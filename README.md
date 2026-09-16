@@ -1,31 +1,5 @@
 # AQ Sync — Android companion for the CoreS3 air-quality logger
 
-> ## Work in progress (paused 2026-09-16)
->
-> Protocol v2 support was implemented in one pass and **paused by the user before hardware or
-> emulator verification**. Tree state: `assembleDebug` OK, `testDebugUnitTest` 58/58, `lintDebug`
-> 0 errors / 7 pre-existing warnings. No emulator was running, so nothing below was clicked through.
->
-> **Done (committed):** v2 codec (opcodes 0x08–0x0D, frames 0x40–0x49, errors 12–15) + `DeviceConfig`
-> model + `ConfigPatch` builder + LAN framing, all unit-tested; `DeviceSession` v2 ops with typed
-> exceptions; `data/lan/TcpTransport` (AQS1 handshake, reader loop demux, keep-alive; loopback-tested)
-> and `LanDiscovery` (NsdManager, API 31–37 paths); repository LAN-first-with-BLE-fallback rule,
-> one-time token fetch over BLE, Room schema v2 (`lanToken`/`lanPort`, explicit migration); manifest
-> `INTERNET` + `ACCESS_LOCAL_NETWORK` with `LanPermission` helper; Device screen (pairing / Wi-Fi /
-> LAN / bonds), Settings sheet (Advanced switch, DataStore), Debug screen, transport chip; Today fixes
-> (µm label, hoisted list state + keys + banner outside the list); `FakeTransport` v2 ops incl. a
-> simulated-LAN mode; README decisions table + AGENTS.md rules.
->
-> **Not done:** no run on emulator or phone (no screenshots); the "Set time scrolls to top" bug was
-> fixed structurally, not reproduced; `LanDiscovery` and the API 37 permission prompt untested on a
-> device; no v2 firmware capture behind the test fixtures; reboot-reconnect delay (6 s) unmeasured.
->
-> **First on resume:** start an emulator (API 35/36 or 37), `adb install app/build/outputs/apk/debug/app-debug.apk`,
-> connect *Debug: fake device*, walk Today → Device → Wi-Fi scan → join `home` → Settings → Advanced →
-> Debug → Device log, check the Set-time scroll behaviour and the pairing/reboot flow, then take the
-> `/tmp/aq-v2-*.png` screenshots. After that: a real phone against the v2 firmware, BLE then LAN.
-
-
 Native Android app that pairs with an **M5Stack CoreS3 (ESP32-S3)** running the
 [`m5stack-aq-parquet`](../m5stack-aq-parquet) firmware, shows its live readings, gives it UTC,
 and copies its finalized **Parquet** files into the phone — byte-exact, verified, offline.
@@ -49,7 +23,7 @@ phone run" decisions — Auto-sync has not yet.** Verified on 2026-09-17:
 88/88 unit tests (v1+v2 frame codec, CONFIG JSON + `SET_CONFIG` builder, LAN framing with a `LIVE`
 push between two `CHUNK`s, the real `TcpTransport` against an in-JVM fake device over loopback,
 JSON models, Parquet verification, sync planner, lost-window recovery, the resume-after-lost-link
-decision, the auto-sync worker's decision logic over the fake device), debug APK ≈ 65 MB unminified.
+decision, the auto-sync worker's decision logic over the fake device), debug APK ≈ 65 MiB unminified.
 
 The v1 file-sync part of the protocol *is* bench-verified: the same contract was exercised from a
 macOS host client against the real board on 2026-09-16 (pairing, 766-file manifest, verified
@@ -57,10 +31,13 @@ transfers at 15–21 KB/s, time set, flush). The v2 additions — configuration,
 reboot, log tail, token, LAN transport — are implemented from
 [`docs/ble-sync-protocol.md`](../m5stack-aq-parquet/docs/ble-sync-protocol.md) and the firmware
 headers, with no v2 device capture yet; the fixtures in the tests are hand-assembled from the
-documented layouts. `LanDiscovery` (NsdManager) and the LAN permission flow can only be exercised
-on a phone with a v2 device on the same network. See
-[`docs/bench-verified.md`](../m5stack-aq-parquet/docs/bench-verified.md#board-1-bluetooth-le-sync)
-in the firmware repo for what was measured.
+documented layouts. On the phone (OnePlus 7 Pro, Android 16 = API 36) `LanDiscovery` found the
+board via `NsdManager` and the app chose TCP on its own; the `ACCESS_LOCAL_NETWORK` prompt is only
+enforced from API 37 and is still unverified. Not yet measured from the phone: an instrumented full
+776-file sync over each link, a complete Auto-sync period cycle, `ble.clear_bonds`, `lan.rotate_token`
+end to end, the `fixed`/`none` pairing modes. See
+[`docs/bench-verified.md`](../m5stack-aq-parquet/docs/bench-verified.md#phone-over-lan-and-ble-oneplus-7-pro-android-16)
+in the firmware repo for what was measured, on which firmware and app commit.
 
 ## What it does
 
@@ -85,10 +62,12 @@ archive and verification are shared (`AqTransport` → `DeviceSession` → `Sync
 | | Bluetooth LE (`data/ble/BleTransport`) | LAN (`data/lan/TcpTransport`) |
 | --- | --- | --- |
 | Discovery | GATT scan for the service UUID | mDNS `_aqsync._tcp` via `NsdManager` (`data/lan/LanDiscovery`), TXT `station`/`dev`/`fw`/`proto` |
-| Auth | LE Secure Connections bond (passkey / PIN / none per `ble.pair`) | `"AQS1"` + 32-byte token, obtainable **only** over BLE (`GET_TOKEN`; `ERROR` 13 over LAN) |
-| Framing | one notification per frame, `payload_max = MTU − 3` (517 → 514) | `len` u16 LE + frame, `payload_max` 1024 from `HELLO`; `mtu` reports 1027 so the same arithmetic holds |
+| Auth | LE Secure Connections bond (passkey / PIN / none per `ble.pair`) | `"AQS1"` + 32-byte token, obtainable **only** over BLE (`GET_TOKEN`; `ERROR` 13 over LAN); a token the device rejects (`ERROR` 14) is dropped and fetched again on the next BLE session (`data/lan/LanTokenPolicy`) |
+| Framing | one notification per frame, `payload_max = min(MTU − 3, 512)` (517 → 512; Android silently drops notifications above the 512-byte GATT attribute limit) | `len` u16 LE + frame, `payload_max` 1024 from `HELLO`; `mtu` reports 1027 so the same arithmetic holds |
 | Pushes | `status` / `live` characteristics | `STATUS` 0x48 / `LIVE` 0x49 frames, demultiplexed by type byte off the single reader loop; may sit between two `CHUNK`s |
 | Liveness | GATT link state | `STATUS` (0x07) keep-alive after 120 s idle; link declared lost after 180 s without any byte |
+| Lost link | 3 automatic reconnect attempts, 5 s apart, with the normal transport rule; a sync that was running (or had just died of the pipe) resumes — see "After the first phone run" | same |
+| Kept alive by | the `dataSync` foreground service for the duration of a transfer, nothing while idle | the same service plus a `WifiManager.WifiLock` held only while a LAN transfer runs (`data/lan/LanWifiLock`) |
 | Chosen when | always available | the device's station is currently discovered on the network **and** a token is stored; any LAN failure falls back to BLE with a snackbar |
 
 ### Pairing
@@ -126,7 +105,7 @@ everything after it is diffable against that.
 | DI / data | Hilt 2.60.1, Room 2.8.5 (schema v3), DataStore Preferences 1.2.1, WorkManager 2.11.2 + androidx.hilt:hilt-work 1.4.0, kotlinx.serialization 1.11.0, coroutines/Flow |
 | Build | AGP 9.4.0, Gradle 9.7.1, KSP 2.3.12, version catalog |
 | SDK | `compileSdk`/`targetSdk` **37**, `minSdk` **31** (no legacy Bluetooth permission model) |
-| Permissions | `BLUETOOTH_SCAN` (`neverForLocation`), `BLUETOOTH_CONNECT`, `INTERNET` (LAN sockets only), `ACCESS_LOCAL_NETWORK` (runtime, API 37+ only), `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_DATA_SYNC`, `POST_NOTIFICATIONS` (runtime, API 33+) |
+| Permissions | `BLUETOOTH_SCAN` (`neverForLocation`), `BLUETOOTH_CONNECT`, `INTERNET` (LAN sockets only), `ACCESS_LOCAL_NETWORK` (runtime, API 37+ only), `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_DATA_SYNC`, `POST_NOTIFICATIONS` (runtime, API 33+), `WAKE_LOCK` (only for the `WifiLock` during LAN transfers; no CPU wake lock anywhere) |
 
 ## Build
 
@@ -140,10 +119,13 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 ```
 
 Debug builds include a **fake device** (menu → *Debug: fake device*) that speaks protocol v2: three
-small `PAR1…PAR1` files with correct CRCs, live JSON every 10 s, a fake configuration (pairing,
+small `PAR1…PAR1` files plus one 1 MiB benchmark file (≈ 8 s at the fake's chunk pace — enough to
+watch the progress notification, the Stop action and a `.partial` resume), all with correct CRCs,
+live JSON every 10 s, a fake configuration (pairing,
 Wi-Fi, LAN), a fake Wi-Fi scan list (`home` / `walkthru-field` / `CoffeeShop Guest` can be joined;
 anything else ends in `failed`), a fake token, a fake 8 KiB serial log, and a `REBOOT` that drops the
-link and applies pending `ble.*` changes. The fake persists for the process, like NVS. A second entry,
+link and applies pending `ble.*` changes. The fake persists for the process, like NVS. It also
+carries the fault-injection hooks the unit tests use (`dropLeadingChunks`, `closedDelayMs`). A second entry,
 *Debug: fake device (as LAN)*, is the same device behaving like the LAN pipe (`payload_max` 1024,
 `GET_TOKEN` refused with `ERROR` 13) so the LAN-specific UI can be seen without a network. It is
 **not** a socket: the real `TcpTransport` is covered by a loopback unit test and otherwise only
@@ -155,8 +137,8 @@ testable on hardware.
 app/src/main/java/earth/walkthru/aqsync/
   data/protocol/   UUIDs, binary frame codec (v1+v2), CONFIG model + SET_CONFIG builder, LAN framing, JSON models, Parquet verification
   data/ble/        scanner, GATT transport (serialized operation queue), session (all ops), frame recorder
-  data/lan/        TCP transport (AQS1 handshake, reader loop, keep-alive), mDNS discovery
-  data/sync/       sync planner, engine, file archive
+  data/lan/        TCP transport (AQS1 handshake, reader loop, keep-alive), mDNS discovery, WifiLock, token (re)fetch policy
+  data/sync/       sync planner, engine (lost-window re-read), file archive, READ window size, resume-after-lost-link policy
   data/background/ dataSync foreground service + notifications; auto-sync WorkManager worker, scheduler, runner (decision logic)
   data/local/      Room database (known devices incl. LAN token + auto-sync switch, archived files)
   data/settings/   DataStore preferences (Advanced mode)
@@ -223,6 +205,9 @@ After the first phone run (2026-09-17, OnePlus 7 Pro, Android 16):
 
 | Question | Decision |
 | --- | --- |
+| The LAN sync died when the screen went off | Measured: ~2 min after screen-off, `ConnectivityService` logged "Destroyed live tcp sockets for uids={ours}" and `TcpTransport` saw "Software caused connection abort" 6 ms later — the background network restriction, not the link. Every user-started transfer now runs under `data/background/SyncForegroundService` (`foregroundServiceType="dataSync"`, started by the repository while the app is still in the foreground, so the API 31+ start rule holds). It owns no logic: it mirrors `sync`/`reconnecting` into one ongoing notification (files done/total, bytes, current file, progress bar, **Stop** → `cancelSync`), paced at ≤ 2 posts/s (`NotificationManager` sheds above ~5/s), and stops itself 1.5 s after nothing needs protecting. `onTimeout` (API 35+, the 6 h/24 h `dataSync` budget) cancels cleanly. It is **not** kept alive while the link is idle (battery); `POST_NOTIFICATIONS` is asked once on the first Sync tap (API 33+) and a denial only hides the notification. |
+| A link that drops on its own | Before this there was no automatic path out of `Failed`, only the button. The repository watches each Ready session: `Failed`, or `Disconnected` without a `disconnect()` call (`closeSessionLocked` clears the slot first, so deliberate closes are never mistaken), starts **3 reconnect attempts 5 s apart** with the normal transport rule (LAN if still discovered, else BLE), then an error snackbar. The Today/Files banners say "Link lost (…). Reconnecting automatically, attempt n of 3…"; Stop on the notification cancels it. The foreground service stays up across the attempts (`foregroundNeeded = sync.running || reconnecting != null`). |
+| The stored token was rotated by another client | Seen: `SET_CONFIG lan.rotate_token=1` from the Mac → the phone's LAN handshake got `ERROR` 14, fell back to Bluetooth as designed — and never fetched a new token, because one was still stored, so LAN would have stayed dead until reinstall. `tryLan` now treats `LanFailure.AUTH_FAILED` as proof the stored token is dead: it clears `known_device.lanToken` and marks the address stale (`data/lan/LanTokenPolicy`, pure, unit-tested); the BLE session that follows fetches `GET_TOKEN` through the existing one-time path and the snackbar says "LAN token renewed". Deliberate rotation and Forget clear the mark. Any other LAN failure keeps the token. |
 | Wi-Fi power save during a LAN sync | Measured: with the screen locked, throughput fell from ~60 to ~12 files/min, then TCP stalled > 5 s and the transfer broke. `data/lan/LanWifiLock` holds one `WifiManager.WifiLock` from the first `OPEN` to the sync's `finally` — interactive sync and `SyncWorker` alike, both go through `startSync` — and **only while the active transport is LAN**; Bluetooth syncs hold nothing and the lock is never kept over an idle link. Mode is `WIFI_MODE_FULL_HIGH_PERF` on every supported API on purpose: on API 31–33 it is active with the screen off, while `WIFI_MODE_FULL_LOW_LATENCY` is only active with the screen **on** and the app in the foreground (AOSP `WifiLockManager` checks `IMPORTANCE_FOREGROUND`; a `dataSync` foreground service does not count). On API 34+ the framework turns a HIGH_PERF request into a LOW_LATENCY lock anyway (`high_perf_lock_deprecated`, default on), so requesting LOW_LATENCY first would only lose the 31–33 case. Honest consequence: **on Android 14+ this lock does not protect a screen-off LAN sync**; what does is the automatic resume after a lost link (next row). Needs the `WAKE_LOCK` permission; the app still holds no CPU wake lock. |
 | Link lost right *after* the sync already died of the pipe | Seen: the device stopped answering, the sync ended with `TransportException("no response from device within 60 s")`, the link was declared lost a moment later, the auto-reconnect succeeded — with `resumeSync=false`, because the sync was no longer `running`; the user had to press Sync all again. `SyncProgress.endCause` now records how a run ended (`COMPLETED`, `STOPPED`, `TRANSPORT_FAILURE`, `FAILURE`) and `SyncResumePolicy.shouldResume` (pure, unit-tested) tells the link watcher to resume when the sync was running **or** ended with a transport-level failure (no response, link lost, socket error, transport closed) within the last 5 min (`TcpTransport`'s 180 s dead-link deadline plus margin). A user Stop, a completed run (device `ERROR`s and mismatches are outcomes, not a broken pipe) or any other failure is left alone. `SyncPlanner` skips verified files, so the resume only pulls what is still missing. |
 | Who may send `REBOOT` (0x0B) | Audited after a `REBOOT` reached the board right after two `LIST`s during a phone session, with no certainty the owner had tapped anything. Result: `DeviceSession.reboot()` has exactly one caller, `DeviceConnectionRepository.rebootAndReconnect()`, whose only caller is the Device screen's "Reboot device" confirmation dialog — no sync-complete path, retry, `LaunchedEffect`, snackbar action or the foreground service's Stop intent can reach it. Two gaps were closed anyway: (1) the Reboot / Rotate token / Forget all bonds buttons were enabled **during a running sync** (`canEdit` did not look at the transfer) — now `canDisrupt = canEdit && !syncRunning`, and the repository refuses `rebootAndReconnect()` while `sync.running` and takes `busy` with a synchronous compare-and-set so a re-fired confirm cannot send a second `REBOOT`; the dialog's confirm also checks its own flag before calling. (2) Advanced → Debug's raw-command box could send any opcode, including `0b`; it now refuses `REBOOT` and `SET_CONFIG` (the ones that need a confirmation dialog) and points to the Device screen. Not a phone-side cause of an *unsolicited* reboot was found. |
@@ -253,22 +238,25 @@ After the first phone run (2026-09-17, OnePlus 7 Pro, Android 16):
 
 ## Next
 
-1. Test against the board from a real phone — BLE first, then LAN once the v2 firmware ships —
-   and record the result in the firmware repo's `docs/bench-verified.md`; measure a full 766-file
-   sync over each link and BLE/Wi-Fi coexistence.
-1. Auto-sync on the OnePlus: switch it on, close the app, leave the phone overnight next to the
+1. Instrumented phone runs, recorded in the firmware repo's `docs/bench-verified.md` (date, firmware
+   SHA-256, app commit, phone): a full 776-file sync over BLE and over LAN with the foreground-service
+   build (the first phone runs, commit `a993268`, were partial and died of Android's background
+   socket kill), BLE/Wi-Fi coexistence over a long soak, energy, `lan.rotate_token` and
+   `ble.clear_bonds` end to end from the phone, `fixed`/`none` pairing (needs a display-less board).
+2. Auto-sync on the OnePlus: switch it on, close the app, leave the phone overnight next to the
    logger on the home Wi-Fi, then count how many 15-min periods produced a run (`adb logcat -s
    AutoSync SyncWorker`), whether `setForeground` was refused in the background, and whether the
    BLE fallback connects by address with the screen off. Record the OEM battery settings that were
    needed.
-2. Verify the API 37 local-network permission flow on a real Android 16 device (grant, deny,
-   revoke while connected) and `NsdManager` behaviour across API 31–37.
-3. Further transports behind the same `AqTransport` interface as the firmware grows them (LoRa
+3. Verify the API 37 local-network permission flow on a real Android 17 device (grant, deny,
+   revoke while connected; the OnePlus is API 36, where it is not enforced) and `NsdManager`
+   behaviour across API 31–37.
+4. Further transports behind the same `AqTransport` interface as the firmware grows them (LoRa
    relays between devices). The sync engine, archive and verification do not change; only the
    byte pipe does.
-4. Opt-in cloud step **after** local sync: encrypted backup and/or community contribution, off by
+5. Opt-in cloud step **after** local sync: encrypted backup and/or community contribution, off by
    default, with the privacy boundaries in `../m5stack-aq-parquet/product/mobile-architecture.md`.
    It needs its own setting and review; `INTERNET` being declared for LAN does not pre-approve it.
    A device with its own Wi-Fi/SIM uploading directly is a parallel path, not a replacement for the
    phone archive.
-5. On-phone querying (the product notes discuss DuckDB) — deliberately out of scope.
+6. On-phone querying (the product notes discuss DuckDB) — deliberately out of scope.
