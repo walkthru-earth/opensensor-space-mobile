@@ -42,11 +42,13 @@ can leave the phone through the system share sheet or the file picker.
 
 ## Status
 
-**Implements protocol v2 (2026-09-17); not yet tested against hardware from a phone.** Verified on
+**Implements protocol v2 (2026-09-17) plus Auto-sync (2026-09-17); the BLE file sync has run
+against the board from a phone (OnePlus 7 Pro, Android 16), Auto-sync has not yet.** Verified on
 2026-09-17: `./gradlew lintDebug assembleDebug testDebugUnitTest` → 0 lint errors (7 pre-existing
-warnings), 58/58 unit tests (v1+v2 frame codec, CONFIG JSON + `SET_CONFIG` builder, LAN framing
+warnings), 84/84 unit tests (v1+v2 frame codec, CONFIG JSON + `SET_CONFIG` builder, LAN framing
 with a `LIVE` push between two `CHUNK`s, the real `TcpTransport` against an in-JVM fake device over
-loopback, JSON models, Parquet verification, sync planner), debug APK ≈ 64 MB unminified.
+loopback, JSON models, Parquet verification, sync planner, lost-window recovery, the auto-sync
+worker's decision logic over the fake device), debug APK ≈ 64 MB unminified.
 
 The v1 file-sync part of the protocol *is* bench-verified: the same contract was exercised from a
 macOS host client against the real board on 2026-09-16 (pairing, 766-file manifest, verified
@@ -65,8 +67,9 @@ in the firmware repo for what was measured.
 | --- | --- |
 | **Devices** | Scans for the AQ Sync service UUID (`c0a5e9f0-0001-4b1a-9c3e-2d7f8a6b4e01`), lists `AQ-xxxx` devices with RSSI and bond state, remembers known devices. |
 | **Today** | Live PM1 / PM2.5 / PM10, particle counts, board temperature (explicitly *not* ambient), battery/USB, freshness, storage counters, UTC state. **Set time from phone** and **Finalize buffered rows** actions, each explained before it runs. |
-| **Files** | Device manifest grouped by Hive partition (dated / unsynced-boot / benchmarks / legacy). **Sync all** downloads every file the archive lacks, with per-file and overall progress. Per-file state: not synced · syncing · synced (verified) · mismatch. |
+| **Files** | Device manifest grouped by Hive partition (dated / unsynced-boot / benchmarks / legacy). **Sync all** downloads every file the archive lacks, with per-file and overall progress. Per-file state: not synced · syncing · synced (verified) · mismatch. Menu: **Sync now in background** (one expedited WorkManager job — leave the app, watch the notification) and a quick **Auto-sync** toggle for the connected device. |
 | **Export** | Share one file or a zip of the archive via the share sheet, or save a zip with *Save to…* (Storage Access Framework). |
+| **Device** | **Auto-sync** card (any protocol version): a per-device switch; while any known device has it on, a WorkManager job runs about every 15 min — app closed, screen off — finds the logger on the LAN (mDNS) or over its Bluetooth bond, pulls only the files the archive lacks under a `dataSync` progress notification, and posts one summary ("Synced 23 new files from AQ-6b40 · 1.1 MiB") only when something arrived. |
 | **Device** (v2) | Bluetooth pairing mode (random passkey / fixed PIN / none) with the "Default PIN 123456 — change it" nag, pending-reboot notice and **Reboot device** (finalizes the RAM batch, restarts, app reconnects). **Wi-Fi**: state / IP / RSSI, *Scan networks* → pick → hidden passphrase → *Save and connect*, state polled while `connecting`, radio on/off. **LAN**: server on/off, whether this phone holds a token, *Fetch token* (Bluetooth only, by contract), *Rotate token*, local-network permission explanation on Android 16+. **Forget all bonds**. Every write is one validated `SET_CONFIG`. |
 | **Settings** | A sheet with one switch: **Advanced mode** (DataStore). Off by default. |
 | **Debug** (Advanced only) | Active transport + endpoint + `payload_max`, live `status` JSON pretty-printed, last 200 raw frames (direction, type, length, first bytes; `TOKEN` and `SET_CONFIG` redacted), **Device log** (`LOG_TAIL 8192`) in a monospace box with refresh, **Raw command** (hex in → decoded frames out). |
@@ -119,10 +122,10 @@ everything after it is diffable against that.
 | | |
 | --- | --- |
 | Language / UI | Kotlin 2.4.20, Jetpack Compose, Material 3 (dynamic color), Navigation 3 |
-| DI / data | Hilt 2.60.1, Room 2.8.5 (schema v2), DataStore Preferences 1.2.1, kotlinx.serialization 1.11.0, coroutines/Flow |
+| DI / data | Hilt 2.60.1, Room 2.8.5 (schema v3), DataStore Preferences 1.2.1, WorkManager 2.11.2 + androidx.hilt:hilt-work 1.4.0, kotlinx.serialization 1.11.0, coroutines/Flow |
 | Build | AGP 9.4.0, Gradle 9.7.1, KSP 2.3.12, version catalog |
 | SDK | `compileSdk`/`targetSdk` **37**, `minSdk` **31** (no legacy Bluetooth permission model) |
-| Permissions | `BLUETOOTH_SCAN` (`neverForLocation`), `BLUETOOTH_CONNECT`, `INTERNET` (LAN sockets only), `ACCESS_LOCAL_NETWORK` (runtime, API 37+ only) |
+| Permissions | `BLUETOOTH_SCAN` (`neverForLocation`), `BLUETOOTH_CONNECT`, `INTERNET` (LAN sockets only), `ACCESS_LOCAL_NETWORK` (runtime, API 37+ only), `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_DATA_SYNC`, `POST_NOTIFICATIONS` (runtime, API 33+) |
 
 ## Build
 
@@ -153,12 +156,13 @@ app/src/main/java/earth/walkthru/aqsync/
   data/ble/        scanner, GATT transport (serialized operation queue), session (all ops), frame recorder
   data/lan/        TCP transport (AQS1 handshake, reader loop, keep-alive), mDNS discovery
   data/sync/       sync planner, engine, file archive
-  data/local/      Room database (known devices incl. LAN token, archived files)
+  data/background/ dataSync foreground service + notifications; auto-sync WorkManager worker, scheduler, runner (decision logic)
+  data/local/      Room database (known devices incl. LAN token + auto-sync switch, archived files)
   data/settings/   DataStore preferences (Advanced mode)
   data/export/     share / zip / SAF export
   data/fake/       in-app fake device for debug builds
   ui/scan · ui/device (Today, Device) · ui/files · ui/debug · ui/settings · ui/permissions · ui/theme
-app/src/test/      frame codec v1/v2, config, LAN framing, TcpTransport loopback, verification, JSON, planner, lost-window recovery + stale-frame drain against the fake device
+app/src/test/      frame codec v1/v2, config, LAN framing, TcpTransport loopback, verification, JSON, planner, lost-window recovery + stale-frame drain against the fake device, auto-sync runner (links, guards, "nothing new") over the fake device
 ```
 
 ## Design decisions
@@ -199,6 +203,21 @@ Protocol v2 (2026-09-17):
 | LAN `readLive()` | Nothing can request a `LIVE` push, so it returns the latest push or waits ≤ 15 s for the next sample. `readStatus()` returns the latest push or sends `STATUS` (0x07) and waits ≤ 10 s. |
 | Fake "LAN" | `FakeTransport(simulateLan = true)` is not a socket; it only reports `payload_max` 1024 and refuses `GET_TOKEN`. The real transport is unit-tested over loopback and otherwise only on hardware. |
 
+Auto-sync (2026-09-17):
+
+| Question | Decision |
+| --- | --- |
+| How often, and by what | One WorkManager `PeriodicWorkRequest` (`data/background/AutoSyncScheduler`), unique name, `KEEP`, **15 minutes** — the platform minimum (`PeriodicWorkRequest.MIN_PERIODIC_INTERVAL_MILLIS`); Android picks the moment inside each period, so "every 15 min" means "roughly, and later under Doze". It exists exactly while at least one `known_device.autoSync` row is on (the scheduler observes the count; the switch only flips the row) and is cancelled when the last one goes off. No alarms, no bare threads, no always-on service: the logger writes a file every 15 min anyway. |
+| Constraints | `NetworkType.CONNECTED` + battery not low, as asked. Caveat, recorded rather than silently changed: CONNECTED needs *some* network (Wi-Fi with no internet counts), so a phone with Wi-Fi off and no mobile data never runs the periodic job even though the Bluetooth path needs no network. If that turns out to matter, drop the network constraint and let the LAN browse fail fast. |
+| Which link, in which order | Same rule as an interactive connect (`AutoSyncPolicy.linksFor`): browse mDNS `_aqsync._tcp` up to 10 s (early exit once every wanted station is resolved); LAN when the device's station is found **and** a token is stored; else, and after a failed LAN connect, **Bluetooth only if the phone is bonded** — a direct `connectGatt` to the stored address, no scan, 15 s budget, `allowBonding = false` so a lost bond is a failure, never a passkey dialog nobody can answer. Not found → finish quietly until the next period. One mDNS browse per run serves every device. |
+| The app is in use | The worker skips any device while the repository holds a session — the very device (interactive use wins) or another one (one link at a time) — and re-checks between links. "Sync now in background" releases the interactive session first, then enqueues; the worker's own session then feeds the same `sync` state, so the Files screen shows the worker's progress if it is still open. |
+| Foreground work | `setForeground(ForegroundInfo(WORKER_ID, …, FOREGROUND_SERVICE_TYPE_DATA_SYNC))` with the same `SyncNotifications.progress` notification as the user-started service ("AQ-6b40 · 12/776 files · 1.8 MiB", Stop = WorkManager cancel intent), updated at ≤ 2/s. WorkManager's `SystemForegroundService` is merged into the manifest with `foregroundServiceType="dataSync"`, otherwise Android 14+ refuses the type. On Android 12+ `setForeground` may throw `ForegroundServiceStartNotAllowedException` when the app is in the background; the worker logs one line and continues as a plain job (a running job has network access for its own duration), so the transfer still happens and only the ongoing notification is missing. |
+| Summary notification | Posted only when a run brought new files or left failures ("Synced 23 new files from AQ-6b40 · 1.1 MiB", tap opens the app; several devices → "from 2 loggers"). Nothing new → nothing posted. `POST_NOTIFICATIONS` is asked once when Auto-sync is switched on (same helper as the first Sync tap); a denial changes nothing but visibility. |
+| Failures and retries | A device that is not reachable is not an error: one log line, next period. `Result.retry()` (exponential backoff from 5 min, at most 2 retries per period) only for transient conditions: an exception from a link, or a transfer that broke off before every planned file had an outcome (`BackgroundSyncResult.incomplete`). Per-file failures are not retried inside the period — those files are still missing from the archive, so the next run picks them up. |
+| "Sync now in background" | One unique `OneTimeWorkRequest`, `setExpedited(RUN_AS_NON_EXPEDITED_WORK_REQUEST)`, `KEEP`, with the target address as input data (works for a device whose switch is off). Expedited work may carry network/storage constraints only, so it has no battery rule. |
+| OEM battery killers | The test phone is a **OnePlus 7 Pro**; OxygenOS/ColorOS are the worst offenders on dontkillmyapp.com: "Battery optimization → Don't optimize" is often not enough, the app may also need "Allow background activity" and to be excluded from the "deep optimization"/"sleep standby" lists, and a swiped-away app may still be killed. WorkManager survives that (the job is re-scheduled), a bare thread would not. Nothing is measured yet: the first field test should note how many of the 15-min periods actually ran. |
+| Room v3 | `known_device.autoSync INTEGER NOT NULL DEFAULT 0`, explicit `MIGRATION_2_3`, schema JSON exported; the switch is preserved across every upsert the connect path does. |
+
 ## Lessons learned
 
 - **`customizer.sh` cannot take a spaced application name.** `"AQ Sync"` was substituted into identifiers (`class AQ Sync`, `Theme.AQ Sync`, `AQ Sync.kt`). Use a single token (`AqSync`) or fix by hand right after generation; the raw output is kept as the first commit so the fix is visible.
@@ -216,6 +235,10 @@ Protocol v2 (2026-09-17):
 - **Push frames make "await the next frame" wrong on LAN.** `STATUS`/`LIVE` may arrive between two `CHUNK`s. Demultiplexing by type byte in the transport keeps `DeviceSession` byte-for-byte identical for both pipes; the loopback test asserts a `LIVE` in the middle of a `READ` is delivered to the live flow and the `CHUNK`s stay contiguous.
 - **`android.util.Log` in a class under JVM test** needs `testOptions.unitTests.isReturnDefaultValues = true`; otherwise the first `Log.i` throws "not mocked".
 - **"gap in stream: expected offset 32768, got CHUNK at 41894" turned out to be 514-byte frames > the 512-byte GATT limit, dropped by Android; the client now resumes lost windows anyway.** Measured 2026-09-17 on a OnePlus 7 Pro (Android 16): runs of 16–18 consecutive `CHUNK`s vanished at the start of every 16 KiB window, a retry reproduced it, and the whole sync aborted. First reading: "Android BT stacks drop notification bursts, use 4 KiB windows over BLE". Root cause: firmware v5 sent full chunks of `MTU − 3 = 514` bytes, but a GATT attribute value is at most 512 bytes; Android silently discards oversize notifications (macOS accepts them), so every *full* chunk was lost and only the short last one arrived — 41894 = 32768 + 18 × 507. Fixed in the firmware (BLE frames capped at 512). Kept on the phone, because the contract prescribes it and a lossy link is still possible: a window is re-read from the phone's own offset instead of aborting the sync, and a failed request's stragglers are drained before the next request. The window stays at `max_read` on BLE — halving it would halve throughput for a problem that was not the radio's. `FakeTransport.dropLeadingChunks` / `closedDelayMs` reproduce both symptoms in `WindowRecoveryTest`.
+- **WorkManager's foreground worker needs the manifest's help twice.** Its `SystemForegroundService` ships without a `foregroundServiceType`; merge it with `dataSync` (`tools:node="merge"`) or Android 14+ throws on `setForeground`. And with a Hilt worker factory the default `WorkManagerInitializer` must be removed from `androidx.startup.InitializationProvider`, otherwise WorkManager initializes before the `Configuration.Provider` and the worker cannot be constructed.
+- **Expedited work is picky.** `setExpedited` rejects any constraint but network/storage (so no "battery not low" on the manual run) and, on API 31+, runs as an expedited job whose `getForegroundInfo()` is not consulted; `setForeground` is still called explicitly so both request kinds show the same notification.
+- **A worker cannot answer a passkey dialog.** `BleTransport` got `allowBonding = false` and a configurable connect timeout: the unattended path connects straight to the bonded address (`connectGatt`, no scan) and treats "not bonded" as a failure to log, never as a reason to call `createBond()` from the background.
+- **`openSession` rewrote every `KnownDevice` column.** Adding `autoSync` to the entity was not enough; the upsert after `info` had to carry `previous?.autoSync` or every connect would have switched auto-sync off again. Any future column needs the same line.
 - **Continuity belongs in the session, not the download loop.** When the gap was detected only in `SyncEngine`'s chunk callback, the exception left the rest of the window in the response channel, and the next request (`CLOSE`, then `LIST`) read those frames as its own reply. Checking `CHUNK.offset` against the expected offset inside `DeviceSession.read` and finishing the window there keeps the "one request, one ordered reply" invariant intact for every caller.
 
 ## Next
@@ -223,6 +246,11 @@ Protocol v2 (2026-09-17):
 1. Test against the board from a real phone — BLE first, then LAN once the v2 firmware ships —
    and record the result in the firmware repo's `docs/bench-verified.md`; measure a full 766-file
    sync over each link and BLE/Wi-Fi coexistence.
+1. Auto-sync on the OnePlus: switch it on, close the app, leave the phone overnight next to the
+   logger on the home Wi-Fi, then count how many 15-min periods produced a run (`adb logcat -s
+   AutoSync SyncWorker`), whether `setForeground` was refused in the background, and whether the
+   BLE fallback connects by address with the screen off. Record the OEM battery settings that were
+   needed.
 2. Verify the API 37 local-network permission flow on a real Android 16 device (grant, deny,
    revoke while connected) and `NsdManager` behaviour across API 31–37.
 3. Further transports behind the same `AqTransport` interface as the firmware grows them (LoRa
