@@ -60,6 +60,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
@@ -184,9 +185,17 @@ class DeviceConnectionRepository @Inject constructor(
         .flatMapLatest { it?.connectionState ?: flowOf(ConnectionState.Disconnected) }
         .stateIn(scope, SharingStarted.Eagerly, ConnectionState.Disconnected)
 
-    /** Which pipe the current session uses, for the "Bluetooth" / "Wi-Fi LAN" chip. */
+    /**
+     * Which pipe the current session uses, for the "Bluetooth" / "Wi-Fi LAN" chip on every device
+     * screen. The single source for it: the screens used to derive the kind from the [session]
+     * object inside their own wide `combine`s, so the chip depended on a `DeviceSession` identity
+     * change reaching each ViewModel. This flow is re-evaluated on every session swap *and* on every
+     * connection-state change of that session (the LAN probe in [tryLan] is reused as the session
+     * when it succeeds; a reconnect may happen while no screen is subscribed), then de-duplicated.
+     */
     val activeTransport: StateFlow<TransportKind?> = _session
-        .map { it?.transport?.kind }
+        .flatMapLatest { s -> if (s == null) flowOf(null) else s.connectionState.map { s.transport.kind } }
+        .distinctUntilChanged()
         .stateIn(scope, SharingStarted.Eagerly, null)
 
     private val _config = MutableStateFlow<ConfigSnapshot?>(null)

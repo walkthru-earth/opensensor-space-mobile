@@ -86,7 +86,6 @@ class DeviceViewModel @Inject constructor(
             address = session?.address,
             name = session?.transport?.displayName,
             connection = conn,
-            transport = session?.transport?.kind,
             endpoint = session?.transport?.endpoint,
             info = info,
             status = status,
@@ -100,12 +99,16 @@ class DeviceViewModel @Inject constructor(
         Triple(devices, err, known)
     }
 
-    private val activity = combine(repository.busy, repository.sync) { busy, sync -> busy to sync.running }
+    // The transport chip reads the repository's activeTransport flow, not the session object (see there).
+    private val activity = combine(repository.busy, repository.sync, repository.activeTransport) { busy, sync, transport ->
+        Triple(busy, sync.running, transport)
+    }
 
     val uiState: StateFlow<DeviceUiState> = combine(
         core, repository.wifiScan, lan, activity, settings.advancedMode,
-    ) { base, scan, (lanDevices, lanErr, known), (busy, syncRunning), advanced ->
+    ) { base, scan, (lanDevices, lanErr, known), (busy, syncRunning, transport), advanced ->
         base.copy(
+            transport = transport,
             wifiScan = scan,
             known = known,
             onLan = base.info?.station?.let { lanDevices[it] },

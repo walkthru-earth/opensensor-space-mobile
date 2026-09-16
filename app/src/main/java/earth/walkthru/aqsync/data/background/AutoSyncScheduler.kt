@@ -6,7 +6,6 @@ import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
-import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.OutOfQuotaPolicy
 import androidx.work.PeriodicWorkRequestBuilder
@@ -28,8 +27,11 @@ import javax.inject.Singleton
  * Registers and cancels the WorkManager requests that run [SyncWorker].
  *
  * - **Periodic**: one unique request, 15 min (the platform minimum; Android decides the exact
- *   moment inside each period), `NetworkType.CONNECTED` + battery not low, `KEEP` so an app update
- *   or restart does not reset the schedule. It exists exactly while at least one known device has
+ *   moment inside each period), battery not low — and **no network constraint**: the Bluetooth
+ *   path needs no network, and `NetworkType.CONNECTED` kept a phone with Wi-Fi off and no mobile
+ *   data from ever running the job. The LAN side is skipped fast inside the run when no Wi-Fi
+ *   network is up ([AppAutoSyncGateway.browseLan]). `KEEP` so an app update or restart does not
+ *   reset the schedule. It exists exactly while at least one known device has
  *   Auto-sync on — [start] observes the count in Room and (un)registers accordingly, so the switch
  *   in the UI only has to flip the row.
  * - **Sync now**: one unique expedited one-time request (`RUN_AS_NON_EXPEDITED_WORK_REQUEST` when
@@ -58,12 +60,7 @@ class AutoSyncScheduler @Inject constructor(
     fun setPeriodicEnabled(enabled: Boolean) {
         if (enabled) {
             val request = PeriodicWorkRequestBuilder<SyncWorker>(PERIOD_MINUTES, TimeUnit.MINUTES)
-                .setConstraints(
-                    Constraints.Builder()
-                        .setRequiredNetworkType(NetworkType.CONNECTED)
-                        .setRequiresBatteryNotLow(true)
-                        .build()
-                )
+                .setConstraints(Constraints.Builder().setRequiresBatteryNotLow(true).build())
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_MINUTES, TimeUnit.MINUTES)
                 .addTag(TAG_AUTO_SYNC)
                 .build()
@@ -78,11 +75,11 @@ class AutoSyncScheduler @Inject constructor(
      * system allows, and the user may leave the app.
      */
     fun syncNow(address: String) {
-        // Expedited work may only carry network/storage constraints, so no battery rule here.
+        // Expedited work may only carry network/storage constraints (so no battery rule), and we
+        // want none of those either: the Bluetooth path needs no network.
         val request = OneTimeWorkRequestBuilder<SyncWorker>()
             .setInputData(workDataOf(SyncWorker.KEY_ADDRESS to address))
             .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
-            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_MINUTES, TimeUnit.MINUTES)
             .addTag(TAG_AUTO_SYNC)
             .build()

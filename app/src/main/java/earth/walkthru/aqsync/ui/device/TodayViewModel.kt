@@ -44,7 +44,7 @@ class TodayViewModel @Inject constructor(
 
     val uiState: StateFlow<TodayUiState> = combine(
         repository.session, repository.connectionState, repository.info, repository.status, repository.live, repository.sync,
-        settings.advancedMode, repository.reconnecting,
+        settings.advancedMode, repository.reconnecting, repository.activeTransport,
     ) { values ->
         val session = values[0] as earth.walkthru.aqsync.data.ble.DeviceSession?
         TodayUiState(
@@ -56,7 +56,8 @@ class TodayViewModel @Inject constructor(
             live = values[4] as TimedLive?,
             sync = values[5] as SyncProgress,
             isFake = repository.isFake,
-            transport = session?.transport?.kind,
+            // From the repository's own flow, not from the session object: see activeTransport.
+            transport = values[8] as TransportKind?,
             advancedMode = values[6] as Boolean,
             reconnecting = values[7] as ReconnectState?,
         )

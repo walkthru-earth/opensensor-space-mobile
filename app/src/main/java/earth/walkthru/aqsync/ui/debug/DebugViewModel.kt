@@ -68,6 +68,7 @@ class DebugViewModel @Inject constructor(
 
     private val base = combine(
         repository.session, repository.connectionState, repository.statusRaw, repository.status, repository.config, frames,
+        repository.activeTransport,
     ) { values ->
         val session = values[0] as earth.walkthru.aqsync.data.ble.DeviceSession?
         val conn = values[1] as ConnectionState
@@ -75,7 +76,7 @@ class DebugViewModel @Inject constructor(
         DebugUiState(
             address = session?.address,
             connection = conn,
-            transport = session?.transport?.kind,
+            transport = values[6] as TransportKind?,
             endpoint = session?.transport?.endpoint,
             payloadMax = (conn as? ConnectionState.Ready)?.let { it.mtu - 3 },
             statusJsonPretty = (values[2] as String?)?.let(::prettyPrint),

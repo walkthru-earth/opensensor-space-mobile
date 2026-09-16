@@ -12,6 +12,7 @@ import earth.walkthru.aqsync.data.ReconnectState
 import earth.walkthru.aqsync.data.SyncProgress
 import earth.walkthru.aqsync.data.background.AutoSyncScheduler
 import earth.walkthru.aqsync.data.ble.ConnectionState
+import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.export.ExportManager
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
@@ -52,6 +53,8 @@ data class FilesUiState(
     val autoSync: Boolean? = null,
     /** A background sync job is queued or running right now. */
     val backgroundSyncActive: Boolean = false,
+    /** Active pipe, for the top-bar chip (same source as Today / Device). */
+    val transport: TransportKind? = null,
 )
 
 /** UI-side effects: launch a share sheet or a SAF picker. */
@@ -79,7 +82,7 @@ class FilesViewModel @Inject constructor(
 
     val uiState: StateFlow<FilesUiState> = combine(
         repository.connectionState, repository.manifest, repository.plan, repository.sync, archivedFileDao.observeAll(), exporting,
-        repository.reconnecting, repository.currentKnownDevice, autoSyncScheduler.observeActive(),
+        repository.reconnecting, repository.currentKnownDevice, autoSyncScheduler.observeActive(), repository.activeTransport,
     ) { values ->
         @Suppress("UNCHECKED_CAST")
         val archived = values[4] as List<ArchivedFile>
@@ -96,6 +99,7 @@ class FilesViewModel @Inject constructor(
             reconnecting = values[6] as ReconnectState?,
             autoSync = (values[7] as KnownDevice?)?.autoSync,
             backgroundSyncActive = values[8] as Boolean,
+            transport = values[9] as TransportKind?,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FilesUiState())
 
