@@ -68,6 +68,7 @@ import earth.walkthru.aqsync.ui.components.formatAgo
 import earth.walkthru.aqsync.ui.components.formatBytes
 import earth.walkthru.aqsync.ui.components.formatRate
 import earth.walkthru.aqsync.ui.components.rememberNowMillis
+import earth.walkthru.aqsync.ui.permissions.rememberNotificationPermission
 
 @Composable
 fun FilesScreen(
@@ -85,6 +86,11 @@ fun FilesScreen(
     val createDoc = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
         viewModel.onDocumentCreated(uri)
     }
+    // The sync runs under a dataSync foreground service whose notification needs POST_NOTIFICATIONS
+    // on API 33+. Ask once, right before the first sync; whatever the answer, the sync starts —
+    // a denial only hides the notification.
+    val notificationPermission = rememberNotificationPermission()
+    fun withNotificationPermission(action: () -> Unit) = notificationPermission.ensureThen(action)
 
     LaunchedEffect(Unit) {
         viewModel.events.collect { ev ->
@@ -169,7 +175,7 @@ fun FilesScreen(
                     text = { Text("Stop") },
                 )
                 plan != null && plan.missingCount > 0 && state.connection.isReady -> ExtendedFloatingActionButton(
-                    onClick = { viewModel.syncAll() },
+                    onClick = { withNotificationPermission { viewModel.syncAll() } },
                     icon = { Icon(Icons.Rounded.Download, contentDescription = null) },
                     text = { Text("Sync all · ${plan.missingCount} · ${formatBytes(plan.missingBytes)}") },
                 )
@@ -183,7 +189,7 @@ fun FilesScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             if (state.connection !is ConnectionState.Ready) {
-                item { ConnectionBanner(state.connection) }
+                item { ConnectionBanner(state.connection, reconnecting = state.reconnecting) }
             }
             if (state.sync.running || state.sync.outcomes.isNotEmpty()) {
                 item { SyncProgressCard(state.sync, now) }
@@ -253,7 +259,7 @@ fun FilesScreen(
                             FileRow(
                                 entry = entry,
                                 canSync = state.connection.isReady && !state.sync.running,
-                                onSync = { viewModel.syncOne(entry.name) },
+                                onSync = { withNotificationPermission { viewModel.syncOne(entry.name) } },
                                 onShare = {
                                     viewModel.archivedFor(entry.name, (entry.partition as? earth.walkthru.aqsync.data.sync.HivePartition.Dated)?.station)
                                         ?.let(viewModel::share)

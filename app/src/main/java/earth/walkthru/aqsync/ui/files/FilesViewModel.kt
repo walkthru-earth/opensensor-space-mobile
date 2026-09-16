@@ -8,6 +8,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import earth.walkthru.aqsync.data.DeviceConnectionRepository
 import earth.walkthru.aqsync.data.DeviceEvent
 import earth.walkthru.aqsync.data.ManifestState
+import earth.walkthru.aqsync.data.ReconnectState
 import earth.walkthru.aqsync.data.SyncProgress
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.export.ExportManager
@@ -42,6 +43,7 @@ data class FilesUiState(
     val archived: List<ArchivedFile> = emptyList(),
     val archivedBytes: Long = 0,
     val exporting: Boolean = false,
+    val reconnecting: ReconnectState? = null,
 )
 
 /** UI-side effects: launch a share sheet or a SAF picker. */
@@ -67,6 +69,7 @@ class FilesViewModel @Inject constructor(
 
     val uiState: StateFlow<FilesUiState> = combine(
         repository.connectionState, repository.manifest, repository.plan, repository.sync, archivedFileDao.observeAll(), exporting,
+        repository.reconnecting,
     ) { values ->
         @Suppress("UNCHECKED_CAST")
         val archived = values[4] as List<ArchivedFile>
@@ -80,6 +83,7 @@ class FilesViewModel @Inject constructor(
             archived = archived,
             archivedBytes = archived.sumOf { it.bytes },
             exporting = values[5] as Boolean,
+            reconnecting = values[6] as ReconnectState?,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FilesUiState())
 

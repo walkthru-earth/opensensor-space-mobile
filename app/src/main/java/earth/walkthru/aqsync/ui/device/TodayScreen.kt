@@ -150,8 +150,8 @@ fun TodayScreen(
             // so the scroll position cannot jump.
             if (state.connection !is ConnectionState.Ready) {
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-                    ConnectionBanner(state.connection)
-                    if (state.connection is ConnectionState.Failed || state.connection is ConnectionState.Disconnected) {
+                    ConnectionBanner(state.connection, reconnecting = state.reconnecting)
+                    if (state.reconnecting == null && (state.connection is ConnectionState.Failed || state.connection is ConnectionState.Disconnected)) {
                         Spacer(Modifier.height(8.dp))
                         Button(onClick = { viewModel.reconnect() }, modifier = Modifier.fillMaxWidth()) { Text("Reconnect") }
                     }

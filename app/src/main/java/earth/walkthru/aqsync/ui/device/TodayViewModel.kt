@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import earth.walkthru.aqsync.data.DeviceConnectionRepository
 import earth.walkthru.aqsync.data.DeviceEvent
+import earth.walkthru.aqsync.data.ReconnectState
 import earth.walkthru.aqsync.data.SyncProgress
 import earth.walkthru.aqsync.data.TimedLive
 import earth.walkthru.aqsync.data.TimedStatus
@@ -30,6 +31,7 @@ data class TodayUiState(
     val isFake: Boolean = false,
     val transport: TransportKind? = null,
     val advancedMode: Boolean = false,
+    val reconnecting: ReconnectState? = null,
 )
 
 @HiltViewModel
@@ -42,7 +44,7 @@ class TodayViewModel @Inject constructor(
 
     val uiState: StateFlow<TodayUiState> = combine(
         repository.session, repository.connectionState, repository.info, repository.status, repository.live, repository.sync,
-        settings.advancedMode,
+        settings.advancedMode, repository.reconnecting,
     ) { values ->
         val session = values[0] as earth.walkthru.aqsync.data.ble.DeviceSession?
         TodayUiState(
@@ -56,6 +58,7 @@ class TodayViewModel @Inject constructor(
             isFake = repository.isFake,
             transport = session?.transport?.kind,
             advancedMode = values[6] as Boolean,
+            reconnecting = values[7] as ReconnectState?,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TodayUiState())
 

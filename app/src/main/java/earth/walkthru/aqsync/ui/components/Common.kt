@@ -39,6 +39,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import earth.walkthru.aqsync.data.ReconnectState
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.TransportKind
 import kotlinx.coroutines.delay
@@ -137,7 +138,7 @@ fun ConnectionState.describe(): String = when (this) {
 }
 
 @Composable
-fun ConnectionBanner(state: ConnectionState, modifier: Modifier = Modifier) {
+fun ConnectionBanner(state: ConnectionState, modifier: Modifier = Modifier, reconnecting: ReconnectState? = null) {
     val (container, content) = when (state) {
         is ConnectionState.Ready -> MaterialTheme.colorScheme.surfaceContainer to MaterialTheme.colorScheme.onSurface
         is ConnectionState.Failed -> MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
@@ -160,6 +161,12 @@ fun ConnectionBanner(state: ConnectionState, modifier: Modifier = Modifier) {
             Spacer(Modifier.width(12.dp))
             Column {
                 Text(state.describe(), style = MaterialTheme.typography.bodyMedium)
+                if (reconnecting != null) {
+                    Text(
+                        "Link lost (${reconnecting.reason}). Reconnecting automatically, attempt ${reconnecting.attempt} of ${reconnecting.maxAttempts}…",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
                 if (state == ConnectionState.Bonding) {
                     Text(
                         "The CoreS3 shows a passkey on its screen. Android will ask you to type it.",

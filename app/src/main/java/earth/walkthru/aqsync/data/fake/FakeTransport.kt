@@ -32,7 +32,7 @@ import kotlin.random.Random
  * An in-process CoreS3 that speaks protocol v2 over the [AqTransport] interface, so every screen
  * and the whole sync path can be exercised without hardware.
  *
- * It serves three small `PAR1…PAR1` files with correct CRC-32s, emits `live` JSON every 10 s and
+ * It serves three small `PAR1…PAR1` files plus one 1 MiB benchmark file, all with correct CRC-32s, emits `live` JSON every 10 s and
  * `status` after every sample, honours `max_read`, and answers `SET_TIME` / `FLUSH` like the
  * firmware would. v2: a fake config (pairing mode, Wi-Fi, LAN), a fake Wi-Fi scan list, a fake
  * token, a fake serial log ring, and `REBOOT` that drops the link and resets boot state. Enabled
@@ -120,6 +120,9 @@ class FakeTransport(
         FakeFile("station=$station/year=2026/month=09/day=15/data_1000_${bootId}_15000-15089-90.parquet", fakeParquet(rnd, 24_000)),
         FakeFile("station=$station/year=2026/month=09/day=15/data_1015_${bootId}_15090-15179-90.parquet", fakeParquet(rnd, 23_400)),
         FakeFile("station=$station/unsynced/boot=$bootId/data_0000_${bootId}_1-60-60.parquet", fakeParquet(rnd, 9_800)),
+        // One file big enough (≈ 8 s at the fake's chunk pace) to watch the progress notification,
+        // the Stop action and a resume from `.partial` without hardware.
+        FakeFile("benchmarks/boot=$bootId/bench_lz4_raw_${bootId}_1-6000-6000.parquet", fakeParquet(rnd, 1_048_576)),
     )
 
     init {

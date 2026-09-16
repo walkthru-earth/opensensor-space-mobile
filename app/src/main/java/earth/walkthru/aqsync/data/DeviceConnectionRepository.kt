@@ -1,6 +1,9 @@
 package earth.walkthru.aqsync.data
 
+import android.content.Context
 import android.util.Log
+import dagger.hilt.android.qualifiers.ApplicationContext
+import earth.walkthru.aqsync.data.background.SyncForegroundService
 import earth.walkthru.aqsync.data.ble.AqTransport
 import earth.walkthru.aqsync.data.ble.ConfigSnapshot
 import earth.walkthru.aqsync.data.ble.ConnectionState
@@ -15,6 +18,7 @@ import earth.walkthru.aqsync.data.ble.WifiUnavailableException
 import earth.walkthru.aqsync.data.lan.LanConnectException
 import earth.walkthru.aqsync.data.lan.LanDevice
 import earth.walkthru.aqsync.data.lan.LanDiscovery
+import earth.walkthru.aqsync.data.lan.LanTokenPolicy
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.local.database.KnownDevice
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
@@ -52,12 +56,15 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -117,6 +124,23 @@ sealed interface LogTailState {
 /** How the repository should pick a transport for a connect. */
 enum class TransportPreference { AUTO, BLE_ONLY }
 
+/** A link that was Ready dropped on its own; the repository is trying to get it back. */
+data class ReconnectState(val attempt: Int, val maxAttempts: Int, val reason: String)
+
+/** Outcome of one [DeviceConnectionRepository.syncInBackground] run, for the worker's summary. */
+data class BackgroundSyncResult(
+    val address: String,
+    val deviceName: String?,
+    val transport: TransportKind?,
+    val newFiles: Int,
+    val newBytes: Long,
+    val failures: Int,
+    /** Non-null when nothing was attempted (already connected elsewhere, connect failed, …). */
+    val skipped: String? = null,
+) {
+    val attempted: Boolean get() = skipped == null
+}
+
 /**
  * Owns the single live connection to a logger and everything derived from it.
  *
@@ -126,6 +150,7 @@ enum class TransportPreference { AUTO, BLE_ONLY }
 @OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
 class DeviceConnectionRepository @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val transportFactory: TransportFactory,
     private val knownDeviceDao: KnownDeviceDao,
     private val archivedFileDao: ArchivedFileDao,
@@ -134,6 +159,7 @@ class DeviceConnectionRepository @Inject constructor(
     private val lanDiscovery: LanDiscovery,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val tokenPolicy = LanTokenPolicy()
 
     private val _session = MutableStateFlow<DeviceSession?>(null)
     val session: StateFlow<DeviceSession?> = _session.asStateFlow()
@@ -159,6 +185,10 @@ class DeviceConnectionRepository @Inject constructor(
     /** Set while a config write / reboot / token fetch is in flight, to disable the buttons. */
     private val _busy = MutableStateFlow(false)
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
+
+    /** Non-null while a lost link is being re-established automatically (see [watchLink]). */
+    private val _reconnecting = MutableStateFlow<ReconnectState?>(null)
+    val reconnecting: StateFlow<ReconnectState?> = _reconnecting.asStateFlow()
 
     // ------------------------------------------------------------ LAN discovery
 
@@ -223,11 +253,19 @@ class DeviceConnectionRepository @Inject constructor(
     private val _sync = MutableStateFlow(SyncProgress())
     val sync: StateFlow<SyncProgress> = _sync.asStateFlow()
 
+    /**
+     * True while the process must stay out of the background firewall chain: a transfer is running,
+     * or a link that was carrying one is being re-established. Drives the dataSync foreground service.
+     */
+    val foregroundNeeded: StateFlow<Boolean> = combine(_sync, _reconnecting) { s, r -> s.running || r != null }
+        .stateIn(scope, SharingStarted.Eagerly, false)
+
     private val _events = MutableSharedFlow<DeviceEvent>(extraBufferCapacity = 16, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     val events: SharedFlow<DeviceEvent> = _events.asSharedFlow()
 
     /** Address of the device we are connected to / connecting to. */
     val currentAddress: String? get() = _session.value?.address
+    val currentDisplayName: String? get() = _session.value?.transport?.displayName
     val isFake: Boolean get() = _session.value?.transport?.let(transportFactory::isFake) == true
 
     /**
@@ -282,30 +320,37 @@ class DeviceConnectionRepository @Inject constructor(
      */
     fun connect(address: String, name: String?, fake: Boolean = false, preference: TransportPreference = TransportPreference.AUTO) {
         scope.launch {
-            connectMutex.withLock {
-                val existing = _session.value
-                if (existing != null && existing.address == address && existing.connectionState.value.isReady) return@withLock
-                closeSessionLocked()
-                resetDerivedState()
-
-                knownDeviceDao.insertIfAbsent(
-                    KnownDevice(address, name, null, null, null, System.currentTimeMillis(), null)
-                )
-                val known = knownDeviceDao.get(address)
-
-                var transport: AqTransport? = null
-                if (fake) {
-                    transport = transportFactory.fake(address)
-                } else if (preference == TransportPreference.AUTO) {
-                    transport = tryLan(address, name ?: known?.name, known)
-                }
-                if (transport == null) {
-                    transport = transportFactory.ble(address)
-                }
-                if (!openSession(transport, address, name)) return@withLock
-                refreshManifest()
-            }
+            reconnectJob?.cancel()
+            reconnectJob = null
+            _reconnecting.value = null
+            connectMutex.withLock { connectLocked(address, name, fake, preference) }
         }
+    }
+
+    /** Body of [connect]; true when a session is Ready afterwards. Caller holds [connectMutex]. */
+    private suspend fun connectLocked(address: String, name: String?, fake: Boolean, preference: TransportPreference): Boolean {
+        val existing = _session.value
+        if (existing != null && existing.address == address && existing.connectionState.value.isReady) return true
+        closeSessionLocked()
+        resetDerivedState()
+
+        knownDeviceDao.insertIfAbsent(
+            KnownDevice(address, name, null, null, null, System.currentTimeMillis(), null)
+        )
+        val known = knownDeviceDao.get(address)
+
+        var transport: AqTransport? = null
+        if (fake) {
+            transport = transportFactory.fake(address)
+        } else if (preference == TransportPreference.AUTO) {
+            transport = tryLan(address, name ?: known?.name, known)
+        }
+        if (transport == null) {
+            transport = transportFactory.ble(address)
+        }
+        if (!openSession(transport, address, name, fake)) return false
+        refreshManifest()
+        return true
     }
 
     /** Attempt a LAN session; null when not applicable or when it failed (the caller falls back to BLE). */
@@ -330,7 +375,15 @@ class DeviceConnectionRepository @Inject constructor(
             transport
         } catch (e: LanConnectException) {
             Log.w(TAG, "LAN connect failed (${e.failure}); falling back to Bluetooth")
-            _events.tryEmit(DeviceEvent.Info("Wi-Fi LAN: ${e.message}. Using Bluetooth."))
+            if (tokenPolicy.invalidatesToken(e.failure)) {
+                // The device rotated its token (ERROR 14 at the handshake). The stored copy is dead:
+                // drop it so the Bluetooth session we are about to open fetches a fresh one.
+                knownDeviceDao.setLanToken(address, null, null)
+                tokenPolicy.markStale(address)
+                _events.tryEmit(DeviceEvent.Info("Wi-Fi LAN: token rejected. Using Bluetooth and renewing the token."))
+            } else {
+                _events.tryEmit(DeviceEvent.Info("Wi-Fi LAN: ${e.message}. Using Bluetooth."))
+            }
             _session.value = null
             transport.close()
             null
@@ -355,7 +408,7 @@ class DeviceConnectionRepository @Inject constructor(
     }
 
     /** Connect [transport] (if not already), read `info`, persist identity, fetch token/config. */
-    private suspend fun openSession(transport: AqTransport, address: String, name: String?): Boolean {
+    private suspend fun openSession(transport: AqTransport, address: String, name: String?, fake: Boolean): Boolean {
         val session = (_session.value?.takeIf { it.transport === transport } ?: DeviceSession(transport))
             .also { it.staleFrameLogger = { m -> Log.w(TAG, m) } }
         _session.value = session
@@ -366,6 +419,7 @@ class DeviceConnectionRepository @Inject constructor(
             return false
         }
         startNotificationCollection(session)
+        watchLink(session, address, name, fake)
         try {
             val info = session.readInfo()
             _info.value = info
@@ -396,9 +450,12 @@ class DeviceConnectionRepository @Inject constructor(
 
             val v2 = (proto ?: 1) >= 2
             if (v2) {
-                // Token: once, over BLE only, when we do not hold one yet. Never logged.
-                if (transport.kind != TransportKind.LAN && previous?.lanToken == null) {
-                    fetchTokenLocked(session, address, quiet = true)
+                // Token: once, over BLE only, when we do not hold one (or the LAN handshake just
+                // said ours is stale, see tryLan). Never logged.
+                if (tokenPolicy.shouldFetch(transport.kind, proto, previous?.lanToken)) {
+                    if (fetchTokenLocked(session, address, quiet = true) && tokenPolicy.onFetched(address)) {
+                        _events.tryEmit(DeviceEvent.Info("LAN token renewed"))
+                    }
                 }
                 runCatching { session.getConfig() }
                     .onSuccess { _config.value = it }
@@ -446,32 +503,93 @@ class DeviceConnectionRepository @Inject constructor(
     }
 
     private suspend fun closeSessionLocked() {
+        linkWatchJob?.cancel()
+        linkWatchJob = null
         syncJob?.cancel()
         syncJob = null
         notificationJob?.cancel()
         notificationJob = null
-        _session.value?.let { s ->
+        // Drop the session from the slot *before* the transport reports Disconnected, so nothing
+        // mistakes this deliberate close for a lost link.
+        val s = _session.value
+        _session.value = null
+        if (s != null) {
             runCatching { s.transport.disconnect() }
             s.transport.close()
         }
-        _session.value = null
         _sync.update { it.copy(running = false, current = null) }
+    }
+
+    // ------------------------------------------------------------- link watch
+
+    private var linkWatchJob: Job? = null
+    private var reconnectJob: Job? = null
+
+    /**
+     * Once [session] is Ready, wait for it to stop being Ready while it is still the current
+     * session — that is a link lost on its own (LAN socket destroyed by the OS in the background,
+     * GATT 133, device reboot), never a [disconnect] (which clears the slot first). Then retry
+     * [RECONNECT_ATTEMPTS] times, [RECONNECT_DELAY_MS] apart, with the normal transport rule: LAN
+     * if the device is still discovered, else Bluetooth — so a LAN link killed by the background
+     * restriction comes back over BLE within seconds. A sync that was running is resumed.
+     */
+    private fun watchLink(session: DeviceSession, address: String, name: String?, fake: Boolean) {
+        linkWatchJob?.cancel()
+        linkWatchJob = scope.launch {
+            val lost = session.connectionState.first { !it.isReady && it !is ConnectionState.Connecting && !it.isBusy }
+            if (_session.value !== session) return@launch
+            val reason = (lost as? ConnectionState.Failed)?.reason ?: "device closed the connection"
+            val wasSyncing = _sync.value.running
+            Log.w(TAG, "link lost ($reason); auto-reconnect starts, resumeSync=$wasSyncing")
+            reconnectJob = scope.launch { reconnectLoop(address, name, fake, reason, wasSyncing) }
+        }
+    }
+
+    private suspend fun reconnectLoop(address: String, name: String?, fake: Boolean, reason: String, resumeSync: Boolean) {
+        try {
+            for (attempt in 1..RECONNECT_ATTEMPTS) {
+                _reconnecting.value = ReconnectState(attempt, RECONNECT_ATTEMPTS, reason)
+                _events.tryEmit(DeviceEvent.Info("Link lost ($reason). Reconnecting ($attempt/$RECONNECT_ATTEMPTS)…"))
+                delay(RECONNECT_DELAY_MS)
+                val ok = connectMutex.withLock {
+                    // A newer session appeared meanwhile (user action): stop.
+                    val cur = _session.value
+                    if (cur != null && cur.connectionState.value.isReady) return@withLock true
+                    connectLocked(address, name, fake, TransportPreference.AUTO)
+                }
+                if (ok) {
+                    if (resumeSync) {
+                        // The manifest refresh started by connectLocked feeds `plan`; sync once it is there.
+                        withTimeoutOrNull(MANIFEST_WAIT_MS) { plan.filterNotNull().first() }
+                        syncAll()
+                    }
+                    return
+                }
+            }
+            _events.tryEmit(DeviceEvent.Error("Could not reconnect after $RECONNECT_ATTEMPTS attempts. Use Reconnect when the device is back."))
+        } finally {
+            _reconnecting.value = null
+        }
     }
 
     // ----------------------------------------------------------------- manifest
 
     fun refreshManifest() {
         val session = _session.value ?: return
-        scope.launch {
-            _manifest.value = ManifestState.Loading
-            try {
-                val (files, end) = session.list()
-                _manifest.value = ManifestState.Loaded(files, end, System.currentTimeMillis())
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                _manifest.value = ManifestState.Error(e.message ?: "LIST failed")
-            }
+        scope.launch { refreshManifestNow(session) }
+    }
+
+    private suspend fun refreshManifestNow(session: DeviceSession): Boolean {
+        _manifest.value = ManifestState.Loading
+        return try {
+            val (files, end) = session.list()
+            _manifest.value = ManifestState.Loaded(files, end, System.currentTimeMillis())
+            true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            _manifest.value = ManifestState.Error(e.message ?: "LIST failed")
+            false
         }
     }
 
@@ -494,25 +612,44 @@ class DeviceConnectionRepository @Inject constructor(
         syncJob?.cancel()
     }
 
-    private fun startSync(entries: List<ManifestEntry>) {
-        if (_sync.value.running) return
-        val session = _session.value ?: return
+    /** Stop an automatic reconnect (the user pressed Stop on the notification). */
+    fun cancelReconnect() {
+        reconnectJob?.cancel()
+        reconnectJob = null
+        _reconnecting.value = null
+    }
+
+    /**
+     * Pull [entries]. Returns the job (so a caller can await it) or null when nothing started.
+     *
+     * [foregroundService] = true (user-started syncs) puts the process under the dataSync foreground
+     * service for the duration of the transfer; see [SyncForegroundService] for the measured reason.
+     * The auto-sync worker passes false because WorkManager already runs it as a foreground worker.
+     */
+    private fun startSync(entries: List<ManifestEntry>, foregroundService: Boolean = true): Job? {
+        if (_sync.value.running) return null
+        val session = _session.value ?: return null
         val info = _info.value
         val station = info?.station ?: run {
             _events.tryEmit(DeviceEvent.Error("Cannot sync: device `info` has no station id"))
-            return
+            return null
         }
         val maxRead = info.maxRead ?: DEFAULT_MAX_READ
         if (entries.isEmpty()) {
             _events.tryEmit(DeviceEvent.Info("Archive is already up to date"))
-            return
+            return null
         }
         val total = entries.sumOf { it.bytes - it.partialBytes }
         val started = System.currentTimeMillis()
         _sync.value = SyncProgress(running = true, filesTotal = entries.size, bytesTotal = total, startedAtEpochMs = started)
         val meter = RateMeter()
+        if (foregroundService) {
+            // The fake device needs no protection, but in debug builds it runs under the service too
+            // so the notification and its Stop action can be exercised without hardware.
+            if (FOREGROUND_FOR_FAKE || !transportFactory.isFake(session.transport)) SyncForegroundService.start(context)
+        }
 
-        syncJob = scope.launch {
+        val job = scope.launch {
             var bytesBefore = 0L
             val outcomes = ArrayList<FileOutcome>()
             try {
@@ -552,7 +689,86 @@ class DeviceConnectionRepository @Inject constructor(
                 if (session.connectionState.value.isReady) refreshManifest()
             }
         }
+        syncJob = job
+        return job
     }
+
+    // ---------------------------------------------------------- background sync
+
+    /**
+     * One unattended sync of [address] for the auto-sync worker: connect over [lanTarget] (host/port
+     * from a fresh mDNS browse, token from Room) or Bluetooth by address, LIST, pull what the archive
+     * lacks, disconnect again — unless the UI already holds a Ready session to this very device, in
+     * which case that session is used and left open. Any other live session means "skip": one
+     * device link at a time. Progress is visible on [sync] like a user-started run. Nothing here
+     * starts the app's own foreground service; the worker is WorkManager's foreground worker.
+     */
+    suspend fun syncInBackground(address: String, lanTarget: LanDevice?): BackgroundSyncResult {
+        val known = knownDeviceDao.get(address)
+        val name = known?.name
+        var openedHere = false
+        val session: DeviceSession = connectMutex.withLock {
+            val cur = _session.value
+            when {
+                cur != null && cur.address == address && cur.connectionState.value.isReady -> cur
+                cur != null -> return BackgroundSyncResult(address, name, null, 0, 0, 0, skipped = "another session is active (${cur.address})")
+                _reconnecting.value != null -> return BackgroundSyncResult(address, name, null, 0, 0, 0, skipped = "a reconnect is in progress")
+                else -> {
+                    resetDerivedState()
+                    val transport: AqTransport = if (lanTarget != null) {
+                        val tokenHex = known?.lanToken
+                        val host = lanTarget.host
+                        if (tokenHex == null || host == null) {
+                            return BackgroundSyncResult(address, name, null, 0, 0, 0, skipped = "no token or address for the LAN link")
+                        }
+                        transportFactory.lan(address, name, host, lanTarget.port.takeIf { it in 1..65535 } ?: known.lanPort ?: 0, tokenHex.hexToBytes())
+                    } else {
+                        transportFactory.ble(address)
+                    }
+                    if (!openSession(transport, address, name, fake = false)) {
+                        // openSession already closed the transport's state; make sure the slot is clean.
+                        closeSessionLocked()
+                        return BackgroundSyncResult(address, name, transport.kind, 0, 0, 0, skipped = "connect failed")
+                    }
+                    if (lanTarget != null && tokenPolicy.isStale(address)) {
+                        // Should not happen (LAN succeeded), but keep the mark honest.
+                        tokenPolicy.clear(address)
+                    }
+                    openedHere = true
+                    _session.value ?: return BackgroundSyncResult(address, name, transport.kind, 0, 0, 0, skipped = "session vanished")
+                }
+            }
+        }
+        try {
+            if (!refreshManifestNow(session)) {
+                return BackgroundSyncResult(address, session.transport.displayName ?: name, session.transport.kind, 0, 0, 0, skipped = "LIST failed")
+            }
+            val plan = withTimeoutOrNull(MANIFEST_WAIT_MS) { plan.filterNotNull().first() }
+                ?: return BackgroundSyncResult(address, session.transport.displayName ?: name, session.transport.kind, 0, 0, 0, skipped = "no plan")
+            val job = startSync(plan.toDownload, foregroundService = false)
+            if (job == null) {
+                return BackgroundSyncResult(address, session.transport.displayName ?: name, session.transport.kind, 0, 0, 0)
+            }
+            job.join()
+            val outcomes = _sync.value.outcomes
+            val synced = outcomes.filterIsInstance<FileOutcome.Synced>()
+            return BackgroundSyncResult(
+                address = address,
+                deviceName = session.transport.displayName ?: name,
+                transport = session.transport.kind,
+                newFiles = synced.size,
+                newBytes = synced.sumOf { it.bytes },
+                failures = outcomes.size - synced.size,
+            )
+        } finally {
+            if (openedHere) {
+                connectMutex.withLock { if (_session.value === session) closeSessionLocked() }
+            }
+        }
+    }
+
+    /** True when a session to [address] is Ready right now (the worker then reuses it). */
+    fun isConnectedTo(address: String): Boolean = _session.value?.let { it.address == address && it.connectionState.value.isReady } == true
 
     private fun describe(o: FileOutcome): String = when (o) {
         is FileOutcome.Synced -> "synced"
@@ -750,6 +966,7 @@ class DeviceConnectionRepository @Inject constructor(
             try {
                 _config.value = session.setConfig(ConfigPatch.build { rotateToken() })
                 knownDeviceDao.setLanToken(address, null, null)
+                tokenPolicy.clear(address)
                 if (session.transport.kind == TransportKind.LAN) {
                     _events.tryEmit(DeviceEvent.Info("Token rotated. This LAN session will drop; reconnect over Bluetooth to fetch the new token."))
                 } else if (fetchTokenLocked(session, address, quiet = true)) {
@@ -787,7 +1004,10 @@ class DeviceConnectionRepository @Inject constructor(
         knownDeviceDao.touch(address, name, System.currentTimeMillis())
     }
 
-    suspend fun forget(address: String) = withContext(Dispatchers.IO) { knownDeviceDao.delete(address) }
+    suspend fun forget(address: String) = withContext(Dispatchers.IO) {
+        tokenPolicy.clear(address)
+        knownDeviceDao.delete(address)
+    }
 
     /** Rolling throughput over the last few seconds. */
     private class RateMeter {
@@ -815,5 +1035,13 @@ class DeviceConnectionRepository @Inject constructor(
 
         /** Boot + BLE stack start + advertising on the CoreS3; generous. */
         const val REBOOT_RECONNECT_DELAY_MS = 6_000L
+
+        /** Auto-reconnect after a lost link: bounded, then the user is told. */
+        const val RECONNECT_ATTEMPTS = 3
+        const val RECONNECT_DELAY_MS = 5_000L
+        const val MANIFEST_WAIT_MS = 30_000L
+
+        /** Debug builds run the fake device under the foreground service too, so the notification can be seen without hardware. */
+        private val FOREGROUND_FOR_FAKE = earth.walkthru.aqsync.BuildConfig.DEBUG
     }
 }

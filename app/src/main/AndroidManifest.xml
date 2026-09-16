@@ -17,6 +17,14 @@
       permissions, so it is usually granted with them; the app still checks and requests it before
       any LAN action and keeps working over Bluetooth when it is denied. Below API 37 the permission
       does not exist and is never requested.
+
+      FOREGROUND_SERVICE + FOREGROUND_SERVICE_DATA_SYNC: every file transfer runs under a `dataSync`
+      foreground service (data/background/SyncForegroundService). Measured on Android 16 (OnePlus 7 Pro): ~2 min after the screen
+      went off, ConnectivityService "Destroyed live tcp sockets for uids={<ours>}" and the LAN sync
+      died with "Software caused connection abort" — the background network restriction. A
+      foreground service keeps the uid out of that firewall chain for the duration of the transfer
+      and not a second longer. POST_NOTIFICATIONS is requested at runtime on API 33+ so the progress
+      notification is visible; a denial only hides the notification, the service still runs.
     -->
     <uses-permission
         android:name="android.permission.BLUETOOTH_SCAN"
@@ -24,6 +32,9 @@
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <uses-feature
         android:name="android.hardware.bluetooth_le"
@@ -51,6 +62,17 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!--
+          Keeps the process out of the background firewall chain while a user-started sync runs.
+          Started by DeviceConnectionRepository when a transfer begins (the app is in the
+          foreground at that moment); it attaches to the repository's sync state flow, shows the
+          progress notification with a Stop action, and stops itself when the sync ends.
+        -->
+        <service
+            android:name=".data.background.SyncForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <!-- Read-only handout of archive files and export zips to the share sheet. -->
         <provider
