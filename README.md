@@ -42,13 +42,14 @@ can leave the phone through the system share sheet or the file picker.
 
 ## Status
 
-**Implements protocol v2 (2026-09-17) plus Auto-sync (2026-09-17); the BLE file sync has run
-against the board from a phone (OnePlus 7 Pro, Android 16), Auto-sync has not yet.** Verified on
-2026-09-17: `./gradlew lintDebug assembleDebug testDebugUnitTest` → 0 lint errors (7 pre-existing
-warnings), 84/84 unit tests (v1+v2 frame codec, CONFIG JSON + `SET_CONFIG` builder, LAN framing
-with a `LIVE` push between two `CHUNK`s, the real `TcpTransport` against an in-JVM fake device over
-loopback, JSON models, Parquet verification, sync planner, lost-window recovery, the auto-sync
-worker's decision logic over the fake device), debug APK ≈ 64 MB unminified.
+**Implements protocol v2 (2026-09-17) plus Auto-sync (2026-09-17); the BLE and LAN file sync
+have run against the board from a phone (OnePlus 7 Pro, Android 16) — see the "After the first
+phone run" decisions — Auto-sync has not yet.** Verified on 2026-09-17:
+`./gradlew assembleDebug testDebugUnitTest lintDebug` → 0 lint errors (7 pre-existing warnings),
+88/88 unit tests (v1+v2 frame codec, CONFIG JSON + `SET_CONFIG` builder, LAN framing with a `LIVE`
+push between two `CHUNK`s, the real `TcpTransport` against an in-JVM fake device over loopback,
+JSON models, Parquet verification, sync planner, lost-window recovery, the resume-after-lost-link
+decision, the auto-sync worker's decision logic over the fake device), debug APK ≈ 65 MB unminified.
 
 The v1 file-sync part of the protocol *is* bench-verified: the same contract was exercised from a
 macOS host client against the real board on 2026-09-16 (pairing, 766-file manifest, verified
@@ -162,7 +163,7 @@ app/src/main/java/earth/walkthru/aqsync/
   data/export/     share / zip / SAF export
   data/fake/       in-app fake device for debug builds
   ui/scan · ui/device (Today, Device) · ui/files · ui/debug · ui/settings · ui/permissions · ui/theme
-app/src/test/      frame codec v1/v2, config, LAN framing, TcpTransport loopback, verification, JSON, planner, lost-window recovery + stale-frame drain against the fake device, auto-sync runner (links, guards, "nothing new") over the fake device
+app/src/test/      frame codec v1/v2, config, LAN framing, TcpTransport loopback, verification, JSON, planner, resume-after-lost-link policy, lost-window recovery + stale-frame drain against the fake device, auto-sync runner (links, guards, "nothing new") over the fake device
 ```
 
 ## Design decisions
