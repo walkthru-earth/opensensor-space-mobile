@@ -3,12 +3,14 @@ package earth.walkthru.aqsync.data.protocol
 import java.util.UUID
 
 /**
- * GATT attribute identities from docs/ble-sync-protocol.md (protocol v1).
+ * GATT attribute identities from docs/ble-sync-protocol.md (protocol v2; the GATT layout is
+ * unchanged from v1).
  *
  * Base UUID `c0a5e9f0-XXXX-4b1a-9c3e-2d7f8a6b4e01`; the 16-bit field selects the attribute.
  */
 object AqUuids {
-    const val PROTOCOL_VERSION = 1
+    /** Highest protocol version this app implements. v1 devices are a strict subset. */
+    const val PROTOCOL_VERSION = 2
 
     private fun aq(attr: Int): UUID = UUID.fromString(
         "c0a5e9f0-%04x-4b1a-9c3e-2d7f8a6b4e01".format(attr)
