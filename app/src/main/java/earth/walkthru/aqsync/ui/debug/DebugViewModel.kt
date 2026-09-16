@@ -12,6 +12,7 @@ import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.protocol.AqJson
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.protocol.FrameType
+import earth.walkthru.aqsync.data.protocol.Opcode
 import earth.walkthru.aqsync.data.protocol.hexToBytes
 import earth.walkthru.aqsync.data.protocol.toHex
 import earth.walkthru.aqsync.data.settings.AppSettings
@@ -115,6 +116,14 @@ class DebugViewModel @Inject constructor(
         }
         if (bytes.isEmpty() || bytes.size > 512) {
             rawError.value = "request must be 1..512 bytes"
+            return
+        }
+        // The destructive requests need their confirmation dialog (AGENTS.md): REBOOT restarts the
+        // logger, SET_CONFIG can rotate the token, forget bonds or disable the passkey. The raw
+        // box is for looking at frames, not for bypassing the Device screen.
+        val op = bytes[0].toInt() and 0xFF
+        if (op == Opcode.REBOOT || op == Opcode.SET_CONFIG) {
+            rawError.value = "${Opcode.name(op)} is not sent from here; use the Device screen, which asks for confirmation"
             return
         }
         viewModelScope.launch {

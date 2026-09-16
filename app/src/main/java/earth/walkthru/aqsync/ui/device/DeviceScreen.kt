@@ -230,7 +230,7 @@ fun DeviceScreen(
                             StatLine("bonds stored on the device", state.config?.config?.ble?.bonds?.toString() ?: "—")
                             InfoNote("The device keeps up to 3 bonded phones and evicts the oldest. Forgetting all bonds also forgets this phone: the next Bluetooth connection pairs again.")
                             Spacer(Modifier.height(8.dp))
-                            OutlinedButton(onClick = { confirmBonds = true }, enabled = state.canEdit) { Text("Forget all bonds") }
+                            OutlinedButton(onClick = { confirmBonds = true }, enabled = state.canDisrupt) { Text("Forget all bonds") }
                         }
                     }
                 }
@@ -252,7 +252,11 @@ fun DeviceScreen(
                         "The app disconnects and reconnects automatically."
                 )
             },
-            confirmButton = { TextButton(onClick = { confirmReboot = false; viewModel.reboot() }) { Text("Reboot") } },
+            // The only path to REBOOT in the app. Single-fire: the flag is cleared before the call,
+            // and the repository refuses a second call while the first is in flight or a sync runs.
+            confirmButton = {
+                TextButton(onClick = { if (confirmReboot) { confirmReboot = false; viewModel.reboot() } }) { Text("Reboot") }
+            },
             dismissButton = { TextButton(onClick = { confirmReboot = false }) { Text("Cancel") } },
         )
     }
@@ -411,7 +415,8 @@ private fun PairingCard(state: DeviceUiState, onSave: (PairMode, String?) -> Uni
                 enabled = state.canEdit && pinOk && !needsPin && (selected != current || pin.length == 6),
                 modifier = Modifier.weight(1f),
             ) { Text("Save pairing") }
-            OutlinedButton(onClick = onReboot, enabled = state.canEdit, modifier = Modifier.weight(1f)) {
+            // Disabled during a transfer: a REBOOT would kill the download (see DeviceUiState.canDisrupt).
+            OutlinedButton(onClick = onReboot, enabled = state.canDisrupt, modifier = Modifier.weight(1f)) {
                 Icon(Icons.Rounded.RestartAlt, contentDescription = null)
                 Spacer(Modifier.width(6.dp))
                 Text("Reboot device")
@@ -707,7 +712,7 @@ private fun LanCard(
                     Text("Reconnect over Bluetooth")
                 }
             }
-            OutlinedButton(onClick = onRotateToken, enabled = state.canEdit, modifier = Modifier.weight(1f)) { Text("Rotate token") }
+            OutlinedButton(onClick = onRotateToken, enabled = state.canDisrupt, modifier = Modifier.weight(1f)) { Text("Rotate token") }
         }
         if (!state.overBle) InfoNote("Fetching the token is Bluetooth-only by contract.")
     }

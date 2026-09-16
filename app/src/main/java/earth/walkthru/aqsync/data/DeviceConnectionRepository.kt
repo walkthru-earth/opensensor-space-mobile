@@ -954,15 +954,26 @@ class DeviceConnectionRepository @Inject constructor(
     /**
      * `REBOOT` → `REBOOTING delay_ms`, then drop the link and reconnect once the device is back
      * (BLE advertising resumes a few seconds after boot; the same transport rule applies again).
+     *
+     * This is the **only** caller of [DeviceSession.reboot] and is itself called only from the
+     * Device screen's confirmation dialog (`DeviceViewModel.reboot`). Guards, in case a UI path ever
+     * re-fires: refused while a transfer is running (a reboot would kill it and finalize the RAM
+     * batch under it), and [_busy] is taken synchronously with compare-and-set so two calls in the
+     * same instant send one `REBOOT`, not two.
      */
     fun rebootAndReconnect() {
         val session = _session.value ?: return
+        if (_sync.value.running) {
+            _events.tryEmit(DeviceEvent.Error("Not rebooting while a sync is running. Stop the sync first."))
+            return
+        }
+        if (!_busy.compareAndSet(expect = false, update = true)) return
         val address = session.address
         val name = session.transport.displayName
         val fake = isFake
         scope.launch {
-            _busy.value = true
             try {
+                if (_sync.value.running) throw IllegalStateException("a sync started meanwhile; not rebooting")
                 val r = session.reboot()
                 _events.tryEmit(DeviceEvent.Info("Device is rebooting (in ${r.delayMs} ms). Reconnecting…"))
                 delay(r.delayMs.toLong().coerceIn(100L, 5_000L))

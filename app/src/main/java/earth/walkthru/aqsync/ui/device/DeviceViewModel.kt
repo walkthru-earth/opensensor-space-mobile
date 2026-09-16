@@ -47,6 +47,8 @@ data class DeviceUiState(
     /** Phone holds a Bluetooth bond for this address (checked when the screen opens / config refreshes). */
     val bonded: Boolean = false,
     val busy: Boolean = false,
+    /** A file transfer is running on this session (interactive or worker-fed). */
+    val syncRunning: Boolean = false,
     val isFake: Boolean = false,
     val advancedMode: Boolean = false,
 ) {
@@ -57,6 +59,11 @@ data class DeviceUiState(
     val isV2: Boolean get() = (info?.proto ?: 1) >= 2
     val ready: Boolean get() = connection.isReady
     val canEdit: Boolean get() = ready && isV2 && !busy
+    /**
+     * Actions that drop the link (reboot, rotate token, forget bonds) are also refused while a
+     * transfer runs: a `REBOOT` mid-sync would kill the download and finalize the RAM batch under it.
+     */
+    val canDisrupt: Boolean get() = canEdit && !syncRunning
     val overBle: Boolean get() = transport == TransportKind.BLE || transport == TransportKind.FAKE
 }
 
@@ -93,15 +100,18 @@ class DeviceViewModel @Inject constructor(
         Triple(devices, err, known)
     }
 
+    private val activity = combine(repository.busy, repository.sync) { busy, sync -> busy to sync.running }
+
     val uiState: StateFlow<DeviceUiState> = combine(
-        core, repository.wifiScan, lan, repository.busy, settings.advancedMode,
-    ) { base, scan, (lanDevices, lanErr, known), busy, advanced ->
+        core, repository.wifiScan, lan, activity, settings.advancedMode,
+    ) { base, scan, (lanDevices, lanErr, known), (busy, syncRunning), advanced ->
         base.copy(
             wifiScan = scan,
             known = known,
             onLan = base.info?.station?.let { lanDevices[it] },
             lanDiscoveryError = lanErr,
             busy = busy,
+            syncRunning = syncRunning,
             advancedMode = advanced,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DeviceUiState())
