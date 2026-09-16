@@ -13,7 +13,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
@@ -63,8 +62,10 @@ class FakeTransport(
     private val _live = MutableSharedFlow<ByteArray>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     override val statusNotifications: Flow<ByteArray> = _status
     override val liveNotifications: Flow<ByteArray> = _live
-    private val _responses = Channel<ByteArray>(Channel.UNLIMITED)
-    override val responseFrames: ReceiveChannel<ByteArray> = _responses
+    // Replaced on every connect so the same fake device (and its configuration) survives
+    // close() + reconnect, e.g. across a fake REBOOT.
+    private var _responses = Channel<ByteArray>(Channel.UNLIMITED)
+    override val responseFrames: ReceiveChannel<ByteArray> get() = _responses
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var liveJob: Job? = null
@@ -141,6 +142,7 @@ class FakeTransport(
 
     override suspend fun connect() {
         if (_state.value.isReady) return
+        if (_responses.isClosedForSend) _responses = Channel(Channel.UNLIMITED)
         _state.value = ConnectionState.Connecting
         delay(400)
         _state.value = ConnectionState.DiscoveringServices
@@ -169,9 +171,15 @@ class FakeTransport(
         _state.value = ConnectionState.Disconnected
     }
 
+    /**
+     * Unlike the real transports this instance stays usable after close(): the factory hands out
+     * one fake per address so device state (config, token, log, files) persists like NVS would.
+     */
     override fun close() {
         liveJob?.cancel()
-        scope.cancel()
+        liveJob = null
+        openHandle = null
+        openFile = null
         _responses.close()
         _state.value = ConnectionState.Disconnected
     }

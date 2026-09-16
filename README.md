@@ -1,28 +1,63 @@
 # AQ Sync — Android companion for the CoreS3 air-quality logger
 
+> ## Work in progress (paused 2026-09-16)
+>
+> Protocol v2 support was implemented in one pass and **paused by the user before hardware or
+> emulator verification**. Tree state: `assembleDebug` OK, `testDebugUnitTest` 58/58, `lintDebug`
+> 0 errors / 7 pre-existing warnings. No emulator was running, so nothing below was clicked through.
+>
+> **Done (committed):** v2 codec (opcodes 0x08–0x0D, frames 0x40–0x49, errors 12–15) + `DeviceConfig`
+> model + `ConfigPatch` builder + LAN framing, all unit-tested; `DeviceSession` v2 ops with typed
+> exceptions; `data/lan/TcpTransport` (AQS1 handshake, reader loop demux, keep-alive; loopback-tested)
+> and `LanDiscovery` (NsdManager, API 31–37 paths); repository LAN-first-with-BLE-fallback rule,
+> one-time token fetch over BLE, Room schema v2 (`lanToken`/`lanPort`, explicit migration); manifest
+> `INTERNET` + `ACCESS_LOCAL_NETWORK` with `LanPermission` helper; Device screen (pairing / Wi-Fi /
+> LAN / bonds), Settings sheet (Advanced switch, DataStore), Debug screen, transport chip; Today fixes
+> (µm label, hoisted list state + keys + banner outside the list); `FakeTransport` v2 ops incl. a
+> simulated-LAN mode; README decisions table + AGENTS.md rules.
+>
+> **Not done:** no run on emulator or phone (no screenshots); the "Set time scrolls to top" bug was
+> fixed structurally, not reproduced; `LanDiscovery` and the API 37 permission prompt untested on a
+> device; no v2 firmware capture behind the test fixtures; reboot-reconnect delay (6 s) unmeasured.
+>
+> **First on resume:** start an emulator (API 35/36 or 37), `adb install app/build/outputs/apk/debug/app-debug.apk`,
+> connect *Debug: fake device*, walk Today → Device → Wi-Fi scan → join `home` → Settings → Advanced →
+> Debug → Device log, check the Set-time scroll behaviour and the pairing/reboot flow, then take the
+> `/tmp/aq-v2-*.png` screenshots. After that: a real phone against the v2 firmware, BLE then LAN.
+
+
 Native Android app that pairs with an **M5Stack CoreS3 (ESP32-S3)** running the
 [`m5stack-aq-parquet`](../m5stack-aq-parquet) firmware, shows its live readings, gives it UTC,
 and copies its finalized **Parquet** files into the phone — byte-exact, verified, offline.
 
-**Offline-first, not offline-only.** Everything works with no network at all: the phone's archive is
-the source of truth, filled over whatever link the device offers (BLE today; Wi-Fi or LoRa relays are
-future transports on the firmware side). Cloud backup or sharing is a *later, opt-in* step that runs
-after local sync and stays off by default; if the device or the phone has Wi-Fi or a SIM, that is a
-convenience, never a requirement. This first version therefore declares **no `INTERNET` permission**,
-no location permission, no analytics, no accounts — add network only together with an explicit
-sync-to-cloud setting. Data can already leave the phone through the system share sheet or the
-file picker.
+**Offline-first, not offline-only.** Everything works with no internet at all: the phone's archive is
+the source of truth, filled over whichever link the device offers — **Bluetooth LE** always, and since
+protocol v2 a **LAN** link (one TCP socket on your own Wi-Fi network, discovered with mDNS, authenticated
+with a token the phone can only obtain over the bonded BLE link). Cloud backup or sharing is a *later,
+opt-in* step that runs after local sync and stays off by default; if the device or the phone has Wi-Fi
+or a SIM, that is a convenience, never a requirement. The app declares `INTERNET` **only so that LAN
+sockets exist**: the code connects exclusively to addresses obtained from mDNS discovery of
+`_aqsync._tcp`; there is no cloud endpoint, no location permission, no analytics, no accounts. Data
+can leave the phone through the system share sheet or the file picker.
 
 ## Status
 
-**Built against protocol v1; not yet tested against hardware from a phone.** Verified so far: `./gradlew clean lintDebug assembleDebug testDebugUnitTest` → 0 lint errors, 29/29 unit tests (frame codec, JSON models, Parquet verification, sync planner), debug APK ≈ 64 MB unminified. The protocol itself
-*is* bench-verified: the same contract was exercised from a macOS host client against the real
-board on 2026-09-16 (pairing, 766-file manifest, verified transfers at 15–21 KB/s, time set,
-flush). See
-[`docs/ble-sync-protocol.md`](../m5stack-aq-parquet/docs/ble-sync-protocol.md) and
+**Implements protocol v2 (2026-09-17); not yet tested against hardware from a phone.** Verified on
+2026-09-17: `./gradlew lintDebug assembleDebug testDebugUnitTest` → 0 lint errors (7 pre-existing
+warnings), 58/58 unit tests (v1+v2 frame codec, CONFIG JSON + `SET_CONFIG` builder, LAN framing
+with a `LIVE` push between two `CHUNK`s, the real `TcpTransport` against an in-JVM fake device over
+loopback, JSON models, Parquet verification, sync planner), debug APK ≈ 64 MB unminified.
+
+The v1 file-sync part of the protocol *is* bench-verified: the same contract was exercised from a
+macOS host client against the real board on 2026-09-16 (pairing, 766-file manifest, verified
+transfers at 15–21 KB/s, time set, flush). The v2 additions — configuration, Wi-Fi provisioning,
+reboot, log tail, token, LAN transport — are implemented from
+[`docs/ble-sync-protocol.md`](../m5stack-aq-parquet/docs/ble-sync-protocol.md) and the firmware
+headers, with no v2 device capture yet; the fixtures in the tests are hand-assembled from the
+documented layouts. `LanDiscovery` (NsdManager) and the LAN permission flow can only be exercised
+on a phone with a v2 device on the same network. See
 [`docs/bench-verified.md`](../m5stack-aq-parquet/docs/bench-verified.md#board-1-bluetooth-le-sync)
-in the firmware repo. The frame codec and JSON parsers here are unit-tested against payloads
-captured in that session.
+in the firmware repo for what was measured.
 
 ## What it does
 
@@ -32,6 +67,25 @@ captured in that session.
 | **Today** | Live PM1 / PM2.5 / PM10, particle counts, board temperature (explicitly *not* ambient), battery/USB, freshness, storage counters, UTC state. **Set time from phone** and **Finalize buffered rows** actions, each explained before it runs. |
 | **Files** | Device manifest grouped by Hive partition (dated / unsynced-boot / benchmarks / legacy). **Sync all** downloads every file the archive lacks, with per-file and overall progress. Per-file state: not synced · syncing · synced (verified) · mismatch. |
 | **Export** | Share one file or a zip of the archive via the share sheet, or save a zip with *Save to…* (Storage Access Framework). |
+| **Device** (v2) | Bluetooth pairing mode (random passkey / fixed PIN / none) with the "Default PIN 123456 — change it" nag, pending-reboot notice and **Reboot device** (finalizes the RAM batch, restarts, app reconnects). **Wi-Fi**: state / IP / RSSI, *Scan networks* → pick → hidden passphrase → *Save and connect*, state polled while `connecting`, radio on/off. **LAN**: server on/off, whether this phone holds a token, *Fetch token* (Bluetooth only, by contract), *Rotate token*, local-network permission explanation on Android 16+. **Forget all bonds**. Every write is one validated `SET_CONFIG`. |
+| **Settings** | A sheet with one switch: **Advanced mode** (DataStore). Off by default. |
+| **Debug** (Advanced only) | Active transport + endpoint + `payload_max`, live `status` JSON pretty-printed, last 200 raw frames (direction, type, length, first bytes; `TOKEN` and `SET_CONFIG` redacted), **Device log** (`LOG_TAIL 8192`) in a monospace box with refresh, **Raw command** (hex in → decoded frames out). |
+
+The top bar shows a small chip naming the active link: **Bluetooth** or **Wi-Fi LAN**.
+
+### Transports
+
+Both links carry the same requests and frames; only the byte pipe differs, so the sync engine,
+archive and verification are shared (`AqTransport` → `DeviceSession` → `SyncEngine`).
+
+| | Bluetooth LE (`data/ble/BleTransport`) | LAN (`data/lan/TcpTransport`) |
+| --- | --- | --- |
+| Discovery | GATT scan for the service UUID | mDNS `_aqsync._tcp` via `NsdManager` (`data/lan/LanDiscovery`), TXT `station`/`dev`/`fw`/`proto` |
+| Auth | LE Secure Connections bond (passkey / PIN / none per `ble.pair`) | `"AQS1"` + 32-byte token, obtainable **only** over BLE (`GET_TOKEN`; `ERROR` 13 over LAN) |
+| Framing | one notification per frame, `payload_max = MTU − 3` (517 → 514) | `len` u16 LE + frame, `payload_max` 1024 from `HELLO`; `mtu` reports 1027 so the same arithmetic holds |
+| Pushes | `status` / `live` characteristics | `STATUS` 0x48 / `LIVE` 0x49 frames, demultiplexed by type byte off the single reader loop; may sit between two `CHUNK`s |
+| Liveness | GATT link state | `STATUS` (0x07) keep-alive after 120 s idle; link declared lost after 180 s without any byte |
+| Chosen when | always available | the device's station is currently discovered on the network **and** a token is stored; any LAN failure falls back to BLE with a snackbar |
 
 ### Pairing
 
@@ -65,10 +119,10 @@ everything after it is diffable against that.
 | | |
 | --- | --- |
 | Language / UI | Kotlin 2.4.20, Jetpack Compose, Material 3 (dynamic color), Navigation 3 |
-| DI / data | Hilt 2.60.1, Room 2.8.5, kotlinx.serialization 1.11.0, coroutines/Flow |
+| DI / data | Hilt 2.60.1, Room 2.8.5 (schema v2), DataStore Preferences 1.2.1, kotlinx.serialization 1.11.0, coroutines/Flow |
 | Build | AGP 9.4.0, Gradle 9.7.1, KSP 2.3.12, version catalog |
 | SDK | `compileSdk`/`targetSdk` **37**, `minSdk` **31** (no legacy Bluetooth permission model) |
-| Permissions | `BLUETOOTH_SCAN` (`neverForLocation`), `BLUETOOTH_CONNECT` — nothing else |
+| Permissions | `BLUETOOTH_SCAN` (`neverForLocation`), `BLUETOOTH_CONNECT`, `INTERNET` (LAN sockets only), `ACCESS_LOCAL_NETWORK` (runtime, API 37+ only) |
 
 ## Build
 
@@ -81,22 +135,30 @@ export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 adb install app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Debug builds include a **fake device** (menu → *Use fake device*) that serves three small
-`PAR1…PAR1` files with correct CRCs and emits live JSON every 10 s, so the UI can be exercised with
-no hardware.
+Debug builds include a **fake device** (menu → *Debug: fake device*) that speaks protocol v2: three
+small `PAR1…PAR1` files with correct CRCs, live JSON every 10 s, a fake configuration (pairing,
+Wi-Fi, LAN), a fake Wi-Fi scan list (`home` / `walkthru-field` / `CoffeeShop Guest` can be joined;
+anything else ends in `failed`), a fake token, a fake 8 KiB serial log, and a `REBOOT` that drops the
+link and applies pending `ble.*` changes. The fake persists for the process, like NVS. A second entry,
+*Debug: fake device (as LAN)*, is the same device behaving like the LAN pipe (`payload_max` 1024,
+`GET_TOKEN` refused with `ERROR` 13) so the LAN-specific UI can be seen without a network. It is
+**not** a socket: the real `TcpTransport` is covered by a loopback unit test and otherwise only
+testable on hardware.
 
 ## Layout
 
 ```
 app/src/main/java/earth/walkthru/aqsync/
-  data/protocol/   UUIDs, binary frame codec, JSON models, Parquet verification
-  data/ble/        scanner, GATT transport (serialized operation queue), session
+  data/protocol/   UUIDs, binary frame codec (v1+v2), CONFIG model + SET_CONFIG builder, LAN framing, JSON models, Parquet verification
+  data/ble/        scanner, GATT transport (serialized operation queue), session (all ops), frame recorder
+  data/lan/        TCP transport (AQS1 handshake, reader loop, keep-alive), mDNS discovery
   data/sync/       sync planner, engine, file archive
-  data/local/      Room database (known devices, archived files)
+  data/local/      Room database (known devices incl. LAN token, archived files)
+  data/settings/   DataStore preferences (Advanced mode)
   data/export/     share / zip / SAF export
   data/fake/       in-app fake device for debug builds
-  ui/scan · ui/device · ui/files · ui/permissions · ui/theme
-app/src/test/      frame codec, verification, JSON, planner tests
+  ui/scan · ui/device (Today, Device) · ui/files · ui/debug · ui/settings · ui/permissions · ui/theme
+app/src/test/      frame codec v1/v2, config, LAN framing, TcpTransport loopback, verification, JSON, planner
 ```
 
 ## Design decisions
@@ -117,6 +179,24 @@ Choices the protocol left open, and what this app does (mirrored into the firmwa
 | Bonding | `createBond()` before first characteristic access if unbonded; GATT status 5 / 15 / 133 while pairing is in progress → wait for `BOND_BONDED`, then retry the operation once. |
 | Downloads and rotation | Session and sync state live in a process-scoped repository, not the Activity, so a rotation mid-sync does not abort the transfer. |
 
+Protocol v2 (2026-09-17):
+
+| Question | Decision |
+| --- | --- |
+| Local-network permission on Android 16+ (API 37) | **Path B — the broad `ACCESS_LOCAL_NETWORK` runtime permission**, per [developer.android.com/privacy-and-security/local-network-permission](https://developer.android.com/privacy-and-security/local-network-permission), not the per-device picker (`DiscoveryRequest.FLAG_SHOW_PICKER`): the app manages devices persistently and reconnects to them on its own. It is in the NEARBY_DEVICES group with the Bluetooth permissions, so it is usually granted with them; the LAN card still checks and asks before any LAN action, and a denial hides LAN with an explanation while BLE keeps working. Below API 37 it is never requested. mDNS browsing runs only while the app is started (`LifecycleStartEffect`) and the permission is held. |
+| Why `INTERNET` is now declared | Sockets do not exist without it. It is used for exactly one thing: a TCP connection to a host/port obtained from mDNS discovery of `_aqsync._tcp` on the current network. No cloud endpoint exists; a future one needs its own opt-in setting and review. |
+| Where the LAN token lives | `known_device.lanToken` in Room, hex, nullable, keyed by the device's Bluetooth address (schema v2, explicit `ALTER TABLE` migration, no destructive fallback). Fetched once automatically after a BLE session reaches Ready if absent; never logged, never displayed (`KnownDevice.toString`, `Frame.Token.toString`, the frame recorder and the raw-command view all redact it). The database is part of Android's end-to-end-encrypted auto backup / device transfer like the archive is; *Rotate token* on the device invalidates every copy. |
+| When LAN is preferred | The device's `station` (from the mDNS TXT record) is currently discovered **and** a token is stored → try LAN first; any failure (unreachable, handshake timeout, `ERROR` 14 auth, `ERROR` 7 busy, malformed `HELLO`) falls back to BLE and says so in a snackbar. `GET_TOKEN` and *Fetch token* force BLE. Identity stays the Bluetooth address on both pipes, so archive, Room row and UI are one device. |
+| `HELLO.payload_max` ≠ 1024 | Trusted if ≥ 64; frames longer than it are a framing error that drops the link. Before `HELLO` the cap is the documented 1024. `mtu` reports `payload_max + 3`. |
+| Zero-length or oversize LAN frame | Framing has been lost, so the only safe reaction is to close the socket (a resync could deliver a wrong `CHUNK`). A stream that ends mid-frame is an error too, not a clean EOF. |
+| `SET_CONFIG` line format | `key=value
+` per key, trailing newline included (the firmware's `apply_lines` skips empty lines). PIN must be six ASCII digits, SSID 1–32 bytes, PSK ≤ 63 bytes and no line breaks in either, validated on the phone before sending; `ERROR` 12 from the device names the key and nothing changed. `ble.pin` arrives as a number, so `012345` is shown zero-padded. |
+| `WIFI_SCAN_END.status` ≠ 0 | Treated as the scan's error (code 15 → the typed "Wi-Fi unavailable"), not as a partial success; access points received before it are discarded. |
+| `LOG` slices | Kept as bytes and decoded after concatenation (a slice boundary may split a UTF-8 sequence). `LOG_END.returned` ≠ bytes received is flagged in the UI as "a slice may be missing" but the text is still shown — it is for humans, not data. |
+| `REBOOT` | After `REBOOTING delay_ms` the app waits `delay_ms`, drops the session, waits 6 s and reconnects with the normal transport rule. `ble.*` changes are shown as pending (`CONFIG.flags` bit 0) until then. |
+| LAN `readLive()` | Nothing can request a `LIVE` push, so it returns the latest push or waits ≤ 15 s for the next sample. `readStatus()` returns the latest push or sends `STATUS` (0x07) and waits ≤ 10 s. |
+| Fake "LAN" | `FakeTransport(simulateLan = true)` is not a socket; it only reports `payload_max` 1024 and refuses `GET_TOKEN`. The real transport is unit-tested over loopback and otherwise only on hardware. |
+
 ## Lessons learned
 
 - **`customizer.sh` cannot take a spaced application name.** `"AQ Sync"` was substituted into identifiers (`class AQ Sync`, `Theme.AQ Sync`, `AQ Sync.kt`). Use a single token (`AqSync`) or fix by hand right after generation; the raw output is kept as the first commit so the fix is visible.
@@ -127,16 +207,26 @@ Choices the protocol left open, and what this app does (mirrored into the firmwa
 - **Lint `NonObservableLocale`:** `Locale.getDefault()` inside a composable is flagged; `String.uppercase()` (root locale) is fine for eyebrow labels.
 - **Trust the contract's absolute offsets.** Every `CHUNK` carries its offset, so the client verifies continuity itself rather than counting notifications — the same property that let the firmware-side host client detect a deliberately dropped frame in tests.
 - **The protocol was proven before the app was.** Verifying the contract with a laptop client against the real board first (see the firmware repo's bench record) meant the app could be built and unit-tested against captured payloads with no hardware in the loop; the remaining risk is Android's BLE stack behaviour, not the protocol.
+- **`String.uppercase()` is not unit-safe.** The particles card said "(MM)" because `Eyebrow` uppercased its label and `"µ".uppercase()` is `"Μ"` (Greek capital mu). `Eyebrow` now has an `uppercase` flag; labels that carry units pass `false`.
+- **Keep conditional items out of a `LazyColumn` and give the rest keys.** The connection banner used to be the list's first item; anything that flipped the link state inserted or removed index 0 above the user's scroll position. It now sits above the list, every item has a stable key and the `LazyListState` is hoisted to the screen. `BleTransport` also left the state at `EnablingNotifications` after a runtime auth retry (never back to `Ready`), which would have kept the banner visible and disabled every button after a re-authenticated write. Neither could be reproduced here (no emulator was running during this pass); both are fixed structurally.
+- **A runtime permission can be missing while its group is granted.** `ACCESS_LOCAL_NETWORK` shares the NEARBY_DEVICES group with the Bluetooth permissions, so on Android 16 it is usually silently granted — but "usually" is not "always", and on API < 37 `Manifest.permission.ACCESS_LOCAL_NETWORK` does not exist at all. `LanPermission` returns "granted" below 37 and asks above it.
+- **`NsdManager` needs two code paths.** `registerServiceInfoCallback` (continuous updates, `getHostAddresses`) exists from API 34; API 31–33 have only the one-shot `resolveService`, which rejects concurrent calls (`FAILURE_ALREADY_ACTIVE`), so resolves are queued one at a time there.
+- **Push frames make "await the next frame" wrong on LAN.** `STATUS`/`LIVE` may arrive between two `CHUNK`s. Demultiplexing by type byte in the transport keeps `DeviceSession` byte-for-byte identical for both pipes; the loopback test asserts a `LIVE` in the middle of a `READ` is delivered to the live flow and the `CHUNK`s stay contiguous.
+- **`android.util.Log` in a class under JVM test** needs `testOptions.unitTests.isReturnDefaultValues = true`; otherwise the first `Log.i` throws "not mocked".
 
 ## Next
 
-1. Test against the board from a real phone and record the result in the firmware repo's
-   `docs/bench-verified.md`; measure a full 766-file sync.
-2. Further transports behind the same `AqTransport` interface as the firmware grows them
-   (Wi-Fi direct/LAN, LoRa relays between devices). The sync engine, archive and verification
-   do not change; only the byte pipe does.
-3. Opt-in cloud step **after** local sync: encrypted backup and/or community contribution, off by
+1. Test against the board from a real phone — BLE first, then LAN once the v2 firmware ships —
+   and record the result in the firmware repo's `docs/bench-verified.md`; measure a full 766-file
+   sync over each link and BLE/Wi-Fi coexistence.
+2. Verify the API 37 local-network permission flow on a real Android 16 device (grant, deny,
+   revoke while connected) and `NsdManager` behaviour across API 31–37.
+3. Further transports behind the same `AqTransport` interface as the firmware grows them (LoRa
+   relays between devices). The sync engine, archive and verification do not change; only the
+   byte pipe does.
+4. Opt-in cloud step **after** local sync: encrypted backup and/or community contribution, off by
    default, with the privacy boundaries in `../m5stack-aq-parquet/product/mobile-architecture.md`.
-   This is when `INTERNET` gets added. A device with its own Wi-Fi/SIM uploading directly is a
-   parallel path, not a replacement for the phone archive.
-4. On-phone querying (the product notes discuss DuckDB) — deliberately out of scope for v1.
+   It needs its own setting and review; `INTERNET` being declared for LAN does not pre-approve it.
+   A device with its own Wi-Fi/SIM uploading directly is a parallel path, not a replacement for the
+   phone archive.
+5. On-phone querying (the product notes discuss DuckDB) — deliberately out of scope.

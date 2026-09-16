@@ -123,7 +123,11 @@ class DebugViewModel @Inject constructor(
             try {
                 val got = session.rawCommand(bytes)
                 rawResults.value = got.map { (raw, frame) ->
-                    RawResult(hex = raw.toHex(), decoded = frame?.let(::describe) ?: "undecodable (${raw.size} bytes)")
+                    RawResult(
+                        // A TOKEN frame is a bearer secret: show the type byte only.
+                        hex = if (frame is Frame.Token) raw.copyOf(1).toHex() + " <redacted>" else raw.toHex(),
+                        decoded = frame?.let(::describe) ?: "undecodable (${raw.size} bytes)",
+                    )
                 }
                 if (got.isEmpty()) rawError.value = "no response frames within the quiet period (STATUS 0x07 answers on the status channel only)"
             } catch (e: Exception) {

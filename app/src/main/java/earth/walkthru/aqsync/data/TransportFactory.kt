@@ -38,9 +38,14 @@ class TransportFactory @Inject constructor(@ApplicationContext private val conte
     fun lan(address: String, name: String?, host: InetAddress, port: Int, token: ByteArray): AqTransport =
         TcpTransport(address = address, displayName = name, host = host, port = port, token = token)
 
+    private val fakes = HashMap<String, FakeTransport>()
+
+    /** One fake per address, kept for the process lifetime so its "NVS" survives disconnects and fake reboots. */
     fun fake(address: String): AqTransport {
         check(BuildConfig.DEBUG) { "fake device is debug-only" }
-        return FakeTransport(address = address, simulateLan = address == FakeTransport.FAKE_LAN_ADDRESS)
+        return synchronized(fakes) {
+            fakes.getOrPut(address) { FakeTransport(address = address, simulateLan = address == FakeTransport.FAKE_LAN_ADDRESS) }
+        }
     }
 
     fun isFake(transport: AqTransport): Boolean = transport is FakeTransport

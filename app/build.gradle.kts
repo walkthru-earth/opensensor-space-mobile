@@ -59,6 +59,11 @@ android {
         }
     }
 
+    testOptions {
+        // Lets JVM tests exercise classes that call android.util.Log (TcpTransport loopback test).
+        unitTests.isReturnDefaultValues = true
+    }
+
     lint {
         // Offline-first: fail the build on lint errors so an insecure API or a
         // permission nobody reviewed cannot slip in unnoticed. INTERNET is declared
