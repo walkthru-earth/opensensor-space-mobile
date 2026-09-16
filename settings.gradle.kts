@@ -28,6 +28,6 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "AQ Sync"
+rootProject.name = "aq-sync"
 
 include(":app")

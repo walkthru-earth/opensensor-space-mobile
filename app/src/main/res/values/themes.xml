@@ -17,5 +17,5 @@
 
 <resources>
 
-    <style name="Theme.AQ Sync" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.AqSync" parent="android:Theme.Material.Light.NoActionBar" />
 </resources>

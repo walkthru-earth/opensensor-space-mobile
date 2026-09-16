@@ -24,12 +24,12 @@ plugins {
 
 android {
     namespace = "earth.walkthru.aqsync"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "earth.walkthru.aqsync"
-        minSdk = 23
-        targetSdk = 36
+        minSdk = 31
+        targetSdk = 37
         versionCode = 1
         versionName = "1.0"
 
@@ -49,7 +49,7 @@ android {
     buildFeatures {
         compose = true
         aidl = false
-        buildConfig = false
+        buildConfig = true
         shaders = false
     }
 
@@ -58,6 +58,29 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+
+    lint {
+        // The product promise is air-gapped; fail the build on lint errors so a
+        // stray INTERNET permission or insecure API cannot slip in unnoticed.
+        abortOnError = true
+        warningsAsErrors = false
+        checkDependencies = false
+    }
+}
+
+kotlin {
+    compilerOptions {
+        freeCompilerArgs.addAll(
+            "-opt-in=androidx.compose.material3.ExperimentalMaterial3ExpressiveApi",
+            "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api",
+        )
+    }
+}
+
+composeCompiler {
+    // Strong skipping and intrinsic remember are on by default in this Kotlin
+    // (the explicit flag is deprecated and slated for removal in 2.5.0).
+    reportsDestination = layout.buildDirectory.dir("compose_compiler")
 }
 
 ksp {
@@ -117,4 +140,12 @@ dependencies {
     implementation(libs.androidx.navigation3.ui)
     implementation(libs.androidx.navigation3.runtime)
     implementation(libs.androidx.lifecycle.viewmodel.navigation3)
+
+    // Serialization (info/status/live JSON) and coroutines on Android
+    implementation(libs.kotlinx.serialization.json)
+    implementation(libs.kotlinx.coroutines.android)
+
+    // Icons and SAF helpers
+    implementation(libs.androidx.compose.material.icons.extended)
+    implementation(libs.androidx.documentfile)
 }
