@@ -203,13 +203,22 @@ fun FilesScreen(
                 }
                 is ManifestState.Loaded -> {
                     item {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        // The summary takes the remaining width and wraps; the caption keeps its own
+                        // slot so the two never run into each other (seen as "…GiBlisted 2 min ago").
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
                             Text(
                                 "${m.end.count} finalized files · ${m.end.partials} .partial · ${formatBytes(m.end.sdUsedKib * 1024)} of ${formatBytes(m.end.sdKib * 1024)}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.weight(1f),
                             )
-                            Text("listed ${formatAgo(now - m.atEpochMs)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.width(12.dp))
+                            Text(
+                                "listed ${formatAgo(now - m.atEpochMs)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                            )
                         }
                         if (m.files.size != m.end.count) {
                             Text(

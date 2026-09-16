@@ -403,7 +403,9 @@ private fun StorageCard(status: DeviceStatus?, receivedAt: Long?, now: Long) {
             }
             val warn = MaterialTheme.colorScheme.error
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Counter("files", status.fin)
+                // `status.fin` counts files finalized since the device booted, not the card total
+                // (that is `LIST_END.count` on the Files screen), so say so.
+                Counter("files this boot", status.fin)
                 Counter("buffered rows", status.buf?.toLong())
                 Counter("dropped", status.drop, if ((status.drop ?: 0) > 0) warn else null)
                 Counter("errors", status.err, if ((status.err ?: 0) > 0) warn else null)
