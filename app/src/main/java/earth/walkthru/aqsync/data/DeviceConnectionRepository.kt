@@ -38,9 +38,11 @@ import earth.walkthru.aqsync.data.sync.FileProgress
 import earth.walkthru.aqsync.data.sync.FileSyncState
 import earth.walkthru.aqsync.data.sync.ManifestEntry
 import earth.walkthru.aqsync.data.sync.ReadWindow
+import earth.walkthru.aqsync.data.sync.SyncEndCause
 import earth.walkthru.aqsync.data.sync.SyncEngine
 import earth.walkthru.aqsync.data.sync.SyncPlan
 import earth.walkthru.aqsync.data.sync.SyncPlanner
+import earth.walkthru.aqsync.data.sync.SyncResumePolicy
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -99,6 +101,8 @@ data class SyncProgress(
     val outcomes: List<FileOutcome> = emptyList(),
     val startedAtEpochMs: Long? = null,
     val finishedAtEpochMs: Long? = null,
+    /** Why the last run ended (null while running or before the first run); see [SyncResumePolicy]. */
+    val endCause: SyncEndCause? = null,
 ) {
     val fraction: Float get() = if (bytesTotal == 0L) 0f else (bytesDone.toFloat() / bytesTotal).coerceIn(0f, 1f)
     val failures: List<FileOutcome> get() = outcomes.filter { it !is FileOutcome.Synced }
@@ -551,7 +555,9 @@ class DeviceConnectionRepository @Inject constructor(
      * GATT 133, device reboot), never a [disconnect] (which clears the slot first). Then retry
      * [RECONNECT_ATTEMPTS] times, [RECONNECT_DELAY_MS] apart, with the normal transport rule: LAN
      * if the device is still discovered, else Bluetooth — so a LAN link killed by the background
-     * restriction comes back over BLE within seconds. A sync that was running is resumed.
+     * restriction comes back over BLE within seconds. A sync that was running — or that had just
+     * died of the pipe itself ("no response from device within 60 s", socket error), see
+     * [SyncResumePolicy] — is resumed; a user Stop or a completed run is not.
      */
     private fun watchLink(session: DeviceSession, address: String, name: String?, fake: Boolean) {
         linkWatchJob?.cancel()
@@ -559,9 +565,10 @@ class DeviceConnectionRepository @Inject constructor(
             val lost = session.connectionState.first { !it.isReady && it !is ConnectionState.Connecting && !it.isBusy }
             if (_session.value !== session) return@launch
             val reason = (lost as? ConnectionState.Failed)?.reason ?: "device closed the connection"
-            val wasSyncing = _sync.value.running
-            Log.w(TAG, "link lost ($reason); auto-reconnect starts, resumeSync=$wasSyncing")
-            reconnectJob = scope.launch { reconnectLoop(address, name, fake, reason, wasSyncing) }
+            val sync = _sync.value
+            val resume = SyncResumePolicy.shouldResume(sync.running, sync.endCause, sync.finishedAtEpochMs, System.currentTimeMillis())
+            Log.w(TAG, "link lost ($reason); auto-reconnect starts, resumeSync=$resume (running=${sync.running}, lastEnd=${sync.endCause})")
+            reconnectJob = scope.launch { reconnectLoop(address, name, fake, reason, resume) }
         }
     }
 
@@ -681,6 +688,7 @@ class DeviceConnectionRepository @Inject constructor(
             val outcomes = ArrayList<FileOutcome>()
             val holdWifi = session.transport.kind == TransportKind.LAN
             if (holdWifi) lanWifiLock.acquire()
+            var endCause = SyncEndCause.FAILURE
             try {
                 for (entry in entries) {
                     val fileBase = bytesBefore
@@ -707,16 +715,24 @@ class DeviceConnectionRepository @Inject constructor(
                     }
                 }
                 val synced = outcomes.count { it is FileOutcome.Synced }
+                endCause = SyncEndCause.COMPLETED
                 _events.tryEmit(DeviceEvent.Info("Synced $synced of ${entries.size} file(s)"))
             } catch (e: CancellationException) {
+                endCause = SyncEndCause.STOPPED
                 _events.tryEmit(DeviceEvent.Info("Sync stopped; partial files are kept for resume"))
                 throw e
+            } catch (e: TransportException) {
+                // The pipe failed under us (no response, link lost, socket error): if the link watcher
+                // sees the loss shortly and gets the device back, it resumes this sync (SyncResumePolicy).
+                endCause = SyncEndCause.TRANSPORT_FAILURE
+                Log.e(TAG, "sync aborted by the transport", e)
+                _events.tryEmit(DeviceEvent.Error("Sync aborted: ${e.message ?: e::class.simpleName}"))
             } catch (e: Exception) {
                 Log.e(TAG, "sync aborted", e)
                 _events.tryEmit(DeviceEvent.Error("Sync aborted: ${e.message ?: e::class.simpleName}"))
             } finally {
                 if (holdWifi) lanWifiLock.release()
-                _sync.update { it.copy(running = false, current = null, finishedAtEpochMs = System.currentTimeMillis()) }
+                _sync.update { it.copy(running = false, current = null, finishedAtEpochMs = System.currentTimeMillis(), endCause = endCause) }
                 // A FLUSH or a rotation may have finalized a new file while we were pulling.
                 if (session.connectionState.value.isReady) refreshManifest()
             }
