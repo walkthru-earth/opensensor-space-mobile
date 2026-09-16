@@ -6,8 +6,10 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import earth.walkthru.aqsync.data.DeviceConnectionRepository
 import earth.walkthru.aqsync.data.DeviceEvent
 import earth.walkthru.aqsync.data.TimedStatus
+import earth.walkthru.aqsync.data.TransportFactory
 import earth.walkthru.aqsync.data.TransportPreference
 import earth.walkthru.aqsync.data.WifiScanState
+import earth.walkthru.aqsync.data.background.AutoSyncScheduler
 import earth.walkthru.aqsync.data.ble.ConfigSnapshot
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.TransportKind
@@ -25,6 +27,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class DeviceUiState(
@@ -41,10 +44,16 @@ data class DeviceUiState(
     /** This device as currently seen on the LAN (by station), if at all. */
     val onLan: LanDevice? = null,
     val lanDiscoveryError: String? = null,
+    /** Phone holds a Bluetooth bond for this address (checked when the screen opens / config refreshes). */
+    val bonded: Boolean = false,
     val busy: Boolean = false,
     val isFake: Boolean = false,
     val advancedMode: Boolean = false,
 ) {
+    /** Per-device Auto-sync switch (Room `known_device.autoSync`). */
+    val autoSync: Boolean get() = known?.autoSync == true
+    /** Unattended BLE needs a bond; LAN needs a stored token. Without either the switch would do nothing. */
+    val autoSyncReachable: Boolean get() = known?.hasLanToken == true || bonded
     val isV2: Boolean get() = (info?.proto ?: 1) >= 2
     val ready: Boolean get() = connection.isReady
     val canEdit: Boolean get() = ready && isV2 && !busy
@@ -54,6 +63,7 @@ data class DeviceUiState(
 @HiltViewModel
 class DeviceViewModel @Inject constructor(
     private val repository: DeviceConnectionRepository,
+    private val transportFactory: TransportFactory,
     settings: AppSettings,
 ) : ViewModel() {
 
@@ -75,6 +85,7 @@ class DeviceViewModel @Inject constructor(
             status = status,
             config = config,
             isFake = repository.isFake,
+            bonded = session?.address?.let { repository.isFake || transportFactory.isBonded(it) } == true,
         )
     }
 
@@ -97,6 +108,22 @@ class DeviceViewModel @Inject constructor(
 
     fun refreshConfig() = repository.refreshConfig()
     fun disconnect() = repository.disconnect()
+
+    // ------------------------------------------------------------ auto-sync
+
+    /** Flip the Room row; the scheduler observes the count and (un)registers the periodic work. */
+    fun setAutoSync(enabled: Boolean) {
+        val addr = uiState.value.address ?: return
+        viewModelScope.launch {
+            repository.setAutoSync(addr, enabled)
+            localEvents.tryEmit(
+                DeviceEvent.Info(
+                    if (enabled) "Auto-sync on: new files are pulled about every ${AutoSyncScheduler.PERIOD_MINUTES} min, even with the app closed."
+                    else "Auto-sync off for this device."
+                )
+            )
+        }
+    }
 
     // ------------------------------------------------------------- pairing
 

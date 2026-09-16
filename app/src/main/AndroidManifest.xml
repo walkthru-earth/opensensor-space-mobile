@@ -25,6 +25,8 @@
       foreground service keeps the uid out of that firewall chain for the duration of the transfer
       and not a second longer. POST_NOTIFICATIONS is requested at runtime on API 33+ so the progress
       notification is visible; a denial only hides the notification, the service still runs.
+      The auto-sync WorkManager worker (data/background/SyncWorker) uses the same type through
+      WorkManager's SystemForegroundService, merged below.
     -->
     <uses-permission
         android:name="android.permission.BLUETOOTH_SCAN"
@@ -73,6 +75,27 @@
             android:name=".data.background.SyncForegroundService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!--
+          Auto-sync (data/background/SyncWorker, AutoSyncScheduler). WorkManager's own foreground
+          service carries the worker's progress notification; it must be declared with the same
+          dataSync type as ours, otherwise Android 14+ refuses setForeground. The default WorkManager
+          initializer is removed so the Application can supply the Hilt worker factory.
+        -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
+        </provider>
 
         <!-- Read-only handout of archive files and export zips to the share sheet. -->
         <provider

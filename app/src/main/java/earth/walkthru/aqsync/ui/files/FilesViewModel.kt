@@ -10,13 +10,16 @@ import earth.walkthru.aqsync.data.DeviceEvent
 import earth.walkthru.aqsync.data.ManifestState
 import earth.walkthru.aqsync.data.ReconnectState
 import earth.walkthru.aqsync.data.SyncProgress
+import earth.walkthru.aqsync.data.background.AutoSyncScheduler
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.export.ExportManager
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
+import earth.walkthru.aqsync.data.local.database.KnownDevice
 import earth.walkthru.aqsync.data.sync.HivePartition
 import earth.walkthru.aqsync.data.sync.ManifestEntry
 import earth.walkthru.aqsync.data.sync.SyncPlan
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -24,6 +27,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.io.File
@@ -44,6 +48,10 @@ data class FilesUiState(
     val archivedBytes: Long = 0,
     val exporting: Boolean = false,
     val reconnecting: ReconnectState? = null,
+    /** Auto-sync switch of the connected device (null: no session / unknown device). */
+    val autoSync: Boolean? = null,
+    /** A background sync job is queued or running right now. */
+    val backgroundSyncActive: Boolean = false,
 )
 
 /** UI-side effects: launch a share sheet or a SAF picker. */
@@ -57,9 +65,11 @@ class FilesViewModel @Inject constructor(
     private val repository: DeviceConnectionRepository,
     private val archivedFileDao: ArchivedFileDao,
     private val export: ExportManager,
+    private val autoSyncScheduler: AutoSyncScheduler,
 ) : ViewModel() {
 
-    val events: SharedFlow<DeviceEvent> = repository.events
+    private val localEvents = MutableSharedFlow<DeviceEvent>(extraBufferCapacity = 4)
+    val events: Flow<DeviceEvent> = merge(repository.events, localEvents)
 
     private val _effects = MutableSharedFlow<FilesEffect>(extraBufferCapacity = 4)
     val effects: SharedFlow<FilesEffect> = _effects.asSharedFlow()
@@ -69,7 +79,7 @@ class FilesViewModel @Inject constructor(
 
     val uiState: StateFlow<FilesUiState> = combine(
         repository.connectionState, repository.manifest, repository.plan, repository.sync, archivedFileDao.observeAll(), exporting,
-        repository.reconnecting,
+        repository.reconnecting, repository.currentKnownDevice, autoSyncScheduler.observeActive(),
     ) { values ->
         @Suppress("UNCHECKED_CAST")
         val archived = values[4] as List<ArchivedFile>
@@ -84,6 +94,8 @@ class FilesViewModel @Inject constructor(
             archivedBytes = archived.sumOf { it.bytes },
             exporting = values[5] as Boolean,
             reconnecting = values[6] as ReconnectState?,
+            autoSync = (values[7] as KnownDevice?)?.autoSync,
+            backgroundSyncActive = values[8] as Boolean,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FilesUiState())
 
@@ -115,6 +127,29 @@ class FilesViewModel @Inject constructor(
 
     fun refresh() = repository.refreshManifest()
     fun syncAll() = repository.syncAll()
+
+    /** Quick toggle of the connected device's Auto-sync switch (same row the Device screen edits). */
+    fun setAutoSync(enabled: Boolean) {
+        val addr = repository.currentAddress ?: return
+        viewModelScope.launch {
+            repository.setAutoSync(addr, enabled)
+            localEvents.tryEmit(DeviceEvent.Info(if (enabled) "Auto-sync on: about every ${AutoSyncScheduler.PERIOD_MINUTES} min, app closed or not." else "Auto-sync off for this device."))
+        }
+    }
+
+    /**
+     * One expedited background run for the connected device — the user can leave the app right
+     * away. The worker refuses to touch a device the app is connected to, so the current session is
+     * released first; the worker's own session then feeds the same progress state this screen shows.
+     */
+    fun syncNowInBackground() {
+        val addr = repository.currentAddress ?: return
+        viewModelScope.launch {
+            repository.disconnectNow()
+            autoSyncScheduler.syncNow(addr)
+            localEvents.tryEmit(DeviceEvent.Info("Background sync queued. You can leave the app; the notification shows progress."))
+        }
+    }
     fun syncOne(name: String) = repository.syncOne(name)
     fun cancelSync() = repository.cancelSync()
     fun disconnect() = repository.disconnect()

@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.CloudOff
+import androidx.compose.material.icons.rounded.CloudSync
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Error
 import androidx.compose.material.icons.rounded.IosShare
@@ -26,10 +27,13 @@ import androidx.compose.material.icons.rounded.LinkOff
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Stop
+import androidx.compose.material.icons.rounded.Sync
+import androidx.compose.material.icons.rounded.SyncLock
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -38,6 +42,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -57,6 +62,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import earth.walkthru.aqsync.data.DeviceEvent
 import earth.walkthru.aqsync.data.ManifestState
 import earth.walkthru.aqsync.data.SyncProgress
+import earth.walkthru.aqsync.data.background.AutoSyncScheduler
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.sync.FileSyncState
 import earth.walkthru.aqsync.data.sync.ManifestEntry
@@ -132,6 +138,23 @@ fun FilesScreen(
                     IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, contentDescription = "Export") }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                         val hasFiles = state.archived.isNotEmpty() && !state.exporting
+                        // Background sync: a one-time WorkManager job (leave the app, watch the
+                        // notification) and the per-device Auto-sync switch, both also on the Device screen.
+                        DropdownMenuItem(
+                            text = { Text(if (state.backgroundSyncActive) "Background sync queued…" else "Sync now in background") },
+                            leadingIcon = { Icon(Icons.Rounded.CloudSync, contentDescription = null) },
+                            enabled = state.connection.isReady && !state.sync.running && !state.backgroundSyncActive,
+                            onClick = { menu = false; withNotificationPermission { viewModel.syncNowInBackground() } },
+                        )
+                        state.autoSync?.let { on ->
+                            DropdownMenuItem(
+                                text = { Text(if (on) "Auto-sync every ${AutoSyncScheduler.PERIOD_MINUTES} min: on" else "Auto-sync every ${AutoSyncScheduler.PERIOD_MINUTES} min: off") },
+                                leadingIcon = { Icon(if (on) Icons.Rounded.SyncLock else Icons.Rounded.Sync, contentDescription = null) },
+                                trailingIcon = { Switch(checked = on, onCheckedChange = null) },
+                                onClick = { menu = false; withNotificationPermission { viewModel.setAutoSync(!on) } },
+                            )
+                        }
+                        HorizontalDivider()
                         DropdownMenuItem(
                             text = { Text("Share archive as zip") },
                             leadingIcon = { Icon(Icons.Rounded.IosShare, contentDescription = null) },

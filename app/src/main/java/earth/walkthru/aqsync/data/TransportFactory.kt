@@ -1,8 +1,12 @@
 package earth.walkthru.aqsync.data
 
+import android.Manifest
 import android.annotation.SuppressLint
+import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.content.Context
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
 import earth.walkthru.aqsync.BuildConfig
 import earth.walkthru.aqsync.data.ble.AqTransport
@@ -28,6 +32,32 @@ class TransportFactory @Inject constructor(@ApplicationContext private val conte
         val adapter = manager?.adapter ?: throw TransportException("this phone has no Bluetooth adapter")
         val device = adapter.getRemoteDevice(address)
         return BleTransport(context, device)
+    }
+
+    /**
+     * Unattended BLE connect for the auto-sync worker: straight `connectGatt` to a **bonded** address
+     * (no scan, no pairing dialog — [isBonded] is checked first), with a short timeout so an absent
+     * logger costs seconds, not the 30 s the interactive path allows.
+     */
+    @SuppressLint("MissingPermission") // the worker checks hasConnectPermission() first
+    fun bleUnattended(address: String, connectTimeoutMs: Long): AqTransport {
+        if (!hasConnectPermission()) throw TransportException("BLUETOOTH_CONNECT is not granted")
+        val manager = context.getSystemService(BluetoothManager::class.java)
+        val adapter = manager?.adapter ?: throw TransportException("this phone has no Bluetooth adapter")
+        if (!adapter.isEnabled) throw TransportException("Bluetooth is off")
+        val device = adapter.getRemoteDevice(address)
+        return BleTransport(context, device, connectTimeoutMs = connectTimeoutMs, allowBonding = false)
+    }
+
+    fun hasConnectPermission(): Boolean =
+        ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+
+    /** True when the phone holds a bond for [address] (false without BLUETOOTH_CONNECT or an adapter). */
+    @SuppressLint("MissingPermission") // checked one line above
+    fun isBonded(address: String): Boolean {
+        if (!hasConnectPermission()) return false
+        val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter ?: return false
+        return runCatching { adapter.getRemoteDevice(address).bondState == BluetoothDevice.BOND_BONDED }.getOrDefault(false)
     }
 
     /**

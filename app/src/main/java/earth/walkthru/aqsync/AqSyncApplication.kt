@@ -17,7 +17,36 @@
 package earth.walkthru.aqsync
 
 import android.app.Application
+import androidx.hilt.work.HiltWorkerFactory
+import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
+import earth.walkthru.aqsync.data.background.AutoSyncScheduler
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import javax.inject.Inject
 
+/**
+ * WorkManager is configured here (default initializer disabled in the manifest) so [SyncWorker]
+ * can be Hilt-injected; the scheduler then keeps the periodic auto-sync registration in step
+ * with the `known_device.autoSync` rows for the life of the process.
+ */
 @HiltAndroidApp
-class AqSyncApplication : Application()
+class AqSyncApplication : Application(), Configuration.Provider {
+
+    @Inject
+    lateinit var workerFactory: HiltWorkerFactory
+
+    @Inject
+    lateinit var autoSyncScheduler: AutoSyncScheduler
+
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    override val workManagerConfiguration: Configuration
+        get() = Configuration.Builder().setWorkerFactory(workerFactory).build()
+
+    override fun onCreate() {
+        super.onCreate()
+        autoSyncScheduler.start(appScope)
+    }
+}

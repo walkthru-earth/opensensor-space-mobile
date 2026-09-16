@@ -55,6 +55,13 @@ import kotlin.coroutines.resumeWithException
 class BleTransport(
     private val context: Context,
     private val device: BluetoothDevice,
+    /**
+     * Budget for `connectGatt` to report a link. The UI keeps the default (the user is watching);
+     * the auto-sync worker passes a short one and never bonds, so an absent device costs seconds.
+     */
+    private val connectTimeoutMs: Long = CONNECT_TIMEOUT_MS,
+    /** False for unattended connects: a device that would need the passkey dialog is a failure, not a prompt. */
+    private val allowBonding: Boolean = true,
 ) : AqTransport {
 
     override val address: String = device.address
@@ -185,7 +192,7 @@ class BleTransport(
         registerBondReceiver()
         try {
             _state.value = ConnectionState.Connecting
-            val g = withTimeout(CONNECT_TIMEOUT_MS) {
+            val g = withTimeout(connectTimeoutMs) {
                 suspendCancellableCoroutine<Int> { cont ->
                     pendingConnect.set(cont)
                     cont.invokeOnCancellation { pendingConnect.set(null) }
@@ -258,6 +265,7 @@ class BleTransport(
             bondState.value = BluetoothDevice.BOND_BONDED
             return
         }
+        if (!allowBonding) throw TransportException("device is not bonded; pairing needs the app open")
         _state.value = ConnectionState.Bonding
         if (device.bondState != BluetoothDevice.BOND_BONDING) {
             if (!device.createBond()) throw TransportException("could not start pairing")
@@ -334,6 +342,9 @@ class BleTransport(
                 attempt++
                 Log.w(TAG, "$name: GATT status ${r.status}; waiting for bond then retrying")
                 val before = _state.value
+                if (!allowBonding && device.bondState == BluetoothDevice.BOND_NONE) {
+                    throw TransportException("device lost its bond; pairing needs the app open")
+                }
                 _state.value = ConnectionState.Bonding
                 if (device.bondState == BluetoothDevice.BOND_NONE) device.createBond()
                 awaitBond()

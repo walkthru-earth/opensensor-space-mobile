@@ -45,6 +45,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
@@ -140,6 +141,12 @@ data class BackgroundSyncResult(
     val failures: Int,
     /** Non-null when nothing was attempted (already connected elsewhere, connect failed, …). */
     val skipped: String? = null,
+    /**
+     * The transfer stopped before every planned file had an outcome (link lost, cancelled): a
+     * transient condition worth a backed-off retry, unlike per-file failures which the next
+     * period picks up anyway because those files are still missing from the archive.
+     */
+    val incomplete: Boolean = false,
 ) {
     val attempted: Boolean get() = skipped == null
 }
@@ -410,8 +417,12 @@ class DeviceConnectionRepository @Inject constructor(
         _logTail.value = LogTailState.Idle
     }
 
-    /** Connect [transport] (if not already), read `info`, persist identity, fetch token/config. */
-    private suspend fun openSession(transport: AqTransport, address: String, name: String?, fake: Boolean): Boolean {
+    /**
+     * Connect [transport] (if not already), read `info`, persist identity, fetch token/config.
+     * [watch] = false (background sync) skips the lost-link auto-reconnect: the worker has no user
+     * to keep informed and simply tries again at its next period.
+     */
+    private suspend fun openSession(transport: AqTransport, address: String, name: String?, fake: Boolean, watch: Boolean = true): Boolean {
         val session = (_session.value?.takeIf { it.transport === transport } ?: DeviceSession(transport))
             .also { it.staleFrameLogger = { m -> Log.w(TAG, m) } }
         _session.value = session
@@ -422,7 +433,7 @@ class DeviceConnectionRepository @Inject constructor(
             return false
         }
         startNotificationCollection(session)
-        watchLink(session, address, name, fake)
+        if (watch) watchLink(session, address, name, fake)
         try {
             val info = session.readInfo()
             _info.value = info
@@ -443,6 +454,7 @@ class DeviceConnectionRepository @Inject constructor(
                     lastConnectedEpochMs = now,
                     lanToken = previous?.lanToken,
                     lanPort = previous?.lanPort,
+                    autoSync = previous?.autoSync ?: false,
                 )
             )
             runCatching { transport.readStatus().decodeToString() }.onSuccess { raw ->
@@ -504,6 +516,9 @@ class DeviceConnectionRepository @Inject constructor(
     fun disconnect() {
         scope.launch { connectMutex.withLock { closeSessionLocked() } }
     }
+
+    /** [disconnect] that returns once the slot is empty (so a background job queued right after does not find the session). */
+    suspend fun disconnectNow() = connectMutex.withLock { closeSessionLocked() }
 
     private suspend fun closeSessionLocked() {
         linkWatchJob?.cancel()
@@ -704,78 +719,89 @@ class DeviceConnectionRepository @Inject constructor(
 
     /**
      * One unattended sync of [address] for the auto-sync worker: connect over [lanTarget] (host/port
-     * from a fresh mDNS browse, token from Room) or Bluetooth by address, LIST, pull what the archive
-     * lacks, disconnect again — unless the UI already holds a Ready session to this very device, in
-     * which case that session is used and left open. Any other live session means "skip": one
-     * device link at a time. Progress is visible on [sync] like a user-started run. Nothing here
-     * starts the app's own foreground service; the worker is WorkManager's foreground worker.
+     * from a fresh mDNS browse, token from Room) or Bluetooth straight to the bonded address
+     * ([bleConnectTimeoutMs], no pairing), LIST, pull what the archive lacks, disconnect again.
+     *
+     * Guard: if the app holds *any* session right now — the user is looking at a device, or a
+     * reconnect is in flight — the worker gets `skipped` and touches nothing: one device link at a
+     * time, and an interactive session is never hijacked. Progress is visible on [sync] like a
+     * user-started run so the worker can mirror it into its notification. Nothing here starts the
+     * app's own foreground service; the worker is WorkManager's foreground worker.
      */
-    suspend fun syncInBackground(address: String, lanTarget: LanDevice?): BackgroundSyncResult {
+    suspend fun syncInBackground(address: String, lanTarget: LanDevice?, bleConnectTimeoutMs: Long = BACKGROUND_BLE_CONNECT_MS): BackgroundSyncResult {
         val known = knownDeviceDao.get(address)
         val name = known?.name
-        var openedHere = false
+        fun skip(reason: String, kind: TransportKind? = null) = BackgroundSyncResult(address, name, kind, 0, 0, 0, skipped = reason)
+
         val session: DeviceSession = connectMutex.withLock {
             val cur = _session.value
-            when {
-                cur != null && cur.address == address && cur.connectionState.value.isReady -> cur
-                cur != null -> return BackgroundSyncResult(address, name, null, 0, 0, 0, skipped = "another session is active (${cur.address})")
-                _reconnecting.value != null -> return BackgroundSyncResult(address, name, null, 0, 0, 0, skipped = "a reconnect is in progress")
-                else -> {
-                    resetDerivedState()
-                    val transport: AqTransport = if (lanTarget != null) {
-                        val tokenHex = known?.lanToken
-                        val host = lanTarget.host
-                        if (tokenHex == null || host == null) {
-                            return BackgroundSyncResult(address, name, null, 0, 0, 0, skipped = "no token or address for the LAN link")
-                        }
-                        transportFactory.lan(address, name, host, lanTarget.port.takeIf { it in 1..65535 } ?: known.lanPort ?: 0, tokenHex.hexToBytes())
-                    } else {
-                        transportFactory.ble(address)
-                    }
-                    if (!openSession(transport, address, name, fake = false)) {
-                        // openSession already closed the transport's state; make sure the slot is clean.
-                        closeSessionLocked()
-                        return BackgroundSyncResult(address, name, transport.kind, 0, 0, 0, skipped = "connect failed")
-                    }
-                    if (lanTarget != null && tokenPolicy.isStale(address)) {
-                        // Should not happen (LAN succeeded), but keep the mark honest.
-                        tokenPolicy.clear(address)
-                    }
-                    openedHere = true
-                    _session.value ?: return BackgroundSyncResult(address, name, transport.kind, 0, 0, 0, skipped = "session vanished")
-                }
+            if (cur != null) {
+                return if (cur.address == address) skip("the app has an interactive session with this device") else skip("another session is active (${cur.address})")
             }
+            if (_reconnecting.value != null) return skip("a reconnect is in progress")
+            resetDerivedState()
+            val transport: AqTransport = try {
+                if (lanTarget != null) {
+                    val tokenHex = known?.lanToken
+                    val host = lanTarget.host
+                    if (tokenHex == null || host == null) return skip("no token or address for the LAN link")
+                    val port = lanTarget.port.takeIf { it in 1..65535 } ?: known.lanPort ?: return skip("no LAN port")
+                    transportFactory.lan(address, name, host, port, tokenHex.hexToBytes())
+                } else {
+                    transportFactory.bleUnattended(address, bleConnectTimeoutMs)
+                }
+            } catch (e: TransportException) {
+                return skip("cannot build transport: ${e.message}", if (lanTarget != null) TransportKind.LAN else TransportKind.BLE)
+            } catch (e: IllegalArgumentException) {
+                return skip("malformed token or address")
+            }
+            if (!openSession(transport, address, name, fake = false, watch = false)) {
+                closeSessionLocked()
+                if (lanTarget != null) tokenPolicy.clear(address)
+                return skip("connect failed", transport.kind)
+            }
+            _session.value ?: return skip("session vanished", transport.kind)
         }
         try {
-            if (!refreshManifestNow(session)) {
-                return BackgroundSyncResult(address, session.transport.displayName ?: name, session.transport.kind, 0, 0, 0, skipped = "LIST failed")
-            }
+            val displayName = session.transport.displayName ?: name
+            val kind = session.transport.kind
+            if (!refreshManifestNow(session)) return skip("LIST failed", kind).copy(deviceName = displayName)
             val plan = withTimeoutOrNull(MANIFEST_WAIT_MS) { plan.filterNotNull().first() }
-                ?: return BackgroundSyncResult(address, session.transport.displayName ?: name, session.transport.kind, 0, 0, 0, skipped = "no plan")
+                ?: return skip("no plan", kind).copy(deviceName = displayName)
+            val wanted = plan.toDownload.size
             val job = startSync(plan.toDownload, foregroundService = false)
-            if (job == null) {
-                return BackgroundSyncResult(address, session.transport.displayName ?: name, session.transport.kind, 0, 0, 0)
-            }
+                ?: return BackgroundSyncResult(address, displayName, kind, 0, 0, 0)
             job.join()
             val outcomes = _sync.value.outcomes
             val synced = outcomes.filterIsInstance<FileOutcome.Synced>()
             return BackgroundSyncResult(
                 address = address,
-                deviceName = session.transport.displayName ?: name,
-                transport = session.transport.kind,
+                deviceName = displayName,
+                transport = kind,
                 newFiles = synced.size,
                 newBytes = synced.sumOf { it.bytes },
                 failures = outcomes.size - synced.size,
+                incomplete = outcomes.size < wanted,
             )
         } finally {
-            if (openedHere) {
+            // Runs on cancellation too (the user pressed Stop on the worker's notification): the
+            // sync job is cancelled and the link closed even though this coroutine is already dead.
+            withContext(NonCancellable) {
                 connectMutex.withLock { if (_session.value === session) closeSessionLocked() }
             }
         }
     }
 
-    /** True when a session to [address] is Ready right now (the worker then reuses it). */
+    /** True when a session to [address] is Ready right now. */
     fun isConnectedTo(address: String): Boolean = _session.value?.let { it.address == address && it.connectionState.value.isReady } == true
+
+    /** Address of the session the app holds right now (Ready or still connecting), or null. */
+    val interactiveSessionAddress: String? get() = _session.value?.address
+
+    /** Per-device opt-in to unattended syncs; the scheduler observes the count and (un)registers the periodic work. */
+    suspend fun setAutoSync(address: String, enabled: Boolean) = withContext(Dispatchers.IO) {
+        knownDeviceDao.setAutoSync(address, enabled)
+    }
 
     private fun describe(o: FileOutcome): String = when (o) {
         is FileOutcome.Synced -> "synced"
@@ -1044,6 +1070,9 @@ class DeviceConnectionRepository @Inject constructor(
         const val RECONNECT_ATTEMPTS = 3
         const val RECONNECT_DELAY_MS = 5_000L
         const val MANIFEST_WAIT_MS = 30_000L
+
+        /** Unattended BLE connect budget: a logger that is not in range should cost seconds per period, not 30 s. */
+        const val BACKGROUND_BLE_CONNECT_MS = 15_000L
 
         /** Debug builds run the fake device under the foreground service too, so the notification can be seen without hardware. */
         private val FOREGROUND_FOR_FAKE = earth.walkthru.aqsync.BuildConfig.DEBUG

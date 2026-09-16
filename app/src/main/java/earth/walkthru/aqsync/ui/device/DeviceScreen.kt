@@ -65,6 +65,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import earth.walkthru.aqsync.data.DeviceEvent
 import earth.walkthru.aqsync.data.WifiScanState
+import earth.walkthru.aqsync.data.background.AutoSyncScheduler
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.protocol.ConfigPatch
@@ -83,6 +84,7 @@ import earth.walkthru.aqsync.ui.components.WarningNote
 import earth.walkthru.aqsync.ui.components.formatAgo
 import earth.walkthru.aqsync.ui.components.rememberNowMillis
 import earth.walkthru.aqsync.ui.permissions.rememberLanPermission
+import earth.walkthru.aqsync.ui.permissions.rememberNotificationPermission
 import earth.walkthru.aqsync.ui.settings.SettingsSheet
 import kotlinx.coroutines.delay
 
@@ -131,6 +133,10 @@ fun DeviceScreen(
     var confirmReboot by remember { mutableStateOf(false) }
     var confirmRotate by remember { mutableStateOf(false) }
     var confirmBonds by remember { mutableStateOf(false) }
+    // The worker's progress and summary notifications need POST_NOTIFICATIONS on API 33+; ask once
+    // when Auto-sync is switched on (same helper as the first Sync tap). A denial still enables it.
+    val notificationPermission = rememberNotificationPermission()
+    fun withNotificationPermission(action: () -> Unit) = notificationPermission.ensureThen(action)
 
     Scaffold(
         topBar = {
@@ -186,6 +192,9 @@ fun DeviceScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 item(key = "info") { DeviceInfoCard(state, now) }
+                item(key = "autosync") {
+                    AutoSyncCard(state, onToggle = { on -> withNotificationPermission { viewModel.setAutoSync(on) } })
+                }
                 if (state.info != null && !state.isV2) {
                     item(key = "v1") {
                         SectionCard("configuration") {
@@ -273,6 +282,40 @@ fun DeviceScreen(
 }
 
 // ------------------------------------------------------------------- cards
+
+/**
+ * Per-device opt-in to unattended syncs. The switch flips `known_device.autoSync`; the scheduler
+ * registers one 15-minute WorkManager job while any device has it on. The card spells out what the
+ * worker will and will not do, and warns when neither link can work unattended.
+ */
+@Composable
+private fun AutoSyncCard(state: DeviceUiState, onToggle: (Boolean) -> Unit) {
+    val known = state.known
+    SectionCard(
+        "auto-sync",
+        trailing = {
+            Switch(checked = state.autoSync, onCheckedChange = onToggle, enabled = known != null)
+        },
+    ) {
+        Text(
+            if (state.autoSync) "On: about every ${AutoSyncScheduler.PERIOD_MINUTES} minutes this phone looks for the logger and copies the files the archive lacks — with the app closed and the screen off."
+            else "Off. Turn on to copy new files about every ${AutoSyncScheduler.PERIOD_MINUTES} minutes in the background, with the app closed.",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Spacer(Modifier.height(6.dp))
+        StatLine("wi-fi lan", if (known?.hasLanToken == true) "token stored — tried first when the logger is on this network" else "no token yet (fetched over Bluetooth)")
+        StatLine("bluetooth", if (state.bonded) "bonded — direct connect, no scan" else "not bonded — connect once to pair")
+        if (state.autoSync && !state.autoSyncReachable) {
+            Spacer(Modifier.height(8.dp))
+            WarningNote("Neither link can be used unattended yet: no LAN token and no Bluetooth bond. Finish one interactive connection first.")
+        }
+        InfoNote(
+            "Runs as a background job with a progress notification; a summary is posted only when new files arrived. " +
+                "Android decides the exact moment within each period and needs a network connection and a battery that is not low. " +
+                "Files are pulled and verified exactly as with Sync all; the logger is never asked to delete anything."
+        )
+    }
+}
 
 @Composable
 private fun DeviceInfoCard(state: DeviceUiState, now: Long) {
