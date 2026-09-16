@@ -36,6 +36,7 @@ import earth.walkthru.aqsync.data.sync.FileOutcome
 import earth.walkthru.aqsync.data.sync.FileProgress
 import earth.walkthru.aqsync.data.sync.FileSyncState
 import earth.walkthru.aqsync.data.sync.ManifestEntry
+import earth.walkthru.aqsync.data.sync.ReadWindow
 import earth.walkthru.aqsync.data.sync.SyncEngine
 import earth.walkthru.aqsync.data.sync.SyncPlan
 import earth.walkthru.aqsync.data.sync.SyncPlanner
@@ -91,6 +92,8 @@ data class SyncProgress(
     val bytesDone: Long = 0,
     val bytesTotal: Long = 0,
     val bytesPerSecond: Double = 0.0,
+    /** `READ` windows lost to dropped notifications and re-read successfully, over the whole run. */
+    val windowsRecovered: Int = 0,
     val outcomes: List<FileOutcome> = emptyList(),
     val startedAtEpochMs: Long? = null,
     val finishedAtEpochMs: Long? = null,
@@ -634,7 +637,8 @@ class DeviceConnectionRepository @Inject constructor(
             _events.tryEmit(DeviceEvent.Error("Cannot sync: device `info` has no station id"))
             return null
         }
-        val maxRead = info.maxRead ?: DEFAULT_MAX_READ
+        // max_read on every link; ReadWindow records why BLE is not given a smaller window.
+        val maxRead = ReadWindow.forTransport(session.transport, info.maxRead)
         if (entries.isEmpty()) {
             _events.tryEmit(DeviceEvent.Info("Archive is already up to date"))
             return null
@@ -651,10 +655,12 @@ class DeviceConnectionRepository @Inject constructor(
 
         val job = scope.launch {
             var bytesBefore = 0L
+            var windowsBefore = 0
             val outcomes = ArrayList<FileOutcome>()
             try {
                 for (entry in entries) {
                     val fileBase = bytesBefore
+                    val windowsBase = windowsBefore
                     val outcome = syncEngine.download(
                         session = session,
                         station = station,
@@ -664,8 +670,9 @@ class DeviceConnectionRepository @Inject constructor(
                         maxRead = maxRead,
                     ) { p ->
                         val done = fileBase + (p.bytesDone - p.resumedFrom)
+                        windowsBefore = windowsBase + p.windowsRecovered
                         _sync.update {
-                            it.copy(current = p, bytesDone = done, bytesPerSecond = meter.update(done))
+                            it.copy(current = p, bytesDone = done, bytesPerSecond = meter.update(done), windowsRecovered = windowsBefore)
                         }
                     }
                     bytesBefore += entry.bytes - entry.partialBytes
@@ -1029,9 +1036,6 @@ class DeviceConnectionRepository @Inject constructor(
 
     companion object {
         private const val TAG = "DeviceConnection"
-
-        /** Used only if `info.max_read` is absent; conservative. */
-        const val DEFAULT_MAX_READ = 4096
 
         /** Boot + BLE stack start + advertising on the CoreS3; generous. */
         const val REBOOT_RECONNECT_DELAY_MS = 6_000L

@@ -2,13 +2,14 @@ package earth.walkthru.aqsync.data.sync
 
 import earth.walkthru.aqsync.data.ble.DeviceErrorException
 import earth.walkthru.aqsync.data.ble.DeviceSession
-import earth.walkthru.aqsync.data.ble.ProtocolViolationException
+import earth.walkthru.aqsync.data.ble.WindowLostException
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.protocol.ParquetVerify
 import earth.walkthru.aqsync.data.protocol.ProtocolError
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -21,6 +22,8 @@ data class FileProgress(
     val bytesDone: Long,
     val bytesTotal: Long,
     val resumedFrom: Long,
+    /** `READ` windows that arrived incomplete (dropped notifications) and were re-read successfully. */
+    val windowsRecovered: Int = 0,
 ) {
     val fraction: Float get() = if (bytesTotal == 0L) 0f else (bytesDone.toFloat() / bytesTotal).coerceIn(0f, 1f)
 }
@@ -49,12 +52,20 @@ class SyncAbortedException(message: String, cause: Throwable? = null) : Exceptio
  *
  * Chunks are written at their absolute offsets into a `.partial` file so an interrupted transfer
  * resumes after re-`OPEN` as long as `size` and `crc32` still match.
+ *
+ * A window that arrives incomplete ([WindowLostException]: notifications were lost between the
+ * device and this code) is re-read from the last good offset — `READ` is idempotent on an
+ * immutable file — up to [WINDOW_RETRIES] times with a short backoff. Only when the same window
+ * keeps failing is the *file* marked [FileOutcome.Failed]; the sync goes on with the next file.
  */
 @Singleton
 class SyncEngine @Inject constructor(
     private val archive: FileArchive,
     private val archivedFileDao: ArchivedFileDao,
 ) {
+    /** `WINDOW_RETRY_BACKOFF_MS × attempt` between re-reads of a lost window; tests shorten it. */
+    var windowRetryBackoffMs: Long = WINDOW_RETRY_BACKOFF_MS
+
     suspend fun download(
         session: DeviceSession,
         station: String,
@@ -86,30 +97,47 @@ class SyncEngine @Inject constructor(
             var offset = resumeFrom
             onProgress(FileProgress(name, offset, opened.size, resumeFrom))
 
+            var windowsRecovered = 0
             writer.use { w ->
                 val readLength = maxRead.coerceAtLeast(1).toLong()
+                var attempt = 0
                 while (offset < opened.size) {
                     currentCoroutineContext().ensureActive()
                     val before = offset
-                    val end = session.read(handle, offset, readLength) { chunk ->
-                        when {
-                            chunk.offset == offset -> {
-                                w.writeAt(chunk.offset, chunk.payload)
-                                offset += chunk.payload.size
-                            }
-                            // Duplicate or overlapping chunk: the bytes are identical (immutable file), keep going.
-                            chunk.offset < offset -> {
-                                val overlap = (offset - chunk.offset).toInt()
-                                if (overlap < chunk.payload.size) {
-                                    w.writeAt(offset, chunk.payload.copyOfRange(overlap, chunk.payload.size))
-                                    offset = chunk.offset + chunk.payload.size
+                    val end = try {
+                        session.read(handle, offset, readLength) { chunk ->
+                            when {
+                                chunk.offset == offset -> {
+                                    w.writeAt(chunk.offset, chunk.payload)
+                                    offset += chunk.payload.size
                                 }
+                                // Duplicate or overlapping chunk: the bytes are identical (immutable file), keep going.
+                                chunk.offset < offset -> {
+                                    val overlap = (offset - chunk.offset).toInt()
+                                    if (overlap < chunk.payload.size) {
+                                        w.writeAt(offset, chunk.payload.copyOfRange(overlap, chunk.payload.size))
+                                        offset = chunk.offset + chunk.payload.size
+                                    }
+                                }
+                                // The session checks continuity before calling us; this is a safety net.
+                                else -> throw WindowLostException(offset, "gap in stream: expected offset $offset, got CHUNK at ${chunk.offset}")
                             }
-                            else -> throw ProtocolViolationException(
-                                "gap in stream: expected offset $offset, got CHUNK at ${chunk.offset}"
+                            onProgress(FileProgress(name, offset, opened.size, resumeFrom, windowsRecovered))
+                        }
+                    } catch (e: WindowLostException) {
+                        attempt++
+                        // Bytes written before the gap are good (absolute offsets); the next READ starts
+                        // at our own `offset`, which is what is actually on disk (the contract says never
+                        // trust the device's count over ours; e.receivedUpTo is the session's view of it).
+                        if (attempt > WINDOW_RETRIES) {
+                            return FileOutcome.Failed(
+                                name,
+                                "window at $offset lost ${attempt}× in a row (last: ${e.message}); " +
+                                    "notifications keep getting lost on this link — move closer and retry"
                             )
                         }
-                        onProgress(FileProgress(name, offset, opened.size, resumeFrom))
+                        delay(windowRetryBackoffMs * attempt)
+                        continue
                     }
                     if (!end.ok) {
                         return FileOutcome.DeviceError(
@@ -117,13 +145,13 @@ class SyncEngine @Inject constructor(
                             "READ ended with status ${end.status}: ${ProtocolError.describe(end.status)}"
                         )
                     }
-                    if (end.nextOffset != offset) {
-                        throw ProtocolViolationException(
-                            "READ_END next_offset=${end.nextOffset} but ${offset} bytes were received"
-                        )
-                    }
                     if (offset == before && offset < opened.size) {
-                        throw ProtocolViolationException("READ at $offset returned no data before end of file")
+                        return FileOutcome.Failed(name, "READ at $offset returned no data before end of file")
+                    }
+                    if (attempt > 0) {
+                        windowsRecovered++
+                        attempt = 0
+                        onProgress(FileProgress(name, offset, opened.size, resumeFrom, windowsRecovered))
                     }
                 }
                 w.sync()
@@ -155,5 +183,13 @@ class SyncEngine @Inject constructor(
             // next OPEN or on disconnect anyway, so a failure here is not an error.
             runCatching { withContext(NonCancellable) { withTimeout(3_000) { session.close(handle) } } }
         }
+    }
+
+    companion object {
+        /** Re-reads of one window before the file is given up; 6 attempts in total. */
+        const val WINDOW_RETRIES = 5
+
+        /** Linear backoff: 300 ms, 600 ms, … lets a busy link catch up without stalling the sync. */
+        const val WINDOW_RETRY_BACKOFF_MS = 300L
     }
 }

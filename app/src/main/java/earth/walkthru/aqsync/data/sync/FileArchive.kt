@@ -22,9 +22,12 @@ import javax.inject.Singleton
  * [commit], i.e. an atomic rename after verification.
  */
 @Singleton
-class FileArchive @Inject constructor(@ApplicationContext context: Context) {
-    val root: File = File(context.filesDir, "archive")
-    val partialRoot: File = File(context.filesDir, "archive-partial")
+class FileArchive(baseDir: File) {
+    @Inject
+    constructor(@ApplicationContext context: Context) : this(context.filesDir)
+
+    val root: File = File(baseDir, "archive")
+    val partialRoot: File = File(baseDir, "archive-partial")
 
     fun fileFor(station: String, name: String): File = File(File(root, safeStation(station)), name)
 

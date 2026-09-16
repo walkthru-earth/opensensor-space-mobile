@@ -300,7 +300,8 @@ private fun SyncProgressCard(sync: SyncProgress, now: Long) {
             LinearProgressIndicator(progress = { sync.fraction }, modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(6.dp))
             Text(
-                "${formatBytes(sync.bytesDone)} of ${formatBytes(sync.bytesTotal)}",
+                "${formatBytes(sync.bytesDone)} of ${formatBytes(sync.bytesTotal)}" +
+                    if (sync.windowsRecovered > 0) " · recovered ${sync.windowsRecovered} lost window${if (sync.windowsRecovered == 1) "" else "s"}" else "",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
             )

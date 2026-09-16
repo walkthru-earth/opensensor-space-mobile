@@ -137,6 +137,23 @@ class FakeTransport(
     private var openFile: FakeFile? = null
     private var nextHandle = 1
 
+    // ------------------------------------------------------------ fault injection (tests)
+
+    /** Number of `READ` requests handled so far; the hooks below are keyed on it (1-based). */
+    @Volatile var readCount: Int = 0
+        private set
+
+    /**
+     * Test hook reproducing the lost-burst symptom seen on a phone: for the k-th `READ` window (1-based),
+     * return how many of its *leading* `CHUNK` frames to drop. `READ_END` is still sent with the
+     * device's true `next_offset`, exactly like the firmware whose notifications never reached the
+     * phone. Returns 0 by default (lossless).
+     */
+    @Volatile var dropLeadingChunks: (readIndex: Int) -> Int = { 0 }
+
+    /** Test hook: delay the `CLOSED` reply by this many ms, so a caller's timeout fires first. */
+    @Volatile var closedDelayMs: Long = 0
+
     class FakeFile(val name: String, val bytes: ByteArray) {
         val crc32: Long = ParquetVerify.crc32(bytes)
     }
@@ -247,10 +264,11 @@ class FakeTransport(
                 if (offset > f.bytes.size) return error(op, ProtocolError.RANGE_OUTSIDE_FILE)
                 val end = minOf(f.bytes.size.toLong(), offset + minOf(length, maxRead.toLong()))
                 val chunkMax = (mtu - 3) - 7
+                var toDrop = dropLeadingChunks(++readCount)
                 var pos = offset
                 while (pos < end) {
                     val n = minOf(chunkMax.toLong(), end - pos).toInt()
-                    send(Frame.Chunk(handle, pos, f.bytes.copyOfRange(pos.toInt(), pos.toInt() + n)))
+                    if (toDrop > 0) toDrop-- else send(Frame.Chunk(handle, pos, f.bytes.copyOfRange(pos.toInt(), pos.toInt() + n)))
                     pos += n
                     if (chunkDelayMs > 0) delay(chunkDelayMs)
                 }
@@ -262,6 +280,7 @@ class FakeTransport(
                 if (handle != openHandle) return error(op, ProtocolError.BAD_HANDLE)
                 openHandle = null
                 openFile = null
+                if (closedDelayMs > 0) delay(closedDelayMs)
                 send(Frame.Closed(handle))
             }
             Opcode.SET_TIME -> {
