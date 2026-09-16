@@ -157,4 +157,9 @@ dependencies {
 
     // Preferences (Advanced mode switch)
     implementation(libs.androidx.datastore.preferences)
+
+    // Auto-sync: WorkManager periodic/expedited worker with a Hilt-injected factory
+    implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.androidx.hilt.work)
+    ksp(libs.androidx.hilt.compiler)
 }

@@ -29,12 +29,17 @@ data class KnownDevice(
     val lanToken: String? = null,
     /** `TOKEN.port` (47390 on today's firmware). Schema v2. */
     val lanPort: Int? = null,
+    /**
+     * User opted this logger into unattended background syncs (WorkManager, ≥ 15 min apart).
+     * Off by default; the switch lives on the Device screen and as a quick toggle on Files. Schema v3.
+     */
+    val autoSync: Boolean = false,
 ) {
     val hasLanToken: Boolean get() = lanToken != null
 
     /** Safe for logs: identity without the secret. */
     override fun toString(): String =
-        "KnownDevice(address=$address, name=$name, station=$station, lanToken=${if (lanToken != null) "<set>" else "null"}, lanPort=$lanPort)"
+        "KnownDevice(address=$address, name=$name, station=$station, lanToken=${if (lanToken != null) "<set>" else "null"}, lanPort=$lanPort, autoSync=$autoSync)"
 }
 
 @Dao
@@ -59,6 +64,16 @@ interface KnownDeviceDao {
 
     @Query("SELECT * FROM known_device WHERE station = :station LIMIT 1")
     suspend fun findByStation(station: String): KnownDevice?
+
+    @Query("UPDATE known_device SET autoSync = :enabled WHERE address = :address")
+    suspend fun setAutoSync(address: String, enabled: Boolean)
+
+    /** Devices the worker should try, most recently connected first. */
+    @Query("SELECT * FROM known_device WHERE autoSync = 1 ORDER BY lastConnectedEpochMs DESC")
+    suspend fun autoSyncDevices(): List<KnownDevice>
+
+    @Query("SELECT COUNT(*) FROM known_device WHERE autoSync = 1")
+    fun observeAutoSyncCount(): Flow<Int>
 
     @Query("DELETE FROM known_device WHERE address = :address")
     suspend fun delete(address: String)
