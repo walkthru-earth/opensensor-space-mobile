@@ -1,0 +1,67 @@
+package earth.walkthru.aqsync.data.protocol
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+/** Payloads captured from the CoreS3 (`arduino-cores3-parquet-v4`) over BLE on 2026-09-16. */
+class JsonModelsTest {
+    private val info = """{"proto":1,"fw":"arduino-cores3-parquet-v4","schema":"cores3-telemetry-v2","cols":77,""" +
+        """"dict":"20f850852413abb1165f3f7ca95b4831a0e90a34ae7c7fcb41c44b108d3513c3",""" +
+        """"station":"53315f5f-cb85-4d8d-b623-d56266084189","dev":"441bf6e26b40",""" +
+        """"boot":"b41d37a48c04031e9397e28ce48c2f43","max_read":16384}"""
+    private val status = """{"up_s":262,"int_s":900,"buf":25,"fin":0,"drop":0,"err":0,"miss":0,"fail":0,""" +
+        """"codec":"UNCOMPRESSED","utc":0,"gen":0,"sd":1,"sd_kib":30704848,"sd_used_kib":36576,"heap":198192,"part":0}"""
+    private val live = """{"seq":23,"mono":252976111,"pms":4,"pm1":14,"pm25":22,"pm10":27,"c1":14,"c25":22,"c10":27,""" +
+        """"n03":2127,"n05":650,"n1":129,"n25":10,"n5":6,"n10":2,"t":42.3,"bat":16372,"pct":0,"chg":0,"vbus":5136,"als":1}"""
+
+    @Test
+    fun `info parses identities`() {
+        val parsed = AqJson.decodeFromString(DeviceInfo.serializer(), info)
+        assertEquals(1, parsed.proto)
+        assertEquals("53315f5f-cb85-4d8d-b623-d56266084189", parsed.station)
+        assertEquals("441bf6e26b40", parsed.dev)
+        assertEquals(16384, parsed.maxRead)
+        assertEquals(77, parsed.cols)
+    }
+
+    @Test
+    fun `status parses counters and flags`() {
+        val parsed = AqJson.decodeFromString(DeviceStatus.serializer(), status)
+        assertEquals(262L, parsed.upSeconds)
+        assertEquals(25, parsed.buf)
+        assertFalse(parsed.utcSynced)
+        assertTrue(parsed.sdMounted)
+        assertFalse(parsed.storageFailed)
+        assertEquals(30_704_848L, parsed.sdKib)
+    }
+
+    @Test
+    fun `live parses a valid PMS snapshot`() {
+        val parsed = LiveSample.parse(live)
+        assertTrue(parsed.pmValid)
+        assertEquals(22.0, parsed.pm25!!, 0.0)
+        assertEquals(2127L, parsed.n03)
+        assertEquals(42.3, parsed.t!!, 0.0)
+        assertFalse(parsed.hasUtc)
+    }
+
+    @Test
+    fun `absent keys are null never zero`() {
+        // Sensor warming up: no PM keys at all, no UTC.
+        val parsed = LiveSample.parse("""{"seq":1,"mono":10000000,"pms":1,"bat":4100}""")
+        assertFalse(parsed.pmValid)
+        assertNull(parsed.pm25)
+        assertNull(parsed.n03)
+        assertNull(parsed.utc)
+        assertEquals(4100, parsed.bat)
+    }
+
+    @Test
+    fun `unknown keys from newer firmware are ignored`() {
+        val parsed = LiveSample.parse("""{"seq":1,"mono":1,"pms":4,"pm25":3,"pm1":1,"pm10":4,"future_key":true}""")
+        assertEquals(3.0, parsed.pm25!!, 0.0)
+    }
+}

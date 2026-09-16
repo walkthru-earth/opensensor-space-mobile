@@ -1,46 +1,48 @@
-/*
- * Copyright (C) 2022 The Android Open Source Project
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package earth.walkthru.aqsync.ui
 
-import earth.walkthru.aqsync.ui.device.DeviceScreen
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
+import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
+import earth.walkthru.aqsync.ui.device.TodayScreen
+import earth.walkthru.aqsync.ui.files.FilesScreen
+import earth.walkthru.aqsync.ui.scan.ScanScreen
 
 @Composable
-fun MainNavigation() {
+fun MainNavigation(modifier: Modifier = Modifier) {
+    val backStack = rememberNavBackStack(ScanKey)
 
-    val backStack = rememberNavBackStack(Main)
+    fun openTab(key: NavKey) {
+        // Today <-> Files behave as sibling tabs: replace rather than stack.
+        val last = backStack.lastOrNull()
+        if (last is TodayKey || last is FilesKey) backStack.removeLastOrNull()
+        backStack.add(key)
+    }
 
     NavDisplay(
+        modifier = modifier,
         backStack = backStack,
         onBack = { backStack.removeLastOrNull() },
         entryProvider = entryProvider {
-            entry<Main> {
-                DeviceScreen(
-                    onItemClick = { navKey -> backStack.add(navKey) },
-                    modifier = Modifier.safeDrawingPadding().padding(16.dp)
+            entry<ScanKey> {
+                ScanScreen(onConnected = { address -> backStack.add(TodayKey(address)) })
+            }
+            entry<TodayKey> { key ->
+                TodayScreen(
+                    address = key.address,
+                    onOpenFiles = { openTab(FilesKey(key.address)) },
+                    onDisconnected = { backStack.removeAll { it !is ScanKey } },
                 )
             }
-        }
+            entry<FilesKey> { key ->
+                FilesScreen(
+                    address = key.address,
+                    onOpenToday = { openTab(TodayKey(key.address)) },
+                    onDisconnected = { backStack.removeAll { it !is ScanKey } },
+                )
+            }
+        },
     )
 }

@@ -1,19 +1,25 @@
-<!--
-  ~ Copyright (C) 2022 The Android Open Source Project
-  ~
-  ~ Licensed under the Apache License, Version 2.0 (the "License");
-  ~ you may not use this file except in compliance with the License.
-  ~ You may obtain a copy of the License at
-  ~
-  ~      http://www.apache.org/licenses/LICENSE-2.0
-  ~
-  ~ Unless required by applicable law or agreed to in writing, software
-  ~ distributed under the License is distributed on an "AS IS" BASIS,
-  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  ~ See the License for the specific language governing permissions and
-  ~ limitations under the License.
-  -->
-
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">AQ Sync</string>
+
+    <string name="perm_title">Bluetooth, and nothing else</string>
+    <string name="perm_body">AQ Sync talks to your CoreS3 air-quality logger over Bluetooth Low Energy and copies its Parquet files onto this phone. It asks for Bluetooth scanning and connecting only. It never asks for location, and the app has no internet permission at all: nothing leaves this phone unless you share it.</string>
+    <string name="perm_grant">Allow Bluetooth</string>
+    <string name="perm_denied">Bluetooth permission was denied. Enable it in system settings to find your logger.</string>
+    <string name="perm_open_settings">Open app settings</string>
+    <string name="bt_off_title">Bluetooth is off</string>
+    <string name="bt_off_body">Turn Bluetooth on to find your logger.</string>
+    <string name="bt_turn_on">Turn on Bluetooth</string>
+
+    <string name="scan_title">Loggers nearby</string>
+    <string name="scan_known">Known loggers</string>
+    <string name="scan_hint">Bring the phone near the CoreS3. It advertises as AQ-xxxx.</string>
+    <string name="scan_pair_hint">On first connection, type the 6-digit code shown on the device screen.</string>
+    <string name="scan_fake">Debug: fake device</string>
+
+    <string name="today_title">Today</string>
+    <string name="files_title">Files</string>
+    <string name="board_temp">board temperature, not ambient</string>
+    <string name="set_time">Set time from phone</string>
+    <string name="flush">Finalize buffered rows</string>
 </resources>

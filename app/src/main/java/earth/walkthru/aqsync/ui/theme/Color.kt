@@ -1,27 +1,22 @@
-/*
- * Copyright (C) 2022 The Android Open Source Project
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package earth.walkthru.aqsync.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val Purple80 = Color(0xFFD0BCFF)
-val PurpleGrey80 = Color(0xFFCCC2DC)
-val Pink80 = Color(0xFFEFB8C8)
+// Fallback seed palette when dynamic color is unavailable (it always is on API 31+, but a
+// custom scheme keeps previews and tests deterministic). Ink, teal, and a warm accent for warnings.
+val Ink = Color(0xFF0F1B1E)
+val InkSoft = Color(0xFF1A2A2F)
+val Teal = Color(0xFF3CC9B0)
+val TealDeep = Color(0xFF0E7C6B)
+val Mist = Color(0xFFDDEDEA)
+val Sand = Color(0xFFF2E5C8)
+val Ember = Color(0xFFE8734A)
+val Rose = Color(0xFFD64A5C)
 
-val Purple40 = Color(0xFF6650a4)
-val PurpleGrey40 = Color(0xFF625b71)
-val Pink40 = Color(0xFF7D5260)
+// Air-quality bands for PM2.5 in µg/m³ (WHO 2021 24-h guideline is 15; these are display bands,
+// not an AQI: no averaging window is applied to a 10-second snapshot).
+val BandGood = Color(0xFF4CC38A)
+val BandModerate = Color(0xFFE9C46A)
+val BandElevated = Color(0xFFF4A261)
+val BandHigh = Color(0xFFE76F51)
+val BandVeryHigh = Color(0xFF9B2226)

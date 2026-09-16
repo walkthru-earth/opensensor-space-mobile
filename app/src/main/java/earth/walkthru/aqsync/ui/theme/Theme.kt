@@ -1,72 +1,83 @@
-/*
- * Copyright (C) 2022 The Android Open Source Project
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package earth.walkthru.aqsync.ui.theme
 
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalInspectionMode
 
-private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
+private val FallbackDark = darkColorScheme(
+    primary = Teal,
+    onPrimary = Ink,
+    secondary = Mist,
+    tertiary = Sand,
+    background = Ink,
+    surface = Ink,
+    surfaceContainer = InkSoft,
+    error = Rose,
 )
 
-private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
-
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
+private val FallbackLight = lightColorScheme(
+    primary = TealDeep,
+    tertiary = Ember,
+    error = Rose,
 )
 
+/** Rounder, expressive-style corner family. */
+private val AqShapes = Shapes(
+    extraSmall = RoundedCornerShape(6.dp),
+    small = RoundedCornerShape(10.dp),
+    medium = RoundedCornerShape(16.dp),
+    large = RoundedCornerShape(22.dp),
+    extraLarge = RoundedCornerShape(28.dp),
+)
+
+/**
+ * Material 3 with the user's wallpaper-derived dynamic colors (always available at minSdk 31) and
+ * expressive-leaning typography/shapes. Previews and tests fall back to the ink/teal palette.
+ *
+ * Note: `MaterialExpressiveTheme`, `MotionScheme` and `expressiveLightColorScheme` are declared
+ * `internal` in the Kotlin metadata of material3 1.4.0 (Compose BOM 2026.09.00), so they cannot be
+ * called from app code even with the experimental opt-in; switch to them once they are public.
+ */
 @Composable
-fun MyApplicationTheme(
+fun AqSyncTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
     dynamicColor: Boolean = true,
-    content: @Composable () -> Unit
+    content: @Composable () -> Unit,
 ) {
+    val inspection = LocalInspectionMode.current
     val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+        dynamicColor && !inspection -> {
             val context = LocalContext.current
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
+        darkTheme -> FallbackDark
+        else -> FallbackLight
     }
 
     MaterialTheme(
         colorScheme = colorScheme,
+        shapes = AqShapes,
         typography = Typography,
-        content = content
+        content = content,
     )
+}
+
+/** PM2.5 display band colour (not an AQI; see Color.kt). */
+@Composable
+fun pm25Band(value: Double?): androidx.compose.ui.graphics.Color = when {
+    value == null -> MaterialTheme.colorScheme.onSurfaceVariant
+    value <= 15 -> BandGood
+    value <= 35 -> BandModerate
+    value <= 55 -> BandElevated
+    value <= 150 -> BandHigh
+    else -> BandVeryHigh
 }
