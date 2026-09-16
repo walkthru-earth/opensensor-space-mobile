@@ -19,6 +19,7 @@ import earth.walkthru.aqsync.data.lan.LanConnectException
 import earth.walkthru.aqsync.data.lan.LanDevice
 import earth.walkthru.aqsync.data.lan.LanDiscovery
 import earth.walkthru.aqsync.data.lan.LanTokenPolicy
+import earth.walkthru.aqsync.data.lan.LanWifiLock
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.local.database.KnownDevice
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
@@ -167,6 +168,7 @@ class DeviceConnectionRepository @Inject constructor(
     private val archive: FileArchive,
     private val syncEngine: SyncEngine,
     private val lanDiscovery: LanDiscovery,
+    private val lanWifiLock: LanWifiLock,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val tokenPolicy = LanTokenPolicy()
@@ -643,6 +645,11 @@ class DeviceConnectionRepository @Inject constructor(
      * [foregroundService] = true (user-started syncs) puts the process under the dataSync foreground
      * service for the duration of the transfer; see [SyncForegroundService] for the measured reason.
      * The auto-sync worker passes false because WorkManager already runs it as a foreground worker.
+     *
+     * Over the LAN pipe — interactive or worker, both come through here — a [LanWifiLock] is held
+     * from the first `OPEN` to the `finally`, so the phone's Wi-Fi is asked to stay out of power
+     * save while bytes are flowing (measured: power save cut throughput 5× and then stalled TCP).
+     * Never over Bluetooth.
      */
     private fun startSync(entries: List<ManifestEntry>, foregroundService: Boolean = true): Job? {
         if (_sync.value.running) return null
@@ -672,6 +679,8 @@ class DeviceConnectionRepository @Inject constructor(
             var bytesBefore = 0L
             var windowsBefore = 0
             val outcomes = ArrayList<FileOutcome>()
+            val holdWifi = session.transport.kind == TransportKind.LAN
+            if (holdWifi) lanWifiLock.acquire()
             try {
                 for (entry in entries) {
                     val fileBase = bytesBefore
@@ -706,6 +715,7 @@ class DeviceConnectionRepository @Inject constructor(
                 Log.e(TAG, "sync aborted", e)
                 _events.tryEmit(DeviceEvent.Error("Sync aborted: ${e.message ?: e::class.simpleName}"))
             } finally {
+                if (holdWifi) lanWifiLock.release()
                 _sync.update { it.copy(running = false, current = null, finishedAtEpochMs = System.currentTimeMillis()) }
                 // A FLUSH or a rotation may have finalized a new file while we were pulling.
                 if (session.connectionState.value.isReady) refreshManifest()

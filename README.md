@@ -218,6 +218,12 @@ Auto-sync (2026-09-17):
 | OEM battery killers | The test phone is a **OnePlus 7 Pro**; OxygenOS/ColorOS are the worst offenders on dontkillmyapp.com: "Battery optimization → Don't optimize" is often not enough, the app may also need "Allow background activity" and to be excluded from the "deep optimization"/"sleep standby" lists, and a swiped-away app may still be killed. WorkManager survives that (the job is re-scheduled), a bare thread would not. Nothing is measured yet: the first field test should note how many of the 15-min periods actually ran. |
 | Room v3 | `known_device.autoSync INTEGER NOT NULL DEFAULT 0`, explicit `MIGRATION_2_3`, schema JSON exported; the switch is preserved across every upsert the connect path does. |
 
+After the first phone run (2026-09-17, OnePlus 7 Pro, Android 16):
+
+| Question | Decision |
+| --- | --- |
+| Wi-Fi power save during a LAN sync | Measured: with the screen locked, throughput fell from ~60 to ~12 files/min, then TCP stalled > 5 s and the transfer broke. `data/lan/LanWifiLock` holds one `WifiManager.WifiLock` from the first `OPEN` to the sync's `finally` — interactive sync and `SyncWorker` alike, both go through `startSync` — and **only while the active transport is LAN**; Bluetooth syncs hold nothing and the lock is never kept over an idle link. Mode is `WIFI_MODE_FULL_HIGH_PERF` on every supported API on purpose: on API 31–33 it is active with the screen off, while `WIFI_MODE_FULL_LOW_LATENCY` is only active with the screen **on** and the app in the foreground (AOSP `WifiLockManager` checks `IMPORTANCE_FOREGROUND`; a `dataSync` foreground service does not count). On API 34+ the framework turns a HIGH_PERF request into a LOW_LATENCY lock anyway (`high_perf_lock_deprecated`, default on), so requesting LOW_LATENCY first would only lose the 31–33 case. Honest consequence: **on Android 14+ this lock does not protect a screen-off LAN sync**; what does is the automatic resume after a lost link (next row). Needs the `WAKE_LOCK` permission; the app still holds no CPU wake lock. |
+
 ## Lessons learned
 
 - **`customizer.sh` cannot take a spaced application name.** `"AQ Sync"` was substituted into identifiers (`class AQ Sync`, `Theme.AQ Sync`, `AQ Sync.kt`). Use a single token (`AqSync`) or fix by hand right after generation; the raw output is kept as the first commit so the fix is visible.

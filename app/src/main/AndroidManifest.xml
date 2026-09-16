@@ -27,6 +27,11 @@
       notification is visible; a denial only hides the notification, the service still runs.
       The auto-sync WorkManager worker (data/background/SyncWorker) uses the same type through
       WorkManager's SystemForegroundService, merged below.
+
+      WAKE_LOCK exists for exactly one object: the WifiManager.WifiLock in data/lan/LanWifiLock,
+      held only while a file transfer runs over the LAN pipe (measured 2026-09-17: with the screen
+      locked the phone's Wi-Fi entered power save, throughput fell 5x and TCP stalled). The app
+      holds no CPU wake lock; Bluetooth syncs hold nothing.
     -->
     <uses-permission
         android:name="android.permission.BLUETOOTH_SCAN"
@@ -37,6 +42,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <uses-feature
         android:name="android.hardware.bluetooth_le"
