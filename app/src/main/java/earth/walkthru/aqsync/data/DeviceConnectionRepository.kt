@@ -2,17 +2,30 @@ package earth.walkthru.aqsync.data
 
 import android.util.Log
 import earth.walkthru.aqsync.data.ble.AqTransport
+import earth.walkthru.aqsync.data.ble.ConfigSnapshot
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.DeviceErrorException
 import earth.walkthru.aqsync.data.ble.DeviceSession
+import earth.walkthru.aqsync.data.ble.InvalidConfigException
+import earth.walkthru.aqsync.data.ble.LogTail
+import earth.walkthru.aqsync.data.ble.NotAllowedOnLinkException
 import earth.walkthru.aqsync.data.ble.TransportException
+import earth.walkthru.aqsync.data.ble.TransportKind
+import earth.walkthru.aqsync.data.ble.WifiUnavailableException
+import earth.walkthru.aqsync.data.lan.LanConnectException
+import earth.walkthru.aqsync.data.lan.LanDevice
+import earth.walkthru.aqsync.data.lan.LanDiscovery
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.local.database.KnownDevice
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
+import earth.walkthru.aqsync.data.protocol.AqUuids
+import earth.walkthru.aqsync.data.protocol.ConfigPatch
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.protocol.DeviceStatus
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.protocol.LiveSample
+import earth.walkthru.aqsync.data.protocol.hexToBytes
+import earth.walkthru.aqsync.data.protocol.toHex
 import earth.walkthru.aqsync.data.sync.ArchivedIdentity
 import earth.walkthru.aqsync.data.sync.FileArchive
 import earth.walkthru.aqsync.data.sync.FileOutcome
@@ -38,8 +51,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -83,6 +98,25 @@ sealed interface DeviceEvent {
     data class Error(val message: String) : DeviceEvent
 }
 
+/** Result of the last `WIFI_SCAN`, for the Device screen. */
+sealed interface WifiScanState {
+    data object Idle : WifiScanState
+    data object Scanning : WifiScanState
+    data class Done(val accessPoints: List<Frame.WifiAp>, val atEpochMs: Long) : WifiScanState
+    data class Failed(val message: String, val unavailable: Boolean) : WifiScanState
+}
+
+/** Result of the last `LOG_TAIL`, for Advanced → Debug. */
+sealed interface LogTailState {
+    data object Idle : LogTailState
+    data object Loading : LogTailState
+    data class Loaded(val tail: LogTail, val atEpochMs: Long) : LogTailState
+    data class Failed(val message: String) : LogTailState
+}
+
+/** How the repository should pick a transport for a connect. */
+enum class TransportPreference { AUTO, BLE_ONLY }
+
 /**
  * Owns the single live connection to a logger and everything derived from it.
  *
@@ -97,6 +131,7 @@ class DeviceConnectionRepository @Inject constructor(
     private val archivedFileDao: ArchivedFileDao,
     private val archive: FileArchive,
     private val syncEngine: SyncEngine,
+    private val lanDiscovery: LanDiscovery,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -106,6 +141,68 @@ class DeviceConnectionRepository @Inject constructor(
     val connectionState: StateFlow<ConnectionState> = _session
         .flatMapLatest { it?.connectionState ?: flowOf(ConnectionState.Disconnected) }
         .stateIn(scope, SharingStarted.Eagerly, ConnectionState.Disconnected)
+
+    /** Which pipe the current session uses, for the "Bluetooth" / "Wi-Fi LAN" chip. */
+    val activeTransport: StateFlow<TransportKind?> = _session
+        .map { it?.transport?.kind }
+        .stateIn(scope, SharingStarted.Eagerly, null)
+
+    private val _config = MutableStateFlow<ConfigSnapshot?>(null)
+    val config: StateFlow<ConfigSnapshot?> = _config.asStateFlow()
+
+    private val _wifiScan = MutableStateFlow<WifiScanState>(WifiScanState.Idle)
+    val wifiScan: StateFlow<WifiScanState> = _wifiScan.asStateFlow()
+
+    private val _logTail = MutableStateFlow<LogTailState>(LogTailState.Idle)
+    val logTail: StateFlow<LogTailState> = _logTail.asStateFlow()
+
+    /** Set while a config write / reboot / token fetch is in flight, to disable the buttons. */
+    private val _busy = MutableStateFlow(false)
+    val busy: StateFlow<Boolean> = _busy.asStateFlow()
+
+    // ------------------------------------------------------------ LAN discovery
+
+    /** `_aqsync._tcp` instances visible right now, keyed by station UUID from their TXT record. */
+    private val _lanDevices = MutableStateFlow<Map<String, LanDevice>>(emptyMap())
+    val lanDevices: StateFlow<Map<String, LanDevice>> = _lanDevices.asStateFlow()
+
+    private val _lanDiscoveryError = MutableStateFlow<String?>(null)
+    val lanDiscoveryError: StateFlow<String?> = _lanDiscoveryError.asStateFlow()
+
+    private var lanDiscoveryJob: Job? = null
+
+    /**
+     * Browse mDNS while the app is in the foreground and the LAN permission is held. The caller
+     * (the UI gate) is responsible for the permission check; this only starts/stops the browse.
+     */
+    fun setLanDiscoveryActive(active: Boolean) {
+        if (active) {
+            if (lanDiscoveryJob?.isActive == true) return
+            _lanDiscoveryError.value = null
+            lanDiscoveryJob = scope.launch {
+                try {
+                    lanDiscovery.discover().collect { ev ->
+                        when (ev) {
+                            is LanDiscovery.Event.Devices -> _lanDevices.value = ev.devices.values
+                                .filter { it.isConnectable }
+                                .associateBy { it.station!! }
+                            is LanDiscovery.Event.Failed -> _lanDiscoveryError.value = ev.message
+                        }
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    _lanDiscoveryError.value = e.message ?: "mDNS browse failed"
+                } finally {
+                    _lanDevices.value = emptyMap()
+                }
+            }
+        } else {
+            lanDiscoveryJob?.cancel()
+            lanDiscoveryJob = null
+            _lanDevices.value = emptyMap()
+        }
+    }
 
     private val _info = MutableStateFlow<DeviceInfo?>(null)
     val info: StateFlow<DeviceInfo?> = _info.asStateFlow()
@@ -171,59 +268,159 @@ class DeviceConnectionRepository @Inject constructor(
 
     // ------------------------------------------------------------------ connect
 
-    /** Connect to [address] (or the fake device when [fake]). Safe to call while connected to the same peer. */
-    fun connect(address: String, name: String?, fake: Boolean = false) {
+    /**
+     * Connect to [address] (or the fake device when [fake]). Safe to call while connected to the same peer.
+     *
+     * Transport choice (contract, "LAN transport"): prefer LAN when the device's station is currently
+     * discovered on the network *and* a token is stored, else BLE; if the LAN connect fails for any
+     * reason fall back to BLE and say so. [preference] = [TransportPreference.BLE_ONLY] skips LAN
+     * (needed for `GET_TOKEN`, which is BLE-only by contract).
+     */
+    fun connect(address: String, name: String?, fake: Boolean = false, preference: TransportPreference = TransportPreference.AUTO) {
         scope.launch {
             connectMutex.withLock {
                 val existing = _session.value
                 if (existing != null && existing.address == address && existing.connectionState.value.isReady) return@withLock
                 closeSessionLocked()
-
-                val transport: AqTransport = if (fake) transportFactory.fake(address) else transportFactory.ble(address)
-                val session = DeviceSession(transport).also { it.staleFrameLogger = { m -> Log.w(TAG, m) } }
-                _session.value = session
-                _info.value = null
-                _status.value = null
-                _live.value = null
-                _manifest.value = ManifestState.Idle
-                _sync.value = SyncProgress()
+                resetDerivedState()
 
                 knownDeviceDao.insertIfAbsent(
                     KnownDevice(address, name, null, null, null, System.currentTimeMillis(), null)
                 )
-                try {
-                    transport.connect()
-                } catch (e: TransportException) {
-                    _events.tryEmit(DeviceEvent.Error(e.message ?: "connection failed"))
-                    return@withLock
+                val known = knownDeviceDao.get(address)
+
+                var transport: AqTransport? = null
+                if (fake) {
+                    transport = transportFactory.fake(address)
+                } else if (preference == TransportPreference.AUTO) {
+                    transport = tryLan(address, name ?: known?.name, known)
                 }
-                startNotificationCollection(session)
-                try {
-                    val info = session.readInfo()
-                    _info.value = info
-                    if (info.proto != null && info.proto != 1) {
-                        _events.tryEmit(DeviceEvent.Error("Device speaks protocol v${info.proto}; this app implements v1."))
-                    }
-                    val now = System.currentTimeMillis()
-                    knownDeviceDao.upsert(
-                        KnownDevice(
-                            address = address,
-                            name = name ?: transport.displayName,
-                            station = info.station,
-                            deviceId = info.dev,
-                            firmware = info.fw,
-                            lastSeenEpochMs = now,
-                            lastConnectedEpochMs = now,
-                        )
-                    )
-                    runCatching { session.readStatus() }.onSuccess { _status.value = TimedStatus(it, System.currentTimeMillis()) }
-                    runCatching { session.readLive() }.onSuccess { _live.value = TimedLive(it, System.currentTimeMillis()) }
-                } catch (e: Exception) {
-                    if (e is CancellationException) throw e
-                    _events.tryEmit(DeviceEvent.Error("Connected, but reading `info` failed: ${e.message}"))
+                if (transport == null) {
+                    transport = transportFactory.ble(address)
                 }
+                if (!openSession(transport, address, name)) return@withLock
                 refreshManifest()
             }
+        }
+    }
+
+    /** Attempt a LAN session; null when not applicable or when it failed (the caller falls back to BLE). */
+    private suspend fun tryLan(address: String, name: String?, known: KnownDevice?): AqTransport? {
+        val station = known?.station ?: return null
+        val tokenHex = known.lanToken ?: return null
+        val seen = _lanDevices.value[station] ?: return null
+        val host = seen.host ?: return null
+        val token = try {
+            tokenHex.hexToBytes()
+        } catch (e: IllegalArgumentException) {
+            Log.w(TAG, "stored LAN token is malformed; ignoring it")
+            return null
+        }
+        val port = seen.port.takeIf { it in 1..65535 } ?: known.lanPort ?: return null
+        val transport = transportFactory.lan(address, name, host, port, token)
+        // Put the LAN attempt in the session slot so the UI shows "Authenticating on the LAN…".
+        val probe = DeviceSession(transport).also { it.staleFrameLogger = { m -> Log.w(TAG, m) } }
+        _session.value = probe
+        return try {
+            transport.connect()
+            transport
+        } catch (e: LanConnectException) {
+            Log.w(TAG, "LAN connect failed (${e.failure}); falling back to Bluetooth")
+            _events.tryEmit(DeviceEvent.Info("Wi-Fi LAN: ${e.message}. Using Bluetooth."))
+            _session.value = null
+            transport.close()
+            null
+        } catch (e: TransportException) {
+            _events.tryEmit(DeviceEvent.Info("Wi-Fi LAN failed (${e.message}). Using Bluetooth."))
+            _session.value = null
+            transport.close()
+            null
+        }
+    }
+
+    private fun resetDerivedState() {
+        _info.value = null
+        _status.value = null
+        _live.value = null
+        _manifest.value = ManifestState.Idle
+        _sync.value = SyncProgress()
+        _config.value = null
+        _wifiScan.value = WifiScanState.Idle
+        _logTail.value = LogTailState.Idle
+    }
+
+    /** Connect [transport] (if not already), read `info`, persist identity, fetch token/config. */
+    private suspend fun openSession(transport: AqTransport, address: String, name: String?): Boolean {
+        val session = (_session.value?.takeIf { it.transport === transport } ?: DeviceSession(transport))
+            .also { it.staleFrameLogger = { m -> Log.w(TAG, m) } }
+        _session.value = session
+        try {
+            transport.connect()
+        } catch (e: TransportException) {
+            _events.tryEmit(DeviceEvent.Error(e.message ?: "connection failed"))
+            return false
+        }
+        startNotificationCollection(session)
+        try {
+            val info = session.readInfo()
+            _info.value = info
+            val proto = info.proto
+            if (proto != null && proto > AqUuids.PROTOCOL_VERSION) {
+                _events.tryEmit(DeviceEvent.Info("Device speaks protocol v$proto; this app implements v${AqUuids.PROTOCOL_VERSION}. Newer features are ignored."))
+            }
+            val now = System.currentTimeMillis()
+            val previous = knownDeviceDao.get(address)
+            knownDeviceDao.upsert(
+                KnownDevice(
+                    address = address,
+                    name = name ?: transport.displayName ?: previous?.name,
+                    station = info.station,
+                    deviceId = info.dev,
+                    firmware = info.fw,
+                    lastSeenEpochMs = now,
+                    lastConnectedEpochMs = now,
+                    lanToken = previous?.lanToken,
+                    lanPort = previous?.lanPort,
+                )
+            )
+            runCatching { session.readStatus() }.onSuccess { _status.value = TimedStatus(it, System.currentTimeMillis()) }
+            runCatching { session.readLive() }.onSuccess { _live.value = TimedLive(it, System.currentTimeMillis()) }
+
+            val v2 = (proto ?: 1) >= 2
+            if (v2) {
+                // Token: once, over BLE only, when we do not hold one yet. Never logged.
+                if (transport.kind != TransportKind.LAN && previous?.lanToken == null) {
+                    fetchTokenLocked(session, address, quiet = true)
+                }
+                runCatching { session.getConfig() }
+                    .onSuccess { _config.value = it }
+                    .onFailure { Log.w(TAG, "GET_CONFIG failed: ${it.message}") }
+            }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            _events.tryEmit(DeviceEvent.Error("Connected, but reading `info` failed: ${e.message}"))
+        }
+        return true
+    }
+
+    private suspend fun fetchTokenLocked(session: DeviceSession, address: String, quiet: Boolean): Boolean {
+        return try {
+            val t = session.getToken()
+            knownDeviceDao.setLanToken(address, t.token.toHex(), t.port)
+            if (!quiet) _events.tryEmit(DeviceEvent.Info("LAN token stored on this phone (port ${t.port})."))
+            true
+        } catch (e: NotAllowedOnLinkException) {
+            if (!quiet) _events.tryEmit(DeviceEvent.Error("The token can only be fetched over Bluetooth."))
+            false
+        } catch (e: DeviceErrorException) {
+            if (!quiet) _events.tryEmit(DeviceEvent.Error(e.message ?: "GET_TOKEN rejected"))
+            false
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "GET_TOKEN failed: ${e.message}")
+            if (!quiet) _events.tryEmit(DeviceEvent.Error("GET_TOKEN failed: ${e.message}"))
+            false
         }
     }
 
@@ -399,6 +596,180 @@ class DeviceConnectionRepository @Inject constructor(
         scope.launch { runCatching { session.requestStatus() } }
     }
 
+    // ---------------------------------------------------------------- v2 controls
+
+    fun refreshConfig() {
+        val session = _session.value ?: return
+        scope.launch {
+            try {
+                _config.value = session.getConfig()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _events.tryEmit(DeviceEvent.Error("GET_CONFIG failed: ${e.message}"))
+            }
+        }
+    }
+
+    /**
+     * `SET_CONFIG`. Validation already happened in [ConfigPatch]; `ERROR` 12 names the key the
+     * device still rejected. A `ble.*` change is reported as pending until the next boot.
+     */
+    fun applyConfig(patch: ConfigPatch, successMessage: String? = null) {
+        val session = _session.value ?: return
+        if (patch.isEmpty) return
+        scope.launch {
+            _busy.value = true
+            try {
+                val snap = session.setConfig(patch)
+                _config.value = snap
+                val msg = successMessage ?: "Settings saved"
+                _events.tryEmit(
+                    DeviceEvent.Info(
+                        if (snap.rebootRequired) "$msg. Bluetooth changes apply after a reboot." else msg
+                    )
+                )
+            } catch (e: InvalidConfigException) {
+                _events.tryEmit(DeviceEvent.Error("Device rejected `${e.key}`; nothing was changed."))
+            } catch (e: DeviceErrorException) {
+                _events.tryEmit(DeviceEvent.Error(e.message ?: "SET_CONFIG rejected"))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _events.tryEmit(DeviceEvent.Error("SET_CONFIG failed: ${e.message}"))
+            } finally {
+                _busy.value = false
+            }
+        }
+    }
+
+    fun startWifiScan() {
+        val session = _session.value ?: return
+        if (_wifiScan.value is WifiScanState.Scanning) return
+        scope.launch {
+            _wifiScan.value = WifiScanState.Scanning
+            try {
+                val r = session.wifiScan()
+                _wifiScan.value = WifiScanState.Done(r.accessPoints.sortedByDescending { it.rssi }, System.currentTimeMillis())
+            } catch (e: WifiUnavailableException) {
+                _wifiScan.value = WifiScanState.Failed("The device's Wi-Fi radio cannot scan right now.", unavailable = true)
+            } catch (e: DeviceErrorException) {
+                _wifiScan.value = WifiScanState.Failed(e.message ?: "WIFI_SCAN rejected", unavailable = false)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _wifiScan.value = WifiScanState.Failed("WIFI_SCAN failed: ${e.message}", unavailable = false)
+            }
+        }
+    }
+
+    fun clearWifiScan() {
+        if (_wifiScan.value !is WifiScanState.Scanning) _wifiScan.value = WifiScanState.Idle
+    }
+
+    /**
+     * `REBOOT` → `REBOOTING delay_ms`, then drop the link and reconnect once the device is back
+     * (BLE advertising resumes a few seconds after boot; the same transport rule applies again).
+     */
+    fun rebootAndReconnect() {
+        val session = _session.value ?: return
+        val address = session.address
+        val name = session.transport.displayName
+        val fake = isFake
+        scope.launch {
+            _busy.value = true
+            try {
+                val r = session.reboot()
+                _events.tryEmit(DeviceEvent.Info("Device is rebooting (in ${r.delayMs} ms). Reconnecting…"))
+                delay(r.delayMs.toLong().coerceIn(100L, 5_000L))
+                connectMutex.withLock { closeSessionLocked() }
+                delay(REBOOT_RECONNECT_DELAY_MS)
+                connect(address, name, fake = fake)
+            } catch (e: DeviceErrorException) {
+                _events.tryEmit(DeviceEvent.Error(e.message ?: "REBOOT rejected"))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _events.tryEmit(DeviceEvent.Error("REBOOT failed: ${e.message}"))
+            } finally {
+                _busy.value = false
+            }
+        }
+    }
+
+    fun refreshLogTail(maxBytes: Int = DeviceSession.LOG_RING_BYTES) {
+        val session = _session.value ?: return
+        if (_logTail.value is LogTailState.Loading) return
+        scope.launch {
+            _logTail.value = LogTailState.Loading
+            try {
+                _logTail.value = LogTailState.Loaded(session.logTail(maxBytes), System.currentTimeMillis())
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _logTail.value = LogTailState.Failed(e.message ?: "LOG_TAIL failed")
+            }
+        }
+    }
+
+    /** Explicit "Fetch token" (BLE only by contract). */
+    fun fetchToken() {
+        val session = _session.value ?: return
+        if (session.transport.kind == TransportKind.LAN) {
+            _events.tryEmit(DeviceEvent.Error("The token can only be fetched over Bluetooth. Reconnect over Bluetooth first."))
+            return
+        }
+        scope.launch {
+            _busy.value = true
+            try {
+                fetchTokenLocked(session, session.address, quiet = false)
+            } finally {
+                _busy.value = false
+            }
+        }
+    }
+
+    /**
+     * `lan.rotate_token=1`: the device forgets the old token and drops every LAN session, so the
+     * stored copy is cleared and — over BLE — the new one is fetched right away.
+     */
+    fun rotateToken() {
+        val session = _session.value ?: return
+        val address = session.address
+        scope.launch {
+            _busy.value = true
+            try {
+                _config.value = session.setConfig(ConfigPatch.build { rotateToken() })
+                knownDeviceDao.setLanToken(address, null, null)
+                if (session.transport.kind == TransportKind.LAN) {
+                    _events.tryEmit(DeviceEvent.Info("Token rotated. This LAN session will drop; reconnect over Bluetooth to fetch the new token."))
+                } else if (fetchTokenLocked(session, address, quiet = true)) {
+                    _events.tryEmit(DeviceEvent.Info("Token rotated and the new one stored on this phone."))
+                } else {
+                    _events.tryEmit(DeviceEvent.Info("Token rotated. Use “Fetch token” to store the new one."))
+                }
+            } catch (e: DeviceErrorException) {
+                _events.tryEmit(DeviceEvent.Error(e.message ?: "rotate_token rejected"))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _events.tryEmit(DeviceEvent.Error("rotate_token failed: ${e.message}"))
+            } finally {
+                _busy.value = false
+            }
+        }
+    }
+
+    /** `ble.clear_bonds=1`: the device forgets every phone, including this one. */
+    fun clearBonds() {
+        applyConfig(ConfigPatch.build { clearBonds() }, "Device forgot all bonded phones. You will pair again on the next Bluetooth connection.")
+    }
+
+    /** Whether the connected device has a stored LAN token (for the LAN card). */
+    val currentKnownDevice: Flow<KnownDevice?> = _session.flatMapLatest { s ->
+        if (s == null) flowOf(null) else knownDeviceDao.observeAll().map { list -> list.firstOrNull { it.address == s.address } }
+    }
+
     // ------------------------------------------------------------- known devices
 
     val knownDevices: Flow<List<KnownDevice>> = knownDeviceDao.observeAll()
@@ -432,5 +803,8 @@ class DeviceConnectionRepository @Inject constructor(
 
         /** Used only if `info.max_read` is absent; conservative. */
         const val DEFAULT_MAX_READ = 4096
+
+        /** Boot + BLE stack start + advertising on the CoreS3; generous. */
+        const val REBOOT_RECONNECT_DELAY_MS = 6_000L
     }
 }

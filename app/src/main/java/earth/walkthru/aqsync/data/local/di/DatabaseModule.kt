@@ -24,5 +24,7 @@ class DatabaseModule {
     @Provides
     @Singleton
     fun provideAppDatabase(@ApplicationContext appContext: Context): AppDatabase =
-        Room.databaseBuilder(appContext, AppDatabase::class.java, "aq-sync.db").build()
+        Room.databaseBuilder(appContext, AppDatabase::class.java, "aq-sync.db")
+            .addMigrations(*AppDatabase.MIGRATIONS)
+            .build()
 }

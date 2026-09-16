@@ -59,6 +59,8 @@ class BleTransport(
 
     override val address: String = device.address
     override val displayName: String? get() = runCatching { device.name }.getOrNull()
+    override val kind: TransportKind = TransportKind.BLE
+    override val endpoint: String get() = device.address
 
     private val _state = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
     override val connectionState: StateFlow<ConnectionState> = _state.asStateFlow()

@@ -114,6 +114,7 @@ fun ConnectionState.describe(): String = when (this) {
     ConnectionState.Bonding -> "Pairing — enter the 6-digit code shown on the device"
     ConnectionState.NegotiatingMtu -> "Negotiating MTU…"
     ConnectionState.EnablingNotifications -> "Enabling notifications…"
+    ConnectionState.Authenticating -> "Authenticating on the LAN…"
     is ConnectionState.Ready -> "Connected · MTU $mtu"
     is ConnectionState.Failed -> "Failed: $reason"
 }

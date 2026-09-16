@@ -22,7 +22,20 @@ data class KnownDevice(
     val firmware: String?,
     val lastSeenEpochMs: Long,
     val lastConnectedEpochMs: Long?,
-)
+    /**
+     * LAN bearer token from `GET_TOKEN`, 32 bytes as 64 hex chars; null until fetched over BLE.
+     * A secret: never log it, never show it. Schema v2.
+     */
+    val lanToken: String? = null,
+    /** `TOKEN.port` (47390 on today's firmware). Schema v2. */
+    val lanPort: Int? = null,
+) {
+    val hasLanToken: Boolean get() = lanToken != null
+
+    /** Safe for logs: identity without the secret. */
+    override fun toString(): String =
+        "KnownDevice(address=$address, name=$name, station=$station, lanToken=${if (lanToken != null) "<set>" else "null"}, lanPort=$lanPort)"
+}
 
 @Dao
 interface KnownDeviceDao {
@@ -40,6 +53,12 @@ interface KnownDeviceDao {
 
     @Query("UPDATE known_device SET lastSeenEpochMs = :epochMs, name = COALESCE(:name, name) WHERE address = :address")
     suspend fun touch(address: String, name: String?, epochMs: Long)
+
+    @Query("UPDATE known_device SET lanToken = :tokenHex, lanPort = :port WHERE address = :address")
+    suspend fun setLanToken(address: String, tokenHex: String?, port: Int?)
+
+    @Query("SELECT * FROM known_device WHERE station = :station LIMIT 1")
+    suspend fun findByStation(station: String): KnownDevice?
 
     @Query("DELETE FROM known_device WHERE address = :address")
     suspend fun delete(address: String)

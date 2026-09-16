@@ -14,28 +14,47 @@ sealed interface ConnectionState {
     data object Bonding : ConnectionState
     data object NegotiatingMtu : ConnectionState
     data object EnablingNotifications : ConnectionState
+
+    /** LAN: `"AQS1"` + token sent, waiting for `HELLO`. */
+    data object Authenticating : ConnectionState
     data class Ready(val mtu: Int) : ConnectionState
     data class Failed(val reason: String, val gattStatus: Int? = null) : ConnectionState
 
     val isReady: Boolean get() = this is Ready
     val isBusy: Boolean
         get() = this is Connecting || this is DiscoveringServices || this is Bonding ||
-            this is NegotiatingMtu || this is EnablingNotifications
+            this is NegotiatingMtu || this is EnablingNotifications || this is Authenticating
 }
 
-class TransportException(message: String, val gattStatus: Int? = null, cause: Throwable? = null) :
+open class TransportException(message: String, val gattStatus: Int? = null, cause: Throwable? = null) :
     Exception(message, cause)
+
+/** Which byte pipe a transport is. The protocol above it is identical. */
+enum class TransportKind(val label: String) {
+    BLE("Bluetooth"),
+    LAN("Wi-Fi LAN"),
+    FAKE("Fake device"),
+}
 
 /**
  * The five GATT attributes of the AQ Sync service, abstracted so the same protocol/sync code runs
- * over a real [BluetoothGatt][android.bluetooth.BluetoothGatt] link or an in-process fake device.
+ * over a real [BluetoothGatt][android.bluetooth.BluetoothGatt] link, a LAN TCP socket
+ * ([earth.walkthru.aqsync.data.lan.TcpTransport]) or an in-process fake device.
  *
  * Byte-level only: framing and JSON live one layer up in [DeviceSession].
  */
 interface AqTransport {
-    /** Stable identity of the peer (Bluetooth address, or a fake id). */
+    /**
+     * Stable identity of the peer: the Bluetooth address (or a fake id) — also over LAN, so a device
+     * is the same [earth.walkthru.aqsync.data.local.database.KnownDevice] whichever pipe is active.
+     */
     val address: String
     val displayName: String?
+
+    val kind: TransportKind
+
+    /** Human-readable endpoint: the Bluetooth address, or `host:port` for LAN. */
+    val endpoint: String
 
     val connectionState: StateFlow<ConnectionState>
 

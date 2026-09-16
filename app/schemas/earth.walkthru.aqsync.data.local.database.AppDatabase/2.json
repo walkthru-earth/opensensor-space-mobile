@@ -1,0 +1,144 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 2,
+    "identityHash": "8757cd7a42f57f79c4787def7f1aab55",
+    "entities": [
+      {
+        "tableName": "known_device",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`address` TEXT NOT NULL, `name` TEXT, `station` TEXT, `deviceId` TEXT, `firmware` TEXT, `lastSeenEpochMs` INTEGER NOT NULL, `lastConnectedEpochMs` INTEGER, `lanToken` TEXT, `lanPort` INTEGER, PRIMARY KEY(`address`))",
+        "fields": [
+          {
+            "fieldPath": "address",
+            "columnName": "address",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "station",
+            "columnName": "station",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "deviceId",
+            "columnName": "deviceId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "firmware",
+            "columnName": "firmware",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastSeenEpochMs",
+            "columnName": "lastSeenEpochMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastConnectedEpochMs",
+            "columnName": "lastConnectedEpochMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lanToken",
+            "columnName": "lanToken",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lanPort",
+            "columnName": "lanPort",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "address"
+          ]
+        }
+      },
+      {
+        "tableName": "archived_file",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `station` TEXT NOT NULL, `name` TEXT NOT NULL, `bytes` INTEGER NOT NULL, `crc32` INTEGER NOT NULL, `sha256` TEXT NOT NULL, `syncedAtEpochMs` INTEGER NOT NULL, `sourceDevice` TEXT NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "station",
+            "columnName": "station",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bytes",
+            "columnName": "bytes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "crc32",
+            "columnName": "crc32",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sha256",
+            "columnName": "sha256",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncedAtEpochMs",
+            "columnName": "syncedAtEpochMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceDevice",
+            "columnName": "sourceDevice",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_archived_file_station_name",
+            "unique": true,
+            "columnNames": [
+              "station",
+              "name"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_archived_file_station_name` ON `${TABLE_NAME}` (`station`, `name`)"
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '8757cd7a42f57f79c4787def7f1aab55')"
+    ]
+  }
+}

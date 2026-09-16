@@ -60,8 +60,9 @@ android {
     }
 
     lint {
-        // The product promise is air-gapped; fail the build on lint errors so a
-        // stray INTERNET permission or insecure API cannot slip in unnoticed.
+        // Offline-first: fail the build on lint errors so an insecure API or a
+        // permission nobody reviewed cannot slip in unnoticed. INTERNET is declared
+        // deliberately for the mDNS-discovered LAN transport only (see the manifest).
         abortOnError = true
         warningsAsErrors = false
         checkDependencies = false
@@ -148,4 +149,7 @@ dependencies {
     // Icons and SAF helpers
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.documentfile)
+
+    // Preferences (Advanced mode switch)
+    implementation(libs.androidx.datastore.preferences)
 }

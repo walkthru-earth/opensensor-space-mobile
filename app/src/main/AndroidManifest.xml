@@ -3,15 +3,27 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!--
-      Offline-first: this version needs only the two modern Bluetooth LE permissions.
-      BLUETOOTH_SCAN is declared neverForLocation so no location permission is implied.
-      INTERNET is intentionally absent until an opt-in cloud sync exists; add it together
-      with that setting, never before.
+      Offline-first. Bluetooth LE is the primary link: BLUETOOTH_SCAN is declared neverForLocation
+      so no location permission is implied, BLUETOOTH_CONNECT for GATT.
+
+      INTERNET exists only so that sockets exist at all: the protocol v2 LAN transport opens one
+      plain TCP connection to a device discovered via mDNS `_aqsync._tcp` on the current network
+      (data/lan/). The code never connects to any address it did not obtain from that discovery;
+      there is still no cloud endpoint, no analytics and no account. A future cloud step needs its
+      own explicit opt-in setting and review (AGENTS.md).
+
+      ACCESS_LOCAL_NETWORK (API 37+) is required for any local-network traffic — TCP, mDNS,
+      NsdManager — on phones targeting SDK 37. It is in the NEARBY_DEVICES group with the Bluetooth
+      permissions, so it is usually granted with them; the app still checks and requests it before
+      any LAN action and keeps working over Bluetooth when it is denied. Below API 37 the permission
+      does not exist and is never requested.
     -->
     <uses-permission
         android:name="android.permission.BLUETOOTH_SCAN"
         android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
 
     <uses-feature
         android:name="android.hardware.bluetooth_le"
