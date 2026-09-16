@@ -10,7 +10,7 @@ out through the system share sheet or saved with the system file picker.
 
 ## Status
 
-**Built against protocol v1; not yet tested against hardware from a phone.** The protocol itself
+**Built against protocol v1; not yet tested against hardware from a phone.** Verified so far: `./gradlew clean lintDebug assembleDebug testDebugUnitTest` → 0 lint errors, 29/29 unit tests (frame codec, JSON models, Parquet verification, sync planner), debug APK ≈ 64 MB unminified. The protocol itself
 *is* bench-verified: the same contract was exercised from a macOS host client against the real
 board on 2026-09-16 (pairing, 766-file manifest, verified transfers at 15–21 KB/s, time set,
 flush). See
@@ -93,6 +93,35 @@ app/src/main/java/earth/walkthru/aqsync/
   ui/scan · ui/device · ui/files · ui/permissions · ui/theme
 app/src/test/      frame codec, verification, JSON, planner tests
 ```
+
+## Design decisions
+
+Choices the protocol left open, and what this app does (mirrored into the firmware repo's
+`docs/ble-sync-protocol.md` on 2026-09-16):
+
+| Question | Decision |
+| --- | --- |
+| Archive root for names without a station (`benchmarks/…`, `legacy-parquet/…`) | Everything is stored under `archive/<station uuid from info>/<name verbatim>`, so dated files sit at `…/<uuid>/station=<uuid>/year=…`. Redundant on purpose: two devices can never collide. |
+| `STATUS` (0x07) has no `response` frame | Fire-and-forget; the `status` notification is the acknowledgement. Never awaited on `response`. |
+| `ERROR.op` for unparseable requests | Accepted as "mine" when it equals the request opcode (the firmware echoes the first byte); anything else is a protocol violation. |
+| `OPENED.name` differs from the requested name | Treated as a mismatch outcome, not silently accepted. |
+| `READ_END.next_offset` ≠ bytes actually received | Window fails as a protocol violation. A lost `CHUNK` must never be papered over by trusting the device's offset. |
+| `info.max_read` missing | Falls back to 4096 (the firmware always sends 16384; dead code kept as a guard). |
+| `bat`/`pct` in `live` | Shown raw with a "board report, unqualified" label; 16,372 → 23 mV was observed with no battery attached. |
+| One outstanding GATT operation | Enforced with a `Mutex` around every read/write/descriptor call; Android's `BluetoothGatt` silently fails on concurrent operations. |
+| Bonding | `createBond()` before first characteristic access if unbonded; GATT status 5 / 15 / 133 while pairing is in progress → wait for `BOND_BONDED`, then retry the operation once. |
+| Downloads and rotation | Session and sync state live in a process-scoped repository, not the Activity, so a rotation mid-sync does not abort the transfer. |
+
+## Lessons learned
+
+- **`customizer.sh` cannot take a spaced application name.** `"AQ Sync"` was substituted into identifiers (`class AQ Sync`, `Theme.AQ Sync`, `AQ Sync.kt`). Use a single token (`AqSync`) or fix by hand right after generation; the raw output is kept as the first commit so the fix is visible.
+- **macOS ships bash 3; the generator needs 4+.** `brew install bash`, then run it as `/opt/homebrew/bin/bash customizer.sh …`.
+- **Material 3 Expressive is not usable from the pinned BOM.** `MaterialExpressiveTheme`, `MotionScheme` and `expressiveLightColorScheme` are `internal` in material3 1.4.0 (Compose BOM 2026.09.00). Use `MaterialTheme` + dynamic color; add expressive shapes/typography yourself.
+- **API 33+ `writeCharacteristic`/`writeDescriptor` return `BluetoothStatusCodes`, not GATT status.** Comparing against `BluetoothGatt.GATT_SUCCESS` compiled and worked only because both constants are 0; lint's `WrongConstant` caught it. Compare with `BluetoothStatusCodes.SUCCESS`.
+- **AGP 9.4 + Kotlin 2.4.20 + KSP 2.3.12 + compileSdk 37 build cleanly today.** The explicit Compose strong-skipping flag is deprecated (default on); `nonTransitiveRClass` stays on from the template.
+- **Lint `NonObservableLocale`:** `Locale.getDefault()` inside a composable is flagged; `String.uppercase()` (root locale) is fine for eyebrow labels.
+- **Trust the contract's absolute offsets.** Every `CHUNK` carries its offset, so the client verifies continuity itself rather than counting notifications — the same property that let the firmware-side host client detect a deliberately dropped frame in tests.
+- **The protocol was proven before the app was.** Verifying the contract with a laptop client against the real board first (see the firmware repo's bench record) meant the app could be built and unit-tested against captured payloads with no hardware in the loop; the remaining risk is Android's BLE stack behaviour, not the protocol.
 
 ## Next
 
