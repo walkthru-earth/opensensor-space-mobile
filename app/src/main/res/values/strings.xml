@@ -3,7 +3,7 @@
     <string name="app_name">AQ Sync</string>
 
     <string name="perm_title">Bluetooth, and nothing else</string>
-    <string name="perm_body">AQ Sync talks to your CoreS3 air-quality logger over Bluetooth Low Energy and copies its Parquet files onto this phone. It asks for Bluetooth scanning and connecting only. It never asks for location, and the app has no internet permission at all: nothing leaves this phone unless you share it.</string>
+    <string name="perm_body">AQ Sync talks to your CoreS3 air-quality logger over Bluetooth Low Energy and copies its Parquet files onto this phone. It asks for Bluetooth scanning and connecting. It never asks for location. Network access is used only to reach a logger on your own Wi-Fi network, found with mDNS; there is no cloud endpoint, and nothing leaves this phone unless you share it.</string>
     <string name="perm_grant">Allow Bluetooth</string>
     <string name="perm_denied">Bluetooth permission was denied. Enable it in system settings to find your logger.</string>
     <string name="perm_open_settings">Open app settings</string>
@@ -16,6 +16,7 @@
     <string name="scan_hint">Bring the phone near the CoreS3. It advertises as AQ-xxxx.</string>
     <string name="scan_pair_hint">On first connection, type the 6-digit code shown on the device screen.</string>
     <string name="scan_fake">Debug: fake device</string>
+    <string name="scan_fake_lan">Debug: fake device (as LAN)</string>
 
     <string name="today_title">Today</string>
     <string name="files_title">Files</string>

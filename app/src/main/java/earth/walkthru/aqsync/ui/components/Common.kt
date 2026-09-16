@@ -3,16 +3,23 @@ package earth.walkthru.aqsync.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Bluetooth
+import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Sensors
+import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.Warning
+import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -33,6 +40,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import earth.walkthru.aqsync.data.ble.ConnectionState
+import earth.walkthru.aqsync.data.ble.TransportKind
 import kotlinx.coroutines.delay
 import java.util.Locale
 
@@ -83,11 +91,20 @@ fun rememberNowMillis(periodMs: Long = 1000): Long {
     return now
 }
 
-/** Small caps label used above readings and in stat rows. */
+/**
+ * Small caps label used above readings and in stat rows. Pass [uppercase] = false when the text
+ * carries a unit: `"µm".uppercase()` is `"ΜM"` (Greek capital mu), which is how "(MM)" once
+ * appeared on the particles card.
+ */
 @Composable
-fun Eyebrow(text: String, modifier: Modifier = Modifier, color: Color = MaterialTheme.colorScheme.onSurfaceVariant) {
+fun Eyebrow(
+    text: String,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    uppercase: Boolean = true,
+) {
     Text(
-        text.uppercase(),
+        if (uppercase) text.uppercase() else text,
         style = MaterialTheme.typography.labelSmall,
         color = color,
         modifier = modifier,
@@ -154,7 +171,7 @@ fun ConnectionBanner(state: ConnectionState, modifier: Modifier = Modifier) {
     }
 }
 
-enum class DeviceTab { TODAY, FILES }
+enum class DeviceTab { TODAY, FILES, DEVICE }
 
 @Composable
 fun DeviceBottomBar(selected: DeviceTab, onSelect: (DeviceTab) -> Unit) {
@@ -171,7 +188,73 @@ fun DeviceBottomBar(selected: DeviceTab, onSelect: (DeviceTab) -> Unit) {
             icon = { Icon(Icons.Rounded.FolderOpen, contentDescription = null) },
             label = { Text("Files") },
         )
+        NavigationBarItem(
+            selected = selected == DeviceTab.DEVICE,
+            onClick = { onSelect(DeviceTab.DEVICE) },
+            icon = { Icon(Icons.Rounded.Tune, contentDescription = null) },
+            label = { Text("Device") },
+        )
     }
+}
+
+/** Small chip naming the active byte pipe: "Bluetooth" / "Wi-Fi LAN" (and "Fake device" in debug builds). */
+@Composable
+fun TransportChip(kind: TransportKind?, modifier: Modifier = Modifier) {
+    if (kind == null) return
+    val (icon, container, content) = when (kind) {
+        TransportKind.BLE -> Triple(Icons.Rounded.Bluetooth, MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.onSecondaryContainer)
+        TransportKind.LAN -> Triple(Icons.Rounded.Wifi, MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.onTertiaryContainer)
+        TransportKind.FAKE -> Triple(Icons.Rounded.BugReport, MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    Surface(shape = MaterialTheme.shapes.small, color = container, contentColor = content, modifier = modifier) {
+        Row(Modifier.padding(horizontal = 8.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(14.dp))
+            Text(kind.label, style = MaterialTheme.typography.labelSmall)
+        }
+    }
+}
+
+/** Card wrapper used by the Device and Debug screens. */
+@Composable
+fun SectionCard(
+    title: String,
+    modifier: Modifier = Modifier,
+    trailing: (@Composable () -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = modifier.fillMaxWidth()) {
+        Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Eyebrow(title)
+                Spacer(Modifier.weight(1f))
+                trailing?.invoke()
+            }
+            Spacer(Modifier.height(8.dp))
+            content()
+        }
+    }
+}
+
+/** A warning strip inside a card. */
+@Composable
+fun WarningNote(text: String, modifier: Modifier = Modifier) {
+    Surface(color = MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.medium, modifier = modifier.fillMaxWidth()) {
+        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Icon(Icons.Rounded.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer, modifier = Modifier.size(20.dp))
+            Text(text, color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+/** An informational strip inside a card. */
+@Composable
+fun InfoNote(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text,
+        modifier = modifier.padding(top = 6.dp),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 /** Two-column key/value line for compact stat rows. */

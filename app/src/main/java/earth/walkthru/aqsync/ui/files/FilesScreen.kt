@@ -73,6 +73,7 @@ import earth.walkthru.aqsync.ui.components.rememberNowMillis
 fun FilesScreen(
     address: String,
     onOpenToday: () -> Unit,
+    onOpenDevice: () -> Unit,
     onDisconnected: () -> Unit,
     viewModel: FilesViewModel = hiltViewModel(),
 ) {
@@ -151,7 +152,15 @@ fun FilesScreen(
                 },
             )
         },
-        bottomBar = { DeviceBottomBar(DeviceTab.FILES) { if (it == DeviceTab.TODAY) onOpenToday() } },
+        bottomBar = {
+            DeviceBottomBar(DeviceTab.FILES) {
+                when (it) {
+                    DeviceTab.TODAY -> onOpenToday()
+                    DeviceTab.DEVICE -> onOpenDevice()
+                    DeviceTab.FILES -> Unit
+                }
+            }
+        },
         floatingActionButton = {
             when {
                 state.sync.running -> ExtendedFloatingActionButton(

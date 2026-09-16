@@ -333,10 +333,14 @@ class BleTransport(
             if (r.status in AUTH_STATUSES && attempt == 0) {
                 attempt++
                 Log.w(TAG, "$name: GATT status ${r.status}; waiting for bond then retrying")
+                val before = _state.value
                 _state.value = ConnectionState.Bonding
                 if (device.bondState == BluetoothDevice.BOND_NONE) device.createBond()
                 awaitBond()
-                _state.value = ConnectionState.EnablingNotifications
+                // During connect we are still enabling notifications; at runtime (a read/write on a
+                // Ready link that the stack re-authenticated) go back to Ready, otherwise the UI
+                // shows a stale "Enabling notifications…" banner and requireReady() fails.
+                _state.value = if (before is ConnectionState.Ready) before else ConnectionState.EnablingNotifications
                 continue
             }
             return r

@@ -37,6 +37,8 @@ data class ScanUiState(
     /** Address we are currently trying to connect to, for the row spinner. */
     val connectingTo: String? = null,
     val showFakeEntry: Boolean = BuildConfig.DEBUG,
+    /** Stations currently advertised on the LAN, for the "on LAN" tag. */
+    val lanStations: Set<String> = emptySet(),
 )
 
 @HiltViewModel
@@ -53,7 +55,7 @@ class ScanViewModel @Inject constructor(
     val events: SharedFlow<DeviceEvent> = repository.events
 
     val uiState: StateFlow<ScanUiState> = combine(
-        scanning, scanError, seen, repository.knownDevices, repository.connectionState, connectingTo,
+        scanning, scanError, seen, repository.knownDevices, repository.connectionState, connectingTo, repository.lanDevices,
     ) { values ->
         @Suppress("UNCHECKED_CAST")
         val nearby = (values[2] as Map<String, ScannedDevice>).values
@@ -66,6 +68,7 @@ class ScanViewModel @Inject constructor(
             known = values[3] as List<KnownDevice>,
             connection = values[4] as ConnectionState,
             connectingTo = values[5] as String?,
+            lanStations = (values[6] as Map<String, *>).keys,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ScanUiState())
 
@@ -118,6 +121,13 @@ class ScanViewModel @Inject constructor(
         stopScan()
         connectingTo.value = FakeTransport.FAKE_ADDRESS
         repository.connect(FakeTransport.FAKE_ADDRESS, "AQ-6b40 (fake)", fake = true)
+    }
+
+    /** Debug: the same fake, behaving like the LAN pipe (payload_max 1024, GET_TOKEN refused). */
+    fun connectFakeLan() {
+        stopScan()
+        connectingTo.value = FakeTransport.FAKE_LAN_ADDRESS
+        repository.connect(FakeTransport.FAKE_LAN_ADDRESS, "AQ-6b40 (fake LAN)", fake = true)
     }
 
     fun clearConnecting() {

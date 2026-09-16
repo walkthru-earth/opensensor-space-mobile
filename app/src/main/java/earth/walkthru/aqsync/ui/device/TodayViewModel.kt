@@ -9,7 +9,9 @@ import earth.walkthru.aqsync.data.SyncProgress
 import earth.walkthru.aqsync.data.TimedLive
 import earth.walkthru.aqsync.data.TimedStatus
 import earth.walkthru.aqsync.data.ble.ConnectionState
+import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
+import earth.walkthru.aqsync.data.settings.AppSettings
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -26,17 +28,21 @@ data class TodayUiState(
     val live: TimedLive? = null,
     val sync: SyncProgress = SyncProgress(),
     val isFake: Boolean = false,
+    val transport: TransportKind? = null,
+    val advancedMode: Boolean = false,
 )
 
 @HiltViewModel
 class TodayViewModel @Inject constructor(
     private val repository: DeviceConnectionRepository,
+    settings: AppSettings,
 ) : ViewModel() {
 
     val events: SharedFlow<DeviceEvent> = repository.events
 
     val uiState: StateFlow<TodayUiState> = combine(
         repository.session, repository.connectionState, repository.info, repository.status, repository.live, repository.sync,
+        settings.advancedMode,
     ) { values ->
         val session = values[0] as earth.walkthru.aqsync.data.ble.DeviceSession?
         TodayUiState(
@@ -48,6 +54,8 @@ class TodayViewModel @Inject constructor(
             live = values[4] as TimedLive?,
             sync = values[5] as SyncProgress,
             isFake = repository.isFake,
+            transport = session?.transport?.kind,
+            advancedMode = values[6] as Boolean,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TodayUiState())
 

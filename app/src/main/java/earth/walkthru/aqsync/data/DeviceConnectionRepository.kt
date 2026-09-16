@@ -210,6 +210,10 @@ class DeviceConnectionRepository @Inject constructor(
     private val _status = MutableStateFlow<TimedStatus?>(null)
     val status: StateFlow<TimedStatus?> = _status.asStateFlow()
 
+    /** The latest `status` JSON exactly as received (unknown keys included), for Advanced → Debug. */
+    private val _statusRaw = MutableStateFlow<String?>(null)
+    val statusRaw: StateFlow<String?> = _statusRaw.asStateFlow()
+
     private val _live = MutableStateFlow<TimedLive?>(null)
     val live: StateFlow<TimedLive?> = _live.asStateFlow()
 
@@ -341,6 +345,7 @@ class DeviceConnectionRepository @Inject constructor(
     private fun resetDerivedState() {
         _info.value = null
         _status.value = null
+        _statusRaw.value = null
         _live.value = null
         _manifest.value = ManifestState.Idle
         _sync.value = SyncProgress()
@@ -383,7 +388,10 @@ class DeviceConnectionRepository @Inject constructor(
                     lanPort = previous?.lanPort,
                 )
             )
-            runCatching { session.readStatus() }.onSuccess { _status.value = TimedStatus(it, System.currentTimeMillis()) }
+            runCatching { transport.readStatus().decodeToString() }.onSuccess { raw ->
+                _statusRaw.value = raw
+                runCatching { DeviceStatus.parse(raw) }.onSuccess { _status.value = TimedStatus(it, System.currentTimeMillis()) }
+            }
             runCatching { session.readLive() }.onSuccess { _live.value = TimedLive(it, System.currentTimeMillis()) }
 
             val v2 = (proto ?: 1) >= 2
@@ -428,6 +436,7 @@ class DeviceConnectionRepository @Inject constructor(
         notificationJob?.cancel()
         notificationJob = scope.launch {
             launch { session.status.collect { _status.value = TimedStatus(it, System.currentTimeMillis()) } }
+            launch { session.statusJson.collect { _statusRaw.value = it } }
             launch { session.live.collect { _live.value = TimedLive(it, System.currentTimeMillis()) } }
         }
     }

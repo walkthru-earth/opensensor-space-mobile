@@ -11,11 +11,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.BatteryChargingFull
 import androidx.compose.material.icons.rounded.BatteryStd
+import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.LinkOff
 import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -58,10 +61,12 @@ import earth.walkthru.aqsync.ui.components.DeviceTab
 import earth.walkthru.aqsync.ui.components.Eyebrow
 import earth.walkthru.aqsync.ui.components.StatLine
 import earth.walkthru.aqsync.ui.components.StatusDot
+import earth.walkthru.aqsync.ui.components.TransportChip
 import earth.walkthru.aqsync.ui.components.formatAgo
 import earth.walkthru.aqsync.ui.components.formatBytes
 import earth.walkthru.aqsync.ui.components.formatUptime
 import earth.walkthru.aqsync.ui.components.rememberNowMillis
+import earth.walkthru.aqsync.ui.settings.SettingsSheet
 import earth.walkthru.aqsync.ui.theme.pm25Band
 import java.time.Instant
 import java.time.ZoneId
@@ -75,12 +80,18 @@ private const val STALE_AFTER_MS = 30_000L
 fun TodayScreen(
     address: String,
     onOpenFiles: () -> Unit,
+    onOpenDevice: () -> Unit,
+    onOpenDebug: () -> Unit,
     onDisconnected: () -> Unit,
     viewModel: TodayViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val now = rememberNowMillis()
+    // Hoisted so the scroll position belongs to the screen, not to whichever LazyColumn node
+    // happens to be composed: a "Set time" tap must never reset it (see the keyed items below).
+    val listState = rememberLazyListState()
+    var showSettings by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.events.collect { ev ->
@@ -104,28 +115,41 @@ fun TodayScreen(
                 title = {
                     Column {
                         Text(state.name ?: address, style = MaterialTheme.typography.titleLarge)
-                        state.info?.station?.let {
-                            Text("station ${it.take(8)}…", style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TransportChip(state.transport)
+                            state.info?.station?.let {
+                                Text("station ${it.take(8)}…", style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                     }
                 },
                 actions = {
+                    if (state.advancedMode) {
+                        IconButton(onClick = onOpenDebug) { Icon(Icons.Rounded.BugReport, contentDescription = "Debug") }
+                    }
+                    IconButton(onClick = { showSettings = true }) { Icon(Icons.Rounded.Settings, contentDescription = "Settings") }
                     IconButton(onClick = { viewModel.disconnect(); onDisconnected() }) {
                         Icon(Icons.Rounded.LinkOff, contentDescription = "Disconnect")
                     }
                 },
             )
         },
-        bottomBar = { DeviceBottomBar(DeviceTab.TODAY) { if (it == DeviceTab.FILES) onOpenFiles() } },
+        bottomBar = {
+            DeviceBottomBar(DeviceTab.TODAY) {
+                when (it) {
+                    DeviceTab.FILES -> onOpenFiles()
+                    DeviceTab.DEVICE -> onOpenDevice()
+                    DeviceTab.TODAY -> Unit
+                }
+            }
+        },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = padding.calculateTopPadding() + 4.dp, bottom = padding.calculateBottomPadding() + 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+        Column(Modifier.fillMaxSize().padding(top = padding.calculateTopPadding())) {
+            // The banner lives outside the list: when it appears or disappears no list index shifts,
+            // so the scroll position cannot jump.
             if (state.connection !is ConnectionState.Ready) {
-                item {
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
                     ConnectionBanner(state.connection)
                     if (state.connection is ConnectionState.Failed || state.connection is ConnectionState.Disconnected) {
                         Spacer(Modifier.height(8.dp))
@@ -133,37 +157,46 @@ fun TodayScreen(
                     }
                 }
             }
-
-            item { ReadingsCard(state.live?.sample, state.live?.receivedAtEpochMs, now) }
-            item { ParticleRow(state.live?.sample) }
-            item { BoardCard(state.live?.sample, state.status?.status) }
-            item { StorageCard(state.status?.status, state.status?.receivedAtEpochMs, now) }
-            item {
-                ClockCard(
-                    status = state.status?.status,
-                    live = state.live?.sample,
-                    enabled = state.connection.isReady,
-                    onSetTime = { confirmTime = true },
-                    onFlush = { confirmFlush = true },
-                )
-            }
-            state.info?.let { info ->
-                item {
-                    Column(Modifier.padding(horizontal = 4.dp, vertical = 8.dp)) {
-                        Eyebrow("device")
-                        Spacer(Modifier.height(6.dp))
-                        StatLine("firmware", info.fw ?: "—")
-                        StatLine("schema", "${info.schema ?: "—"} · ${info.cols ?: "?"} cols")
-                        StatLine("protocol", "v${info.proto ?: "?"}")
-                        StatLine("device id", info.dev ?: "—")
-                        StatLine("boot", info.boot?.take(12)?.plus("…") ?: "—")
-                        StatLine("dictionary", info.dict?.take(12)?.plus("…") ?: "—")
-                        StatLine("max_read", info.maxRead?.let { "$it B" } ?: "— (using default)")
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = padding.calculateBottomPadding() + 24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                item(key = "readings") { ReadingsCard(state.live?.sample, state.live?.receivedAtEpochMs, now) }
+                item(key = "particles") { ParticleRow(state.live?.sample) }
+                item(key = "board") { BoardCard(state.live?.sample, state.status?.status) }
+                item(key = "storage") { StorageCard(state.status?.status, state.status?.receivedAtEpochMs, now) }
+                item(key = "clock") {
+                    ClockCard(
+                        status = state.status?.status,
+                        live = state.live?.sample,
+                        enabled = state.connection.isReady,
+                        onSetTime = { confirmTime = true },
+                        onFlush = { confirmFlush = true },
+                    )
+                }
+                state.info?.let { info ->
+                    item(key = "info") {
+                        Column(Modifier.padding(horizontal = 4.dp, vertical = 8.dp)) {
+                            Eyebrow("device")
+                            Spacer(Modifier.height(6.dp))
+                            StatLine("firmware", info.fw ?: "—")
+                            StatLine("schema", "${info.schema ?: "—"} · ${info.cols ?: "?"} cols")
+                            StatLine("protocol", "v${info.proto ?: "?"}")
+                            StatLine("device id", info.dev ?: "—")
+                            StatLine("boot", info.boot?.take(12)?.plus("…") ?: "—")
+                            StatLine("dictionary", info.dict?.take(12)?.plus("…") ?: "—")
+                            StatLine("max_read", info.maxRead?.let { "$it B" } ?: "— (using default)")
+                            StatLine("link", "${state.transport?.label ?: "—"}${state.connection.let { c -> if (c is ConnectionState.Ready) " · payload ${c.mtu - 3} B" else "" }}")
+                        }
                     }
                 }
             }
         }
     }
+
+    if (showSettings) SettingsSheet(onDismiss = { showSettings = false })
 
     if (confirmTime) {
         AlertDialog(
@@ -296,7 +329,8 @@ private fun ParticleRow(live: LiveSample?) {
     )
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
-            Eyebrow("particles per 0.1 L, by size (µm)")
+            // Not uppercased: "µ".uppercase() is the Greek capital mu, which rendered as "(MM)".
+            Eyebrow("PARTICLES PER 0.1 L, BY SIZE (µm)", uppercase = false)
             Spacer(Modifier.height(8.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 counts.forEach { (label, n) ->

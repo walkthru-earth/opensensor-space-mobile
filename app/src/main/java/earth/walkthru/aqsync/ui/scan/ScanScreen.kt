@@ -114,6 +114,11 @@ fun ScanScreen(
                                 leadingIcon = { Icon(Icons.Rounded.BugReport, contentDescription = null) },
                                 onClick = { open = false; viewModel.connectFake() },
                             )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.scan_fake_lan)) },
+                                leadingIcon = { Icon(Icons.Rounded.BugReport, contentDescription = null) },
+                                onClick = { open = false; viewModel.connectFakeLan() },
+                            )
                         }
                     }
                 },
@@ -177,6 +182,7 @@ fun ScanScreen(
                     KnownRow(
                         device = dev,
                         now = now,
+                        onLan = dev.station != null && dev.station in state.lanStations,
                         connecting = target == dev.address,
                         onClick = { viewModel.connect(dev.address, dev.name) },
                         onForget = { viewModel.forget(dev.address) },
@@ -217,7 +223,7 @@ private fun NearbyRow(device: ScannedDevice, known: KnownDevice?, connecting: Bo
 }
 
 @Composable
-private fun KnownRow(device: KnownDevice, now: Long, connecting: Boolean, onClick: () -> Unit, onForget: () -> Unit) {
+private fun KnownRow(device: KnownDevice, now: Long, onLan: Boolean, connecting: Boolean, onClick: () -> Unit, onForget: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
     Surface(
         shape = MaterialTheme.shapes.extraLarge,
@@ -228,7 +234,10 @@ private fun KnownRow(device: KnownDevice, now: Long, connecting: Boolean, onClic
     ) {
         Row(Modifier.padding(start = 20.dp, end = 8.dp, top = 12.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(device.name ?: device.address, style = MaterialTheme.typography.titleMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(device.name ?: device.address, style = MaterialTheme.typography.titleMedium)
+                    if (onLan) Tag(if (device.hasLanToken) "on LAN" else "on LAN · no token")
+                }
                 Text(
                     buildString {
                         append("seen ").append(formatAgo(now - device.lastSeenEpochMs))
