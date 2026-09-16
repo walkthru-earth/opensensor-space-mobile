@@ -4,9 +4,14 @@ Native Android app that pairs with an **M5Stack CoreS3 (ESP32-S3)** running the
 [`m5stack-aq-parquet`](../m5stack-aq-parquet) firmware, shows its live readings, gives it UTC,
 and copies its finalized **Parquet** files into the phone — byte-exact, verified, offline.
 
-Air-gapped by design: the app declares **no `INTERNET` permission**, no location permission,
-no analytics, no accounts. Everything it knows lives in app-private storage and can be shared
-out through the system share sheet or saved with the system file picker.
+**Offline-first, not offline-only.** Everything works with no network at all: the phone's archive is
+the source of truth, filled over whatever link the device offers (BLE today; Wi-Fi or LoRa relays are
+future transports on the firmware side). Cloud backup or sharing is a *later, opt-in* step that runs
+after local sync and stays off by default; if the device or the phone has Wi-Fi or a SIM, that is a
+convenience, never a requirement. This first version therefore declares **no `INTERNET` permission**,
+no location permission, no analytics, no accounts — add network only together with an explicit
+sync-to-cloud setting. Data can already leave the phone through the system share sheet or the
+file picker.
 
 ## Status
 
@@ -125,7 +130,13 @@ Choices the protocol left open, and what this app does (mirrored into the firmwa
 
 ## Next
 
-Test against the board from a real phone and record the result in the firmware repo's
-`docs/bench-verified.md`; measure a full 766-file sync; then decide on on-phone querying
-(the product notes in `../m5stack-aq-parquet/product/` discuss DuckDB, deliberately out of scope
-for this first version).
+1. Test against the board from a real phone and record the result in the firmware repo's
+   `docs/bench-verified.md`; measure a full 766-file sync.
+2. Further transports behind the same `AqTransport` interface as the firmware grows them
+   (Wi-Fi direct/LAN, LoRa relays between devices). The sync engine, archive and verification
+   do not change; only the byte pipe does.
+3. Opt-in cloud step **after** local sync: encrypted backup and/or community contribution, off by
+   default, with the privacy boundaries in `../m5stack-aq-parquet/product/mobile-architecture.md`.
+   This is when `INTERNET` gets added. A device with its own Wi-Fi/SIM uploading directly is a
+   parallel path, not a replacement for the phone archive.
+4. On-phone querying (the product notes discuss DuckDB) — deliberately out of scope for v1.

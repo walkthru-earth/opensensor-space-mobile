@@ -11,7 +11,7 @@ Measured device behaviour lives in `../m5stack-aq-parquet/docs/bench-verified.md
 
 ## Non-negotiables
 
-- **Offline, air-gapped.** No `INTERNET` permission, no location permission, no analytics or crash-reporting SDKs, no accounts. Only `BLUETOOTH_SCAN` (`neverForLocation`) and `BLUETOOTH_CONNECT`.
+- **Offline-first, not offline-only.** Every feature must work with no network: the local archive is the source of truth and is filled over the device link (BLE now; the firmware may add Wi-Fi or LoRa device-to-device later — add a transport behind `AqTransport`, do not fork the sync engine). Cloud backup/sharing is a later **opt-in** step that runs *after* local sync, is off by default, and never gates local use. Today the app declares no `INTERNET` permission, no location permission, no analytics or crash-reporting SDKs, no accounts — only `BLUETOOTH_SCAN` (`neverForLocation`) and `BLUETOOTH_CONNECT`. When cloud sync is added: request `INTERNET` then, keep it behind an explicit setting, and follow the privacy boundaries in `../m5stack-aq-parquet/product/mobile-architecture.md`.
 - **Never present unverified data.** A file is synced only after size, CRC-32 (`OPENED.crc32`) and `PAR1` head/tail all match. Absent JSON keys are `null`, never `0`. A lost `CHUNK` (offset gap) fails the window; do not trust `next_offset` over the received byte count.
 - **Never ask the device to delete, rename or rewrite.** Sync is a pull of immutable files. `SET_TIME` and `FLUSH` are the only state-changing requests and must be explicit user actions with an explanation.
 - **Keep the Hive path verbatim** under `archive/<station>/…` so the phone archive mirrors the SD card and the firmware repo's `tools/export_parquet.py` output.

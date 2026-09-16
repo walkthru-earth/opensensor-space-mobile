@@ -3,9 +3,10 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!--
-      Air-gapped by design: the only permissions are the two modern Bluetooth LE ones.
-      BLUETOOTH_SCAN is declared neverForLocation so no location permission is implied,
-      and there is deliberately no INTERNET permission.
+      Offline-first: this version needs only the two modern Bluetooth LE permissions.
+      BLUETOOTH_SCAN is declared neverForLocation so no location permission is implied.
+      INTERNET is intentionally absent until an opt-in cloud sync exists; add it together
+      with that setting, never before.
     -->
     <uses-permission
         android:name="android.permission.BLUETOOTH_SCAN"

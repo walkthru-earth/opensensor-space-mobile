@@ -21,7 +21,7 @@ import javax.inject.Singleton
 /**
  * Ways a verified file leaves the phone, all user-initiated and all local:
  * the system share sheet ([Intent.ACTION_SEND] / [Intent.ACTION_SEND_MULTIPLE]) through a
- * [FileProvider], or "Save to…" via the Storage Access Framework. No network, no cloud SDK.
+ * [FileProvider], or "Save to…" via the Storage Access Framework. No network in this version; a future opt-in cloud sync would sit beside this, after local sync, never instead of it.
  */
 @Singleton
 class ExportManager @Inject constructor(
