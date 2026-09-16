@@ -87,7 +87,7 @@ fun rememberNowMillis(periodMs: Long = 1000): Long {
 @Composable
 fun Eyebrow(text: String, modifier: Modifier = Modifier, color: Color = MaterialTheme.colorScheme.onSurfaceVariant) {
     Text(
-        text.uppercase(Locale.getDefault()),
+        text.uppercase(),
         style = MaterialTheme.typography.labelSmall,
         color = color,
         modifier = modifier,

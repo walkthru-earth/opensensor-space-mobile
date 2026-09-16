@@ -3,11 +3,9 @@
     <cloud-backup>
         <include domain="file" path="archive/" />
         <include domain="database" path="aq-sync.db" />
-        <exclude domain="file" path="archive-partial/" />
     </cloud-backup>
     <device-transfer>
         <include domain="file" path="archive/" />
         <include domain="database" path="aq-sync.db" />
-        <exclude domain="file" path="archive-partial/" />
     </device-transfer>
 </data-extraction-rules>

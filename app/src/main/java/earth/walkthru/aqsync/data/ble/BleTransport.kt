@@ -7,6 +7,7 @@ import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothProfile
+import android.bluetooth.BluetoothStatusCodes
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -367,7 +368,7 @@ class BleTransport(
 
     private fun writeCharacteristicCompat(g: BluetoothGatt, c: BluetoothGattCharacteristic, value: ByteArray, type: Int): Boolean =
         if (Build.VERSION.SDK_INT >= 33) {
-            g.writeCharacteristic(c, value, type) == BluetoothGatt.GATT_SUCCESS
+            g.writeCharacteristic(c, value, type) == BluetoothStatusCodes.SUCCESS
         } else {
             @Suppress("DEPRECATION")
             run {
@@ -379,7 +380,7 @@ class BleTransport(
 
     private fun writeDescriptorCompat(g: BluetoothGatt, d: BluetoothGattDescriptor, value: ByteArray): Boolean =
         if (Build.VERSION.SDK_INT >= 33) {
-            g.writeDescriptor(d, value) == BluetoothGatt.GATT_SUCCESS
+            g.writeDescriptor(d, value) == BluetoothStatusCodes.SUCCESS
         } else {
             @Suppress("DEPRECATION")
             run {
