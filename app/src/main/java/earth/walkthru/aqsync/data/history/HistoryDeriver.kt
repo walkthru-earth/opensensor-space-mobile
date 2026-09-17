@@ -105,7 +105,9 @@ class HistoryDeriver @Inject constructor(
                     rebuilt++
                 }
             }
-            if (rebuilt > 0) Log.i(TAG, "derived $rebuilt of $checked station-days ($rows rows)")
+            // "derived 0 of N" (debug) is the healthy line after a pass with nothing new — a rebuild on
+            // every pass was the symptom of the @Upsert bug (README decisions, 2026-09-18).
+            if (rebuilt > 0) Log.i(TAG, "derived $rebuilt of $checked station-days ($rows rows)") else Log.d(TAG, "derived 0 of $checked station-days (nothing changed)")
             Result(checked, rebuilt, rows)
         }
     }
