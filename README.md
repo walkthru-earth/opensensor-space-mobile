@@ -44,7 +44,7 @@ in the firmware repo for what was measured, on which firmware and app commit.
 | Screen | Behaviour |
 | --- | --- |
 | **Devices** | Scans for the AQ Sync service UUID (`c0a5e9f0-0001-4b1a-9c3e-2d7f8a6b4e01`), lists `AQ-xxxx` devices with RSSI and bond state, remembers known devices. |
-| **Today** | Live PM1 / PM2.5 / PM10, particle counts, board temperature (explicitly *not* ambient), battery/USB, freshness, storage counters, UTC state. **Set time from phone** and **Finalize buffered rows** actions, each explained before it runs. |
+| **Today** | Live PM1 / PM2.5 / PM10, particle counts, board temperature (explicitly *not* ambient), battery/USB, freshness, storage counters (firmware v6 adds the rows/row groups already on the card in the open file, `status.open`/`open_rg`, shown only when the key is present), UTC state. **Set time from phone** and **Finalize buffered rows** actions, each explained before it runs. |
 | **Files** | Device manifest grouped by Hive partition (dated / unsynced-boot / benchmarks / legacy). **Sync all** downloads every file the archive lacks, with per-file and overall progress. Per-file state: not synced · syncing · synced (verified) · mismatch. Menu: **Sync now in background** (one expedited WorkManager job — leave the app, watch the notification) and a quick **Auto-sync** toggle for the connected device. |
 | **Export** | Share one file or a zip of the archive via the share sheet, or save a zip with *Save to…* (Storage Access Framework). |
 | **Device** | **Auto-sync** card (any protocol version): a per-device switch; while any known device has it on, a WorkManager job runs about every 15 min — app closed, screen off — finds the logger on the LAN (mDNS) or over its Bluetooth bond, pulls only the files the archive lacks under a `dataSync` progress notification, and posts one summary ("Synced 23 new files from AQ-6b40 · 1.1 MiB") only when something arrived. |
@@ -259,4 +259,11 @@ After the first phone run (2026-09-17, OnePlus 7 Pro, Android 16):
    It needs its own setting and review; `INTERNET` being declared for LAN does not pre-approve it.
    A device with its own Wi-Fi/SIM uploading directly is a parallel path, not a replacement for the
    phone archive.
-6. On-phone querying (the product notes discuss DuckDB) — deliberately out of scope.
+6. On-phone history, friendly UX, many loggers, location/map, iOS parity — evaluated in
+   [`docs/history-ux-and-data-layer.md`](docs/history-ux-and-data-layer.md) (2026-09-17, for
+   decision, nothing implemented). Key findings: Kotlin DataFrame cannot read Parquet on Android
+   (`dataframe-arrow` needs Arrow's native Dataset library), so the proposal is an own reader/writer
+   for the firmware's Parquet subset, a *derived* one-file-per-UTC-day layer beside the untouched raw
+   archive (measured 5–9× smaller than the device files), aggregate tiers in Room, an opaque
+   `deployment_id` to the board instead of coordinates, and an amendment to the "no location
+   permission" rule that has to be agreed before any code.

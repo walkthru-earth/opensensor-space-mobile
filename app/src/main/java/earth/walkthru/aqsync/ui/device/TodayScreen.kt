@@ -224,6 +224,7 @@ fun TodayScreen(
                 Text(
                     "The logger keeps the newest rows in RAM until the rotation interval ends. Finalizing writes them " +
                         "to the card now as a short Parquet file so you can sync everything up to this moment. " +
+                        "On firmware v6 it also closes the open file's row groups that are already on the card. " +
                         "It does not change the rotation interval."
                 )
             },
@@ -407,6 +408,9 @@ private fun StorageCard(status: DeviceStatus?, receivedAt: Long?, now: Long) {
                 // (that is `LIST_END.count` on the Files screen), so say so.
                 Counter("files this boot", status.fin)
                 Counter("buffered rows", status.buf?.toLong())
+                // Firmware v6 keeps an open multi-row-group file on the card between batches; those
+                // rows are safe from a reset but not listable yet. Older firmware never sends the key.
+                if (status.open != null) Counter("on card, open", status.open.toLong())
                 Counter("dropped", status.drop, if ((status.drop ?: 0) > 0) warn else null)
                 Counter("errors", status.err, if ((status.err ?: 0) > 0) warn else null)
                 Counter("missed", status.miss, if ((status.miss ?: 0) > 0) warn else null)
@@ -422,7 +426,10 @@ private fun StorageCard(status: DeviceStatus?, receivedAt: Long?, now: Long) {
                 valueColor = if (status.sd == 0) warn else MaterialTheme.colorScheme.onSurface,
             )
             StatLine("codec", status.codec ?: "—")
-            StatLine("rotation", status.intervalSeconds?.let { "${it / 60} min" } ?: "—")
+            StatLine(
+                "rotation",
+                status.intervalSeconds?.let { s -> "${s / 60} min" + (status.openRowGroups?.let { " · open file: $it row group${if (it == 1) "" else "s"}" } ?: "") } ?: "—",
+            )
             StatLine("retained .partial", status.part?.toString() ?: "—")
             StatLine("uptime", status.upSeconds?.let(::formatUptime) ?: "—")
             StatLine("free heap", status.heap?.let { formatBytes(it) } ?: "—")

@@ -45,10 +45,18 @@ data class DeviceInfo(
 data class DeviceStatus(
     /** Seconds since boot. */
     @SerialName("up_s") val upSeconds: Long? = null,
-    /** Rotation interval (600 or 900). */
+    /** Rotation interval in seconds: 600 or 900; firmware v6 adds 1800 and 3600 (set over serial only). */
     @SerialName("int_s") val intervalSeconds: Int? = null,
     /** Rows buffered in RAM, not yet in any file. */
     val buf: Int? = null,
+    /**
+     * Firmware v6: rows already written and synced into the open `.partial` file whose footer is
+     * still pending (one row group per ≤ 90-row batch). They are on the card but not listable until
+     * the window closes or a `FLUSH`. Absent (null) on v5.
+     */
+    val open: Int? = null,
+    /** Firmware v6: row groups in that open file. Absent (null) on v5. */
+    @SerialName("open_rg") val openRowGroups: Int? = null,
     /** files_finalized. */
     val fin: Long? = null,
     /** rows_dropped. */

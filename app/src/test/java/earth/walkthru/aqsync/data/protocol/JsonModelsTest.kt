@@ -36,6 +36,22 @@ class JsonModelsTest {
         assertTrue(parsed.sdMounted)
         assertFalse(parsed.storageFailed)
         assertEquals(30_704_848L, parsed.sdKib)
+        // v5 firmware never sends the v6 open-file keys: absent means null, never 0.
+        assertNull(parsed.open)
+        assertNull(parsed.openRowGroups)
+    }
+
+    /** Firmware v6 `status` example from `docs/ble-sync-protocol.md` (hand-assembled from the contract, no capture yet). */
+    @Test
+    fun `status v6 carries open-file rows and row groups and a 1800 s interval`() {
+        val v6 = """{"up_s":12345,"int_s":1800,"buf":12,"fin":764,"drop":0,"err":0,"miss":0,""" +
+            """"fail":0,"codec":"LZ4_RAW","utc":1,"gen":1,"sd":1,"sd_kib":31166976,""" +
+            """"sd_used_kib":34176,"heap":180000,"part":0,"open":180,"open_rg":2}"""
+        val parsed = AqJson.decodeFromString(DeviceStatus.serializer(), v6)
+        assertEquals(1800, parsed.intervalSeconds)
+        assertEquals(180, parsed.open)
+        assertEquals(2, parsed.openRowGroups)
+        assertTrue(parsed.utcSynced)
     }
 
     @Test
