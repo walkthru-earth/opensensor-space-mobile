@@ -85,6 +85,9 @@ class Aggregator(private val station: String, private val resolutions: Set<Resol
 
     private val accs = HashMap<Pair<Resolution, Long>, Acc>()
 
+    /** `(boot_id_hi, boot_id_lo, sequence)` already counted — the same rule the daily file uses, so both agree. */
+    private val seen = HashSet<Triple<Long, Long, Long>>()
+
     /**
      * Adds every timed row of [file]. Only the [COLUMNS] chunks are read. With an [anchor] for the file's
      * boot, rows without UTC get an estimated time (§4.6) and count as `estimatedRows`.
@@ -95,9 +98,29 @@ class Aggregator(private val station: String, private val resolutions: Set<Resol
         val utc = file.readColumn(utcLeaf)
         fun col(name: String): ColumnValues? = md.leaf(name)?.let { file.readColumn(it) }
         val applicable = anchor?.takeIf { it.boot == md.bootId }
+        // Rows already counted from another file of the day (same boot and sequence) are skipped by
+        // masking their UTC; device files never overlap, but the tiers and the daily file must agree anyway.
+        val bootHi = col("boot_id_hi")
+        val bootLo = col("boot_id_lo")
+        val seq = col(ParquetIndexer.SEQ)
+        val monoCol = if (applicable != null) col(ParquetIndexer.MONO) else null
+        var utcMasked = utc
+        var monoMasked = monoCol
+        if (seq != null) {
+            val dup = BooleanArray(utc.size)
+            var any = false
+            for (i in 0 until utc.size) {
+                val key = Triple(bootHi?.asLong(i) ?: 0L, bootLo?.asLong(i) ?: 0L, seq.asLong(i) ?: continue)
+                if (!seen.add(key)) { dup[i] = true; any = true }
+            }
+            if (any) {
+                utcMasked = mask(utc, dup)
+                monoMasked = monoCol?.let { mask(it, dup) }
+            }
+        }
         add(
-            utc = utc,
-            mono = if (applicable != null) col(ParquetIndexer.MONO) else null,
+            utc = utcMasked,
+            mono = monoMasked,
             anchor = applicable,
             pms = col(ParquetIndexer.PMS_STATUS),
             pm1 = col("pm1_atmospheric_ug_m3"),
@@ -154,6 +177,15 @@ class Aggregator(private val station: String, private val resolutions: Set<Resol
                 battery?.asDouble(i)?.let { acc.bat += it; acc.batN++ }
                 vbus?.asDouble(i)?.let { acc.vbus += it; acc.vbusN++ }
             }
+        }
+    }
+
+    private fun mask(col: ColumnValues, dup: BooleanArray): ColumnValues {
+        val valid = BooleanArray(col.size) { !dup[it] && !col.isNull(it) }
+        return when (col) {
+            is ColumnValues.Int32 -> ColumnValues.Int32(col.values, valid)
+            is ColumnValues.Int64 -> ColumnValues.Int64(col.values, valid)
+            is ColumnValues.Float32 -> ColumnValues.Float32(col.values, valid)
         }
     }
 

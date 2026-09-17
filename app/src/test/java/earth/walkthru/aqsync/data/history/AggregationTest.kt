@@ -132,12 +132,28 @@ class AggregationTest {
         put("station=$station/year=2026/month=09/day=17/data_1000_a_107-211-3.parquet", "device/v3-board-2rg-105rows.parquet", 3)
         val third = deriver.deriveStale()
         assertEquals(1, third.daysRebuilt)
-        assertEquals(210L, third.rowsAggregated)
-        assertEquals(210, buckets.rows.first { it.resolution == 86_400L }.rows)
+        assertEquals(210L, third.rowsAggregated) // rows read
+        assertEquals(105, buckets.rows.first { it.resolution == 86_400L }.rows) // rows counted: duplicates (same boot + sequence) skipped, like the daily file
         assertEquals(2, days.rows.single().sourceFiles)
         // Same rows under two names: the daily file de-duplicates on (boot, sequence) — 105 rows, 2 sources in the manifest.
         assertEquals(105L, earth.walkthru.aqsync.data.history.parquet.ParquetFile.open(store.dayFile(station, 20713)).numRows)
         assertTrue(store.manifestFile(station, 20713).readText().contains("\"rows_used\": 0"))
+
+        // A second real v6 file (the full 10:00–10:29Z window, 180 rows) joins the day: 285 rows, two UTC hours → two row groups.
+        put("station=$station/year=2026/month=09/day=17/data_1000_495ccef9f3eb8c5917070c921c9baec8_107-286-3.parquet", "device/v3-board-2rg-180rows.parquet", 4)
+        val fifth = deriver.deriveStale()
+        assertEquals(1, fifth.daysRebuilt)
+        val twoWindows = earth.walkthru.aqsync.data.history.parquet.ParquetFile.open(store.dayFile(station, 20713))
+        assertEquals(285L, twoWindows.numRows)
+        assertEquals(2, twoWindows.rowGroupCount)
+        assertEquals(listOf(105L, 180L), twoWindows.metadata.rowGroups.map { it.numRows })
+        val seq = twoWindows.readColumn("sequence") as earth.walkthru.aqsync.data.history.parquet.ColumnValues.Int64
+        for (i in 1 until seq.size) assertEquals("contiguous across the two device files", seq.values[i - 1] + 1, seq.values[i])
+        assertEquals(285, buckets.rows.first { it.resolution == 86_400L }.rows)
+        File("build/parquet-samples").apply { mkdirs() }.let { dir ->
+            store.dayFile(station, 20713).copyTo(File(dir, "derived-day-two-windows.parquet"), overwrite = true)
+            store.manifestFile(station, 20713).copyTo(File(dir, "derived-day-two-windows.manifest.json"), overwrite = true)
+        }
 
         // Removing every dated file removes the day's tiers.
         files.rows.removeAll { it.name.contains("day=17") }
