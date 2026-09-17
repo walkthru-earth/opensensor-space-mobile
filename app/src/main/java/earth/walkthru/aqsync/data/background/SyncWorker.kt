@@ -12,6 +12,7 @@ import androidx.work.WorkerParameters
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import earth.walkthru.aqsync.data.DeviceConnectionRepository
+import earth.walkthru.aqsync.data.history.HistoryDeriver
 import earth.walkthru.aqsync.data.SyncProgress
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
@@ -45,6 +46,7 @@ class SyncWorker @AssistedInject constructor(
     private val gateway: AppAutoSyncGateway,
     private val repository: DeviceConnectionRepository,
     private val notifications: SyncNotifications,
+    private val historyDeriver: HistoryDeriver,
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun getForegroundInfo(): ForegroundInfo =
@@ -98,6 +100,10 @@ class SyncWorker @AssistedInject constructor(
             if (!foreground) runCatching { manager.cancel(SyncNotifications.WORKER_ID) }
         }
 
+        if (report.newFiles > 0) {
+            // Still inside the worker's run: the tiers for the days that just gained files.
+            runCatching { historyDeriver.deriveStale() }.onFailure { Log.w(TAG, "derive failed: ${it.message}") }
+        }
         if (report.shouldNotify) {
             notifications.postSummary(report.summaryDeviceName, report.newFiles, report.newBytes, report.failures)
         }

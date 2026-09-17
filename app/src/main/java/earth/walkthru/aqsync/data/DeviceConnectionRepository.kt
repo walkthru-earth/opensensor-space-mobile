@@ -5,6 +5,7 @@ import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import earth.walkthru.aqsync.data.background.SyncForegroundService
 import earth.walkthru.aqsync.data.ble.AqTransport
+import earth.walkthru.aqsync.data.history.HistoryDeriver
 import earth.walkthru.aqsync.data.ble.ConfigSnapshot
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.DeviceErrorException
@@ -174,6 +175,7 @@ class DeviceConnectionRepository @Inject constructor(
     private val syncEngine: SyncEngine,
     private val lanDiscovery: LanDiscovery,
     private val lanWifiLock: LanWifiLock,
+    private val historyDeriver: HistoryDeriver,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val tokenPolicy = LanTokenPolicy()
@@ -744,6 +746,8 @@ class DeviceConnectionRepository @Inject constructor(
                 _sync.update { it.copy(running = false, current = null, finishedAtEpochMs = System.currentTimeMillis(), endCause = endCause) }
                 // A FLUSH or a rotation may have finalized a new file while we were pulling.
                 if (session.connectionState.value.isReady) refreshManifest()
+                // Bring the history tiers up to date with whatever arrived; cheap when nothing did.
+                scope.launch { runCatching { historyDeriver.deriveStale() }.onFailure { Log.w(TAG, "derive after sync failed: ${it.message}") } }
             }
         }
         syncJob = job

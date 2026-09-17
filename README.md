@@ -25,20 +25,21 @@ push between two `CHUNK`s, the real `TcpTransport` against an in-JVM fake device
 JSON models, Parquet verification, sync planner, lost-window recovery, the resume-after-lost-link
 decision, the auto-sync worker's decision logic over the fake device), debug APK ≈ 65 MiB unminified.
 
-**History, steps 1–2 of [`docs/history-ux-and-data-layer.md`](docs/history-ux-and-data-layer.md)
+**History, steps 1–3a of [`docs/history-ux-and-data-layer.md`](docs/history-ux-and-data-layer.md)
 (2026-09-17):** a pure-Kotlin reader for the firmware's Parquet subset (`data/history/parquet`) that
 decodes all 881 columns of 21 fixture files — nine real `AQ-6b40` files (v1 73-col and v2 77-col,
 UNCOMPRESSED and LZ4_RAW, dated and unsynced) and twelve firmware-v6 writer fixtures (up to 8 row
 groups, statistics, `TIMESTAMP(NANOS, UTC)`) — byte-identically to PyArrow in 0.15 s total; Room v4
 indexes every verified file (rows, row groups, schema version, UTC/uptime/sequence spans, PMS-valid
 rows) at sync time and back-fills older rows; an Advanced-only **Metrics** screen shows a file through
-that reader. **The first file firmware v6 wrote on the board** (`data_0930_495ccef9…_2-106-2.parquet`,
+that reader; Room v5 adds the 15 min / 1 h / 1 day aggregate tiers rebuilt per station-day from the
+verified files (`HistoryDeriver`). **The first file firmware v6 wrote on the board** (`data_0930_495ccef9…_2-106-2.parquet`,
 2026-09-17 09:42–09:59Z, 105 rows in two row groups of 90 + 15, SHA-256 `1a06e93b…f3cf`, fetched over
 serial by the firmware-side session) is a committed fixture: the reader decodes it, the index takes
 its spans from the footer statistics, and every integer column's statistics agree with the decoded
 rows per row group (`RealArchiveTest`). The same test, where the firmware checkout sits next to this
 repo, sweeps **all 765 real files** on this machine (67,092 rows, 58,791 column chunks) in 0.5 s on
-the JVM. 104/104 unit tests, 0 lint errors (7 pre-existing warnings). Not yet run *on the phone*
+the JVM. 108/108 unit tests, 0 lint errors (7 pre-existing warnings). Not yet run *on the phone*
 against a v3 file — that needs a BLE/LAN sync of the board's new files and goes into the firmware
 repo's `bench-verified.md`.
 
@@ -159,7 +160,7 @@ app/src/main/java/earth/walkthru/aqsync/
   data/sync/       sync planner, engine (lost-window re-read), file archive, READ window size, resume-after-lost-link policy
   data/background/ dataSync foreground service + notifications; auto-sync WorkManager worker, scheduler, runner (decision logic)
   data/local/      Room database (known devices incl. LAN token + auto-sync switch, archived files + history index, schema v4)
-  data/history/    Parquet subset reader (parquet/: Thrift compact footer, pages, LZ4 block), file indexer, index back-fill
+  data/history/    Parquet subset reader (parquet/: Thrift compact footer, pages, LZ4 block), file indexer + back-fill, aggregate tiers (Aggregator, HistoryDeriver)
   data/settings/   DataStore preferences (Advanced mode)
   data/export/     share / zip / SAF export
   data/fake/       in-app fake device for debug builds
@@ -241,6 +242,8 @@ History (2026-09-17, steps 1–2; the evaluation and the remaining steps are in 
 | Oracle for the reader | PyArrow, via `tools/make_parquet_fixtures.py` run in the firmware repo's pixi env: it copies real device files, compiles the firmware's own fixture writers for v3 files, and writes `expected.json` (footer facts, per-row-group statistics decoded from raw bytes, per-column null count/first/last/min/max/sum). The Kotlin tests compare every column of every file. Regenerate when the firmware writer changes; commit the result. |
 | What the index stores (Room v4) | Derived from the file, never from its name: rows, row groups, `schema_version`, `boot_id`, `purpose`, UTC row count and span, monotonic span, sequence span, `pms_status == 4` count, plus `indexedAt`/`indexError`. Computed in `SyncEngine` right after verification (same upsert as the row) and back-filled lazily for older rows by `HistoryIndexer.backfill` (batches of 100, failures retried once per pass, never-indexed rows first). v6 footers answer the spans from statistics without decoding (`fromStatistics`); v1/v2 files decode three columns. |
 | Benchmark copies | `purpose = codec-comparison-duplicate-rows` files are indexed like any other but excluded from every history query (`withUtcBetween` filters on `purpose`). |
+| Aggregate tiers (Room v5) | `aggregate_bucket` at **15 min / 1 h / 1 day** (`Resolution`), identity `(station, resolution, start)`: rows, PMS-valid rows, PM1/PM2.5/PM10 means (PM2.5 min/max), particle means, board temperature, battery, USB. Particle means use only `pms_status == 4` rows; `coverage = validRows / expected` (90 / 360 / 8,640) is carried so a bucket built from three readings says so. Rows without UTC are not on the timeline. Built per UTC station-day by `HistoryDeriver` from the verified files (`Aggregator`, pure), replaced atomically per day. |
+| When a day is rebuilt | `derived_day` stores a SHA-256 over the day's sorted `name:crc32` source list; `deriveStale()` rebuilds exactly the days whose set changed (late file, re-synced mismatch, deleted file) and drops days with no sources left. Triggered after every interactive sync (repository `finally`), inside `SyncWorker` when a run brought files, and when Files opens (after the index back-fill). Both tables are caches: drop them and derive again → identical rows. |
 | A file the reader refuses | Keeps its `archived_file` row (Files, Export, sync identity unaffected) with `indexError`; the Metrics screen says so. The archive is the source of truth, the index only describes it. |
 
 ## Lessons learned

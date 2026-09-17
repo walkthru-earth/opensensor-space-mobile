@@ -8,7 +8,9 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import earth.walkthru.aqsync.data.local.database.AppDatabase
+import earth.walkthru.aqsync.data.local.database.AggregateBucketDao
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
+import earth.walkthru.aqsync.data.local.database.DerivedDayDao
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
 import javax.inject.Singleton
 
@@ -20,6 +22,12 @@ class DatabaseModule {
 
     @Provides
     fun provideArchivedFileDao(db: AppDatabase): ArchivedFileDao = db.archivedFileDao()
+
+    @Provides
+    fun provideAggregateBucketDao(db: AppDatabase): AggregateBucketDao = db.aggregateBucketDao()
+
+    @Provides
+    fun provideDerivedDayDao(db: AppDatabase): DerivedDayDao = db.derivedDayDao()
 
     @Provides
     @Singleton

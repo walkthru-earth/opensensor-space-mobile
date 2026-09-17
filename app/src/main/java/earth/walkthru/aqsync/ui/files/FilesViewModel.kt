@@ -14,6 +14,7 @@ import earth.walkthru.aqsync.data.background.AutoSyncScheduler
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.export.ExportManager
+import earth.walkthru.aqsync.data.history.HistoryDeriver
 import earth.walkthru.aqsync.data.history.HistoryIndexer
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
@@ -75,6 +76,7 @@ class FilesViewModel @Inject constructor(
     private val autoSyncScheduler: AutoSyncScheduler,
     settings: AppSettings,
     historyIndexer: HistoryIndexer,
+    historyDeriver: HistoryDeriver,
 ) : ViewModel() {
 
     private val localEvents = MutableSharedFlow<DeviceEvent>(extraBufferCapacity = 4)
@@ -89,7 +91,10 @@ class FilesViewModel @Inject constructor(
     init {
         // Files synced before Room v4 (or by an older reader) get their history index here: idempotent,
         // a few hundred files take well under a second, and an interrupted pass simply resumes next time.
-        viewModelScope.launch { runCatching { historyIndexer.backfillAll() } }
+        viewModelScope.launch {
+            runCatching { historyIndexer.backfillAll() }
+            runCatching { historyDeriver.deriveStale() }
+        }
     }
 
     val uiState: StateFlow<FilesUiState> = combine(

@@ -1,5 +1,6 @@
 package earth.walkthru.aqsync.data.local.database
 
+import androidx.room.AutoMigration
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
@@ -13,11 +14,21 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * - v4: `archived_file` history index columns (rows, row groups, schema version, UTC/monotonic/sequence
  *   spans, PMS-valid rows, indexedAt/indexError), all nullable; existing rows are back-filled lazily by
  *   `HistoryIndexer` from the files already in the archive.
+ * - v5: `aggregate_bucket` (15 min / 1 h / 1 day tiers) and `derived_day` (per station-day source
+ *   signature), both pure caches of the archive rebuilt by `HistoryDeriver`; added with an
+ *   `AutoMigration` (new tables only).
  */
-@Database(entities = [KnownDevice::class, ArchivedFile::class], version = 4, exportSchema = true)
+@Database(
+    entities = [KnownDevice::class, ArchivedFile::class, AggregateBucket::class, DerivedDay::class],
+    version = 5,
+    exportSchema = true,
+    autoMigrations = [AutoMigration(from = 4, to = 5)],
+)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun knownDeviceDao(): KnownDeviceDao
     abstract fun archivedFileDao(): ArchivedFileDao
+    abstract fun aggregateBucketDao(): AggregateBucketDao
+    abstract fun derivedDayDao(): DerivedDayDao
 
     companion object {
         val MIGRATION_1_2: Migration = object : Migration(1, 2) {

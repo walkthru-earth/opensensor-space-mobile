@@ -1,0 +1,151 @@
+package earth.walkthru.aqsync.data.history
+
+import android.util.Log
+import earth.walkthru.aqsync.data.history.parquet.ParquetFile
+import earth.walkthru.aqsync.data.history.parquet.ParquetFormatException
+import earth.walkthru.aqsync.data.local.database.AggregateBucket
+import earth.walkthru.aqsync.data.local.database.AggregateBucketDao
+import earth.walkthru.aqsync.data.local.database.ArchivedFile
+import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
+import earth.walkthru.aqsync.data.local.database.DerivedDay
+import earth.walkthru.aqsync.data.local.database.DerivedDayDao
+import earth.walkthru.aqsync.data.sync.FileArchive
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
+import java.security.MessageDigest
+import javax.inject.Inject
+import javax.inject.Singleton
+
+/**
+ * Keeps the aggregate tiers (`aggregate_bucket`) in step with the archive, one UTC station-day at a
+ * time. A day is (re)built when the set of verified, indexed, telemetry files that carry UTC rows
+ * overlapping it differs from the set recorded in `derived_day` — so a late-arriving file rebuilds
+ * exactly its day, and an unchanged day costs one string comparison.
+ *
+ * Pure caches: dropping both tables and running [deriveStale] again gives the same rows. Nothing here
+ * writes to the archive.
+ */
+@Singleton
+class HistoryDeriver @Inject constructor(
+    private val archive: FileArchive,
+    private val archivedFileDao: ArchivedFileDao,
+    private val bucketDao: AggregateBucketDao,
+    private val dayDao: DerivedDayDao,
+) {
+    data class Result(val daysChecked: Int, val daysRebuilt: Int, val rowsAggregated: Long)
+
+    /** Which station-days a set of indexed files touches (UTC rows only; unsynced files have none). */
+    fun daysOf(files: List<ArchivedFile>): Map<String, Set<Long>> {
+        val out = HashMap<String, MutableSet<Long>>()
+        for (f in files) {
+            if (!f.indexed || (f.utcRows ?: 0) == 0L || !(f.purpose == null || f.purpose == "telemetry")) continue
+            val first = f.firstUtcNs ?: continue
+            val last = f.lastUtcNs ?: continue
+            val days = out.getOrPut(f.station) { HashSet() }
+            var d = Math.floorDiv(first, DAY_NS)
+            val lastDay = Math.floorDiv(last, DAY_NS)
+            while (d <= lastDay) { days += d; d++ }
+        }
+        return out
+    }
+
+    /** Deterministic identity of a day's source set: sorted `name:crc32` lines, SHA-256. */
+    fun signature(files: List<ArchivedFile>): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        files.map { "${it.name}:${it.crc32}" }.sorted().forEach { digest.update(it.toByteArray()); digest.update('\n'.code.toByte()) }
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    /**
+     * Rebuilds every stale station-day. Cheap when nothing changed; a full first pass over a year of one
+     * station is ~365 day rebuilds of ≤ 96 files each. Safe to call from any screen or worker; idempotent.
+     */
+    suspend fun deriveStale(stations: Collection<String>? = null): Result = withContext(Dispatchers.IO) {
+        var checked = 0
+        var rebuilt = 0
+        var rows = 0L
+        val all = archivedFileDao.observeAll().first()
+        val wanted = daysOf(all)
+        // Stations that only have derived days left (every dated file gone) must be visited too, to drop them.
+        val allStations = (wanted.keys + dayDao.stations()).filter { stations == null || it in stations }
+        for (station in allStations) {
+            val days = wanted[station] ?: emptySet()
+            val known = dayDao.forStation(station).associateBy { it.epochDay }
+            for (day in days.sorted()) {
+                checked++
+                val dayStartNs = day * DAY_NS
+                val sources = archivedFileDao.withUtcBetween(station, dayStartNs, dayStartNs + DAY_NS)
+                val sig = signature(sources)
+                if (known[day]?.sourceSignature == sig) continue
+                val built = buildDay(station, day, sources)
+                rebuilt++
+                rows += built
+            }
+            // Days that no longer have any source (files deleted) lose their tiers too.
+            for (stale in known.keys - days) {
+                bucketDao.replaceDay(station, stale * 86_400, emptyList())
+                dayDao.delete(station, stale)
+                rebuilt++
+            }
+        }
+        if (rebuilt > 0) Log.i(TAG, "derived $rebuilt of $checked station-days ($rows rows)")
+        Result(checked, rebuilt, rows)
+    }
+
+    /** Aggregates one station-day from [sources] and replaces its tiers. Returns rows aggregated. */
+    suspend fun buildDay(station: String, epochDay: Long, sources: List<ArchivedFile>): Long {
+        val dayStartS = epochDay * 86_400
+        val agg = Aggregator(station)
+        var rows = 0L
+        for (src in sources) {
+            val file = archive.fileFor(src.station, src.name)
+            if (!file.isFile) continue
+            try {
+                val pf = ParquetFile.open(file)
+                agg.add(pf)
+                rows += pf.numRows
+            } catch (e: ParquetFormatException) {
+                Log.w(TAG, "${src.name}: ${e.message}")
+            }
+        }
+        // Keep only buckets that start inside this day: a file straddling midnight contributes its other
+        // rows when the neighbouring day is built (it is in that day's source set too).
+        val buckets = agg.buckets().filter { it.startEpochS >= dayStartS && it.startEpochS < dayStartS + 86_400 }.map { it.toEntity() }
+        bucketDao.replaceDay(station, dayStartS, buckets)
+        dayDao.upsert(
+            DerivedDay(
+                station = station,
+                epochDay = epochDay,
+                sourceSignature = signature(sources),
+                sourceFiles = sources.size,
+                rows = buckets.filter { it.resolution == Resolution.DAY.seconds }.sumOf { it.rows },
+                builtAtEpochMs = System.currentTimeMillis(),
+            )
+        )
+        return rows
+    }
+
+    private fun Bucket.toEntity() = AggregateBucket(
+        station = station,
+        resolution = resolution.seconds,
+        startEpochS = startEpochS,
+        rows = rows,
+        validRows = validRows,
+        pm1Mean = pm1Mean,
+        pm25Mean = pm25Mean,
+        pm25Min = pm25Min,
+        pm25Max = pm25Max,
+        pm10Mean = pm10Mean,
+        particlesGt03Mean = particlesGt03Mean,
+        particlesGt25Mean = particlesGt25Mean,
+        boardTempMean = boardTempMean,
+        batteryPercentMean = batteryPercentMean,
+        vbusMvMean = vbusMvMean,
+    )
+
+    companion object {
+        private const val TAG = "HistoryDeriver"
+        const val DAY_NS = 86_400L * 1_000_000_000L
+    }
+}
