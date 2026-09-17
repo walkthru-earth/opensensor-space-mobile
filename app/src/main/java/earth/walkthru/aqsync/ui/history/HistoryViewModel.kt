@@ -52,12 +52,13 @@ data class HistoryUiState(
     val canPageForward: Boolean get() = toS < nowRounded(range)
 }
 
-/** "Now" rounded up to the next quarter hour, so a live day view ends on a tick and not mid-bucket. */
-fun nowRounded(range: HistoryRange): Long {
-    val now = System.currentTimeMillis() / 1000
-    val step = range.tier?.seconds ?: 900L
-    return Math.floorDiv(now, step) * step + step
-}
+/**
+ * The end of the span that contains "now": the next **local midnight**. Every range is then whole
+ * local days — a Day is a calendar day (the ring's dial has midnight at the top), a Week seven of
+ * them ending tonight, and so on. The buckets underneath stay UTC-aligned.
+ */
+fun nowRounded(@Suppress("UNUSED_PARAMETER") range: HistoryRange, zone: java.time.ZoneId = java.time.ZoneId.systemDefault()): Long =
+    java.time.LocalDate.now(zone).plusDays(1).atStartOfDay(zone).toEpochSecond()
 
 /**
  * History works from the archive alone — no session needed — but shows the link chip when one exists.
@@ -158,6 +159,12 @@ class HistoryViewModel @Inject constructor(
         val r = range.value
         val next = toS.value + direction * r.seconds
         toS.value = minOf(next, nowRounded(r))
+    }
+
+    /** From a calendar cell: show that UTC day (ending at its midnight). */
+    fun openDay(dayStartS: Long) {
+        range.value = HistoryRange.DAY
+        toS.value = minOf(dayStartS + 86_400, nowRounded(HistoryRange.DAY))
     }
 
     /** Jump so the latest data is in view (the last day with data, or now). */

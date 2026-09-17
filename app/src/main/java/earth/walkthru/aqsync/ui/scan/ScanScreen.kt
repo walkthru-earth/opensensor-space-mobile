@@ -183,6 +183,7 @@ fun ScanScreen(
                 NearbyRow(
                     device = dev,
                     known = known,
+                    summary = known?.station?.let { state.summaries[it] },
                     connecting = target == dev.address,
                     onClick = { viewModel.connect(dev.address, dev.name) },
                 )
@@ -230,7 +231,7 @@ fun ScanScreen(
 }
 
 @Composable
-private fun NearbyRow(device: ScannedDevice, known: KnownDevice?, connecting: Boolean, onClick: () -> Unit) {
+private fun NearbyRow(device: ScannedDevice, known: KnownDevice?, summary: LoggerSummary?, connecting: Boolean, onClick: () -> Unit) {
     Surface(
         shape = MaterialTheme.shapes.extraLarge,
         color = MaterialTheme.colorScheme.surfaceContainer,
@@ -247,6 +248,7 @@ private fun NearbyRow(device: ScannedDevice, known: KnownDevice?, connecting: Bo
                     if (device.bonded) Tag("paired")
                     if (known?.station != null) Tag("known")
                 }
+                ArchiveLine(summary, rememberNowMillis())
             }
             Spacer(Modifier.width(12.dp))
             if (connecting) {
@@ -255,6 +257,28 @@ private fun NearbyRow(device: ScannedDevice, known: KnownDevice?, connecting: Bo
                 RssiMeter(device.rssi)
             }
         }
+    }
+}
+
+/** From the archive on this phone, never from a live link: the last UTC day with valid readings, as a mood. */
+@Composable
+private fun ArchiveLine(summary: LoggerSummary?, now: Long) {
+    val mean = summary?.lastDayPm25Mean
+    val dayStart = summary?.lastDayStartS
+    if (mean != null && dayStart != null) {
+        val mood = AirMood.of(mean.toDouble())
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp)) {
+            MoodFace(mood, mood.color(), Modifier.size(16.dp))
+            Text(
+                "${mood.title} · avg ${"%.0f".format(java.util.Locale.ROOT, mean)} µg/m³ on ${DateTimeFormatter.ofPattern("d MMM").withZone(ZoneOffset.UTC).format(Instant.ofEpochSecond(dayStart))}" +
+                    (summary.lastDayCoverage?.let { " (${(it * 100).toInt()} % of the day)" } ?: "") +
+                    " · ${summary.files} files" + (summary.lastSyncedEpochMs?.let { ", synced ${formatAgo(now - it)}" } ?: ""),
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 2,
+            )
+        }
+    } else if (summary != null && summary.lastDataUtcNs == null && summary.files > 0) {
+        Text("${summary.files} files, none with a clock yet — give the logger the time.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.padding(top = 4.dp))
     }
 }
 
@@ -285,22 +309,7 @@ private fun KnownRow(device: KnownDevice, summary: LoggerSummary?, now: Long, on
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                // From the archive on this phone, never from a live link: the last UTC day with valid readings.
-                val mean = summary?.lastDayPm25Mean
-                val dayStart = summary?.lastDayStartS
-                if (mean != null && dayStart != null) {
-                    val mood = AirMood.of(mean.toDouble())
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp)) {
-                        MoodFace(mood, mood.color(), Modifier.size(16.dp))
-                        Text(
-                            "${mood.title} · avg ${"%.0f".format(java.util.Locale.ROOT, mean)} µg/m³ on ${DateTimeFormatter.ofPattern("d MMM").withZone(ZoneOffset.UTC).format(Instant.ofEpochSecond(dayStart))}" +
-                                (summary.lastDayCoverage?.let { " (${(it * 100).toInt()} % of the day)" } ?: ""),
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                } else if (summary != null && summary.lastDataUtcNs == null && summary.files > 0) {
-                    Text("Files have no clock yet — give the logger the time.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.padding(top = 4.dp))
-                }
+                ArchiveLine(summary, now)
             }
             if (connecting) {
                 CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 3.dp)

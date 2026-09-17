@@ -26,6 +26,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import earth.walkthru.aqsync.data.history.HistoryColumn
+import earth.walkthru.aqsync.data.history.Columns
+import earth.walkthru.aqsync.data.history.AirMood
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.material3.Surface
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -110,19 +118,7 @@ fun HistoryScreen(
                 }
             }
             item(key = "chart") {
-                SectionCard(state.metric.label + " · " + state.metric.unit) {
-                    val s = state.series
-                    when {
-                        state.station == null -> Text("This logger has not been connected yet, so there is no archive to show.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        s == null -> Text("Loading…", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        s.isEmpty -> EmptySpan(state)
-                        else -> {
-                            HistoryChart(s, zone = zone)
-                            Spacer(Modifier.height(8.dp))
-                            Summary(s)
-                        }
-                    }
-                }
+                ChartCard(state, zone, onOpenDay = { dayStartS -> viewModel.openDay(dayStartS) })
             }
             item(key = "metric") {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -173,6 +169,109 @@ fun HistoryScreen(
     }
 }
 
+/**
+ * The picture depends on the span: a day is a ring plus quarter-hour columns, a week hourly columns,
+ * a month or a year a calendar of days plus daily / weekly columns. Every column is coloured by its
+ * own band; touch one to read it.
+ */
+@Composable
+private fun ChartCard(state: HistoryUiState, zone: ZoneId, onOpenDay: (Long) -> Unit) {
+    val s = state.series
+    var selected by remember(state.range, state.toS, state.metric) { mutableStateOf<HistoryColumn?>(null) }
+    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Eyebrow(state.metric.label)
+                Spacer(Modifier.width(6.dp))
+                Eyebrow(state.metric.unit, uppercase = false)
+                Spacer(Modifier.weight(1f))
+                if (s != null && !s.isEmpty) Eyebrow("${(s.coverage * 100).toInt()} % covered", uppercase = false)
+            }
+            Spacer(Modifier.height(8.dp))
+            when {
+                state.station == null -> Text("This logger has not been connected yet, so there is no archive to show.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                s == null -> Text("Loading…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                s.isEmpty -> EmptySpan(state)
+                else -> {
+                    val slot = Columns.slotSeconds(state.range)
+                    val align = if (state.range == HistoryRange.YEAR) MONDAY_EPOCH_S else 0L
+                    val columns = remember(s) { Columns.rebin(s, slot, align) }
+                    when (state.range) {
+                        HistoryRange.DAY -> {
+                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                DayRing(
+                                    columns = columns,
+                                    metric = state.metric,
+                                    dayStartS = s.fromS,
+                                    mean = s.mean,
+                                    coverage = s.coverage,
+                                    nowS = System.currentTimeMillis() / 1000,
+                                    selected = selected,
+                                    zone = zone,
+                                )
+                            }
+                            Spacer(Modifier.height(8.dp))
+                        }
+                        HistoryRange.MONTH, HistoryRange.YEAR -> {
+                            val days = remember(s) { Columns.rebin(s, 86_400L, 0L) }
+                            CalendarHeatmap(days, state.metric, s.fromS, s.toS, onPickDay = { onOpenDay(it.startS) })
+                            InfoNote("One cell per UTC day, coloured by its average; tap a day to open it.")
+                            Spacer(Modifier.height(8.dp))
+                        }
+                        HistoryRange.WEEK -> Unit
+                    }
+                    BandColumnChart(
+                        columns = columns,
+                        metric = state.metric,
+                        range = state.range,
+                        fromS = s.fromS,
+                        toS = s.toS,
+                        selected = selected,
+                        onSelect = { selected = it },
+                        height = if (state.range == HistoryRange.DAY) 170.dp else 200.dp,
+                        zone = zone,
+                    )
+                    SelectedColumn(selected, state, zone)
+                    Spacer(Modifier.height(8.dp))
+                    Summary(s)
+                }
+            }
+        }
+    }
+}
+
+/** What the touched column says — time slot, value with its mood, peak, coverage, estimated or not. */
+@Composable
+private fun SelectedColumn(c: HistoryColumn?, state: HistoryUiState, zone: ZoneId) {
+    val text = if (c == null) {
+        "Touch a column to read it"
+    } else {
+        val fmt = when (state.range) {
+            HistoryRange.DAY -> DateTimeFormatter.ofPattern("HH:mm")
+            HistoryRange.WEEK -> DateTimeFormatter.ofPattern("EEE HH:mm")
+            HistoryRange.MONTH -> DateTimeFormatter.ofPattern("EEE d MMM")
+            HistoryRange.YEAR -> DateTimeFormatter.ofPattern("d MMM")
+        }.withZone(zone)
+        val slot = when (state.range) {
+            HistoryRange.MONTH -> fmt.format(Instant.ofEpochSecond(c.startS))
+            HistoryRange.YEAR -> "week of ${fmt.format(Instant.ofEpochSecond(c.startS))}"
+            else -> "${fmt.format(Instant.ofEpochSecond(c.startS))}–${DateTimeFormatter.ofPattern("HH:mm").withZone(zone).format(Instant.ofEpochSecond(c.endS))}"
+        }
+        val m = c.mean
+        if (m == null) "$slot · no readings" else buildString {
+            append(slot).append(" · ").append(fmt(m)).append(' ').append(state.metric.unit)
+            if (state.metric.banded) append(" · ").append(AirMood.of(m.toDouble()).title)
+            c.max?.takeIf { it > m * 1.15f }?.let { append(" · peak ").append(fmt(it)) }
+            append(" · ").append((c.coverage * 100).toInt()).append(" % covered")
+            if (c.estimated) append(" · estimated time")
+        }
+    }
+    Text(text, style = MaterialTheme.typography.bodySmall, color = if (c == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(top = 6.dp), maxLines = 2)
+}
+
+/** 1970-01-05 was a Monday: week columns align to it. */
+private const val MONDAY_EPOCH_S = 4 * 86_400L
+
 @Composable
 private fun Summary(s: HistorySeries) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -221,11 +320,7 @@ private fun spanLabel(range: HistoryRange, toS: Long, zone: ZoneId): String {
     val from = Instant.ofEpochSecond(toS - range.seconds)
     val to = Instant.ofEpochSecond(toS - 1)
     return when (range) {
-        HistoryRange.DAY -> {
-            val d = DateTimeFormatter.ofPattern("EEE d MMM").withZone(zone)
-            val t = DateTimeFormatter.ofPattern("HH:mm").withZone(zone)
-            "${d.format(from)} ${t.format(from)} → ${d.format(to)} ${t.format(to)}"
-        }
+        HistoryRange.DAY -> DateTimeFormatter.ofPattern("EEEE d MMMM").withZone(zone).format(from)
         HistoryRange.WEEK, HistoryRange.MONTH -> {
             val d = DateTimeFormatter.ofPattern("d MMM").withZone(zone)
             "${d.format(from)} → ${d.format(to)}"
