@@ -149,4 +149,4 @@ jobs:
         with:
           name: aq-sync-${{ steps.meta.outputs.version_name }}
           path: dist/
-          retention-days: 30
+          retention-days: 14   # the organisation maximum
