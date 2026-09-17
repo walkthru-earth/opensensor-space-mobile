@@ -7,6 +7,7 @@ import earth.walkthru.aqsync.data.local.database.ArchivedFile
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.sync.FileArchive
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import javax.inject.Inject
@@ -58,7 +59,7 @@ class HistoryIndexer @Inject constructor(
      * Indexes up to [limit] rows that need it. Returns how many rows were updated (0 = nothing left).
      * Rows whose previous attempt failed are retried once per call — a newer reader may accept them.
      */
-    suspend fun backfill(limit: Int = 100): Int = withContext(Dispatchers.IO) {
+    suspend fun backfill(limit: Int = 100): Int = mutex.withLock { withContext(Dispatchers.IO) {
         val pending = archivedFileDao.unindexed(limit)
         var done = 0
         for (row in pending) {
@@ -71,7 +72,7 @@ class HistoryIndexer @Inject constructor(
         }
         if (done > 0) Log.i(TAG, "indexed $done files (${pending.size} candidates)")
         done
-    }
+    } }
 
     /** Runs [backfill] until nothing is left, bounded, then the time-estimate pass. */
     suspend fun backfillAll(maxBatches: Int = 50) {
@@ -103,6 +104,8 @@ class HistoryIndexer @Inject constructor(
         if (changed > 0) Log.i(TAG, "estimated time for $changed files")
         changed
     }
+
+    private val mutex = kotlinx.coroutines.sync.Mutex()
 
     private companion object {
         const val TAG = "HistoryIndexer"

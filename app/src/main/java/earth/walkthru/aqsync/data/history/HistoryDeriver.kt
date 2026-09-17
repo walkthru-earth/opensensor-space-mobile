@@ -12,6 +12,8 @@ import earth.walkthru.aqsync.data.local.database.DerivedDayDao
 import earth.walkthru.aqsync.data.sync.FileArchive
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.security.MessageDigest
 import javax.inject.Inject
@@ -38,6 +40,9 @@ class HistoryDeriver @Inject constructor(
     data class Result(val daysChecked: Int, val daysRebuilt: Int, val rowsAggregated: Long)
 
     private val dailyBuilder = DailyDerivedBuilder(store) { station, name -> archive.fileFor(station, name) }
+
+    /** Passes are triggered from several places (screens, post-sync, worker); run one at a time so they never duplicate work. */
+    private val mutex = Mutex()
 
     /** Which station-days a set of indexed files touches — by real UTC, or by the estimated span (§4.6). */
     fun daysOf(files: List<ArchivedFile>): Map<String, Set<Long>> {
@@ -66,7 +71,7 @@ class HistoryDeriver @Inject constructor(
      * Rebuilds every stale station-day. Cheap when nothing changed; a full first pass over a year of one
      * station is ~365 day rebuilds of ≤ 96 files each. Safe to call from any screen or worker; idempotent.
      */
-    suspend fun deriveStale(stations: Collection<String>? = null): Result = withContext(Dispatchers.IO) {
+    suspend fun deriveStale(stations: Collection<String>? = null): Result = mutex.withLock { withContext(Dispatchers.IO) {
         var checked = 0
         var rebuilt = 0
         var rows = 0L
@@ -101,7 +106,7 @@ class HistoryDeriver @Inject constructor(
         }
         if (rebuilt > 0) Log.i(TAG, "derived $rebuilt of $checked station-days ($rows rows)")
         Result(checked, rebuilt, rows)
-    }
+    } }
 
     /** Aggregates one station-day from [sources] and replaces its tiers. Returns rows aggregated. */
     suspend fun buildDay(station: String, epochDay: Long, sources: List<ArchivedFile>, anchors: Map<String, TimeEstimate.Anchor> = emptyMap()): Long {
