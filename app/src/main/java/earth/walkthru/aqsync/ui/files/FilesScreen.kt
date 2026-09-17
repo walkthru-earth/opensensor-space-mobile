@@ -231,6 +231,15 @@ fun FilesScreen(
             if (state.sync.running || state.sync.outcomes.isNotEmpty()) {
                 item { SyncProgressCard(state.sync, now) }
             }
+            // From the archive alone, so it works without a session: one column per synced file.
+            item(key = "file-chart") {
+                FileChartCard(
+                    state = state.fileChart,
+                    onToggle = viewModel::setFileChart,
+                    onMetric = viewModel::setFileChartMetric,
+                    onPage = viewModel::pageFileChart,
+                )
+            }
             when (val m = state.manifest) {
                 ManifestState.Idle -> item { Hint("Connect to list the files on the card.") }
                 ManifestState.Loading -> item {

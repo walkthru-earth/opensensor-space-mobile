@@ -174,7 +174,7 @@ fun HistoryScreen(
 }
 
 /**
- * The picture depends on the span: a day is a ring plus quarter-hour columns, a week hourly columns,
+ * The picture depends on the span: a day is a ring plus hourly columns, a week hourly columns,
  * a month or a year a calendar of days plus daily / weekly columns. Every column is coloured by its
  * own band; touch one to read it.
  */

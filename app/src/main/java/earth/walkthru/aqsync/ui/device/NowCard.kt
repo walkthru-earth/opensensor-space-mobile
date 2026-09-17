@@ -84,7 +84,7 @@ fun NowCard(reading: NowReading, today: TodaySoFar?, fresh: Boolean, showNumber:
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     MoodFace(today.mood, today.mood.color(), Modifier.size(22.dp))
                     Text(
-                        "${today.mood.title} · average ${fmtPm(today.pm25Mean.toDouble())} µg/m³ over ${(today.coverage * 100).toInt()} % of the day (${today.validRows} readings, UTC day)",
+                        "${today.mood.title} · average ${fmtPm(today.pm25Mean.toDouble())} µg/m³ over ${(today.coverage * 100).toInt()} % of the day (${today.validRows} readings since midnight)",
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }

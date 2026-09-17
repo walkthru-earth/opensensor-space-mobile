@@ -317,6 +317,9 @@ makes the "Give the logger the time" nudge on Home worth being prominent.
 | D9 | Unsynced time | implement the estimate of §4.6 in the derive step, clearly labelled |
 | D10 | Charts | Compose `Canvas` with a written design spec that Swift Charts follows (§4.5) |
 | D11 | GeoParquet | **2.0 rc.1, both directions**: read any GeoParquet 2.0 file (native `GEOMETRY`/`GEOGRAPHY` + WKB, plus the encodings and codecs mainstream writers use) and write our own; the reader stays the own Kotlin one, extended (§7). Decided 2026-09-17. |
+| D12 | Day view granularity | **24 hourly columns and 24 ring segments** (was 96 quarter-hours): tappable at phone width, one reading with Week, short spikes kept by the peak whisker; the 15-min tier stays in Room for Week and a later zoom. Plus **Chart by file** on Files: one column per archived file (`FileSummary`, pure, in `:core:history`), the diagnostic a time axis hides (FLUSH files, estimated time, gaps, untimed files). Decided 2026-09-18. |
+
+**Progress (2026-09-18):** first phone-side audit after the module restructure. Fixed: `derived_day`/`archived_file` `@Upsert` never updating (auto id + unique index → every derive pass rebuilt every day), the Today card on the UTC day instead of the local one, the History span frozen at the day the screen opened, the Day view re-reading Parquet on every Room write. Implemented D12 (hourly day, Chart by file). Details and the phone evidence in the README decisions table.
 
 **Progress (2026-09-17):** implemented and gated — step 1 (reader, `data/history/parquet`), step 2
 (Room v4 index, `HistoryIndexer`, file Metrics screen), step 3a (aggregate tiers, Room v5,

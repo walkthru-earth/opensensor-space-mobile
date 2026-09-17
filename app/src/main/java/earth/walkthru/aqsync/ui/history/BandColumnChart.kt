@@ -57,6 +57,8 @@ fun BandColumnChart(
     modifier: Modifier = Modifier,
     height: Dp = 200.dp,
     zone: ZoneId = ZoneId.systemDefault(),
+    /** X-axis labels `(position, text)` in the chart's own units; null = time ticks for [range]. The "chart by file" strip passes file indices. */
+    xLabels: List<Pair<Long, String>>? = null,
 ) {
     val onSurface = MaterialTheme.colorScheme.onSurface
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
@@ -194,7 +196,7 @@ fun BandColumnChart(
             drawLine(onSurface.copy(alpha = 0.6f), Offset(cx, plot.top), Offset(cx, plot.bottom), 1f)
         }
         // X ticks.
-        for ((t, label) in ticks(range, fromS, toS, zone)) {
+        for ((t, label) in xLabels ?: ticks(range, fromS, toS, zone)) {
             val xx = x(t)
             drawLine(gridColor, Offset(xx, plot.bottom), Offset(xx, plot.bottom + 4f), 1f)
             val w = labelPaint.measureText(label)

@@ -8,7 +8,6 @@ import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Transaction
-import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -105,7 +104,15 @@ interface DerivedDayDao {
     @Query("SELECT * FROM derived_day WHERE station = :station AND epochDay = :epochDay")
     suspend fun get(station: String, epochDay: Long): DerivedDay?
 
-    @Upsert
+    /**
+     * `REPLACE`, not `@Upsert`: the entity has an auto-generated id **and** a unique `(station, epochDay)`
+     * index. Room's `@Upsert` resolves the unique-index conflict with `UPDATE … WHERE id = ?` using the
+     * entity's id — 0 for a freshly built row — which updates nothing, so a day's signature was never
+     * refreshed after its first build and every derive pass rebuilt every day (found on the phone,
+     * 2026-09-18: "derived 3 of 3 station-days" on each pass). `REPLACE` deletes the conflicting row
+     * and inserts the new one; the id carries no meaning here.
+     */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(day: DerivedDay)
 
     @Query("DELETE FROM derived_day WHERE station = :station AND epochDay = :epochDay")

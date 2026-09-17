@@ -26,9 +26,14 @@ data class HistoryColumn(
 /** Pure re-binning and axis choices for the History chart; shared by every range. */
 object Columns {
 
-    /** Column width per range: 96 · 168 · 30 · 52 columns. */
+    /**
+     * Column width per range: 24 · 168 · 30 · 53 columns (365 days span 53 week slots). A day is drawn in **hours** (chosen
+     * 2026-09-18 over 96 quarter-hours): 24 columns are tappable at phone width, the peak whisker
+     * keeps a short spike visible, and the reading is the same as Week ("one column = one hour"). The
+     * 15-min tier stays in Room for the Week view and for a finer zoom later.
+     */
     fun slotSeconds(range: HistoryRange): Long = when (range) {
-        HistoryRange.DAY -> 900L
+        HistoryRange.DAY -> 3_600L
         HistoryRange.WEEK -> 3_600L
         HistoryRange.MONTH -> 86_400L
         HistoryRange.YEAR -> 7 * 86_400L

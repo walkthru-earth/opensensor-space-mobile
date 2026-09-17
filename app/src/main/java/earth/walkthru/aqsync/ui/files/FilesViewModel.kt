@@ -14,8 +14,12 @@ import earth.walkthru.aqsync.data.background.AutoSyncScheduler
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.export.ExportManager
+import earth.walkthru.aqsync.data.history.FileSummary
 import earth.walkthru.aqsync.data.history.HistoryDeriver
 import earth.walkthru.aqsync.data.history.HistoryIndexer
+import earth.walkthru.aqsync.data.history.HistoryRepository
+import earth.walkthru.aqsync.data.history.MetricSpec
+import earth.walkthru.aqsync.data.history.Metrics
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.local.database.KnownDevice
@@ -31,7 +35,11 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.io.File
@@ -60,7 +68,23 @@ data class FilesUiState(
     val transport: TransportKind? = null,
     /** Detailed level (or Developer) reveals the per-file "Metrics" inspector (the reader's on-phone proof). */
     val advancedMode: Boolean = false,
+    /** "Chart by file": one column per archived file of the connected station (null while off). */
+    val fileChart: FileChartState? = null,
 )
+
+/** The strip of per-file columns: the window shown, of how many files, for which metric. */
+data class FileChartState(
+    val metric: MetricSpec,
+    /** Every telemetry file of the station, oldest first (timed by first row, then untimed by name). */
+    val total: Int,
+    /** Index of the first column shown into the full list. */
+    val offset: Int,
+    val page: List<FileSummary>,
+    val loading: Boolean,
+) {
+    val canPageBack: Boolean get() = offset > 0
+    val canPageForward: Boolean get() = offset + page.size < total
+}
 
 /** UI-side effects: launch a share sheet or a SAF picker. */
 sealed interface FilesEffect {
@@ -72,6 +96,7 @@ sealed interface FilesEffect {
 class FilesViewModel @Inject constructor(
     private val repository: DeviceConnectionRepository,
     private val archivedFileDao: ArchivedFileDao,
+    private val history: HistoryRepository,
     private val export: ExportManager,
     private val autoSyncScheduler: AutoSyncScheduler,
     settings: AppSettings,
@@ -88,6 +113,14 @@ class FilesViewModel @Inject constructor(
     private val exporting = MutableStateFlow(false)
     private var pendingZip: File? = null
 
+    private val fileChartOn = MutableStateFlow(false)
+    private val fileChartMetric = MutableStateFlow(Metrics.primary)
+
+    /** Null = the latest page; otherwise the offset the user paged to. */
+    private val fileChartOffset = MutableStateFlow<Int?>(null)
+    private val summaries = MutableStateFlow<Pair<String, List<FileSummary>>?>(null)
+    private val summarising = MutableStateFlow(false)
+
     init {
         // Files synced before Room v4 (or by an older reader) get their history index here: idempotent,
         // a few hundred files take well under a second, and an interrupted pass simply resumes next time.
@@ -97,10 +130,40 @@ class FilesViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Summaries follow the archive: whenever the connected station's file list changes while the chart
+     * is on, the missing files are read (cached per `(name, crc32)` in the repository, so a new sync
+     * costs only its new files).
+     */
+    private val fileSummaryUpdates = combine(fileChartOn, repository.currentKnownDevice.map { it?.station }.distinctUntilChanged(), archivedFileDao.observeAll()) { on, station, files ->
+        if (!on || station == null) null else station to files.filter { it.station == station }.map { Triple(it.name, it.crc32, it.estFirstUtcNs) to it }
+    }.distinctUntilChanged { a, b -> a?.first == b?.first && a?.second?.map { it.first } == b?.second?.map { it.first } }
+        .onEach { input ->
+            if (input == null) { summaries.value = null; return@onEach }
+            summarising.value = true
+            try {
+                summaries.value = input.first to history.fileSummaries(input.first, input.second.map { it.second })
+            } finally {
+                summarising.value = false
+            }
+        }
+
+    init {
+        // After the property above exists: initializer order matters.
+        fileSummaryUpdates.launchIn(viewModelScope)
+    }
+
+    private val fileChart: Flow<FileChartState?> = combine(fileChartOn, fileChartMetric, fileChartOffset, summaries, summarising) { on, metric, offset, all, loading ->
+        if (!on) return@combine null
+        val list = all?.second ?: emptyList()
+        val start = (offset ?: (list.size - FILE_CHART_PAGE)).coerceIn(0, maxOf(0, list.size - 1))
+        FileChartState(metric, list.size, start, list.drop(start).take(FILE_CHART_PAGE), loading)
+    }
+
     val uiState: StateFlow<FilesUiState> = combine(
         repository.connectionState, repository.manifest, repository.plan, repository.sync, archivedFileDao.observeAll(), exporting,
         repository.reconnecting, repository.currentKnownDevice, autoSyncScheduler.observeActive(), repository.activeTransport,
-        settings.detailed,
+        settings.detailed, fileChart,
     ) { values ->
         @Suppress("UNCHECKED_CAST")
         val archived = values[4] as List<ArchivedFile>
@@ -119,8 +182,19 @@ class FilesViewModel @Inject constructor(
             backgroundSyncActive = values[8] as Boolean,
             transport = values[9] as TransportKind?,
             advancedMode = values[10] as Boolean,
+            fileChart = values[11] as FileChartState?,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FilesUiState())
+
+    fun setFileChart(on: Boolean) { fileChartOn.value = on; if (!on) fileChartOffset.value = null }
+    fun setFileChartMetric(metric: MetricSpec) { fileChartMetric.value = metric }
+
+    /** Page the strip by one window; forward past the end snaps back to "latest". */
+    fun pageFileChart(direction: Int) {
+        val st = uiState.value.fileChart ?: return
+        val next = st.offset + direction * FILE_CHART_PAGE
+        fileChartOffset.value = if (next + FILE_CHART_PAGE >= st.total) null else next.coerceAtLeast(0)
+    }
 
     private fun group(plan: SyncPlan): List<PartitionGroup> {
         val byPartition = plan.entries.groupBy { it.partition }
@@ -246,4 +320,9 @@ class FilesViewModel @Inject constructor(
 
     fun archivedFor(name: String, station: String?): ArchivedFile? =
         uiState.value.archived.firstOrNull { it.name == name && (station == null || it.station == station) }
+
+    companion object {
+        /** Columns per page of the "chart by file" strip: a day of 15-min files, tappable at phone width. */
+        const val FILE_CHART_PAGE = 96
+    }
 }

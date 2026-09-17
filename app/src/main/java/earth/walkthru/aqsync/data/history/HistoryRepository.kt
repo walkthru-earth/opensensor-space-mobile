@@ -2,6 +2,7 @@ package earth.walkthru.aqsync.data.history
 
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 import earth.walkthru.aqsync.data.history.parquet.ParquetFormatException
+import earth.walkthru.aqsync.data.local.database.ArchivedFile
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.local.database.MetricBucket
 import earth.walkthru.aqsync.data.local.database.MetricBucketDao
@@ -9,10 +10,12 @@ import earth.walkthru.aqsync.data.sync.FileArchive
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -33,11 +36,42 @@ class HistoryRepository @Inject constructor(
         return if (tier != null) {
             bucketDao.observe(station, metric.id, tier.seconds, tier.bucketStart(fromS), toS).map { buckets -> fromBuckets(metric, range, fromS, toS, tier, buckets) }
         } else {
-            // Re-read the rows whenever the station's file list changes (a sync, a back-fill).
-            archivedFileDao.observeForStation(station).map { files -> files.filter { it.indexed }.size to files.sumOf { it.rows ?: 0L } }
+            // Re-read the rows only when the station's timeline actually changed (a synced or indexed
+            // file, a new time estimate) — Room re-emits on every write to the table, and a day re-read
+            // opens every file of the day.
+            archivedFileDao.observeForStation(station)
+                .map { files -> files.filter { it.indexed }.map { Triple(it.name, it.crc32, it.timelineFirstNs) } }
+                .distinctUntilChanged()
                 .flatMapLatest { flow { emit(fromRows(station, metric, range, fromS, toS)) }.flowOn(Dispatchers.IO) }
         }
     }
+
+    /**
+     * "Chart by file": one [FileSummary] per archived telemetry file of [station], oldest first —
+     * timed files by their (real or estimated) first row, then the untimed ones by name. Reads every
+     * file once (≈ 40 KB each, footer + a few columns); files are immutable, so the result is cached
+     * by `(station, name, crc32)` for the life of the process.
+     */
+    suspend fun fileSummaries(station: String, files: List<ArchivedFile>): List<FileSummary> = withContext(Dispatchers.IO) {
+        val telemetry = files.filter { it.indexed && (it.purpose == null || it.purpose == "telemetry") }
+        val anchors = if (telemetry.any { it.hasEstimatedUtc }) TimeEstimate.anchors(telemetry.map { it.info() }) else emptyMap()
+        val ordered = telemetry.sortedWith(compareBy<ArchivedFile> { it.timelineFirstNs == null }.thenBy { it.timelineFirstNs ?: 0L }.thenBy { it.name })
+        ordered.mapNotNull { f ->
+            val key = Triple(f.station, f.name, f.crc32) to f.estFirstUtcNs
+            synchronized(summaryCache) { summaryCache[key] }?.let { return@mapNotNull it }
+            val file = archive.fileFor(f.station, f.name)
+            if (!file.isFile) return@mapNotNull null
+            try {
+                FileSummary.of(f.name, ParquetFile.open(file), if (f.hasEstimatedUtc) anchors[f.bootId] else null)
+                    .also { synchronized(summaryCache) { summaryCache[key] = it } }
+            } catch (e: ParquetFormatException) {
+                null
+            }
+        }
+    }
+
+    /** Immutable files → immutable summaries; the estimate's first-UTC is part of the key because an anchor re-dates a file. */
+    private val summaryCache = HashMap<Pair<Triple<String, String, Long>, Long?>, FileSummary>()
 
     private fun fromBuckets(metric: MetricSpec, range: HistoryRange, fromS: Long, toS: Long, tier: Resolution, buckets: List<MetricBucket>): HistorySeries {
         val points = buckets.map { b ->

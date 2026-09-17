@@ -34,7 +34,7 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * The day as a clock: 96 quarter-hour segments around a dial, midnight at the top, each coloured by
+ * The day as a clock: 24 hour segments around a dial (one per drawn column), midnight at the top, each coloured by
  * its band, faded by its coverage, dashed when on estimated time, dark where nothing was recorded;
  * a tick for "now" when the day is today; the day's average and its mood in the middle. Reads like
  * a watch face — you see at once *when* the air was bad — and it is the shape the iOS widget can take.

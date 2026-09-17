@@ -18,6 +18,7 @@ import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
 import earth.walkthru.aqsync.data.local.database.MetricBucketDao
 import earth.walkthru.aqsync.data.settings.AppSettings
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -87,11 +88,24 @@ class HistoryViewModel @Inject constructor(
     private val range = MutableStateFlow(HistoryRange.DAY)
     private val toS = MutableStateFlow(nowRounded(HistoryRange.DAY))
 
+    /**
+     * True until the user pages back: the span then follows "now", so a screen left open across local
+     * midnight moves to the new day instead of showing yesterday as today (the initial [toS] was
+     * computed once, at construction).
+     */
+    private val followsNow = MutableStateFlow(true)
+
     init {
         // Same idempotent housekeeping as Files: index anything old, derive any stale day, then the flows below re-emit.
         viewModelScope.launch {
             runCatching { historyIndexer.backfillAll() }
             runCatching { historyDeriver.deriveStale() }
+        }
+        viewModelScope.launch {
+            while (true) {
+                delay(60_000)
+                if (followsNow.value) toS.value = nowRounded(range.value)
+            }
         }
     }
 
@@ -155,20 +169,28 @@ class HistoryViewModel @Inject constructor(
     fun setRange(r: HistoryRange) {
         range.value = r
         toS.value = nowRounded(r)
+        followsNow.value = true
     }
 
     fun page(direction: Int) {
         val r = range.value
         val next = toS.value + direction * r.seconds
-        toS.value = minOf(next, nowRounded(r))
+        val now = nowRounded(r)
+        toS.value = minOf(next, now)
+        followsNow.value = toS.value == now
     }
 
     /** From a calendar cell: show that UTC day (ending at its midnight). */
     fun openDay(dayStartS: Long) {
         range.value = HistoryRange.DAY
-        toS.value = minOf(dayStartS + 86_400, nowRounded(HistoryRange.DAY))
+        val now = nowRounded(HistoryRange.DAY)
+        toS.value = minOf(dayStartS + 86_400, now)
+        followsNow.value = toS.value == now
     }
 
     /** Jump so the latest data is in view (the last day with data, or now). */
-    fun jumpToLatest() { toS.value = nowRounded(range.value) }
+    fun jumpToLatest() {
+        toS.value = nowRounded(range.value)
+        followsNow.value = true
+    }
 }

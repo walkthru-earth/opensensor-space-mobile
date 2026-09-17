@@ -3,9 +3,10 @@ package earth.walkthru.aqsync.data.local.database
 import androidx.room.Dao
 import androidx.room.Entity
 import androidx.room.Index
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
-import androidx.room.Upsert
 import earth.walkthru.aqsync.data.history.IndexedFileInfo
 import kotlinx.coroutines.flow.Flow
 
@@ -100,7 +101,13 @@ interface ArchivedFileDao {
     @Query("SELECT COALESCE(SUM(bytes), 0) FROM archived_file")
     fun observeTotalBytes(): Flow<Long>
 
-    @Upsert
+    /**
+     * `REPLACE`, not `@Upsert`, for the same reason as `DerivedDayDao.upsert`: auto-generated id plus a
+     * unique `(station, name)` index means `@Upsert` cannot update a row it did not fetch first. The
+     * indexer passes fetched rows (id set), but `SyncEngine` writes a fresh row after a verified
+     * download and must win over any stale row of the same name.
+     */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(file: ArchivedFile)
 
     /** Rows not yet indexed (pre-v4 rows, or a previous attempt that failed and should be retried after an app update). */
