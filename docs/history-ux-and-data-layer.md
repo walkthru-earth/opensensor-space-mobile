@@ -317,6 +317,11 @@ makes the "Give the logger the time" nudge on Home worth being prominent.
 | D9 | Unsynced time | implement the estimate of §4.6 in the derive step, clearly labelled |
 | D10 | Charts | Compose `Canvas` with a written design spec that Swift Charts follows (§4.5) |
 
+**Progress (2026-09-17):** steps 1 and 2 below are implemented and gated (`data/history/parquet`,
+`data/history/ParquetIndexer` + `HistoryIndexer`, Room v4, `ui/history/FileMetricsScreen` behind
+Advanced mode; 102 unit tests). The README's "Design decisions → History" table records the choices
+made while implementing. Steps 3–7 are next.
+
 Suggested order of work once decided: (1) `data/history/parquet` reader + tests on real files →
 (2) footer index in Room + Detailed "Metrics" screen reading raw days (proves the reader on the
 phone) → (3) writer + `DeriveWorker` + daily files + tiers → (4) History screen + Now card friendly

@@ -3,6 +3,7 @@ package earth.walkthru.aqsync.data.sync
 import earth.walkthru.aqsync.data.ble.DeviceErrorException
 import earth.walkthru.aqsync.data.ble.DeviceSession
 import earth.walkthru.aqsync.data.ble.WindowLostException
+import earth.walkthru.aqsync.data.history.HistoryIndexer
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.protocol.ParquetVerify
@@ -62,6 +63,7 @@ class SyncAbortedException(message: String, cause: Throwable? = null) : Exceptio
 class SyncEngine @Inject constructor(
     private val archive: FileArchive,
     private val archivedFileDao: ArchivedFileDao,
+    private val historyIndexer: HistoryIndexer,
 ) {
     /** `WINDOW_RETRY_BACKOFF_MS × attempt` between re-reads of a lost window; tests shorten it. */
     var windowRetryBackoffMs: Long = WINDOW_RETRY_BACKOFF_MS
@@ -163,18 +165,19 @@ class SyncEngine @Inject constructor(
                 return FileOutcome.Mismatch(name, verdict.describe())
             }
             val sha256 = ParquetVerify.sha256Hex(writer.file)
-            archive.commit(station, name)
-            archivedFileDao.upsert(
-                ArchivedFile(
-                    station = station,
-                    name = name,
-                    bytes = opened.size,
-                    crc32 = opened.crc32,
-                    sha256 = sha256,
-                    syncedAtEpochMs = System.currentTimeMillis(),
-                    sourceDevice = sourceDevice,
-                )
+            val committed = archive.commit(station, name)
+            val row = ArchivedFile(
+                station = station,
+                name = name,
+                bytes = opened.size,
+                crc32 = opened.crc32,
+                sha256 = sha256,
+                syncedAtEpochMs = System.currentTimeMillis(),
+                sourceDevice = sourceDevice,
             )
+            // Index the verified bytes now (rows, time span, …) so History never has to re-open the file.
+            // A file the reader refuses keeps its row with `indexError`; the archive copy is untouched.
+            archivedFileDao.upsert(historyIndexer.indexed(row, committed))
             return FileOutcome.Synced(name, opened.size, sha256)
         } catch (e: DeviceErrorException) {
             return FileOutcome.DeviceError(name, e.protocolError, e.message ?: "device error")

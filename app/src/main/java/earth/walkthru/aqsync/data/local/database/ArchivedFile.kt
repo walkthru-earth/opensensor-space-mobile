@@ -31,7 +31,34 @@ data class ArchivedFile(
     val syncedAtEpochMs: Long,
     /** Bluetooth address (or fake id) of the device the copy came from. */
     val sourceDevice: String,
-)
+
+    // ---- History index (schema v4). All nullable: null means "not indexed yet" (a row written before
+    // v4, or a file the reader refused — see indexError). Derived from the file's own footer/rows by
+    // `ParquetIndexer`, never from the Hive name.
+    /** When the index below was computed; null until then. */
+    val indexedAtEpochMs: Long? = null,
+    /** Why indexing failed (`ParquetFormatException` message), else null. */
+    val indexError: String? = null,
+    val rows: Long? = null,
+    val rowGroups: Int? = null,
+    /** `schema_version` file metadata (`cores3-telemetry-v1|v2|v3`). */
+    val schemaVersion: String? = null,
+    val bootId: String? = null,
+    /** `purpose` file metadata; `telemetry` for station data, `codec-comparison-duplicate-rows` for benchmark copies. */
+    val purpose: String? = null,
+    /** Rows with a UTC timestamp and their span (`event_time_utc_ns`). 0 / null for unsynced files. */
+    val utcRows: Long? = null,
+    val firstUtcNs: Long? = null,
+    val lastUtcNs: Long? = null,
+    val firstMonoUs: Long? = null,
+    val lastMonoUs: Long? = null,
+    val firstSeq: Long? = null,
+    val lastSeq: Long? = null,
+    /** Rows with `pms_status == 4`. */
+    val pmValidRows: Long? = null,
+) {
+    val indexed: Boolean get() = indexedAtEpochMs != null && indexError == null
+}
 
 @Dao
 interface ArchivedFileDao {
@@ -55,6 +82,20 @@ interface ArchivedFileDao {
 
     @Upsert
     suspend fun upsert(file: ArchivedFile)
+
+    /** Rows not yet indexed (pre-v4 rows, or a previous attempt that failed and should be retried after an app update). */
+    @Query("SELECT * FROM archived_file WHERE indexedAtEpochMs IS NULL OR indexError IS NOT NULL ORDER BY (indexedAtEpochMs IS NULL) DESC, name LIMIT :limit")
+    suspend fun unindexed(limit: Int): List<ArchivedFile>
+
+    @Query("SELECT COUNT(*) FROM archived_file WHERE indexedAtEpochMs IS NULL OR indexError IS NOT NULL")
+    fun observeUnindexedCount(): Flow<Int>
+
+    /** Telemetry files of one station with UTC rows overlapping [fromNs, toNs), by time. */
+    @Query(
+        "SELECT * FROM archived_file WHERE station = :station AND indexError IS NULL AND utcRows > 0 " +
+            "AND (purpose IS NULL OR purpose = 'telemetry') AND lastUtcNs >= :fromNs AND firstUtcNs < :toNs ORDER BY firstUtcNs"
+    )
+    suspend fun withUtcBetween(station: String, fromNs: Long, toNs: Long): List<ArchivedFile>
 
     @Query("DELETE FROM archived_file WHERE station = :station AND name = :name")
     suspend fun delete(station: String, name: String)

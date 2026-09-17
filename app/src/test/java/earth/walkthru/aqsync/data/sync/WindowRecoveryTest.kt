@@ -4,6 +4,7 @@ import earth.walkthru.aqsync.data.ble.DeviceSession
 import earth.walkthru.aqsync.data.ble.WindowLostException
 import earth.walkthru.aqsync.data.fake.FakeTransport
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
+import earth.walkthru.aqsync.data.history.HistoryIndexer
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -40,7 +41,7 @@ class WindowRecoveryTest {
         tmp = Files.createTempDirectory("aqsync-window").toFile()
         fake = FakeTransport(chunkDelayMs = 0, liveIntervalMs = 3_600_000)
         session = DeviceSession(fake).also { it.staleFrameLogger = staleLog::add }
-        engine = SyncEngine(FileArchive(tmp), dao).also { it.windowRetryBackoffMs = 5 }
+        engine = FileArchive(tmp).let { a -> SyncEngine(a, dao, HistoryIndexer(a, dao)) }.also { it.windowRetryBackoffMs = 5 }
         withTimeout(10_000) { fake.connect() }
     }
 
@@ -148,6 +149,10 @@ class WindowRecoveryTest {
         override suspend fun get(station: String, name: String) = rows.firstOrNull { it.station == station && it.name == name }
         override fun observeCount(): Flow<Int> = flowOf(rows.size)
         override fun observeTotalBytes(): Flow<Long> = flowOf(rows.sumOf { it.bytes })
+        override suspend fun unindexed(limit: Int) = rows.filter { it.indexedAtEpochMs == null || it.indexError != null }.take(limit)
+        override fun observeUnindexedCount(): Flow<Int> = flowOf(rows.count { it.indexedAtEpochMs == null || it.indexError != null })
+        override suspend fun withUtcBetween(station: String, fromNs: Long, toNs: Long) =
+            rows.filter { it.station == station && it.indexError == null && (it.utcRows ?: 0) > 0 && (it.lastUtcNs ?: Long.MIN_VALUE) >= fromNs && (it.firstUtcNs ?: Long.MAX_VALUE) < toNs }
         override suspend fun upsert(file: ArchivedFile) {
             rows.removeAll { it.station == file.station && it.name == file.name }
             rows += file

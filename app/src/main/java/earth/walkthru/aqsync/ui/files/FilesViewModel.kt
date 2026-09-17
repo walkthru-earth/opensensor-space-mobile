@@ -14,8 +14,10 @@ import earth.walkthru.aqsync.data.background.AutoSyncScheduler
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.export.ExportManager
+import earth.walkthru.aqsync.data.history.HistoryIndexer
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
+import earth.walkthru.aqsync.data.settings.AppSettings
 import earth.walkthru.aqsync.data.local.database.KnownDevice
 import earth.walkthru.aqsync.data.sync.HivePartition
 import earth.walkthru.aqsync.data.sync.ManifestEntry
@@ -55,6 +57,8 @@ data class FilesUiState(
     val backgroundSyncActive: Boolean = false,
     /** Active pipe, for the top-bar chip (same source as Today / Device). */
     val transport: TransportKind? = null,
+    /** Advanced mode reveals the per-file "Metrics" inspector (the reader's on-phone proof). */
+    val advancedMode: Boolean = false,
 )
 
 /** UI-side effects: launch a share sheet or a SAF picker. */
@@ -69,6 +73,8 @@ class FilesViewModel @Inject constructor(
     private val archivedFileDao: ArchivedFileDao,
     private val export: ExportManager,
     private val autoSyncScheduler: AutoSyncScheduler,
+    settings: AppSettings,
+    historyIndexer: HistoryIndexer,
 ) : ViewModel() {
 
     private val localEvents = MutableSharedFlow<DeviceEvent>(extraBufferCapacity = 4)
@@ -80,9 +86,16 @@ class FilesViewModel @Inject constructor(
     private val exporting = MutableStateFlow(false)
     private var pendingZip: File? = null
 
+    init {
+        // Files synced before Room v4 (or by an older reader) get their history index here: idempotent,
+        // a few hundred files take well under a second, and an interrupted pass simply resumes next time.
+        viewModelScope.launch { runCatching { historyIndexer.backfillAll() } }
+    }
+
     val uiState: StateFlow<FilesUiState> = combine(
         repository.connectionState, repository.manifest, repository.plan, repository.sync, archivedFileDao.observeAll(), exporting,
         repository.reconnecting, repository.currentKnownDevice, autoSyncScheduler.observeActive(), repository.activeTransport,
+        settings.advancedMode,
     ) { values ->
         @Suppress("UNCHECKED_CAST")
         val archived = values[4] as List<ArchivedFile>
@@ -100,6 +113,7 @@ class FilesViewModel @Inject constructor(
             autoSync = (values[7] as KnownDevice?)?.autoSync,
             backgroundSyncActive = values[8] as Boolean,
             transport = values[9] as TransportKind?,
+            advancedMode = values[10] as Boolean,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FilesUiState())
 

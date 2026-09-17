@@ -25,6 +25,16 @@ push between two `CHUNK`s, the real `TcpTransport` against an in-JVM fake device
 JSON models, Parquet verification, sync planner, lost-window recovery, the resume-after-lost-link
 decision, the auto-sync worker's decision logic over the fake device), debug APK ≈ 65 MiB unminified.
 
+**History, steps 1–2 of [`docs/history-ux-and-data-layer.md`](docs/history-ux-and-data-layer.md)
+(2026-09-17):** a pure-Kotlin reader for the firmware's Parquet subset (`data/history/parquet`) that
+decodes all 881 columns of 21 fixture files — nine real `AQ-6b40` files (v1 73-col and v2 77-col,
+UNCOMPRESSED and LZ4_RAW, dated and unsynced) and twelve firmware-v6 writer fixtures (up to 8 row
+groups, statistics, `TIMESTAMP(NANOS, UTC)`) — byte-identically to PyArrow in 0.15 s total; Room v4
+indexes every verified file (rows, row groups, schema version, UTC/uptime/sequence spans, PMS-valid
+rows) at sync time and back-fills older rows; an Advanced-only **Metrics** screen shows a file through
+that reader. 102/102 unit tests, 0 lint errors (7 pre-existing warnings). Not yet run on the phone
+against a v3 file: the first one was still being written by the board when this was committed.
+
 The v1 file-sync part of the protocol *is* bench-verified: the same contract was exercised from a
 macOS host client against the real board on 2026-09-16 (pairing, 766-file manifest, verified
 transfers at 15–21 KB/s, time set, flush). The v2 additions — configuration, Wi-Fi provisioning,
@@ -50,6 +60,7 @@ in the firmware repo for what was measured, on which firmware and app commit.
 | **Device** | **Auto-sync** card (any protocol version): a per-device switch; while any known device has it on, a WorkManager job runs about every 15 min — app closed, screen off — finds the logger on the LAN (mDNS) or over its Bluetooth bond, pulls only the files the archive lacks under a `dataSync` progress notification, and posts one summary ("Synced 23 new files from AQ-6b40 · 1.1 MiB") only when something arrived. |
 | **Device** (v2) | Bluetooth pairing mode (random passkey / fixed PIN / none) with the "Default PIN 123456 — change it" nag, pending-reboot notice and **Reboot device** (finalizes the RAM batch, restarts, app reconnects). **Wi-Fi**: state / IP / RSSI, *Scan networks* → pick → hidden passphrase → *Save and connect*, state polled while `connecting`, radio on/off. **LAN**: server on/off, whether this phone holds a token, *Fetch token* (Bluetooth only, by contract), *Rotate token*, local-network permission explanation on Android 16+. **Forget all bonds**. Every write is one validated `SET_CONFIG`. |
 | **Settings** | A sheet with one switch: **Advanced mode** (DataStore). Off by default. |
+| **Metrics** (Advanced only, from a synced file's table icon on Files) | One archived file opened by the app's **own Parquet reader**: rows, row groups, schema/writer version, codec, footer size, UTC and uptime span, sequence range, PMS-valid rows, per-row-group spans from v6 footer statistics, every column decoded (nulls, min, max, first, last, "footer agrees") and the file's key/value metadata. Decodes all 77 columns in a few ms; the archive copy is never touched. |
 | **Debug** (Advanced only) | Active transport + endpoint + `payload_max`, live `status` JSON pretty-printed, last 200 raw frames (direction, type, length, first bytes; `TOKEN` and `SET_CONFIG` redacted), **Device log** (`LOG_TAIL 8192`) in a monospace box with refresh, **Raw command** (hex in → decoded frames out; `REBOOT` and `SET_CONFIG` are refused — they need the Device screen's confirmation). |
 
 The top bar of Today, Files, Device and Debug shows a small chip naming the active link: **Bluetooth** or **Wi-Fi LAN**. It follows `DeviceConnectionRepository.activeTransport`, one flow for every screen, so a reconnect over the other pipe changes it everywhere at once.
@@ -140,12 +151,14 @@ app/src/main/java/earth/walkthru/aqsync/
   data/lan/        TCP transport (AQS1 handshake, reader loop, keep-alive), mDNS discovery, WifiLock, token (re)fetch policy
   data/sync/       sync planner, engine (lost-window re-read), file archive, READ window size, resume-after-lost-link policy
   data/background/ dataSync foreground service + notifications; auto-sync WorkManager worker, scheduler, runner (decision logic)
-  data/local/      Room database (known devices incl. LAN token + auto-sync switch, archived files)
+  data/local/      Room database (known devices incl. LAN token + auto-sync switch, archived files + history index, schema v4)
+  data/history/    Parquet subset reader (parquet/: Thrift compact footer, pages, LZ4 block), file indexer, index back-fill
   data/settings/   DataStore preferences (Advanced mode)
   data/export/     share / zip / SAF export
   data/fake/       in-app fake device for debug builds
-  ui/scan · ui/device (Today, Device) · ui/files · ui/debug · ui/settings · ui/permissions · ui/theme
-app/src/test/      frame codec v1/v2, config, LAN framing, TcpTransport loopback, verification, JSON, planner, resume-after-lost-link policy, lost-window recovery + stale-frame drain against the fake device, auto-sync runner (links, guards, "nothing new") over the fake device
+  ui/scan · ui/device (Today, Device) · ui/files · ui/history (file Metrics) · ui/debug · ui/settings · ui/permissions · ui/theme
+app/src/test/      frame codec v1/v2, config, LAN framing, TcpTransport loopback, verification, JSON, planner, resume-after-lost-link policy, lost-window recovery + stale-frame drain against the fake device, auto-sync runner (links, guards, "nothing new") over the fake device, Parquet reader against PyArrow (`resources/parquet/`), indexer
+tools/make_parquet_fixtures.py   regenerates `app/src/test/resources/parquet/` (9 real device files + 12 firmware v3 fixtures + PyArrow `expected.json`); run in the firmware repo's pixi env
 ```
 
 ## Design decisions
@@ -212,6 +225,17 @@ After the first phone run (2026-09-17, OnePlus 7 Pro, Android 16):
 | Link lost right *after* the sync already died of the pipe | Seen: the device stopped answering, the sync ended with `TransportException("no response from device within 60 s")`, the link was declared lost a moment later, the auto-reconnect succeeded — with `resumeSync=false`, because the sync was no longer `running`; the user had to press Sync all again. `SyncProgress.endCause` now records how a run ended (`COMPLETED`, `STOPPED`, `TRANSPORT_FAILURE`, `FAILURE`) and `SyncResumePolicy.shouldResume` (pure, unit-tested) tells the link watcher to resume when the sync was running **or** ended with a transport-level failure (no response, link lost, socket error, transport closed) within the last 5 min (`TcpTransport`'s 180 s dead-link deadline plus margin). A user Stop, a completed run (device `ERROR`s and mismatches are outcomes, not a broken pipe) or any other failure is left alone. `SyncPlanner` skips verified files, so the resume only pulls what is still missing. |
 | Who may send `REBOOT` (0x0B) | Audited after a `REBOOT` reached the board right after two `LIST`s during a phone session, with no certainty the owner had tapped anything. Result: `DeviceSession.reboot()` has exactly one caller, `DeviceConnectionRepository.rebootAndReconnect()`, whose only caller is the Device screen's "Reboot device" confirmation dialog — no sync-complete path, retry, `LaunchedEffect`, snackbar action or the foreground service's Stop intent can reach it. Two gaps were closed anyway: (1) the Reboot / Rotate token / Forget all bonds buttons were enabled **during a running sync** (`canEdit` did not look at the transfer) — now `canDisrupt = canEdit && !syncRunning`, and the repository refuses `rebootAndReconnect()` while `sync.running` and takes `busy` with a synchronous compare-and-set so a re-fired confirm cannot send a second `REBOOT`; the dialog's confirm also checks its own flag before calling. (2) Advanced → Debug's raw-command box could send any opcode, including `0b`; it now refuses `REBOOT` and `SET_CONFIG` (the ones that need a confirmation dialog) and points to the Device screen. Not a phone-side cause of an *unsolicited* reboot was found. |
 
+History (2026-09-17, steps 1–2; the evaluation and the remaining steps are in `docs/history-ux-and-data-layer.md`):
+
+| Question | Decision |
+| --- | --- |
+| How to read Parquet on the phone | **Own reader for the firmware's subset** (`data/history/parquet`): Thrift-compact footer, any number of row groups, Data Page V1, PLAIN, RLE definition levels (max level 1), INT32/INT64/FLOAT, UNCOMPRESSED or LZ4_RAW (own ~60-line block decoder), footer statistics and the TIMESTAMP logical type. Everything else — dictionary pages, Data Page V2, other codecs/types, nested schemas — is refused with a typed `ParquetFormatException` naming the feature. Kotlin DataFrame cannot read Parquet on Android (its Arrow Dataset JNI has no Android build) and DuckDB for Android is an experimental self-build; both are documented in the evaluation. |
+| Zero-copy, concretely | `FileChannel.map` + absolute reads; only the requested column chunks are touched (3 of 77 for a PM2.5 chart); PLAIN pages are decoded once into `IntArray`/`LongArray`/`FloatArray` with a `BooleanArray` validity mask (`ColumnValues`), no boxing, no per-row objects. |
+| Oracle for the reader | PyArrow, via `tools/make_parquet_fixtures.py` run in the firmware repo's pixi env: it copies real device files, compiles the firmware's own fixture writers for v3 files, and writes `expected.json` (footer facts, per-row-group statistics decoded from raw bytes, per-column null count/first/last/min/max/sum). The Kotlin tests compare every column of every file. Regenerate when the firmware writer changes; commit the result. |
+| What the index stores (Room v4) | Derived from the file, never from its name: rows, row groups, `schema_version`, `boot_id`, `purpose`, UTC row count and span, monotonic span, sequence span, `pms_status == 4` count, plus `indexedAt`/`indexError`. Computed in `SyncEngine` right after verification (same upsert as the row) and back-filled lazily for older rows by `HistoryIndexer.backfill` (batches of 100, failures retried once per pass, never-indexed rows first). v6 footers answer the spans from statistics without decoding (`fromStatistics`); v1/v2 files decode three columns. |
+| Benchmark copies | `purpose = codec-comparison-duplicate-rows` files are indexed like any other but excluded from every history query (`withUtcBetween` filters on `purpose`). |
+| A file the reader refuses | Keeps its `archived_file` row (Files, Export, sync identity unaffected) with `indexError`; the Metrics screen says so. The archive is the source of truth, the index only describes it. |
+
 ## Lessons learned
 
 - **`customizer.sh` cannot take a spaced application name.** `"AQ Sync"` was substituted into identifiers (`class AQ Sync`, `Theme.AQ Sync`, `AQ Sync.kt`). Use a single token (`AqSync`) or fix by hand right after generation; the raw output is kept as the first commit so the fix is visible.
@@ -233,6 +257,8 @@ After the first phone run (2026-09-17, OnePlus 7 Pro, Android 16):
 - **Expedited work is picky.** `setExpedited` rejects any constraint but network/storage (so no "battery not low" on the manual run) and, on API 31+, runs as an expedited job whose `getForegroundInfo()` is not consulted; `setForeground` is still called explicitly so both request kinds show the same notification.
 - **A worker cannot answer a passkey dialog.** `BleTransport` got `allowBonding = false` and a configurable connect timeout: the unattended path connects straight to the bonded address (`connectGatt`, no scan) and treats "not bonded" as a failure to log, never as a reason to call `createBond()` from the background.
 - **`openSession` rewrote every `KnownDevice` column.** Adding `autoSync` to the entity was not enough; the upsert after `info` had to carry `previous?.autoSync` or every connect would have switched auto-sync off again. Any future column needs the same line.
+- **`ByteBuffer.position(int)` returns `Buffer`, not `ByteBuffer`.** `buf.duplicate().position(n).get(array)` resolved to an unrelated `get` extension and failed to compile; use absolute `get(index)` or slice first. And `LazyListScope.items(list, key)` needs the explicit `androidx.compose.foundation.lazy.items` import or it silently resolves to `items(count)`.
+- **PMS concentrations are INT32 in the files** (`pm25_atmospheric_ug_m3` is an integer µg/m³ from the sensor); only the IMU/temperature/humidity columns are FLOAT. The `live` JSON shows them as numbers, which hid this until the reader test asked for a `Float32`.
 - **One flow for the transport chip.** On the phone the chip kept saying "Wi-Fi LAN" after the repository had reconnected over Bluetooth, until the app was killed. Each screen derived the kind from the `DeviceSession` object inside its own eight-way `combine`, so the chip depended on a session-identity change propagating through three ViewModels (with `WhileSubscribed` restarts while the screen was off), and the Files screen had no chip at all. The repository's `activeTransport` — re-evaluated on every session swap *and* every connection-state change, de-duplicated — is now the single source, and Files shows the chip too. Not reproduced without hardware; fixed structurally.
 - **Continuity belongs in the session, not the download loop.** When the gap was detected only in `SyncEngine`'s chunk callback, the exception left the rest of the window in the response channel, and the next request (`CLOSE`, then `LIST`) read those frames as its own reply. Checking `CHUNK.offset` against the expected offset inside `DeviceSession.read` and finishing the window there keeps the "one request, one ordered reply" invariant intact for every caller.
 

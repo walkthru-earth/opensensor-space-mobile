@@ -6,6 +6,7 @@ import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.fake.FakeTransport
 import earth.walkthru.aqsync.data.lan.LanDevice
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
+import earth.walkthru.aqsync.data.history.HistoryIndexer
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.local.database.KnownDevice
 import earth.walkthru.aqsync.data.protocol.LanFraming
@@ -297,7 +298,7 @@ class AutoSyncRunnerTest {
     private class TestGateway(tmp: File) : AutoSyncGateway {
         val fake = FakeTransport(chunkDelayMs = 0, liveIntervalMs = 3_600_000)
         val dao = InMemoryDao()
-        private val engine = SyncEngine(FileArchive(tmp), dao).also { it.windowRetryBackoffMs = 1 }
+        private val engine = FileArchive(tmp).let { a -> SyncEngine(a, dao, HistoryIndexer(a, dao)) }.also { it.windowRetryBackoffMs = 1 }
 
         val devices = ArrayList<KnownDevice>()
         var session: String? = null
@@ -370,6 +371,10 @@ class AutoSyncRunnerTest {
         override suspend fun get(station: String, name: String) = rows.firstOrNull { it.station == station && it.name == name }
         override fun observeCount(): Flow<Int> = flowOf(rows.size)
         override fun observeTotalBytes(): Flow<Long> = flowOf(rows.sumOf { it.bytes })
+        override suspend fun unindexed(limit: Int) = rows.filter { it.indexedAtEpochMs == null || it.indexError != null }.take(limit)
+        override fun observeUnindexedCount(): Flow<Int> = flowOf(rows.count { it.indexedAtEpochMs == null || it.indexError != null })
+        override suspend fun withUtcBetween(station: String, fromNs: Long, toNs: Long) =
+            rows.filter { it.station == station && it.indexError == null && (it.utcRows ?: 0) > 0 && (it.lastUtcNs ?: Long.MIN_VALUE) >= fromNs && (it.firstUtcNs ?: Long.MAX_VALUE) < toNs }
         override suspend fun upsert(file: ArchivedFile) {
             rows.removeAll { it.station == file.station && it.name == file.name }
             rows += file

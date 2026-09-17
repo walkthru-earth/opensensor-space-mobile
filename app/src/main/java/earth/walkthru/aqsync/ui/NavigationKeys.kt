@@ -22,3 +22,7 @@ data class DeviceKey(val address: String) : NavKey
 /** Advanced mode only: raw status JSON, frame log, device log, raw commands. */
 @Serializable
 data class DebugKey(val address: String) : NavKey
+
+/** Advanced mode only (Detailed level later): one archived file decoded by the app's Parquet reader. */
+@Serializable
+data class FileMetricsKey(val station: String, val name: String) : NavKey

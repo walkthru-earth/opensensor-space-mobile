@@ -12,6 +12,7 @@ import earth.walkthru.aqsync.ui.debug.DebugScreen
 import earth.walkthru.aqsync.ui.device.DeviceScreen
 import earth.walkthru.aqsync.ui.device.TodayScreen
 import earth.walkthru.aqsync.ui.files.FilesScreen
+import earth.walkthru.aqsync.ui.history.FileMetricsScreen
 import earth.walkthru.aqsync.ui.permissions.rememberLanPermission
 import earth.walkthru.aqsync.ui.scan.ScanScreen
 
@@ -51,7 +52,15 @@ fun MainNavigation(modifier: Modifier = Modifier) {
                     address = key.address,
                     onOpenToday = { openTab(TodayKey(key.address)) },
                     onOpenDevice = { openTab(DeviceKey(key.address)) },
+                    onOpenFileMetrics = { station, name -> backStack.add(FileMetricsKey(station, name)) },
                     onDisconnected = { toScan() },
+                )
+            }
+            entry<FileMetricsKey> { key ->
+                FileMetricsScreen(
+                    station = key.station,
+                    name = key.name,
+                    onBack = { if (backStack.lastOrNull() is FileMetricsKey) backStack.removeLastOrNull() },
                 )
             }
             entry<DeviceKey> { key ->

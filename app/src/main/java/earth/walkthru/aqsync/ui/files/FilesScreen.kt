@@ -23,6 +23,7 @@ import androidx.compose.material.icons.rounded.CloudSync
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Error
 import androidx.compose.material.icons.rounded.IosShare
+import androidx.compose.material.icons.rounded.TableChart
 import androidx.compose.material.icons.rounded.LinkOff
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Refresh
@@ -82,6 +83,7 @@ fun FilesScreen(
     address: String,
     onOpenToday: () -> Unit,
     onOpenDevice: () -> Unit,
+    onOpenFileMetrics: (station: String, name: String) -> Unit,
     onDisconnected: () -> Unit,
     viewModel: FilesViewModel = hiltViewModel(),
 ) {
@@ -291,6 +293,12 @@ fun FilesScreen(
                                     viewModel.archivedFor(entry.name, (entry.partition as? earth.walkthru.aqsync.data.sync.HivePartition.Dated)?.station)
                                         ?.let(viewModel::share)
                                 },
+                                onInspect = if (state.advancedMode) {
+                                    {
+                                        viewModel.archivedFor(entry.name, (entry.partition as? earth.walkthru.aqsync.data.sync.HivePartition.Dated)?.station)
+                                            ?.let { onOpenFileMetrics(it.station, it.name) }
+                                    }
+                                } else null,
                             )
                         }
                     }
@@ -351,7 +359,7 @@ private fun SyncProgressCard(sync: SyncProgress, now: Long) {
 }
 
 @Composable
-private fun FileRow(entry: ManifestEntry, canSync: Boolean, onSync: () -> Unit, onShare: () -> Unit) {
+private fun FileRow(entry: ManifestEntry, canSync: Boolean, onSync: () -> Unit, onShare: () -> Unit, onInspect: (() -> Unit)? = null) {
     val (icon, tint, label) = when (entry.state) {
         FileSyncState.SYNCED -> Triple(Icons.Rounded.CheckCircle, MaterialTheme.colorScheme.primary, "synced · verified")
         FileSyncState.SYNCING -> Triple(null, MaterialTheme.colorScheme.primary, "syncing ${formatBytes(entry.partialBytes)} / ${formatBytes(entry.bytes)}")
@@ -395,6 +403,13 @@ private fun FileRow(entry: ManifestEntry, canSync: Boolean, onSync: () -> Unit, 
                     )
                 }
                 if (entry.state == FileSyncState.SYNCED) {
+                    // Advanced mode: open the file in the app's Parquet reader (rows, time span, every column).
+                    if (onInspect != null) {
+                        IconButton(onClick = onInspect, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Rounded.TableChart, contentDescription = "Metrics", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                        }
+                        Spacer(Modifier.width(4.dp))
+                    }
                     Icon(Icons.Rounded.IosShare, contentDescription = "Share", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                 }
             }
