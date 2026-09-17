@@ -97,6 +97,7 @@ import kotlinx.coroutines.delay
 fun DeviceScreen(
     address: String,
     onOpenToday: () -> Unit,
+    onOpenHistory: () -> Unit,
     onOpenFiles: () -> Unit,
     onOpenDebug: () -> Unit,
     onDisconnected: () -> Unit,
@@ -168,6 +169,7 @@ fun DeviceScreen(
             DeviceBottomBar(DeviceTab.DEVICE) {
                 when (it) {
                     DeviceTab.TODAY -> onOpenToday()
+                    DeviceTab.HISTORY -> onOpenHistory()
                     DeviceTab.FILES -> onOpenFiles()
                     DeviceTab.DEVICE -> Unit
                 }

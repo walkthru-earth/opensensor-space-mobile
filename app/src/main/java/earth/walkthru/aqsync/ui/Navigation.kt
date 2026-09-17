@@ -13,6 +13,7 @@ import earth.walkthru.aqsync.ui.device.DeviceScreen
 import earth.walkthru.aqsync.ui.device.TodayScreen
 import earth.walkthru.aqsync.ui.files.FilesScreen
 import earth.walkthru.aqsync.ui.history.FileMetricsScreen
+import earth.walkthru.aqsync.ui.history.HistoryScreen
 import earth.walkthru.aqsync.ui.permissions.rememberLanPermission
 import earth.walkthru.aqsync.ui.scan.ScanScreen
 
@@ -24,7 +25,7 @@ fun MainNavigation(modifier: Modifier = Modifier) {
     fun openTab(key: NavKey) {
         // Today / Files / Device behave as sibling tabs: replace rather than stack.
         val last = backStack.lastOrNull()
-        if (last is TodayKey || last is FilesKey || last is DeviceKey) backStack.removeLastOrNull()
+        if (last is TodayKey || last is HistoryKey || last is FilesKey || last is DeviceKey) backStack.removeLastOrNull()
         backStack.add(key)
     }
 
@@ -41,16 +42,26 @@ fun MainNavigation(modifier: Modifier = Modifier) {
             entry<TodayKey> { key ->
                 TodayScreen(
                     address = key.address,
+                    onOpenHistory = { openTab(HistoryKey(key.address)) },
                     onOpenFiles = { openTab(FilesKey(key.address)) },
                     onOpenDevice = { openTab(DeviceKey(key.address)) },
                     onOpenDebug = { backStack.add(DebugKey(key.address)) },
                     onDisconnected = { toScan() },
                 )
             }
+            entry<HistoryKey> { key ->
+                HistoryScreen(
+                    address = key.address,
+                    onOpenToday = { openTab(TodayKey(key.address)) },
+                    onOpenFiles = { openTab(FilesKey(key.address)) },
+                    onOpenDevice = { openTab(DeviceKey(key.address)) },
+                )
+            }
             entry<FilesKey> { key ->
                 FilesScreen(
                     address = key.address,
                     onOpenToday = { openTab(TodayKey(key.address)) },
+                    onOpenHistory = { openTab(HistoryKey(key.address)) },
                     onOpenDevice = { openTab(DeviceKey(key.address)) },
                     onOpenFileMetrics = { station, name -> backStack.add(FileMetricsKey(station, name)) },
                     onDisconnected = { toScan() },
@@ -67,6 +78,7 @@ fun MainNavigation(modifier: Modifier = Modifier) {
                 DeviceScreen(
                     address = key.address,
                     onOpenToday = { openTab(TodayKey(key.address)) },
+                    onOpenHistory = { openTab(HistoryKey(key.address)) },
                     onOpenFiles = { openTab(FilesKey(key.address)) },
                     onOpenDebug = { backStack.add(DebugKey(key.address)) },
                     onDisconnected = { toScan() },

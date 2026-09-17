@@ -11,6 +11,10 @@ data object ScanKey : NavKey
 @Serializable
 data class TodayKey(val address: String) : NavKey
 
+/** Day / week / month / year charts from the phone archive of one logger (no session needed). */
+@Serializable
+data class HistoryKey(val address: String) : NavKey
+
 /** Manifest, sync and export for the connected logger. */
 @Serializable
 data class FilesKey(val address: String) : NavKey

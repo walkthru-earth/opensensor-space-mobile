@@ -82,6 +82,7 @@ import earth.walkthru.aqsync.ui.permissions.rememberNotificationPermission
 fun FilesScreen(
     address: String,
     onOpenToday: () -> Unit,
+    onOpenHistory: () -> Unit,
     onOpenDevice: () -> Unit,
     onOpenFileMetrics: (station: String, name: String) -> Unit,
     onDisconnected: () -> Unit,
@@ -191,6 +192,7 @@ fun FilesScreen(
             DeviceBottomBar(DeviceTab.FILES) {
                 when (it) {
                     DeviceTab.TODAY -> onOpenToday()
+                    DeviceTab.HISTORY -> onOpenHistory()
                     DeviceTab.DEVICE -> onOpenDevice()
                     DeviceTab.FILES -> Unit
                 }

@@ -25,7 +25,7 @@ push between two `CHUNK`s, the real `TcpTransport` against an in-JVM fake device
 JSON models, Parquet verification, sync planner, lost-window recovery, the resume-after-lost-link
 decision, the auto-sync worker's decision logic over the fake device), debug APK ≈ 65 MiB unminified.
 
-**History, steps 1–3a of [`docs/history-ux-and-data-layer.md`](docs/history-ux-and-data-layer.md)
+**History, steps 1–3a and 4a of [`docs/history-ux-and-data-layer.md`](docs/history-ux-and-data-layer.md)
 (2026-09-17):** a pure-Kotlin reader for the firmware's Parquet subset (`data/history/parquet`) that
 decodes all 881 columns of 21 fixture files — nine real `AQ-6b40` files (v1 73-col and v2 77-col,
 UNCOMPRESSED and LZ4_RAW, dated and unsynced) and twelve firmware-v6 writer fixtures (up to 8 row
@@ -33,13 +33,15 @@ groups, statistics, `TIMESTAMP(NANOS, UTC)`) — byte-identically to PyArrow in 
 indexes every verified file (rows, row groups, schema version, UTC/uptime/sequence spans, PMS-valid
 rows) at sync time and back-fills older rows; an Advanced-only **Metrics** screen shows a file through
 that reader; Room v5 adds the 15 min / 1 h / 1 day aggregate tiers rebuilt per station-day from the
-verified files (`HistoryDeriver`). **The first file firmware v6 wrote on the board** (`data_0930_495ccef9…_2-106-2.parquet`,
+verified files (`HistoryDeriver`); a **History** tab (day/week/month/year, `Canvas` chart with band
+shading, envelope, gaps and coverage) reads those tiers, or the rows for a day, through
+`HistoryRepository`. **The first file firmware v6 wrote on the board** (`data_0930_495ccef9…_2-106-2.parquet`,
 2026-09-17 09:42–09:59Z, 105 rows in two row groups of 90 + 15, SHA-256 `1a06e93b…f3cf`, fetched over
 serial by the firmware-side session) is a committed fixture: the reader decodes it, the index takes
 its spans from the footer statistics, and every integer column's statistics agree with the decoded
 rows per row group (`RealArchiveTest`). The same test, where the firmware checkout sits next to this
 repo, sweeps **all 765 real files** on this machine (67,092 rows, 58,791 column chunks) in 0.5 s on
-the JVM. 108/108 unit tests, 0 lint errors (7 pre-existing warnings). Not yet run *on the phone*
+the JVM. 109/109 unit tests, 0 lint errors (7 pre-existing warnings). Not yet run *on the phone*
 against a v3 file — that needs a BLE/LAN sync of the board's new files and goes into the firmware
 repo's `bench-verified.md`.
 
@@ -63,6 +65,7 @@ in the firmware repo for what was measured, on which firmware and app commit.
 | --- | --- |
 | **Devices** | Scans for the AQ Sync service UUID (`c0a5e9f0-0001-4b1a-9c3e-2d7f8a6b4e01`), lists `AQ-xxxx` devices with RSSI and bond state, remembers known devices. |
 | **Today** | Live PM1 / PM2.5 / PM10, particle counts, board temperature (explicitly *not* ambient), battery/USB, freshness, storage counters (firmware v6 adds the rows/row groups already on the card in the open file, `status.open`/`open_rg`, shown only when the key is present), UTC state. **Set time from phone** and **Finalize buffered rows** actions, each explained before it runs. |
+| **History** | Day · Week · Month · Year of one logger **from the phone archive** (no session needed): a `Canvas` chart with the PM2.5 bands shaded behind the series, min/max envelope + mean line for aggregated ranges, minute-binned rows for the day, gaps where no valid readings exist, a coverage strip, average / peak / coverage for the span, paging back in time. Metrics: PM2.5, PM10, PM1, board temperature. Says how many files have no timestamp and points to *Set time*. Developer card (Advanced) names the source tier and point count. |
 | **Files** | Device manifest grouped by Hive partition (dated / unsynced-boot / benchmarks / legacy). **Sync all** downloads every file the archive lacks, with per-file and overall progress. Per-file state: not synced · syncing · synced (verified) · mismatch. Menu: **Sync now in background** (one expedited WorkManager job — leave the app, watch the notification) and a quick **Auto-sync** toggle for the connected device. |
 | **Export** | Share one file or a zip of the archive via the share sheet, or save a zip with *Save to…* (Storage Access Framework). |
 | **Device** | **Auto-sync** card (any protocol version): a per-device switch; while any known device has it on, a WorkManager job runs about every 15 min — app closed, screen off — finds the logger on the LAN (mDNS) or over its Bluetooth bond, pulls only the files the archive lacks under a `dataSync` progress notification, and posts one summary ("Synced 23 new files from AQ-6b40 · 1.1 MiB") only when something arrived. |
@@ -164,7 +167,7 @@ app/src/main/java/earth/walkthru/aqsync/
   data/settings/   DataStore preferences (Advanced mode)
   data/export/     share / zip / SAF export
   data/fake/       in-app fake device for debug builds
-  ui/scan · ui/device (Today, Device) · ui/files · ui/history (file Metrics) · ui/debug · ui/settings · ui/permissions · ui/theme
+  ui/scan · ui/device (Today, Device) · ui/history (History chart, file Metrics) · ui/files · ui/debug · ui/settings · ui/permissions · ui/theme
 app/src/test/      frame codec v1/v2, config, LAN framing, TcpTransport loopback, verification, JSON, planner, resume-after-lost-link policy, lost-window recovery + stale-frame drain against the fake device, auto-sync runner (links, guards, "nothing new") over the fake device, Parquet reader against PyArrow (`resources/parquet/`), indexer
 tools/make_parquet_fixtures.py   regenerates `app/src/test/resources/parquet/` (9 real device files + 12 firmware v3 fixtures + PyArrow `expected.json`); run in the firmware repo's pixi env
 ```
@@ -244,6 +247,7 @@ History (2026-09-17, steps 1–2; the evaluation and the remaining steps are in 
 | Benchmark copies | `purpose = codec-comparison-duplicate-rows` files are indexed like any other but excluded from every history query (`withUtcBetween` filters on `purpose`). |
 | Aggregate tiers (Room v5) | `aggregate_bucket` at **15 min / 1 h / 1 day** (`Resolution`), identity `(station, resolution, start)`: rows, PMS-valid rows, PM1/PM2.5/PM10 means (PM2.5 min/max), particle means, board temperature, battery, USB. Particle means use only `pms_status == 4` rows; `coverage = validRows / expected` (90 / 360 / 8,640) is carried so a bucket built from three readings says so. Rows without UTC are not on the timeline. Built per UTC station-day by `HistoryDeriver` from the verified files (`Aggregator`, pure), replaced atomically per day. |
 | When a day is rebuilt | `derived_day` stores a SHA-256 over the day's sorted `name:crc32` source list; `deriveStale()` rebuilds exactly the days whose set changed (late file, re-synced mismatch, deleted file) and drops days with no sources left. Triggered after every interactive sync (repository `finally`), inside `SyncWorker` when a run brought files, and when Files opens (after the index back-fill). Both tables are caches: drop them and derive again → identical rows. |
+| History screen data path | Day → the rows (`withUtcBetween` + reader, 3 columns), binned to minutes above 3,000 points (a full day is 8,640 rows, so a day always bins to ≤ 1,440 points); Week → 15-min tier; Month → 1-h tier; Year → 1-day tier. Means over a span are weighted by valid rows, never averages of averages. The chart is a Compose `Canvas` (no chart library): the same spec is what Swift Charts will draw. Time labels in the phone's zone, buckets UTC-aligned. |
 | A file the reader refuses | Keeps its `archived_file` row (Files, Export, sync identity unaffected) with `indexError`; the Metrics screen says so. The archive is the source of truth, the index only describes it. |
 
 ## Lessons learned

@@ -17,6 +17,7 @@ import androidx.compose.material.icons.rounded.Bluetooth
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Sensors
+import androidx.compose.material.icons.rounded.ShowChart
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material.icons.rounded.Wifi
@@ -178,7 +179,7 @@ fun ConnectionBanner(state: ConnectionState, modifier: Modifier = Modifier, reco
     }
 }
 
-enum class DeviceTab { TODAY, FILES, DEVICE }
+enum class DeviceTab { TODAY, HISTORY, FILES, DEVICE }
 
 @Composable
 fun DeviceBottomBar(selected: DeviceTab, onSelect: (DeviceTab) -> Unit) {
@@ -188,6 +189,12 @@ fun DeviceBottomBar(selected: DeviceTab, onSelect: (DeviceTab) -> Unit) {
             onClick = { onSelect(DeviceTab.TODAY) },
             icon = { Icon(Icons.Rounded.Sensors, contentDescription = null) },
             label = { Text("Today") },
+        )
+        NavigationBarItem(
+            selected = selected == DeviceTab.HISTORY,
+            onClick = { onSelect(DeviceTab.HISTORY) },
+            icon = { Icon(Icons.Rounded.ShowChart, contentDescription = null) },
+            label = { Text("History") },
         )
         NavigationBarItem(
             selected = selected == DeviceTab.FILES,

@@ -79,6 +79,7 @@ private const val STALE_AFTER_MS = 30_000L
 @Composable
 fun TodayScreen(
     address: String,
+    onOpenHistory: () -> Unit,
     onOpenFiles: () -> Unit,
     onOpenDevice: () -> Unit,
     onOpenDebug: () -> Unit,
@@ -137,6 +138,7 @@ fun TodayScreen(
         bottomBar = {
             DeviceBottomBar(DeviceTab.TODAY) {
                 when (it) {
+                    DeviceTab.HISTORY -> onOpenHistory()
                     DeviceTab.FILES -> onOpenFiles()
                     DeviceTab.DEVICE -> onOpenDevice()
                     DeviceTab.TODAY -> Unit
