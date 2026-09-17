@@ -8,7 +8,7 @@ import org.junit.Test
 class ColumnsTest {
 
     private fun series(points: List<HistoryPoint>, fromS: Long, toS: Long) =
-        HistorySeries(HistoryMetric.PM25, HistoryRange.DAY, fromS, toS, points, validRows = 0, expectedRows = 0, mean = null, max = null, binned = true)
+        HistorySeries(Metrics.PM25, HistoryRange.DAY, fromS, toS, points, validRows = 0, expectedRows = 0, mean = null, max = null, binned = true)
 
     @Test
     fun `rebin weights by covered time and keeps gaps as slots`() {

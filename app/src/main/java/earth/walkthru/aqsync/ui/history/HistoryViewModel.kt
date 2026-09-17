@@ -8,11 +8,12 @@ import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.history.HistoryDeriver
 import earth.walkthru.aqsync.data.history.HistoryIndexer
-import earth.walkthru.aqsync.data.history.HistoryMetric
+import earth.walkthru.aqsync.data.history.MetricSpec
+import earth.walkthru.aqsync.data.history.Metrics
 import earth.walkthru.aqsync.data.history.HistoryRange
 import earth.walkthru.aqsync.data.history.HistoryRepository
 import earth.walkthru.aqsync.data.history.HistorySeries
-import earth.walkthru.aqsync.data.local.database.AggregateBucketDao
+import earth.walkthru.aqsync.data.local.database.MetricBucketDao
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
 import earth.walkthru.aqsync.data.settings.AppSettings
@@ -31,7 +32,7 @@ import javax.inject.Inject
 data class HistoryUiState(
     val station: String? = null,
     val deviceName: String? = null,
-    val metric: HistoryMetric = HistoryMetric.PM25,
+    val metric: MetricSpec = Metrics.PM25,
     val range: HistoryRange = HistoryRange.DAY,
     /** End of the visible span (epoch seconds); "now" rounded up unless the user paged back. */
     val toS: Long = 0,
@@ -72,7 +73,7 @@ class HistoryViewModel @Inject constructor(
     private val history: HistoryRepository,
     private val knownDeviceDao: KnownDeviceDao,
     private val archivedFileDao: ArchivedFileDao,
-    private val bucketDao: AggregateBucketDao,
+    private val bucketDao: MetricBucketDao,
     settings: AppSettings,
     historyIndexer: HistoryIndexer,
     historyDeriver: HistoryDeriver,
@@ -82,7 +83,7 @@ class HistoryViewModel @Inject constructor(
 
     /** The screen binds its nav key's address once; the station follows from the known-device row. */
     fun bind(address: String) { this.address.value = address }
-    private val metric = MutableStateFlow(HistoryMetric.PM25)
+    private val metric = MutableStateFlow(Metrics.PM25)
     private val range = MutableStateFlow(HistoryRange.DAY)
     private val toS = MutableStateFlow(nowRounded(HistoryRange.DAY))
 
@@ -131,7 +132,7 @@ class HistoryViewModel @Inject constructor(
         HistoryUiState(
             station = d?.station,
             deviceName = d?.name,
-            metric = values[1] as HistoryMetric,
+            metric = values[1] as MetricSpec,
             range = values[2] as HistoryRange,
             toS = values[3] as Long,
             series = values[4] as HistorySeries?,
@@ -148,7 +149,7 @@ class HistoryViewModel @Inject constructor(
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HistoryUiState(toS = toS.value))
 
-    fun setMetric(m: HistoryMetric) { metric.value = m }
+    fun setMetric(m: MetricSpec) { metric.value = m }
 
     fun setRange(r: HistoryRange) {
         range.value = r

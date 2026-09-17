@@ -1,17 +1,5 @@
 package earth.walkthru.aqsync.data.history
 
-/** What the History chart can plot. Bands (the capybara colours) apply to PM2.5 only. */
-enum class HistoryMetric(val column: String, val label: String, val unit: String, val banded: Boolean) {
-    PM25("pm25_atmospheric_ug_m3", "PM2.5", "µg/m³", true),
-    PM10("pm10_atmospheric_ug_m3", "PM10", "µg/m³", false),
-    PM1("pm1_atmospheric_ug_m3", "PM1", "µg/m³", false),
-    BOARD_TEMP("imu_temperature_c", "Board temperature", "°C", false),
-    ;
-
-    /** Whether the metric is a particle reading gated by `pms_status == 4`. */
-    val particle: Boolean get() = this != BOARD_TEMP
-}
-
 /** Visible span and which tier serves it. `DAY` reads the rows themselves (≤ 8,640 of them). */
 enum class HistoryRange(val seconds: Long, val tier: Resolution?, val label: String) {
     DAY(86_400, null, "Day"),
@@ -27,7 +15,7 @@ enum class HistoryRange(val seconds: Long, val tier: Resolution?, val label: Str
 data class HistoryPoint(val startS: Long, val endS: Long, val mean: Float?, val min: Float?, val max: Float?, val coverage: Float, val estimated: Boolean = false)
 
 data class HistorySeries(
-    val metric: HistoryMetric,
+    val metric: MetricSpec,
     val range: HistoryRange,
     val fromS: Long,
     val toS: Long,

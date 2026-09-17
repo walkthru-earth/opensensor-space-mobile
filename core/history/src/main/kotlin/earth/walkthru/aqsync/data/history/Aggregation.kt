@@ -16,200 +16,106 @@ enum class Resolution(val seconds: Long) {
     fun bucketStart(epochSeconds: Long): Long = Math.floorDiv(epochSeconds, seconds) * seconds
 }
 
+/** One metric's aggregate inside one bucket. `n` are the rows that passed the metric's gate and were non-null. */
+data class MetricAgg(val n: Int, val mean: Float, val min: Float, val max: Float)
+
 /**
- * One aggregated bucket. Particle values come only from rows whose `pms_status == 4` (present, warmed
- * up, fresh, no sensor error) — `rows` counts every row, `validRows` the ones behind the means, and
- * `coverage` is `validRows / expected`, so a bucket built from three readings says so.
- *
- * Board temperature is the IMU die, explicitly not ambient; battery/USB are the board's report,
- * unqualified — same caveats as the Today screen.
+ * One aggregated bucket: the row counts that are the same for every metric, and one [MetricAgg] per
+ * registered metric that had a value. `coverage(metric)` = its `n / expected`, so a bucket built from
+ * three readings says so.
  */
 data class Bucket(
     val station: String,
     val resolution: Resolution,
     val startEpochS: Long,
+    /** Every timed row in the slot, whatever its validity. */
     val rows: Int,
-    val validRows: Int,
     /** Of `rows`, those placed by a time estimate (§4.6). */
     val estimatedRows: Int,
-    val pm1Mean: Float?,
-    val pm25Mean: Float?,
-    val pm25Min: Int?,
-    val pm25Max: Int?,
-    val pm10Mean: Float?,
-    val particlesGt03Mean: Float?,
-    val particlesGt25Mean: Float?,
-    val boardTempMean: Float?,
-    val batteryPercentMean: Float?,
-    val vbusMvMean: Float?,
+    val metrics: Map<String, MetricAgg>,
 ) {
-    val coverage: Float get() = (validRows.toFloat() / resolution.expectedRows).coerceIn(0f, 1f)
     val endEpochS: Long get() = startEpochS + resolution.seconds
+    fun agg(metric: MetricSpec): MetricAgg? = metrics[metric.id]
+    fun coverage(metric: MetricSpec): Float = ((metrics[metric.id]?.n ?: 0).toFloat() / resolution.expectedRows).coerceIn(0f, 1f)
+
+    /** Rows behind the primary (PM2.5) mean — what the Now card and Home cards call "valid readings". */
+    val validRows: Int get() = metrics[Metrics.primary.id]?.n ?: 0
 }
 
 /**
- * Pure aggregation of decoded columns into [Bucket]s. Feed it any number of files (a UTC day's worth,
- * in practice) through [add]; [buckets] returns one entry per non-empty (resolution, start).
- * Rows without UTC are skipped — they belong to the unsynced view, not to a timeline.
+ * Pure aggregation of decoded columns into [Bucket]s for every metric in the registry. Feed it any
+ * number of files (a UTC day's worth, in practice) through [add]; [buckets] returns one entry per
+ * non-empty (resolution, start). Rows without UTC are skipped unless a [TimeEstimate.Anchor] dates
+ * them (§4.6). Rows already seen under the same `(boot, sequence)` are skipped, like the daily file.
  */
-class Aggregator(private val station: String, private val resolutions: Set<Resolution> = Resolution.entries.toSet()) {
-
-    /** The columns a tier needs; three of them drive validity and time, the rest are the metrics. */
-    companion object {
-        val COLUMNS = listOf(
-            ParquetIndexer.UTC, ParquetIndexer.PMS_STATUS,
-            "pm1_atmospheric_ug_m3", "pm25_atmospheric_ug_m3", "pm10_atmospheric_ug_m3",
-            "particles_gt03_per_01l", "particles_gt25_per_01l",
-            "imu_temperature_c", "battery_percent", "vbus_mv",
-        )
-    }
-
-    private class Acc {
+class Aggregator(
+    private val station: String,
+    private val resolutions: Set<Resolution> = Resolution.entries.toSet(),
+    private val metrics: List<MetricSpec> = Metrics.all,
+) {
+    private class Acc(metricCount: Int) {
         var rows = 0
-        var valid = 0
         var estimated = 0
-        var pm1 = 0.0
-        var pm25 = 0.0
-        var pm25Min = Int.MAX_VALUE
-        var pm25Max = Int.MIN_VALUE
-        var pm10 = 0.0
-        var gt03 = 0.0
-        var gt25 = 0.0
-        var temp = 0.0
-        var tempN = 0
-        var bat = 0.0
-        var batN = 0
-        var vbus = 0.0
-        var vbusN = 0
+        val n = IntArray(metricCount)
+        val sum = DoubleArray(metricCount)
+        val min = FloatArray(metricCount) { Float.POSITIVE_INFINITY }
+        val max = FloatArray(metricCount) { Float.NEGATIVE_INFINITY }
     }
 
     private val accs = HashMap<Pair<Resolution, Long>, Acc>()
-
-    /** `(boot_id_hi, boot_id_lo, sequence)` already counted — the same rule the daily file uses, so both agree. */
     private val seen = HashSet<Triple<Long, Long, Long>>()
+    private val gateColumns: List<String> = metrics.mapNotNull { it.gate?.column }.distinct()
 
-    /**
-     * Adds every timed row of [file]. Only the [COLUMNS] chunks are read. With an [anchor] for the file's
-     * boot, rows without UTC get an estimated time (§4.6) and count as `estimatedRows`.
-     */
+    /** Adds every timed row of [file]; with an [anchor] for the file's boot, unsynced rows get an estimated time. */
     fun add(file: ParquetFile, anchor: TimeEstimate.Anchor? = null) {
         val md = file.metadata
-        val utcLeaf = md.leaf(ParquetIndexer.UTC) ?: return
-        val utc = file.readColumn(utcLeaf)
+        val utc = md.leaf(ParquetIndexer.UTC)?.let { file.readColumn(it) } ?: return
         fun col(name: String): ColumnValues? = md.leaf(name)?.let { file.readColumn(it) }
         val applicable = anchor?.takeIf { it.boot == md.bootId }
-        // Rows already counted from another file of the day (same boot and sequence) are skipped by
-        // masking their UTC; device files never overlap, but the tiers and the daily file must agree anyway.
+        val mono = if (applicable != null) col(ParquetIndexer.MONO) else null
         val bootHi = col("boot_id_hi")
         val bootLo = col("boot_id_lo")
         val seq = col(ParquetIndexer.SEQ)
-        val monoCol = if (applicable != null) col(ParquetIndexer.MONO) else null
-        var utcMasked = utc
-        var monoMasked = monoCol
-        if (seq != null) {
-            val dup = BooleanArray(utc.size)
-            var any = false
-            for (i in 0 until utc.size) {
-                val key = Triple(bootHi?.asLong(i) ?: 0L, bootLo?.asLong(i) ?: 0L, seq.asLong(i) ?: continue)
-                if (!seen.add(key)) { dup[i] = true; any = true }
-            }
-            if (any) {
-                utcMasked = mask(utc, dup)
-                monoMasked = monoCol?.let { mask(it, dup) }
-            }
-        }
-        add(
-            utc = utcMasked,
-            mono = monoMasked,
-            anchor = applicable,
-            pms = col(ParquetIndexer.PMS_STATUS),
-            pm1 = col("pm1_atmospheric_ug_m3"),
-            pm25 = col("pm25_atmospheric_ug_m3"),
-            pm10 = col("pm10_atmospheric_ug_m3"),
-            gt03 = col("particles_gt03_per_01l"),
-            gt25 = col("particles_gt25_per_01l"),
-            temp = col("imu_temperature_c"),
-            battery = col("battery_percent"),
-            vbus = col("vbus_mv"),
-        )
-    }
-
-    /** Column-level entry point (tests, and later the daily derived file). All columns share one row index. */
-    fun add(
-        utc: ColumnValues,
-        mono: ColumnValues? = null,
-        anchor: TimeEstimate.Anchor? = null,
-        pms: ColumnValues?,
-        pm1: ColumnValues?,
-        pm25: ColumnValues?,
-        pm10: ColumnValues?,
-        gt03: ColumnValues?,
-        gt25: ColumnValues?,
-        temp: ColumnValues?,
-        battery: ColumnValues?,
-        vbus: ColumnValues?,
-    ) {
+        val values = metrics.map { col(it.column) }
+        val gates = gateColumns.associateWith { col(it) }
         for (i in 0 until utc.size) {
             var estimated = false
             val ns = utc.asLong(i) ?: run {
                 val m = mono?.asLong(i) ?: return@run null
                 estimated = true
-                anchor?.estimateNs(m)
+                applicable?.estimateNs(m)
             } ?: continue
+            if (seq != null) {
+                val key = Triple(bootHi?.asLong(i) ?: 0L, bootLo?.asLong(i) ?: 0L, seq.asLong(i) ?: -1L)
+                if (key.third >= 0 && !seen.add(key)) continue
+            }
             val s = Math.floorDiv(ns, 1_000_000_000L)
-            val pmValid = pms?.asLong(i) == ParquetIndexer.PMS_VALID.toLong()
-            val pm25v = if (pmValid) pm25?.asLong(i)?.toInt() else null
             for (r in resolutions) {
-                val acc = accs.getOrPut(r to r.bucketStart(s)) { Acc() }
+                val acc = accs.getOrPut(r to r.bucketStart(s)) { Acc(metrics.size) }
                 acc.rows++
                 if (estimated) acc.estimated++
-                if (pmValid && pm25v != null) {
-                    acc.valid++
-                    acc.pm25 += pm25v
-                    if (pm25v < acc.pm25Min) acc.pm25Min = pm25v
-                    if (pm25v > acc.pm25Max) acc.pm25Max = pm25v
-                    pm1?.asDouble(i)?.let { acc.pm1 += it }
-                    pm10?.asDouble(i)?.let { acc.pm10 += it }
-                    gt03?.asDouble(i)?.let { acc.gt03 += it }
-                    gt25?.asDouble(i)?.let { acc.gt25 += it }
+                for ((k, spec) in metrics.withIndex()) {
+                    val colv = values[k] ?: continue
+                    if (!spec.accepts(spec.gate?.let { g -> gates[g.column]?.asLong(i) })) continue
+                    val v = colv.asDouble(i) ?: continue
+                    if (v.isNaN() || v.isInfinite()) continue
+                    acc.n[k]++
+                    acc.sum[k] += v
+                    val f = v.toFloat()
+                    if (f < acc.min[k]) acc.min[k] = f
+                    if (f > acc.max[k]) acc.max[k] = f
                 }
-                temp?.asDouble(i)?.let { if (!it.isNaN()) { acc.temp += it; acc.tempN++ } }
-                battery?.asDouble(i)?.let { acc.bat += it; acc.batN++ }
-                vbus?.asDouble(i)?.let { acc.vbus += it; acc.vbusN++ }
             }
-        }
-    }
-
-    private fun mask(col: ColumnValues, dup: BooleanArray): ColumnValues {
-        val valid = BooleanArray(col.size) { !dup[it] && !col.isNull(it) }
-        return when (col) {
-            is ColumnValues.Int32 -> ColumnValues.Int32(col.values, valid)
-            is ColumnValues.Int64 -> ColumnValues.Int64(col.values, valid)
-            is ColumnValues.Float32 -> ColumnValues.Float32(col.values, valid)
         }
     }
 
     fun buckets(): List<Bucket> = accs.entries
         .sortedWith(compareBy({ it.key.first.ordinal }, { it.key.second }))
         .map { (key, a) ->
-            val v = a.valid
-            Bucket(
-                station = station,
-                resolution = key.first,
-                startEpochS = key.second,
-                rows = a.rows,
-                validRows = v,
-                estimatedRows = a.estimated,
-                pm1Mean = if (v > 0) (a.pm1 / v).toFloat() else null,
-                pm25Mean = if (v > 0) (a.pm25 / v).toFloat() else null,
-                pm25Min = if (v > 0) a.pm25Min else null,
-                pm25Max = if (v > 0) a.pm25Max else null,
-                pm10Mean = if (v > 0) (a.pm10 / v).toFloat() else null,
-                particlesGt03Mean = if (v > 0) (a.gt03 / v).toFloat() else null,
-                particlesGt25Mean = if (v > 0) (a.gt25 / v).toFloat() else null,
-                boardTempMean = if (a.tempN > 0) (a.temp / a.tempN).toFloat() else null,
-                batteryPercentMean = if (a.batN > 0) (a.bat / a.batN).toFloat() else null,
-                vbusMvMean = if (a.vbusN > 0) (a.vbus / a.vbusN).toFloat() else null,
-            )
+            val per = LinkedHashMap<String, MetricAgg>()
+            for ((k, spec) in metrics.withIndex()) {
+                if (a.n[k] > 0) per[spec.id] = MetricAgg(a.n[k], (a.sum[k] / a.n[k]).toFloat(), a.min[k], a.max[k])
+            }
+            Bucket(station, key.first, key.second, a.rows, a.estimated, per)
         }
 }

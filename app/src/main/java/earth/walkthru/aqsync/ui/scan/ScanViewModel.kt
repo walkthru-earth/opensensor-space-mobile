@@ -9,7 +9,8 @@ import earth.walkthru.aqsync.BuildConfig
 import earth.walkthru.aqsync.data.DeviceConnectionRepository
 import earth.walkthru.aqsync.data.background.AutoSyncScheduler
 import earth.walkthru.aqsync.data.history.Resolution
-import earth.walkthru.aqsync.data.local.database.AggregateBucketDao
+import earth.walkthru.aqsync.data.history.Metrics
+import earth.walkthru.aqsync.data.local.database.MetricBucketDao
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.DeviceEvent
 import earth.walkthru.aqsync.data.ble.BleScanner
@@ -67,13 +68,13 @@ class ScanViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val repository: DeviceConnectionRepository,
     archivedFileDao: ArchivedFileDao,
-    bucketDao: AggregateBucketDao,
+    bucketDao: MetricBucketDao,
     private val autoSyncScheduler: AutoSyncScheduler,
 ) : ViewModel() {
 
-    private val summaries: Flow<Map<String, LoggerSummary>> = combine(archivedFileDao.observeAll(), bucketDao.observeAllDays()) { files, days ->
-        val latestDay = HashMap<String, earth.walkthru.aqsync.data.local.database.AggregateBucket>()
-        for (b in days) if (b.pm25Mean != null && !latestDay.containsKey(b.station)) latestDay[b.station] = b // newest first
+    private val summaries: Flow<Map<String, LoggerSummary>> = combine(archivedFileDao.observeAll(), bucketDao.observeAllDays(Metrics.primary.id)) { files, days ->
+        val latestDay = HashMap<String, earth.walkthru.aqsync.data.local.database.MetricBucket>()
+        for (b in days) if (!latestDay.containsKey(b.station)) latestDay[b.station] = b // newest first
         files.groupBy { it.station }.mapValues { (station, list) ->
             val day = latestDay[station]
             LoggerSummary(
@@ -81,7 +82,7 @@ class ScanViewModel @Inject constructor(
                 lastSyncedEpochMs = list.maxOfOrNull { it.syncedAtEpochMs },
                 lastDataUtcNs = list.mapNotNull { it.lastUtcNs }.maxOrNull(),
                 lastDayStartS = day?.startEpochS,
-                lastDayPm25Mean = day?.pm25Mean,
+                lastDayPm25Mean = day?.mean,
                 lastDayCoverage = day?.let { (it.validRows.toFloat() / Resolution.DAY.expectedRows).coerceIn(0f, 1f) },
             )
         }

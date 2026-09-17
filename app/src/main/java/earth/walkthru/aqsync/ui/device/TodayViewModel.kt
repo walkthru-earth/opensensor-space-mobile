@@ -14,7 +14,8 @@ import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.history.Resolution
 import earth.walkthru.aqsync.data.history.TodaySoFar
-import earth.walkthru.aqsync.data.local.database.AggregateBucketDao
+import earth.walkthru.aqsync.data.history.Metrics
+import earth.walkthru.aqsync.data.local.database.MetricBucketDao
 import earth.walkthru.aqsync.data.settings.AppSettings
 import earth.walkthru.aqsync.data.settings.DetailLevel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -50,7 +51,7 @@ data class TodayUiState(
 class TodayViewModel @Inject constructor(
     private val repository: DeviceConnectionRepository,
     settings: AppSettings,
-    bucketDao: AggregateBucketDao,
+    bucketDao: MetricBucketDao,
 ) : ViewModel() {
 
     val events: SharedFlow<DeviceEvent> = repository.events
@@ -60,8 +61,8 @@ class TodayViewModel @Inject constructor(
     private val todaySoFar = repository.info.map { it?.station }.distinctUntilChanged().flatMapLatest { station ->
         if (station == null) flowOf(null) else {
             val dayStart = Math.floorDiv(System.currentTimeMillis() / 1000, 86_400L) * 86_400
-            bucketDao.observe(station, Resolution.DAY.seconds, dayStart, dayStart + 86_400).map { buckets ->
-                buckets.firstOrNull()?.let { b -> b.pm25Mean?.let { TodaySoFar(it, b.validRows, (b.validRows.toFloat() / Resolution.DAY.expectedRows).coerceIn(0f, 1f)) } }
+            bucketDao.observe(station, Metrics.primary.id, Resolution.DAY.seconds, dayStart, dayStart + 86_400).map { buckets ->
+                buckets.firstOrNull()?.let { b -> TodaySoFar(b.mean, b.validRows, (b.validRows.toFloat() / Resolution.DAY.expectedRows).coerceIn(0f, 1f)) }
             }
         }
     }

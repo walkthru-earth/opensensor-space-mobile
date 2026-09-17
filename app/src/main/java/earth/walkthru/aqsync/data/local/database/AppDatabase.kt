@@ -2,6 +2,8 @@ package earth.walkthru.aqsync.data.local.database
 
 import androidx.room.AutoMigration
 import androidx.room.Database
+import androidx.room.DeleteTable
+import androidx.room.migration.AutoMigrationSpec
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
@@ -19,18 +21,24 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  *   `AutoMigration` (new tables only).
  * - v6: `archived_file.estFirstUtcNs/estLastUtcNs/estAnchorFile` (estimated time for unsynced files whose
  *   boot later got a clock) and `aggregate_bucket.estimatedRows` (default 0); `AutoMigration`.
+ * - v7: `metric_bucket` (one row per metric — the registry decides which) replaces the wide
+ *   `aggregate_bucket`, which is dropped; `AutoMigration` with `DeleteTable`. Tiers are a cache: the
+ *   deriver's signature version bump rebuilds every day on first run.
  */
 @Database(
-    entities = [KnownDevice::class, ArchivedFile::class, AggregateBucket::class, DerivedDay::class],
-    version = 6,
+    entities = [KnownDevice::class, ArchivedFile::class, MetricBucket::class, DerivedDay::class],
+    version = 7,
     exportSchema = true,
-    autoMigrations = [AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6)],
+    autoMigrations = [AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6), AutoMigration(from = 6, to = 7, spec = AppDatabase.DropWideTiers::class)],
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun knownDeviceDao(): KnownDeviceDao
     abstract fun archivedFileDao(): ArchivedFileDao
-    abstract fun aggregateBucketDao(): AggregateBucketDao
+    abstract fun metricBucketDao(): MetricBucketDao
     abstract fun derivedDayDao(): DerivedDayDao
+
+    @DeleteTable(tableName = "aggregate_bucket")
+    class DropWideTiers : AutoMigrationSpec
 
     companion object {
         val MIGRATION_1_2: Migration = object : Migration(1, 2) {

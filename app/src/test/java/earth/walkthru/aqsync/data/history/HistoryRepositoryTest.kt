@@ -1,7 +1,7 @@
 package earth.walkthru.aqsync.data.history
 
-import earth.walkthru.aqsync.data.local.database.AggregateBucket
-import earth.walkthru.aqsync.data.local.database.AggregateBucketDao
+import earth.walkthru.aqsync.data.local.database.MetricBucket
+import earth.walkthru.aqsync.data.local.database.MetricBucketDao
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.sync.FileArchive
@@ -32,12 +32,12 @@ class HistoryRepositoryTest {
         archive.fileFor(station, name).apply { parentFile!!.mkdirs(); writeBytes(bytes("device/v3-board-2rg-105rows.parquet")) }
         files.rows += HistoryIndexer(archive, files).indexed(ArchivedFile(station = station, name = name, bytes = 1, crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), archive.fileFor(station, name))
         val agg = Aggregator(station).also { it.add(earth.walkthru.aqsync.data.history.parquet.ParquetFile.wrap(bytes("device/v3-board-2rg-105rows.parquet"))) }
-        buckets.rows += agg.buckets().map { b -> AggregateBucket(station = station, resolution = b.resolution.seconds, startEpochS = b.startEpochS, rows = b.rows, validRows = b.validRows, pm1Mean = b.pm1Mean, pm25Mean = b.pm25Mean, pm25Min = b.pm25Min, pm25Max = b.pm25Max, pm10Mean = b.pm10Mean, particlesGt03Mean = b.particlesGt03Mean, particlesGt25Mean = b.particlesGt25Mean, boardTempMean = b.boardTempMean, batteryPercentMean = b.batteryPercentMean, vbusMvMean = b.vbusMvMean) }
+        buckets.rows += agg.buckets().flatMap { b -> b.metrics.map { (id, a) -> MetricBucket(station = station, metricId = id, resolution = b.resolution.seconds, startEpochS = b.startEpochS, rows = b.rows, validRows = a.n, estimatedRows = b.estimatedRows, mean = a.mean, min = a.min, max = a.max) } }
 
         val repo = HistoryRepository(archive, files, buckets)
 
         // Day: 24 h ending at midnight after the data → 105 raw points (below the binning cap).
-        val day = repo.observe(station, HistoryMetric.PM25, HistoryRange.DAY, dayStart + 86_400).first()
+        val day = repo.observe(station, Metrics.PM25, HistoryRange.DAY, dayStart + 86_400).first()
         assertFalse(day.binned)
         assertEquals(105, day.points.size)
         assertEquals(105L, day.validRows)
@@ -45,17 +45,17 @@ class HistoryRepositoryTest {
         assertEquals(105f / 8640f, day.coverage, 1e-6f)
         assertTrue(day.points.all { it.endS - it.startS == 10L })
         // Board temperature is not gated by pms_status and has no envelope.
-        val temp = repo.observe(station, HistoryMetric.BOARD_TEMP, HistoryRange.DAY, dayStart + 86_400).first()
+        val temp = repo.observe(station, Metrics.BOARD_TEMP, HistoryRange.DAY, dayStart + 86_400).first()
         assertEquals(41.40f, temp.mean!!, 0.01f)
         assertNull(temp.points.first().min)
 
         // A day with no data is empty, not an error.
-        val empty = repo.observe(station, HistoryMetric.PM25, HistoryRange.DAY, dayStart - 86_400).first()
+        val empty = repo.observe(station, Metrics.PM25, HistoryRange.DAY, dayStart - 86_400).first()
         assertTrue(empty.isEmpty)
         assertEquals(0, empty.points.size)
 
         // Week: 15-minute buckets, weighted mean equals the row mean, envelope present.
-        val week = repo.observe(station, HistoryMetric.PM25, HistoryRange.WEEK, dayStart + 86_400).first()
+        val week = repo.observe(station, Metrics.PM25, HistoryRange.WEEK, dayStart + 86_400).first()
         assertEquals(2, week.points.size)
         assertEquals(27.93f, week.mean!!, 0.01f)
         assertTrue(week.points.all { it.min != null && it.max != null })
@@ -81,16 +81,15 @@ class HistoryRepositoryTest {
         override suspend fun stations() = rows.map { it.station }.distinct()
     }
 
-    private class Buckets : AggregateBucketDao {
-        val rows = mutableListOf<AggregateBucket>()
-        override fun observe(station: String, resolution: Long, fromS: Long, toS: Long): Flow<List<AggregateBucket>> =
-            flowOf(rows.filter { it.station == station && it.resolution == resolution && it.startEpochS >= fromS && it.startEpochS < toS }.sortedBy { it.startEpochS })
-        override suspend fun between(station: String, resolution: Long, fromS: Long, toS: Long) = observe(station, resolution, fromS, toS).first()
+    private class Buckets : MetricBucketDao {
+        val rows = mutableListOf<MetricBucket>()
+        override fun observe(station: String, metricId: String, resolution: Long, fromS: Long, toS: Long): Flow<List<MetricBucket>> =
+            flowOf(rows.filter { it.station == station && it.metricId == metricId && it.resolution == resolution && it.startEpochS >= fromS && it.startEpochS < toS }.sortedBy { it.startEpochS })
         override fun observeFirstDay(station: String): Flow<Long?> = flowOf(null)
         override fun observeLastDay(station: String): Flow<Long?> = flowOf(null)
         override fun observeDayCount(station: String): Flow<Int> = flowOf(0)
-        override fun observeAllDays(): Flow<List<AggregateBucket>> = flowOf(rows.filter { it.resolution == 86_400L }.sortedByDescending { it.startEpochS })
+        override fun observeAllDays(metricId: String): Flow<List<MetricBucket>> = flowOf(rows.filter { it.resolution == 86_400L && it.metricId == metricId })
         override suspend fun deleteBetween(station: String, fromS: Long, toS: Long) { rows.removeAll { it.startEpochS >= fromS && it.startEpochS < toS } }
-        override suspend fun insertAll(rows: List<AggregateBucket>) { this.rows += rows }
+        override suspend fun insertAll(rows: List<MetricBucket>) { this.rows += rows }
     }
 }

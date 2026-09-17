@@ -24,7 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import earth.walkthru.aqsync.data.history.AirMood
 import earth.walkthru.aqsync.data.history.HistoryColumn
-import earth.walkthru.aqsync.data.history.HistoryMetric
+import earth.walkthru.aqsync.data.history.MetricSpec
 import earth.walkthru.aqsync.ui.device.MoodFace
 import earth.walkthru.aqsync.ui.device.color
 import java.time.Instant
@@ -42,7 +42,7 @@ import kotlin.math.sin
 @Composable
 fun DayRing(
     columns: List<HistoryColumn>,
-    metric: HistoryMetric,
+    metric: MetricSpec,
     dayStartS: Long,
     mean: Float?,
     coverage: Float,
@@ -58,7 +58,7 @@ fun DayRing(
     val empty = MaterialTheme.colorScheme.surfaceContainerHighest
     val labelPx = with(LocalDensity.current) { 11.sp.toPx() }
     val labelPaint = remember(muted, labelPx) { textPaint(muted, labelPx) }
-    val mood = if (metric.banded) mean?.let { AirMood.of(it.toDouble()) } else null
+    val mood = mean?.let { metric.moodOf(it.toDouble()) }
 
     Box(modifier.size(size), contentAlignment = Alignment.Center) {
         Canvas(Modifier.fillMaxSize()) {
@@ -75,7 +75,7 @@ fun DayRing(
                 val sweep = ((col.endS - col.startS) / daySeconds) * 360f
                 val m = col.mean
                 if (m == null) continue
-                val color = if (metric.banded) AirMood.of(m.toDouble()).color() else primary
+                val color = if (metric.banded) (metric.moodOf(m.toDouble()) ?: AirMood.FRESH).color() else primary
                 val alpha = 0.3f + 0.7f * col.coverage
                 val isSel = selected != null && selected.startS == col.startS
                 drawArc(

@@ -1,7 +1,7 @@
 package earth.walkthru.aqsync.data.history
 
-import earth.walkthru.aqsync.data.local.database.AggregateBucket
-import earth.walkthru.aqsync.data.local.database.AggregateBucketDao
+import earth.walkthru.aqsync.data.local.database.MetricBucket
+import earth.walkthru.aqsync.data.local.database.MetricBucketDao
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.local.database.DerivedDay
@@ -44,7 +44,8 @@ class HistoryDeriverTest {
         assertEquals(1, first.daysChecked)
         assertEquals(1, first.daysRebuilt)
         assertEquals(105L, first.rowsAggregated)
-        assertEquals(4, buckets.rows.size) // 2 × 15 min + 1 h + 1 day
+        assertEquals(4, buckets.rows.map { it.resolution to it.startEpochS }.distinct().size) // 2 × 15 min + 1 h + 1 day, one row per metric each
+        assertTrue(buckets.rows.any { it.metricId == "pm25" } && buckets.rows.any { it.metricId == "board_c" } && buckets.rows.none { it.metricId == "rh" })
         assertEquals(1, days.rows.size)
         // The derived daily file exists, is read back by our own reader, and carries the manifest index column.
         val dayFile = store.dayFile(station, 20713)
@@ -73,7 +74,7 @@ class HistoryDeriverTest {
         val third = deriver.deriveStale()
         assertEquals(1, third.daysRebuilt)
         assertEquals(210L, third.rowsAggregated) // rows read
-        assertEquals(105, buckets.rows.first { it.resolution == 86_400L }.rows) // rows counted: duplicates (same boot + sequence) skipped, like the daily file
+        assertEquals(105, buckets.rows.first { it.resolution == 86_400L && it.metricId == "pm25" }.rows) // rows counted: duplicates (same boot + sequence) skipped, like the daily file
         assertEquals(2, days.rows.single().sourceFiles)
         // Same rows under two names: the daily file de-duplicates on (boot, sequence) — 105 rows, 2 sources in the manifest.
         assertEquals(105L, earth.walkthru.aqsync.data.history.parquet.ParquetFile.open(store.dayFile(station, 20713)).numRows)
@@ -89,7 +90,7 @@ class HistoryDeriverTest {
         assertEquals(listOf(105L, 180L), twoWindows.metadata.rowGroups.map { it.numRows })
         val seq = twoWindows.readColumn("sequence") as earth.walkthru.aqsync.data.history.parquet.ColumnValues.Int64
         for (i in 1 until seq.size) assertEquals("contiguous across the two device files", seq.values[i - 1] + 1, seq.values[i])
-        assertEquals(285, buckets.rows.first { it.resolution == 86_400L }.rows)
+        assertEquals(285, buckets.rows.first { it.resolution == 86_400L && it.metricId == "pm25" }.rows)
         File("build/parquet-samples").apply { mkdirs() }.let { dir ->
             store.dayFile(station, 20713).copyTo(File(dir, "derived-day-two-windows.parquet"), overwrite = true)
             store.manifestFile(station, 20713).copyTo(File(dir, "derived-day-two-windows.manifest.json"), overwrite = true)
@@ -128,19 +129,17 @@ class HistoryDeriverTest {
         override suspend fun stations() = rows.map { it.station }.distinct()
     }
 
-    private class InMemoryBuckets : AggregateBucketDao {
-        val rows = mutableListOf<AggregateBucket>()
-        override fun observe(station: String, resolution: Long, fromS: Long, toS: Long): Flow<List<AggregateBucket>> = flowOf(rows)
-        override suspend fun between(station: String, resolution: Long, fromS: Long, toS: Long) =
-            rows.filter { it.station == station && it.resolution == resolution && it.startEpochS >= fromS && it.startEpochS < toS }.sortedBy { it.startEpochS }
+    private class InMemoryBuckets : MetricBucketDao {
+        val rows = mutableListOf<MetricBucket>()
+        override fun observe(station: String, metricId: String, resolution: Long, fromS: Long, toS: Long): Flow<List<MetricBucket>> = flowOf(rows)
         override fun observeFirstDay(station: String): Flow<Long?> = flowOf(null)
         override fun observeLastDay(station: String): Flow<Long?> = flowOf(null)
         override fun observeDayCount(station: String): Flow<Int> = flowOf(0)
-        override fun observeAllDays(): Flow<List<AggregateBucket>> = flowOf(rows.filter { it.resolution == 86_400L }.sortedByDescending { it.startEpochS })
+        override fun observeAllDays(metricId: String): Flow<List<MetricBucket>> = flowOf(rows.filter { it.resolution == 86_400L && it.metricId == metricId })
         override suspend fun deleteBetween(station: String, fromS: Long, toS: Long) {
             rows.removeAll { it.station == station && it.startEpochS >= fromS && it.startEpochS < toS }
         }
-        override suspend fun insertAll(rows: List<AggregateBucket>) {
+        override suspend fun insertAll(rows: List<MetricBucket>) {
             this.rows += rows
         }
     }

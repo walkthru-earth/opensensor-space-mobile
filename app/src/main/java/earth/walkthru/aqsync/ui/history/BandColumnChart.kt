@@ -26,7 +26,7 @@ import androidx.compose.ui.unit.sp
 import earth.walkthru.aqsync.data.history.AirMood
 import earth.walkthru.aqsync.data.history.Columns
 import earth.walkthru.aqsync.data.history.HistoryColumn
-import earth.walkthru.aqsync.data.history.HistoryMetric
+import earth.walkthru.aqsync.data.history.MetricSpec
 import earth.walkthru.aqsync.data.history.HistoryRange
 import earth.walkthru.aqsync.ui.device.color
 import java.time.Instant
@@ -48,7 +48,7 @@ const val WHO_PM25_24H = 15f
 @Composable
 fun BandColumnChart(
     columns: List<HistoryColumn>,
-    metric: HistoryMetric,
+    metric: MetricSpec,
     range: HistoryRange,
     fromS: Long,
     toS: Long,
@@ -66,8 +66,8 @@ fun BandColumnChart(
     val labelPaint = remember(muted, labelPx) { textPaint(muted, labelPx) }
     val capPaint = remember(onSurface, labelPx) { textPaint(onSurface, labelPx * 0.95f, bold = true) }
 
-    // PM2.5: always show the whole "Getting hazy" band (≤ 55) so a hazy afternoon is never clipped; spikes beyond are capped.
-    val floor = if (metric.banded) 60f else 10f
+    // The metric's own floor (PM2.5: 60, so the whole "Getting hazy" band is always visible); spikes beyond are capped.
+    val floor = metric.axisFloor
     val yMax = remember(columns, metric) { Columns.axisMax(columns, floor) }
 
     Canvas(
@@ -148,7 +148,7 @@ fun BandColumnChart(
             // "Clipped" when the mean or the peak inside the slot is off-scale: the cap says how high it really went.
             val clipped = (c.max ?: m) > yMax
             val topY = y(minOf(m, yMax))
-            val color = if (metric.banded) AirMood.of(m.toDouble()).color() else primary
+            val color = if (metric.banded) (metric.moodOf(m.toDouble()) ?: AirMood.FRESH).color() else primary
             val alpha = 0.35f + 0.65f * c.coverage
             val isSel = selected != null && selected.startS == c.startS
             if (c.estimated) {

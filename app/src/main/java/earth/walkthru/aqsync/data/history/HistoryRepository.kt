@@ -2,8 +2,8 @@ package earth.walkthru.aqsync.data.history
 
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 import earth.walkthru.aqsync.data.history.parquet.ParquetFormatException
-import earth.walkthru.aqsync.data.local.database.AggregateBucket
-import earth.walkthru.aqsync.data.local.database.AggregateBucketDao
+import earth.walkthru.aqsync.data.local.database.MetricBucket
+import earth.walkthru.aqsync.data.local.database.MetricBucketDao
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.sync.FileArchive
 import kotlinx.coroutines.Dispatchers
@@ -16,16 +16,6 @@ import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Which tier column carries a metric's mean / min / max (the wide tier table is replaced by a per-metric one in the registry step). */
-private fun HistoryMetric.mean(b: AggregateBucket): Float? = when (this) {
-    HistoryMetric.PM25 -> b.pm25Mean
-    HistoryMetric.PM10 -> b.pm10Mean
-    HistoryMetric.PM1 -> b.pm1Mean
-    HistoryMetric.BOARD_TEMP -> b.boardTempMean
-}
-private fun HistoryMetric.min(b: AggregateBucket): Float? = if (this == HistoryMetric.PM25) b.pm25Min?.toFloat() else null
-private fun HistoryMetric.max(b: AggregateBucket): Float? = if (this == HistoryMetric.PM25) b.pm25Max?.toFloat() else null
-
 /**
  * Serves the History screen from the tiers (week / month / year) or the rows (day). Reactive: a
  * derive pass or a new synced file re-emits. Pure reads; nothing here writes.
@@ -34,14 +24,14 @@ private fun HistoryMetric.max(b: AggregateBucket): Float? = if (this == HistoryM
 class HistoryRepository @Inject constructor(
     private val archive: FileArchive,
     private val archivedFileDao: ArchivedFileDao,
-    private val bucketDao: AggregateBucketDao,
+    private val bucketDao: MetricBucketDao,
 ) {
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun observe(station: String, metric: HistoryMetric, range: HistoryRange, toS: Long): Flow<HistorySeries> {
+    fun observe(station: String, metric: MetricSpec, range: HistoryRange, toS: Long): Flow<HistorySeries> {
         val fromS = toS - range.seconds
         val tier = range.tier
         return if (tier != null) {
-            bucketDao.observe(station, tier.seconds, tier.bucketStart(fromS), toS).map { buckets -> fromBuckets(metric, range, fromS, toS, tier, buckets) }
+            bucketDao.observe(station, metric.id, tier.seconds, tier.bucketStart(fromS), toS).map { buckets -> fromBuckets(metric, range, fromS, toS, tier, buckets) }
         } else {
             // Re-read the rows whenever the station's file list changes (a sync, a back-fill).
             archivedFileDao.observeForStation(station).map { files -> files.filter { it.indexed }.size to files.sumOf { it.rows ?: 0L } }
@@ -49,20 +39,22 @@ class HistoryRepository @Inject constructor(
         }
     }
 
-    private fun fromBuckets(metric: HistoryMetric, range: HistoryRange, fromS: Long, toS: Long, tier: Resolution, buckets: List<AggregateBucket>): HistorySeries {
+    private fun fromBuckets(metric: MetricSpec, range: HistoryRange, fromS: Long, toS: Long, tier: Resolution, buckets: List<MetricBucket>): HistorySeries {
         val points = buckets.map { b ->
-            val valid = if (metric.particle) b.validRows else b.rows
-            HistoryPoint(b.startEpochS, b.startEpochS + tier.seconds, metric.mean(b), metric.min(b), metric.max(b), (valid.toFloat() / tier.expectedRows).coerceIn(0f, 1f), estimated = b.estimatedRows * 2 >= b.rows && b.estimatedRows > 0)
+            HistoryPoint(
+                b.startEpochS, b.startEpochS + tier.seconds, b.mean,
+                if (metric.envelope) b.min else null, if (metric.envelope) b.max else null,
+                (b.validRows.toFloat() / tier.expectedRows).coerceIn(0f, 1f),
+                estimated = b.estimatedRows * 2 >= b.rows && b.estimatedRows > 0,
+            )
         }
         var weighted = 0.0
         var weight = 0L
         var max: Float? = null
         for (b in buckets) {
-            val m = metric.mean(b) ?: continue
-            val n = if (metric.particle) b.validRows else b.rows
-            weighted += m.toDouble() * n
-            weight += n
-            val hi = metric.max(b) ?: m
+            weighted += b.mean.toDouble() * b.validRows
+            weight += b.validRows
+            val hi = if (metric.envelope) b.max else b.mean
             max = if (max == null || hi > max) hi else max
         }
         return HistorySeries(
@@ -76,7 +68,7 @@ class HistoryRepository @Inject constructor(
         )
     }
 
-    private suspend fun fromRows(station: String, metric: HistoryMetric, range: HistoryRange, fromS: Long, toS: Long): HistorySeries {
+    private suspend fun fromRows(station: String, metric: MetricSpec, range: HistoryRange, fromS: Long, toS: Long): HistorySeries {
         val files = archivedFileDao.withUtcBetween(station, fromS * 1_000_000_000L, toS * 1_000_000_000L)
         val anchors = if (files.any { it.hasEstimatedUtc }) TimeEstimate.anchors(archivedFileDao.indexedForStation(station).map { it.info() }) else emptyMap()
         val times = ArrayList<Long>()
@@ -91,7 +83,7 @@ class HistoryRepository @Inject constructor(
             val utc = md.leaf(ParquetIndexer.UTC)?.let { pf.readColumn(it) } ?: continue
             val anchor = if (f.hasEstimatedUtc) anchors[f.bootId]?.takeIf { it.boot == md.bootId } else null
             val mono = if (anchor != null) md.leaf(ParquetIndexer.MONO)?.let { pf.readColumn(it) } else null
-            val pms = md.leaf(ParquetIndexer.PMS_STATUS)?.let { pf.readColumn(it) }
+            val gate = metric.gate?.let { g -> md.leaf(g.column)?.let { pf.readColumn(it) } }
             val col = md.leaf(metric.column)?.let { pf.readColumn(it) }
             for (i in 0 until utc.size) {
                 var est = false
@@ -102,8 +94,8 @@ class HistoryRepository @Inject constructor(
                 } ?: continue
                 val s = Math.floorDiv(ns, 1_000_000_000L)
                 if (s < fromS || s >= toS) continue
-                val ok = !metric.particle || pms?.asLong(i) == ParquetIndexer.PMS_VALID.toLong()
-                val v = if (ok) col?.asDouble(i)?.toFloat() else null
+                val ok = metric.accepts(gate?.asLong(i))
+                val v = if (ok) col?.asDouble(i)?.toFloat()?.takeIf { it.isFinite() } else null
                 times += s
                 values += (v ?: Float.NaN)
                 estimatedFlags += est

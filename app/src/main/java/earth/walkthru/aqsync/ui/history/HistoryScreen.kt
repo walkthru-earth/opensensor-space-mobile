@@ -42,7 +42,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import earth.walkthru.aqsync.data.history.HistoryMetric
+import earth.walkthru.aqsync.data.history.MetricSpec
+import earth.walkthru.aqsync.data.history.Metrics
 import earth.walkthru.aqsync.data.history.HistoryRange
 import earth.walkthru.aqsync.data.history.HistorySeries
 import earth.walkthru.aqsync.data.history.TimeEstimate
@@ -53,7 +54,7 @@ import earth.walkthru.aqsync.ui.components.InfoNote
 import earth.walkthru.aqsync.ui.components.SectionCard
 import earth.walkthru.aqsync.ui.components.StatLine
 import earth.walkthru.aqsync.ui.components.TransportChip
-import earth.walkthru.aqsync.ui.theme.pm25Band
+import earth.walkthru.aqsync.ui.device.color
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -122,8 +123,8 @@ fun HistoryScreen(
             }
             item(key = "metric") {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    HistoryMetric.entries.forEach { m ->
-                        FilterChip(selected = state.metric == m, onClick = { viewModel.setMetric(m) }, label = { Text(m.label) })
+                    Metrics.chartable.forEach { m ->
+                        FilterChip(selected = state.metric.id == m.id, onClick = { viewModel.setMetric(m) }, label = { Text(m.label) })
                     }
                 }
             }
@@ -260,7 +261,7 @@ private fun SelectedColumn(c: HistoryColumn?, state: HistoryUiState, zone: ZoneI
         val m = c.mean
         if (m == null) "$slot · no readings" else buildString {
             append(slot).append(" · ").append(fmt(m)).append(' ').append(state.metric.unit)
-            if (state.metric.banded) append(" · ").append(AirMood.of(m.toDouble()).title)
+            state.metric.moodOf(m.toDouble())?.let { append(" · ").append(it.title) }
             c.max?.takeIf { it > m * 1.15f }?.let { append(" · peak ").append(fmt(it)) }
             append(" · ").append((c.coverage * 100).toInt()).append(" % covered")
             if (c.estimated) append(" · estimated time")
@@ -281,12 +282,12 @@ private fun Summary(s: HistorySeries) {
                 s.mean?.let { fmt(it) } ?: "—",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.SemiBold,
-                color = if (s.metric.banded) pm25Band(s.mean?.toDouble()) else MaterialTheme.colorScheme.onSurface,
+                color = s.mean?.let { s.metric.moodOf(it.toDouble())?.color() } ?: MaterialTheme.colorScheme.onSurface,
             )
         }
         Column {
             Eyebrow("peak")
-            Text(s.max?.let { fmt(it) } ?: "—", style = MaterialTheme.typography.headlineSmall, color = if (s.metric.banded) pm25Band(s.max?.toDouble()) else MaterialTheme.colorScheme.onSurface)
+            Text(s.max?.let { fmt(it) } ?: "—", style = MaterialTheme.typography.headlineSmall, color = s.max?.let { s.metric.moodOf(it.toDouble())?.color() } ?: MaterialTheme.colorScheme.onSurface)
         }
         Column(horizontalAlignment = Alignment.End) {
             Eyebrow("coverage")

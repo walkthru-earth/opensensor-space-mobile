@@ -3,8 +3,8 @@ package earth.walkthru.aqsync.data.history
 import android.util.Log
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 import earth.walkthru.aqsync.data.history.parquet.ParquetFormatException
-import earth.walkthru.aqsync.data.local.database.AggregateBucket
-import earth.walkthru.aqsync.data.local.database.AggregateBucketDao
+import earth.walkthru.aqsync.data.local.database.MetricBucket
+import earth.walkthru.aqsync.data.local.database.MetricBucketDao
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.local.database.DerivedDay
@@ -30,7 +30,7 @@ import javax.inject.Singleton
 class HistoryDeriver @Inject constructor(
     private val archive: FileArchive,
     private val archivedFileDao: ArchivedFileDao,
-    private val bucketDao: AggregateBucketDao,
+    private val bucketDao: MetricBucketDao,
     private val dayDao: DerivedDayDao,
     private val store: DerivedStore,
     private val indexer: HistoryIndexer,
@@ -57,6 +57,7 @@ class HistoryDeriver @Inject constructor(
     /** Deterministic identity of a day's source set: sorted `name:crc32[:est<anchor>]` lines, SHA-256 (a new anchor re-dates a file, so it is part of the identity). */
     fun signature(files: List<ArchivedFile>): String {
         val digest = MessageDigest.getInstance("SHA-256")
+        digest.update("derive-v$DERIVE_VERSION\n".toByteArray())
         files.map { "${it.name}:${it.crc32}" + (if (it.hasEstimatedUtc) ":est${it.estAnchorFile}:${it.estFirstUtcNs}" else "") }.sorted().forEach { digest.update(it.toByteArray()); digest.update('\n'.code.toByte()) }
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
@@ -121,8 +122,8 @@ class HistoryDeriver @Inject constructor(
         }
         // Keep only buckets that start inside this day: a file straddling midnight contributes its other
         // rows when the neighbouring day is built (it is in that day's source set too).
-        val buckets = agg.buckets().filter { it.startEpochS >= dayStartS && it.startEpochS < dayStartS + 86_400 }.map { it.toEntity() }
-        bucketDao.replaceDay(station, dayStartS, buckets)
+        val dayBuckets = agg.buckets().filter { it.startEpochS >= dayStartS && it.startEpochS < dayStartS + 86_400 }
+        bucketDao.replaceDay(station, dayStartS, dayBuckets.flatMap { it.toEntities() })
         val sig = signature(sources)
         // The derived daily Parquet file: same sources, same moment. A failure here keeps the tiers and
         // leaves `dailyFile` null; the next derive pass tries again because the signature is then unchanged
@@ -140,7 +141,7 @@ class HistoryDeriver @Inject constructor(
                 // A missing daily file marks the day stale so it is retried on the next pass.
                 sourceSignature = if (daily != null) sig else "$sig:no-daily-file",
                 sourceFiles = sources.size,
-                rows = buckets.filter { it.resolution == Resolution.DAY.seconds }.sumOf { it.rows },
+                rows = dayBuckets.filter { it.resolution == Resolution.DAY }.sumOf { it.rows },
                 builtAtEpochMs = System.currentTimeMillis(),
                 dailyFile = daily?.file?.relativeTo(store.root)?.path,
             )
@@ -148,27 +149,27 @@ class HistoryDeriver @Inject constructor(
         return rows
     }
 
-    private fun Bucket.toEntity() = AggregateBucket(
-        station = station,
-        resolution = resolution.seconds,
-        startEpochS = startEpochS,
-        rows = rows,
-        validRows = validRows,
-        estimatedRows = estimatedRows,
-        pm1Mean = pm1Mean,
-        pm25Mean = pm25Mean,
-        pm25Min = pm25Min,
-        pm25Max = pm25Max,
-        pm10Mean = pm10Mean,
-        particlesGt03Mean = particlesGt03Mean,
-        particlesGt25Mean = particlesGt25Mean,
-        boardTempMean = boardTempMean,
-        batteryPercentMean = batteryPercentMean,
-        vbusMvMean = vbusMvMean,
-    )
+    /** One row per metric that had values in the bucket. */
+    private fun Bucket.toEntities(): List<MetricBucket> = metrics.map { (metricId, a) ->
+        MetricBucket(
+            station = station,
+            metricId = metricId,
+            resolution = resolution.seconds,
+            startEpochS = startEpochS,
+            rows = rows,
+            validRows = a.n,
+            estimatedRows = estimatedRows,
+            mean = a.mean,
+            min = a.min,
+            max = a.max,
+        )
+    }
 
     companion object {
         private const val TAG = "HistoryDeriver"
+
+        /** Part of every day's signature: bump when the tiers' meaning changes so every day is rebuilt. 2 = per-metric rows. */
+        const val DERIVE_VERSION = 2
         const val DAY_NS = 86_400L * 1_000_000_000L
     }
 }

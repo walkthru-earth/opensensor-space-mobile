@@ -29,20 +29,30 @@ Generated from Google's `android/architecture-templates` (`base` branch) with `c
 
 ```sh
 export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
-./gradlew --no-daemon clean lintDebug assembleDebug testDebugUnitTest
+./gradlew --no-daemon clean verify   # = :app lintDebug + assembleDebug + testDebugUnitTest + every :core module's tests
 ```
 
-All three must pass before a commit: lint errors fail the build by design; do not add lint warnings carelessly (7 pre-existing ones are known). Unit tests under `app/src/test/` use payloads captured from the real device (`AQ-6b40`, firmware `arduino-cores3-parquet-v4`) for v1 and hand-assembled fixtures from the contract for v2; keep them in sync with the contract and replace v2 fixtures with captures (a v2 device *has* been read from the phone, but no capture was taken yet). Behaviour tests run the real `DeviceSession`/`SyncEngine`/`AutoSyncRunner` against `FakeTransport` and its fault hooks (`dropLeadingChunks`, `closedDelayMs`) — extend the fake rather than mocking. The `TcpTransport` loopback test is the only automated coverage of the LAN pipe; `LanDiscovery`, `LanWifiLock`, the foreground service and the worker plumbing are only testable on a phone. Bump `gradle/libs.versions.toml` only to versions you have verified build, and note the date in `README.md`.
+Everything in `verify` must pass before a commit: lint errors fail the build by design; do not add lint warnings carelessly (7 pre-existing ones are known). Unit tests under `app/src/test/` use payloads captured from the real device (`AQ-6b40`, firmware `arduino-cores3-parquet-v4`) for v1 and hand-assembled fixtures from the contract for v2; keep them in sync with the contract and replace v2 fixtures with captures (a v2 device *has* been read from the phone, but no capture was taken yet). Behaviour tests run the real `DeviceSession`/`SyncEngine`/`AutoSyncRunner` against `FakeTransport` and its fault hooks (`dropLeadingChunks`, `closedDelayMs`) — extend the fake rather than mocking. The `TcpTransport` loopback test is the only automated coverage of the LAN pipe; `LanDiscovery`, `LanWifiLock`, the foreground service and the worker plumbing are only testable on a phone. Bump `gradle/libs.versions.toml` only to versions you have verified build, and note the date in `README.md`.
 
-## Layout
+## Layout — three pure modules under one Android app
 
 ```
+core/protocol/   pure JVM  data/protocol: UUIDs, frame codec v1+v2, CONFIG model, LAN framing, JSON, Parquet verify  (contract mirror)
+core/parquet/    pure JVM  data/history/parquet: reader, writer, Thrift compact, LZ4 block; src/test/resources/parquet = the fixtures
+core/history/    pure JVM  data/history: file index, metric registry (Metrics), Aggregator → tiers, TimeEstimate, Columns, AirMood, history model
 app/src/main/java/earth/walkthru/aqsync/
-  data/protocol/  UUIDs, frame codec v1+v2, CONFIG model, LAN framing, JSON   (contract mirror)
   data/ble/       scanner, GATT transport, session (all ops), frame recorder  (Android BLE only here)
   data/lan/       TCP transport, NsdManager discovery, WifiLock, token policy  (Android net only here)
-  data/sync/      planner, engine, archive, READ window, resume policy         (pure logic + files)
+  data/sync/      planner, engine, archive, READ window, resume policy         (files + Room)
+  data/history/   HistoryIndexer, HistoryDeriver, DailyDerivedBuilder, HistoryRepository  (Room + files around the pure core)
   data/background/ dataSync foreground service, notifications, auto-sync worker + scheduler + runner
-  data/local/     Room (schema v3)          data/settings/  DataStore          data/export/  share/zip/SAF
-  data/fake/      debug-only fake device    ui/             Compose screens (scan, device, files, debug, settings)
+  data/local/     Room (schema v7)          data/settings/  DataStore          data/export/  share/zip/SAF
+  data/fake/      debug-only fake device    ui/             Compose screens (scan, device, history, files, debug, settings)
 ```
+
+Rules that keep the modules honest:
+
+- **`:core:*` never imports Android, Hilt, Room or `android.util.Log`.** They are plain Kotlin/JVM with kotlinx.serialization at most; their tests are plain JUnit. If a class needs a DAO, a `Context` or a `File` under `filesDir`, it belongs in `:app` (pattern: `HistoryIndexer` wraps `ParquetIndexer`; `ArchivedFile.info()` maps the Room row to the pure `IndexedFileInfo`). These modules are what the iOS app transliterates and what a hub or laptop tool can reuse unchanged.
+- **A new sensor type is a registry entry, not code.** `Metrics` (`:core:history`) lists every quantity as a `MetricSpec` (column, unit, validity gate, display bands, chartable, envelope, axis floor). Tiers (`metric_bucket`, one row per metric), daily derived files, the History picker and the charts iterate the registry and never name a column. Column names follow the firmware's field dictionary; a spec whose column a file lacks yields no values, never zeros, so the registry may be ahead of the hardware (`AMBIENT_TEMP`, `HUMIDITY` are listed while the SHT20 is unresolved).
+- **A new analysis is a pure object in `:core:history`** with a test over the real fixtures (`core/parquet/src/test/resources/parquet`, regenerated by `tools/make_parquet_fixtures.py`, PyArrow as oracle), fed by `:app` from Room/files — like `Aggregator`, `TimeEstimate`, `Columns`. Never a query inside a composable.
+- **Firmware updates (OTA), when the contract exists,** follow the same seams as every other device action: opcodes/frames in `:core:protocol` mirroring `../m5stack-aq-parquet/docs/ble-sync-protocol.md` (owned there — do not invent them here), the session op in `data/ble/DeviceSession`, a `data/firmware/` updater in `:app` that verifies the image (size, SHA-256 from a signed manifest, target model/version from `info`) **before** any byte reaches the board, and a Device-screen confirmation dialog like `REBOOT`/rotate token. It is refused while a sync runs, never runs from the worker, and never over an unverified link. Gate features on `info` (`proto`, `fw`), not on guesses.

@@ -12,34 +12,31 @@ import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
 /**
- * Aggregate tier row (schema v5). `resolution` is `Resolution.seconds` (900 / 3600 / 86400); identity
- * is `(station, resolution, startEpochS)`. Rebuilt per UTC day by `HistoryDeriver` from the verified
- * files, so it is a cache of the archive, never a source: deleting every row and re-deriving yields
- * the same table.
+ * Aggregate tier row (schema v7), **one row per metric**: identity `(station, metricId, resolution,
+ * startEpochS)`. `metricId` is `MetricSpec.id` from the registry, so a new sensor is a new registry
+ * entry and nothing here changes. Rebuilt per UTC day by `HistoryDeriver` from the verified files —
+ * a cache of the archive, never a source: deleting every row and re-deriving yields the same table.
  */
 @Entity(
-    tableName = "aggregate_bucket",
-    indices = [Index(value = ["station", "resolution", "startEpochS"], unique = true)],
+    tableName = "metric_bucket",
+    indices = [Index(value = ["station", "metricId", "resolution", "startEpochS"], unique = true)],
 )
-data class AggregateBucket(
+data class MetricBucket(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val station: String,
+    val metricId: String,
+    /** `Resolution.seconds`: 900 / 3600 / 86400. */
     val resolution: Long,
     val startEpochS: Long,
+    /** Every timed row in the slot (same for all metrics of the slot). */
     val rows: Int,
+    /** Rows that passed this metric's gate and had a value. */
     val validRows: Int,
-    /** Of `rows`, how many sit on the timeline by an estimate (§4.6) rather than a real UTC stamp. */
-    @androidx.room.ColumnInfo(defaultValue = "0") val estimatedRows: Int = 0,
-    val pm1Mean: Float?,
-    val pm25Mean: Float?,
-    val pm25Min: Int?,
-    val pm25Max: Int?,
-    val pm10Mean: Float?,
-    val particlesGt03Mean: Float?,
-    val particlesGt25Mean: Float?,
-    val boardTempMean: Float?,
-    val batteryPercentMean: Float?,
-    val vbusMvMean: Float?,
+    /** Of `rows`, those on estimated time (§4.6). */
+    val estimatedRows: Int,
+    val mean: Float,
+    val min: Float,
+    val max: Float,
 )
 
 /**
@@ -66,41 +63,35 @@ data class DerivedDay(
 )
 
 @Dao
-interface AggregateBucketDao {
+interface MetricBucketDao {
     @Query(
-        "SELECT * FROM aggregate_bucket WHERE station = :station AND resolution = :resolution " +
+        "SELECT * FROM metric_bucket WHERE station = :station AND metricId = :metricId AND resolution = :resolution " +
             "AND startEpochS >= :fromS AND startEpochS < :toS ORDER BY startEpochS"
     )
-    fun observe(station: String, resolution: Long, fromS: Long, toS: Long): Flow<List<AggregateBucket>>
+    fun observe(station: String, metricId: String, resolution: Long, fromS: Long, toS: Long): Flow<List<MetricBucket>>
 
-    @Query(
-        "SELECT * FROM aggregate_bucket WHERE station = :station AND resolution = :resolution " +
-            "AND startEpochS >= :fromS AND startEpochS < :toS ORDER BY startEpochS"
-    )
-    suspend fun between(station: String, resolution: Long, fromS: Long, toS: Long): List<AggregateBucket>
-
-    @Query("SELECT MIN(startEpochS) FROM aggregate_bucket WHERE station = :station AND resolution = 86400")
+    @Query("SELECT MIN(startEpochS) FROM metric_bucket WHERE station = :station AND resolution = 86400")
     fun observeFirstDay(station: String): Flow<Long?>
 
-    @Query("SELECT MAX(startEpochS) FROM aggregate_bucket WHERE station = :station AND resolution = 86400")
+    @Query("SELECT MAX(startEpochS) FROM metric_bucket WHERE station = :station AND resolution = 86400")
     fun observeLastDay(station: String): Flow<Long?>
 
-    @Query("SELECT COUNT(*) FROM aggregate_bucket WHERE station = :station AND resolution = 86400")
+    @Query("SELECT COUNT(DISTINCT startEpochS) FROM metric_bucket WHERE station = :station AND resolution = 86400")
     fun observeDayCount(station: String): Flow<Int>
 
-    /** Every station's day buckets, newest first — Home picks the latest per station. */
-    @Query("SELECT * FROM aggregate_bucket WHERE resolution = 86400 ORDER BY startEpochS DESC")
-    fun observeAllDays(): Flow<List<AggregateBucket>>
+    /** Every station's day buckets of one metric, newest first — Home picks the latest per station. */
+    @Query("SELECT * FROM metric_bucket WHERE metricId = :metricId AND resolution = 86400 ORDER BY startEpochS DESC")
+    fun observeAllDays(metricId: String): Flow<List<MetricBucket>>
 
-    @Query("DELETE FROM aggregate_bucket WHERE station = :station AND startEpochS >= :fromS AND startEpochS < :toS")
+    @Query("DELETE FROM metric_bucket WHERE station = :station AND startEpochS >= :fromS AND startEpochS < :toS")
     suspend fun deleteBetween(station: String, fromS: Long, toS: Long)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertAll(rows: List<AggregateBucket>)
+    suspend fun insertAll(rows: List<MetricBucket>)
 
-    /** Replace one station-day atomically: History never sees a half-rebuilt day. */
+    /** Replace one station-day atomically (every metric, every resolution): History never sees a half-rebuilt day. */
     @Transaction
-    suspend fun replaceDay(station: String, dayStartS: Long, rows: List<AggregateBucket>) {
+    suspend fun replaceDay(station: String, dayStartS: Long, rows: List<MetricBucket>) {
         deleteBetween(station, dayStartS, dayStartS + 86_400)
         if (rows.isNotEmpty()) insertAll(rows)
     }

@@ -20,7 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import earth.walkthru.aqsync.data.history.AirMood
 import earth.walkthru.aqsync.data.history.HistoryColumn
-import earth.walkthru.aqsync.data.history.HistoryMetric
+import earth.walkthru.aqsync.data.history.MetricSpec
 import earth.walkthru.aqsync.ui.device.color
 import java.time.DayOfWeek
 import java.time.Instant
@@ -37,7 +37,7 @@ import java.time.temporal.ChronoUnit
 @Composable
 fun CalendarHeatmap(
     days: List<HistoryColumn>,
-    metric: HistoryMetric,
+    metric: MetricSpec,
     fromS: Long,
     toS: Long,
     onPickDay: (HistoryColumn) -> Unit,
@@ -96,7 +96,7 @@ fun CalendarHeatmap(
                 if (m == null) {
                     drawRoundRect(empty, Offset(x0, y0), sz, radius)
                 } else {
-                    val color = if (metric.banded) AirMood.of(m.toDouble()).color() else primary
+                    val color = if (metric.banded) (metric.moodOf(m.toDouble()) ?: AirMood.FRESH).color() else primary
                     val alpha = 0.5f + 0.5f * col.coverage
                     if (col.estimated) {
                         drawRoundRect(color.copy(alpha = alpha * 0.3f), Offset(x0, y0), sz, radius)

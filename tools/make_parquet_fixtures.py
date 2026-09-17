@@ -9,7 +9,7 @@ It copies a representative set of *real* device files (v1 73-column, v2 77-colum
 file, UNCOMPRESSED
 and LZ4_RAW, dated and unsynced, 1 to 90 rows) from the SD export, compiles the firmware's fixture
 writers to produce v3-style files (several row groups, statistics, TIMESTAMP annotation), and writes
-`expected.json` next to them: for every file, the footer facts and per-column aggregates the Kotlin
+`expected.json` next to them (in :core:parquet; :core:history and :app tests read the same directory): for every file, the footer facts and per-column aggregates the Kotlin
 reader must reproduce exactly. Nothing here is hand-typed.
 """
 from __future__ import annotations
@@ -33,7 +33,7 @@ EXPORT = FIRMWARE / "exports/sd-20260916T173205Z/output"
 # The first file the board wrote with firmware v6 (contract v3): 2 row groups (90 + 15 rows), statistics,
 # TIMESTAMP annotation, fetched over serial on 2026-09-17 (SHA-256 1a06e93b…f3cf).
 V3_BOARD = FIRMWARE / "firmware/arduino-m5unified/artifacts/output"
-OUT = ANDROID / "app/src/test/resources/parquet"
+OUT = ANDROID / "core/parquet/src/test/resources/parquet"
 
 STATION = "station=53315f5f-cb85-4d8d-b623-d56266084189"
 DEVICE_FILES = [

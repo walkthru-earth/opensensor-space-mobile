@@ -8,7 +8,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import earth.walkthru.aqsync.data.local.database.AppDatabase
-import earth.walkthru.aqsync.data.local.database.AggregateBucketDao
+import earth.walkthru.aqsync.data.local.database.MetricBucketDao
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.local.database.DerivedDayDao
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
@@ -24,7 +24,7 @@ class DatabaseModule {
     fun provideArchivedFileDao(db: AppDatabase): ArchivedFileDao = db.archivedFileDao()
 
     @Provides
-    fun provideAggregateBucketDao(db: AppDatabase): AggregateBucketDao = db.aggregateBucketDao()
+    fun provideMetricBucketDao(db: AppDatabase): MetricBucketDao = db.metricBucketDao()
 
     @Provides
     fun provideDerivedDayDao(db: AppDatabase): DerivedDayDao = db.derivedDayDao()
