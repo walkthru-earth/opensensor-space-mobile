@@ -25,7 +25,7 @@ push between two `CHUNK`s, the real `TcpTransport` against an in-JVM fake device
 JSON models, Parquet verification, sync planner, lost-window recovery, the resume-after-lost-link
 decision, the auto-sync worker's decision logic over the fake device), debug APK ≈ 65 MiB unminified.
 
-**History, steps 1–3a, 4 and 5 of [`docs/history-ux-and-data-layer.md`](docs/history-ux-and-data-layer.md)
+**History, steps 1–5 (3c folded into 3b) of [`docs/history-ux-and-data-layer.md`](docs/history-ux-and-data-layer.md)
 (2026-09-17):** a pure-Kotlin reader for the firmware's Parquet subset (`data/history/parquet`) that
 decodes all 881 columns of 21 fixture files — nine real `AQ-6b40` files (v1 73-col and v2 77-col,
 UNCOMPRESSED and LZ4_RAW, dated and unsynced) and twelve firmware-v6 writer fixtures (up to 8 row
@@ -33,7 +33,9 @@ groups, statistics, `TIMESTAMP(NANOS, UTC)`) — byte-identically to PyArrow in 
 indexes every verified file (rows, row groups, schema version, UTC/uptime/sequence spans, PMS-valid
 rows) at sync time and back-fills older rows; an Advanced-only **Metrics** screen shows a file through
 that reader; Room v5 adds the 15 min / 1 h / 1 day aggregate tiers rebuilt per station-day from the
-verified files (`HistoryDeriver`); a **History** tab (day/week/month/year, `Canvas` chart with band
+verified files (`HistoryDeriver`), which also writes the **derived daily Parquet** files
+(`derived/v1/<station>/day=….parquet` + manifest) with the app's own `ParquetWriter` — validated by
+PyArrow and DuckDB via `tools/validate_parquet_samples.py`; a **History** tab (day/week/month/year, `Canvas` chart with band
 shading, envelope, gaps and coverage) reads those tiers, or the rows for a day, through
 `HistoryRepository`; the Today screen opens with the friendly **Now card** (five moods, advice,
 comparison, "today so far" from the tiers) and the Boolean Advanced switch became **Simple ·
@@ -44,7 +46,7 @@ serial by the firmware-side session) is a committed fixture: the reader decodes 
 its spans from the footer statistics, and every integer column's statistics agree with the decoded
 rows per row group (`RealArchiveTest`). The same test, where the firmware checkout sits next to this
 repo, sweeps **all 765 real files** on this machine (67,092 rows, 58,791 column chunks) in 0.5 s on
-the JVM. 112/112 unit tests, 0 lint errors (7 pre-existing warnings). Not yet run *on the phone*
+the JVM. 117/117 unit tests, 0 lint errors (7 pre-existing warnings). Not yet run *on the phone*
 against a v3 file — that needs a BLE/LAN sync of the board's new files and goes into the firmware
 repo's `bench-verified.md`.
 
@@ -166,12 +168,13 @@ app/src/main/java/earth/walkthru/aqsync/
   data/sync/       sync planner, engine (lost-window re-read), file archive, READ window size, resume-after-lost-link policy
   data/background/ dataSync foreground service + notifications; auto-sync WorkManager worker, scheduler, runner (decision logic)
   data/local/      Room database (known devices incl. LAN token + auto-sync switch, archived files + history index, schema v4)
-  data/history/    Parquet subset reader (parquet/: Thrift compact footer, pages, LZ4 block), file indexer + back-fill, aggregate tiers (Aggregator, HistoryDeriver)
+  data/history/    Parquet subset reader + writer (parquet/: Thrift compact, pages, LZ4 block codec), file indexer + back-fill, aggregate tiers, derived daily files (Aggregator, HistoryDeriver, DailyDerivedBuilder), friendly layer (AirMood)
   data/settings/   DataStore preferences (Advanced mode)
   data/export/     share / zip / SAF export
   data/fake/       in-app fake device for debug builds
   ui/scan · ui/device (Today, Device) · ui/history (History chart, file Metrics) · ui/files · ui/debug · ui/settings · ui/permissions · ui/theme
 app/src/test/      frame codec v1/v2, config, LAN framing, TcpTransport loopback, verification, JSON, planner, resume-after-lost-link policy, lost-window recovery + stale-frame drain against the fake device, auto-sync runner (links, guards, "nothing new") over the fake device, Parquet reader against PyArrow (`resources/parquet/`), indexer
+tools/validate_parquet_samples.py  PyArrow + DuckDB oracle for files the app's ParquetWriter produced (app/build/parquet-samples/ after the tests, or a phone's derived/ copy)
 tools/make_parquet_fixtures.py   regenerates `app/src/test/resources/parquet/` (9 real device files + 12 firmware v3 fixtures + PyArrow `expected.json`); run in the firmware repo's pixi env
 ```
 
@@ -250,6 +253,8 @@ History (2026-09-17, steps 1–2; the evaluation and the remaining steps are in 
 | What the index stores (Room v4) | Derived from the file, never from its name: rows, row groups, `schema_version`, `boot_id`, `purpose`, UTC row count and span, monotonic span, sequence span, `pms_status == 4` count, plus `indexedAt`/`indexError`. Computed in `SyncEngine` right after verification (same upsert as the row) and back-filled lazily for older rows by `HistoryIndexer.backfill` (batches of 100, failures retried once per pass, never-indexed rows first). v6 footers answer the spans from statistics without decoding (`fromStatistics`); v1/v2 files decode three columns. |
 | Benchmark copies | `purpose = codec-comparison-duplicate-rows` files are indexed like any other but excluded from every history query (`withUtcBetween` filters on `purpose`). |
 | Aggregate tiers (Room v5) | `aggregate_bucket` at **15 min / 1 h / 1 day** (`Resolution`), identity `(station, resolution, start)`: rows, PMS-valid rows, PM1/PM2.5/PM10 means (PM2.5 min/max), particle means, board temperature, battery, USB. Particle means use only `pms_status == 4` rows; `coverage = validRows / expected` (90 / 360 / 8,640) is carried so a bucket built from three readings says so. Rows without UTC are not on the timeline. Built per UTC station-day by `HistoryDeriver` from the verified files (`Aggregator`, pure), replaced atomically per day. |
+| Derived daily Parquet (step 3b) | `derived/v1/<station>/day=YYYY-MM-DD.parquet` + `.manifest.json`, written by the app's own `ParquetWriter` (the mirror of the reader: PLAIN, RLE levels, LZ4_RAW with an own ~60-line block compressor, per-chunk `min_value`/`max_value` + exact flags + `null_count` + `nan_count`, TYPE_ORDER column orders, `TIMESTAMP(NANOS, UTC)` on the two `*_utc_ns` columns, `sorting_columns`, row-group `file_offset`/`ordinal`). Rows: every UTC row of the day from the verified device files, time-ordered, de-duplicated on `(boot_id_hi, boot_id_lo, sequence)`; **one row group per UTC hour**. Columns: the union of the sources (v1 files leave the four v2 columns null) plus `source_file_index` (INT32 into the manifest's `sources`). **Deviation from the evaluation's spec:** no `station_id` string column — the file stays flat numeric so the app's reader reads it back; the station is in the path and the metadata, as on the SD card. Metadata copies the invariant device keys and adds `derived_by`, `derived_version`, `source_count`, `coverage_rows`, `complete` (every known file in and the day ended > 30 min ago), `day`, `purpose = telemetry-derived-day`. Written atomically (temp + rename), never inside `archive/`. Validated by `tools/validate_parquet_samples.py` (PyArrow 25.0.0 + DuckDB 1.5.5 in the firmware repo's pixi env) on the writer's samples and on a day built from the board's v6 file: every statistic matches the values, DuckDB reads `TIMESTAMPTZ` and prunes a range query, `time_bucket` works. |
+| No separate `DeriveWorker` | The evaluation planned a WorkManager `DeriveWorker` chained after sync. Not needed: `deriveStale()` (tiers **and** daily files) already runs inside `SyncWorker` after a run that brought files, in the repository's sync `finally`, and when Files/History open; a day costs milliseconds. A missing daily file marks its `derived_day` signature stale so the next pass retries it. |
 | When a day is rebuilt | `derived_day` stores a SHA-256 over the day's sorted `name:crc32` source list; `deriveStale()` rebuilds exactly the days whose set changed (late file, re-synced mismatch, deleted file) and drops days with no sources left. Triggered after every interactive sync (repository `finally`), inside `SyncWorker` when a run brought files, and when Files opens (after the index back-fill). Both tables are caches: drop them and derive again → identical rows. |
 | Friendly layer | `AirMood` (pure): five moods on the same PM2.5 bands the chart shades (edges 15 · 35 · 55 · 150 µg/m³; WHO 2021 24-h guideline = 15), each with a title, one line of advice and a comparison — colour is never the only carrier. `NowReading.of(live)` puts the sensor's state first: `pms_status` ≠ 4 shows words ("warming up"), never a number. "Right now" is labelled a 10-second snapshot; "Today so far" is the UTC-day tier's weighted average with its coverage. No "AQI" anywhere: a named index needs validated averaging rules (product notes). The face is a Canvas placeholder with the character's behaviour; the capybara artwork replaces `MoodFace` one-for-one on both platforms. |
 | Detail levels | `DetailLevel` Simple · Detailed · Developer replaces the Boolean Advanced switch; `AppSettings.advancedMode` (= Developer) and `detailed` (≥ Detailed) stay as flows so existing consumers did not change. Simple: Now card, clock/actions. Detailed: every measurement card, the device card, the file Metrics inspector. Developer: the Debug destination and the History source card. Migration: `detail_level` unset and `advanced_mode = true` → Developer. |

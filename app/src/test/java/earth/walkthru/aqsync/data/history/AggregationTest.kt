@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -89,7 +90,8 @@ class AggregationTest {
         val buckets = InMemoryBuckets()
         val days = InMemoryDays()
         val indexer = HistoryIndexer(archive, files)
-        val deriver = HistoryDeriver(archive, files, buckets, days)
+        val store = DerivedStore(tmp)
+        val deriver = HistoryDeriver(archive, files, buckets, days, store)
 
         fun put(name: String, resource: String, crc: Long) {
             archive.fileFor(station, name).apply { parentFile!!.mkdirs(); writeBytes(bytes(resource)) }
@@ -104,6 +106,24 @@ class AggregationTest {
         assertEquals(105L, first.rowsAggregated)
         assertEquals(4, buckets.rows.size) // 2 × 15 min + 1 h + 1 day
         assertEquals(1, days.rows.size)
+        // The derived daily file exists, is read back by our own reader, and carries the manifest index column.
+        val dayFile = store.dayFile(station, 20713)
+        assertTrue(dayFile.isFile)
+        assertEquals("station/day=2026-09-17.parquet".substringAfter('/'), dayFile.name)
+        val daily = earth.walkthru.aqsync.data.history.parquet.ParquetFile.open(dayFile)
+        assertEquals(105L, daily.numRows)
+        assertEquals(1, daily.rowGroupCount) // 09:42–09:59Z is one UTC hour
+        assertEquals(78, daily.leaves.size) // 77 + source_file_index
+        assertTrue(daily.leaf("event_time_utc_ns").isTimestampNanosUtc)
+        assertEquals("telemetry-derived-day", daily.metadata.keyValueMetadata["purpose"])
+        assertTrue(daily.metadata.keyValueMetadata["complete"] in setOf("true", "false"))
+        assertTrue(store.manifestFile(station, 20713).readText().contains("\"rows_used\": 105"))
+        assertEquals("day=2026-09-17.parquet", days.rows.single().dailyFile?.substringAfter('/'))
+        // For tools/validate_parquet_samples.py (PyArrow + DuckDB): a real derived day built from the board's file.
+        File("build/parquet-samples").apply { mkdirs() }.let { dir ->
+            dayFile.copyTo(File(dir, "derived-day.parquet"), overwrite = true)
+            store.manifestFile(station, 20713).copyTo(File(dir, "derived-day.manifest.json"), overwrite = true)
+        }
 
         val second = deriver.deriveStale()
         assertEquals(0, second.daysRebuilt)
@@ -115,6 +135,9 @@ class AggregationTest {
         assertEquals(210L, third.rowsAggregated)
         assertEquals(210, buckets.rows.first { it.resolution == 86_400L }.rows)
         assertEquals(2, days.rows.single().sourceFiles)
+        // Same rows under two names: the daily file de-duplicates on (boot, sequence) — 105 rows, 2 sources in the manifest.
+        assertEquals(105L, earth.walkthru.aqsync.data.history.parquet.ParquetFile.open(store.dayFile(station, 20713)).numRows)
+        assertTrue(store.manifestFile(station, 20713).readText().contains("\"rows_used\": 0"))
 
         // Removing every dated file removes the day's tiers.
         files.rows.removeAll { it.name.contains("day=17") }
@@ -122,6 +145,7 @@ class AggregationTest {
         assertEquals(1, fourth.daysRebuilt)
         assertTrue(buckets.rows.isEmpty())
         assertTrue(days.rows.isEmpty())
+        assertFalse(store.dayFile(station, 20713).exists())
     }
 
     private class InMemoryFiles : ArchivedFileDao {

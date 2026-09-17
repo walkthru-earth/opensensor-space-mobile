@@ -59,4 +59,54 @@ internal object Lz4Block {
         if (op != dstLength) throw ParquetFormatException("LZ4 block produced $op of $dstLength bytes")
         return out
     }
+
+    /**
+     * Compresses [src] as one LZ4 block (greedy, 4-byte hash of the last seen position — the classic
+     * "fast" scheme). Not the reference implementation's speed, but the reference decoder reads it,
+     * and so does PyArrow. Obeys the format's end-of-block rules: the last match starts ≥ 12 bytes
+     * before the end and the last 5 bytes are literals.
+     */
+    fun compress(src: ByteArray): ByteArray {
+        val n = src.size
+        val out = java.io.ByteArrayOutputStream(n / 2 + 16)
+        if (n == 0) return out.toByteArray()
+        val table = IntArray(1 shl 12) { -1 }
+        fun read32(i: Int): Int = (src[i].toInt() and 0xFF) or ((src[i + 1].toInt() and 0xFF) shl 8) or ((src[i + 2].toInt() and 0xFF) shl 16) or ((src[i + 3].toInt() and 0xFF) shl 24)
+        fun hash(v: Int): Int = (v * -1640531535) ushr (32 - 12)
+        fun writeLength(base: Int) {
+            var rest = base
+            while (rest >= 255) { out.write(255); rest -= 255 }
+            out.write(rest)
+        }
+        fun emit(literalStart: Int, literalLen: Int, offset: Int, matchLen: Int) {
+            val ml = matchLen - 4
+            out.write((minOf(literalLen, 15) shl 4) or (if (matchLen == 0) 0 else minOf(ml, 15)))
+            if (literalLen >= 15) writeLength(literalLen - 15)
+            out.write(src, literalStart, literalLen)
+            if (matchLen == 0) return
+            out.write(offset and 0xFF)
+            out.write(offset ushr 8)
+            if (ml >= 15) writeLength(ml - 15)
+        }
+        var anchor = 0
+        var ip = 0
+        val matchLimit = n - 12
+        while (ip < matchLimit) {
+            val h = hash(read32(ip))
+            val ref = table[h]
+            table[h] = ip
+            if (ref >= 0 && ip - ref < 65536 && read32(ref) == read32(ip)) {
+                var len = 4
+                val maxLen = n - 5 - ip
+                while (len < maxLen && src[ref + len] == src[ip + len]) len++
+                emit(anchor, ip - anchor, ip - ref, len)
+                ip += len
+                anchor = ip
+            } else {
+                ip++
+            }
+        }
+        emit(anchor, n - anchor, 0, 0)
+        return out.toByteArray()
+    }
 }

@@ -32,8 +32,11 @@ class HistoryDeriver @Inject constructor(
     private val archivedFileDao: ArchivedFileDao,
     private val bucketDao: AggregateBucketDao,
     private val dayDao: DerivedDayDao,
+    private val store: DerivedStore,
 ) {
     data class Result(val daysChecked: Int, val daysRebuilt: Int, val rowsAggregated: Long)
+
+    private val dailyBuilder = DailyDerivedBuilder(store) { station, name -> archive.fileFor(station, name) }
 
     /** Which station-days a set of indexed files touches (UTC rows only; unsynced files have none). */
     fun daysOf(files: List<ArchivedFile>): Map<String, Set<Long>> {
@@ -86,6 +89,8 @@ class HistoryDeriver @Inject constructor(
             for (stale in known.keys - days) {
                 bucketDao.replaceDay(station, stale * 86_400, emptyList())
                 dayDao.delete(station, stale)
+                store.dayFile(station, stale).delete()
+                store.manifestFile(station, stale).delete()
                 rebuilt++
             }
         }
@@ -113,14 +118,26 @@ class HistoryDeriver @Inject constructor(
         // rows when the neighbouring day is built (it is in that day's source set too).
         val buckets = agg.buckets().filter { it.startEpochS >= dayStartS && it.startEpochS < dayStartS + 86_400 }.map { it.toEntity() }
         bucketDao.replaceDay(station, dayStartS, buckets)
+        val sig = signature(sources)
+        // The derived daily Parquet file: same sources, same moment. A failure here keeps the tiers and
+        // leaves `dailyFile` null; the next derive pass tries again because the signature is then unchanged
+        // only if the write also succeeded (see below).
+        val daily = try {
+            dailyBuilder.build(station, epochDay, sources, sig)
+        } catch (e: Exception) {
+            Log.w(TAG, "daily file for $station ${DerivedStore.dayLabel(epochDay)}: ${e.message}")
+            null
+        }
         dayDao.upsert(
             DerivedDay(
                 station = station,
                 epochDay = epochDay,
-                sourceSignature = signature(sources),
+                // A missing daily file marks the day stale so it is retried on the next pass.
+                sourceSignature = if (daily != null) sig else "$sig:no-daily-file",
                 sourceFiles = sources.size,
                 rows = buckets.filter { it.resolution == Resolution.DAY.seconds }.sumOf { it.rows },
                 builtAtEpochMs = System.currentTimeMillis(),
+                dailyFile = daily?.file?.relativeTo(store.root)?.path,
             )
         )
         return rows

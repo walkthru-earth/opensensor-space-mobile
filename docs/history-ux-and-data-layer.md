@@ -321,9 +321,10 @@ makes the "Give the logger the time" nudge on Home worth being prominent.
 (Room v4 index, `HistoryIndexer`, file Metrics screen), step 3a (aggregate tiers, Room v5,
 `HistoryDeriver`), step 4 (History tab with the Canvas chart, `HistoryRepository`; Now card with
 `AirMood`/`NowReading`; Simple · Detailed · Developer), step 5 as M1 (Home cards from the archive,
-"Collect from all loggers" through the auto-sync worker with `allKnown`). 112 unit tests. The README's "Design
-decisions → History" table records the choices made while implementing. Still open: 3b/3c (daily
-derived Parquet writer + `DeriveWorker` + manifest), 6
+"Collect from all loggers" through the auto-sync worker with `allKnown`), step 3b/3c (`ParquetWriter`,
+`DailyDerivedBuilder`, manifest; validated with PyArrow + DuckDB by `tools/validate_parquet_samples.py`;
+no separate `DeriveWorker` — see the README decision). 117 unit tests. The README's "Design
+decisions → History" table records the choices made while implementing. Still open: 6
 (deployment record + map + `deployment.id` contract PR — blocked on the D4 rule amendment), 7 (spec
 documents for iOS), and §4.6 (time estimate for unsynced boots).
 
