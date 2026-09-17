@@ -23,10 +23,12 @@ plugins {
 }
 
 // CI (.github/workflows/release.yml) stamps the build through the environment; a local build keeps
-// the defaults. Read through providers so the configuration cache stays valid.
-val ciVersionCode = providers.environmentVariable("AQSYNC_VERSION_CODE").orNull?.toIntOrNull()
-val ciVersionName = providers.environmentVariable("AQSYNC_VERSION_NAME").orNull
-val releaseKeystore = providers.environmentVariable("AQSYNC_KEYSTORE_FILE").orNull?.let { rootProject.file(it) }
+// the defaults. Read through providers so the configuration cache stays valid. A variable that is
+// set but blank (GitHub exports an unset secret as "") counts as absent.
+fun env(name: String): String? = providers.environmentVariable(name).orNull?.takeIf { it.isNotBlank() }
+val ciVersionCode = env("AQSYNC_VERSION_CODE")?.toIntOrNull()
+val ciVersionName = env("AQSYNC_VERSION_NAME")
+val releaseKeystore = env("AQSYNC_KEYSTORE_FILE")?.let { rootProject.file(it) }
 
 android {
     namespace = "earth.walkthru.aqsync"
