@@ -233,21 +233,23 @@ class DailyDerivedBuilder(private val store: DerivedStore, private val fileFor: 
                 val v = LongArray(n); val valid = BooleanArray(n)
                 rows.forEachIndexed { k, (s, i) -> estimated[s]?.get(i)?.takeIf { it != Long.MIN_VALUE }?.let { v[k] = it; valid[k] = true } }
                 ColumnValues.Int64(v, valid.takeIf { it.any { b -> !b } })
-            } else when (c.type) {
-                ParquetType.INT32 -> {
-                    val v = IntArray(n); val valid = BooleanArray(n)
-                    rows.forEachIndexed { k, (s, i) -> val col = decoded[s][c.name]; if (col != null && !col.isNull(i)) { v[k] = (col as ColumnValues.Int32).values[i]; valid[k] = true } }
-                    ColumnValues.Int32(v, valid.takeIf { it.any { b -> !b } })
-                }
-                ParquetType.INT64 -> {
-                    val v = LongArray(n); val valid = BooleanArray(n)
-                    rows.forEachIndexed { k, (s, i) -> val col = decoded[s][c.name]; if (col != null && !col.isNull(i)) { v[k] = (col as ColumnValues.Int64).values[i]; valid[k] = true } }
-                    ColumnValues.Int64(v, valid.takeIf { it.any { b -> !b } })
-                }
-                else -> {
-                    val v = FloatArray(n); val valid = BooleanArray(n)
-                    rows.forEachIndexed { k, (s, i) -> val col = decoded[s][c.name]; if (col != null && !col.isNull(i)) { v[k] = (col as ColumnValues.Float32).values[i]; valid[k] = true } }
-                    ColumnValues.Float32(v, valid.takeIf { it.any { b -> !b } })
+            } else {
+                when (c.type) {
+                    ParquetType.INT32 -> {
+                        val v = IntArray(n); val valid = BooleanArray(n)
+                        rows.forEachIndexed { k, (s, i) -> val col = decoded[s][c.name]; if (col != null && !col.isNull(i)) { v[k] = (col as ColumnValues.Int32).values[i]; valid[k] = true } }
+                        ColumnValues.Int32(v, valid.takeIf { it.any { b -> !b } })
+                    }
+                    ParquetType.INT64 -> {
+                        val v = LongArray(n); val valid = BooleanArray(n)
+                        rows.forEachIndexed { k, (s, i) -> val col = decoded[s][c.name]; if (col != null && !col.isNull(i)) { v[k] = (col as ColumnValues.Int64).values[i]; valid[k] = true } }
+                        ColumnValues.Int64(v, valid.takeIf { it.any { b -> !b } })
+                    }
+                    else -> {
+                        val v = FloatArray(n); val valid = BooleanArray(n)
+                        rows.forEachIndexed { k, (s, i) -> val col = decoded[s][c.name]; if (col != null && !col.isNull(i)) { v[k] = (col as ColumnValues.Float32).values[i]; valid[k] = true } }
+                        ColumnValues.Float32(v, valid.takeIf { it.any { b -> !b } })
+                    }
                 }
             }
         }
@@ -258,6 +260,7 @@ class DailyDerivedBuilder(private val store: DerivedStore, private val fileFor: 
         const val SOURCE_INDEX = "source_file_index"
         const val ESTIMATED_UTC = "event_time_utc_estimated_ns"
         const val HOUR_NS = 3_600L * 1_000_000_000L
+
         /** A day is "complete" only this long after it ended: the logger's last window has had time to close and sync. */
         const val COMPLETE_GRACE_S = 30 * 60L
         val COPIED_METADATA = setOf("board", "dictionary_version", "dictionary_uri", "dictionary_sha256", "device_id", "pms_status", "light_status", "proximity_status", "magnetic_units", "unavailable", "sample_interval_ms", "clock", "time_semantics")

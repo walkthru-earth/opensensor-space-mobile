@@ -1,17 +1,18 @@
 package earth.walkthru.aqsync.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalInspectionMode
+import androidx.compose.ui.unit.dp
+import earth.walkthru.aqsync.data.history.AirMood
 
 private val FallbackDark = darkColorScheme(
     primary = Teal,
@@ -71,13 +72,10 @@ fun AqSyncTheme(
     )
 }
 
-/** PM2.5 display band colour (not an AQI; see Color.kt). */
+/**
+ * PM2.5 display band colour (not an AQI; see Color.kt). Delegates to `AirMood.of` so the edges and
+ * their boundary rule (exclusive upper bound) exist in exactly one place.
+ */
 @Composable
-fun pm25Band(value: Double?): androidx.compose.ui.graphics.Color = when {
-    value == null -> MaterialTheme.colorScheme.onSurfaceVariant
-    value <= 15 -> BandGood
-    value <= 35 -> BandModerate
-    value <= 55 -> BandElevated
-    value <= 150 -> BandHigh
-    else -> BandVeryHigh
-}
+fun pm25Band(value: Double?): androidx.compose.ui.graphics.Color =
+    value?.let { AirMood.of(it).color() } ?: MaterialTheme.colorScheme.onSurfaceVariant

@@ -88,7 +88,8 @@ class SyncEngine @Inject constructor(
         try {
             if (opened.size != expectedBytes) {
                 return FileOutcome.Mismatch(
-                    name, "LIST said $expectedBytes bytes but OPENED says ${opened.size}; the file is supposed to be immutable"
+                    name,
+                    "LIST said $expectedBytes bytes but OPENED says ${opened.size}; the file is supposed to be immutable"
                 )
             }
             if (opened.name.isNotEmpty() && opened.name != name) {
@@ -134,7 +135,7 @@ class SyncEngine @Inject constructor(
                         if (attempt > WINDOW_RETRIES) {
                             return FileOutcome.Failed(
                                 name,
-                                "window at $offset lost ${attempt}× in a row (last: ${e.message}); " +
+                                "window at $offset lost $attempt× in a row (last: ${e.message}); " +
                                     "notifications keep getting lost on this link — move closer and retry"
                             )
                         }
@@ -143,7 +144,8 @@ class SyncEngine @Inject constructor(
                     }
                     if (!end.ok) {
                         return FileOutcome.DeviceError(
-                            name, ProtocolError.fromCode(end.status),
+                            name,
+                            ProtocolError.fromCode(end.status),
                             "READ ended with status ${end.status}: ${ProtocolError.describe(end.status)}"
                         )
                     }

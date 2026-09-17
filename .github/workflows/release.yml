@@ -1,0 +1,152 @@
+# APKs anyone can install, without a store.
+#
+# - Every push to `main` refreshes ONE rolling pre-release tagged `latest` (tag moved to the commit,
+#   assets replaced), so the newest build is always at .../releases/tag/latest.
+# - A `v*` tag (e.g. `v1.2.0`) publishes a proper, permanent release with the same assets.
+#
+# One universal APK covers every Android ABI: the app has no native code (Room uses the platform's
+# SQLite; the Parquet reader is pure Kotlin), so per-ABI splits would only produce identical files.
+# `minSdk 31` → Android 12 and newer, phones and tablets.
+#
+# Signing: with the four AQSYNC_* secrets set, the release APK is signed with the project key
+# (installable over previous releases). Without them, app/build.gradle.kts falls back to the debug
+# key and the release name says so — still installable, but a fresh install, not an upgrade path.
+#   KEYSTORE_BASE64  = base64 of the .jks   ·   KEYSTORE_PASSWORD · KEY_ALIAS · KEY_PASSWORD
+name: release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # for the commit list in the release notes
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Work out version and channel
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            {
+              echo "channel=tag"
+              echo "tag=${GITHUB_REF_NAME}"
+              echo "version_name=${GITHUB_REF_NAME#v}"
+            } >> "$GITHUB_OUTPUT"
+          else
+            {
+              echo "channel=rolling"
+              echo "tag=latest"
+              echo "version_name=0.0.${GITHUB_RUN_NUMBER}-$(git rev-parse --short=8 HEAD)"
+            } >> "$GITHUB_OUTPUT"
+          fi
+          # Monotonic across both channels: the run number only grows.
+          echo "version_code=${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the release keystore (if the secrets exist)
+        id: keystore
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "${KEYSTORE_BASE64}" ]; then
+            echo "${KEYSTORE_BASE64}" | base64 -d > "${RUNNER_TEMP}/release.jks"
+            echo "file=${RUNNER_TEMP}/release.jks" >> "$GITHUB_OUTPUT"
+            echo "signed=project key" >> "$GITHUB_OUTPUT"
+          else
+            echo "signed=debug key (no KEYSTORE_BASE64 secret; installable, but not an upgrade path)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build release APK
+        env:
+          AQSYNC_VERSION_CODE: ${{ steps.meta.outputs.version_code }}
+          AQSYNC_VERSION_NAME: ${{ steps.meta.outputs.version_name }}
+          AQSYNC_KEYSTORE_FILE: ${{ steps.keystore.outputs.file }}
+          AQSYNC_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          AQSYNC_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          AQSYNC_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew --no-daemon :app:assembleRelease
+
+      - name: Name and checksum the artifacts
+        id: files
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp app/build/outputs/apk/release/app-release.apk "dist/aq-sync-${{ steps.meta.outputs.version_name }}-universal.apk"
+          cp app/build/outputs/mapping/release/mapping.txt "dist/mapping-${{ steps.meta.outputs.version_name }}.txt" 2>/dev/null || true
+          (cd dist && sha256sum -- * > SHA256SUMS.txt)
+          ls -l dist
+
+      - name: Release notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "**AQ Sync** \`${{ steps.meta.outputs.version_name }}\` · versionCode ${{ steps.meta.outputs.version_code }} · commit ${GITHUB_SHA::8}"
+            echo
+            echo "Signed with: ${{ steps.keystore.outputs.signed }}."
+            echo "Universal APK — Android 12+ (minSdk 31), all ABIs (no native code)."
+            echo
+            if [ "${{ steps.meta.outputs.channel }}" = "rolling" ]; then
+              echo "_Rolling build: this release is replaced on every push to \`main\`._"
+              echo
+            fi
+            echo "### Changes"
+            prev=$(git describe --tags --abbrev=0 --match 'v*' HEAD^ 2>/dev/null || true)
+            if [ -n "$prev" ]; then git log --format='- %s (%h)' "$prev..HEAD" | head -50; else git log --format='- %s (%h)' -n 20; fi
+          } > dist/NOTES.md
+
+      - name: Move the rolling tag to this commit
+        if: steps.meta.outputs.channel == 'rolling'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Delete the previous rolling release so the new one is created cleanly at this commit.
+          gh release delete latest --yes --cleanup-tag 2>/dev/null || true
+          git tag -f latest "$GITHUB_SHA"
+          git push -f origin refs/tags/latest
+
+      - name: Publish (create or replace)
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.channel == 'rolling' && 'Latest build (rolling)' || format('AQ Sync {0}', steps.meta.outputs.version_name) }}
+          prerelease: ${{ steps.meta.outputs.channel == 'rolling' }}
+          make_latest: ${{ steps.meta.outputs.channel == 'tag' }}
+          body_path: dist/NOTES.md
+          files: |
+            dist/*.apk
+            dist/SHA256SUMS.txt
+            dist/mapping-*.txt
+          fail_on_unmatched_files: false
+
+      - name: Keep the APK as a workflow artifact too
+        uses: actions/upload-artifact@v7
+        with:
+          name: aq-sync-${{ steps.meta.outputs.version_name }}
+          path: dist/
+          retention-days: 30

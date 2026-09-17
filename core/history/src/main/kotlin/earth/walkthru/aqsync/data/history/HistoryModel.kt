@@ -34,4 +34,3 @@ data class HistorySeries(
     val coverage: Float get() = if (expectedRows == 0L) 0f else (validRows.toFloat() / expectedRows).coerceIn(0f, 1f)
     val isEmpty: Boolean get() = points.none { it.mean != null }
 }
-

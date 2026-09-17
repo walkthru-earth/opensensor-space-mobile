@@ -4,9 +4,9 @@ import earth.walkthru.aqsync.data.BackgroundSyncResult
 import earth.walkthru.aqsync.data.ble.DeviceSession
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.fake.FakeTransport
+import earth.walkthru.aqsync.data.history.HistoryIndexer
 import earth.walkthru.aqsync.data.lan.LanDevice
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
-import earth.walkthru.aqsync.data.history.HistoryIndexer
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.local.database.KnownDevice
 import earth.walkthru.aqsync.data.protocol.LanFraming
@@ -320,10 +320,13 @@ class AutoSyncRunnerTest {
         var session: String? = null
         var lan: Map<String, LanDevice> = emptyMap()
         val bonded = HashSet<String>()
+
         /** Link labels ("LAN" / "Bluetooth") whose connect "fails" → a `skipped` result, like the repository's. */
         val unreachable = HashSet<String>()
+
         /** Link labels whose sync throws an IOException mid-way. */
         val throwing = HashSet<String>()
+
         /** Stop the transfer after this many files (link lost) → `incomplete`. */
         var cutAfterFiles: Int? = null
 

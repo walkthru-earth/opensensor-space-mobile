@@ -30,19 +30,7 @@ import earth.walkthru.aqsync.data.history.AirMood
 import earth.walkthru.aqsync.data.history.NowReading
 import earth.walkthru.aqsync.data.history.TodaySoFar
 import earth.walkthru.aqsync.ui.components.Eyebrow
-import earth.walkthru.aqsync.ui.theme.BandElevated
-import earth.walkthru.aqsync.ui.theme.BandGood
-import earth.walkthru.aqsync.ui.theme.BandHigh
-import earth.walkthru.aqsync.ui.theme.BandModerate
-import earth.walkthru.aqsync.ui.theme.BandVeryHigh
-
-fun AirMood.color(): Color = when (this) {
-    AirMood.FRESH -> BandGood
-    AirMood.FINE -> BandModerate
-    AirMood.HAZY -> BandElevated
-    AirMood.SMOKY -> BandHigh
-    AirMood.THICK -> BandVeryHigh
-}
+import earth.walkthru.aqsync.ui.theme.color
 
 /**
  * The friendly reading: a character, a plain title, one line of advice, a comparison, then the

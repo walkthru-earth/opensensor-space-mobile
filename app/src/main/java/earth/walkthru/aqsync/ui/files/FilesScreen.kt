@@ -23,13 +23,13 @@ import androidx.compose.material.icons.rounded.CloudSync
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Error
 import androidx.compose.material.icons.rounded.IosShare
-import androidx.compose.material.icons.rounded.TableChart
 import androidx.compose.material.icons.rounded.LinkOff
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material.icons.rounded.SyncLock
+import androidx.compose.material.icons.rounded.TableChart
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -306,7 +306,9 @@ fun FilesScreen(
                                         viewModel.archivedFor(entry.name, (entry.partition as? earth.walkthru.aqsync.data.sync.HivePartition.Dated)?.station)
                                             ?.let { onOpenFileMetrics(it.station, it.name) }
                                     }
-                                } else null,
+                                } else {
+                                    null
+                                },
                             )
                         }
                     }
@@ -330,8 +332,10 @@ private fun SyncProgressCard(sync: SyncProgress, now: Long) {
                 Spacer(Modifier.weight(1f))
                 if (sync.running) {
                     Text(formatRate(sync.bytesPerSecond), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                } else sync.finishedAtEpochMs?.let {
-                    Text(formatAgo(now - it), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                } else {
+                    sync.finishedAtEpochMs?.let {
+                        Text(formatAgo(now - it), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    }
                 }
             }
             Spacer(Modifier.height(6.dp))

@@ -21,8 +21,8 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.automirrored.rounded.Send
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -98,7 +98,11 @@ fun DebugScreen(
     // state, so wait for the first real value before deciding.
     var seenAdvanced by remember { mutableStateOf(false) }
     LaunchedEffect(state.advancedMode) {
-        if (state.advancedMode) seenAdvanced = true else if (seenAdvanced) onBack()
+        if (state.advancedMode) {
+            seenAdvanced = true
+        } else if (seenAdvanced) {
+            onBack()
+        }
     }
 
     Scaffold(
@@ -175,8 +179,17 @@ fun DebugScreen(
                                         )
                                         Text(
                                             "%s %-13s %5d B  %s%s".format(
-                                                timeOf(f.atEpochMs), f.typeName, f.length, f.previewHex,
-                                                if (f.redacted) " <redacted>" else if (f.length > 16) "…" else "",
+                                                timeOf(f.atEpochMs),
+                                                f.typeName,
+                                                f.length,
+                                                f.previewHex,
+                                                if (f.redacted) {
+                                                    " <redacted>"
+                                                } else if (f.length > 16) {
+                                                    "…"
+                                                } else {
+                                                    ""
+                                                },
                                             ),
                                             style = MaterialTheme.typography.bodySmall,
                                             fontFamily = FontFamily.Monospace,

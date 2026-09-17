@@ -12,8 +12,8 @@ import androidx.work.WorkerParameters
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import earth.walkthru.aqsync.data.DeviceConnectionRepository
-import earth.walkthru.aqsync.data.history.HistoryDeriver
 import earth.walkthru.aqsync.data.SyncProgress
+import earth.walkthru.aqsync.data.history.HistoryDeriver
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay

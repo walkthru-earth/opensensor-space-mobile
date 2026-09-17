@@ -216,8 +216,10 @@ class ParquetWriter(
                     i32(3, ParquetRepetition.OPTIONAL.code)
                     string(4, c.name)
                     if (c.timestampNanosUtc) {
-                        struct(10) { // LogicalType
-                            struct(8) { // TIMESTAMP
+                        struct(10) {
+                            // LogicalType
+                            struct(8) {
+                                // TIMESTAMP
                                 bool(1, true) // isAdjustedToUTC
                                 struct(2) { struct(3) { } } // unit = NANOS (empty struct)
                             }
@@ -233,7 +235,8 @@ class ParquetWriter(
                     for (ch in g.chunks) {
                         listStruct {
                             i64(2, ch.pageOffset) // file_offset (deprecated, still written by everyone)
-                            struct(3) { // ColumnMetaData
+                            struct(3) {
+                                // ColumnMetaData
                                 i32(1, ch.column.type.code)
                                 listBegin(2, Type.I32, 2)
                                 listI32(ParquetEncoding.PLAIN.code)
@@ -245,7 +248,8 @@ class ParquetWriter(
                                 i64(6, ch.uncompressedSize)
                                 i64(7, ch.compressedSize)
                                 i64(9, ch.pageOffset)
-                                struct(12) { // Statistics
+                                struct(12) {
+                                    // Statistics
                                     i64(3, ch.nullCount)
                                     if (ch.max != null) binary(5, ch.max)
                                     if (ch.min != null) binary(6, ch.min)

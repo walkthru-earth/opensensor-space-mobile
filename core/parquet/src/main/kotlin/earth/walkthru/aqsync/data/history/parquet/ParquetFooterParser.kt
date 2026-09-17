@@ -60,7 +60,7 @@ object ParquetFooterParser {
         if (schema.isEmpty()) throw ParquetFormatException("footer has no schema")
         val root = schema.first()
         val leafCount = schema.size - 1
-        if (root.numChildren != leafCount) throw ParquetFormatException("nested schema (root has ${root.numChildren} children, ${leafCount} elements): only flat schemas are supported")
+        if (root.numChildren != leafCount) throw ParquetFormatException("nested schema (root has ${root.numChildren} children, $leafCount elements): only flat schemas are supported")
         schema.drop(1).forEach { e -> if (!e.isLeaf) throw ParquetFormatException("group column '${e.name}': only flat schemas are supported") }
         rowGroups.forEachIndexed { g, rg ->
             if (rg.columns.size != leafCount) throw ParquetFormatException("row group $g has ${rg.columns.size} column chunks for $leafCount leaves")
@@ -115,7 +115,9 @@ object ParquetFooterParser {
     private fun readLogicalType(r: ThriftCompactReader): ParquetLogicalType? {
         var result: ParquetLogicalType? = null
         r.readStruct { f ->
-            result = if (f.id == 8 && f.type == Type.STRUCT) readTimestampType(r) else {
+            result = if (f.id == 8 && f.type == Type.STRUCT) {
+                readTimestampType(r)
+            } else {
                 r.skip(f.type)
                 ParquetLogicalType.Other(f.id)
             }

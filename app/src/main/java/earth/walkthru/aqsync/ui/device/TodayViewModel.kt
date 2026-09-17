@@ -11,22 +11,22 @@ import earth.walkthru.aqsync.data.TimedLive
 import earth.walkthru.aqsync.data.TimedStatus
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.TransportKind
-import earth.walkthru.aqsync.data.protocol.DeviceInfo
+import earth.walkthru.aqsync.data.history.Metrics
 import earth.walkthru.aqsync.data.history.Resolution
 import earth.walkthru.aqsync.data.history.TodaySoFar
-import earth.walkthru.aqsync.data.history.Metrics
 import earth.walkthru.aqsync.data.local.database.MetricBucketDao
+import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.settings.AppSettings
 import earth.walkthru.aqsync.data.settings.DetailLevel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 
@@ -59,7 +59,9 @@ class TodayViewModel @Inject constructor(
     /** The current UTC day's bucket for the connected station; re-emits as the deriver rebuilds it. */
     @OptIn(ExperimentalCoroutinesApi::class)
     private val todaySoFar = repository.info.map { it?.station }.distinctUntilChanged().flatMapLatest { station ->
-        if (station == null) flowOf(null) else {
+        if (station == null) {
+            flowOf(null)
+        } else {
             val dayStart = Math.floorDiv(System.currentTimeMillis() / 1000, 86_400L) * 86_400
             bucketDao.observe(station, Metrics.primary.id, Resolution.DAY.seconds, dayStart, dayStart + 86_400).map { buckets ->
                 buckets.firstOrNull()?.let { b -> TodaySoFar(b.mean, b.validRows, (b.validRows.toFloat() / Resolution.DAY.expectedRows).coerceIn(0f, 1f)) }

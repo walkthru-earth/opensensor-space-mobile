@@ -18,9 +18,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.LinkOff
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.LockOpen
-import androidx.compose.material.icons.rounded.LinkOff
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.rounded.Settings
@@ -304,8 +304,11 @@ private fun AutoSyncCard(state: DeviceUiState, onToggle: (Boolean) -> Unit) {
         },
     ) {
         Text(
-            if (state.autoSync) "On: about every ${AutoSyncScheduler.PERIOD_MINUTES} minutes this phone looks for the logger and copies the files the archive lacks — with the app closed and the screen off."
-            else "Off. Turn on to copy new files about every ${AutoSyncScheduler.PERIOD_MINUTES} minutes in the background, with the app closed.",
+            if (state.autoSync) {
+                "On: about every ${AutoSyncScheduler.PERIOD_MINUTES} minutes this phone looks for the logger and copies the files the archive lacks — with the app closed and the screen off."
+            } else {
+                "Off. Turn on to copy new files about every ${AutoSyncScheduler.PERIOD_MINUTES} minutes in the background, with the app closed."
+            },
             style = MaterialTheme.typography.bodyMedium,
         )
         Spacer(Modifier.height(6.dp))
@@ -358,7 +361,16 @@ private fun PairingCard(state: DeviceUiState, onSave: (PairMode, String?) -> Uni
             )
         }
         if (ble != null) {
-            StatLine("display detected at first boot", if (ble.display == 1) "yes" else if (ble.display == 0) "no" else "—")
+            StatLine(
+                "display detected at first boot",
+                if (ble.display == 1) {
+                    "yes"
+                } else if (ble.display == 0) {
+                    "no"
+                } else {
+                    "—"
+                }
+            )
             if (current == PairMode.FIXED) StatLine("PIN", ble.pinText ?: "—")
         }
         if (ble?.isPinDefault == true && current == PairMode.FIXED) {

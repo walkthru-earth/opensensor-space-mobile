@@ -1,7 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  What leaves the phone through Android's own backup paths (minSdk 31, so this file is the only one
+  that applies; `fullBackupContent` is ignored from Android 12).
+
+  Cloud backup (Google Drive, Auto Backup) is capped at 25 MB per app and is skipped *entirely* when
+  the payload exceeds it — the raw archive (766 files ≈ 32 MB after a full sync) would push it over,
+  so only the database goes to the cloud: known devices, the archive index, the tiers, and the LAN
+  token (LAN-scoped, rotatable from the Device screen; restoring it is what keeps LAN sync working on
+  a new phone, since Bluetooth bonds never transfer). `disableIfNoEncryptionCapabilities` keeps the
+  database out of a cloud backup that the device cannot end-to-end encrypt with its lock-screen
+  secret. The archive itself is re-pulled from the logger, or moved with the device-to-device path.
+
+  Device-to-device transfer (cable / local Wi-Fi, no server, no quota) carries the archive too, so a
+  new phone starts with the same files. Partial downloads live in `archive-partial/`, not included.
+-->
 <data-extraction-rules>
-    <cloud-backup>
-        <include domain="file" path="archive/" />
+    <cloud-backup disableIfNoEncryptionCapabilities="true">
         <include domain="database" path="aq-sync.db" />
     </cloud-backup>
     <device-transfer>

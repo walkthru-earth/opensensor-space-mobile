@@ -93,7 +93,9 @@ class SyncForegroundService : Service() {
         watchJob = scope.launch {
             data class Snapshot(val needed: Boolean, val progress: earth.walkthru.aqsync.data.SyncProgress, val reconnect: earth.walkthru.aqsync.data.ReconnectState?, val name: String?)
             combine(
-                repository.foregroundNeeded, repository.sync, repository.reconnecting,
+                repository.foregroundNeeded,
+                repository.sync,
+                repository.reconnecting,
                 repository.session.map { it?.transport?.displayName },
             ) { needed, progress, reconnect, name -> Snapshot(needed, progress, reconnect, name) }
                 .distinctUntilChanged()
@@ -176,6 +178,5 @@ class SyncForegroundService : Service() {
                 false
             }
         }
-
     }
 }

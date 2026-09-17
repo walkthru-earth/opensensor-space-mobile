@@ -26,7 +26,7 @@ import earth.walkthru.aqsync.data.history.AirMood
 import earth.walkthru.aqsync.data.history.HistoryColumn
 import earth.walkthru.aqsync.data.history.MetricSpec
 import earth.walkthru.aqsync.ui.device.MoodFace
-import earth.walkthru.aqsync.ui.device.color
+import earth.walkthru.aqsync.ui.theme.color
 import java.time.Instant
 import java.time.ZoneId
 import kotlin.math.PI

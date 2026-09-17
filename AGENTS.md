@@ -48,8 +48,21 @@ Generated from Google's `android/architecture-templates` (`base` branch) with `c
 
 ```sh
 export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+tools/setup-hooks.sh                 # once per clone: installs the git hooks from .pre-commit-config.yaml
 ./gradlew --no-daemon clean verify   # = :app lintDebug + assembleDebug + testDebugUnitTest + every :core module's tests
 ```
+
+**Hooks and CI.** `.pre-commit-config.yaml` runs on every commit (seconds): whitespace/EOL, YAML/JSON/TOML
+syntax, no large files, no private keys, **gitleaks** secret scan, and **ktlint** (format + lint on the
+staged Kotlin files with the rules in `.editorconfig`: Android Studio style, no line-length limit, the
+house-style rules — `{ a; b }` one-liners, compact `when`, one-line enums, `_x` backing fields —
+switched off; a hook that reformats a file fails the commit once, re-stage and commit again). The
+**pre-push** hook runs the full `./gradlew verify`. `.github/workflows/verify.yml` runs both on every push
+and PR and uploads the debug APK; `release.yml` publishes a universal release APK to the rolling
+`latest` pre-release on every push to `main` and to a permanent release on a `v*` tag (signed with the
+project key only when the `KEYSTORE_*` secrets exist, otherwise with the debug key and it says so). CI
+has no phone and no emulator: BLE, mDNS, the foreground service and WorkManager plumbing are verified
+only on hardware and recorded in the firmware repo's `bench-verified.md`.
 
 Everything in `verify` must pass before a commit: lint errors fail the build by design; do not add lint warnings carelessly (7 pre-existing ones are known). Unit tests under `app/src/test/` use payloads captured from the real device (`AQ-6b40`, firmware `arduino-cores3-parquet-v4`) for v1 and hand-assembled fixtures from the contract for v2; keep them in sync with the contract and replace v2 fixtures with captures (a v2 device *has* been read from the phone, but no capture was taken yet). Behaviour tests run the real `DeviceSession`/`SyncEngine`/`AutoSyncRunner` against `FakeTransport` and its fault hooks (`dropLeadingChunks`, `closedDelayMs`) — extend the fake rather than mocking. The `TcpTransport` loopback test is the only automated coverage of the LAN pipe; `LanDiscovery`, `LanWifiLock`, the foreground service and the worker plumbing are only testable on a phone. Bump `gradle/libs.versions.toml` only to versions you have verified build, and note the date in `README.md`.
 

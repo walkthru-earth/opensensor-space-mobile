@@ -5,7 +5,6 @@ import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import earth.walkthru.aqsync.data.background.SyncForegroundService
 import earth.walkthru.aqsync.data.ble.AqTransport
-import earth.walkthru.aqsync.data.history.HistoryDeriver
 import earth.walkthru.aqsync.data.ble.ConfigSnapshot
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.DeviceErrorException
@@ -16,6 +15,7 @@ import earth.walkthru.aqsync.data.ble.NotAllowedOnLinkException
 import earth.walkthru.aqsync.data.ble.TransportException
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.ble.WifiUnavailableException
+import earth.walkthru.aqsync.data.history.HistoryDeriver
 import earth.walkthru.aqsync.data.lan.LanConnectException
 import earth.walkthru.aqsync.data.lan.LanDevice
 import earth.walkthru.aqsync.data.lan.LanDiscovery
@@ -52,6 +52,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -62,7 +63,6 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
@@ -71,10 +71,10 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -240,9 +240,10 @@ class DeviceConnectionRepository @Inject constructor(
                 try {
                     lanDiscovery.discover().collect { ev ->
                         when (ev) {
-                            is LanDiscovery.Event.Devices -> _lanDevices.value = ev.devices.values
-                                .filter { it.isConnectable }
-                                .associateBy { it.station!! }
+                            is LanDiscovery.Event.Devices ->
+                                _lanDevices.value = ev.devices.values
+                                    .filter { it.isConnectable }
+                                    .associateBy { it.station!! }
                             is LanDiscovery.Event.Failed -> _lanDiscoveryError.value = ev.message
                         }
                     }
@@ -500,25 +501,23 @@ class DeviceConnectionRepository @Inject constructor(
         return true
     }
 
-    private suspend fun fetchTokenLocked(session: DeviceSession, address: String, quiet: Boolean): Boolean {
-        return try {
-            val t = session.getToken()
-            knownDeviceDao.setLanToken(address, t.token.toHex(), t.port)
-            if (!quiet) _events.tryEmit(DeviceEvent.Info("LAN token stored on this phone (port ${t.port})."))
-            true
-        } catch (e: NotAllowedOnLinkException) {
-            if (!quiet) _events.tryEmit(DeviceEvent.Error("The token can only be fetched over Bluetooth."))
-            false
-        } catch (e: DeviceErrorException) {
-            if (!quiet) _events.tryEmit(DeviceEvent.Error(e.message ?: "GET_TOKEN rejected"))
-            false
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.w(TAG, "GET_TOKEN failed: ${e.message}")
-            if (!quiet) _events.tryEmit(DeviceEvent.Error("GET_TOKEN failed: ${e.message}"))
-            false
-        }
+    private suspend fun fetchTokenLocked(session: DeviceSession, address: String, quiet: Boolean): Boolean = try {
+        val t = session.getToken()
+        knownDeviceDao.setLanToken(address, t.token.toHex(), t.port)
+        if (!quiet) _events.tryEmit(DeviceEvent.Info("LAN token stored on this phone (port ${t.port})."))
+        true
+    } catch (e: NotAllowedOnLinkException) {
+        if (!quiet) _events.tryEmit(DeviceEvent.Error("The token can only be fetched over Bluetooth."))
+        false
+    } catch (e: DeviceErrorException) {
+        if (!quiet) _events.tryEmit(DeviceEvent.Error(e.message ?: "GET_TOKEN rejected"))
+        false
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Log.w(TAG, "GET_TOKEN failed: ${e.message}")
+        if (!quiet) _events.tryEmit(DeviceEvent.Error("GET_TOKEN failed: ${e.message}"))
+        false
     }
 
     private fun startNotificationCollection(session: DeviceSession) {

@@ -343,10 +343,16 @@ object FrameCodec {
             when (type) {
                 FrameType.FILE -> Frame.File(bytes = buf.u32(), name = buf.restUtf8())
                 FrameType.LIST_END -> Frame.ListEnd(
-                    count = buf.u16(), partials = buf.u16(), sdKib = buf.u32(), sdUsedKib = buf.u32()
+                    count = buf.u16(),
+                    partials = buf.u16(),
+                    sdKib = buf.u32(),
+                    sdUsedKib = buf.u32()
                 )
                 FrameType.OPENED -> Frame.Opened(
-                    handle = buf.u16(), size = buf.u32(), crc32 = buf.u32(), name = buf.restUtf8()
+                    handle = buf.u16(),
+                    size = buf.u32(),
+                    crc32 = buf.u32(),
+                    name = buf.restUtf8()
                 )
                 FrameType.CHUNK -> {
                     val handle = buf.u16()
@@ -360,7 +366,10 @@ object FrameCodec {
                 FrameType.FLUSHED -> Frame.Flushed(rows = buf.u16(), filesFinalized = buf.u32())
                 FrameType.CONFIG -> Frame.Config(flags = buf.u8(), json = buf.restUtf8())
                 FrameType.WIFI_AP -> Frame.WifiAp(
-                    rssi = buf.get().toInt(), auth = buf.u8(), channel = buf.u8(), ssid = buf.restUtf8()
+                    rssi = buf.get().toInt(),
+                    auth = buf.u8(),
+                    channel = buf.u8(),
+                    ssid = buf.restUtf8()
                 )
                 FrameType.WIFI_SCAN_END -> Frame.WifiScanEnd(count = buf.u16(), status = buf.u8())
                 FrameType.REBOOTING -> Frame.Rebooting(delayMs = buf.u16())

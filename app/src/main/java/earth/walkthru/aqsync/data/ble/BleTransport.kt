@@ -110,7 +110,8 @@ class BleTransport(
             val dev: BluetoothDevice? = if (Build.VERSION.SDK_INT >= 33) {
                 intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
             } else {
-                @Suppress("DEPRECATION") intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                @Suppress("DEPRECATION")
+                intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
             }
             if (dev?.address != device.address) return
             val newState = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.BOND_NONE)
@@ -128,7 +129,7 @@ class BleTransport(
             } else {
                 pendingConnect.getAndSet(null)?.resume(status)
                 pendingOp.getAndSet(null)?.resume(GattResult(if (status == 0) GATT_DISCONNECTED else status))
-                _state.value = if (status == BluetoothGatt.GATT_SUCCESS || status == 19 /* remote terminated */) {
+                _state.value = if (status == BluetoothGatt.GATT_SUCCESS || status == GATT_CONN_TERMINATE_PEER_USER) {
                     ConnectionState.Disconnected
                 } else {
                     ConnectionState.Failed("link lost (GATT status $status)", status)
@@ -452,10 +453,13 @@ class BleTransport(
     companion object {
         private const val TAG = "BleTransport"
         const val GATT_DISCONNECTED = -1
+
+        /** HCI 0x13 as surfaced by `onConnectionStateChange`: the device closed the link on purpose. */
+        const val GATT_CONN_TERMINATE_PEER_USER = 19
         const val GATT_ERROR_133 = 133
         val AUTH_STATUSES = setOf(
             BluetoothGatt.GATT_INSUFFICIENT_AUTHENTICATION, // 5
-            BluetoothGatt.GATT_INSUFFICIENT_ENCRYPTION,     // 15
+            BluetoothGatt.GATT_INSUFFICIENT_ENCRYPTION, // 15
             GATT_ERROR_133,
         )
         const val CONNECT_TIMEOUT_MS = 30_000L

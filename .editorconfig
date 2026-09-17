@@ -1,0 +1,40 @@
+# Editor + ktlint settings. Kotlin follows Android Studio's default style ("intellij_idea"), not the
+# stricter ktlint_official: this codebase keeps dense one-line declarations on purpose, so line
+# length is not enforced and the wrapping rules that hang off it stay quiet.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{kt,kts}]
+ktlint_code_style = intellij_idea
+max_line_length = off
+# Signatures stay as the author wrote them: with no line limit this rule would join `= withLock {` bodies onto
+# the signature, and its `multiline` mode breaks the `fun f() = when (x) {` idiom used everywhere here.
+ktlint_standard_function-signature = disabled
+# Composables are PascalCase by convention; test names use backticked sentences.
+ktlint_function_naming_ignore_when_annotated_with = Composable
+# Trailing commas are left as the author wrote them (Compose code mixes both).
+ktlint_standard_trailing-comma-on-call-site = disabled
+ktlint_standard_trailing-comma-on-declaration-site = disabled
+# Deliberate house style, not formatting: `{ a; b }` one-liners in tests and builders, compact `when`
+# branches, enum entries on one line, `_x` backing fields for flows, one file per protocol concept.
+ktlint_standard_statement-wrapping = disabled
+ktlint_standard_blank-line-between-when-conditions = disabled
+ktlint_standard_enum-wrapping = disabled
+ktlint_standard_backing-property-naming = disabled
+ktlint_standard_filename = disabled
+
+[*.{yml,yaml,json,toml}]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+[*.py]
+indent_size = 4

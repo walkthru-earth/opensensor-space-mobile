@@ -14,3 +14,14 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Build and IDE output in every module (the template's `/build` only matched the root).
+build/
+bin/
+.kotlin/
+*.hprof
+
+# Signing material never enters the repo (CI gets it from secrets).
+*.jks
+*.keystore
+keystore.properties

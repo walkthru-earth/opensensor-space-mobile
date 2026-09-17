@@ -194,7 +194,8 @@ class DeviceSession(val transport: AqTransport) {
                     }
                     if (frame.ok && frame.nextOffset != expected) {
                         throw WindowLostException(
-                            expected, "READ_END next_offset=${frame.nextOffset} but $expected is where the received bytes end"
+                            expected,
+                            "READ_END next_offset=${frame.nextOffset} but $expected is where the received bytes end"
                         )
                     }
                     return frame

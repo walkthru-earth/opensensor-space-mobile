@@ -107,15 +107,25 @@ object SyncPlanner {
             val partial = partials[file.name] ?: 0L
             when {
                 !SafeName.isValid(file.name) -> ManifestEntry(
-                    file.name, file.bytes, partition, FileSyncState.INVALID_NAME,
+                    file.name,
+                    file.bytes,
+                    partition,
+                    FileSyncState.INVALID_NAME,
                     detail = "name violates the safe_name() whitelist; refusing to store it"
                 )
                 local == null && partial in 1 until file.bytes -> ManifestEntry(
-                    file.name, file.bytes, partition, FileSyncState.PARTIAL, partialBytes = partial
+                    file.name,
+                    file.bytes,
+                    partition,
+                    FileSyncState.PARTIAL,
+                    partialBytes = partial
                 )
                 local == null -> ManifestEntry(file.name, file.bytes, partition, FileSyncState.NOT_SYNCED)
                 local.bytes != file.bytes -> ManifestEntry(
-                    file.name, file.bytes, partition, FileSyncState.MISMATCH,
+                    file.name,
+                    file.bytes,
+                    partition,
+                    FileSyncState.MISMATCH,
                     detail = "archived copy is ${local.bytes} bytes, device reports ${file.bytes}"
                 )
                 else -> ManifestEntry(file.name, file.bytes, partition, FileSyncState.SYNCED)

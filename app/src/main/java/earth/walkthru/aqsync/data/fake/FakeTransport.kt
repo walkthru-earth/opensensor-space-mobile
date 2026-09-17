@@ -62,6 +62,7 @@ class FakeTransport(
     private val _live = MutableSharedFlow<ByteArray>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     override val statusNotifications: Flow<ByteArray> = _status
     override val liveNotifications: Flow<ByteArray> = _live
+
     // Replaced on every connect so the same fake device (and its configuration) survives
     // close() + reconnect, e.g. across a fake REBOOT.
     private var _responses = Channel<ByteArray>(Channel.UNLIMITED)
@@ -509,7 +510,7 @@ class FakeTransport(
         val pm1 = (pm25 * 0.7).toInt()
         val pm10 = (pm25 * 1.3).toInt()
         val utc = utcAnchorNs?.let { """"utc":${it + upSeconds * 1_000_000_000L},""" } ?: ""
-        return """{"seq":$seq,"mono":${upSeconds * 1_000_000},${utc}"pms":4,""" +
+        return """{"seq":$seq,"mono":${upSeconds * 1_000_000},$utc"pms":4,""" +
             """"pm1":$pm1,"pm25":${pm25.toInt()},"pm10":$pm10,"c1":$pm1,"c25":${pm25.toInt()},"c10":$pm10,""" +
             """"n03":${(pm25 * 130).toInt()},"n05":${(pm25 * 36).toInt()},"n1":${(pm25 * 4).toInt()},"n25":2,"n5":0,"n10":0,""" +
             """"t":${"%.1f".format(26.0 + rnd.nextDouble(-0.3, 0.3))},"bat":4100,"pct":80,"chg":0,"vbus":5000,"als":120}"""

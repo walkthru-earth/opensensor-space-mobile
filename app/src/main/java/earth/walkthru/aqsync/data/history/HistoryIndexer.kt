@@ -59,20 +59,22 @@ class HistoryIndexer @Inject constructor(
      * Indexes up to [limit] rows that need it. Returns how many rows were updated (0 = nothing left).
      * Rows whose previous attempt failed are retried once per call — a newer reader may accept them.
      */
-    suspend fun backfill(limit: Int = 100): Int = mutex.withLock { withContext(Dispatchers.IO) {
-        val pending = archivedFileDao.unindexed(limit)
-        var done = 0
-        for (row in pending) {
-            val file = archive.fileFor(row.station, row.name)
-            val updated = if (file.isFile) indexed(row, file) else row.copy(indexedAtEpochMs = System.currentTimeMillis(), indexError = "file missing from archive")
-            // A failed retry of an already-failed row changes nothing; skip the write to keep the loop finite.
-            if (row.indexError != null && updated.indexError != null) continue
-            archivedFileDao.upsert(updated)
-            done++
+    suspend fun backfill(limit: Int = 100): Int = mutex.withLock {
+        withContext(Dispatchers.IO) {
+            val pending = archivedFileDao.unindexed(limit)
+            var done = 0
+            for (row in pending) {
+                val file = archive.fileFor(row.station, row.name)
+                val updated = if (file.isFile) indexed(row, file) else row.copy(indexedAtEpochMs = System.currentTimeMillis(), indexError = "file missing from archive")
+                // A failed retry of an already-failed row changes nothing; skip the write to keep the loop finite.
+                if (row.indexError != null && updated.indexError != null) continue
+                archivedFileDao.upsert(updated)
+                done++
+            }
+            if (done > 0) Log.i(TAG, "indexed $done files (${pending.size} candidates)")
+            done
         }
-        if (done > 0) Log.i(TAG, "indexed $done files (${pending.size} candidates)")
-        done
-    } }
+    }
 
     /** Runs [backfill] until nothing is left, bounded, then the time-estimate pass. */
     suspend fun backfillAll(maxBatches: Int = 50) {
@@ -97,7 +99,9 @@ class HistoryIndexer @Inject constructor(
                     f.copy(estFirstUtcNs = span.first, estLastUtcNs = span.second, estAnchorFile = anchor.sourceFile)
                 } else if (f.estFirstUtcNs != null || f.estAnchorFile != null) {
                     f.copy(estFirstUtcNs = null, estLastUtcNs = null, estAnchorFile = null) // anchor gone or file now has UTC
-                } else f
+                } else {
+                    f
+                }
                 if (updated != f) { archivedFileDao.upsert(updated); changed++ }
             }
         }

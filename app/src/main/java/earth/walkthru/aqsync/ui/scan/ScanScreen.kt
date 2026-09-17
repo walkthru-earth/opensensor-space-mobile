@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.BugReport
+import androidx.compose.material.icons.rounded.CloudSync
 import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Radar
@@ -25,6 +26,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
@@ -52,23 +54,21 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import earth.walkthru.aqsync.R
-import earth.walkthru.aqsync.ui.permissions.rememberNotificationPermission
-import androidx.compose.material.icons.rounded.CloudSync
-import androidx.compose.material3.FilledTonalButton
-import java.time.format.DateTimeFormatter
-import java.time.ZoneOffset
-import java.time.Instant
-import earth.walkthru.aqsync.ui.device.color
-import earth.walkthru.aqsync.ui.device.MoodFace
-import earth.walkthru.aqsync.data.history.AirMood
 import earth.walkthru.aqsync.data.DeviceEvent
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.ScannedDevice
+import earth.walkthru.aqsync.data.history.AirMood
 import earth.walkthru.aqsync.data.local.database.KnownDevice
 import earth.walkthru.aqsync.ui.components.ConnectionBanner
 import earth.walkthru.aqsync.ui.components.Eyebrow
 import earth.walkthru.aqsync.ui.components.formatAgo
 import earth.walkthru.aqsync.ui.components.rememberNowMillis
+import earth.walkthru.aqsync.ui.device.MoodFace
+import earth.walkthru.aqsync.ui.permissions.rememberNotificationPermission
+import earth.walkthru.aqsync.ui.theme.color
+import java.time.Instant
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 
 @Composable
 fun ScanScreen(
@@ -304,7 +304,9 @@ private fun KnownRow(device: KnownDevice, summary: LoggerSummary?, now: Long, on
                         if (summary != null) {
                             append(" · ").append(summary.files).append(" file").append(if (summary.files == 1) "" else "s")
                             summary.lastSyncedEpochMs?.let { append(", synced ").append(formatAgo(now - it)) }
-                        } else device.station?.let { append(" · station ").append(it.take(8)) }
+                        } else {
+                            device.station?.let { append(" · station ").append(it.take(8)) }
+                        }
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

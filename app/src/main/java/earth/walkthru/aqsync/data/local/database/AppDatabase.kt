@@ -3,8 +3,8 @@ package earth.walkthru.aqsync.data.local.database
 import androidx.room.AutoMigration
 import androidx.room.Database
 import androidx.room.DeleteTable
-import androidx.room.migration.AutoMigrationSpec
 import androidx.room.RoomDatabase
+import androidx.room.migration.AutoMigrationSpec
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 

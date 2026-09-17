@@ -54,11 +54,13 @@ data class DeviceUiState(
 ) {
     /** Per-device Auto-sync switch (Room `known_device.autoSync`). */
     val autoSync: Boolean get() = known?.autoSync == true
+
     /** Unattended BLE needs a bond; LAN needs a stored token. Without either the switch would do nothing. */
     val autoSyncReachable: Boolean get() = known?.hasLanToken == true || bonded
     val isV2: Boolean get() = (info?.proto ?: 1) >= 2
     val ready: Boolean get() = connection.isReady
     val canEdit: Boolean get() = ready && isV2 && !busy
+
     /**
      * Actions that drop the link (reboot, rotate token, forget bonds) are also refused while a
      * transfer runs: a `REBOOT` mid-sync would kill the download and finalize the RAM batch under it.
@@ -80,7 +82,11 @@ class DeviceViewModel @Inject constructor(
     val events: Flow<DeviceEvent> = merge(repository.events, localEvents)
 
     private val core = combine(
-        repository.session, repository.connectionState, repository.info, repository.status, repository.config,
+        repository.session,
+        repository.connectionState,
+        repository.info,
+        repository.status,
+        repository.config,
     ) { session, conn, info, status, config ->
         DeviceUiState(
             address = session?.address,
@@ -105,7 +111,11 @@ class DeviceViewModel @Inject constructor(
     }
 
     val uiState: StateFlow<DeviceUiState> = combine(
-        core, repository.wifiScan, lan, activity, settings.advancedMode,
+        core,
+        repository.wifiScan,
+        lan,
+        activity,
+        settings.advancedMode,
     ) { base, scan, (lanDevices, lanErr, known), (busy, syncRunning, transport), advanced ->
         base.copy(
             transport = transport,
@@ -131,8 +141,11 @@ class DeviceViewModel @Inject constructor(
             repository.setAutoSync(addr, enabled)
             localEvents.tryEmit(
                 DeviceEvent.Info(
-                    if (enabled) "Auto-sync on: new files are pulled about every ${AutoSyncScheduler.PERIOD_MINUTES} min, even with the app closed."
-                    else "Auto-sync off for this device."
+                    if (enabled) {
+                        "Auto-sync on: new files are pulled about every ${AutoSyncScheduler.PERIOD_MINUTES} min, even with the app closed."
+                    } else {
+                        "Auto-sync off for this device."
+                    }
                 )
             )
         }

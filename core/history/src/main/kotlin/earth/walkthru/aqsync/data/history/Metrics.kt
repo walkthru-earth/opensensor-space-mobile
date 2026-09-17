@@ -65,6 +65,7 @@ object Metrics {
     val PARTICLES_GT03 = MetricSpec("n03", "particles_gt03_per_01l", "Particles > 0.3 µm", "per 0.1 L", MetricKind.PARTICLE_COUNT, PMS_VALID, null, chartable = false, settleSeconds = PMS_SETTLE_S)
     val PARTICLES_GT25 = MetricSpec("n25", "particles_gt25_per_01l", "Particles > 2.5 µm", "per 0.1 L", MetricKind.PARTICLE_COUNT, PMS_VALID, null, chartable = false, settleSeconds = PMS_SETTLE_S)
     val BOARD_TEMP = MetricSpec("board_c", "imu_temperature_c", "Board temperature", "°C", MetricKind.TEMPERATURE, null, null)
+
     /** Null on the current board (SHT20 address collision); listed so the day the sensor works, History does too. */
     val AMBIENT_TEMP = MetricSpec("ambient_c", "ambient_temperature_c", "Temperature", "°C", MetricKind.TEMPERATURE, null, null)
     val HUMIDITY = MetricSpec("rh", "relative_humidity_percent", "Humidity", "%", MetricKind.HUMIDITY, null, null, axisFloor = 100f)

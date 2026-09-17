@@ -32,7 +32,9 @@ import javax.inject.Inject
  * with the `known_device.autoSync` rows for the life of the process.
  */
 @HiltAndroidApp
-class AqSyncApplication : Application(), Configuration.Provider {
+class AqSyncApplication :
+    Application(),
+    Configuration.Provider {
 
     @Inject
     lateinit var workerFactory: HiltWorkerFactory

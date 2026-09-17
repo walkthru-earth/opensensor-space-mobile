@@ -51,8 +51,8 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.DeviceEvent
-import earth.walkthru.aqsync.data.history.NowReading
 import earth.walkthru.aqsync.data.ble.ConnectionState
+import earth.walkthru.aqsync.data.history.NowReading
 import earth.walkthru.aqsync.data.protocol.DeviceStatus
 import earth.walkthru.aqsync.data.protocol.LiveSample
 import earth.walkthru.aqsync.data.protocol.PmsStatus
@@ -342,8 +342,12 @@ private fun BigValue(label: String, value: String, unit: String, modifier: Modif
 @Composable
 private fun ParticleRow(live: LiveSample?) {
     val counts = listOf(
-        ">0.3" to live?.n03, ">0.5" to live?.n05, ">1" to live?.n1,
-        ">2.5" to live?.n25, ">5" to live?.n5, ">10" to live?.n10,
+        ">0.3" to live?.n03,
+        ">0.5" to live?.n05,
+        ">1" to live?.n1,
+        ">2.5" to live?.n25,
+        ">5" to live?.n5,
+        ">10" to live?.n10,
     )
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {

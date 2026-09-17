@@ -22,6 +22,12 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+// CI (.github/workflows/release.yml) stamps the build through the environment; a local build keeps
+// the defaults. Read through providers so the configuration cache stays valid.
+val ciVersionCode = providers.environmentVariable("AQSYNC_VERSION_CODE").orNull?.toIntOrNull()
+val ciVersionName = providers.environmentVariable("AQSYNC_VERSION_NAME").orNull
+val releaseKeystore = providers.environmentVariable("AQSYNC_KEYSTORE_FILE").orNull?.let { rootProject.file(it) }
+
 android {
     namespace = "earth.walkthru.aqsync"
     compileSdk = 37
@@ -30,8 +36,8 @@ android {
         applicationId = "earth.walkthru.aqsync"
         minSdk = 31
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = ciVersionCode ?: 1
+        versionName = ciVersionName ?: "1.0"
 
         testInstrumentationRunner = "earth.walkthru.aqsync.HiltTestRunner"
         vectorDrawables {
@@ -39,10 +45,25 @@ android {
         }
     }
 
+    signingConfigs {
+        // Release key only when CI (or a developer) provides one; the file never enters the repo
+        // (*.jks is ignored). Without it the release build type is signed with the debug key below,
+        // so a CI artifact is always installable — as a *test* build, not a store release.
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = releaseKeystore
+                storePassword = providers.environmentVariable("AQSYNC_KEYSTORE_PASSWORD").orNull
+                keyAlias = providers.environmentVariable("AQSYNC_KEY_ALIAS").orNull
+                keyPassword = providers.environmentVariable("AQSYNC_KEY_PASSWORD").orNull
+            }
+        }
+    }
+
     buildTypes {
         getByName("release") {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = if (releaseKeystore != null) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
         }
     }
 
@@ -103,7 +124,6 @@ dependencies {
     implementation(project(":core:protocol"))
     implementation(project(":core:parquet"))
     implementation(project(":core:history"))
-
 
     val composeBom = platform(libs.androidx.compose.bom)
     implementation(composeBom)

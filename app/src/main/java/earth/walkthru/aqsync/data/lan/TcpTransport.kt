@@ -56,8 +56,7 @@ enum class LanFailure(val label: String) {
     PROTOCOL("unexpected handshake answer"),
 }
 
-class LanConnectException(val failure: LanFailure, detail: String? = null, cause: Throwable? = null) :
-    TransportException(if (detail == null) failure.label else "${failure.label} ($detail)", cause = cause)
+class LanConnectException(val failure: LanFailure, detail: String? = null, cause: Throwable? = null) : TransportException(if (detail == null) failure.label else "${failure.label} ($detail)", cause = cause)
 
 /**
  * [AqTransport] over one plain TCP socket (docs/ble-sync-protocol.md, "LAN transport").

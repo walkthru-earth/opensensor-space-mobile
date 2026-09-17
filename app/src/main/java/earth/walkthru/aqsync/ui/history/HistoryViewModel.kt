@@ -8,14 +8,14 @@ import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.history.HistoryDeriver
 import earth.walkthru.aqsync.data.history.HistoryIndexer
-import earth.walkthru.aqsync.data.history.MetricSpec
-import earth.walkthru.aqsync.data.history.Metrics
 import earth.walkthru.aqsync.data.history.HistoryRange
 import earth.walkthru.aqsync.data.history.HistoryRepository
 import earth.walkthru.aqsync.data.history.HistorySeries
-import earth.walkthru.aqsync.data.local.database.MetricBucketDao
+import earth.walkthru.aqsync.data.history.MetricSpec
+import earth.walkthru.aqsync.data.history.Metrics
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
+import earth.walkthru.aqsync.data.local.database.MetricBucketDao
 import earth.walkthru.aqsync.data.settings.AppSettings
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -127,6 +127,7 @@ class HistoryViewModel @Inject constructor(
     ) { values ->
         val d = values[0] as earth.walkthru.aqsync.data.local.database.KnownDevice?
         val counts = values[5] as Counts
+
         @Suppress("UNCHECKED_CAST")
         val dd = values[6] as Triple<Int, Long?, Long?>
         HistoryUiState(

@@ -67,7 +67,12 @@ class DebugViewModel @Inject constructor(
     private val frames = repository.session.flatMapLatest { it?.frames?.records ?: flowOf(emptyList()) }
 
     private val base = combine(
-        repository.session, repository.connectionState, repository.statusRaw, repository.status, repository.config, frames,
+        repository.session,
+        repository.connectionState,
+        repository.statusRaw,
+        repository.status,
+        repository.config,
+        frames,
         repository.activeTransport,
     ) { values ->
         val session = values[0] as earth.walkthru.aqsync.data.ble.DeviceSession?

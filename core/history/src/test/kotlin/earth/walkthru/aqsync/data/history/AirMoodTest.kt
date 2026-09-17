@@ -21,6 +21,22 @@ class AirMoodTest {
     }
 
     @Test
+    fun `an edge value belongs to the upper band and agrees with the registry`() {
+        // PM values are integers in the files, so exactly 15 / 35 / 55 / 150 happen every day. The
+        // upper bound is exclusive everywhere: `AirMood.of`, `MetricSpec.moodOf`, and the UI colours
+        // that delegate to them (the theme once kept a second copy of the edges with `<=`).
+        val edges = AirMood.entries.dropLast(1).map { it.upTo.toDouble() }
+        assertEquals(listOf(15.0, 35.0, 55.0, 150.0), edges)
+        edges.forEachIndexed { i, edge ->
+            val below = Math.nextDown(edge)
+            assertEquals(AirMood.entries[i], AirMood.of(below))
+            assertEquals(AirMood.entries[i + 1], AirMood.of(edge))
+            assertEquals(AirMood.of(edge), Metrics.PM25.moodOf(edge))
+            assertEquals(AirMood.of(below), Metrics.PM25.moodOf(below))
+        }
+    }
+
+    @Test
     fun `the sensor's own state comes before any number`() {
         assertEquals(NowReading.Waiting, NowReading.of(null))
         val warming = LiveSample.parse("""{"seq":1,"mono":1,"pms":1,"pm25":40}""")

@@ -26,9 +26,9 @@ import androidx.compose.ui.unit.sp
 import earth.walkthru.aqsync.data.history.AirMood
 import earth.walkthru.aqsync.data.history.Columns
 import earth.walkthru.aqsync.data.history.HistoryColumn
-import earth.walkthru.aqsync.data.history.MetricSpec
 import earth.walkthru.aqsync.data.history.HistoryRange
-import earth.walkthru.aqsync.ui.device.color
+import earth.walkthru.aqsync.data.history.MetricSpec
+import earth.walkthru.aqsync.ui.theme.color
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -183,8 +183,10 @@ fun BandColumnChart(
             }
         }
         // Gaps: a faint dotted baseline where nothing was recorded.
-        for (c in columns) if (c.mean == null) {
-            drawLine(muted.copy(alpha = 0.35f), Offset(x(c.startS) + gap / 2, plot.bottom - 1f), Offset(x(c.endS) - gap / 2, plot.bottom - 1f), 2f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(2f, 3f)))
+        for (c in columns) {
+            if (c.mean == null) {
+                drawLine(muted.copy(alpha = 0.35f), Offset(x(c.startS) + gap / 2, plot.bottom - 1f), Offset(x(c.endS) - gap / 2, plot.bottom - 1f), 2f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(2f, 3f)))
+            }
         }
         // Cursor.
         selected?.let { s ->

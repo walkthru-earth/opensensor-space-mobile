@@ -13,7 +13,9 @@ internal class ThriftCompactWriter {
     private fun fieldHeader(id: Int, type: Int) {
         val last = lastFieldIds.removeLast()
         val delta = id - last
-        if (delta in 1..15) out.write((delta shl 4) or type) else {
+        if (delta in 1..15) {
+            out.write((delta shl 4) or type)
+        } else {
             out.write(type)
             writeZigZag32(id)
         }
@@ -47,7 +49,9 @@ internal class ThriftCompactWriter {
     }
 
     private fun listHeader(elementType: Int, size: Int) {
-        if (size < 15) out.write((size shl 4) or elementType) else {
+        if (size < 15) {
+            out.write((size shl 4) or elementType)
+        } else {
             out.write(0xF0 or elementType)
             writeVarint(size.toLong())
         }

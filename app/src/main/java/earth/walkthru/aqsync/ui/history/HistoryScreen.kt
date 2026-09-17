@@ -1,6 +1,7 @@
 package earth.walkthru.aqsync.ui.history
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -22,30 +23,29 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import earth.walkthru.aqsync.data.history.HistoryColumn
-import earth.walkthru.aqsync.data.history.Columns
-import earth.walkthru.aqsync.data.history.AirMood
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.material3.Surface
-import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import earth.walkthru.aqsync.data.history.MetricSpec
-import earth.walkthru.aqsync.data.history.Metrics
+import earth.walkthru.aqsync.data.history.AirMood
+import earth.walkthru.aqsync.data.history.Columns
+import earth.walkthru.aqsync.data.history.HistoryColumn
 import earth.walkthru.aqsync.data.history.HistoryRange
 import earth.walkthru.aqsync.data.history.HistorySeries
+import earth.walkthru.aqsync.data.history.MetricSpec
+import earth.walkthru.aqsync.data.history.Metrics
 import earth.walkthru.aqsync.data.history.TimeEstimate
 import earth.walkthru.aqsync.ui.components.DeviceBottomBar
 import earth.walkthru.aqsync.ui.components.DeviceTab
@@ -54,7 +54,7 @@ import earth.walkthru.aqsync.ui.components.InfoNote
 import earth.walkthru.aqsync.ui.components.SectionCard
 import earth.walkthru.aqsync.ui.components.StatLine
 import earth.walkthru.aqsync.ui.components.TransportChip
-import earth.walkthru.aqsync.ui.device.color
+import earth.walkthru.aqsync.ui.theme.color
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -154,12 +154,15 @@ fun HistoryScreen(
                 item(key = "dev") {
                     SectionCard("Developer") {
                         val s = state.series
-                        StatLine("source", when {
-                            s == null -> "—"
-                            state.range.tier != null -> "aggregate tier ${state.range.tier!!.seconds / 60} min"
-                            s.binned -> "rows binned to 1 min"
-                            else -> "raw 10 s rows"
-                        })
+                        StatLine(
+                            "source",
+                            when {
+                                s == null -> "—"
+                                state.range.tier != null -> "aggregate tier ${state.range.tier!!.seconds / 60} min"
+                                s.binned -> "rows binned to 1 min"
+                                else -> "raw 10 s rows"
+                            }
+                        )
                         StatLine("points", s?.points?.size?.toString() ?: "—")
                         StatLine("valid rows", s?.validRows?.toString() ?: "—")
                         StatLine("station", state.station ?: "—")
@@ -259,12 +262,16 @@ private fun SelectedColumn(c: HistoryColumn?, state: HistoryUiState, zone: ZoneI
             else -> "${fmt.format(Instant.ofEpochSecond(c.startS))}–${DateTimeFormatter.ofPattern("HH:mm").withZone(zone).format(Instant.ofEpochSecond(c.endS))}"
         }
         val m = c.mean
-        if (m == null) "$slot · no readings" else buildString {
-            append(slot).append(" · ").append(fmt(m)).append(' ').append(state.metric.unit)
-            state.metric.moodOf(m.toDouble())?.let { append(" · ").append(it.title) }
-            c.max?.takeIf { it > m * 1.15f }?.let { append(" · peak ").append(fmt(it)) }
-            append(" · ").append((c.coverage * 100).toInt()).append(" % covered")
-            if (c.estimated) append(" · estimated time")
+        if (m == null) {
+            "$slot · no readings"
+        } else {
+            buildString {
+                append(slot).append(" · ").append(fmt(m)).append(' ').append(state.metric.unit)
+                state.metric.moodOf(m.toDouble())?.let { append(" · ").append(it.title) }
+                c.max?.takeIf { it > m * 1.15f }?.let { append(" · peak ").append(fmt(it)) }
+                append(" · ").append((c.coverage * 100).toInt()).append(" % covered")
+                if (c.estimated) append(" · estimated time")
+            }
         }
     }
     Text(text, style = MaterialTheme.typography.bodySmall, color = if (c == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(top = 6.dp), maxLines = 2)

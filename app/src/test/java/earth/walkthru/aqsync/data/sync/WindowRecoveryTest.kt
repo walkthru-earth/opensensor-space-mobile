@@ -3,8 +3,8 @@ package earth.walkthru.aqsync.data.sync
 import earth.walkthru.aqsync.data.ble.DeviceSession
 import earth.walkthru.aqsync.data.ble.WindowLostException
 import earth.walkthru.aqsync.data.fake.FakeTransport
-import earth.walkthru.aqsync.data.local.database.ArchivedFile
 import earth.walkthru.aqsync.data.history.HistoryIndexer
+import earth.walkthru.aqsync.data.local.database.ArchivedFile
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf

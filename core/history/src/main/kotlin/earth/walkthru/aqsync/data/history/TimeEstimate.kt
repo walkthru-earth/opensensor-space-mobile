@@ -2,7 +2,7 @@ package earth.walkthru.aqsync.data.history
 
 import kotlin.math.abs
 
-/**
+/*
  * UTC for rows the logger stamped before it had a clock (§4.6 of the evaluation).
  *
  * Every row carries `monotonic_us`, microseconds since power-on. Once the same boot receives a time

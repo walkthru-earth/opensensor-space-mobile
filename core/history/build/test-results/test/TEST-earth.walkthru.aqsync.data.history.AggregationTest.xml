@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="earth.walkthru.aqsync.data.history.AggregationTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-09-17T12:38:47.335Z" hostname="yharbys-MacBook-Air.local" time="0.027">
-  <properties/>
-  <testcase name="rows without UTC or without a valid PMS reading are handled" classname="earth.walkthru.aqsync.data.history.AggregationTest" time="0.017"/>
-  <testcase name="board file lands in the right 15-minute, hourly and daily buckets" classname="earth.walkthru.aqsync.data.history.AggregationTest" time="0.005"/>
-  <testcase name="unsynced file contributes nothing" classname="earth.walkthru.aqsync.data.history.AggregationTest" time="0.002"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

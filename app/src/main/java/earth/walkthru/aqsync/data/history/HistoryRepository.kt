@@ -2,9 +2,9 @@ package earth.walkthru.aqsync.data.history
 
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 import earth.walkthru.aqsync.data.history.parquet.ParquetFormatException
+import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.local.database.MetricBucket
 import earth.walkthru.aqsync.data.local.database.MetricBucketDao
-import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.sync.FileArchive
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -42,8 +42,11 @@ class HistoryRepository @Inject constructor(
     private fun fromBuckets(metric: MetricSpec, range: HistoryRange, fromS: Long, toS: Long, tier: Resolution, buckets: List<MetricBucket>): HistorySeries {
         val points = buckets.map { b ->
             HistoryPoint(
-                b.startEpochS, b.startEpochS + tier.seconds, b.mean,
-                if (metric.envelope) b.min else null, if (metric.envelope) b.max else null,
+                b.startEpochS,
+                b.startEpochS + tier.seconds,
+                b.mean,
+                if (metric.envelope) b.min else null,
+                if (metric.envelope) b.max else null,
                 (b.validRows.toFloat() / tier.expectedRows).coerceIn(0f, 1f),
                 estimated = b.estimatedRows * 2 >= b.rows && b.estimatedRows > 0,
             )

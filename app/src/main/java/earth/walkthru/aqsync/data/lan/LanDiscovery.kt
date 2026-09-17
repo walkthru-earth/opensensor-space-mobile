@@ -177,17 +177,20 @@ class LanDiscovery @Inject constructor(@ApplicationContext private val context: 
                 queue.removeFirstOrNull() ?: run { busy = false; null }
             } ?: return
             @Suppress("DEPRECATION")
-            nsd.resolveService(info, object : NsdManager.ResolveListener {
-                override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {
-                    Log.w(TAG, "resolve failed for ${serviceInfo.serviceName}: $errorCode")
-                    next()
-                }
+            nsd.resolveService(
+                info,
+                object : NsdManager.ResolveListener {
+                    override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {
+                        Log.w(TAG, "resolve failed for ${serviceInfo.serviceName}: $errorCode")
+                        next()
+                    }
 
-                override fun onServiceResolved(serviceInfo: NsdServiceInfo) {
-                    onResolved(serviceInfo)
-                    next()
+                    override fun onServiceResolved(serviceInfo: NsdServiceInfo) {
+                        onResolved(serviceInfo)
+                        next()
+                    }
                 }
-            })
+            )
         }
     }
 
