@@ -126,6 +126,11 @@ dependencies {
     implementation(project(":core:protocol"))
     implementation(project(":core:parquet"))
     implementation(project(":core:history"))
+    // ZSTD pages of external GeoParquet (PyArrow/GDAL default in many pipelines): the one native library,
+    // registered into :core:parquet's codec SPI by data/history/parquet/AppParquetCodecs. Prebuilt AAR;
+    // the pure module never links it (docs/history-ux-and-data-layer.md §7, G1).
+    implementation(libs.zstd.jni) { artifact { type = "aar" } }
+    testImplementation(libs.zstd.jni)
 
     val composeBom = platform(libs.androidx.compose.bom)
     implementation(composeBom)

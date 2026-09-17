@@ -53,14 +53,96 @@ enum class ParquetRepetition(val code: Int) {
     }
 }
 
-/** `LogicalType` union. Only TIMESTAMP is modelled; everything else keeps its union field id. */
+/**
+ * `LogicalType` union. TIMESTAMP (8), STRING (1) and the parquet-format 2.11 geospatial types GEOMETRY (17)
+ * and GEOGRAPHY (18) are modelled; everything else keeps its union field id.
+ */
 sealed interface ParquetLogicalType {
     enum class TimeUnit { MILLIS, MICROS, NANOS, UNKNOWN }
 
     data class Timestamp(val isAdjustedToUtc: Boolean, val unit: TimeUnit) : ParquetLogicalType
 
+    /** UTF-8 `BYTE_ARRAY`. */
+    data object Utf8 : ParquetLogicalType
+
+    /**
+     * WKB in a `BYTE_ARRAY`, planar edges. [crs] is the raw string of the annotation (`null` = OGC:CRS84);
+     * interpret it with [Crs.parse].
+     */
+    data class Geometry(val crs: String?) : ParquetLogicalType
+
+    /** WKB in a `BYTE_ARRAY`, edges interpolated with [algorithm] (`null` = SPHERICAL). */
+    data class Geography(val crs: String?, val algorithm: EdgeInterpolation?) : ParquetLogicalType
+
     data class Other(val unionFieldId: Int) : ParquetLogicalType
+
+    val isGeospatial: Boolean get() = this is Geometry || this is Geography
 }
+
+/** `EdgeInterpolationAlgorithm` of `GeographyType`. */
+enum class EdgeInterpolation(val code: Int) {
+    SPHERICAL(0), VINCENTY(1), THOMAS(2), ANDOYER(3), KARNEY(4), UNKNOWN(-1);
+
+    companion object {
+        fun of(code: Int): EdgeInterpolation = entries.firstOrNull { it.code == code } ?: UNKNOWN
+    }
+}
+
+/**
+ * `BoundingBox` of the geospatial statistics: X/Y always, Z and M when the column has them. X may wrap
+ * (`xmin > xmax`) for a box crossing the antimeridian, exactly as the spec allows.
+ */
+data class BoundingBox(
+    val xmin: Double,
+    val xmax: Double,
+    val ymin: Double,
+    val ymax: Double,
+    val zmin: Double? = null,
+    val zmax: Double? = null,
+    val mmin: Double? = null,
+    val mmax: Double? = null,
+) {
+    val wrapsAntimeridian: Boolean get() = xmin > xmax
+
+    /** True when a point may lie inside (X honouring the wrap rule). Nulls in Z/M are ignored. */
+    fun mayContain(x: Double, y: Double): Boolean {
+        val xIn = if (wrapsAntimeridian) x >= xmin || x <= xmax else x in xmin..xmax
+        return xIn && y in ymin..ymax
+    }
+
+    /** The union of two boxes (no antimeridian reasoning: a wrapped input yields a wrapped output only when identical). */
+    fun union(other: BoundingBox): BoundingBox = BoundingBox(
+        minOf(xmin, other.xmin),
+        maxOf(xmax, other.xmax),
+        minOf(ymin, other.ymin),
+        maxOf(ymax, other.ymax),
+        minOrNull(zmin, other.zmin),
+        maxOrNull(zmax, other.zmax),
+        minOrNull(mmin, other.mmin),
+        maxOrNull(mmax, other.mmax),
+    )
+
+    private fun minOrNull(a: Double?, b: Double?) = if (a == null) {
+        b
+    } else if (b == null) {
+        a
+    } else {
+        minOf(a, b)
+    }
+    private fun maxOrNull(a: Double?, b: Double?) = if (a == null) {
+        b
+    } else if (b == null) {
+        a
+    } else {
+        maxOf(a, b)
+    }
+}
+
+/**
+ * `GeospatialStatistics` (`ColumnMetaData` field 17): the bbox of every geometry in the chunk and the ISO
+ * WKB type codes present (1–7, +1000 Z, +2000 M, +3000 ZM); an empty list means "unknown".
+ */
+data class GeospatialStatistics(val bbox: BoundingBox?, val geospatialTypes: List<Int>)
 
 data class SchemaElement(
     val name: String,
@@ -88,6 +170,9 @@ data class LeafColumn(
     val maxDefinitionLevel: Int get() = if (repetition == ParquetRepetition.REQUIRED) 0 else 1
     val isTimestampNanosUtc: Boolean
         get() = (logicalType as? ParquetLogicalType.Timestamp)?.let { it.isAdjustedToUtc && it.unit == ParquetLogicalType.TimeUnit.NANOS } == true
+
+    /** GEOMETRY or GEOGRAPHY annotated (GeoParquet 2.0 native form). */
+    val isGeospatial: Boolean get() = logicalType?.isGeospatial == true
 }
 
 /**
@@ -139,6 +224,8 @@ data class ColumnChunkMeta(
     val statistics: ColumnStatistics?,
     /** `ColumnChunk.file_offset` (deprecated but written); the chunk's own path is always null for us. */
     val chunkFileOffset: Long,
+    /** parquet-format 2.11 `geospatial_statistics`, present on GEOMETRY/GEOGRAPHY chunks from writers that compute it. */
+    val geospatialStatistics: GeospatialStatistics? = null,
 ) {
     val name: String get() = pathInSchema.joinToString(".")
 
@@ -170,21 +257,71 @@ data class ParquetFileMetadata(
     /** Size of the serialized footer in bytes (the number before the trailing `PAR1`). */
     val footerLength: Int,
 ) {
-    /** The leaves in schema order. Our files are flat, so this is `schema.drop(1)`; nested groups are rejected by the parser. */
+    /**
+     * The leaves in schema order. Our files are flat, so this is `schema.drop(1)`; nested groups are rejected by
+     * the parser. A BYTE_ARRAY with only the legacy `ConvertedType UTF8` (DuckDB) is reported as [ParquetLogicalType.Utf8].
+     */
     val leaves: List<LeafColumn> = schema.drop(1).mapIndexed { i, e ->
         LeafColumn(
             index = i,
             name = e.name,
             type = e.type ?: ParquetType.UNKNOWN,
             repetition = e.repetition ?: ParquetRepetition.OPTIONAL,
-            logicalType = e.logicalType,
+            logicalType = e.logicalType ?: if (e.convertedType == CONVERTED_UTF8 && e.type == ParquetType.BYTE_ARRAY) ParquetLogicalType.Utf8 else null,
         )
     }
 
     fun leaf(name: String): LeafColumn? = leaves.firstOrNull { it.name == name }
 
+    /** The GeoParquet `geo` key, parsed leniently, or null when absent or unparseable. */
+    val geo: GeoParquetMetadata? by lazy { keyValueMetadata["geo"]?.let { GeoParquetMetadata.parse(it) } }
+
+    /**
+     * Every geometry column of the file, whichever way it is declared: the Parquet-native GEOMETRY/GEOGRAPHY
+     * logical type (GeoParquet 2.0, or a plain Parquet writer with no `geo` key) and/or the `geo` key
+     * (GeoParquet 1.x: WKB in an unannotated BYTE_ARRAY). The logical type wins on CRS/edges; `geo` fills
+     * `geometry_types`, `bbox`, `orientation` and provides the primary column.
+     */
+    val geometryColumns: List<GeometryColumn> by lazy {
+        val fromGeo = geo?.columns.orEmpty()
+        val names = LinkedHashSet<String>()
+        leaves.filter { it.isGeospatial }.forEach { names += it.name }
+        fromGeo.keys.filter { leaf(it) != null }.forEach { names += it }
+        names.mapNotNull { name ->
+            val leaf = leaf(name) ?: return@mapNotNull null
+            val meta = fromGeo[name]
+            if (leaf.type != ParquetType.BYTE_ARRAY) return@mapNotNull null
+            if (meta != null && meta.encoding != null && meta.encoding != "WKB") return@mapNotNull null // GeoArrow native encodings of 1.1 are nested: not this reader
+            val logical = leaf.logicalType
+            val crs = when (logical) {
+                is ParquetLogicalType.Geometry -> Crs.parse(logical.crs, keyValueMetadata)
+                is ParquetLogicalType.Geography -> Crs.parse(logical.crs, keyValueMetadata)
+                else -> Crs.fromGeoJson(meta?.crs)
+            }
+            val edges = when {
+                logical is ParquetLogicalType.Geography -> (logical.algorithm ?: EdgeInterpolation.SPHERICAL).name.lowercase()
+                logical is ParquetLogicalType.Geometry -> "planar"
+                else -> meta?.edges ?: "planar"
+            }
+            GeometryColumn(
+                leaf = leaf,
+                crs = crs,
+                edges = edges,
+                primary = geo?.primaryColumn == name || (geo == null && names.first() == name),
+                geometryTypes = meta?.geometryTypes,
+                bbox = meta?.bbox,
+                orientation = meta?.orientation,
+                statistics = rowGroups.mapNotNull { it.columns.getOrNull(leaf.index)?.geospatialStatistics },
+            )
+        }
+    }
+
     /** Firmware file metadata: `schema_version` (`cores3-telemetry-v1|v2|v3`), `station_id`, `boot_id`, … */
     val schemaVersion: String? get() = keyValueMetadata["schema_version"]
+
+    private companion object {
+        const val CONVERTED_UTF8 = 0
+    }
     val stationId: String? get() = keyValueMetadata["station_id"]
     val bootId: String? get() = keyValueMetadata["boot_id"]
 }

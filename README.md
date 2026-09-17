@@ -25,6 +25,15 @@ push between two `CHUNK`s, the real `TcpTransport` against an in-JVM fake device
 JSON models, Parquet verification, sync planner, lost-window recovery, the resume-after-lost-link
 decision, the auto-sync worker's decision logic over the fake device), debug APK ≈ 65 MiB unminified.
 
+**GeoParquet 2.0 (2026-09-17, D11):** `:core:parquet` now reads any GeoParquet 2.0 file from PyArrow, GDAL or DuckDB
+and writes its own — `BYTE_ARRAY`/`DOUBLE` columns, the Parquet-native `GEOMETRY`/`GEOGRAPHY` logical types and
+geospatial statistics, the `geo` key, an own WKB decoder (7 OGC types, XY/Z/M/ZM, both byte orders, EWKB
+flags), dictionary pages, Data Page V2, own SNAPPY, GZIP, and ZSTD through a codec SPI that `:app` fills with
+`zstd-jni` (`AppParquetCodecs`, the one native library). 20 fixtures from PyArrow 25 and DuckDB 1.5.5 (every
+codec × encoding × page version) decode cell-for-cell; our writer's output is accepted by PyArrow and DuckDB
+(`tools/validate_parquet_samples.py`). Firmware and device files are unchanged; the import UI and map are
+separate decisions (D4/D5). Details in `docs/history-ux-and-data-layer.md` §7.
+
 **Restructured into modules (2026-09-17):** `:core:protocol`, `:core:parquet`, `:core:history` are pure
 Kotlin/JVM; `:app` is Android. A metric registry (`Metrics`) replaces hard-coded PM columns and the
 tiers are one row per metric (Room v7), so a new sensor is a registry entry. `./gradlew verify` is the gate.
@@ -54,7 +63,7 @@ rows per row group (`RealArchiveTest`); the board's second, **full 1800 s window
 deriver folds both into one derived day of 285 rows in two hourly row groups (188 B/row against 512
 B/row for the device files) that DuckDB reads and buckets. The same test, where the firmware checkout
 sits next to this repo, sweeps **all 766 real files** on this machine (67,272 rows, 58,868 column
-chunks, 136 statistics cross-checks) in 0.2 s on the JVM. 123 unit tests (46 `:app`, 77 `:core`), 0 lint errors (7 pre-existing warnings). Not yet run *on the phone*
+chunks, 136 statistics cross-checks) in 0.2 s on the JVM. 135 unit tests (47 `:app`, 88 `:core`), 0 lint errors (7 pre-existing warnings). Not yet run *on the phone*
 against a v3 file — that needs a BLE/LAN sync of the board's new files and goes into the firmware
 repo's `bench-verified.md`.
 
@@ -271,7 +280,8 @@ History (2026-09-17, steps 1–2; the evaluation and the remaining steps are in 
 
 | Question | Decision |
 | --- | --- |
-| How to read Parquet on the phone | **Own reader for the firmware's subset** (`data/history/parquet`): Thrift-compact footer, any number of row groups, Data Page V1, PLAIN, RLE definition levels (max level 1), INT32/INT64/FLOAT, UNCOMPRESSED or LZ4_RAW (own ~60-line block decoder), footer statistics and the TIMESTAMP logical type. Everything else — dictionary pages, Data Page V2, other codecs/types, nested schemas — is refused with a typed `ParquetFormatException` naming the feature. Kotlin DataFrame cannot read Parquet on Android (its Arrow Dataset JNI has no Android build) and DuckDB for Android is an experimental self-build; both are documented in the evaluation. |
+| How to read Parquet on the phone | **Own reader for the firmware's subset** (`data/history/parquet`): Thrift-compact footer, any number of row groups, Data Page V1, PLAIN, RLE definition levels (max level 1), INT32/INT64/FLOAT, UNCOMPRESSED or LZ4_RAW (own ~60-line block decoder), footer statistics and the TIMESTAMP logical type. Since D11 (GeoParquet, below) also DOUBLE/BYTE_ARRAY, dictionary pages, Data Page V2, SNAPPY/GZIP/ZSTD. Everything else — repetition levels/nested schemas, DELTA/BYTE_STREAM_SPLIT encodings, BROTLI/LZO, BOOLEAN/INT96/FIXED_LEN_BYTE_ARRAY — is refused with a typed `ParquetFormatException` naming the feature. Kotlin DataFrame cannot read Parquet on Android (its Arrow Dataset JNI has no Android build) and DuckDB for Android is an experimental self-build; both are documented in the evaluation. |
+| GeoParquet (D11, 2026-09-17) | **GeoParquet 2.0 rc.1, read any file + write our own**, by extending the own reader rather than importing an engine (`docs/history-ux-and-data-layer.md` §7). 2.0 dropped the nested GeoArrow encodings: a geometry column is a flat `BYTE_ARRAY` of WKB with the Parquet-native `GEOMETRY`/`GEOGRAPHY` logical type (union fields 17/18), CRS on the type (`absent` = OGC:CRS84, PROJJSON, `EPSG:4326`, `srid:0`), `geospatial_statistics` (bbox + WKB type codes) per chunk, and the `geo` key optional for reading. The reader grows `BYTE_ARRAY`/`ColumnValues.Binary`, dictionary pages + `RLE_DICTIONARY`, Data Page V2, an own SNAPPY decoder, GZIP via `java.util.zip`, and a codec SPI that `:app` fills for **ZSTD with `zstd-jni` (`@aar`)** — the one native library, kept out of `:core:*`. Own WKB decoder (7 types, XY/Z/M/ZM, both byte orders), no PROJ. Measured in the pixi env: PyArrow 25 emits `GEOMETRY` + stats with SNAPPY + RLE_DICTIONARY, DuckDB 1.5.5 `GEOPARQUET_VERSION 'V2'` emits `GEOMETRY` + `geo` with PLAIN + SNAPPY — that matrix is the fixture set. The import UI and the map stay separate decisions (D4/D5). |
 | Zero-copy, concretely | `FileChannel.map` + absolute reads; only the requested column chunks are touched (3 of 77 for a PM2.5 chart); PLAIN pages are decoded once into `IntArray`/`LongArray`/`FloatArray` with a `BooleanArray` validity mask (`ColumnValues`), no boxing, no per-row objects. |
 | Oracle for the reader | PyArrow, via `tools/make_parquet_fixtures.py` run in the firmware repo's pixi env: it copies real device files, compiles the firmware's own fixture writers for v3 files, and writes `expected.json` (footer facts, per-row-group statistics decoded from raw bytes, per-column null count/first/last/min/max/sum). The Kotlin tests compare every column of every file. Regenerate when the firmware writer changes; commit the result. |
 | What the index stores (Room v4) | Derived from the file, never from its name: rows, row groups, `schema_version`, `boot_id`, `purpose`, UTC row count and span, monotonic span, sequence span, `pms_status == 4` count, plus `indexedAt`/`indexError`. Computed in `SyncEngine` right after verification (same upsert as the row) and back-filled lazily for older rows by `HistoryIndexer.backfill` (batches of 100, failures retried once per pass, never-indexed rows first). v6 footers answer the spans from statistics without decoding (`fromStatistics`); v1/v2 files decode three columns. |

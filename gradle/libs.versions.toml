@@ -20,6 +20,7 @@ kotlinxSerialization = "1.11.0"
 androidxDocumentfile = "1.1.0"
 androidxDatastore = "1.2.1"
 androidxWork = "2.11.2"
+zstdJni = "1.5.7-17"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidxCore" }
@@ -58,6 +59,8 @@ androidx-documentfile = { module = "androidx.documentfile:documentfile", version
 androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "androidxDatastore" }
 androidx-work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "androidxWork" }
 androidx-hilt-work = { module = "androidx.hilt:hilt-work", version.ref = "androidxHilt" }
+# ZSTD for Parquet pages (GeoParquet from PyArrow/GDAL): JVM jar in :core:parquet tests, AAR in :app.
+zstd-jni = { module = "com.github.luben:zstd-jni", version.ref = "zstdJni" }
 androidx-hilt-compiler = { module = "androidx.hilt:hilt-compiler", version.ref = "androidxHilt" }
 
 [plugins]

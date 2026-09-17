@@ -40,6 +40,13 @@ internal class ThriftCompactWriter {
     fun i32(id: Int, value: Int) { fieldHeader(id, ThriftCompactReader.Type.I32); writeZigZag32(value) }
     fun i64(id: Int, value: Long) { fieldHeader(id, ThriftCompactReader.Type.I64); writeZigZag64(value) }
     fun binary(id: Int, value: ByteArray) { fieldHeader(id, ThriftCompactReader.Type.BINARY); writeBinary(value) }
+
+    /** Thrift doubles travel as 8 little-endian bytes in the compact protocol. */
+    fun double(id: Int, value: Double) {
+        fieldHeader(id, ThriftCompactReader.Type.DOUBLE)
+        val bits = java.lang.Double.doubleToRawLongBits(value)
+        for (i in 0 until 8) out.write(((bits ushr (8 * i)) and 0xFF).toInt())
+    }
     fun string(id: Int, value: String) = binary(id, value.toByteArray(Charsets.UTF_8))
 
     /** A list field of [size] elements of [elementType]; the caller then writes each element. */

@@ -316,6 +316,7 @@ makes the "Give the logger the time" nudge on Home worth being prominent.
 | D8 | Many loggers | **M1** Home cards + sequential "collect from all nearby" queue; M2 (concurrent, LAN first) only after a measured need (§4.3) |
 | D9 | Unsynced time | implement the estimate of §4.6 in the derive step, clearly labelled |
 | D10 | Charts | Compose `Canvas` with a written design spec that Swift Charts follows (§4.5) |
+| D11 | GeoParquet | **2.0 rc.1, both directions**: read any GeoParquet 2.0 file (native `GEOMETRY`/`GEOGRAPHY` + WKB, plus the encodings and codecs mainstream writers use) and write our own; the reader stays the own Kotlin one, extended (§7). Decided 2026-09-17. |
 
 **Progress (2026-09-17):** implemented and gated — step 1 (reader, `data/history/parquet`), step 2
 (Room v4 index, `HistoryIndexer`, file Metrics screen), step 3a (aggregate tiers, Room v5,
@@ -328,10 +329,11 @@ spans in the index, `estimatedRows` in the tiers, `event_time_utc_estimated_ns` 
 in the chart; verified exact against a real later stamp of the same boot). Then (same day) the
 restructure: three pure `:core` modules under `:app`, the metric registry (`Metrics`) and per-metric tiers
 (Room v7), the chart redesign (band-coloured columns, day ring, calendar heatmap), and the warm-up
-research (README decision "Sensor warm-up and settling"). 123 unit tests (46 `:app`, 77 `:core`). The README's "Design
+research (README decision "Sensor warm-up and settling"). 135 unit tests (47 `:app`, 88 `:core`). The README's "Design
 decisions → History" table records the choices made while implementing. Still open: 6
 (deployment record + map + `deployment.id` contract PR — blocked on the D4 rule amendment), 7 (spec
-documents for iOS).
+documents for iOS). **D11 (GeoParquet 2.0, §7) implemented the same day**: reader, writer, fixtures,
+codec SPI + `AppParquetCodecs`; 135 unit tests, `verify` green; the import UI stays with 6.
 
 Suggested order of work once decided: (1) `data/history/parquet` reader + tests on real files →
 (2) footer index in Room + Detailed "Metrics" screen reading raw days (proves the reader on the
@@ -353,6 +355,93 @@ The measurements in §0 prompted writer changes on the firmware side — built, 
 | `.partial` retained | a reset between row groups leaves a footer-less `.partial` whose earlier groups are complete on the card | still never listed by the device; a footer-rebuild tool is possible later and would belong in the firmware repo |
 
 Nothing changes for sync: identity is still `(station, name, size, crc32)` per finalized file, and `ParquetVerify` only checks magic/size/CRC. The derived daily spec in §2 stays as written; its writer and the device writer now agree on statistics rules (parquet-format 2.13 TYPE_ORDER float rules) and on the TIMESTAMP annotation. Reference: `../m5stack-aq-parquet/docs/telemetry-pipeline.md` ("Direct Parquet experiment") and `tools/parquet_footer.py` there, a 100-line Thrift-compact footer decoder that is a direct template for the Kotlin footer parser.
+
+## 7. GeoParquet 2.0 (decided 2026-09-17, D11)
+
+**Why now.** Location is coming to the phone side (D4: coordinates only on the phone, an opaque
+`deployment_id` to the board), the derived daily files and exports are what a laptop, a hub, a GIS
+tool or another phone will open, and the user wants the phone to *read* other people's GeoParquet as
+well (other networks' stations, boundaries, coverage polygons). GeoParquet 2.0 is at `v2.0.0-rc.1`.
+
+**What 2.0 rc.1 is** ([spec](https://geoparquet.org/releases/v2.0.0-rc.1/), [parquet-format
+Geospatial.md](https://github.com/apache/parquet-format/blob/apache-parquet-format-2.12.0/Geospatial.md),
+`parquet.thrift` 2.12):
+
+| | 1.1 | 2.0 rc.1 | Consequence for the own reader |
+| --- | --- | --- | --- |
+| Geometry encoding | WKB **or** native GeoArrow (`LIST`/struct of `DOUBLE`) | **WKB only**, `BYTE_ARRAY` annotated with the Parquet-native `LogicalType` union field **17 `GEOMETRY{1: crs}`** or **18 `GEOGRAPHY{1: crs, 2: algorithm}`** | flat schema, max definition level 1, **no repetition levels** — the current page decoder's shape; the nested encodings that would have needed a real nested reader are gone |
+| CRS | `geo` JSON only | the logical type's `crs` string is the source of truth (absent → OGC:CRS84; inline PROJJSON; `EPSG:4326`-style authority code; `srid:0` = unknown; `projjson:<kv key>`); `geo` restates it as inline PROJJSON | no PROJ: accept the four forms, treat absent / `OGC:CRS84` / `EPSG:4326` / PROJJSON with `id` OGC:CRS84 or EPSG:4326 as lon/lat, expose everything else as an opaque string |
+| `geo` key-value metadata | required | required for a *conformant* file, but a 2.0 reader MUST also read files carrying only the native types (DuckDB's default output) | `geo` is optional input; the logical type decides |
+| Statistics | none for geometry | `ColumnMetaData` field **17 `GeospatialStatistics{1: BoundingBox{xmin,xmax,ymin,ymax[,zmin,zmax,mmin,mmax]}, 2: list<i32> geospatial_types}`** (ISO WKB codes, +1000 Z, +2000 M, +3000 ZM) | decode; lets the app skip files/row groups outside a bbox without touching pages |
+| Version string | `"1.1.0"` | `"2.0.0"` — the rc.1 `schema.json` pins `version` to that const (DuckDB writes it too); readers must not reject unknown fields | write `"2.0.0"`, accept any `1.x`/`2.x` and read `1.x` files (WKB + `geo`, no logical type) as well |
+
+**Measured (2026-09-17, firmware repo pixi env, no network):** PyArrow 25.0.0 writes the `GEOMETRY`
+logical type and `geospatial_statistics` when the Arrow field is a registered `geoarrow.wkb` extension
+type (default output **SNAPPY + RLE_DICTIONARY**, dictionary page before the data pages; no `geo` key —
+that is GeoPandas' job); DuckDB 1.5.5 with the already-installed `spatial` extension writes
+`COPY … (FORMAT PARQUET, GEOPARQUET_VERSION 'V2')` = `GEOMETRY` type + `geo` key, **PLAIN + SNAPPY**.
+Neither writes LZ4_RAW or Data Page V2 by default; PyArrow can be asked for
+`compression='none'|'gzip'|'zstd'`, `use_dictionary=False`, `data_page_version='2.0'`. So "read any
+GeoParquet 2.0" is, concretely, "read what PyArrow/GeoPandas, GDAL and DuckDB emit": that is the
+matrix the fixtures cover.
+
+**Options for "any file" (the codecs are the only hard part):**
+
+| Option | APK | Verdict |
+| --- | --- | --- |
+| G1 — extend the own reader: `BYTE_ARRAY` PLAIN, dictionary pages + `RLE_DICTIONARY`/`PLAIN_DICTIONARY` indices, Data Page V2, own SNAPPY decoder (~150 lines, the format is a byte-copy LZ77), GZIP via `java.util.zip.Inflater`; **ZSTD through a codec SPI** filled by `:app` with `zstd-jni` (`@aar`, BSD, prebuilt for Android 5+) and by `:core:parquet` tests with the plain jar | ~1 MB (zstd `.so` per ABI) | **Chosen.** Keeps `:core:*` dependency-free and transliterable to Swift (Apple ships libzstd/libcompression for the same seam); everything else stays pure Kotlin under the PyArrow/DuckDB oracle |
+| G2 — Rust `parquet` + `geoarrow` crates behind UniFFI (R3) | 5–8 MB/ABI + Rust toolchain | Not for this: 2.0 removed the nested encodings that made a full reader necessary; revisit only for spatial *analysis* (joins, index) |
+| G3 — DuckDB + spatial (R2) | 30–60 MB, self-built | No (unchanged from D1) |
+| Pure-Kotlin ZSTD | 0 | No: ~2,000 lines of FSE/Huffman to own and verify; a `.so` is cheaper |
+
+**Design.**
+
+1. **Values.** New `ColumnValues.Binary(offsets: IntArray, data: ByteArray, valid)` — Arrow-style, one
+   contiguous buffer, no boxing. Lifts the derived-file restriction "no `station_id` string column"
+   (README) as a side effect; `STRING`/`UTF8` is the same physical decode.
+2. **Metadata.** `ParquetLogicalType.Geometry(crs)`, `.Geography(crs, algorithm)`;
+   `ColumnChunkMeta.geospatialStatistics`; `GeoParquetMetadata` (kotlinx.serialization, unknown fields
+   ignored) parsed from `keyValueMetadata["geo"]` on demand; `ParquetFileMetadata.geometryColumns`
+   unions both sources (logical type wins, `geo` fills `geometry_types`/`bbox`/`edges`/`orientation`).
+   `Crs` value object: `Crs84`, `Authority(auth, code)`, `Srid(n)`, `ProjJson(text)`, `Unknown`.
+3. **Geometry.** `Wkb` decoder → `Geometry` sealed class (Point, LineString, Polygon, MultiPoint,
+   MultiLineString, MultiPolygon, GeometryCollection; XY/Z/M/ZM; per-geometry byte order honoured;
+   coordinates in `DoubleArray`s). Pure, tested against PyArrow's `geo_statistics` bbox and DuckDB's
+   `ST_AsText`. A `bbox()` per geometry and per column.
+4. **Pages.** The decoder grows: dictionary page (PLAIN values) → indices (`RLE_DICTIONARY`: one byte bit
+   width, RLE/bit-packed hybrid — `RleBitPackedHybrid` already decodes any width ≤ 32); Data Page V2
+   (levels uncompressed and outside the compressed block, `is_compressed` flag, `num_nulls`, `num_rows`).
+   Everything else still raises `ParquetFormatException` naming the feature.
+5. **Codecs.** `interface PageDecompressor`, `ParquetCodecs.builtIn` (UNCOMPRESSED, LZ4_RAW, SNAPPY, GZIP),
+   `ParquetFile.open(file, codecs)`; `:app` supplies `ZSTD` via zstd-jni. BROTLI, LZO, framed LZ4 stay
+   refused (nobody writes GeoParquet with them by default).
+6. **Writer.** `ParquetWriter.Column(type = BYTE_ARRAY, geometry = Geometry(crs))` → PLAIN BYTE_ARRAY page,
+   `GEOMETRY` logical type, `geospatial_statistics` (bbox + type codes) per chunk, `geo` metadata built by
+   `GeoParquetMetadata.forWriter(...)`. Still LZ4_RAW/UNCOMPRESSED, Data Page V1 — DuckDB and PyArrow read
+   both. Deployment point per station goes on the derived daily files / exports when a deployment record
+   exists (D4), never to the board.
+7. **App seam (not in this step).** Import of external GeoParquet (SAF picker → `imports/<sha256>.parquet`,
+   indexed like archive files, drawn on the D5 map) is the follow-up once D4/D5 land; the reader is the
+   prerequisite, the import UI is a separate decision.
+
+**Fixtures (20 files, 68 KB).** `tools/make_geoparquet_fixtures.py` (same pixi env) writes to
+`core/parquet/src/test/resources/geoparquet/`: PyArrow × {none, snappy, gzip, zstd} × {plain,
+dictionary} × {data page v1, v2} = 16 files, one multi-page / two-row-group file whose dictionary
+overflows into PLAIN pages (verified page by page: `DICT, DATA(RLE_DICTIONARY) ×2, DATA(PLAIN)`), one
+"native only" file without the `geo` key, and DuckDB `GEOPARQUET_VERSION 'V2'` and `'V1'` (WKB + `geo`,
+no logical type — proves 1.x reading). The table: INT32, INT64, DOUBLE, FLOAT, STRING and a nullable
+`GEOMETRY` column with all seven OGC types, XY / XYZ / XYZM, both WKB byte orders, `LINESTRING EMPTY`,
+two nulls and a duplicate (the DuckDB files omit the ZM row: DuckDB 1.5.5 drops the `geo` key when any
+geometry has an M value — measured). `expected.json` carries footer facts, per-chunk `geo_statistics`
+from PyArrow, per-column aggregates and per-row `ST_AsText` from DuckDB. `GeoParquetFileTest` decodes
+every column of every file against it, round-trips through `ParquetWriter`, and
+`tools/validate_parquet_samples.py` then checks the round-trip file with PyArrow and DuckDB
+(`GEOMETRY` type, `geo` 2.0.0, statistics equal to what PyArrow derives from the same WKB, `ST_AsText`
+on every row, DuckDB bbox pruning). A third, independent reader — [hyparquet](https://github.com/hyparam/hyparquet)
+(pure JS) — reads the PyArrow/DuckDB fixtures and our output identically *except* LZ4_RAW pages, where
+`hyparquet-compressors` 1.1.1 has a decoder bug (match-length extension test applied after `+4`; any
+match ≥ 19 bytes breaks it; PyArrow, DuckDB and the reference decoder read the same blocks). Our files
+and the firmware's are valid; the fix is one line upstream.
 
 ## Sources checked (2026-09-17)
 

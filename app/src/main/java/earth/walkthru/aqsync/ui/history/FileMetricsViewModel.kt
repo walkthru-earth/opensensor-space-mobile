@@ -129,13 +129,14 @@ class FileMetricsViewModel @Inject constructor(
             if (first == null) first = text
             last = text
             when (col) {
-                is ColumnValues.Float32 -> {
-                    val v = col.values[i].toDouble()
+                is ColumnValues.Float32, is ColumnValues.Float64 -> {
+                    val v = col.asDouble(i)!!
                     if (!v.isNaN()) {
                         if (v < minD) minD = v
                         if (v > maxD) maxD = v
                     }
                 }
+                is ColumnValues.Binary -> Unit // strings / WKB: no numeric range
                 else -> {
                     val v = col.asLong(i)!!
                     if (v < minL) minL = v
@@ -145,7 +146,8 @@ class FileMetricsViewModel @Inject constructor(
         }
         val (minText, maxText) = when {
             !any -> "—" to "—"
-            col is ColumnValues.Float32 -> (if (minD.isFinite()) trim(minD) else "—") to (if (maxD.isFinite()) trim(maxD) else "—")
+            col is ColumnValues.Float32 || col is ColumnValues.Float64 -> (if (minD.isFinite()) trim(minD) else "—") to (if (maxD.isFinite()) trim(maxD) else "—")
+            col is ColumnValues.Binary -> "—" to "—"
             else -> minL.toString() to maxL.toString()
         }
         return ColumnSummary(name, type, timestamp, col.size, col.nullCount, minText, maxText, first ?: "—", last ?: "—", statsMin, statsMax)
@@ -153,8 +155,10 @@ class FileMetricsViewModel @Inject constructor(
 
     private fun format(col: ColumnValues, i: Int): String = when (col) {
         is ColumnValues.Float32 -> trim(col.values[i].toDouble())
+        is ColumnValues.Float64 -> trim(col.values[i])
         is ColumnValues.Int32 -> col.values[i].toString()
         is ColumnValues.Int64 -> col.values[i].toString()
+        is ColumnValues.Binary -> if (col.length(i) <= 64) col.string(i) ?: "" else "${col.length(i)} bytes"
     }
 
     private fun trim(v: Double): String = if (v == Math.rint(v) && kotlin.math.abs(v) < 1e15) v.toLong().toString() else "%.4g".format(java.util.Locale.ROOT, v)

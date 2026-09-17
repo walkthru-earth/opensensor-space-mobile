@@ -7,26 +7,31 @@ import java.nio.ByteOrder
 import java.nio.channels.FileChannel
 
 /**
- * Reads the Parquet subset the CoreS3 firmware writes — and nothing else, on purpose:
+ * Reads the Parquet subset the CoreS3 firmware writes, plus what GeoParquet 2.0 files from PyArrow,
+ * DuckDB and GDAL need (docs/history-ux-and-data-layer.md §7) — and nothing else, on purpose:
  *
- * - flat schema, leaves of physical type INT32 / INT64 / FLOAT, REQUIRED or OPTIONAL;
- * - any number of row groups (v1 writer: one; v6 writer: up to eight), one or more Data Page V1 per
- *   column chunk, PLAIN values, RLE/bit-packed definition levels (max level 1), no dictionary pages;
- * - codec UNCOMPRESSED or LZ4_RAW (whole page compressed as one LZ4 block);
- * - footer statistics and the TIMESTAMP logical type are exposed, not required.
+ * - flat schema, leaves of physical type INT32 / INT64 / FLOAT / DOUBLE / BYTE_ARRAY, REQUIRED or
+ *   OPTIONAL (max definition level 1, no repetition levels);
+ * - any number of row groups, Data Page V1 or V2, PLAIN values or a PLAIN dictionary page with
+ *   RLE_DICTIONARY / PLAIN_DICTIONARY indices, RLE/bit-packed definition levels;
+ * - codecs from a [ParquetCodecs] registry: UNCOMPRESSED, LZ4_RAW, SNAPPY, GZIP built in, ZSTD when the
+ *   caller registers one;
+ * - footer statistics, the TIMESTAMP / STRING / GEOMETRY / GEOGRAPHY logical types and the geospatial
+ *   statistics are exposed, not required.
  *
  * Anything else raises [ParquetFormatException] naming the feature, so a file from another writer is
  * refused loudly rather than misread. Files are memory-mapped and decoded straight into primitive
  * arrays ([ColumnValues]); a chart that needs three of 77 columns touches three column chunks.
  *
- * Not thread-safe per instance for concurrent reads of the *same* instance is fine (absolute reads,
- * duplicated buffers) — the mapped buffer itself is never repositioned.
+ * Concurrent reads of the *same* instance are fine (absolute reads, duplicated buffers) — the mapped
+ * buffer itself is never repositioned.
  */
 class ParquetFile private constructor(
     private val buf: ByteBuffer,
     val metadata: ParquetFileMetadata,
     /** Where the bytes came from, for messages. */
     val source: String,
+    private val codecs: ParquetCodecs,
 ) {
     val leaves: List<LeafColumn> get() = metadata.leaves
     val numRows: Long get() = metadata.numRows
@@ -50,36 +55,50 @@ class ParquetFile private constructor(
         val rg = metadata.rowGroups.getOrNull(rowGroup) ?: throw ParquetFormatException("row group $rowGroup does not exist in $source")
         val chunk = rg.columns[leaf.index]
         if (chunk.name != leaf.name) throw ParquetFormatException("column chunk ${leaf.index} is '${chunk.name}', expected '${leaf.name}' ($source)")
-        return ColumnChunkDecoder(buf, source).decode(leaf, chunk, rg.numRows)
+        return ColumnChunkDecoder(buf, source, codecs).decode(leaf, chunk, rg.numRows)
     }
+
+    /** The geometry columns of a GeoParquet file (2.0 native types and/or the `geo` key); empty for a plain file. */
+    val geometryColumns: List<GeometryColumn> get() = metadata.geometryColumns
+
+    /** Decodes one geometry column (all row groups) from WKB; null rows stay null. */
+    fun readGeometry(column: GeometryColumn): List<Geometry?> = Wkb.decodeColumn(binary(readColumn(column.leaf), column.name))
+
+    /** Decodes one geometry column of one row group. */
+    fun readGeometry(column: GeometryColumn, rowGroup: Int): List<Geometry?> = Wkb.decodeColumn(binary(readColumn(column.leaf, rowGroup), column.name))
+
+    private fun binary(values: ColumnValues, name: String): ColumnValues.Binary =
+        values as? ColumnValues.Binary ?: throw ParquetFormatException("'$name' is not a BYTE_ARRAY column ($source)")
 
     private fun empty(leaf: LeafColumn): ColumnValues = when (leaf.type) {
         ParquetType.INT32 -> ColumnValues.Int32(IntArray(0), null)
         ParquetType.INT64 -> ColumnValues.Int64(LongArray(0), null)
         ParquetType.FLOAT -> ColumnValues.Float32(FloatArray(0), null)
+        ParquetType.DOUBLE -> ColumnValues.Float64(DoubleArray(0), null)
+        ParquetType.BYTE_ARRAY -> ColumnValues.Binary(IntArray(1), ByteArray(0), null)
         else -> throw ParquetFormatException("physical type ${leaf.type} of '${leaf.name}' is not supported ($source)")
     }
 
     companion object {
         /** Memory-maps [file] read-only and parses its footer. The mapping outlives the channel. */
-        fun open(file: File): ParquetFile {
+        fun open(file: File, codecs: ParquetCodecs = ParquetCodecs.builtIn): ParquetFile {
             val mapped = RandomAccessFile(file, "r").use { raf ->
                 raf.channel.map(FileChannel.MapMode.READ_ONLY, 0, raf.length())
             }
             mapped.order(ByteOrder.LITTLE_ENDIAN)
-            return ParquetFile(mapped, ParquetFooterParser.parse(mapped), file.name)
+            return ParquetFile(mapped, ParquetFooterParser.parse(mapped), file.name, codecs)
         }
 
         /** For tests and for bytes that were just verified in memory. */
-        fun wrap(bytes: ByteArray, source: String = "bytes"): ParquetFile {
+        fun wrap(bytes: ByteArray, source: String = "bytes", codecs: ParquetCodecs = ParquetCodecs.builtIn): ParquetFile {
             val buf = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
-            return ParquetFile(buf, ParquetFooterParser.parse(buf), source)
+            return ParquetFile(buf, ParquetFooterParser.parse(buf), source, codecs)
         }
     }
 }
 
 /** Decodes one column chunk (all its pages) into a [ColumnValues] of exactly `numRows` slots. */
-private class ColumnChunkDecoder(private val file: ByteBuffer, private val source: String) {
+private class ColumnChunkDecoder(private val file: ByteBuffer, private val source: String, private val codecs: ParquetCodecs) {
 
     private class PageHeader(
         val type: Int,
@@ -88,9 +107,88 @@ private class ColumnChunkDecoder(private val file: ByteBuffer, private val sourc
         val numValues: Int,
         val encoding: ParquetEncoding,
         val definitionLevelEncoding: ParquetEncoding,
-        val repetitionLevelEncoding: ParquetEncoding,
         val headerLength: Int,
+        // Data Page V2 only:
+        val numNulls: Int = 0,
+        val definitionLevelsByteLength: Int = 0,
+        val repetitionLevelsByteLength: Int = 0,
+        val isCompressed: Boolean = true,
     )
+
+    /** The PLAIN values of a page or a dictionary, dense (nulls removed), before they are scattered into row slots. */
+    private sealed class Dense {
+        abstract val count: Int
+
+        class I32(val v: IntArray) : Dense() { override val count get() = v.size }
+        class I64(val v: LongArray) : Dense() { override val count get() = v.size }
+        class F32(val v: FloatArray) : Dense() { override val count get() = v.size }
+        class F64(val v: DoubleArray) : Dense() { override val count get() = v.size }
+        class Bin(val offsets: IntArray, val data: ByteArray) : Dense() { override val count get() = offsets.size - 1 }
+
+        /** Dictionary lookup: `indices` into this, producing the values in index order. */
+        fun gather(indices: IntArray, column: String, source: String): Dense {
+            for (ix in indices) if (ix < 0 || ix >= count) throw ParquetFormatException("'$column': dictionary index $ix outside a dictionary of $count ($source)")
+            return when (this) {
+                is I32 -> I32(IntArray(indices.size) { v[indices[it]] })
+                is I64 -> I64(LongArray(indices.size) { v[indices[it]] })
+                is F32 -> F32(FloatArray(indices.size) { v[indices[it]] })
+                is F64 -> F64(DoubleArray(indices.size) { v[indices[it]] })
+                is Bin -> {
+                    val out = IntArray(indices.size + 1)
+                    var total = 0
+                    for ((i, ix) in indices.withIndex()) { out[i] = total; total += offsets[ix + 1] - offsets[ix] }
+                    out[indices.size] = total
+                    val bytes = ByteArray(total)
+                    for ((i, ix) in indices.withIndex()) System.arraycopy(data, offsets[ix], bytes, out[i], offsets[ix + 1] - offsets[ix])
+                    Bin(out, bytes)
+                }
+            }
+        }
+    }
+
+    /** Accumulates the rows of one chunk; fixed-width types preallocate, BYTE_ARRAY grows. */
+    private class Builder(type: ParquetType, private val rows: Int) {
+        private val ints = if (type == ParquetType.INT32) IntArray(rows) else null
+        private val longs = if (type == ParquetType.INT64) LongArray(rows) else null
+        private val floats = if (type == ParquetType.FLOAT) FloatArray(rows) else null
+        private val doubles = if (type == ParquetType.DOUBLE) DoubleArray(rows) else null
+        private val offsets = if (type == ParquetType.BYTE_ARRAY) IntArray(rows + 1) else null
+        private var bytes = if (type == ParquetType.BYTE_ARRAY) ByteArray(0) else null
+        private var byteLength = 0
+
+        /** Scatters [dense] over rows `[row, row + numValues)`, skipping the null slots of [valid]. */
+        fun scatter(dense: Dense, valid: BooleanArray?, row: Int, numValues: Int) {
+            var k = 0
+            when (dense) {
+                is Dense.I32 -> for (i in row until row + numValues) { if (valid == null || valid[i]) ints!![i] = dense.v[k++] }
+                is Dense.I64 -> for (i in row until row + numValues) { if (valid == null || valid[i]) longs!![i] = dense.v[k++] }
+                is Dense.F32 -> for (i in row until row + numValues) { if (valid == null || valid[i]) floats!![i] = dense.v[k++] }
+                is Dense.F64 -> for (i in row until row + numValues) { if (valid == null || valid[i]) doubles!![i] = dense.v[k++] }
+                is Dense.Bin -> {
+                    val pageBytes = dense.offsets.last()
+                    val need = byteLength + pageBytes
+                    var buffer = bytes!!
+                    if (need > buffer.size) { buffer = buffer.copyOf(maxOf(need, buffer.size * 2)); bytes = buffer }
+                    System.arraycopy(dense.data, 0, buffer, byteLength, pageBytes)
+                    val offs = offsets!!
+                    for (i in row until row + numValues) {
+                        offs[i] = byteLength + dense.offsets[k]
+                        if (valid == null || valid[i]) k++
+                    }
+                    byteLength += pageBytes
+                    offs[row + numValues] = byteLength
+                }
+            }
+        }
+
+        fun build(valid: BooleanArray?): ColumnValues = when {
+            ints != null -> ColumnValues.Int32(ints, valid)
+            longs != null -> ColumnValues.Int64(longs, valid)
+            floats != null -> ColumnValues.Float32(floats, valid)
+            doubles != null -> ColumnValues.Float64(doubles, valid)
+            else -> { offsets!![rows] = byteLength; ColumnValues.Binary(offsets, bytes!!.copyOf(byteLength), valid) }
+        }
+    }
 
     private companion object {
         const val DATA_PAGE = 0
@@ -103,20 +201,15 @@ private class ColumnChunkDecoder(private val file: ByteBuffer, private val sourc
         if (numRows > Int.MAX_VALUE) throw ParquetFormatException("row group too large ($numRows rows)")
         val rows = numRows.toInt()
         if (chunk.numValues != numRows) throw ParquetFormatException("'${leaf.name}': ${chunk.numValues} values for $numRows rows — repeated columns are not supported ($source)")
-        val width = leaf.type.plainWidth
-        if (width < 0) throw ParquetFormatException("physical type ${leaf.type} of '${leaf.name}' is not supported ($source)")
-        when (chunk.codec) {
-            ParquetCodec.UNCOMPRESSED, ParquetCodec.LZ4_RAW -> Unit
-            else -> throw ParquetFormatException("codec ${chunk.codec} of '${leaf.name}' is not supported ($source)")
+        when (leaf.type) {
+            ParquetType.INT32, ParquetType.INT64, ParquetType.FLOAT, ParquetType.DOUBLE, ParquetType.BYTE_ARRAY -> Unit
+            else -> throw ParquetFormatException("physical type ${leaf.type} of '${leaf.name}' is not supported ($source)")
         }
-        if (chunk.dictionaryPageOffset != null && chunk.dictionaryPageOffset > 0) {
-            throw ParquetFormatException("'${leaf.name}' has a dictionary page: dictionary encoding is not supported ($source)")
-        }
+        val decompressor = codecs[chunk.codec] ?: throw ParquetFormatException("codec ${chunk.codec} of '${leaf.name}' is not supported (registered: ${codecs.supported}) ($source)")
 
         val valid: BooleanArray? = if (leaf.maxDefinitionLevel == 0) null else BooleanArray(rows)
-        val ints = if (leaf.type == ParquetType.INT32) IntArray(rows) else null
-        val longs = if (leaf.type == ParquetType.INT64) LongArray(rows) else null
-        val floats = if (leaf.type == ParquetType.FLOAT) FloatArray(rows) else null
+        val builder = Builder(leaf.type, rows)
+        var dictionary: Dense? = null
 
         var offset = chunk.firstPageOffset
         var row = 0
@@ -128,41 +221,60 @@ private class ColumnChunkDecoder(private val file: ByteBuffer, private val sourc
             val dataEnd = dataStart + header.compressedSize
             if (dataEnd > file.limit()) throw ParquetFormatException("'${leaf.name}': page at $offset runs past the end of the file ($source)")
             when (header.type) {
+                DICTIONARY_PAGE -> {
+                    if (dictionary != null) throw ParquetFormatException("'${leaf.name}': second dictionary page ($source)")
+                    if (header.encoding != ParquetEncoding.PLAIN && header.encoding != ParquetEncoding.PLAIN_DICTIONARY) throw ParquetFormatException("'${leaf.name}': dictionary page encoding ${header.encoding} is not supported ($source)")
+                    val page = decompress(decompressor, chunk.codec, dataStart, header.compressedSize, header.uncompressedSize, leaf.name)
+                    dictionary = decodePlain(leaf.type, page, 0, header.numValues, leaf.name)
+                }
                 DATA_PAGE -> {
-                    if (header.encoding != ParquetEncoding.PLAIN) throw ParquetFormatException("'${leaf.name}': encoding ${header.encoding} is not supported, only PLAIN ($source)")
                     if (header.numValues > rows - row) throw ParquetFormatException("'${leaf.name}': page holds ${header.numValues} values but only ${rows - row} rows remain ($source)")
-                    val page = pageBytes(chunk.codec, dataStart, header)
+                    val page = decompress(decompressor, chunk.codec, dataStart, header.compressedSize, header.uncompressedSize, leaf.name)
                     var pos = 0
                     val defined: Int
                     if (valid != null) {
                         if (header.definitionLevelEncoding != ParquetEncoding.RLE) throw ParquetFormatException("'${leaf.name}': definition levels use ${header.definitionLevelEncoding}, only RLE is supported ($source)")
+                        if (page.limit() < 4) throw ParquetFormatException("'${leaf.name}': page too small for definition levels ($source)")
                         val levelsLength = page.getInt(pos)
                         pos += 4
                         if (levelsLength < 0 || pos + levelsLength > page.limit()) throw ParquetFormatException("'${leaf.name}': definition-level block of $levelsLength bytes does not fit the page ($source)")
-                        val levels = page.duplicate().apply { position(pos); limit(pos + levelsLength) }.slice().order(ByteOrder.LITTLE_ENDIAN)
-                        defined = RleBitPackedHybrid.decodeBooleanLevels(levels, header.numValues, valid, row)
+                        defined = RleBitPackedHybrid.decodeBooleanLevels(slice(page, pos, levelsLength), header.numValues, valid, row)
                         pos += levelsLength
                     } else {
                         defined = header.numValues
                     }
-                    if (pos + defined * width > page.limit()) throw ParquetFormatException("'${leaf.name}': $defined PLAIN values do not fit the page ($source)")
-                    val values = page.duplicate().apply { position(pos) }.order(ByteOrder.LITTLE_ENDIAN)
-                    // Scatter the dense PLAIN values into their row slots (nulls keep a zero slot).
-                    var k = 0
-                    for (i in row until row + header.numValues) {
-                        if (valid != null && !valid[i]) continue
-                        when {
-                            ints != null -> ints[i] = values.getInt(pos + k * 4)
-                            longs != null -> longs[i] = values.getLong(pos + k * 8)
-                            floats != null -> floats[i] = values.getFloat(pos + k * 4)
-                        }
-                        k++
-                    }
+                    val dense = decodeValues(leaf, header.encoding, page, pos, defined, dictionary)
+                    builder.scatter(dense, valid, row, header.numValues)
                     row += header.numValues
                     pages++
                 }
-                DICTIONARY_PAGE -> throw ParquetFormatException("'${leaf.name}' has a dictionary page: dictionary encoding is not supported ($source)")
-                DATA_PAGE_V2 -> throw ParquetFormatException("'${leaf.name}' uses Data Page V2, only V1 is supported ($source)")
+                DATA_PAGE_V2 -> {
+                    if (header.numValues > rows - row) throw ParquetFormatException("'${leaf.name}': page holds ${header.numValues} values but only ${rows - row} rows remain ($source)")
+                    if (header.repetitionLevelsByteLength != 0) throw ParquetFormatException("'${leaf.name}': repetition levels are not supported ($source)")
+                    val defLen = header.definitionLevelsByteLength
+                    if (defLen < 0 || defLen > header.compressedSize) throw ParquetFormatException("'${leaf.name}': definition-level block of $defLen bytes does not fit the page ($source)")
+                    val defined: Int
+                    if (valid != null) {
+                        if (defLen == 0) throw ParquetFormatException("'${leaf.name}': optional column without definition levels ($source)")
+                        defined = RleBitPackedHybrid.decodeBooleanLevels(slice(file, dataStart.toInt(), defLen), header.numValues, valid, row)
+                        if (defined != header.numValues - header.numNulls) throw ParquetFormatException("'${leaf.name}': page declares ${header.numNulls} nulls but the levels show ${header.numValues - defined} ($source)")
+                    } else {
+                        if (header.numNulls != 0) throw ParquetFormatException("'${leaf.name}': required column with ${header.numNulls} nulls ($source)")
+                        defined = header.numValues
+                    }
+                    val valuesStart = dataStart + defLen
+                    val valuesCompressed = header.compressedSize - defLen
+                    val valuesUncompressed = header.uncompressedSize - defLen
+                    val values = if (header.isCompressed) {
+                        decompress(decompressor, chunk.codec, valuesStart, valuesCompressed, valuesUncompressed, leaf.name)
+                    } else {
+                        slice(file, valuesStart.toInt(), valuesCompressed)
+                    }
+                    val dense = decodeValues(leaf, header.encoding, values, 0, defined, dictionary)
+                    builder.scatter(dense, valid, row, header.numValues)
+                    row += header.numValues
+                    pages++
+                }
                 INDEX_PAGE -> Unit
                 else -> throw ParquetFormatException("'${leaf.name}': unknown page type ${header.type} ($source)")
             }
@@ -170,23 +282,84 @@ private class ColumnChunkDecoder(private val file: ByteBuffer, private val sourc
             if (pages > 100_000) throw ParquetFormatException("'${leaf.name}': runaway page loop ($source)")
         }
         val validOrNull = valid?.takeIf { v -> v.any { !it } }
-        return when {
-            ints != null -> ColumnValues.Int32(ints, validOrNull)
-            longs != null -> ColumnValues.Int64(longs, validOrNull)
-            else -> ColumnValues.Float32(floats!!, validOrNull)
+        return builder.build(validOrNull)
+    }
+
+    private fun decodeValues(leaf: LeafColumn, encoding: ParquetEncoding, page: ByteBuffer, pos: Int, defined: Int, dictionary: Dense?): Dense = when (encoding) {
+        ParquetEncoding.PLAIN -> decodePlain(leaf.type, page, pos, defined, leaf.name)
+        ParquetEncoding.RLE_DICTIONARY, ParquetEncoding.PLAIN_DICTIONARY -> {
+            val dict = dictionary ?: throw ParquetFormatException("'${leaf.name}': dictionary-encoded page without a dictionary page ($source)")
+            if (defined == 0) {
+                dict.gather(IntArray(0), leaf.name, source)
+            } else {
+                if (pos >= page.limit()) throw ParquetFormatException("'${leaf.name}': dictionary indices missing ($source)")
+                val bitWidth = page.get(pos).toInt() and 0xFF
+                if (bitWidth > 32) throw ParquetFormatException("'${leaf.name}': dictionary index bit width $bitWidth ($source)")
+                val indices = RleBitPackedHybrid.decode(slice(page, pos + 1, page.limit() - pos - 1), defined, bitWidth)
+                dict.gather(indices, leaf.name, source)
+            }
+        }
+        else -> throw ParquetFormatException("'${leaf.name}': encoding $encoding is not supported, only PLAIN and dictionary ($source)")
+    }
+
+    /** PLAIN: fixed-width little-endian values, or `i32 length + bytes` for BYTE_ARRAY. */
+    private fun decodePlain(type: ParquetType, page: ByteBuffer, pos: Int, count: Int, column: String): Dense {
+        val p = page.duplicate().order(ByteOrder.LITTLE_ENDIAN)
+        if (type == ParquetType.BYTE_ARRAY) {
+            val offsets = IntArray(count + 1)
+            var at = pos
+            var total = 0
+            for (i in 0 until count) {
+                if (at + 4 > p.limit()) throw ParquetFormatException("'$column': BYTE_ARRAY page truncated at value $i ($source)")
+                val len = p.getInt(at)
+                if (len < 0 || at + 4 + len > p.limit()) throw ParquetFormatException("'$column': BYTE_ARRAY length $len does not fit the page ($source)")
+                offsets[i] = total
+                total += len
+                at += 4 + len
+            }
+            offsets[count] = total
+            val data = ByteArray(total)
+            at = pos
+            for (i in 0 until count) {
+                val len = offsets[i + 1] - offsets[i]
+                p.position(at + 4)
+                p.get(data, offsets[i], len)
+                at += 4 + len
+            }
+            return Dense.Bin(offsets, data)
+        }
+        val width = type.plainWidth
+        if (pos + count.toLong() * width > p.limit()) throw ParquetFormatException("'$column': $count PLAIN values do not fit the page ($source)")
+        return when (type) {
+            ParquetType.INT32 -> Dense.I32(IntArray(count) { p.getInt(pos + it * 4) })
+            ParquetType.INT64 -> Dense.I64(LongArray(count) { p.getLong(pos + it * 8) })
+            ParquetType.FLOAT -> Dense.F32(FloatArray(count) { p.getFloat(pos + it * 4) })
+            ParquetType.DOUBLE -> Dense.F64(DoubleArray(count) { p.getDouble(pos + it * 8) })
+            else -> throw ParquetFormatException("physical type $type of '$column' is not supported ($source)")
         }
     }
 
-    private fun pageBytes(codec: ParquetCodec, start: Long, header: PageHeader): ByteBuffer {
-        val raw = file.duplicate().apply { position(start.toInt()); limit((start + header.compressedSize).toInt()) }.slice().order(ByteOrder.LITTLE_ENDIAN)
-        return when (codec) {
-            ParquetCodec.UNCOMPRESSED -> {
-                if (header.compressedSize != header.uncompressedSize) throw ParquetFormatException("uncompressed page sizes disagree (${header.compressedSize} vs ${header.uncompressedSize}) ($source)")
-                raw
-            }
-            ParquetCodec.LZ4_RAW -> ByteBuffer.wrap(Lz4Block.decompress(raw, header.uncompressedSize)).order(ByteOrder.LITTLE_ENDIAN)
-            else -> throw ParquetFormatException("codec $codec is not supported ($source)")
+    private fun decompress(decompressor: PageDecompressor, codec: ParquetCodec, start: Long, compressedSize: Int, uncompressedSize: Int, column: String): ByteBuffer {
+        if (compressedSize < 0 || uncompressedSize < 0) throw ParquetFormatException("'$column': negative page size ($source)")
+        val raw = slice(file, start.toInt(), compressedSize)
+        if (codec == ParquetCodec.UNCOMPRESSED) {
+            if (compressedSize != uncompressedSize) throw ParquetFormatException("'$column': uncompressed page sizes disagree ($compressedSize vs $uncompressedSize) ($source)")
+            return raw
         }
+        val out = try {
+            decompressor.decompress(raw, uncompressedSize)
+        } catch (e: ParquetFormatException) {
+            throw ParquetFormatException("'$column': ${e.message} ($source)", e)
+        } catch (e: RuntimeException) {
+            throw ParquetFormatException("'$column': $codec page failed to decompress: ${e.message} ($source)", e)
+        }
+        if (out.size != uncompressedSize) throw ParquetFormatException("'$column': $codec page produced ${out.size} bytes, header says $uncompressedSize ($source)")
+        return ByteBuffer.wrap(out).order(ByteOrder.LITTLE_ENDIAN)
+    }
+
+    private fun slice(buf: ByteBuffer, start: Int, length: Int): ByteBuffer {
+        if (start < 0 || length < 0 || start + length > buf.limit()) throw ParquetFormatException("slice [$start, ${start + length}) outside ${buf.limit()} bytes ($source)")
+        return buf.duplicate().apply { position(start); limit(start + length) }.slice().order(ByteOrder.LITTLE_ENDIAN)
     }
 
     private fun readPageHeader(offset: Long, column: String): PageHeader {
@@ -198,7 +371,10 @@ private class ColumnChunkDecoder(private val file: ByteBuffer, private val sourc
         var numValues = 0
         var encoding = ParquetEncoding.UNKNOWN
         var defEnc = ParquetEncoding.UNKNOWN
-        var repEnc = ParquetEncoding.UNKNOWN
+        var numNulls = 0
+        var defLen = 0
+        var repLen = 0
+        var isCompressed = true
         try {
             r.readStruct { f ->
                 when (f.id) {
@@ -206,11 +382,32 @@ private class ColumnChunkDecoder(private val file: ByteBuffer, private val sourc
                     2 -> uncompressed = r.readI32()
                     3 -> compressed = r.readI32()
                     5 -> r.readStruct { d ->
+                        // DataPageHeader
                         when (d.id) {
                             1 -> numValues = r.readI32()
                             2 -> encoding = ParquetEncoding.of(r.readI32())
                             3 -> defEnc = ParquetEncoding.of(r.readI32())
-                            4 -> repEnc = ParquetEncoding.of(r.readI32())
+                            else -> r.skip(d.type)
+                        }
+                    }
+                    7 -> r.readStruct { d ->
+                        // DictionaryPageHeader
+                        when (d.id) {
+                            1 -> numValues = r.readI32()
+                            2 -> encoding = ParquetEncoding.of(r.readI32())
+                            else -> r.skip(d.type)
+                        }
+                    }
+                    8 -> r.readStruct { d ->
+                        // DataPageHeaderV2
+                        when (d.id) {
+                            1 -> numValues = r.readI32()
+                            2 -> numNulls = r.readI32()
+                            3 -> r.readI32() // num_rows: equals num_values on a flat column
+                            4 -> encoding = ParquetEncoding.of(r.readI32())
+                            5 -> defLen = r.readI32()
+                            6 -> repLen = r.readI32()
+                            7 -> isCompressed = r.booleanFromHeader(d)
                             else -> r.skip(d.type)
                         }
                     }
@@ -221,13 +418,13 @@ private class ColumnChunkDecoder(private val file: ByteBuffer, private val sourc
             throw ParquetFormatException("'$column': malformed page header at $offset: ${e.message} ($source)", e)
         }
         if (compressed < 0 || uncompressed < 0) throw ParquetFormatException("'$column': negative page size at $offset ($source)")
-        return PageHeader(type, uncompressed, compressed, numValues, encoding, defEnc, repEnc, r.position)
+        return PageHeader(type, uncompressed, compressed, numValues, encoding, defEnc, r.position, numNulls, defLen, repLen, isCompressed)
     }
 }
 
 /**
- * The RLE / bit-packed hybrid used for definition levels. Only bit width 1 is needed (max
- * definition level 1 on a flat schema) but the decoder is written for any width ≤ 32.
+ * The RLE / bit-packed hybrid used for definition levels and dictionary indices. Written for any bit
+ * width 0..32 (0 = every value is 0, which a one-entry dictionary produces).
  */
 internal object RleBitPackedHybrid {
 
@@ -247,36 +444,40 @@ internal object RleBitPackedHybrid {
     }
 
     fun decode(data: ByteBuffer, count: Int, bitWidth: Int): IntArray {
-        require(bitWidth in 1..32) { "bit width $bitWidth" }
+        if (bitWidth !in 0..32) throw ParquetFormatException("bit width $bitWidth")
         val out = IntArray(count)
+        if (count == 0) return out
         val r = ThriftCompactReader(data)
         val byteWidth = (bitWidth + 7) / 8
         var n = 0
         while (n < count) {
-            if (!data.hasRemaining()) throw ParquetFormatException("definition levels end after $n of $count values")
+            if (!data.hasRemaining()) throw ParquetFormatException("RLE/bit-packed data ends after $n of $count values")
             val header = r.readVarint64()
             if (header and 1L == 0L) {
                 // RLE run: count = header >> 1, then the value in byteWidth little-endian bytes.
                 val run = (header ushr 1).toInt()
                 var value = 0
-                for (b in 0 until byteWidth) value = value or ((data.get().toInt() and 0xFF) shl (8 * b))
-                if (run < 0 || n + run > count) throw ParquetFormatException("definition-level run of $run exceeds $count values")
+                for (b in 0 until byteWidth) {
+                    if (!data.hasRemaining()) throw ParquetFormatException("RLE run value truncated")
+                    value = value or ((data.get().toInt() and 0xFF) shl (8 * b))
+                }
+                if (run < 0 || n + run > count) throw ParquetFormatException("RLE run of $run exceeds $count values")
                 java.util.Arrays.fill(out, n, n + run, value)
                 n += run
             } else {
                 // Bit-packed: header >> 1 groups of 8 values, LSB first; the last group may pad past count.
                 val groups = (header ushr 1).toInt()
-                val mask = if (bitWidth == 32) -1 else (1 shl bitWidth) - 1
+                val mask = (1L shl bitWidth) - 1 // bitWidth 32 → 0xFFFFFFFF
                 var bitBuffer = 0L
                 var bits = 0
                 for (g in 0 until groups) {
                     for (v in 0 until 8) {
                         while (bits < bitWidth) {
-                            if (!data.hasRemaining()) throw ParquetFormatException("bit-packed definition levels truncated")
+                            if (!data.hasRemaining()) throw ParquetFormatException("bit-packed data truncated")
                             bitBuffer = bitBuffer or ((data.get().toLong() and 0xFF) shl bits)
                             bits += 8
                         }
-                        val value = (bitBuffer and mask.toLong()).toInt()
+                        val value = (bitBuffer and mask).toInt()
                         bitBuffer = bitBuffer ushr bitWidth
                         bits -= bitWidth
                         if (n < count) out[n++] = value

@@ -1,0 +1,4057 @@
+{
+ "generator": "tools/make_geoparquet_fixtures.py",
+ "pyarrow": "25.0.0",
+ "duckdb": "1.5.5",
+ "geoparquet": "2.0.0",
+ "files": [
+  {
+   "label": "pa-none-plain-v1",
+   "writer": "pyarrow 25.0.0",
+   "file": "pyarrow/pa-none-plain-v1.parquet",
+   "size": 3918,
+   "sha256": "e4a19cdbc486aec224a4ae37cd69d492fa43c0fcf76915bcfb091e15837ef5e1",
+   "created_by": "parquet-cpp-arrow version 25.0.0",
+   "rows": 14,
+   "columns": 6,
+   "row_groups": [
+    {
+     "rows": 14,
+     "chunks": {
+      "id": {
+       "codec": "UNCOMPRESSED",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "big": {
+       "codec": "UNCOMPRESSED",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 2
+      },
+      "ratio": {
+       "codec": "UNCOMPRESSED",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 3
+      },
+      "temp": {
+       "codec": "UNCOMPRESSED",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "name": {
+       "codec": "UNCOMPRESSED",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "geometry": {
+       "codec": "UNCOMPRESSED",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "geo": {
+        "types": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         1001,
+         3001
+        ],
+        "xmin": -2.0,
+        "xmax": 11.0,
+        "ymin": -3.0,
+        "ymax": 20.0,
+        "zmin": 3.0,
+        "zmax": 9.0,
+        "mmin": 10.0,
+        "mmax": 10.0
+       }
+      }
+     }
+    }
+   ],
+   "metadata": {
+    "geo": "{\"version\":\"2.0.0\",\"primary_column\":\"geometry\",\"columns\":{\"geometry\":{\"encoding\":\"WKB\",\"geometry_types\":[\"GeometryCollection\",\"LineString\",\"MultiLineString\",\"MultiPoint\",\"MultiPolygon\",\"Point\",\"Point Z\",\"Point ZM\",\"Polygon\"],\"bbox\":[-2.0,-3.0,3.0,10.0,11.0,20.0,9.0,10.0]}}}",
+    "purpose": "geoparquet-fixture"
+   },
+   "column_details": [
+    {
+     "name": "id",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 14,
+     "first": 1,
+     "last": 14,
+     "min": 1,
+     "max": 14,
+     "sum": 105
+    },
+    {
+     "name": "big",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 2,
+     "valid": 12,
+     "first": 10000000000,
+     "last": 140000000000,
+     "min": 10000000000,
+     "max": 140000000000,
+     "sum": 900000000000
+    },
+    {
+     "name": "ratio",
+     "physical": "DOUBLE",
+     "logical": "None",
+     "arrow": "double",
+     "nulls": 3,
+     "valid": 11,
+     "nan": 0,
+     "first": 0.3333333333333333,
+     "last": 4.666666666666667,
+     "min": 0.3333333333333333,
+     "max": 4.666666666666667,
+     "sum": 27.0
+    },
+    {
+     "name": "temp",
+     "physical": "FLOAT",
+     "logical": "None",
+     "arrow": "float",
+     "nulls": 0,
+     "valid": 14,
+     "nan": 0,
+     "first": 0.5,
+     "last": 13.5,
+     "min": 0.5,
+     "max": 13.5,
+     "sum": 98.0
+    },
+    {
+     "name": "name",
+     "physical": "BYTE_ARRAY",
+     "logical": "String",
+     "arrow": "string",
+     "nulls": 0,
+     "valid": 14,
+     "values": [
+      "point-le",
+      "null",
+      "point-z-be",
+      "linestring",
+      "polygon-hole",
+      "multipoint",
+      "multilinestring-be",
+      "multipolygon",
+      "collection",
+      "point-be",
+      "point-zm",
+      "linestring-empty",
+      "null-2",
+      "point-le-2"
+     ]
+    },
+    {
+     "name": "geometry",
+     "physical": "BYTE_ARRAY",
+     "logical": "Geometry(crs=)",
+     "arrow": "extension<geoarrow.wkb<WkbType>>",
+     "nulls": 2,
+     "wkt": [
+      "POINT (10 20)",
+      null,
+      "POINT Z (1 2 3)",
+      "LINESTRING (0 0, 1 1, 2 0)",
+      "POLYGON ((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1))",
+      "MULTIPOINT (-1 -1, -2 -3)",
+      "MULTILINESTRING ((0 0, 1 0), (0 1, 1 1))",
+      "MULTIPOLYGON (((0 0, 4 0, 4 4, 0 4, 0 0)), ((10 10, 11 10, 11 11, 10 10)))",
+      "GEOMETRYCOLLECTION (POINT (5 5), LINESTRING (5 5, 6 6))",
+      "POINT (-1.5 2.5)",
+      "POINT ZM (7 8 9 10)",
+      "LINESTRING EMPTY",
+      null,
+      "POINT (10 20)"
+     ]
+    }
+   ]
+  },
+  {
+   "label": "pa-none-plain-v2",
+   "writer": "pyarrow 25.0.0",
+   "file": "pyarrow/pa-none-plain-v2.parquet",
+   "size": 3924,
+   "sha256": "a7ea649bbbddfadae0fa843677cefe4979b93ac69da65703158bf84c7b11c317",
+   "created_by": "parquet-cpp-arrow version 25.0.0",
+   "rows": 14,
+   "columns": 6,
+   "row_groups": [
+    {
+     "rows": 14,
+     "chunks": {
+      "id": {
+       "codec": "UNCOMPRESSED",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "big": {
+       "codec": "UNCOMPRESSED",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 2
+      },
+      "ratio": {
+       "codec": "UNCOMPRESSED",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 3
+      },
+      "temp": {
+       "codec": "UNCOMPRESSED",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "name": {
+       "codec": "UNCOMPRESSED",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "geometry": {
+       "codec": "UNCOMPRESSED",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "geo": {
+        "types": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         1001,
+         3001
+        ],
+        "xmin": -2.0,
+        "xmax": 11.0,
+        "ymin": -3.0,
+        "ymax": 20.0,
+        "zmin": 3.0,
+        "zmax": 9.0,
+        "mmin": 10.0,
+        "mmax": 10.0
+       }
+      }
+     }
+    }
+   ],
+   "metadata": {
+    "geo": "{\"version\":\"2.0.0\",\"primary_column\":\"geometry\",\"columns\":{\"geometry\":{\"encoding\":\"WKB\",\"geometry_types\":[\"GeometryCollection\",\"LineString\",\"MultiLineString\",\"MultiPoint\",\"MultiPolygon\",\"Point\",\"Point Z\",\"Point ZM\",\"Polygon\"],\"bbox\":[-2.0,-3.0,3.0,10.0,11.0,20.0,9.0,10.0]}}}",
+    "purpose": "geoparquet-fixture"
+   },
+   "column_details": [
+    {
+     "name": "id",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 14,
+     "first": 1,
+     "last": 14,
+     "min": 1,
+     "max": 14,
+     "sum": 105
+    },
+    {
+     "name": "big",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 2,
+     "valid": 12,
+     "first": 10000000000,
+     "last": 140000000000,
+     "min": 10000000000,
+     "max": 140000000000,
+     "sum": 900000000000
+    },
+    {
+     "name": "ratio",
+     "physical": "DOUBLE",
+     "logical": "None",
+     "arrow": "double",
+     "nulls": 3,
+     "valid": 11,
+     "nan": 0,
+     "first": 0.3333333333333333,
+     "last": 4.666666666666667,
+     "min": 0.3333333333333333,
+     "max": 4.666666666666667,
+     "sum": 27.0
+    },
+    {
+     "name": "temp",
+     "physical": "FLOAT",
+     "logical": "None",
+     "arrow": "float",
+     "nulls": 0,
+     "valid": 14,
+     "nan": 0,
+     "first": 0.5,
+     "last": 13.5,
+     "min": 0.5,
+     "max": 13.5,
+     "sum": 98.0
+    },
+    {
+     "name": "name",
+     "physical": "BYTE_ARRAY",
+     "logical": "String",
+     "arrow": "string",
+     "nulls": 0,
+     "valid": 14,
+     "values": [
+      "point-le",
+      "null",
+      "point-z-be",
+      "linestring",
+      "polygon-hole",
+      "multipoint",
+      "multilinestring-be",
+      "multipolygon",
+      "collection",
+      "point-be",
+      "point-zm",
+      "linestring-empty",
+      "null-2",
+      "point-le-2"
+     ]
+    },
+    {
+     "name": "geometry",
+     "physical": "BYTE_ARRAY",
+     "logical": "Geometry(crs=)",
+     "arrow": "extension<geoarrow.wkb<WkbType>>",
+     "nulls": 2,
+     "wkt": [
+      "POINT (10 20)",
+      null,
+      "POINT Z (1 2 3)",
+      "LINESTRING (0 0, 1 1, 2 0)",
+      "POLYGON ((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1))",
+      "MULTIPOINT (-1 -1, -2 -3)",
+      "MULTILINESTRING ((0 0, 1 0), (0 1, 1 1))",
+      "MULTIPOLYGON (((0 0, 4 0, 4 4, 0 4, 0 0)), ((10 10, 11 10, 11 11, 10 10)))",
+      "GEOMETRYCOLLECTION (POINT (5 5), LINESTRING (5 5, 6 6))",
+      "POINT (-1.5 2.5)",
+      "POINT ZM (7 8 9 10)",
+      "LINESTRING EMPTY",
+      null,
+      "POINT (10 20)"
+     ]
+    }
+   ]
+  },
+  {
+   "label": "pa-none-dict-v1",
+   "writer": "pyarrow 25.0.0",
+   "file": "pyarrow/pa-none-dict-v1.parquet",
+   "size": 4103,
+   "sha256": "bb1f38daa5874497c98f1ca6b6013422ff07385fe2bcf4a93be8b538058e2d67",
+   "created_by": "parquet-cpp-arrow version 25.0.0",
+   "rows": 14,
+   "columns": 6,
+   "row_groups": [
+    {
+     "rows": 14,
+     "chunks": {
+      "id": {
+       "codec": "UNCOMPRESSED",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "big": {
+       "codec": "UNCOMPRESSED",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 2
+      },
+      "ratio": {
+       "codec": "UNCOMPRESSED",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 3
+      },
+      "temp": {
+       "codec": "UNCOMPRESSED",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "name": {
+       "codec": "UNCOMPRESSED",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "geometry": {
+       "codec": "UNCOMPRESSED",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "geo": {
+        "types": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         1001,
+         3001
+        ],
+        "xmin": -2.0,
+        "xmax": 11.0,
+        "ymin": -3.0,
+        "ymax": 20.0,
+        "zmin": 3.0,
+        "zmax": 9.0,
+        "mmin": 10.0,
+        "mmax": 10.0
+       }
+      }
+     }
+    }
+   ],
+   "metadata": {
+    "geo": "{\"version\":\"2.0.0\",\"primary_column\":\"geometry\",\"columns\":{\"geometry\":{\"encoding\":\"WKB\",\"geometry_types\":[\"GeometryCollection\",\"LineString\",\"MultiLineString\",\"MultiPoint\",\"MultiPolygon\",\"Point\",\"Point Z\",\"Point ZM\",\"Polygon\"],\"bbox\":[-2.0,-3.0,3.0,10.0,11.0,20.0,9.0,10.0]}}}",
+    "purpose": "geoparquet-fixture"
+   },
+   "column_details": [
+    {
+     "name": "id",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 14,
+     "first": 1,
+     "last": 14,
+     "min": 1,
+     "max": 14,
+     "sum": 105
+    },
+    {
+     "name": "big",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 2,
+     "valid": 12,
+     "first": 10000000000,
+     "last": 140000000000,
+     "min": 10000000000,
+     "max": 140000000000,
+     "sum": 900000000000
+    },
+    {
+     "name": "ratio",
+     "physical": "DOUBLE",
+     "logical": "None",
+     "arrow": "double",
+     "nulls": 3,
+     "valid": 11,
+     "nan": 0,
+     "first": 0.3333333333333333,
+     "last": 4.666666666666667,
+     "min": 0.3333333333333333,
+     "max": 4.666666666666667,
+     "sum": 27.0
+    },
+    {
+     "name": "temp",
+     "physical": "FLOAT",
+     "logical": "None",
+     "arrow": "float",
+     "nulls": 0,
+     "valid": 14,
+     "nan": 0,
+     "first": 0.5,
+     "last": 13.5,
+     "min": 0.5,
+     "max": 13.5,
+     "sum": 98.0
+    },
+    {
+     "name": "name",
+     "physical": "BYTE_ARRAY",
+     "logical": "String",
+     "arrow": "string",
+     "nulls": 0,
+     "valid": 14,
+     "values": [
+      "point-le",
+      "null",
+      "point-z-be",
+      "linestring",
+      "polygon-hole",
+      "multipoint",
+      "multilinestring-be",
+      "multipolygon",
+      "collection",
+      "point-be",
+      "point-zm",
+      "linestring-empty",
+      "null-2",
+      "point-le-2"
+     ]
+    },
+    {
+     "name": "geometry",
+     "physical": "BYTE_ARRAY",
+     "logical": "Geometry(crs=)",
+     "arrow": "extension<geoarrow.wkb<WkbType>>",
+     "nulls": 2,
+     "wkt": [
+      "POINT (10 20)",
+      null,
+      "POINT Z (1 2 3)",
+      "LINESTRING (0 0, 1 1, 2 0)",
+      "POLYGON ((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1))",
+      "MULTIPOINT (-1 -1, -2 -3)",
+      "MULTILINESTRING ((0 0, 1 0), (0 1, 1 1))",
+      "MULTIPOLYGON (((0 0, 4 0, 4 4, 0 4, 0 0)), ((10 10, 11 10, 11 11, 10 10)))",
+      "GEOMETRYCOLLECTION (POINT (5 5), LINESTRING (5 5, 6 6))",
+      "POINT (-1.5 2.5)",
+      "POINT ZM (7 8 9 10)",
+      "LINESTRING EMPTY",
+      null,
+      "POINT (10 20)"
+     ]
+    }
+   ]
+  },
+  {
+   "label": "pa-none-dict-v2",
+   "writer": "pyarrow 25.0.0",
+   "file": "pyarrow/pa-none-dict-v2.parquet",
+   "size": 4109,
+   "sha256": "f1f7cb7a7ed9364b6217bbfa9071fc4c1bd46aa6415903607949e2839d6b9339",
+   "created_by": "parquet-cpp-arrow version 25.0.0",
+   "rows": 14,
+   "columns": 6,
+   "row_groups": [
+    {
+     "rows": 14,
+     "chunks": {
+      "id": {
+       "codec": "UNCOMPRESSED",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "big": {
+       "codec": "UNCOMPRESSED",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 2
+      },
+      "ratio": {
+       "codec": "UNCOMPRESSED",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 3
+      },
+      "temp": {
+       "codec": "UNCOMPRESSED",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "name": {
+       "codec": "UNCOMPRESSED",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "geometry": {
+       "codec": "UNCOMPRESSED",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "geo": {
+        "types": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         1001,
+         3001
+        ],
+        "xmin": -2.0,
+        "xmax": 11.0,
+        "ymin": -3.0,
+        "ymax": 20.0,
+        "zmin": 3.0,
+        "zmax": 9.0,
+        "mmin": 10.0,
+        "mmax": 10.0
+       }
+      }
+     }
+    }
+   ],
+   "metadata": {
+    "geo": "{\"version\":\"2.0.0\",\"primary_column\":\"geometry\",\"columns\":{\"geometry\":{\"encoding\":\"WKB\",\"geometry_types\":[\"GeometryCollection\",\"LineString\",\"MultiLineString\",\"MultiPoint\",\"MultiPolygon\",\"Point\",\"Point Z\",\"Point ZM\",\"Polygon\"],\"bbox\":[-2.0,-3.0,3.0,10.0,11.0,20.0,9.0,10.0]}}}",
+    "purpose": "geoparquet-fixture"
+   },
+   "column_details": [
+    {
+     "name": "id",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 14,
+     "first": 1,
+     "last": 14,
+     "min": 1,
+     "max": 14,
+     "sum": 105
+    },
+    {
+     "name": "big",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 2,
+     "valid": 12,
+     "first": 10000000000,
+     "last": 140000000000,
+     "min": 10000000000,
+     "max": 140000000000,
+     "sum": 900000000000
+    },
+    {
+     "name": "ratio",
+     "physical": "DOUBLE",
+     "logical": "None",
+     "arrow": "double",
+     "nulls": 3,
+     "valid": 11,
+     "nan": 0,
+     "first": 0.3333333333333333,
+     "last": 4.666666666666667,
+     "min": 0.3333333333333333,
+     "max": 4.666666666666667,
+     "sum": 27.0
+    },
+    {
+     "name": "temp",
+     "physical": "FLOAT",
+     "logical": "None",
+     "arrow": "float",
+     "nulls": 0,
+     "valid": 14,
+     "nan": 0,
+     "first": 0.5,
+     "last": 13.5,
+     "min": 0.5,
+     "max": 13.5,
+     "sum": 98.0
+    },
+    {
+     "name": "name",
+     "physical": "BYTE_ARRAY",
+     "logical": "String",
+     "arrow": "string",
+     "nulls": 0,
+     "valid": 14,
+     "values": [
+      "point-le",
+      "null",
+      "point-z-be",
+      "linestring",
+      "polygon-hole",
+      "multipoint",
+      "multilinestring-be",
+      "multipolygon",
+      "collection",
+      "point-be",
+      "point-zm",
+      "linestring-empty",
+      "null-2",
+      "point-le-2"
+     ]
+    },
+    {
+     "name": "geometry",
+     "physical": "BYTE_ARRAY",
+     "logical": "Geometry(crs=)",
+     "arrow": "extension<geoarrow.wkb<WkbType>>",
+     "nulls": 2,
+     "wkt": [
+      "POINT (10 20)",
+      null,
+      "POINT Z (1 2 3)",
+      "LINESTRING (0 0, 1 1, 2 0)",
+      "POLYGON ((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1))",
+      "MULTIPOINT (-1 -1, -2 -3)",
+      "MULTILINESTRING ((0 0, 1 0), (0 1, 1 1))",
+      "MULTIPOLYGON (((0 0, 4 0, 4 4, 0 4, 0 0)), ((10 10, 11 10, 11 11, 10 10)))",
+      "GEOMETRYCOLLECTION (POINT (5 5), LINESTRING (5 5, 6 6))",
+      "POINT (-1.5 2.5)",
+      "POINT ZM (7 8 9 10)",
+      "LINESTRING EMPTY",
+      null,
+      "POINT (10 20)"
+     ]
+    }
+   ]
+  },
+  {
+   "label": "pa-snappy-plain-v1",
+   "writer": "pyarrow 25.0.0",
+   "file": "pyarrow/pa-snappy-plain-v1.parquet",
+   "size": 3329,
+   "sha256": "88e5d44de774ddbd6ca1c4d7734fa9b5ae740512ee4441bfaeb2d14f361fb86a",
+   "created_by": "parquet-cpp-arrow version 25.0.0",
+   "rows": 14,
+   "columns": 6,
+   "row_groups": [
+    {
+     "rows": 14,
+     "chunks": {
+      "id": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "big": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 2
+      },
+      "ratio": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 3
+      },
+      "temp": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "name": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "geometry": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "geo": {
+        "types": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         1001,
+         3001
+        ],
+        "xmin": -2.0,
+        "xmax": 11.0,
+        "ymin": -3.0,
+        "ymax": 20.0,
+        "zmin": 3.0,
+        "zmax": 9.0,
+        "mmin": 10.0,
+        "mmax": 10.0
+       }
+      }
+     }
+    }
+   ],
+   "metadata": {
+    "geo": "{\"version\":\"2.0.0\",\"primary_column\":\"geometry\",\"columns\":{\"geometry\":{\"encoding\":\"WKB\",\"geometry_types\":[\"GeometryCollection\",\"LineString\",\"MultiLineString\",\"MultiPoint\",\"MultiPolygon\",\"Point\",\"Point Z\",\"Point ZM\",\"Polygon\"],\"bbox\":[-2.0,-3.0,3.0,10.0,11.0,20.0,9.0,10.0]}}}",
+    "purpose": "geoparquet-fixture"
+   },
+   "column_details": [
+    {
+     "name": "id",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 14,
+     "first": 1,
+     "last": 14,
+     "min": 1,
+     "max": 14,
+     "sum": 105
+    },
+    {
+     "name": "big",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 2,
+     "valid": 12,
+     "first": 10000000000,
+     "last": 140000000000,
+     "min": 10000000000,
+     "max": 140000000000,
+     "sum": 900000000000
+    },
+    {
+     "name": "ratio",
+     "physical": "DOUBLE",
+     "logical": "None",
+     "arrow": "double",
+     "nulls": 3,
+     "valid": 11,
+     "nan": 0,
+     "first": 0.3333333333333333,
+     "last": 4.666666666666667,
+     "min": 0.3333333333333333,
+     "max": 4.666666666666667,
+     "sum": 27.0
+    },
+    {
+     "name": "temp",
+     "physical": "FLOAT",
+     "logical": "None",
+     "arrow": "float",
+     "nulls": 0,
+     "valid": 14,
+     "nan": 0,
+     "first": 0.5,
+     "last": 13.5,
+     "min": 0.5,
+     "max": 13.5,
+     "sum": 98.0
+    },
+    {
+     "name": "name",
+     "physical": "BYTE_ARRAY",
+     "logical": "String",
+     "arrow": "string",
+     "nulls": 0,
+     "valid": 14,
+     "values": [
+      "point-le",
+      "null",
+      "point-z-be",
+      "linestring",
+      "polygon-hole",
+      "multipoint",
+      "multilinestring-be",
+      "multipolygon",
+      "collection",
+      "point-be",
+      "point-zm",
+      "linestring-empty",
+      "null-2",
+      "point-le-2"
+     ]
+    },
+    {
+     "name": "geometry",
+     "physical": "BYTE_ARRAY",
+     "logical": "Geometry(crs=)",
+     "arrow": "extension<geoarrow.wkb<WkbType>>",
+     "nulls": 2,
+     "wkt": [
+      "POINT (10 20)",
+      null,
+      "POINT Z (1 2 3)",
+      "LINESTRING (0 0, 1 1, 2 0)",
+      "POLYGON ((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1))",
+      "MULTIPOINT (-1 -1, -2 -3)",
+      "MULTILINESTRING ((0 0, 1 0), (0 1, 1 1))",
+      "MULTIPOLYGON (((0 0, 4 0, 4 4, 0 4, 0 0)), ((10 10, 11 10, 11 11, 10 10)))",
+      "GEOMETRYCOLLECTION (POINT (5 5), LINESTRING (5 5, 6 6))",
+      "POINT (-1.5 2.5)",
+      "POINT ZM (7 8 9 10)",
+      "LINESTRING EMPTY",
+      null,
+      "POINT (10 20)"
+     ]
+    }
+   ]
+  },
+  {
+   "label": "pa-snappy-plain-v2",
+   "writer": "pyarrow 25.0.0",
+   "file": "pyarrow/pa-snappy-plain-v2.parquet",
+   "size": 3331,
+   "sha256": "0c573d7551893e1311aaf96af4ef4689c7786253894be1ba82ecfb2c846529a1",
+   "created_by": "parquet-cpp-arrow version 25.0.0",
+   "rows": 14,
+   "columns": 6,
+   "row_groups": [
+    {
+     "rows": 14,
+     "chunks": {
+      "id": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "big": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 2
+      },
+      "ratio": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 3
+      },
+      "temp": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "name": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "geometry": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "geo": {
+        "types": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         1001,
+         3001
+        ],
+        "xmin": -2.0,
+        "xmax": 11.0,
+        "ymin": -3.0,
+        "ymax": 20.0,
+        "zmin": 3.0,
+        "zmax": 9.0,
+        "mmin": 10.0,
+        "mmax": 10.0
+       }
+      }
+     }
+    }
+   ],
+   "metadata": {
+    "geo": "{\"version\":\"2.0.0\",\"primary_column\":\"geometry\",\"columns\":{\"geometry\":{\"encoding\":\"WKB\",\"geometry_types\":[\"GeometryCollection\",\"LineString\",\"MultiLineString\",\"MultiPoint\",\"MultiPolygon\",\"Point\",\"Point Z\",\"Point ZM\",\"Polygon\"],\"bbox\":[-2.0,-3.0,3.0,10.0,11.0,20.0,9.0,10.0]}}}",
+    "purpose": "geoparquet-fixture"
+   },
+   "column_details": [
+    {
+     "name": "id",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 14,
+     "first": 1,
+     "last": 14,
+     "min": 1,
+     "max": 14,
+     "sum": 105
+    },
+    {
+     "name": "big",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 2,
+     "valid": 12,
+     "first": 10000000000,
+     "last": 140000000000,
+     "min": 10000000000,
+     "max": 140000000000,
+     "sum": 900000000000
+    },
+    {
+     "name": "ratio",
+     "physical": "DOUBLE",
+     "logical": "None",
+     "arrow": "double",
+     "nulls": 3,
+     "valid": 11,
+     "nan": 0,
+     "first": 0.3333333333333333,
+     "last": 4.666666666666667,
+     "min": 0.3333333333333333,
+     "max": 4.666666666666667,
+     "sum": 27.0
+    },
+    {
+     "name": "temp",
+     "physical": "FLOAT",
+     "logical": "None",
+     "arrow": "float",
+     "nulls": 0,
+     "valid": 14,
+     "nan": 0,
+     "first": 0.5,
+     "last": 13.5,
+     "min": 0.5,
+     "max": 13.5,
+     "sum": 98.0
+    },
+    {
+     "name": "name",
+     "physical": "BYTE_ARRAY",
+     "logical": "String",
+     "arrow": "string",
+     "nulls": 0,
+     "valid": 14,
+     "values": [
+      "point-le",
+      "null",
+      "point-z-be",
+      "linestring",
+      "polygon-hole",
+      "multipoint",
+      "multilinestring-be",
+      "multipolygon",
+      "collection",
+      "point-be",
+      "point-zm",
+      "linestring-empty",
+      "null-2",
+      "point-le-2"
+     ]
+    },
+    {
+     "name": "geometry",
+     "physical": "BYTE_ARRAY",
+     "logical": "Geometry(crs=)",
+     "arrow": "extension<geoarrow.wkb<WkbType>>",
+     "nulls": 2,
+     "wkt": [
+      "POINT (10 20)",
+      null,
+      "POINT Z (1 2 3)",
+      "LINESTRING (0 0, 1 1, 2 0)",
+      "POLYGON ((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1))",
+      "MULTIPOINT (-1 -1, -2 -3)",
+      "MULTILINESTRING ((0 0, 1 0), (0 1, 1 1))",
+      "MULTIPOLYGON (((0 0, 4 0, 4 4, 0 4, 0 0)), ((10 10, 11 10, 11 11, 10 10)))",
+      "GEOMETRYCOLLECTION (POINT (5 5), LINESTRING (5 5, 6 6))",
+      "POINT (-1.5 2.5)",
+      "POINT ZM (7 8 9 10)",
+      "LINESTRING EMPTY",
+      null,
+      "POINT (10 20)"
+     ]
+    }
+   ]
+  },
+  {
+   "label": "pa-snappy-dict-v1",
+   "writer": "pyarrow 25.0.0",
+   "file": "pyarrow/pa-snappy-dict-v1.parquet",
+   "size": 3543,
+   "sha256": "31001d2c37f29fd025dea73a1acfc941007b04e51581a703ba7f4b701a655a45",
+   "created_by": "parquet-cpp-arrow version 25.0.0",
+   "rows": 14,
+   "columns": 6,
+   "row_groups": [
+    {
+     "rows": 14,
+     "chunks": {
+      "id": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "big": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 2
+      },
+      "ratio": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 3
+      },
+      "temp": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "name": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "geometry": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "geo": {
+        "types": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         1001,
+         3001
+        ],
+        "xmin": -2.0,
+        "xmax": 11.0,
+        "ymin": -3.0,
+        "ymax": 20.0,
+        "zmin": 3.0,
+        "zmax": 9.0,
+        "mmin": 10.0,
+        "mmax": 10.0
+       }
+      }
+     }
+    }
+   ],
+   "metadata": {
+    "geo": "{\"version\":\"2.0.0\",\"primary_column\":\"geometry\",\"columns\":{\"geometry\":{\"encoding\":\"WKB\",\"geometry_types\":[\"GeometryCollection\",\"LineString\",\"MultiLineString\",\"MultiPoint\",\"MultiPolygon\",\"Point\",\"Point Z\",\"Point ZM\",\"Polygon\"],\"bbox\":[-2.0,-3.0,3.0,10.0,11.0,20.0,9.0,10.0]}}}",
+    "purpose": "geoparquet-fixture"
+   },
+   "column_details": [
+    {
+     "name": "id",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 14,
+     "first": 1,
+     "last": 14,
+     "min": 1,
+     "max": 14,
+     "sum": 105
+    },
+    {
+     "name": "big",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 2,
+     "valid": 12,
+     "first": 10000000000,
+     "last": 140000000000,
+     "min": 10000000000,
+     "max": 140000000000,
+     "sum": 900000000000
+    },
+    {
+     "name": "ratio",
+     "physical": "DOUBLE",
+     "logical": "None",
+     "arrow": "double",
+     "nulls": 3,
+     "valid": 11,
+     "nan": 0,
+     "first": 0.3333333333333333,
+     "last": 4.666666666666667,
+     "min": 0.3333333333333333,
+     "max": 4.666666666666667,
+     "sum": 27.0
+    },
+    {
+     "name": "temp",
+     "physical": "FLOAT",
+     "logical": "None",
+     "arrow": "float",
+     "nulls": 0,
+     "valid": 14,
+     "nan": 0,
+     "first": 0.5,
+     "last": 13.5,
+     "min": 0.5,
+     "max": 13.5,
+     "sum": 98.0
+    },
+    {
+     "name": "name",
+     "physical": "BYTE_ARRAY",
+     "logical": "String",
+     "arrow": "string",
+     "nulls": 0,
+     "valid": 14,
+     "values": [
+      "point-le",
+      "null",
+      "point-z-be",
+      "linestring",
+      "polygon-hole",
+      "multipoint",
+      "multilinestring-be",
+      "multipolygon",
+      "collection",
+      "point-be",
+      "point-zm",
+      "linestring-empty",
+      "null-2",
+      "point-le-2"
+     ]
+    },
+    {
+     "name": "geometry",
+     "physical": "BYTE_ARRAY",
+     "logical": "Geometry(crs=)",
+     "arrow": "extension<geoarrow.wkb<WkbType>>",
+     "nulls": 2,
+     "wkt": [
+      "POINT (10 20)",
+      null,
+      "POINT Z (1 2 3)",
+      "LINESTRING (0 0, 1 1, 2 0)",
+      "POLYGON ((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1))",
+      "MULTIPOINT (-1 -1, -2 -3)",
+      "MULTILINESTRING ((0 0, 1 0), (0 1, 1 1))",
+      "MULTIPOLYGON (((0 0, 4 0, 4 4, 0 4, 0 0)), ((10 10, 11 10, 11 11, 10 10)))",
+      "GEOMETRYCOLLECTION (POINT (5 5), LINESTRING (5 5, 6 6))",
+      "POINT (-1.5 2.5)",
+      "POINT ZM (7 8 9 10)",
+      "LINESTRING EMPTY",
+      null,
+      "POINT (10 20)"
+     ]
+    }
+   ]
+  },
+  {
+   "label": "pa-snappy-dict-v2",
+   "writer": "pyarrow 25.0.0",
+   "file": "pyarrow/pa-snappy-dict-v2.parquet",
+   "size": 3537,
+   "sha256": "f71b69bf8008ca9ac600babdf18d3cf23a3c8f21c8d9bb2075f6f1fa07115328",
+   "created_by": "parquet-cpp-arrow version 25.0.0",
+   "rows": 14,
+   "columns": 6,
+   "row_groups": [
+    {
+     "rows": 14,
+     "chunks": {
+      "id": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "big": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 2
+      },
+      "ratio": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 3
+      },
+      "temp": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "name": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "geometry": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "geo": {
+        "types": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         1001,
+         3001
+        ],
+        "xmin": -2.0,
+        "xmax": 11.0,
+        "ymin": -3.0,
+        "ymax": 20.0,
+        "zmin": 3.0,
+        "zmax": 9.0,
+        "mmin": 10.0,
+        "mmax": 10.0
+       }
+      }
+     }
+    }
+   ],
+   "metadata": {
+    "geo": "{\"version\":\"2.0.0\",\"primary_column\":\"geometry\",\"columns\":{\"geometry\":{\"encoding\":\"WKB\",\"geometry_types\":[\"GeometryCollection\",\"LineString\",\"MultiLineString\",\"MultiPoint\",\"MultiPolygon\",\"Point\",\"Point Z\",\"Point ZM\",\"Polygon\"],\"bbox\":[-2.0,-3.0,3.0,10.0,11.0,20.0,9.0,10.0]}}}",
+    "purpose": "geoparquet-fixture"
+   },
+   "column_details": [
+    {
+     "name": "id",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 14,
+     "first": 1,
+     "last": 14,
+     "min": 1,
+     "max": 14,
+     "sum": 105
+    },
+    {
+     "name": "big",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 2,
+     "valid": 12,
+     "first": 10000000000,
+     "last": 140000000000,
+     "min": 10000000000,
+     "max": 140000000000,
+     "sum": 900000000000
+    },
+    {
+     "name": "ratio",
+     "physical": "DOUBLE",
+     "logical": "None",
+     "arrow": "double",
+     "nulls": 3,
+     "valid": 11,
+     "nan": 0,
+     "first": 0.3333333333333333,
+     "last": 4.666666666666667,
+     "min": 0.3333333333333333,
+     "max": 4.666666666666667,
+     "sum": 27.0
+    },
+    {
+     "name": "temp",
+     "physical": "FLOAT",
+     "logical": "None",
+     "arrow": "float",
+     "nulls": 0,
+     "valid": 14,
+     "nan": 0,
+     "first": 0.5,
+     "last": 13.5,
+     "min": 0.5,
+     "max": 13.5,
+     "sum": 98.0
+    },
+    {
+     "name": "name",
+     "physical": "BYTE_ARRAY",
+     "logical": "String",
+     "arrow": "string",
+     "nulls": 0,
+     "valid": 14,
+     "values": [
+      "point-le",
+      "null",
+      "point-z-be",
+      "linestring",
+      "polygon-hole",
+      "multipoint",
+      "multilinestring-be",
+      "multipolygon",
+      "collection",
+      "point-be",
+      "point-zm",
+      "linestring-empty",
+      "null-2",
+      "point-le-2"
+     ]
+    },
+    {
+     "name": "geometry",
+     "physical": "BYTE_ARRAY",
+     "logical": "Geometry(crs=)",
+     "arrow": "extension<geoarrow.wkb<WkbType>>",
+     "nulls": 2,
+     "wkt": [
+      "POINT (10 20)",
+      null,
+      "POINT Z (1 2 3)",
+      "LINESTRING (0 0, 1 1, 2 0)",
+      "POLYGON ((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1))",
+      "MULTIPOINT (-1 -1, -2 -3)",
+      "MULTILINESTRING ((0 0, 1 0), (0 1, 1 1))",
+      "MULTIPOLYGON (((0 0, 4 0, 4 4, 0 4, 0 0)), ((10 10, 11 10, 11 11, 10 10)))",
+      "GEOMETRYCOLLECTION (POINT (5 5), LINESTRING (5 5, 6 6))",
+      "POINT (-1.5 2.5)",
+      "POINT ZM (7 8 9 10)",
+      "LINESTRING EMPTY",
+      null,
+      "POINT (10 20)"
+     ]
+    }
+   ]
+  },
+  {
+   "label": "pa-gzip-plain-v1",
+   "writer": "pyarrow 25.0.0",
+   "file": "pyarrow/pa-gzip-plain-v1.parquet",
+   "size": 3216,
+   "sha256": "0944070b28ae17b7d6cc4785dca72ed745e429b54583cf911ccf7d33c73eb18c",
+   "created_by": "parquet-cpp-arrow version 25.0.0",
+   "rows": 14,
+   "columns": 6,
+   "row_groups": [
+    {
+     "rows": 14,
+     "chunks": {
+      "id": {
+       "codec": "GZIP",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "big": {
+       "codec": "GZIP",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 2
+      },
+      "ratio": {
+       "codec": "GZIP",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 3
+      },
+      "temp": {
+       "codec": "GZIP",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "name": {
+       "codec": "GZIP",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "geometry": {
+       "codec": "GZIP",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "geo": {
+        "types": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         1001,
+         3001
+        ],
+        "xmin": -2.0,
+        "xmax": 11.0,
+        "ymin": -3.0,
+        "ymax": 20.0,
+        "zmin": 3.0,
+        "zmax": 9.0,
+        "mmin": 10.0,
+        "mmax": 10.0
+       }
+      }
+     }
+    }
+   ],
+   "metadata": {
+    "geo": "{\"version\":\"2.0.0\",\"primary_column\":\"geometry\",\"columns\":{\"geometry\":{\"encoding\":\"WKB\",\"geometry_types\":[\"GeometryCollection\",\"LineString\",\"MultiLineString\",\"MultiPoint\",\"MultiPolygon\",\"Point\",\"Point Z\",\"Point ZM\",\"Polygon\"],\"bbox\":[-2.0,-3.0,3.0,10.0,11.0,20.0,9.0,10.0]}}}",
+    "purpose": "geoparquet-fixture"
+   },
+   "column_details": [
+    {
+     "name": "id",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 14,
+     "first": 1,
+     "last": 14,
+     "min": 1,
+     "max": 14,
+     "sum": 105
+    },
+    {
+     "name": "big",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 2,
+     "valid": 12,
+     "first": 10000000000,
+     "last": 140000000000,
+     "min": 10000000000,
+     "max": 140000000000,
+     "sum": 900000000000
+    },
+    {
+     "name": "ratio",
+     "physical": "DOUBLE",
+     "logical": "None",
+     "arrow": "double",
+     "nulls": 3,
+     "valid": 11,
+     "nan": 0,
+     "first": 0.3333333333333333,
+     "last": 4.666666666666667,
+     "min": 0.3333333333333333,
+     "max": 4.666666666666667,
+     "sum": 27.0
+    },
+    {
+     "name": "temp",
+     "physical": "FLOAT",
+     "logical": "None",
+     "arrow": "float",
+     "nulls": 0,
+     "valid": 14,
+     "nan": 0,
+     "first": 0.5,
+     "last": 13.5,
+     "min": 0.5,
+     "max": 13.5,
+     "sum": 98.0
+    },
+    {
+     "name": "name",
+     "physical": "BYTE_ARRAY",
+     "logical": "String",
+     "arrow": "string",
+     "nulls": 0,
+     "valid": 14,
+     "values": [
+      "point-le",
+      "null",
+      "point-z-be",
+      "linestring",
+      "polygon-hole",
+      "multipoint",
+      "multilinestring-be",
+      "multipolygon",
+      "collection",
+      "point-be",
+      "point-zm",
+      "linestring-empty",
+      "null-2",
+      "point-le-2"
+     ]
+    },
+    {
+     "name": "geometry",
+     "physical": "BYTE_ARRAY",
+     "logical": "Geometry(crs=)",
+     "arrow": "extension<geoarrow.wkb<WkbType>>",
+     "nulls": 2,
+     "wkt": [
+      "POINT (10 20)",
+      null,
+      "POINT Z (1 2 3)",
+      "LINESTRING (0 0, 1 1, 2 0)",
+      "POLYGON ((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1))",
+      "MULTIPOINT (-1 -1, -2 -3)",
+      "MULTILINESTRING ((0 0, 1 0), (0 1, 1 1))",
+      "MULTIPOLYGON (((0 0, 4 0, 4 4, 0 4, 0 0)), ((10 10, 11 10, 11 11, 10 10)))",
+      "GEOMETRYCOLLECTION (POINT (5 5), LINESTRING (5 5, 6 6))",
+      "POINT (-1.5 2.5)",
+      "POINT ZM (7 8 9 10)",
+      "LINESTRING EMPTY",
+      null,
+      "POINT (10 20)"
+     ]
+    }
+   ]
+  },
+  {
+   "label": "pa-gzip-plain-v2",
+   "writer": "pyarrow 25.0.0",
+   "file": "pyarrow/pa-gzip-plain-v2.parquet",
+   "size": 3219,
+   "sha256": "2be62a02cdb3182831ead8a8aa36e077ea7abbbea6ac821e03030253b15da414",
+   "created_by": "parquet-cpp-arrow version 25.0.0",
+   "rows": 14,
+   "columns": 6,
+   "row_groups": [
+    {
+     "rows": 14,
+     "chunks": {
+      "id": {
+       "codec": "GZIP",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "big": {
+       "codec": "GZIP",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 2
+      },
+      "ratio": {
+       "codec": "GZIP",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 3
+      },
+      "temp": {
+       "codec": "GZIP",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "name": {
+       "codec": "GZIP",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "geometry": {
+       "codec": "GZIP",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "geo": {
+        "types": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         1001,
+         3001
+        ],
+        "xmin": -2.0,
+        "xmax": 11.0,
+        "ymin": -3.0,
+        "ymax": 20.0,
+        "zmin": 3.0,
+        "zmax": 9.0,
+        "mmin": 10.0,
+        "mmax": 10.0
+       }
+      }
+     }
+    }
+   ],
+   "metadata": {
+    "geo": "{\"version\":\"2.0.0\",\"primary_column\":\"geometry\",\"columns\":{\"geometry\":{\"encoding\":\"WKB\",\"geometry_types\":[\"GeometryCollection\",\"LineString\",\"MultiLineString\",\"MultiPoint\",\"MultiPolygon\",\"Point\",\"Point Z\",\"Point ZM\",\"Polygon\"],\"bbox\":[-2.0,-3.0,3.0,10.0,11.0,20.0,9.0,10.0]}}}",
+    "purpose": "geoparquet-fixture"
+   },
+   "column_details": [
+    {
+     "name": "id",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 14,
+     "first": 1,
+     "last": 14,
+     "min": 1,
+     "max": 14,
+     "sum": 105
+    },
+    {
+     "name": "big",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 2,
+     "valid": 12,
+     "first": 10000000000,
+     "last": 140000000000,
+     "min": 10000000000,
+     "max": 140000000000,
+     "sum": 900000000000
+    },
+    {
+     "name": "ratio",
+     "physical": "DOUBLE",
+     "logical": "None",
+     "arrow": "double",
+     "nulls": 3,
+     "valid": 11,
+     "nan": 0,
+     "first": 0.3333333333333333,
+     "last": 4.666666666666667,
+     "min": 0.3333333333333333,
+     "max": 4.666666666666667,
+     "sum": 27.0
+    },
+    {
+     "name": "temp",
+     "physical": "FLOAT",
+     "logical": "None",
+     "arrow": "float",
+     "nulls": 0,
+     "valid": 14,
+     "nan": 0,
+     "first": 0.5,
+     "last": 13.5,
+     "min": 0.5,
+     "max": 13.5,
+     "sum": 98.0
+    },
+    {
+     "name": "name",
+     "physical": "BYTE_ARRAY",
+     "logical": "String",
+     "arrow": "string",
+     "nulls": 0,
+     "valid": 14,
+     "values": [
+      "point-le",
+      "null",
+      "point-z-be",
+      "linestring",
+      "polygon-hole",
+      "multipoint",
+      "multilinestring-be",
+      "multipolygon",
+      "collection",
+      "point-be",
+      "point-zm",
+      "linestring-empty",
+      "null-2",
+      "point-le-2"
+     ]
+    },
+    {
+     "name": "geometry",
+     "physical": "BYTE_ARRAY",
+     "logical": "Geometry(crs=)",
+     "arrow": "extension<geoarrow.wkb<WkbType>>",
+     "nulls": 2,
+     "wkt": [
+      "POINT (10 20)",
+      null,
+      "POINT Z (1 2 3)",
+      "LINESTRING (0 0, 1 1, 2 0)",
+      "POLYGON ((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1))",
+      "MULTIPOINT (-1 -1, -2 -3)",
+      "MULTILINESTRING ((0 0, 1 0), (0 1, 1 1))",
+      "MULTIPOLYGON (((0 0, 4 0, 4 4, 0 4, 0 0)), ((10 10, 11 10, 11 11, 10 10)))",
+      "GEOMETRYCOLLECTION (POINT (5 5), LINESTRING (5 5, 6 6))",
+      "POINT (-1.5 2.5)",
+      "POINT ZM (7 8 9 10)",
+      "LINESTRING EMPTY",
+      null,
+      "POINT (10 20)"
+     ]
+    }
+   ]
+  },
+  {
+   "label": "pa-gzip-dict-v1",
+   "writer": "pyarrow 25.0.0",
+   "file": "pyarrow/pa-gzip-dict-v1.parquet",
+   "size": 3544,
+   "sha256": "6c5c8ca03aebd1863606176e2be4e71c0bef7188294d775f61ec18d553615df2",
+   "created_by": "parquet-cpp-arrow version 25.0.0",
+   "rows": 14,
+   "columns": 6,
+   "row_groups": [
+    {
+     "rows": 14,
+     "chunks": {
+      "id": {
+       "codec": "GZIP",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "big": {
+       "codec": "GZIP",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 2
+      },
+      "ratio": {
+       "codec": "GZIP",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 3
+      },
+      "temp": {
+       "codec": "GZIP",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "name": {
+       "codec": "GZIP",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "geometry": {
+       "codec": "GZIP",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "geo": {
+        "types": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         1001,
+         3001
+        ],
+        "xmin": -2.0,
+        "xmax": 11.0,
+        "ymin": -3.0,
+        "ymax": 20.0,
+        "zmin": 3.0,
+        "zmax": 9.0,
+        "mmin": 10.0,
+        "mmax": 10.0
+       }
+      }
+     }
+    }
+   ],
+   "metadata": {
+    "geo": "{\"version\":\"2.0.0\",\"primary_column\":\"geometry\",\"columns\":{\"geometry\":{\"encoding\":\"WKB\",\"geometry_types\":[\"GeometryCollection\",\"LineString\",\"MultiLineString\",\"MultiPoint\",\"MultiPolygon\",\"Point\",\"Point Z\",\"Point ZM\",\"Polygon\"],\"bbox\":[-2.0,-3.0,3.0,10.0,11.0,20.0,9.0,10.0]}}}",
+    "purpose": "geoparquet-fixture"
+   },
+   "column_details": [
+    {
+     "name": "id",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 14,
+     "first": 1,
+     "last": 14,
+     "min": 1,
+     "max": 14,
+     "sum": 105
+    },
+    {
+     "name": "big",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 2,
+     "valid": 12,
+     "first": 10000000000,
+     "last": 140000000000,
+     "min": 10000000000,
+     "max": 140000000000,
+     "sum": 900000000000
+    },
+    {
+     "name": "ratio",
+     "physical": "DOUBLE",
+     "logical": "None",
+     "arrow": "double",
+     "nulls": 3,
+     "valid": 11,
+     "nan": 0,
+     "first": 0.3333333333333333,
+     "last": 4.666666666666667,
+     "min": 0.3333333333333333,
+     "max": 4.666666666666667,
+     "sum": 27.0
+    },
+    {
+     "name": "temp",
+     "physical": "FLOAT",
+     "logical": "None",
+     "arrow": "float",
+     "nulls": 0,
+     "valid": 14,
+     "nan": 0,
+     "first": 0.5,
+     "last": 13.5,
+     "min": 0.5,
+     "max": 13.5,
+     "sum": 98.0
+    },
+    {
+     "name": "name",
+     "physical": "BYTE_ARRAY",
+     "logical": "String",
+     "arrow": "string",
+     "nulls": 0,
+     "valid": 14,
+     "values": [
+      "point-le",
+      "null",
+      "point-z-be",
+      "linestring",
+      "polygon-hole",
+      "multipoint",
+      "multilinestring-be",
+      "multipolygon",
+      "collection",
+      "point-be",
+      "point-zm",
+      "linestring-empty",
+      "null-2",
+      "point-le-2"
+     ]
+    },
+    {
+     "name": "geometry",
+     "physical": "BYTE_ARRAY",
+     "logical": "Geometry(crs=)",
+     "arrow": "extension<geoarrow.wkb<WkbType>>",
+     "nulls": 2,
+     "wkt": [
+      "POINT (10 20)",
+      null,
+      "POINT Z (1 2 3)",
+      "LINESTRING (0 0, 1 1, 2 0)",
+      "POLYGON ((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1))",
+      "MULTIPOINT (-1 -1, -2 -3)",
+      "MULTILINESTRING ((0 0, 1 0), (0 1, 1 1))",
+      "MULTIPOLYGON (((0 0, 4 0, 4 4, 0 4, 0 0)), ((10 10, 11 10, 11 11, 10 10)))",
+      "GEOMETRYCOLLECTION (POINT (5 5), LINESTRING (5 5, 6 6))",
+      "POINT (-1.5 2.5)",
+      "POINT ZM (7 8 9 10)",
+      "LINESTRING EMPTY",
+      null,
+      "POINT (10 20)"
+     ]
+    }
+   ]
+  },
+  {
+   "label": "pa-gzip-dict-v2",
+   "writer": "pyarrow 25.0.0",
+   "file": "pyarrow/pa-gzip-dict-v2.parquet",
+   "size": 3430,
+   "sha256": "2de8a2a29d53198cde6cbfc32f789f85e5077c48178a8a41bd9ac245f56e1cb6",
+   "created_by": "parquet-cpp-arrow version 25.0.0",
+   "rows": 14,
+   "columns": 6,
+   "row_groups": [
+    {
+     "rows": 14,
+     "chunks": {
+      "id": {
+       "codec": "GZIP",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "big": {
+       "codec": "GZIP",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 2
+      },
+      "ratio": {
+       "codec": "GZIP",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 3
+      },
+      "temp": {
+       "codec": "GZIP",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "name": {
+       "codec": "GZIP",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "geometry": {
+       "codec": "GZIP",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "geo": {
+        "types": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         1001,
+         3001
+        ],
+        "xmin": -2.0,
+        "xmax": 11.0,
+        "ymin": -3.0,
+        "ymax": 20.0,
+        "zmin": 3.0,
+        "zmax": 9.0,
+        "mmin": 10.0,
+        "mmax": 10.0
+       }
+      }
+     }
+    }
+   ],
+   "metadata": {
+    "geo": "{\"version\":\"2.0.0\",\"primary_column\":\"geometry\",\"columns\":{\"geometry\":{\"encoding\":\"WKB\",\"geometry_types\":[\"GeometryCollection\",\"LineString\",\"MultiLineString\",\"MultiPoint\",\"MultiPolygon\",\"Point\",\"Point Z\",\"Point ZM\",\"Polygon\"],\"bbox\":[-2.0,-3.0,3.0,10.0,11.0,20.0,9.0,10.0]}}}",
+    "purpose": "geoparquet-fixture"
+   },
+   "column_details": [
+    {
+     "name": "id",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 14,
+     "first": 1,
+     "last": 14,
+     "min": 1,
+     "max": 14,
+     "sum": 105
+    },
+    {
+     "name": "big",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 2,
+     "valid": 12,
+     "first": 10000000000,
+     "last": 140000000000,
+     "min": 10000000000,
+     "max": 140000000000,
+     "sum": 900000000000
+    },
+    {
+     "name": "ratio",
+     "physical": "DOUBLE",
+     "logical": "None",
+     "arrow": "double",
+     "nulls": 3,
+     "valid": 11,
+     "nan": 0,
+     "first": 0.3333333333333333,
+     "last": 4.666666666666667,
+     "min": 0.3333333333333333,
+     "max": 4.666666666666667,
+     "sum": 27.0
+    },
+    {
+     "name": "temp",
+     "physical": "FLOAT",
+     "logical": "None",
+     "arrow": "float",
+     "nulls": 0,
+     "valid": 14,
+     "nan": 0,
+     "first": 0.5,
+     "last": 13.5,
+     "min": 0.5,
+     "max": 13.5,
+     "sum": 98.0
+    },
+    {
+     "name": "name",
+     "physical": "BYTE_ARRAY",
+     "logical": "String",
+     "arrow": "string",
+     "nulls": 0,
+     "valid": 14,
+     "values": [
+      "point-le",
+      "null",
+      "point-z-be",
+      "linestring",
+      "polygon-hole",
+      "multipoint",
+      "multilinestring-be",
+      "multipolygon",
+      "collection",
+      "point-be",
+      "point-zm",
+      "linestring-empty",
+      "null-2",
+      "point-le-2"
+     ]
+    },
+    {
+     "name": "geometry",
+     "physical": "BYTE_ARRAY",
+     "logical": "Geometry(crs=)",
+     "arrow": "extension<geoarrow.wkb<WkbType>>",
+     "nulls": 2,
+     "wkt": [
+      "POINT (10 20)",
+      null,
+      "POINT Z (1 2 3)",
+      "LINESTRING (0 0, 1 1, 2 0)",
+      "POLYGON ((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1))",
+      "MULTIPOINT (-1 -1, -2 -3)",
+      "MULTILINESTRING ((0 0, 1 0), (0 1, 1 1))",
+      "MULTIPOLYGON (((0 0, 4 0, 4 4, 0 4, 0 0)), ((10 10, 11 10, 11 11, 10 10)))",
+      "GEOMETRYCOLLECTION (POINT (5 5), LINESTRING (5 5, 6 6))",
+      "POINT (-1.5 2.5)",
+      "POINT ZM (7 8 9 10)",
+      "LINESTRING EMPTY",
+      null,
+      "POINT (10 20)"
+     ]
+    }
+   ]
+  },
+  {
+   "label": "pa-zstd-plain-v1",
+   "writer": "pyarrow 25.0.0",
+   "file": "pyarrow/pa-zstd-plain-v1.parquet",
+   "size": 3275,
+   "sha256": "10fd5a1f59431739d6a670b377f0877641ede9a704be77d3d50d775f7e18397b",
+   "created_by": "parquet-cpp-arrow version 25.0.0",
+   "rows": 14,
+   "columns": 6,
+   "row_groups": [
+    {
+     "rows": 14,
+     "chunks": {
+      "id": {
+       "codec": "ZSTD",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "big": {
+       "codec": "ZSTD",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 2
+      },
+      "ratio": {
+       "codec": "ZSTD",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 3
+      },
+      "temp": {
+       "codec": "ZSTD",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "name": {
+       "codec": "ZSTD",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "geometry": {
+       "codec": "ZSTD",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "geo": {
+        "types": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         1001,
+         3001
+        ],
+        "xmin": -2.0,
+        "xmax": 11.0,
+        "ymin": -3.0,
+        "ymax": 20.0,
+        "zmin": 3.0,
+        "zmax": 9.0,
+        "mmin": 10.0,
+        "mmax": 10.0
+       }
+      }
+     }
+    }
+   ],
+   "metadata": {
+    "geo": "{\"version\":\"2.0.0\",\"primary_column\":\"geometry\",\"columns\":{\"geometry\":{\"encoding\":\"WKB\",\"geometry_types\":[\"GeometryCollection\",\"LineString\",\"MultiLineString\",\"MultiPoint\",\"MultiPolygon\",\"Point\",\"Point Z\",\"Point ZM\",\"Polygon\"],\"bbox\":[-2.0,-3.0,3.0,10.0,11.0,20.0,9.0,10.0]}}}",
+    "purpose": "geoparquet-fixture"
+   },
+   "column_details": [
+    {
+     "name": "id",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 14,
+     "first": 1,
+     "last": 14,
+     "min": 1,
+     "max": 14,
+     "sum": 105
+    },
+    {
+     "name": "big",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 2,
+     "valid": 12,
+     "first": 10000000000,
+     "last": 140000000000,
+     "min": 10000000000,
+     "max": 140000000000,
+     "sum": 900000000000
+    },
+    {
+     "name": "ratio",
+     "physical": "DOUBLE",
+     "logical": "None",
+     "arrow": "double",
+     "nulls": 3,
+     "valid": 11,
+     "nan": 0,
+     "first": 0.3333333333333333,
+     "last": 4.666666666666667,
+     "min": 0.3333333333333333,
+     "max": 4.666666666666667,
+     "sum": 27.0
+    },
+    {
+     "name": "temp",
+     "physical": "FLOAT",
+     "logical": "None",
+     "arrow": "float",
+     "nulls": 0,
+     "valid": 14,
+     "nan": 0,
+     "first": 0.5,
+     "last": 13.5,
+     "min": 0.5,
+     "max": 13.5,
+     "sum": 98.0
+    },
+    {
+     "name": "name",
+     "physical": "BYTE_ARRAY",
+     "logical": "String",
+     "arrow": "string",
+     "nulls": 0,
+     "valid": 14,
+     "values": [
+      "point-le",
+      "null",
+      "point-z-be",
+      "linestring",
+      "polygon-hole",
+      "multipoint",
+      "multilinestring-be",
+      "multipolygon",
+      "collection",
+      "point-be",
+      "point-zm",
+      "linestring-empty",
+      "null-2",
+      "point-le-2"
+     ]
+    },
+    {
+     "name": "geometry",
+     "physical": "BYTE_ARRAY",
+     "logical": "Geometry(crs=)",
+     "arrow": "extension<geoarrow.wkb<WkbType>>",
+     "nulls": 2,
+     "wkt": [
+      "POINT (10 20)",
+      null,
+      "POINT Z (1 2 3)",
+      "LINESTRING (0 0, 1 1, 2 0)",
+      "POLYGON ((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1))",
+      "MULTIPOINT (-1 -1, -2 -3)",
+      "MULTILINESTRING ((0 0, 1 0), (0 1, 1 1))",
+      "MULTIPOLYGON (((0 0, 4 0, 4 4, 0 4, 0 0)), ((10 10, 11 10, 11 11, 10 10)))",
+      "GEOMETRYCOLLECTION (POINT (5 5), LINESTRING (5 5, 6 6))",
+      "POINT (-1.5 2.5)",
+      "POINT ZM (7 8 9 10)",
+      "LINESTRING EMPTY",
+      null,
+      "POINT (10 20)"
+     ]
+    }
+   ]
+  },
+  {
+   "label": "pa-zstd-plain-v2",
+   "writer": "pyarrow 25.0.0",
+   "file": "pyarrow/pa-zstd-plain-v2.parquet",
+   "size": 3272,
+   "sha256": "5aeba156fc938c77e9f981695518eeda2cfd3cfb6c0677e372607dc1e3f6136e",
+   "created_by": "parquet-cpp-arrow version 25.0.0",
+   "rows": 14,
+   "columns": 6,
+   "row_groups": [
+    {
+     "rows": 14,
+     "chunks": {
+      "id": {
+       "codec": "ZSTD",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "big": {
+       "codec": "ZSTD",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 2
+      },
+      "ratio": {
+       "codec": "ZSTD",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 3
+      },
+      "temp": {
+       "codec": "ZSTD",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "name": {
+       "codec": "ZSTD",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "geometry": {
+       "codec": "ZSTD",
+       "encodings": [
+        "PLAIN",
+        "RLE"
+       ],
+       "dictionary_page": false,
+       "num_values": 14,
+       "geo": {
+        "types": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         1001,
+         3001
+        ],
+        "xmin": -2.0,
+        "xmax": 11.0,
+        "ymin": -3.0,
+        "ymax": 20.0,
+        "zmin": 3.0,
+        "zmax": 9.0,
+        "mmin": 10.0,
+        "mmax": 10.0
+       }
+      }
+     }
+    }
+   ],
+   "metadata": {
+    "geo": "{\"version\":\"2.0.0\",\"primary_column\":\"geometry\",\"columns\":{\"geometry\":{\"encoding\":\"WKB\",\"geometry_types\":[\"GeometryCollection\",\"LineString\",\"MultiLineString\",\"MultiPoint\",\"MultiPolygon\",\"Point\",\"Point Z\",\"Point ZM\",\"Polygon\"],\"bbox\":[-2.0,-3.0,3.0,10.0,11.0,20.0,9.0,10.0]}}}",
+    "purpose": "geoparquet-fixture"
+   },
+   "column_details": [
+    {
+     "name": "id",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 14,
+     "first": 1,
+     "last": 14,
+     "min": 1,
+     "max": 14,
+     "sum": 105
+    },
+    {
+     "name": "big",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 2,
+     "valid": 12,
+     "first": 10000000000,
+     "last": 140000000000,
+     "min": 10000000000,
+     "max": 140000000000,
+     "sum": 900000000000
+    },
+    {
+     "name": "ratio",
+     "physical": "DOUBLE",
+     "logical": "None",
+     "arrow": "double",
+     "nulls": 3,
+     "valid": 11,
+     "nan": 0,
+     "first": 0.3333333333333333,
+     "last": 4.666666666666667,
+     "min": 0.3333333333333333,
+     "max": 4.666666666666667,
+     "sum": 27.0
+    },
+    {
+     "name": "temp",
+     "physical": "FLOAT",
+     "logical": "None",
+     "arrow": "float",
+     "nulls": 0,
+     "valid": 14,
+     "nan": 0,
+     "first": 0.5,
+     "last": 13.5,
+     "min": 0.5,
+     "max": 13.5,
+     "sum": 98.0
+    },
+    {
+     "name": "name",
+     "physical": "BYTE_ARRAY",
+     "logical": "String",
+     "arrow": "string",
+     "nulls": 0,
+     "valid": 14,
+     "values": [
+      "point-le",
+      "null",
+      "point-z-be",
+      "linestring",
+      "polygon-hole",
+      "multipoint",
+      "multilinestring-be",
+      "multipolygon",
+      "collection",
+      "point-be",
+      "point-zm",
+      "linestring-empty",
+      "null-2",
+      "point-le-2"
+     ]
+    },
+    {
+     "name": "geometry",
+     "physical": "BYTE_ARRAY",
+     "logical": "Geometry(crs=)",
+     "arrow": "extension<geoarrow.wkb<WkbType>>",
+     "nulls": 2,
+     "wkt": [
+      "POINT (10 20)",
+      null,
+      "POINT Z (1 2 3)",
+      "LINESTRING (0 0, 1 1, 2 0)",
+      "POLYGON ((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1))",
+      "MULTIPOINT (-1 -1, -2 -3)",
+      "MULTILINESTRING ((0 0, 1 0), (0 1, 1 1))",
+      "MULTIPOLYGON (((0 0, 4 0, 4 4, 0 4, 0 0)), ((10 10, 11 10, 11 11, 10 10)))",
+      "GEOMETRYCOLLECTION (POINT (5 5), LINESTRING (5 5, 6 6))",
+      "POINT (-1.5 2.5)",
+      "POINT ZM (7 8 9 10)",
+      "LINESTRING EMPTY",
+      null,
+      "POINT (10 20)"
+     ]
+    }
+   ]
+  },
+  {
+   "label": "pa-zstd-dict-v1",
+   "writer": "pyarrow 25.0.0",
+   "file": "pyarrow/pa-zstd-dict-v1.parquet",
+   "size": 3547,
+   "sha256": "abcaf96c6b7a2bd7f69e291500ee52b5282094c6bec121f355bd682001bc98bd",
+   "created_by": "parquet-cpp-arrow version 25.0.0",
+   "rows": 14,
+   "columns": 6,
+   "row_groups": [
+    {
+     "rows": 14,
+     "chunks": {
+      "id": {
+       "codec": "ZSTD",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "big": {
+       "codec": "ZSTD",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 2
+      },
+      "ratio": {
+       "codec": "ZSTD",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 3
+      },
+      "temp": {
+       "codec": "ZSTD",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "name": {
+       "codec": "ZSTD",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "geometry": {
+       "codec": "ZSTD",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "geo": {
+        "types": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         1001,
+         3001
+        ],
+        "xmin": -2.0,
+        "xmax": 11.0,
+        "ymin": -3.0,
+        "ymax": 20.0,
+        "zmin": 3.0,
+        "zmax": 9.0,
+        "mmin": 10.0,
+        "mmax": 10.0
+       }
+      }
+     }
+    }
+   ],
+   "metadata": {
+    "geo": "{\"version\":\"2.0.0\",\"primary_column\":\"geometry\",\"columns\":{\"geometry\":{\"encoding\":\"WKB\",\"geometry_types\":[\"GeometryCollection\",\"LineString\",\"MultiLineString\",\"MultiPoint\",\"MultiPolygon\",\"Point\",\"Point Z\",\"Point ZM\",\"Polygon\"],\"bbox\":[-2.0,-3.0,3.0,10.0,11.0,20.0,9.0,10.0]}}}",
+    "purpose": "geoparquet-fixture"
+   },
+   "column_details": [
+    {
+     "name": "id",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 14,
+     "first": 1,
+     "last": 14,
+     "min": 1,
+     "max": 14,
+     "sum": 105
+    },
+    {
+     "name": "big",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 2,
+     "valid": 12,
+     "first": 10000000000,
+     "last": 140000000000,
+     "min": 10000000000,
+     "max": 140000000000,
+     "sum": 900000000000
+    },
+    {
+     "name": "ratio",
+     "physical": "DOUBLE",
+     "logical": "None",
+     "arrow": "double",
+     "nulls": 3,
+     "valid": 11,
+     "nan": 0,
+     "first": 0.3333333333333333,
+     "last": 4.666666666666667,
+     "min": 0.3333333333333333,
+     "max": 4.666666666666667,
+     "sum": 27.0
+    },
+    {
+     "name": "temp",
+     "physical": "FLOAT",
+     "logical": "None",
+     "arrow": "float",
+     "nulls": 0,
+     "valid": 14,
+     "nan": 0,
+     "first": 0.5,
+     "last": 13.5,
+     "min": 0.5,
+     "max": 13.5,
+     "sum": 98.0
+    },
+    {
+     "name": "name",
+     "physical": "BYTE_ARRAY",
+     "logical": "String",
+     "arrow": "string",
+     "nulls": 0,
+     "valid": 14,
+     "values": [
+      "point-le",
+      "null",
+      "point-z-be",
+      "linestring",
+      "polygon-hole",
+      "multipoint",
+      "multilinestring-be",
+      "multipolygon",
+      "collection",
+      "point-be",
+      "point-zm",
+      "linestring-empty",
+      "null-2",
+      "point-le-2"
+     ]
+    },
+    {
+     "name": "geometry",
+     "physical": "BYTE_ARRAY",
+     "logical": "Geometry(crs=)",
+     "arrow": "extension<geoarrow.wkb<WkbType>>",
+     "nulls": 2,
+     "wkt": [
+      "POINT (10 20)",
+      null,
+      "POINT Z (1 2 3)",
+      "LINESTRING (0 0, 1 1, 2 0)",
+      "POLYGON ((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1))",
+      "MULTIPOINT (-1 -1, -2 -3)",
+      "MULTILINESTRING ((0 0, 1 0), (0 1, 1 1))",
+      "MULTIPOLYGON (((0 0, 4 0, 4 4, 0 4, 0 0)), ((10 10, 11 10, 11 11, 10 10)))",
+      "GEOMETRYCOLLECTION (POINT (5 5), LINESTRING (5 5, 6 6))",
+      "POINT (-1.5 2.5)",
+      "POINT ZM (7 8 9 10)",
+      "LINESTRING EMPTY",
+      null,
+      "POINT (10 20)"
+     ]
+    }
+   ]
+  },
+  {
+   "label": "pa-zstd-dict-v2",
+   "writer": "pyarrow 25.0.0",
+   "file": "pyarrow/pa-zstd-dict-v2.parquet",
+   "size": 3499,
+   "sha256": "4b7ba60a198fadb64625b6171ef0441819ba33a422b0d1cbb1f4b07c4a78b614",
+   "created_by": "parquet-cpp-arrow version 25.0.0",
+   "rows": 14,
+   "columns": 6,
+   "row_groups": [
+    {
+     "rows": 14,
+     "chunks": {
+      "id": {
+       "codec": "ZSTD",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "big": {
+       "codec": "ZSTD",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 2
+      },
+      "ratio": {
+       "codec": "ZSTD",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 3
+      },
+      "temp": {
+       "codec": "ZSTD",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "name": {
+       "codec": "ZSTD",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "geometry": {
+       "codec": "ZSTD",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "geo": {
+        "types": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         1001,
+         3001
+        ],
+        "xmin": -2.0,
+        "xmax": 11.0,
+        "ymin": -3.0,
+        "ymax": 20.0,
+        "zmin": 3.0,
+        "zmax": 9.0,
+        "mmin": 10.0,
+        "mmax": 10.0
+       }
+      }
+     }
+    }
+   ],
+   "metadata": {
+    "geo": "{\"version\":\"2.0.0\",\"primary_column\":\"geometry\",\"columns\":{\"geometry\":{\"encoding\":\"WKB\",\"geometry_types\":[\"GeometryCollection\",\"LineString\",\"MultiLineString\",\"MultiPoint\",\"MultiPolygon\",\"Point\",\"Point Z\",\"Point ZM\",\"Polygon\"],\"bbox\":[-2.0,-3.0,3.0,10.0,11.0,20.0,9.0,10.0]}}}",
+    "purpose": "geoparquet-fixture"
+   },
+   "column_details": [
+    {
+     "name": "id",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 14,
+     "first": 1,
+     "last": 14,
+     "min": 1,
+     "max": 14,
+     "sum": 105
+    },
+    {
+     "name": "big",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 2,
+     "valid": 12,
+     "first": 10000000000,
+     "last": 140000000000,
+     "min": 10000000000,
+     "max": 140000000000,
+     "sum": 900000000000
+    },
+    {
+     "name": "ratio",
+     "physical": "DOUBLE",
+     "logical": "None",
+     "arrow": "double",
+     "nulls": 3,
+     "valid": 11,
+     "nan": 0,
+     "first": 0.3333333333333333,
+     "last": 4.666666666666667,
+     "min": 0.3333333333333333,
+     "max": 4.666666666666667,
+     "sum": 27.0
+    },
+    {
+     "name": "temp",
+     "physical": "FLOAT",
+     "logical": "None",
+     "arrow": "float",
+     "nulls": 0,
+     "valid": 14,
+     "nan": 0,
+     "first": 0.5,
+     "last": 13.5,
+     "min": 0.5,
+     "max": 13.5,
+     "sum": 98.0
+    },
+    {
+     "name": "name",
+     "physical": "BYTE_ARRAY",
+     "logical": "String",
+     "arrow": "string",
+     "nulls": 0,
+     "valid": 14,
+     "values": [
+      "point-le",
+      "null",
+      "point-z-be",
+      "linestring",
+      "polygon-hole",
+      "multipoint",
+      "multilinestring-be",
+      "multipolygon",
+      "collection",
+      "point-be",
+      "point-zm",
+      "linestring-empty",
+      "null-2",
+      "point-le-2"
+     ]
+    },
+    {
+     "name": "geometry",
+     "physical": "BYTE_ARRAY",
+     "logical": "Geometry(crs=)",
+     "arrow": "extension<geoarrow.wkb<WkbType>>",
+     "nulls": 2,
+     "wkt": [
+      "POINT (10 20)",
+      null,
+      "POINT Z (1 2 3)",
+      "LINESTRING (0 0, 1 1, 2 0)",
+      "POLYGON ((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1))",
+      "MULTIPOINT (-1 -1, -2 -3)",
+      "MULTILINESTRING ((0 0, 1 0), (0 1, 1 1))",
+      "MULTIPOLYGON (((0 0, 4 0, 4 4, 0 4, 0 0)), ((10 10, 11 10, 11 11, 10 10)))",
+      "GEOMETRYCOLLECTION (POINT (5 5), LINESTRING (5 5, 6 6))",
+      "POINT (-1.5 2.5)",
+      "POINT ZM (7 8 9 10)",
+      "LINESTRING EMPTY",
+      null,
+      "POINT (10 20)"
+     ]
+    }
+   ]
+  },
+  {
+   "label": "pa-snappy-multipage",
+   "writer": "pyarrow 25.0.0",
+   "file": "pyarrow/pa-snappy-multipage.parquet",
+   "size": 5764,
+   "sha256": "74d3185f63564cec4ae3b1d8a8dbf8ade59d80bac0d8bec7cef38985118d18be",
+   "created_by": "parquet-cpp-arrow version 25.0.0",
+   "rows": 14,
+   "columns": 6,
+   "row_groups": [
+    {
+     "rows": 8,
+     "chunks": {
+      "id": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 8,
+       "nulls": 0
+      },
+      "big": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 8,
+       "nulls": 1
+      },
+      "ratio": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 8,
+       "nulls": 2
+      },
+      "temp": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 8,
+       "nulls": 0
+      },
+      "name": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 8,
+       "nulls": 0
+      },
+      "geometry": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 8,
+       "geo": {
+        "types": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1001
+        ],
+        "xmin": -2.0,
+        "xmax": 11.0,
+        "ymin": -3.0,
+        "ymax": 20.0,
+        "zmin": 3.0,
+        "zmax": 3.0,
+        "mmin": null,
+        "mmax": null
+       }
+      }
+     }
+    },
+    {
+     "rows": 6,
+     "chunks": {
+      "id": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 6,
+       "nulls": 0
+      },
+      "big": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 6,
+       "nulls": 1
+      },
+      "ratio": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 6,
+       "nulls": 1
+      },
+      "temp": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 6,
+       "nulls": 0
+      },
+      "name": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 6,
+       "nulls": 0
+      },
+      "geometry": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 6,
+       "geo": {
+        "types": [
+         1,
+         2,
+         7,
+         3001
+        ],
+        "xmin": -1.5,
+        "xmax": 10.0,
+        "ymin": 2.5,
+        "ymax": 20.0,
+        "zmin": 9.0,
+        "zmax": 9.0,
+        "mmin": 10.0,
+        "mmax": 10.0
+       }
+      }
+     }
+    }
+   ],
+   "metadata": {
+    "geo": "{\"version\":\"2.0.0\",\"primary_column\":\"geometry\",\"columns\":{\"geometry\":{\"encoding\":\"WKB\",\"geometry_types\":[\"GeometryCollection\",\"LineString\",\"MultiLineString\",\"MultiPoint\",\"MultiPolygon\",\"Point\",\"Point Z\",\"Point ZM\",\"Polygon\"],\"bbox\":[-2.0,-3.0,3.0,10.0,11.0,20.0,9.0,10.0]}}}",
+    "purpose": "geoparquet-fixture"
+   },
+   "column_details": [
+    {
+     "name": "id",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 14,
+     "first": 1,
+     "last": 14,
+     "min": 1,
+     "max": 14,
+     "sum": 105
+    },
+    {
+     "name": "big",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 2,
+     "valid": 12,
+     "first": 10000000000,
+     "last": 140000000000,
+     "min": 10000000000,
+     "max": 140000000000,
+     "sum": 900000000000
+    },
+    {
+     "name": "ratio",
+     "physical": "DOUBLE",
+     "logical": "None",
+     "arrow": "double",
+     "nulls": 3,
+     "valid": 11,
+     "nan": 0,
+     "first": 0.3333333333333333,
+     "last": 4.666666666666667,
+     "min": 0.3333333333333333,
+     "max": 4.666666666666667,
+     "sum": 27.0
+    },
+    {
+     "name": "temp",
+     "physical": "FLOAT",
+     "logical": "None",
+     "arrow": "float",
+     "nulls": 0,
+     "valid": 14,
+     "nan": 0,
+     "first": 0.5,
+     "last": 13.5,
+     "min": 0.5,
+     "max": 13.5,
+     "sum": 98.0
+    },
+    {
+     "name": "name",
+     "physical": "BYTE_ARRAY",
+     "logical": "String",
+     "arrow": "string",
+     "nulls": 0,
+     "valid": 14,
+     "values": [
+      "point-le",
+      "null",
+      "point-z-be",
+      "linestring",
+      "polygon-hole",
+      "multipoint",
+      "multilinestring-be",
+      "multipolygon",
+      "collection",
+      "point-be",
+      "point-zm",
+      "linestring-empty",
+      "null-2",
+      "point-le-2"
+     ]
+    },
+    {
+     "name": "geometry",
+     "physical": "BYTE_ARRAY",
+     "logical": "Geometry(crs=)",
+     "arrow": "extension<geoarrow.wkb<WkbType>>",
+     "nulls": 2,
+     "wkt": [
+      "POINT (10 20)",
+      null,
+      "POINT Z (1 2 3)",
+      "LINESTRING (0 0, 1 1, 2 0)",
+      "POLYGON ((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1))",
+      "MULTIPOINT (-1 -1, -2 -3)",
+      "MULTILINESTRING ((0 0, 1 0), (0 1, 1 1))",
+      "MULTIPOLYGON (((0 0, 4 0, 4 4, 0 4, 0 0)), ((10 10, 11 10, 11 11, 10 10)))",
+      "GEOMETRYCOLLECTION (POINT (5 5), LINESTRING (5 5, 6 6))",
+      "POINT (-1.5 2.5)",
+      "POINT ZM (7 8 9 10)",
+      "LINESTRING EMPTY",
+      null,
+      "POINT (10 20)"
+     ]
+    }
+   ]
+  },
+  {
+   "label": "pa-native-only",
+   "writer": "pyarrow 25.0.0",
+   "file": "pyarrow/pa-native-only.parquet",
+   "size": 2856,
+   "sha256": "9627e926242521ce779ba104d232e4c922fb62186aed7bf28da4c9700f6df15d",
+   "created_by": "parquet-cpp-arrow version 25.0.0",
+   "rows": 14,
+   "columns": 6,
+   "row_groups": [
+    {
+     "rows": 14,
+     "chunks": {
+      "id": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "big": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 2
+      },
+      "ratio": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 3
+      },
+      "temp": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "name": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "nulls": 0
+      },
+      "geometry": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+       ],
+       "dictionary_page": true,
+       "num_values": 14,
+       "geo": {
+        "types": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         1001,
+         3001
+        ],
+        "xmin": -2.0,
+        "xmax": 11.0,
+        "ymin": -3.0,
+        "ymax": 20.0,
+        "zmin": 3.0,
+        "zmax": 9.0,
+        "mmin": 10.0,
+        "mmax": 10.0
+       }
+      }
+     }
+    }
+   ],
+   "metadata": {
+    "purpose": "geoparquet-fixture"
+   },
+   "column_details": [
+    {
+     "name": "id",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 14,
+     "first": 1,
+     "last": 14,
+     "min": 1,
+     "max": 14,
+     "sum": 105
+    },
+    {
+     "name": "big",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 2,
+     "valid": 12,
+     "first": 10000000000,
+     "last": 140000000000,
+     "min": 10000000000,
+     "max": 140000000000,
+     "sum": 900000000000
+    },
+    {
+     "name": "ratio",
+     "physical": "DOUBLE",
+     "logical": "None",
+     "arrow": "double",
+     "nulls": 3,
+     "valid": 11,
+     "nan": 0,
+     "first": 0.3333333333333333,
+     "last": 4.666666666666667,
+     "min": 0.3333333333333333,
+     "max": 4.666666666666667,
+     "sum": 27.0
+    },
+    {
+     "name": "temp",
+     "physical": "FLOAT",
+     "logical": "None",
+     "arrow": "float",
+     "nulls": 0,
+     "valid": 14,
+     "nan": 0,
+     "first": 0.5,
+     "last": 13.5,
+     "min": 0.5,
+     "max": 13.5,
+     "sum": 98.0
+    },
+    {
+     "name": "name",
+     "physical": "BYTE_ARRAY",
+     "logical": "String",
+     "arrow": "string",
+     "nulls": 0,
+     "valid": 14,
+     "values": [
+      "point-le",
+      "null",
+      "point-z-be",
+      "linestring",
+      "polygon-hole",
+      "multipoint",
+      "multilinestring-be",
+      "multipolygon",
+      "collection",
+      "point-be",
+      "point-zm",
+      "linestring-empty",
+      "null-2",
+      "point-le-2"
+     ]
+    },
+    {
+     "name": "geometry",
+     "physical": "BYTE_ARRAY",
+     "logical": "Geometry(crs=)",
+     "arrow": "extension<geoarrow.wkb<WkbType>>",
+     "nulls": 2,
+     "wkt": [
+      "POINT (10 20)",
+      null,
+      "POINT Z (1 2 3)",
+      "LINESTRING (0 0, 1 1, 2 0)",
+      "POLYGON ((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1))",
+      "MULTIPOINT (-1 -1, -2 -3)",
+      "MULTILINESTRING ((0 0, 1 0), (0 1, 1 1))",
+      "MULTIPOLYGON (((0 0, 4 0, 4 4, 0 4, 0 0)), ((10 10, 11 10, 11 11, 10 10)))",
+      "GEOMETRYCOLLECTION (POINT (5 5), LINESTRING (5 5, 6 6))",
+      "POINT (-1.5 2.5)",
+      "POINT ZM (7 8 9 10)",
+      "LINESTRING EMPTY",
+      null,
+      "POINT (10 20)"
+     ]
+    }
+   ]
+  },
+  {
+   "label": "duckdb-v2",
+   "writer": "duckdb 1.5.5",
+   "file": "duckdb/duckdb-v2.parquet",
+   "size": 1215,
+   "sha256": "e0767e639315a9492690781cea8d2a6d15058564263daffbfd38126ed88344bd",
+   "created_by": "DuckDB version v1.5.5 (build )",
+   "rows": 13,
+   "columns": 3,
+   "row_groups": [
+    {
+     "rows": 13,
+     "chunks": {
+      "id": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN"
+       ],
+       "dictionary_page": false,
+       "num_values": 13,
+       "nulls": 0
+      },
+      "name": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN"
+       ],
+       "dictionary_page": false,
+       "num_values": 13,
+       "nulls": 0
+      },
+      "geometry": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN"
+       ],
+       "dictionary_page": false,
+       "num_values": 13,
+       "nulls": 2,
+       "geo": {
+        "types": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         1001
+        ],
+        "xmin": -2.0,
+        "xmax": 11.0,
+        "ymin": -3.0,
+        "ymax": 20.0,
+        "zmin": 3.0,
+        "zmax": 3.0,
+        "mmin": null,
+        "mmax": null
+       }
+      }
+     }
+    }
+   ],
+   "metadata": {
+    "geo": "{\"version\":\"2.0.0\",\"primary_column\":\"geometry\",\"columns\":{\"geometry\":{\"encoding\":\"WKB\",\"geometry_types\":[\"Point\",\"LineString\",\"Polygon\",\"MultiPoint\",\"MultiLineString\",\"MultiPolygon\",\"GeometryCollection\",\"Point Z\"],\"bbox\":[-2.0,-3.0,3.0,11.0,20.0,3.0]}}}"
+   },
+   "column_details": [
+    {
+     "name": "id",
+     "physical": "INT32",
+     "logical": "Int(bitWidth=32, isSigned=true)",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 13,
+     "first": 1,
+     "last": 14,
+     "min": 1,
+     "max": 14,
+     "sum": 94
+    },
+    {
+     "name": "name",
+     "physical": "BYTE_ARRAY",
+     "logical": "String",
+     "arrow": "string",
+     "nulls": 0,
+     "valid": 13,
+     "values": [
+      "point-le",
+      "null",
+      "point-z-be",
+      "linestring",
+      "polygon-hole",
+      "multipoint",
+      "multilinestring-be",
+      "multipolygon",
+      "collection",
+      "point-be",
+      "linestring-empty",
+      "null-2",
+      "point-le-2"
+     ]
+    },
+    {
+     "name": "geometry",
+     "physical": "BYTE_ARRAY",
+     "logical": "Geometry(crs=)",
+     "arrow": "extension<geoarrow.wkb<WkbType>>",
+     "nulls": 2,
+     "wkt": [
+      "POINT (10 20)",
+      null,
+      "POINT Z (1 2 3)",
+      "LINESTRING (0 0, 1 1, 2 0)",
+      "POLYGON ((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1))",
+      "MULTIPOINT (-1 -1, -2 -3)",
+      "MULTILINESTRING ((0 0, 1 0), (0 1, 1 1))",
+      "MULTIPOLYGON (((0 0, 4 0, 4 4, 0 4, 0 0)), ((10 10, 11 10, 11 11, 10 10)))",
+      "GEOMETRYCOLLECTION (POINT (5 5), LINESTRING (5 5, 6 6))",
+      "POINT (-1.5 2.5)",
+      "LINESTRING EMPTY",
+      null,
+      "POINT (10 20)"
+     ]
+    }
+   ]
+  },
+  {
+   "label": "duckdb-v1",
+   "writer": "duckdb 1.5.5",
+   "file": "duckdb/duckdb-v1.parquet",
+   "size": 1141,
+   "sha256": "2789d6099724879f501a935ba78d3b682de3162b3f2334f68779e89d9838911a",
+   "created_by": "DuckDB version v1.5.5 (build )",
+   "rows": 13,
+   "columns": 3,
+   "row_groups": [
+    {
+     "rows": 13,
+     "chunks": {
+      "id": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN"
+       ],
+       "dictionary_page": false,
+       "num_values": 13,
+       "nulls": 0
+      },
+      "name": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN"
+       ],
+       "dictionary_page": false,
+       "num_values": 13,
+       "nulls": 0
+      },
+      "geometry": {
+       "codec": "SNAPPY",
+       "encodings": [
+        "PLAIN"
+       ],
+       "dictionary_page": false,
+       "num_values": 13,
+       "nulls": 2
+      }
+     }
+    }
+   ],
+   "metadata": {
+    "geo": "{\"version\":\"1.0.0\",\"primary_column\":\"geometry\",\"columns\":{\"geometry\":{\"encoding\":\"WKB\",\"geometry_types\":[\"Point\",\"LineString\",\"Polygon\",\"MultiPoint\",\"MultiLineString\",\"MultiPolygon\",\"GeometryCollection\",\"Point Z\"],\"bbox\":[-2.0,-3.0,3.0,11.0,20.0,3.0]}}}"
+   },
+   "column_details": [
+    {
+     "name": "id",
+     "physical": "INT32",
+     "logical": "Int(bitWidth=32, isSigned=true)",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 13,
+     "first": 1,
+     "last": 14,
+     "min": 1,
+     "max": 14,
+     "sum": 94
+    },
+    {
+     "name": "name",
+     "physical": "BYTE_ARRAY",
+     "logical": "String",
+     "arrow": "string",
+     "nulls": 0,
+     "valid": 13,
+     "values": [
+      "point-le",
+      "null",
+      "point-z-be",
+      "linestring",
+      "polygon-hole",
+      "multipoint",
+      "multilinestring-be",
+      "multipolygon",
+      "collection",
+      "point-be",
+      "linestring-empty",
+      "null-2",
+      "point-le-2"
+     ]
+    },
+    {
+     "name": "geometry",
+     "physical": "BYTE_ARRAY",
+     "logical": "None",
+     "arrow": "binary",
+     "nulls": 2,
+     "wkt": [
+      "POINT (10 20)",
+      null,
+      "POINT Z (1 2 3)",
+      "LINESTRING (0 0, 1 1, 2 0)",
+      "POLYGON ((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1))",
+      "MULTIPOINT (-1 -1, -2 -3)",
+      "MULTILINESTRING ((0 0, 1 0), (0 1, 1 1))",
+      "MULTIPOLYGON (((0 0, 4 0, 4 4, 0 4, 0 0)), ((10 10, 11 10, 11 11, 10 10)))",
+      "GEOMETRYCOLLECTION (POINT (5 5), LINESTRING (5 5, 6 6))",
+      "POINT (-1.5 2.5)",
+      "LINESTRING EMPTY",
+      null,
+      "POINT (10 20)"
+     ]
+    }
+   ]
+  }
+ ]
+}

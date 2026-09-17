@@ -11,6 +11,7 @@ Read `README.md` first; it holds status, design decisions and lessons learned. T
 | The plan and its progress: history, UX, data layer, iOS parity, open decisions D1–D10 | `docs/history-ux-and-data-layer.md` (progress note under §6) |
 | Protocol frames / JSON / CONFIG (mirror only; owner is the firmware repo) | `core/protocol/src/main/kotlin/.../data/protocol/` ← `../m5stack-aq-parquet/docs/ble-sync-protocol.md` |
 | Parquet reader / writer, fixtures, PyArrow oracle | `core/parquet/` · fixtures `core/parquet/src/test/resources/parquet/` · `tools/make_parquet_fixtures.py`, `tools/validate_parquet_samples.py` (run with `cd ../m5stack-aq-parquet && pixi run python …`) |
+| GeoParquet 2.0 (WKB, `GEOMETRY`, `geo`, codecs, ZSTD via `AppParquetCodecs`) | `docs/history-ux-and-data-layer.md` §7 (D11) · `core/parquet/.../Geometry.kt`, `GeoParquetMetadata.kt`, `ParquetCodecs.kt` · fixtures `core/parquet/src/test/resources/geoparquet/` from `tools/make_geoparquet_fixtures.py` (PyArrow + DuckDB) |
 | Metrics, bands, gates, settle window (add a sensor here) | `core/history/.../Metrics.kt` |
 | Tiers, daily derived files, time estimate, chart binning | `core/history/.../Aggregation.kt`, `app/.../data/history/HistoryDeriver.kt` + `DailyDerived.kt`, `core/history/.../TimeEstimate.kt`, `Columns.kt` |
 | Friendly layer (moods, copy), Now card, detail levels | `core/history/.../AirMood.kt`, `app/.../ui/device/NowCard.kt`, `app/.../data/settings/AppSettings.kt` (`DetailLevel`) |
@@ -70,7 +71,7 @@ Everything in `verify` must pass before a commit: lint errors fail the build by 
 
 ```
 core/protocol/   pure JVM  data/protocol: UUIDs, frame codec v1+v2, CONFIG model, LAN framing, JSON, Parquet verify  (contract mirror)
-core/parquet/    pure JVM  data/history/parquet: reader, writer, Thrift compact, LZ4 block; src/test/resources/parquet = the fixtures
+core/parquet/    pure JVM  data/history/parquet: reader (+GeoParquet 2.0: WKB, GEOMETRY, geo key, dictionary, page V2, Snappy/GZIP, codec SPI), writer, Thrift compact, LZ4 block; src/test/resources/{parquet,geoparquet} = the fixtures
 core/history/    pure JVM  data/history: file index, metric registry (Metrics), Aggregator → tiers, TimeEstimate, Columns, AirMood, history model
 app/src/main/java/earth/walkthru/aqsync/
   data/ble/       scanner, GATT transport, session (all ops), frame recorder  (Android BLE only here)

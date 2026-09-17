@@ -111,18 +111,70 @@ object ParquetFooterParser {
         return SchemaElement(name, type, typeLength, repetition, numChildren, convertedType, fieldId, logicalType)
     }
 
-    /** `LogicalType` is a union: exactly one struct field set; field 8 is TIMESTAMP. */
+    /** `LogicalType` is a union: exactly one struct field set; 1 STRING, 8 TIMESTAMP, 17 GEOMETRY, 18 GEOGRAPHY. */
     private fun readLogicalType(r: ThriftCompactReader): ParquetLogicalType? {
         var result: ParquetLogicalType? = null
         r.readStruct { f ->
-            result = if (f.id == 8 && f.type == Type.STRUCT) {
-                readTimestampType(r)
-            } else {
-                r.skip(f.type)
-                ParquetLogicalType.Other(f.id)
+            result = when {
+                f.type != Type.STRUCT -> { r.skip(f.type); ParquetLogicalType.Other(f.id) }
+                f.id == 1 -> { r.skip(f.type); ParquetLogicalType.Utf8 }
+                f.id == 8 -> readTimestampType(r)
+                f.id == 17 -> readGeometryType(r)
+                f.id == 18 -> readGeographyType(r)
+                else -> { r.skip(f.type); ParquetLogicalType.Other(f.id) }
             }
         }
         return result
+    }
+
+    private fun readGeometryType(r: ThriftCompactReader): ParquetLogicalType.Geometry {
+        var crs: String? = null
+        r.readStruct { f ->
+            when (f.id) {
+                1 -> crs = r.readString()
+                else -> r.skip(f.type)
+            }
+        }
+        return ParquetLogicalType.Geometry(crs)
+    }
+
+    private fun readGeographyType(r: ThriftCompactReader): ParquetLogicalType.Geography {
+        var crs: String? = null
+        var algorithm: EdgeInterpolation? = null
+        r.readStruct { f ->
+            when (f.id) {
+                1 -> crs = r.readString()
+                2 -> algorithm = EdgeInterpolation.of(r.readI32())
+                else -> r.skip(f.type)
+            }
+        }
+        return ParquetLogicalType.Geography(crs, algorithm)
+    }
+
+    private fun readGeospatialStatistics(r: ThriftCompactReader): GeospatialStatistics {
+        var bbox: BoundingBox? = null
+        var types: List<Int> = emptyList()
+        r.readStruct { f ->
+            when (f.id) {
+                1 -> bbox = readBoundingBox(r)
+                2 -> types = readList(r) { r.readI32() }
+                else -> r.skip(f.type)
+            }
+        }
+        return GeospatialStatistics(bbox, types)
+    }
+
+    private fun readBoundingBox(r: ThriftCompactReader): BoundingBox {
+        val v = arrayOfNulls<Double>(8)
+        r.readStruct { f ->
+            if (f.id in 1..8 && f.type == Type.DOUBLE) v[f.id - 1] = r.readDouble() else r.skip(f.type)
+        }
+        val xmin = v[0]
+        val xmax = v[1]
+        val ymin = v[2]
+        val ymax = v[3]
+        if (xmin == null || xmax == null || ymin == null || ymax == null) throw ParquetFormatException("geospatial bounding box without X/Y")
+        return BoundingBox(xmin, xmax, ymin, ymax, v[4], v[5], v[6], v[7])
     }
 
     private fun readTimestampType(r: ThriftCompactReader): ParquetLogicalType.Timestamp {
@@ -213,6 +265,7 @@ object ParquetFooterParser {
         var indexPageOffset: Long? = null
         var dictionaryPageOffset: Long? = null
         var statistics: ColumnStatistics? = null
+        var geo: GeospatialStatistics? = null
         r.readStruct { f ->
             when (f.id) {
                 1 -> type = ParquetType.of(r.readI32())
@@ -226,10 +279,11 @@ object ParquetFooterParser {
                 10 -> indexPageOffset = r.readI64()
                 11 -> dictionaryPageOffset = r.readI64()
                 12 -> statistics = readStatistics(r)
+                17 -> geo = readGeospatialStatistics(r)
                 else -> r.skip(f.type)
             }
         }
-        return ColumnChunkMeta(type, encodings, path, codec, numValues, uncompressed, compressed, dataPageOffset, indexPageOffset, dictionaryPageOffset, statistics, chunkFileOffset = 0L)
+        return ColumnChunkMeta(type, encodings, path, codec, numValues, uncompressed, compressed, dataPageOffset, indexPageOffset, dictionaryPageOffset, statistics, chunkFileOffset = 0L, geospatialStatistics = geo)
     }
 
     private fun readStatistics(r: ThriftCompactReader): ColumnStatistics {
