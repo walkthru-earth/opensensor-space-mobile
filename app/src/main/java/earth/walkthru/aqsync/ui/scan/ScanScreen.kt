@@ -52,6 +52,15 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import earth.walkthru.aqsync.R
+import earth.walkthru.aqsync.ui.permissions.rememberNotificationPermission
+import androidx.compose.material.icons.rounded.CloudSync
+import androidx.compose.material3.FilledTonalButton
+import java.time.format.DateTimeFormatter
+import java.time.ZoneOffset
+import java.time.Instant
+import earth.walkthru.aqsync.ui.device.color
+import earth.walkthru.aqsync.ui.device.MoodFace
+import earth.walkthru.aqsync.data.history.AirMood
 import earth.walkthru.aqsync.data.DeviceEvent
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.ScannedDevice
@@ -75,6 +84,10 @@ fun ScanScreen(
         viewModel.startScan()
         onStopOrDispose { viewModel.stopScan() }
     }
+
+    // The collect-all run shows a dataSync notification (API 33+ needs POST_NOTIFICATIONS); a denial only hides it.
+    val notificationPermission = rememberNotificationPermission()
+    fun withNotificationPermission(action: () -> Unit) = notificationPermission.ensureThen(action)
 
     LaunchedEffect(Unit) {
         viewModel.events.collect { ev ->
@@ -181,12 +194,35 @@ fun ScanScreen(
                 items(knownNotNearby, key = { "k:" + it.address }) { dev ->
                     KnownRow(
                         device = dev,
+                        summary = dev.station?.let { state.summaries[it] },
                         now = now,
                         onLan = dev.station != null && dev.station in state.lanStations,
                         connecting = target == dev.address,
                         onClick = { viewModel.connect(dev.address, dev.name) },
                         onForget = { viewModel.forget(dev.address) },
                     )
+                }
+            }
+            // Several loggers: one background pass over all of them, one at a time, LAN then bond.
+            if (state.known.size >= 2) {
+                item(key = "collect") {
+                    Column(Modifier.padding(top = 8.dp)) {
+                        FilledTonalButton(
+                            onClick = { withNotificationPermission { viewModel.collectAll() } },
+                            enabled = !state.backgroundSyncActive && state.connection !is ConnectionState.Ready,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Icon(Icons.Rounded.CloudSync, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(if (state.backgroundSyncActive) "Collecting in the background…" else "Collect from all ${state.known.size} loggers")
+                        }
+                        Text(
+                            "Visits every known logger in turn — over your Wi-Fi when it is on the network and this phone holds its token, else over its Bluetooth pairing — and pulls only the files this phone lacks. Runs in the background with a progress notification; you can leave the app. A logger you have open is skipped.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 6.dp, start = 4.dp, end = 4.dp),
+                        )
+                    }
                 }
             }
         }
@@ -223,7 +259,7 @@ private fun NearbyRow(device: ScannedDevice, known: KnownDevice?, connecting: Bo
 }
 
 @Composable
-private fun KnownRow(device: KnownDevice, now: Long, onLan: Boolean, connecting: Boolean, onClick: () -> Unit, onForget: () -> Unit) {
+private fun KnownRow(device: KnownDevice, summary: LoggerSummary?, now: Long, onLan: Boolean, connecting: Boolean, onClick: () -> Unit, onForget: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
     Surface(
         shape = MaterialTheme.shapes.extraLarge,
@@ -241,11 +277,30 @@ private fun KnownRow(device: KnownDevice, now: Long, onLan: Boolean, connecting:
                 Text(
                     buildString {
                         append("seen ").append(formatAgo(now - device.lastSeenEpochMs))
-                        device.station?.let { append(" · station ").append(it.take(8)) }
+                        if (summary != null) {
+                            append(" · ").append(summary.files).append(" file").append(if (summary.files == 1) "" else "s")
+                            summary.lastSyncedEpochMs?.let { append(", synced ").append(formatAgo(now - it)) }
+                        } else device.station?.let { append(" · station ").append(it.take(8)) }
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                // From the archive on this phone, never from a live link: the last UTC day with valid readings.
+                val mean = summary?.lastDayPm25Mean
+                val dayStart = summary?.lastDayStartS
+                if (mean != null && dayStart != null) {
+                    val mood = AirMood.of(mean.toDouble())
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp)) {
+                        MoodFace(mood, mood.color(), Modifier.size(16.dp))
+                        Text(
+                            "${mood.title} · avg ${"%.0f".format(java.util.Locale.ROOT, mean)} µg/m³ on ${DateTimeFormatter.ofPattern("d MMM").withZone(ZoneOffset.UTC).format(Instant.ofEpochSecond(dayStart))}" +
+                                (summary.lastDayCoverage?.let { " (${(it * 100).toInt()} % of the day)" } ?: ""),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                } else if (summary != null && summary.lastDataUtcNs == null && summary.files > 0) {
+                    Text("Files have no clock yet — give the logger the time.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.padding(top = 4.dp))
+                }
             }
             if (connecting) {
                 CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 3.dp)

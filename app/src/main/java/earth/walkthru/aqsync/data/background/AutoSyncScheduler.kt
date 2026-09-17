@@ -86,6 +86,21 @@ class AutoSyncScheduler @Inject constructor(
         workManager.enqueueUniqueWork(MANUAL_NAME, ExistingWorkPolicy.KEEP, request)
     }
 
+    /**
+     * "Collect from all loggers": one expedited run over every known device, LAN then Bluetooth bond,
+     * one at a time — the maintainer's walk through a site. Same worker, same notification, same
+     * summary ("Synced 40 new files from 3 loggers"). Interactive use of a device still wins.
+     */
+    fun collectAll() {
+        val request = OneTimeWorkRequestBuilder<SyncWorker>()
+            .setInputData(workDataOf(SyncWorker.KEY_ALL_KNOWN to true))
+            .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_MINUTES, TimeUnit.MINUTES)
+            .addTag(TAG_AUTO_SYNC)
+            .build()
+        workManager.enqueueUniqueWork(MANUAL_NAME, ExistingWorkPolicy.KEEP, request)
+    }
+
     /** True while a manual or periodic run is queued or running (for the Files menu). */
     fun observeActive(): Flow<Boolean> =
         workManager.getWorkInfosByTagFlow(TAG_AUTO_SYNC).map { infos ->

@@ -39,6 +39,8 @@ class AppAutoSyncGateway @Inject constructor(
 
     override suspend fun knownDevice(address: String): KnownDevice? = knownDeviceDao.get(address)
 
+    override suspend fun allKnownDevices(): List<KnownDevice> = knownDeviceDao.allByLastConnected()
+
     override fun interactiveSessionAddress(): String? = repository.interactiveSessionAddress
 
     override suspend fun browseLan(stations: Set<String>, timeoutMs: Long): Map<String, LanDevice> {

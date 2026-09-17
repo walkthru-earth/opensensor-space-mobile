@@ -25,7 +25,7 @@ push between two `CHUNK`s, the real `TcpTransport` against an in-JVM fake device
 JSON models, Parquet verification, sync planner, lost-window recovery, the resume-after-lost-link
 decision, the auto-sync worker's decision logic over the fake device), debug APK ≈ 65 MiB unminified.
 
-**History, steps 1–3a and 4 of [`docs/history-ux-and-data-layer.md`](docs/history-ux-and-data-layer.md)
+**History, steps 1–3a, 4 and 5 of [`docs/history-ux-and-data-layer.md`](docs/history-ux-and-data-layer.md)
 (2026-09-17):** a pure-Kotlin reader for the firmware's Parquet subset (`data/history/parquet`) that
 decodes all 881 columns of 21 fixture files — nine real `AQ-6b40` files (v1 73-col and v2 77-col,
 UNCOMPRESSED and LZ4_RAW, dated and unsynced) and twelve firmware-v6 writer fixtures (up to 8 row
@@ -37,13 +37,14 @@ verified files (`HistoryDeriver`); a **History** tab (day/week/month/year, `Canv
 shading, envelope, gaps and coverage) reads those tiers, or the rows for a day, through
 `HistoryRepository`; the Today screen opens with the friendly **Now card** (five moods, advice,
 comparison, "today so far" from the tiers) and the Boolean Advanced switch became **Simple ·
-Detailed · Developer**. **The first file firmware v6 wrote on the board** (`data_0930_495ccef9…_2-106-2.parquet`,
+Detailed · Developer**; Home cards summarise each logger from the archive and **Collect from all
+loggers** runs the auto-sync worker over every known device. **The first file firmware v6 wrote on the board** (`data_0930_495ccef9…_2-106-2.parquet`,
 2026-09-17 09:42–09:59Z, 105 rows in two row groups of 90 + 15, SHA-256 `1a06e93b…f3cf`, fetched over
 serial by the firmware-side session) is a committed fixture: the reader decodes it, the index takes
 its spans from the footer statistics, and every integer column's statistics agree with the decoded
 rows per row group (`RealArchiveTest`). The same test, where the firmware checkout sits next to this
 repo, sweeps **all 765 real files** on this machine (67,092 rows, 58,791 column chunks) in 0.5 s on
-the JVM. 111/111 unit tests, 0 lint errors (7 pre-existing warnings). Not yet run *on the phone*
+the JVM. 112/112 unit tests, 0 lint errors (7 pre-existing warnings). Not yet run *on the phone*
 against a v3 file — that needs a BLE/LAN sync of the board's new files and goes into the firmware
 repo's `bench-verified.md`.
 
@@ -65,7 +66,7 @@ in the firmware repo for what was measured, on which firmware and app commit.
 
 | Screen | Behaviour |
 | --- | --- |
-| **Devices** | Scans for the AQ Sync service UUID (`c0a5e9f0-0001-4b1a-9c3e-2d7f8a6b4e01`), lists `AQ-xxxx` devices with RSSI and bond state, remembers known devices. |
+| **Devices** (Home) | Scans for the AQ Sync service UUID (`c0a5e9f0-0001-4b1a-9c3e-2d7f8a6b4e01`), lists `AQ-xxxx` devices with RSSI and bond state, remembers known devices. Each known logger's card says what the **phone archive** holds for it — files, last sync, and the last UTC day with valid readings as a mood + average + coverage — with no link needed. With two or more known loggers, **Collect from all N loggers** runs one background pass over every known device (LAN when discovered and a token is held, else its Bluetooth bond, one at a time, only missing files), with the same `dataSync` notification and summary as Auto-sync; a logger you have open is skipped. |
 | **Today** | Opens with the **Now card**: a five-mood character (Canvas placeholder for the capybara artwork) on the PM2.5 bands, a plain title ("Fresh air" … "Thick smoke"), one line of advice, a familiar comparison, the PM2.5 number labelled as a 10-second snapshot, and **Today so far** — the UTC day's real average with its coverage from the archive tiers, or a nudge to give the logger the time. The sensor's own state (warming up, stale, error) is shown in words before any number. **Detailed** adds PM1 / PM10, particle counts, board temperature (explicitly *not* ambient), battery/USB, storage counters (firmware v6 adds the rows/row groups already on the card in the open file, `status.open`/`open_rg`, shown only when the key is present) and the device card. Always: UTC state, **Set time from phone** and **Finalize buffered rows**, each explained before it runs. |
 | **History** | Day · Week · Month · Year of one logger **from the phone archive** (no session needed): a `Canvas` chart with the PM2.5 bands shaded behind the series, min/max envelope + mean line for aggregated ranges, minute-binned rows for the day, gaps where no valid readings exist, a coverage strip, average / peak / coverage for the span, paging back in time. Metrics: PM2.5, PM10, PM1, board temperature. Says how many files have no timestamp and points to *Set time*. Developer card (Advanced) names the source tier and point count. |
 | **Files** | Device manifest grouped by Hive partition (dated / unsynced-boot / benchmarks / legacy). **Sync all** downloads every file the archive lacks, with per-file and overall progress. Per-file state: not synced · syncing · synced (verified) · mismatch. Menu: **Sync now in background** (one expedited WorkManager job — leave the app, watch the notification) and a quick **Auto-sync** toggle for the connected device. |
@@ -223,6 +224,7 @@ Auto-sync (2026-09-17):
 | Foreground work | `setForeground(ForegroundInfo(WORKER_ID, …, FOREGROUND_SERVICE_TYPE_DATA_SYNC))` with the same `SyncNotifications.progress` notification as the user-started service ("AQ-6b40 · 12/776 files · 1.8 MiB", Stop = WorkManager cancel intent), updated at ≤ 2/s. WorkManager's `SystemForegroundService` is merged into the manifest with `foregroundServiceType="dataSync"`, otherwise Android 14+ refuses the type. On Android 12+ `setForeground` may throw `ForegroundServiceStartNotAllowedException` when the app is in the background; the worker logs one line and continues as a plain job (a running job has network access for its own duration), so the transfer still happens and only the ongoing notification is missing. |
 | Summary notification | Posted only when a run brought new files or left failures ("Synced 23 new files from AQ-6b40 · 1.1 MiB", tap opens the app; several devices → "from 2 loggers"). Nothing new → nothing posted. `POST_NOTIFICATIONS` is asked once when Auto-sync is switched on (same helper as the first Sync tap); a denial changes nothing but visibility. |
 | Failures and retries | A device that is not reachable is not an error: one log line, next period. `Result.retry()` (exponential backoff from 5 min, at most 2 retries per period) only for transient conditions: an exception from a link, or a transfer that broke off before every planned file had an outcome (`BackgroundSyncResult.incomplete`). Per-file failures are not retried inside the period — those files are still missing from the archive, so the next run picks them up. |
+| "Collect from all loggers" (2026-09-17) | The same one-time expedited request with `KEY_ALL_KNOWN = true`; `AutoSyncRunner.run(allKnown = true)` visits `known_device` ordered by last connection whether or not the Auto-sync switch is on (`AutoSyncGateway.allKnownDevices`). Everything else — LAN-then-bond order, one link at a time, "interactive use wins", summary only when something arrived — is the existing runner. Chosen over concurrent sessions (M2 in the evaluation): no new failure modes on BLE, and the engine, archive and Room are already per-file. |
 | "Sync now in background" | One unique `OneTimeWorkRequest`, `setExpedited(RUN_AS_NON_EXPEDITED_WORK_REQUEST)`, `KEEP`, with the target address as input data (works for a device whose switch is off). Expedited work may carry network/storage constraints only, so it has no battery rule. |
 | OEM battery killers | The test phone is a **OnePlus 7 Pro**; OxygenOS/ColorOS are the worst offenders on dontkillmyapp.com: "Battery optimization → Don't optimize" is often not enough, the app may also need "Allow background activity" and to be excluded from the "deep optimization"/"sleep standby" lists, and a swiped-away app may still be killed. WorkManager survives that (the job is re-scheduled), a bare thread would not. Nothing is measured yet: the first field test should note how many of the 15-min periods actually ran. |
 | Room v3 | `known_device.autoSync INTEGER NOT NULL DEFAULT 0`, explicit `MIGRATION_2_3`, schema JSON exported; the switch is preserved across every upsert the connect path does. |

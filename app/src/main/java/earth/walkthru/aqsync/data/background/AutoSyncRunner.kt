@@ -26,6 +26,9 @@ interface AutoSyncGateway {
     /** One known device by Bluetooth address, switch on or off ("Sync now" targets the connected device). */
     suspend fun knownDevice(address: String): KnownDevice?
 
+    /** Every known device, switch on or off, most recently connected first ("Collect from all loggers"). */
+    suspend fun allKnownDevices(): List<KnownDevice>
+
     /** Address of the session the app currently holds (user is on a device screen), or null. */
     fun interactiveSessionAddress(): String?
 
@@ -120,10 +123,16 @@ class AutoSyncRunner(
 ) {
     /**
      * [onlyAddress] = a manual "Sync now in background" for that one device, whether or not its
-     * Auto-sync switch is on; null = the periodic run over every device with the switch on.
+     * Auto-sync switch is on; [allKnown] = a manual "Collect from all loggers" over every known device
+     * (a maintainer walking a site); otherwise the periodic run over every device with the switch on.
+     * In every case each device is tried in turn over LAN, then its Bluetooth bond — one link at a time.
      */
-    suspend fun run(onlyAddress: String? = null): AutoSyncReport {
-        val devices = if (onlyAddress != null) listOfNotNull(gateway.knownDevice(onlyAddress)) else gateway.autoSyncDevices()
+    suspend fun run(onlyAddress: String? = null, allKnown: Boolean = false): AutoSyncReport {
+        val devices = when {
+            onlyAddress != null -> listOfNotNull(gateway.knownDevice(onlyAddress))
+            allKnown -> gateway.allKnownDevices()
+            else -> gateway.autoSyncDevices()
+        }
         if (devices.isEmpty()) return AutoSyncReport(emptyList())
 
         val stations = devices.mapNotNull { d -> d.station?.takeIf { d.hasLanToken } }.toSet()

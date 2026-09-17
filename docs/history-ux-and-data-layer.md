@@ -320,9 +320,10 @@ makes the "Give the logger the time" nudge on Home worth being prominent.
 **Progress (2026-09-17):** implemented and gated — step 1 (reader, `data/history/parquet`), step 2
 (Room v4 index, `HistoryIndexer`, file Metrics screen), step 3a (aggregate tiers, Room v5,
 `HistoryDeriver`), step 4 (History tab with the Canvas chart, `HistoryRepository`; Now card with
-`AirMood`/`NowReading`; Simple · Detailed · Developer). 111 unit tests. The README's "Design
+`AirMood`/`NowReading`; Simple · Detailed · Developer), step 5 as M1 (Home cards from the archive,
+"Collect from all loggers" through the auto-sync worker with `allKnown`). 112 unit tests. The README's "Design
 decisions → History" table records the choices made while implementing. Still open: 3b/3c (daily
-derived Parquet writer + `DeriveWorker` + manifest), 5 (Home with many loggers + collect queue), 6
+derived Parquet writer + `DeriveWorker` + manifest), 6
 (deployment record + map + `deployment.id` contract PR — blocked on the D4 rule amendment), 7 (spec
 documents for iOS), and §4.6 (time estimate for unsynced boots).
 

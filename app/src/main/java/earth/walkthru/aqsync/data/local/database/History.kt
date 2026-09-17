@@ -86,6 +86,10 @@ interface AggregateBucketDao {
     @Query("SELECT COUNT(*) FROM aggregate_bucket WHERE station = :station AND resolution = 86400")
     fun observeDayCount(station: String): Flow<Int>
 
+    /** Every station's day buckets, newest first — Home picks the latest per station. */
+    @Query("SELECT * FROM aggregate_bucket WHERE resolution = 86400 ORDER BY startEpochS DESC")
+    fun observeAllDays(): Flow<List<AggregateBucket>>
+
     @Query("DELETE FROM aggregate_bucket WHERE station = :station AND startEpochS >= :fromS AND startEpochS < :toS")
     suspend fun deleteBetween(station: String, fromS: Long, toS: Long)
 

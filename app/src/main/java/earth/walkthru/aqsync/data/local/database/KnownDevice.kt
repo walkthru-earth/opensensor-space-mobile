@@ -72,6 +72,10 @@ interface KnownDeviceDao {
     @Query("SELECT * FROM known_device WHERE autoSync = 1 ORDER BY lastConnectedEpochMs DESC")
     suspend fun autoSyncDevices(): List<KnownDevice>
 
+    /** Every known device for "Collect from all loggers", most recently connected first. */
+    @Query("SELECT * FROM known_device ORDER BY lastConnectedEpochMs DESC")
+    suspend fun allByLastConnected(): List<KnownDevice>
+
     @Query("SELECT COUNT(*) FROM known_device WHERE autoSync = 1")
     fun observeAutoSyncCount(): Flow<Int>
 

@@ -7,6 +7,10 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import earth.walkthru.aqsync.BuildConfig
 import earth.walkthru.aqsync.data.DeviceConnectionRepository
+import earth.walkthru.aqsync.data.background.AutoSyncScheduler
+import earth.walkthru.aqsync.data.history.Resolution
+import earth.walkthru.aqsync.data.local.database.AggregateBucketDao
+import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.DeviceEvent
 import earth.walkthru.aqsync.data.ble.BleScanner
 import earth.walkthru.aqsync.data.ble.ConnectionState
@@ -15,6 +19,7 @@ import earth.walkthru.aqsync.data.fake.FakeTransport
 import earth.walkthru.aqsync.data.local.database.KnownDevice
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -26,6 +31,18 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+/** What Home knows about a logger from the phone archive alone — no link needed. */
+data class LoggerSummary(
+    val files: Int,
+    val lastSyncedEpochMs: Long?,
+    /** Latest timed row on this phone (UTC ns), if any file has a clock. */
+    val lastDataUtcNs: Long?,
+    /** The most recent UTC day with valid readings: its start and PM2.5 average. */
+    val lastDayStartS: Long?,
+    val lastDayPm25Mean: Float?,
+    val lastDayCoverage: Float?,
+)
 
 data class ScanUiState(
     val scanning: Boolean = false,
@@ -39,13 +56,36 @@ data class ScanUiState(
     val showFakeEntry: Boolean = BuildConfig.DEBUG,
     /** Stations currently advertised on the LAN, for the "on LAN" tag. */
     val lanStations: Set<String> = emptySet(),
+    /** Keyed by station. */
+    val summaries: Map<String, LoggerSummary> = emptyMap(),
+    /** A manual or periodic background run is queued or running. */
+    val backgroundSyncActive: Boolean = false,
 )
 
 @HiltViewModel
 class ScanViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val repository: DeviceConnectionRepository,
+    archivedFileDao: ArchivedFileDao,
+    bucketDao: AggregateBucketDao,
+    private val autoSyncScheduler: AutoSyncScheduler,
 ) : ViewModel() {
+
+    private val summaries: Flow<Map<String, LoggerSummary>> = combine(archivedFileDao.observeAll(), bucketDao.observeAllDays()) { files, days ->
+        val latestDay = HashMap<String, earth.walkthru.aqsync.data.local.database.AggregateBucket>()
+        for (b in days) if (b.pm25Mean != null && !latestDay.containsKey(b.station)) latestDay[b.station] = b // newest first
+        files.groupBy { it.station }.mapValues { (station, list) ->
+            val day = latestDay[station]
+            LoggerSummary(
+                files = list.size,
+                lastSyncedEpochMs = list.maxOfOrNull { it.syncedAtEpochMs },
+                lastDataUtcNs = list.mapNotNull { it.lastUtcNs }.maxOrNull(),
+                lastDayStartS = day?.startEpochS,
+                lastDayPm25Mean = day?.pm25Mean,
+                lastDayCoverage = day?.let { (it.validRows.toFloat() / Resolution.DAY.expectedRows).coerceIn(0f, 1f) },
+            )
+        }
+    }
 
     private val scanning = MutableStateFlow(false)
     private val scanError = MutableStateFlow<String?>(null)
@@ -56,6 +96,7 @@ class ScanViewModel @Inject constructor(
 
     val uiState: StateFlow<ScanUiState> = combine(
         scanning, scanError, seen, repository.knownDevices, repository.connectionState, connectingTo, repository.lanDevices,
+        summaries, autoSyncScheduler.observeActive(),
     ) { values ->
         @Suppress("UNCHECKED_CAST")
         val nearby = (values[2] as Map<String, ScannedDevice>).values
@@ -69,8 +110,13 @@ class ScanViewModel @Inject constructor(
             connection = values[4] as ConnectionState,
             connectingTo = values[5] as String?,
             lanStations = (values[6] as Map<String, *>).keys,
+            summaries = values[7] as Map<String, LoggerSummary>,
+            backgroundSyncActive = values[8] as Boolean,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ScanUiState())
+
+    /** Maintainer's walk: one background run over every known logger, LAN then bond, one at a time. */
+    fun collectAll() = autoSyncScheduler.collectAll()
 
     private var scanJob: Job? = null
     private var pruneJob: Job? = null

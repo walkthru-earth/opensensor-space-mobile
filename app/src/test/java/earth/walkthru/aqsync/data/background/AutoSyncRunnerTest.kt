@@ -63,7 +63,8 @@ class AutoSyncRunnerTest {
         station to LanDevice("AQ-6b40", InetAddress.getByAddress(byteArrayOf(192.toByte(), 168.toByte(), 1, 42)), 47390, mapOf(LanFraming.TXT_STATION to station), 0L)
     )
 
-    private fun run(onlyAddress: String? = null) = runBlocking { withTimeout(60_000) { AutoSyncRunner(gateway, lanBrowseMs = 10, log = gateway.log::add).run(onlyAddress) } }
+    private fun run(onlyAddress: String? = null, allKnown: Boolean = false) =
+        runBlocking { withTimeout(60_000) { AutoSyncRunner(gateway, lanBrowseMs = 10, log = gateway.log::add).run(onlyAddress, allKnown) } }
 
     // ------------------------------------------------------------------ policy
 
@@ -280,6 +281,21 @@ class AutoSyncRunnerTest {
     }
 
     @Test
+    fun `collect from all loggers - visits a device whose switch is off, the periodic run does not`() {
+        gateway.devices += device(autoSync = false)
+        gateway.bonded += bleAddr
+
+        val periodic = run()
+        assertTrue("periodic run ignores a switched-off device", periodic.devices.isEmpty())
+        assertTrue(gateway.calls.isEmpty())
+
+        val collect = run(allKnown = true)
+        assertEquals(listOf(bleAddr to "Bluetooth"), gateway.calls)
+        assertEquals(gateway.fake.files.size, collect.newFiles)
+        assertTrue(collect.shouldNotify)
+    }
+
+    @Test
     fun `no auto-sync device at all - empty report, nothing to notify or retry`() {
         val report = run()
         assertTrue(report.devices.isEmpty())
@@ -318,6 +334,7 @@ class AutoSyncRunnerTest {
 
         override suspend fun autoSyncDevices() = devices.filter { it.autoSync }.sortedByDescending { it.lastConnectedEpochMs }
         override suspend fun knownDevice(address: String) = devices.firstOrNull { it.address == address }
+        override suspend fun allKnownDevices() = devices.sortedByDescending { it.lastConnectedEpochMs }
         override fun interactiveSessionAddress() = session
         override suspend fun browseLan(stations: Set<String>, timeoutMs: Long): Map<String, LanDevice> {
             browses++

@@ -87,6 +87,7 @@ class HistoryRepositoryTest {
         override fun observeFirstDay(station: String): Flow<Long?> = flowOf(null)
         override fun observeLastDay(station: String): Flow<Long?> = flowOf(null)
         override fun observeDayCount(station: String): Flow<Int> = flowOf(0)
+        override fun observeAllDays(): Flow<List<AggregateBucket>> = flowOf(rows.filter { it.resolution == 86_400L }.sortedByDescending { it.startEpochS })
         override suspend fun deleteBetween(station: String, fromS: Long, toS: Long) { rows.removeAll { it.startEpochS >= fromS && it.startEpochS < toS } }
         override suspend fun insertAll(rows: List<AggregateBucket>) { this.rows += rows }
     }

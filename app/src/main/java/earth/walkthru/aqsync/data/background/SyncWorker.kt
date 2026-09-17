@@ -85,7 +85,10 @@ class SyncWorker @AssistedInject constructor(
                         }
                 }
                 try {
-                    AutoSyncRunner(gateway, log = { Log.i(TAG, it) }).run(onlyAddress = inputData.getString(KEY_ADDRESS))
+                    AutoSyncRunner(gateway, log = { Log.i(TAG, it) }).run(
+                        onlyAddress = inputData.getString(KEY_ADDRESS),
+                        allKnown = inputData.getBoolean(KEY_ALL_KNOWN, false),
+                    )
                 } finally {
                     mirror.cancel()
                 }
@@ -123,5 +126,8 @@ class SyncWorker @AssistedInject constructor(
 
         /** Input data: restrict a manual run to this Bluetooth address (switch on or off). Absent for periodic runs. */
         const val KEY_ADDRESS = "address"
+
+        /** Input data: a manual run over every known device ("Collect from all loggers"). */
+        const val KEY_ALL_KNOWN = "all_known"
     }
 }
