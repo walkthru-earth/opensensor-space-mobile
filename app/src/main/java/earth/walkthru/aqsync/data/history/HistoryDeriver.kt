@@ -33,18 +33,19 @@ class HistoryDeriver @Inject constructor(
     private val bucketDao: AggregateBucketDao,
     private val dayDao: DerivedDayDao,
     private val store: DerivedStore,
+    private val indexer: HistoryIndexer,
 ) {
     data class Result(val daysChecked: Int, val daysRebuilt: Int, val rowsAggregated: Long)
 
     private val dailyBuilder = DailyDerivedBuilder(store) { station, name -> archive.fileFor(station, name) }
 
-    /** Which station-days a set of indexed files touches (UTC rows only; unsynced files have none). */
+    /** Which station-days a set of indexed files touches — by real UTC, or by the estimated span (§4.6). */
     fun daysOf(files: List<ArchivedFile>): Map<String, Set<Long>> {
         val out = HashMap<String, MutableSet<Long>>()
         for (f in files) {
-            if (!f.indexed || (f.utcRows ?: 0) == 0L || !(f.purpose == null || f.purpose == "telemetry")) continue
-            val first = f.firstUtcNs ?: continue
-            val last = f.lastUtcNs ?: continue
+            if (!f.indexed || !(f.purpose == null || f.purpose == "telemetry")) continue
+            val first = f.timelineFirstNs ?: continue
+            val last = f.timelineLastNs ?: continue
             val days = out.getOrPut(f.station) { HashSet() }
             var d = Math.floorDiv(first, DAY_NS)
             val lastDay = Math.floorDiv(last, DAY_NS)
@@ -53,10 +54,10 @@ class HistoryDeriver @Inject constructor(
         return out
     }
 
-    /** Deterministic identity of a day's source set: sorted `name:crc32` lines, SHA-256. */
+    /** Deterministic identity of a day's source set: sorted `name:crc32[:est<anchor>]` lines, SHA-256 (a new anchor re-dates a file, so it is part of the identity). */
     fun signature(files: List<ArchivedFile>): String {
         val digest = MessageDigest.getInstance("SHA-256")
-        files.map { "${it.name}:${it.crc32}" }.sorted().forEach { digest.update(it.toByteArray()); digest.update('\n'.code.toByte()) }
+        files.map { "${it.name}:${it.crc32}" + (if (it.hasEstimatedUtc) ":est${it.estAnchorFile}:${it.estFirstUtcNs}" else "") }.sorted().forEach { digest.update(it.toByteArray()); digest.update('\n'.code.toByte()) }
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
@@ -68,8 +69,11 @@ class HistoryDeriver @Inject constructor(
         var checked = 0
         var rebuilt = 0
         var rows = 0L
+        // A file that just arrived may be the first timed file of a boot: re-date that boot's unsynced files first.
+        indexer.estimateTimes()
         val all = archivedFileDao.observeAll().first()
         val wanted = daysOf(all)
+        val anchorsByStation = all.groupBy { it.station }.mapValues { (_, files) -> TimeEstimate.anchors(files) }
         // Stations that only have derived days left (every dated file gone) must be visited too, to drop them.
         val allStations = (wanted.keys + dayDao.stations()).filter { stations == null || it in stations }
         for (station in allStations) {
@@ -81,7 +85,7 @@ class HistoryDeriver @Inject constructor(
                 val sources = archivedFileDao.withUtcBetween(station, dayStartNs, dayStartNs + DAY_NS)
                 val sig = signature(sources)
                 if (known[day]?.sourceSignature == sig) continue
-                val built = buildDay(station, day, sources)
+                val built = buildDay(station, day, sources, anchorsByStation[station] ?: emptyMap())
                 rebuilt++
                 rows += built
             }
@@ -99,7 +103,7 @@ class HistoryDeriver @Inject constructor(
     }
 
     /** Aggregates one station-day from [sources] and replaces its tiers. Returns rows aggregated. */
-    suspend fun buildDay(station: String, epochDay: Long, sources: List<ArchivedFile>): Long {
+    suspend fun buildDay(station: String, epochDay: Long, sources: List<ArchivedFile>, anchors: Map<String, TimeEstimate.Anchor> = emptyMap()): Long {
         val dayStartS = epochDay * 86_400
         val agg = Aggregator(station)
         var rows = 0L
@@ -108,7 +112,8 @@ class HistoryDeriver @Inject constructor(
             if (!file.isFile) continue
             try {
                 val pf = ParquetFile.open(file)
-                agg.add(pf)
+                // Estimated time only for files that have no UTC of their own and whose boot has an anchor.
+                agg.add(pf, if (src.hasEstimatedUtc) anchors[src.bootId] else null)
                 rows += pf.numRows
             } catch (e: ParquetFormatException) {
                 Log.w(TAG, "${src.name}: ${e.message}")
@@ -123,7 +128,7 @@ class HistoryDeriver @Inject constructor(
         // leaves `dailyFile` null; the next derive pass tries again because the signature is then unchanged
         // only if the write also succeeded (see below).
         val daily = try {
-            dailyBuilder.build(station, epochDay, sources, sig)
+            dailyBuilder.build(station, epochDay, sources, sig, anchors)
         } catch (e: Exception) {
             Log.w(TAG, "daily file for $station ${DerivedStore.dayLabel(epochDay)}: ${e.message}")
             null
@@ -149,6 +154,7 @@ class HistoryDeriver @Inject constructor(
         startEpochS = startEpochS,
         rows = rows,
         validRows = validRows,
+        estimatedRows = estimatedRows,
         pm1Mean = pm1Mean,
         pm25Mean = pm25Mean,
         pm25Min = pm25Min,

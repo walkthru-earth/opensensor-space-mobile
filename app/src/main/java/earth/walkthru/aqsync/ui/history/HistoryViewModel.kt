@@ -40,6 +40,8 @@ data class HistoryUiState(
     val filesWithTime: Int = 0,
     val filesTotal: Int = 0,
     val filesUnindexed: Int = 0,
+    /** Files placed on the timeline by a §4.6 estimate. */
+    val filesEstimated: Int = 0,
     val daysWithData: Int = 0,
     val firstDayS: Long? = null,
     val lastDayS: Long? = null,
@@ -99,10 +101,17 @@ class HistoryViewModel @Inject constructor(
             if (station == null) flowOf(null) else history.observe(station, m, r, t)
         }
 
+    private data class Counts(val withTime: Int, val total: Int, val unindexed: Int, val estimated: Int)
+
     private val fileCounts = device.flatMapLatest { d ->
-        val station = d?.station ?: return@flatMapLatest flowOf(Triple(0, 0, 0))
+        val station = d?.station ?: return@flatMapLatest flowOf(Counts(0, 0, 0, 0))
         archivedFileDao.observeForStation(station).map { files ->
-            Triple(files.count { it.indexed && (it.utcRows ?: 0) > 0 && (it.purpose == null || it.purpose == "telemetry") }, files.size, files.count { !it.indexed })
+            Counts(
+                withTime = files.count { it.indexed && it.hasUtc && (it.purpose == null || it.purpose == "telemetry") },
+                total = files.size,
+                unindexed = files.count { !it.indexed },
+                estimated = files.count { it.indexed && it.hasEstimatedUtc },
+            )
         }
     }
 
@@ -115,8 +124,7 @@ class HistoryViewModel @Inject constructor(
         device, metric, range, toS, series, fileCounts, days, settings.advancedMode, repository.connectionState, repository.activeTransport,
     ) { values ->
         val d = values[0] as earth.walkthru.aqsync.data.local.database.KnownDevice?
-        @Suppress("UNCHECKED_CAST")
-        val counts = values[5] as Triple<Int, Int, Int>
+        val counts = values[5] as Counts
         @Suppress("UNCHECKED_CAST")
         val dd = values[6] as Triple<Int, Long?, Long?>
         HistoryUiState(
@@ -126,9 +134,10 @@ class HistoryViewModel @Inject constructor(
             range = values[2] as HistoryRange,
             toS = values[3] as Long,
             series = values[4] as HistorySeries?,
-            filesWithTime = counts.first,
-            filesTotal = counts.second,
-            filesUnindexed = counts.third,
+            filesWithTime = counts.withTime,
+            filesTotal = counts.total,
+            filesUnindexed = counts.unindexed,
+            filesEstimated = counts.estimated,
             daysWithData = dd.first,
             firstDayS = dd.second,
             lastDayS = dd.third,

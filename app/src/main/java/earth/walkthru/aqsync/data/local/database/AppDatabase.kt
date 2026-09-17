@@ -17,12 +17,14 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * - v5: `aggregate_bucket` (15 min / 1 h / 1 day tiers) and `derived_day` (per station-day source
  *   signature), both pure caches of the archive rebuilt by `HistoryDeriver`; added with an
  *   `AutoMigration` (new tables only).
+ * - v6: `archived_file.estFirstUtcNs/estLastUtcNs/estAnchorFile` (estimated time for unsynced files whose
+ *   boot later got a clock) and `aggregate_bucket.estimatedRows` (default 0); `AutoMigration`.
  */
 @Database(
     entities = [KnownDevice::class, ArchivedFile::class, AggregateBucket::class, DerivedDay::class],
-    version = 5,
+    version = 6,
     exportSchema = true,
-    autoMigrations = [AutoMigration(from = 4, to = 5)],
+    autoMigrations = [AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6)],
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun knownDeviceDao(): KnownDeviceDao

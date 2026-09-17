@@ -46,8 +46,11 @@ enum class HistoryRange(val seconds: Long, val tier: Resolution?, val label: Str
     YEAR(365 * 86_400, Resolution.DAY, "Year"),
 }
 
-/** One plotted element: a bucket (mean with min/max envelope) or a raw 10-second row (mean only). */
-data class HistoryPoint(val startS: Long, val endS: Long, val mean: Float?, val min: Float?, val max: Float?, val coverage: Float)
+/**
+ * One plotted element: a bucket (mean with min/max envelope) or a raw 10-second row (mean only).
+ * [estimated]: the time axis for this point comes from a §4.6 estimate (drawn dashed), not a UTC stamp.
+ */
+data class HistoryPoint(val startS: Long, val endS: Long, val mean: Float?, val min: Float?, val max: Float?, val coverage: Float, val estimated: Boolean = false)
 
 data class HistorySeries(
     val metric: HistoryMetric,
@@ -62,7 +65,10 @@ data class HistorySeries(
     val max: Float?,
     /** True when the day view had to bin rows (more than [RAW_POINT_CAP]) into minutes. */
     val binned: Boolean,
+    /** Rows on the estimated time axis (§4.6) among [validRows]-bearing rows. */
+    val estimatedRows: Long = 0,
 ) {
+    val hasEstimated: Boolean get() = estimatedRows > 0
     val coverage: Float get() = if (expectedRows == 0L) 0f else (validRows.toFloat() / expectedRows).coerceIn(0f, 1f)
     val isEmpty: Boolean get() = points.none { it.mean != null }
 }
@@ -93,7 +99,7 @@ class HistoryRepository @Inject constructor(
     private fun fromBuckets(metric: HistoryMetric, range: HistoryRange, fromS: Long, toS: Long, tier: Resolution, buckets: List<AggregateBucket>): HistorySeries {
         val points = buckets.map { b ->
             val valid = if (metric.particle) b.validRows else b.rows
-            HistoryPoint(b.startEpochS, b.startEpochS + tier.seconds, metric.mean(b), metric.min(b), metric.max(b), (valid.toFloat() / tier.expectedRows).coerceIn(0f, 1f))
+            HistoryPoint(b.startEpochS, b.startEpochS + tier.seconds, metric.mean(b), metric.min(b), metric.max(b), (valid.toFloat() / tier.expectedRows).coerceIn(0f, 1f), estimated = b.estimatedRows * 2 >= b.rows && b.estimatedRows > 0)
         }
         var weighted = 0.0
         var weight = 0L
@@ -113,29 +119,42 @@ class HistoryRepository @Inject constructor(
             mean = if (weight > 0) (weighted / weight).toFloat() else null,
             max = max,
             binned = false,
+            estimatedRows = buckets.sumOf { it.estimatedRows.toLong() },
         )
     }
 
     private suspend fun fromRows(station: String, metric: HistoryMetric, range: HistoryRange, fromS: Long, toS: Long): HistorySeries {
         val files = archivedFileDao.withUtcBetween(station, fromS * 1_000_000_000L, toS * 1_000_000_000L)
+        val anchors = if (files.any { it.hasEstimatedUtc }) TimeEstimate.anchors(archivedFileDao.indexedForStation(station)) else emptyMap()
         val times = ArrayList<Long>()
         val values = ArrayList<Float>() // NaN = invalid / null
+        val estimatedFlags = ArrayList<Boolean>()
+        var estimatedRows = 0L
         for (f in files) {
             val file = archive.fileFor(f.station, f.name)
             if (!file.isFile) continue
             val pf = try { ParquetFile.open(file) } catch (e: ParquetFormatException) { continue }
             val md = pf.metadata
             val utc = md.leaf(ParquetIndexer.UTC)?.let { pf.readColumn(it) } ?: continue
+            val anchor = if (f.hasEstimatedUtc) anchors[f.bootId]?.takeIf { it.boot == md.bootId } else null
+            val mono = if (anchor != null) md.leaf(ParquetIndexer.MONO)?.let { pf.readColumn(it) } else null
             val pms = md.leaf(ParquetIndexer.PMS_STATUS)?.let { pf.readColumn(it) }
             val col = md.leaf(metric.column)?.let { pf.readColumn(it) }
             for (i in 0 until utc.size) {
-                val ns = utc.asLong(i) ?: continue
+                var est = false
+                val ns = utc.asLong(i) ?: run {
+                    val m = mono?.asLong(i) ?: return@run null
+                    est = true
+                    anchor?.estimateNs(m)
+                } ?: continue
                 val s = Math.floorDiv(ns, 1_000_000_000L)
                 if (s < fromS || s >= toS) continue
                 val ok = !metric.particle || pms?.asLong(i) == ParquetIndexer.PMS_VALID.toLong()
                 val v = if (ok) col?.asDouble(i)?.toFloat() else null
                 times += s
                 values += (v ?: Float.NaN)
+                estimatedFlags += est
+                if (est && v != null) estimatedRows++
             }
         }
         // Files come ordered by first UTC, rows inside are ordered; a FLUSH file can still interleave.
@@ -149,21 +168,25 @@ class HistoryRepository @Inject constructor(
             for (i in order) {
                 val v = values[i]
                 val valid = !v.isNaN()
-                points += HistoryPoint(times[i], times[i] + 10, if (valid) v else null, null, null, if (valid) 1f else 0f)
+                points += HistoryPoint(times[i], times[i] + 10, if (valid) v else null, null, null, if (valid) 1f else 0f, estimated = estimatedFlags[i])
                 if (valid) { sum += v; n++; if (max == null || v > max) max = v }
             }
         } else {
             var bucket = Long.MIN_VALUE
             var bSum = 0.0
             var bN = 0
+            var bEst = 0
+            var bAll = 0
             var bMin = Float.MAX_VALUE
             var bMax = -Float.MAX_VALUE
             fun flush() {
-                if (bucket != Long.MIN_VALUE) points += HistoryPoint(bucket, bucket + 60, if (bN > 0) (bSum / bN).toFloat() else null, if (bN > 0) bMin else null, if (bN > 0) bMax else null, bN / 6f)
+                if (bucket != Long.MIN_VALUE) points += HistoryPoint(bucket, bucket + 60, if (bN > 0) (bSum / bN).toFloat() else null, if (bN > 0) bMin else null, if (bN > 0) bMax else null, bN / 6f, estimated = bEst * 2 >= bAll && bEst > 0)
             }
             for (i in order) {
                 val b = Math.floorDiv(times[i], 60L) * 60
-                if (b != bucket) { flush(); bucket = b; bSum = 0.0; bN = 0; bMin = Float.MAX_VALUE; bMax = -Float.MAX_VALUE }
+                if (b != bucket) { flush(); bucket = b; bSum = 0.0; bN = 0; bEst = 0; bAll = 0; bMin = Float.MAX_VALUE; bMax = -Float.MAX_VALUE }
+                bAll++
+                if (estimatedFlags[i]) bEst++
                 val v = values[i]
                 if (!v.isNaN()) {
                     bSum += v; bN++
@@ -175,7 +198,7 @@ class HistoryRepository @Inject constructor(
             }
             flush()
         }
-        return HistorySeries(metric, range, fromS, toS, points, validRows = n, expectedRows = range.seconds / 10, mean = if (n > 0) (sum / n).toFloat() else null, max = max, binned = binned)
+        return HistorySeries(metric, range, fromS, toS, points, validRows = n, expectedRows = range.seconds / 10, mean = if (n > 0) (sum / n).toFloat() else null, max = max, binned = binned, estimatedRows = estimatedRows)
     }
 
     companion object {

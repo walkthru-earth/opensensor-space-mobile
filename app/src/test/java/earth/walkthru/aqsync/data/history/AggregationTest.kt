@@ -63,7 +63,7 @@ class AggregationTest {
         val pms = ColumnValues.Int32(intArrayOf(4, 2, 4, 4), null) // second row: stale sensor
         val pm25 = ColumnValues.Int32(intArrayOf(10, 99, 50, 20), null)
         val temp = ColumnValues.Float32(floatArrayOf(40f, 41f, 42f, Float.NaN), null)
-        agg.add(utc, pms, null, pm25, null, null, null, temp, null, null)
+        agg.add(utc = utc, pms = pms, pm1 = null, pm25 = pm25, pm10 = null, gt03 = null, gt25 = null, temp = temp, battery = null, vbus = null)
         val b = agg.buckets().single()
         assertEquals(3600L, b.startEpochS)
         assertEquals(3, b.rows) // the UTC-less row is not on the timeline at all
@@ -91,7 +91,7 @@ class AggregationTest {
         val days = InMemoryDays()
         val indexer = HistoryIndexer(archive, files)
         val store = DerivedStore(tmp)
-        val deriver = HistoryDeriver(archive, files, buckets, days, store)
+        val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer)
 
         fun put(name: String, resource: String, crc: Long) {
             archive.fileFor(station, name).apply { parentFile!!.mkdirs(); writeBytes(bytes(resource)) }
@@ -168,6 +168,8 @@ class AggregationTest {
         override suspend fun withUtcBetween(station: String, fromNs: Long, toNs: Long) =
             rows.filter { it.station == station && it.indexError == null && (it.utcRows ?: 0) > 0 && (it.purpose == null || it.purpose == "telemetry") && (it.lastUtcNs ?: Long.MIN_VALUE) >= fromNs && (it.firstUtcNs ?: Long.MAX_VALUE) < toNs }
                 .sortedBy { it.firstUtcNs }
+        override suspend fun indexedForStation(station: String) = rows.filter { it.station == station && it.indexed }
+        override suspend fun stations() = rows.map { it.station }.distinct()
     }
 
     private class InMemoryBuckets : AggregateBucketDao {

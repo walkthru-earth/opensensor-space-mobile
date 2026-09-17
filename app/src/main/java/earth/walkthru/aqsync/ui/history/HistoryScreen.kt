@@ -37,6 +37,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import earth.walkthru.aqsync.data.history.HistoryMetric
 import earth.walkthru.aqsync.data.history.HistoryRange
 import earth.walkthru.aqsync.data.history.HistorySeries
+import earth.walkthru.aqsync.data.history.TimeEstimate
 import earth.walkthru.aqsync.ui.components.DeviceBottomBar
 import earth.walkthru.aqsync.ui.components.DeviceTab
 import earth.walkthru.aqsync.ui.components.Eyebrow
@@ -141,9 +142,11 @@ fun HistoryScreen(
                     }
                     StatLine("files with time", "${state.filesWithTime} of ${state.filesTotal}")
                     if (state.filesUnindexed > 0) StatLine("still indexing", state.filesUnindexed.toString())
-                    if (state.filesTotal > state.filesWithTime) {
+                    if (state.filesEstimated > 0) StatLine("files with estimated time", state.filesEstimated.toString())
+                    val untimed = state.filesTotal - state.filesWithTime - state.filesEstimated
+                    if (untimed > 0) {
                         InfoNote(
-                            "${state.filesTotal - state.filesWithTime} file${if (state.filesTotal - state.filesWithTime == 1) "" else "s"} were logged while the logger had no clock, " +
+                            "$untimed file${if (untimed == 1) "" else "s"} were logged while the logger had no clock and no later time set reached that power-on, " +
                                 "so their rows cannot be placed on this timeline. Give the logger the time from Today so new rows get one.",
                         )
                     }
@@ -194,6 +197,9 @@ private fun Summary(s: HistorySeries) {
     }
     if (s.coverage < 0.5f) {
         InfoNote("Less than half of this ${s.range.label.lowercase()} has readings: the average describes the covered part only.")
+    }
+    if (s.hasEstimated) {
+        InfoNote("Dashed stretches (${s.estimatedRows} readings) were logged before the logger had a clock; their time is estimated from a later time set on the same power-on (uncorrected drift, roughly ±${TimeEstimate.DRIFT_PPM.toInt()} s per ${(1_000_000 / TimeEstimate.DRIFT_PPM / 3600).toInt()} h of distance).")
     }
 }
 

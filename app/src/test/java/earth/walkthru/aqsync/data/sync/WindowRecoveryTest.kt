@@ -153,6 +153,8 @@ class WindowRecoveryTest {
         override fun observeUnindexedCount(): Flow<Int> = flowOf(rows.count { it.indexedAtEpochMs == null || it.indexError != null })
         override suspend fun withUtcBetween(station: String, fromNs: Long, toNs: Long) =
             rows.filter { it.station == station && it.indexError == null && (it.utcRows ?: 0) > 0 && (it.lastUtcNs ?: Long.MIN_VALUE) >= fromNs && (it.firstUtcNs ?: Long.MAX_VALUE) < toNs }
+        override suspend fun indexedForStation(station: String) = rows.filter { it.station == station && it.indexed }
+        override suspend fun stations() = rows.map { it.station }.distinct()
         override suspend fun upsert(file: ArchivedFile) {
             rows.removeAll { it.station == file.station && it.name == file.name }
             rows += file

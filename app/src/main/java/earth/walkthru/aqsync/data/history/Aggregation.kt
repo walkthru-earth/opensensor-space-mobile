@@ -30,6 +30,8 @@ data class Bucket(
     val startEpochS: Long,
     val rows: Int,
     val validRows: Int,
+    /** Of `rows`, those placed by a time estimate (§4.6). */
+    val estimatedRows: Int,
     val pm1Mean: Float?,
     val pm25Mean: Float?,
     val pm25Min: Int?,
@@ -65,6 +67,7 @@ class Aggregator(private val station: String, private val resolutions: Set<Resol
     private class Acc {
         var rows = 0
         var valid = 0
+        var estimated = 0
         var pm1 = 0.0
         var pm25 = 0.0
         var pm25Min = Int.MAX_VALUE
@@ -82,14 +85,20 @@ class Aggregator(private val station: String, private val resolutions: Set<Resol
 
     private val accs = HashMap<Pair<Resolution, Long>, Acc>()
 
-    /** Adds every UTC row of [file]. Only the [COLUMNS] chunks are read. */
-    fun add(file: ParquetFile) {
+    /**
+     * Adds every timed row of [file]. Only the [COLUMNS] chunks are read. With an [anchor] for the file's
+     * boot, rows without UTC get an estimated time (§4.6) and count as `estimatedRows`.
+     */
+    fun add(file: ParquetFile, anchor: TimeEstimate.Anchor? = null) {
         val md = file.metadata
         val utcLeaf = md.leaf(ParquetIndexer.UTC) ?: return
         val utc = file.readColumn(utcLeaf)
         fun col(name: String): ColumnValues? = md.leaf(name)?.let { file.readColumn(it) }
+        val applicable = anchor?.takeIf { it.boot == md.bootId }
         add(
             utc = utc,
+            mono = if (applicable != null) col(ParquetIndexer.MONO) else null,
+            anchor = applicable,
             pms = col(ParquetIndexer.PMS_STATUS),
             pm1 = col("pm1_atmospheric_ug_m3"),
             pm25 = col("pm25_atmospheric_ug_m3"),
@@ -105,6 +114,8 @@ class Aggregator(private val station: String, private val resolutions: Set<Resol
     /** Column-level entry point (tests, and later the daily derived file). All columns share one row index. */
     fun add(
         utc: ColumnValues,
+        mono: ColumnValues? = null,
+        anchor: TimeEstimate.Anchor? = null,
         pms: ColumnValues?,
         pm1: ColumnValues?,
         pm25: ColumnValues?,
@@ -116,13 +127,19 @@ class Aggregator(private val station: String, private val resolutions: Set<Resol
         vbus: ColumnValues?,
     ) {
         for (i in 0 until utc.size) {
-            val ns = utc.asLong(i) ?: continue
+            var estimated = false
+            val ns = utc.asLong(i) ?: run {
+                val m = mono?.asLong(i) ?: return@run null
+                estimated = true
+                anchor?.estimateNs(m)
+            } ?: continue
             val s = Math.floorDiv(ns, 1_000_000_000L)
             val pmValid = pms?.asLong(i) == ParquetIndexer.PMS_VALID.toLong()
             val pm25v = if (pmValid) pm25?.asLong(i)?.toInt() else null
             for (r in resolutions) {
                 val acc = accs.getOrPut(r to r.bucketStart(s)) { Acc() }
                 acc.rows++
+                if (estimated) acc.estimated++
                 if (pmValid && pm25v != null) {
                     acc.valid++
                     acc.pm25 += pm25v
@@ -150,6 +167,7 @@ class Aggregator(private val station: String, private val resolutions: Set<Resol
                 startEpochS = key.second,
                 rows = a.rows,
                 validRows = v,
+                estimatedRows = a.estimated,
                 pm1Mean = if (v > 0) (a.pm1 / v).toFloat() else null,
                 pm25Mean = if (v > 0) (a.pm25 / v).toFloat() else null,
                 pm25Min = if (v > 0) a.pm25Min else null,

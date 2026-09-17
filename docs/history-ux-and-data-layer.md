@@ -323,10 +323,12 @@ makes the "Give the logger the time" nudge on Home worth being prominent.
 `AirMood`/`NowReading`; Simple · Detailed · Developer), step 5 as M1 (Home cards from the archive,
 "Collect from all loggers" through the auto-sync worker with `allKnown`), step 3b/3c (`ParquetWriter`,
 `DailyDerivedBuilder`, manifest; validated with PyArrow + DuckDB by `tools/validate_parquet_samples.py`;
-no separate `DeriveWorker` — see the README decision). 117 unit tests. The README's "Design
+no separate `DeriveWorker` — see the README decision), §4.6 (`TimeEstimate`: anchor per boot, estimated
+spans in the index, `estimatedRows` in the tiers, `event_time_utc_estimated_ns` in the daily file, dashed
+in the chart; verified exact against a real later stamp of the same boot). 120 unit tests. The README's "Design
 decisions → History" table records the choices made while implementing. Still open: 6
 (deployment record + map + `deployment.id` contract PR — blocked on the D4 rule amendment), 7 (spec
-documents for iOS), and §4.6 (time estimate for unsynced boots).
+documents for iOS).
 
 Suggested order of work once decided: (1) `data/history/parquet` reader + tests on real files →
 (2) footer index in Room + Detailed "Metrics" screen reading raw days (proves the reader on the

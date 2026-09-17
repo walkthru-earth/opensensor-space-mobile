@@ -12,6 +12,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
@@ -99,8 +100,10 @@ fun HistoryChart(series: HistorySeries, modifier: Modifier = Modifier, zone: Zon
 
         // Envelope (aggregated ranges).
         drawEnvelope(series.points, ::x, ::y, envelope)
-        // Mean line, broken at gaps.
-        drawMeanLine(series.points, ::x, ::y, line, strokeWidth = if (series.range == HistoryRange.YEAR) 2.5f else 2f)
+        // Mean line, broken at gaps; estimated-time stretches dashed.
+        val stroke = if (series.range == HistoryRange.YEAR) 2.5f else 2f
+        drawMeanLine(series.points.map { if (it.estimated) it.copy(mean = null) else it }, ::x, ::y, line, strokeWidth = stroke)
+        drawMeanLine(series.points.map { if (!it.estimated) it.copy(mean = null) else it }, ::x, ::y, line, strokeWidth = stroke, dashed = true)
 
         // Coverage strip: per point, alpha = coverage; empty where no rows at all.
         val stripTop = plot.bottom + labelPx * 1.7f
@@ -132,7 +135,7 @@ private fun DrawScope.drawEnvelope(points: List<HistoryPoint>, x: (Long) -> Floa
     flush()
 }
 
-private fun DrawScope.drawMeanLine(points: List<HistoryPoint>, x: (Long) -> Float, y: (Float) -> Float, color: Color, strokeWidth: Float) {
+private fun DrawScope.drawMeanLine(points: List<HistoryPoint>, x: (Long) -> Float, y: (Float) -> Float, color: Color, strokeWidth: Float, dashed: Boolean = false) {
     val path = Path()
     var open = false
     var lastEnd = Long.MIN_VALUE
@@ -157,7 +160,7 @@ private fun DrawScope.drawMeanLine(points: List<HistoryPoint>, x: (Long) -> Floa
         lastEnd = p.endS
     }
     if (runLength == 1) singles += lastPoint
-    drawPath(path, color, style = Stroke(width = strokeWidth))
+    drawPath(path, color, style = Stroke(width = strokeWidth, pathEffect = if (dashed) PathEffect.dashPathEffect(floatArrayOf(6f, 5f)) else null))
     // Isolated points would be invisible as a zero-length path: draw them as dots.
     for (s in singles) drawCircle(color, radius = strokeWidth * 1.2f, center = s)
 }

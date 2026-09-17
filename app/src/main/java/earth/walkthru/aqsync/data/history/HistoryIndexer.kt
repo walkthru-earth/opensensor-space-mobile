@@ -73,9 +73,35 @@ class HistoryIndexer @Inject constructor(
         done
     }
 
-    /** Runs [backfill] until nothing is left, bounded. */
+    /** Runs [backfill] until nothing is left, bounded, then the time-estimate pass. */
     suspend fun backfillAll(maxBatches: Int = 50) {
         repeat(maxBatches) { if (backfill() == 0) return }
+        estimateTimes()
+    }
+
+    /**
+     * §4.6: gives every unsynced file whose boot later received a clock an estimated UTC span, from
+     * the index alone (no decoding). Idempotent; rows whose estimate is unchanged are not rewritten.
+     * Returns how many rows changed.
+     */
+    suspend fun estimateTimes(): Int = withContext(Dispatchers.IO) {
+        var changed = 0
+        for (station in archivedFileDao.stations()) {
+            val files = archivedFileDao.indexedForStation(station)
+            val anchors = TimeEstimate.anchors(files)
+            for (f in files) {
+                val span = TimeEstimate.span(f, anchors)
+                val anchor = f.bootId?.let { anchors[it] }
+                val updated = if (span != null && anchor != null) {
+                    f.copy(estFirstUtcNs = span.first, estLastUtcNs = span.second, estAnchorFile = anchor.sourceFile)
+                } else if (f.estFirstUtcNs != null || f.estAnchorFile != null) {
+                    f.copy(estFirstUtcNs = null, estLastUtcNs = null, estAnchorFile = null) // anchor gone or file now has UTC
+                } else f
+                if (updated != f) { archivedFileDao.upsert(updated); changed++ }
+            }
+        }
+        if (changed > 0) Log.i(TAG, "estimated time for $changed files")
+        changed
     }
 
     private companion object {

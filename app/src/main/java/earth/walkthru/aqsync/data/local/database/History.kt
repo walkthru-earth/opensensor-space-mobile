@@ -28,6 +28,8 @@ data class AggregateBucket(
     val startEpochS: Long,
     val rows: Int,
     val validRows: Int,
+    /** Of `rows`, how many sit on the timeline by an estimate (§4.6) rather than a real UTC stamp. */
+    @androidx.room.ColumnInfo(defaultValue = "0") val estimatedRows: Int = 0,
     val pm1Mean: Float?,
     val pm25Mean: Float?,
     val pm25Min: Int?,

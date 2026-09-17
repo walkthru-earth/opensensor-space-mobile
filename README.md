@@ -25,7 +25,7 @@ push between two `CHUNK`s, the real `TcpTransport` against an in-JVM fake device
 JSON models, Parquet verification, sync planner, lost-window recovery, the resume-after-lost-link
 decision, the auto-sync worker's decision logic over the fake device), debug APK ≈ 65 MiB unminified.
 
-**History, steps 1–5 (3c folded into 3b) of [`docs/history-ux-and-data-layer.md`](docs/history-ux-and-data-layer.md)
+**History, steps 1–5 (3c folded into 3b) and §4.6 of [`docs/history-ux-and-data-layer.md`](docs/history-ux-and-data-layer.md)
 (2026-09-17):** a pure-Kotlin reader for the firmware's Parquet subset (`data/history/parquet`) that
 decodes all 881 columns of 21 fixture files — nine real `AQ-6b40` files (v1 73-col and v2 77-col,
 UNCOMPRESSED and LZ4_RAW, dated and unsynced) and twelve firmware-v6 writer fixtures (up to 8 row
@@ -40,13 +40,14 @@ shading, envelope, gaps and coverage) reads those tiers, or the rows for a day, 
 `HistoryRepository`; the Today screen opens with the friendly **Now card** (five moods, advice,
 comparison, "today so far" from the tiers) and the Boolean Advanced switch became **Simple ·
 Detailed · Developer**; Home cards summarise each logger from the archive and **Collect from all
-loggers** runs the auto-sync worker over every known device. **The first file firmware v6 wrote on the board** (`data_0930_495ccef9…_2-106-2.parquet`,
+loggers** runs the auto-sync worker over every known device; unsynced files of a boot that later got
+the time are dated by `TimeEstimate` and drawn dashed. **The first file firmware v6 wrote on the board** (`data_0930_495ccef9…_2-106-2.parquet`,
 2026-09-17 09:42–09:59Z, 105 rows in two row groups of 90 + 15, SHA-256 `1a06e93b…f3cf`, fetched over
 serial by the firmware-side session) is a committed fixture: the reader decodes it, the index takes
 its spans from the footer statistics, and every integer column's statistics agree with the decoded
 rows per row group (`RealArchiveTest`). The same test, where the firmware checkout sits next to this
 repo, sweeps **all 765 real files** on this machine (67,092 rows, 58,791 column chunks) in 0.5 s on
-the JVM. 117/117 unit tests, 0 lint errors (7 pre-existing warnings). Not yet run *on the phone*
+the JVM. 120/120 unit tests, 0 lint errors (7 pre-existing warnings). Not yet run *on the phone*
 against a v3 file — that needs a BLE/LAN sync of the board's new files and goes into the firmware
 repo's `bench-verified.md`.
 
@@ -167,7 +168,7 @@ app/src/main/java/earth/walkthru/aqsync/
   data/lan/        TCP transport (AQS1 handshake, reader loop, keep-alive), mDNS discovery, WifiLock, token (re)fetch policy
   data/sync/       sync planner, engine (lost-window re-read), file archive, READ window size, resume-after-lost-link policy
   data/background/ dataSync foreground service + notifications; auto-sync WorkManager worker, scheduler, runner (decision logic)
-  data/local/      Room database (known devices incl. LAN token + auto-sync switch, archived files + history index, schema v4)
+  data/local/      Room database (known devices incl. LAN token + auto-sync switch, archived files + history index + estimated time, aggregate tiers, derived days; schema v6)
   data/history/    Parquet subset reader + writer (parquet/: Thrift compact, pages, LZ4 block codec), file indexer + back-fill, aggregate tiers, derived daily files (Aggregator, HistoryDeriver, DailyDerivedBuilder), friendly layer (AirMood)
   data/settings/   DataStore preferences (Advanced mode)
   data/export/     share / zip / SAF export
@@ -259,6 +260,7 @@ History (2026-09-17, steps 1–2; the evaluation and the remaining steps are in 
 | Friendly layer | `AirMood` (pure): five moods on the same PM2.5 bands the chart shades (edges 15 · 35 · 55 · 150 µg/m³; WHO 2021 24-h guideline = 15), each with a title, one line of advice and a comparison — colour is never the only carrier. `NowReading.of(live)` puts the sensor's state first: `pms_status` ≠ 4 shows words ("warming up"), never a number. "Right now" is labelled a 10-second snapshot; "Today so far" is the UTC-day tier's weighted average with its coverage. No "AQI" anywhere: a named index needs validated averaging rules (product notes). The face is a Canvas placeholder with the character's behaviour; the capybara artwork replaces `MoodFace` one-for-one on both platforms. |
 | Detail levels | `DetailLevel` Simple · Detailed · Developer replaces the Boolean Advanced switch; `AppSettings.advancedMode` (= Developer) and `detailed` (≥ Detailed) stay as flows so existing consumers did not change. Simple: Now card, clock/actions. Detailed: every measurement card, the device card, the file Metrics inspector. Developer: the Debug destination and the History source card. Migration: `detail_level` unset and `advanced_mode = true` → Developer. |
 | History screen data path | Day → the rows (`withUtcBetween` + reader, 3 columns), binned to minutes above 3,000 points (a full day is 8,640 rows, so a day always bins to ≤ 1,440 points); Week → 15-min tier; Month → 1-h tier; Year → 1-day tier. Means over a span are weighted by valid rows, never averages of averages. The chart is a Compose `Canvas` (no chart library): the same spec is what Swift Charts will draw. Time labels in the phone's zone, buckets UTC-aligned. |
+| Time for rows logged before the clock (§4.6 of the evaluation; Room v6) | `TimeEstimate` (pure): the **earliest fully-timed file of a boot** is its anchor; for that boot's unsynced files `utc ≈ anchor_utc + (monotonic_us − anchor_mono)`, never across a reboot, never overwriting `event_time_utc_ns`. Verified on the real boot `e452563e…` of 2026-09-08: the estimate reproduces the firmware's own stamp 43 min after the anchor **exactly**, and dates the two unsynced files to 19:29–19:40Z. Stored as `archived_file.estFirstUtcNs/estLastUtcNs/estAnchorFile` (index only, no decode), computed by `HistoryIndexer.estimateTimes()` at the start of every derive pass; the day signature includes the anchor, so a new anchor re-dates and rebuilds. Tiers carry `estimatedRows`; the daily file adds `event_time_utc_estimated_ns` (TIMESTAMP) with `event_time_utc_ns` left null and a `time_estimate` metadata note; the manifest names each source's `time_anchor`. The chart draws estimated stretches **dashed** and says so, with the drift assumption (±50 ppm) spelled out. Boots that never got the time stay off the timeline. |
 | A file the reader refuses | Keeps its `archived_file` row (Files, Export, sync identity unaffected) with `indexError`; the Metrics screen says so. The archive is the source of truth, the index only describes it. |
 
 ## Lessons learned

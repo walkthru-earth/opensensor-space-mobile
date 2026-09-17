@@ -55,7 +55,15 @@ data class DailyManifest(
     @kotlinx.serialization.SerialName("source_signature") val sourceSignature: String,
 ) {
     @Serializable
-    data class Source(val name: String, val bytes: Long, val crc32: Long, val sha256: String, @kotlinx.serialization.SerialName("rows_used") val rowsUsed: Int)
+    data class Source(
+        val name: String,
+        val bytes: Long,
+        val crc32: Long,
+        val sha256: String,
+        @kotlinx.serialization.SerialName("rows_used") val rowsUsed: Int,
+        /** Set when this source's rows are dated by an estimate: the fully-timed file of the same boot that anchored them. */
+        @kotlinx.serialization.SerialName("time_anchor") val timeAnchor: String? = null,
+    )
 }
 
 data class DailyBuildResult(val file: File, val manifest: File, val rows: Int, val columns: Int, val rowGroups: Int, val complete: Boolean)
@@ -77,13 +85,22 @@ data class DailyBuildResult(val file: File, val manifest: File, val rows: Int, v
  */
 class DailyDerivedBuilder(private val store: DerivedStore, private val fileFor: (station: String, name: String) -> File) {
 
-    fun build(station: String, epochDay: Long, sources: List<ArchivedFile>, sourceSignature: String, nowEpochS: Long = System.currentTimeMillis() / 1000): DailyBuildResult? {
+    fun build(
+        station: String,
+        epochDay: Long,
+        sources: List<ArchivedFile>,
+        sourceSignature: String,
+        anchors: Map<String, TimeEstimate.Anchor> = emptyMap(),
+        nowEpochS: Long = System.currentTimeMillis() / 1000,
+    ): DailyBuildResult? {
         val dayStartNs = epochDay * HistoryDeriver.DAY_NS
         val dayEndNs = dayStartNs + HistoryDeriver.DAY_NS
 
         // 1. Open every source, gather its columns and the row indices that belong to this day.
-        class Src(val row: ArchivedFile, val file: ParquetFile, val keep: IntArray)
+        // Estimated times (§4.6) per source: monotonic → UTC for unsynced files whose boot has an anchor.
+        class Src(val row: ArchivedFile, val file: ParquetFile, val keep: IntArray, val estimated: LongArray?)
         val opened = ArrayList<Src>()
+        var anyEstimated = false
         val columnOrder = LinkedHashMap<String, ParquetType>()
         val timestampColumns = HashSet<String>()
         val seenExact = HashSet<Triple<Long, Long, Long>>()
@@ -96,9 +113,12 @@ class DailyDerivedBuilder(private val store: DerivedStore, private val fileFor: 
             val bootHi = md.leaf("boot_id_hi")?.let { pf.readColumn(it) }
             val bootLo = md.leaf("boot_id_lo")?.let { pf.readColumn(it) }
             val seq = md.leaf(ParquetIndexer.SEQ)?.let { pf.readColumn(it) }
+            val anchor = if (src.hasEstimatedUtc) anchors[src.bootId]?.takeIf { it.boot == md.bootId } else null
+            val mono = if (anchor != null) md.leaf(ParquetIndexer.MONO)?.let { pf.readColumn(it) } else null
+            val estimated = if (anchor != null && mono != null) LongArray(utc.size) { i -> mono.asLong(i)?.let(anchor::estimateNs) ?: Long.MIN_VALUE } else null
             val keep = ArrayList<Int>()
             for (i in 0 until utc.size) {
-                val ns = utc.asLong(i) ?: continue
+                val ns = utc.asLong(i) ?: estimated?.get(i)?.takeIf { it != Long.MIN_VALUE } ?: continue
                 if (ns < dayStartNs || ns >= dayEndNs) continue
                 val key = Triple(bootHi?.asLong(i) ?: 0L, bootLo?.asLong(i) ?: 0L, seq?.asLong(i) ?: (ns))
                 if (!seenExact.add(key)) continue
@@ -110,25 +130,28 @@ class DailyDerivedBuilder(private val store: DerivedStore, private val fileFor: 
                 if (prev != null && prev != leaf.type) throw ParquetFormatException("'${leaf.name}' is $prev in one file and ${leaf.type} in another")
                 if (leaf.isTimestampNanosUtc) timestampColumns += leaf.name
             }
-            opened += Src(src, pf, keep.toIntArray())
+            if (estimated != null && keep.isNotEmpty()) anyEstimated = true
+            opened += Src(src, pf, keep.toIntArray(), estimated)
         }
         if (opened.isEmpty() || opened.all { it.keep.isEmpty() }) return null
         // The two *_utc_ns columns are annotated even when the sources (v1/v2) did not annotate them.
         timestampColumns += listOf(ParquetIndexer.UTC, "clock_anchor_utc_ns").filter { it in columnOrder }
 
-        // 2. Flatten to (source index, row index, utc) sorted by time.
+        // 2. Flatten to (source index, row index, timeline utc) sorted by time — real UTC or the estimate.
         data class Ref(val src: Int, val row: Int, val utcNs: Long)
         val refs = ArrayList<Ref>()
         opened.forEachIndexed { s, src ->
             val utc = src.file.readColumn(ParquetIndexer.UTC)
-            for (i in src.keep) refs += Ref(s, i, utc.asLong(i)!!)
+            for (i in src.keep) refs += Ref(s, i, utc.asLong(i) ?: src.estimated!![i])
         }
         refs.sortBy { it.utcNs }
 
-        // 3. Columns to write: the union, plus the manifest index.
+        // 3. Columns to write: the union, the manifest index, and — when any row is estimated — the estimate.
         val columns = columnOrder.map { (name, type) -> ParquetWriter.Column(name, type, timestampNanosUtc = name in timestampColumns) } +
-            ParquetWriter.Column(SOURCE_INDEX, ParquetType.INT32)
+            ParquetWriter.Column(SOURCE_INDEX, ParquetType.INT32) +
+            (if (anyEstimated) listOf(ParquetWriter.Column(ESTIMATED_UTC, ParquetType.INT64, timestampNanosUtc = true)) else emptyList())
         val utcIndex = columns.indexOfFirst { it.name == ParquetIndexer.UTC }
+        val estimatedBySource: List<LongArray?> = opened.map { it.estimated }
 
         // Decode every needed column of every source once.
         val decoded: List<Map<String, ColumnValues>> = opened.map { src -> src.file.leaves.associate { it.name to src.file.readColumn(it) } }
@@ -149,6 +172,10 @@ class DailyDerivedBuilder(private val store: DerivedStore, private val fileFor: 
             put("complete", complete.toString())
             put("schema_versions", opened.map { it.file.metadata.schemaVersion ?: "?" }.distinct().joinToString(","))
             put("purpose", "telemetry-derived-day")
+            if (anyEstimated) {
+                put("estimated_rows", refs.count { r -> opened[r.src].estimated != null }.toString())
+                put("time_estimate", "rows with null event_time_utc_ns carry $ESTIMATED_UTC = anchor_utc + (monotonic_us - anchor_mono) from a later SET_TIME of the same boot; drift not corrected (assume ±${TimeEstimate.DRIFT_PPM.toInt()} ppm)")
+            }
         }
 
         // 5. Write, one row group per UTC hour.
@@ -164,7 +191,7 @@ class DailyDerivedBuilder(private val store: DerivedStore, private val fileFor: 
                 val hour = Math.floorDiv(refs[start].utcNs, HOUR_NS)
                 var end = start
                 while (end < refs.size && Math.floorDiv(refs[end].utcNs, HOUR_NS) == hour) end++
-                writer.rowGroup(gather(columns, decoded, refs.subList(start, end).map { it.src to it.row }))
+                writer.rowGroup(gather(columns, decoded, estimatedBySource, refs.subList(start, end).map { it.src to it.row }))
                 groups++
                 start = end
             }
@@ -179,7 +206,7 @@ class DailyDerivedBuilder(private val store: DerivedStore, private val fileFor: 
         val manifest = DailyManifest(
             station = station,
             day = DerivedStore.dayLabel(epochDay),
-            sources = opened.map { s -> DailyManifest.Source(s.row.name, s.row.bytes, s.row.crc32, s.row.sha256, s.keep.size) },
+            sources = opened.map { s -> DailyManifest.Source(s.row.name, s.row.bytes, s.row.crc32, s.row.sha256, s.keep.size, s.row.estAnchorFile.takeIf { s.estimated != null }) },
             rows = refs.size,
             columns = columns.map { it.name },
             complete = complete,
@@ -197,11 +224,15 @@ class DailyDerivedBuilder(private val store: DerivedStore, private val fileFor: 
     }
 
     /** Builds one row group's columns by gathering rows (source, index) from the decoded sources. */
-    private fun gather(columns: List<ParquetWriter.Column>, decoded: List<Map<String, ColumnValues>>, rows: List<Pair<Int, Int>>): List<ColumnValues> {
+    private fun gather(columns: List<ParquetWriter.Column>, decoded: List<Map<String, ColumnValues>>, estimated: List<LongArray?>, rows: List<Pair<Int, Int>>): List<ColumnValues> {
         val n = rows.size
         return columns.map { c ->
             if (c.name == SOURCE_INDEX) {
                 ColumnValues.Int32(IntArray(n) { rows[it].first }, null)
+            } else if (c.name == ESTIMATED_UTC) {
+                val v = LongArray(n); val valid = BooleanArray(n)
+                rows.forEachIndexed { k, (s, i) -> estimated[s]?.get(i)?.takeIf { it != Long.MIN_VALUE }?.let { v[k] = it; valid[k] = true } }
+                ColumnValues.Int64(v, valid.takeIf { it.any { b -> !b } })
             } else when (c.type) {
                 ParquetType.INT32 -> {
                     val v = IntArray(n); val valid = BooleanArray(n)
@@ -225,6 +256,7 @@ class DailyDerivedBuilder(private val store: DerivedStore, private val fileFor: 
     companion object {
         const val BUILDER = "AQ Sync Android derived-v1"
         const val SOURCE_INDEX = "source_file_index"
+        const val ESTIMATED_UTC = "event_time_utc_estimated_ns"
         const val HOUR_NS = 3_600L * 1_000_000_000L
         /** A day is "complete" only this long after it ended: the logger's last window has had time to close and sync. */
         const val COMPLETE_GRACE_S = 30 * 60L
