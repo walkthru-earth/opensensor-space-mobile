@@ -317,10 +317,14 @@ makes the "Give the logger the time" nudge on Home worth being prominent.
 | D9 | Unsynced time | implement the estimate of §4.6 in the derive step, clearly labelled |
 | D10 | Charts | Compose `Canvas` with a written design spec that Swift Charts follows (§4.5) |
 
-**Progress (2026-09-17):** steps 1 and 2 below are implemented and gated (`data/history/parquet`,
-`data/history/ParquetIndexer` + `HistoryIndexer`, Room v4, `ui/history/FileMetricsScreen` behind
-Advanced mode; 102 unit tests). The README's "Design decisions → History" table records the choices
-made while implementing. Steps 3–7 are next.
+**Progress (2026-09-17):** implemented and gated — step 1 (reader, `data/history/parquet`), step 2
+(Room v4 index, `HistoryIndexer`, file Metrics screen), step 3a (aggregate tiers, Room v5,
+`HistoryDeriver`), step 4 (History tab with the Canvas chart, `HistoryRepository`; Now card with
+`AirMood`/`NowReading`; Simple · Detailed · Developer). 111 unit tests. The README's "Design
+decisions → History" table records the choices made while implementing. Still open: 3b/3c (daily
+derived Parquet writer + `DeriveWorker` + manifest), 5 (Home with many loggers + collect queue), 6
+(deployment record + map + `deployment.id` contract PR — blocked on the D4 rule amendment), 7 (spec
+documents for iOS), and §4.6 (time estimate for unsynced boots).
 
 Suggested order of work once decided: (1) `data/history/parquet` reader + tests on real files →
 (2) footer index in Room + Detailed "Metrics" screen reading raw days (proves the reader on the

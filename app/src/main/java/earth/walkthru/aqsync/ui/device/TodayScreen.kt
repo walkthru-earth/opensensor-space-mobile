@@ -51,6 +51,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.DeviceEvent
+import earth.walkthru.aqsync.data.history.NowReading
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.protocol.DeviceStatus
 import earth.walkthru.aqsync.data.protocol.LiveSample
@@ -165,10 +166,24 @@ fun TodayScreen(
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = padding.calculateBottomPadding() + 24.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                item(key = "readings") { ReadingsCard(state.live?.sample, state.live?.receivedAtEpochMs, now) }
-                item(key = "particles") { ParticleRow(state.live?.sample) }
-                item(key = "board") { BoardCard(state.live?.sample, state.status?.status) }
-                item(key = "storage") { StorageCard(state.status?.status, state.status?.receivedAtEpochMs, now) }
+                // The friendly reading comes first at every level; the measurement cards are Detailed.
+                // Conditional items sit *after* the first item so a level change never moves the top.
+                item(key = "now") {
+                    val ageMs = state.live?.receivedAtEpochMs?.let { now - it }
+                    NowCard(
+                        reading = NowReading.of(state.live?.sample),
+                        today = state.todaySoFar,
+                        fresh = ageMs != null && ageMs <= STALE_AFTER_MS,
+                        showNumber = true,
+                        onSetTime = if (state.status?.status?.utcSynced == false) ({ confirmTime = true }) else null,
+                    )
+                }
+                if (state.detailLevel.detailed) {
+                    item(key = "readings") { ReadingsCard(state.live?.sample, state.live?.receivedAtEpochMs, now) }
+                    item(key = "particles") { ParticleRow(state.live?.sample) }
+                    item(key = "board") { BoardCard(state.live?.sample, state.status?.status) }
+                    item(key = "storage") { StorageCard(state.status?.status, state.status?.receivedAtEpochMs, now) }
+                }
                 item(key = "clock") {
                     ClockCard(
                         status = state.status?.status,
@@ -178,7 +193,7 @@ fun TodayScreen(
                         onFlush = { confirmFlush = true },
                     )
                 }
-                state.info?.let { info ->
+                state.info?.takeIf { state.detailLevel.detailed }?.let { info ->
                     item(key = "info") {
                         Column(Modifier.padding(horizontal = 4.dp, vertical = 8.dp)) {
                             Eyebrow("device")

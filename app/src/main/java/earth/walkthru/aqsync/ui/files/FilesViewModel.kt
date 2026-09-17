@@ -58,7 +58,7 @@ data class FilesUiState(
     val backgroundSyncActive: Boolean = false,
     /** Active pipe, for the top-bar chip (same source as Today / Device). */
     val transport: TransportKind? = null,
-    /** Advanced mode reveals the per-file "Metrics" inspector (the reader's on-phone proof). */
+    /** Detailed level (or Developer) reveals the per-file "Metrics" inspector (the reader's on-phone proof). */
     val advancedMode: Boolean = false,
 )
 
@@ -100,7 +100,7 @@ class FilesViewModel @Inject constructor(
     val uiState: StateFlow<FilesUiState> = combine(
         repository.connectionState, repository.manifest, repository.plan, repository.sync, archivedFileDao.observeAll(), exporting,
         repository.reconnecting, repository.currentKnownDevice, autoSyncScheduler.observeActive(), repository.activeTransport,
-        settings.advancedMode,
+        settings.detailed,
     ) { values ->
         @Suppress("UNCHECKED_CAST")
         val archived = values[4] as List<ArchivedFile>

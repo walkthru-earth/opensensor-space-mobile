@@ -12,7 +12,16 @@ import earth.walkthru.aqsync.data.TimedStatus
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
+import earth.walkthru.aqsync.data.history.Resolution
+import earth.walkthru.aqsync.data.history.TodaySoFar
+import earth.walkthru.aqsync.data.local.database.AggregateBucketDao
 import earth.walkthru.aqsync.data.settings.AppSettings
+import earth.walkthru.aqsync.data.settings.DetailLevel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -32,19 +41,34 @@ data class TodayUiState(
     val transport: TransportKind? = null,
     val advancedMode: Boolean = false,
     val reconnecting: ReconnectState? = null,
+    val detailLevel: DetailLevel = DetailLevel.SIMPLE,
+    /** Today's UTC-day tier for this station, once the phone archive has timed rows for it. */
+    val todaySoFar: TodaySoFar? = null,
 )
 
 @HiltViewModel
 class TodayViewModel @Inject constructor(
     private val repository: DeviceConnectionRepository,
     settings: AppSettings,
+    bucketDao: AggregateBucketDao,
 ) : ViewModel() {
 
     val events: SharedFlow<DeviceEvent> = repository.events
 
+    /** The current UTC day's bucket for the connected station; re-emits as the deriver rebuilds it. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val todaySoFar = repository.info.map { it?.station }.distinctUntilChanged().flatMapLatest { station ->
+        if (station == null) flowOf(null) else {
+            val dayStart = Math.floorDiv(System.currentTimeMillis() / 1000, 86_400L) * 86_400
+            bucketDao.observe(station, Resolution.DAY.seconds, dayStart, dayStart + 86_400).map { buckets ->
+                buckets.firstOrNull()?.let { b -> b.pm25Mean?.let { TodaySoFar(it, b.validRows, (b.validRows.toFloat() / Resolution.DAY.expectedRows).coerceIn(0f, 1f)) } }
+            }
+        }
+    }
+
     val uiState: StateFlow<TodayUiState> = combine(
         repository.session, repository.connectionState, repository.info, repository.status, repository.live, repository.sync,
-        settings.advancedMode, repository.reconnecting, repository.activeTransport,
+        settings.detailLevel, repository.reconnecting, repository.activeTransport, todaySoFar,
     ) { values ->
         val session = values[0] as earth.walkthru.aqsync.data.ble.DeviceSession?
         TodayUiState(
@@ -58,8 +82,10 @@ class TodayViewModel @Inject constructor(
             isFake = repository.isFake,
             // From the repository's own flow, not from the session object: see activeTransport.
             transport = values[8] as TransportKind?,
-            advancedMode = values[6] as Boolean,
+            advancedMode = (values[6] as DetailLevel).developer,
+            detailLevel = values[6] as DetailLevel,
             reconnecting = values[7] as ReconnectState?,
+            todaySoFar = values[9] as TodaySoFar?,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TodayUiState())
 

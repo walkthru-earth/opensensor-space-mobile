@@ -1,48 +1,58 @@
 package earth.walkthru.aqsync.ui.settings
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Switch
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import earth.walkthru.aqsync.BuildConfig
+import earth.walkthru.aqsync.data.settings.DetailLevel
 import earth.walkthru.aqsync.ui.components.Eyebrow
 
 /**
- * The app's only settings: the **Advanced mode** switch (persisted in DataStore). Everything else
- * the user can change lives on the device and is edited from the Device screen.
+ * The app's only setting: the **detail level** (Simple · Detailed · Developer, persisted in
+ * DataStore). Everything else the user can change lives on the device and is edited from the Device
+ * screen. Same three levels, same names, on iOS.
  */
 @Composable
 fun SettingsSheet(onDismiss: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
-    val advanced by viewModel.advancedMode.collectAsStateWithLifecycle()
+    val level by viewModel.detailLevel.collectAsStateWithLifecycle()
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 32.dp)) {
             Text("Settings", style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.height(16.dp))
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Advanced mode", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        "Adds a Debug screen with the raw status JSON, the last frames on the link, the device's serial log and a raw command box. Off by default; nothing else changes.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+            Text("Detail level", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(8.dp))
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                DetailLevel.entries.forEachIndexed { i, l ->
+                    SegmentedButton(
+                        selected = level == l,
+                        onClick = { viewModel.setDetailLevel(l) },
+                        shape = SegmentedButtonDefaults.itemShape(i, DetailLevel.entries.size),
+                        label = { Text(l.title) },
                     )
                 }
-                Spacer(Modifier.padding(8.dp))
-                Switch(checked = advanced, onCheckedChange = { viewModel.setAdvancedMode(it) })
             }
+            Spacer(Modifier.height(8.dp))
+            Text(level.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                "Cosmetic: every level reads the same data from the same logger. Nothing is hidden from the archive or the export.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp),
+            )
             Spacer(Modifier.height(24.dp))
             Eyebrow("about")
             Spacer(Modifier.height(4.dp))
