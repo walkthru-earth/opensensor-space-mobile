@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.core.content.FileProvider
 import dagger.hilt.android.qualifiers.ApplicationContext
+import earth.walkthru.aqsync.data.history.DerivedStore
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
 import earth.walkthru.aqsync.data.sync.FileArchive
 import kotlinx.coroutines.Dispatchers
@@ -27,6 +28,7 @@ import javax.inject.Singleton
 class ExportManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val archive: FileArchive,
+    private val derived: DerivedStore,
 ) {
     private val authority = "${context.packageName}.files"
     private val exportDir = File(context.cacheDir, "export").apply { mkdirs() }
@@ -70,6 +72,35 @@ class ExportManager @Inject constructor(
     fun zipName(): String {
         val ts = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss").withZone(ZoneOffset.UTC).format(Instant.now())
         return "aq-sync-archive-$ts.zip"
+    }
+
+    fun dailyZipName(): String {
+        val ts = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss").withZone(ZoneOffset.UTC).format(Instant.now())
+        return "aq-sync-daily-$ts.zip"
+    }
+
+    /** How many derived daily files exist (for the menu). */
+    fun dailyFileCount(): Int = derived.listAll().size
+
+    /**
+     * Zip the derived daily files (`derived/v1/<station>/day=….parquet` + manifests): the small,
+     * analysis-ready export for a data collector — one Parquet file per station-day, statistics,
+     * typed timestamps. The raw archive zip stays the byte-exact mirror for the firmware maintainer.
+     */
+    suspend fun buildDailyZip(): File? = withContext(Dispatchers.IO) {
+        val files = derived.root.walkTopDown().filter { it.isFile && (it.extension == "parquet" || it.name.endsWith(".manifest.json")) }.toList()
+        if (files.none { it.extension == "parquet" }) return@withContext null
+        exportDir.listFiles()?.forEach { it.delete() }
+        val out = File(exportDir, dailyZipName())
+        ZipOutputStream(out.outputStream().buffered()).use { zip ->
+            zip.setLevel(0)
+            for (file in files.sortedBy { it.relativeTo(derived.root).path }) {
+                zip.putNextEntry(ZipEntry("derived/v1/" + file.relativeTo(derived.root).path).apply { time = file.lastModified() })
+                file.inputStream().use { it.copyTo(zip) }
+                zip.closeEntry()
+            }
+        }
+        out
     }
 
     /**

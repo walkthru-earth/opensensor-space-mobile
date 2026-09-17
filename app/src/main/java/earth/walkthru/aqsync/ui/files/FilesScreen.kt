@@ -180,6 +180,12 @@ fun FilesScreen(
                             onClick = { menu = false; viewModel.shareAllLoose() },
                         )
                         DropdownMenuItem(
+                            text = { Text("Share daily files (derived)") },
+                            leadingIcon = { Icon(Icons.Rounded.IosShare, contentDescription = null) },
+                            enabled = hasFiles,
+                            onClick = { menu = false; viewModel.shareDailyZip() },
+                        )
+                        DropdownMenuItem(
                             text = { Text("Disconnect") },
                             leadingIcon = { Icon(Icons.Rounded.LinkOff, contentDescription = null) },
                             onClick = { menu = false; viewModel.disconnect(); onDisconnected() },

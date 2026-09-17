@@ -198,6 +198,23 @@ class FilesViewModel @Inject constructor(
         }
     }
 
+    /** Share the derived daily files (one Parquet per station-day) — the small export for a data collector. */
+    fun shareDailyZip() {
+        viewModelScope.launch {
+            exporting.value = true
+            try {
+                val zip = export.buildDailyZip()
+                if (zip == null) {
+                    localEvents.tryEmit(DeviceEvent.Info("No daily files yet: they are built from synced files that carry a timestamp."))
+                    return@launch
+                }
+                _effects.tryEmit(FilesEffect.Launch(export.shareZipIntent(zip)))
+            } finally {
+                exporting.value = false
+            }
+        }
+    }
+
     /** Step 1 of "Save to…": build the zip, then ask the UI to open the SAF picker. */
     fun saveZip() {
         viewModelScope.launch {
