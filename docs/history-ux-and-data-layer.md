@@ -325,7 +325,10 @@ makes the "Give the logger the time" nudge on Home worth being prominent.
 `DailyDerivedBuilder`, manifest; validated with PyArrow + DuckDB by `tools/validate_parquet_samples.py`;
 no separate `DeriveWorker` — see the README decision), §4.6 (`TimeEstimate`: anchor per boot, estimated
 spans in the index, `estimatedRows` in the tiers, `event_time_utc_estimated_ns` in the daily file, dashed
-in the chart; verified exact against a real later stamp of the same boot). 120 unit tests. The README's "Design
+in the chart; verified exact against a real later stamp of the same boot). Then (same day) the
+restructure: three pure `:core` modules under `:app`, the metric registry (`Metrics`) and per-metric tiers
+(Room v7), the chart redesign (band-coloured columns, day ring, calendar heatmap), and the warm-up
+research (README decision "Sensor warm-up and settling"). 123 unit tests (46 `:app`, 77 `:core`). The README's "Design
 decisions → History" table records the choices made while implementing. Still open: 6
 (deployment record + map + `deployment.id` contract PR — blocked on the D4 rule amendment), 7 (spec
 documents for iOS).

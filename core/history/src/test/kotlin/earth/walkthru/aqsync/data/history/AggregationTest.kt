@@ -48,6 +48,9 @@ class AggregationTest {
         assertNull(d[0].agg(Metrics.HUMIDITY))
         assertNull(d[0].agg(Metrics.AMBIENT_TEMP))
         assertNotNull(d[0].agg(Metrics.BATTERY))
+        // The board booted 38 s before its first row: the first 180 s of uptime are "settling" — 15 rows (38 s → 180 s).
+        assertEquals(15, d[0].agg(Metrics.PM25)!!.settling)
+        assertEquals(0, d[0].agg(Metrics.BOARD_TEMP)!!.settling) // no settle window on the IMU
     }
 
     @Test

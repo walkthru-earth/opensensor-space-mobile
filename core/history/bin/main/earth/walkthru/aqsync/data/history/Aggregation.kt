@@ -16,8 +16,12 @@ enum class Resolution(val seconds: Long) {
     fun bucketStart(epochSeconds: Long): Long = Math.floorDiv(epochSeconds, seconds) * seconds
 }
 
-/** One metric's aggregate inside one bucket. `n` are the rows that passed the metric's gate and were non-null. */
-data class MetricAgg(val n: Int, val mean: Float, val min: Float, val max: Float)
+/**
+ * One metric's aggregate inside one bucket. `n` are the rows that passed the metric's gate and were
+ * non-null; `settling` of those were within the metric's `settleSeconds` after power-on (counted, not
+ * excluded — the drift is small on this hardware, see `MetricSpec.settleSeconds`).
+ */
+data class MetricAgg(val n: Int, val mean: Float, val min: Float, val max: Float, val settling: Int = 0)
 
 /**
  * One aggregated bucket: the row counts that are the same for every metric, and one [MetricAgg] per
@@ -57,6 +61,7 @@ class Aggregator(
         var rows = 0
         var estimated = 0
         val n = IntArray(metricCount)
+        val settling = IntArray(metricCount)
         val sum = DoubleArray(metricCount)
         val min = FloatArray(metricCount) { Float.POSITIVE_INFINITY }
         val max = FloatArray(metricCount) { Float.NEGATIVE_INFINITY }
@@ -72,7 +77,8 @@ class Aggregator(
         val utc = md.leaf(ParquetIndexer.UTC)?.let { file.readColumn(it) } ?: return
         fun col(name: String): ColumnValues? = md.leaf(name)?.let { file.readColumn(it) }
         val applicable = anchor?.takeIf { it.boot == md.bootId }
-        val mono = if (applicable != null) col(ParquetIndexer.MONO) else null
+        val monoAll = col(ParquetIndexer.MONO)
+        val mono = if (applicable != null) monoAll else null
         val bootHi = col("boot_id_hi")
         val bootLo = col("boot_id_lo")
         val seq = col(ParquetIndexer.SEQ)
@@ -100,6 +106,7 @@ class Aggregator(
                     val v = colv.asDouble(i) ?: continue
                     if (v.isNaN() || v.isInfinite()) continue
                     acc.n[k]++
+                    if (spec.settleSeconds > 0 && (monoAll?.asLong(i) ?: Long.MAX_VALUE) < spec.settleSeconds * 1_000_000L) acc.settling[k]++
                     acc.sum[k] += v
                     val f = v.toFloat()
                     if (f < acc.min[k]) acc.min[k] = f
@@ -114,7 +121,7 @@ class Aggregator(
         .map { (key, a) ->
             val per = LinkedHashMap<String, MetricAgg>()
             for ((k, spec) in metrics.withIndex()) {
-                if (a.n[k] > 0) per[spec.id] = MetricAgg(a.n[k], (a.sum[k] / a.n[k]).toFloat(), a.min[k], a.max[k])
+                if (a.n[k] > 0) per[spec.id] = MetricAgg(a.n[k], (a.sum[k] / a.n[k]).toFloat(), a.min[k], a.max[k], a.settling[k])
             }
             Bucket(station, key.first, key.second, a.rows, a.estimated, per)
         }

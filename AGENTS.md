@@ -3,6 +3,25 @@
 Companion app for the CoreS3 air-quality logger in the sibling repo `../m5stack-aq-parquet`.
 Read `README.md` first; it holds status, design decisions and lessons learned. This file holds the rules.
 
+## Where to look first (read this instead of grepping)
+
+| Need | Go to |
+| --- | --- |
+| Status, what is verified, every design decision and lesson | `README.md` (Status → What it does → Design decisions tables → Lessons learned) |
+| The plan and its progress: history, UX, data layer, iOS parity, open decisions D1–D10 | `docs/history-ux-and-data-layer.md` (progress note under §6) |
+| Protocol frames / JSON / CONFIG (mirror only; owner is the firmware repo) | `core/protocol/src/main/kotlin/.../data/protocol/` ← `../m5stack-aq-parquet/docs/ble-sync-protocol.md` |
+| Parquet reader / writer, fixtures, PyArrow oracle | `core/parquet/` · fixtures `core/parquet/src/test/resources/parquet/` · `tools/make_parquet_fixtures.py`, `tools/validate_parquet_samples.py` (run with `cd ../m5stack-aq-parquet && pixi run python …`) |
+| Metrics, bands, gates, settle window (add a sensor here) | `core/history/.../Metrics.kt` |
+| Tiers, daily derived files, time estimate, chart binning | `core/history/.../Aggregation.kt`, `app/.../data/history/HistoryDeriver.kt` + `DailyDerived.kt`, `core/history/.../TimeEstimate.kt`, `Columns.kt` |
+| Friendly layer (moods, copy), Now card, detail levels | `core/history/.../AirMood.kt`, `app/.../ui/device/NowCard.kt`, `app/.../data/settings/AppSettings.kt` (`DetailLevel`) |
+| Charts (columns, day ring, calendar) | `app/.../ui/history/BandColumnChart.kt`, `DayRing.kt`, `CalendarHeatmap.kt`, `HistoryScreen.kt` |
+| Sync engine, transports, background | `app/.../data/sync/SyncEngine.kt`, `data/ble/`, `data/lan/`, `data/background/AutoSyncRunner.kt` |
+| Room schema (v7) and migrations | `app/.../data/local/database/AppDatabase.kt`, `History.kt`, `ArchivedFile.kt`, JSON under `app/schemas/` |
+| Test phone | OnePlus 7 Pro, Android 16, Wi-Fi ADB `adb connect 192.168.100.173:38457` (port changes after reboot); `run-as` is refused on this ROM, so inspect via logcat tags `HistoryIndexer HistoryDeriver SyncEngine`, not files |
+| Board files fetched over serial by the firmware-side session | `../m5stack-aq-parquet/firmware/arduino-m5unified/artifacts/output/` (v6 files); full SD export `../m5stack-aq-parquet/exports/sd-20260916T173205Z/` (764 files) |
+
+Settled questions — do not re-research: Kotlin DataFrame cannot read Parquet on Android (Arrow Dataset JNI has no Android build) and boxes values; DuckDB for Android is an experimental self-build (Swift is official); MapLibre Compose 0.17 / PMTiles `file://` for maps; Rive (MIT, Compose API) over Lottie for the data-driven character; sensor warm-up: firmware nulls uptime < 30 s (`pms_status = 1`), the next ~3 min drift ~2.5 µg/m³ on this hardware (`Metrics.PMS_SETTLE_S`), Sensor.Community wakes 15 s before a 5 s window, AirGradient gates nothing numerically and applies EPA-2021 humidity compensation (needs RH, which this board lacks). Sources and numbers are in the README decisions.
+
 ## The contract is not here
 
 The Bluetooth protocol lives in **`../m5stack-aq-parquet/docs/ble-sync-protocol.md`** and is owned by the firmware repo. Do not change frame layouts, opcodes, UUIDs, JSON keys or error codes in this app without changing that document (and the firmware) first. If the document is ambiguous, resolve it there, then implement — the "Design decisions" table in `README.md` lists the choices already made.

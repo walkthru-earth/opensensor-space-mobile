@@ -34,6 +34,12 @@ data class MetricSpec(
     val envelope: Boolean = false,
     /** Axis floor so a normal range is never clipped away (µg/m³ 60 keeps the "hazy" band visible). */
     val axisFloor: Float = 10f,
+    /**
+     * Seconds after power-on during which readings count but are flagged as *settling*. The firmware
+     * already nulls the first 30 s (`pms_status = 1`); on this archive the next ~3 min still drift by
+     * ~2.5 µg/m³ mean-abs against minutes 5–10 (14 boots, 2026-09-17), so 180 s for the PMS. Not a gate.
+     */
+    val settleSeconds: Long = 0,
 ) {
     val banded: Boolean get() = bands != null
 
@@ -50,11 +56,14 @@ object Metrics {
     /** WHO 2021 24-h guideline is the first edge (15). The same edges the chart shades and the capybara feels. */
     val PM25_BANDS: List<Band> = AirMood.entries.map { Band(it.upTo, it) }
 
-    val PM25 = MetricSpec("pm25", "pm25_atmospheric_ug_m3", "PM2.5", "µg/m³", MetricKind.PARTICLE_MASS, PMS_VALID, PM25_BANDS, envelope = true, axisFloor = 60f)
-    val PM10 = MetricSpec("pm10", "pm10_atmospheric_ug_m3", "PM10", "µg/m³", MetricKind.PARTICLE_MASS, PMS_VALID, null, envelope = true, axisFloor = 60f)
-    val PM1 = MetricSpec("pm1", "pm1_atmospheric_ug_m3", "PM1", "µg/m³", MetricKind.PARTICLE_MASS, PMS_VALID, null, envelope = true, axisFloor = 60f)
-    val PARTICLES_GT03 = MetricSpec("n03", "particles_gt03_per_01l", "Particles > 0.3 µm", "per 0.1 L", MetricKind.PARTICLE_COUNT, PMS_VALID, null, chartable = false)
-    val PARTICLES_GT25 = MetricSpec("n25", "particles_gt25_per_01l", "Particles > 2.5 µm", "per 0.1 L", MetricKind.PARTICLE_COUNT, PMS_VALID, null, chartable = false)
+    /** Measured on this archive, see [MetricSpec.settleSeconds]. */
+    const val PMS_SETTLE_S = 180L
+
+    val PM25 = MetricSpec("pm25", "pm25_atmospheric_ug_m3", "PM2.5", "µg/m³", MetricKind.PARTICLE_MASS, PMS_VALID, PM25_BANDS, envelope = true, axisFloor = 60f, settleSeconds = PMS_SETTLE_S)
+    val PM10 = MetricSpec("pm10", "pm10_atmospheric_ug_m3", "PM10", "µg/m³", MetricKind.PARTICLE_MASS, PMS_VALID, null, envelope = true, axisFloor = 60f, settleSeconds = PMS_SETTLE_S)
+    val PM1 = MetricSpec("pm1", "pm1_atmospheric_ug_m3", "PM1", "µg/m³", MetricKind.PARTICLE_MASS, PMS_VALID, null, envelope = true, axisFloor = 60f, settleSeconds = PMS_SETTLE_S)
+    val PARTICLES_GT03 = MetricSpec("n03", "particles_gt03_per_01l", "Particles > 0.3 µm", "per 0.1 L", MetricKind.PARTICLE_COUNT, PMS_VALID, null, chartable = false, settleSeconds = PMS_SETTLE_S)
+    val PARTICLES_GT25 = MetricSpec("n25", "particles_gt25_per_01l", "Particles > 2.5 µm", "per 0.1 L", MetricKind.PARTICLE_COUNT, PMS_VALID, null, chartable = false, settleSeconds = PMS_SETTLE_S)
     val BOARD_TEMP = MetricSpec("board_c", "imu_temperature_c", "Board temperature", "°C", MetricKind.TEMPERATURE, null, null)
     /** Null on the current board (SHT20 address collision); listed so the day the sensor works, History does too. */
     val AMBIENT_TEMP = MetricSpec("ambient_c", "ambient_temperature_c", "Temperature", "°C", MetricKind.TEMPERATURE, null, null)
