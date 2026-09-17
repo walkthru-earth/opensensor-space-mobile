@@ -88,9 +88,9 @@ class HistoryIndexer @Inject constructor(
         var changed = 0
         for (station in archivedFileDao.stations()) {
             val files = archivedFileDao.indexedForStation(station)
-            val anchors = TimeEstimate.anchors(files)
+            val anchors = TimeEstimate.anchors(files.map { it.info() })
             for (f in files) {
-                val span = TimeEstimate.span(f, anchors)
+                val span = TimeEstimate.span(f.info(), anchors)
                 val anchor = f.bootId?.let { anchors[it] }
                 val updated = if (span != null && anchor != null) {
                     f.copy(estFirstUtcNs = span.first, estLastUtcNs = span.second, estAnchorFile = anchor.sourceFile)

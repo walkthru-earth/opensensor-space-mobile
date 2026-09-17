@@ -73,7 +73,7 @@ class HistoryDeriver @Inject constructor(
         indexer.estimateTimes()
         val all = archivedFileDao.observeAll().first()
         val wanted = daysOf(all)
-        val anchorsByStation = all.groupBy { it.station }.mapValues { (_, files) -> TimeEstimate.anchors(files) }
+        val anchorsByStation = all.groupBy { it.station }.mapValues { (_, files) -> TimeEstimate.anchors(files.map { it.info() }) }
         // Stations that only have derived days left (every dated file gone) must be visited too, to drop them.
         val allStations = (wanted.keys + dayDao.stations()).filter { stations == null || it in stations }
         for (station in allStations) {

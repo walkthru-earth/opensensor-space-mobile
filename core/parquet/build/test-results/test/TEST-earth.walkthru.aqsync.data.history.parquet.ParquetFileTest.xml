@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="earth.walkthru.aqsync.data.history.parquet.ParquetFileTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-09-17T12:14:45.027Z" hostname="yharbys-MacBook-Air.local" time="0.201">
+  <properties/>
+  <testcase name="empty file has zero rows and empty columns" classname="earth.walkthru.aqsync.data.history.parquet.ParquetFileTest" time="0.043"/>
+  <testcase name="row-group reads concatenate to the whole column and match per-group statistics" classname="earth.walkthru.aqsync.data.history.parquet.ParquetFileTest" time="0.014"/>
+  <testcase name="fixtures cover both writers, both codecs, one and many row groups" classname="earth.walkthru.aqsync.data.history.parquet.ParquetFileTest" time="0.004"/>
+  <testcase name="malformed input is refused with a typed exception" classname="earth.walkthru.aqsync.data.history.parquet.ParquetFileTest" time="0.005"/>
+  <testcase name="real device file - unsynced rows have null UTC and a monotonic clock" classname="earth.walkthru.aqsync.data.history.parquet.ParquetFileTest" time="0.007"/>
+  <testcase name="footer facts match PyArrow for every fixture" classname="earth.walkthru.aqsync.data.history.parquet.ParquetFileTest" time="0.023"/>
+  <testcase name="memory-mapped open reads the same values as wrap" classname="earth.walkthru.aqsync.data.history.parquet.ParquetFileTest" time="0.013"/>
+  <testcase name="every column of every fixture decodes to PyArrow's values" classname="earth.walkthru.aqsync.data.history.parquet.ParquetFileTest" time="0.087"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

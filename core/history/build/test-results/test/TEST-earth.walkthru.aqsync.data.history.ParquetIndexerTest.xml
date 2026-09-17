@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="earth.walkthru.aqsync.data.history.ParquetIndexerTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-09-17T12:16:43.015Z" hostname="yharbys-MacBook-Air.local" time="0.042">
+  <properties/>
+  <testcase name="v3 file - statistics fast path agrees with decoding" classname="earth.walkthru.aqsync.data.history.ParquetIndexerTest" time="0.003"/>
+  <testcase name="unsynced file has no UTC span but a monotonic one" classname="earth.walkthru.aqsync.data.history.ParquetIndexerTest" time="0.001"/>
+  <testcase name="real v2 file - index comes from decoding and matches PyArrow" classname="earth.walkthru.aqsync.data.history.ParquetIndexerTest" time="0.036"/>
+  <testcase name="v3 multi-row-group - statistics span all groups" classname="earth.walkthru.aqsync.data.history.ParquetIndexerTest" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="earth.walkthru.aqsync.data.protocol.FrameCodecV2Test" tests="12" skipped="0" failures="0" errors="0" timestamp="2026-09-17T12:14:45.076Z" hostname="yharbys-MacBook-Air.local" time="0.016">
+  <properties/>
+  <testcase name="TOKEN decodes port and exactly 32 bytes and never prints the token" classname="earth.walkthru.aqsync.data.protocol.FrameCodecV2Test" time="0.001"/>
+  <testcase name="every v2 frame round-trips through encode and decode" classname="earth.walkthru.aqsync.data.protocol.FrameCodecV2Test" time="0.006"/>
+  <testcase name="WIFI_AP decodes signed rssi auth channel and ssid" classname="earth.walkthru.aqsync.data.protocol.FrameCodecV2Test" time="0.002"/>
+  <testcase name="WIFI_SCAN_END REBOOTING LOG_END decode" classname="earth.walkthru.aqsync.data.protocol.FrameCodecV2Test" time="0.0"/>
+  <testcase name="LOG keeps raw bytes so a split UTF-8 sequence survives concatenation" classname="earth.walkthru.aqsync.data.protocol.FrameCodecV2Test" time="0.0"/>
+  <testcase name="CONFIG decodes flags and json" classname="earth.walkthru.aqsync.data.protocol.FrameCodecV2Test" time="0.001"/>
+  <testcase name="truncated v2 frames are rejected not misread" classname="earth.walkthru.aqsync.data.protocol.FrameCodecV2Test" time="0.0"/>
+  <testcase name="HELLO STATUS LIVE decode" classname="earth.walkthru.aqsync.data.protocol.FrameCodecV2Test" time="0.003"/>
+  <testcase name="v2 requests encode per contract" classname="earth.walkthru.aqsync.data.protocol.FrameCodecV2Test" time="0.001"/>
+  <testcase name="v2 error codes are named" classname="earth.walkthru.aqsync.data.protocol.FrameCodecV2Test" time="0.001"/>
+  <testcase name="LOG_TAIL rejects values outside u16" classname="earth.walkthru.aqsync.data.protocol.FrameCodecV2Test" time="0.0"/>
+  <testcase name="opcode and frame names cover v2" classname="earth.walkthru.aqsync.data.protocol.FrameCodecV2Test" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

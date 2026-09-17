@@ -15,3 +15,10 @@
  */
 
 // Root build.gradle.kts
+
+// The one gate: lint, build, and every unit test in every module (AGENTS.md).
+tasks.register("verify") {
+    group = "verification"
+    description = "lintDebug + assembleDebug + unit tests of :app and every :core module"
+    dependsOn(":app:lintDebug", ":app:assembleDebug", ":app:testDebugUnitTest", ":core:protocol:test", ":core:parquet:test", ":core:history:test")
+}

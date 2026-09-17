@@ -427,7 +427,7 @@ private fun StorageCard(status: DeviceStatus?, receivedAt: Long?, now: Long) {
                 Counter("buffered rows", status.buf?.toLong())
                 // Firmware v6 keeps an open multi-row-group file on the card between batches; those
                 // rows are safe from a reset but not listable yet. Older firmware never sends the key.
-                if (status.open != null) Counter("on card, open", status.open.toLong())
+                status.open?.let { Counter("on card, open", it.toLong()) }
                 Counter("dropped", status.drop, if ((status.drop ?: 0) > 0) warn else null)
                 Counter("errors", status.err, if ((status.err ?: 0) > 0) warn else null)
                 Counter("missed", status.miss, if ((status.miss ?: 0) > 0) warn else null)

@@ -31,3 +31,8 @@ dependencyResolutionManagement {
 rootProject.name = "aq-sync"
 
 include(":app")
+// Pure Kotlin/JVM modules: no Android, no DI. They are the contract mirror, the file format and the
+// analysis logic — the parts the iOS app will transliterate and a hub or laptop tool can reuse as is.
+include(":core:protocol")
+include(":core:parquet")
+include(":core:history")

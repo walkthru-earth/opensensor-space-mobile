@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="earth.walkthru.aqsync.data.protocol.LanFramingTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-09-17T12:14:45.096Z" hostname="yharbys-MacBook-Air.local" time="0.003">
+  <properties/>
+  <testcase name="handshake is AQS1 plus 32 raw token bytes unframed" classname="earth.walkthru.aqsync.data.protocol.LanFramingTest" time="0.001"/>
+  <testcase name="zero-length and oversize frames drop the link rather than desync" classname="earth.walkthru.aqsync.data.protocol.LanFramingTest" time="0.0"/>
+  <testcase name="read returns null on clean EOF and fails on a torn frame" classname="earth.walkthru.aqsync.data.protocol.LanFramingTest" time="0.001"/>
+  <testcase name="a captured stream with a LIVE push between two CHUNKs demultiplexes in order" classname="earth.walkthru.aqsync.data.protocol.LanFramingTest" time="0.0"/>
+  <testcase name="encode prefixes little-endian length" classname="earth.walkthru.aqsync.data.protocol.LanFramingTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

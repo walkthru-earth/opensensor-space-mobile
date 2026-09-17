@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="earth.walkthru.aqsync.data.history.parquet.ParquetWriterTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-09-17T12:14:45.231Z" hostname="yharbys-MacBook-Air.local" time="0.022">
+  <properties/>
+  <testcase name="round trip through the reader, both codecs, with statistics that follow the 2_13 float rules" classname="earth.walkthru.aqsync.data.history.parquet.ParquetWriterTest" time="0.011"/>
+  <testcase name="LZ4 block compressor round-trips through the decoder" classname="earth.walkthru.aqsync.data.history.parquet.ParquetWriterTest" time="0.008"/>
+  <testcase name="no rows at all is a valid empty file" classname="earth.walkthru.aqsync.data.history.parquet.ParquetWriterTest" time="0.001"/>
+  <testcase name="all-null and empty columns carry null_count and no min or max" classname="earth.walkthru.aqsync.data.history.parquet.ParquetWriterTest" time="0.001"/>
+  <testcase name="zero as the extreme is written as -0_0 for min and +0_0 for max" classname="earth.walkthru.aqsync.data.history.parquet.ParquetWriterTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

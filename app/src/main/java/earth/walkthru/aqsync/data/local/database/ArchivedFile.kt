@@ -6,6 +6,7 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Upsert
+import earth.walkthru.aqsync.data.history.IndexedFileInfo
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -64,6 +65,9 @@ data class ArchivedFile(
     val estAnchorFile: String? = null,
 ) {
     val indexed: Boolean get() = indexedAtEpochMs != null && indexError == null
+
+    /** The plain record the pure history module works with. */
+    fun info() = IndexedFileInfo(name, bootId, purpose, indexed, rows, utcRows, firstUtcNs, lastUtcNs, firstMonoUs, lastMonoUs)
 
     /** The file has real UTC rows. */
     val hasUtc: Boolean get() = (utcRows ?: 0L) > 0L

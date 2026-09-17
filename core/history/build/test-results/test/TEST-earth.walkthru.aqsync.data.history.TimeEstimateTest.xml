@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="earth.walkthru.aqsync.data.history.TimeEstimateTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-09-17T12:16:43.058Z" hostname="yharbys-MacBook-Air.local" time="0.015">
+  <properties/>
+  <testcase name="the earliest fully-timed file of a boot is its anchor" classname="earth.walkthru.aqsync.data.history.TimeEstimateTest" time="0.004"/>
+  <testcase name="aggregator dates the unsynced rows with the anchor and counts them as estimated" classname="earth.walkthru.aqsync.data.history.TimeEstimateTest" time="0.008"/>
+  <testcase name="the estimate reproduces a real later stamp of the same boot exactly" classname="earth.walkthru.aqsync.data.history.TimeEstimateTest" time="0.003"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

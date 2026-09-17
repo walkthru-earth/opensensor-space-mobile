@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="earth.walkthru.aqsync.data.history.ColumnsTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-09-17T12:16:43.009Z" hostname="yharbys-MacBook-Air.local" time="0.003">
+  <properties/>
+  <testcase name="nice steps" classname="earth.walkthru.aqsync.data.history.ColumnsTest" time="0.0"/>
+  <testcase name="axis follows the 95th percentile, not the spike" classname="earth.walkthru.aqsync.data.history.ColumnsTest" time="0.001"/>
+  <testcase name="rebin weights by covered time and keeps gaps as slots" classname="earth.walkthru.aqsync.data.history.ColumnsTest" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

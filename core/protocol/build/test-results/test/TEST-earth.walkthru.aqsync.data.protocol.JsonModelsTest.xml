@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="earth.walkthru.aqsync.data.protocol.JsonModelsTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-09-17T12:14:45.093Z" hostname="yharbys-MacBook-Air.local" time="0.002">
+  <properties/>
+  <testcase name="live parses a valid PMS snapshot" classname="earth.walkthru.aqsync.data.protocol.JsonModelsTest" time="0.001"/>
+  <testcase name="info parses identities" classname="earth.walkthru.aqsync.data.protocol.JsonModelsTest" time="0.0"/>
+  <testcase name="status parses counters and flags" classname="earth.walkthru.aqsync.data.protocol.JsonModelsTest" time="0.001"/>
+  <testcase name="absent keys are null never zero" classname="earth.walkthru.aqsync.data.protocol.JsonModelsTest" time="0.0"/>
+  <testcase name="unknown keys from newer firmware are ignored" classname="earth.walkthru.aqsync.data.protocol.JsonModelsTest" time="0.0"/>
+  <testcase name="status v6 carries open-file rows and row groups and a 1800 s interval" classname="earth.walkthru.aqsync.data.protocol.JsonModelsTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

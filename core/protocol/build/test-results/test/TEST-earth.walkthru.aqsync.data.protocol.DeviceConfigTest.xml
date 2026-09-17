@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="earth.walkthru.aqsync.data.protocol.DeviceConfigTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-09-17T12:14:45.029Z" hostname="yharbys-MacBook-Air.local" time="0.033">
+  <properties/>
+  <testcase name="absent objects and keys are null and unknown keys are ignored" classname="earth.walkthru.aqsync.data.protocol.DeviceConfigTest" time="0.024"/>
+  <testcase name="ssid and psk limits are in bytes not chars" classname="earth.walkthru.aqsync.data.protocol.DeviceConfigTest" time="0.003"/>
+  <testcase name="pin must be exactly six digits" classname="earth.walkthru.aqsync.data.protocol.DeviceConfigTest" time="0.0"/>
+  <testcase name="full document parses" classname="earth.walkthru.aqsync.data.protocol.DeviceConfigTest" time="0.001"/>
+  <testcase name="patch never prints secret values" classname="earth.walkthru.aqsync.data.protocol.DeviceConfigTest" time="0.0"/>
+  <testcase name="empty patch is detectable" classname="earth.walkthru.aqsync.data.protocol.DeviceConfigTest" time="0.0"/>
+  <testcase name="patch emits key=value lines in order with trailing newline and dedups keys" classname="earth.walkthru.aqsync.data.protocol.DeviceConfigTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

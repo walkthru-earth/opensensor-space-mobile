@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="earth.walkthru.aqsync.data.history.AirMoodTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-09-17T12:16:42.994Z" hostname="yharbys-MacBook-Air.local" time="0.014">
+  <properties/>
+  <testcase name="bands match the chart's PM2_5 bands at their edges" classname="earth.walkthru.aqsync.data.history.AirMoodTest" time="0.001"/>
+  <testcase name="the sensor's own state comes before any number" classname="earth.walkthru.aqsync.data.history.AirMoodTest" time="0.011"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

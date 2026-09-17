@@ -93,7 +93,17 @@ ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
 
+android.sourceSets.getByName("test") {
+    // The Parquet fixtures (real device files + PyArrow expectations) live once, in :core:parquet.
+    resources.srcDir(rootProject.file("core/parquet/src/test/resources"))
+}
+
 dependencies {
+    // Pure modules: contract mirror, file format, analysis. Nothing Android below :app.
+    implementation(project(":core:protocol"))
+    implementation(project(":core:parquet"))
+    implementation(project(":core:history"))
+
 
     val composeBom = platform(libs.androidx.compose.bom)
     implementation(composeBom)
