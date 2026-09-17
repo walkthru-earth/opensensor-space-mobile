@@ -157,8 +157,11 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 **Ready-made APKs:** every push to `main` refreshes the rolling
 [`latest`](../../releases/tag/latest) pre-release (one universal APK — the app has no native code, so
 one file serves every ABI on Android 12+ — with `SHA256SUMS.txt`), and a `v*` tag publishes a permanent
-release (`.github/workflows/release.yml`). Until the `KEYSTORE_*` secrets are set the APK is signed with
-the debug key: installable, but a later project-key build will not install over it.
+release (`.github/workflows/release.yml`), signed with the project key (`CN=AQ Sync, O=walkthru.earth`,
+SHA-256 `b039d9e8…f04f3f7`). `tools/setup-signing.sh` generated that key into the git-ignored `secrets/`
+(`release.jks` + `.env` with the `AQSYNC_*` variables the build reads) and uploaded the four Actions
+secrets; `set -a; source secrets/.env; set +a; ./gradlew :app:assembleRelease` signs a local release the
+same way. Back the keystore up — without it no future release installs over an existing one.
 
 Debug builds include a **fake device** (menu → *Debug: fake device*) that speaks protocol v2: three
 small `PAR1…PAR1` files plus one 1 MiB benchmark file (≈ 8 s at the fake's chunk pace — enough to

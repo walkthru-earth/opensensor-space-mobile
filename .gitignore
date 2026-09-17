@@ -25,3 +25,9 @@ bin/
 *.jks
 *.keystore
 keystore.properties
+
+# Local secrets: release keystore + its passwords (tools/setup-signing.sh). Never committed; CI gets
+# them as GitHub Actions secrets.
+/secrets/
+.env
+.env.*
