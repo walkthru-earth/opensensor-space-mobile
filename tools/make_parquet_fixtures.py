@@ -5,7 +5,8 @@ Run from the firmware repo so its pixi environment (PyArrow, clang++) is used:
 
     cd ../m5stack-aq-parquet && pixi run python ../m5stack-aq-android/tools/make_parquet_fixtures.py
 
-It copies a representative set of *real* device files (v1 73-column and v2 77-column, UNCOMPRESSED
+It copies a representative set of *real* device files (v1 73-column, v2 77-column and the first v3 board
+file, UNCOMPRESSED
 and LZ4_RAW, dated and unsynced, 1 to 90 rows) from the SD export, compiles the firmware's fixture
 writers to produce v3-style files (several row groups, statistics, TIMESTAMP annotation), and writes
 `expected.json` next to them: for every file, the footer facts and per-column aggregates the Kotlin
@@ -29,6 +30,9 @@ import pyarrow.parquet as pq
 ANDROID = Path(__file__).resolve().parents[1]
 FIRMWARE = ANDROID.parent / "m5stack-aq-parquet"
 EXPORT = FIRMWARE / "exports/sd-20260916T173205Z/output"
+# The first file the board wrote with firmware v6 (contract v3): 2 row groups (90 + 15 rows), statistics,
+# TIMESTAMP annotation, fetched over serial on 2026-09-17 (SHA-256 1a06e93b…f3cf).
+V3_BOARD = FIRMWARE / "firmware/arduino-m5unified/artifacts/output"
 OUT = ANDROID / "app/src/test/resources/parquet"
 
 STATION = "station=53315f5f-cb85-4d8d-b623-d56266084189"
@@ -190,6 +194,12 @@ def main() -> None:
         dst = device_dir / f"{label}.parquet"
         shutil.copyfile(src, dst)
         entries.append({"label": label, "kind": "device", "source": rel, **describe(dst, f"device/{dst.name}")})
+    for src in sorted(V3_BOARD.rglob("*.parquet")) if V3_BOARD.is_dir() else []:
+        md = pq.ParquetFile(src).metadata
+        label = f"v3-board-{md.num_row_groups}rg-{md.num_rows}rows"
+        dst = device_dir / f"{label}.parquet"
+        shutil.copyfile(src, dst)
+        entries.append({"label": label, "kind": "device", "source": str(src.relative_to(FIRMWARE)), **describe(dst, f"device/{dst.name}")})
     for label, path in generate_v3(v3_dir):
         entries.append({"label": label, "kind": "v3-fixture", "source": "firmware fixture writer", **describe(path, f"v3/{path.name}")})
 

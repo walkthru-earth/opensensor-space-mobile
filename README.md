@@ -32,8 +32,15 @@ UNCOMPRESSED and LZ4_RAW, dated and unsynced) and twelve firmware-v6 writer fixt
 groups, statistics, `TIMESTAMP(NANOS, UTC)`) — byte-identically to PyArrow in 0.15 s total; Room v4
 indexes every verified file (rows, row groups, schema version, UTC/uptime/sequence spans, PMS-valid
 rows) at sync time and back-fills older rows; an Advanced-only **Metrics** screen shows a file through
-that reader. 102/102 unit tests, 0 lint errors (7 pre-existing warnings). Not yet run on the phone
-against a v3 file: the first one was still being written by the board when this was committed.
+that reader. **The first file firmware v6 wrote on the board** (`data_0930_495ccef9…_2-106-2.parquet`,
+2026-09-17 09:42–09:59Z, 105 rows in two row groups of 90 + 15, SHA-256 `1a06e93b…f3cf`, fetched over
+serial by the firmware-side session) is a committed fixture: the reader decodes it, the index takes
+its spans from the footer statistics, and every integer column's statistics agree with the decoded
+rows per row group (`RealArchiveTest`). The same test, where the firmware checkout sits next to this
+repo, sweeps **all 765 real files** on this machine (67,092 rows, 58,791 column chunks) in 0.5 s on
+the JVM. 104/104 unit tests, 0 lint errors (7 pre-existing warnings). Not yet run *on the phone*
+against a v3 file — that needs a BLE/LAN sync of the board's new files and goes into the firmware
+repo's `bench-verified.md`.
 
 The v1 file-sync part of the protocol *is* bench-verified: the same contract was exercised from a
 macOS host client against the real board on 2026-09-16 (pairing, 766-file manifest, verified

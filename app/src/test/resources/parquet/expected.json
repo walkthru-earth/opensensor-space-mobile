@@ -8906,6 +8906,1753 @@
    ]
   },
   {
+   "label": "v3-board-2rg-105rows",
+   "kind": "device",
+   "source": "firmware/arduino-m5unified/artifacts/output/station=53315f5f-cb85-4d8d-b623-d56266084189/year=2026/month=09/day=17/data_0930_495ccef9f3eb8c5917070c921c9baec8_2-106-2.parquet",
+   "file": "device/v3-board-2rg-105rows.parquet",
+   "size": 58313,
+   "sha256": "1a06e93b6c25d638bf95407224970dbcbb6d19897052c53476e3de249418f3cf",
+   "created_by": "m5stack-aq-parquet version 0.2 (build arduino-cores3-parquet-v6)",
+   "version": "1.0",
+   "rows": 105,
+   "columns": 77,
+   "row_groups": [
+    {
+     "rows": 90,
+     "compressed": 36985,
+     "codec": "UNCOMPRESSED",
+     "encodings": [
+      "PLAIN",
+      "RLE"
+     ],
+     "stats": {
+      "schema_version": {
+       "nulls": 0,
+       "min": 3,
+       "max": 3
+      },
+      "device_id": {
+       "nulls": 0,
+       "min": 74886896839488,
+       "max": 74886896839488
+      },
+      "boot_id_hi": {
+       "nulls": 0,
+       "min": 5286327635560598617,
+       "max": 5286327635560598617
+      },
+      "boot_id_lo": {
+       "nulls": 0,
+       "min": 1659308809394040520,
+       "max": 1659308809394040520
+      },
+      "sequence": {
+       "nulls": 0,
+       "min": 2,
+       "max": 91
+      },
+      "monotonic_us": {
+       "nulls": 0,
+       "min": 38151887,
+       "max": 928156413
+      },
+      "scheduled_us": {
+       "nulls": 0,
+       "min": 38143711,
+       "max": 928143711
+      },
+      "sample_jitter_us": {
+       "nulls": 0,
+       "min": 528,
+       "max": 21000
+      },
+      "event_time_utc_ns": {
+       "nulls": 0,
+       "min": 1789638155334325000,
+       "max": 1789639045338851000
+      },
+      "clock_status": {
+       "nulls": 0,
+       "min": 1,
+       "max": 1
+      },
+      "pms_status": {
+       "nulls": 0,
+       "min": 4,
+       "max": 4
+      },
+      "pms_age_ms": {
+       "nulls": 0,
+       "min": 0,
+       "max": 870
+      },
+      "pm1_cf1_ug_m3": {
+       "nulls": 0,
+       "min": 9,
+       "max": 26
+      },
+      "pm25_cf1_ug_m3": {
+       "nulls": 0,
+       "min": 11,
+       "max": 48
+      },
+      "pm10_cf1_ug_m3": {
+       "nulls": 0,
+       "min": 11,
+       "max": 55
+      },
+      "pm1_atmospheric_ug_m3": {
+       "nulls": 0,
+       "min": 9,
+       "max": 23
+      },
+      "pm25_atmospheric_ug_m3": {
+       "nulls": 0,
+       "min": 11,
+       "max": 40
+      },
+      "pm10_atmospheric_ug_m3": {
+       "nulls": 0,
+       "min": 11,
+       "max": 51
+      },
+      "particles_gt03_per_01l": {
+       "nulls": 0,
+       "min": 1359,
+       "max": 3753
+      },
+      "particles_gt05_per_01l": {
+       "nulls": 0,
+       "min": 416,
+       "max": 1161
+      },
+      "particles_gt10_per_01l": {
+       "nulls": 0,
+       "min": 43,
+       "max": 291
+      },
+      "particles_gt25_per_01l": {
+       "nulls": 0,
+       "min": 0,
+       "max": 48
+      },
+      "particles_gt50_per_01l": {
+       "nulls": 0,
+       "min": 0,
+       "max": 14
+      },
+      "particles_gt100_per_01l": {
+       "nulls": 0,
+       "min": 0,
+       "max": 6
+      },
+      "pms_firmware": {
+       "nulls": 0,
+       "min": 151,
+       "max": 151
+      },
+      "pms_error": {
+       "nulls": 0,
+       "min": 0,
+       "max": 0
+      },
+      "pms_frames": {
+       "nulls": 0,
+       "min": 35,
+       "max": 1053
+      },
+      "pms_checksum_errors": {
+       "nulls": 0,
+       "min": 0,
+       "max": 0
+      },
+      "pms_length_errors": {
+       "nulls": 0,
+       "min": 0,
+       "max": 0
+      },
+      "imu_fresh_mask": {
+       "nulls": 0,
+       "min": 7,
+       "max": 7
+      },
+      "accel_x_g": {
+       "nulls": 0,
+       "min": -0.00439453125,
+       "max": 0.016845703125
+      },
+      "accel_y_g": {
+       "nulls": 0,
+       "min": 0.989990234375,
+       "max": 1.000732421875
+      },
+      "accel_z_g": {
+       "nulls": 0,
+       "min": -0.056396484375,
+       "max": -0.023193359375
+      },
+      "gyro_x_dps": {
+       "nulls": 0,
+       "min": -1.708984375,
+       "max": 1.28173828125
+      },
+      "gyro_y_dps": {
+       "nulls": 0,
+       "min": -0.42724609375,
+       "max": 0.244140625
+      },
+      "gyro_z_dps": {
+       "nulls": 0,
+       "min": -1.46484375,
+       "max": 0.67138671875
+      },
+      "mag_x_raw": {
+       "nulls": 0,
+       "min": -1204,
+       "max": -1160
+      },
+      "mag_y_raw": {
+       "nulls": 0,
+       "min": -76,
+       "max": -38
+      },
+      "mag_z_raw": {
+       "nulls": 0,
+       "min": -60,
+       "max": 10
+      },
+      "imu_temperature_c": {
+       "nulls": 0,
+       "min": 39.740234375,
+       "max": 42.03125
+      },
+      "light_ch0_raw": {
+       "nulls": 0,
+       "min": 2,
+       "max": 3
+      },
+      "light_ch1_raw": {
+       "nulls": 0,
+       "min": 4,
+       "max": 5
+      },
+      "proximity_raw": {
+       "nulls": 0,
+       "min": 0,
+       "max": 4
+      },
+      "light_status": {
+       "nulls": 0,
+       "min": 3,
+       "max": 3
+      },
+      "proximity_status": {
+       "nulls": 0,
+       "min": 3,
+       "max": 3
+      },
+      "vbus_mv": {
+       "nulls": 0,
+       "min": 4863,
+       "max": 4938
+      },
+      "battery_mv": {
+       "nulls": 0,
+       "min": 5,
+       "max": 16379
+      },
+      "battery_percent": {
+       "nulls": 0,
+       "min": 0,
+       "max": 0
+      },
+      "charging_status": {
+       "nulls": 0,
+       "min": 0,
+       "max": 0
+      },
+      "external_5v_enabled": {
+       "nulls": 0,
+       "min": 0,
+       "max": 0
+      },
+      "usb_output_enabled": {
+       "nulls": 0,
+       "min": 0,
+       "max": 0
+      },
+      "rtc_read_ok": {
+       "nulls": 0,
+       "min": 0,
+       "max": 0
+      },
+      "touch_points": {
+       "nulls": 0,
+       "min": 0,
+       "max": 0
+      },
+      "heap_free_bytes": {
+       "nulls": 0,
+       "min": 70912,
+       "max": 73820
+      },
+      "heap_min_free_bytes": {
+       "nulls": 0,
+       "min": 23956,
+       "max": 58408
+      },
+      "psram_free_bytes": {
+       "nulls": 0,
+       "min": 8172364,
+       "max": 8172364
+      },
+      "sd_total_bytes": {
+       "nulls": 0,
+       "min": 31441764352,
+       "max": 31441764352
+      },
+      "sd_used_bytes": {
+       "nulls": 0,
+       "min": 40435712,
+       "max": 40452096
+      },
+      "rows_dropped": {
+       "nulls": 0,
+       "min": 0,
+       "max": 0
+      },
+      "sample_deadlines_missed": {
+       "nulls": 0,
+       "min": 0,
+       "max": 0
+      },
+      "storage_errors": {
+       "nulls": 0,
+       "min": 0,
+       "max": 0
+      },
+      "files_finalized": {
+       "nulls": 0,
+       "min": 1,
+       "max": 2
+      },
+      "last_write_us": {
+       "nulls": 0,
+       "min": 94225,
+       "max": 2098767
+      },
+      "last_sync_us": {
+       "nulls": 0,
+       "min": 5828,
+       "max": 5986
+      },
+      "queue_high_water": {
+       "nulls": 0,
+       "min": 2,
+       "max": 2
+      },
+      "clock_epoch": {
+       "nulls": 0,
+       "min": 1,
+       "max": 1
+      },
+      "collection_completed_mono_us": {
+       "nulls": 0,
+       "min": 38157328,
+       "max": 928162257
+      },
+      "pms_received_mono_us": {
+       "nulls": 0,
+       "min": 37281642,
+       "max": 927455662
+      },
+      "clock_anchor_mono_us": {
+       "nulls": 0,
+       "min": 32817562,
+       "max": 32817562
+      },
+      "clock_anchor_utc_ns": {
+       "nulls": 0,
+       "min": 1789638150000000000,
+       "max": 1789638150000000000
+      }
+     }
+    },
+    {
+     "rows": 15,
+     "compressed": 7731,
+     "codec": "UNCOMPRESSED",
+     "encodings": [
+      "PLAIN",
+      "RLE"
+     ],
+     "stats": {
+      "schema_version": {
+       "nulls": 0,
+       "min": 3,
+       "max": 3
+      },
+      "device_id": {
+       "nulls": 0,
+       "min": 74886896839488,
+       "max": 74886896839488
+      },
+      "boot_id_hi": {
+       "nulls": 0,
+       "min": 5286327635560598617,
+       "max": 5286327635560598617
+      },
+      "boot_id_lo": {
+       "nulls": 0,
+       "min": 1659308809394040520,
+       "max": 1659308809394040520
+      },
+      "sequence": {
+       "nulls": 0,
+       "min": 92,
+       "max": 106
+      },
+      "monotonic_us": {
+       "nulls": 0,
+       "min": 938150350,
+       "max": 1078149239
+      },
+      "scheduled_us": {
+       "nulls": 0,
+       "min": 938143711,
+       "max": 1078143711
+      },
+      "sample_jitter_us": {
+       "nulls": 0,
+       "min": 1531,
+       "max": 18618
+      },
+      "event_time_utc_ns": {
+       "nulls": 0,
+       "min": 1789639055332788000,
+       "max": 1789639195331677000
+      },
+      "clock_status": {
+       "nulls": 0,
+       "min": 1,
+       "max": 1
+      },
+      "pms_status": {
+       "nulls": 0,
+       "min": 4,
+       "max": 4
+      },
+      "pms_age_ms": {
+       "nulls": 0,
+       "min": 82,
+       "max": 783
+      },
+      "pm1_cf1_ug_m3": {
+       "nulls": 0,
+       "min": 23,
+       "max": 30
+      },
+      "pm25_cf1_ug_m3": {
+       "nulls": 0,
+       "min": 44,
+       "max": 55
+      },
+      "pm10_cf1_ug_m3": {
+       "nulls": 0,
+       "min": 46,
+       "max": 69
+      },
+      "pm1_atmospheric_ug_m3": {
+       "nulls": 0,
+       "min": 21,
+       "max": 26
+      },
+      "pm25_atmospheric_ug_m3": {
+       "nulls": 0,
+       "min": 38,
+       "max": 44
+      },
+      "pm10_atmospheric_ug_m3": {
+       "nulls": 0,
+       "min": 45,
+       "max": 59
+      },
+      "particles_gt03_per_01l": {
+       "nulls": 0,
+       "min": 3669,
+       "max": 4203
+      },
+      "particles_gt05_per_01l": {
+       "nulls": 0,
+       "min": 1124,
+       "max": 1320
+      },
+      "particles_gt10_per_01l": {
+       "nulls": 0,
+       "min": 240,
+       "max": 352
+      },
+      "particles_gt25_per_01l": {
+       "nulls": 0,
+       "min": 21,
+       "max": 57
+      },
+      "particles_gt50_per_01l": {
+       "nulls": 0,
+       "min": 2,
+       "max": 20
+      },
+      "particles_gt100_per_01l": {
+       "nulls": 0,
+       "min": 0,
+       "max": 6
+      },
+      "pms_firmware": {
+       "nulls": 0,
+       "min": 151,
+       "max": 151
+      },
+      "pms_error": {
+       "nulls": 0,
+       "min": 0,
+       "max": 0
+      },
+      "pms_frames": {
+       "nulls": 0,
+       "min": 1065,
+       "max": 1223
+      },
+      "pms_checksum_errors": {
+       "nulls": 0,
+       "min": 0,
+       "max": 0
+      },
+      "pms_length_errors": {
+       "nulls": 0,
+       "min": 0,
+       "max": 0
+      },
+      "imu_fresh_mask": {
+       "nulls": 0,
+       "min": 7,
+       "max": 7
+      },
+      "accel_x_g": {
+       "nulls": 0,
+       "min": 0.00439453125,
+       "max": 0.010009765625
+      },
+      "accel_y_g": {
+       "nulls": 0,
+       "min": 0.995849609375,
+       "max": 0.999755859375
+      },
+      "accel_z_g": {
+       "nulls": 0,
+       "min": -0.04443359375,
+       "max": -0.031005859375
+      },
+      "gyro_x_dps": {
+       "nulls": 0,
+       "min": -0.6103515625,
+       "max": 0.54931640625
+      },
+      "gyro_y_dps": {
+       "nulls": 0,
+       "min": -0.42724609375,
+       "max": 0.0
+      },
+      "gyro_z_dps": {
+       "nulls": 0,
+       "min": -0.8544921875,
+       "max": 0.18310546875
+      },
+      "mag_x_raw": {
+       "nulls": 0,
+       "min": -1196,
+       "max": -1164
+      },
+      "mag_y_raw": {
+       "nulls": 0,
+       "min": -72,
+       "max": -40
+      },
+      "mag_z_raw": {
+       "nulls": 0,
+       "min": -52,
+       "max": 4
+      },
+      "imu_temperature_c": {
+       "nulls": 0,
+       "min": 41.990234375,
+       "max": 42.08203125
+      },
+      "light_ch0_raw": {
+       "nulls": 0,
+       "min": 2,
+       "max": 2
+      },
+      "light_ch1_raw": {
+       "nulls": 0,
+       "min": 4,
+       "max": 4
+      },
+      "proximity_raw": {
+       "nulls": 0,
+       "min": 0,
+       "max": 2
+      },
+      "light_status": {
+       "nulls": 0,
+       "min": 3,
+       "max": 3
+      },
+      "proximity_status": {
+       "nulls": 0,
+       "min": 3,
+       "max": 3
+      },
+      "vbus_mv": {
+       "nulls": 0,
+       "min": 4899,
+       "max": 4926
+      },
+      "battery_mv": {
+       "nulls": 0,
+       "min": 25,
+       "max": 16379
+      },
+      "battery_percent": {
+       "nulls": 0,
+       "min": 0,
+       "max": 0
+      },
+      "charging_status": {
+       "nulls": 0,
+       "min": 0,
+       "max": 0
+      },
+      "external_5v_enabled": {
+       "nulls": 0,
+       "min": 0,
+       "max": 0
+      },
+      "usb_output_enabled": {
+       "nulls": 0,
+       "min": 0,
+       "max": 0
+      },
+      "rtc_read_ok": {
+       "nulls": 0,
+       "min": 0,
+       "max": 0
+      },
+      "touch_points": {
+       "nulls": 0,
+       "min": 0,
+       "max": 0
+      },
+      "heap_free_bytes": {
+       "nulls": 0,
+       "min": 73152,
+       "max": 73152
+      },
+      "heap_min_free_bytes": {
+       "nulls": 0,
+       "min": 23956,
+       "max": 23956
+      },
+      "psram_free_bytes": {
+       "nulls": 0,
+       "min": 8172364,
+       "max": 8172364
+      },
+      "sd_total_bytes": {
+       "nulls": 0,
+       "min": 31441764352,
+       "max": 31441764352
+      },
+      "sd_used_bytes": {
+       "nulls": 0,
+       "min": 40452096,
+       "max": 40452096
+      },
+      "rows_dropped": {
+       "nulls": 0,
+       "min": 0,
+       "max": 0
+      },
+      "sample_deadlines_missed": {
+       "nulls": 0,
+       "min": 0,
+       "max": 0
+      },
+      "storage_errors": {
+       "nulls": 0,
+       "min": 0,
+       "max": 0
+      },
+      "files_finalized": {
+       "nulls": 0,
+       "min": 2,
+       "max": 2
+      },
+      "last_write_us": {
+       "nulls": 0,
+       "min": 2098767,
+       "max": 2098767
+      },
+      "last_sync_us": {
+       "nulls": 0,
+       "min": 11494,
+       "max": 11494
+      },
+      "queue_high_water": {
+       "nulls": 0,
+       "min": 2,
+       "max": 2
+      },
+      "clock_epoch": {
+       "nulls": 0,
+       "min": 1,
+       "max": 1
+      },
+      "collection_completed_mono_us": {
+       "nulls": 0,
+       "min": 938155776,
+       "max": 1078154682
+      },
+      "pms_received_mono_us": {
+       "nulls": 0,
+       "min": 938068636,
+       "max": 1077582607
+      },
+      "clock_anchor_mono_us": {
+       "nulls": 0,
+       "min": 32817562,
+       "max": 32817562
+      },
+      "clock_anchor_utc_ns": {
+       "nulls": 0,
+       "min": 1789638150000000000,
+       "max": 1789638150000000000
+      }
+     }
+    }
+   ],
+   "metadata": {
+    "durability": "RAM batch; unfinished rows lost on reset; each row group fsynced; footer at finalization; completed files retained",
+    "unavailable": "SHT20 address collision; battery current unsupported; camera/audio not sampled",
+    "magnetic_units": "M5Unified BMI270 auxiliary raw counts; uncalibrated",
+    "light_status": "0=unavailable,1=not-fresh,2=invalid,3=valid,4=io-error",
+    "board": "CoreS3 ESP32-S3 rev0.2",
+    "purpose": "telemetry",
+    "compression": "UNCOMPRESSED",
+    "proximity_status": "0=unavailable,1=not-fresh,2=saturated,3=valid,4=io-error",
+    "clock": "0=unsynchronized/null,1=host estimate; RTC calendar untrusted; partitions UTC",
+    "row_group_rows_max": "90",
+    "row_groups": "2",
+    "time_semantics": "event_time_utc_ns estimates snapshot start; collection_completed_mono_us bounds sequential reads; pms_received_mono_us is last checksum-valid UART frame receipt, not sensor phenomenon time; result/ingestion time and clock uncertainty unknown; no retroactive UTC assignment",
+    "calibration_id": "unknown",
+    "sample_interval_ms": "10000",
+    "deployment_id": "unknown",
+    "dictionary_sha256": "20f850852413abb1165f3f7ca95b4831a0e90a34ae7c7fcb41c44b108d3513c3",
+    "pms_status": "0=missing,1=warming,2=stale,3=sensor-error,4=valid",
+    "dictionary_uri": "https://github.com/walkthru-earth/m5stack-aq-parquet/blob/main/firmware/arduino-m5unified/bringup/telemetry_fields.inc",
+    "dictionary_version": "cores3-telemetry-v2",
+    "firmware": "arduino-cores3-parquet-v6",
+    "acquisition_config_id": "cores3-acquisition-v1",
+    "boot_id": "495ccef9f3eb8c5917070c921c9baec8",
+    "rotation_interval_s": "1800",
+    "station_id": "53315f5f-cb85-4d8d-b623-d56266084189",
+    "device_id": "441bf6e26b40",
+    "acquisition_config": "{\"sample_interval_ms\":10000,\"pms_warmup_us\":30000000,\"pms_stale_after_ms\":5000,\"pms_uart_rx\":18,\"pms_uart_tx\":17,\"pms_baud\":9600,\"m5unified\":\"0.2.21\",\"ltr553\":\"raw-v1\",\"snapshot\":\"latest-available-not-average\"}",
+    "schema_version": "cores3-telemetry-v3"
+   },
+   "column_details": [
+    {
+     "name": "schema_version",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 105,
+     "first": 3,
+     "last": 3,
+     "min": 3,
+     "max": 3,
+     "sum": 315
+    },
+    {
+     "name": "device_id",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 0,
+     "valid": 105,
+     "first": 74886896839488,
+     "last": 74886896839488,
+     "min": 74886896839488,
+     "max": 74886896839488,
+     "sum": 7863124168146240
+    },
+    {
+     "name": "boot_id_hi",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 0,
+     "valid": 105,
+     "first": 5286327635560598617,
+     "last": 5286327635560598617,
+     "min": 5286327635560598617,
+     "max": 5286327635560598617,
+     "sum": 555064401733862854785
+    },
+    {
+     "name": "boot_id_lo",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 0,
+     "valid": 105,
+     "first": 1659308809394040520,
+     "last": 1659308809394040520,
+     "min": 1659308809394040520,
+     "max": 1659308809394040520,
+     "sum": 174227424986374254600
+    },
+    {
+     "name": "sequence",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 0,
+     "valid": 105,
+     "first": 2,
+     "last": 106,
+     "min": 2,
+     "max": 106,
+     "sum": 5670
+    },
+    {
+     "name": "monotonic_us",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 0,
+     "valid": 105,
+     "first": 38151887,
+     "last": 1078149239,
+     "min": 38151887,
+     "max": 1078149239,
+     "sum": 58606162280
+    },
+    {
+     "name": "scheduled_us",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 0,
+     "valid": 105,
+     "first": 38143711,
+     "last": 1078143711,
+     "min": 38143711,
+     "max": 1078143711,
+     "sum": 58605089655
+    },
+    {
+     "name": "sample_jitter_us",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 0,
+     "valid": 105,
+     "first": 8176,
+     "last": 5528,
+     "min": 528,
+     "max": 21000,
+     "sum": 1072625
+    },
+    {
+     "name": "event_time_utc_ns",
+     "physical": "INT64",
+     "logical": "Timestamp(isAdjustedToUTC=true, timeUnit=nanoseconds, is_from_converted_type=false, force_set_converted_type=false)",
+     "arrow": "timestamp[ns, tz=UTC]",
+     "nulls": 0,
+     "valid": 105,
+     "first": 1789638155334325000,
+     "last": 1789639195331677000,
+     "min": 1789638155334325000,
+     "max": 1789639195331677000,
+     "sum": 187912060910318270000
+    },
+    {
+     "name": "clock_status",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 105,
+     "first": 1,
+     "last": 1,
+     "min": 1,
+     "max": 1,
+     "sum": 105
+    },
+    {
+     "name": "pms_status",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 105,
+     "first": 4,
+     "last": 4,
+     "min": 4,
+     "max": 4,
+     "sum": 420
+    },
+    {
+     "name": "pms_age_ms",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 0,
+     "valid": 105,
+     "first": 870,
+     "last": 567,
+     "min": 0,
+     "max": 870,
+     "sum": 46770
+    },
+    {
+     "name": "pm1_cf1_ug_m3",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 105,
+     "first": 9,
+     "last": 26,
+     "min": 9,
+     "max": 30,
+     "sum": 1917
+    },
+    {
+     "name": "pm25_cf1_ug_m3",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 105,
+     "first": 11,
+     "last": 44,
+     "min": 11,
+     "max": 55,
+     "sum": 3191
+    },
+    {
+     "name": "pm10_cf1_ug_m3",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 105,
+     "first": 11,
+     "last": 47,
+     "min": 11,
+     "max": 69,
+     "sum": 3614
+    },
+    {
+     "name": "pm1_atmospheric_ug_m3",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 105,
+     "first": 9,
+     "last": 23,
+     "min": 9,
+     "max": 26,
+     "sum": 1825
+    },
+    {
+     "name": "pm25_atmospheric_ug_m3",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 105,
+     "first": 11,
+     "last": 38,
+     "min": 11,
+     "max": 44,
+     "sum": 2933
+    },
+    {
+     "name": "pm10_atmospheric_ug_m3",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 105,
+     "first": 11,
+     "last": 46,
+     "min": 11,
+     "max": 59,
+     "sum": 3530
+    },
+    {
+     "name": "particles_gt03_per_01l",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 105,
+     "first": 1359,
+     "last": 3753,
+     "min": 1359,
+     "max": 4203,
+     "sum": 288039
+    },
+    {
+     "name": "particles_gt05_per_01l",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 105,
+     "first": 416,
+     "last": 1149,
+     "min": 416,
+     "max": 1320,
+     "sum": 88954
+    },
+    {
+     "name": "particles_gt10_per_01l",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 105,
+     "first": 54,
+     "last": 242,
+     "min": 43,
+     "max": 352,
+     "sum": 18589
+    },
+    {
+     "name": "particles_gt25_per_01l",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 105,
+     "first": 0,
+     "last": 25,
+     "min": 0,
+     "max": 57,
+     "sum": 1783
+    },
+    {
+     "name": "particles_gt50_per_01l",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 105,
+     "first": 0,
+     "last": 6,
+     "min": 0,
+     "max": 20,
+     "sum": 569
+    },
+    {
+     "name": "particles_gt100_per_01l",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 105,
+     "first": 0,
+     "last": 0,
+     "min": 0,
+     "max": 6,
+     "sum": 156
+    },
+    {
+     "name": "pms_firmware",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 105,
+     "first": 151,
+     "last": 151,
+     "min": 151,
+     "max": 151,
+     "sum": 15855
+    },
+    {
+     "name": "pms_error",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 105,
+     "first": 0,
+     "last": 0,
+     "min": 0,
+     "max": 0,
+     "sum": 0
+    },
+    {
+     "name": "pms_frames",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 0,
+     "valid": 105,
+     "first": 35,
+     "last": 1223,
+     "min": 35,
+     "max": 1223,
+     "sum": 66318
+    },
+    {
+     "name": "pms_checksum_errors",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 0,
+     "valid": 105,
+     "first": 0,
+     "last": 0,
+     "min": 0,
+     "max": 0,
+     "sum": 0
+    },
+    {
+     "name": "pms_length_errors",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 0,
+     "valid": 105,
+     "first": 0,
+     "last": 0,
+     "min": 0,
+     "max": 0,
+     "sum": 0
+    },
+    {
+     "name": "imu_fresh_mask",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 105,
+     "first": 7,
+     "last": 7,
+     "min": 7,
+     "max": 7,
+     "sum": 735
+    },
+    {
+     "name": "accel_x_g",
+     "physical": "FLOAT",
+     "logical": "None",
+     "arrow": "float",
+     "nulls": 0,
+     "valid": 105,
+     "nan": 0,
+     "inf": 0,
+     "first": -0.0029296875,
+     "last": 0.0078125,
+     "min": -0.00439453125,
+     "max": 0.016845703125,
+     "sum": 0.42919921875
+    },
+    {
+     "name": "accel_y_g",
+     "physical": "FLOAT",
+     "logical": "None",
+     "arrow": "float",
+     "nulls": 0,
+     "valid": 105,
+     "nan": 0,
+     "inf": 0,
+     "first": 1.000732421875,
+     "last": 0.997314453125,
+     "min": 0.989990234375,
+     "max": 1.000732421875,
+     "sum": 104.72216796875
+    },
+    {
+     "name": "accel_z_g",
+     "physical": "FLOAT",
+     "logical": "None",
+     "arrow": "float",
+     "nulls": 0,
+     "valid": 105,
+     "nan": 0,
+     "inf": 0,
+     "first": -0.046630859375,
+     "last": -0.041015625,
+     "min": -0.056396484375,
+     "max": -0.023193359375,
+     "sum": -3.832763671875
+    },
+    {
+     "name": "gyro_x_dps",
+     "physical": "FLOAT",
+     "logical": "None",
+     "arrow": "float",
+     "nulls": 0,
+     "valid": 105,
+     "nan": 0,
+     "inf": 0,
+     "first": 0.30517578125,
+     "last": -0.18310546875,
+     "min": -1.708984375,
+     "max": 1.28173828125,
+     "sum": 2.13623046875
+    },
+    {
+     "name": "gyro_y_dps",
+     "physical": "FLOAT",
+     "logical": "None",
+     "arrow": "float",
+     "nulls": 0,
+     "valid": 105,
+     "nan": 0,
+     "inf": 0,
+     "first": -0.30517578125,
+     "last": -0.3662109375,
+     "min": -0.42724609375,
+     "max": 0.244140625,
+     "sum": -16.9677734375
+    },
+    {
+     "name": "gyro_z_dps",
+     "physical": "FLOAT",
+     "logical": "None",
+     "arrow": "float",
+     "nulls": 0,
+     "valid": 105,
+     "nan": 0,
+     "inf": 0,
+     "first": 0.06103515625,
+     "last": -0.732421875,
+     "min": -1.46484375,
+     "max": 0.67138671875,
+     "sum": -23.49853515625
+    },
+    {
+     "name": "mag_x_raw",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 105,
+     "first": -1174,
+     "last": -1188,
+     "min": -1204,
+     "max": -1160,
+     "sum": -123834
+    },
+    {
+     "name": "mag_y_raw",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 105,
+     "first": -60,
+     "last": -56,
+     "min": -76,
+     "max": -38,
+     "sum": -5810
+    },
+    {
+     "name": "mag_z_raw",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 105,
+     "first": -42,
+     "last": -52,
+     "min": -60,
+     "max": 10,
+     "sum": -2088
+    },
+    {
+     "name": "imu_temperature_c",
+     "physical": "FLOAT",
+     "logical": "None",
+     "arrow": "float",
+     "nulls": 0,
+     "valid": 105,
+     "nan": 0,
+     "inf": 0,
+     "first": 39.740234375,
+     "last": 42.0,
+     "min": 39.740234375,
+     "max": 42.08203125,
+     "sum": 4347.09765625
+    },
+    {
+     "name": "light_ch0_raw",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 105,
+     "first": 2,
+     "last": 2,
+     "min": 2,
+     "max": 3,
+     "sum": 213
+    },
+    {
+     "name": "light_ch1_raw",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 105,
+     "first": 4,
+     "last": 4,
+     "min": 4,
+     "max": 5,
+     "sum": 498
+    },
+    {
+     "name": "proximity_raw",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 105,
+     "first": 0,
+     "last": 0,
+     "min": 0,
+     "max": 4,
+     "sum": 9
+    },
+    {
+     "name": "light_status",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 105,
+     "first": 3,
+     "last": 3,
+     "min": 3,
+     "max": 3,
+     "sum": 315
+    },
+    {
+     "name": "proximity_status",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 105,
+     "first": 3,
+     "last": 3,
+     "min": 3,
+     "max": 3,
+     "sum": 315
+    },
+    {
+     "name": "vbus_mv",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 105,
+     "first": 4911,
+     "last": 4906,
+     "min": 4863,
+     "max": 4938,
+     "sum": 515971
+    },
+    {
+     "name": "battery_mv",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 105,
+     "first": 2140,
+     "last": 16379,
+     "min": 5,
+     "max": 16379,
+     "sum": 273234
+    },
+    {
+     "name": "battery_percent",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 105,
+     "first": 0,
+     "last": 0,
+     "min": 0,
+     "max": 0,
+     "sum": 0
+    },
+    {
+     "name": "charging_status",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 105,
+     "first": 0,
+     "last": 0,
+     "min": 0,
+     "max": 0,
+     "sum": 0
+    },
+    {
+     "name": "battery_current_ma",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 105,
+     "valid": 0
+    },
+    {
+     "name": "external_5v_enabled",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 105,
+     "first": 0,
+     "last": 0,
+     "min": 0,
+     "max": 0,
+     "sum": 0
+    },
+    {
+     "name": "usb_output_enabled",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 105,
+     "first": 0,
+     "last": 0,
+     "min": 0,
+     "max": 0,
+     "sum": 0
+    },
+    {
+     "name": "rtc_date_yyyymmdd",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 105,
+     "valid": 0
+    },
+    {
+     "name": "rtc_time_hhmmss",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 105,
+     "valid": 0
+    },
+    {
+     "name": "rtc_read_ok",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 105,
+     "first": 0,
+     "last": 0,
+     "min": 0,
+     "max": 0,
+     "sum": 0
+    },
+    {
+     "name": "touch_points",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 105,
+     "first": 0,
+     "last": 0,
+     "min": 0,
+     "max": 0,
+     "sum": 0
+    },
+    {
+     "name": "touch_x_px",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 105,
+     "valid": 0
+    },
+    {
+     "name": "touch_y_px",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 105,
+     "valid": 0
+    },
+    {
+     "name": "heap_free_bytes",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 0,
+     "valid": 105,
+     "first": 73820,
+     "last": 73152,
+     "min": 70912,
+     "max": 73820,
+     "sum": 7695728
+    },
+    {
+     "name": "heap_min_free_bytes",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 0,
+     "valid": 105,
+     "first": 58408,
+     "last": 23956,
+     "min": 23956,
+     "max": 58408,
+     "sum": 2653188
+    },
+    {
+     "name": "psram_free_bytes",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 0,
+     "valid": 105,
+     "first": 8172364,
+     "last": 8172364,
+     "min": 8172364,
+     "max": 8172364,
+     "sum": 858098220
+    },
+    {
+     "name": "sd_total_bytes",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 0,
+     "valid": 105,
+     "first": 31441764352,
+     "last": 31441764352,
+     "min": 31441764352,
+     "max": 31441764352,
+     "sum": 3301385256960
+    },
+    {
+     "name": "sd_used_bytes",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 0,
+     "valid": 105,
+     "first": 40435712,
+     "last": 40452096,
+     "min": 40435712,
+     "max": 40452096,
+     "sum": 4247453696
+    },
+    {
+     "name": "rows_dropped",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 0,
+     "valid": 105,
+     "first": 0,
+     "last": 0,
+     "min": 0,
+     "max": 0,
+     "sum": 0
+    },
+    {
+     "name": "sample_deadlines_missed",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 0,
+     "valid": 105,
+     "first": 0,
+     "last": 0,
+     "min": 0,
+     "max": 0,
+     "sum": 0
+    },
+    {
+     "name": "storage_errors",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 0,
+     "valid": 105,
+     "first": 0,
+     "last": 0,
+     "min": 0,
+     "max": 0,
+     "sum": 0
+    },
+    {
+     "name": "files_finalized",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 0,
+     "valid": 105,
+     "first": 1,
+     "last": 2,
+     "min": 1,
+     "max": 2,
+     "sum": 209
+    },
+    {
+     "name": "last_write_us",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 0,
+     "valid": 105,
+     "first": 94225,
+     "last": 2098767,
+     "min": 94225,
+     "max": 2098767,
+     "sum": 218365993
+    },
+    {
+     "name": "last_sync_us",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 0,
+     "valid": 105,
+     "first": 5828,
+     "last": 11494,
+     "min": 5828,
+     "max": 11494,
+     "sum": 710992
+    },
+    {
+     "name": "queue_high_water",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 105,
+     "first": 2,
+     "last": 2,
+     "min": 2,
+     "max": 2,
+     "sum": 210
+    },
+    {
+     "name": "ambient_temperature_c",
+     "physical": "FLOAT",
+     "logical": "None",
+     "arrow": "float",
+     "nulls": 105,
+     "valid": 0
+    },
+    {
+     "name": "relative_humidity_percent",
+     "physical": "FLOAT",
+     "logical": "None",
+     "arrow": "float",
+     "nulls": 105,
+     "valid": 0
+    },
+    {
+     "name": "clock_epoch",
+     "physical": "INT32",
+     "logical": "None",
+     "arrow": "int32",
+     "nulls": 0,
+     "valid": 105,
+     "first": 1,
+     "last": 1,
+     "min": 1,
+     "max": 1,
+     "sum": 105
+    },
+    {
+     "name": "collection_completed_mono_us",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 0,
+     "valid": 105,
+     "first": 38157328,
+     "last": 1078154682,
+     "min": 38157328,
+     "max": 1078154682,
+     "sum": 58606738845
+    },
+    {
+     "name": "pms_received_mono_us",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 0,
+     "valid": 105,
+     "first": 37281642,
+     "last": 1077582607,
+     "min": 37281642,
+     "max": 1077582607,
+     "sum": 58559417489
+    },
+    {
+     "name": "clock_anchor_mono_us",
+     "physical": "INT64",
+     "logical": "None",
+     "arrow": "int64",
+     "nulls": 0,
+     "valid": 105,
+     "first": 32817562,
+     "last": 32817562,
+     "min": 32817562,
+     "max": 32817562,
+     "sum": 3445844010
+    },
+    {
+     "name": "clock_anchor_utc_ns",
+     "physical": "INT64",
+     "logical": "Timestamp(isAdjustedToUTC=true, timeUnit=nanoseconds, is_from_converted_type=false, force_set_converted_type=false)",
+     "arrow": "timestamp[ns, tz=UTC]",
+     "nulls": 0,
+     "valid": 105,
+     "first": 1789638150000000000,
+     "last": 1789638150000000000,
+     "min": 1789638150000000000,
+     "max": 1789638150000000000,
+     "sum": 187912005750000000000
+    }
+   ]
+  },
+  {
    "label": "v3-contract-none-unsynced",
    "kind": "v3-fixture",
    "source": "firmware fixture writer",
