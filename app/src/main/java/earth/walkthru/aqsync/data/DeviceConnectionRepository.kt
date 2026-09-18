@@ -84,13 +84,6 @@ data class TimedLive(val sample: LiveSample, val receivedAtEpochMs: Long)
 
 data class TimedStatus(val status: DeviceStatus, val receivedAtEpochMs: Long)
 
-sealed interface ManifestState {
-    data object Idle : ManifestState
-    data object Loading : ManifestState
-    data class Loaded(val files: List<Frame.File>, val end: Frame.ListEnd, val atEpochMs: Long) : ManifestState
-    data class Error(val message: String) : ManifestState
-}
-
 data class SyncProgress(
     val running: Boolean = false,
     val current: FileProgress? = null,
@@ -304,7 +297,8 @@ class DeviceConnectionRepository @Inject constructor(
      */
     val plan: StateFlow<SyncPlan?> = combine(_manifest, _info, archivedFileDao.observeAll(), _sync) { m, info, archived, sync ->
         val station = info?.station ?: return@combine null
-        val loaded = m as? ManifestState.Loaded ?: return@combine null
+        // The last successful listing, kept through a refresh or its failure (see ManifestState).
+        val loaded = m.last ?: return@combine null
         val ids = archived.map { ArchivedIdentity(it.station, it.name, it.bytes, it.crc32) }
         val base = SyncPlanner.plan(station, loaded.files, ids, archive.partialLengths(station))
         overlayProgress(base, sync)
@@ -618,16 +612,24 @@ class DeviceConnectionRepository @Inject constructor(
         scope.launch { refreshManifestNow(session) }
     }
 
+    /**
+     * One `LIST`. The previous listing survives a failure (`ManifestState.failed` keeps `last`): a
+     * refresh that dies — link lost, timeout — must not blank the Files screen or null the plan.
+     * There is no retry on the same session: a lost link is re-established by [watchLink], whose
+     * [connectLocked] issues a fresh `LIST`; a timeout means the device is not answering and a
+     * second request would only queue behind the stale reply ([DeviceSession] drains it first).
+     */
     private suspend fun refreshManifestNow(session: DeviceSession): Boolean {
-        _manifest.value = ManifestState.Loading
+        _manifest.update { it.refreshing() }
         return try {
             val (files, end) = session.list()
-            _manifest.value = ManifestState.Loaded(files, end, System.currentTimeMillis())
+            _manifest.update { it.loaded(files, end, System.currentTimeMillis()) }
             true
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            _manifest.value = ManifestState.Error(e.message ?: "LIST failed")
+            Log.w(TAG, "LIST failed: ${e.message}")
+            _manifest.update { it.failed(e.message ?: "LIST failed") }
             false
         }
     }
@@ -669,8 +671,16 @@ class DeviceConnectionRepository @Inject constructor(
      * from the first `OPEN` to the `finally`, so the phone's Wi-Fi is asked to stay out of power
      * save while bytes are flowing (measured: power save cut throughput 5× and then stalled TCP).
      * Never over Bluetooth.
+     *
+     * The post-sync `LIST` (a `FLUSH` or a rotation may have finalized a new file while we were
+     * pulling) runs **inside** the run, while `running` is still true: the foreground service stops
+     * 1.5 s after `running` turns false, and a phone that has been in the background for the
+     * length of the transfer has no network grace period left — the LAN socket is destroyed the
+     * moment the service goes, which is how the refresh used to die with "link lost while waiting
+     * for a response" right after "Synced n of n". The worker ([refreshAfter] = false) skips it: it
+     * closes the session straight after the run, so the listing would only cost radio time.
      */
-    private fun startSync(entries: List<ManifestEntry>, foregroundService: Boolean = true): Job? {
+    private fun startSync(entries: List<ManifestEntry>, foregroundService: Boolean = true, refreshAfter: Boolean = foregroundService): Job? {
         if (_sync.value.running) return null
         val session = _session.value ?: return null
         val info = _info.value
@@ -729,6 +739,12 @@ class DeviceConnectionRepository @Inject constructor(
                 val synced = outcomes.count { it is FileOutcome.Synced }
                 endCause = SyncEndCause.COMPLETED
                 _events.tryEmit(DeviceEvent.Info("Synced $synced of ${entries.size} file(s)"))
+                // Still under the foreground service and the WifiLock (see the KDoc): re-LIST now.
+                // A failure here is the refresh's, not the sync's — the files are verified and stored.
+                if (refreshAfter && session.connectionState.value.isReady) {
+                    _sync.update { it.copy(current = null) }
+                    refreshManifestNow(session)
+                }
             } catch (e: CancellationException) {
                 endCause = SyncEndCause.STOPPED
                 _events.tryEmit(DeviceEvent.Info("Sync stopped; partial files are kept for resume"))
@@ -745,8 +761,12 @@ class DeviceConnectionRepository @Inject constructor(
             } finally {
                 if (holdWifi) lanWifiLock.release()
                 _sync.update { it.copy(running = false, current = null, finishedAtEpochMs = System.currentTimeMillis(), endCause = endCause) }
-                // A FLUSH or a rotation may have finalized a new file while we were pulling.
-                if (session.connectionState.value.isReady) refreshManifest()
+                // A run that ended early for a non-transport reason (a Stop, a local I/O error) still
+                // has a live link: refresh so the plan reflects what did arrive. COMPLETED refreshed
+                // above; TRANSPORT_FAILURE has no link to ask (watchLink re-LISTs after reconnecting).
+                if (refreshAfter && endCause != SyncEndCause.COMPLETED && endCause != SyncEndCause.TRANSPORT_FAILURE && session.connectionState.value.isReady) {
+                    refreshManifest()
+                }
                 // Bring the history tiers up to date with whatever arrived; cheap when nothing did.
                 scope.launch { runCatching { historyDeriver.deriveStale() }.onFailure { Log.w(TAG, "derive after sync failed: ${it.message}") } }
             }

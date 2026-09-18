@@ -139,7 +139,7 @@ fun FilesScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { viewModel.refresh() }, enabled = state.connection.isReady && state.manifest !is ManifestState.Loading) {
+                    IconButton(onClick = { viewModel.refresh() }, enabled = state.connection.isReady && !state.manifest.isLoading) {
                         Icon(Icons.Rounded.Refresh, contentDescription = "Refresh list")
                     }
                     IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, contentDescription = "Export") }
@@ -240,31 +240,43 @@ fun FilesScreen(
                     onPage = viewModel::pageFileChart,
                 )
             }
-            when (val m = state.manifest) {
-                ManifestState.Idle -> item { Hint("Connect to list the files on the card.") }
-                ManifestState.Loading -> item {
+            // The last successful listing stays on screen through a refresh and through its failure
+            // (ManifestState keeps `last`); Loading/Error only add a line above it. Without a listing
+            // yet, they are the whole content.
+            val manifestState = state.manifest
+            val m = manifestState.last
+            when {
+                manifestState is ManifestState.Idle -> item { Hint("Connect to list the files on the card.") }
+                manifestState.isLoading && m == null -> item {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                         Text("Listing files on the microSD…", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-                is ManifestState.Error -> item {
+                manifestState is ManifestState.Error && m == null -> item {
                     Surface(color = MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth()) {
-                        Text("LIST failed: ${m.message}", Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onErrorContainer)
+                        Text("LIST failed: ${manifestState.message}", Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onErrorContainer)
                     }
                 }
-                is ManifestState.Loaded -> {
-                    item {
-                        // The summary takes the remaining width and wraps; the caption keeps its own
-                        // slot so the two never run into each other (seen as "…GiBlisted 2 min ago").
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-                            Text(
-                                "${m.end.count} finalized files · ${m.end.partials} .partial · ${formatBytes(m.end.sdUsedKib * 1024)} of ${formatBytes(m.end.sdKib * 1024)}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.weight(1f),
-                            )
-                            Spacer(Modifier.width(12.dp))
+            }
+            if (m != null) {
+                item {
+                    // The summary takes the remaining width and wraps; the caption keeps its own
+                    // slot so the two never run into each other (seen as "…GiBlisted 2 min ago").
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                        Text(
+                            "${m.end.count} finalized files · ${m.end.partials} .partial · ${formatBytes(m.end.sdUsedKib * 1024)} of ${formatBytes(m.end.sdKib * 1024)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        if (manifestState.isLoading) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 1.5.dp)
+                                Text("refreshing…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                            }
+                        } else {
                             Text(
                                 "listed ${formatAgo(now - m.atEpochMs)}",
                                 style = MaterialTheme.typography.bodySmall,
@@ -272,56 +284,65 @@ fun FilesScreen(
                                 maxLines = 1,
                             )
                         }
-                        if (m.files.size != m.end.count) {
-                            Text(
-                                "Device announced ${m.end.count} files but sent ${m.files.size} FILE frames.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error,
-                            )
-                        }
                     }
-                    if (plan != null && plan.entries.isNotEmpty() && plan.missingCount == 0) {
-                        item { Hint("Everything on the card is in the archive and verified.") }
+                    manifestState.error?.let { reason ->
+                        // The refresh failed; the list below is the one from `listed … ago` and is
+                        // still valid (device files are immutable). Refresh, or wait for the reconnect.
+                        Text(
+                            "Refresh failed: $reason — showing the last listing.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
                     }
-                    if (m.files.isEmpty()) item { Hint("No finalized Parquet files yet. Use \"Finalize buffered rows\" on Today to create one.") }
-                    state.groups.forEach { group ->
-                        item(key = "g:" + group.title + group.subtitle) {
-                            Column(Modifier.padding(top = 8.dp)) {
-                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                    Text(group.title, style = MaterialTheme.typography.titleMedium)
-                                    Spacer(Modifier.weight(1f))
-                                    Text(
-                                        "${group.entries.count { it.entry.state == FileSyncState.SYNCED }}/${group.entries.size} · ${formatBytes(group.bytes)}",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                                group.subtitle?.let {
-                                    Text(it, style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
+                    if (m.files.size != m.end.count) {
+                        Text(
+                            "Device announced ${m.end.count} files but sent ${m.files.size} FILE frames.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+                if (plan != null && plan.entries.isNotEmpty() && plan.missingCount == 0) {
+                    item { Hint("Everything on the card is in the archive and verified.") }
+                }
+                if (m.files.isEmpty()) item { Hint("No finalized Parquet files yet. Use \"Finalize buffered rows\" on Today to create one.") }
+                state.groups.forEach { group ->
+                    item(key = "g:" + group.title + group.subtitle) {
+                        Column(Modifier.padding(top = 8.dp)) {
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                Text(group.title, style = MaterialTheme.typography.titleMedium)
+                                Spacer(Modifier.weight(1f))
+                                Text(
+                                    "${group.entries.count { it.entry.state == FileSyncState.SYNCED }}/${group.entries.size} · ${formatBytes(group.bytes)}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            group.subtitle?.let {
+                                Text(it, style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
-                        items(group.entries, key = { it.entry.name }) { item ->
-                            val entry = item.entry
-                            FileRow(
-                                entry = entry,
-                                localTime = item.localTime,
-                                canSync = state.connection.isReady && !state.sync.running,
-                                onSync = { withNotificationPermission { viewModel.syncOne(entry.name) } },
-                                onShare = {
+                    }
+                    items(group.entries, key = { it.entry.name }) { item ->
+                        val entry = item.entry
+                        FileRow(
+                            entry = entry,
+                            localTime = item.localTime,
+                            canSync = state.connection.isReady && !state.sync.running,
+                            onSync = { withNotificationPermission { viewModel.syncOne(entry.name) } },
+                            onShare = {
+                                viewModel.archivedFor(entry.name, (entry.partition as? earth.walkthru.aqsync.data.sync.HivePartition.Dated)?.station)
+                                    ?.let(viewModel::share)
+                            },
+                            onInspect = if (state.advancedMode) {
+                                {
                                     viewModel.archivedFor(entry.name, (entry.partition as? earth.walkthru.aqsync.data.sync.HivePartition.Dated)?.station)
-                                        ?.let(viewModel::share)
-                                },
-                                onInspect = if (state.advancedMode) {
-                                    {
-                                        viewModel.archivedFor(entry.name, (entry.partition as? earth.walkthru.aqsync.data.sync.HivePartition.Dated)?.station)
-                                            ?.let { onOpenFileMetrics(it.station, it.name) }
-                                    }
-                                } else {
-                                    null
-                                },
-                            )
-                        }
+                                        ?.let { onOpenFileMetrics(it.station, it.name) }
+                                }
+                            } else {
+                                null
+                            },
+                        )
                     }
                 }
             }

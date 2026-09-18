@@ -92,7 +92,8 @@ finalizing), `WIFI_SCAN_TIMEOUT_MS` 20 s; "no response from device within N s" i
 ```mermaid
 stateDiagram-v2
   [*] --> Running: startSync(plan) — foreground service + WifiLock (LAN only)
-  Running --> COMPLETED
+  Running --> Relisting: last file done — post-sync LIST, still `running`, still protected
+  Relisting --> COMPLETED
   Running --> STOPPED: user Stop / cancelSync
   Running --> TRANSPORT_FAILURE: no response · link lost · socket error · transport closed
   Running --> FAILURE: anything else
@@ -102,6 +103,25 @@ stateDiagram-v2
 `SyncProgress.endCause` (`SyncEndCause`) records how a run ended; the Files card, the notification
 and the resume policy read it. Per-file outcomes (`Synced` / `Mismatch` / `DeviceError` / `Failed`)
 are **outcomes**, not a broken pipe.
+
+**The post-sync `LIST` runs inside the run.** A `FLUSH` or a rotation may have finalized a file
+while we were pulling, so a completed run re-lists — *before* `running` turns false, because the
+foreground service stops 1.5 s after that and a phone that spent the whole transfer in the
+background has no network grace period left: the LAN socket is destroyed the moment the service
+goes. Seen on the phone as "LIST failed: link lost while waiting for a response" right after
+"Synced n of n" — the link was fine for the files and killed for the listing. A failure of that
+`LIST` is the refresh's, never the sync's (the files are verified and stored). The worker skips
+the re-list (it closes the session next). `STOPPED` and `FAILURE` still refresh from the `finally`
+when the link is up; `TRANSPORT_FAILURE` has no link to ask — `watchLink`'s reconnect issues the
+fresh `LIST`.
+
+**A refresh never blanks the listing** (`ManifestState`, `data/ManifestState.kt`). `Loading` and
+`Error` carry the last `Loaded` in `last`; `plan` derives from `last`, and the Files screen keeps
+the list with "refreshing…" or "Refresh failed: … — showing the last listing." above it. Only a
+new session (`resetDerivedState` → `Idle`) drops it. There is no blind retry of `LIST` on the same
+session: a lost link is a reconnect (which re-lists), a timeout means the device is not answering
+and a second request would only queue behind the stale reply. Longer timeouts are not the answer
+either — "link lost" fires on the transport's state change, not on `FRAME_TIMEOUT_MS`.
 
 ## Resume after a lost link
 
