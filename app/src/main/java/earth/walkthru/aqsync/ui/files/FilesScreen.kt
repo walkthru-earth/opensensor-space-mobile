@@ -291,7 +291,7 @@ fun FilesScreen(
                                     Text(group.title, style = MaterialTheme.typography.titleMedium)
                                     Spacer(Modifier.weight(1f))
                                     Text(
-                                        "${group.entries.count { it.state == FileSyncState.SYNCED }}/${group.entries.size} · ${formatBytes(group.bytes)}",
+                                        "${group.entries.count { it.entry.state == FileSyncState.SYNCED }}/${group.entries.size} · ${formatBytes(group.bytes)}",
                                         style = MaterialTheme.typography.labelMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
@@ -301,9 +301,11 @@ fun FilesScreen(
                                 }
                             }
                         }
-                        items(group.entries, key = { it.name }) { entry ->
+                        items(group.entries, key = { it.entry.name }) { item ->
+                            val entry = item.entry
                             FileRow(
                                 entry = entry,
+                                localTime = item.localTime,
                                 canSync = state.connection.isReady && !state.sync.running,
                                 onSync = { withNotificationPermission { viewModel.syncOne(entry.name) } },
                                 onShare = {
@@ -380,7 +382,7 @@ private fun SyncProgressCard(sync: SyncProgress, now: Long) {
 }
 
 @Composable
-private fun FileRow(entry: ManifestEntry, canSync: Boolean, onSync: () -> Unit, onShare: () -> Unit, onInspect: (() -> Unit)? = null) {
+private fun FileRow(entry: ManifestEntry, localTime: String?, canSync: Boolean, onSync: () -> Unit, onShare: () -> Unit, onInspect: (() -> Unit)? = null) {
     val (icon, tint, label) = when (entry.state) {
         FileSyncState.SYNCED -> Triple(Icons.Rounded.CheckCircle, MaterialTheme.colorScheme.primary, "synced · verified")
         FileSyncState.SYNCING -> Triple(null, MaterialTheme.colorScheme.primary, "syncing ${formatBytes(entry.partialBytes)} / ${formatBytes(entry.bytes)}")
@@ -417,8 +419,9 @@ private fun FileRow(entry: ManifestEntry, canSync: Boolean, onSync: () -> Unit, 
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
+                    // The name's HHMM is the UTC window start; the phone's local time goes first so the two never get confused.
                     Text(
-                        "${formatBytes(entry.bytes)} · $label",
+                        (localTime?.let { "$it · " } ?: "") + "${formatBytes(entry.bytes)} · $label",
                         style = MaterialTheme.typography.labelSmall,
                         color = if (entry.state == FileSyncState.MISMATCH || entry.state == FileSyncState.INVALID_NAME) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                     )

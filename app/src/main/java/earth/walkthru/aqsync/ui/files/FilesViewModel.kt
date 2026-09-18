@@ -24,8 +24,6 @@ import earth.walkthru.aqsync.data.local.database.ArchivedFile
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.local.database.KnownDevice
 import earth.walkthru.aqsync.data.settings.AppSettings
-import earth.walkthru.aqsync.data.sync.HivePartition
-import earth.walkthru.aqsync.data.sync.ManifestEntry
 import earth.walkthru.aqsync.data.sync.SyncPlan
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -44,11 +42,6 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.io.File
 import javax.inject.Inject
-
-/** A group of manifest entries sharing a Hive partition, in display order. */
-data class PartitionGroup(val partition: HivePartition, val title: String, val subtitle: String?, val entries: List<ManifestEntry>) {
-    val bytes: Long get() = entries.sumOf { it.bytes }
-}
 
 data class FilesUiState(
     val connection: ConnectionState = ConnectionState.Disconnected,
@@ -196,31 +189,8 @@ class FilesViewModel @Inject constructor(
         fileChartOffset.value = if (next + FILE_CHART_PAGE >= st.total) null else next.coerceAtLeast(0)
     }
 
-    private fun group(plan: SyncPlan): List<PartitionGroup> {
-        val byPartition = plan.entries.groupBy { it.partition }
-        return byPartition.map { (p, entries) ->
-            val (title, subtitle) = when (p) {
-                is HivePartition.Dated -> p.isoDate to "station ${p.station.take(8)}"
-                is HivePartition.Unsynced -> "Unsynced (no UTC)" to "boot ${p.boot.take(12)}"
-                is HivePartition.Benchmarks -> "Benchmarks" to p.boot?.let { "boot ${it.take(12)}" }
-                HivePartition.Legacy -> "Legacy Parquet" to null
-                is HivePartition.Other -> (p.directory.ifEmpty { "(root)" }) to "unrecognised layout"
-            }
-            PartitionGroup(p, title, subtitle, entries.sortedByDescending { it.name })
-        }.sortedWith(
-            compareBy<PartitionGroup> { rank(it.partition) }
-                .thenByDescending { (it.partition as? HivePartition.Dated)?.isoDate ?: "" }
-                .thenBy { it.title }
-        )
-    }
-
-    private fun rank(p: HivePartition) = when (p) {
-        is HivePartition.Dated -> 0
-        is HivePartition.Unsynced -> 1
-        is HivePartition.Benchmarks -> 2
-        HivePartition.Legacy -> 3
-        is HivePartition.Other -> 4
-    }
+    /** Headers are local calendar days (the device names and partitions files in UTC); see [FileGrouping]. */
+    private fun group(plan: SyncPlan): List<PartitionGroup> = FileGrouping.group(plan.entries)
 
     fun refresh() = repository.refreshManifest()
     fun syncAll() = repository.syncAll()
