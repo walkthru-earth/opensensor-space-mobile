@@ -6,23 +6,25 @@
 
 ## One-line status
 
-Implements **protocol v2** + **Auto-sync** + **on-phone history** (index, tiers, derived daily
-Parquet, charts) + **GeoParquet 2.0** read/write. BLE and LAN file sync have run against the board
-from one phone (OnePlus 7 Pro, Android 16 / API 36, 2026-09-17, app commit `a993268`, partial runs).
-Auto-sync has **not** completed a period cycle on a phone yet.
+Implements **protocol v2** (+ the 2.1 advertising payload) + **Auto-sync** with event-driven
+triggers (companion presence, advertising flags, Wi-Fi arrival) + **on-phone history** (index, tiers,
+derived daily Parquet, charts) + **GeoParquet 2.0** read/write. BLE and LAN file sync have run against
+the board from one phone (OnePlus 7 Pro, Android 16 / API 36, 2026-09-17, app commit `a993268`,
+partial runs). Auto-sync has **not** completed a period cycle on a phone yet, and none of the
+triggers has fired on a phone.
 
 ## Verification ladder
 
 ```mermaid
 flowchart LR
-  A["Unit tests (JVM)<br/>143 tests, fixtures from real files"] --> B["Loopback / fake device<br/>TcpTransport, FakeTransport faults"] --> C["Phone run<br/>bench-verified.md"] --> D["Field soak<br/>not yet"]
+  A["Unit tests (JVM)<br/>151 tests, fixtures from real files"] --> B["Loopback / fake device<br/>TcpTransport, FakeTransport faults"] --> C["Phone run<br/>bench-verified.md"] --> D["Field soak<br/>not yet"]
 ```
 
 `./gradlew --no-daemon clean verify` on 2026-09-18: **0 lint errors** (7 pre-existing warnings),
-**143/143 unit tests** — 52 `:app` (auto-sync runner, deriver, indexer, repository, ZSTD codec, Files local-day grouping,
-LAN token policy, `TcpTransport` loopback, planner, resume policy, lost-window recovery), 47
+**151/151 unit tests** — 55 `:app` (auto-sync runner incl. the LAN-only Wi-Fi trigger, deriver, indexer, repository, ZSTD codec, Files local-day grouping,
+LAN token policy, `TcpTransport` loopback, planner, resume policy, lost-window recovery), 52
 `:core:protocol` (frame codec v1+v2, CONFIG + `SET_CONFIG` builder, LAN framing with a `LIVE` push
-between two `CHUNK`s, JSON, Parquet verify), 23 `:core:parquet` (reader vs PyArrow, writer,
+between two `CHUNK`s, JSON, Parquet verify, 2.1 advertising payload), 23 `:core:parquet` (reader vs PyArrow, writer,
 GeoParquet), 21 `:core:history` (aggregation, moods, columns, file summary, indexer, time
 estimate, `RealArchiveTest`). Debug APK 68.4 MiB unminified.
 
@@ -34,7 +36,8 @@ estimate, `RealArchiveTest`). Debug APK 68.4 MiB unminified.
 | v2 config / Wi-Fi / reboot / log / token | hand-assembled fixtures from the contract | a v2 device was read from the phone; no capture taken | `ble.clear_bonds`, `lan.rotate_token` end to end, `fixed`/`none` pairing (needs display-less board) |
 | LAN transport | loopback `TcpTransportTest` | `LanDiscovery` found the board via `NsdManager`; app chose TCP on its own | `ACCESS_LOCAL_NETWORK` prompt (enforced only from API 37) |
 | Lost window / drain / resume | `WindowRecoveryTest`, `SyncResumePolicyTest` | 514-byte-frame drop reproduced 2026-09-17 and survived | — |
-| Auto-sync worker | `AutoSyncRunnerTest` over the fake | — | a complete 15-min period cycle, `setForeground` refusal in background, OEM battery settings |
+| Auto-sync worker | `AutoSyncRunnerTest` over the fake (incl. `lanOnly`) | — | a complete 15-min period cycle, `setForeground` refusal in background, OEM battery settings |
+| Auto-sync triggers | `AdvertisementTest` (2.1 bytes) | — | association dialog finding the advertising logger, `EVENT_BLE_APPEARED`, offloaded flag-scan match on the OnePlus controller, Wi-Fi-arrival run, companion exemptions vs the screen-off socket kill |
 | History pipeline | fixtures + `RealArchiveTest` (766 real files, 0.2 s) | derive fix observed 2026-09-18 02:35 ("derived 1 of 3 station-days") | chart update after a sync of a v3 file recorded in bench-verified |
 | Derived daily Parquet | PyArrow 25 + DuckDB 1.5.5 oracle | — | — |
 | GeoParquet 2.0 | 20 fixtures (PyArrow + DuckDB) cell-for-cell; writer accepted by both | n/a (no device files) | import UI / map (D4/D5, undecided) |

@@ -22,7 +22,7 @@ Scope / Code / Related header and a "Uses → affects" table). This file holds t
 | Tiers, daily derived files, time estimate, chart binning | `core/history/.../Aggregation.kt`, `app/.../data/history/HistoryDeriver.kt` + `DailyDerived.kt`, `core/history/.../TimeEstimate.kt`, `Columns.kt` |
 | Friendly layer (moods, copy), Now card, detail levels | `core/history/.../AirMood.kt`, `app/.../ui/device/NowCard.kt`, `app/.../data/settings/AppSettings.kt` (`DetailLevel`) |
 | Charts (columns, day ring, calendar) | `app/.../ui/history/BandColumnChart.kt`, `DayRing.kt`, `CalendarHeatmap.kt`, `HistoryScreen.kt` |
-| Sync engine, transports, background | `docs/sync-engine.md`, `docs/transports.md`, `docs/background-sync.md` · `app/.../data/sync/SyncEngine.kt`, `data/ble/`, `data/lan/`, `data/background/AutoSyncRunner.kt` |
+| Sync engine, transports, background, triggers | `docs/sync-engine.md`, `docs/transports.md`, `docs/background-sync.md` · `app/.../data/sync/SyncEngine.kt`, `data/ble/`, `data/lan/`, `data/background/AutoSyncRunner.kt`, `CompanionPresence.kt`, `AdvertFlagScan.kt`, `SyncTriggers.kt` |
 | Room schema (v8), migrations, DataStore, files on disk, backup | `docs/data-model.md` · `app/.../data/local/database/AppDatabase.kt`, `History.kt`, `ArchivedFile.kt`, JSON under `app/schemas/` |
 | Test phone | OnePlus 7 Pro, Android 16, Wi-Fi ADB `adb connect 192.168.100.173:38457` (port changes after reboot); `run-as` is refused on this ROM, so inspect via logcat tags `HistoryIndexer HistoryDeriver SyncEngine`, not files |
 | Board files fetched over serial by the firmware-side session | `../m5stack-aq-parquet/firmware/arduino-m5unified/artifacts/output/` (v6 files); full SD export `../m5stack-aq-parquet/exports/sd-20260916T173205Z/` (764 files) |

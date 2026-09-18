@@ -15,10 +15,12 @@ accounts. Data leaves the phone through the share sheet or the file picker.
 
 ## Status (2026-09-18)
 
-Protocol v2 + Auto-sync + on-phone history + GeoParquet 2.0 read/write are implemented.
-`./gradlew verify` → **143/143 unit tests**, 0 lint errors (7 known warnings). BLE and LAN file
-sync have run against the board from one phone (OnePlus 7 Pro, Android 16, partial runs); an
-instrumented full sync and a complete Auto-sync period cycle have not. What was measured, on which
+Protocol v2 (+ 2.1 advertising payload) + Auto-sync with event-driven triggers (companion-device
+presence, the logger's advertising flags, Wi-Fi arrival) + on-phone history + GeoParquet 2.0
+read/write are implemented. `./gradlew verify` → **151/151 unit tests**, 0 lint errors (7 known
+warnings). BLE and LAN file sync have run against the board from one phone (OnePlus 7 Pro,
+Android 16, partial runs); an instrumented full sync, a complete Auto-sync period cycle and every
+trigger have not. What was measured, on which
 firmware and app commit, lives in the firmware repo's
 [`docs/bench-verified.md`](../m5stack-aq-parquet/docs/bench-verified.md#phone-over-lan-and-ble-oneplus-7-pro-android-16);
 the detailed ladder and the next steps are in [`docs/status.md`](docs/status.md).
@@ -44,7 +46,7 @@ flowchart LR
 | Opcodes, frames, error codes, UUIDs, LAN framing (mirror of the firmware contract) | [`docs/protocol-quickref.md`](docs/protocol-quickref.md) |
 | BLE vs LAN, pairing, the LAN token, reconnect | [`docs/transports.md`](docs/transports.md) |
 | Download, verification, lost windows, resume, archive paths, `REBOOT` audit | [`docs/sync-engine.md`](docs/sync-engine.md) |
-| Auto-sync, WorkManager, foreground notification, WifiLock | [`docs/background-sync.md`](docs/background-sync.md) |
+| Auto-sync, WorkManager, foreground notification, WifiLock, triggers (presence / advertising / Wi-Fi) | [`docs/background-sync.md`](docs/background-sync.md) |
 | Room v8, DataStore, files on disk, backup | [`docs/data-model.md`](docs/data-model.md) |
 | Index → tiers → derived day → charts; metrics, moods, time estimate | [`docs/history-pipeline.md`](docs/history-pipeline.md) |
 | Own Parquet reader/writer, GeoParquet 2.0, fixtures, oracles | [`docs/parquet.md`](docs/parquet.md) |

@@ -16,12 +16,17 @@ the `WifiManager.WifiLock` below.
 
 ```mermaid
 flowchart TD
-  SW["known_device.autoSync on (any row)"] --> P["PeriodicWorkRequest 15 min · KEEP<br/>battery not low · backoff exp 5 min"]
-  M1["Files › Sync now in background"] --> O1["OneTimeWorkRequest expedited · KEEP<br/>KEY_ADDRESS"]
-  M2["Home › Collect from all N loggers"] --> O2["OneTimeWorkRequest expedited · KEEP<br/>KEY_ALL_KNOWN"]
+  SW["known_device.autoSync on (any row)"] --> P["PeriodicWorkRequest 15 min · KEEP<br/>battery not low · backoff exp 5 min (the floor)"]
+  M1["Files › Sync now in background"] --> O1["OneTimeWorkRequest expedited · KEEP auto-sync-now<br/>KEY_ADDRESS"]
+  M2["Home › Collect from all N loggers"] --> O2["OneTimeWorkRequest expedited · KEEP auto-sync-now<br/>KEY_ALL_KNOWN"]
+  T1["CDM: logger came into BLE range<br/>CompanionPresenceService"] --> O3["OneTimeWorkRequest expedited · KEEP auto-sync-trigger<br/>KEY_ADDRESS + KEY_TRIGGER"]
+  T2["controller: logger advertises new_files / no_utc<br/>AdvertScanReceiver"] --> O3
+  T3["phone joined Wi-Fi<br/>WifiArrivalReceiver"] --> O4["OneTimeWorkRequest expedited · KEEP auto-sync-trigger<br/>KEY_TRIGGER + KEY_LAN_ONLY"]
   P --> W[SyncWorker]
   O1 --> W
   O2 --> W
+  O3 --> W
+  O4 --> W
   W --> F["setForeground(WORKER_ID, dataSync) — may be refused in background → plain job"]
   W --> R[AutoSyncRunner.run]
   R --> L["browse mDNS ≤ 10 s once for all stations"]
@@ -57,7 +62,7 @@ never swallowed by a manual run and at most one triggered run is pending; all ex
 ## Decision logic (`AutoSyncRunner`, pure)
 
 - **Which devices**: `autoSync` rows; `onlyAddress` for Sync now; `allKnown` visits `known_device` ordered by last connection whether or not the switch is on.
-- **Links** (`AutoSyncPolicy.linksFor`): one mDNS browse per run (`LAN_BROWSE_MS` 10 s, early exit once every wanted station resolved); LAN when the station is found **and** a token is stored; else, and after a failed LAN connect, **BLE only if bonded** — direct `connectGatt` to the stored address, no scan, `BACKGROUND_BLE_CONNECT_MS` 15 s, `allowBonding = false`. Not found → finish quietly.
+- **Links** (`AutoSyncPolicy.linksFor`): one mDNS browse per run (`LAN_BROWSE_MS` 10 s, early exit once every wanted station resolved); LAN when the station is found **and** a token is stored; else, and after a failed LAN connect, **BLE only if bonded** — direct `connectGatt` to the stored address, no scan, `BACKGROUND_BLE_CONNECT_MS` 15 s, `allowBonding = false`. Not found → finish quietly. `lanOnly` (the Wi-Fi trigger) leaves BLE out altogether.
 - **Interactive use wins**: skip any device while the repository holds a session (the same device, or another — one link at a time), re-checked between links. "Sync now in background" releases the interactive session first, then enqueues; the worker's session feeds the same `sync` state so the Files screen shows its progress.
 - **Wi-Fi gate**: `AppAutoSyncGateway.browseLan` returns empty when no `TRANSPORT_WIFI` network is up (active network first, else a ≤ 1 s `NetworkRequest` probe; an offline LAN counts), so the 10 s browse never runs for nothing.
 - **Never** pairs, scans, or touches a device the repository has a session with. `deriveStale()` runs after a run that brought files.
@@ -67,13 +72,16 @@ never swallowed by a manual run and at most one triggered run is pending; all ex
 | Path | Mechanism |
 | --- | --- |
 | User-started transfer | `SyncForegroundService` (`foregroundServiceType="dataSync"`), started by the repository **while the app is in the foreground** (API 31+ start rule). Owns no logic: mirrors `sync`/`reconnecting` into one ongoing notification (files done/total, bytes, current file, progress bar, **Stop** → `cancelSync`), paced at `NOTIFY_INTERVAL_MS` 500 ms (≤ 2 posts/s; `NotificationManager` sheds above ~5/s), stops itself `STOP_GRACE_MS` 1.5 s after `foregroundNeeded` turns false. `onTimeout` (API 35+, the 6 h / 24 h `dataSync` budget) cancels cleanly. **Not** kept alive while the link is idle. |
-| Worker | `setForeground(ForegroundInfo(WORKER_ID, …, FOREGROUND_SERVICE_TYPE_DATA_SYNC))` with the same `SyncNotifications.progress`. `ForegroundServiceStartNotAllowedException` (app in background) → log one line, continue as a plain job (a running job has network access for its own duration); only the ongoing notification is missing. |
+| Worker | `setForeground(ForegroundInfo(WORKER_ID, …, FOREGROUND_SERVICE_TYPE_DATA_SYNC))` with the same `SyncNotifications.progress`. `ForegroundServiceStartNotAllowedException` (app in background) → log one line, continue as a plain job (a running job has network access for its own duration); only the ongoing notification is missing. With a companion association and the logger present, `REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND` should make the refusal go away — unverified. |
 | Manifest | WorkManager's `SystemForegroundService` merged with `foregroundServiceType="dataSync"` (`tools:node="merge"`), or Android 14+ throws; default `WorkManagerInitializer` removed from `InitializationProvider` because of the Hilt worker factory. |
 | Notifications | Channels `sync_progress`, `sync_summary`; ids `FOREGROUND_ID` 1001, `WORKER_ID` 1002, `SUMMARY_ID` 1003. Summary: "Synced 23 new files from AQ-6b40 · 1.1 MiB" (several devices → "from 2 loggers"), only when something arrived or failed. `POST_NOTIFICATIONS` asked once on the first Sync tap / Auto-sync switch-on (API 33+); a denial only hides the notification. |
 
 Why the service exists (measured 2026-09-17): ~2 min after screen-off, `ConnectivityService`
 logged "Destroyed live tcp sockets for uids={ours}" and `TcpTransport` saw "Software caused
-connection abort" 6 ms later — the background network restriction, not the link.
+connection abort" 6 ms later — the background network restriction, not the link. The companion
+exemption (above) addresses the same restriction from the other side, for the whole time the logger
+is present rather than only during a transfer; the service stays until a phone run shows it is
+redundant.
 
 ## Wi-Fi lock (`LanWifiLock`)
 
