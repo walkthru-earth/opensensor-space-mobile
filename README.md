@@ -19,8 +19,9 @@ Protocol v2 (+ 2.1 advertising payload) + Auto-sync with event-driven triggers (
 presence, the logger's advertising flags, Wi-Fi arrival) + on-phone history + GeoParquet 2.0
 read/write are implemented. `./gradlew verify` → **151/151 unit tests**, 0 lint errors (7 known
 warnings). BLE and LAN file sync have run against the board from one phone (OnePlus 7 Pro,
-Android 16, partial runs); an instrumented full sync, a complete Auto-sync period cycle and every
-trigger have not. What was measured, on which
+Android 16, partial runs); the advertising-flag wake has fired once on that phone (file closed on the
+board → new file on the phone in 28 s, app process killed beforehand); an instrumented full sync, a
+complete Auto-sync period cycle, companion presence and the Wi-Fi-arrival run have not. What was measured, on which
 firmware and app commit, lives in the firmware repo's
 [`docs/bench-verified.md`](../m5stack-aq-parquet/docs/bench-verified.md#phone-over-lan-and-ble-oneplus-7-pro-android-16);
 the detailed ladder and the next steps are in [`docs/status.md`](docs/status.md).
