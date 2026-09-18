@@ -21,6 +21,7 @@ import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
 import earth.walkthru.aqsync.data.background.AutoSyncScheduler
+import earth.walkthru.aqsync.data.background.SyncTriggers
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -29,7 +30,8 @@ import javax.inject.Inject
 /**
  * WorkManager is configured here (default initializer disabled in the manifest) so [SyncWorker]
  * can be Hilt-injected; the scheduler then keeps the periodic auto-sync registration in step
- * with the `known_device.autoSync` rows for the life of the process.
+ * with the `known_device.autoSync` rows for the life of the process, and [SyncTriggers] re-arms
+ * the event-driven starts (Wi-Fi arrival, companion presence) that outlive the process.
  */
 @HiltAndroidApp
 class AqSyncApplication :
@@ -42,6 +44,9 @@ class AqSyncApplication :
     @Inject
     lateinit var autoSyncScheduler: AutoSyncScheduler
 
+    @Inject
+    lateinit var syncTriggers: SyncTriggers
+
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override val workManagerConfiguration: Configuration
@@ -50,5 +55,6 @@ class AqSyncApplication :
     override fun onCreate() {
         super.onCreate()
         autoSyncScheduler.start(appScope)
+        syncTriggers.register(appScope)
     }
 }

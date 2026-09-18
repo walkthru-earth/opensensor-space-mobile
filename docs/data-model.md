@@ -4,7 +4,7 @@
 **Code:** `data/local/database/AppDatabase.kt`, `KnownDevice.kt`, `ArchivedFile.kt`, `History.kt`; `data/local/di/DatabaseModule.kt` (`aq-sync.db`); `app/schemas/earth.walkthru.aqsync.data.local.database.AppDatabase/1…7.json`; `data/settings/AppSettings.kt`; `data/sync/FileArchive.kt`; `data/history/DailyDerived.kt`; `res/xml/data_extraction_rules.xml`.
 **Related:** [sync-engine.md](sync-engine.md) (who writes `archived_file`), [history-pipeline.md](history-pipeline.md) (who writes the tiers), [transports.md](transports.md#lan-token-lifecycle) (the token).
 
-## Room schema v7 (`aq-sync.db`)
+## Room schema v8 (`aq-sync.db`)
 
 ```mermaid
 erDiagram
@@ -19,6 +19,7 @@ erDiagram
     string lanToken "hex, nullable, REDACTED everywhere"
     int lanPort
     bool autoSync "v3"
+    int companionAssociationId "v8, nullable; CDM association behind wake-when-nearby"
   }
   archived_file {
     long id PK "auto; business key (station,name) UNIQUE"

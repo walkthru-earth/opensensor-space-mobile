@@ -87,6 +87,14 @@ class AutoSyncRunnerTest {
         assertTrue(AutoSyncPolicy.linksFor(device(), unresolved, bonded = false).isEmpty())
     }
 
+    @Test
+    fun `policy - lanOnly (Wi-Fi trigger) never offers Bluetooth, even when bonded`() {
+        val links = AutoSyncPolicy.linksFor(device(), onLan(), bonded = true, lanOnly = true)
+        assertEquals(1, links.size)
+        assertTrue(links[0] is AutoSyncLink.Lan)
+        assertTrue(AutoSyncPolicy.linksFor(device(), emptyMap(), bonded = true, lanOnly = true).isEmpty())
+    }
+
     // ------------------------------------------------------------------ runner
 
     @Test
@@ -139,6 +147,31 @@ class AutoSyncRunnerTest {
         assertEquals(2, dev.tried.size)
         assertEquals(TransportKind.BLE, dev.result?.transport)
         assertEquals(gateway.fake.files.size, report.newFiles)
+    }
+
+    @Test
+    fun `Wi-Fi trigger run - LAN gone means the device is skipped, Bluetooth is not tried`() {
+        gateway.devices += device()
+        gateway.lan = onLan()
+        gateway.bonded += bleAddr
+        gateway.unreachable += "LAN"
+
+        val report = runBlocking { AutoSyncRunner(gateway, lanBrowseMs = 100).run(lanOnly = true) }
+
+        assertEquals(listOf(bleAddr to "LAN"), gateway.calls)
+        assertFalse(report.shouldNotify)
+        assertFalse(report.transientFailure)
+    }
+
+    @Test
+    fun `Wi-Fi trigger run - device not on the LAN is skipped before any link`() {
+        gateway.devices += device()
+        gateway.bonded += bleAddr
+
+        val report = runBlocking { AutoSyncRunner(gateway, lanBrowseMs = 100).run(lanOnly = true) }
+
+        assertTrue(gateway.calls.isEmpty())
+        assertEquals("not on the LAN (Bluetooth not tried on a Wi-Fi trigger)", report.devices.single().skipped)
     }
 
     @Test

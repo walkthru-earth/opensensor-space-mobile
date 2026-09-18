@@ -32,6 +32,18 @@
       held only while a file transfer runs over the LAN pipe (measured 2026-09-17: with the screen
       locked the phone's Wi-Fi entered power save, throughput fell 5x and TCP stalled). The app
       holds no CPU wake lock; Bluetooth syncs hold nothing.
+
+      Companion Device Manager ("wake when nearby", data/background/CompanionPresence*): the user
+      approves one system dialog per logger; Android then scans for that Bluetooth address itself
+      and binds CompanionPresenceService while the logger is in range. The four REQUEST_COMPANION_*
+      permissions are normal (install-time) and only take effect while an associated device is
+      present (AOSP CompanionExemptionProcessor): RUN_IN_BACKGROUND puts the app on the power-save
+      allowlist, USE_DATA_IN_BACKGROUND allows background data — the exemption the measured
+      screen-off socket kill called for — START_FOREGROUND_SERVICES_FROM_BACKGROUND lets the worker's
+      setForeground succeed when the trigger fires with the app closed, and
+      OBSERVE_COMPANION_DEVICE_PRESENCE is required by startObservingDevicePresence. No location
+      permission is involved. RECEIVE_BOOT_COMPLETED only restarts the process so the Wi-Fi-arrival
+      trigger (data/background/SyncTriggers) is re-registered; it schedules nothing by itself.
     -->
     <uses-permission
         android:name="android.permission.BLUETOOTH_SCAN"
@@ -43,10 +55,18 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.REQUEST_COMPANION_RUN_IN_BACKGROUND" />
+    <uses-permission android:name="android.permission.REQUEST_COMPANION_USE_DATA_IN_BACKGROUND" />
+    <uses-permission android:name="android.permission.REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND" />
+    <uses-permission android:name="android.permission.REQUEST_OBSERVE_COMPANION_DEVICE_PRESENCE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <uses-feature
         android:name="android.hardware.bluetooth_le"
         android:required="true" />
+    <uses-feature
+        android:name="android.software.companion_device_setup"
+        android:required="false" />
 
     <application
         android:name=".AqSyncApplication"
@@ -101,6 +121,43 @@
                 android:value="androidx.startup"
                 tools:node="remove" />
         </provider>
+
+        <!--
+          Bound by the system while an associated logger is in Bluetooth range (Companion Device
+          Manager); enqueues the auto-sync worker for that device. Exported with the framework's
+          signature permission, as the API requires.
+        -->
+        <service
+            android:name=".data.background.CompanionPresenceService"
+            android:exported="true"
+            android:permission="android.permission.BIND_COMPANION_DEVICE_SERVICE">
+            <intent-filter>
+                <action android:name="android.companion.CompanionDeviceService" />
+            </intent-filter>
+        </service>
+
+        <!-- Explicit target of the Wi-Fi-arrival PendingIntent (SyncTriggers); never exported. -->
+        <receiver
+            android:name=".data.background.WifiArrivalReceiver"
+            android:exported="false" />
+
+        <!--
+          Explicit target of the offloaded BLE scan PendingIntent (AdvertFlagScan): the controller
+          wakes the app when a bonded Auto-sync logger advertises new_files / no_utc. Never exported.
+        -->
+        <receiver
+            android:name=".data.background.AdvertScanReceiver"
+            android:exported="false" />
+
+        <!-- Starts the process after boot/update so Application.onCreate re-arms the triggers. -->
+        <receiver
+            android:name=".data.background.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <!-- Read-only handout of archive files and export zips to the share sheet. -->
         <provider

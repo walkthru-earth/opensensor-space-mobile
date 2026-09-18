@@ -1,5 +1,6 @@
 package earth.walkthru.aqsync.ui.device
 
+import android.content.IntentSender
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -10,6 +11,7 @@ import earth.walkthru.aqsync.data.TransportFactory
 import earth.walkthru.aqsync.data.TransportPreference
 import earth.walkthru.aqsync.data.WifiScanState
 import earth.walkthru.aqsync.data.background.AutoSyncScheduler
+import earth.walkthru.aqsync.data.background.CompanionPresence
 import earth.walkthru.aqsync.data.ble.ConfigSnapshot
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.TransportKind
@@ -20,8 +22,11 @@ import earth.walkthru.aqsync.data.protocol.ConfigValidationException
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.protocol.PairMode
 import earth.walkthru.aqsync.data.settings.AppSettings
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asExecutor
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -51,9 +56,16 @@ data class DeviceUiState(
     val syncRunning: Boolean = false,
     val isFake: Boolean = false,
     val advancedMode: Boolean = false,
+    /** The phone has the companion-device feature (the "wake when nearby" setup can be offered). */
+    val companionSupported: Boolean = false,
+    /** A companion association request is in flight (system dialog pending or just launched). */
+    val companionBusy: Boolean = false,
 ) {
     /** Per-device Auto-sync switch (Room `known_device.autoSync`). */
     val autoSync: Boolean get() = known?.autoSync == true
+
+    /** "Wake when nearby": a Companion Device Manager association is recorded for this logger. */
+    val companion: Boolean get() = known?.hasCompanion == true
 
     /** Unattended BLE needs a bond; LAN needs a stored token. Without either the switch would do nothing. */
     val autoSyncReachable: Boolean get() = known?.hasLanToken == true || bonded
@@ -73,10 +85,18 @@ data class DeviceUiState(
 class DeviceViewModel @Inject constructor(
     private val repository: DeviceConnectionRepository,
     private val transportFactory: TransportFactory,
+    private val companionPresence: CompanionPresence,
     settings: AppSettings,
 ) : ViewModel() {
 
     private val localEvents = MutableSharedFlow<DeviceEvent>(extraBufferCapacity = 4)
+
+    /** System dialogs the screen must launch (`StartIntentSenderForResult`): the companion association confirm. */
+    val launchRequests = MutableSharedFlow<IntentSender>(extraBufferCapacity = 1)
+    private val companionBusy = MutableStateFlow(false)
+
+    /** Set while a companion setup dropped a Bluetooth session that should come back afterwards. */
+    private var reconnectAfterCompanion: Pair<String, String?>? = null
 
     /** Repository snackbar events plus local validation errors. */
     val events: Flow<DeviceEvent> = merge(repository.events, localEvents)
@@ -115,8 +135,8 @@ class DeviceViewModel @Inject constructor(
         repository.wifiScan,
         lan,
         activity,
-        settings.advancedMode,
-    ) { base, scan, (lanDevices, lanErr, known), (busy, syncRunning, transport), advanced ->
+        combine(settings.advancedMode, companionBusy) { a, b -> a to b },
+    ) { base, scan, (lanDevices, lanErr, known), (busy, syncRunning, transport), (advanced, companionBusy) ->
         base.copy(
             transport = transport,
             wifiScan = scan,
@@ -126,6 +146,8 @@ class DeviceViewModel @Inject constructor(
             busy = busy,
             syncRunning = syncRunning,
             advancedMode = advanced,
+            companionSupported = companionPresence.supported && !base.isFake,
+            companionBusy = companionBusy,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DeviceUiState())
 
@@ -148,6 +170,75 @@ class DeviceViewModel @Inject constructor(
                     }
                 )
             )
+        }
+    }
+
+    // ------------------------------------------------------ wake when nearby
+
+    /**
+     * Start the one-time Companion Device Manager association for this logger. The system dialog
+     * needs the device to be advertising, which it is not while this phone holds its single BLE
+     * connection — so a Bluetooth session is dropped first and restored after the dialog; a LAN
+     * session stays. The [IntentSender] reaches the screen through [launchRequests].
+     */
+    fun setupCompanion() {
+        val s = uiState.value
+        val addr = s.address ?: return
+        if (!s.companionSupported || s.companionBusy) return
+        companionBusy.value = true
+        viewModelScope.launch {
+            if (s.overBle && s.connection != ConnectionState.Disconnected) {
+                reconnectAfterCompanion = addr to s.name
+                repository.disconnectNow()
+            }
+            companionPresence.associate(
+                addr,
+                Dispatchers.Main.asExecutor(),
+                onIntent = { sender ->
+                    if (!launchRequests.tryEmit(sender)) {
+                        finishCompanion(addr, "Could not open the system dialog")
+                    }
+                },
+                onError = { reason -> finishCompanion(addr, "Wake when nearby not set up: $reason") },
+            )
+        }
+    }
+
+    /** The system confirm dialog returned; [approved] when the user accepted the association. */
+    fun onCompanionResult(approved: Boolean) {
+        val addr = uiState.value.address ?: reconnectAfterCompanion?.first ?: return
+        viewModelScope.launch {
+            if (!approved) {
+                finishCompanion(addr, "Wake when nearby not set up (cancelled)")
+                return@launch
+            }
+            val id = companionPresence.onAssociated(addr)
+            if (id == null) {
+                finishCompanion(addr, "Wake when nearby not set up: the system recorded no association")
+                return@launch
+            }
+            repository.setCompanionAssociation(addr, id)
+            finishCompanion(addr, "Wake when nearby is on: a sync starts when this phone comes into range of the logger.", ok = true)
+        }
+    }
+
+    /** Remove the association ("wake when nearby" off); the Auto-sync switch and periodic run are untouched. */
+    fun removeCompanion() {
+        val s = uiState.value
+        val addr = s.address ?: return
+        viewModelScope.launch {
+            companionPresence.disassociate(addr, s.known?.companionAssociationId)
+            repository.setCompanionAssociation(addr, null)
+            localEvents.tryEmit(DeviceEvent.Info("Wake when nearby is off."))
+        }
+    }
+
+    private fun finishCompanion(addr: String, message: String, ok: Boolean = false) {
+        companionBusy.value = false
+        localEvents.tryEmit(if (ok) DeviceEvent.Info(message) else DeviceEvent.Error(message))
+        reconnectAfterCompanion?.let { (address, name) ->
+            reconnectAfterCompanion = null
+            if (address == addr) repository.connect(address, name, fake = false, preference = TransportPreference.BLE_ONLY)
         }
     }
 

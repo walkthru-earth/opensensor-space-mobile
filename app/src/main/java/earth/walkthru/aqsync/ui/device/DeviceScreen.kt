@@ -1,5 +1,9 @@
 package earth.walkthru.aqsync.ui.device
 
+import android.app.Activity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -117,6 +121,13 @@ fun DeviceScreen(
             }
         }
     }
+    // The companion-device association is a system dialog launched from an IntentSender.
+    val companionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+        viewModel.onCompanionResult(result.resultCode == Activity.RESULT_OK)
+    }
+    LaunchedEffect(Unit) {
+        viewModel.launchRequests.collect { sender -> companionLauncher.launch(IntentSenderRequest.Builder(sender).build()) }
+    }
     LaunchedEffect(state.address) {
         if (state.address != null && state.address != address) onDisconnected()
     }
@@ -195,7 +206,12 @@ fun DeviceScreen(
             ) {
                 item(key = "info") { DeviceInfoCard(state, now) }
                 item(key = "autosync") {
-                    AutoSyncCard(state, onToggle = { on -> withNotificationPermission { viewModel.setAutoSync(on) } })
+                    AutoSyncCard(
+                        state,
+                        onToggle = { on -> withNotificationPermission { viewModel.setAutoSync(on) } },
+                        onSetupCompanion = { withNotificationPermission { viewModel.setupCompanion() } },
+                        onRemoveCompanion = viewModel::removeCompanion,
+                    )
                 }
                 if (state.info != null && !state.isV2) {
                     item(key = "v1") {
@@ -295,7 +311,7 @@ fun DeviceScreen(
  * worker will and will not do, and warns when neither link can work unattended.
  */
 @Composable
-private fun AutoSyncCard(state: DeviceUiState, onToggle: (Boolean) -> Unit) {
+private fun AutoSyncCard(state: DeviceUiState, onToggle: (Boolean) -> Unit, onSetupCompanion: () -> Unit, onRemoveCompanion: () -> Unit) {
     val known = state.known
     SectionCard(
         "auto-sync",
@@ -314,13 +330,41 @@ private fun AutoSyncCard(state: DeviceUiState, onToggle: (Boolean) -> Unit) {
         Spacer(Modifier.height(6.dp))
         StatLine("wi-fi lan", if (known?.hasLanToken == true) "token stored — tried first when the logger is on this network" else "no token yet (fetched over Bluetooth)")
         StatLine("bluetooth", if (state.bonded) "bonded — direct connect, no scan" else "not bonded — connect once to pair")
+        StatLine(
+            "wake when nearby",
+            when {
+                !state.companionSupported -> "not available on this phone"
+                state.companion -> "on — Android watches for this logger and starts a sync when it comes into range"
+                else -> "off — syncs wait for the next period"
+            },
+        )
         if (state.autoSync && !state.autoSyncReachable) {
             Spacer(Modifier.height(8.dp))
             WarningNote("Neither link can be used unattended yet: no LAN token and no Bluetooth bond. Finish one interactive connection first.")
         }
+        if (state.companionSupported && known != null) {
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (state.companion) {
+                    OutlinedButton(onClick = onRemoveCompanion) { Text("Turn off wake when nearby") }
+                } else {
+                    FilledTonalButton(onClick = onSetupCompanion, enabled = !state.companionBusy) {
+                        Text(if (state.companionBusy) "Waiting for Android…" else "Set up wake when nearby")
+                    }
+                }
+            }
+            if (!state.companion) {
+                Spacer(Modifier.height(6.dp))
+                InfoNote(
+                    "One system dialog: Android then scans for this logger's Bluetooth address on its own, wakes the app when it is in range and lets " +
+                        "it use the network in the background while the logger is present. " +
+                        (if (state.overBle && state.ready) "The Bluetooth link is dropped for the dialog (the logger must be advertising) and restored afterwards." else "")
+                )
+            }
+        }
         InfoNote(
             "Runs as a background job with a progress notification; a summary is posted only when new files arrived. " +
-                "Android decides the exact moment within each period and needs a network connection and a battery that is not low. " +
+                "Android decides the exact moment within each period and needs a battery that is not low; joining a Wi-Fi network also starts a LAN check. " +
                 "Files are pulled and verified exactly as with Sync all; the logger is never asked to delete anything."
         )
     }

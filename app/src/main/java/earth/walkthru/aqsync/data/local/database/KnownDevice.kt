@@ -34,12 +34,26 @@ data class KnownDevice(
      * Off by default; the switch lives on the Device screen and as a quick toggle on Files. Schema v3.
      */
     val autoSync: Boolean = false,
+    /**
+     * Companion Device Manager association for this address, once the user approved the system
+     * dialog ("wake when nearby"): the id from `AssociationInfo.getId()` on API 33+, or
+     * [COMPANION_ASSOCIATED_LEGACY] on API 31–32 where the framework only reports the address.
+     * Null = never associated. The framework's own store is the truth; this column is the app's
+     * memory of it so the Device screen and the presence service can skip a lookup. Schema v8.
+     */
+    val companionAssociationId: Int? = null,
 ) {
     val hasLanToken: Boolean get() = lanToken != null
+    val hasCompanion: Boolean get() = companionAssociationId != null
 
     /** Safe for logs: identity without the secret. */
     override fun toString(): String =
-        "KnownDevice(address=$address, name=$name, station=$station, lanToken=${if (lanToken != null) "<set>" else "null"}, lanPort=$lanPort, autoSync=$autoSync)"
+        "KnownDevice(address=$address, name=$name, station=$station, lanToken=${if (lanToken != null) "<set>" else "null"}, lanPort=$lanPort, autoSync=$autoSync, companion=$companionAssociationId)"
+
+    companion object {
+        /** API 31–32 associations have no id visible to the app; this marks "associated, id unknown". */
+        const val COMPANION_ASSOCIATED_LEGACY = -1
+    }
 }
 
 @Dao
@@ -78,6 +92,13 @@ interface KnownDeviceDao {
 
     @Query("SELECT COUNT(*) FROM known_device WHERE autoSync = 1")
     fun observeAutoSyncCount(): Flow<Int>
+
+    @Query("UPDATE known_device SET companionAssociationId = :associationId WHERE address = :address")
+    suspend fun setCompanionAssociation(address: String, associationId: Int?)
+
+    /** Devices with a stored LAN token and the switch on: the only ones a Wi-Fi-arrival run can reach. */
+    @Query("SELECT COUNT(*) FROM known_device WHERE autoSync = 1 AND lanToken IS NOT NULL")
+    suspend fun autoSyncLanCount(): Int
 
     @Query("DELETE FROM known_device WHERE address = :address")
     suspend fun delete(address: String)

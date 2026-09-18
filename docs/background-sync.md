@@ -1,8 +1,9 @@
 # Background sync — WorkManager, the foreground notification, WifiLock
 
-**Scope:** everything that must outlive the screen: Auto-sync periodic work, "Sync now in background", "Collect from all loggers", the `dataSync` foreground service, the Wi-Fi lock.
-**Code:** `data/background/AutoSyncScheduler.kt`, `SyncWorker.kt`, `AutoSyncRunner.kt` (pure decision logic + `AutoSyncPolicy`), `AppAutoSyncGateway.kt` (Android plumbing), `SyncForegroundService.kt`, `SyncNotifications.kt`; `data/lan/LanWifiLock.kt`; `ui/permissions/NotificationPermission.kt`; `AndroidManifest.xml` (service + `SystemForegroundService` merge, `WorkManagerInitializer` removal).
-**Tests:** `AutoSyncRunnerTest` (links, guards, "nothing new") over the fake. The worker, service and scheduler plumbing are phone-only.
+**Scope:** everything that must outlive the screen: Auto-sync periodic work, "Sync now in background", "Collect from all loggers", the `dataSync` foreground service, the Wi-Fi lock — and the **event-driven triggers** that start a run before the period is up: companion-device presence, the device's advertising flags, Wi-Fi arrival.
+**Code:** `data/background/AutoSyncScheduler.kt`, `SyncWorker.kt`, `AutoSyncRunner.kt` (pure decision logic + `AutoSyncPolicy`), `AppAutoSyncGateway.kt` (Android plumbing), `SyncForegroundService.kt`, `SyncNotifications.kt`; triggers: `CompanionPresence.kt` + `CompanionPresenceService.kt`, `AdvertFlagScan.kt` (+ `AdvertScanReceiver`), `SyncTriggers.kt` (+ `WifiArrivalReceiver`, `BootReceiver`, `SyncTrigger`); `core/protocol/.../Advertisement.kt`; `data/lan/LanWifiLock.kt`; `ui/permissions/NotificationPermission.kt`; `AndroidManifest.xml` (services, receivers, `REQUEST_COMPANION_*`, `SystemForegroundService` merge, `WorkManagerInitializer` removal).
+**Tests:** `AutoSyncRunnerTest` (links, guards, "nothing new", `lanOnly`) over the fake; `AdvertisementTest` (protocol 2.1 bytes). The worker, service, scheduler, CDM and receiver plumbing are phone-only.
+**Design and evidence:** `../m5stack-aq-parquet/docs/background-sync-triggers.md` (why these triggers, what Android does, what to measure) — **none of the triggers is bench-verified yet.**
 **Related:** [transports.md](transports.md), [sync-engine.md](sync-engine.md).
 
 ## Rule
@@ -30,12 +31,27 @@ flowchart TD
   S --> N["summary notification only if new files or failures"]
 ```
 
+## Triggers — starting a run before the period is up
+
+The 15-minute periodic request is the **floor**. Three sources enqueue the same expedited one-time
+`SyncWorker` request (unique name `auto-sync-trigger`, `KEEP`, input `KEY_TRIGGER`) so a trigger is
+never swallowed by a manual run and at most one triggered run is pending; all existing guards apply.
+
+| Trigger | Mechanism | Fires when | Needs from the device |
+| --- | --- | --- | --- |
+| **Wake when nearby** (`SyncTrigger.PRESENCE`) | Companion Device Manager. Device screen › Auto-sync › *Set up wake when nearby* → `CompanionDeviceManager.associate` with a `BluetoothLeDeviceFilter` on the logger's **address**, single-device, one system confirm dialog (the logger must be advertising, so a BLE session is dropped for it and restored; LAN stays). Then `startObservingDevicePresence` (`ObservingDevicePresenceRequest` on API 36, address string on 31–35). The system binds `CompanionPresenceService`; `EVENT_BLE_APPEARED` / `onDeviceAppeared` → `syncNow(address, PRESENCE)` if the device's Auto-sync switch is on. Disappeared → nothing. Association id in `known_device.companionAssociationId` (schema v8); *Turn off* or *Forget* disassociates. | The logger comes into BLE range (once per arrival; AOSP scans `SCAN_MODE_LOW_POWER`, `FIRST_MATCH \| MATCH_LOST`, MAC filter; disappeared ≈ 10 s after the last report). | A stable public address — the CoreS3 default. |
+| **Advertising flags** (`SyncTrigger.ADVERTISEMENT`) | `AdvertFlagScan`: `BluetoothLeScanner.startScan(filters, LOW_POWER + FIRST_MATCH \| MATCH_LOST, PendingIntent)` with two offloaded filters per **bonded** Auto-sync device — `deviceAddress` AND `serviceData(SERVICE, [0, flag], mask [0, flag])` for `new_files` and for `no_utc`. `AdvertScanReceiver` decodes `Advertisement`, skips when `changeKey` (`boot16:fin:flags`) equals the last run's or within 5 min, else `syncNow(address, ADVERTISEMENT)`. Registered at process start, re-armed by every periodic run (stop + start; a Bluetooth toggle drops it), unregistered when no bonded Auto-sync device exists. Needs `isOffloadedFilteringSupported()`; otherwise absent, with a log line. | The **device** decides: it sets `new_files` when a file finalizes and clears it after a `LIST`; `no_utc` while it has no UTC anchor (reboot). | Firmware ≥ `-v6.3` (protocol 2.1 advertising payload). |
+| **Wi-Fi arrival** (`SyncTrigger.WIFI`) | `SyncTriggers`: `ConnectivityManager.registerNetworkCallback(NetworkRequest{TRANSPORT_WIFI}, PendingIntent)` → `WifiArrivalReceiver` → `syncOnTrigger(WIFI, lanOnly = true)` when ≥ 1 Auto-sync device has a LAN token; throttled to one start per 10 min (the callback also fires at registration when already on Wi-Fi). `lanOnly` keeps Bluetooth out of a run that says nothing about range. Re-registered at every process start (survives process death, not reboot → `BootReceiver`). | The phone joins any Wi-Fi network (SSID is location-gated, so "home" is unknown; the 10 s mDNS browse is the cost of a miss). | Nothing. |
+
+**Exemptions that come with CDM** (AOSP `CompanionExemptionProcessor`, *while an associated device is present*): `REQUEST_COMPANION_RUN_IN_BACKGROUND` → permanent power-save allowlist; `REQUEST_COMPANION_USE_DATA_IN_BACKGROUND` → background data allowed — the exemption the measured screen-off socket kill ("Destroyed live tcp sockets") called for; `REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND` → the worker's `setForeground` should stop being refused. All normal permissions, no location. Whether they hold on the OnePlus's ROM is exactly what the next phone run must show.
+
 ## Scheduling (`AutoSyncScheduler`)
 
 | Request | Details |
 | --- | --- |
 | Periodic | Unique name, `KEEP`, **15 min** (`PeriodicWorkRequest.MIN_PERIODIC_INTERVAL_MILLIS`; Android picks the moment, later under Doze). Exists exactly while ≥ 1 `known_device.autoSync` row is on (the scheduler observes the count; the switch only flips the row) and is cancelled when the last goes off. Constraint: **battery not low only** — `NetworkType.CONNECTED` was dropped because the BLE path needs no network and a phone with Wi-Fi off never ran. |
-| Sync now / Collect all | One unique `OneTimeWorkRequest`, `setExpedited(RUN_AS_NON_EXPEDITED_WORK_REQUEST)`, `KEEP`, input `KEY_ADDRESS` or `KEY_ALL_KNOWN`. Expedited work may carry network/storage constraints only → no battery rule. |
+| Sync now / Collect all | One unique `OneTimeWorkRequest` (`auto-sync-now`), `setExpedited(RUN_AS_NON_EXPEDITED_WORK_REQUEST)`, `KEEP`, input `KEY_ADDRESS` or `KEY_ALL_KNOWN`. Expedited work may carry network/storage constraints only → no battery rule. |
+| Triggered | Same request under `auto-sync-trigger`, `KEEP`; input `KEY_TRIGGER` (+ `KEY_ADDRESS` for presence/advertisement, `KEY_LAN_ONLY` for Wi-Fi). Two workers may overlap (manual + triggered); the second sees the repository session and skips. |
 | Retry | `Result.retry()` with exponential backoff from 5 min, at most `MAX_RETRIES` 2 per period, **only** for transient conditions (a link exception, or a transfer that broke before every planned file had an outcome — `BackgroundSyncResult.incomplete`). Not reachable is not an error: one log line, next period. Per-file failures are not retried inside the period. |
 
 ## Decision logic (`AutoSyncRunner`, pure)
@@ -89,3 +105,6 @@ deep-optimization / sleep-standby lists; a swiped-away app may still be killed. 
 | `known_device.autoSync` column | scheduler's observed count; every `KnownDevice` upsert must carry `previous?.autoSync` ([lesson](lessons-learned.md#room--data)) |
 | `SyncForegroundService` start point | must remain a foreground-app moment (repository `startSync`), else API 31+ refuses |
 | `LanWifiLock` acquire/release | `startSync` `finally`; never over BLE, never idle |
+| `Advertisement` layout | mirror of the firmware contract (`ble-sync-protocol.md`, "Advertising payload"); change there first; `AdvertFlagScan` filter bytes and `AdvertisementTest` |
+| `SyncTrigger` enum | `AutoSyncScheduler.syncNow/syncOnTrigger`, `SyncWorker` log line, the periodic-run detection that re-arms the flag scan |
+| `companionAssociationId` column | `CompanionPresence.observe` at start, `forget()` disassociation, Device screen "wake when nearby" line |

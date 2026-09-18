@@ -34,7 +34,7 @@ WorkManager plumbing are verified only on hardware and recorded in the firmware 
 | | |
 | --- | --- |
 | Language / UI | Kotlin 2.4.20, Jetpack Compose (BOM 2026.09.00, material3 1.4.0), Material 3 dynamic color, Navigation 3 (1.1.7) |
-| DI / data | Hilt 2.60.1, Room 2.8.5 (**schema v7**), DataStore Preferences 1.2.1, WorkManager 2.11.2 + `androidx.hilt:hilt-work` 1.4.0, kotlinx.serialization 1.11.0, coroutines 1.11.0 |
+| DI / data | Hilt 2.60.1, Room 2.8.5 (**schema v8**), DataStore Preferences 1.2.1, WorkManager 2.11.2 + `androidx.hilt:hilt-work` 1.4.0, kotlinx.serialization 1.11.0, coroutines 1.11.0 |
 | Native | `zstd-jni` 1.5.7-17 (`@aar`) — the only native library |
 | Build | AGP 9.4.0, Gradle 9.7.1, KSP 2.3.12, version catalog; `:core:*` are `kotlin("jvm")` targeting Java 17 |
 | SDK | `compileSdk`/`targetSdk` **37**, `minSdk` **31** (modern Bluetooth permission model; no legacy branches) |

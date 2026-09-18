@@ -3,6 +3,7 @@ package earth.walkthru.aqsync.data
 import android.content.Context
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
+import earth.walkthru.aqsync.data.background.CompanionPresence
 import earth.walkthru.aqsync.data.background.SyncForegroundService
 import earth.walkthru.aqsync.data.ble.AqTransport
 import earth.walkthru.aqsync.data.ble.ConfigSnapshot
@@ -176,6 +177,7 @@ class DeviceConnectionRepository @Inject constructor(
     private val lanDiscovery: LanDiscovery,
     private val lanWifiLock: LanWifiLock,
     private val historyDeriver: HistoryDeriver,
+    private val companionPresence: CompanionPresence,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val tokenPolicy = LanTokenPolicy()
@@ -841,6 +843,14 @@ class DeviceConnectionRepository @Inject constructor(
         knownDeviceDao.setAutoSync(address, enabled)
     }
 
+    /**
+     * Record the Companion Device Manager association behind "wake when nearby" (null = removed).
+     * The framework holds the association itself; this is the app's memory of it.
+     */
+    suspend fun setCompanionAssociation(address: String, associationId: Int?) = withContext(Dispatchers.IO) {
+        knownDeviceDao.setCompanionAssociation(address, associationId)
+    }
+
     private fun describe(o: FileOutcome): String = when (o) {
         is FileOutcome.Synced -> "synced"
         is FileOutcome.Mismatch -> o.reason
@@ -1088,6 +1098,7 @@ class DeviceConnectionRepository @Inject constructor(
 
     suspend fun forget(address: String) = withContext(Dispatchers.IO) {
         tokenPolicy.clear(address)
+        knownDeviceDao.get(address)?.companionAssociationId?.let { companionPresence.disassociate(address, it) }
         knownDeviceDao.delete(address)
     }
 

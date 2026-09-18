@@ -47,6 +47,7 @@ class SyncWorker @AssistedInject constructor(
     private val repository: DeviceConnectionRepository,
     private val notifications: SyncNotifications,
     private val historyDeriver: HistoryDeriver,
+    private val advertScan: AdvertFlagScan,
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun getForegroundInfo(): ForegroundInfo =
@@ -85,9 +86,12 @@ class SyncWorker @AssistedInject constructor(
                         }
                 }
                 try {
+                    val trigger = inputData.getString(KEY_TRIGGER) ?: (if (inputData.getString(KEY_ADDRESS) != null || inputData.getBoolean(KEY_ALL_KNOWN, false)) SyncTrigger.MANUAL.name else "PERIODIC")
+                    Log.i(TAG, "auto-sync run: trigger=$trigger")
                     AutoSyncRunner(gateway, log = { Log.i(TAG, it) }).run(
                         onlyAddress = inputData.getString(KEY_ADDRESS),
                         allKnown = inputData.getBoolean(KEY_ALL_KNOWN, false),
+                        lanOnly = inputData.getBoolean(KEY_LAN_ONLY, false),
                     )
                 } finally {
                     mirror.cancel()
@@ -103,6 +107,11 @@ class SyncWorker @AssistedInject constructor(
             if (!foreground) runCatching { manager.cancel(SyncNotifications.WORKER_ID) }
         }
 
+        if (inputData.getString(KEY_TRIGGER) == null && inputData.getString(KEY_ADDRESS) == null && !inputData.getBoolean(KEY_ALL_KNOWN, false)) {
+            // Periodic run: the cheapest place to re-arm the offloaded flag scan, which a Bluetooth
+            // toggle silently drops (stop + start, de-duplicated by the receiver).
+            runCatching { advertScan.ensureRegisteredNow() }.onFailure { Log.w(TAG, "flag scan re-register failed: ${it.message}") }
+        }
         if (report.newFiles > 0) {
             // Still inside the worker's run: the tiers for the days that just gained files.
             runCatching { historyDeriver.deriveStale() }.onFailure { Log.w(TAG, "derive failed: ${it.message}") }
@@ -129,5 +138,11 @@ class SyncWorker @AssistedInject constructor(
 
         /** Input data: a manual run over every known device ("Collect from all loggers"). */
         const val KEY_ALL_KNOWN = "all_known"
+
+        /** Input data: [SyncTrigger] name, for the log line; absent on periodic runs. */
+        const val KEY_TRIGGER = "trigger"
+
+        /** Input data: try the LAN link only (a Wi-Fi join must not start Bluetooth connects). */
+        const val KEY_LAN_ONLY = "lan_only"
     }
 }

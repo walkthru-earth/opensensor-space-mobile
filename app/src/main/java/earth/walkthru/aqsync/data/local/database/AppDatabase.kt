@@ -24,12 +24,14 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * - v7: `metric_bucket` (one row per metric — the registry decides which) replaces the wide
  *   `aggregate_bucket`, which is dropped; `AutoMigration` with `DeleteTable`. Tiers are a cache: the
  *   deriver's signature version bump rebuilds every day on first run.
+ * - v8: `known_device.companionAssociationId` (nullable) — the Companion Device Manager association
+ *   behind "wake when nearby"; `AutoMigration` (new nullable column).
  */
 @Database(
     entities = [KnownDevice::class, ArchivedFile::class, MetricBucket::class, DerivedDay::class],
-    version = 7,
+    version = 8,
     exportSchema = true,
-    autoMigrations = [AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6), AutoMigration(from = 6, to = 7, spec = AppDatabase.DropWideTiers::class)],
+    autoMigrations = [AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6), AutoMigration(from = 6, to = 7, spec = AppDatabase.DropWideTiers::class), AutoMigration(from = 7, to = 8)],
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun knownDeviceDao(): KnownDeviceDao

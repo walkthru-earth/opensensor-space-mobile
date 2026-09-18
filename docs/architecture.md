@@ -13,7 +13,7 @@ flowchart TB
     PQ[":core:parquet<br/>reader + writer, Thrift compact, LZ4/Snappy/GZIP, codec SPI, WKB"]
     HI[":core:history<br/>Metrics registry, Aggregator, TimeEstimate, Columns, AirMood, ParquetIndexer"]
   end
-  APP[":app (Android)<br/>Hilt · Room v7 · DataStore · WorkManager · Compose · zstd-jni"]
+  APP[":app (Android)<br/>Hilt · Room v8 · DataStore · WorkManager · Compose · zstd-jni"]
   HI --> PQ
   HI --> PR
   APP --> HI
@@ -52,7 +52,7 @@ flowchart LR
 | `data/sync/` | `SyncPlanner`, `SyncEngine`, `FileArchive`, `ReadWindow`, `SyncResumePolicy` | files + Room |
 | `data/background/` | `SyncForegroundService`, `SyncNotifications`, `SyncWorker`, `AutoSyncScheduler`, `AutoSyncRunner` (pure), `AppAutoSyncGateway` | yes (runner: no) |
 | `data/history/` | `HistoryIndexer`, `HistoryDeriver`, `DailyDerived*`, `HistoryRepository`, `parquet/AppParquetCodecs` (ZSTD) | Room + files |
-| `data/local/database/` | `AppDatabase` (v7), `KnownDevice`, `ArchivedFile`, `History.kt` (`MetricBucket`, `DerivedDay`) | yes |
+| `data/local/database/` | `AppDatabase` (v8), `KnownDevice`, `ArchivedFile`, `History.kt` (`MetricBucket`, `DerivedDay`) | yes |
 | `data/settings/AppSettings.kt` | DataStore: `DetailLevel` Simple · Detailed · Developer | yes |
 | `data/export/ExportManager.kt` | share / zip / SAF | yes |
 | `data/fake/FakeTransport.kt` | in-process protocol-v2 device with fault hooks | no (JVM) |

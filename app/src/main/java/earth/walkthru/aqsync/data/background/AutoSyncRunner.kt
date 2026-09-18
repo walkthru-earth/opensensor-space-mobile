@@ -52,13 +52,13 @@ object AutoSyncPolicy {
      * the interactive connect uses), then Bluetooth if — and only if — the phone is bonded: an
      * unbonded device would need the passkey dialog, which does not exist in a worker.
      */
-    fun linksFor(device: KnownDevice, lan: Map<String, LanDevice>, bonded: Boolean): List<AutoSyncLink> {
+    fun linksFor(device: KnownDevice, lan: Map<String, LanDevice>, bonded: Boolean, lanOnly: Boolean = false): List<AutoSyncLink> {
         val links = ArrayList<AutoSyncLink>(2)
         val station = device.station
         if (station != null && device.hasLanToken) {
             lan[station]?.takeIf { it.isConnectable }?.let { links += AutoSyncLink.Lan(it) }
         }
-        if (bonded) links += AutoSyncLink.Ble
+        if (bonded && !lanOnly) links += AutoSyncLink.Ble
         return links
     }
 }
@@ -126,8 +126,9 @@ class AutoSyncRunner(
      * Auto-sync switch is on; [allKnown] = a manual "Collect from all loggers" over every known device
      * (a maintainer walking a site); otherwise the periodic run over every device with the switch on.
      * In every case each device is tried in turn over LAN, then its Bluetooth bond — one link at a time.
+     * [lanOnly] (the Wi-Fi-arrival trigger) leaves Bluetooth out: a Wi-Fi join says nothing about range.
      */
-    suspend fun run(onlyAddress: String? = null, allKnown: Boolean = false): AutoSyncReport {
+    suspend fun run(onlyAddress: String? = null, allKnown: Boolean = false, lanOnly: Boolean = false): AutoSyncReport {
         val devices = when {
             onlyAddress != null -> listOfNotNull(gateway.knownDevice(onlyAddress))
             allKnown -> gateway.allKnownDevices()
@@ -147,9 +148,9 @@ class AutoSyncRunner(
                 reports += DeviceRunReport(device, emptyList(), null, skipped = why)
                 continue
             }
-            val links = AutoSyncPolicy.linksFor(device, lan, gateway.isBonded(device.address))
+            val links = AutoSyncPolicy.linksFor(device, lan, gateway.isBonded(device.address), lanOnly)
             if (links.isEmpty()) {
-                val why = "not on the LAN and not bonded"
+                val why = if (lanOnly) "not on the LAN (Bluetooth not tried on a Wi-Fi trigger)" else "not on the LAN and not bonded"
                 log("auto-sync ${device.name ?: device.address}: skipped, $why")
                 reports += DeviceRunReport(device, emptyList(), null, skipped = why)
                 continue

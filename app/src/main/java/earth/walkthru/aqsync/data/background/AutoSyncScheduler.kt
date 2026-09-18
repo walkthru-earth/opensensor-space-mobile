@@ -36,6 +36,9 @@ import javax.inject.Singleton
  *   in the UI only has to flip the row.
  * - **Sync now**: one unique expedited one-time request (`RUN_AS_NON_EXPEDITED_WORK_REQUEST` when
  *   the quota is spent), `KEEP` so a double tap does not queue a second run.
+ * - **Triggered**: the same one-time request under a second unique name, enqueued by
+ *   [CompanionPresenceService] (logger came into BLE range) and [SyncTriggers] (phone joined Wi-Fi);
+ *   see the firmware repo's `docs/background-sync-triggers.md` for why these exist.
  *
  * Retry backoff (a transfer that broke off, see [SyncWorker]): exponential from 5 min, so a flaky
  * link is retried a couple of times inside the period without hammering the radio.
@@ -74,16 +77,32 @@ class AutoSyncScheduler @Inject constructor(
      * "Sync now in background" for [address] (Auto-sync switch on or not): runs as soon as the
      * system allows, and the user may leave the app.
      */
-    fun syncNow(address: String) {
+    fun syncNow(address: String, trigger: SyncTrigger = SyncTrigger.MANUAL) {
         // Expedited work may only carry network/storage constraints (so no battery rule), and we
         // want none of those either: the Bluetooth path needs no network.
         val request = OneTimeWorkRequestBuilder<SyncWorker>()
-            .setInputData(workDataOf(SyncWorker.KEY_ADDRESS to address))
+            .setInputData(workDataOf(SyncWorker.KEY_ADDRESS to address, SyncWorker.KEY_TRIGGER to trigger.name))
             .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_MINUTES, TimeUnit.MINUTES)
             .addTag(TAG_AUTO_SYNC)
             .build()
-        workManager.enqueueUniqueWork(MANUAL_NAME, ExistingWorkPolicy.KEEP, request)
+        // Triggered runs queue under their own name so a presence event is not swallowed by a
+        // manual run the user just started (KEEP would drop it); at most one of each is pending.
+        workManager.enqueueUniqueWork(if (trigger == SyncTrigger.MANUAL) MANUAL_NAME else TRIGGER_NAME, ExistingWorkPolicy.KEEP, request)
+    }
+
+    /**
+     * An event-driven run over every Auto-sync device ([SyncTriggers]): the Wi-Fi trigger passes
+     * [lanOnly] so a Wi-Fi join never turns into Bluetooth connect attempts.
+     */
+    fun syncOnTrigger(trigger: SyncTrigger, lanOnly: Boolean) {
+        val request = OneTimeWorkRequestBuilder<SyncWorker>()
+            .setInputData(workDataOf(SyncWorker.KEY_TRIGGER to trigger.name, SyncWorker.KEY_LAN_ONLY to lanOnly))
+            .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_MINUTES, TimeUnit.MINUTES)
+            .addTag(TAG_AUTO_SYNC)
+            .build()
+        workManager.enqueueUniqueWork(TRIGGER_NAME, ExistingWorkPolicy.KEEP, request)
     }
 
     /**
@@ -112,6 +131,7 @@ class AutoSyncScheduler @Inject constructor(
         private const val TAG = "AutoSyncScheduler"
         const val PERIODIC_NAME = "auto-sync-periodic"
         const val MANUAL_NAME = "auto-sync-now"
+        const val TRIGGER_NAME = "auto-sync-trigger"
         const val TAG_AUTO_SYNC = "auto-sync"
 
         /** WorkManager refuses shorter periods (PeriodicWorkRequest.MIN_PERIODIC_INTERVAL_MILLIS). */
