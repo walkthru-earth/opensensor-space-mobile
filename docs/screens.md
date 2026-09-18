@@ -61,4 +61,5 @@ state change, de-duplicated). Never derive it per screen from the session object
 | `DetailLevel` / `AppSettings` | every `detailed`/`advancedMode` collector; Debug visibility; Files table icon |
 | `NowCard.kt` / `AirMood` copy | Today, Home cards (same moods), iOS parity (`MoodFace` is replaced one-for-one) |
 | `BandColumnChart.kt`, `DayRing.kt`, `CalendarHeatmap.kt` | History and Files › Chart by file (share `Columns` + `HistoryColumn`) |
+| `ui/files/FileGrouping.kt` | Files list headers and per-row local time (pure: `zone`/`locale` parameters, `FileGroupingTest`); the firmware's `day=`/`data_HHMM_` naming in `../m5stack-aq-parquet/docs/telemetry-pipeline.md` is what it parses |
 | `DeviceScreen` confirmation dialogs | the **only** call path to `rebootAndReconnect()` — keep it that way ([sync-engine.md](sync-engine.md#state-changing-requests)) |

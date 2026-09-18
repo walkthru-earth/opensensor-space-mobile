@@ -15,11 +15,11 @@ Auto-sync has **not** completed a period cycle on a phone yet.
 
 ```mermaid
 flowchart LR
-  A["Unit tests (JVM)<br/>138 tests, fixtures from real files"] --> B["Loopback / fake device<br/>TcpTransport, FakeTransport faults"] --> C["Phone run<br/>bench-verified.md"] --> D["Field soak<br/>not yet"]
+  A["Unit tests (JVM)<br/>143 tests, fixtures from real files"] --> B["Loopback / fake device<br/>TcpTransport, FakeTransport faults"] --> C["Phone run<br/>bench-verified.md"] --> D["Field soak<br/>not yet"]
 ```
 
 `./gradlew --no-daemon clean verify` on 2026-09-18: **0 lint errors** (7 pre-existing warnings),
-**138/138 unit tests** — 47 `:app` (auto-sync runner, deriver, indexer, repository, ZSTD codec,
+**143/143 unit tests** — 52 `:app` (auto-sync runner, deriver, indexer, repository, ZSTD codec, Files local-day grouping,
 LAN token policy, `TcpTransport` loopback, planner, resume policy, lost-window recovery), 47
 `:core:protocol` (frame codec v1+v2, CONFIG + `SET_CONFIG` builder, LAN framing with a `LIVE` push
 between two `CHUNK`s, JSON, Parquet verify), 23 `:core:parquet` (reader vs PyArrow, writer,
@@ -41,6 +41,7 @@ estimate, `RealArchiveTest`). Debug APK 68.4 MiB unminified.
 
 ## Recent changes (newest first)
 
+- **2026-09-18** (later) — Files list grouped by **local calendar day** (`FileGrouping`, zone-pinned tests): the headers were the SD card's UTC `day=` folder, so at UTC+3 every file after 21:00 local sat under tomorrow. Header subtitle names the UTC folder(s); each row shows its local start time. Installed on the OnePlus (commit `c6c27cd`), not yet recorded in bench-verified.
 - **2026-09-18** — bugs found on the phone, fixed: `derived_day` upsert that never updated (every pass rebuilt every day), Today card on the UTC day, History span frozen at open time, Day re-read on every Room write. Day view → **24 hourly columns**; Files gained **Chart by file**.
 - **2026-09-17** — GeoParquet 2.0 (D11); modules split into `:core:protocol` / `:core:parquet` / `:core:history`; metric registry, tiers one row per metric (Room v7); History steps 1–5 + §4.6 time estimate; Now card, detail levels, Home cards, Collect from all loggers; first phone run fixes (foreground service, auto-reconnect, token renewal, WifiLock, resume policy, REBOOT audit); Auto-sync; protocol v2.
 - **2026-09-16** — v1 protocol bench-verified from a macOS host; decisions mirrored into `ble-sync-protocol.md`.

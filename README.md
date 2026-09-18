@@ -16,7 +16,7 @@ accounts. Data leaves the phone through the share sheet or the file picker.
 ## Status (2026-09-18)
 
 Protocol v2 + Auto-sync + on-phone history + GeoParquet 2.0 read/write are implemented.
-`./gradlew verify` → **138/138 unit tests**, 0 lint errors (7 known warnings). BLE and LAN file
+`./gradlew verify` → **143/143 unit tests**, 0 lint errors (7 known warnings). BLE and LAN file
 sync have run against the board from one phone (OnePlus 7 Pro, Android 16, partial runs); an
 instrumented full sync and a complete Auto-sync period cycle have not. What was measured, on which
 firmware and app commit, lives in the firmware repo's
