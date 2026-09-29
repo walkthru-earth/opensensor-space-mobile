@@ -1,5 +1,6 @@
 package earth.walkthru.aqsync.ui.history
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ChevronLeft
 import androidx.compose.material.icons.rounded.ChevronRight
@@ -35,6 +37,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -102,15 +106,20 @@ fun HistoryScreen(
             if (state.stations.size > 1) {
                 item(key = "station-epochs") {
                     Column {
-                        Text("Station history", style = MaterialTheme.typography.titleSmall)
-                        state.stations.forEach { station ->
-                            FilterChip(
-                                selected = state.station == station,
-                                onClick = { viewModel.selectStation(station) },
-                                label = { Text(station) },
-                            )
+                        Text("History from", style = MaterialTheme.typography.titleSmall)
+                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            state.stations.forEach { station ->
+                                val current = station == state.stations.last()
+                                val label = "${if (current) "Current" else "Earlier"} · ${station.take(8)}"
+                                FilterChip(
+                                    selected = state.station == station,
+                                    onClick = { viewModel.selectStation(station) },
+                                    label = { Text(label) },
+                                    modifier = Modifier.semantics { contentDescription = "$label, station $station" },
+                                )
+                            }
                         }
-                        InfoNote("Earlier stations remain separate after a device reset. Their archived files are unchanged.")
+                        InfoNote("Earlier station readings stay available after a device reset.")
                     }
                 }
             }
@@ -135,13 +144,19 @@ fun HistoryScreen(
             }
             item(key = "chart") {
                 if (state.availableMetrics.isEmpty()) {
-                    InfoNote("No supported measurements are indexed for this station yet. Verified files remain available in Files and Export.")
+                    InfoNote(
+                        if (state.filesUntimed > 0) {
+                            "This station has saved readings without a calendar time. Use Files → Chart by file to see them in file order."
+                        } else {
+                            "No supported measurements are indexed for this station yet. Verified files remain available in Files and Export."
+                        }
+                    )
                 } else {
                     ChartCard(state, zone, onOpenDay = { dayStartS -> viewModel.openDay(dayStartS) })
                 }
             }
             item(key = "metric") {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     state.availableMetrics.forEach { m ->
                         FilterChip(selected = state.metric.id == m.id, onClick = { viewModel.setMetric(m) }, label = { Text(m.label) })
                     }
@@ -157,16 +172,19 @@ fun HistoryScreen(
                         StatLine("from · to (UTC days)", "${f.format(Instant.ofEpochSecond(firstDay))} · ${f.format(Instant.ofEpochSecond(lastDay))}")
                     }
                     StatLine("files with time", "${state.filesWithTime} of ${state.filesTotal}")
-                    if (state.filesUnindexed > 0) StatLine("still indexing", state.filesUnindexed.toString())
+                    if (state.filesPendingIndex > 0) StatLine("waiting to index", state.filesPendingIndex.toString())
+                    if (state.filesIndexFailed > 0) StatLine("could not index", state.filesIndexFailed.toString())
                     if (state.filesEstimated > 0) StatLine("files with estimated time", state.filesEstimated.toString())
-                    val untimed = state.filesTotal - state.filesWithTime - state.filesEstimated
-                    if (untimed > 0) {
+                    if (state.filesOtherStation > 0) {
+                        InfoNote("${state.filesOtherStation} saved copies have another station ID. They are kept unchanged and excluded from this station's history; choose the earlier station above to see its dated readings.")
+                    }
+                    if (state.filesUntimed > 0) {
                         InfoNote(
-                            "$untimed file${if (untimed == 1) "" else "s"} were logged while the logger had no clock and no later time set reached that power-on, " +
+                            "${state.filesUntimed} file${if (state.filesUntimed == 1) "" else "s"} were logged while the logger had no clock and no later time set reached that power-on, " +
                                 "so their rows cannot be placed on this timeline. Give the logger the time from Today so new rows get one.",
                         )
                     }
-                    InfoNote("Means use only readings the sensor marked valid (warmed up, fresh, no error). Coverage is the share of the window that has such readings — 3 readings in an hour is 1 %, not an hourly average.")
+                    if (state.availableMetrics.isNotEmpty()) InfoNote("Means use only readings the sensor marked valid (warmed up, fresh, no error). Coverage is the share of the window that has such readings — 3 readings in an hour is 1 %, not an hourly average.")
                 }
             }
             if (state.advancedMode) {

@@ -86,6 +86,36 @@ Neither run captured a raw GATT packet or transferred a file. The 100% value is 
 capped estimate, not a capacity-calibration result. Charging state remains unknown; the board
 adapter does not report `chg` or `vbus`.
 
+## Waveshare History after station reset (2026-09-30 Cairo)
+
+OnePlus 7 Pro (GM1911, Android 16 / API 36) received the updated debug APK in place with
+`adb install -r`; app data and archived files were retained. APK SHA-256 was
+`9c14cec1db961f842f570f99095db414558f19cd0247e62f01678564001be051`.
+The connected AQ-7500 had current station `81c0da75-009b-4922-94f9-64e310f006b8` and
+earlier station `7abe1b6b-e014-42e7-b259-bf61cee9f288` from the prior reset. History showed
+the current station's 30 September PM2.5 day chart (23.3 µg/m³, 2% coverage), then selecting
+**Earlier** opened its latest day, 29 September (36.5 µg/m³, 18% coverage). Changing to Week
+kept that date and showed its 23–29 September chart. The full UUIDs were replaced by short
+Current/Earlier labels; metric chips now scroll horizontally without squeezing a long label.
+
+Before this fix, History counted 99 retained SD copies whose inner Hive path named the earlier
+station as “still indexing” under the current station and described all 115 current-namespace
+files as untimed. The page now excludes those copies from the current station's file/time counts
+and explains their provenance; the immutable archive bytes and outer INFO-station namespace
+were not changed. After four additional files were collected, the current-namespace view showed
+20 own files, including three with real UTC, two with estimated time, and 99 retained copies
+from the earlier station. This observation covers the two station views and Day/Week controls,
+not a controlled reset/reflash or complete file-sync qualification. The firmware image was
+previously read as SHA-256 `63951c913b0995ee7d2180a68fb4fc995202b48cfe6741655909e2b420febc0c`;
+it was not read again during this battery-only phone run.
+
+Screenshots are retained in the firmware trial's ignored `artifacts/` directory:
+`history-android-current-20260930.png` (SHA-256
+`1832c216861e926198ba91aec625018439368b66d195b466f06887ffff9cd6c7`) and
+`history-android-earlier-20260930.png` (SHA-256
+`0e80bc7ea09de10c87b146bb45120290e74d5df10484a2c8fa60f89d7b105634`).
+The focused History presentation tests and `./gradlew --no-daemon verify` passed.
+
 ## Verification ladder
 
 ```mermaid

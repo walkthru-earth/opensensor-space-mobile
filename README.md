@@ -27,6 +27,9 @@ The USB update opened on the OnePlus on 2026-09-29 with existing archives intact
 pairing repair restored Waveshare live readings; its earlier station history remained selectable.
 Earlier BLE/LAN partial sync and one advertising wake were measured on a OnePlus 7 Pro (Android 16);
 full sync, an Auto-sync period cycle, companion presence and Wi-Fi-arrival runs remain outstanding.
+On 2026-09-30, the OnePlus History screen was checked after a Waveshare station reset: it now
+shows compact generation labels, opens an earlier station at its latest recorded day, preserves
+that date across range changes, and separates retained producer copies from untimed files.
 Measured behavior lives in the firmware's
 [CoreS3 bench record](../aq-parquet/docs/boards/m5stack-cores3/bench-verified.md);
 [`docs/status.md`](docs/status.md) separates host tests from phone evidence.

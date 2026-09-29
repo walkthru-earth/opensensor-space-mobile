@@ -29,8 +29,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
@@ -50,7 +52,10 @@ data class HistoryUiState(
     /** Verified telemetry files with UTC rows / all verified files of the station. */
     val filesWithTime: Int = 0,
     val filesTotal: Int = 0,
-    val filesUnindexed: Int = 0,
+    val filesPendingIndex: Int = 0,
+    val filesIndexFailed: Int = 0,
+    val filesOtherStation: Int = 0,
+    val filesUntimed: Int = 0,
     /** Files placed on the timeline by a §4.6 estimate. */
     val filesEstimated: Int = 0,
     val daysWithData: Int = 0,
@@ -100,7 +105,7 @@ class HistoryViewModel @AssistedInject constructor(
     private val address = MutableStateFlow<String?>(deviceAddress)
     private val selectedStation = MutableStateFlow<String?>(null)
     private val stations = epochDao.observeForDevice(deviceAddress).map { epochs -> epochs.map { it.station } }
-    fun selectStation(station: String) { selectedStation.value = station; jumpToLatest() }
+    fun selectStation(station: String) { selectedStation.value = station }
 
     /** The screen binds its nav key's address once; the station follows from the known-device row. */
     fun bind(address: String) { this.address.value = address }
@@ -129,11 +134,25 @@ class HistoryViewModel @AssistedInject constructor(
         }
     }
 
-    private val device = combine(knownDeviceDao.observeAll(), address, selectedStation, stations) { list, a, selected, epochs ->
-        list.firstOrNull { it.address == a }?.let { d -> d.copy(station = selected?.takeIf { it in epochs } ?: d.station) }
+    private val device = combine(knownDeviceDao.observeAll(), address, selectedStation, stations, archivedFileDao.observeAll()) { list, a, selected, epochs, files ->
+        list.firstOrNull { it.address == a }?.let { d ->
+            d.copy(station = preferredHistoryStation(d.station, epochs, files, selected))
+        }
     }
 
     private val stationQuery = device.map { it?.station }.distinctUntilChanged()
+
+    init {
+        viewModelScope.launch {
+            stationQuery.collectLatest { station ->
+                if (station == null) return@collectLatest
+                val latest = latestHistoryDayEnd(archivedFileDao.observeForStation(station).first(), java.time.ZoneId.systemDefault())
+                val now = nowRounded(range.value)
+                toS.value = minOf(latest ?: now, now)
+                followsNow.value = toS.value == now
+            }
+        }
+    }
 
     private val availableMetrics = stationQuery.archiveQueryResults { station ->
         if (station == null) {
@@ -151,25 +170,17 @@ class HistoryViewModel @AssistedInject constructor(
     }.stateIn(viewModelScope, SharingStarted.Eagerly, ArchiveQueryResult<String?, List<MetricSpec>>(null, null))
 
     private val series = combine(device, metric, range, toS) { d, m, r, t -> ArchiveSeriesQuery(d?.station, m, r, t) }
+        .distinctUntilChanged()
         .archiveQueryResults { query ->
             val station = query.station
             if (station == null) flowOf(null) else history.observe(station, query.metric, query.range, query.toS)
         }
 
-    private data class Counts(val withTime: Int, val total: Int, val unindexed: Int, val estimated: Int)
-
     private val fileCounts = stationQuery.archiveQueryResults { station ->
         if (station == null) {
-            flowOf(Counts(0, 0, 0, 0))
+            flowOf(HistoryFileCounts())
         } else {
-            archivedFileDao.observeForStation(station).map { files ->
-                Counts(
-                    withTime = files.count { it.indexed && it.hasUtc && (it.purpose == null || it.purpose == "telemetry") },
-                    total = files.size,
-                    unindexed = files.count { !it.indexed },
-                    estimated = files.count { it.indexed && it.hasEstimatedUtc },
-                )
-            }
+            archivedFileDao.observeForStation(station).map(::countHistoryFiles)
         }
     }
 
@@ -187,7 +198,7 @@ class HistoryViewModel @AssistedInject constructor(
         val d = values[0] as earth.walkthru.aqsync.data.local.database.KnownDevice?
 
         @Suppress("UNCHECKED_CAST")
-        val counts = (values[5] as ArchiveQueryResult<String?, Counts>).forQuery(d?.station) ?: Counts(0, 0, 0, 0)
+        val counts = (values[5] as ArchiveQueryResult<String?, HistoryFileCounts>).forQuery(d?.station) ?: HistoryFileCounts()
         val query = ArchiveSeriesQuery(d?.station, values[1] as MetricSpec, values[2] as HistoryRange, values[3] as Long)
 
         @Suppress("UNCHECKED_CAST")
@@ -209,7 +220,10 @@ class HistoryViewModel @AssistedInject constructor(
             series = result.forQuery(query),
             filesWithTime = counts.withTime,
             filesTotal = counts.total,
-            filesUnindexed = counts.unindexed,
+            filesPendingIndex = counts.pending,
+            filesIndexFailed = counts.failed,
+            filesOtherStation = counts.otherStation,
+            filesUntimed = counts.untimed,
             filesEstimated = counts.estimated,
             daysWithData = dd.first,
             firstDayS = dd.second,
@@ -223,9 +237,10 @@ class HistoryViewModel @AssistedInject constructor(
     fun setMetric(m: MetricSpec) { metric.value = m }
 
     fun setRange(r: HistoryRange) {
+        val followedNow = followsNow.value
         range.value = r
-        toS.value = nowRounded(r)
-        followsNow.value = true
+        toS.value = if (followedNow) nowRounded(r) else minOf(toS.value, nowRounded(r))
+        followsNow.value = toS.value == nowRounded(r)
     }
 
     fun page(direction: Int) {
@@ -242,11 +257,5 @@ class HistoryViewModel @AssistedInject constructor(
         val now = nowRounded(HistoryRange.DAY)
         toS.value = minOf(dayStartS + 86_400, now)
         followsNow.value = toS.value == now
-    }
-
-    /** Jump so the latest data is in view (the last day with data, or now). */
-    fun jumpToLatest() {
-        toS.value = nowRounded(range.value)
-        followsNow.value = true
     }
 }
