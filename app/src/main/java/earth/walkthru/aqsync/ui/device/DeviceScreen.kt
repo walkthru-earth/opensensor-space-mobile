@@ -105,7 +105,7 @@ fun DeviceScreen(
     onOpenFiles: () -> Unit,
     onOpenDebug: () -> Unit,
     onDisconnected: () -> Unit,
-    viewModel: DeviceViewModel = hiltViewModel(),
+    viewModel: DeviceViewModel = hiltViewModel<DeviceViewModel, DeviceViewModel.Factory>(key = address, creationCallback = { it.create(address) }),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
@@ -741,7 +741,7 @@ private fun LanCard(
                 if (perm.deniedOnce) {
                     "Without it the app cannot browse for the logger or open a socket to it; Bluetooth keeps working. You can allow it later in system settings."
                 } else {
-                    "Android 16+ asks before an app may talk to devices on your local network. AQ Sync only ever connects to a logger it found via mDNS."
+                    "Android 16+ asks before an app may talk to devices on your local network. opensensor.space only ever connects to a sensor device it found via mDNS."
                 }
             )
             Spacer(Modifier.height(6.dp))

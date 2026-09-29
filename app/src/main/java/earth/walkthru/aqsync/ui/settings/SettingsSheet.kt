@@ -80,7 +80,7 @@ fun SettingsSheet(onDismiss: () -> Unit, viewModel: SettingsViewModel = hiltView
             Eyebrow("about")
             Spacer(Modifier.height(4.dp))
             Text(
-                "AQ Sync ${BuildConfig.VERSION_NAME} · protocol v2 · offline-first. Network access is used only for the LAN link to a logger found on your own network; there is no cloud endpoint.",
+                "opensensor.space ${BuildConfig.VERSION_NAME} · protocol v2 · offline-first. Network access is used only for the LAN link to a sensor device found on your own network; there is no cloud endpoint.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

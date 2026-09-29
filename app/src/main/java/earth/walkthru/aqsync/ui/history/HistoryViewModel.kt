@@ -2,10 +2,15 @@ package earth.walkthru.aqsync.ui.history
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedFactory
+import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
-import earth.walkthru.aqsync.data.DeviceConnectionRepository
+import earth.walkthru.aqsync.data.DeviceConnectionManager
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.TransportKind
+import earth.walkthru.aqsync.data.history.ArchiveQueryResult
+import earth.walkthru.aqsync.data.history.ArchiveSeriesQuery
 import earth.walkthru.aqsync.data.history.HistoryDeriver
 import earth.walkthru.aqsync.data.history.HistoryIndexer
 import earth.walkthru.aqsync.data.history.HistoryRange
@@ -13,9 +18,11 @@ import earth.walkthru.aqsync.data.history.HistoryRepository
 import earth.walkthru.aqsync.data.history.HistorySeries
 import earth.walkthru.aqsync.data.history.MetricSpec
 import earth.walkthru.aqsync.data.history.Metrics
+import earth.walkthru.aqsync.data.history.archiveQueryResults
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
 import earth.walkthru.aqsync.data.local.database.MetricBucketDao
+import earth.walkthru.aqsync.data.local.database.StationEpochDao
 import earth.walkthru.aqsync.data.settings.AppSettings
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
@@ -23,17 +30,19 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import javax.inject.Inject
 
 data class HistoryUiState(
     val station: String? = null,
+    val stations: List<String> = emptyList(),
     val deviceName: String? = null,
     val metric: MetricSpec = Metrics.PM25,
+    val availableMetrics: List<MetricSpec> = emptyList(),
     val range: HistoryRange = HistoryRange.DAY,
     /** End of the visible span (epoch seconds); "now" rounded up unless the user paged back. */
     val toS: Long = 0,
@@ -68,19 +77,30 @@ fun nowRounded(@Suppress("UNUSED_PARAMETER") range: HistoryRange, zone: java.tim
  * and therefore no history yet.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
-@HiltViewModel
-class HistoryViewModel @Inject constructor(
-    private val repository: DeviceConnectionRepository,
+@HiltViewModel(assistedFactory = HistoryViewModel.Factory::class)
+class HistoryViewModel @AssistedInject constructor(
+    manager: DeviceConnectionManager,
+    @Assisted deviceAddress: String,
     private val history: HistoryRepository,
     private val knownDeviceDao: KnownDeviceDao,
+    epochDao: StationEpochDao,
     private val archivedFileDao: ArchivedFileDao,
     private val bucketDao: MetricBucketDao,
     settings: AppSettings,
     historyIndexer: HistoryIndexer,
     historyDeriver: HistoryDeriver,
 ) : ViewModel() {
+    private val repository = manager.controller(deviceAddress)
 
-    private val address = MutableStateFlow<String?>(null)
+    @AssistedFactory
+    interface Factory {
+        fun create(deviceAddress: String): HistoryViewModel
+    }
+
+    private val address = MutableStateFlow<String?>(deviceAddress)
+    private val selectedStation = MutableStateFlow<String?>(null)
+    private val stations = epochDao.observeForDevice(deviceAddress).map { epochs -> epochs.map { it.station } }
+    fun selectStation(station: String) { selectedStation.value = station; jumpToLatest() }
 
     /** The screen binds its nav key's address once; the station follows from the known-device row. */
     fun bind(address: String) { this.address.value = address }
@@ -109,48 +129,84 @@ class HistoryViewModel @Inject constructor(
         }
     }
 
-    private val device = combine(knownDeviceDao.observeAll(), address) { list, a -> list.firstOrNull { it.address == a } }
+    private val device = combine(knownDeviceDao.observeAll(), address, selectedStation, stations) { list, a, selected, epochs ->
+        list.firstOrNull { it.address == a }?.let { d -> d.copy(station = selected?.takeIf { it in epochs } ?: d.station) }
+    }
 
-    private val series = combine(device, metric, range, toS) { d, m, r, t -> Triple(d?.station, m, r) to t }
-        .flatMapLatest { (key, t) ->
-            val (station, m, r) = key
-            if (station == null) flowOf(null) else history.observe(station, m, r, t)
+    private val stationQuery = device.map { it?.station }.distinctUntilChanged()
+
+    private val availableMetrics = stationQuery.archiveQueryResults { station ->
+        if (station == null) {
+            flowOf(emptyList())
+        } else {
+            combine(
+                Metrics.chartable.map { spec ->
+                    bucketDao.observeAllDays(spec.id).map { rows -> spec.takeIf { rows.any { it.station == station && it.validRows > 0 } } }
+                }
+            ) { specs -> specs.filterNotNull() }
+        }
+    }.onEach { result ->
+        val available = result.value.orEmpty()
+        if (available.isNotEmpty() && metric.value !in available) metric.value = available.first()
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, ArchiveQueryResult<String?, List<MetricSpec>>(null, null))
+
+    private val series = combine(device, metric, range, toS) { d, m, r, t -> ArchiveSeriesQuery(d?.station, m, r, t) }
+        .archiveQueryResults { query ->
+            val station = query.station
+            if (station == null) flowOf(null) else history.observe(station, query.metric, query.range, query.toS)
         }
 
     private data class Counts(val withTime: Int, val total: Int, val unindexed: Int, val estimated: Int)
 
-    private val fileCounts = device.flatMapLatest { d ->
-        val station = d?.station ?: return@flatMapLatest flowOf(Counts(0, 0, 0, 0))
-        archivedFileDao.observeForStation(station).map { files ->
-            Counts(
-                withTime = files.count { it.indexed && it.hasUtc && (it.purpose == null || it.purpose == "telemetry") },
-                total = files.size,
-                unindexed = files.count { !it.indexed },
-                estimated = files.count { it.indexed && it.hasEstimatedUtc },
-            )
+    private val fileCounts = stationQuery.archiveQueryResults { station ->
+        if (station == null) {
+            flowOf(Counts(0, 0, 0, 0))
+        } else {
+            archivedFileDao.observeForStation(station).map { files ->
+                Counts(
+                    withTime = files.count { it.indexed && it.hasUtc && (it.purpose == null || it.purpose == "telemetry") },
+                    total = files.size,
+                    unindexed = files.count { !it.indexed },
+                    estimated = files.count { it.indexed && it.hasEstimatedUtc },
+                )
+            }
         }
     }
 
-    private val days = device.flatMapLatest { d ->
-        val station = d?.station ?: return@flatMapLatest flowOf(Triple(0, null, null))
-        combine(bucketDao.observeDayCount(station), bucketDao.observeFirstDay(station), bucketDao.observeLastDay(station)) { n, f, l -> Triple(n, f, l) }
+    private val days = stationQuery.archiveQueryResults { station ->
+        if (station == null) {
+            flowOf(Triple<Int, Long?, Long?>(0, null, null))
+        } else {
+            combine(bucketDao.observeDayCount(station), bucketDao.observeFirstDay(station), bucketDao.observeLastDay(station)) { n, f, l -> Triple(n, f, l) }
+        }
     }
 
     val uiState: StateFlow<HistoryUiState> = combine(
-        device, metric, range, toS, series, fileCounts, days, settings.advancedMode, repository.connectionState, repository.activeTransport,
+        device, metric, range, toS, series, fileCounts, days, settings.advancedMode, repository.connectionState, repository.activeTransport, stations, availableMetrics,
     ) { values ->
         val d = values[0] as earth.walkthru.aqsync.data.local.database.KnownDevice?
-        val counts = values[5] as Counts
 
         @Suppress("UNCHECKED_CAST")
-        val dd = values[6] as Triple<Int, Long?, Long?>
+        val counts = (values[5] as ArchiveQueryResult<String?, Counts>).forQuery(d?.station) ?: Counts(0, 0, 0, 0)
+        val query = ArchiveSeriesQuery(d?.station, values[1] as MetricSpec, values[2] as HistoryRange, values[3] as Long)
+
+        @Suppress("UNCHECKED_CAST")
+        val result = values[4] as ArchiveQueryResult<ArchiveSeriesQuery, HistorySeries>
+
+        @Suppress("UNCHECKED_CAST")
+        val dd = (values[6] as ArchiveQueryResult<String?, Triple<Int, Long?, Long?>>).forQuery(d?.station) ?: Triple(0, null, null)
+
+        @Suppress("UNCHECKED_CAST")
+        val available = (values[11] as ArchiveQueryResult<String?, List<MetricSpec>>).forQuery(d?.station).orEmpty()
         HistoryUiState(
             station = d?.station,
+            stations = (values[10] as List<*>).filterIsInstance<String>(),
             deviceName = d?.name,
             metric = values[1] as MetricSpec,
+            availableMetrics = available,
             range = values[2] as HistoryRange,
             toS = values[3] as Long,
-            series = values[4] as HistorySeries?,
+            series = result.forQuery(query),
             filesWithTime = counts.withTime,
             filesTotal = counts.total,
             filesUnindexed = counts.unindexed,

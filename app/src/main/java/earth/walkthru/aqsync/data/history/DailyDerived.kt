@@ -256,7 +256,7 @@ class DailyDerivedBuilder(private val store: DerivedStore, private val fileFor: 
     }
 
     companion object {
-        const val BUILDER = "AQ Sync Android derived-v1"
+        const val BUILDER = "opensensor.space Android derived-v1"
         const val SOURCE_INDEX = "source_file_index"
         const val ESTIMATED_UTC = "event_time_utc_estimated_ns"
         const val HOUR_NS = 3_600L * 1_000_000_000L

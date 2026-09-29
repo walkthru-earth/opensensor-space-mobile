@@ -40,7 +40,7 @@ class SyncNotifications @Inject constructor(@ApplicationContext private val cont
     fun ensureChannels() {
         manager.createNotificationChannel(
             NotificationChannel(CHANNEL_PROGRESS, "Sync progress", NotificationManager.IMPORTANCE_LOW).apply {
-                description = "Shown while Parquet files are being copied from a logger. Keeps the transfer alive when the screen is off."
+                description = "Shown while Parquet files are being copied from a sensor device. Keeps the transfer alive when the screen is off."
                 setShowBadge(false)
             }
         )
@@ -62,7 +62,7 @@ class SyncNotifications @Inject constructor(@ApplicationContext private val cont
      */
     fun progress(deviceName: String?, progress: SyncProgress, stopIntent: PendingIntent?, reconnecting: ReconnectState? = null): Notification {
         ensureChannels()
-        val name = deviceName ?: "logger"
+        val name = deviceName ?: "device"
         val title = when {
             reconnecting != null -> "$name · reconnecting (${reconnecting.attempt}/${reconnecting.maxAttempts})…"
             progress.filesTotal > 0 -> "$name · ${progress.filesDone}/${progress.filesTotal} files · ${formatBytes(progress.bytesDone)}"
@@ -73,7 +73,7 @@ class SyncNotifications @Inject constructor(@ApplicationContext private val cont
             reconnecting != null -> "Link lost: ${reconnecting.reason}. The sync resumes when the device is back."
             current != null -> current.name.substringAfterLast('/') + " · ${formatBytes(current.bytesDone)} / ${formatBytes(current.bytesTotal)}"
             progress.bytesTotal > 0 -> "${formatBytes(progress.bytesDone)} of ${formatBytes(progress.bytesTotal)}"
-            else -> "Listing files on the microSD…"
+            else -> "Listing files on the device…"
         }
         val builder = NotificationCompat.Builder(context, CHANNEL_PROGRESS)
             .setSmallIcon(R.drawable.ic_stat_sync)
@@ -102,7 +102,7 @@ class SyncNotifications @Inject constructor(@ApplicationContext private val cont
         if (newFiles <= 0 && failures <= 0) return
         if (!canPost) return
         ensureChannels()
-        val name = deviceName ?: "logger"
+        val name = deviceName ?: "device"
         val title = if (newFiles > 0) "Synced $newFiles new file${if (newFiles == 1) "" else "s"} from $name · ${formatBytes(newBytes)}" else "Sync from $name had problems"
         val text = when {
             newFiles > 0 && failures > 0 -> "$failures file${if (failures == 1) "" else "s"} could not be verified; they will be retried."

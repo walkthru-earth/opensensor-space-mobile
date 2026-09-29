@@ -10,7 +10,8 @@ import android.os.IBinder
 import android.util.Log
 import androidx.core.app.ServiceCompat
 import dagger.hilt.android.AndroidEntryPoint
-import earth.walkthru.aqsync.data.DeviceConnectionRepository
+import earth.walkthru.aqsync.data.DeviceConnectionManager
+import earth.walkthru.aqsync.data.collectionProgress
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -46,7 +47,7 @@ import javax.inject.Inject
 class SyncForegroundService : Service() {
 
     @Inject
-    lateinit var repository: DeviceConnectionRepository
+    lateinit var manager: DeviceConnectionManager
 
     @Inject
     lateinit var notifications: SyncNotifications
@@ -60,16 +61,15 @@ class SyncForegroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> {
-                repository.cancelSync()
-                repository.cancelReconnect()
+                manager.cancelInteractive()
                 // The watcher sees foregroundNeeded=false and stops the service; if nothing is
                 // running any more (race), stop right away.
-                if (!repository.foregroundNeeded.value) finish()
+                if (!manager.snapshots.value.any { it.foregroundNeeded && it.backgroundOwner == null }) finish()
                 return START_NOT_STICKY
             }
             else -> {
                 if (!inForeground) {
-                    val initial = notifications.progress(repository.currentDisplayName, repository.sync.value, stopIntent(), repository.reconnecting.value)
+                    val initial = notifications.progress("opensensor.space", collectionProgress(manager.snapshots.value.filter { it.backgroundOwner == null && it.foregroundNeeded }), stopIntent())
                     try {
                         ServiceCompat.startForeground(this, SyncNotifications.FOREGROUND_ID, initial, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
                         inForeground = true
@@ -92,12 +92,15 @@ class SyncForegroundService : Service() {
         if (watchJob?.isActive == true) return
         watchJob = scope.launch {
             data class Snapshot(val needed: Boolean, val progress: earth.walkthru.aqsync.data.SyncProgress, val reconnect: earth.walkthru.aqsync.data.ReconnectState?, val name: String?)
-            combine(
-                repository.foregroundNeeded,
-                repository.sync,
-                repository.reconnecting,
-                repository.session.map { it?.transport?.displayName },
-            ) { needed, progress, reconnect, name -> Snapshot(needed, progress, reconnect, name) }
+            manager.snapshots.map { all ->
+                val active = all.filter { it.backgroundOwner == null && it.foregroundNeeded }
+                Snapshot(
+                    active.isNotEmpty(),
+                    collectionProgress(active),
+                    active.singleOrNull()?.reconnect,
+                    active.singleOrNull()?.name ?: "${active.size} devices"
+                )
+            }
                 .distinctUntilChanged()
                 // Progress arrives per CHUNK (hundreds per second on LAN); NotificationManager sheds
                 // posts above ~5/s ("Package enqueue rate … Shedding"), so coalesce and pace them.
@@ -107,7 +110,7 @@ class SyncForegroundService : Service() {
                         // A sync that just aborted because the link dropped flips `running` a moment
                         // before the reconnect state appears; give it that moment before stopping.
                         delay(STOP_GRACE_MS)
-                        if (!repository.foregroundNeeded.value) finish()
+                        if (!manager.snapshots.value.any { it.foregroundNeeded && it.backgroundOwner == null }) finish()
                         return@collect
                     }
                     if (inForeground) {
@@ -134,8 +137,7 @@ class SyncForegroundService : Service() {
     /** API 35+: the system's `dataSync` time budget ran out. Stop the transfer; partials resume later. */
     override fun onTimeout(startId: Int, fgsType: Int) {
         Log.w(TAG, "dataSync foreground service timed out (type $fgsType); stopping the sync")
-        repository.cancelSync()
-        repository.cancelReconnect()
+        manager.cancelInteractive()
         finish()
     }
 

@@ -35,11 +35,12 @@ import javax.inject.Singleton
 class LanWifiLock @Inject constructor(@ApplicationContext private val context: Context) {
 
     private var lock: WifiManager.WifiLock? = null
+    private val leases = LanTransferLeases(::acquireResource, ::releaseResource)
 
-    /** Acquire (idempotent). Returns false when Wi-Fi is unavailable on this device; the sync still runs. */
-    @Synchronized
-    fun acquire(): Boolean {
-        if (lock?.isHeld == true) return true
+    /** Each transfer closes its own lease in finally; the last LAN transfer releases the radio. */
+    fun acquireLease(): AutoCloseable? = leases.acquire()
+
+    private fun acquireResource(): Boolean {
         val wifi = context.getSystemService(WifiManager::class.java) ?: run {
             Log.w(TAG, "no WifiManager; LAN sync runs without a Wi-Fi lock")
             return false
@@ -58,9 +59,7 @@ class LanWifiLock @Inject constructor(@ApplicationContext private val context: C
         }
     }
 
-    /** Release (idempotent, safe to call from a `finally`). */
-    @Synchronized
-    fun release() {
+    private fun releaseResource() {
         val l = lock ?: return
         lock = null
         if (l.isHeld) {
@@ -70,9 +69,36 @@ class LanWifiLock @Inject constructor(@ApplicationContext private val context: C
         }
     }
 
-    val isHeld: Boolean get() = lock?.isHeld == true
+    val isHeld: Boolean get() = leases.activeCount > 0
 
     private companion object {
         const val TAG = "AqSync:LanWifiLock"
+    }
+}
+
+/** Android-free owner accounting, so a failed acquire or repeated close cannot release another owner. */
+internal class LanTransferLeases(
+    private val acquireResource: () -> Boolean,
+    private val releaseResource: () -> Unit,
+) {
+    private var owners = 0
+
+    val activeCount: Int @Synchronized get() = owners
+
+    @Synchronized
+    fun acquire(): AutoCloseable? {
+        if (owners == 0 && !acquireResource()) return null
+        owners++
+        return object : AutoCloseable {
+            private var closed = false
+
+            override fun close() = synchronized(this@LanTransferLeases) {
+                if (!closed) {
+                    closed = true
+                    owners--
+                    if (owners == 0) releaseResource()
+                }
+            }
+        }
     }
 }

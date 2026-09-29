@@ -170,7 +170,7 @@ fun ConnectionBanner(state: ConnectionState, modifier: Modifier = Modifier, reco
                 }
                 if (state == ConnectionState.Bonding) {
                     Text(
-                        "The CoreS3 shows a passkey on its screen. Android will ask you to type it.",
+                        "Enter the device’s 6-digit pairing code when Android asks. Read it from its display, or obtain the owner PIN over USB for a device without a display.",
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }

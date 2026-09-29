@@ -2,9 +2,12 @@ package earth.walkthru.aqsync.ui.debug
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedFactory
+import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import earth.walkthru.aqsync.data.ArchiveTimeSummary
-import earth.walkthru.aqsync.data.DeviceConnectionRepository
+import earth.walkthru.aqsync.data.DeviceConnectionManager
 import earth.walkthru.aqsync.data.DeviceEvent
 import earth.walkthru.aqsync.data.LogTailState
 import earth.walkthru.aqsync.data.SyncDiagnostic
@@ -30,7 +33,6 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
-import javax.inject.Inject
 
 /** One line of the raw-command result. */
 data class RawResult(val hex: String, val decoded: String)
@@ -55,11 +57,18 @@ data class DebugUiState(
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
-@HiltViewModel
-class DebugViewModel @Inject constructor(
-    private val repository: DeviceConnectionRepository,
+@HiltViewModel(assistedFactory = DebugViewModel.Factory::class)
+class DebugViewModel @AssistedInject constructor(
+    manager: DeviceConnectionManager,
+    @Assisted deviceAddress: String,
     settings: AppSettings,
 ) : ViewModel() {
+    private val repository = manager.controller(deviceAddress)
+
+    @AssistedFactory
+    interface Factory {
+        fun create(deviceAddress: String): DebugViewModel
+    }
 
     val events: SharedFlow<DeviceEvent> = repository.events
 
@@ -128,6 +137,10 @@ class DebugViewModel @Inject constructor(
 
     /** Hex in (whitespace allowed) → frames out. Runs through the same session mutex as everything else. */
     fun sendRaw(hex: String) {
+        if (repository.backgroundOwner.value != null) {
+            rawError.value = "Background collection owns this device. Wait for it to finish before sending raw commands."
+            return
+        }
         val session = repository.session.value ?: return
         val bytes = try {
             hex.hexToBytes()

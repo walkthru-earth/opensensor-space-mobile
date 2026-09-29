@@ -12,6 +12,7 @@ import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.local.database.DerivedDayDao
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
 import earth.walkthru.aqsync.data.local.database.MetricBucketDao
+import earth.walkthru.aqsync.data.local.database.StationEpochDao
 import earth.walkthru.aqsync.data.local.security.LanTokenCipher
 import earth.walkthru.aqsync.data.local.security.LanTokenCipherContract
 import earth.walkthru.aqsync.data.local.security.LanTokenMigration
@@ -44,6 +45,9 @@ class DatabaseModule {
 
     @Provides
     fun provideDerivedDayDao(db: AppDatabase): DerivedDayDao = db.derivedDayDao()
+
+    @Provides
+    fun provideStationEpochDao(db: AppDatabase): StationEpochDao = db.stationEpochDao()
 
     @Provides
     @Singleton

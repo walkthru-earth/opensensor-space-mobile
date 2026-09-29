@@ -4,6 +4,11 @@ import earth.walkthru.aqsync.data.BackgroundSyncResult
 import earth.walkthru.aqsync.data.lan.LanDevice
 import earth.walkthru.aqsync.data.local.database.KnownDevice
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 
 /** One way the worker may reach a logger, in the order [AutoSyncPolicy.linksFor] returns them. */
 sealed interface AutoSyncLink {
@@ -31,6 +36,9 @@ interface AutoSyncGateway {
 
     /** Address of the session the app currently holds (user is on a device screen), or null. */
     fun interactiveSessionAddress(): String?
+
+    /** Skip only this device; the controller performs an atomic check again before opening. */
+    fun isDeviceOwned(address: String): Boolean = interactiveSessionAddress() == address
 
     /**
      * Browse `_aqsync._tcp` for up to [timeoutMs] (return early once every station in [stations]
@@ -120,6 +128,7 @@ class AutoSyncRunner(
     private val gateway: AutoSyncGateway,
     private val lanBrowseMs: Long = LAN_BROWSE_MS,
     private val log: (String) -> Unit = {},
+    private val maxConcurrentDevices: Int = 2,
 ) {
     /**
      * [onlyAddress] = a manual "Sync now in background" for that one device, whether or not its
@@ -139,25 +148,29 @@ class AutoSyncRunner(
         val stations = devices.mapNotNull { d -> d.station?.takeIf { d.hasLanToken } }.toSet()
         val lan = if (stations.isEmpty()) emptyMap() else gateway.browseLan(stations, lanBrowseMs)
 
-        val reports = ArrayList<DeviceRunReport>(devices.size)
-        for (device in devices) {
-            val busy = gateway.interactiveSessionAddress()
-            if (busy != null) {
-                val why = if (busy == device.address) "the app has an interactive session with this device" else "the app is connected to $busy"
-                log("auto-sync ${device.name ?: device.address}: skipped, $why")
-                reports += DeviceRunReport(device, emptyList(), null, skipped = why)
-                continue
-            }
-            val links = AutoSyncPolicy.linksFor(device, lan, gateway.isBonded(device.address), lanOnly)
-            if (links.isEmpty()) {
-                val why = if (lanOnly) "not on the LAN (Bluetooth not tried on a Wi-Fi trigger)" else "not on the LAN and not bonded"
-                log("auto-sync ${device.name ?: device.address}: skipped, $why")
-                reports += DeviceRunReport(device, emptyList(), null, skipped = why)
-                continue
-            }
-            reports += runDevice(device, links)
+        require(maxConcurrentDevices > 0)
+        val permits = Semaphore(maxConcurrentDevices)
+        return coroutineScope {
+            AutoSyncReport(
+                devices.distinctBy { it.address }.map { device ->
+                    async {
+                        permits.withPermit {
+                            if (gateway.isDeviceOwned(device.address)) {
+                                DeviceRunReport(device, emptyList(), null, skipped = "the app has an interactive session with this device")
+                            } else {
+                                val links = AutoSyncPolicy.linksFor(device, lan, gateway.isBonded(device.address), lanOnly)
+                                if (links.isEmpty()) {
+                                    val why = if (lanOnly) "not on the LAN (Bluetooth not tried on a Wi-Fi trigger)" else "not on the LAN and not bonded"
+                                    DeviceRunReport(device, emptyList(), null, skipped = why)
+                                } else {
+                                    runDevice(device, links)
+                                }
+                            }
+                        }
+                    }
+                }.awaitAll()
+            )
         }
-        return AutoSyncReport(reports)
     }
 
     private suspend fun runDevice(device: KnownDevice, links: List<AutoSyncLink>): DeviceRunReport {
@@ -184,7 +197,7 @@ class AutoSyncRunner(
                 return DeviceRunReport(device, tried, result)
             }
             log("auto-sync ${device.name ?: device.address} over ${link.label()}: ${result.skipped}")
-            if (gateway.interactiveSessionAddress() != null) {
+            if (gateway.isDeviceOwned(device.address)) {
                 // The user opened a device meanwhile: interactive use wins, do not try the other link.
                 return DeviceRunReport(device, tried, result, skipped = result.skipped)
             }

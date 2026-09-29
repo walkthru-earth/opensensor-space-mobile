@@ -54,6 +54,8 @@ class LanDiscovery @Inject constructor(@ApplicationContext private val context: 
         data class Failed(val message: String) : Event
     }
 
+    private var sharedResolver: LegacyResolver? = null
+
     fun discover(): Flow<Event> = callbackFlow {
         val nsd = context.getSystemService(NsdManager::class.java)
         if (nsd == null) {
@@ -82,7 +84,7 @@ class LanDiscovery @Inject constructor(@ApplicationContext private val context: 
         }
 
         val infoCallbacks = HashMap<String, NsdManager.ServiceInfoCallback>()
-        val resolver = LegacyResolver(nsd) { upsert(it) }
+        val resolver = synchronized(this@LanDiscovery) { sharedResolver ?: LegacyResolver(nsd).also { sharedResolver = it } }
 
         val listener = object : NsdManager.DiscoveryListener {
             override fun onDiscoveryStarted(serviceType: String) {
@@ -112,7 +114,7 @@ class LanDiscovery @Inject constructor(@ApplicationContext private val context: 
                         Log.w(TAG, "registerServiceInfoCallback: ${e.message}")
                     }
                 } else {
-                    resolver.enqueue(info)
+                    resolver.enqueue(info) { upsert(it) }
                 }
             }
 
@@ -158,14 +160,13 @@ class LanDiscovery @Inject constructor(@ApplicationContext private val context: 
     }
 
     /** API 31–33: one `resolveService` at a time. */
-    private class LegacyResolver(private val nsd: NsdManager, private val onResolved: (NsdServiceInfo) -> Unit) {
-        private val queue = ArrayDeque<NsdServiceInfo>()
+    private class LegacyResolver(private val nsd: NsdManager) {
+        private val queue = ArrayDeque<Pair<NsdServiceInfo, (NsdServiceInfo) -> Unit>>()
         private var busy = false
 
-        fun enqueue(info: NsdServiceInfo) {
+        fun enqueue(info: NsdServiceInfo, onResolved: (NsdServiceInfo) -> Unit) {
             synchronized(this) {
-                queue.removeAll { it.serviceName == info.serviceName }
-                queue.addLast(info)
+                queue.addLast(info to onResolved)
                 if (busy) return
                 busy = true
             }
@@ -173,9 +174,10 @@ class LanDiscovery @Inject constructor(@ApplicationContext private val context: 
         }
 
         private fun next() {
-            val info = synchronized(this) {
+            val request = synchronized(this) {
                 queue.removeFirstOrNull() ?: run { busy = false; null }
             } ?: return
+            val (info, onResolved) = request
             @Suppress("DEPRECATION")
             nsd.resolveService(
                 info,

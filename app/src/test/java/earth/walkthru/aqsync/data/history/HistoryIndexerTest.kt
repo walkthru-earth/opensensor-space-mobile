@@ -49,6 +49,26 @@ class HistoryIndexerTest {
         assertEquals(listOf(good), hit.map { it.name })
     }
 
+    @Test
+    fun `retained earlier station files are archived without being attributed to the reset station`() {
+        val tmp = java.nio.file.Files.createTempDirectory("opensensor-station-reset").toFile()
+        try {
+            val archive = FileArchive(tmp)
+            val name = "station=old-station/year=2026/month=09/day=08/retained.parquet"
+            val payload = bytes("device/v2-lz4-4rows-dated.parquet")
+            val file = archive.fileFor("new-station", name).apply { parentFile!!.mkdirs(); writeBytes(payload) }
+            val row = ArchivedFile(station = "new-station", name = name, bytes = payload.size.toLong(), crc32 = 1, sha256 = "saved", syncedAtEpochMs = 1, sourceDevice = "same-device")
+            val indexed = HistoryIndexer(archive, InMemoryDao()).indexed(row, file)
+            assertFalse(indexed.indexed)
+            assertTrue(indexed.indexError!!.contains("old-station"))
+            org.junit.Assert.assertArrayEquals(payload, file.readBytes())
+            assertEquals("new-station", indexed.station)
+            assertEquals(name, indexed.name)
+        } finally {
+            tmp.deleteRecursively()
+        }
+    }
+
     private class InMemoryDao : ArchivedFileDao {
         val rows = mutableListOf<ArchivedFile>()
         override fun observeAll(): Flow<List<ArchivedFile>> = flowOf(rows)

@@ -1,15 +1,15 @@
 # Data model — Room, DataStore, files on disk, backup
 
 **Scope:** what the phone stores, where, and how it moves between phones. Not how it is computed (see history-pipeline) or fetched (see sync-engine).
-**Code:** `data/local/database/AppDatabase.kt`, `KnownDevice.kt`, `ArchivedFile.kt`, `History.kt`; `data/local/di/DatabaseModule.kt` (`aq-sync.db`); `app/schemas/earth.walkthru.aqsync.data.local.database.AppDatabase/1…7.json`; `data/settings/AppSettings.kt`; `data/sync/FileArchive.kt`; `data/history/DailyDerived.kt`; `res/xml/data_extraction_rules.xml`.
+**Code:** `data/local/database/AppDatabase.kt`, `KnownDevice.kt`, `StationEpoch.kt`, `ArchivedFile.kt`, `History.kt`; `data/local/di/DatabaseModule.kt` (`aq-sync.db`); `app/schemas/earth.walkthru.aqsync.data.local.database.AppDatabase/1…9.json`; `data/DeviceContinuityPolicy.kt`; `data/settings/AppSettings.kt`; `data/sync/FileArchive.kt`; `data/history/DailyDerived.kt`; `res/xml/data_extraction_rules.xml`.
 **Related:** [sync-engine.md](sync-engine.md) (who writes `archived_file`), [history-pipeline.md](history-pipeline.md) (who writes the tiers), [transports.md](transports.md#lan-token-lifecycle) (the token).
 
-## Room schema v8 (`aq-sync.db`)
+## Room schema v9 (`aq-sync.db`)
 
 ```mermaid
 erDiagram
   known_device {
-    string address PK "Bluetooth address = identity on both pipes"
+    string address PK "enrolled Bluetooth endpoint, also used on LAN"
     string name
     string station "uuid from info"
     string deviceId
@@ -20,6 +20,13 @@ erDiagram
     int lanPort
     bool autoSync "v3"
     int companionAssociationId "v8, nullable; CDM association behind wake-when-nearby"
+  }
+  station_epoch {
+    string address PK "composite key with station"
+    string station PK "original generation UUID"
+    string deviceId "nullable; no invented historical hardware identity"
+    long firstSeenEpochMs
+    bool observedFromAuthenticatedBle "false for migrated associations"
   }
   archived_file {
     long id PK "auto; business key (station,name) UNIQUE"
@@ -73,6 +80,7 @@ erDiagram
     string dailyFile "null → retry next pass"
   }
   known_device ||--o{ archived_file : "station"
+  known_device ||--o{ station_epoch : "address (logical association, no cascade)"
   archived_file }o--o{ metric_bucket : "derived per station-day"
   archived_file }o--|| derived_day : "signature over sources"
 ```
@@ -91,6 +99,50 @@ keeps its row with `indexError`).
 | 4 → 5 | `AutoMigration` | new tables (`aggregate_bucket` wide, `derived_day`) |
 | 5 → 6 | `AutoMigration` | `archived_file.est*` (time estimate), `estimatedRows` |
 | 6 → 7 | `AutoMigration` + `DropWideTiers` (`@DeleteTable aggregate_bucket`) | `metric_bucket` one row per metric; `DERIVE_VERSION` 2 forces a rebuild |
+| 7 → 8 | `AutoMigration` | nullable `known_device.companionAssociationId` |
+| 8 → 9 | explicit | `station_epoch`; seed current known stations and historical `(sourceDevice, station)` associations from archived files, preserving files, credentials and settings |
+
+The v8→v9 SQL can be checked without Android or extra Python dependencies:
+
+```sh
+python3 tools/validate_station_epoch_migration.py
+```
+
+Passed on 2026-09-29. The validator builds SQLite databases from the exported v8/v9 Room schemas
+and executes the literal SQL extracted from `MIGRATION_8_9` in `AppDatabase.kt`. It verifies every
+migrated table's columns, keys, indexes and foreign keys against v9, unchanged known-device and
+archive rows (including an opaque synthetic token), current and archive-only epochs, missing
+legacy hardware IDs, timestamp fallback/earliest observation, immutable first-seen provenance and
+retention after forgetting a device. It prints no credentials. This is a host check of the SQL
+and schema exports, not an Android Room migration or phone reset/reflash measurement.
+
+### Station generations and device continuity
+
+`known_device.station` is the latest accepted station UUID for an enrolled Bluetooth endpoint.
+`station_epoch` retains each observed generation under that endpoint. `recordIfAbsent` preserves
+its first observation; there is no foreign-key cascade when the owner forgets a device. The v9
+migration records existing associations as legacy (`observedFromAuthenticatedBle = false`), uses
+the saved connection/seen time for current stations and the earliest archive sync time for
+archive-only stations, and leaves historical hardware IDs null when they were not recorded.
+History can select these station generations independently. They are associations, not permission
+to replace a device or merge measurements from different stations.
+
+The current enrollment key remains the public Bluetooth address. A future durable phone-local
+physical-device ID and endpoint reassignment need a separate migration and explicit ownership
+policy. `info.dev` is a full hardware MAC identifier, not a cryptographic fingerprint; the wire
+contract contains no device public key or signed firmware-image identity. Changes to `boot`, `fw`
+or the dictionary hash are normal metadata changes. A changed or missing previously recorded
+full hardware ID is rejected before identity is overwritten. An accepted station change requires
+the same full hardware ID over the enrolled BLE link; it adds an epoch, clears the old LAN token
+and port, and fetches a replacement token over BLE. See [transports](transports.md#reset-reflash-and-identity-continuity).
+
+Station lineage never rewrites existing archive paths, database archive identities or file bytes.
+An SD card can still contain older station trees after NVS erase; firmware LIST traverses the
+whole output tree. The protocol's archive namespace remains the station from the collecting
+session's INFO, while the original Hive path and Parquet station metadata describe the file's
+own generation. These can differ. Do not silently reparent old files or relabel their rows as
+the current generation. Collection routing and history interpretation must preserve that distinction
+([canonical firmware contract](../../aq-parquet/docs/shared/ble-sync-protocol.md#phone-sync-algorithm)).
 
 No destructive fallback. Every version's JSON is exported to `app/schemas/`. Token encryption does
 not change the SQL schema: `SecureKnownDeviceDao` encrypts new values with AES-256-GCM under a
@@ -107,7 +159,7 @@ failures still propagate.
 ### Write semantics that bit us
 
 - **`@Upsert` on an entity with an auto id and a unique index updates nothing** (it runs `UPDATE … WHERE id = ?` with id 0). `archived_file` and `derived_day` use `@Insert(onConflict = REPLACE)` — the id carries no meaning. `known_device` (address is the PK) may use `@Upsert`.
-- **`openSession` rewrites every `KnownDevice` column.** The post-`info` upsert must carry `previous?.autoSync` (and any future column) or every connect switches auto-sync off.
+- **`openSession` rewrites every `KnownDevice` column.** The post-`info` upsert carries `previous?.autoSync` and `previous?.companionAssociationId`; future columns must be preserved too. Identity checks run before the upsert, and a station change deliberately discards the old token and port.
 - `derived_day.dailyFile == null` means the daily Parquet failed → its signature is treated as stale next pass.
 
 ## DataStore (`AppSettings`)
@@ -161,4 +213,5 @@ removed — Android 12+ (our minSdk) reads only `dataExtractionRules`.
 | `metric_bucket` meaning | bump `HistoryDeriver.DERIVE_VERSION` (part of every day's signature) |
 | `derived_day.sourceSignature` inputs | which days rebuild after a sync — keep `name:crc32` + anchor |
 | `known_device` columns | the `openSession` upsert line; `KnownDevice.toString` redaction |
+| `station_epoch` / continuity policy | History's generation picker, reset provenance, credential renewal; never archive path rewriting |
 | `FileArchive.root` | `data_extraction_rules.xml` device-transfer include, Export zips, `HistoryIndexer` |

@@ -5,7 +5,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 /**
- * JSON characteristic payloads from docs/ble-sync-protocol.md.
+ * JSON characteristic payloads from ../aq-parquet/docs/shared/ble-sync-protocol.md.
  *
  * Every field is nullable on purpose: "absent keys mean null (invalid/unavailable), never zero".
  * Unknown keys are ignored so a newer firmware does not break an older phone.
@@ -131,8 +131,10 @@ data class LiveSample(
     val n25: Long? = null,
     val n5: Long? = null,
     val n10: Long? = null,
-    /** imu_temperature_c — board temperature, NOT ambient. */
+    /** Board-specific temperature; interpret via info.schema/dictionary, never this key alone. */
     val t: Double? = null,
+    /** Waveshare PMS5003T relative_humidity_percent; absent when unavailable. */
+    val rh: Double? = null,
     /** battery_mv */
     val bat: Int? = null,
     /** battery_percent */

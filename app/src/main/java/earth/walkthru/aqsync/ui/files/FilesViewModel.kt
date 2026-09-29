@@ -4,8 +4,11 @@ import android.content.Intent
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedFactory
+import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
-import earth.walkthru.aqsync.data.DeviceConnectionRepository
+import earth.walkthru.aqsync.data.DeviceConnectionManager
 import earth.walkthru.aqsync.data.DeviceEvent
 import earth.walkthru.aqsync.data.ManifestState
 import earth.walkthru.aqsync.data.ReconnectState
@@ -23,6 +26,7 @@ import earth.walkthru.aqsync.data.history.Metrics
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.local.database.KnownDevice
+import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
 import earth.walkthru.aqsync.data.settings.AppSettings
 import earth.walkthru.aqsync.data.sync.SyncPlan
 import kotlinx.coroutines.flow.Flow
@@ -41,7 +45,6 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.io.File
-import javax.inject.Inject
 
 data class FilesUiState(
     val connection: ConnectionState = ConnectionState.Disconnected,
@@ -50,6 +53,8 @@ data class FilesUiState(
     val groups: List<PartitionGroup> = emptyList(),
     val sync: SyncProgress = SyncProgress(),
     val archived: List<ArchivedFile> = emptyList(),
+    /** Storage owner from INFO/enrollment, never the station embedded in a retained SD pathname. */
+    val archiveStation: String? = null,
     val archivedBytes: Long = 0,
     val exporting: Boolean = false,
     val reconnecting: ReconnectState? = null,
@@ -85,10 +90,12 @@ sealed interface FilesEffect {
     data class CreateDocument(val suggestedName: String) : FilesEffect
 }
 
-@HiltViewModel
-class FilesViewModel @Inject constructor(
-    private val repository: DeviceConnectionRepository,
+@HiltViewModel(assistedFactory = FilesViewModel.Factory::class)
+class FilesViewModel @AssistedInject constructor(
+    manager: DeviceConnectionManager,
+    @Assisted deviceAddress: String,
     private val archivedFileDao: ArchivedFileDao,
+    knownDeviceDao: KnownDeviceDao,
     private val history: HistoryRepository,
     private val export: ExportManager,
     private val autoSyncScheduler: AutoSyncScheduler,
@@ -96,6 +103,14 @@ class FilesViewModel @Inject constructor(
     historyIndexer: HistoryIndexer,
     historyDeriver: HistoryDeriver,
 ) : ViewModel() {
+    private val repository = manager.controller(deviceAddress)
+    private val enrolledDevice = knownDeviceDao.observeAll().map { devices -> devices.firstOrNull { it.address == deviceAddress } }
+    private val archiveStation = combine(repository.info, enrolledDevice) { info, enrolled -> info?.station ?: enrolled?.station }.distinctUntilChanged()
+
+    @AssistedFactory
+    interface Factory {
+        fun create(deviceAddress: String): FilesViewModel
+    }
 
     private val localEvents = MutableSharedFlow<DeviceEvent>(extraBufferCapacity = 4)
     val events: Flow<DeviceEvent> = merge(repository.events, localEvents)
@@ -128,7 +143,7 @@ class FilesViewModel @Inject constructor(
      * is on, the missing files are read (cached per `(name, crc32)` in the repository, so a new sync
      * costs only its new files).
      */
-    private val fileSummaryUpdates = combine(fileChartOn, repository.currentKnownDevice.map { it?.station }.distinctUntilChanged(), archivedFileDao.observeAll()) { on, station, files ->
+    private val fileSummaryUpdates = combine(fileChartOn, archiveStation, archivedFileDao.observeAll()) { on, station, files ->
         if (!on || station == null) null else station to files.filter { it.station == station }.map { Triple(it.name, it.crc32, it.estFirstUtcNs) to it }
     }.distinctUntilChanged { a, b -> a?.first == b?.first && a?.second?.map { it.first } == b?.second?.map { it.first } }
         .onEach { input ->
@@ -156,7 +171,7 @@ class FilesViewModel @Inject constructor(
     val uiState: StateFlow<FilesUiState> = combine(
         repository.connectionState, repository.manifest, repository.plan, repository.sync, archivedFileDao.observeAll(), exporting,
         repository.reconnecting, repository.currentKnownDevice, autoSyncScheduler.observeActive(), repository.activeTransport,
-        settings.detailed, fileChart,
+        settings.detailed, fileChart, archiveStation,
     ) { values ->
         @Suppress("UNCHECKED_CAST")
         val archived = values[4] as List<ArchivedFile>
@@ -168,6 +183,7 @@ class FilesViewModel @Inject constructor(
             groups = plan?.let(::group) ?: emptyList(),
             sync = values[3] as SyncProgress,
             archived = archived,
+            archiveStation = values[12] as String?,
             archivedBytes = archived.sumOf { it.bytes },
             exporting = values[5] as Boolean,
             reconnecting = values[6] as ReconnectState?,
@@ -288,11 +304,15 @@ class FilesViewModel @Inject constructor(
         }
     }
 
-    fun archivedFor(name: String, station: String?): ArchivedFile? =
-        uiState.value.archived.firstOrNull { it.name == name && (station == null || it.station == station) }
+    fun archivedFor(name: String): ArchivedFile? =
+        archivedFileForOwner(uiState.value.archived, name, uiState.value.archiveStation)
 
     companion object {
         /** Columns per page of the "chart by file" strip: a day of 15-min files, tappable at phone width. */
         const val FILE_CHART_PAGE = 96
     }
 }
+
+/** A relative path can occur on multiple sensors or station generations. Missing ownership fails closed. */
+internal fun archivedFileForOwner(files: List<ArchivedFile>, name: String, ownerStation: String?): ArchivedFile? =
+    ownerStation?.let { station -> files.firstOrNull { it.station == station && it.name == name } }

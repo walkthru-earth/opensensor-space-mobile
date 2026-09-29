@@ -2,7 +2,7 @@
 
 **Scope:** the file transfer: planner → engine → archive; integrity; lost windows; stale-frame drain; resume; the state-changing requests.
 **Code:** `data/sync/SyncPlanner.kt`, `SyncEngine.kt`, `FileArchive.kt`, `ReadWindow.kt`, `SyncResumePolicy.kt`; `data/ble/DeviceSession.kt` (`read`, `drainStale`, `reboot`); `core/protocol/…/ParquetVerify.kt`.
-**Tests:** `SyncPlannerTest`, `WindowRecoveryTest` (fake with `dropLeadingChunks` / `closedDelayMs`), `SyncResumePolicyTest`, `ParquetVerifyTest`.
+**Tests:** `SyncPlannerTest`, `DeviceSessionPollingTest`, `ConcurrentArchiveTest`, `WindowRecoveryTest` (fake with `dropLeadingChunks` / `closedDelayMs`), `SyncResumePolicyTest`, `ParquetVerifyTest`.
 **Related:** [transports.md](transports.md) (the pipe underneath), [data-model.md](data-model.md) (what is recorded), [history-pipeline.md](history-pipeline.md) (what runs after).
 
 ## One file
@@ -41,6 +41,36 @@ Synced ⇔ exactly `size` bytes **and** own CRC-32 == `OPENED.crc32` **and** hea
 written atomically (temp + rename) under the **verbatim Hive path**, SHA-256'd, recorded in Room
 with its history index in the same upsert. `OPENED.name` ≠ requested name → `Mismatch`, not
 silently accepted. Nothing incomplete is ever presented as data.
+
+## Response polling under concurrent load
+
+A poll slice must not cancel a receive that has already extracted the next response frame.
+Kotlin channels document [prompt cancellation and undelivered elements](https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-core/kotlinx.coroutines.channels/-channel/):
+a timed receive can change channel state and then throw cancellation. The session therefore
+selects atomically between `onReceiveCatching` and `onTimeout`, retaining the same polling and
+request timeouts. This closes a potential response-loss race found while investigating a repeated
+host-test timeout; deterministic boundary regressions demonstrate frame loss in the original
+wait, raw-command quiet wait and stale drain. The observed runner timeout alone does not identify
+which response was lost.
+Actual request cancellation still propagates and marks the response stream for normal stale drain.
+
+## Concurrent archive safety (2026-09-29)
+
+`FileArchive.withWriterLease(station, name)` guards OPEN through CLOSE, including partial resume,
+verification, immutable commit and Room indexing. Other devices with different file identities can
+transfer concurrently. A second writer for the same identity waits cancellably and then rechecks
+any committed destination against the current OPENED size/CRC/PAR1 and recorded SHA-256.
+Identical content is reused without changing source provenance; `alreadyArchived` excludes it from
+worker new-file counts. Conflicting or corrupt existing bytes are retained and reported, never
+replaced. `commit` also refuses an existing destination. Host coverage: `ConcurrentArchiveTest`;
+physical concurrent transfers remain unverified.
+
+The per-address controller reserves interactive/background ownership and the manager rejects
+competing full hardware IDs; a physical board still has one file handle across BLE and LAN.
+Raw Hive paths and outer INFO-station namespaces remain unchanged. After station regeneration,
+a retained inner Hive station mismatch is archived/exportable but excluded from the new station's
+history. Earlier epochs remain separately selectable. Richer producer provenance and duplicate
+old-station downloads need an owner-contract decision ([opensensor-space.md](opensensor-space.md)).
 
 ## Archive layout (`FileArchive`)
 

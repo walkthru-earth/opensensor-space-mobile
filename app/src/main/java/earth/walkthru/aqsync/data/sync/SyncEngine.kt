@@ -33,7 +33,7 @@ data class FileProgress(
 sealed interface FileOutcome {
     val name: String
 
-    data class Synced(override val name: String, val bytes: Long, val sha256: String) : FileOutcome
+    data class Synced(override val name: String, val bytes: Long, val sha256: String, val alreadyArchived: Boolean = false) : FileOutcome
     data class Mismatch(override val name: String, val reason: String) : FileOutcome
     data class DeviceError(override val name: String, val error: ProtocolError?, val message: String) : FileOutcome
     data class Failed(override val name: String, val message: String) : FileOutcome
@@ -79,6 +79,20 @@ class SyncEngine @Inject constructor(
     ): FileOutcome {
         if (!SafeName.isValid(name)) return FileOutcome.Failed(name, "refusing unsafe name")
 
+        return archive.withWriterLease(station, name) {
+            downloadLocked(session, station, sourceDevice, name, expectedBytes, maxRead, onProgress)
+        }
+    }
+
+    private suspend fun downloadLocked(
+        session: DeviceSession,
+        station: String,
+        sourceDevice: String,
+        name: String,
+        expectedBytes: Long,
+        maxRead: Int,
+        onProgress: (FileProgress) -> Unit,
+    ): FileOutcome {
         val opened = try {
             session.open(name)
         } catch (e: DeviceErrorException) {
@@ -94,6 +108,39 @@ class SyncEngine @Inject constructor(
             }
             if (opened.name.isNotEmpty() && opened.name != name) {
                 return FileOutcome.Mismatch(name, "OPENED echoed a different name: ${opened.name}")
+            }
+
+            // Another collector may have committed while this caller waited for its writer lease.
+            // Verify again against OPENED, and never replace immutable history with different bytes.
+            val existing = archive.fileFor(station, name)
+            if (existing.exists()) {
+                if (!existing.isFile) return FileOutcome.Mismatch(name, "archive destination is not a file")
+                val verdict = ParquetVerify.verify(existing, opened.size, opened.crc32)
+                if (!verdict.ok) return FileOutcome.Mismatch(name, "existing archive conflicts with device: ${verdict.describe()}")
+                val sha256 = ParquetVerify.sha256Hex(existing)
+                val row = archivedFileDao.get(station, name)
+                if (row != null && (row.bytes != opened.size || row.crc32 != opened.crc32 || row.sha256 != sha256)) {
+                    return FileOutcome.Mismatch(name, "existing archive conflicts with its recorded fingerprint")
+                }
+                if (row == null) {
+                    archivedFileDao.upsert(
+                        historyIndexer.indexed(
+                            ArchivedFile(
+                                station = station,
+                                name = name,
+                                bytes = opened.size,
+                                crc32 = opened.crc32,
+                                sha256 = sha256,
+                                syncedAtEpochMs = System.currentTimeMillis(),
+                                sourceDevice = sourceDevice,
+                            ),
+                            existing,
+                        )
+                    )
+                }
+                archive.discardPartial(station, name)
+                onProgress(FileProgress(name, opened.size, opened.size, opened.size))
+                return FileOutcome.Synced(name, opened.size, sha256, alreadyArchived = true)
             }
 
             val (writer, resumeFrom) = archive.openPartial(station, name, opened.size, opened.crc32)

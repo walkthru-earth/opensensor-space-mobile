@@ -11,8 +11,9 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
-import earth.walkthru.aqsync.data.DeviceConnectionRepository
+import earth.walkthru.aqsync.data.DeviceConnectionManager
 import earth.walkthru.aqsync.data.SyncProgress
+import earth.walkthru.aqsync.data.collectionProgress
 import earth.walkthru.aqsync.data.history.HistoryDeriver
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
@@ -44,19 +45,21 @@ class SyncWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted params: WorkerParameters,
     private val gateway: AppAutoSyncGateway,
-    private val repository: DeviceConnectionRepository,
+    private val manager: DeviceConnectionManager,
     private val notifications: SyncNotifications,
     private val historyDeriver: HistoryDeriver,
     private val advertScan: AdvertFlagScan,
 ) : CoroutineWorker(appContext, params) {
+    private val owner = id.toString()
+    private val notificationId = workerNotificationIds.incrementAndGet()
 
     override suspend fun getForegroundInfo(): ForegroundInfo =
-        foregroundInfo(repository.currentDisplayName, repository.sync.value)
+        foregroundInfo("opensensor.space", collectionProgress(manager.snapshots.value.filter { it.backgroundOwner == owner }))
 
     private fun foregroundInfo(name: String?, progress: SyncProgress): ForegroundInfo {
         val stop = WorkManager.getInstance(applicationContext).createCancelPendingIntent(id)
         val n = notifications.progress(name, progress, stop)
-        return ForegroundInfo(SyncNotifications.WORKER_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        return ForegroundInfo(notificationId, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
     }
 
     override suspend fun doWork(): Result {
@@ -64,23 +67,28 @@ class SyncWorker @AssistedInject constructor(
         try {
             setForeground(getForegroundInfo())
             foreground = true
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             // ForegroundServiceStartNotAllowedException (API 31+, app in background) or a missing
             // type/permission: run as a plain job instead; WorkManager gives it network for its run.
             Log.w(TAG, "foreground refused (${e::class.simpleName}); running as a plain job")
         }
-        val manager = applicationContext.getSystemService(NotificationManager::class.java)
+        val notificationManager = applicationContext.getSystemService(NotificationManager::class.java)
         val report = try {
             coroutineScope {
                 val mirror = launch {
-                    combine(repository.sync, repository.session.map { it?.transport?.displayName }) { p, n -> n to p }
+                    manager.snapshots.map { all ->
+                        val owned = all.filter { it.backgroundOwner == owner }
+                        (owned.singleOrNull()?.name ?: "${owned.size} devices") to collectionProgress(owned)
+                    }
                         .distinctUntilChanged()
                         .filter { (_, p) -> p.running }
                         // Progress arrives per CHUNK; NotificationManager sheds posts above ~5/s.
                         .conflate()
                         .collect { (name, progress) ->
                             if (foreground || notifications.canPost) {
-                                runCatching { manager.notify(SyncNotifications.WORKER_ID, notifications.progress(name, progress, WorkManager.getInstance(applicationContext).createCancelPendingIntent(id))) }
+                                runCatching { notificationManager.notify(notificationId, notifications.progress(name, progress, WorkManager.getInstance(applicationContext).createCancelPendingIntent(id))) }
                             }
                             delay(NOTIFY_INTERVAL_MS)
                         }
@@ -88,7 +96,7 @@ class SyncWorker @AssistedInject constructor(
                 try {
                     val trigger = inputData.getString(KEY_TRIGGER) ?: (if (inputData.getString(KEY_ADDRESS) != null || inputData.getBoolean(KEY_ALL_KNOWN, false)) SyncTrigger.MANUAL.name else "PERIODIC")
                     Log.i(TAG, "auto-sync run: trigger=$trigger")
-                    AutoSyncRunner(gateway, log = { Log.i(TAG, it) }).run(
+                    AutoSyncRunner(gateway.forRun(owner), log = { Log.i(TAG, it) }).run(
                         onlyAddress = inputData.getString(KEY_ADDRESS),
                         allKnown = inputData.getBoolean(KEY_ALL_KNOWN, false),
                         lanOnly = inputData.getBoolean(KEY_LAN_ONLY, false),
@@ -104,7 +112,7 @@ class SyncWorker @AssistedInject constructor(
             Log.w(TAG, "auto-sync run failed: ${e::class.simpleName}: ${e.message}")
             return retryOrGiveUp()
         } finally {
-            if (!foreground) runCatching { manager.cancel(SyncNotifications.WORKER_ID) }
+            if (!foreground) runCatching { notificationManager.cancel(notificationId) }
         }
 
         if (inputData.getString(KEY_TRIGGER) == null && inputData.getString(KEY_ADDRESS) == null && !inputData.getBoolean(KEY_ALL_KNOWN, false)) {
@@ -127,6 +135,7 @@ class SyncWorker @AssistedInject constructor(
         if (runAttemptCount < MAX_RETRIES) Result.retry() else Result.success()
 
     companion object {
+        private val workerNotificationIds = java.util.concurrent.atomic.AtomicInteger(10_000)
         private const val TAG = "SyncWorker"
         private const val NOTIFY_INTERVAL_MS = 500L
 

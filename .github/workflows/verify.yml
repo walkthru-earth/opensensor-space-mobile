@@ -52,12 +52,14 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+      - name: Validate station epoch migration
+        run: python3 tools/validate_station_epoch_migration.py
       - run: ./gradlew --no-daemon verify
       - name: Upload debug APK
         if: success()
         uses: actions/upload-artifact@v7
         with:
-          name: aq-sync-debug-${{ github.sha }}
+          name: opensensor-space-debug-${{ github.sha }}
           path: app/build/outputs/apk/debug/app-debug.apk
           retention-days: 14
       - name: Upload lint and test reports

@@ -6,8 +6,9 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import earth.walkthru.aqsync.BuildConfig
-import earth.walkthru.aqsync.data.DeviceConnectionRepository
+import earth.walkthru.aqsync.data.DeviceConnectionManager
 import earth.walkthru.aqsync.data.DeviceEvent
+import earth.walkthru.aqsync.data.DeviceSnapshot
 import earth.walkthru.aqsync.data.background.AutoSyncScheduler
 import earth.walkthru.aqsync.data.ble.BleScanner
 import earth.walkthru.aqsync.data.ble.ConnectionState
@@ -17,7 +18,9 @@ import earth.walkthru.aqsync.data.history.Metrics
 import earth.walkthru.aqsync.data.history.Resolution
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.local.database.KnownDevice
+import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
 import earth.walkthru.aqsync.data.local.database.MetricBucketDao
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -27,6 +30,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
@@ -47,6 +52,7 @@ data class LoggerSummary(
 
 data class ScanUiState(
     val scanning: Boolean = false,
+    val activeDevices: List<DeviceSnapshot> = emptyList(),
     val scanError: String? = null,
     /** Advertisers seen in the last ~15 s, strongest first. */
     val nearby: List<ScannedDevice> = emptyList(),
@@ -63,10 +69,12 @@ data class ScanUiState(
     val backgroundSyncActive: Boolean = false,
 )
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class ScanViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val repository: DeviceConnectionRepository,
+    private val manager: DeviceConnectionManager,
+    private val knownDeviceDao: KnownDeviceDao,
     archivedFileDao: ArchivedFileDao,
     bucketDao: MetricBucketDao,
     private val autoSyncScheduler: AutoSyncScheduler,
@@ -93,11 +101,16 @@ class ScanViewModel @Inject constructor(
     private val seen = MutableStateFlow<Map<String, ScannedDevice>>(emptyMap())
     private val connectingTo = MutableStateFlow<String?>(null)
 
-    val events: SharedFlow<DeviceEvent> = repository.events
+    val events: Flow<DeviceEvent> = connectingTo.flatMapLatest { address ->
+        if (address == null) kotlinx.coroutines.flow.emptyFlow() else manager.controller(address).events
+    }
+    private val connection = connectingTo.flatMapLatest { address ->
+        if (address == null) flowOf(ConnectionState.Disconnected) else manager.controller(address).connectionState
+    }
 
     val uiState: StateFlow<ScanUiState> = combine(
-        scanning, scanError, seen, repository.knownDevices, repository.connectionState, connectingTo, repository.lanDevices,
-        summaries, autoSyncScheduler.observeActive(),
+        scanning, scanError, seen, knownDeviceDao.observeAll(), connection, connectingTo, manager.lanDevices,
+        summaries, autoSyncScheduler.observeActive(), manager.snapshots,
     ) { values ->
         @Suppress("UNCHECKED_CAST")
         val nearby = (values[2] as Map<String, ScannedDevice>).values
@@ -105,6 +118,7 @@ class ScanViewModel @Inject constructor(
         @Suppress("UNCHECKED_CAST")
         ScanUiState(
             scanning = values[0] as Boolean,
+            activeDevices = (values[9] as List<*>).filterIsInstance<DeviceSnapshot>().filter { it.connection != ConnectionState.Disconnected },
             scanError = values[1] as String?,
             nearby = nearby,
             known = values[3] as List<KnownDevice>,
@@ -131,7 +145,8 @@ class ScanViewModel @Inject constructor(
                 when (ev) {
                     is BleScanner.Event.Seen -> {
                         seen.update { it + (ev.device.address to ev.device) }
-                        repository.touchSeen(ev.device.address, ev.device.name)
+                        knownDeviceDao.insertIfAbsent(KnownDevice(ev.device.address, ev.device.name, null, null, null, ev.device.lastSeenEpochMs, null))
+                        knownDeviceDao.touch(ev.device.address, ev.device.name, ev.device.lastSeenEpochMs)
                     }
                     is BleScanner.Event.Failed -> {
                         scanError.value = ev.message
@@ -161,20 +176,20 @@ class ScanViewModel @Inject constructor(
     fun connect(address: String, name: String?) {
         stopScan()
         connectingTo.value = address
-        repository.connect(address, name)
+        manager.controller(address).connect(address, name)
     }
 
     fun connectFake() {
         stopScan()
         connectingTo.value = FakeTransport.FAKE_ADDRESS
-        repository.connect(FakeTransport.FAKE_ADDRESS, "AQ-6b40 (fake)", fake = true)
+        manager.controller(FakeTransport.FAKE_ADDRESS).connect(FakeTransport.FAKE_ADDRESS, "AQ-6b40 (fake)", fake = true)
     }
 
     /** Debug: the same fake, behaving like the LAN pipe (payload_max 1024, GET_TOKEN refused). */
     fun connectFakeLan() {
         stopScan()
         connectingTo.value = FakeTransport.FAKE_LAN_ADDRESS
-        repository.connect(FakeTransport.FAKE_LAN_ADDRESS, "AQ-6b40 (fake LAN)", fake = true)
+        manager.controller(FakeTransport.FAKE_LAN_ADDRESS).connect(FakeTransport.FAKE_LAN_ADDRESS, "AQ-6b40 (fake LAN)", fake = true)
     }
 
     fun clearConnecting() {
@@ -182,7 +197,7 @@ class ScanViewModel @Inject constructor(
     }
 
     fun forget(address: String) {
-        viewModelScope.launch { repository.forget(address) }
+        viewModelScope.launch { manager.controller(address).forget(address) }
     }
 
     override fun onCleared() {

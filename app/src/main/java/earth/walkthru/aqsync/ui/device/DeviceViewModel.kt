@@ -3,8 +3,11 @@ package earth.walkthru.aqsync.ui.device
 import android.content.IntentSender
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedFactory
+import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
-import earth.walkthru.aqsync.data.DeviceConnectionRepository
+import earth.walkthru.aqsync.data.DeviceConnectionManager
 import earth.walkthru.aqsync.data.DeviceEvent
 import earth.walkthru.aqsync.data.TimedStatus
 import earth.walkthru.aqsync.data.TransportFactory
@@ -15,8 +18,10 @@ import earth.walkthru.aqsync.data.background.CompanionPresence
 import earth.walkthru.aqsync.data.ble.ConfigSnapshot
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.TransportKind
+import earth.walkthru.aqsync.data.fake.FakeTransport
 import earth.walkthru.aqsync.data.lan.LanDevice
 import earth.walkthru.aqsync.data.local.database.KnownDevice
+import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
 import earth.walkthru.aqsync.data.protocol.ConfigPatch
 import earth.walkthru.aqsync.data.protocol.ConfigValidationException
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
@@ -30,10 +35,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import javax.inject.Inject
 
 data class DeviceUiState(
     val address: String? = null,
@@ -81,13 +86,23 @@ data class DeviceUiState(
     val overBle: Boolean get() = transport == TransportKind.BLE || transport == TransportKind.FAKE
 }
 
-@HiltViewModel
-class DeviceViewModel @Inject constructor(
-    private val repository: DeviceConnectionRepository,
+@HiltViewModel(assistedFactory = DeviceViewModel.Factory::class)
+class DeviceViewModel @AssistedInject constructor(
+    manager: DeviceConnectionManager,
+    @Assisted private val deviceAddress: String,
     private val transportFactory: TransportFactory,
     private val companionPresence: CompanionPresence,
     settings: AppSettings,
+    knownDeviceDao: KnownDeviceDao,
 ) : ViewModel() {
+    private val repository = manager.controller(deviceAddress)
+    private val enrolledDevice = knownDeviceDao.observeAll().map { devices -> devices.firstOrNull { it.address == deviceAddress } }
+    private val fakeEndpoint = deviceAddress == FakeTransport.FAKE_ADDRESS || deviceAddress == FakeTransport.FAKE_LAN_ADDRESS
+
+    @AssistedFactory
+    interface Factory {
+        fun create(deviceAddress: String): DeviceViewModel
+    }
 
     private val localEvents = MutableSharedFlow<DeviceEvent>(extraBufferCapacity = 4)
 
@@ -101,7 +116,7 @@ class DeviceViewModel @Inject constructor(
     /** Repository snackbar events plus local validation errors. */
     val events: Flow<DeviceEvent> = merge(repository.events, localEvents)
 
-    private val core = combine(
+    private val sessionCore = combine(
         repository.session,
         repository.connectionState,
         repository.info,
@@ -109,17 +124,18 @@ class DeviceViewModel @Inject constructor(
         repository.config,
     ) { session, conn, info, status, config ->
         DeviceUiState(
-            address = session?.address,
+            address = session?.address ?: deviceAddress,
             name = session?.transport?.displayName,
             connection = conn,
             endpoint = session?.transport?.endpoint,
             info = info,
             status = status,
             config = config,
-            isFake = repository.isFake,
+            isFake = repository.isFake || fakeEndpoint,
             bonded = session?.address?.let { repository.isFake || transportFactory.isBonded(it) } == true,
         )
     }
+    private val core = combine(sessionCore, enrolledDevice) { base, enrolled -> base.copy(name = base.name ?: enrolled?.name) }
 
     private val lan = combine(repository.lanDevices, repository.lanDiscoveryError, repository.currentKnownDevice) { devices, err, known ->
         Triple(devices, err, known)
@@ -184,7 +200,7 @@ class DeviceViewModel @Inject constructor(
     fun setupCompanion() {
         val s = uiState.value
         val addr = s.address ?: return
-        if (!s.companionSupported || s.companionBusy) return
+        if (!s.companionSupported || s.companionBusy || s.busy || s.syncRunning) return
         companionBusy.value = true
         viewModelScope.launch {
             if (s.overBle && s.connection != ConnectionState.Disconnected) {
@@ -306,7 +322,6 @@ class DeviceViewModel @Inject constructor(
 
     fun reconnect() {
         val s = uiState.value
-        val addr = s.address ?: return
-        repository.connect(addr, s.name, fake = s.isFake)
+        repository.connect(deviceAddress, s.name, fake = fakeEndpoint)
     }
 }

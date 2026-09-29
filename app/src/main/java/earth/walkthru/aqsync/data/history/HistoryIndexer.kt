@@ -6,6 +6,7 @@ import earth.walkthru.aqsync.data.history.parquet.ParquetFormatException
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.sync.FileArchive
+import earth.walkthru.aqsync.data.sync.HivePartition
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -31,24 +32,33 @@ class HistoryIndexer @Inject constructor(
 ) {
     /** Index [file] (already verified) and return [row] with the index columns filled — never throws. */
     fun indexed(row: ArchivedFile, file: File, nowEpochMs: Long = System.currentTimeMillis()): ArchivedFile = try {
-        val index = ParquetIndexer.index(ParquetFile.open(file))
-        row.copy(
-            indexedAtEpochMs = nowEpochMs,
-            indexError = null,
-            rows = index.rows,
-            rowGroups = index.rowGroups,
-            schemaVersion = index.schemaVersion,
-            bootId = index.bootId,
-            purpose = index.purpose,
-            utcRows = index.utcRows,
-            firstUtcNs = index.firstUtcNs,
-            lastUtcNs = index.lastUtcNs,
-            firstMonoUs = index.firstMonoUs,
-            lastMonoUs = index.lastMonoUs,
-            firstSeq = index.firstSeq,
-            lastSeq = index.lastSeq,
-            pmValidRows = index.pmValidRows,
-        )
+        val producer = when (val partition = HivePartition.of(row.name)) {
+            is HivePartition.Dated -> partition.station
+            is HivePartition.Unsynced -> partition.station
+            else -> null
+        }
+        if (producer != null && producer != row.station) {
+            row.copy(indexedAtEpochMs = nowEpochMs, indexError = "File belongs to station $producer. Raw bytes are saved; history is excluded from current station ${row.station}.")
+        } else {
+            val index = ParquetIndexer.index(ParquetFile.open(file))
+            row.copy(
+                indexedAtEpochMs = nowEpochMs,
+                indexError = null,
+                rows = index.rows,
+                rowGroups = index.rowGroups,
+                schemaVersion = index.schemaVersion,
+                bootId = index.bootId,
+                purpose = index.purpose,
+                utcRows = index.utcRows,
+                firstUtcNs = index.firstUtcNs,
+                lastUtcNs = index.lastUtcNs,
+                firstMonoUs = index.firstMonoUs,
+                lastMonoUs = index.lastMonoUs,
+                firstSeq = index.firstSeq,
+                lastSeq = index.lastSeq,
+                pmValidRows = index.pmValidRows,
+            )
+        }
     } catch (e: ParquetFormatException) {
         row.copy(indexedAtEpochMs = nowEpochMs, indexError = e.message ?: "unreadable Parquet")
     } catch (e: java.io.IOException) {

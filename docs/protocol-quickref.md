@@ -1,7 +1,7 @@
 # Protocol quick reference — the mirror, not the contract
 
 **Scope:** constants as implemented in `:core:protocol`, for lookup. The **owner** is
-`../m5stack-aq-parquet/docs/ble-sync-protocol.md`; do not change a layout, opcode, UUID, JSON key
+`../aq-parquet/docs/shared/ble-sync-protocol.md`; do not change a layout, opcode, UUID, JSON key
 or error code here before changing it there (and the firmware).
 **Code:** `core/protocol/…/data/protocol/Frames.kt`, `AqUuids.kt`, `LanFraming.kt`, `DeviceConfig.kt`, `JsonModels.kt`, `ParquetVerify.kt`.
 **Related:** [transports.md](transports.md) (pipes), [sync-engine.md](sync-engine.md) (how the file opcodes are driven).

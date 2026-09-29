@@ -104,7 +104,9 @@ jobs:
           AQSYNC_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           AQSYNC_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           AQSYNC_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew --no-daemon verify :app:assembleRelease
+        run: |
+          python3 tools/validate_station_epoch_migration.py
+          ./gradlew --no-daemon verify :app:assembleRelease
 
       - name: Verify the built APK signer
         shell: bash
@@ -127,7 +129,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          cp app/build/outputs/apk/release/app-release.apk "dist/aq-sync-${{ steps.meta.outputs.version_name }}-universal.apk"
+          cp app/build/outputs/apk/release/app-release.apk "dist/opensensor-space-${{ steps.meta.outputs.version_name }}-universal.apk"
           cp app/build/outputs/mapping/release/mapping.txt "dist/mapping-${{ steps.meta.outputs.version_name }}.txt" 2>/dev/null || true
           (cd dist && sha256sum -- * > SHA256SUMS.txt)
           ls -l dist
@@ -137,10 +139,10 @@ jobs:
         run: |
           set -euo pipefail
           {
-            echo "**AQ Sync** \`${{ steps.meta.outputs.version_name }}\` · versionCode ${{ steps.meta.outputs.version_code }} · commit ${GITHUB_SHA::8}"
+            echo "**opensensor.space** \`${{ steps.meta.outputs.version_name }}\` · versionCode ${{ steps.meta.outputs.version_code }} · commit ${GITHUB_SHA::8}"
             echo
             echo "Signed with the validated project release certificate (SHA-256 \`${{ steps.keystore.outputs.cert_sha256 }}\`)."
-            echo "Universal APK — Android 12+ (minSdk 31), all ABIs (no native code)."
+            echo "Universal APK — Android 12+ (minSdk 31), including the bundled ZSTD native ABIs."
             echo
             if [ "${{ steps.meta.outputs.channel }}" = "rolling" ]; then
               echo "_Rolling build: this release is replaced on every push to \`main\`._"
@@ -167,7 +169,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
-          name: ${{ steps.meta.outputs.channel == 'rolling' && 'Latest build (rolling)' || format('AQ Sync {0}', steps.meta.outputs.version_name) }}
+          name: ${{ steps.meta.outputs.channel == 'rolling' && 'Latest build (rolling)' || format('opensensor.space {0}', steps.meta.outputs.version_name) }}
           prerelease: ${{ steps.meta.outputs.channel == 'rolling' }}
           make_latest: ${{ steps.meta.outputs.channel == 'tag' }}
           body_path: dist/NOTES.md
@@ -180,6 +182,6 @@ jobs:
       - name: Keep the APK as a workflow artifact too
         uses: actions/upload-artifact@v7
         with:
-          name: aq-sync-${{ steps.meta.outputs.version_name }}
+          name: opensensor-space-${{ steps.meta.outputs.version_name }}
           path: dist/
           retention-days: 14   # the organisation maximum

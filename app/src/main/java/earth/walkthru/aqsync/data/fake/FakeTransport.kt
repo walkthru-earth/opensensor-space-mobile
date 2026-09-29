@@ -9,6 +9,7 @@ import earth.walkthru.aqsync.data.protocol.FrameCodec
 import earth.walkthru.aqsync.data.protocol.Opcode
 import earth.walkthru.aqsync.data.protocol.ParquetVerify
 import earth.walkthru.aqsync.data.protocol.ProtocolError
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -48,6 +49,9 @@ class FakeTransport(
     private val chunkDelayMs: Long = 4,
     seed: Int = 7,
     private val simulateLan: Boolean = false,
+    val station: String = "53315f5f-cb85-4d8d-b623-d56266084189",
+    val deviceId: String = "441bf6e26b40",
+    dispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : AqTransport {
 
     override val displayName: String = "AQ-6b40"
@@ -68,15 +72,13 @@ class FakeTransport(
     private var _responses = Channel<ByteArray>(Channel.UNLIMITED)
     override val responseFrames: ReceiveChannel<ByteArray> get() = _responses
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val scope = CoroutineScope(SupervisorJob() + dispatcher)
     private var liveJob: Job? = null
     private val rnd = Random(seed)
 
     // --------------------------------------------------------------- device state
 
     // Identities observed on real hardware (bench run 2026-09, AQ-6b40) so fixtures look authentic.
-    val station = "53315f5f-cb85-4d8d-b623-d56266084189"
-    val deviceId = "441bf6e26b40"
     val bootId = "b41d37a48c04031e9397e28ce48c2f43"
     val maxRead = 16_384
 

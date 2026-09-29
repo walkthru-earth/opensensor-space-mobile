@@ -86,7 +86,7 @@ fun FilesScreen(
     onOpenDevice: () -> Unit,
     onOpenFileMetrics: (station: String, name: String) -> Unit,
     onDisconnected: () -> Unit,
-    viewModel: FilesViewModel = hiltViewModel(),
+    viewModel: FilesViewModel = hiltViewModel<FilesViewModel, FilesViewModel.Factory>(key = address, creationCallback = { it.create(address) }),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
@@ -332,12 +332,12 @@ fun FilesScreen(
                             canSync = state.connection.isReady && !state.sync.running,
                             onSync = { withNotificationPermission { viewModel.syncOne(entry.name) } },
                             onShare = {
-                                viewModel.archivedFor(entry.name, (entry.partition as? earth.walkthru.aqsync.data.sync.HivePartition.Dated)?.station)
+                                viewModel.archivedFor(entry.name)
                                     ?.let(viewModel::share)
                             },
                             onInspect = if (state.advancedMode) {
                                 {
-                                    viewModel.archivedFor(entry.name, (entry.partition as? earth.walkthru.aqsync.data.sync.HivePartition.Dated)?.station)
+                                    viewModel.archivedFor(entry.name)
                                         ?.let { onOpenFileMetrics(it.station, it.name) }
                                 }
                             } else {

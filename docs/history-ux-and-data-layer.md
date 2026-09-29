@@ -14,7 +14,7 @@ iOS app later with the same features.
 
 ## 0. What the archive actually looks like (measured, not assumed)
 
-Measured on `../m5stack-aq-parquet/exports/sd-20260916T173205Z` (the full SD export of `AQ-6b40`,
+Measured on `../aq-parquet/exports/sd-20260916T173205Z` (the full SD export of `AQ-6b40`,
 764 files) with PyArrow via `pixi run python` in the firmware repo:
 
 | Fact | Value | Consequence |
@@ -76,7 +76,7 @@ still be a fine *analysis* API on small aggregate tables (thousands of rows), if
 Validation: the JVM unit tests write fixtures with the Kotlin writer and the firmware repo's
 `pixi run python` validates them with PyArrow **and** DuckDB (same harness the firmware uses);
 the reader is tested against the 764 real files (a `git submodule`-free copy of a handful goes to
-`app/src/test/resources`, the rest runs as an opt-in local test pointed at `../m5stack-aq-parquet/exports`).
+`app/src/test/resources`, the rest runs as an opt-in local test pointed at `../aq-parquet/exports`).
 
 ## 2. Merge into one file per day? Storage layout
 
@@ -132,7 +132,7 @@ no Arrow runtime exists on Android (§1).
 
 `AGENTS.md` says "No location permission" and the README repeats it. This proposal **asks to amend
 that rule**, not to ignore it. The privacy notes already anticipate it:
-`../m5stack-aq-parquet/product/mobile-app.md` — *"Location is optional and private, with
+`../aq-parquet/product/mobile-app.md` — *"Location is optional and private, with
 indoor/outdoor context and effective dates. Unknown location prevents spatial sharing, not
 logging."* Proposed replacement rule:
 
@@ -156,7 +156,7 @@ stamps it into the data. For location there are two designs:
 | Privacy | coordinates on an **unencrypted SD card** and in every file forever (the mobile-architecture note warns exactly about this) | files carry a random id; the phone's `deployment` table (and only it) resolves id → place, dates, indoor/outdoor |
 | Moves / corrections | rewrite metadata? Impossible, files are immutable; historic files carry the wrong place | new id when the logger moves; old files keep the old id; the phone table has effective dates either way |
 | Multiple phones / iOS | each phone must send the same numbers | the id is set once; a second phone learns the id from the files/`info` and can attach its own record or import the owner's |
-| Contract | both are `SET_CONFIG` changes owned by `../m5stack-aq-parquet/docs/ble-sync-protocol.md`; either needs a firmware PR first (AGENTS.md: contract lives there) | same; smaller diff; `info` JSON gains `deployment` so the phone can show "id set on 2026-09-17" |
+| Contract | both are `SET_CONFIG` changes owned by `../aq-parquet/docs/shared/ble-sync-protocol.md`; either needs a firmware PR first (AGENTS.md: contract lives there) | same; smaller diff; `info` JSON gains `deployment` so the phone can show "id set on 2026-09-17" |
 
 B also works with **no firmware change at all** in the meantime: the phone can already key a
 deployment record by `(station, effective_from)`, and back-fill the id later.
@@ -346,7 +346,7 @@ firmware `deployment.id` contract PR → (7) spec documents for iOS.
 
 ## Firmware follow-up (2026-09-17, firmware repo commits `ce8aaa0`…`44642bb` on `main`)
 
-The measurements in §0 prompted writer changes on the firmware side — built, host-tested, and **flashed hash-verified on 2026-09-17**; the first 1800 s file (`data_0930_…_2-106-2.parquet`, 2 row groups, 105 rows) was fetched over serial the same day and is now a committed fixture that the Kotlin reader decodes and cross-checks against its own footer statistics (`RealArchiveTest`); `../m5stack-aq-parquet/docs/bench-verified.md` remains the authority on what the *board* has been measured to do. Every file in the current phone archive is still as described in §0. The app already tolerates v3 devices (`ignoreUnknownKeys`, generic interval display, `ParquetVerify` checks only magic/size/CRC) and mirrors the two new `status` keys `open`/`open_rg` (`DeviceStatus`, Today storage card). Once `arduino-cores3-parquet-v6` is on the board, device files (`schema_version = cores3-telemetry-v3`, `dictionary_version` still `cores3-telemetry-v2`, same 77 leaves) will carry:
+The measurements in §0 prompted writer changes on the firmware side — built, host-tested, and **flashed hash-verified on 2026-09-17**; the first 1800 s file (`data_0930_…_2-106-2.parquet`, 2 row groups, 105 rows) was fetched over serial the same day and is now a committed fixture that the Kotlin reader decodes and cross-checks against its own footer statistics (`RealArchiveTest`); `../aq-parquet/docs/boards/m5stack-cores3/bench-verified.md` remains the authority on what the *board* has been measured to do. Every file in the current phone archive is still as described in §0. The app already tolerates v3 devices (`ignoreUnknownKeys`, generic interval display, `ParquetVerify` checks only magic/size/CRC) and mirrors the two new `status` keys `open`/`open_rg` (`DeviceStatus`, Today storage card). Once `arduino-cores3-parquet-v6` is on the board, device files (`schema_version = cores3-telemetry-v3`, `dictionary_version` still `cores3-telemetry-v2`, same 77 leaves) will carry:
 
 | §0 finding | v3 device file | Consequence for R1 (own Kotlin/Swift reader) |
 | --- | --- | --- |
@@ -354,10 +354,10 @@ The measurements in §0 prompted writer changes on the firmware side — built, 
 | `null_count` only | `min_value`/`max_value` (PLAIN LE bytes) + `is_*_exact`, `nan_count` on FLOAT, `column_orders` = TYPE_ORDER; deprecated `min`/`max` **absent** | read Statistics fields 5/6/7/8/9; the `archived_file` index (first/last `event_time_utc_ns`, `monotonic_us`, `sequence`) comes straight from the footer, no page decode |
 | INT64, no TIMESTAMP | `event_time_utc_ns`, `clock_anchor_utc_ns` annotated `TIMESTAMP(NANOS, isAdjustedToUTC=true)` (SchemaElement field 10 → LogicalType field 8) | the reader must accept a `logicalType` on a leaf; physical decode is unchanged. DuckDB shows these as TIMESTAMPTZ at µs — use `epoch_ns()`; PyArrow keeps ns |
 | 7 KB footer / 88 rows | +1.5 KB statistics per group; per-chunk metadata (~57 B × 77) dominates, so hourly files only take the footer share from 17 % to ~14 % | the byte win remains LZ4 + the derived daily file (§2); hourly device files mainly mean 4× fewer files to sync |
-| — | `RowGroup.sorting_columns` = `sequence` ascending, `file_offset`, `total_compressed_size`, `ordinal`; `created_by = m5stack-aq-parquet version 0.2 (build arduino-cores3-parquet-v6)`; metadata `row_groups`, `row_group_rows_max` | optional to use; `created_by`/`schema_version` distinguish v3 files |
+| — | `RowGroup.sorting_columns` = `sequence` ascending, `file_offset`, `total_compressed_size`, `ordinal`; `created_by = aq-parquet version 0.2 (build arduino-cores3-parquet-v6)`; metadata `row_groups`, `row_group_rows_max` | optional to use; `created_by`/`schema_version` distinguish v3 files |
 | `.partial` retained | a reset between row groups leaves a footer-less `.partial` whose earlier groups are complete on the card | still never listed by the device; a footer-rebuild tool is possible later and would belong in the firmware repo |
 
-Nothing changes for sync: identity is still `(station, name, size, crc32)` per finalized file, and `ParquetVerify` only checks magic/size/CRC. The derived daily spec in §2 stays as written; its writer and the device writer now agree on statistics rules (parquet-format 2.13 TYPE_ORDER float rules) and on the TIMESTAMP annotation. Reference: `../m5stack-aq-parquet/docs/telemetry-pipeline.md` ("Direct Parquet experiment") and `tools/parquet_footer.py` there, a 100-line Thrift-compact footer decoder that is a direct template for the Kotlin footer parser.
+Nothing changes for sync: identity is still `(station, name, size, crc32)` per finalized file, and `ParquetVerify` only checks magic/size/CRC. The derived daily spec in §2 stays as written; its writer and the device writer now agree on statistics rules (parquet-format 2.13 TYPE_ORDER float rules) and on the TIMESTAMP annotation. Reference: `../aq-parquet/docs/shared/telemetry-pipeline.md` ("Direct Parquet experiment") and `tools/parquet_footer.py` there, a 100-line Thrift-compact footer decoder that is a direct template for the Kotlin footer parser.
 
 ## 7. GeoParquet 2.0 (decided 2026-09-17, D11)
 
@@ -455,4 +455,4 @@ and the firmware's are valid; the fix is one line upstream.
 - [MapLibre Compose — Getting started](https://maplibre.org/maplibre-compose/getting-started/): 0.17.0, Android OpenGL/Vulkan runtimes, iOS linker flags.
 - [MapLibre Native Android — PMTiles](https://raw.githubusercontent.com/maplibre/maplibre-native/refs/heads/main/platform/android/docs/data/PMTiles.md): `pmtiles://file://` since 11.7.0, no `asset://`, no offline packs for PMTiles.
 - `apache/arrow-java` issue #801 (Android allocation manager) — open.
-- Measurements in §0: PyArrow over `../m5stack-aq-parquet/exports/sd-20260916T173205Z` (756 station files, 66,560 rows).
+- Measurements in §0: PyArrow over `../aq-parquet/exports/sd-20260916T173205Z` (756 station files, 66,560 rows).

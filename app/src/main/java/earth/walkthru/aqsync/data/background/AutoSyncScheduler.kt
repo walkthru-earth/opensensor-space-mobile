@@ -88,7 +88,7 @@ class AutoSyncScheduler @Inject constructor(
             .build()
         // Triggered runs queue under their own name so a presence event is not swallowed by a
         // manual run the user just started (KEEP would drop it); at most one of each is pending.
-        workManager.enqueueUniqueWork(if (trigger == SyncTrigger.MANUAL) MANUAL_NAME else TRIGGER_NAME, ExistingWorkPolicy.KEEP, request)
+        workManager.enqueueUniqueWork((if (trigger == SyncTrigger.MANUAL) MANUAL_NAME else TRIGGER_NAME) + "-$address", ExistingWorkPolicy.KEEP, request)
     }
 
     /**
@@ -107,7 +107,7 @@ class AutoSyncScheduler @Inject constructor(
 
     /**
      * "Collect from all loggers": one expedited run over every known device, LAN then Bluetooth bond,
-     * one at a time — the maintainer's walk through a site. Same worker, same notification, same
+     * with bounded parallel device transfers — the maintainer's walk through a site. Same worker, same notification, same
      * summary ("Synced 40 new files from 3 loggers"). Interactive use of a device still wins.
      */
     fun collectAll() {

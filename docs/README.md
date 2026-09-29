@@ -2,14 +2,14 @@
 
 One file per concern. Each starts with a **Scope / Code / Related** header so you can decide in a
 few lines whether it is the right file, then a compact Mermaid diagram, then the facts and the
-decisions that belong to that concern only. Numbers were validated against the code on 2026-09-18
-(`./gradlew verify`: 138 tests, 0 lint errors, 7 known warnings).
+decisions that belong to that concern only. Current verification is recorded in [status.md](status.md); dated results describe their original revision.
 
 ## Routing table
 
 | I need to… | Read | Then open the code in |
 | --- | --- | --- |
-| Know what is verified, on what hardware, and what is next | [status.md](status.md) | `../m5stack-aq-parquet/docs/bench-verified.md` |
+| Know what is verified, on what hardware, and what is next | [status.md](status.md) | `../aq-parquet/docs/boards/m5stack-cores3/bench-verified.md` |
+| Understand the opensensor.space rebrand, concurrent multi-device collection and reset/reflash recovery | [opensensor-space.md](opensensor-space.md) (implementation and remaining qualification) | `data/DeviceConnectionRepository.kt`, `data/background/`, `data/sync/`, `ui/`; new firmware owner `../aq-parquet/docs/shared/` |
 | Understand modules, layers, who depends on whom, "what a change touches" | [architecture.md](architecture.md) | `core/*/build.gradle.kts`, `app/build.gradle.kts` |
 | Change a screen, the nav graph, detail levels | [screens.md](screens.md) | `app/…/ui/`, `data/settings/AppSettings.kt` |
 | Look up an opcode, frame type, error code, UUID, LAN framing constant | [protocol-quickref.md](protocol-quickref.md) | `core/protocol/…/Frames.kt`, `AqUuids.kt`, `LanFraming.kt` |
@@ -25,7 +25,7 @@ decisions that belong to that concern only. Numbers were validated against the c
 | What the AirGradient Android app does differently, and verdicts | [review-airgradient-android.md](review-airgradient-android.md) | — |
 
 Rules (non-negotiables) live in [`../AGENTS.md`](../AGENTS.md). The protocol contract lives in the
-firmware repo: `../m5stack-aq-parquet/docs/ble-sync-protocol.md` — never in this repo.
+firmware repo: `../aq-parquet/docs/shared/ble-sync-protocol.md` — never in this repo.
 
 ## How the concerns connect
 

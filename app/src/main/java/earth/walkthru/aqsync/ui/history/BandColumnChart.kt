@@ -24,7 +24,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import earth.walkthru.aqsync.data.history.AirMood
-import earth.walkthru.aqsync.data.history.Columns
+import earth.walkthru.aqsync.data.history.ChartAxes
 import earth.walkthru.aqsync.data.history.HistoryColumn
 import earth.walkthru.aqsync.data.history.HistoryRange
 import earth.walkthru.aqsync.data.history.MetricSpec
@@ -32,6 +32,7 @@ import earth.walkthru.aqsync.ui.theme.color
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlin.math.abs
 import kotlin.math.max
 
 /** WHO 2021 24-hour guideline for PM2.5, µg/m³ — the one reference line the chart draws. */
@@ -69,8 +70,8 @@ fun BandColumnChart(
     val capPaint = remember(onSurface, labelPx) { textPaint(onSurface, labelPx * 0.95f, bold = true) }
 
     // The metric's own floor (PM2.5: 60, so the whole "Getting hazy" band is always visible); spikes beyond are capped.
-    val floor = metric.axisFloor
-    val yMax = remember(columns, metric) { Columns.axisMax(columns, floor) }
+    val axis = remember(columns, metric) { ChartAxes.of(columns, metric) }
+    val yMax = axis.max
 
     Canvas(
         modifier
@@ -102,11 +103,12 @@ fun BandColumnChart(
         val top = labelPx * 1.4f
         val plot = Rect(left, top, size.width, bottom)
         fun x(t: Long) = plot.left + (t - fromS).toFloat() / (toS - fromS) * plot.width
-        fun y(v: Float) = plot.bottom - (v / yMax).coerceIn(0f, 1f) * plot.height
+        fun y(v: Float) = plot.bottom - axis.fraction(v) * plot.height
+        val zeroY = y(0f)
 
         // Grid + y labels.
-        val step = Columns.niceStep(yMax)
-        var v = 0f
+        val step = axis.step
+        var v = axis.min
         while (v <= yMax + 1e-3f) {
             val yy = y(v)
             drawLine(gridColor, Offset(plot.left, yy), Offset(plot.right, yy), 1f)
@@ -114,7 +116,7 @@ fun BandColumnChart(
             v += step
         }
         // WHO guideline (PM2.5 only), dashed, labelled at the right.
-        if (metric.banded && WHO_PM25_24H < yMax) {
+        if (ChartAxes.hasPm25Guideline(metric) && WHO_PM25_24H < yMax) {
             val yy = y(WHO_PM25_24H)
             drawLine(AirMood.FINE.color().copy(alpha = 0.9f), Offset(plot.left, yy), Offset(plot.right, yy), 1.5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f)))
             val label = "WHO 24 h"
@@ -127,12 +129,13 @@ fun BandColumnChart(
         run {
             var i = 0
             while (i < columns.size) {
-                fun over(k: Int) = (columns[k].max ?: columns[k].mean ?: 0f) > yMax
+                fun peak(k: Int) = columns[k].max?.takeIf(Float::isFinite) ?: columns[k].mean?.takeIf(Float::isFinite) ?: 0f
+                fun over(k: Int) = peak(k) > yMax
                 if (!over(i)) { i++; continue }
                 var j = i
                 var best = i
                 while (j < columns.size && over(j)) {
-                    if ((columns[j].max ?: columns[j].mean!!) > (columns[best].max ?: columns[best].mean!!)) best = j
+                    if (peak(j) > peak(best)) best = j
                     j++
                 }
                 labelCap[best] = true
@@ -144,26 +147,28 @@ fun BandColumnChart(
         val gap = (slotW * 0.18f).coerceIn(1f, 6f)
         val radius = CornerRadius((slotW * 0.3f).coerceAtMost(8f))
         for ((ci, c) in columns.withIndex()) {
-            val m = c.mean ?: continue
+            val m = c.mean?.takeIf(Float::isFinite) ?: continue
             val x0 = x(c.startS) + gap / 2
             val w = max(slotW - gap, 1.5f)
             // "Clipped" when the mean or the peak inside the slot is off-scale: the cap says how high it really went.
-            val clipped = (c.max ?: m) > yMax
-            val topY = y(minOf(m, yMax))
+            val peak = c.max?.takeIf(Float::isFinite)
+            val clipped = (peak ?: m) > yMax
+            val meanY = y(m)
+            val topY = minOf(meanY, zeroY)
+            val barHeight = abs(meanY - zeroY)
             val color = if (metric.banded) (metric.moodOf(m.toDouble()) ?: AirMood.FRESH).color() else primary
             val alpha = 0.35f + 0.65f * c.coverage
             val isSel = selected != null && selected.startS == c.startS
             if (c.estimated) {
-                drawRoundRect(color.copy(alpha = alpha), Offset(x0, topY), Size(w, plot.bottom - topY), radius, style = Stroke(1.5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 3f))))
-                drawRoundRect(color.copy(alpha = alpha * 0.25f), Offset(x0, topY), Size(w, plot.bottom - topY), radius)
+                drawRoundRect(color.copy(alpha = alpha), Offset(x0, topY), Size(w, barHeight), radius, style = Stroke(1.5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 3f))))
+                drawRoundRect(color.copy(alpha = alpha * 0.25f), Offset(x0, topY), Size(w, barHeight), radius)
             } else {
-                drawRoundRect(color.copy(alpha = alpha), Offset(x0, topY), Size(w, plot.bottom - topY), radius)
+                drawRoundRect(color.copy(alpha = alpha), Offset(x0, topY), Size(w, barHeight), radius)
             }
             // Peak whisker inside the slot (only when it adds information).
-            val peak = c.max
-            if (peak != null && peak > m * 1.15f) {
+            if (peak != null && peak - m > abs(m) * 0.15f) {
                 val py = y(minOf(peak, yMax))
-                drawLine(color.copy(alpha = 0.7f), Offset(x0 + w / 2, topY), Offset(x0 + w / 2, py), 1.5f)
+                drawLine(color.copy(alpha = 0.7f), Offset(x0 + w / 2, meanY), Offset(x0 + w / 2, py), 1.5f)
             }
             if (clipped) {
                 // Off-scale: a cap with the value, so the spike is neither hidden nor allowed to flatten the day.
@@ -175,19 +180,19 @@ fun BandColumnChart(
                 }
                 drawPath(cap, color)
                 if (labelCap[ci]) {
-                    val text = fmtAxis((c.max ?: m))
+                    val text = fmtAxis((peak ?: m))
                     val tw = capPaint.measureText(text)
                     drawContext.canvas.nativeCanvas.drawText(text, (x0 + w / 2 - tw / 2).coerceIn(plot.left, plot.right - tw), plot.top - labelPx * 0.45f, capPaint)
                 }
             }
             if (isSel) {
-                drawRoundRect(onSurface, Offset(x0 - 1f, topY - 1f), Size(w + 2f, plot.bottom - topY + 2f), radius, style = Stroke(2f))
+                drawRoundRect(onSurface, Offset(x0 - 1f, topY - 1f), Size(w + 2f, barHeight + 2f), radius, style = Stroke(2f))
             }
         }
         // Gaps: a faint dotted baseline where nothing was recorded.
         for (c in columns) {
             if (c.mean == null) {
-                drawLine(muted.copy(alpha = 0.35f), Offset(x(c.startS) + gap / 2, plot.bottom - 1f), Offset(x(c.endS) - gap / 2, plot.bottom - 1f), 2f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(2f, 3f)))
+                drawLine(muted.copy(alpha = 0.35f), Offset(x(c.startS) + gap / 2, zeroY - 1f), Offset(x(c.endS) - gap / 2, zeroY - 1f), 2f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(2f, 3f)))
             }
         }
         // Cursor.
@@ -203,6 +208,7 @@ fun BandColumnChart(
             drawContext.canvas.nativeCanvas.drawText(label, (xx - w / 2).coerceIn(plot.left, plot.right - w), plot.bottom + labelPx * 1.5f, labelPaint)
         }
         drawLine(muted.copy(alpha = 0.6f), Offset(plot.left, plot.bottom), Offset(plot.right, plot.bottom), 1f)
+        if (axis.min < 0f) drawLine(muted.copy(alpha = 0.6f), Offset(plot.left, zeroY), Offset(plot.right, zeroY), 1f)
     }
 }
 

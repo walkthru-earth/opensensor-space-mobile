@@ -1,20 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">AQ Sync</string>
+    <string name="app_name">opensensor.space</string>
 
-    <string name="perm_title">Bluetooth, and nothing else</string>
-    <string name="perm_body">AQ Sync talks to your CoreS3 air-quality logger over Bluetooth Low Energy and copies its Parquet files onto this phone. It asks for Bluetooth scanning and connecting. It never asks for location. Network access is used only to reach a logger on your own Wi-Fi network, found with mDNS; there is no cloud endpoint, and nothing leaves this phone unless you share it.</string>
+    <string name="perm_title">Connect your sensors</string>
+    <string name="perm_body">opensensor.space connects to compatible sensor devices over Bluetooth Low Energy and copies their Parquet files onto this phone. It asks for Bluetooth scanning and connecting. It never asks for location. Network access is used only to reach a sensor device on your own Wi-Fi network, found with mDNS; there is no cloud endpoint, and nothing leaves this phone unless you share it.</string>
     <string name="perm_grant">Allow Bluetooth</string>
-    <string name="perm_denied">Bluetooth permission was denied. Enable it in system settings to find your logger.</string>
+    <string name="perm_denied">Bluetooth permission was denied. Enable it in system settings to find your sensors.</string>
     <string name="perm_open_settings">Open app settings</string>
     <string name="bt_off_title">Bluetooth is off</string>
-    <string name="bt_off_body">Turn Bluetooth on to find your logger.</string>
+    <string name="bt_off_body">Turn Bluetooth on to find your sensors.</string>
     <string name="bt_turn_on">Turn on Bluetooth</string>
 
-    <string name="scan_title">Loggers nearby</string>
-    <string name="scan_known">Known loggers</string>
-    <string name="scan_hint">Bring the phone near the CoreS3. It advertises as AQ-xxxx.</string>
-    <string name="scan_pair_hint">On first connection, type the 6-digit code shown on the device screen.</string>
+    <string name="scan_title">Sensors nearby</string>
+    <string name="scan_known">Known sensors</string>
+    <string name="scan_hint">Bring the phone near a compatible Bluetooth sensor device. Current firmware advertises as AQ-xxxx.</string>
+    <string name="scan_pair_hint">On first connection, enter the device’s 6-digit pairing code. Read it from its display, or obtain the owner PIN over USB for a device without a display.</string>
     <string name="scan_fake">Debug: fake device</string>
     <string name="scan_fake_lan">Debug: fake device (as LAN)</string>
 

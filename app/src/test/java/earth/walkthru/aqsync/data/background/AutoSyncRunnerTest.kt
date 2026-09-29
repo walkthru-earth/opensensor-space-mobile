@@ -15,9 +15,13 @@ import earth.walkthru.aqsync.data.sync.FileArchive
 import earth.walkthru.aqsync.data.sync.FileOutcome
 import earth.walkthru.aqsync.data.sync.SyncEngine
 import earth.walkthru.aqsync.data.sync.SyncPlanner
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestCoroutineScheduler
+import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -37,6 +41,7 @@ import java.nio.file.Files
  * whose "sync" is the real LIST → plan → download path over the in-process [FakeTransport], so
  * "new files" and "nothing new" come from actual transfers, not canned numbers.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class AutoSyncRunnerTest {
     private lateinit var tmp: File
     private lateinit var gateway: TestGateway
@@ -63,8 +68,17 @@ class AutoSyncRunnerTest {
         station to LanDevice("AQ-6b40", InetAddress.getByAddress(byteArrayOf(192.toByte(), 168.toByte(), 1, 42)), 47390, mapOf(LanFraming.TXT_STATION to station), 0L)
     )
 
-    private fun run(onlyAddress: String? = null, allKnown: Boolean = false) =
-        runBlocking { withTimeout(60_000) { AutoSyncRunner(gateway, lanBrowseMs = 10, log = gateway.log::add).run(onlyAddress, allKnown) } }
+    private fun run(onlyAddress: String? = null, allKnown: Boolean = false, lanOnly: Boolean = false): AutoSyncReport {
+        var report: AutoSyncReport? = null
+        // The real session and fake response handlers share virtual time. Keep the demo's files
+        // and simulated OPEN/READ delays without racing wall-clock receive timeout slices.
+        runTest(gateway.dispatcher) {
+            report = withTimeout(60_000) {
+                AutoSyncRunner(gateway, lanBrowseMs = 10, log = gateway.log::add).run(onlyAddress, allKnown, lanOnly)
+            }
+        }
+        return requireNotNull(report)
+    }
 
     // ------------------------------------------------------------------ policy
 
@@ -156,7 +170,7 @@ class AutoSyncRunnerTest {
         gateway.bonded += bleAddr
         gateway.unreachable += "LAN"
 
-        val report = runBlocking { AutoSyncRunner(gateway, lanBrowseMs = 100).run(lanOnly = true) }
+        val report = run(lanOnly = true)
 
         assertEquals(listOf(bleAddr to "LAN"), gateway.calls)
         assertFalse(report.shouldNotify)
@@ -168,7 +182,7 @@ class AutoSyncRunnerTest {
         gateway.devices += device()
         gateway.bonded += bleAddr
 
-        val report = runBlocking { AutoSyncRunner(gateway, lanBrowseMs = 100).run(lanOnly = true) }
+        val report = run(lanOnly = true)
 
         assertTrue(gateway.calls.isEmpty())
         assertEquals("not on the LAN (Bluetooth not tried on a Wi-Fi trigger)", report.devices.single().skipped)
@@ -217,15 +231,15 @@ class AutoSyncRunnerTest {
     }
 
     @Test
-    fun `interactive session with another device - one link at a time, everything skipped`() {
+    fun `interactive session with another device leaves this device available`() {
         gateway.devices += device()
         gateway.bonded += bleAddr
         gateway.session = otherAddr
 
         val report = run()
 
-        assertTrue(gateway.calls.isEmpty())
-        assertEquals("the app is connected to $otherAddr", report.devices.single().skipped)
+        assertEquals(listOf(bleAddr to "Bluetooth"), gateway.calls)
+        assertTrue(report.devices.single().result!!.attempted)
     }
 
     @Test
@@ -337,6 +351,33 @@ class AutoSyncRunnerTest {
         assertEquals("logger", report.summaryDeviceName)
     }
 
+    @Test
+    fun `collect all transfers distinct devices simultaneously using real sessions and engine`() = runTest(gateway.dispatcher) {
+        val payload = checkNotNull(javaClass.classLoader?.getResourceAsStream("parquet/device/v1-none-90rows-dated.parquet")).use { it.readBytes() }
+        val second = FakeTransport(address = otherAddr, chunkDelayMs = 0, liveIntervalMs = 3_600_000, station = "station-b", deviceId = "441bf6e26b41", dispatcher = gateway.dispatcher)
+        gateway.peers[otherAddr] = second
+        listOf(gateway.fake, second).forEach { fake ->
+            fake.files.clear()
+            fake.files += FakeTransport.FakeFile("legacy-parquet/readings.parquet", payload)
+        }
+        gateway.devices += device(token = null)
+        gateway.devices += device(address = otherAddr, token = null, station = second.station)
+        gateway.bonded += listOf(bleAddr, otherAddr)
+        val bothEntered = CompletableDeferred<Unit>()
+        var entered = 0
+        gateway.beforeSync = {
+            entered++
+            if (entered == 2) bothEntered.complete(Unit)
+            bothEntered.await()
+        }
+        val report = withTimeout(10_000) { AutoSyncRunner(gateway).run(allKnown = true) }
+        assertEquals(2, report.newFiles)
+        assertEquals(0, report.failures)
+        assertEquals(2, gateway.dao.rows.size)
+        assertEquals(setOf(gateway.fake.station, second.station), gateway.dao.rows.map { it.station }.toSet())
+        assertTrue(gateway.dao.rows.all { it.indexed })
+    }
+
     // ---------------------------------------------------------------- fixtures
 
     /**
@@ -345,7 +386,10 @@ class AutoSyncRunnerTest {
      * against the in-memory archive table, [SyncEngine.download] for each missing file.
      */
     private class TestGateway(tmp: File) : AutoSyncGateway {
-        val fake = FakeTransport(chunkDelayMs = 0, liveIntervalMs = 3_600_000)
+        val dispatcher = StandardTestDispatcher(TestCoroutineScheduler())
+        val fake = FakeTransport(chunkDelayMs = 0, liveIntervalMs = 3_600_000, dispatcher = dispatcher)
+        val peers = java.util.concurrent.ConcurrentHashMap<String, FakeTransport>()
+        var beforeSync: suspend (KnownDevice) -> Unit = {}
         val dao = InMemoryDao()
         private val engine = FileArchive(tmp).let { a -> SyncEngine(a, dao, HistoryIndexer(a, dao)) }.also { it.windowRetryBackoffMs = 1 }
 
@@ -363,8 +407,8 @@ class AutoSyncRunnerTest {
         /** Stop the transfer after this many files (link lost) → `incomplete`. */
         var cutAfterFiles: Int? = null
 
-        val calls = ArrayList<Pair<String, String>>()
-        val log = ArrayList<String>()
+        val calls = java.util.Collections.synchronizedList(ArrayList<Pair<String, String>>())
+        val log = java.util.Collections.synchronizedList(ArrayList<String>())
         var browses = 0
         var lastBrowseStations: Set<String> = emptySet()
 
@@ -387,6 +431,8 @@ class AutoSyncRunnerTest {
             if (label in unreachable) return BackgroundSyncResult(device.address, device.name, kind, 0, 0, 0, skipped = "connect failed")
             if (label in throwing) throw IOException("socket reset by peer")
 
+            val fake = peers[device.address] ?: this.fake
+            beforeSync(device)
             fake.connect()
             val s = DeviceSession(fake)
             try {
@@ -413,11 +459,11 @@ class AutoSyncRunnerTest {
             }
         }
 
-        fun close() = fake.close()
+        fun close() { fake.close(); peers.values.forEach { it.close() } }
     }
 
     private class InMemoryDao : ArchivedFileDao {
-        val rows = ArrayList<ArchivedFile>()
+        val rows = java.util.concurrent.CopyOnWriteArrayList<ArchivedFile>()
         override fun observeAll(): Flow<List<ArchivedFile>> = flowOf(rows)
         override fun observeForStation(station: String): Flow<List<ArchivedFile>> = flowOf(rows)
         override suspend fun forStation(station: String) = rows.filter { it.station == station }

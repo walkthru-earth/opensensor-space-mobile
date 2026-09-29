@@ -71,12 +71,12 @@ class ExportManager @Inject constructor(
     /** Suggested filename for the archive zip. */
     fun zipName(): String {
         val ts = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss").withZone(ZoneOffset.UTC).format(Instant.now())
-        return "aq-sync-archive-$ts.zip"
+        return "opensensor-space-archive-$ts.zip"
     }
 
     fun dailyZipName(): String {
         val ts = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss").withZone(ZoneOffset.UTC).format(Instant.now())
-        return "aq-sync-daily-$ts.zip"
+        return "opensensor-space-daily-$ts.zip"
     }
 
     /** How many derived daily files exist (for the menu). */

@@ -2,9 +2,15 @@
 
 **Scope:** the current state of the app; the split between "unit-tested", "run on a phone" and "unverified".
 **Code:** `./gradlew verify` (the gate), `.github/workflows/verify.yml`.
-**Related:** measured device behaviour is recorded only in `../m5stack-aq-parquet/docs/bench-verified.md` ("Phone over LAN and BLE"); anything not there is unverified.
+**Related:** measured device behaviour is recorded only in `../aq-parquet/docs/boards/m5stack-cores3/bench-verified.md` ("Phone over LAN and BLE"); anything not there is unverified.
 
 ## One-line status
+
+The **opensensor.space** initial implementation adds independent device controllers, bounded
+concurrent collection, station-epoch recovery and reviewed sensor profiles. All new behavior is
+host-tested; multi-device Bluetooth/LAN, Android notification lifetime, upgrade migration and
+reset/reflash recovery still require phone qualification. See [opensensor-space.md](opensensor-space.md).
+
 
 Implements **protocol v2** (+ the 2.1 advertising payload) + **Auto-sync** with event-driven
 triggers (companion presence, advertising flags, Wi-Fi arrival) + **on-phone history** (index, tiers,
@@ -14,6 +20,13 @@ partial runs). Auto-sync has **not** completed a period cycle on a phone yet. Of
 **advertising-flag wake is measured once** (2026-09-18, app `678c1c0` / firmware `-v6.3`: dead app
 process started by the controller 19 s after the board closed a file, new file on the phone at 28 s);
 companion presence and the Wi-Fi-arrival run are not.
+
+## Current host gate (2026-09-29)
+
+`./gradlew --no-daemon verify`: **219 tests reported, 218 passed, one skipped, zero failures/errors**;
+zero lint errors and 14 existing warnings (including dependency update notices). Debug APK builds.
+The stdlib SQLite migration validator passes against v8/v9 exports. These results cover the new
+implementation; the dated ladder below retains the earlier hardware qualification baseline.
 
 ## Verification ladder
 
@@ -46,6 +59,15 @@ estimate, `RealArchiveTest`). Debug APK 68.4 MiB unminified.
 
 ## Recent changes (newest first)
 
+- **2026-09-29** — Rebranded visible copy/releases/exports without changing Android install or wire
+  identities. Added per-device assisted ViewModels/controllers, two-transfer budget, shared legacy
+  mDNS resolver, foreground aggregation and worker ownership; immutable archive writer leases and
+  reference-counted LAN protection; Room v9 station epochs and continuity policy; reviewed nullable
+  live profiles and available-metric/signed history charts. Retained SD producer-station mismatch
+  stays archived/exportable and is excluded from the new station's charts. No board was flashed,
+  rebooted or paired, and no new phone evidence is claimed. Qualification and limitations are in
+  [opensensor-space.md](opensensor-space.md).
+
 - **2026-09-20** — LAN bearer tokens are encrypted at rest with Android Keystore AES-GCM. Startup
   completes plaintext migration before Auto-sync services can consume tokens. Missing keys, failed
   authentication and malformed encrypted values fail closed by clearing only that device's token and
@@ -53,8 +75,8 @@ estimate, `RealArchiveTest`). Debug APK 68.4 MiB unminified.
   unrelated failures still surface. Covered by focused JVM tests; not yet exercised on a phone or
   across a real device-to-device transfer.
 - **2026-09-19** — **Post-sync `LIST` no longer dies with the link.** Seen on the phone after a completed sync: "LIST failed: link lost while waiting for a response" replaced the whole file list. Cause: the refresh was launched after `running = false`, i.e. after the foreground service let go of the uid, so the socket was killed under it (transport of that run not recorded — LAN + backgrounded phone fits; confirm with `adb logcat -s SyncEngine SyncFgs ConnectivityService` on the next run). The re-list now runs inside the protected run; `ManifestState` keeps the last listing through `Loading`/`Error` (`ManifestStateTest`), so the Files screen shows "Refresh failed: … — showing the last listing." instead of a blank list, and `plan` stays usable. Not yet on the phone.
-- **2026-09-18** (14:03 local) — app `678c1c0` (APK `3c454c74…`) installed on the OnePlus over Wi-Fi adb against firmware `-v6.3`; **first device-flagged wake measured** — see the ladder above and the firmware repo's [bench record](../../m5stack-aq-parquet/docs/bench-verified.md#board-1-advertising-payload-wakes-the-phone-firmware-v63-protocol-21). `setForeground` still refused (no companion association yet); Wi-Fi callback fires at every process start and is throttled as designed.
-- **2026-09-18** (evening) — **Event-driven Auto-sync** ([background-sync.md](background-sync.md#triggers--starting-a-run-before-the-period-is-up)): Companion Device Manager "wake when nearby" (association dialog on the Device screen, `CompanionPresenceService`, `REQUEST_COMPANION_*` exemptions, Room v8 `companionAssociationId`), offloaded advertising-flag scan on the firmware's new protocol-2.1 service data (`Advertisement`, `AdvertFlagScan`), Wi-Fi-arrival LAN-only run (`SyncTriggers`), `SyncTrigger` on every one-time run. 151 tests, lint clean. **Not yet on the phone**; design and measurement list in `../m5stack-aq-parquet/docs/background-sync-triggers.md`.
+- **2026-09-18** (14:03 local) — app `678c1c0` (APK `3c454c74…`) installed on the OnePlus over Wi-Fi adb against firmware `-v6.3`; **first device-flagged wake measured** — see the ladder above and the firmware repo's [bench record](../../aq-parquet/docs/boards/m5stack-cores3/bench-verified.md#board-1-advertising-payload-wakes-the-phone-firmware-v63-protocol-21). `setForeground` still refused (no companion association yet); Wi-Fi callback fires at every process start and is throttled as designed.
+- **2026-09-18** (evening) — **Event-driven Auto-sync** ([background-sync.md](background-sync.md#triggers--starting-a-run-before-the-period-is-up)): Companion Device Manager "wake when nearby" (association dialog on the Device screen, `CompanionPresenceService`, `REQUEST_COMPANION_*` exemptions, Room v8 `companionAssociationId`), offloaded advertising-flag scan on the firmware's new protocol-2.1 service data (`Advertisement`, `AdvertFlagScan`), Wi-Fi-arrival LAN-only run (`SyncTriggers`), `SyncTrigger` on every one-time run. 151 tests, lint clean. **Not yet on the phone**; design and measurement list in `../aq-parquet/docs/shared/background-sync-triggers.md`.
 
 - **2026-09-18** (later) — Files list grouped by **local calendar day** (`FileGrouping`, zone-pinned tests): the headers were the SD card's UTC `day=` folder, so at UTC+3 every file after 21:00 local sat under tomorrow. Header subtitle names the UTC folder(s); each row shows its local start time. Installed on the OnePlus (commit `c6c27cd`), not yet recorded in bench-verified.
 - **2026-09-18** — bugs found on the phone, fixed: `derived_day` upsert that never updated (every pass rebuilt every day), Today card on the UTC day, History span frozen at open time, Day re-read on every Room write. Day view → **24 hourly columns**; Files gained **Chart by file**.
@@ -63,11 +85,17 @@ estimate, `RealArchiveTest`). Debug APK 68.4 MiB unminified.
 
 ## Next
 
+0. **Qualify this multi-device/recovery slice**: install upgrade from the existing signed build;
+   test BLE/BLE, BLE/LAN and LAN/LAN with two boards, cancellation and foreground ownership;
+   normal reset/reflash and separately authorized credential-erasing recovery; retained SD station
+   history and pairing repair. Record each result under the correct firmware board bench record.
+
+
 1. **Instrumented phone runs** → `bench-verified.md` (date, firmware SHA-256, app commit, phone): full sync over BLE and LAN with the foreground-service build; BLE/Wi-Fi coexistence soak; energy; `lan.rotate_token`, `ble.clear_bonds`, `fixed`/`none` pairing.
 2. **Auto-sync overnight on the OnePlus**: count 15-min periods that ran (`adb logcat -s AutoSyncScheduler SyncWorker CompanionPresence AdvertFlagScan SyncTriggers`), whether `setForeground` was refused, whether BLE-by-address connects with the screen off; record OEM battery settings needed. **Triggers first:** the owner taps *Set up wake when nearby* — does the association dialog find the advertising logger; does `EVENT_BLE_APPEARED` arrive after walking back in; does a screen-off LAN sync survive with the device present (no "Destroyed live tcp sockets") and does `setForeground` stop being refused. The flag scan firing within a minute of `PARQUET READY` is measured (19 s, one event); repeat for a distribution and after a Bluetooth toggle.
 3. **API 37 local-network permission** on a real Android 17 device (grant / deny / revoke while connected) and `NsdManager` across API 31–37.
 4. **Further transports** (LoRa relays) behind `AqTransport`; engine, archive, verification unchanged.
-5. **Opt-in cloud step after local sync** — off by default, own setting and review; `INTERNET` for LAN does not pre-approve it. Privacy boundaries: `../m5stack-aq-parquet/product/mobile-architecture.md`.
+5. **Opt-in cloud step after local sync** — off by default, own setting and review; `INTERNET` for LAN does not pre-approve it. Privacy boundaries: `../aq-parquet/product/mobile-architecture.md`.
 6. **Open decisions** D1–D10 (location/map, import UI, iOS parity) in [history-ux-and-data-layer.md](history-ux-and-data-layer.md) §6.
 
 ## Test phone

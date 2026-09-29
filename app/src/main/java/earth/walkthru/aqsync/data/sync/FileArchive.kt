@@ -2,6 +2,8 @@ package earth.walkthru.aqsync.data.sync
 
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.File
 import java.io.IOException
 import java.io.RandomAccessFile
@@ -28,6 +30,27 @@ class FileArchive(baseDir: File) {
 
     val root: File = File(baseDir, "archive")
     val partialRoot: File = File(baseDir, "archive-partial")
+
+    private class WriterSlot(val mutex: Mutex = Mutex(), var users: Int = 0)
+    private val writers = HashMap<Pair<String, String>, WriterSlot>()
+
+    /** One writer per archive identity, including waiters; different files can transfer together. */
+    suspend fun <T> withWriterLease(station: String, name: String, block: suspend () -> T): T {
+        safeStation(station)
+        require(SafeName.isValid(name)) { "unsafe archive name" }
+        val key = station to name
+        val slot = synchronized(writers) {
+            writers.getOrPut(key) { WriterSlot() }.also { it.users++ }
+        }
+        try {
+            return slot.mutex.withLock { block() }
+        } finally {
+            synchronized(writers) {
+                slot.users--
+                if (slot.users == 0) writers.remove(key)
+            }
+        }
+    }
 
     fun fileFor(station: String, name: String): File = File(File(root, safeStation(station)), name)
 
@@ -94,7 +117,7 @@ class FileArchive(baseDir: File) {
         val src = partialFor(station, name)
         val dst = fileFor(station, name)
         dst.parentFile?.mkdirs()
-        if (dst.exists() && !dst.delete()) throw IOException("could not replace ${dst.path}")
+        if (dst.exists()) throw IOException("refusing to replace archived file ${dst.path}")
         if (!src.renameTo(dst)) throw IOException("rename ${src.path} → ${dst.path} failed")
         metaFor(station, name).delete()
         return dst
@@ -104,7 +127,7 @@ class FileArchive(baseDir: File) {
 
     /** Station UUIDs are `[0-9a-f-]`; anything else is refused rather than used as a path. */
     private fun safeStation(station: String): String {
-        require(station.isNotEmpty() && station.matches(Regex("[0-9A-Za-z._-]+"))) { "unsafe station id: $station" }
+        require(station !in setOf(".", "..") && station.isNotEmpty() && station.matches(Regex("[0-9A-Za-z._-]+"))) { "unsafe station id: $station" }
         return station
     }
 

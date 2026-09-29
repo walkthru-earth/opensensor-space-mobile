@@ -1,9 +1,10 @@
-# AQ Sync — Android companion for the CoreS3 air-quality logger
+# opensensor.space — Android sensor companion
 
-Native Android app that pairs with an **M5Stack CoreS3 (ESP32-S3)** running the
-[`m5stack-aq-parquet`](../m5stack-aq-parquet) firmware, shows its live readings, gives it UTC,
-copies its finalized **Parquet** files into the phone — byte-exact, verified, offline — and turns
-them into on-phone history (tiers, derived daily Parquet, charts).
+Native Android companion for devices running the shared
+[`aq-parquet`](../aq-parquet) sync contract. Connect multiple devices over Bluetooth LE or
+local Wi-Fi/LAN, collect their immutable **Parquet** files into a verified phone archive, and
+explore measurements offline. Reviewed live profiles cover M5Stack CoreS3 and Waveshare
+ESP32-S3-SIM7670G V2; other schemas can be collected without guessing their live meanings.
 
 **Offline-first, not offline-only.** Everything works with no internet: the phone's archive is the
 source of truth, filled over **Bluetooth LE** always and, since protocol v2, over the **LAN** (one
@@ -13,18 +14,20 @@ over the bonded BLE link). Cloud backup or sharing is a *later, opt-in* step, of
 from mDNS discovery of `_aqsync._tcp`. No cloud endpoint, no location permission, no analytics, no
 accounts. Data leaves the phone through the share sheet or the file picker.
 
-## Status (2026-09-18)
+## Status (2026-09-29)
 
-Protocol v2 (+ 2.1 advertising payload) + Auto-sync with event-driven triggers (companion-device
-presence, the logger's advertising flags, Wi-Fi arrival) + on-phone history + GeoParquet 2.0
-read/write are implemented. `./gradlew verify` → **151/151 unit tests**, 0 lint errors (7 known
-warnings). BLE and LAN file sync have run against the board from one phone (OnePlus 7 Pro,
-Android 16, partial runs); the advertising-flag wake has fired once on that phone (file closed on the
-board → new file on the phone in 28 s, app process killed beforehand); an instrumented full sync, a
-complete Auto-sync period cycle, companion presence and the Wi-Fi-arrival run have not. What was measured, on which
-firmware and app commit, lives in the firmware repo's
-[`docs/bench-verified.md`](../m5stack-aq-parquet/docs/bench-verified.md#phone-over-lan-and-ble-oneplus-7-pro-android-16);
-the detailed ladder and the next steps are in [`docs/status.md`](docs/status.md).
+The opensensor.space rebrand and initial multi-device implementation are in place: independent
+controllers, a shared two-transfer budget, immutable archive collision checks, per-device
+reset/reflash continuity, retained station epochs, and available-metric history with signed charts.
+The Android application ID and signing identity are retained for existing installations.
+`verify` passes: **218 tests passed, one skipped**, zero lint errors (14 existing warnings).
+Host verification and implementation details are in [`docs/opensensor-space.md`](docs/opensensor-space.md).
+**Simultaneous phone collection and reset/reflash recovery remain unverified on hardware.**
+Earlier BLE/LAN partial sync and one advertising wake were measured on a OnePlus 7 Pro (Android 16);
+full sync, an Auto-sync period cycle, companion presence and Wi-Fi-arrival runs remain outstanding.
+Measured behavior lives in the firmware's
+[CoreS3 bench record](../aq-parquet/docs/boards/m5stack-cores3/bench-verified.md);
+[`docs/status.md`](docs/status.md) separates host tests from phone evidence.
 
 ## Documentation map
 
@@ -41,6 +44,7 @@ flowchart LR
 
 | Concern | File |
 | --- | --- |
+| Rebrand, multi-device implementation, reset/reflash policy and remaining qualification | [`docs/opensensor-space.md`](docs/opensensor-space.md) |
 | What is verified, where, and what is next | [`docs/status.md`](docs/status.md) |
 | Modules, layers, "what a change touches" | [`docs/architecture.md`](docs/architecture.md) |
 | Screens, navigation, detail levels | [`docs/screens.md`](docs/screens.md) |
@@ -48,7 +52,7 @@ flowchart LR
 | BLE vs LAN, pairing, the LAN token, reconnect | [`docs/transports.md`](docs/transports.md) |
 | Download, verification, lost windows, resume, archive paths, `REBOOT` audit | [`docs/sync-engine.md`](docs/sync-engine.md) |
 | Auto-sync, WorkManager, foreground notification, WifiLock, triggers (presence / advertising / Wi-Fi) | [`docs/background-sync.md`](docs/background-sync.md) |
-| Room v8, DataStore, files on disk, backup | [`docs/data-model.md`](docs/data-model.md) |
+| Room v9, DataStore, files on disk, backup | [`docs/data-model.md`](docs/data-model.md) |
 | Index → tiers → derived day → charts; metrics, moods, time estimate | [`docs/history-pipeline.md`](docs/history-pipeline.md) |
 | Own Parquet reader/writer, GeoParquet 2.0, fixtures, oracles | [`docs/parquet.md`](docs/parquet.md) |
 | Stack, build, hooks, CI, signing, fake device | [`docs/build-and-release.md`](docs/build-and-release.md) |
@@ -75,9 +79,9 @@ core/protocol/   pure JVM · contract mirror: UUIDs, frames v1+v2, CONFIG, LAN f
 core/parquet/    pure JVM · own Parquet reader + writer (GeoParquet 2.0, LZ4/Snappy/GZIP, codec SPI) · test fixtures
 core/history/    pure JVM · Metrics registry, Aggregator → tiers, TimeEstimate, Columns, AirMood, file index
 app/             Android · data/{ble,lan,sync,background,history,local,settings,export,fake} · ui/{scan,device,history,files,debug,settings}
-tools/           fixture generators + PyArrow/DuckDB oracle (run in ../m5stack-aq-parquet's pixi env), hooks, signing
+tools/           fixture generators + PyArrow/DuckDB oracle (run in ../aq-parquet's pixi env), hooks, signing
 docs/            one file per concern (see the map above)
 ```
 
-The Bluetooth protocol is owned by the firmware repo (`../m5stack-aq-parquet/docs/ble-sync-protocol.md`);
+The Bluetooth protocol is owned by the firmware repo (`../aq-parquet/docs/shared/ble-sync-protocol.md`);
 this app mirrors it and never changes a frame, opcode, UUID or JSON key first.

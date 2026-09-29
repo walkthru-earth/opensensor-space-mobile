@@ -37,6 +37,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -153,6 +154,26 @@ fun ScanScreen(
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = padding.calculateTopPadding() + 8.dp, bottom = padding.calculateBottomPadding() + 96.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
+            if (state.activeDevices.isNotEmpty()) {
+                item(key = "active-devices") { Eyebrow("connected devices · ${state.activeDevices.size}") }
+                items(state.activeDevices, key = { "active:" + it.address }) { active ->
+                    Column {
+                        TextButton(onClick = { onConnected(active.address) }) { Text(active.name ?: active.address) }
+                        Text(
+                            if (active.progress.running) {
+                                "Collecting ${active.progress.filesDone}/${active.progress.filesTotal} files"
+                            } else if (active.reconnect != null) {
+                                "Reconnecting…"
+                            } else if (active.connection is ConnectionState.Failed) {
+                                active.connection.reason
+                            } else {
+                                "Connected"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            }
             if (target != null || state.connection.isBusy) {
                 item { ConnectionBanner(state.connection) }
             }
@@ -205,7 +226,7 @@ fun ScanScreen(
                     )
                 }
             }
-            // Several loggers: one background pass over all of them, one at a time, LAN then bond.
+            // Several loggers: one bounded background pass over all of them, LAN then bond per device.
             if (state.known.size >= 2) {
                 item(key = "collect") {
                     Column(Modifier.padding(top = 8.dp)) {
@@ -216,7 +237,7 @@ fun ScanScreen(
                         ) {
                             Icon(Icons.Rounded.CloudSync, contentDescription = null)
                             Spacer(Modifier.width(8.dp))
-                            Text(if (state.backgroundSyncActive) "Collecting in the background…" else "Collect from all ${state.known.size} loggers")
+                            Text(if (state.backgroundSyncActive) "Collecting in the background…" else "Collect from all ${state.known.size} devices")
                         }
                         Text(
                             "Visits every known logger in turn — over your Wi-Fi when it is on the network and this phone holds its token, else over its Bluetooth pairing — and pulls only the files this phone lacks. Runs in the background with a progress notification; you can leave the app. A logger you have open is skipped.",

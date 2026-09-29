@@ -56,8 +56,11 @@ import earth.walkthru.aqsync.data.SyncProgress
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.history.NowReading
 import earth.walkthru.aqsync.data.protocol.DeviceStatus
+import earth.walkthru.aqsync.data.protocol.LiveProfile
+import earth.walkthru.aqsync.data.protocol.LiveProfiles
 import earth.walkthru.aqsync.data.protocol.LiveSample
 import earth.walkthru.aqsync.data.protocol.PmsStatus
+import earth.walkthru.aqsync.data.protocol.TemperatureSource
 import earth.walkthru.aqsync.ui.components.ConnectionBanner
 import earth.walkthru.aqsync.ui.components.DeviceBottomBar
 import earth.walkthru.aqsync.ui.components.DeviceTab
@@ -87,9 +90,11 @@ fun TodayScreen(
     onOpenDevice: () -> Unit,
     onOpenDebug: () -> Unit,
     onDisconnected: () -> Unit,
-    viewModel: TodayViewModel = hiltViewModel(),
+    viewModel: TodayViewModel = hiltViewModel<TodayViewModel, TodayViewModel.Factory>(key = address, creationCallback = { it.create(address) }),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val profile = LiveProfiles.resolve(state.info)
+    val showParticles = profile != null && state.live?.sample?.pms?.let { it != PmsStatus.ABSENT.code } == true
     val snackbar = remember { SnackbarHostState() }
     val now = rememberNowMillis()
     // Hoisted so the scroll position belongs to the screen, not to whichever LazyColumn node
@@ -129,6 +134,7 @@ fun TodayScreen(
                     }
                 },
                 actions = {
+                    TextButton(onClick = onDisconnected) { Text("Devices") }
                     if (state.advancedMode) {
                         IconButton(onClick = onOpenDebug) { Icon(Icons.Rounded.BugReport, contentDescription = "Debug") }
                     }
@@ -173,18 +179,27 @@ fun TodayScreen(
                 // Conditional items sit *after* the first item so a level change never moves the top.
                 item(key = "now") {
                     val ageMs = state.live?.receivedAtEpochMs?.let { now - it }
-                    NowCard(
-                        reading = NowReading.of(state.live?.sample),
-                        today = state.todaySoFar,
-                        fresh = ageMs != null && ageMs <= STALE_AFTER_MS,
-                        showNumber = true,
-                        onSetTime = if (state.status?.status?.utcSynced == false) ({ confirmTime = true }) else null,
-                    )
+                    if (showParticles) {
+                        NowCard(
+                            reading = NowReading.of(state.live?.sample),
+                            today = state.todaySoFar,
+                            fresh = ageMs != null && ageMs <= STALE_AFTER_MS,
+                            showNumber = true,
+                            onSetTime = if (state.status?.status?.utcSynced == false) ({ confirmTime = true }) else null,
+                        )
+                    } else {
+                        SensorReadingsCard(profile, state.live?.sample, ageMs)
+                    }
+                }
+                if (showParticles && profile.temperature == TemperatureSource.AMBIENT) {
+                    item(key = "environment") { SensorReadingsCard(profile, state.live?.sample, state.live?.receivedAtEpochMs?.let { now - it }) }
                 }
                 if (state.detailLevel.detailed) {
-                    item(key = "readings") { ReadingsCard(state.live?.sample, state.live?.receivedAtEpochMs, now) }
-                    item(key = "particles") { ParticleRow(state.live?.sample) }
-                    item(key = "board") { BoardCard(state.live?.sample, state.status?.status) }
+                    if (showParticles) {
+                        item(key = "readings") { ReadingsCard(state.live?.sample, state.live?.receivedAtEpochMs, now) }
+                        item(key = "particles") { ParticleRow(state.live?.sample) }
+                    }
+                    item(key = "board") { BoardCard(state.live?.sample, profile) }
                     item(key = "storage") { StorageCard(state.status?.status, state.status?.receivedAtEpochMs, now) }
                 }
                 item(key = "smart-sync") {
@@ -280,6 +295,32 @@ private fun phoneClock(): String =
     DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss z", Locale.US).withZone(ZoneId.systemDefault()).format(Instant.now())
 
 // ------------------------------------------------------------------ readings
+
+@Composable
+private fun SensorReadingsCard(profile: LiveProfile?, live: LiveSample?, ageMs: Long?) {
+    Surface(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(horizontal = 24.dp, vertical = 22.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Eyebrow("Sensor readings")
+                Spacer(Modifier.weight(1f))
+                FreshnessLabel(ageMs, ageMs == null || ageMs > STALE_AFTER_MS)
+            }
+            Spacer(Modifier.height(12.dp))
+            if (profile == null) {
+                Text("Live readings are not supported for this firmware yet. Sync its verified Parquet files to browse the archive.", style = MaterialTheme.typography.bodyMedium)
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                    BigValue(profile.temperature.label, fmt(live?.t), "°C", Modifier.weight(1f))
+                    if (profile.humidity) BigValue("Humidity", fmt(live?.rh), "%", Modifier.weight(1f))
+                }
+                if (live == null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text("Waiting for the first sample…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun ReadingsCard(live: LiveSample?, receivedAt: Long?, now: Long) {
@@ -392,17 +433,25 @@ private fun ParticleRow(live: LiveSample?) {
 }
 
 @Composable
-private fun BoardCard(live: LiveSample?, status: DeviceStatus?) {
+private fun BoardCard(live: LiveSample?, profile: LiveProfile?) {
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.padding(horizontal = 20.dp, vertical = 16.dp), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
             Column(Modifier.weight(1f)) {
-                Eyebrow("board temp")
+                Eyebrow(profile?.temperature?.label ?: "Temperature")
                 Row(verticalAlignment = Alignment.Bottom) {
-                    Text(live?.t?.let { String.format(Locale.US, "%.1f", it) } ?: "—", style = MaterialTheme.typography.displaySmall)
+                    Text(if (profile != null) fmt(live?.t) else "—", style = MaterialTheme.typography.displaySmall)
                     Spacer(Modifier.width(4.dp))
                     Text("°C", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 5.dp))
                 }
-                Text(stringResource(R.string.board_temp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
+                Text(
+                    when (profile?.temperature) {
+                        TemperatureSource.BOARD -> stringResource(R.string.board_temp)
+                        TemperatureSource.AMBIENT -> "Ambient temperature from the sensor"
+                        null -> "Live temperature is not supported for this firmware yet"
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.tertiary,
+                )
             }
             Column(Modifier.weight(1f)) {
                 Eyebrow("battery")

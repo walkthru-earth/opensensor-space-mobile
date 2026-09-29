@@ -11,12 +11,14 @@ import earth.walkthru.aqsync.data.protocol.LiveSample
 import earth.walkthru.aqsync.data.protocol.Opcode
 import earth.walkthru.aqsync.data.protocol.ProtocolError
 import earth.walkthru.aqsync.data.protocol.Request
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.selects.onTimeout
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withTimeoutOrNull
 
 /** The device answered a request with an `ERROR` frame. Subclasses type the v2 codes callers branch on. */
 open class DeviceErrorException(val frame: Frame.Error) : Exception(frame.describe()) {
@@ -346,7 +348,7 @@ class DeviceSession(val transport: AqTransport) {
             val got = ArrayList<Pair<ByteArray, Frame?>>()
             val started = System.currentTimeMillis()
             while (System.currentTimeMillis() - started < maxTotalMs) {
-                val raw = withTimeoutOrNull(quietMs) { transport.responseFrames.receiveCatching().getOrNull() } ?: break
+                val raw = receiveWithin(quietMs) ?: break
                 frames.rx(raw)
                 got += raw to runCatching { FrameCodec.decode(raw) }.getOrNull()
             }
@@ -379,7 +381,7 @@ class DeviceSession(val transport: AqTransport) {
         var waited = 0L
         while (waited < timeoutMs) {
             val slice = minOf(POLL_MS, timeoutMs - waited)
-            withTimeoutOrNull(slice) { transport.responseFrames.receiveCatching().getOrNull() }
+            receiveWithin(slice)
                 ?.let { frames.rx(it); return it }
             waited += slice
             val st = transport.connectionState.value
@@ -391,6 +393,13 @@ class DeviceSession(val transport: AqTransport) {
             }
         }
         throw TransportException("no response from device within ${timeoutMs / 1000} s")
+    }
+
+    /** Poll expiry must not cancel a receive that already extracted a protocol frame. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private suspend fun receiveWithin(timeoutMs: Long): ByteArray? = select {
+        transport.responseFrames.onReceiveCatching { it.getOrNull() }
+        onTimeout(timeoutMs) { null }
     }
 
     /**
@@ -439,7 +448,7 @@ class DeviceSession(val transport: AqTransport) {
             } else {
                 val remaining = deadline - System.currentTimeMillis()
                 if (remaining <= 0) break
-                withTimeoutOrNull(minOf(DRAIN_QUIET_MS, remaining)) { transport.responseFrames.receiveCatching().getOrNull() } ?: break
+                receiveWithin(minOf(DRAIN_QUIET_MS, remaining)) ?: break
             }
             dropped++
             if (pending != null && isTerminal(pending, raw)) {

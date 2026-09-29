@@ -1,7 +1,7 @@
 # Transports — BLE, LAN, pairing, the token, reconnect
 
 **Scope:** the two byte pipes behind `AqTransport`, how the repository picks one, pairing, the LAN token lifecycle, link loss.
-**Code:** `data/ble/AqTransport.kt`, `BleTransport.kt`, `BleScanner.kt`, `DeviceSession.kt`; `data/lan/TcpTransport.kt`, `LanDiscovery.kt`, `LanTokenPolicy.kt`, `LanWifiLock.kt`; `data/TransportFactory.kt`; `data/DeviceConnectionRepository.kt` (`connect`, `tryLan`, `reconnectLoop`, `activeTransport`); `ui/permissions/LanPermission.kt`.
+**Code:** `data/ble/AqTransport.kt`, `BleTransport.kt`, `BleScanner.kt`, `DeviceSession.kt`; `data/lan/TcpTransport.kt`, `LanDiscovery.kt`, `LanTokenPolicy.kt`, `LanWifiLock.kt`; `data/TransportFactory.kt`; `data/DeviceConnectionManager.kt`, `DeviceConnectionRepository.kt` (`connect`, `tryLan`, `reconnectLoop`, `activeTransport`), `DeviceContinuityPolicy.kt`, `DeviceIdentityClaims.kt`; `ui/permissions/LanPermission.kt`.
 **Related:** [protocol-quickref.md](protocol-quickref.md), [sync-engine.md](sync-engine.md) (what runs on top), [background-sync.md](background-sync.md) (unattended links, WifiLock).
 
 ## Choosing a link
@@ -20,14 +20,25 @@ flowchart TD
 ```
 
 `TransportPreference.AUTO` is the rule above; `GET_TOKEN` and *Fetch token* force BLE. Any LAN
-failure falls back to BLE with a snackbar. Identity stays the Bluetooth address on both pipes.
+connection failure falls back to BLE with a snackbar. After connection, INFO must pass
+`DeviceContinuityPolicy` before identity is persisted or files collected; a mismatch closes the
+attempt and surfaces an error. Enrollment stays keyed by the Bluetooth address on both pipes.
+The [canonical firmware contract](../../aq-parquet/docs/shared/ble-sync-protocol.md) owns the UUIDs,
+advertising and mDNS names; the app rebrand does not change them.
+
+`DeviceConnectionManager` owns one controller per enrolled public Bluetooth endpoint. Each has
+its own session, reconnect, manifest and sync state; selecting another device does not close it.
+`DeviceIdentityClaims` refuses a second active controller claiming the same full hardware ID, so
+two apparent endpoints cannot race one physical device's single open-file slot. Operations remain
+serialized within each GATT pipe and each session. LAN transfers hold independent leases on a
+shared `LanWifiLock`; the last transfer releases it.
 
 ## Side by side
 
 | | Bluetooth LE (`BleTransport`) | LAN (`TcpTransport`) |
 | --- | --- | --- |
 | Discovery | GATT scan for the service UUID (`BleScanner`) | mDNS `_aqsync._tcp` via `NsdManager` (`LanDiscovery`), TXT `station`/`dev`/`fw`/`proto`; browsed only while the app is started and the permission is held |
-| Auth | LE Secure Connections bond (passkey / PIN / none per `ble.pair`); every characteristic needs an encrypted, authenticated link | `"AQS1"` + 32-byte token, obtainable **only** over BLE; the socket itself is unencrypted by contract |
+| Auth | LE Secure Connections bond; passkey/PIN modes require encrypted, authenticated access; explicit lab `none` mode uses encrypted Just Works without MITM authentication | `"AQS1"` + 32-byte token, obtainable **only** over BLE; the socket itself is unencrypted by contract and does not authenticate server identity |
 | Framing | one notification per frame; `payload_max = min(MTU − 3, 512)` — Android silently drops notifications above the 512-byte GATT attribute limit; control requests ≤ 512 B | `len` u16 LE + frame; `payload_max` from `HELLO` (1024), `mtu` reports `payload_max + 3` |
 | Pushes | `status` / `live` characteristics | `STATUS` 0x48 / `LIVE` 0x49 frames, **demultiplexed by type byte in the transport's single reader loop** — they may sit between two `CHUNK`s; `DeviceSession` is byte-for-byte identical for both pipes |
 | Liveness | GATT link state | `STATUS` keep-alive after 120 s idle (`KEEPALIVE_POLL_MS` 15 s); link declared dead after `DEAD_AFTER_MS` 180 s without a byte |
@@ -38,11 +49,43 @@ failure falls back to BLE with a snackbar. Identity stays the Bluetooth address 
 
 ## Pairing (BLE)
 
-Device is display-only: first connection shows a random six-digit passkey full-screen; Android asks
-for it. `createBond()` before first characteristic access if unbonded; GATT status 5 / 15 / 133
+Display-equipped firmware shows a random six-digit pairing passkey; headless firmware uses a
+per-device fixed PIN obtained through the owner's physical provisioning path. Android handles
+the pairing dialog. `createBond()` before first characteristic access if unbonded; GATT status 5 / 15 / 133
 during pairing → wait for `BOND_BONDED`, retry the operation once. Reconnects are silent.
 `allowBonding = false` (unattended path) treats "not bonded" as a failure — never a passkey dialog
 nobody can answer. MTU < 247 is refused.
+
+### Reset, reflash and identity continuity
+
+The wire INFO has no cryptographic fingerprint. `dev` is the full 12-hex Wi-Fi hardware MAC,
+`station` is a random UUID persisted in NVS, `boot` is a fresh random identifier per boot,
+`fw` is a text label and `dict` hashes the telemetry dictionary, not the firmware binary.
+Advertising names, the 16-bit advertising boot suffix and mDNS TXT are public hints, not
+authorization to replace trust. LAN HELLO identity checks detect inconsistencies, but the current
+plaintext bearer-token handshake authenticates the phone rather than the server.
+
+| Observed change | Implemented app policy |
+| --- | --- |
+| Same enrolled endpoint/full hardware ID/station; new boot, firmware or dictionary | Accept the connection; refresh the manifest and use the normal resume policy |
+| Same enrolled BLE endpoint/full hardware ID; changed station | Preserve old history, record a new station epoch, clear old LAN token/port and refetch over BLE |
+| Changed station learned over LAN | Reject; reconnect over the enrolled BLE link before accepting a generation |
+| Changed full hardware ID, missing previously pinned ID, malformed ID or changed endpoint | Reject automatic continuity; replacement needs explicit enrollment/ownership handling |
+| Legacy optional `dev` absent; same station | Allow generic collection; a new station cannot be automatically linked without a previously matching full hardware ID |
+
+Normal reset and uploads that preserve NVS should retain station, BLE bonds, LAN token and Wi-Fi
+configuration. A full NVS erase creates a new station/PIN/token and loses bonds and provisioned
+Wi-Fi. Android may still report `BOND_BONDED` after firmware lost its keys. The app does not silently
+forget bonds, downgrade security or pair from a worker: stale-bond repair requires the foreground
+and Android's pairing/settings interaction. There is no guaranteed fully automatic reconnection
+after all device trust material is erased, nor a hidden `removeBond` recovery path.
+
+Station generations preserve the original archive and Hive paths; they do not reparent old data
+([data model](data-model.md#station-generations-and-device-continuity)). The policies and migration
+are covered by host checks; multi-device radio behavior, erased-NVS Android recovery and fingerprint
+replacement have **not been verified on a phone**. Measured runs remain in the
+[CoreS3 bench record](../../aq-parquet/docs/boards/m5stack-cores3/bench-verified.md#phone-over-lan-and-ble-oneplus-7-pro-android-16);
+other boards need their own records.
 
 ## LAN token lifecycle
 
@@ -56,6 +99,7 @@ stateDiagram-v2
   Stored --> Stale: LAN ERROR 14 (rotated elsewhere) → lanToken cleared
   Stale --> Stored: next BLE session refetches, snackbar "LAN token renewed"
   Stored --> Stale: unreadable encrypted value → token + port cleared
+  Stored --> Stale: verified BLE station-generation change → token + port cleared
   Stored --> None: Forget device / deliberate Rotate token
 ```
 
@@ -65,6 +109,9 @@ The DAO exposes the 64-character hex value but stores AES-GCM ciphertext in
 one-time plaintext migration before Auto-sync scheduling or triggers can read credentials. A missing
 Keystore key, failed GCM authentication, or malformed encrypted value clears only the token and port,
 keeps the known-device row, and falls back to BLE; the next bonded BLE session fetches a fresh token.
+An accepted same-hardware station-generation change also clears the token and port before the
+post-INFO upsert and requests a fresh token on that BLE connection. Rejected identity changes
+cannot overwrite credentials or trigger automatic trust replacement.
 Any LAN failure other than `AUTH_FAILED` keeps a readable token. Unrelated DAO/programmer failures are
 not converted into token loss ([data-model.md](data-model.md#backup)).
 
@@ -115,5 +162,7 @@ API 34+: `registerServiceInfoCallback` (continuous, `getHostAddresses`). API 31�
 | `TcpTransport` reader loop | push demux (`LIVE` between `CHUNK`s) — `TcpTransportTest` asserts it |
 | `BleTransport.allowBonding` / timeouts | `AutoSyncRunner` path (`bleUnattended`) — a passkey dialog in the background is a bug |
 | `LanTokenPolicy` | repository `tryLan`, token refetch after Ready, snackbar copy |
+| `DeviceContinuityPolicy` / `DeviceIdentityClaims` | INFO acceptance, station epochs, credential renewal and prevention of duplicate physical-device owners |
+| `DeviceConnectionManager` | per-device ownership and snapshots; selection must not close another controller |
 | `LanDiscovery` TXT parsing | `AutoSyncPolicy.linksFor` (station match), Device screen LAN card |
 | `DeviceConnectionRepository.activeTransport` | the top-bar chip on four screens |

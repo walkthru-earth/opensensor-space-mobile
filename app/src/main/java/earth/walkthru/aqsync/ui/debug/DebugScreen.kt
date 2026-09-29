@@ -76,7 +76,7 @@ fun DebugScreen(
     address: String,
     onBack: () -> Unit,
     onDisconnected: () -> Unit,
-    viewModel: DebugViewModel = hiltViewModel(),
+    viewModel: DebugViewModel = hiltViewModel<DebugViewModel, DebugViewModel.Factory>(key = address, creationCallback = { it.create(address) }),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }

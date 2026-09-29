@@ -8,7 +8,7 @@ import android.net.NetworkRequest
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import earth.walkthru.aqsync.data.BackgroundSyncResult
-import earth.walkthru.aqsync.data.DeviceConnectionRepository
+import earth.walkthru.aqsync.data.DeviceConnectionManager
 import earth.walkthru.aqsync.data.TransportFactory
 import earth.walkthru.aqsync.data.lan.LanDevice
 import earth.walkthru.aqsync.data.lan.LanDiscovery
@@ -29,7 +29,7 @@ import javax.inject.Singleton
 @Singleton
 class AppAutoSyncGateway @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val repository: DeviceConnectionRepository,
+    private val manager: DeviceConnectionManager,
     private val knownDeviceDao: KnownDeviceDao,
     private val lanDiscovery: LanDiscovery,
     private val transportFactory: TransportFactory,
@@ -41,7 +41,13 @@ class AppAutoSyncGateway @Inject constructor(
 
     override suspend fun allKnownDevices(): List<KnownDevice> = knownDeviceDao.allByLastConnected()
 
-    override fun interactiveSessionAddress(): String? = repository.interactiveSessionAddress
+    override fun interactiveSessionAddress(): String? = manager.snapshots.value.firstOrNull { manager.isOwned(it.address) }?.address
+
+    override fun isDeviceOwned(address: String): Boolean = manager.isOwned(address)
+
+    fun forRun(owner: String): AutoSyncGateway = object : AutoSyncGateway by this {
+        override suspend fun sync(device: KnownDevice, link: AutoSyncLink): BackgroundSyncResult = syncOwned(device, link, owner)
+    }
 
     override suspend fun browseLan(stations: Set<String>, timeoutMs: Long): Map<String, LanDevice> {
         if (!LanPermission.isGranted(context)) {
@@ -110,9 +116,11 @@ class AppAutoSyncGateway @Inject constructor(
 
     override fun isBonded(address: String): Boolean = transportFactory.isBonded(address)
 
-    override suspend fun sync(device: KnownDevice, link: AutoSyncLink): BackgroundSyncResult = when (link) {
-        is AutoSyncLink.Lan -> repository.syncInBackground(device.address, link.target)
-        AutoSyncLink.Ble -> repository.syncInBackground(device.address, null)
+    override suspend fun sync(device: KnownDevice, link: AutoSyncLink): BackgroundSyncResult = syncOwned(device, link, "background")
+
+    private suspend fun syncOwned(device: KnownDevice, link: AutoSyncLink, owner: String): BackgroundSyncResult = when (link) {
+        is AutoSyncLink.Lan -> manager.controller(device.address).syncInBackground(device.address, link.target, owner = owner)
+        AutoSyncLink.Ble -> manager.controller(device.address).syncInBackground(device.address, null, owner = owner)
     }
 
     private companion object {

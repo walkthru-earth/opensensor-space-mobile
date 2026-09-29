@@ -19,22 +19,24 @@ flowchart LR
 export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"   # JBR (JDK 25) or any JDK ≥ 17
 tools/setup-hooks.sh                 # once per clone
 ./gradlew --no-daemon clean verify   # the gate; everything must pass before a commit
+python3 tools/validate_station_epoch_migration.py   # stdlib SQLite, actual v8→v9 SQL vs Room exports
 adb install app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Lint errors fail the build by design; **7 pre-existing warnings** are known — do not add more
+Lint errors fail the build by design; **14 existing warnings** are known at 2026-09-29 (seven source warnings and seven
+dependency-update notices) — do not add more
 carelessly. `testOptions.unitTests.isReturnDefaultValues = true` so `android.util.Log` in a class
 under JVM test does not throw. A ktlint hook that reformats a file fails the commit once; re-stage
 and commit again. CI has **no phone and no emulator**: BLE, mDNS, the foreground service and
 WorkManager plumbing are verified only on hardware and recorded in the firmware repo's
 `bench-verified.md`.
 
-## Stack (verified building 2026-09-17)
+## Stack (verified building 2026-09-29; dependency versions unchanged)
 
 | | |
 | --- | --- |
 | Language / UI | Kotlin 2.4.20, Jetpack Compose (BOM 2026.09.00, material3 1.4.0), Material 3 dynamic color, Navigation 3 (1.1.7) |
-| DI / data | Hilt 2.60.1, Room 2.8.5 (**schema v8**), DataStore Preferences 1.2.1, WorkManager 2.11.2 + `androidx.hilt:hilt-work` 1.4.0, kotlinx.serialization 1.11.0, coroutines 1.11.0 |
+| DI / data | Hilt 2.60.1, Room 2.8.5 (**schema v9**), DataStore Preferences 1.2.1, WorkManager 2.11.2 + `androidx.hilt:hilt-work` 1.4.0, kotlinx.serialization 1.11.0, coroutines 1.11.0 |
 | Native | `zstd-jni` 1.5.7-17 (`@aar`) — the only native library |
 | Build | AGP 9.4.0, Gradle 9.7.1, KSP 2.3.12, version catalog; `:core:*` are `kotlin("jvm")` targeting Java 17 |
 | SDK | `compileSdk`/`targetSdk` **37**, `minSdk` **31** (modern Bluetooth permission model; no legacy branches) |
@@ -57,6 +59,9 @@ Bump `libs.versions.toml` only to versions you have verified build, and note the
 
 No location permission, no analytics/crash SDKs, no accounts. `allowBackup` with
 `dataExtractionRules` ([data-model.md](data-model.md#backup)).
+
+CI verification and release builds also run the station-epoch migration validator. It checks
+SQL and exported schemas on the host; a real Android installation upgrade remains unverified.
 
 ## Releases
 

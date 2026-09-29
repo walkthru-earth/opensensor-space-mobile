@@ -70,7 +70,7 @@ fun HistoryScreen(
     onOpenToday: () -> Unit,
     onOpenFiles: () -> Unit,
     onOpenDevice: () -> Unit,
-    viewModel: HistoryViewModel = hiltViewModel(),
+    viewModel: HistoryViewModel = hiltViewModel<HistoryViewModel, HistoryViewModel.Factory>(key = address, creationCallback = { it.create(address) }),
 ) {
     LaunchedEffect(address) { viewModel.bind(address) }
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -99,6 +99,21 @@ fun HistoryScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            if (state.stations.size > 1) {
+                item(key = "station-epochs") {
+                    Column {
+                        Text("Station history", style = MaterialTheme.typography.titleSmall)
+                        state.stations.forEach { station ->
+                            FilterChip(
+                                selected = state.station == station,
+                                onClick = { viewModel.selectStation(station) },
+                                label = { Text(station) },
+                            )
+                        }
+                        InfoNote("Earlier stations remain separate after a device reset. Their archived files are unchanged.")
+                    }
+                }
+            }
             item(key = "range") {
                 SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                     HistoryRange.entries.forEachIndexed { i, r ->
@@ -119,11 +134,15 @@ fun HistoryScreen(
                 }
             }
             item(key = "chart") {
-                ChartCard(state, zone, onOpenDay = { dayStartS -> viewModel.openDay(dayStartS) })
+                if (state.availableMetrics.isEmpty()) {
+                    InfoNote("No supported measurements are indexed for this station yet. Verified files remain available in Files and Export.")
+                } else {
+                    ChartCard(state, zone, onOpenDay = { dayStartS -> viewModel.openDay(dayStartS) })
+                }
             }
             item(key = "metric") {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Metrics.chartable.forEach { m ->
+                    state.availableMetrics.forEach { m ->
                         FilterChip(selected = state.metric.id == m.id, onClick = { viewModel.setMetric(m) }, label = { Text(m.label) })
                     }
                 }

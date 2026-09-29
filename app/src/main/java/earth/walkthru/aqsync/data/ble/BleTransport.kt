@@ -355,6 +355,9 @@ class BleTransport(
                 _state.value = if (before is ConnectionState.Ready) before else ConnectionState.EnablingNotifications
                 continue
             }
+            if (r.status == 5 || r.status == 15) {
+                throw TransportException("Bluetooth pairing needs repair. If the device was erased or reflashed, open Android Bluetooth settings, forget its stale pairing, then pair again from this app. Archived files are retained.", r.status)
+            }
             return r
         }
     }
