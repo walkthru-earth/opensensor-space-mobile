@@ -2,7 +2,7 @@
 
 **Scope:** the current state of the app; the split between "unit-tested", "run on a phone" and "unverified".
 **Code:** `./gradlew verify` (the gate), `.github/workflows/verify.yml`.
-**Related:** measured device behaviour is recorded only in `../aq-parquet/docs/boards/m5stack-cores3/bench-verified.md` ("Phone over LAN and BLE"); anything not there is unverified.
+**Related:** measured device behaviour is recorded in the board-specific `../aq-parquet/docs/boards/*/bench-verified.md`; anything not recorded there is unverified.
 
 ## One-line status
 
@@ -61,6 +61,30 @@ StateFlow conflation, and timeout/cancellation remain bounded. No automatic unpa
 Tapping AQ-7500 opened Today even on a failed link; cancelling pairing left a persistent error
 with archive tabs available. The final debug APK is SHA-256
 `105783e2c2655fea0a9c83cff0fcf577aee3fab17f7d7937899a103f2c26c9b7`.
+
+## Waveshare live battery display (2026-09-30 Cairo)
+
+On the OnePlus 7 Pro (GM1911, Android 16), the installed AQ APK (SHA-256
+`105783e2c2655fea0a9c83cff0fcf577aee3fab17f7d7937899a103f2c26c9b7`, local app
+commit `5df7aa86171fc72e94a0bd72bfda75cb2f3fc056`) connected to AQ-7500 over Bluetooth
+with Waveshare firmware image SHA-256
+`63951c913b0995ee7d2180a68fb4fc995202b48cfe6741655909e2b420febc0c`.
+The app was in Simple view; switching to Detailed showed **100% / 4,277 mV** in Today's Battery
+card while current sensor readings updated. No app source or APK change was needed. The
+screenshot at `../../aq-parquet/firmware/arduino-waveshare-sim7670g/artifacts/battery-android-live-20260930.png`
+(SHA-256 `8080782f9cc55761599a8dd92354a05c93c43ec7c972f66bc88734fdb61bc988`)
+is retained in the firmware trial's git-ignored artifacts; the
+[Waveshare bench record](../../aq-parquet/docs/boards/waveshare-esp32-s3-sim7670g/bench-verified.md)
+has the board-side evidence. This first display observation was USB-attached. After USB was
+unplugged, AQ-7500 remained connected over Bluetooth and the Detailed Battery card showed
+**100% / 4,067 mV**, with changed particle and ambient readings, status age 4 s and uptime
+12m50s. This verifies a fresh battery-only app readout on the same phone and firmware image.
+The second screenshot is retained at
+`../../aq-parquet/firmware/arduino-waveshare-sim7670g/artifacts/battery-android-live-battery-only-20260930.png`
+(322,123 bytes; SHA-256 `70250dffca9867bc284612c9e0a89a6d47e1569a789bd75810856b84a102d78f`).
+Neither run captured a raw GATT packet or transferred a file. The 100% value is the gauge's
+capped estimate, not a capacity-calibration result. Charging state remains unknown; the board
+adapter does not report `chg` or `vbus`.
 
 ## Verification ladder
 
