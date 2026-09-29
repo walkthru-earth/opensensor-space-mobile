@@ -20,9 +20,11 @@ The opensensor.space rebrand and initial multi-device implementation are in plac
 controllers, a shared two-transfer budget, immutable archive collision checks, per-device
 reset/reflash continuity, retained station epochs, and available-metric history with signed charts.
 The Android application ID and signing identity are retained for existing installations.
-`verify` passes: **218 tests passed, one skipped**, zero lint errors (14 existing warnings).
+`verify` passes: **230 tests passed, one skipped**, zero lint errors (14 existing warnings).
 Host verification and implementation details are in [`docs/opensensor-space.md`](docs/opensensor-space.md).
-**Simultaneous phone collection and reset/reflash recovery remain unverified on hardware.**
+**Simultaneous phone collection and controlled reset/reflash qualification remain outstanding.**
+The USB update opened on the OnePlus on 2026-09-29 with existing archives intact. Foreground
+pairing repair restored Waveshare live readings; its earlier station history remained selectable.
 Earlier BLE/LAN partial sync and one advertising wake were measured on a OnePlus 7 Pro (Android 16);
 full sync, an Auto-sync period cycle, companion presence and Wi-Fi-arrival runs remain outstanding.
 Measured behavior lives in the firmware's

@@ -22,7 +22,6 @@ import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Radar
 import androidx.compose.material.icons.rounded.Stop
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -33,14 +32,10 @@ import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,9 +50,8 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import earth.walkthru.aqsync.R
-import earth.walkthru.aqsync.data.DeviceEvent
-import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.ScannedDevice
+import earth.walkthru.aqsync.data.fake.FakeTransport
 import earth.walkthru.aqsync.data.history.AirMood
 import earth.walkthru.aqsync.data.local.database.KnownDevice
 import earth.walkthru.aqsync.ui.components.ConnectionBanner
@@ -77,7 +71,6 @@ fun ScanScreen(
     viewModel: ScanViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    val snackbar = remember { SnackbarHostState() }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     // Scan while the screen is visible; the radio is not free.
@@ -90,27 +83,10 @@ fun ScanScreen(
     val notificationPermission = rememberNotificationPermission()
     fun withNotificationPermission(action: () -> Unit) = notificationPermission.ensureThen(action)
 
-    LaunchedEffect(Unit) {
-        viewModel.events.collect { ev ->
-            when (ev) {
-                is DeviceEvent.Error -> snackbar.showSnackbar(ev.message)
-                is DeviceEvent.Info -> snackbar.showSnackbar(ev.message)
-                is DeviceEvent.ClockConfirmationRequired -> snackbar.showSnackbar("Open Today and run Smart Sync to confirm the clock update.")
-            }
-        }
-    }
-
-    // Navigate once the link is ready for the device we tapped.
-    val target = state.connectingTo
-    LaunchedEffect(state.connection, target) {
-        if (target != null && state.connection is ConnectionState.Ready) {
-            viewModel.clearConnecting()
-            onConnected(target)
-        }
-        if (target != null && state.connection is ConnectionState.Failed) {
-            viewModel.clearConnecting()
-            viewModel.startScan()
-        }
+    // Detail owns persistent link/error state and remains useful with only the local archive.
+    fun openDevice(address: String, name: String?) {
+        viewModel.connect(address, name)
+        onConnected(address)
     }
 
     Scaffold(
@@ -127,12 +103,12 @@ fun ScanScreen(
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.scan_fake)) },
                                 leadingIcon = { Icon(Icons.Rounded.BugReport, contentDescription = null) },
-                                onClick = { open = false; viewModel.connectFake() },
+                                onClick = { open = false; viewModel.connectFake(); onConnected(FakeTransport.FAKE_ADDRESS) },
                             )
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.scan_fake_lan)) },
                                 leadingIcon = { Icon(Icons.Rounded.BugReport, contentDescription = null) },
-                                onClick = { open = false; viewModel.connectFakeLan() },
+                                onClick = { open = false; viewModel.connectFakeLan(); onConnected(FakeTransport.FAKE_LAN_ADDRESS) },
                             )
                         }
                     }
@@ -146,7 +122,6 @@ fun ScanScreen(
                 text = { Text(if (state.scanning) "Stop" else "Scan") },
             )
         },
-        snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         val now = rememberNowMillis()
         LazyColumn(
@@ -155,27 +130,19 @@ fun ScanScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             if (state.activeDevices.isNotEmpty()) {
-                item(key = "active-devices") { Eyebrow("connected devices · ${state.activeDevices.size}") }
+                item(key = "active-devices") { Eyebrow("device connections · ${state.activeDevices.size}") }
                 items(state.activeDevices, key = { "active:" + it.address }) { active ->
-                    Column {
-                        TextButton(onClick = { onConnected(active.address) }) { Text(active.name ?: active.address) }
-                        Text(
-                            if (active.progress.running) {
-                                "Collecting ${active.progress.filesDone}/${active.progress.filesTotal} files"
-                            } else if (active.reconnect != null) {
-                                "Reconnecting…"
-                            } else if (active.connection is ConnectionState.Failed) {
-                                active.connection.reason
-                            } else {
-                                "Connected"
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                        )
+                    Column(Modifier.fillMaxWidth().clickable { openDevice(active.address, active.name) }.padding(vertical = 8.dp)) {
+                        Text(active.name ?: active.address, style = MaterialTheme.typography.titleMedium)
+                        Spacer(Modifier.height(6.dp))
+                        ConnectionBanner(active.connection, reconnecting = active.reconnect)
+                        if (active.progress.running) {
+                            Text("Collecting ${active.progress.filesDone}/${active.progress.filesTotal} files", style = MaterialTheme.typography.bodySmall)
+                        } else if (active.backgroundOwner != null) {
+                            Text("Background collection in progress", style = MaterialTheme.typography.bodySmall)
+                        }
                     }
                 }
-            }
-            if (target != null || state.connection.isBusy) {
-                item { ConnectionBanner(state.connection) }
             }
             item {
                 AnimatedVisibility(visible = state.scanning) {
@@ -206,8 +173,7 @@ fun ScanScreen(
                     device = dev,
                     known = known,
                     summary = known?.station?.let { state.summaries[it] },
-                    connecting = target == dev.address,
-                    onClick = { viewModel.connect(dev.address, dev.name) },
+                    onClick = { openDevice(dev.address, dev.name) },
                 )
             }
 
@@ -220,8 +186,7 @@ fun ScanScreen(
                         summary = dev.station?.let { state.summaries[it] },
                         now = now,
                         onLan = dev.station != null && dev.station in state.lanStations,
-                        connecting = target == dev.address,
-                        onClick = { viewModel.connect(dev.address, dev.name) },
+                        onClick = { openDevice(dev.address, dev.name) },
                         onForget = { viewModel.forget(dev.address) },
                     )
                 }
@@ -232,7 +197,7 @@ fun ScanScreen(
                     Column(Modifier.padding(top = 8.dp)) {
                         FilledTonalButton(
                             onClick = { withNotificationPermission { viewModel.collectAll() } },
-                            enabled = !state.backgroundSyncActive && state.connection !is ConnectionState.Ready,
+                            enabled = !state.backgroundSyncActive,
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Icon(Icons.Rounded.CloudSync, contentDescription = null)
@@ -240,7 +205,7 @@ fun ScanScreen(
                             Text(if (state.backgroundSyncActive) "Collecting in the background…" else "Collect from all ${state.known.size} devices")
                         }
                         Text(
-                            "Visits every known logger in turn — over your Wi-Fi when it is on the network and this phone holds its token, else over its Bluetooth pairing — and pulls only the files this phone lacks. Runs in the background with a progress notification; you can leave the app. A logger you have open is skipped.",
+                            "Collects from known devices over Wi-Fi when this phone holds their token, otherwise over their Bluetooth pairing. Up to two transfers run at once with a progress notification; you can leave the app. Devices with an interactive connection are skipped. An idle device page does not prevent background collection.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 6.dp, start = 4.dp, end = 4.dp),
@@ -253,13 +218,13 @@ fun ScanScreen(
 }
 
 @Composable
-private fun NearbyRow(device: ScannedDevice, known: KnownDevice?, summary: LoggerSummary?, connecting: Boolean, onClick: () -> Unit) {
+private fun NearbyRow(device: ScannedDevice, known: KnownDevice?, summary: LoggerSummary?, onClick: () -> Unit) {
     Surface(
         shape = MaterialTheme.shapes.extraLarge,
         color = MaterialTheme.colorScheme.surfaceContainer,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = !connecting, onClick = onClick),
+            .clickable(onClick = onClick),
     ) {
         Row(Modifier.padding(horizontal = 20.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -273,11 +238,7 @@ private fun NearbyRow(device: ScannedDevice, known: KnownDevice?, summary: Logge
                 ArchiveLine(summary, rememberNowMillis())
             }
             Spacer(Modifier.width(12.dp))
-            if (connecting) {
-                CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 3.dp)
-            } else {
-                RssiMeter(device.rssi)
-            }
+            RssiMeter(device.rssi)
         }
     }
 }
@@ -305,14 +266,14 @@ private fun ArchiveLine(summary: LoggerSummary?, now: Long) {
 }
 
 @Composable
-private fun KnownRow(device: KnownDevice, summary: LoggerSummary?, now: Long, onLan: Boolean, connecting: Boolean, onClick: () -> Unit, onForget: () -> Unit) {
+private fun KnownRow(device: KnownDevice, summary: LoggerSummary?, now: Long, onLan: Boolean, onClick: () -> Unit, onForget: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
     Surface(
         shape = MaterialTheme.shapes.extraLarge,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = !connecting, onClick = onClick),
+            .clickable(onClick = onClick),
     ) {
         Row(Modifier.padding(start = 20.dp, end = 8.dp, top = 12.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -335,11 +296,7 @@ private fun KnownRow(device: KnownDevice, summary: LoggerSummary?, now: Long, on
                 )
                 ArchiveLine(summary, now)
             }
-            if (connecting) {
-                CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 3.dp)
-            } else {
-                Icon(Icons.Rounded.Link, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+            Icon(Icons.Rounded.Link, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, contentDescription = "Options") }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                 DropdownMenuItem(text = { Text("Forget") }, onClick = { menu = false; onForget() })

@@ -1,5 +1,7 @@
 package earth.walkthru.aqsync.ui.components
 
+import android.content.Intent
+import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -28,6 +30,7 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,9 +41,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import earth.walkthru.aqsync.data.ReconnectState
+import earth.walkthru.aqsync.data.ble.BleConnectionFailure
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.TransportKind
 import kotlinx.coroutines.delay
@@ -140,6 +145,7 @@ fun ConnectionState.describe(): String = when (this) {
 
 @Composable
 fun ConnectionBanner(state: ConnectionState, modifier: Modifier = Modifier, reconnecting: ReconnectState? = null) {
+    val context = LocalContext.current
     val (container, content) = when (state) {
         is ConnectionState.Ready -> MaterialTheme.colorScheme.surfaceContainer to MaterialTheme.colorScheme.onSurface
         is ConnectionState.Failed -> MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
@@ -173,6 +179,13 @@ fun ConnectionBanner(state: ConnectionState, modifier: Modifier = Modifier, reco
                         "Enter the device’s 6-digit pairing code when Android asks. Read it from its display, or obtain the owner PIN over USB for a device without a display.",
                         style = MaterialTheme.typography.bodySmall,
                     )
+                }
+                if (BleConnectionFailure.needsPairingRepair(state)) {
+                    TextButton(onClick = {
+                        context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }) {
+                        Text("Bluetooth settings")
+                    }
                 }
             }
         }

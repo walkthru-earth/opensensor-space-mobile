@@ -61,7 +61,10 @@ No location permission, no analytics/crash SDKs, no accounts. `allowBackup` with
 `dataExtractionRules` ([data-model.md](data-model.md#backup)).
 
 CI verification and release builds also run the station-epoch migration validator. It checks
-SQL and exported schemas on the host; a real Android installation upgrade remains unverified.
+SQL and exported schemas on the host. On 2026-09-29, an in-place USB `adb install -r` update
+succeeded on the GM1911 (Android 16 / API 36), and existing archive summaries of 99 and 1,151
+files remained visible. The previous installed schema was not inspected, so this does not
+qualify a controlled v8→v9 Android Room migration; that scenario remains unverified.
 
 ## Releases
 
@@ -82,6 +85,23 @@ partial, wrong, or debug configuration fails before release creation. The expect
 uploaded the four Actions secrets. Local signed release:
 `set -a; source secrets/.env; set +a; ./gradlew :app:assembleRelease`. `secrets/` is git-ignored.
 **Back the keystore up** — without it no future release installs over an existing one.
+
+### Pipeline check (2026-09-29)
+
+After the repository rename and merge at `06ab6cc`, the
+[main verification run](https://github.com/walkthru-earth/opensensor-space-android/actions/runs/36584773614)
+passed all hooks, the station-epoch validator, Gradle verification, and artifact uploads.
+Downloaded reports contain 219 tests: **218 passed, one skipped**, zero failures, and 14 lint warnings.
+The renamed repository resolves the Actions versions and retains its existing keystore secrets.
+`RELEASE_CERT_SHA256` was added from the trusted local keystore's public certificate; no signing key changed.
+
+The [release run](https://github.com/walkthru-earth/opensensor-space-android/actions/runs/36584773885)
+then passed keystore/certificate validation and the full verified release build, but the final
+signer check rejected a changed `apksigner` output label (`V2 Signer:` rather than `Signer #1`).
+The APK verified cryptographically and reported the expected project certificate; publication
+remained blocked. The workflow now recognizes both explicit label formats and still requires
+one signer, one unique 64-digit SHA-256 certificate fingerprint, and an exact match to the
+validated certificate. A fresh main run must pass this corrected check before publication is qualified.
 
 ## Fake device (debug builds, `FakeTransport`)
 

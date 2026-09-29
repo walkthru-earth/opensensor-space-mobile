@@ -4,12 +4,12 @@
 #   assets replaced), so the newest build is always at .../releases/tag/latest.
 # - A `v*` tag (e.g. `v1.2.0`) publishes a proper, permanent release with the same assets.
 #
-# One universal APK covers every Android ABI: the app has no native code (Room uses the platform's
-# SQLite; the Parquet reader is pure Kotlin), so per-ABI splits would only produce identical files.
+# One universal APK includes every ABI supplied by zstd-jni. Room uses the platform's SQLite;
+# the Parquet reader is pure Kotlin and delegates ZSTD decompression to that bundled library.
 # `minSdk 31` → Android 12 and newer, phones and tablets.
 #
-# Signing is fail-closed: all four secrets are mandatory, the keystore and expected certificate are
-# validated before Gradle runs, and the built APK's signer is checked again before publication.
+# Signing is fail-closed: four keystore secrets plus RELEASE_CERT_SHA256 are mandatory.
+# The keystore/certificate are validated before Gradle; the APK signer is checked before publication.
 #   KEYSTORE_BASE64  = base64 of the .jks   ·   KEYSTORE_PASSWORD · KEY_ALIAS · KEY_PASSWORD
 name: release
 
@@ -117,8 +117,12 @@ jobs:
           build_tools=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
           test -n "$build_tools"
           "$build_tools/apksigner" verify --verbose --print-certs app/build/outputs/apk/release/app-release.apk | tee "${RUNNER_TEMP}/apksigner.txt"
-          actual=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "${RUNNER_TEMP}/apksigner.txt" | head -1 | tr -d '[:space:]:-' | tr '[:lower:]' '[:upper:]')
-          if [ -z "$actual" ] || [ "$actual" != "$EXPECTED_CERT_SHA256" ]; then
+          # New build-tools label scheme-specific certificates as "V2 Signer:";
+          # earlier versions use "Signer #1". Accept only explicit certificate digests,
+          # exactly one signer, and one unique SHA-256 fingerprint across schemes.
+          signers=$(sed -n 's/^Number of signers: //p' "${RUNNER_TEMP}/apksigner.txt")
+          actual=$(sed -nE 's/^(Signer #[0-9]+|V[0-9.]+ Signer:)[[:space:]]+certificate SHA-256 digest: ([[:xdigit:]]{64})[[:space:]]*$/\2/p' "${RUNNER_TEMP}/apksigner.txt" | tr '[:lower:]' '[:upper:]' | sort -u)
+          if [ "$signers" != "1" ] || ! [[ "$actual" =~ ^[0-9A-F]{64}$ ]] || [ "$actual" != "$EXPECTED_CERT_SHA256" ]; then
             echo "::error::Built APK signer does not match the validated release certificate"
             exit 1
           fi

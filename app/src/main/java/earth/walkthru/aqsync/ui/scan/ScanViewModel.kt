@@ -7,7 +7,6 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import earth.walkthru.aqsync.BuildConfig
 import earth.walkthru.aqsync.data.DeviceConnectionManager
-import earth.walkthru.aqsync.data.DeviceEvent
 import earth.walkthru.aqsync.data.DeviceSnapshot
 import earth.walkthru.aqsync.data.background.AutoSyncScheduler
 import earth.walkthru.aqsync.data.ble.BleScanner
@@ -20,18 +19,13 @@ import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.local.database.KnownDevice
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
 import earth.walkthru.aqsync.data.local.database.MetricBucketDao
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
@@ -57,9 +51,6 @@ data class ScanUiState(
     /** Advertisers seen in the last ~15 s, strongest first. */
     val nearby: List<ScannedDevice> = emptyList(),
     val known: List<KnownDevice> = emptyList(),
-    val connection: ConnectionState = ConnectionState.Disconnected,
-    /** Address we are currently trying to connect to, for the row spinner. */
-    val connectingTo: String? = null,
     val showFakeEntry: Boolean = BuildConfig.DEBUG,
     /** Stations currently advertised on the LAN, for the "on LAN" tag. */
     val lanStations: Set<String> = emptySet(),
@@ -69,7 +60,6 @@ data class ScanUiState(
     val backgroundSyncActive: Boolean = false,
 )
 
-@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class ScanViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -99,18 +89,15 @@ class ScanViewModel @Inject constructor(
     private val scanning = MutableStateFlow(false)
     private val scanError = MutableStateFlow<String?>(null)
     private val seen = MutableStateFlow<Map<String, ScannedDevice>>(emptyMap())
-    private val connectingTo = MutableStateFlow<String?>(null)
-
-    val events: Flow<DeviceEvent> = connectingTo.flatMapLatest { address ->
-        if (address == null) kotlinx.coroutines.flow.emptyFlow() else manager.controller(address).events
-    }
-    private val connection = connectingTo.flatMapLatest { address ->
-        if (address == null) flowOf(ConnectionState.Disconnected) else manager.controller(address).connectionState
-    }
-
     val uiState: StateFlow<ScanUiState> = combine(
-        scanning, scanError, seen, knownDeviceDao.observeAll(), connection, connectingTo, manager.lanDevices,
-        summaries, autoSyncScheduler.observeActive(), manager.snapshots,
+        scanning,
+        scanError,
+        seen,
+        knownDeviceDao.observeAll(),
+        manager.lanDevices,
+        summaries,
+        autoSyncScheduler.observeActive(),
+        manager.snapshots,
     ) { values ->
         @Suppress("UNCHECKED_CAST")
         val nearby = (values[2] as Map<String, ScannedDevice>).values
@@ -118,19 +105,17 @@ class ScanViewModel @Inject constructor(
         @Suppress("UNCHECKED_CAST")
         ScanUiState(
             scanning = values[0] as Boolean,
-            activeDevices = (values[9] as List<*>).filterIsInstance<DeviceSnapshot>().filter { it.connection != ConnectionState.Disconnected },
+            activeDevices = (values[7] as List<*>).filterIsInstance<DeviceSnapshot>().filter { it.connection != ConnectionState.Disconnected || it.backgroundOwner != null || it.reconnect != null },
             scanError = values[1] as String?,
             nearby = nearby,
             known = values[3] as List<KnownDevice>,
-            connection = values[4] as ConnectionState,
-            connectingTo = values[5] as String?,
-            lanStations = (values[6] as Map<String, *>).keys,
-            summaries = values[7] as Map<String, LoggerSummary>,
-            backgroundSyncActive = values[8] as Boolean,
+            lanStations = (values[4] as Map<String, *>).keys,
+            summaries = values[5] as Map<String, LoggerSummary>,
+            backgroundSyncActive = values[6] as Boolean,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ScanUiState())
 
-    /** Maintainer's walk: one background run over every known logger, LAN then bond, one at a time. */
+    /** One background pass over known devices, sharing the app's two-transfer budget. */
     fun collectAll() = autoSyncScheduler.collectAll()
 
     private var scanJob: Job? = null
@@ -174,26 +159,25 @@ class ScanViewModel @Inject constructor(
     }
 
     fun connect(address: String, name: String?) {
-        stopScan()
-        connectingTo.value = address
-        manager.controller(address).connect(address, name)
+        connectIfIdle(address, name, fake = false)
     }
 
     fun connectFake() {
-        stopScan()
-        connectingTo.value = FakeTransport.FAKE_ADDRESS
-        manager.controller(FakeTransport.FAKE_ADDRESS).connect(FakeTransport.FAKE_ADDRESS, "AQ-6b40 (fake)", fake = true)
+        connectIfIdle(FakeTransport.FAKE_ADDRESS, "AQ-6b40 (fake)", fake = true)
     }
 
     /** Debug: the same fake, behaving like the LAN pipe (payload_max 1024, GET_TOKEN refused). */
     fun connectFakeLan() {
-        stopScan()
-        connectingTo.value = FakeTransport.FAKE_LAN_ADDRESS
-        manager.controller(FakeTransport.FAKE_LAN_ADDRESS).connect(FakeTransport.FAKE_LAN_ADDRESS, "AQ-6b40 (fake LAN)", fake = true)
+        connectIfIdle(FakeTransport.FAKE_LAN_ADDRESS, "AQ-6b40 (fake LAN)", fake = true)
     }
 
-    fun clearConnecting() {
-        connectingTo.value = null
+    /** Opening a device observes an existing owner; it never interrupts its connection or transfer. */
+    private fun connectIfIdle(address: String, name: String?, fake: Boolean) {
+        stopScan()
+        val controller = manager.controller(address)
+        val connection = controller.connectionState.value
+        if (connection.isReady || connection.isBusy || controller.reconnecting.value != null || controller.backgroundOwner.value != null) return
+        controller.connect(address, name, fake = fake)
     }
 
     fun forget(address: String) {

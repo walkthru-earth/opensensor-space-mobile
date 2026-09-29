@@ -23,10 +23,44 @@ companion presence and the Wi-Fi-arrival run are not.
 
 ## Current host gate (2026-09-29)
 
-`./gradlew --no-daemon verify`: **219 tests reported, 218 passed, one skipped, zero failures/errors**;
+`./gradlew --no-daemon verify`: **231 tests reported, 230 passed, one skipped, zero failures/errors**;
 zero lint errors and 14 existing warnings (including dependency update notices). Debug APK builds.
 The stdlib SQLite migration validator passes against v8/v9 exports. These results cover the new
 implementation; the dated ladder below retains the earlier hardware qualification baseline.
+
+## USB installation and stale pairing (2026-09-29)
+
+App `06ab6ccd` was installed with `adb install -r` on the OnePlus 7 Pro (GM1911,
+Android 16 / API 36), using the same debug certificate as its previous installation.
+Startup and Room-backed Home succeeded without an AndroidRuntime crash. Existing known
+devices and archive summaries remained visible: AQ-7500 had 99 files and AQ-6b40 had
+1,151. This is an installation/startup observation, not a controlled v8-to-v9 migration test.
+
+AQ-7500's automatic BLE reconnect failed: Android recorded GATT status 5 and
+`encryption_change:key_missing`, also present before this update. The owner confirmed the
+Waveshare had been reflashed/erased after pairing. Its USB console answered `parquet status`
+without a reset; no firmware, time, configuration or bond changes were made. Current image
+SHA-256 was not measured, so no firmware-specific transfer result is claimed. See the
+[Waveshare bench record](../../aq-parquet/docs/boards/waveshare-esp32-s3-sim7670g/bench-verified.md).
+The owner then entered the physical USB owner PIN. Android reported BOND_BONDED and BLE
+MTU 517; the app verified INFO and displayed current PM2.5, ambient temperature and humidity.
+The station changed from `7abe1b6b-e014-42e7-b259-bf61cee9f288` to
+`81c0da75-009b-4922-94f9-64e310f006b8`. Both epochs appeared in History, and selecting the
+earlier one showed its existing PM2.5 chart (36.5 µg/m³, 18% coverage on 29 September).
+This establishes one foreground stale-bond repair and retained-history observation; it does
+not establish automatic erased-bond repair, file collection after recovery, or simultaneous links.
+
+The follow-up fixes open device details immediately on a sensor tap, even if its link failed
+or a worker owns it. A terminal authentication callback is retained through connection settle
+and teardown, rather than overwritten by a service-discovery error. The persistent banner
+explains pairing repair and opens Android Bluetooth settings; logs contain the GATT status
+and the same explanation. Four regression tests cover failure retention, disconnected status
+0, a fresh attempt and repair-banner detection. Eight more cover asynchronous Android pairing:
+initial BOND_NONE must not be mistaken for cancellation, fast cancellation cannot be lost to
+StateFlow conflation, and timeout/cancellation remain bounded. No automatic unpairing is performed.
+Tapping AQ-7500 opened Today even on a failed link; cancelling pairing left a persistent error
+with archive tabs available. The final debug APK is SHA-256
+`105783e2c2655fea0a9c83cff0fcf577aee3fab17f7d7937899a103f2c26c9b7`.
 
 ## Verification ladder
 
@@ -65,7 +99,8 @@ estimate, `RealArchiveTest`). Debug APK 68.4 MiB unminified.
   reference-counted LAN protection; Room v9 station epochs and continuity policy; reviewed nullable
   live profiles and available-metric/signed history charts. Retained SD producer-station mismatch
   stays archived/exportable and is excluded from the new station's charts. No board was flashed,
-  rebooted or paired, and no new phone evidence is claimed. Qualification and limitations are in
+  rebooted or paired during the initial source audit. The later USB/foreground repair evidence
+  is recorded above. Qualification and limitations are in
   [opensensor-space.md](opensensor-space.md).
 
 - **2026-09-20** — LAN bearer tokens are encrypted at rest with Android Keystore AES-GCM. Startup

@@ -38,13 +38,13 @@ describe Waveshare as diagnostic-only. Cellular, GNSS and camera integration are
 
 ## Host verification of this implementation
 
-On 2026-09-29, `./gradlew --no-daemon verify` passed with **219 tests reported: 218 passed,
-one skipped, zero failures/errors**, including 116 app, 55 protocol, 23 Parquet and 25 history tests.
+On 2026-09-29, `./gradlew --no-daemon verify` passed with **231 tests reported: 230 passed,
+one skipped, zero failures/errors**, including 128 app, 55 protocol, 23 Parquet and 25 history tests.
 Lint has zero errors and the same 14 warnings as the checkpoint. The debug APK builds.
 `python3 tools/validate_station_epoch_migration.py` passes using actual migration SQL and exported
 v8/v9 schemas: credential/archive/device rows are preserved and epoch provenance is retained.
 CI verification/release jobs also execute the migration validator.
-These are host checks; Android upgrade, simultaneous radio transfers and recovery still need phone evidence.
+These are host checks. USB upgrade/startup and foreground pairing recovery now have bounded phone evidence in status.md; controlled schema migration and simultaneous radio transfers still require qualification.
 
 ## Product and compatibility decisions
 
@@ -260,7 +260,11 @@ Deterministic session tests catch frames at poll/quiet boundaries, including the
 receive race, link loss and cancellation/stale drain. Pure tests cover continuity decisions, hardware claim ownership, the global transfer budget, LAN
 lease lifetime, reviewed profiles, signed axes and retained-producer indexing exclusion. Room v9
 SQL was exercised against the exported v8 schema with Python SQLite; Android migration remains
-unverified. A complete structured pairing/replacement state UI and process-death tests remain. Keep lost-window byte-count recovery and existing READ windows;
+unverified as a controlled migration test. A USB update/startup on the OnePlus retained existing
+archive summaries. Erased-bond diagnosis now has a persistent repair message, Android Bluetooth
+settings shortcut and regression tests that preserve GATT 5/15 through connection settle/teardown.
+Device taps open details immediately so failures and offline archives remain accessible. A complete
+structured pairing/replacement state UI and process-death tests remain. Keep lost-window byte-count recovery and existing READ windows;
 concurrency alone does not justify shrinking a BLE window.
 
 Required cases: two separate devices on LAN/LAN, BLE/LAN and BLE/BLE; same-device competing links;

@@ -20,13 +20,14 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -85,7 +86,7 @@ class BleTransport(
     override val responseFrames: ReceiveChannel<ByteArray> = _responses
 
     /** Bond state mirrored from [BluetoothDevice.ACTION_BOND_STATE_CHANGED]. */
-    private val bondState = MutableStateFlow(device.bondState)
+    private val bondState = BleBondAwaiter(device.bondState.toBondState())
 
     private val opMutex = Mutex()
     private val connectMutex = Mutex()
@@ -93,6 +94,10 @@ class BleTransport(
     /** Exactly one GATT operation may be in flight; its continuation lives here. */
     private val pendingOp = AtomicReference<kotlinx.coroutines.CancellableContinuation<GattResult>?>(null)
     private val pendingConnect = AtomicReference<kotlinx.coroutines.CancellableContinuation<Int>?>(null)
+    private val linkFailure = BleConnectionFailure()
+
+    @Volatile
+    private var acceptConnectionCallbacks = false
 
     @Volatile
     private var gatt: BluetoothGatt? = null
@@ -115,24 +120,27 @@ class BleTransport(
             }
             if (dev?.address != device.address) return
             val newState = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.BOND_NONE)
-            Log.i(TAG, "bond state ${bondState.value} -> $newState")
-            bondState.value = newState
+            val previousState = intent.getIntExtra(BluetoothDevice.EXTRA_PREVIOUS_BOND_STATE, -1)
+            Log.i(TAG, "bond state ${bondState.current.state} -> $newState")
+            bondState.update(newState.toBondState(), previousState.takeIf { it != -1 }?.toBondState())
         }
     }
     private var bondReceiverRegistered = false
 
     private val callback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
+            if (!acceptConnectionCallbacks || (gatt != null && gatt !== g)) return
             Log.i(TAG, "connection state=$newState status=$status")
             if (newState == BluetoothProfile.STATE_CONNECTED && status == BluetoothGatt.GATT_SUCCESS) {
                 pendingConnect.getAndSet(null)?.resume(status)
             } else {
-                pendingConnect.getAndSet(null)?.resume(status)
-                pendingOp.getAndSet(null)?.resume(GattResult(if (status == 0) GATT_DISCONNECTED else status))
-                _state.value = if (status == BluetoothGatt.GATT_SUCCESS || status == GATT_CONN_TERMINATE_PEER_USER) {
+                val failureStatus = linkFailure.recordDisconnected(status)
+                pendingConnect.getAndSet(null)?.resume(failureStatus)
+                pendingOp.getAndSet(null)?.resume(GattResult(failureStatus))
+                _state.value = if (failureStatus == GATT_DISCONNECTED || failureStatus == GATT_CONN_TERMINATE_PEER_USER) {
                     ConnectionState.Disconnected
                 } else {
-                    ConnectionState.Failed("link lost (GATT status $status)", status)
+                    ConnectionState.Failed(BleConnectionFailure.message(failureStatus), failureStatus)
                 }
             }
         }
@@ -192,24 +200,29 @@ class BleTransport(
         if (_state.value.isReady) return
         registerBondReceiver()
         try {
+            linkFailure.reset()
             _state.value = ConnectionState.Connecting
+            acceptConnectionCallbacks = true
             val g = withTimeout(connectTimeoutMs) {
                 suspendCancellableCoroutine<Int> { cont ->
                     pendingConnect.set(cont)
-                    cont.invokeOnCancellation { pendingConnect.set(null) }
+                    cont.invokeOnCancellation { pendingConnect.compareAndSet(cont, null) }
                     gatt = device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
                     if (gatt == null) {
-                        pendingConnect.set(null)
-                        cont.resumeWithException(TransportException("connectGatt returned null"))
+                        if (pendingConnect.compareAndSet(cont, null)) cont.resumeWithException(TransportException("connectGatt returned null"))
                     }
                 }
             }
-            if (g != BluetoothGatt.GATT_SUCCESS) throw TransportException("connect failed (GATT status $g)", g)
+            linkFailure.throwIfFailed()
+            if (g != BluetoothGatt.GATT_SUCCESS) throw TransportException(BleConnectionFailure.message(g), g)
             val gattRef = gatt ?: throw TransportException("no GATT after connect")
 
             _state.value = ConnectionState.DiscoveringServices
             // A short settle avoids the well-known 133 on some stacks when discovery starts instantly.
             delay(300)
+            // Missing bond keys can drop the link during this settle. Preserve that callback's
+            // status instead of replacing it with discoverServices' generic false-start error.
+            linkFailure.throwIfFailed()
             val disc = op("discoverServices", 20_000) { gattRef.discoverServices() }
             if (disc.status != BluetoothGatt.GATT_SUCCESS) throw TransportException("service discovery failed (GATT status ${disc.status})", disc.status)
             bindCharacteristics(gattRef)
@@ -231,20 +244,26 @@ class BleTransport(
             enableNotifications(gattRef, response ?: missing("response"))
 
             _state.value = ConnectionState.Ready(mtu)
-            Log.i(TAG, "ready: mtu=$mtu bonded=${bondState.value == BluetoothDevice.BOND_BONDED}")
+            Log.i(TAG, "ready: mtu=$mtu bonded=${bondState.current.state == BleBondAwaiter.State.BONDED}")
         } catch (e: CancellationException) {
             teardown()
             _state.value = ConnectionState.Disconnected
             throw e
         } catch (e: Exception) {
+            val failure = linkFailure.exceptionOrNull() ?: e
             teardown()
-            val reason = when (e) {
-                is TimeoutCancellationException -> "timed out while connecting"
-                is TransportException -> e.message ?: "connection failed"
-                else -> e.message ?: e::class.simpleName ?: "connection failed"
+            val reason = if (failure is TransportException && (failure.gattStatus == 5 || failure.gattStatus == 15)) {
+                BleConnectionFailure.PAIRING_REPAIR_MESSAGE
+            } else {
+                when (failure) {
+                    is TimeoutCancellationException -> "timed out while connecting"
+                    is TransportException -> failure.message ?: "connection failed"
+                    else -> failure.message ?: failure::class.simpleName ?: "connection failed"
+                }
             }
-            _state.value = ConnectionState.Failed(reason, (e as? TransportException)?.gattStatus)
-            throw TransportException(reason, (e as? TransportException)?.gattStatus, e)
+            Log.w(TAG, "connection failed (GATT status ${(failure as? TransportException)?.gattStatus}): $reason")
+            _state.value = ConnectionState.Failed(reason, (failure as? TransportException)?.gattStatus)
+            throw TransportException(reason, (failure as? TransportException)?.gattStatus, e)
         }
     }
 
@@ -262,24 +281,27 @@ class BleTransport(
         throw TransportException("characteristic `$name` missing from the AQ Sync service")
 
     private suspend fun ensureBonded() {
-        if (device.bondState == BluetoothDevice.BOND_BONDED) {
-            bondState.value = BluetoothDevice.BOND_BONDED
-            return
-        }
+        // Refresh after an owner forgets a stale bond in Settings; the constructor snapshot may
+        // belong to the old pairing. Capture before createBond so fast failure events are retained.
+        val beforeRequest = bondState.update(device.bondState.toBondState())
+        if (beforeRequest.state == BleBondAwaiter.State.BONDED) return
         if (!allowBonding) throw TransportException("device is not bonded; pairing needs the app open")
         _state.value = ConnectionState.Bonding
-        if (device.bondState != BluetoothDevice.BOND_BONDING) {
+        if (beforeRequest.state != BleBondAwaiter.State.BONDING) {
             if (!device.createBond()) throw TransportException("could not start pairing")
         }
-        awaitBond()
+        awaitBond(beforeRequest)
     }
 
     /** Wait for the user to type the 6-digit passkey; the system dialog is driven by the stack. */
-    private suspend fun awaitBond() {
-        val result = withTimeout(BOND_TIMEOUT_MS) {
-            bondState.first { it == BluetoothDevice.BOND_BONDED || it == BluetoothDevice.BOND_NONE }
+    private suspend fun awaitBond(beforeRequest: BleBondAwaiter.Snapshot) {
+        val bonded = try {
+            bondState.awaitResult(beforeRequest, BOND_TIMEOUT_MS)
+        } catch (e: TimeoutCancellationException) {
+            currentCoroutineContext().ensureActive()
+            throw TransportException("Pairing timed out. Reconnect and enter this sensor's six-digit PIN when Android asks. Keep this app open while pairing.", cause = e)
         }
-        if (result != BluetoothDevice.BOND_BONDED) {
+        if (!bonded) {
             throw TransportException("pairing was cancelled or the passkey was wrong")
         }
         // Give the stack a moment to raise the link to authenticated before the next ATT request.
@@ -308,19 +330,20 @@ class BleTransport(
      */
     private suspend fun op(name: String, timeoutMs: Long = OP_TIMEOUT_MS, start: () -> Boolean): GattResult =
         opMutex.withLock {
+            linkFailure.throwIfFailed()
             try {
                 withTimeout(timeoutMs) {
                     suspendCancellableCoroutine { cont ->
                         pendingOp.set(cont)
                         cont.invokeOnCancellation { pendingOp.compareAndSet(cont, null) }
                         val started = try {
+                            linkFailure.throwIfFailed()
                             start()
                         } catch (e: Exception) {
                             false
                         }
-                        if (!started) {
-                            pendingOp.compareAndSet(cont, null)
-                            cont.resumeWithException(TransportException("$name could not be issued (stack busy or link down)"))
+                        if (!started && pendingOp.compareAndSet(cont, null)) {
+                            cont.resumeWithException(linkFailure.exceptionOrNull() ?: TransportException("$name could not be issued (stack busy or link down)"))
                         }
                     }
                 }
@@ -339,16 +362,21 @@ class BleTransport(
         var attempt = 0
         while (true) {
             val r = op(name, timeoutMs, start)
+            // A terminal auth disconnect cannot be repaired by retrying an ATT operation on it.
+            linkFailure.throwIfFailed()
             if (r.status in AUTH_STATUSES && attempt == 0) {
                 attempt++
                 Log.w(TAG, "$name: GATT status ${r.status}; waiting for bond then retrying")
                 val before = _state.value
-                if (!allowBonding && device.bondState == BluetoothDevice.BOND_NONE) {
+                val beforeRequest = bondState.update(device.bondState.toBondState())
+                if (!allowBonding && beforeRequest.state == BleBondAwaiter.State.NONE) {
                     throw TransportException("device lost its bond; pairing needs the app open")
                 }
                 _state.value = ConnectionState.Bonding
-                if (device.bondState == BluetoothDevice.BOND_NONE) device.createBond()
-                awaitBond()
+                if (beforeRequest.state == BleBondAwaiter.State.NONE && !device.createBond()) {
+                    throw TransportException("could not start pairing")
+                }
+                awaitBond(beforeRequest)
                 // During connect we are still enabling notifications; at runtime (a read/write on a
                 // Ready link that the stack re-authenticated) go back to Ready, otherwise the UI
                 // shows a stale "Enabling notifications…" banner and requireReady() fails.
@@ -356,7 +384,8 @@ class BleTransport(
                 continue
             }
             if (r.status == 5 || r.status == 15) {
-                throw TransportException("Bluetooth pairing needs repair. If the device was erased or reflashed, open Android Bluetooth settings, forget its stale pairing, then pair again from this app. Archived files are retained.", r.status)
+                Log.w(TAG, "$name failed (GATT status ${r.status}): ${BleConnectionFailure.PAIRING_REPAIR_MESSAGE}")
+                throw TransportException(BleConnectionFailure.PAIRING_REPAIR_MESSAGE, r.status)
             }
             return r
         }
@@ -418,6 +447,7 @@ class BleTransport(
     }
 
     private fun teardown() {
+        acceptConnectionCallbacks = false
         pendingOp.getAndSet(null)?.resume(GattResult(GATT_DISCONNECTED))
         pendingConnect.getAndSet(null)?.resume(GATT_DISCONNECTED)
         gatt?.let {
@@ -451,6 +481,12 @@ class BleTransport(
         if (!bondReceiverRegistered) return
         runCatching { context.unregisterReceiver(bondReceiver) }
         bondReceiverRegistered = false
+    }
+
+    private fun Int.toBondState(): BleBondAwaiter.State = when (this) {
+        BluetoothDevice.BOND_BONDING -> BleBondAwaiter.State.BONDING
+        BluetoothDevice.BOND_BONDED -> BleBondAwaiter.State.BONDED
+        else -> BleBondAwaiter.State.NONE
     }
 
     companion object {
