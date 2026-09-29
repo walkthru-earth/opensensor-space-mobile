@@ -72,6 +72,10 @@ data class DeviceStatus(
     val utc: Int? = null,
     /** Anchor generation (clock_epoch). */
     val gen: Int? = null,
+    /** Firmware v6.2+: anchor source, 0 none, 1 host SET_TIME, 2 restored from RTC. */
+    @SerialName("clk") val clockSource: Int? = null,
+    /** Firmware v6.2+: RTC state, 0 not read, 1 in use/written, 2 unusable. */
+    @SerialName("rtc") val rtcState: Int? = null,
     /** 1 when the card is mounted and the output directory exists. */
     val sd: Int? = null,
     @SerialName("sd_kib") val sdKib: Long? = null,

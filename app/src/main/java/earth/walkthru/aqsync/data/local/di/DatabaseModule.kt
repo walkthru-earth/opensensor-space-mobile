@@ -12,13 +12,29 @@ import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.local.database.DerivedDayDao
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
 import earth.walkthru.aqsync.data.local.database.MetricBucketDao
+import earth.walkthru.aqsync.data.local.security.LanTokenCipher
+import earth.walkthru.aqsync.data.local.security.LanTokenCipherContract
+import earth.walkthru.aqsync.data.local.security.LanTokenMigration
+import earth.walkthru.aqsync.data.local.security.SecureKnownDeviceDao
 import javax.inject.Singleton
 
 @Module
 @InstallIn(SingletonComponent::class)
 class DatabaseModule {
     @Provides
-    fun provideKnownDeviceDao(db: AppDatabase): KnownDeviceDao = db.knownDeviceDao()
+    @Singleton
+    fun provideTokenCipher(cipher: LanTokenCipher): LanTokenCipherContract = cipher
+
+    @Provides
+    @Singleton
+    fun provideSecureKnownDeviceDao(db: AppDatabase, cipher: LanTokenCipherContract): SecureKnownDeviceDao =
+        SecureKnownDeviceDao(db.knownDeviceDao(), cipher)
+
+    @Provides
+    fun provideKnownDeviceDao(dao: SecureKnownDeviceDao): KnownDeviceDao = dao
+
+    @Provides
+    fun provideLanTokenMigration(dao: SecureKnownDeviceDao): LanTokenMigration = dao
 
     @Provides
     fun provideArchivedFileDao(db: AppDatabase): ArchivedFileDao = db.archivedFileDao()

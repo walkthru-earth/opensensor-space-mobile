@@ -19,6 +19,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import earth.walkthru.aqsync.BuildConfig
 import earth.walkthru.aqsync.data.settings.DetailLevel
+import earth.walkthru.aqsync.data.sync.ClockSyncMode
 import earth.walkthru.aqsync.ui.components.Eyebrow
 
 /**
@@ -29,6 +30,7 @@ import earth.walkthru.aqsync.ui.components.Eyebrow
 @Composable
 fun SettingsSheet(onDismiss: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
     val level by viewModel.detailLevel.collectAsStateWithLifecycle()
+    val clockMode by viewModel.clockSyncMode.collectAsStateWithLifecycle()
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 32.dp)) {
             Text("Settings", style = MaterialTheme.typography.headlineSmall)
@@ -49,6 +51,27 @@ fun SettingsSheet(onDismiss: () -> Unit, viewModel: SettingsViewModel = hiltView
             Text(level.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(
                 "Cosmetic: every level reads the same data from the same logger. Nothing is hidden from the archive or the export.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+            Spacer(Modifier.height(24.dp))
+            Text("Smart Sync clock", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(8.dp))
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                ClockSyncMode.entries.forEachIndexed { i, mode ->
+                    SegmentedButton(
+                        selected = clockMode == mode,
+                        onClick = { viewModel.setClockSyncMode(mode) },
+                        shape = SegmentedButtonDefaults.itemShape(i, ClockSyncMode.entries.size),
+                        label = { Text(mode.title) },
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(clockMode.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                "Smart Sync never rewrites raw files. Finalizing buffered rows remains a separate confirmed action.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp),

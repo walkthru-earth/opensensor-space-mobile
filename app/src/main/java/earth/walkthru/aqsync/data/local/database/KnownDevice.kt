@@ -23,8 +23,8 @@ data class KnownDevice(
     val lastSeenEpochMs: Long,
     val lastConnectedEpochMs: Long?,
     /**
-     * LAN bearer token from `GET_TOKEN`, 32 bytes as 64 hex chars; null until fetched over BLE.
-     * A secret: never log it, never show it. Schema v2.
+     * LAN bearer token from `GET_TOKEN`; the DAO API exposes 64 hex chars, while the Room column is
+     * AES-GCM ciphertext protected by Android Keystore. A secret: never log it or show it. Schema v2.
      */
     val lanToken: String? = null,
     /** `TOKEN.port` (47390 on today's firmware). Schema v2. */

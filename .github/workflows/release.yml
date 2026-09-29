@@ -8,9 +8,8 @@
 # SQLite; the Parquet reader is pure Kotlin), so per-ABI splits would only produce identical files.
 # `minSdk 31` → Android 12 and newer, phones and tablets.
 #
-# Signing: with the four AQSYNC_* secrets set, the release APK is signed with the project key
-# (installable over previous releases). Without them, app/build.gradle.kts falls back to the debug
-# key and the release name says so — still installable, but a fresh install, not an upgrade path.
+# Signing is fail-closed: all four secrets are mandatory, the keystore and expected certificate are
+# validated before Gradle runs, and the built APK's signer is checked again before publication.
 #   KEYSTORE_BASE64  = base64 of the .jks   ·   KEYSTORE_PASSWORD · KEY_ALIAS · KEY_PASSWORD
 name: release
 
@@ -64,21 +63,40 @@ jobs:
           # Monotonic across both channels: the run number only grows.
           echo "version_code=${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
 
-      - name: Restore the release keystore (if the secrets exist)
+      - name: Restore and validate release signing configuration
         id: keystore
         shell: bash
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          EXPECTED_CERT_SHA256: ${{ secrets.RELEASE_CERT_SHA256 }}
         run: |
-          if [ -n "${KEYSTORE_BASE64}" ]; then
-            echo "${KEYSTORE_BASE64}" | base64 -d > "${RUNNER_TEMP}/release.jks"
-            echo "file=${RUNNER_TEMP}/release.jks" >> "$GITHUB_OUTPUT"
-            echo "signed=project key" >> "$GITHUB_OUTPUT"
-          else
-            echo "signed=debug key (no KEYSTORE_BASE64 secret; installable, but not an upgrade path)" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          for name in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD EXPECTED_CERT_SHA256; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Required release signing secret $name is missing or blank"
+              exit 1
+            fi
+          done
+          keystore="${RUNNER_TEMP}/release.jks"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          chmod 600 "$keystore"
+          keytool -list -keystore "$keystore" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" -keypass "$KEY_PASSWORD" >/dev/null
+          actual=$(keytool -exportcert -rfc -keystore "$keystore" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" |
+            openssl x509 -outform DER |
+            sha256sum |
+            awk '{print toupper($1)}')
+          expected=$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d '[:space:]:-' | tr '[:lower:]' '[:upper:]')
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::Release certificate SHA-256 does not match RELEASE_CERT_SHA256"
+            exit 1
           fi
+          echo "file=$keystore" >> "$GITHUB_OUTPUT"
+          echo "cert_sha256=$actual" >> "$GITHUB_OUTPUT"
 
-      - name: Build release APK
+      - name: Run the full verification suite and build the release APK
         env:
           AQSYNC_VERSION_CODE: ${{ steps.meta.outputs.version_code }}
           AQSYNC_VERSION_NAME: ${{ steps.meta.outputs.version_name }}
@@ -86,7 +104,22 @@ jobs:
           AQSYNC_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           AQSYNC_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           AQSYNC_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew --no-daemon :app:assembleRelease
+        run: ./gradlew --no-daemon verify :app:assembleRelease
+
+      - name: Verify the built APK signer
+        shell: bash
+        env:
+          EXPECTED_CERT_SHA256: ${{ steps.keystore.outputs.cert_sha256 }}
+        run: |
+          set -euo pipefail
+          build_tools=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
+          test -n "$build_tools"
+          "$build_tools/apksigner" verify --verbose --print-certs app/build/outputs/apk/release/app-release.apk | tee "${RUNNER_TEMP}/apksigner.txt"
+          actual=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "${RUNNER_TEMP}/apksigner.txt" | head -1 | tr -d '[:space:]:-' | tr '[:lower:]' '[:upper:]')
+          if [ -z "$actual" ] || [ "$actual" != "$EXPECTED_CERT_SHA256" ]; then
+            echo "::error::Built APK signer does not match the validated release certificate"
+            exit 1
+          fi
 
       - name: Name and checksum the artifacts
         id: files
@@ -106,7 +139,7 @@ jobs:
           {
             echo "**AQ Sync** \`${{ steps.meta.outputs.version_name }}\` · versionCode ${{ steps.meta.outputs.version_code }} · commit ${GITHUB_SHA::8}"
             echo
-            echo "Signed with: ${{ steps.keystore.outputs.signed }}."
+            echo "Signed with the validated project release certificate (SHA-256 \`${{ steps.keystore.outputs.cert_sha256 }}\`)."
             echo "Universal APK — Android 12+ (minSdk 31), all ABIs (no native code)."
             echo
             if [ "${{ steps.meta.outputs.channel }}" = "rolling" ]; then

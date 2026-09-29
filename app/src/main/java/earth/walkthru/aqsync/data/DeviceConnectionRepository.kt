@@ -34,12 +34,15 @@ import earth.walkthru.aqsync.data.protocol.LiveSample
 import earth.walkthru.aqsync.data.protocol.hexToBytes
 import earth.walkthru.aqsync.data.protocol.toHex
 import earth.walkthru.aqsync.data.sync.ArchivedIdentity
+import earth.walkthru.aqsync.data.sync.ClockSyncAction
+import earth.walkthru.aqsync.data.sync.ClockSyncMode
 import earth.walkthru.aqsync.data.sync.FileArchive
 import earth.walkthru.aqsync.data.sync.FileOutcome
 import earth.walkthru.aqsync.data.sync.FileProgress
 import earth.walkthru.aqsync.data.sync.FileSyncState
 import earth.walkthru.aqsync.data.sync.ManifestEntry
 import earth.walkthru.aqsync.data.sync.ReadWindow
+import earth.walkthru.aqsync.data.sync.SmartSyncPolicy
 import earth.walkthru.aqsync.data.sync.SyncEndCause
 import earth.walkthru.aqsync.data.sync.SyncEngine
 import earth.walkthru.aqsync.data.sync.SyncPlan
@@ -108,7 +111,25 @@ data class SyncProgress(
 sealed interface DeviceEvent {
     data class Info(val message: String) : DeviceEvent
     data class Error(val message: String) : DeviceEvent
+    data class ClockConfirmationRequired(val reason: String) : DeviceEvent
 }
+
+data class ArchiveTimeSummary(
+    val files: Int = 0,
+    val rows: Long = 0,
+    val realTimeRows: Long = 0,
+    val estimatedFiles: Int = 0,
+    val estimatedRows: Long = 0,
+    val unplacedFiles: Int = 0,
+    val unplacedRows: Long = 0,
+    val unplacedBoots: Int = 0,
+)
+
+data class SyncDiagnostic(
+    val atEpochMs: Long,
+    val step: String,
+    val detail: String,
+)
 
 /** Result of the last `WIFI_SCAN`, for the Device screen. */
 sealed interface WifiScanState {
@@ -275,6 +296,12 @@ class DeviceConnectionRepository @Inject constructor(
 
     private val _sync = MutableStateFlow(SyncProgress())
     val sync: StateFlow<SyncProgress> = _sync.asStateFlow()
+
+    private val _archiveTimeSummary = MutableStateFlow(ArchiveTimeSummary())
+    val archiveTimeSummary: StateFlow<ArchiveTimeSummary> = _archiveTimeSummary.asStateFlow()
+
+    private val _syncDiagnostics = MutableStateFlow<List<SyncDiagnostic>>(emptyList())
+    val syncDiagnostics: StateFlow<List<SyncDiagnostic>> = _syncDiagnostics.asStateFlow()
 
     /**
      * True while the process must stay out of the background firewall chain: a transfer is running,
@@ -476,6 +503,8 @@ class DeviceConnectionRepository @Inject constructor(
                 runCatching { DeviceStatus.parse(raw) }.onSuccess { _status.value = TimedStatus(it, System.currentTimeMillis()) }
             }
             runCatching { session.readLive() }.onSuccess { _live.value = TimedLive(it, System.currentTimeMillis()) }
+            info.station?.let { station -> scope.launch { updateArchiveTimeSummary(station) } }
+            recordDiagnostic("connect", "${transport.kind} ready; boot=${info.boot ?: "unknown"}; station=${info.station ?: "unknown"}")
 
             val v2 = (proto ?: 1) >= 2
             if (v2) {
@@ -636,7 +665,36 @@ class DeviceConnectionRepository @Inject constructor(
 
     // --------------------------------------------------------------------- sync
 
-    /** Download every file the plan marks as missing or partial. */
+    /**
+     * Explicit Smart Sync: inspect clock quality, apply the user's SET_TIME consent policy, then
+     * download every immutable missing file. FLUSH is not part of this operation.
+     */
+    fun smartSync(mode: ClockSyncMode, clockConfirmed: Boolean = false) {
+        if (_sync.value.running) return
+        val session = _session.value ?: return
+        scope.launch {
+            val decision = SmartSyncPolicy.decide(_status.value?.status, mode)
+            recordDiagnostic("clock", "${decision.quality}: ${decision.reason}; action=${decision.action}")
+            when (decision.action) {
+                ClockSyncAction.ASK_USER -> {
+                    _events.emit(DeviceEvent.ClockConfirmationRequired(decision.reason))
+                    return@launch
+                }
+                ClockSyncAction.SET_TIME -> if (!clockConfirmed) {
+                    if (!setTimeFromPhoneNow(session, quiet = false)) return@launch
+                }
+                ClockSyncAction.CONTINUE -> Unit
+            }
+            val latest = plan.value ?: run {
+                _events.emit(DeviceEvent.Error("Cannot sync: the device file list is not ready"))
+                return@launch
+            }
+            recordDiagnostic("plan", "${latest.toDownload.size} file(s), ${latest.missingBytes} byte(s) missing")
+            startSync(latest.toDownload)
+        }
+    }
+
+    /** Download every file the plan marks as missing or partial, without changing device state. */
     fun syncAll() {
         val plan = this.plan.value ?: return
         startSync(plan.toDownload)
@@ -768,7 +826,15 @@ class DeviceConnectionRepository @Inject constructor(
                     refreshManifest()
                 }
                 // Bring the history tiers up to date with whatever arrived; cheap when nothing did.
-                scope.launch { runCatching { historyDeriver.deriveStale() }.onFailure { Log.w(TAG, "derive after sync failed: ${it.message}") } }
+                scope.launch {
+                    runCatching {
+                        historyDeriver.deriveStale()
+                        updateArchiveTimeSummary(station)
+                    }.onFailure {
+                        recordDiagnostic("derive", "failed: ${it.message ?: it::class.simpleName}")
+                        Log.w(TAG, "derive after sync failed: ${it.message}")
+                    }
+                }
             }
         }
         syncJob = job
@@ -871,6 +937,34 @@ class DeviceConnectionRepository @Inject constructor(
         knownDeviceDao.setCompanionAssociation(address, associationId)
     }
 
+    private suspend fun updateArchiveTimeSummary(station: String) {
+        val files = archivedFileDao.forStation(station).filter { it.indexed && (it.purpose == null || it.purpose == "telemetry") }
+        val estimated = files.filter { it.hasEstimatedUtc }
+        val unplaced = files.filter { !it.hasUtc && !it.hasEstimatedUtc }
+        _archiveTimeSummary.value = ArchiveTimeSummary(
+            files = files.size,
+            rows = files.sumOf { it.rows ?: 0L },
+            realTimeRows = files.sumOf { it.utcRows ?: 0L },
+            estimatedFiles = estimated.size,
+            estimatedRows = estimated.sumOf { it.rows ?: 0L },
+            unplacedFiles = unplaced.size,
+            unplacedRows = unplaced.sumOf { it.rows ?: 0L },
+            unplacedBoots = unplaced.mapNotNull { it.bootId }.distinct().size,
+        )
+        val summary = _archiveTimeSummary.value
+        recordDiagnostic(
+            "timeline",
+            "${summary.files} file(s), ${summary.realTimeRows} UTC row(s), ${summary.estimatedRows} estimated row(s), ${summary.unplacedRows} unplaced row(s)",
+        )
+        if (summary.unplacedRows > 0) {
+            _events.emit(DeviceEvent.Info("${summary.unplacedRows} reading(s) are safely archived but cannot be placed on the calendar because that boot has no time anchor."))
+        }
+    }
+
+    private fun recordDiagnostic(step: String, detail: String) {
+        _syncDiagnostics.update { (it + SyncDiagnostic(System.currentTimeMillis(), step, detail)).takeLast(100) }
+    }
+
     private fun describe(o: FileOutcome): String = when (o) {
         is FileOutcome.Synced -> "synced"
         is FileOutcome.Mismatch -> o.reason
@@ -883,20 +977,26 @@ class DeviceConnectionRepository @Inject constructor(
     /** SET_TIME with the phone's clock. Only rows sampled afterwards get UTC (contract). */
     fun setTimeFromPhone() {
         val session = _session.value ?: return
-        scope.launch {
-            try {
-                val epoch = System.currentTimeMillis() / 1000
-                val r = session.setTime(epoch)
-                _events.tryEmit(DeviceEvent.Info("Device clock set (epoch ${r.epochSeconds}). Rows from now on carry UTC; earlier rows stay in `unsynced`."))
-                runCatching { session.readStatus() }.onSuccess { _status.value = TimedStatus(it, System.currentTimeMillis()) }
-            } catch (e: DeviceErrorException) {
-                _events.tryEmit(DeviceEvent.Error(e.message ?: "SET_TIME rejected"))
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                _events.tryEmit(DeviceEvent.Error("SET_TIME failed: ${e.message}"))
-            }
-        }
+        scope.launch { setTimeFromPhoneNow(session, quiet = false) }
+    }
+
+    private suspend fun setTimeFromPhoneNow(session: DeviceSession, quiet: Boolean): Boolean = try {
+        val epoch = System.currentTimeMillis() / 1000
+        val r = session.setTime(epoch)
+        recordDiagnostic("clock", "SET_TIME accepted at epoch ${r.epochSeconds}")
+        if (!quiet) _events.emit(DeviceEvent.Info("Device clock set. Rows from now on carry UTC; earlier same-boot rows can be estimated after sync."))
+        runCatching { session.readStatus() }.onSuccess { _status.value = TimedStatus(it, System.currentTimeMillis()) }
+        true
+    } catch (e: DeviceErrorException) {
+        recordDiagnostic("clock", "SET_TIME rejected: ${e.message}")
+        if (!quiet) _events.emit(DeviceEvent.Error(e.message ?: "SET_TIME rejected"))
+        false
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        recordDiagnostic("clock", "SET_TIME failed: ${e.message ?: e::class.simpleName}")
+        if (!quiet) _events.emit(DeviceEvent.Error("SET_TIME failed: ${e.message}"))
+        false
     }
 
     /** FLUSH: finalize the RAM batch into a short file so it can be pulled now. */

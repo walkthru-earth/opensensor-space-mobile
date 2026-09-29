@@ -66,8 +66,9 @@ house-style rules — `{ a; b }` one-liners, compact `when`, one-line enums, `_x
 switched off; a hook that reformats a file fails the commit once, re-stage and commit again). The
 **pre-push** hook runs the full `./gradlew verify`. `.github/workflows/verify.yml` runs both on every push
 and PR and uploads the debug APK; `release.yml` publishes a universal release APK to the rolling
-`latest` pre-release on every push to `main` and to a permanent release on a `v*` tag (signed with the
-project key only when the `KEYSTORE_*` secrets exist, otherwise with the debug key and it says so). CI
+`latest` pre-release on every push to `main` and to a permanent release on a `v*` tag. Signing is
+fail-closed: that job runs `verify`, validates the project keystore/certificate, and checks the APK
+signer before publishing; Gradle never substitutes the debug key. CI
 has no phone and no emulator: BLE, mDNS, the foreground service and WorkManager plumbing are verified
 only on hardware and recorded in the firmware repo's `bench-verified.md`.
 

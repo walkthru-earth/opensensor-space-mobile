@@ -16,7 +16,7 @@ erDiagram
     string firmware
     long lastSeenEpochMs
     long lastConnectedEpochMs
-    string lanToken "hex, nullable, REDACTED everywhere"
+    string lanToken "AES-GCM ciphertext, nullable, REDACTED everywhere"
     int lanPort
     bool autoSync "v3"
     int companionAssociationId "v8, nullable; CDM association behind wake-when-nearby"
@@ -92,7 +92,17 @@ keeps its row with `indexError`).
 | 5 → 6 | `AutoMigration` | `archived_file.est*` (time estimate), `estimatedRows` |
 | 6 → 7 | `AutoMigration` + `DropWideTiers` (`@DeleteTable aggregate_bucket`) | `metric_bucket` one row per metric; `DERIVE_VERSION` 2 forces a rebuild |
 
-No destructive fallback. Every version's JSON is exported to `app/schemas/`.
+No destructive fallback. Every version's JSON is exported to `app/schemas/`. Token encryption does
+not change the SQL schema: `SecureKnownDeviceDao` encrypts new values with AES-256-GCM under a
+non-exportable Android Keystore key and decrypts at the DAO boundary. On first launch after upgrade,
+existing 64-character plaintext values are encrypted in place before the scheduler or event triggers
+start; a dedicated `LanTokenMigration` binding avoids casting the DAO implementation. A marker in
+`noBackupFilesDir` makes that migration idempotent without putting key state into backup. If an
+encrypted value cannot be authenticated, has malformed `enc1` framing, or its Keystore key is gone
+(for example after device-to-device transfer), the secure DAO clears only that row's `lanToken` and
+`lanPort`, preserves the device and settings, and exposes no credential until a later bonded BLE
+session refreshes it. Those credential failures are handled; unrelated crypto/programming/database
+failures still propagate.
 
 ### Write semantics that bit us
 
@@ -125,18 +135,22 @@ zip stays the byte-exact mirror and the derived zip is the small analysis-ready 
 
 ```mermaid
 flowchart LR
-  DB[(aq-sync.db)] --> C["Cloud Auto Backup<br/>only with disableIfNoEncryptionCapabilities"]
+  PREFS[(UI preferences)] --> C["Cloud Auto Backup<br/>encrypted-capable devices only"]
+  DB[(aq-sync.db)] -."excluded: contains bearer secret".-> C
   DB --> T["Device-to-device transfer"]
   AR["archive/"] --> T
   AP["archive-partial/"] -.excluded.-> X[( )]
+  KEY["Android Keystore key + noBackup marker"] -.never backed up.-> X
 ```
 
-Auto Backup is capped at **25 MB per app and skips the whole backup above it**; a full archive is
-≈ 32 MB, so the old rule that included `archive/` silently backed up nothing. The database (known
-devices, index, tiers, LAN token) is what a new phone needs to find the logger and pull again; the
-token is LAN-scoped and rotatable, and restoring it keeps LAN alive since bonds never transfer.
-`fullBackupContent`/`backup_rules.xml` was removed — Android 12+ (our minSdk) reads only
-`dataExtractionRules`.
+Cloud backup excludes the complete Room database: Android extraction rules cannot redact one column,
+and `known_device.lanToken` is a bearer credential. Only non-secret UI preferences are eligible.
+The archive is reproducible and commonly exceeds Auto Backup's 25 MB quota, so it is excluded too.
+A user-initiated device-to-device transfer still carries the database and archive; because Android
+Keystore keys do not transfer, the encrypted token may be unreadable on the destination and must be
+fetched again over Bluetooth. The LAN protocol remains plaintext TCP: at-rest encryption and backup
+exclusion do not encrypt traffic on the local network. `fullBackupContent`/`backup_rules.xml` was
+removed — Android 12+ (our minSdk) reads only `dataExtractionRules`.
 
 ## Uses → affects
 

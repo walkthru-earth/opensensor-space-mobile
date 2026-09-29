@@ -22,9 +22,11 @@ import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
 import earth.walkthru.aqsync.data.background.AutoSyncScheduler
 import earth.walkthru.aqsync.data.background.SyncTriggers
+import earth.walkthru.aqsync.data.local.security.LanTokenMigration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
@@ -47,6 +49,9 @@ class AqSyncApplication :
     @Inject
     lateinit var syncTriggers: SyncTriggers
 
+    @Inject
+    lateinit var lanTokenMigration: LanTokenMigration
+
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override val workManagerConfiguration: Configuration
@@ -54,7 +59,10 @@ class AqSyncApplication :
 
     override fun onCreate() {
         super.onCreate()
-        autoSyncScheduler.start(appScope)
-        syncTriggers.register(appScope)
+        appScope.launch {
+            runCatching { lanTokenMigration.migratePlaintextTokens() }
+            autoSyncScheduler.start(appScope)
+            syncTriggers.register(appScope)
+        }
     }
 }

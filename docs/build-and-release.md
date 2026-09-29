@@ -63,8 +63,13 @@ No location permission, no analytics/crash SDKs, no accounts. `allowBackup` with
 Every push to `main` refreshes the rolling **`latest`** pre-release (one universal APK — no native
 ABI split matters since the app is Android 12+ and `zstd-jni` ships all ABIs — plus
 `SHA256SUMS.txt`); a `v*` tag publishes a permanent release. Artifact retention 14 days (org max).
-Signed with the project key (`CN=AQ Sync, O=walkthru.earth`, SHA-256 `b039d9e8…f04f3f7`) when the
-`KEYSTORE_*` secrets exist, otherwise with the debug key and the release notes say so.
+Signing is **fail-closed**. Release tasks require all four `AQSYNC_*` signing variables and an
+existing keystore; Gradle never substitutes the debug signing config. The release job requires the
+four keystore secrets plus `RELEASE_CERT_SHA256`, validates that the alias/private-key entry opens,
+compares its certificate fingerprint to the configured value, runs the full `verify` suite in the
+same job, builds the APK, and checks the APK signer with `apksigner` before publishing. A missing,
+partial, wrong, or debug configuration fails before release creation. The expected project key is
+`CN=AQ Sync, O=walkthru.earth`, SHA-256 `b039d9e8…f04f3f7`.
 
 `tools/setup-signing.sh` generated `secrets/release.jks` (PKCS12, RSA 4096, 30 y) and
 `secrets/.env` with the `AQSYNC_*` variables `app/build.gradle.kts` reads

@@ -3,6 +3,7 @@ package earth.walkthru.aqsync.ui.device
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import earth.walkthru.aqsync.data.ArchiveTimeSummary
 import earth.walkthru.aqsync.data.DeviceConnectionRepository
 import earth.walkthru.aqsync.data.DeviceEvent
 import earth.walkthru.aqsync.data.ReconnectState
@@ -18,6 +19,7 @@ import earth.walkthru.aqsync.data.local.database.MetricBucketDao
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.settings.AppSettings
 import earth.walkthru.aqsync.data.settings.DetailLevel
+import earth.walkthru.aqsync.data.sync.ClockSyncMode
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -48,6 +50,8 @@ data class TodayUiState(
     val advancedMode: Boolean = false,
     val reconnecting: ReconnectState? = null,
     val detailLevel: DetailLevel = DetailLevel.SIMPLE,
+    val clockSyncMode: ClockSyncMode = ClockSyncMode.ASK,
+    val archiveTime: ArchiveTimeSummary = ArchiveTimeSummary(),
     /** Today (local calendar day) for this station from the hourly tier, once the phone archive has timed rows for it. */
     val todaySoFar: TodaySoFar? = null,
 )
@@ -87,7 +91,7 @@ class TodayViewModel @Inject constructor(
 
     val uiState: StateFlow<TodayUiState> = combine(
         repository.session, repository.connectionState, repository.info, repository.status, repository.live, repository.sync,
-        settings.detailLevel, repository.reconnecting, repository.activeTransport, todaySoFar,
+        settings.detailLevel, repository.reconnecting, repository.activeTransport, todaySoFar, settings.clockSyncMode, repository.archiveTimeSummary,
     ) { values ->
         val session = values[0] as earth.walkthru.aqsync.data.ble.DeviceSession?
         TodayUiState(
@@ -105,6 +109,8 @@ class TodayViewModel @Inject constructor(
             detailLevel = values[6] as DetailLevel,
             reconnecting = values[7] as ReconnectState?,
             todaySoFar = values[9] as TodaySoFar?,
+            clockSyncMode = values[10] as ClockSyncMode,
+            archiveTime = values[11] as ArchiveTimeSummary,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TodayUiState())
 
@@ -116,6 +122,7 @@ class TodayViewModel @Inject constructor(
         }
     }.distinctUntilChanged()
 
+    fun smartSync(clockConfirmed: Boolean = false) = repository.smartSync(uiState.value.clockSyncMode, clockConfirmed)
     fun setTimeFromPhone() = repository.setTimeFromPhone()
     fun flush() = repository.flush()
     fun requestStatus() = repository.requestStatus()

@@ -3,9 +3,11 @@ package earth.walkthru.aqsync.ui.debug
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import earth.walkthru.aqsync.data.ArchiveTimeSummary
 import earth.walkthru.aqsync.data.DeviceConnectionRepository
 import earth.walkthru.aqsync.data.DeviceEvent
 import earth.walkthru.aqsync.data.LogTailState
+import earth.walkthru.aqsync.data.SyncDiagnostic
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.RawFrameRecord
 import earth.walkthru.aqsync.data.ble.TransportKind
@@ -47,6 +49,8 @@ data class DebugUiState(
     val rawBusy: Boolean = false,
     val rawResults: List<RawResult> = emptyList(),
     val rawError: String? = null,
+    val archiveTime: ArchiveTimeSummary = ArchiveTimeSummary(),
+    val syncDiagnostics: List<SyncDiagnostic> = emptyList(),
     val advancedMode: Boolean = false,
 )
 
@@ -91,7 +95,16 @@ class DebugViewModel @Inject constructor(
         )
     }
 
-    val uiState: StateFlow<DebugUiState> = combine(base, repository.logTail, rawBusy, rawResults, rawError, settings.advancedMode) { values ->
+    val uiState: StateFlow<DebugUiState> = combine(
+        base,
+        repository.logTail,
+        rawBusy,
+        rawResults,
+        rawError,
+        settings.advancedMode,
+        repository.archiveTimeSummary,
+        repository.syncDiagnostics,
+    ) { values ->
         @Suppress("UNCHECKED_CAST")
         (values[0] as DebugUiState).copy(
             log = values[1] as LogTailState,
@@ -99,6 +112,8 @@ class DebugViewModel @Inject constructor(
             rawResults = values[3] as List<RawResult>,
             rawError = values[4] as String?,
             advancedMode = values[5] as Boolean,
+            archiveTime = values[6] as ArchiveTimeSummary,
+            syncDiagnostics = values[7] as List<SyncDiagnostic>,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DebugUiState())
 

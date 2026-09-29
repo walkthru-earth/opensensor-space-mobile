@@ -28,7 +28,25 @@ plugins {
 fun env(name: String): String? = providers.environmentVariable(name).orNull?.takeIf { it.isNotBlank() }
 val ciVersionCode = env("AQSYNC_VERSION_CODE")?.toIntOrNull()
 val ciVersionName = env("AQSYNC_VERSION_NAME")
+val releaseSigningVariables = listOf(
+    "AQSYNC_KEYSTORE_FILE",
+    "AQSYNC_KEYSTORE_PASSWORD",
+    "AQSYNC_KEY_ALIAS",
+    "AQSYNC_KEY_PASSWORD",
+)
+val requestedReleaseTasks = gradle.startParameter.taskNames.any { task ->
+    task.substringAfterLast(':').contains("release", ignoreCase = true)
+}
+val missingReleaseSigningVariables = releaseSigningVariables.filter { env(it) == null }
+if (requestedReleaseTasks && missingReleaseSigningVariables.isNotEmpty()) {
+    throw GradleException(
+        "Release tasks require project signing credentials; missing: ${missingReleaseSigningVariables.joinToString()}",
+    )
+}
 val releaseKeystore = env("AQSYNC_KEYSTORE_FILE")?.let { rootProject.file(it) }
+if (requestedReleaseTasks && releaseKeystore?.isFile != true) {
+    throw GradleException("AQSYNC_KEYSTORE_FILE must name an existing regular file")
+}
 
 android {
     namespace = "earth.walkthru.aqsync"
@@ -48,15 +66,12 @@ android {
     }
 
     signingConfigs {
-        // Release key only when CI (or a developer) provides one; the file never enters the repo
-        // (*.jks is ignored). Without it the release build type is signed with the debug key below,
-        // so a CI artifact is always installable — as a *test* build, not a store release.
-        if (releaseKeystore != null) {
+        if (releaseKeystore != null && missingReleaseSigningVariables.isEmpty()) {
             create("release") {
                 storeFile = releaseKeystore
-                storePassword = providers.environmentVariable("AQSYNC_KEYSTORE_PASSWORD").orNull
-                keyAlias = providers.environmentVariable("AQSYNC_KEY_ALIAS").orNull
-                keyPassword = providers.environmentVariable("AQSYNC_KEY_PASSWORD").orNull
+                storePassword = env("AQSYNC_KEYSTORE_PASSWORD")
+                keyAlias = env("AQSYNC_KEY_ALIAS")
+                keyPassword = env("AQSYNC_KEY_PASSWORD")
             }
         }
     }
@@ -65,7 +80,7 @@ android {
         getByName("release") {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = if (releaseKeystore != null) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release")
         }
     }
 

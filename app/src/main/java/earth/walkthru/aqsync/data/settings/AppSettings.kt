@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
+import earth.walkthru.aqsync.data.sync.ClockSyncMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
@@ -45,6 +46,11 @@ class AppSettings @Inject constructor(@ApplicationContext private val context: C
             ?: if (prefs[ADVANCED_MODE] == true) DetailLevel.DEVELOPER else DetailLevel.SIMPLE
     }
 
+    /** Consent policy for SET_TIME during an explicit Smart Sync. Default asks first. */
+    val clockSyncMode: Flow<ClockSyncMode> = context.settingsStore.data.map { prefs ->
+        prefs[CLOCK_SYNC_MODE]?.let { name -> ClockSyncMode.entries.firstOrNull { it.name == name } } ?: ClockSyncMode.ASK
+    }
+
     /** Detailed or Developer. */
     val detailed: Flow<Boolean> = detailLevel.map { it.detailed }
 
@@ -58,11 +64,16 @@ class AppSettings @Inject constructor(@ApplicationContext private val context: C
         }
     }
 
+    suspend fun setClockSyncMode(mode: ClockSyncMode) {
+        context.settingsStore.edit { it[CLOCK_SYNC_MODE] = mode.name }
+    }
+
     /** Kept for callers that only know the old switch: on → Developer, off → Simple. */
     suspend fun setAdvancedMode(on: Boolean) = setDetailLevel(if (on) DetailLevel.DEVELOPER else DetailLevel.SIMPLE)
 
     private companion object {
         val ADVANCED_MODE = booleanPreferencesKey("advanced_mode")
         val DETAIL_LEVEL = stringPreferencesKey("detail_level")
+        val CLOCK_SYNC_MODE = stringPreferencesKey("clock_sync_mode")
     }
 }

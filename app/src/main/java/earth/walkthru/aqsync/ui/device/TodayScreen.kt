@@ -50,7 +50,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import earth.walkthru.aqsync.R
+import earth.walkthru.aqsync.data.ArchiveTimeSummary
 import earth.walkthru.aqsync.data.DeviceEvent
+import earth.walkthru.aqsync.data.SyncProgress
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.history.NowReading
 import earth.walkthru.aqsync.data.protocol.DeviceStatus
@@ -94,12 +96,16 @@ fun TodayScreen(
     // happens to be composed: a "Set time" tap must never reset it (see the keyed items below).
     val listState = rememberLazyListState()
     var showSettings by remember { mutableStateOf(false) }
+    var confirmTime by remember { mutableStateOf(false) }
+    var confirmSmartSyncClock by remember { mutableStateOf<String?>(null) }
+    var confirmFlush by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.events.collect { ev ->
             when (ev) {
                 is DeviceEvent.Error -> snackbar.showSnackbar(ev.message)
                 is DeviceEvent.Info -> snackbar.showSnackbar(ev.message)
+                is DeviceEvent.ClockConfirmationRequired -> confirmSmartSyncClock = ev.reason
             }
         }
     }
@@ -107,9 +113,6 @@ fun TodayScreen(
     LaunchedEffect(state.address) {
         if (state.address != null && state.address != address) onDisconnected()
     }
-
-    var confirmTime by remember { mutableStateOf(false) }
-    var confirmFlush by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -184,6 +187,14 @@ fun TodayScreen(
                     item(key = "board") { BoardCard(state.live?.sample, state.status?.status) }
                     item(key = "storage") { StorageCard(state.status?.status, state.status?.receivedAtEpochMs, now) }
                 }
+                item(key = "smart-sync") {
+                    SmartSyncCard(
+                        sync = state.sync,
+                        archive = state.archiveTime,
+                        enabled = state.connection.isReady,
+                        onSync = { viewModel.smartSync() },
+                    )
+                }
                 item(key = "clock") {
                     ClockCard(
                         status = state.status?.status,
@@ -230,6 +241,20 @@ fun TodayScreen(
             },
             confirmButton = { TextButton(onClick = { confirmTime = false; viewModel.setTimeFromPhone() }) { Text("Set time") } },
             dismissButton = { TextButton(onClick = { confirmTime = false }) { Text("Cancel") } },
+        )
+    }
+    confirmSmartSyncClock?.let { reason ->
+        AlertDialog(
+            onDismissRequest = { confirmSmartSyncClock = null },
+            icon = { Icon(Icons.Rounded.Schedule, contentDescription = null) },
+            title = { Text("Smart Sync needs a clock anchor") },
+            text = {
+                Text(
+                    "$reason. Send this phone's trusted time before downloading? This only timestamps future rows; raw files are never rewritten."
+                )
+            },
+            confirmButton = { TextButton(onClick = { confirmSmartSyncClock = null; viewModel.smartSync(clockConfirmed = true) }) { Text("Set time and sync") } },
+            dismissButton = { TextButton(onClick = { confirmSmartSyncClock = null }) { Text("Not now") } },
         )
     }
     if (confirmFlush) {
@@ -478,8 +503,56 @@ private fun Counter(label: String, value: Long?, color: Color? = null) {
 }
 
 @Composable
+private fun SmartSyncCard(sync: SyncProgress, archive: ArchiveTimeSummary, enabled: Boolean, onSync: () -> Unit) {
+    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
+            Eyebrow("smart sync")
+            Spacer(Modifier.height(6.dp))
+            Text(
+                when {
+                    sync.running -> "Syncing ${sync.filesDone} of ${sync.filesTotal} file(s)…"
+                    archive.unplacedRows > 0 -> "${archive.unplacedRows} reading(s) are saved but have no trustworthy calendar time"
+                    archive.estimatedRows > 0 -> "Archive ready · ${archive.estimatedRows} earlier reading(s) placed from a same-boot anchor"
+                    archive.files > 0 -> "Archive ready · ${archive.files} verified file(s)"
+                    else -> "Checks the clock, downloads missing files, verifies them and updates charts"
+                },
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            if (archive.unplacedRows > 0) {
+                Text(
+                    "Nothing was discarded. Those readings remain exportable; this app will not invent timestamps for a boot with no anchor.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+            Button(onClick = onSync, enabled = enabled && !sync.running, modifier = Modifier.fillMaxWidth()) {
+                Text(if (sync.running) "Syncing…" else "Smart Sync")
+            }
+            Text(
+                "Finalizing the newest buffered rows stays separate so background sync does not create short files.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+    }
+}
+
+@Composable
 private fun ClockCard(status: DeviceStatus?, live: LiveSample?, enabled: Boolean, onSetTime: () -> Unit, onFlush: () -> Unit) {
     val synced = status?.utcSynced
+    val clockLabel = when (status?.clockSource) {
+        1 -> "UTC checked by a host (generation ${status.gen ?: "?"})"
+        2 -> "UTC restored from RTC — Smart Sync can refresh it"
+        0 -> "No UTC — rows go to the `unsynced` tree"
+        else -> when (synced) {
+            true -> "UTC anchored (generation ${status.gen ?: "?"})"
+            false -> "No UTC — rows go to the `unsynced` tree"
+            null -> "Unknown"
+        }
+    }
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
             Eyebrow("clock")
@@ -492,14 +565,7 @@ private fun ClockCard(status: DeviceStatus?, live: LiveSample?, enabled: Boolean
                         null -> MaterialTheme.colorScheme.outline
                     }
                 )
-                Text(
-                    when (synced) {
-                        true -> "UTC anchored (generation ${status.gen ?: "?"})"
-                        false -> "No UTC — rows go to the `unsynced` tree"
-                        null -> "Unknown"
-                    },
-                    style = MaterialTheme.typography.bodyLarge,
-                )
+                Text(clockLabel, style = MaterialTheme.typography.bodyLarge)
             }
             live?.utc?.let { ns ->
                 val inst = Instant.ofEpochSecond(ns / 1_000_000_000L, ns % 1_000_000_000L)

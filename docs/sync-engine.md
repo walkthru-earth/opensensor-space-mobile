@@ -133,11 +133,21 @@ a completed run, or any other failure is left alone. Seen on the phone: the sync
 moment before the link was declared lost, the reconnect succeeded with `resumeSync=false`, and the
 user had to press Sync all again — hence the policy.
 
-## State-changing requests
+## Smart Sync and state-changing requests
+
+**Smart Sync is an explicit user action.** It evaluates the pure `SmartSyncPolicy` before downloading:
+`clk == 1` continues; `clk == 2` (RTC restored) or no UTC follows the app setting **Ask first ·
+Automatic · Never**. The default is Ask first. Choosing Automatic is durable user consent for Smart
+Sync to send `SET_TIME` when those states are detected. It sends time before LIST/download so a later
+same-boot timed file can anchor earlier untimed files. It never rewrites an archive file and never
+includes `FLUSH`; finalizing remains a separate confirmed **sync through now** action so periodic or
+ordinary pulls do not create short files. Unknown clock state is not guessed (`utc == 1` on old
+firmware is treated as anchored).
 
 `SET_TIME`, `FLUSH`, `SET_CONFIG`, `REBOOT` (and `ble.clear_bonds` / `lan.rotate_token` inside
-`SET_CONFIG`) are **explicit user actions with an explanation**; the destructive ones (reboot, rotate
-token, forget bonds, pairing mode `none`) need a confirmation dialog.
+`SET_CONFIG`) are **explicit user actions or covered by the user's explicit Smart Sync clock policy**;
+the destructive ones (reboot, rotate token, forget bonds, pairing mode `none`) need a confirmation
+dialog.
 
 `REBOOT` (0x0B) has exactly **one** call path: `DeviceSession.reboot()` ←
 `DeviceConnectionRepository.rebootAndReconnect()` ← the Device screen's confirmation dialog. It is

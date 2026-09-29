@@ -55,13 +55,18 @@ stateDiagram-v2
   Stored --> Stored: LAN HELLO ok
   Stored --> Stale: LAN ERROR 14 (rotated elsewhere) → lanToken cleared
   Stale --> Stored: next BLE session refetches, snackbar "LAN token renewed"
+  Stored --> Stale: unreadable encrypted value → token + port cleared
   Stored --> None: Forget device / deliberate Rotate token
 ```
 
-Lives only in `known_device.lanToken` (hex, nullable). **Never logged, never displayed**:
-`KnownDevice.toString`, `Frame.Token.toString`, `FrameRecorder` and the raw-command view redact it.
-Any LAN failure other than `AUTH_FAILED` keeps the token. Restored by Android backup (the database),
-which is what keeps LAN alive on a new phone since bonds never transfer ([data-model.md](data-model.md#backup)).
+The DAO exposes the 64-character hex value but stores AES-GCM ciphertext in
+`known_device.lanToken` (nullable). **Never logged, never displayed**: `KnownDevice.toString`,
+`Frame.Token.toString`, `FrameRecorder` and the raw-command view redact it. Startup finishes the
+one-time plaintext migration before Auto-sync scheduling or triggers can read credentials. A missing
+Keystore key, failed GCM authentication, or malformed encrypted value clears only the token and port,
+keeps the known-device row, and falls back to BLE; the next bonded BLE session fetches a fresh token.
+Any LAN failure other than `AUTH_FAILED` keeps a readable token. Unrelated DAO/programmer failures are
+not converted into token loss ([data-model.md](data-model.md#backup)).
 
 ## Lost link → automatic reconnect (repository)
 

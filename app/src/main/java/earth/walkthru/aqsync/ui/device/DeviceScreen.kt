@@ -118,6 +118,7 @@ fun DeviceScreen(
             when (ev) {
                 is DeviceEvent.Error -> snackbar.showSnackbar(ev.message)
                 is DeviceEvent.Info -> snackbar.showSnackbar(ev.message)
+                is DeviceEvent.ClockConfirmationRequired -> snackbar.showSnackbar("Open Today and run Smart Sync to confirm the clock update.")
             }
         }
     }

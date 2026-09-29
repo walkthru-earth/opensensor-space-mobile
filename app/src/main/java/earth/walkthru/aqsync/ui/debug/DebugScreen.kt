@@ -88,6 +88,7 @@ fun DebugScreen(
             when (ev) {
                 is DeviceEvent.Error -> snackbar.showSnackbar(ev.message)
                 is DeviceEvent.Info -> snackbar.showSnackbar(ev.message)
+                is DeviceEvent.ClockConfirmationRequired -> snackbar.showSnackbar("Open Today and run Smart Sync to confirm the clock update.")
             }
         }
     }
@@ -138,6 +139,22 @@ fun DebugScreen(
                         StatLine("endpoint", state.endpoint ?: "—")
                         StatLine("payload_max", state.payloadMax?.let { "$it B" } ?: "—")
                         StatLine("state", state.connection.let { c -> c::class.simpleName ?: "?" })
+                    }
+                }
+                item(key = "sync-diagnostics") {
+                    SectionCard("smart sync diagnostics") {
+                        val a = state.archiveTime
+                        StatLine("archive", "${a.files} files · ${a.rows} rows")
+                        StatLine("real UTC", "${a.realTimeRows} rows")
+                        StatLine("same-boot estimate", "${a.estimatedRows} rows in ${a.estimatedFiles} files")
+                        StatLine("unplaced", "${a.unplacedRows} rows in ${a.unplacedFiles} files · ${a.unplacedBoots} boot(s)")
+                        Spacer(Modifier.height(8.dp))
+                        MonoBox(
+                            state.syncDiagnostics.asReversed().joinToString("\n") { d ->
+                                "${timeOf(d.atEpochMs)}  ${d.step.padEnd(10)} ${d.detail}"
+                            }.ifEmpty { "No Smart Sync decisions recorded yet." },
+                            maxHeight = 240,
+                        )
                     }
                 }
                 item(key = "status") {
