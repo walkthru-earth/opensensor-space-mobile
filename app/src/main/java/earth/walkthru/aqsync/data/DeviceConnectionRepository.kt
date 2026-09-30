@@ -346,7 +346,9 @@ class DeviceConnectionRepository @Inject constructor(
 
     private var notificationJob: Job? = null
     private var syncJob: Job? = null
+    private var connectJob: Job? = null
     private val connectMutex = Mutex()
+    private val connectionIntent = ConnectionIntent()
 
     // ------------------------------------------------------------------ connect
 
@@ -360,22 +362,43 @@ class DeviceConnectionRepository @Inject constructor(
      */
     fun connect(address: String, name: String?, fake: Boolean = false, preference: TransportPreference = TransportPreference.AUTO) {
         check(boundAddress == null || boundAddress == address) { "controller belongs to another device" }
-        scope.launch {
-            reconnectJob?.cancel()
-            reconnectJob = null
-            _reconnecting.value = null
-            connectMutex.withLock { connectLocked(address, name, fake, preference) }
+        val claim = connectionIntent.claim()
+        val job = scope.launch(start = CoroutineStart.LAZY) {
+            connectMutex.withLock {
+                if (!connectionIntent.owns(claim)) return@withLock
+                cancelReconnect()
+                connectLocked(address, name, fake, preference, claim)
+                if (!connectionIntent.owns(claim)) closeSessionLocked()
+            }
+        }
+        synchronized(this) {
+            connectJob?.cancel()
+            connectJob = job
+        }
+        job.invokeOnCompletion { synchronized(this) { if (connectJob === job) connectJob = null } }
+        job.start()
+    }
+
+    private fun cancelPendingConnect() {
+        synchronized(this) {
+            connectJob?.cancel()
+            connectJob = null
         }
     }
 
     /** Body of [connect]; true when a session is Ready afterwards. Caller holds [connectMutex]. */
-    private suspend fun connectLocked(address: String, name: String?, fake: Boolean, preference: TransportPreference): Boolean {
+    private suspend fun connectLocked(address: String, name: String?, fake: Boolean, preference: TransportPreference, claim: Long): Boolean {
         if (backgroundOwner.value != null) {
             _events.tryEmit(DeviceEvent.Info("Background collection owns this device. Its progress remains available; reconnect after it finishes."))
             return false
         }
         val existing = _session.value
-        if (existing != null && existing.address == address && existing.connectionState.value.isReady) return true
+        if (existing != null && existing.address == address && existing.connectionState.value.isReady) {
+            // A repeated Connect is a new explicit intent even when it can reuse the pipe. Give
+            // the existing link watcher the new claim so future loss still reconnects it.
+            watchLink(existing, address, name, fake, claim)
+            return true
+        }
         closeSessionLocked()
         resetDerivedState()
 
@@ -394,7 +417,7 @@ class DeviceConnectionRepository @Inject constructor(
             transport = transportFactory.ble(address)
         }
         val opened = try {
-            openSession(transport, address, name, fake)
+            openSession(transport, address, name, fake, claim = claim)
         } catch (e: CancellationException) {
             withContext(NonCancellable) { closeSessionLocked() }
             throw e
@@ -474,7 +497,7 @@ class DeviceConnectionRepository @Inject constructor(
      * [watch] = false (background sync) skips the lost-link auto-reconnect: the worker has no user
      * to keep informed and simply tries again at its next period.
      */
-    private suspend fun openSession(transport: AqTransport, address: String, name: String?, fake: Boolean, watch: Boolean = true): Boolean {
+    private suspend fun openSession(transport: AqTransport, address: String, name: String?, fake: Boolean, watch: Boolean = true, claim: Long? = null): Boolean {
         val session = (_session.value?.takeIf { it.transport === transport } ?: DeviceSession(transport))
             .also { it.staleFrameLogger = { m -> Log.w(TAG, m) } }
         _session.value = session
@@ -486,7 +509,6 @@ class DeviceConnectionRepository @Inject constructor(
             return false
         }
         startNotificationCollection(session)
-        if (watch) watchLink(session, address, name, fake)
         try {
             val info = session.readInfo()
             val proto = info.proto
@@ -563,6 +585,9 @@ class DeviceConnectionRepository @Inject constructor(
             _events.tryEmit(DeviceEvent.Error(connectionFailure.value!!))
             return false
         }
+        // Verification and enrollment must finish before link loss can start an automatic
+        // reconnect. A rejected or half-open session must never re-enroll itself later.
+        if (watch && claim != null && connectionIntent.owns(claim)) watchLink(session, address, name, fake, claim)
         return true
     }
 
@@ -588,21 +613,25 @@ class DeviceConnectionRepository @Inject constructor(
     private fun startNotificationCollection(session: DeviceSession) {
         notificationJob?.cancel()
         notificationJob = scope.launch {
-            launch { session.status.collect { _status.value = TimedStatus(it, System.currentTimeMillis()) } }
-            launch { session.statusJson.collect { _statusRaw.value = it } }
-            launch { session.live.collect { _live.value = TimedLive(it, System.currentTimeMillis()) } }
+            launch { session.status.collect { if (_session.value === session) _status.value = TimedStatus(it, System.currentTimeMillis()) } }
+            launch { session.statusJson.collect { if (_session.value === session) _statusRaw.value = it } }
+            launch { session.live.collect { if (_session.value === session) _live.value = TimedLive(it, System.currentTimeMillis()) } }
         }
     }
 
     fun disconnect() {
+        val claim = connectionIntent.claim()
+        cancelPendingConnect()
         cancelReconnect()
-        scope.launch { connectMutex.withLock { closeSessionLocked() } }
+        scope.launch { connectMutex.withLock { if (connectionIntent.owns(claim)) closeSessionLocked() } }
     }
 
     /** [disconnect] that returns once the slot is empty (so a background job queued right after does not find the session). */
     suspend fun disconnectNow() {
+        val claim = connectionIntent.claim()
+        cancelPendingConnect()
         cancelReconnect()
-        connectMutex.withLock { closeSessionLocked() }
+        connectMutex.withLock { if (connectionIntent.owns(claim)) closeSessionLocked() }
     }
 
     private suspend fun closeSessionLocked() {
@@ -642,33 +671,42 @@ class DeviceConnectionRepository @Inject constructor(
      * died of the pipe itself ("no response from device within 60 s", socket error), see
      * [SyncResumePolicy] — is resumed; a user Stop or a completed run is not.
      */
-    private fun watchLink(session: DeviceSession, address: String, name: String?, fake: Boolean) {
+    private fun watchLink(session: DeviceSession, address: String, name: String?, fake: Boolean, claim: Long) {
         linkWatchJob?.cancel()
         linkWatchJob = scope.launch {
             val lost = session.connectionState.first { !it.isReady && it !is ConnectionState.Connecting && !it.isBusy }
-            if (_session.value !== session) return@launch
+            if (_session.value !== session || !connectionIntent.owns(claim)) return@launch
             val reason = (lost as? ConnectionState.Failed)?.reason ?: "device closed the connection"
             val sync = _sync.value
             val resume = SyncResumePolicy.shouldResume(sync.running, sync.endCause, sync.finishedAtEpochMs, System.currentTimeMillis())
             Log.w(TAG, "link lost ($reason); auto-reconnect starts, resumeSync=$resume (running=${sync.running}, lastEnd=${sync.endCause})")
-            reconnectJob = scope.launch { reconnectLoop(address, name, fake, reason, resume) }
+            reconnectJob = scope.launch { reconnectLoop(address, name, fake, reason, resume, claim) }
         }
     }
 
-    private suspend fun reconnectLoop(address: String, name: String?, fake: Boolean, reason: String, resumeSync: Boolean) {
+    private suspend fun reconnectLoop(address: String, name: String?, fake: Boolean, reason: String, resumeSync: Boolean, claim: Long) {
         try {
             for (attempt in 1..RECONNECT_ATTEMPTS) {
+                if (!connectionIntent.owns(claim)) return
                 _reconnecting.value = ReconnectState(attempt, RECONNECT_ATTEMPTS, reason)
                 _events.tryEmit(DeviceEvent.Info("Link lost ($reason). Reconnecting ($attempt/$RECONNECT_ATTEMPTS)…"))
                 delay(RECONNECT_DELAY_MS)
                 val ok = connectMutex.withLock {
+                    if (!connectionIntent.owns(claim)) return@withLock null
                     // A newer session appeared meanwhile (user action): stop.
                     val cur = _session.value
                     if (cur != null && cur.connectionState.value.isReady) return@withLock true
-                    connectLocked(address, name, fake, TransportPreference.AUTO)
+                    val opened = connectLocked(address, name, fake, TransportPreference.AUTO, claim)
+                    if (!connectionIntent.owns(claim)) {
+                        closeSessionLocked()
+                        null
+                    } else {
+                        opened
+                    }
                 }
+                if (ok == null) return
                 if (ok) {
-                    if (resumeSync) {
+                    if (resumeSync && connectionIntent.owns(claim)) {
                         // The manifest refresh started by connectLocked feeds `plan`; sync once it is there.
                         withTimeoutOrNull(MANIFEST_WAIT_MS) { plan.filterNotNull().first() }
                         syncAll()
@@ -676,9 +714,9 @@ class DeviceConnectionRepository @Inject constructor(
                     return
                 }
             }
-            _events.tryEmit(DeviceEvent.Error("Could not reconnect after $RECONNECT_ATTEMPTS attempts. Use Reconnect when the device is back."))
+            if (connectionIntent.owns(claim)) _events.tryEmit(DeviceEvent.Error("Could not reconnect after $RECONNECT_ATTEMPTS attempts. Use Reconnect when the device is back."))
         } finally {
-            _reconnecting.value = null
+            if (connectionIntent.owns(claim)) _reconnecting.value = null
         }
     }
 
@@ -697,16 +735,18 @@ class DeviceConnectionRepository @Inject constructor(
      * second request would only queue behind the stale reply ([DeviceSession] drains it first).
      */
     private suspend fun refreshManifestNow(session: DeviceSession): Boolean {
+        if (_session.value !== session) return false
         _manifest.update { it.refreshing() }
         return try {
             val (files, end) = session.list()
+            if (_session.value !== session) return false
             _manifest.update { it.loaded(files, end, System.currentTimeMillis()) }
             true
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             Log.w(TAG, "LIST failed: ${e.message}")
-            _manifest.update { it.failed(e.message ?: "LIST failed") }
+            if (_session.value === session) _manifest.update { it.failed(e.message ?: "LIST failed") }
             false
         }
     }
@@ -1206,15 +1246,22 @@ class DeviceConnectionRepository @Inject constructor(
         val address = session.address
         val name = session.transport.displayName
         val fake = isFake
+        val claim = connectionIntent.claim()
         scope.launch {
             try {
+                if (!connectionIntent.owns(claim)) return@launch
                 if (_sync.value.running) throw IllegalStateException("a sync started meanwhile; not rebooting")
                 val r = session.reboot()
                 _events.tryEmit(DeviceEvent.Info("Device is rebooting (in ${r.delayMs} ms). Reconnecting…"))
                 delay(r.delayMs.toLong().coerceIn(100L, 5_000L))
-                connectMutex.withLock { closeSessionLocked() }
+                connectMutex.withLock { if (connectionIntent.owns(claim)) closeSessionLocked() }
+                if (!connectionIntent.owns(claim)) return@launch
                 delay(REBOOT_RECONNECT_DELAY_MS)
-                connect(address, name, fake = fake)
+                connectMutex.withLock {
+                    if (!connectionIntent.owns(claim)) return@withLock
+                    connectLocked(address, name, fake, TransportPreference.AUTO, claim)
+                    if (!connectionIntent.owns(claim)) closeSessionLocked()
+                }
             } catch (e: DeviceErrorException) {
                 _events.tryEmit(DeviceEvent.Error(e.message ?: "REBOOT rejected"))
             } catch (e: CancellationException) {
@@ -1222,6 +1269,9 @@ class DeviceConnectionRepository @Inject constructor(
             } catch (e: Exception) {
                 _events.tryEmit(DeviceEvent.Error("REBOOT failed: ${e.message}"))
             } finally {
+                // A rejected reboot keeps the original session. The new explicit intent invalidated
+                // its old link watcher, so re-arm it if that session still belongs to this action.
+                if (connectionIntent.owns(claim) && _session.value === session) watchLink(session, address, name, fake, claim)
                 _busy.value = false
             }
         }
@@ -1311,8 +1361,11 @@ class DeviceConnectionRepository @Inject constructor(
 
     suspend fun forget(address: String) = withContext(Dispatchers.IO) {
         check(boundAddress == null || boundAddress == address) { "controller belongs to another device" }
+        val claim = connectionIntent.claim()
+        cancelPendingConnect()
         cancelReconnect()
         connectMutex.withLock {
+            if (!connectionIntent.owns(claim)) return@withLock
             // Forget must revoke the live session as well as the saved token. Otherwise the phone
             // can keep using a LAN pipe after its credentials disappear from Settings, and an
             // in-flight connection can re-create the known row while the delete is in flight.
