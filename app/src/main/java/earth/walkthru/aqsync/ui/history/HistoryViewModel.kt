@@ -14,6 +14,7 @@ import earth.walkthru.aqsync.data.history.ArchiveSeriesQuery
 import earth.walkthru.aqsync.data.history.HistoryRange
 import earth.walkthru.aqsync.data.history.HistoryRepository
 import earth.walkthru.aqsync.data.history.HistorySeries
+import earth.walkthru.aqsync.data.history.HistoryWindow
 import earth.walkthru.aqsync.data.history.MetricSpec
 import earth.walkthru.aqsync.data.history.Metrics
 import earth.walkthru.aqsync.data.history.archiveQueryResults
@@ -36,6 +37,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.time.ZoneId
 
 data class HistoryUiState(
     /** Initial Room lookups and the selected archive query have not finished yet. */
@@ -46,6 +48,7 @@ data class HistoryUiState(
     val metric: MetricSpec = Metrics.PM25,
     val availableMetrics: List<MetricSpec> = emptyList(),
     val range: HistoryRange = HistoryRange.DAY,
+    val zone: ZoneId = ZoneId.systemDefault(),
     /** End of the visible span (epoch seconds); "now" rounded up unless the user paged back. */
     val toS: Long = 0,
     val series: HistorySeries? = null,
@@ -65,7 +68,8 @@ data class HistoryUiState(
     val connection: ConnectionState = ConnectionState.Disconnected,
     val transport: TransportKind? = null,
 ) {
-    val canPageForward: Boolean get() = toS < nowRounded(range)
+    val window: HistoryWindow get() = HistoryWindow.endingAt(toS, range, zone)
+    val canPageForward: Boolean get() = toS < nowRounded(range, zone)
 }
 
 /**
@@ -73,8 +77,7 @@ data class HistoryUiState(
  * local days — a Day is a calendar day (the ring's dial has midnight at the top), a Week seven of
  * them ending tonight, and so on. The buckets underneath stay UTC-aligned.
  */
-fun nowRounded(@Suppress("UNUSED_PARAMETER") range: HistoryRange, zone: java.time.ZoneId = java.time.ZoneId.systemDefault()): Long =
-    java.time.LocalDate.now(zone).plusDays(1).atStartOfDay(zone).toEpochSecond()
+fun nowRounded(range: HistoryRange, zone: ZoneId = ZoneId.systemDefault()): Long = HistoryWindow.current(range, zone).toS
 
 /**
  * History works from the archive alone — no session needed — but shows the link chip when one exists.
@@ -94,6 +97,7 @@ class HistoryViewModel @AssistedInject constructor(
     settings: AppSettings,
 ) : ViewModel() {
     private val repository = manager.controller(deviceAddress)
+    private val zone = ZoneId.systemDefault()
 
     @AssistedFactory
     interface Factory {
@@ -109,7 +113,7 @@ class HistoryViewModel @AssistedInject constructor(
     fun bind(address: String) { this.address.value = address }
     private val metric = MutableStateFlow(Metrics.PM25)
     private val range = MutableStateFlow(HistoryRange.DAY)
-    private val toS = MutableStateFlow(nowRounded(HistoryRange.DAY))
+    private val toS = MutableStateFlow(nowRounded(HistoryRange.DAY, zone))
 
     /**
      * True until the user pages back: the span then follows "now", so a screen left open across local
@@ -122,7 +126,7 @@ class HistoryViewModel @AssistedInject constructor(
         viewModelScope.launch {
             while (true) {
                 delay(60_000)
-                if (followsNow.value) toS.value = nowRounded(range.value)
+                if (followsNow.value) toS.value = nowRounded(range.value, zone)
             }
         }
     }
@@ -139,8 +143,8 @@ class HistoryViewModel @AssistedInject constructor(
         viewModelScope.launch {
             stationQuery.collectLatest { station ->
                 if (station == null) return@collectLatest
-                val latest = latestHistoryDayEnd(archivedFileDao.observeForStation(station).first(), java.time.ZoneId.systemDefault())
-                val now = nowRounded(range.value)
+                val latest = latestHistoryDayEnd(archivedFileDao.observeForStation(station).first(), zone)
+                val now = nowRounded(range.value, zone)
                 toS.value = minOf(latest ?: now, now)
                 followsNow.value = toS.value == now
             }
@@ -162,11 +166,11 @@ class HistoryViewModel @AssistedInject constructor(
         if (available.isNotEmpty() && metric.value !in available) metric.value = available.first()
     }.stateIn(viewModelScope, SharingStarted.Eagerly, ArchiveQueryResult<String?, List<MetricSpec>>(null, null))
 
-    private val series = combine(device, metric, range, toS) { d, m, r, t -> ArchiveSeriesQuery(d?.station, m, r, t) }
+    private val series = combine(device, metric, range, toS) { d, m, r, t -> ArchiveSeriesQuery(d?.station, m, r, HistoryWindow.endingAt(t, r, zone)) }
         .distinctUntilChanged()
         .archiveQueryResults { query ->
             val station = query.station
-            if (station == null) flowOf(null) else history.observe(station, query.metric, query.range, query.toS)
+            if (station == null) flowOf(null) else history.observe(station, query.metric, query.range, query.window)
         }
 
     private val fileCounts = stationQuery.archiveQueryResults { station ->
@@ -193,7 +197,7 @@ class HistoryViewModel @AssistedInject constructor(
         @Suppress("UNCHECKED_CAST")
         val countsResult = values[5] as ArchiveQueryResult<String?, HistoryFileCounts>
         val counts = countsResult.forQuery(d?.station) ?: HistoryFileCounts()
-        val query = ArchiveSeriesQuery(d?.station, values[1] as MetricSpec, values[2] as HistoryRange, values[3] as Long)
+        val query = ArchiveSeriesQuery(d?.station, values[1] as MetricSpec, values[2] as HistoryRange, HistoryWindow.endingAt(values[3] as Long, values[2] as HistoryRange, zone))
 
         @Suppress("UNCHECKED_CAST")
         val result = values[4] as ArchiveQueryResult<ArchiveSeriesQuery, HistorySeries>
@@ -217,6 +221,7 @@ class HistoryViewModel @AssistedInject constructor(
             metric = values[1] as MetricSpec,
             availableMetrics = available,
             range = values[2] as HistoryRange,
+            zone = zone,
             toS = values[3] as Long,
             series = result.forQuery(query),
             filesWithTime = counts.withTime,
@@ -233,30 +238,30 @@ class HistoryViewModel @AssistedInject constructor(
             connection = values[8] as ConnectionState,
             transport = values[9] as TransportKind?,
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HistoryUiState(toS = toS.value))
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HistoryUiState(toS = toS.value, zone = zone))
 
     fun setMetric(m: MetricSpec) { metric.value = m }
 
     fun setRange(r: HistoryRange) {
         val followedNow = followsNow.value
         range.value = r
-        toS.value = if (followedNow) nowRounded(r) else minOf(toS.value, nowRounded(r))
-        followsNow.value = toS.value == nowRounded(r)
+        toS.value = if (followedNow) nowRounded(r, zone) else minOf(toS.value, nowRounded(r, zone))
+        followsNow.value = toS.value == nowRounded(r, zone)
     }
 
     fun page(direction: Int) {
         val r = range.value
-        val next = toS.value + direction * r.seconds
-        val now = nowRounded(r)
+        val next = HistoryWindow.endingAt(toS.value, r, zone).page(r, direction).toS
+        val now = nowRounded(r, zone)
         toS.value = minOf(next, now)
         followsNow.value = toS.value == now
     }
 
-    /** From a calendar cell: show that UTC day (ending at its midnight). */
+    /** From a calendar cell: show its complete local day. */
     fun openDay(dayStartS: Long) {
         range.value = HistoryRange.DAY
-        val now = nowRounded(HistoryRange.DAY)
-        toS.value = minOf(dayStartS + 86_400, now)
+        val now = nowRounded(HistoryRange.DAY, zone)
+        toS.value = minOf(HistoryWindow.dayContaining(dayStartS, zone).toS, now)
         followsNow.value = toS.value == now
     }
 }

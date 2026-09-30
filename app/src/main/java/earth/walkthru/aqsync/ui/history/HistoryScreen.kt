@@ -48,6 +48,7 @@ import earth.walkthru.aqsync.data.history.Columns
 import earth.walkthru.aqsync.data.history.HistoryColumn
 import earth.walkthru.aqsync.data.history.HistoryRange
 import earth.walkthru.aqsync.data.history.HistorySeries
+import earth.walkthru.aqsync.data.history.HistoryWindow
 import earth.walkthru.aqsync.data.history.MetricSpec
 import earth.walkthru.aqsync.data.history.Metrics
 import earth.walkthru.aqsync.data.history.TimeEstimate
@@ -78,7 +79,7 @@ fun HistoryScreen(
 ) {
     LaunchedEffect(address) { viewModel.bind(address) }
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    val zone = ZoneId.systemDefault()
+    val zone = state.zone
 
     Scaffold(
         topBar = {
@@ -142,7 +143,7 @@ fun HistoryScreen(
             item(key = "span") {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { viewModel.page(-1) }) { Icon(Icons.Rounded.ChevronLeft, contentDescription = "Earlier") }
-                    Text(spanLabel(state.range, state.toS, zone), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    Text(spanLabel(state.range, state.window), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                     IconButton(onClick = { viewModel.page(1) }, enabled = state.canPageForward) { Icon(Icons.Rounded.ChevronRight, contentDescription = "Later") }
                 }
             }
@@ -238,9 +239,13 @@ private fun ChartCard(state: HistoryUiState, zone: ZoneId, onOpenDay: (Long) -> 
                 s == null -> Text("Loading…", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 s.isEmpty -> EmptySpan(state)
                 else -> {
-                    val slot = Columns.slotSeconds(state.range)
-                    val align = if (state.range == HistoryRange.YEAR) MONDAY_EPOCH_S else 0L
-                    val columns = remember(s) { Columns.rebin(s, slot, align) }
+                    val columns = remember(s, zone) {
+                        when (state.range) {
+                            HistoryRange.DAY, HistoryRange.WEEK -> Columns.rebinHours(s)
+                            HistoryRange.MONTH -> Columns.rebinLocalDays(s, zone)
+                            HistoryRange.YEAR -> Columns.rebinLocalWeeks(s, zone)
+                        }
+                    }
                     when (state.range) {
                         HistoryRange.DAY -> {
                             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -248,6 +253,7 @@ private fun ChartCard(state: HistoryUiState, zone: ZoneId, onOpenDay: (Long) -> 
                                     columns = columns,
                                     metric = state.metric,
                                     dayStartS = s.fromS,
+                                    dayEndS = s.toS,
                                     mean = s.mean,
                                     coverage = s.coverage,
                                     nowS = System.currentTimeMillis() / 1000,
@@ -258,9 +264,9 @@ private fun ChartCard(state: HistoryUiState, zone: ZoneId, onOpenDay: (Long) -> 
                             Spacer(Modifier.height(8.dp))
                         }
                         HistoryRange.MONTH, HistoryRange.YEAR -> {
-                            val days = remember(s) { Columns.rebin(s, 86_400L, 0L) }
-                            CalendarHeatmap(days, state.metric, s.fromS, s.toS, onPickDay = { onOpenDay(it.startS) })
-                            InfoNote("One cell per UTC day, coloured by its average; tap a day to open it.")
+                            val days = remember(s, zone) { Columns.rebinLocalDays(s, zone) }
+                            CalendarHeatmap(days, state.metric, s.fromS, s.toS, onPickDay = { onOpenDay(it.startS) }, zone = zone)
+                            InfoNote("One cell per local day, coloured by its average; tap a day to open it.")
                             Spacer(Modifier.height(8.dp))
                         }
                         HistoryRange.WEEK -> Unit
@@ -292,15 +298,15 @@ private fun SelectedColumn(c: HistoryColumn?, state: HistoryUiState, zone: ZoneI
         "Touch a column to read it"
     } else {
         val fmt = when (state.range) {
-            HistoryRange.DAY -> DateTimeFormatter.ofPattern("HH:mm")
-            HistoryRange.WEEK -> DateTimeFormatter.ofPattern("EEE HH:mm")
+            HistoryRange.DAY -> DateTimeFormatter.ofPattern("HH:mm XXX")
+            HistoryRange.WEEK -> DateTimeFormatter.ofPattern("EEE HH:mm XXX")
             HistoryRange.MONTH -> DateTimeFormatter.ofPattern("EEE d MMM")
             HistoryRange.YEAR -> DateTimeFormatter.ofPattern("d MMM")
         }.withZone(zone)
         val slot = when (state.range) {
             HistoryRange.MONTH -> fmt.format(Instant.ofEpochSecond(c.startS))
             HistoryRange.YEAR -> "week of ${fmt.format(Instant.ofEpochSecond(c.startS))}"
-            else -> "${fmt.format(Instant.ofEpochSecond(c.startS))}–${DateTimeFormatter.ofPattern("HH:mm").withZone(zone).format(Instant.ofEpochSecond(c.endS))}"
+            else -> "${fmt.format(Instant.ofEpochSecond(c.startS))}–${DateTimeFormatter.ofPattern("HH:mm XXX").withZone(zone).format(Instant.ofEpochSecond(c.endS))}"
         }
         val m = c.mean
         if (m == null) {
@@ -317,9 +323,6 @@ private fun SelectedColumn(c: HistoryColumn?, state: HistoryUiState, zone: ZoneI
     }
     Text(text, style = MaterialTheme.typography.bodySmall, color = if (c == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(top = 6.dp), maxLines = 2)
 }
-
-/** 1970-01-05 was a Monday: week columns align to it. */
-private const val MONDAY_EPOCH_S = 4 * 86_400L
 
 @Composable
 private fun Summary(s: HistorySeries) {
@@ -356,7 +359,7 @@ private fun EmptySpan(state: HistoryUiState) {
     Column {
         Text("No readings with a timestamp in this ${state.range.label.lowercase()}.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         val lastDay = state.lastDayS
-        if (lastDay != null && lastDay + 86_400 <= state.toS - state.range.seconds) {
+        if (lastDay != null && Instant.ofEpochSecond(lastDay).atZone(state.zone).toLocalDate().isBefore(Instant.ofEpochSecond(state.window.fromS).atZone(state.zone).toLocalDate())) {
             Spacer(Modifier.height(4.dp))
             Text("The latest readings are from ${DateTimeFormatter.ofPattern("d MMM yyyy").withZone(ZoneId.of("UTC")).format(Instant.ofEpochSecond(lastDay))}.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -365,9 +368,10 @@ private fun EmptySpan(state: HistoryUiState) {
 
 private fun fmt(v: Float): String = if (v >= 100) v.toInt().toString() else "%.1f".format(java.util.Locale.ROOT, v)
 
-private fun spanLabel(range: HistoryRange, toS: Long, zone: ZoneId): String {
-    val from = Instant.ofEpochSecond(toS - range.seconds)
-    val to = Instant.ofEpochSecond(toS - 1)
+private fun spanLabel(range: HistoryRange, window: HistoryWindow): String {
+    val from = Instant.ofEpochSecond(window.fromS)
+    val to = Instant.ofEpochSecond(window.toS - 1)
+    val zone = window.zone
     return when (range) {
         HistoryRange.DAY -> DateTimeFormatter.ofPattern("EEEE d MMMM").withZone(zone).format(from)
         HistoryRange.WEEK, HistoryRange.MONTH -> {

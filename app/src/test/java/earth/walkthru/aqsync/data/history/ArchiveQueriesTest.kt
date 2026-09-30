@@ -12,12 +12,15 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.ZoneId
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ArchiveQueriesTest {
+    private val zone = ZoneId.of("UTC")
+
     @Test
     fun `station metric range and paging changes hide old data before new reads complete`() = runTest {
-        val first = ArchiveSeriesQuery("station-a", Metrics.PM25, HistoryRange.DAY, 100_000L)
+        val first = ArchiveSeriesQuery("station-a", Metrics.PM25, HistoryRange.DAY, HistoryWindow.endingAt(86_400L, HistoryRange.DAY, zone))
         val queries = MutableStateFlow(first)
         var result: ArchiveQueryResult<ArchiveSeriesQuery, String>? = null
         backgroundScope.launch {
@@ -28,7 +31,7 @@ class ArchiveQueriesTest {
         runCurrent()
         assertEquals("station-a", result?.forQuery(first))
 
-        for (next in listOf(first.copy(station = "station-b"), first.copy(metric = Metrics.HUMIDITY), first.copy(range = HistoryRange.WEEK), first.copy(toS = 200_000L))) {
+        for (next in listOf(first.copy(station = "station-b"), first.copy(metric = Metrics.HUMIDITY), first.copy(range = HistoryRange.WEEK, window = HistoryWindow.endingAt(first.toS, HistoryRange.WEEK, zone)), first.copy(window = HistoryWindow.endingAt(172_800L, HistoryRange.DAY, zone)))) {
             queries.value = next
             // The UI label can update before the result collector is scheduled: old data must be hidden already.
             assertNull(result?.forQuery(next))
@@ -37,7 +40,7 @@ class ArchiveQueriesTest {
             advanceTimeBy(100)
             runCurrent()
             assertEquals(next.station, result?.forQuery(next))
-            assertEquals(next.toS - next.range.seconds, result?.query?.fromS)
+            assertEquals(next.window.fromS, result?.query?.fromS)
         }
     }
 

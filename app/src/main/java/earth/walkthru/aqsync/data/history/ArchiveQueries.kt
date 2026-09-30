@@ -6,13 +6,17 @@ import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import java.time.ZoneId
 
 /** Includes the range as well as both derived bounds, so paging and midnight cannot reuse a result. */
-data class ArchiveSeriesQuery(val station: String?, val metric: MetricSpec, val range: HistoryRange, val toS: Long) {
-    val fromS: Long get() = toS - range.seconds
+data class ArchiveSeriesQuery(val station: String?, val metric: MetricSpec, val range: HistoryRange, val window: HistoryWindow) {
+    val fromS: Long get() = window.fromS
+    val toS: Long get() = window.toS
 }
 
-data class ArchiveDayQuery(val station: String?, val dayStartS: Long)
+data class ArchiveDayQuery(val station: String?, val dayStartS: Long, val zone: ZoneId = ZoneId.systemDefault()) {
+    val window: HistoryWindow get() = HistoryWindow.dayContaining(dayStartS, zone)
+}
 
 /** Carries provenance through asynchronous reads and independently combined UI label flows. */
 data class ArchiveQueryResult<Q, V>(val query: Q, val value: V?) {

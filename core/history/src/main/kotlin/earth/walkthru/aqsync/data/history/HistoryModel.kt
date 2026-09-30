@@ -1,11 +1,15 @@
 package earth.walkthru.aqsync.data.history
 
 /** Visible span and which tier serves it. `DAY` reads the rows themselves (≤ 8,640 of them). */
-enum class HistoryRange(val seconds: Long, val tier: Resolution?, val label: String) {
-    DAY(86_400, null, "Day"),
-    WEEK(7 * 86_400, Resolution.MIN15, "Week"),
-    MONTH(30 * 86_400, Resolution.HOUR, "Month"),
-    YEAR(365 * 86_400, Resolution.DAY, "Year"),
+enum class HistoryRange(val days: Long, val tier: Resolution?, val label: String) {
+    DAY(1, null, "Day"),
+    WEEK(7, Resolution.MIN15, "Week"),
+    MONTH(30, Resolution.HOUR, "Month"),
+    YEAR(365, Resolution.HOUR, "Year"),
+    ;
+
+    /** Nominal duration for fixed-resolution chart slots; calendar windows use [HistoryWindow]. */
+    val seconds: Long get() = days * 86_400
 }
 
 /**

@@ -1,5 +1,8 @@
 package earth.walkthru.aqsync.data.history
 
+import java.time.Instant
+import java.time.ZoneId
+import java.time.temporal.TemporalAdjusters
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.log10
@@ -25,6 +28,85 @@ data class HistoryColumn(
 
 /** Pure re-binning and axis choices for the History chart; shared by every range. */
 object Columns {
+
+    /** Elapsed hours inside the exact local window: 23 or 25 columns on DST change days. */
+    fun rebinHours(series: HistorySeries): List<HistoryColumn> {
+        val boundaries = ArrayList<Long>()
+        var at = series.fromS
+        while (at < series.toS) {
+            boundaries += at
+            at += 3_600
+        }
+        boundaries += series.toS
+        return rebinBoundaries(series, boundaries)
+    }
+
+    /** One variable-length local day per cell, including 23/25-hour days. */
+    fun rebinLocalDays(series: HistorySeries, zone: ZoneId): List<HistoryColumn> {
+        val boundaries = ArrayList<Long>()
+        var day = Instant.ofEpochSecond(series.fromS).atZone(zone).toLocalDate()
+        val end = Instant.ofEpochSecond(series.toS).atZone(zone).toLocalDate()
+        while (!day.isAfter(end)) {
+            boundaries += day.atStartOfDay(zone).toEpochSecond()
+            day = day.plusDays(1)
+        }
+        return rebinBoundaries(series, boundaries)
+    }
+
+    /** Monday-aligned local weeks, clipped to the selected window at both ends. */
+    fun rebinLocalWeeks(series: HistorySeries, zone: ZoneId): List<HistoryColumn> {
+        val boundaries = arrayListOf(series.fromS)
+        var monday = Instant.ofEpochSecond(series.fromS).atZone(zone).toLocalDate()
+            .with(TemporalAdjusters.next(java.time.DayOfWeek.MONDAY))
+        while (monday.atStartOfDay(zone).toEpochSecond() < series.toS) {
+            val boundary = monday.atStartOfDay(zone).toEpochSecond()
+            if (boundary > series.fromS) boundaries += boundary
+            monday = monday.plusWeeks(1)
+        }
+        boundaries += series.toS
+        return rebinBoundaries(series, boundaries)
+    }
+
+    /** Split UTC tier points at local boundaries so both mean and coverage use the visible span. */
+    private fun rebinBoundaries(series: HistorySeries, boundaries: List<Long>): List<HistoryColumn> {
+        if (boundaries.size < 2) return emptyList()
+        val count = boundaries.size - 1
+        val weight = DoubleArray(count)
+        val sum = DoubleArray(count)
+        val covered = DoubleArray(count)
+        val estimated = DoubleArray(count)
+        val peak = FloatArray(count) { Float.NEGATIVE_INFINITY }
+        for (p in series.points) {
+            if (p.endS <= series.fromS || p.startS >= series.toS) continue
+            var i = boundaries.binarySearch(p.startS).let { if (it >= 0) it else -it - 2 }.coerceIn(0, count - 1)
+            while (i < count && boundaries[i] < p.endS) {
+                val overlap = (minOf(p.endS, boundaries[i + 1]) - maxOf(p.startS, boundaries[i])).coerceAtLeast(0)
+                if (overlap > 0) {
+                    val w = overlap * p.coverage.toDouble()
+                    covered[i] += w
+                    if (p.estimated) estimated[i] += w
+                    p.mean?.let { m ->
+                        sum[i] += m * w
+                        weight[i] += w
+                        val hi = p.max ?: m
+                        if (hi > peak[i]) peak[i] = hi
+                    }
+                }
+                i++
+            }
+        }
+        return List(count) { i ->
+            val span = (boundaries[i + 1] - boundaries[i]).toDouble()
+            HistoryColumn(
+                startS = boundaries[i],
+                endS = boundaries[i + 1],
+                mean = if (weight[i] > 0) (sum[i] / weight[i]).toFloat() else null,
+                max = if (peak[i].isFinite()) peak[i] else null,
+                coverage = (covered[i] / span).toFloat().coerceIn(0f, 1f),
+                estimatedShare = if (covered[i] > 0) (estimated[i] / covered[i]).toFloat().coerceIn(0f, 1f) else 0f,
+            )
+        }
+    }
 
     /**
      * Column width per range: 24 · 168 · 30 · 53 columns (365 days span 53 week slots). A day is drawn in **hours** (chosen

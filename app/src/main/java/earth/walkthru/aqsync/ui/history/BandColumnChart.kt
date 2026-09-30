@@ -228,18 +228,31 @@ internal fun ticks(range: HistoryRange, fromS: Long, toS: Long, zone: ZoneId): L
         HistoryRange.MONTH -> DateTimeFormatter.ofPattern("d MMM")
         HistoryRange.YEAR -> DateTimeFormatter.ofPattern("MMM")
     }.withZone(zone)
-    val step = when (range) {
-        HistoryRange.DAY -> 6 * 3600L
-        HistoryRange.WEEK -> 86_400L
-        HistoryRange.MONTH -> 7 * 86_400L
-        HistoryRange.YEAR -> 61 * 86_400L
-    }
-    val offset = zone.rules.getOffset(Instant.ofEpochSecond(toS)).totalSeconds
-    var t = Math.floorDiv(fromS + offset, step) * step - offset
     val out = ArrayList<Pair<Long, String>>()
-    while (t <= toS) {
-        if (t >= fromS) out += t to fmt.format(Instant.ofEpochSecond(t))
-        t += step
+    val first = Instant.ofEpochSecond(fromS).atZone(zone).toLocalDate()
+    if (range == HistoryRange.DAY) {
+        for (hour in 0..24 step 6) {
+            val t = if (hour == 24) {
+                first.plusDays(1).atStartOfDay(zone).toEpochSecond()
+            } else {
+                first.atTime(hour, 0).atZone(zone).toEpochSecond()
+            }
+            if (t in fromS..toS) out += t to fmt.format(Instant.ofEpochSecond(t))
+        }
+    } else {
+        val stepDays = when (range) {
+            HistoryRange.WEEK -> 1L
+            HistoryRange.MONTH -> 7L
+            HistoryRange.YEAR -> 61L
+            HistoryRange.DAY -> error("handled above")
+        }
+        var day = first
+        while (true) {
+            val t = day.atStartOfDay(zone).toEpochSecond()
+            if (t > toS) break
+            if (t >= fromS) out += t to fmt.format(Instant.ofEpochSecond(t))
+            day = day.plusDays(stepDays)
+        }
     }
     return out
 }

@@ -34,7 +34,7 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * The day as a clock: 24 hour segments around a dial (one per drawn column), midnight at the top, each coloured by
+ * The day as a clock: one segment per elapsed hour (23 or 25 across DST), midnight at the top, each coloured by
  * its band, faded by its coverage, dashed when on estimated time, dark where nothing was recorded;
  * a tick for "now" when the day is today; the day's average and its mood in the middle. Reads like
  * a watch face — you see at once *when* the air was bad — and it is the shape the iOS widget can take.
@@ -44,6 +44,7 @@ fun DayRing(
     columns: List<HistoryColumn>,
     metric: MetricSpec,
     dayStartS: Long,
+    dayEndS: Long,
     mean: Float?,
     coverage: Float,
     nowS: Long?,
@@ -66,7 +67,7 @@ fun DayRing(
             val outer = this.size.minDimension / 2 - labelPx * 1.4f
             val thickness = outer * 0.22f
             val r = outer - thickness / 2
-            val daySeconds = 86_400f
+            val daySeconds = (dayEndS - dayStartS).toFloat()
             fun angle(s: Long): Float = ((s - dayStartS) / daySeconds) * 360f - 90f // midnight at the top
             // Base track.
             drawCircle(empty, r, c, style = Stroke(thickness))
@@ -89,12 +90,9 @@ fun DayRing(
                 )
             }
             // Hour marks: 00 · 06 · 12 · 18 in the local zone.
-            val offset = zone.rules.getOffset(Instant.ofEpochSecond(dayStartS)).totalSeconds
+            val day = Instant.ofEpochSecond(dayStartS).atZone(zone).toLocalDate()
             for (h in listOf(0, 6, 12, 18)) {
-                // Local hour h → UTC seconds within the day window.
-                var s = dayStartS + h * 3600L - offset
-                while (s < dayStartS) s += 86_400
-                while (s >= dayStartS + 86_400) s -= 86_400
+                val s = day.atTime(h, 0).atZone(zone).toEpochSecond()
                 val a = angle(s) * PI.toFloat() / 180f
                 val lr = outer + labelPx * 0.8f
                 val text = "%02d".format(h)
@@ -103,7 +101,7 @@ fun DayRing(
                 drawLine(muted.copy(alpha = 0.5f), Offset(c.x + cos(a) * (outer + 2f), c.y + sin(a) * (outer + 2f)), Offset(c.x + cos(a) * (outer + 8f), c.y + sin(a) * (outer + 8f)), 1.5f)
             }
             // Now marker.
-            if (nowS != null && nowS >= dayStartS && nowS < dayStartS + 86_400) {
+            if (nowS != null && nowS >= dayStartS && nowS < dayEndS) {
                 val a = angle(nowS) * PI.toFloat() / 180f
                 drawLine(onSurface, Offset(c.x + cos(a) * (r - thickness * 0.8f), c.y + sin(a) * (r - thickness * 0.8f)), Offset(c.x + cos(a) * (r + thickness * 0.8f), c.y + sin(a) * (r + thickness * 0.8f)), 2.5f, cap = StrokeCap.Round)
             }

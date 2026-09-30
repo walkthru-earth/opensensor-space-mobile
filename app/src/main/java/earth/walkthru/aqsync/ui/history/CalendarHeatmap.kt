@@ -29,7 +29,7 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 
 /**
- * A month or a year as a calendar of days: one cell per UTC day, weeks as columns, Monday at the
+ * A month or a year as a calendar of local days: one cell per day, weeks as columns, Monday at the
  * top, coloured by the day's band and faded by its coverage; empty days are hollow; estimated days
  * dashed. Tap a day to open it. Month labels along the top. The same picture the iOS app draws with
  * a `LazyVGrid`.
@@ -87,7 +87,7 @@ fun CalendarHeatmap(
             for (dow in 0 until rows) {
                 val date = gridStart.plusDays((week * 7 + dow).toLong())
                 val startS = date.atStartOfDay(zone).toEpochSecond()
-                if (startS < fromS - 86_400 || startS >= toS) continue
+                if (startS < fromS || startS >= toS) continue
                 val col = byDay[startS]
                 val x0 = week * cellW + pad
                 val y0 = gridTop + dow * cellH + pad

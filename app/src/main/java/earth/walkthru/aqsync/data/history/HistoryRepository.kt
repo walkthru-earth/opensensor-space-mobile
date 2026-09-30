@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -30,11 +31,12 @@ class HistoryRepository @Inject constructor(
     private val bucketDao: MetricBucketDao,
 ) {
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun observe(station: String, metric: MetricSpec, range: HistoryRange, toS: Long): Flow<HistorySeries> {
-        val fromS = toS - range.seconds
+    fun observe(station: String, metric: MetricSpec, range: HistoryRange, window: HistoryWindow): Flow<HistorySeries> {
+        val fromS = window.fromS
+        val toS = window.toS
         val tier = range.tier
         return if (tier != null) {
-            bucketDao.observe(station, metric.id, tier.seconds, tier.bucketStart(fromS), toS).map { buckets -> fromBuckets(metric, range, fromS, toS, tier, buckets) }
+            observeTier(station, metric, range, window, tier)
         } else {
             // Re-read the rows only when the station's timeline actually changed (a synced or indexed
             // file, a new time estimate) — Room re-emits on every write to the table, and a day re-read
@@ -45,6 +47,16 @@ class HistoryRepository @Inject constructor(
                 .flatMapLatest { flow { emit(fromRows(station, metric, range, fromS, toS)) }.flowOn(Dispatchers.IO) }
         }
     }
+
+    /** Today card: the same exact local-day bounds, using hourly tiers plus raw boundary rows. */
+    fun observeHourlyDay(station: String, metric: MetricSpec, window: HistoryWindow): Flow<HistorySeries> =
+        observeTier(station, metric, HistoryRange.DAY, window, Resolution.HOUR)
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun observeTier(station: String, metric: MetricSpec, range: HistoryRange, window: HistoryWindow, tier: Resolution): Flow<HistorySeries> =
+        bucketDao.observe(station, metric.id, tier.seconds, tier.bucketStart(window.fromS), window.toS).mapLatest { buckets ->
+            fromBuckets(station, metric, range, window.fromS, window.toS, tier, buckets)
+        }.flowOn(Dispatchers.IO)
 
     /**
      * "Chart by file": one [FileSummary] per archived telemetry file of [station], oldest first —
@@ -73,8 +85,15 @@ class HistoryRepository @Inject constructor(
     /** Immutable files → immutable summaries; the estimate's first-UTC is part of the key because an anchor re-dates a file. */
     private val summaryCache = HashMap<Pair<Triple<String, String, Long>, Long?>, FileSummary>()
 
-    private fun fromBuckets(metric: MetricSpec, range: HistoryRange, fromS: Long, toS: Long, tier: Resolution, buckets: List<MetricBucket>): HistorySeries {
-        val points = buckets.map { b ->
+    private suspend fun fromBuckets(station: String, metric: MetricSpec, range: HistoryRange, fromS: Long, toS: Long, tier: Resolution, buckets: List<MetricBucket>): HistorySeries {
+        // A local midnight can cut through a UTC tier bucket (e.g. India at :30). Read only
+        // those two partial edges from verified rows; whole interior buckets remain cheap.
+        val firstWhole = if (tier.bucketStart(fromS) == fromS) fromS else tier.bucketStart(fromS) + tier.seconds
+        val lastWholeEnd = tier.bucketStart(toS)
+        val leading = if (fromS < firstWhole) fromRows(station, metric, range, fromS, minOf(firstWhole, toS)) else null
+        val trailing = if (lastWholeEnd < toS && lastWholeEnd >= firstWhole) fromRows(station, metric, range, lastWholeEnd, toS) else null
+        val whole = buckets.filter { it.startEpochS >= firstWhole && it.startEpochS + tier.seconds <= toS }
+        val points = leading?.points.orEmpty() + whole.map { b ->
             HistoryPoint(
                 b.startEpochS,
                 b.startEpochS + tier.seconds,
@@ -84,24 +103,29 @@ class HistoryRepository @Inject constructor(
                 (b.validRows.toFloat() / tier.expectedRows).coerceIn(0f, 1f),
                 estimated = b.estimatedRows * 2 >= b.rows && b.estimatedRows > 0,
             )
-        }
+        } + trailing?.points.orEmpty()
         var weighted = 0.0
         var weight = 0L
         var max: Float? = null
-        for (b in buckets) {
+        for (b in whole) {
             weighted += b.mean.toDouble() * b.validRows
             weight += b.validRows
             val hi = if (metric.envelope) b.max else b.mean
             max = if (max == null || hi > max) hi else max
         }
+        for (edge in listOfNotNull(leading, trailing)) {
+            weighted += (edge.mean ?: 0f).toDouble() * edge.validRows
+            weight += edge.validRows
+            edge.max?.let { hi -> max = if (max == null || hi > max) hi else max }
+        }
         return HistorySeries(
             metric, range, fromS, toS, points,
             validRows = weight,
-            expectedRows = range.seconds / 10,
+            expectedRows = (toS - fromS) / 10,
             mean = if (weight > 0) (weighted / weight).toFloat() else null,
             max = max,
             binned = false,
-            estimatedRows = buckets.sumOf { it.estimatedRows.toLong() },
+            estimatedRows = whole.sumOf { it.estimatedRows.toLong() } + listOfNotNull(leading, trailing).sumOf { it.estimatedRows },
         )
     }
 
@@ -188,7 +212,7 @@ class HistoryRepository @Inject constructor(
             }
             flush()
         }
-        return HistorySeries(metric, range, fromS, toS, points, validRows = n, expectedRows = range.seconds / 10, mean = if (n > 0) (sum / n).toFloat() else null, max = max, binned = binned, estimatedRows = estimatedRows)
+        return HistorySeries(metric, range, fromS, toS, points, validRows = n, expectedRows = (toS - fromS) / 10, mean = if (n > 0) (sum / n).toFloat() else null, max = max, binned = binned, estimatedRows = estimatedRows)
     }
 
     companion object {

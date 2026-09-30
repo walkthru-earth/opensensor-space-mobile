@@ -4,8 +4,38 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.ZoneOffset
 
 class ColumnsTest {
+
+    @Test
+    fun `local day bins retain spring 23 hours and both fall 01 hours`() {
+        val zone = ZoneId.of("America/New_York")
+        val spring = HistoryWindow.endingOn(LocalDate.of(2026, 3, 9), HistoryRange.DAY, zone)
+        val springSeries = series(emptyList(), spring.fromS, spring.toS)
+        assertEquals(23, Columns.rebinHours(springSeries).size)
+        assertEquals(23 * 3_600L, Columns.rebinLocalDays(springSeries, zone).single().endS - spring.fromS)
+
+        val fall = HistoryWindow.endingOn(LocalDate.of(2026, 11, 2), HistoryRange.DAY, zone)
+        val firstOne = LocalDateTime.of(2026, 11, 1, 1, 0).atOffset(ZoneOffset.ofHours(-4)).toEpochSecond()
+        val secondOne = LocalDateTime.of(2026, 11, 1, 1, 0).atOffset(ZoneOffset.ofHours(-5)).toEpochSecond()
+        val fallSeries = series(
+            listOf(HistoryPoint(firstOne, firstOne + 3_600, 10f, null, null, 1f), HistoryPoint(secondOne, secondOne + 3_600, 20f, null, null, 1f)),
+            fall.fromS,
+            fall.toS,
+        )
+        val hours = Columns.rebinHours(fallSeries)
+        assertEquals(25, hours.size)
+        assertEquals(10f, hours.single { it.startS == firstOne }.mean)
+        assertEquals(20f, hours.single { it.startS == secondOne }.mean)
+        val day = Columns.rebinLocalDays(fallSeries, zone).single()
+        assertEquals(25 * 3_600L, day.endS - day.startS)
+        assertEquals(15f, day.mean)
+        assertEquals(2f / 25f, day.coverage, 1e-6f)
+    }
 
     private fun series(points: List<HistoryPoint>, fromS: Long, toS: Long) =
         HistorySeries(Metrics.PM25, HistoryRange.DAY, fromS, toS, points, validRows = 0, expectedRows = 0, mean = null, max = null, binned = true)

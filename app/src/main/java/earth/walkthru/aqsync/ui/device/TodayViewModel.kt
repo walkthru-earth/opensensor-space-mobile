@@ -18,12 +18,11 @@ import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.fake.FakeTransport
 import earth.walkthru.aqsync.data.history.ArchiveDayQuery
 import earth.walkthru.aqsync.data.history.ArchiveQueryResult
+import earth.walkthru.aqsync.data.history.HistoryRepository
 import earth.walkthru.aqsync.data.history.Metrics
-import earth.walkthru.aqsync.data.history.Resolution
 import earth.walkthru.aqsync.data.history.TodaySoFar
 import earth.walkthru.aqsync.data.history.archiveQueryResults
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
-import earth.walkthru.aqsync.data.local.database.MetricBucketDao
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.settings.AppSettings
 import earth.walkthru.aqsync.data.settings.DetailLevel
@@ -67,12 +66,13 @@ class TodayViewModel @AssistedInject constructor(
     manager: DeviceConnectionManager,
     @Assisted private val deviceAddress: String,
     settings: AppSettings,
-    bucketDao: MetricBucketDao,
+    history: HistoryRepository,
     knownDeviceDao: KnownDeviceDao,
 ) : ViewModel() {
     private val repository = manager.controller(deviceAddress)
     private val enrolledDevice = knownDeviceDao.observeAll().map { devices -> devices.firstOrNull { it.address == deviceAddress } }
     private val fakeEndpoint = deviceAddress == FakeTransport.FAKE_ADDRESS || deviceAddress == FakeTransport.FAKE_LAN_ADDRESS
+    private val zone = ZoneId.systemDefault()
 
     @AssistedFactory
     interface Factory {
@@ -84,25 +84,18 @@ class TodayViewModel @AssistedInject constructor(
 
     /**
      * Today so far for the connected station — the **local** calendar day, like the History Day view,
-     * folded from the hourly tier (UTC-aligned buckets; a whole-hour offset zone folds exactly, a
-     * half-hour zone is off by at most one bucket edge). Re-emits as the deriver rebuilds, and rolls
+     * folded from the hourly tier with exact raw reads at partial UTC bucket edges. Re-emits as the deriver rebuilds, and rolls
      * over at local midnight while the screen stays open ([localDayStart] ticks once a minute).
      */
     @OptIn(ExperimentalCoroutinesApi::class)
-    private val todaySoFar = combine(repository.info.map { it?.station }.distinctUntilChanged(), dayStart) { station, start -> ArchiveDayQuery(station, start) }
+    private val todaySoFar = combine(repository.info.map { it?.station }.distinctUntilChanged(), dayStart) { station, start -> ArchiveDayQuery(station, start, zone) }
         .archiveQueryResults { query ->
             val station = query.station
             if (station == null) {
                 flowOf(null)
             } else {
-                bucketDao.observe(station, Metrics.primary.id, Resolution.HOUR.seconds, query.dayStartS, query.dayStartS + 86_400).map { buckets ->
-                    val valid = buckets.sumOf { it.validRows }
-                    if (valid == 0) {
-                        null
-                    } else {
-                        val mean = buckets.sumOf { it.mean.toDouble() * it.validRows } / valid
-                        TodaySoFar(mean.toFloat(), valid, (valid.toFloat() / Resolution.DAY.expectedRows).coerceIn(0f, 1f))
-                    }
+                history.observeHourlyDay(station, Metrics.primary, query.window).map { series ->
+                    series.mean?.let { TodaySoFar(it, series.validRows.toInt(), series.coverage) }
                 }
             }
         }
@@ -130,7 +123,7 @@ class TodayViewModel @AssistedInject constructor(
             advancedMode = (values[6] as DetailLevel).developer,
             detailLevel = values[6] as DetailLevel,
             reconnecting = values[7] as ReconnectState?,
-            todaySoFar = today.forQuery(ArchiveDayQuery(info?.station, values[13] as Long)),
+            todaySoFar = today.forQuery(ArchiveDayQuery(info?.station, values[13] as Long, zone)),
             clockSyncMode = values[10] as ClockSyncMode,
             archiveTime = values[11] as ArchiveTimeSummary,
         )
@@ -144,7 +137,7 @@ class TodayViewModel @AssistedInject constructor(
         }
     }.distinctUntilChanged()
 
-    private fun currentDayStart(): Long = LocalDate.now(ZoneId.systemDefault()).atStartOfDay(ZoneId.systemDefault()).toEpochSecond()
+    private fun currentDayStart(): Long = LocalDate.now(zone).atStartOfDay(zone).toEpochSecond()
 
     fun smartSync(clockConfirmed: Boolean = false) = repository.smartSync(uiState.value.clockSyncMode, clockConfirmed)
     fun setTimeFromPhone() = repository.setTimeFromPhone()
