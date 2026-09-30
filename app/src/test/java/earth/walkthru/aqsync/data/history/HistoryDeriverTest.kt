@@ -69,6 +69,15 @@ class HistoryDeriverTest {
         val second = deriver.deriveStale()
         assertEquals(0, second.daysRebuilt)
 
+        // The Room signature is a cache marker; missing output files must be rebuilt from the archive.
+        assertTrue(store.manifestFile(station, 20713).delete())
+        assertEquals(1, deriver.deriveStale().daysRebuilt)
+        assertTrue(store.manifestFile(station, 20713).isFile)
+        assertTrue(dayFile.delete())
+        assertEquals(1, deriver.deriveStale().daysRebuilt)
+        assertTrue(dayFile.isFile)
+        assertEquals(0, deriver.deriveStale().daysRebuilt)
+
         // A second file for the same day (here: the same bytes under another name and CRC) changes the signature.
         put("station=$station/year=2026/month=09/day=17/data_1000_a_107-211-3.parquet", "device/v3-board-2rg-105rows.parquet", 3)
         val third = deriver.deriveStale()

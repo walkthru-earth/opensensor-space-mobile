@@ -69,6 +69,35 @@ class HistoryIndexerTest {
         }
     }
 
+    @Test
+    fun `backfillAll estimates unsynced files even when no rows need indexing`() = runBlocking {
+        val tmp = java.nio.file.Files.createTempDirectory("aq-history-estimate").toFile()
+        try {
+            val archive = FileArchive(tmp)
+            val dao = InMemoryDao()
+            val station = "station-1"
+            val boot = "boot-1"
+            dao.rows += ArchivedFile(
+                station = station, name = "unsynced.parquet", bytes = 1, crc32 = 1, sha256 = "a", syncedAtEpochMs = 1, sourceDevice = "fake",
+                indexedAtEpochMs = 1, rows = 2, utcRows = 0, bootId = boot, firstMonoUs = 1_000_000, lastMonoUs = 2_000_000,
+            )
+            dao.rows += ArchivedFile(
+                station = station, name = "anchor.parquet", bytes = 1, crc32 = 2, sha256 = "b", syncedAtEpochMs = 1, sourceDevice = "fake",
+                indexedAtEpochMs = 1, rows = 2, utcRows = 2, bootId = boot, firstUtcNs = 10_000_000_000, lastUtcNs = 11_000_000_000,
+                firstMonoUs = 3_000_000, lastMonoUs = 4_000_000,
+            )
+
+            HistoryIndexer(archive, dao).backfillAll()
+
+            val estimated = dao.rows.first { it.name == "unsynced.parquet" }
+            assertEquals(8_000_000_000L, estimated.estFirstUtcNs)
+            assertEquals(9_000_000_000L, estimated.estLastUtcNs)
+            assertEquals("anchor.parquet", estimated.estAnchorFile)
+        } finally {
+            tmp.deleteRecursively()
+        }
+    }
+
     private class InMemoryDao : ArchivedFileDao {
         val rows = mutableListOf<ArchivedFile>()
         override fun observeAll(): Flow<List<ArchivedFile>> = flowOf(rows)

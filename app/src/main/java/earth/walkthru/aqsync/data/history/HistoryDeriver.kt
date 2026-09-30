@@ -91,7 +91,8 @@ class HistoryDeriver @Inject constructor(
                     val dayStartNs = day * DAY_NS
                     val sources = archivedFileDao.withUtcBetween(station, dayStartNs, dayStartNs + DAY_NS)
                     val sig = signature(sources)
-                    if (known[day]?.sourceSignature == sig) continue
+                    val cached = known[day]
+                    if (cached?.sourceSignature == sig && cached.dailyFile != null && store.dayFile(station, day).isFile && store.manifestFile(station, day).isFile) continue
                     val built = buildDay(station, day, sources, anchorsByStation[station] ?: emptyMap())
                     rebuilt++
                     rows += built

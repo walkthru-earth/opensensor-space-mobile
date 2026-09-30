@@ -88,7 +88,11 @@ class HistoryIndexer @Inject constructor(
 
     /** Runs [backfill] until nothing is left, bounded, then the time-estimate pass. */
     suspend fun backfillAll(maxBatches: Int = 50) {
-        repeat(maxBatches) { if (backfill() == 0) return }
+        var remaining = maxBatches
+        while (remaining > 0) {
+            if (backfill() == 0) break
+            remaining--
+        }
         estimateTimes()
     }
 
