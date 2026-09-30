@@ -22,6 +22,12 @@ address keys the enrolled Room row and controller, including reconnect after a w
 session. Archive/history use station epochs; a full
 `info.dev` check guards continuity. Returning to Devices retains other controllers and their work.
 
+Each Navigation 3 entry owns its ViewModel and saveable UI state. Popping a detail page or
+replacing a sibling tab clears that screen's jobs; the process-owned controller and any
+WorkManager collection continue. Room and repository flows update visible screens without
+manual reload. A screen refreshes device state after reconnect, when its request key changes,
+or when the user requests it. Compose recomposition only renders the latest state.
+
 ## Detail levels (`DetailLevel`, DataStore)
 
 | Level | Shows | Notes |

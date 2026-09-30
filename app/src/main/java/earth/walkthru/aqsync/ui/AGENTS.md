@@ -8,6 +8,11 @@ need the same behavior.
 
 - Known devices are devices the owner connected to; a nearby advertisement is
   only a scan result. Forget must stay forgotten until explicit reconnection.
+- Navigation 3 entries own screen ViewModels. Load once when an entry opens;
+  collect observable Room/repository state with lifecycle awareness. Refresh
+  only for explicit user action, reconnection, or changed request keys. A
+  composable recomposition must never start transport/file work. Cancel screen
+  jobs on pop; process-owned controllers and WorkManager may outlive the screen.
 - Simple mode must explain the current reading and archive state without
   Debug. Advanced mode only reveals extra information; it must not alter sync.
 - Distinguish stale, unavailable and unverified readings from zero. Keep

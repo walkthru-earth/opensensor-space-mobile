@@ -4,9 +4,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleStartEffect
+import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
+import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import earth.walkthru.aqsync.ui.debug.DebugScreen
 import earth.walkthru.aqsync.ui.device.DeviceScreen
@@ -23,8 +25,9 @@ fun MainNavigation(modifier: Modifier = Modifier) {
     LanDiscoveryEffect()
 
     fun openTab(key: NavKey) {
-        // Today / Files / Device behave as sibling tabs: replace rather than stack.
+        // Device tabs are siblings: replace rather than stack, and keep the active tab intact.
         val last = backStack.lastOrNull()
+        if (last == key) return
         if (last is TodayKey || last is HistoryKey || last is FilesKey || last is DeviceKey) backStack.removeLastOrNull()
         backStack.add(key)
     }
@@ -35,6 +38,10 @@ fun MainNavigation(modifier: Modifier = Modifier) {
         modifier = modifier,
         backStack = backStack,
         onBack = { backStack.removeLastOrNull() },
+        entryDecorators = listOf(
+            rememberSaveableStateHolderNavEntryDecorator(),
+            rememberViewModelStoreNavEntryDecorator(),
+        ),
         entryProvider = entryProvider {
             entry<ScanKey> {
                 ScanScreen(onConnected = { address -> backStack.add(TodayKey(address)) })
