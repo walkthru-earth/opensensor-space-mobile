@@ -3,7 +3,7 @@
 
 Run from the firmware repo so its pixi environment (PyArrow, clang++) is used:
 
-    cd ../m5stack-aq-parquet && pixi run python ../m5stack-aq-android/tools/make_parquet_fixtures.py
+    cd ../aq-parquet && pixi run python ../opensensor-space-android/tools/make_parquet_fixtures.py
 
 It copies a representative set of *real* device files (v1 73-column, v2 77-column and the first v3 board
 file, UNCOMPRESSED
@@ -28,7 +28,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 ANDROID = Path(__file__).resolve().parents[1]
-FIRMWARE = ANDROID.parent / "m5stack-aq-parquet"
+FIRMWARE = ANDROID.parent / "aq-parquet"
 EXPORT = FIRMWARE / "exports/sd-20260916T173205Z/output"
 # The first file the board wrote with firmware v6 (contract v3): 2 row groups (90 + 15 rows), statistics,
 # TIMESTAMP annotation, fetched over serial on 2026-09-17 (SHA-256 1a06e93b…f3cf).

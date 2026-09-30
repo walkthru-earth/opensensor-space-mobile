@@ -4,7 +4,7 @@ package earth.walkthru.aqsync.data.protocol
  * Advertising service data, protocol revision 2.1 (firmware `-v6.3`): ten little-endian bytes the
  * device broadcasts under [AqUuids.SERVICE] so a phone learns "something changed" without
  * connecting — and so an offloaded scan filter can wake the app on a flag bit. Layout and rules:
- * `../m5stack-aq-parquet/docs/ble-sync-protocol.md`, "Advertising payload (v2.1)".
+ * `../aq-parquet/docs/shared/ble-sync-protocol.md`, "Advertising payload (v2.1)".
  *
  * Everything in it is public to anyone in range; it carries presence, counters and health bits only.
  */

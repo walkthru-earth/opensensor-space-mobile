@@ -118,8 +118,8 @@ that drops the link and applies pending `ble.*` changes. Persists for the proces
 ## Provenance and generator gotchas
 
 ```sh
-git clone --depth 1 --branch base https://github.com/android/architecture-templates.git m5stack-aq-android
-cd m5stack-aq-android && rm -rf .git
+git clone --depth 1 --branch base https://github.com/android/architecture-templates.git opensensor-space-android
+cd opensensor-space-android && rm -rf .git
 /opt/homebrew/bin/bash customizer.sh earth.walkthru.aqsync Device "AQ Sync"   # bash ≥ 4; macOS ships 3
 ```
 

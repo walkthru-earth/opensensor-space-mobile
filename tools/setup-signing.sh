@@ -13,7 +13,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-REPO="${AQSYNC_GH_REPO:-walkthru-earth/m5stack-aq-android}"
+REPO="${AQSYNC_GH_REPO:-walkthru-earth/opensensor-space-android}"
 DIR="secrets"
 KS="$DIR/release.jks"
 ENV="$DIR/.env"
