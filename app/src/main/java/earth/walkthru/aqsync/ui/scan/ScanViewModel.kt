@@ -19,14 +19,17 @@ import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.local.database.KnownDevice
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
 import earth.walkthru.aqsync.data.local.database.MetricBucketDao
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -120,28 +123,13 @@ class ScanViewModel @Inject constructor(
 
     private var scanJob: Job? = null
     private var pruneJob: Job? = null
+    private var scanGeneration = 0
 
     fun startScan() {
         if (scanJob?.isActive == true) return
+        val generation = ++scanGeneration
         scanError.value = null
         scanning.value = true
-        scanJob = viewModelScope.launch {
-            BleScanner.scan(context).collect { ev ->
-                when (ev) {
-                    is BleScanner.Event.Seen -> {
-                        seen.update { it + (ev.device.address to ev.device) }
-                        // An advertisement is only a nearby candidate. The connection repository
-                        // enrolls a device when the user opens it; never turn a passive scan into
-                        // a saved device (or undo Forget as soon as the next advert arrives).
-                        knownDeviceDao.touch(ev.device.address, ev.device.name, ev.device.lastSeenEpochMs)
-                    }
-                    is BleScanner.Event.Failed -> {
-                        scanError.value = ev.message
-                        stopScan()
-                    }
-                }
-            }
-        }
         pruneJob?.cancel()
         pruneJob = viewModelScope.launch {
             while (isActive) {
@@ -150,9 +138,42 @@ class ScanViewModel @Inject constructor(
                 seen.update { m -> m.filterValues { it.lastSeenEpochMs >= cutoff } }
             }
         }
+        scanJob = viewModelScope.launch {
+            try {
+                BleScanner.scan(context).takeWhile { ev ->
+                    when (ev) {
+                        is BleScanner.Event.Seen -> {
+                            seen.update { it + (ev.device.address to ev.device) }
+                            // Only an explicit connection enrolls a device; a passive scan must
+                            // not recreate a row that the user chose to forget.
+                            knownDeviceDao.touch(ev.device.address, ev.device.name, ev.device.lastSeenEpochMs)
+                            true
+                        }
+                        is BleScanner.Event.Failed -> {
+                            scanError.value = ev.message
+                            false
+                        }
+                    }
+                }.collect()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                scanError.value = "Could not scan: ${e.message ?: e::class.simpleName}"
+            } finally {
+                // A stopped run can finish after a new run starts. Only its own generation may
+                // clear the current button state or cancel the current pruning loop.
+                if (scanGeneration == generation) {
+                    scanning.value = false
+                    pruneJob?.cancel()
+                    pruneJob = null
+                    scanJob = null
+                }
+            }
+        }
     }
 
     fun stopScan() {
+        scanGeneration++
         scanJob?.cancel()
         scanJob = null
         pruneJob?.cancel()
