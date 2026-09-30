@@ -7,9 +7,10 @@
 ## One-line status
 
 The **opensensor.space** initial implementation adds independent device controllers, bounded
-concurrent collection, station-epoch recovery and reviewed sensor profiles. All new behavior is
-host-tested; multi-device Bluetooth/LAN, Android notification lifetime, upgrade migration and
-reset/reflash recovery still require phone qualification. See [opensensor-space.md](opensensor-space.md).
+concurrent collection, station-epoch recovery and reviewed sensor profiles. The current build
+has a one-file foreground BLE sync and navigation/resume check on a phone; multi-device
+Bluetooth/LAN, Android notification lifetime, upgrade migration and reset/reflash recovery
+still require phone qualification. See [opensensor-space.md](opensensor-space.md).
 
 
 Implements **protocol v2** (+ the 2.1 advertising payload) + **Auto-sync** with event-driven
@@ -23,19 +24,41 @@ companion presence and the Wi-Fi-arrival run are not.
 
 ## Current host gate (2026-09-30)
 
-`./gradlew --no-daemon verify`: **236 tests passed, zero skipped or failed** across
+`./gradlew --no-daemon verify`: **241 tests passed, zero skipped or failed** across
 `:app` and the three `:core` modules; zero lint errors. The debug APK builds.
 The optional real-archive test now finds the sibling `aq-parquet` checkout and
 decoded all 767 local Parquet files (67,442 rows) instead of silently skipping
 that corpus. The stdlib SQLite migration validator passes against v8/v9 exports.
 These are host checks; the dated ladder below retains the hardware baseline.
 
-The OnePlus 7 Pro (Android 16 / API 36) accepted the final debug APK in place
+The OnePlus 7 Pro (Android 16 / API 36) accepted the current debug APK in place
 with `adb install -r`, preserving app data. APK SHA-256:
-`b22cbd4d08497ec2927c22a6fcdd1f3bfea2c6ed96cd56d229c93618b605365b`.
-The phone remained at its lock screen during this run, so foreground UI, BLE
-collection and post-install archive behavior were not observed here. The
-firmware-side Waveshare flash and SD readback are recorded in its bench file.
+`4f00537c996d77a39bea9a09f322b62309d1e955a3868ba05d3dfbb46206de7f`.
+The unlocked-phone lifecycle and one-file BLE check is recorded below; the
+firmware-side flash and SD readback are in its board bench file.
+
+## Lifecycle and foreground BLE check (2026-09-30 Cairo)
+
+OnePlus 7 Pro (GM1911, Android 16 / API 36), app commit `d1f91e4`, APK SHA-256
+`4f00537c996d77a39bea9a09f322b62309d1e955a3868ba05d3dfbb46206de7f`.
+Installation preserved the archive and connected AQ-7500 over Bluetooth to the
+Waveshare station `81c0da75-009b-4922-94f9-64e310f006b8`. History loaded
+its 30 September PM2.5 day chart (26.7 µg/m³, 25% coverage). Switching
+History → Files → History, then backgrounding and reopening the app, showed
+the same chart. Files' explicit refresh updated the LIST age without clearing
+its verified listing. The earlier initial History state exposed an empty 0/0
+placeholder while Room resolved; the current build displays “Loading archive…”
+until the query is ready.
+
+Today reported zero dropped rows and storage errors. Its confirmed “Finalize
+buffered rows” action made one short file available. Files showed 150 finalized
+files with one pending transfer. Foreground **Sync all** over BLE completed
+**1/1 file, 16.8 KiB displayed**, then showed “Everything on the card is in the
+archive and verified”; the phone archive count rose from 1,399 to 1,400. This
+is a one-file transfer and UI lifecycle check, not a full-archive throughput,
+LAN, screen-off sync or multi-device qualification. The board had no UTC anchor,
+so those new readings were archived without invented calendar times. See the
+[Waveshare bench record](../../aq-parquet/docs/boards/waveshare-esp32-s3-sim7670g/bench-verified.md).
 
 ## USB installation and stale pairing (2026-09-29)
 
