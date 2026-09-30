@@ -63,6 +63,31 @@ class HistoryRepositoryTest {
         assertEquals(15f / 90f, week.points[0].coverage, 1e-6f)
     }
 
+    @Test
+    fun `day view counts duplicate boot sequences once across files`() = runBlocking {
+        val tmp = File.createTempFile("aq-hist-duplicates", "").apply { delete(); mkdirs(); deleteOnExit() }
+        val archive = FileArchive(tmp)
+        val files = Files()
+        val fixture = bytes("device/v3-board-2rg-105rows.parquet")
+        for ((index, name) in listOf(
+            "station=$station/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet",
+            "station=$station/year=2026/month=09/day=17/data_1000_a_107-211-3.parquet",
+        ).withIndex()) {
+            val file = archive.fileFor(station, name).apply { parentFile!!.mkdirs(); writeBytes(fixture) }
+            files.rows += HistoryIndexer(archive, files).indexed(
+                ArchivedFile(station = station, name = name, bytes = fixture.size.toLong(), crc32 = index.toLong(), sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"),
+                file,
+            )
+        }
+
+        val day = HistoryRepository(archive, files, Buckets())
+            .observe(station, Metrics.PM25, HistoryRange.DAY, dayStart + 86_400).first()
+        assertEquals(105, day.points.size)
+        assertEquals(105L, day.validRows)
+        assertEquals(27.93f, day.mean!!, 0.01f)
+        assertEquals(105f / 8640f, day.coverage, 1e-6f)
+    }
+
     private class Files : ArchivedFileDao {
         val rows = mutableListOf<ArchivedFile>()
         override fun observeAll(): Flow<List<ArchivedFile>> = flowOf(rows.toList())

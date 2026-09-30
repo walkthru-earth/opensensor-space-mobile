@@ -111,6 +111,7 @@ class HistoryRepository @Inject constructor(
         val times = ArrayList<Long>()
         val values = ArrayList<Float>() // NaN = invalid / null
         val estimatedFlags = ArrayList<Boolean>()
+        val seen = HashSet<Triple<Long, Long, Long>>()
         var estimatedRows = 0L
         for (f in files) {
             val file = archive.fileFor(f.station, f.name)
@@ -118,6 +119,9 @@ class HistoryRepository @Inject constructor(
             val pf = try { ParquetFile.open(file) } catch (e: ParquetFormatException) { continue }
             val md = pf.metadata
             val utc = md.leaf(ParquetIndexer.UTC)?.let { pf.readColumn(it) } ?: continue
+            val bootHi = md.leaf("boot_id_hi")?.let { pf.readColumn(it) }
+            val bootLo = md.leaf("boot_id_lo")?.let { pf.readColumn(it) }
+            val seq = md.leaf(ParquetIndexer.SEQ)?.let { pf.readColumn(it) }
             val anchor = if (f.hasEstimatedUtc) anchors[f.bootId]?.takeIf { it.boot == md.bootId } else null
             val mono = if (anchor != null) md.leaf(ParquetIndexer.MONO)?.let { pf.readColumn(it) } else null
             val gate = metric.gate?.let { g -> md.leaf(g.column)?.let { pf.readColumn(it) } }
@@ -131,6 +135,10 @@ class HistoryRepository @Inject constructor(
                 } ?: continue
                 val s = Math.floorDiv(ns, 1_000_000_000L)
                 if (s < fromS || s >= toS) continue
+                if (seq != null) {
+                    val key = Triple(bootHi?.asLong(i) ?: 0L, bootLo?.asLong(i) ?: 0L, seq.asLong(i) ?: -1L)
+                    if (key.third >= 0 && !seen.add(key)) continue
+                }
                 val ok = metric.accepts(gate?.asLong(i))
                 val v = if (ok) col?.asDouble(i)?.toFloat()?.takeIf { it.isFinite() } else null
                 times += s
