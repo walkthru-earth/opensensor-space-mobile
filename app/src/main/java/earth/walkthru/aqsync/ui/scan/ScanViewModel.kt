@@ -130,7 +130,9 @@ class ScanViewModel @Inject constructor(
                 when (ev) {
                     is BleScanner.Event.Seen -> {
                         seen.update { it + (ev.device.address to ev.device) }
-                        knownDeviceDao.insertIfAbsent(KnownDevice(ev.device.address, ev.device.name, null, null, null, ev.device.lastSeenEpochMs, null))
+                        // An advertisement is only a nearby candidate. The connection repository
+                        // enrolls a device when the user opens it; never turn a passive scan into
+                        // a saved device (or undo Forget as soon as the next advert arrives).
                         knownDeviceDao.touch(ev.device.address, ev.device.name, ev.device.lastSeenEpochMs)
                     }
                     is BleScanner.Event.Failed -> {

@@ -22,6 +22,7 @@ import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Radar
 import androidx.compose.material.icons.rounded.Stop
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -34,6 +35,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -72,6 +74,7 @@ fun ScanScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    var forgetTarget by remember { mutableStateOf<Pair<String, String?>?>(null) }
 
     // Scan while the screen is visible; the radio is not free.
     LifecycleStartEffect(Unit) {
@@ -174,6 +177,7 @@ fun ScanScreen(
                     known = known,
                     summary = known?.station?.let { state.summaries[it] },
                     onClick = { openDevice(dev.address, dev.name) },
+                    onForget = { forgetTarget = dev.address to dev.name },
                 )
             }
 
@@ -187,7 +191,7 @@ fun ScanScreen(
                         now = now,
                         onLan = dev.station != null && dev.station in state.lanStations,
                         onClick = { openDevice(dev.address, dev.name) },
-                        onForget = { viewModel.forget(dev.address) },
+                        onForget = { forgetTarget = dev.address to dev.name },
                     )
                 }
             }
@@ -215,10 +219,23 @@ fun ScanScreen(
             }
         }
     }
+    forgetTarget?.let { (address, name) ->
+        AlertDialog(
+            onDismissRequest = { forgetTarget = null },
+            title = { Text("Forget ${name ?: address}?") },
+            text = {
+                Text("This removes the saved device, its LAN access, and automatic collection settings from this phone. Files already collected stay here. The logger may still appear under Nearby while it is advertising.")
+            },
+            confirmButton = {
+                TextButton(onClick = { forgetTarget = null; viewModel.forget(address) }) { Text("Forget device") }
+            },
+            dismissButton = { TextButton(onClick = { forgetTarget = null }) { Text("Cancel") } },
+        )
+    }
 }
 
 @Composable
-private fun NearbyRow(device: ScannedDevice, known: KnownDevice?, summary: LoggerSummary?, onClick: () -> Unit) {
+private fun NearbyRow(device: ScannedDevice, known: KnownDevice?, summary: LoggerSummary?, onClick: () -> Unit, onForget: () -> Unit) {
     Surface(
         shape = MaterialTheme.shapes.extraLarge,
         color = MaterialTheme.colorScheme.surfaceContainer,
@@ -239,6 +256,7 @@ private fun NearbyRow(device: ScannedDevice, known: KnownDevice?, summary: Logge
             }
             Spacer(Modifier.width(12.dp))
             RssiMeter(device.rssi)
+            if (known != null) ForgetMenu(onForget)
         }
     }
 }
@@ -267,7 +285,6 @@ private fun ArchiveLine(summary: LoggerSummary?, now: Long) {
 
 @Composable
 private fun KnownRow(device: KnownDevice, summary: LoggerSummary?, now: Long, onLan: Boolean, onClick: () -> Unit, onForget: () -> Unit) {
-    var menu by remember { mutableStateOf(false) }
     Surface(
         shape = MaterialTheme.shapes.extraLarge,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -297,11 +314,17 @@ private fun KnownRow(device: KnownDevice, summary: LoggerSummary?, now: Long, on
                 ArchiveLine(summary, now)
             }
             Icon(Icons.Rounded.Link, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, contentDescription = "Options") }
-            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                DropdownMenuItem(text = { Text("Forget") }, onClick = { menu = false; onForget() })
-            }
+            ForgetMenu(onForget)
         }
+    }
+}
+
+@Composable
+private fun ForgetMenu(onForget: () -> Unit) {
+    var menu by remember { mutableStateOf(false) }
+    IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, contentDescription = "Device options") }
+    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+        DropdownMenuItem(text = { Text("Forget") }, onClick = { menu = false; onForget() })
     }
 }
 
