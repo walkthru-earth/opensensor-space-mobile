@@ -143,91 +143,101 @@ class SyncEngine @Inject constructor(
                 return FileOutcome.Synced(name, opened.size, sha256, alreadyArchived = true)
             }
 
-            val (writer, resumeFrom) = archive.openPartial(station, name, opened.size, opened.crc32)
-            var offset = resumeFrom
-            onProgress(FileProgress(name, offset, opened.size, resumeFrom))
-
             var windowsRecovered = 0
-            writer.use { w ->
-                val readLength = maxRead.coerceAtLeast(1).toLong()
-                var attempt = 0
-                while (offset < opened.size) {
-                    currentCoroutineContext().ensureActive()
-                    val before = offset
-                    val end = try {
-                        session.read(handle, offset, readLength) { chunk ->
-                            when {
-                                chunk.offset == offset -> {
-                                    w.writeAt(chunk.offset, chunk.payload)
-                                    offset += chunk.payload.size
-                                }
-                                // Duplicate or overlapping chunk: the bytes are identical (immutable file), keep going.
-                                chunk.offset < offset -> {
-                                    val overlap = (offset - chunk.offset).toInt()
-                                    if (overlap < chunk.payload.size) {
-                                        w.writeAt(offset, chunk.payload.copyOfRange(overlap, chunk.payload.size))
-                                        offset = chunk.offset + chunk.payload.size
+            var retriedWithoutPartial = false
+            while (true) {
+                val (writer, resumeFrom) = archive.openPartial(station, name, opened.size, opened.crc32)
+                var offset = resumeFrom
+                onProgress(FileProgress(name, offset, opened.size, resumeFrom, windowsRecovered))
+                writer.use { w ->
+                    val readLength = maxRead.coerceAtLeast(1).toLong()
+                    var attempt = 0
+                    while (offset < opened.size) {
+                        currentCoroutineContext().ensureActive()
+                        val before = offset
+                        val end = try {
+                            session.read(handle, offset, readLength) { chunk ->
+                                when {
+                                    chunk.offset == offset -> {
+                                        w.writeAt(chunk.offset, chunk.payload)
+                                        offset += chunk.payload.size
                                     }
+                                    // Duplicate or overlapping chunk: the bytes are identical (immutable file), keep going.
+                                    chunk.offset < offset -> {
+                                        val overlap = (offset - chunk.offset).toInt()
+                                        if (overlap < chunk.payload.size) {
+                                            w.writeAt(offset, chunk.payload.copyOfRange(overlap, chunk.payload.size))
+                                            offset = chunk.offset + chunk.payload.size
+                                        }
+                                    }
+                                    // The session checks continuity before calling us; this is a safety net.
+                                    else -> throw WindowLostException(offset, "gap in stream: expected offset $offset, got CHUNK at ${chunk.offset}")
                                 }
-                                // The session checks continuity before calling us; this is a safety net.
-                                else -> throw WindowLostException(offset, "gap in stream: expected offset $offset, got CHUNK at ${chunk.offset}")
+                                onProgress(FileProgress(name, offset, opened.size, resumeFrom, windowsRecovered))
                             }
-                            onProgress(FileProgress(name, offset, opened.size, resumeFrom, windowsRecovered))
+                        } catch (e: WindowLostException) {
+                            attempt++
+                            // Bytes written before the gap are good (absolute offsets); the next READ starts
+                            // at our own `offset`, which is what is actually on disk (the contract says never
+                            // trust the device's count over ours; e.receivedUpTo is the session's view of it).
+                            if (attempt > WINDOW_RETRIES) {
+                                return FileOutcome.Failed(
+                                    name,
+                                    "window at $offset lost $attempt× in a row (last: ${e.message}); " +
+                                        "notifications keep getting lost on this link — move closer and retry"
+                                )
+                            }
+                            delay(windowRetryBackoffMs * attempt)
+                            continue
                         }
-                    } catch (e: WindowLostException) {
-                        attempt++
-                        // Bytes written before the gap are good (absolute offsets); the next READ starts
-                        // at our own `offset`, which is what is actually on disk (the contract says never
-                        // trust the device's count over ours; e.receivedUpTo is the session's view of it).
-                        if (attempt > WINDOW_RETRIES) {
-                            return FileOutcome.Failed(
+                        if (!end.ok) {
+                            return FileOutcome.DeviceError(
                                 name,
-                                "window at $offset lost $attempt× in a row (last: ${e.message}); " +
-                                    "notifications keep getting lost on this link — move closer and retry"
+                                ProtocolError.fromCode(end.status),
+                                "READ ended with status ${end.status}: ${ProtocolError.describe(end.status)}"
                             )
                         }
-                        delay(windowRetryBackoffMs * attempt)
+                        if (offset == before && offset < opened.size) {
+                            return FileOutcome.Failed(name, "READ at $offset returned no data before end of file")
+                        }
+                        if (attempt > 0) {
+                            windowsRecovered++
+                            attempt = 0
+                            onProgress(FileProgress(name, offset, opened.size, resumeFrom, windowsRecovered))
+                        }
+                    }
+                    w.sync()
+                }
+
+                val verdict = ParquetVerify.verify(writer.file, opened.size, opened.crc32)
+                if (!verdict.ok) {
+                    archive.discardPartial(station, name)
+                    // The metadata records only the device's size and CRC, not a checksum of the
+                    // partial prefix. A corrupted prefix can therefore survive resume and fail the
+                    // final check. Re-read once from zero while this handle is still open, rather
+                    // than making the owner wait for another scheduled or manual sync.
+                    if (resumeFrom > 0 && !retriedWithoutPartial) {
+                        retriedWithoutPartial = true
                         continue
                     }
-                    if (!end.ok) {
-                        return FileOutcome.DeviceError(
-                            name,
-                            ProtocolError.fromCode(end.status),
-                            "READ ended with status ${end.status}: ${ProtocolError.describe(end.status)}"
-                        )
-                    }
-                    if (offset == before && offset < opened.size) {
-                        return FileOutcome.Failed(name, "READ at $offset returned no data before end of file")
-                    }
-                    if (attempt > 0) {
-                        windowsRecovered++
-                        attempt = 0
-                        onProgress(FileProgress(name, offset, opened.size, resumeFrom, windowsRecovered))
-                    }
+                    return FileOutcome.Mismatch(name, verdict.describe())
                 }
-                w.sync()
+                val sha256 = ParquetVerify.sha256Hex(writer.file)
+                val committed = archive.commit(station, name)
+                val row = ArchivedFile(
+                    station = station,
+                    name = name,
+                    bytes = opened.size,
+                    crc32 = opened.crc32,
+                    sha256 = sha256,
+                    syncedAtEpochMs = System.currentTimeMillis(),
+                    sourceDevice = sourceDevice,
+                )
+                // Index the verified bytes now (rows, time span, …) so History never has to re-open the file.
+                // A file the reader refuses keeps its row with `indexError`; the archive copy is untouched.
+                archivedFileDao.upsert(historyIndexer.indexed(row, committed))
+                return FileOutcome.Synced(name, opened.size, sha256)
             }
-
-            val verdict = ParquetVerify.verify(writer.file, opened.size, opened.crc32)
-            if (!verdict.ok) {
-                archive.discardPartial(station, name)
-                return FileOutcome.Mismatch(name, verdict.describe())
-            }
-            val sha256 = ParquetVerify.sha256Hex(writer.file)
-            val committed = archive.commit(station, name)
-            val row = ArchivedFile(
-                station = station,
-                name = name,
-                bytes = opened.size,
-                crc32 = opened.crc32,
-                sha256 = sha256,
-                syncedAtEpochMs = System.currentTimeMillis(),
-                sourceDevice = sourceDevice,
-            )
-            // Index the verified bytes now (rows, time span, …) so History never has to re-open the file.
-            // A file the reader refuses keeps its row with `indexError`; the archive copy is untouched.
-            archivedFileDao.upsert(historyIndexer.indexed(row, committed))
-            return FileOutcome.Synced(name, opened.size, sha256)
         } catch (e: DeviceErrorException) {
             return FileOutcome.DeviceError(name, e.protocolError, e.message ?: "device error")
         } finally {

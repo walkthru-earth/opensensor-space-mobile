@@ -832,6 +832,7 @@ class DeviceConnectionRepository @Inject constructor(
                 for (entry in entries) {
                     val fileBase = bytesBefore
                     val windowsBase = windowsBefore
+                    var requiredBytes = entry.bytes - entry.partialBytes
                     val outcome = syncEngine.download(
                         session = session,
                         station = station,
@@ -842,11 +843,23 @@ class DeviceConnectionRepository @Inject constructor(
                     ) { p ->
                         val done = fileBase + (p.bytesDone - p.resumedFrom)
                         windowsBefore = windowsBase + p.windowsRecovered
+                        // A partial can be discarded after OPEN (metadata changed), or after final
+                        // verification (its stored prefix was corrupt). Keep the total honest when
+                        // the file must be fetched from an earlier offset than the plan expected.
+                        val actualRequiredBytes = entry.bytes - p.resumedFrom
+                        val totalDelta = actualRequiredBytes - requiredBytes
+                        requiredBytes = actualRequiredBytes
                         _sync.update {
-                            it.copy(current = p, bytesDone = done, bytesPerSecond = meter.update(done), windowsRecovered = windowsBefore)
+                            it.copy(
+                                current = p,
+                                bytesDone = done,
+                                bytesTotal = it.bytesTotal + totalDelta,
+                                bytesPerSecond = meter.update(done),
+                                windowsRecovered = windowsBefore,
+                            )
                         }
                     }
-                    bytesBefore += entry.bytes - entry.partialBytes
+                    bytesBefore += requiredBytes
                     outcomes += outcome
                     _sync.update { it.copy(filesDone = outcomes.size, outcomes = outcomes.toList(), bytesDone = bytesBefore) }
                     if (outcome !is FileOutcome.Synced) {
@@ -1297,9 +1310,17 @@ class DeviceConnectionRepository @Inject constructor(
     }
 
     suspend fun forget(address: String) = withContext(Dispatchers.IO) {
-        tokenPolicy.clear(address)
-        knownDeviceDao.get(address)?.companionAssociationId?.let { companionPresence.disassociate(address, it) }
-        knownDeviceDao.delete(address)
+        check(boundAddress == null || boundAddress == address) { "controller belongs to another device" }
+        cancelReconnect()
+        connectMutex.withLock {
+            // Forget must revoke the live session as well as the saved token. Otherwise the phone
+            // can keep using a LAN pipe after its credentials disappear from Settings, and an
+            // in-flight connection can re-create the known row while the delete is in flight.
+            closeSessionLocked()
+            tokenPolicy.clear(address)
+            knownDeviceDao.get(address)?.companionAssociationId?.let { companionPresence.disassociate(address, it) }
+            knownDeviceDao.delete(address)
+        }
     }
 
     /** Rolling throughput over the last few seconds. */
@@ -1308,6 +1329,10 @@ class DeviceConnectionRepository @Inject constructor(
 
         fun update(bytesDone: Long): Double {
             val now = System.nanoTime()
+            // A corrupt partial can force a clean re-read, so the verified transfer progress
+            // legitimately moves back to zero. Start a new rate window instead of showing a
+            // negative throughput while that earlier attempt ages out of the sample window.
+            if (samples.isNotEmpty() && bytesDone < samples.last().second) samples.clear()
             samples.addLast(now to bytesDone)
             while (samples.size > 2 && now - samples.first().first > WINDOW_NS) samples.removeFirst()
             val (t0, b0) = samples.first()

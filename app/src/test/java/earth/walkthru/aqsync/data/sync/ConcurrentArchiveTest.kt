@@ -26,6 +26,7 @@ import java.io.File
 import java.io.IOException
 import java.nio.file.Files
 import java.util.concurrent.ConcurrentHashMap
+import java.util.zip.CRC32
 
 class ConcurrentArchiveTest {
     private lateinit var tmp: File
@@ -138,6 +139,25 @@ class ConcurrentArchiveTest {
         assertTrue(download(b, "station-a") is FileOutcome.Mismatch)
         assertArrayEquals(corrupted, archive.fileFor("station-a", name).readBytes())
         assertEquals(0, b.first.readCount)
+    }
+
+    @Test
+    fun `corrupted resumable prefix is retried from zero in the same download`() = runBlocking {
+        val crc32 = CRC32().also { it.update(bytes) }.value
+        val prefix = bytes.size / 2
+        archive.openPartial("station-a", name, bytes.size.toLong(), crc32).first.use { writer ->
+            writer.writeAt(0, bytes.copyOfRange(0, prefix).also { it[100] = (it[100].toInt() xor 1).toByte() })
+        }
+
+        val source = device()
+        val result = download(source, "station-a")
+
+        assertTrue(result is FileOutcome.Synced)
+        assertArrayEquals(bytes, archive.fileFor("station-a", name).readBytes())
+        assertFalse(archive.partialRoot.walkTopDown().any { it.isFile })
+        val fullWindows = (bytes.size + source.first.maxRead - 1) / source.first.maxRead
+        assertTrue("a clean re-read must follow the corrupt resume", source.first.readCount > fullWindows)
+        assertEquals(1, dao.upserts)
     }
 
     @Test
