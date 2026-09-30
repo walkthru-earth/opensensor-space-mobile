@@ -17,12 +17,14 @@ import earth.walkthru.aqsync.data.background.AutoSyncScheduler
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.export.ExportManager
+import earth.walkthru.aqsync.data.history.ArchiveQueryResult
 import earth.walkthru.aqsync.data.history.FileSummary
 import earth.walkthru.aqsync.data.history.HistoryDeriver
 import earth.walkthru.aqsync.data.history.HistoryIndexer
 import earth.walkthru.aqsync.data.history.HistoryRepository
 import earth.walkthru.aqsync.data.history.MetricSpec
 import earth.walkthru.aqsync.data.history.Metrics
+import earth.walkthru.aqsync.data.history.archiveQueryResults
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.local.database.KnownDevice
@@ -38,10 +40,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.io.File
@@ -82,6 +84,27 @@ data class FileChartState(
 ) {
     val canPageBack: Boolean get() = offset > 0
     val canPageForward: Boolean get() = offset + page.size < total
+}
+
+/** Ties an asynchronous chart read to both its storage owner and the exact archive snapshot. */
+internal data class FileSummaryRequest(val station: String, val files: List<ArchivedFile>)
+
+internal fun fileChartState(
+    metric: MetricSpec,
+    offset: Int?,
+    request: FileSummaryRequest?,
+    result: ArchiveQueryResult<FileSummaryRequest?, List<FileSummary>>,
+): FileChartState {
+    val list = result.forQuery(request).orEmpty()
+    val lastPageStart = maxOf(0, list.size - FilesViewModel.FILE_CHART_PAGE)
+    val start = (offset ?: lastPageStart).coerceIn(0, lastPageStart)
+    return FileChartState(
+        metric = metric,
+        total = list.size,
+        offset = start,
+        page = list.drop(start).take(FilesViewModel.FILE_CHART_PAGE),
+        loading = request != null && (result.query != request || result.value == null),
+    )
 }
 
 /** UI-side effects: launch a share sheet or a SAF picker. */
@@ -126,8 +149,6 @@ class FilesViewModel @AssistedInject constructor(
 
     /** Null = the latest page; otherwise the offset the user paged to. */
     private val fileChartOffset = MutableStateFlow<Int?>(null)
-    private val summaries = MutableStateFlow<Pair<String, List<FileSummary>>?>(null)
-    private val summarising = MutableStateFlow(false)
 
     init {
         // Files synced before Room v4 (or by an older reader) get their history index here: idempotent,
@@ -143,29 +164,20 @@ class FilesViewModel @AssistedInject constructor(
      * is on, the missing files are read (cached per `(name, crc32)` in the repository, so a new sync
      * costs only its new files).
      */
-    private val fileSummaryUpdates = combine(fileChartOn, archiveStation, archivedFileDao.observeAll()) { on, station, files ->
-        if (!on || station == null) null else station to files.filter { it.station == station }.map { Triple(it.name, it.crc32, it.estFirstUtcNs) to it }
-    }.distinctUntilChanged { a, b -> a?.first == b?.first && a?.second?.map { it.first } == b?.second?.map { it.first } }
-        .onEach { input ->
-            if (input == null) { summaries.value = null; return@onEach }
-            summarising.value = true
-            try {
-                summaries.value = input.first to history.fileSummaries(input.first, input.second.map { it.second })
-            } finally {
-                summarising.value = false
-            }
+    private val fileSummaryRequest: StateFlow<FileSummaryRequest?> = combine(fileChartOn, archiveStation, archivedFileDao.observeAll()) { on, station, files ->
+        if (!on || station == null) null else FileSummaryRequest(station, files.filter { it.station == station })
+    }.distinctUntilChanged().stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    private val fileSummaries: StateFlow<ArchiveQueryResult<FileSummaryRequest?, List<FileSummary>>> = fileSummaryRequest.archiveQueryResults { request ->
+        if (request == null) {
+            flowOf<List<FileSummary>?>(null)
+        } else {
+            flow<List<FileSummary>?> { emit(history.fileSummaries(request.station, request.files)) }
         }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, ArchiveQueryResult<FileSummaryRequest?, List<FileSummary>>(null, null))
 
-    init {
-        // After the property above exists: initializer order matters.
-        fileSummaryUpdates.launchIn(viewModelScope)
-    }
-
-    private val fileChart: Flow<FileChartState?> = combine(fileChartOn, fileChartMetric, fileChartOffset, summaries, summarising) { on, metric, offset, all, loading ->
-        if (!on) return@combine null
-        val list = all?.second ?: emptyList()
-        val start = (offset ?: (list.size - FILE_CHART_PAGE)).coerceIn(0, maxOf(0, list.size - 1))
-        FileChartState(metric, list.size, start, list.drop(start).take(FILE_CHART_PAGE), loading)
+    private val fileChart: Flow<FileChartState?> = combine(fileChartOn, fileChartMetric, fileChartOffset, fileSummaryRequest, fileSummaries) { on, metric, offset, request, result ->
+        if (on) fileChartState(metric, offset, request, result) else null
     }
 
     val uiState: StateFlow<FilesUiState> = combine(
