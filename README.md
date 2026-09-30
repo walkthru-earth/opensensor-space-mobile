@@ -14,13 +14,14 @@ over the bonded BLE link). Cloud backup or sharing is a *later, opt-in* step, of
 from mDNS discovery of `_aqsync._tcp`. No cloud endpoint, no location permission, no analytics, no
 accounts. Data leaves the phone through the share sheet or the file picker.
 
-## Status (2026-09-29)
+## Status (2026-09-30)
 
 The opensensor.space rebrand and initial multi-device implementation are in place: independent
 controllers, a shared two-transfer budget, immutable archive collision checks, per-device
 reset/reflash continuity, retained station epochs, and available-metric history with signed charts.
 The Android application ID and signing identity are retained for existing installations.
-`verify` passes: **230 tests passed, one skipped**, zero lint errors (14 existing warnings).
+`verify` passes: **236 tests passed, none skipped**, zero lint errors. The local
+real-archive test decoded 767 device files after its sibling path was corrected.
 Host verification and implementation details are in [`docs/opensensor-space.md`](docs/opensensor-space.md).
 **Simultaneous phone collection and controlled reset/reflash qualification remain outstanding.**
 The USB update opened on the OnePlus on 2026-09-29 with existing archives intact. Foreground

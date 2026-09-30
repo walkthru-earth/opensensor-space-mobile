@@ -21,12 +21,21 @@ partial runs). Auto-sync has **not** completed a period cycle on a phone yet. Of
 process started by the controller 19 s after the board closed a file, new file on the phone at 28 s);
 companion presence and the Wi-Fi-arrival run are not.
 
-## Current host gate (2026-09-29)
+## Current host gate (2026-09-30)
 
-`./gradlew --no-daemon verify`: **231 tests reported, 230 passed, one skipped, zero failures/errors**;
-zero lint errors and 14 existing warnings (including dependency update notices). Debug APK builds.
-The stdlib SQLite migration validator passes against v8/v9 exports. These results cover the new
-implementation; the dated ladder below retains the earlier hardware qualification baseline.
+`./gradlew --no-daemon verify`: **236 tests passed, zero skipped or failed** across
+`:app` and the three `:core` modules; zero lint errors. The debug APK builds.
+The optional real-archive test now finds the sibling `aq-parquet` checkout and
+decoded all 767 local Parquet files (67,442 rows) instead of silently skipping
+that corpus. The stdlib SQLite migration validator passes against v8/v9 exports.
+These are host checks; the dated ladder below retains the hardware baseline.
+
+The OnePlus 7 Pro (Android 16 / API 36) accepted the final debug APK in place
+with `adb install -r`, preserving app data. APK SHA-256:
+`b22cbd4d08497ec2927c22a6fcdd1f3bfea2c6ed96cd56d229c93618b605365b`.
+The phone remained at its lock screen during this run, so foreground UI, BLE
+collection and post-install archive behavior were not observed here. The
+firmware-side Waveshare flash and SD readback are recorded in its bench file.
 
 ## USB installation and stale pairing (2026-09-29)
 
