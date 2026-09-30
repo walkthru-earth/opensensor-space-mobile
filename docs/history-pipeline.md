@@ -23,12 +23,12 @@ flowchart LR
   CO --> UI["BandColumnChart · DayRing · CalendarHeatmap · NowCard · FileChartCard"]
 ```
 
-**When it runs:** index at sync time (same upsert as the row) + lazy back-fill (`backfill`, batches
-of 100, never-indexed rows first, failures retried once per pass); `estimateTimes()` at the start of
-every derive pass; `deriveStale()` after every interactive sync (repository `finally`), inside
-`SyncWorker` when files arrived, and when Files/History open. A day costs milliseconds; no separate
-`DeriveWorker`. Both `HistoryDeriver` and `HistoryIndexer` hold a `Mutex` — passes used to race
-and both rebuilt every day.
+**When it runs:** index at sync time (same upsert as the row) + one process-start back-fill (`backfill`,
+batches of 100, never-indexed rows first, failures retried once per pass); `estimateTimes()` at the
+start of every derive pass; `deriveStale()` once at process start, after every interactive sync
+(repository `finally`), and inside `SyncWorker` when files arrived. Opening Files/History only
+observes Room. A day costs milliseconds; no separate `DeriveWorker`. `HistoryDeriver` and
+`HistoryIndexer` each serialize their passes with a `Mutex`.
 
 ## Index (`ParquetIndexer` → `archived_file`, Room v4)
 

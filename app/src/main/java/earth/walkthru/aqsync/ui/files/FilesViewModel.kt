@@ -19,8 +19,6 @@ import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.export.ExportManager
 import earth.walkthru.aqsync.data.history.ArchiveQueryResult
 import earth.walkthru.aqsync.data.history.FileSummary
-import earth.walkthru.aqsync.data.history.HistoryDeriver
-import earth.walkthru.aqsync.data.history.HistoryIndexer
 import earth.walkthru.aqsync.data.history.HistoryRepository
 import earth.walkthru.aqsync.data.history.MetricSpec
 import earth.walkthru.aqsync.data.history.Metrics
@@ -123,8 +121,6 @@ class FilesViewModel @AssistedInject constructor(
     private val export: ExportManager,
     private val autoSyncScheduler: AutoSyncScheduler,
     settings: AppSettings,
-    historyIndexer: HistoryIndexer,
-    historyDeriver: HistoryDeriver,
 ) : ViewModel() {
     private val repository = manager.controller(deviceAddress)
     private val enrolledDevice = knownDeviceDao.observeAll().map { devices -> devices.firstOrNull { it.address == deviceAddress } }
@@ -149,15 +145,6 @@ class FilesViewModel @AssistedInject constructor(
 
     /** Null = the latest page; otherwise the offset the user paged to. */
     private val fileChartOffset = MutableStateFlow<Int?>(null)
-
-    init {
-        // Files synced before Room v4 (or by an older reader) get their history index here: idempotent,
-        // a few hundred files take well under a second, and an interrupted pass simply resumes next time.
-        viewModelScope.launch {
-            runCatching { historyIndexer.backfillAll() }
-            runCatching { historyDeriver.deriveStale() }
-        }
-    }
 
     /**
      * Summaries follow the archive: whenever the connected station's file list changes while the chart

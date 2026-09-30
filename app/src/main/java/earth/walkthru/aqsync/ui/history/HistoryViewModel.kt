@@ -11,8 +11,6 @@ import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.history.ArchiveQueryResult
 import earth.walkthru.aqsync.data.history.ArchiveSeriesQuery
-import earth.walkthru.aqsync.data.history.HistoryDeriver
-import earth.walkthru.aqsync.data.history.HistoryIndexer
 import earth.walkthru.aqsync.data.history.HistoryRange
 import earth.walkthru.aqsync.data.history.HistoryRepository
 import earth.walkthru.aqsync.data.history.HistorySeries
@@ -40,6 +38,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 data class HistoryUiState(
+    /** Initial Room lookups and the selected archive query have not finished yet. */
+    val initializing: Boolean = true,
     val station: String? = null,
     val stations: List<String> = emptyList(),
     val deviceName: String? = null,
@@ -92,8 +92,6 @@ class HistoryViewModel @AssistedInject constructor(
     private val archivedFileDao: ArchivedFileDao,
     private val bucketDao: MetricBucketDao,
     settings: AppSettings,
-    historyIndexer: HistoryIndexer,
-    historyDeriver: HistoryDeriver,
 ) : ViewModel() {
     private val repository = manager.controller(deviceAddress)
 
@@ -121,11 +119,6 @@ class HistoryViewModel @AssistedInject constructor(
     private val followsNow = MutableStateFlow(true)
 
     init {
-        // Same idempotent housekeeping as Files: index anything old, derive any stale day, then the flows below re-emit.
-        viewModelScope.launch {
-            runCatching { historyIndexer.backfillAll() }
-            runCatching { historyDeriver.deriveStale() }
-        }
         viewModelScope.launch {
             while (true) {
                 delay(60_000)
@@ -198,18 +191,26 @@ class HistoryViewModel @AssistedInject constructor(
         val d = values[0] as earth.walkthru.aqsync.data.local.database.KnownDevice?
 
         @Suppress("UNCHECKED_CAST")
-        val counts = (values[5] as ArchiveQueryResult<String?, HistoryFileCounts>).forQuery(d?.station) ?: HistoryFileCounts()
+        val countsResult = values[5] as ArchiveQueryResult<String?, HistoryFileCounts>
+        val counts = countsResult.forQuery(d?.station) ?: HistoryFileCounts()
         val query = ArchiveSeriesQuery(d?.station, values[1] as MetricSpec, values[2] as HistoryRange, values[3] as Long)
 
         @Suppress("UNCHECKED_CAST")
         val result = values[4] as ArchiveQueryResult<ArchiveSeriesQuery, HistorySeries>
 
         @Suppress("UNCHECKED_CAST")
-        val dd = (values[6] as ArchiveQueryResult<String?, Triple<Int, Long?, Long?>>).forQuery(d?.station) ?: Triple(0, null, null)
+        val daysResult = values[6] as ArchiveQueryResult<String?, Triple<Int, Long?, Long?>>
+        val dd = daysResult.forQuery(d?.station) ?: Triple(0, null, null)
 
         @Suppress("UNCHECKED_CAST")
-        val available = (values[11] as ArchiveQueryResult<String?, List<MetricSpec>>).forQuery(d?.station).orEmpty()
+        val availableResult = values[11] as ArchiveQueryResult<String?, List<MetricSpec>>
+        val available = availableResult.forQuery(d?.station).orEmpty()
+        val loading = d?.station != null && (
+            result.forQuery(query) == null || countsResult.forQuery(d.station) == null ||
+                daysResult.forQuery(d.station) == null || availableResult.forQuery(d.station) == null
+            )
         HistoryUiState(
+            initializing = loading,
             station = d?.station,
             stations = (values[10] as List<*>).filterIsInstance<String>(),
             deviceName = d?.name,

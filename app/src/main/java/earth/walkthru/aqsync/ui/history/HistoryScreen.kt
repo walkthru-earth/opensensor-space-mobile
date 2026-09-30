@@ -103,6 +103,10 @@ fun HistoryScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            if (state.initializing) {
+                item(key = "loading") { InfoNote("Loading archive…") }
+                return@LazyColumn
+            }
             if (state.stations.size > 1) {
                 item(key = "station-epochs") {
                     Column {
