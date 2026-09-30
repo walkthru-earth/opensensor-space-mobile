@@ -20,7 +20,7 @@ The opensensor.space rebrand and initial multi-device implementation are in plac
 controllers, a shared two-transfer budget, immutable archive collision checks, per-device
 reset/reflash continuity, retained station epochs, and available-metric history with signed charts.
 The Android application ID and signing identity are retained for existing installations.
-`verify` passes: **241 tests passed, none skipped**, zero lint errors. The local
+`verify` passes: **247 tests passed, none skipped**, zero lint errors. The local
 real-archive test decoded 767 device files after its sibling path was corrected.
 Host verification and implementation details are in [`docs/opensensor-space.md`](docs/opensensor-space.md).
 **Simultaneous phone collection and controlled reset/reflash qualification remain outstanding.**
@@ -31,8 +31,10 @@ full sync, an Auto-sync period cycle, companion presence and Wi-Fi-arrival runs 
 On 2026-09-30, the OnePlus History screen was checked after a Waveshare station reset: it now
 shows compact generation labels, opens an earlier station at its latest recorded day, preserves
 that date across range changes, and separates retained producer copies from untimed files.
-The current build also completed a one-file foreground BLE sync after finalization and retained
-History through tab navigation and app background/resume. Measured behavior lives in the firmware's
+The preceding verified build completed a one-file foreground BLE sync after finalization and retained
+History through tab navigation and app background/resume. The current build adds local-calendar
+History windows and daylight saving handling; its phone installation succeeded, but the screen
+check remains pending because the phone locked. Measured behavior lives in the firmware's
 [CoreS3](../aq-parquet/docs/boards/m5stack-cores3/bench-verified.md) and
 [Waveshare](../aq-parquet/docs/boards/waveshare-esp32-s3-sim7670g/bench-verified.md) bench records;
 [`docs/status.md`](docs/status.md) separates host tests from phone evidence.

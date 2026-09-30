@@ -7,7 +7,7 @@
 ## One-line status
 
 The **opensensor.space** initial implementation adds independent device controllers, bounded
-concurrent collection, station-epoch recovery and reviewed sensor profiles. The current build
+concurrent collection, station-epoch recovery and reviewed sensor profiles. The preceding build
 has a one-file foreground BLE sync and navigation/resume check on a phone; multi-device
 Bluetooth/LAN, Android notification lifetime, upgrade migration and reset/reflash recovery
 still require phone qualification. See [opensensor-space.md](opensensor-space.md).
@@ -24,7 +24,7 @@ companion presence and the Wi-Fi-arrival run are not.
 
 ## Current host gate (2026-09-30)
 
-`./gradlew --no-daemon verify`: **241 tests passed, zero skipped or failed** across
+`./gradlew --no-daemon clean verify`: **247 tests passed, zero skipped or failed** across
 `:app` and the three `:core` modules; zero lint errors. The debug APK builds.
 The optional real-archive test now finds the sibling `aq-parquet` checkout and
 decoded all 767 local Parquet files (67,442 rows) instead of silently skipping
@@ -33,9 +33,10 @@ These are host checks; the dated ladder below retains the hardware baseline.
 
 The OnePlus 7 Pro (Android 16 / API 36) accepted the current debug APK in place
 with `adb install -r`, preserving app data. APK SHA-256:
-`4f00537c996d77a39bea9a09f322b62309d1e955a3868ba05d3dfbb46206de7f`.
-The unlocked-phone lifecycle and one-file BLE check is recorded below; the
-firmware-side flash and SD readback are in its board bench file.
+`74da8ddd25f9e3141cf3d43e92475b0a3fa8e994d79adbb4bc49e8f07b1f99ca`.
+The device locked before the updated History and Today screens could be checked.
+The unlocked-phone lifecycle and one-file BLE check below used the preceding
+build. Firmware-side flash and SD readback are in its board bench file.
 
 ## Lifecycle and foreground BLE check (2026-09-30 Cairo)
 
