@@ -41,7 +41,7 @@ Derived from the **file**, never its name: rows, row groups, `schema_version`, `
 
 ## Metric registry
 
-**A new sensor is a registry entry, not code.** Every quantity is a `MetricSpec(id, column, label,
+**A new sensor is a registry entry, not code.** (W11 generalizes this into device families in `:core:model`, see [devices-and-discovery.md](devices-and-discovery.md).) Every quantity is a `MetricSpec(id, column, label,
 unit, kind, gate, bands, chartable, envelope, axisFloor, settleSeconds)`. Tiers, daily files, the
 History picker (`Metrics.chartable`) and the charts iterate the registry and never name a column.
 A spec whose column a file lacks yields **no values, never zeros**, so the registry may be ahead of
@@ -118,7 +118,11 @@ title, one line of advice and a comparison — colour is never the only carrier.
 puts the sensor state first (`pms_status ≠ 4` → words, never a number). "Right now" is a 10-second
 snapshot; "Today so far" is the **local** day folded from the hourly tier with its coverage.
 **No "AQI" anywhere** (a named index needs validated averaging rules). The face is a Canvas
-placeholder (`MoodFace`) the capybara artwork replaces one-for-one on both platforms.
+placeholder (`MoodFace`) that mascot artwork from the website replaces one for one on both platforms.
+
+`AirMood` is the air-quality family's scale, not the app's model of "good". Other families
+show neutral metric cards unless their dictionary names a published scale. See
+[devices-and-discovery.md](devices-and-discovery.md).
 
 ## Charts (`Columns`, Compose `Canvas`, no chart library)
 

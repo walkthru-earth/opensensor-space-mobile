@@ -1,7 +1,7 @@
-# Architecture — Android, iOS, shared modules, and what a change touches
+# Architecture of Android, iOS, shared modules, and what a change touches
 
 **Scope:** module boundaries, dependency direction, package layout, and platform ownership.
-**Code:** `settings.gradle.kts`, `core/*/build.gradle.kts`, `app/build.gradle.kts`, `build.gradle.kts` (`verify` task); `data/DeviceConnectionManager.kt`, `DeviceConnectionRepository.kt`, `DeviceIdentityClaims.kt`.
+**Code:** `settings.gradle.kts`, `build-logic/`, `core/*/build.gradle.kts`, `app/build.gradle.kts`, `build.gradle.kts` (`verify` task); `data/DeviceConnectionManager.kt`, `DeviceConnectionRepository.kt`, `DeviceIdentityClaims.kt`.
 **Related:** [data-model.md](data-model.md) (storage), [transports.md](transports.md) · [sync-engine.md](sync-engine.md) · [history-pipeline.md](history-pipeline.md) (the layers in detail).
 
 ## Module graph
@@ -27,13 +27,67 @@ flowchart TB
 ```
 
 `:core:history` exposes `:core:parquet` and `:core:protocol` as `api`, so Android can see all three.
-The boundary is enforced by the build: a `:core` class cannot import `android.*`.
+The boundary is enforced by the build. A `:core` class cannot import `android.*`.
 `protocol` and the sensor-domain part of `history` compile for JVM and iOS from
-`src/commonMain`; their legacy `src/main` trees map to `jvmMain`. Parquet, Java file/stream
-adapters, indexing and calendar windows remain JVM-only. `:ios:shared` consumes common core
-rules and renders the current Compose iOS screen; `ios/App` supplies native app integration,
+`src/commonMain`. Their Java file and stream adapters live in `src/jvmMain`, and their tests in
+`src/commonTest` (JVM and iOS simulator) or `src/jvmTest` (JVM only). Parquet, indexing and
+calendar windows remain JVM-only. `:ios:shared` consumes common core
+rules and renders the current Compose iOS screen. `ios/App` supplies native app integration,
 Core Bluetooth and Bonjour discovery. The Android app remains a separate platform entry point.
 See [ios-migration.md](ios-migration.md) for current scope and build commands.
+
+### Target module graph
+
+The graph above is today's code. The production plan moves toward the graph below, where every
+rule that must give the same answer on both phones is shared and platform code only adapts OS
+services. Device families and metrics become data in `:core:model`, so air quality is one
+family among many. See [production-readiness-plan.md](production-readiness-plan.md) and
+[devices-and-discovery.md](devices-and-discovery.md).
+
+```mermaid
+flowchart TB
+  subgraph shared["Kotlin commonMain, JVM and iOS"]
+    MO[":core:model<br/>devices, families, capabilities, properties, scales"]
+    PR2[":core:protocol"]
+    SY[":core:sync<br/>engine behind FrameLink and ArchiveStore"]
+    PQ2[":core:parquet"]
+    HI2[":core:history"]
+    PF[":core:publicfeed<br/>discover feed port and sample"]
+    DS[":core:designsystem<br/>tokens, theme, components"]
+    DI[":feature:discover<br/>map, cell sheet, device page"]
+  end
+  APP2[":app, Android adapters and screens"]
+  IOS2["ios/App, Swift adapters and :ios:shared"]
+  SY --> PR2 & PQ2 & MO
+  HI2 --> PQ2 & MO
+  DI --> PF & DS & MO
+  APP2 --> SY & HI2 & DI & DS
+  IOS2 --> SY & HI2 & DI & DS
+```
+
+## Build conventions (`build-logic/`)
+
+`settings.gradle.kts` includes `build-logic/` through `pluginManagement { includeBuild(...) }`.
+It holds three convention plugins, so a new shared module is one `plugins {}` line.
+
+| Plugin | Applied by | Sets |
+| --- | --- | --- |
+| `opensensor.kmp.library` | `:core:protocol`, `:core:history` | Kotlin Multiplatform with `jvm` (bytecode 17), `iosArm64`, `iosSimulatorArm64`, `kotlin-test` in `commonTest`, and a `test` task that runs `jvmTest` |
+| `opensensor.jvm.library` | `:core:parquet` | Kotlin/JVM with Java and Kotlin bytecode 17 |
+| `opensensor.kmp.ios-framework` | `:ios:shared` | the KMP library conventions plus the static `OpenSensorShared` framework for each iOS target |
+
+The conventions compile against the Kotlin Gradle plugin as `compileOnly`. The root
+`build.gradle.kts` declares every plugin once with `apply false`, so all modules share one plugin
+classloader. Bytecode 17 is a compiler target, not `jvmToolchain(17)`, because the bundled Android
+Studio JBR and CI provide JDK 21 only and a toolchain would need a network download.
+Warnings are not errors yet, since existing code still has a few.
+
+The real Parquet fixtures live once in `core/parquet/src/test/resources` and are published as
+`:core:parquet` test fixtures (`java-test-fixtures`). `:core:history` and `:core:protocol` tests
+declare `testFixtures(project(":core:parquet"))` instead of pointing at another module's
+directory. `:app` still adds that directory to its unit-test resources.
+
+The root `verify` and `verifyIos` tasks are unchanged and aggregate the module tasks.
 
 ## Layers inside `:app`
 
@@ -76,11 +130,26 @@ The iOS entry point is `ios/OpenSensor.xcodeproj`. Its Swift adapters own Apple 
 the current screen and presentation state live in `ios/shared`. Follow [`../ios/AGENTS.md`](../ios/AGENTS.md)
 for iOS-specific guidance. SwiftUI review rules apply only if native SwiftUI views are introduced.
 
-| `:core` module (`core/<m>/src/main/kotlin/earth/walkthru/aqsync/`) | Files |
+| `:core` module (`core/<m>/src/<set>/kotlin/earth/walkthru/aqsync/`) | Files |
 | --- | --- |
-| `protocol` → `data/protocol/` | `AqUuids`, `Frames`, `DeviceConfig`, `LanFraming`, `JsonModels`, `ParquetVerify` |
-| `parquet` → `data/history/parquet/` | `ParquetFile`, `ParquetFooterParser`, `ParquetMetadata`, `ColumnValues`, `ParquetWriter`, `ThriftCompact(+Writer)`, `Lz4Block`, `ParquetCodecs`, `Geometry`, `GeoParquetMetadata` |
-| `history` → `data/history/` | `Metrics`, `Aggregation`, `TimeEstimate`, `Columns`, `AirMood`, `HistoryModel`, `FileSummary`, `ParquetIndexer` |
+| `protocol` → `data/protocol/` | `commonMain`: `AqGatt`, `Frames`, `WireBuffer`, `DeviceConfig`, `ConfigChunkAccumulator`, `JsonModels`, `LanProtocol`, `Advertisement`, `LiveProfile`, `PlantowerBatchCandidate`, `Crc32` (`expect`), `ParquetVerify`, `SafeName`. `jvmMain`: `AqUuids`, `LanFraming`, `Crc32` (`java.util.zip`), `ParquetVerifyJvm` (file, stream and SHA-256 extensions). `iosMain`: `Crc32` (portable table) |
+| `parquet` → `data/history/parquet/` (`src/main`) | `ParquetFile`, `ParquetFooterParser`, `ParquetMetadata`, `ColumnValues`, `ParquetWriter`, `ThriftCompact(+Writer)`, `Lz4Block`, `ParquetCodecs`, `Geometry`, `GeoParquetMetadata` |
+| `history` → `data/history/` | `commonMain`: `Metrics`, `AirMood`, `TimeEstimate`. `jvmMain`: `Aggregation`, `ChartAxis`, `Columns`, `HistoryModel`, `HistoryWindow`, `FileSummary`, `ParquetIndexer` |
+
+### Shared sync rules in `:core:protocol`
+
+- `ParquetVerify` is the one completion rule. A file is synced only when its size matches, its
+  CRC-32 equals `OPENED.crc32`, and it starts and ends with `PAR1`. The size is checked first, so a
+  short file is never hashed. Platform adapters measure size, CRC-32 and the head and tail bytes
+  and pass them to the common `verify`. The JVM `File` and `InputStream` overloads and
+  `sha256Hex` are extensions in `jvmMain`, so callers outside the package import them by name.
+- `Crc32` is streaming (`update(bytes, offset, length)`, `value`, `reset`). The JVM uses
+  `java.util.zip.CRC32`, iOS uses the table-driven `PortableCrc32`, and `commonTest` proves both
+  agree with the IEEE check value and with each other.
+- `SafeName.isValid` mirrors the firmware `safe_parquet_name()` rule. It allows only
+  `[0-9a-z._=/-]`, rejects `..`, `//` and a leading `/`, needs a name before `.parquet`, and caps the
+  name at 399 bytes. Android `data/sync/SyncPlanner.kt` still has its own copy with a 512 limit
+  until the data layer switches to this one.
 
 ## Rules that keep the modules honest
 

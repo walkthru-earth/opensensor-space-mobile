@@ -128,6 +128,13 @@ no Arrow runtime exists on Android (§1).
 
 ## 3. Location and the map
 
+> **Superseded on 2026-10-08.** The owner chose no location permission at all. A device's place
+> is an H3 cell the owner picks on the map, only when they turn on public sharing in that
+> device's settings, and public data never carries coordinates. The map is now the first-run
+> discover screen. Read [devices-and-discovery.md](devices-and-discovery.md). The
+> `deployment_id` idea in 3.2 still fits, with the phone's deployment record holding the chosen
+> cell instead of coordinates. The rest of this section is kept as history.
+
 ### 3.1 The rule this changes
 
 `AGENTS.md` says "No location permission" and the README repeats it. This proposal **asks to amend

@@ -1,19 +1,3 @@
-/*
- * Copyright (C) 2022 The Android Open Source Project
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.hilt.gradle)
@@ -38,13 +22,23 @@ val requestedReleaseTasks = gradle.startParameter.taskNames.any { task ->
     task.substringAfterLast(':').contains("release", ignoreCase = true)
 }
 val missingReleaseSigningVariables = releaseSigningVariables.filter { env(it) == null }
-if (requestedReleaseTasks && missingReleaseSigningVariables.isNotEmpty()) {
+
+// Local R8 check without the project key. `-Paqsync.localRelease=true` signs the minified release
+// with the debug key so `./gradlew :app:assembleRelease -Paqsync.localRelease=true` works on any
+// machine. Such an APK cannot update a release install and must never be published, so the flag is
+// refused on CI (GitHub Actions sets CI=true) and the release workflow never passes it.
+val localRelease = providers.gradleProperty("aqsync.localRelease").orNull == "true"
+if (localRelease && env("CI") != null) {
+    throw GradleException("aqsync.localRelease is a local check only and is refused on CI")
+}
+if (requestedReleaseTasks && !localRelease && missingReleaseSigningVariables.isNotEmpty()) {
     throw GradleException(
-        "Release tasks require project signing credentials; missing: ${missingReleaseSigningVariables.joinToString()}",
+        "Release tasks require project signing credentials; missing: ${missingReleaseSigningVariables.joinToString()}" +
+            " (for a local minified build without them pass -Paqsync.localRelease=true)",
     )
 }
 val releaseKeystore = env("AQSYNC_KEYSTORE_FILE")?.let { rootProject.file(it) }
-if (requestedReleaseTasks && releaseKeystore?.isFile != true) {
+if (requestedReleaseTasks && !localRelease && releaseKeystore?.isFile != true) {
     throw GradleException("AQSYNC_KEYSTORE_FILE must name an existing regular file")
 }
 
@@ -66,7 +60,7 @@ android {
     }
 
     signingConfigs {
-        if (releaseKeystore != null && missingReleaseSigningVariables.isEmpty()) {
+        if (!localRelease && releaseKeystore != null && missingReleaseSigningVariables.isEmpty()) {
             create("release") {
                 storeFile = releaseKeystore
                 storePassword = env("AQSYNC_KEYSTORE_PASSWORD")
@@ -78,9 +72,17 @@ android {
 
     buildTypes {
         getByName("release") {
-            isMinifyEnabled = false
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.findByName("release")
+            // AGP 9.3+ DSL: R8 code optimization and resource shrinking together, with the default
+            // Android rules (proguard-android-optimize). Project rules live in src/main/keepRules/*.keep.
+            // https://developer.android.com/topic/performance/app-optimization/enable-app-optimization
+            optimization {
+                enable = true
+            }
+            signingConfig = if (localRelease) {
+                signingConfigs.getByName("debug")
+            } else {
+                signingConfigs.findByName("release")
+            }
         }
     }
 
@@ -106,9 +108,16 @@ android {
         // Offline-first: fail the build on lint errors so an insecure API or a
         // permission nobody reviewed cannot slip in unnoticed. INTERNET is declared
         // deliberately for the mDNS-discovered LAN transport only (see the manifest).
+        // Existing warnings are recorded in lint-baseline.xml; any new warning fails the build.
+        // Regenerate only after review: ./gradlew :app:updateLintBaseline
         abortOnError = true
-        warningsAsErrors = false
+        warningsAsErrors = true
         checkDependencies = false
+        baseline = file("lint-baseline.xml")
+        // Version notices change whenever an upstream library ships, not when this code changes.
+        // Dependabot (.github/dependabot.yml) owns updates, so these checks would only make the
+        // gate fail on a date.
+        disable += setOf("GradleDependency", "NewerVersionAvailable", "AndroidGradlePluginVersion")
     }
 }
 

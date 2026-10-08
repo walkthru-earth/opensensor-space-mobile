@@ -1,0 +1,65 @@
+# Dependency updates, weekly and grouped so each ecosystem opens at most a few PRs.
+# Every PR still has to pass verify.yml (Android gate and iOS validation). Real BLE, LAN and
+# background behavior after an update still needs a phone run before a release.
+# Docs: https://docs.github.com/en/code-security/dependabot/working-with-dependabot/dependabot-options-reference
+version: 2
+
+updates:
+  # gradle/libs.versions.toml, the wrapper and plugin versions.
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    groups:
+      # The Kotlin compiler, KSP, Compose compiler and Kotlin/Native move together.
+      kotlin-toolchain:
+        patterns:
+          - "org.jetbrains.kotlin*"
+          - "com.google.devtools.ksp*"
+          - "org.jetbrains.kotlinx:kotlinx-serialization*"
+          - "org.jetbrains.kotlinx:kotlinx-coroutines*"
+      android-build:
+        patterns:
+          - "com.android.tools.build*"
+          - "com.android.application*"
+          - "com.android.library*"
+          - "com.android.kotlin.multiplatform*"
+      compose:
+        patterns:
+          - "androidx.compose*"
+          - "org.jetbrains.compose*"
+      androidx:
+        patterns:
+          - "androidx.*"
+      other:
+        patterns:
+          - "*"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns:
+          - "*"
+
+  # .pre-commit-config.yaml hook revisions.
+  - package-ecosystem: pre-commit
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    groups:
+      hooks:
+        patterns:
+          - "*"
