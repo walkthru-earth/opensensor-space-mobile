@@ -49,6 +49,29 @@ class SyncWireTest {
         assertNull(wire.identity(json.replace("AABBCCDDEEFF", "invalid")))
         assertNull(wire.identity("{}"))
     }
+
+    @Test fun stationIdAllowsDotButNoPathTraversal() {
+        val json = "{\"proto\":2,\"station\":\"STATION\",\"dev\":\"AABBCCDDEEFF\"}"
+        assertEquals("aq.lab_1-b", wire.identity(json.replace("STATION", "aq.lab_1-b"))!!.station)
+        for (unsafe in listOf(".", "..", "a/b", "../x", "a\\\\b", "", "a b")) {
+            assertNull(wire.identity(json.replace("STATION", unsafe)), unsafe)
+        }
+    }
+
+    @Test fun missingMaxReadUsesAndroidDefaultAndNeverExceedsAdvertised() {
+        val json = "{\"proto\":2,\"station\":\"s\",\"dev\":\"AABBCCDDEEFF\"}"
+        assertEquals(SyncWire.DEFAULT_MAX_READ, wire.identity(json)!!.maxRead)
+        assertEquals(4096, SyncWire.DEFAULT_MAX_READ)
+        assertEquals(2048, wire.identity(json.replace("}", ",\"max_read\":2048}"))!!.maxRead)
+        assertNull(wire.identity(json.replace("}", ",\"max_read\":0}")))
+    }
+
+    @Test fun errorFrameCarriesTheRequestOpcode() {
+        val error = wire.decodeHex("7f" + "02" + "04" + "6f70656e")!!
+        assertEquals("error", error.kind)
+        assertEquals(2, error.op)
+        assertEquals(4, error.code)
+    }
 }
 
 // Hex is a readable fixture notation for tests only. Production frames never pass through it.
