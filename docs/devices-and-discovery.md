@@ -1,0 +1,599 @@
+# Devices and discovery
+
+**Scope:** how the app supports any sensor family (air quality is one of many), and how a new user
+sees public sensor data near them on first open through a privacy-preserving H3 map.
+**Code:** planned `:core:model`, `:core:publicfeed`, `:feature:discover`. **Related:**
+[production-readiness-plan.md](production-readiness-plan.md) (W11, W12),
+[cross-platform-guide.md](cross-platform-guide.md),
+`../aq-parquet/docs/shared/table-and-observation-model.md`.
+
+## Product direction
+
+opensensor.space is a home for many kinds of open hardware: air, weather, water, soil, noise,
+energy. The app must treat a new sensor family as data (a dictionary and a family entry), not as
+new screens. And the app must be useful before someone owns a device. Like the first run of
+Google Home, Eufy or Apple Weather, opening the app shows something real right away. Here that
+means readings from public sensors nearby, shown as hexagon cells, never as exact points.
+
+## Part 1. Sensor and hardware agnostic
+
+### Model
+
+The model follows the observation model the firmware already chose
+(`table-and-observation-model.md`, SensorThings concepts). The app adopts the same names so the
+phone, the firmware and a future host API agree.
+
+| Concept | Meaning in the app | Today |
+| --- | --- | --- |
+| `Device` (Thing) | A station with a persistent UUID. The MAC address is separate | Station UUID and known device row |
+| `DeviceFamily` | Hardware plus firmware line, with its transports, capabilities and dictionary | Implied by `cores3-*` schema prefixes |
+| `Capability` | What a device can do (BLE sync, LAN sync, live stream, config, reboot) | Schema prefix checks in screens |
+| `ObservedProperty` | One exact quantity, for example atmospheric PM2.5 or air temperature | `MetricSpec` in `Metrics.kt` |
+| `Datastream` | One property measured by one instrument on one device | Parquet column |
+| `Scale` | Optional interpretation of a value, for example the AQI bands | `AirMood` |
+
+Rules.
+
+1. **The dictionary comes from the device.** The firmware's versioned measurement dictionary is
+   the source of property identity, unit, procedure and time semantics. The app ships a bundled
+   copy for known schema IDs only as a fallback. The app never invents a unit or a band.
+2. **Unknown is fine.** A column that is not in the dictionary still shows with its raw name and
+   no scale, at Detailed level. It is never hidden, coerced or given a default.
+3. **Scales are optional and scientific.** A `Scale` names its source (for example US EPA AQI or
+   WHO 2021). Properties without a published scale use a neutral sequential colour ramp.
+   Brand colours are never used to judge a value.
+4. **Capabilities, not schema strings.** A screen asks `device.can(Capability.LanSync)`. Only the
+   family registry reads schema IDs or adverts.
+5. **One family entry per hardware line.** A `DeviceFamily` declares how to recognize the device
+   (advert, manifest or schema ID), its transports, capabilities, dictionary and its headline
+   properties (which one or two values the device card shows). Adding a family needs no change
+   to the sync engine, the screens or the design system.
+6. **Keep wire names.** The Android package `earth.walkthru.aqsync`, opcodes, UUIDs and archive
+   paths stay. New shared types use generic names (`Reading`, `MetricCard`), never `Air*`.
+
+### Adding a device family
+
+1. The firmware repository documents the family's wire and measurement contract in
+   `../aq-parquet/docs/shared/` (or its own contract repo).
+2. Add its dictionary and a `DeviceFamily` entry in `:core:model` `commonMain`, with tests in
+   `commonTest` that parse a real file from that family.
+3. If it uses a new transport, follow "Adding a transport" in the cross-platform guide.
+4. Optional. A family may provide a hero component (the air-quality mood face is one). Without
+   one, the generic `MetricCard` is used.
+
+## Part 2. Discover public sensors near you
+
+Reassessed on 2026-10-08 against current primary sources (listed at the end). Every version
+below was checked on that date. Items marked "verify on phone" are not yet proven on hardware.
+
+### Decisions at a glance
+
+| # | Decision | Section |
+| --- | --- | --- |
+| 1 | Map first. No sign-in, no onboarding wall, no permission prompt at launch | First screen |
+| 2 | One non-modal bottom sheet with three heights. It never stacks a second sheet | First screen |
+| 3 | Public values are hourly means, published at least one hour late. The window chip offers Last hour, 24 hours and 7 days, never "now" | Privacy rules |
+| 4 | The crowd rule of three applies to every published number, not only the device list, with a differencing guard on parents | Privacy rules |
+| 5 | Only outdoor devices can be published. No accounts, no passkeys. Each shared device gets its own anonymous key made on the phone, and its public ID and generated name come from that key, never free text | Privacy rules |
+| 6 | The phone reads the same Parquet files as the website `/indices` explorer, one plain file per H3 resolution, through HTTP range reads and the repo's own portable Parquet reader. No JSON side feed | Feed contract |
+| 7 | `maplibre-compose` 0.19.0 is the renderer. Its pins match ours (Kotlin 2.4.20, CMP 1.12.1) | Map technology |
+| 8 | H3 runs on the phone (files carry no geometry). Viewport cover of at most 1,024 cells, one GeoJSON source, redrawn after 400 ms of camera rest | Map technology |
+| 9 | An online Protomaps PMTiles basemap, an optional "Offline map" download in the app Settings (nothing bundled), and "© OpenStreetMap" always reachable | Map technology, Compliance |
+| 10 | A "Near me" button asks for approximate location only when tapped. Precise location is never requested | Centring |
+| 11 | Shared data is published under CC BY 4.0 and cannot be withdrawn. "Stop sharing" takes effect from the next UTC day | Privacy rules, Compliance |
+| 12 | Hosting is source.coop (Radiant Earth partnership, AWS Open Data). The phone never holds source.coop write credentials | Feed contract, Compliance |
+
+### UX benchmark
+
+What comparable apps do, and what we take from them.
+
+| App | First screen | Detail | Notes |
+| --- | --- | --- | --- |
+| PurpleAir map | Map, no sign-in | Popup with value, recent averages, a multi-sensor chart, status | Metric and averaging live behind a gear. Grey means stale and also "metric not measured". Name search only covers sensors on screen. Web app only |
+| IQAir AirVisual | City cards, location asked early | Station page with last update time | The map shows only PM2.5 stations so values compare like for like |
+| Sensor.Community | Hexagon map, no sign-in | Tap a hex for count, median and one row per sensor with 24 hour and 7 day means | Metric dropdown, collapsible legend per metric, indoor and reference toggles, a visible sensor counter |
+| Apple Weather | Location prompt, then forecast | Air quality map overlay with a compact gradient legend | Overlay switch for temperature, precipitation and air quality |
+| Google Maps AQ layer | Layers, Map details, Air quality | Coloured AQI bubbles, zooms out to an overview | Nested menu, hard to find |
+| Eufy | Login and email verification before anything | n/a | Account wall |
+| Google Home | Get started, Google account, location | n/a | Permission and account up front |
+| Netatmo Weathermap | Map of user stations, clustered averages when zoomed out | Station values | Only outdoor modules are shared, opt in |
+| Ambient Weather | Network map with layer toggles | Station page | Stale styling undocumented |
+| Windy | Map, layer picker with favourites | Thin colour bar legend, timeline at the bottom | Strong legend and time model |
+| BreezoMeter | Now inside Google Maps Platform | n/a | Consumer app status unclear |
+
+Patterns we copy.
+
+1. Map first with no login (PurpleAir, Sensor.Community), the opposite of Eufy and Google Home.
+2. The active metric and window are always visible on the map, never behind a gear.
+3. A small legend anchored in a corner that expands on tap.
+4. A hex shows one value plus a device count. Tapping it lists the devices (Sensor.Community).
+5. Every cell and device shows when it last updated (IQAir).
+6. Separate styles for "stale" and "this cell does not measure this metric" (PurpleAir uses one grey for both, which is ambiguous).
+7. A non-modal sheet with a grabber and peek, half and full heights, with the map still usable (Material standard bottom sheet, Apple sheet detents).
+8. The device page shows recent averages and a trend, not only a live value.
+9. A count of sensors in view, so an empty area is obviously empty, not broken.
+
+Anti-patterns we avoid. Account or permission walls before any value. Metric pickers hidden in
+menus. Silently hiding cells that lack the chosen metric. Search limited to the viewport. Several
+sheets stacked on top of each other.
+
+### First screen at the Simple level
+
+Zero taps shows the map, the metric and window chips, the legend, the "Sample data" pill while
+the feed is a fixture, and the sheet at peek height. Nothing else. Every explanation sits behind
+an info button.
+
+- **Top bar.** A search field ("Search places") and an "Add your sensor" icon button (`+`). The
+  `+` is the only place on Discover that starts pairing, apart from the first-run card.
+- **Metric chips.** One row. The chips are built from the properties the visible cells actually
+  report, ranked by how many visible cells report them, so the row adapts to any sensor family.
+  At most three property chips show, then a "More" chip opens the sheet at full height with every
+  property grouped by category from the metric registry (Air, Weather, Water, Soil, Noise,
+  Energy). Choosing one from "More" moves it into the row. The last choice is remembered.
+- **Window chip.** One chip at the end of the row, cycling Last hour, 24 hours, 7 days.
+- **Legend.** Bottom left, just above the sheet. A thin colour bar with the unit and the end
+  values. Tap to expand into the band names. Its info button names the scale source (for
+  example US EPA AQI). A property with a published `Scale` uses its fixed bands. A property
+  without one uses the neutral sequential ramp stretched from the 5th to the 95th percentile of
+  the cells in view, as the website does, and the legend shows those two values.
+- **Cell styles.** Filled with the scale colour. A stale cell (no hourly value for 3 hours) is
+  drawn at 40 percent opacity with a dashed outline. A cell that does not measure the chosen
+  metric is outline only, no fill. Selected cell has a thick ink outline.
+- **Sample data.** A pill top right under the chips, "Sample data", in the `accent` tone. It also
+  appears as the first line of every cell sheet and device page. Its info button says the
+  numbers are made up for a preview and real sensors appear when the public feed goes live. It
+  disappears only when the newest files no longer carry `sample = true`.
+- **Attribution.** "© OpenStreetMap" bottom right, visible at launch. It collapses to an info
+  button after the first pan or after 5 seconds, as the OSMF guidelines allow.
+- **First run.** The peek area holds one card instead of the summary. A 48 dp peacock, one line
+  "Public sensors near you, shown as areas", and two actions "Add your sensor" and "Explore".
+  Either action dismisses it for good. The card carries no numbers, so the mascot rule (never
+  beside charts or numbers) holds.
+
+Sheet heights.
+
+| Height | Nothing selected | Cell selected |
+| --- | --- | --- |
+| Peek (about 96 dp) | "12 sensor areas in view" and the freshness, or the first-run card | Cell headline value, device count, freshness |
+| Half (Material half expanded, Apple medium detent) | List of the cells in view by value | Avg, min and max per metric the cell reports |
+| Full (expanded, large detent) | Same list, scrollable | Metrics plus the device list (crowd rule met) |
+
+Tapping a cell opens the sheet at half height. Tapping the map outside a cell returns to peek.
+Back returns sheet to peek before it leaves the screen. On Android this is a
+`BottomSheetScaffold` standard sheet. On iOS the same Compose sheet is drawn, sized to match
+the medium and large detents.
+
+**First open**
+
+```
++--------------------------------------+
+| [Search places              ] [ + ]  |
+| (PM2.5) (Temp) (Humidity) (More)(24h)|
+|                       (Sample data i)|
+|      __    __                        |
+|     /  \__/  \__      map of hexes   |
+|     \__/  \__/  \                    |
+|        \__/  \__/                    |
+|                                      |
+| [green..yellow..red  µg/m³]  © OSM i |
++--------------------------------------+
+| ----                                 |
+| (peacock) Public sensors near you,   |
+|           shown as areas             |
+|  [Add your sensor]   [Explore]       |
++--------------------------------------+
+| Discover    My devices    Settings   |
++--------------------------------------+
+```
+
+**Cell tapped, crowd rule met (3 or more devices)**
+
+```
++--------------------------------------+
+| (PM2.5) (Temp) (Humidity) (More)(24h)|
+|   map, selected hex outlined          |
++--------------------------------------+
+| ----                                 |
+| Sample data                        i |
+| 14 µg/m³  Moderate                   |
+| 5 sensors  Updated 1 h ago           |
+|--------------------------------------|
+|          avg     min     max         |
+| PM2.5    14      6       31   µg/m³  |
+| Temp     21.5    18.0    24.5  °C    |
+| Humidity 48      35      62    %     |
+|--------------------------------------|
+| Sensors here                         |
+| (air) Blue Heron 41   12   1 h ago > |
+| (air) Quiet Fern 07   17   1 h ago > |
+| (wx)  Amber Kite 22   21.0 2 h ago > |
++--------------------------------------+
+```
+
+**Cell tapped, fewer than 3 devices**
+
+The cell itself is never drawn with its own value. The map shows the parent cell instead, so a
+tap lands on the parent. When the user zooms in far enough that the parent is split, the
+lonely child is drawn outline only, and tapping it shows this.
+
+```
++--------------------------------------+
+| ----                                 |
+| Too few sensors here to show      i  |
+| Nearby area                          |
+| 11 µg/m³  Good                       |
+| 9 sensors  Updated 1 h ago           |
+|          avg     min     max         |
+| PM2.5    11      4       29   µg/m³  |
+| [Show the nearby area]               |
++--------------------------------------+
+```
+
+**Device page**
+
+```
++--------------------------------------+
+| <  Blue Heron 41                 i   |
+| Sample data                          |
+| Outdoor air  Updated 1 h ago         |
+|                                      |
+| 12 µg/m³  Good             (hero)    |
+| Area average 14                      |
+|                                      |
+| (PM2.5) (PM10) (Temp) (More)         |
+| (24h) (7d) (30d)   (Avg) (Min) (Max) |
+|   chart, hourly, area average dashed |
+|                                      |
+| Air        PM2.5 12   PM10 18        |
+| Weather    Temp 21.0  Humidity 47    |
+|                                      |
+| About                              > |
++--------------------------------------+
+```
+
+"About" holds the family, the data licence and the source link. Public device pages show
+hourly values only. An owned device keeps its own full-resolution history from local storage,
+and its settings hold "Share this sensor publicly", off by default.
+
+**Navigation.** Three tabs, Discover, My devices and Settings. With no paired device Discover
+is the start tab. With a paired device My devices is the start tab.
+
+### Centring the map and Near me
+
+The map never asks for location at launch. It opens on the first of these that exists.
+
+1. The last viewed area (saved camera).
+2. The cell of the user's own published device.
+3. A region from the phone's IANA time zone, using a bundled zone to bounding box table. This
+   lands on the right country or metro for most people, and on a continent overview otherwise,
+   like Google Maps zooming out to an overview.
+
+Search uses a bundled place list (GeoNames cities with population 15,000 or more, licensed
+CC BY 4.0, credited in About). Search is local, so typing never leaves the phone.
+
+**"Near me" (owner decision 2026-10-08).** A map button that asks for approximate location only
+at the moment it is tapped, because a time-zone guess fails for large zones and store rules
+allow it cleanly. Precise location is never requested on either platform.
+
+- Android. Declare only `ACCESS_COARSE_LOCATION` (about 3 km², similar to a resolution 7 cell).
+  Foreground only, so no Play location declaration or background disclosure is needed. Check
+  the newer Android rule that session-only location on recent SDK targets should use the system
+  location button, against our `targetSdk` before building it.
+- iOS. When In Use with `NSLocationDefaultAccuracyReduced` set to true, so the prompt offers
+  approximate location by default. Search stays the alternative when the user declines (App
+  Review 5.1.1).
+- Use. The fix only moves the camera. It is never stored, never sent and never published, so it
+  is not "collected" under either store's privacy rules.
+
+- Decline. The map stays where it is and search remains. Asking again happens only on the next
+  tap, never on launch.
+- The same approximate fix may preselect the cell in the sharing cell picker. The owner still
+  confirms or moves the cell, and the fix itself is not kept.
+
+`AGENTS.md` records this boundary.
+
+### Privacy rules
+
+Snapping a home to a hexagon does not make its data anonymous. Temperature, humidity, CO2 and
+particle series reveal occupancy, cooking and even how many people are home. The rules below
+treat each public series as personal data until it is aggregated.
+
+1. **No points, only cells.** Public data carries an H3 cell, never coordinates. The owner picks
+   the cell on the map when opting in, optionally starting from an approximate "Near me" fix.
+   Coordinates never leave the phone. No jitter is added to
+   cells, since snapping already coarsens the place and noise only helps for points.
+2. **Precision.** Resolution 7 (5.16 km², edge about 1.4 km) is the finest published and the
+   one stored for a shared device. Coarser levels are derived from it. Resolution 8 (0.74 km²)
+   is never published, because Play treats location finer than about 3 km² as precise, and
+   resolution 7 keeps both store labels at approximate location.
+3. **Crowd rule for every number.** A cell's aggregate and its device list are published only
+   when it holds at least three publishing devices. With fewer, the devices count only toward
+   the parent. A parent is published only when the devices it holds outside its published
+   children number zero or at least three, so a sibling cannot be subtracted from the parent
+   to recover one device.
+4. **Time.** Public values are hourly means, published at least one hour after the hour ends.
+   No live or minute values ever leave the owner's phone through this feature.
+5. **Rounding.** Values are rounded to the instrument's real precision from the dictionary (for
+   example PM to 1 µg/m³, temperature to 0.5 °C, humidity to 1 percent).
+6. **Outdoor only.** A device must be marked outdoor to publish. The indoor or outdoor choice
+   defaults to indoor. Indoor devices never appear in public data (Netatmo and
+   Sensor.Community do the same).
+7. **Device identity, not user identity (owner decision 2026-10-08).** No accounts, no sign-in
+   and no passkey at app start. Passkeys need a relying party server and are an account in
+   store terms, which brings sign-in screens and in-app account deletion for no gain here.
+   Instead, turning sharing on makes a fresh P-256 key pair for that device in the Android
+   Keystore or the iOS Keychain (Secure Enclave where available). The private key never leaves
+   the phone and signs each upload. The public ID is a truncated SHA-256 of the public key, and
+   the public name is derived from the same hash as two words and a number (for example "Blue
+   Heron 41"), so there is no free text and nothing to moderate. Turning sharing on again later
+   makes a new key, ID and name. Nothing is derived from the station UUID, MAC address, serial
+   or the owner. The station UUID, MAC, BLE name, Wi-Fi and LAN token never leave the phone.
+   If the firmware later uploads by itself, the key moves to the board through an
+   `aq-parquet` contract change.
+8. **Opt in per device, with an open licence.** Reading the feed is anonymous and read-only.
+   Uploading is off for every device by default and is turned on only in that device's settings
+   ("Share this sensor publicly"), never globally, in onboarding or in pairing. One
+   confirmation shows the cell picker, the generated name, what is shared (hourly outdoor
+   readings and the area), what never is (exact location, IDs, Wi-Fi, PIN, token), and that
+   published data is released under CC BY 4.0 and cannot be taken back.
+9. **Stop sharing (owner decision 2026-10-08).** Stored with that device's settings. It takes
+   effect from the next UTC day, so the current day's hours still publish and nothing after
+   it does. Data already published stays public under its licence. Sharing can be turned on
+   again at any time with a new identity (rule 7).
+
+The publisher enforces every rule before a file is written. The phone never receives a
+suppressed cell or a lone device, so a modified client cannot reveal one.
+
+Differential privacy noise is not needed for this design. Count suppression, the differencing
+guard and hourly coarsening are the practical baseline, and noise would make small cells
+misleading. Revisit if public values ever become finer than hourly.
+
+### Network boundary
+
+This feature changes the offline-only stance in one narrow way. The app may make anonymous,
+read-only GET requests to the public feed and the basemap. No cookies, accounts, identifiers or
+analytics. A Settings switch, "Show public sensors", turns them off. When it is off or offline,
+Discover shows the last cached snapshot or the bundled sample on the bundled basemap, and
+pairing and sync work exactly as before. `AGENTS.md` records this boundary.
+
+### Public feed contract (proposed)
+
+The feed mirrors the website's `/indices` explorer (`walkthru-earth.github.io`,
+`docs/indices.md` and `docs/parquet-producer-guidance.md`), so one dataset serves the website,
+the phone and anyone with DuckDB. Static files on source.coop (owner decision 2026-10-08, a
+Radiant Earth partnership on AWS Open Data), no server for reading. The publisher (not this
+repo) runs once an hour, applies the privacy rules above, and writes immutable files.
+
+**Upload path.** The phone never holds source.coop write credentials. Signed hourly uploads go
+to a small ingest endpoint owned by the publisher, which checks the signature against the
+device's registered public key and keeps raw rows private until the hourly run aggregates them.
+Who builds and runs the publisher and ingest is still open.
+
+```
+opensensor/discover/v1/
+  cells/window={1h|24h|7d}/date=YYYY-MM-DD/hour=HH/h3_res={r}/data.parquet
+  devices/date=YYYY-MM-DD/hour=HH/h3_res={r}/data.parquet
+  series/month=YYYY-MM/data.parquet
+```
+
+- **Discovery.** S3 `ListObjectsV2` on the bucket is the manifest, as on the website. The phone
+  follows continuation tokens, picks the newest `date` and `hour` (compared as numbers), and
+  caches the answer for 5 minutes. Downloads go through `data.source.coop`.
+- **Cells file.** One plain Parquet file per resolution, `h3_res` 2 to 7. Columns are
+  `h3_index` (INT64, sorted), `devices` (INT32, always 3 or more), `updated` (TIMESTAMP UTC) and
+  flat metric columns `<property>__n`, `__mean`, `__min`, `__max` (DOUBLE, null when the cell
+  does not measure it). Property IDs, units and families come from the dictionary named in the
+  file's key value metadata. No geometry, no nested columns.
+- **Devices file.** Rows `h3_index` (INT64, sorted), `public_id`, `name`, `family` and the
+  latest hourly headline value per property, only for cells that pass the crowd rule.
+- **Series file.** Hourly rows `public_id`, `hour`, then the same flat property columns, sorted
+  by `public_id` then `hour`. A 30 day device chart reads one or two monthly files.
+- **Writer rules for the phone.** SNAPPY (or LZ4_RAW) compression, not ZSTD, because Apple's
+  Compression framework has no zstd and our reader keeps native code out of `:core:*`. PLAIN or
+  RLE_DICTIONARY encodings, no DELTA, no BOOLEAN, no nested types. Min and max statistics on
+  every column. Row groups small enough for pruning (start near 16,384 rows and measure), plus
+  column and offset indexes. The website already reads SNAPPY.
+  The owner plans to republish existing datasets with SNAPPY or LZ4 later. Until then W12
+  builds on the sample feed, which already follows these rules.
+
+Reading on the phone.
+
+1. The camera rests for 400 ms. Resolution is `round(zoom * 0.8)`, clamped to 2 to 7, as on the
+   website. Deeper zoom keeps showing resolution 7.
+2. The viewport is covered with H3 cells at that resolution, coarsening until the cover is at
+   most 1,024 cells, then turned into merged INT64 descendant ranges (pure bit arithmetic on the
+   index, in `commonMain`).
+3. The reader fetches the footer once per URL, keeps row groups (and later pages) whose
+   `h3_index` min and max overlap a range, and range reads only `h3_index` and the chosen
+   metric's `__mean` column. Rows are then filtered exactly.
+4. A tap is an `h3_index` lookup in the rows already loaded, then one more range read of that
+   row group's `__n`, `__mean`, `__min` and `__max` columns for every property, plus the devices
+   file for the same cell.
+
+The reader is the repository's own `:core:parquet`, made portable in W8 (`ByteReader`, common
+LZ4 and Snappy). W12 adds a suspend range source backed by Ktor and an LRU cache of footers and
+byte ranges on disk (proposed 32 MiB). It does not set `Accept-Encoding` on range requests, so
+byte offsets stay true. It reads row group statistics today and gains column and offset index
+support as a follow-up. No third-party Parquet or DuckDB library exists for iOS that would do
+this better.
+
+Paths under `date=` and `hour=` never change, so footers and ranges are cached until the
+newest hour moves on. The last complete hour stays on disk for offline use.
+
+**Sample data.** `tools/discover-fixture/` writes the same layout and schema with Python `h3`
+and PyArrow, including `sample = true` in the key value metadata, and the files ship in the app.
+The phone reads them through the same reader from a local file source, so the sample and the
+live feed share one code path. The pill shows while `sample` is true.
+
+**What we do not copy from the website.** The EOX Sentinel-2 cloudless basemap, whose licence
+restricts commercial use, and the deck.gl globe view. Some current website datasets also still
+store H3 as strings with a geometry column in one large ZSTD row group. The opensensor feed
+starts with the target layout from the producer guidance.
+
+### Map technology
+
+- **Renderer.** `org.maplibre.compose:maplibre-compose` **0.19.0** (2026-10-01). Its own
+  catalogue pins Kotlin 2.4.20 and Compose Multiplatform 1.12.1, the same as ours, so the
+  `expect`/`actual` fallback is not needed now. Since 0.15.0 it renders through
+  `maplibre-native-ffi` instead of the platform SDKs. Android needs minSdk 24 and one runtime
+  artifact (`maplibre-compose-runtime-opengl-android`, Vulkan later after a phone check). iOS
+  needs no CocoaPods or SPM, only `-lc++ -lz` and the system frameworks (CoreFoundation,
+  CoreGraphics, CoreText, Foundation, ImageIO, Metal, QuartzCore), which fits our direct Xcode
+  framework setup. Minimum iOS 15.5. Android and iOS are Beta and minor releases may break, so
+  pin the exact version and upgrade deliberately.
+- **Fallback.** If a future pin breaks it, wrap MapLibre Native directly behind the same
+  composable. Current releases are Android 13.6.1 and iOS 6.31.0 (iOS 7.0.0 is in pre-release).
+- **Cells.** One GeoJSON source built from the loaded rows, with a data-driven fill expression
+  on the chosen value. No composable per cell. Each update replaces the whole dataset, so build
+  it off the main thread and only after the 400 ms rest. The cover budget keeps it near 1,024
+  polygons. Hit testing uses the layer
+  `onClick`. Performance needs a phone measurement on both platforms.
+- **H3 on the phone.** Required, because the files carry no geometry. Behind one interface in
+  `:core:publicfeed`, `com.uber:h3` 4.5.0 on Android and the H3 C library v4 through cinterop on
+  iOS, for `polygonToCells`, `cellToBoundary` and `latLngToCell`. `phansier/h3-kmp` vendors the
+  same C library for both and is worth a review, but it is at 0.0.8. Descendant ranges need no
+  library. A `commonTest` checks both platforms against vectors from Python `h3`.
+- **Basemap online.** A Protomaps PMTiles extract hosted on our own storage, not hotlinked from
+  the Protomaps daily builds. `pmtiles://` is in MapLibre Native since Android 11.7 and iOS 6.10,
+  and the FFI build enables it, but `maplibre-compose` documents no PMTiles API, so it is
+  "verify on phone" on both platforms. Style from `@protomaps/basemaps` 5.7.2, the `white` or
+  `grayscale` flavour recoloured to the sensing palette, light and dark.
+- **Basemap offline (owner decision 2026-10-08).** Nothing is bundled. The app Settings (not a
+  device's settings) offer an optional "Offline map" download, a small world extract
+  (`pmtiles extract --maxzoom` 3 or 4, a few MB, measured before release) with its glyphs and
+  sprites, stored in app storage and removable from the same row. PMTiles sources are not
+  cached by MapLibre, so without the download and without network the cells draw on the plain
+  paper background.
+- **Ornaments.** Use `MapOverlay.AttributionOnly` or draw our own attribution, scale bar off at
+  Simple. Compass only after rotation. Flat Web Mercator, no globe.
+
+### Store compliance
+
+**W12 (read only, sample or public feed).**
+
+- **Attribution.** "© OpenStreetMap" visible on the map at launch, collapsing to an info button,
+  linking to openstreetmap.org/copyright (OSMF guidelines, ODbL Produced Work). The Protomaps
+  credit and GeoNames (CC BY 4.0) sit in About, open source licences. Apple 5.2.2 expects
+  permission for third-party content, which the licences give with attribution.
+- **Privacy policy.** Required by both stores for every app, as a public URL in the console and
+  inside the app (Settings, About). It names the feed and basemap hosts, says each request
+  carries the phone's IP address as any web request does, and says we keep no request logs.
+- **Data safety and privacy label.** Reading the feed sends no identifier, and we receive no
+  request logs, so nothing is collected. Play Data safety declares no data collected or shared.
+  Apple's label is "Data Not Collected", since an IP address sent in a request and not retained
+  need not be disclosed. Confirm in writing with Radiant Earth what source.coop and AWS log for
+  public reads and that it is not shared with us. If that changes, both answers change. The
+  Near me fix is used on the phone only and is not collected.
+- **Privacy manifest.** `PrivacyInfo.xcprivacy` with `NSPrivacyTracking` false and the required
+  reason entries for the APIs the binary uses (UserDefaults, file timestamps, disk space).
+  Audit the built framework, since Kotlin/Native, Compose and MapLibre may call them.
+
+**Once per-device publishing exists.**
+
+- **What is collected.** Hourly outdoor readings and the chosen cell. Apple label "Coarse
+  Location" (the cell) and "Other Data" (readings), not linked to identity, not used for
+  tracking. Play "Approximate location" and the closest sensor category, collected, user
+  initiated, optional, not shared with third parties beyond public publication. Disclose that
+  the data becomes public.
+- **Licence and stopping.** No accounts, so account deletion rules do not apply. Published data
+  is CC BY 4.0, which the opt-in confirmation states before anything uploads. "Stop sharing"
+  stops new data from the next UTC day and does not withdraw what is published. The privacy
+  policy says this, and keeps a contact address for legal removal requests, since per-device
+  series could still count as personal data under laws such as the GDPR even when the licence
+  is irrevocable. Uploads prove ownership with the per-device key (privacy rule 7), never an
+  account.
+- **User-generated content.** Generated names keep the feature out of Apple 1.2 and Play UGC
+  rules. If free-text names are ever allowed, the app must add filtering, reporting, blocking
+  and a contact address first.
+
+### Code layout
+
+| Module | Owns |
+| --- | --- |
+| `:core:model` | `Device`, `DeviceFamily`, `Capability`, `ObservedProperty`, `Scale`, registry |
+| `:core:publicfeed` | `PublicFeed` port, S3 listing, Ktor range source, footer and range cache, H3 interface and viewport cover, bundled sample source |
+| `:core:parquet` | The portable reader from W8, used unchanged except for a suspend range `ByteReader` and later page indexes |
+| `:feature:discover` | CMP `commonMain` screens for the map, cell sheet and public device page, ViewModels |
+| `tools/discover-fixture/` | Script that writes the sample feed in the live layout (Python `h3`, PyArrow), committed output |
+
+`:feature:discover` is shared Compose, so Android and iOS show the same screens. Platform code
+provides only the HTTP engine, the cache directory and the H3 binding. Ktor 3.6.0 is the latest client. Its
+use with Kotlin 2.4.20 still has to pass `verify` and `verifyIos` before it is pinned.
+
+### Owner decisions and open questions
+
+Decided on 2026-10-08.
+
+1. "Near me" ships, approximate location only, asked on tap.
+2. No accounts or passkeys. A per-device anonymous key, with the ID and name derived from it.
+3. Published data is CC BY 4.0 and permanent. "Stop sharing" applies from the next UTC day.
+4. Hosting is source.coop. Logging terms to confirm with Radiant Earth.
+5. No bundled basemap. An optional "Offline map" download in the app Settings.
+6. H3 runs on the phone as native code by default (`com.uber:h3` on Android, the C library on
+   iOS). It is needed anyway for the viewport cover, Near me and the cell picker. The
+   publisher still does all aggregation and privacy work, so the phone only does geometry.
+
+Still open.
+
+1. Who builds and runs the hourly publisher and the upload ingest, and in which repository.
+   This is the job that turns raw uploads into the public cell files and enforces the crowd
+   rule. The read only map in W12 works without it, on the sample data.
+
+### Sources
+
+UX and platform
+- PurpleAir map guide, https://community.purpleair.com/t/purpleair-map-guide/90
+- IQAir AirVisual, https://apps.apple.com/app/iqair-airvisual-air-quality/id1048912974 and https://www.iqair.com/support/knowledge-base/reported-aqi-levels-seem-lower-than-it-appears-visually
+- Sensor.Community map, https://maps.sensor.community/
+- Apple Weather, https://support.apple.com/guide/iphone/check-the-weather-iph1ac0b35f/ios and https://support.apple.com/102594
+- Google Air Quality heatmaps, https://developers.google.com/maps/documentation/air-quality/heatmaps
+- Eufy sign-up, https://service.eufy.com/article-description/Sign-up-for-A-eufy-Account
+- Netatmo Weathermap contribution, https://helpcenter.netatmo.com/hc/en-us/articles/360020909052-How-does-contribution-to-the-Netatmo-Weathermap-work
+- Ambient Weather Network, https://ambientweather.com/ambient-weather-network
+- Material bottom sheets, https://github.com/material-components/material-components-android/blob/master/docs/components/BottomSheet.md and https://developer.android.com/develop/ui/compose/components/bottom-sheets-partial
+- Apple HIG sheets, https://developer.apple.com/design/human-interface-guidelines/sheets
+
+Privacy and location
+- H3 resolution table, https://h3geo.org/docs/core-library/restable
+- Sensor.Community privacy policy, https://devices.sensor.community/privacy-policy
+- Location masking among PurpleAir owners (2026), https://ggis.illinois.edu/news/2026-05-26/study-examines-how-location-privacy-concerns-shape-crowdsourced-socio-environmental
+- Occupancy from temperature and humidity, https://content.iospress.com/articles/journal-of-computer-security/jcs181133
+- Occupancy from CO2, https://bayen.berkeley.edu/sites/default/files/occupancy_detection.pdf
+- Smart meter privacy, https://rts.cs.umass.edu/papers/pdf/buildsys10.pdf
+- Geo-indistinguishability, https://arxiv.org/abs/1212.1984
+- Android location permissions, https://developer.android.com/develop/sensors-and-location/location/permissions
+- Play location policy, https://support.google.com/googleplay/android-developer/answer/9799150
+- NSLocationDefaultAccuracyReduced, https://developer.apple.com/documentation/bundleresources/information-property-list/nslocationdefaultaccuracyreduced
+
+Map technology
+- maplibre-compose releases, https://github.com/maplibre/maplibre-compose/releases and v0.15.0 notes https://github.com/maplibre/maplibre-compose/releases/tag/v0.15.0
+- maplibre-compose version catalogue, https://raw.githubusercontent.com/maplibre/maplibre-compose/main/gradle/libs.versions.toml
+- maplibre-compose docs, https://maplibre.org/maplibre-compose/getting-started/ , https://maplibre.org/maplibre-compose/controls/ , https://maplibre.org/maplibre-compose/interaction/
+- MapLibre Native releases, https://github.com/maplibre/maplibre-native/releases
+- PMTiles on Android, https://maplibre.org/maplibre-native/android/examples/data/PMTiles/
+- MapLibre Native iOS changelog, https://raw.githubusercontent.com/maplibre/maplibre-native/main/platform/ios/CHANGELOG.md
+- FFI data updates, https://maplibre.org/maplibre-native-ffi/guides/update-data/
+- Protomaps flavours, https://docs.protomaps.com/basemaps/flavors , downloads https://docs.protomaps.com/basemaps/downloads , MapLibre use https://docs.protomaps.com/basemaps/maplibre
+- Large GeoJSON guidance, https://docs.mapbox.com/help/troubleshooting/working-with-large-geojson-data/
+
+Feed and libraries
+- Website `/indices` explorer, `../../website/walkthru-earth.github.io/docs/indices.md` and `docs/parquet-producer-guidance.md` (local)
+- Apache Parquet page index, https://parquet.apache.org/docs/file-format/pageindex/
+- S3 ListObjectsV2, https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjectsV2.html
+- hyparquet, the website's reader, https://github.com/hyparam/hyparquet
+- Apple Compression algorithms (no zstd), https://developer.apple.com/documentation/compression/compression_algorithm
+- zstd-kmp, https://klibs.io/project/square/zstd-kmp
+- H3 Java, https://github.com/uber/h3-java , h3-kmp https://github.com/phansier/h3-kmp
+- EOX cloudless licence, https://cloudless.eox.at/documentation/license
+- DuckDB on Android, https://duckdb.org/docs/lts/dev/building/android
+- Ktor releases, https://github.com/ktorio/ktor/releases
+- source.coop range and ETag behaviour, checked with curl on 2026-10-08 against https://data.source.coop/protomaps/openstreetmap/v4.pmtiles
+
+Store compliance
+- OSMF attribution guidelines, https://osmfoundation.org/wiki/Licence/Attribution_Guidelines
+- App Review Guidelines (1.2, 5.1.1, 5.1.5, 5.2.2), https://developer.apple.com/app-store/review/guidelines/
+- App privacy details, https://developer.apple.com/app-store/app-privacy-details/
+- Required reason APIs, https://developer.apple.com/documentation/bundleresources/describing-use-of-required-reason-api
+- Play Data safety, https://support.google.com/googleplay/android-developer/answer/10787469
+- Play privacy policy requirement, https://support.google.com/googleplay/android-developer/answer/10144311
+- Play user-generated content, https://support.google.com/googleplay/android-developer/answer/9876937

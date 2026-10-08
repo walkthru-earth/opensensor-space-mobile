@@ -10,11 +10,12 @@
     <key>CFBundleShortVersionString</key><string>0.1.0</string>
     <key>CFBundleVersion</key><string>1</string>
     <key>LSRequiresIPhoneOS</key><true/>
+    <key>ITSAppUsesNonExemptEncryption</key><false/>
     <key>CADisableMinimumFrameDurationOnPhone</key><true/>
-    <key>NSBluetoothAlwaysUsageDescription</key><string>Connect to your nearby air-quality sensors and display their live readings.</string>
+    <key>NSBluetoothAlwaysUsageDescription</key><string>Finds and connects to your opensensor devices nearby to copy their readings.</string>
     <key>UIApplicationSceneManifest</key>
     <dict><key>UIApplicationSupportsMultipleScenes</key><false/></dict>
-    <key>NSLocalNetworkUsageDescription</key><string>Find your air-quality sensors on the same Wi-Fi network. Discovery stays on your local network.</string>
+    <key>NSLocalNetworkUsageDescription</key><string>Finds your opensensor devices on your Wi-Fi to sync faster.</string>
     <key>NSBonjourServices</key><array><string>_aqsync._tcp</string></array>
     <key>UILaunchScreen</key><dict/>
     <key>UISupportedInterfaceOrientations</key>

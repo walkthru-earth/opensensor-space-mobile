@@ -23,8 +23,11 @@ data class KnownDevice(
     val lastSeenEpochMs: Long,
     val lastConnectedEpochMs: Long?,
     /**
-     * LAN bearer token from `GET_TOKEN`; the DAO API exposes 64 hex chars, while the Room column is
-     * AES-GCM ciphertext protected by Android Keystore. A secret: never log it or show it. Schema v2.
+     * LAN bearer token from `GET_TOKEN`, stored as AES-GCM ciphertext under an Android Keystore key.
+     * Rows read through the DAO carry the ciphertext, an opaque value good only for [hasLanToken]
+     * and for writing the row back. Plaintext comes only from
+     * [earth.walkthru.aqsync.data.local.security.LanCredentialStore], in the data layer. Writes
+     * accept 64 hex chars, which the DAO encrypts. Never log it or show it. Schema v2.
      */
     val lanToken: String? = null,
     /** `TOKEN.port` (47390 on today's firmware). Schema v2. */

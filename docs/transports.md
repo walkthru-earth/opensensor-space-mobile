@@ -118,9 +118,14 @@ measurements do not establish Android/iPhone throughput after the upgrade.
 | Timeouts | connect 15 s unattended (`BACKGROUND_BLE_CONNECT_MS`), `requestMtu` 10 s | `CONNECT_TIMEOUT_MS` 5 s, `HANDSHAKE_TIMEOUT_MS` 8 s, `PUSH_WAIT_MS` 10 s (`readStatus`), `LIVE_WAIT_MS` 15 s (`readLive`) |
 | Framing loss | n/a (per-notification) | zero-length or oversize frame, or EOF mid-frame → close the socket (a resync could deliver a wrong `CHUNK`) |
 | Kept alive by | `dataSync` foreground service during a transfer; nothing while idle | the same + `LanWifiLock` only while a LAN transfer runs |
-| Serialization | **one GATT op at a time** — `opMutex` around every read/write/descriptor call | one socket, one reader loop |
+| Serialization | **one GATT op at a time** — `opMutex` around every read/write/descriptor call; a callback completes the pending op only when its kind and characteristic match (`PendingGattOperation`), so a late callback is dropped | one socket, one reader loop |
 
 ## Pairing (BLE)
+
+The bond-state receiver is registered with `RECEIVER_EXPORTED` on purpose. `ACTION_BOND_STATE_CHANGED`
+comes from the Bluetooth app, a privileged app that does not run as the system UID, and
+developer.android.com ("Context-registered receivers") says a `RECEIVER_NOT_EXPORTED` receiver misses
+broadcasts from such apps. The action is protected, so no other app can send it.
 
 Display-equipped firmware shows a random six-digit pairing passkey; headless firmware uses a
 per-device fixed PIN obtained through the owner's physical provisioning path. Android handles
@@ -170,23 +175,32 @@ stateDiagram-v2
   None --> Stored: BLE session Ready, proto ≥ 2 → GET_TOKEN
   Stored --> Stored: LAN HELLO ok
   Stored --> Stale: LAN ERROR 14 (rotated elsewhere) → lanToken cleared
-  Stale --> Stored: next BLE session refetches, snackbar "LAN token renewed"
+  Stale --> Stored: next BLE session refetches, snackbar LanTokenRenewed
   Stored --> Stale: unreadable encrypted value → token + port cleared
   Stored --> Stale: verified BLE station-generation change → token + port cleared
   Stored --> None: Forget device / deliberate Rotate token
 ```
 
-The DAO exposes the 64-character hex value but stores AES-GCM ciphertext in
-`known_device.lanToken` (nullable). **Never logged, never displayed**: `KnownDevice.toString`,
+`known_device.lanToken` (nullable) holds AES-GCM ciphertext. Rows read through the DAO, and so
+every ViewModel, see only that ciphertext, enough for `hasLanToken`. The plaintext hex comes only from
+`LanCredentialStore.lanToken(address)`, which the repository calls at the moment it builds a LAN
+transport (`tryLan`, `syncInBackground`). **Never logged, never displayed**: `KnownDevice.toString`,
 `Frame.Token.toString`, `FrameRecorder` and the raw-command view redact it. Startup finishes the
-one-time plaintext migration before Auto-sync scheduling or triggers can read credentials. A missing
-Keystore key, failed GCM authentication, or malformed encrypted value clears only the token and port,
-keeps the known-device row, and falls back to BLE; the next bonded BLE session fetches a fresh token.
+one-time plaintext migration before Auto-sync scheduling or triggers can read credentials. Failed GCM
+authentication (`AEADBadTagException`, which is also what a regenerated key gives), a key Android
+invalidated for good, or a malformed `enc1` value clears only the token and port, keeps the
+known-device row, and falls back to BLE. The next bonded BLE session fetches a fresh token. A
+`KeyStoreException`, an `UnrecoverableKeyException` or another transient Keystore error keeps the
+credential and uses BLE for this connect only.
 An accepted same-hardware station-generation change also clears the token and port before the
 post-INFO upsert and requests a fresh token on that BLE connection. Rejected identity changes
 cannot overwrite credentials or trigger automatic trust replacement.
 Any LAN failure other than `AUTH_FAILED` keeps a readable token. Unrelated DAO/programmer failures are
 not converted into token loss ([data-model.md](data-model.md#backup)).
+
+The LAN probe in `tryLan` is removed from the session slot and its transport is closed on every
+failure path, including an unexpected exception and cancellation, and an unexpected exception falls
+back to BLE like a connect failure.
 
 ## Lost link → automatic reconnect (repository)
 
@@ -209,7 +223,10 @@ After `REBOOTING(delay_ms)`: wait `delay_ms`, drop the session, wait `REBOOT_REC
 own. It is in the NEARBY_DEVICES group with the Bluetooth permissions so it is *usually* granted with
 them — but a runtime permission can be missing while its group is granted, and below API 37 the
 constant does not exist. `LanPermission` returns "granted" below 37 and asks above; a denial hides
-LAN with an explanation while BLE keeps working. `INTERNET` exists only for these sockets.
+LAN with an explanation while BLE keeps working. Today `INTERNET` exists only for these sockets.
+The planned discover feed adds anonymous, read-only GETs of the public feed and basemap behind
+the "Show public sensors" switch, and per-device opt-in uploads later
+([devices-and-discovery.md](devices-and-discovery.md#network-boundary)).
 
 ## `NsdManager` two code paths
 

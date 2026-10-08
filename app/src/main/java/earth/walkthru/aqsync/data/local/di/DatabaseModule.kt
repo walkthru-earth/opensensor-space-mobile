@@ -14,6 +14,7 @@ import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
 import earth.walkthru.aqsync.data.local.database.MetricBucketDao
 import earth.walkthru.aqsync.data.local.database.SensorInstallationDao
 import earth.walkthru.aqsync.data.local.database.StationEpochDao
+import earth.walkthru.aqsync.data.local.security.LanCredentialStore
 import earth.walkthru.aqsync.data.local.security.LanTokenCipher
 import earth.walkthru.aqsync.data.local.security.LanTokenCipherContract
 import earth.walkthru.aqsync.data.local.security.LanTokenMigration
@@ -34,6 +35,9 @@ class DatabaseModule {
 
     @Provides
     fun provideKnownDeviceDao(dao: SecureKnownDeviceDao): KnownDeviceDao = dao
+
+    @Provides
+    fun provideLanCredentialStore(dao: SecureKnownDeviceDao): LanCredentialStore = dao
 
     @Provides
     fun provideLanTokenMigration(dao: SecureKnownDeviceDao): LanTokenMigration = dao

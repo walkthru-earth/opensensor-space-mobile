@@ -1,0 +1,14 @@
+opensensor.space mobile
+Copyright (c) 2025-2026 Walkthru.Earth
+
+This project started from the Android Studio architecture template, which carries
+this notice.
+
+  Copyright (C) 2022 The Android Open Source Project
+  Licensed under the Apache License, Version 2.0
+  https://www.apache.org/licenses/LICENSE-2.0
+
+The per-file template headers were replaced by this notice. Files derived from the
+template remain available under the Apache License 2.0 terms for those portions.
+
+Bundled fonts Quicksand and Cairo are licensed under the SIL Open Font License 1.1.

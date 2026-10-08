@@ -68,9 +68,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UIDocumentPickerD
             let folder = FileManager.default.temporaryDirectory.appendingPathComponent("opensensor-export-\(UUID())")
             self.exportFolder = folder
             do {
-                let support = try FileManager.default.url(
-                    for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-                let archive = try ArchiveIO(root: support.appendingPathComponent("SensorArchive", isDirectory: true))
+                let archive = try ArchiveIO(root: SensorArchive.defaultRoot())
                 let snapshot = folder.appendingPathComponent("SensorArchive", isDirectory: true)
                 let count = try await archive.export(to: snapshot)
                 try Task.checkCancellation()
@@ -81,7 +79,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UIDocumentPickerD
                 self.preparedExport = (snapshot, count)
                 self.presentExportIfReady()
             } catch {
-                self.finishExport("Could not prepare the export. Collected files remain saved; try again.")
+                self.finishExport("Could not prepare the export. Collected files remain saved. Try again.")
             }
         }
     }

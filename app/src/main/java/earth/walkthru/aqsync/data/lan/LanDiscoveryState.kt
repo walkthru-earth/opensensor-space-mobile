@@ -6,6 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -13,14 +14,20 @@ import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** Discovered LAN targets keyed by station, as the repository reads them. */
+interface LanTargets {
+    val devices: StateFlow<Map<String, LanDevice>>
+    val error: StateFlow<String?>
+}
+
 /** Shared foreground discovery; controllers consume its targets without each starting a browse. */
 @Singleton
-class LanDiscoveryState @Inject constructor(private val discovery: LanDiscovery) {
+class LanDiscoveryState @Inject constructor(private val discovery: LanDiscovery) : LanTargets {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val _devices = MutableStateFlow<Map<String, LanDevice>>(emptyMap())
-    val devices = _devices.asStateFlow()
+    override val devices: StateFlow<Map<String, LanDevice>> = _devices.asStateFlow()
     private val _error = MutableStateFlow<String?>(null)
-    val error = _error.asStateFlow()
+    override val error: StateFlow<String?> = _error.asStateFlow()
     private var job: Job? = null
     private var generation = 0L
     private val browseMutex = Mutex()

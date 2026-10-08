@@ -1,18 +1,12 @@
 // The first iOS screen consumes the same protocol and sensor-domain code as Android.
+// opensensor.kmp.ios-framework adds the static OpenSensorShared framework for every iOS target.
 plugins {
-    alias(libs.plugins.kotlin.multiplatform)
+    id("opensensor.kmp.ios-framework")
     alias(libs.plugins.compose.multiplatform)
     alias(libs.plugins.compose.compiler)
 }
 
 kotlin {
-    jvm { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
-    listOf(iosArm64(), iosSimulatorArm64()).forEach { target ->
-        target.binaries.framework {
-            baseName = "OpenSensorShared"
-            isStatic = true
-        }
-    }
     sourceSets {
         commonMain.dependencies {
             implementation(project(":core:protocol"))
@@ -21,6 +15,5 @@ kotlin {
             implementation(libs.compose.foundation)
             implementation(libs.compose.material3)
         }
-        commonTest.dependencies { implementation(libs.kotlin.test) }
     }
 }

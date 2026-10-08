@@ -18,15 +18,19 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.history.AirMood
 import earth.walkthru.aqsync.data.history.HistoryColumn
 import earth.walkthru.aqsync.data.history.MetricSpec
-import earth.walkthru.aqsync.ui.device.MoodFace
+import earth.walkthru.aqsync.ui.components.MoodFace
+import earth.walkthru.aqsync.ui.components.NO_VALUE
 import earth.walkthru.aqsync.ui.theme.color
+import earth.walkthru.aqsync.ui.theme.textColorOnSurface
 import java.time.Instant
 import java.time.ZoneId
 import kotlin.math.PI
@@ -109,13 +113,13 @@ fun DayRing(
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.size(size * 0.5f), verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center) {
             if (mood != null) MoodFace(mood, mood.color(), Modifier.size(size * 0.16f))
             Text(
-                mean?.let { if (it >= 100) it.toInt().toString() else "%.1f".format(java.util.Locale.ROOT, it) } ?: "—",
+                mean?.let { if (it >= 100) it.toInt().toString() else "%.1f".format(java.util.Locale.ROOT, it) } ?: NO_VALUE,
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.SemiBold,
-                color = mood?.color() ?: onSurface,
+                color = mood?.textColorOnSurface() ?: onSurface,
             )
-            Text(if (mean == null) "no readings" else metric.unit, style = MaterialTheme.typography.labelSmall, color = muted)
-            if (mean != null) Text("${(coverage * 100).toInt()} % of the day", style = MaterialTheme.typography.labelSmall, color = muted)
+            Text(if (mean == null) stringResource(R.string.history_no_readings_short) else metric.unit, style = MaterialTheme.typography.labelSmall, color = muted)
+            if (mean != null) Text(stringResource(R.string.scan_archive_coverage, (coverage * 100).toInt()), style = MaterialTheme.typography.labelSmall, color = muted)
         }
     }
 }

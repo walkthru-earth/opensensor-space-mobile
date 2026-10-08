@@ -1,14 +1,18 @@
 package earth.walkthru.aqsync.ui.device
 
+import android.content.Context
 import android.content.IntentSender
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.DeviceConnectionManager
-import earth.walkthru.aqsync.data.DeviceEvent
+import earth.walkthru.aqsync.data.DeviceMessage
 import earth.walkthru.aqsync.data.SensorLabel
 import earth.walkthru.aqsync.data.TimedStatus
 import earth.walkthru.aqsync.data.TransportFactory
@@ -20,6 +24,7 @@ import earth.walkthru.aqsync.data.ble.ConfigSnapshot
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.fake.FakeTransport
+import earth.walkthru.aqsync.data.history.DeviceCapabilities
 import earth.walkthru.aqsync.data.lan.LanDevice
 import earth.walkthru.aqsync.data.local.database.KnownDevice
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
@@ -29,16 +34,25 @@ import earth.walkthru.aqsync.data.protocol.ConfigPatch
 import earth.walkthru.aqsync.data.protocol.ConfigValidationException
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.protocol.PairMode
+import earth.walkthru.aqsync.data.protocol.WifiState
 import earth.walkthru.aqsync.data.settings.AppSettings
+import earth.walkthru.aqsync.data.settings.DetailLevel
+import earth.walkthru.aqsync.ui.components.ScreenMessage
+import earth.walkthru.aqsync.ui.components.toStringRes
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asExecutor
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.stateIn
@@ -64,7 +78,7 @@ data class DeviceUiState(
     /** A file transfer is running on this session (interactive or worker-fed). */
     val syncRunning: Boolean = false,
     val isFake: Boolean = false,
-    val advancedMode: Boolean = false,
+    val detailLevel: DetailLevel = DetailLevel.SIMPLE,
     /** The phone has the companion-device feature (the "wake when nearby" setup can be offered). */
     val companionSupported: Boolean = false,
     /** A companion association request is in flight (system dialog pending or just launched). */
@@ -78,7 +92,11 @@ data class DeviceUiState(
 
     /** Unattended BLE needs a bond; LAN needs a stored token. Without either the switch would do nothing. */
     val autoSyncReachable: Boolean get() = known?.hasLanToken == true || bonded
-    val isV2: Boolean get() = (info?.proto ?: 1) >= 2
+
+    /** What this device can do, from `INFO` (shared mapping, no schema strings in the UI). */
+    val capabilities: DeviceCapabilities get() = DeviceCapabilities.from(info)
+    val advancedMode: Boolean get() = detailLevel.developer
+    val isV2: Boolean get() = capabilities.configurable
     val ready: Boolean get() = connection.isReady
     val canEdit: Boolean get() = ready && isV2 && !busy
 
@@ -92,6 +110,7 @@ data class DeviceUiState(
 
 @HiltViewModel(assistedFactory = DeviceViewModel.Factory::class)
 class DeviceViewModel @AssistedInject constructor(
+    @param:ApplicationContext private val context: Context,
     manager: DeviceConnectionManager,
     @Assisted private val deviceAddress: String,
     private val transportFactory: TransportFactory,
@@ -115,17 +134,24 @@ class DeviceViewModel @AssistedInject constructor(
         fun create(deviceAddress: String): DeviceViewModel
     }
 
-    private val localEvents = MutableSharedFlow<DeviceEvent>(extraBufferCapacity = 4)
+    companion object {
+        const val WIFI_POLL_MS = 3_000L
+        const val WIFI_POLL_ATTEMPTS = 20
+    }
 
-    /** System dialogs the screen must launch (`StartIntentSenderForResult`): the companion association confirm. */
-    val launchRequests = MutableSharedFlow<IntentSender>(extraBufferCapacity = 1)
+    private val localEvents = MutableSharedFlow<ScreenMessage>(extraBufferCapacity = 4)
+
+    private val _launchRequests = MutableSharedFlow<IntentSender>(extraBufferCapacity = 1)
+
+    /** System dialogs the route must launch (`StartIntentSenderForResult`), the companion association confirm. Read-only. */
+    val launchRequests: SharedFlow<IntentSender> = _launchRequests.asSharedFlow()
     private val companionBusy = MutableStateFlow(false)
 
     /** Set while a companion setup dropped a Bluetooth session that should come back afterwards. */
     private var reconnectAfterCompanion: Pair<String, String?>? = null
 
     /** Repository snackbar events plus local validation errors. */
-    val events: Flow<DeviceEvent> = merge(repository.events, localEvents)
+    val events: Flow<ScreenMessage> = merge(repository.events.map(ScreenMessage::Device), localEvents)
 
     private val sessionCore = combine(
         repository.session,
@@ -162,8 +188,8 @@ class DeviceViewModel @AssistedInject constructor(
         repository.wifiScan,
         lan,
         activity,
-        combine(settings.advancedMode, companionBusy) { a, b -> a to b },
-    ) { base, scan, (lanDevices, lanErr, known), (busy, syncRunning, transport), (advanced, companionBusy) ->
+        combine(settings.detailLevel, companionBusy) { a, b -> a to b },
+    ) { base, scan, (lanDevices, lanErr, known), (busy, syncRunning, transport), (level, companionBusy) ->
         base.copy(
             transport = transport,
             wifiScan = scan,
@@ -172,11 +198,29 @@ class DeviceViewModel @AssistedInject constructor(
             lanDiscoveryError = lanErr,
             busy = busy,
             syncRunning = syncRunning,
-            advancedMode = advanced,
+            detailLevel = level,
             companionSupported = companionPresence.supported && !base.isFake,
             companionBusy = companionBusy,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DeviceUiState())
+
+    init {
+        // While the device reports Wi-Fi `connecting` on a ready link, re-read the config every 3 s
+        // (up to a minute) so the card shows the join progress. This used to be a LaunchedEffect in
+        // the composable. It now lives with the screen's ViewModel and stops when the entry is popped.
+        viewModelScope.launch {
+            combine(repository.config, repository.connectionState) { config, conn ->
+                config?.config?.wifi?.wifiState == WifiState.CONNECTING && conn.isReady
+            }.distinctUntilChanged().collectLatest { polling ->
+                if (polling) {
+                    repeat(WIFI_POLL_ATTEMPTS) {
+                        delay(WIFI_POLL_MS)
+                        repository.refreshConfig()
+                    }
+                }
+            }
+        }
+    }
 
     fun refreshConfig() = repository.refreshConfig()
     fun disconnect() = repository.disconnect()
@@ -186,11 +230,11 @@ class DeviceViewModel @AssistedInject constructor(
         val state = uiState.value
         val label = SensorLabel.parse(sticker)
         if (label == null || label.model != "PMS5003T") {
-            localEvents.tryEmit(DeviceEvent.Error("Enter the PMS5003T sticker as PMS5003T-YYYYMMDD plus its unit digits"))
+            localEvents.tryEmit(ScreenMessage.Text(context.getString(R.string.msg_sticker_invalid), isError = true))
             return
         }
-        if (!state.canEdit || state.syncRunning || state.info?.schema?.startsWith("waveshare-sim7670g-telemetry-") != true) {
-            localEvents.tryEmit(DeviceEvent.Error("Connect to the Waveshare logger and wait for device tasks to finish"))
+        if (!state.canEdit || state.syncRunning || !state.capabilities.sensorIdentity) {
+            localEvents.tryEmit(ScreenMessage.Text(context.getString(R.string.msg_sensor_busy), isError = true))
             return
         }
         val info = state.info ?: return
@@ -202,7 +246,7 @@ class DeviceViewModel @AssistedInject constructor(
                 if (acknowledged?.serial != label.serial || acknowledged?.model != label.model ||
                     acknowledged?.vendor != label.vendor || acknowledged?.batchCandidate != (if (batchCandidate) 1 else 0)
                 ) {
-                    localEvents.tryEmit(DeviceEvent.Error("Board did not confirm the sensor identity"))
+                    localEvents.tryEmit(ScreenMessage.Text(context.getString(R.string.msg_sensor_not_confirmed), isError = true))
                     return@launch
                 }
                 sensorInstallationDao.record(
@@ -218,11 +262,12 @@ class DeviceViewModel @AssistedInject constructor(
                         source = source,
                     )
                 )
-                localEvents.tryEmit(DeviceEvent.Info("Sensor identity saved. Batch estimate ${if (batchCandidate) "on" else "off"}."))
+                localEvents.tryEmit(ScreenMessage.Text(context.getString(if (batchCandidate) R.string.msg_sensor_saved_on else R.string.msg_sensor_saved_off)))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                localEvents.tryEmit(DeviceEvent.Error("Sensor identity was not saved: ${e.message}"))
+                Log.w("DeviceViewModel", "sensor identity not saved (${e::class.simpleName}: ${e.message})")
+                localEvents.tryEmit(ScreenMessage.Text(context.getString(R.string.msg_sensor_failed), isError = true))
             }
         }
     }
@@ -235,11 +280,11 @@ class DeviceViewModel @AssistedInject constructor(
         viewModelScope.launch {
             repository.setAutoSync(addr, enabled)
             localEvents.tryEmit(
-                DeviceEvent.Info(
+                ScreenMessage.Text(
                     if (enabled) {
-                        "Auto-sync on: new files are pulled about every ${AutoSyncScheduler.PERIOD_MINUTES} min, even with the app closed."
+                        context.getString(R.string.files_autosync_event_on, AutoSyncScheduler.PERIOD_MINUTES.toInt())
                     } else {
-                        "Auto-sync off for this device."
+                        context.getString(R.string.files_autosync_event_off)
                     }
                 )
             )
@@ -268,11 +313,14 @@ class DeviceViewModel @AssistedInject constructor(
                 addr,
                 Dispatchers.Main.asExecutor(),
                 onIntent = { sender ->
-                    if (!launchRequests.tryEmit(sender)) {
-                        finishCompanion(addr, "Could not open the system dialog")
+                    if (!_launchRequests.tryEmit(sender)) {
+                        finishCompanion(addr, context.getString(R.string.msg_wake_no_dialog))
                     }
                 },
-                onError = { reason -> finishCompanion(addr, "Wake when nearby not set up: $reason") },
+                onError = { reason ->
+                    Log.w("DeviceViewModel", "companion association failed ($reason)")
+                    finishCompanion(addr, context.getString(R.string.msg_wake_failed))
+                },
             )
         }
     }
@@ -282,16 +330,16 @@ class DeviceViewModel @AssistedInject constructor(
         val addr = uiState.value.address ?: reconnectAfterCompanion?.first ?: return
         viewModelScope.launch {
             if (!approved) {
-                finishCompanion(addr, "Wake when nearby not set up (cancelled)")
+                finishCompanion(addr, context.getString(R.string.msg_wake_cancelled))
                 return@launch
             }
             val id = companionPresence.onAssociated(addr)
             if (id == null) {
-                finishCompanion(addr, "Wake when nearby not set up: the system recorded no association")
+                finishCompanion(addr, context.getString(R.string.msg_wake_no_link))
                 return@launch
             }
             repository.setCompanionAssociation(addr, id)
-            finishCompanion(addr, "Wake when nearby is on: a sync starts when this phone comes into range of the logger.", ok = true)
+            finishCompanion(addr, context.getString(R.string.msg_wake_on), ok = true)
         }
     }
 
@@ -302,13 +350,13 @@ class DeviceViewModel @AssistedInject constructor(
         viewModelScope.launch {
             companionPresence.disassociate(addr, s.known?.companionAssociationId)
             repository.setCompanionAssociation(addr, null)
-            localEvents.tryEmit(DeviceEvent.Info("Wake when nearby is off."))
+            localEvents.tryEmit(ScreenMessage.Text(context.getString(R.string.msg_wake_off)))
         }
     }
 
     private fun finishCompanion(addr: String, message: String, ok: Boolean = false) {
         companionBusy.value = false
-        localEvents.tryEmit(if (ok) DeviceEvent.Info(message) else DeviceEvent.Error(message))
+        localEvents.tryEmit(ScreenMessage.Text(message, isError = !ok))
         reconnectAfterCompanion?.let { (address, name) ->
             reconnectAfterCompanion = null
             if (address == addr) repository.connect(address, name, fake = false, preference = TransportPreference.BLE_ONLY)
@@ -324,20 +372,20 @@ class DeviceViewModel @AssistedInject constructor(
                 if (mode == PairMode.FIXED && !pin.isNullOrEmpty()) blePin(pin)
             }
         } catch (e: ConfigValidationException) {
-            localEvents.tryEmit(DeviceEvent.Error(e.message ?: "invalid value"))
+            localEvents.tryEmit(ScreenMessage.Text(context.getString(e.problem.toStringRes()), isError = true))
             return
         }
-        repository.applyConfig(patch, "Pairing settings stored")
+        repository.applyConfig(patch, DeviceMessage.ConfigChange.PAIRING)
     }
 
     fun setPin(pin: String) {
         val patch = try {
             ConfigPatch.build { blePin(pin) }
         } catch (e: ConfigValidationException) {
-            localEvents.tryEmit(DeviceEvent.Error(e.message ?: "invalid PIN"))
+            localEvents.tryEmit(ScreenMessage.Text(context.getString(e.problem.toStringRes()), isError = true))
             return
         }
-        repository.applyConfig(patch, "PIN stored")
+        repository.applyConfig(patch, DeviceMessage.ConfigChange.PIN)
     }
 
     fun reboot() = repository.rebootAndReconnect()
@@ -356,14 +404,14 @@ class DeviceViewModel @AssistedInject constructor(
                 wifiOn(true)
             }
         } catch (e: ConfigValidationException) {
-            localEvents.tryEmit(DeviceEvent.Error(e.message ?: "invalid Wi-Fi settings"))
+            localEvents.tryEmit(ScreenMessage.Text(context.getString(e.problem.toStringRes()), isError = true))
             return
         }
-        repository.applyConfig(patch, "Wi-Fi settings sent; the device is connecting")
+        repository.applyConfig(patch, DeviceMessage.ConfigChange.WIFI_SENT)
     }
 
-    fun setWifiOn(on: Boolean) = repository.applyConfig(ConfigPatch.build { wifiOn(on) }, if (on) "Wi-Fi radio on" else "Wi-Fi radio off")
-    fun setLanOn(on: Boolean) = repository.applyConfig(ConfigPatch.build { lanOn(on) }, if (on) "LAN sync server on" else "LAN sync server off")
+    fun setWifiOn(on: Boolean) = repository.applyConfig(ConfigPatch.build { wifiOn(on) }, if (on) DeviceMessage.ConfigChange.WIFI_ON else DeviceMessage.ConfigChange.WIFI_OFF)
+    fun setLanOn(on: Boolean) = repository.applyConfig(ConfigPatch.build { lanOn(on) }, if (on) DeviceMessage.ConfigChange.LAN_ON else DeviceMessage.ConfigChange.LAN_OFF)
 
     // ------------------------------------------------------------------ LAN
 

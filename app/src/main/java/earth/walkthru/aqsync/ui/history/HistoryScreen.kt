@@ -37,12 +37,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.history.AirMood
 import earth.walkthru.aqsync.data.history.Columns
 import earth.walkthru.aqsync.data.history.HistoryColumn
@@ -51,15 +54,19 @@ import earth.walkthru.aqsync.data.history.HistorySeries
 import earth.walkthru.aqsync.data.history.HistoryWindow
 import earth.walkthru.aqsync.data.history.MetricSpec
 import earth.walkthru.aqsync.data.history.Metrics
-import earth.walkthru.aqsync.data.history.TimeEstimate
 import earth.walkthru.aqsync.ui.components.DeviceBottomBar
 import earth.walkthru.aqsync.ui.components.DeviceTab
 import earth.walkthru.aqsync.ui.components.Eyebrow
+import earth.walkthru.aqsync.ui.components.InfoButton
+import earth.walkthru.aqsync.ui.components.InfoContent
 import earth.walkthru.aqsync.ui.components.InfoNote
+import earth.walkthru.aqsync.ui.components.NO_VALUE
 import earth.walkthru.aqsync.ui.components.SectionCard
 import earth.walkthru.aqsync.ui.components.StatLine
 import earth.walkthru.aqsync.ui.components.TransportChip
+import earth.walkthru.aqsync.ui.components.titleText
 import earth.walkthru.aqsync.ui.theme.color
+import earth.walkthru.aqsync.ui.theme.textColorOnSurface
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -84,7 +91,7 @@ fun HistoryScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("History") },
+                title = { Text(stringResource(R.string.history_title)) },
                 actions = { TransportChip(state.transport, Modifier.padding(end = 12.dp)) },
             )
         },
@@ -105,26 +112,27 @@ fun HistoryScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             if (state.initializing) {
-                item(key = "loading") { InfoNote("Loading archive…") }
+                item(key = "loading") { InfoNote(stringResource(R.string.history_loading)) }
                 return@LazyColumn
             }
             if (state.stations.size > 1) {
                 item(key = "station-epochs") {
                     Column {
-                        Text("History from", style = MaterialTheme.typography.titleSmall)
+                        Text(stringResource(R.string.history_from), style = MaterialTheme.typography.titleSmall)
                         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             state.stations.forEach { station ->
                                 val current = station == state.stations.last()
-                                val label = "${if (current) "Current" else "Earlier"} · ${station.take(8)}"
+                                val base = stringResource(if (current) R.string.history_current else R.string.history_earlier)
+                                val label = if (state.advancedMode) "$base · ${station.take(8)}" else base
+                                val chipDescription = stringResource(R.string.history_station_chip, label, station)
                                 FilterChip(
                                     selected = state.station == station,
                                     onClick = { viewModel.selectStation(station) },
                                     label = { Text(label) },
-                                    modifier = Modifier.semantics { contentDescription = "$label, station $station" },
+                                    modifier = Modifier.semantics { contentDescription = chipDescription },
                                 )
                             }
                         }
-                        InfoNote("Earlier station readings stay available after a device reset.")
                     }
                 }
             }
@@ -142,20 +150,14 @@ fun HistoryScreen(
             }
             item(key = "span") {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { viewModel.page(-1) }) { Icon(Icons.Rounded.ChevronLeft, contentDescription = "Earlier") }
+                    IconButton(onClick = { viewModel.page(-1) }) { Icon(Icons.Rounded.ChevronLeft, contentDescription = stringResource(R.string.history_page_earlier)) }
                     Text(spanLabel(state.range, state.window), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                    IconButton(onClick = { viewModel.page(1) }, enabled = state.canPageForward) { Icon(Icons.Rounded.ChevronRight, contentDescription = "Later") }
+                    IconButton(onClick = { viewModel.page(1) }, enabled = state.canPageForward) { Icon(Icons.Rounded.ChevronRight, contentDescription = stringResource(R.string.history_page_later)) }
                 }
             }
             item(key = "chart") {
                 if (state.availableMetrics.isEmpty()) {
-                    InfoNote(
-                        if (state.filesUntimed > 0) {
-                            "This station has saved readings without a calendar time. Use Files → Chart by file to see them in file order."
-                        } else {
-                            "No supported measurements are indexed for this station yet. Verified files remain available in Files and Export."
-                        }
-                    )
+                    InfoNote(stringResource(if (state.filesUntimed > 0) R.string.history_untimed else R.string.history_nothing_indexed))
                 } else {
                     ChartCard(state, zone, onOpenDay = { dayStartS -> viewModel.openDay(dayStartS) })
                 }
@@ -168,46 +170,54 @@ fun HistoryScreen(
                 }
             }
             item(key = "archive") {
-                SectionCard("Archive on this phone") {
-                    StatLine("days with readings", if (state.daysWithData == 0) "none yet" else state.daysWithData.toString())
+                val archiveTitle = stringResource(R.string.history_archive)
+                SectionCard(
+                    archiveTitle,
+                    trailing = {
+                        InfoButton(
+                            InfoContent(
+                                archiveTitle,
+                                stringResource(R.string.info_history_body1),
+                                stringResource(R.string.info_history_body2),
+                                stringResource(R.string.info_history_body3),
+                                stringResource(R.string.info_history_body4),
+                            ),
+                        )
+                    },
+                ) {
+                    StatLine(stringResource(R.string.history_days), if (state.daysWithData == 0) stringResource(R.string.history_none_yet) else state.daysWithData.toString())
                     val firstDay = state.firstDayS
                     val lastDay = state.lastDayS
                     if (firstDay != null && lastDay != null) {
                         val f = DateTimeFormatter.ofPattern("d MMM yyyy").withZone(ZoneId.of("UTC"))
-                        StatLine("from · to (UTC days)", "${f.format(Instant.ofEpochSecond(firstDay))} · ${f.format(Instant.ofEpochSecond(lastDay))}")
+                        if (state.advancedMode) {
+                            StatLine(stringResource(R.string.history_span_utc), "${f.format(Instant.ofEpochSecond(firstDay))} · ${f.format(Instant.ofEpochSecond(lastDay))}")
+                        }
                     }
-                    StatLine("files with time", "${state.filesWithTime} of ${state.filesTotal}")
-                    if (state.filesPendingIndex > 0) StatLine("waiting to index", state.filesPendingIndex.toString())
-                    if (state.filesIndexFailed > 0) StatLine("could not index", state.filesIndexFailed.toString())
-                    if (state.filesEstimated > 0) StatLine("files with estimated time", state.filesEstimated.toString())
-                    if (state.filesOtherStation > 0) {
-                        InfoNote("${state.filesOtherStation} saved copies have another station ID. They are kept unchanged and excluded from this station's history; choose the earlier station above to see its dated readings.")
-                    }
-                    if (state.filesUntimed > 0) {
-                        InfoNote(
-                            "${state.filesUntimed} file${if (state.filesUntimed == 1) "" else "s"} were logged while the logger had no clock and no later time set reached that power-on, " +
-                                "so their rows cannot be placed on this timeline. Give the logger the time from Today so new rows get one.",
-                        )
-                    }
-                    if (state.availableMetrics.isNotEmpty()) InfoNote("Means use only readings the sensor marked valid (warmed up, fresh, no error). Coverage is the share of the window that has such readings — 3 readings in an hour is 1 %, not an hourly average.")
+                    StatLine(stringResource(R.string.history_files_time), stringResource(R.string.history_of, state.filesWithTime, state.filesTotal))
+                    if (state.filesPendingIndex > 0) StatLine(stringResource(R.string.history_waiting_index), state.filesPendingIndex.toString())
+                    if (state.filesIndexFailed > 0) StatLine(stringResource(R.string.history_index_failed), state.filesIndexFailed.toString())
+                    if (state.filesEstimated > 0) StatLine(stringResource(R.string.history_estimated), state.filesEstimated.toString())
+                    if (state.filesOtherStation > 0) InfoNote(pluralStringResource(R.plurals.history_other_station, state.filesOtherStation, state.filesOtherStation))
+                    if (state.filesUntimed > 0) InfoNote(pluralStringResource(R.plurals.history_untimed_files, state.filesUntimed, state.filesUntimed))
                 }
             }
             if (state.advancedMode) {
                 item(key = "dev") {
-                    SectionCard("Developer") {
+                    SectionCard(stringResource(R.string.history_dev_title)) {
                         val s = state.series
                         StatLine(
-                            "source",
+                            stringResource(R.string.history_dev_source),
                             when {
-                                s == null -> "—"
-                                state.range.tier != null -> "aggregate tier ${state.range.tier!!.seconds / 60} min"
-                                s.binned -> "rows binned to 1 min"
-                                else -> "raw 10 s rows"
+                                s == null -> NO_VALUE
+                                state.range.tier != null -> stringResource(R.string.history_dev_tier, state.range.tier!!.seconds / 60)
+                                s.binned -> stringResource(R.string.history_dev_binned)
+                                else -> stringResource(R.string.history_dev_raw)
                             }
                         )
-                        StatLine("points", s?.points?.size?.toString() ?: "—")
-                        StatLine("valid rows", s?.validRows?.toString() ?: "—")
-                        StatLine("station", state.station ?: "—")
+                        StatLine(stringResource(R.string.history_dev_points), s?.points?.size?.toString() ?: NO_VALUE)
+                        StatLine(stringResource(R.string.history_dev_valid_rows), s?.validRows?.toString() ?: NO_VALUE)
+                        StatLine(stringResource(R.string.history_dev_station), state.station ?: NO_VALUE)
                     }
                 }
             }
@@ -231,12 +241,12 @@ private fun ChartCard(state: HistoryUiState, zone: ZoneId, onOpenDay: (Long) -> 
                 Spacer(Modifier.width(6.dp))
                 Eyebrow(state.metric.unit, uppercase = false)
                 Spacer(Modifier.weight(1f))
-                if (s != null && !s.isEmpty) Eyebrow("${(s.coverage * 100).toInt()} % covered", uppercase = false)
+                if (s != null && !s.isEmpty) Eyebrow(stringResource(R.string.history_covered, (s.coverage * 100).toInt()), uppercase = false)
             }
             Spacer(Modifier.height(8.dp))
             when {
-                state.station == null -> Text("This logger has not been connected yet, so there is no archive to show.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                s == null -> Text("Loading…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                state.station == null -> Text(stringResource(R.string.history_never_connected), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                s == null -> Text(stringResource(R.string.history_loading_short), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 s.isEmpty -> EmptySpan(state)
                 else -> {
                     val columns = remember(s, zone) {
@@ -266,7 +276,7 @@ private fun ChartCard(state: HistoryUiState, zone: ZoneId, onOpenDay: (Long) -> 
                         HistoryRange.MONTH, HistoryRange.YEAR -> {
                             val days = remember(s, zone) { Columns.rebinLocalDays(s, zone) }
                             CalendarHeatmap(days, state.metric, s.fromS, s.toS, onPickDay = { onOpenDay(it.startS) }, zone = zone)
-                            InfoNote("One cell per local day, coloured by its average; tap a day to open it.")
+                            InfoNote(stringResource(R.string.history_tap_day))
                             Spacer(Modifier.height(8.dp))
                         }
                         HistoryRange.WEEK -> Unit
@@ -291,11 +301,11 @@ private fun ChartCard(state: HistoryUiState, zone: ZoneId, onOpenDay: (Long) -> 
     }
 }
 
-/** What the touched column says — time slot, value with its mood, peak, coverage, estimated or not. */
+/** What the touched column says. Time slot, value with its mood, peak, coverage, estimated or not. */
 @Composable
 private fun SelectedColumn(c: HistoryColumn?, state: HistoryUiState, zone: ZoneId) {
     val text = if (c == null) {
-        "Touch a column to read it"
+        stringResource(R.string.chart_touch)
     } else {
         val fmt = when (state.range) {
             HistoryRange.DAY -> DateTimeFormatter.ofPattern("HH:mm XXX")
@@ -305,20 +315,21 @@ private fun SelectedColumn(c: HistoryColumn?, state: HistoryUiState, zone: ZoneI
         }.withZone(zone)
         val slot = when (state.range) {
             HistoryRange.MONTH -> fmt.format(Instant.ofEpochSecond(c.startS))
-            HistoryRange.YEAR -> "week of ${fmt.format(Instant.ofEpochSecond(c.startS))}"
-            else -> "${fmt.format(Instant.ofEpochSecond(c.startS))}–${DateTimeFormatter.ofPattern("HH:mm XXX").withZone(zone).format(Instant.ofEpochSecond(c.endS))}"
+            HistoryRange.YEAR -> stringResource(R.string.history_week_of, fmt.format(Instant.ofEpochSecond(c.startS)))
+            else -> "${fmt.format(Instant.ofEpochSecond(c.startS))} → ${DateTimeFormatter.ofPattern("HH:mm XXX").withZone(zone).format(Instant.ofEpochSecond(c.endS))}"
         }
         val m = c.mean
         if (m == null) {
-            "$slot · no readings"
+            "$slot · " + stringResource(R.string.history_no_readings_short)
         } else {
-            buildString {
-                append(slot).append(" · ").append(fmt(m)).append(' ').append(state.metric.unit)
-                state.metric.moodOf(m.toDouble())?.let { append(" · ").append(it.title) }
-                c.max?.takeIf { it > m * 1.15f }?.let { append(" · peak ").append(fmt(it)) }
-                append(" · ").append((c.coverage * 100).toInt()).append(" % covered")
-                if (c.estimated) append(" · estimated time")
-            }
+            listOfNotNull(
+                slot,
+                fmt(m) + " " + state.metric.unit,
+                state.metric.moodOf(m.toDouble())?.titleText(),
+                c.max?.takeIf { it > m * 1.15f }?.let { stringResource(R.string.history_peak_value, fmt(it)) },
+                stringResource(R.string.history_covered, (c.coverage * 100).toInt()),
+                stringResource(R.string.history_estimated_time).takeIf { c.estimated },
+            ).joinToString(" · ")
         }
     }
     Text(text, style = MaterialTheme.typography.bodySmall, color = if (c == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(top = 6.dp), maxLines = 2)
@@ -328,40 +339,37 @@ private fun SelectedColumn(c: HistoryColumn?, state: HistoryUiState, zone: ZoneI
 private fun Summary(s: HistorySeries) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Column {
-            Eyebrow("average")
+            Eyebrow(stringResource(R.string.history_average))
             Text(
-                s.mean?.let { fmt(it) } ?: "—",
+                s.mean?.let { fmt(it) } ?: NO_VALUE,
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.SemiBold,
-                color = s.mean?.let { s.metric.moodOf(it.toDouble())?.color() } ?: MaterialTheme.colorScheme.onSurface,
+                color = s.mean?.let { s.metric.moodOf(it.toDouble())?.textColorOnSurface() } ?: MaterialTheme.colorScheme.onSurface,
             )
         }
         Column {
-            Eyebrow("peak")
-            Text(s.max?.let { fmt(it) } ?: "—", style = MaterialTheme.typography.headlineSmall, color = s.max?.let { s.metric.moodOf(it.toDouble())?.color() } ?: MaterialTheme.colorScheme.onSurface)
+            Eyebrow(stringResource(R.string.history_peak))
+            Text(s.max?.let { fmt(it) } ?: NO_VALUE, style = MaterialTheme.typography.headlineSmall, color = s.max?.let { s.metric.moodOf(it.toDouble())?.textColorOnSurface() } ?: MaterialTheme.colorScheme.onSurface)
         }
         Column(horizontalAlignment = Alignment.End) {
-            Eyebrow("coverage")
+            Eyebrow(stringResource(R.string.history_coverage))
             Text("${(s.coverage * 100).toInt()} %", style = MaterialTheme.typography.headlineSmall)
-            Text("${s.validRows} readings", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(pluralStringResource(R.plurals.history_readings, s.validRows.toInt(), s.validRows), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
     if (s.coverage < 0.5f) {
-        InfoNote("Less than half of this ${s.range.label.lowercase()} has readings: the average describes the covered part only.")
-    }
-    if (s.hasEstimated) {
-        InfoNote("Dashed stretches (${s.estimatedRows} readings) were logged before the logger had a clock; their time is estimated from a later time set on the same power-on (uncorrected drift, roughly ±${TimeEstimate.DRIFT_PPM.toInt()} s per ${(1_000_000 / TimeEstimate.DRIFT_PPM / 3600).toInt()} h of distance).")
+        InfoNote(stringResource(R.string.history_low_coverage))
     }
 }
 
 @Composable
 private fun EmptySpan(state: HistoryUiState) {
     Column {
-        Text("No readings with a timestamp in this ${state.range.label.lowercase()}.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(stringResource(R.string.history_no_readings), color = MaterialTheme.colorScheme.onSurfaceVariant)
         val lastDay = state.lastDayS
         if (lastDay != null && Instant.ofEpochSecond(lastDay).atZone(state.zone).toLocalDate().isBefore(Instant.ofEpochSecond(state.window.fromS).atZone(state.zone).toLocalDate())) {
             Spacer(Modifier.height(4.dp))
-            Text("The latest readings are from ${DateTimeFormatter.ofPattern("d MMM yyyy").withZone(ZoneId.of("UTC")).format(Instant.ofEpochSecond(lastDay))}.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.history_latest, DateTimeFormatter.ofPattern("d MMM yyyy").withZone(ZoneId.of("UTC")).format(Instant.ofEpochSecond(lastDay))), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

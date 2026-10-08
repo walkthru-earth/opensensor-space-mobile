@@ -4,6 +4,15 @@
 **Code:** `./gradlew verify` (the gate), `.github/workflows/verify.yml`.
 **Related:** measured device behaviour is recorded in the board-specific `../aq-parquet/docs/boards/*/bench-verified.md`; anything not recorded there is unverified.
 
+## 2026-10-08 17:55 Cairo. On-demand permissions launch check (OnePlus 7 Pro, Android 16)
+
+Minified release build of `refactor/production-readiness` (W13 merged), installed over the
+previous build with `adb install -r`. `BLUETOOTH_SCAN`, `BLUETOOTH_CONNECT` and
+`POST_NOTIFICATIONS` were revoked and their user-set flags cleared first. Launch opened straight
+on "Sensors nearby" with the known sensor listed and no permission dialog. `dumpsys` showed all
+three still not granted after launch. Still to check on this phone: Scan asks for Nearby
+devices, Sync now asks for notifications, deny twice then the settings link, and the info sheets.
+
 ## 2026-10-08 — iOS interruption recovery and Parquet export
 
 The owner reports that switching to another app during M5Stack collection stops sync,

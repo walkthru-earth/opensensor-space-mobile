@@ -166,6 +166,12 @@ either — "link lost" fires on the transport's state change, not on `FRAME_TIME
 
 `SyncResumePolicy.shouldResume` (pure).
 
+The resume never reads the shared `plan` flow, which can still hold the previous session's plan for a
+moment after a reconnect. The reconnect issues its own `LIST` on the new session, waits for it, and
+plans from that listing (`resumeAfterReconnect`, `planFor`). The background run plans the same way
+after its `LIST`. A `cancelReconnect` (the notification's Stop) also cancels a reconnect that a link
+watcher has decided on but not yet started.
+
 Resume when the sync was `running` **or** ended with `TRANSPORT_FAILURE` within the last
 **5 min** (`RESUME_WINDOW_MS` = `TcpTransport`'s 180 s dead-link deadline plus margin). A user Stop,
 a completed run, or any other failure is left alone. Seen on the phone: the sync died of the pipe a
@@ -190,9 +196,18 @@ dialog.
 
 `REBOOT` (0x0B) has exactly **one** call path: `DeviceSession.reboot()` ←
 `DeviceConnectionRepository.rebootAndReconnect()` ← the Device screen's confirmation dialog. It is
-refused while `sync.running`, takes `busy` with a synchronous compare-and-set so a re-fired confirm
-cannot send a second one, and the dialog checks its own flag too. The Debug raw-command box refuses
-`REBOOT` and `SET_CONFIG`. Audited 2026-09-17 after a `REBOOT` of uncertain origin reached the board;
+refused while `sync.running`, takes the operation gate synchronously so a re-fired confirm cannot
+send a second one, and the dialog checks its own flag too. `DeviceSession.rawCommand` itself refuses
+`REBOOT` and `SET_CONFIG` (`RAW_COMMAND_DENYLIST`, `RawCommandRefusedException`) before anything is
+written, and the Debug raw-command box keeps its own check as a second guard.
+
+**One operation gate.** Config writes, sensor provisioning, token fetch and rotation, and reboot take
+the command slot through `tryBeginCommand`, and a worker takes the device through
+`tryBeginBackground`. Both check and set under one lock, so a second command is refused with "Wait
+for the current device task to finish" instead of running alongside and clearing the first one's
+`busy`. An interactive sync is refused while a command holds the slot. Job handles (`syncJob`,
+`linkWatchJob`, `reconnectJob`, `notificationJob`) change only under the same lock, so a Stop from
+the notification cannot miss a job that is starting. Audited 2026-09-17 after a `REBOOT` of uncertain origin reached the board;
 no phone-side cause of an unsolicited reboot was found, and these two gaps (buttons enabled during
 a sync; raw box accepting `0b`) were closed anyway.
 

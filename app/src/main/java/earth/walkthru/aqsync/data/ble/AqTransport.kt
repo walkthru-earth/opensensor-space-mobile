@@ -29,11 +29,7 @@ sealed interface ConnectionState {
 open class TransportException(message: String, val gattStatus: Int? = null, cause: Throwable? = null) : Exception(message, cause)
 
 /** Which byte pipe a transport is. The protocol above it is identical. */
-enum class TransportKind(val label: String) {
-    BLE("Bluetooth"),
-    LAN("Wi-Fi LAN"),
-    FAKE("Fake device"),
-}
+enum class TransportKind { BLE, LAN, FAKE }
 
 /**
  * The five GATT attributes of the AQ Sync service, abstracted so the same protocol/sync code runs

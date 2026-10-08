@@ -21,7 +21,7 @@ class CompanionState {
         private set
     internal var bluetoothAvailable by mutableStateOf(false)
         private set
-    internal var message by mutableStateOf("Turn on Bluetooth to find your sensors.")
+    internal var message by mutableStateOf("")
         private set
     internal var selectedId by mutableStateOf<String?>(null)
         private set
@@ -40,7 +40,11 @@ class CompanionState {
         private set
     internal var lanScanning by mutableStateOf(false)
         private set
-    internal var lanMessage by mutableStateOf("Find sensors connected to the same Wi-Fi network.")
+    internal var lanMessage by mutableStateOf("")
+        private set
+
+    /** True only after iOS reports the Local Network policy denial (TN3179), never for plain waiting. */
+    internal var lanAccessDenied by mutableStateOf(false)
         private set
 
     internal var wifiAccessAvailable by mutableStateOf(false)
@@ -101,35 +105,46 @@ class CompanionState {
     val statusUuid: String get() = AqGatt.STATUS
 
     fun lanScanStarted() {
+        lanAccessDenied = false
         lanDevices = emptyList()
         lanScanning = true
-        lanMessage = "Looking on your local network… Allow access if iOS asks."
+        lanMessage = "Looking on your Wi-Fi…"
     }
 
     fun lanDevicesFound(names: List<String>) {
         if (!lanScanning) return
         lanDevices = names.distinct().sorted()
-        lanMessage = if (lanDevices.isEmpty()) "Looking on your local network…" else "Sensors available on your Wi-Fi network"
+        lanMessage = if (lanDevices.isEmpty()) "Looking on your Wi-Fi…" else "Sensors on your Wi-Fi"
     }
 
     fun lanScanStopped() {
         if (!lanScanning) return
         lanScanning = false
-        if (lanDevices.isEmpty()) lanMessage = "No Wi-Fi sensors found. Check the sensor's Wi-Fi connection and Local Network access in Settings."
+        if (lanDevices.isEmpty()) lanMessage = "No Wi-Fi sensors found. Check Local Network in Settings."
     }
 
     fun lanScanWaiting() {
-        if (lanScanning) lanMessage = "Waiting for Wi-Fi or Local Network access. Allow access if iOS asks."
+        if (!lanScanning) return
+        lanAccessDenied = false
+        lanMessage = "Waiting for Wi-Fi or Local Network access."
+    }
+
+    /** The browse keeps running, so turning access on in Settings resumes discovery without a restart. */
+    fun lanScanAccessDenied() {
+        if (!lanScanning) return
+        lanAccessDenied = true
+        lanMessage = "Turn on Local Network for opensensor.space in Settings."
     }
 
     fun lanScanReady() {
-        if (lanScanning && lanDevices.isEmpty()) lanMessage = "Looking on your local network…"
+        lanAccessDenied = false
+        if (lanScanning && lanDevices.isEmpty()) lanMessage = "Looking on your Wi-Fi…"
     }
 
     fun lanScanUnavailable() {
         lanScanning = false
         lanDevices = emptyList()
-        lanMessage = "Local discovery is unavailable. Check Wi-Fi and Local Network access in Settings."
+        lanMessage = "Wi-Fi search is not available. Check Wi-Fi and Local Network in Settings."
     }
 
     fun bluetoothChanged(available: Boolean, explanation: String) {

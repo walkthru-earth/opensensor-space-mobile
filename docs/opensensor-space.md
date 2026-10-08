@@ -223,7 +223,7 @@ twice. Never reuse a UTC anchor across boots or infer dates for an unanchored bo
 
 Start with bundled, reviewed schema/dictionary descriptors; current INFO does not contain a
 machine-readable capability manifest. The firmware dictionary URI may point to mutable `main`.
-Do not fetch it from the app automatically: that would violate the current mDNS-only network rule.
+Do not fetch it from the app automatically. The network rule allows only mDNS devices, the public discover feed and the basemap. A future dictionary should reach the phone from the device or bundled with the app. The sensor-agnostic model that consumes these descriptors is in [devices-and-discovery.md](devices-and-discovery.md).
 
 Interpret LIVE `t` via the descriptor: CoreS3 board/IMU temperature versus Waveshare ambient
 temperature; parse optional `rh` as humidity for the reviewed Waveshare profile. Unknown profiles

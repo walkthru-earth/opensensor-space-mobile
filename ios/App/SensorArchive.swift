@@ -8,7 +8,7 @@ final class SensorArchive {
             switch self {
             case .unsafePath: return "The sensor supplied an unsafe archive path."
             case .invalidFile: return "File verification failed (size, CRC-32 or PAR1). Retry sync."
-            case .conflictingArchive: return "An existing archive differs; it was preserved."
+            case .conflictingArchive: return "An existing archive differs. It was preserved."
             case .invalidChunk: return "The sensor sent an unexpected file offset or length."
             }
         }
@@ -23,19 +23,60 @@ final class SensorArchive {
         let size: UInt64
         let crc: UInt32
     }
+    /// The firmware contract caps archive names at 399 UTF-8 bytes (ble-sync-protocol.md, OPENED).
+    static let maxNameBytes = 399
+
+    /// Application Support/SensorArchive, the phone's local archive root.
+    static func defaultRoot() throws -> URL {
+        try FileManager.default.url(
+            for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true
+        ).appendingPathComponent("SensorArchive", isDirectory: true)
+    }
+
+    /// Readable after the first unlock, matching the Keychain's AfterFirstUnlockThisDeviceOnly token,
+    /// so a collection that continues while the phone locks can still write. New files inherit it.
+    static var protection: [FileAttributeKey: Any] {
+        #if os(iOS)
+            [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]
+        #else
+            [:]
+        #endif
+    }
+
     init(root: URL) throws {
         self.root = root.standardizedFileURL
-        try FileManager.default.createDirectory(at: self.root, withIntermediateDirectories: true)
+        try Self.prepareRoot(self.root)
+    }
+
+    /// Creates the root with its protection class and backup exclusion. Later runs only read the
+    /// attributes and repair them when an older build created the directory.
+    private static func prepareRoot(_ root: URL) throws {
+        let manager = FileManager.default
+        if !manager.fileExists(atPath: root.path) {
+            try manager.createDirectory(at: root, withIntermediateDirectories: true, attributes: protection)
+        }
+        var directory = root
+        if try directory.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup != true {
+            var values = URLResourceValues()
+            values.isExcludedFromBackup = true
+            try directory.setResourceValues(values)
+        }
+        #if os(iOS)
+            let current = try manager.attributesOfItem(atPath: root.path)[.protectionKey] as? FileProtectionType
+            if current != .completeUntilFirstUserAuthentication {
+                try manager.setAttributes(protection, ofItemAtPath: root.path)
+            }
+        #endif
     }
 
     func target(station: String, name: String) throws -> URL {
         let stationAllowed = CharacterSet(
             charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
         guard !station.isEmpty, station.unicodeScalars.allSatisfy({ stationAllowed.contains($0) }),
-            !name.hasPrefix("/"), name.utf8.count <= 399, !name.contains(".."),
+            !name.hasPrefix("/"), name.utf8.count <= Self.maxNameBytes, !name.contains(".."),
             name.unicodeScalars.allSatisfy({
                 CharacterSet(charactersIn: "0123456789abcdefghijklmnopqrstuvwxyz._=/-").contains($0)
-            }), name.hasSuffix(".parquet")
+            }), name.hasSuffix(".parquet"), name.utf8.count > 8
         else { throw Failure.unsafePath }
         let components = name.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
         guard !components.isEmpty, components.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }) else {
@@ -79,7 +120,12 @@ final class SensorArchive {
         if let attributes = try? FileManager.default.attributesOfItem(atPath: receipt.path),
             attributes[.type] as? FileAttributeType != .typeRegular
         { throw Failure.unsafePath }
-        try JSONEncoder().encode(Receipt(size: size, crc: crc)).write(to: receipt, options: .atomic)
+        #if os(iOS)
+            let options: Data.WritingOptions = [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
+        #else
+            let options: Data.WritingOptions = .atomic
+        #endif
+        try JSONEncoder().encode(Receipt(size: size, crc: crc)).write(to: receipt, options: options)
     }
 
     /// Export a snapshot containing finalized Parquet files only, with the Hive tree intact.
@@ -115,7 +161,7 @@ final class SensorArchive {
             return nil
         }
         try FileManager.default.createDirectory(
-            at: final.deletingLastPathComponent(), withIntermediateDirectories: true)
+            at: final.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: Self.protection)
         let partial = final.appendingPathExtension("\(size)-\(String(crc, radix: 16)).partial")
         if FileManager.default.fileExists(atPath: partial.path) {
             let attrs = try FileManager.default.attributesOfItem(atPath: partial.path)
@@ -123,7 +169,8 @@ final class SensorArchive {
             if (attrs[.size] as? NSNumber)?.uint64Value ?? 0 > size { try FileManager.default.removeItem(at: partial) }
         }
         if !FileManager.default.fileExists(atPath: partial.path) {
-            guard FileManager.default.createFile(atPath: partial.path, contents: nil) else { throw Failure.invalidFile }
+            guard FileManager.default.createFile(atPath: partial.path, contents: nil, attributes: Self.protection)
+            else { throw Failure.invalidFile }
         }
         return try Download(archive: self, final: final, partial: partial, size: size, crc: crc)
     }
@@ -174,6 +221,11 @@ final class SensorArchive {
             offset += UInt64(bytes.count)
         }
         func persist() throws { try output.synchronize() }
+        /// One READ window: append and make it durable in a single archive call.
+        func write(_ bytes: Data, at receivedOffset: UInt64, windowEnd: UInt64) throws {
+            try append(bytes, at: receivedOffset, windowEnd: windowEnd)
+            try persist()
+        }
         func commit() throws {
             try persist()
             guard try archive.verified(partial, size: size, crc: crc) else {
@@ -209,6 +261,10 @@ actor ArchiveIO {
     func offset() -> UInt64 { download?.offset ?? 0 }
     func append(_ data: Data, at offset: UInt64, end: UInt64) throws {
         try download?.append(data, at: offset, windowEnd: end)
+    }
+    /// Called once per READ window by the transfer engine.
+    func write(_ data: Data, at offset: UInt64, end: UInt64) throws {
+        try download?.write(data, at: offset, windowEnd: end)
     }
     func persist() throws { try download?.persist() }
     func commit() throws {

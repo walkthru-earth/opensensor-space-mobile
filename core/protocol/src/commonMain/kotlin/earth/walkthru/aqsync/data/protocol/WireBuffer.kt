@@ -18,9 +18,11 @@ internal class WireBuffer private constructor(private val bytes: ByteArray) {
     }
 
     private fun unsigned(size: Int): Long {
+        // One bounds check for the whole field, then direct indexing.
         if (remaining() < size) throw WireUnderflowException()
         var value = 0L
-        repeat(size) { shift -> value = value or ((get().toLong() and 0xFF) shl (shift * 8)) }
+        for (shift in 0 until size) value = value or ((bytes[position + shift].toLong() and 0xFF) shl (shift * 8))
+        position += size
         return value
     }
 

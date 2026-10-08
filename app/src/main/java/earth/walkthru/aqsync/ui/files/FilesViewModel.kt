@@ -1,5 +1,6 @@
 package earth.walkthru.aqsync.ui.files
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.lifecycle.ViewModel
@@ -8,8 +9,9 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.DeviceConnectionManager
-import earth.walkthru.aqsync.data.DeviceEvent
 import earth.walkthru.aqsync.data.ManifestState
 import earth.walkthru.aqsync.data.ReconnectState
 import earth.walkthru.aqsync.data.SyncProgress
@@ -28,7 +30,9 @@ import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.local.database.KnownDevice
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
 import earth.walkthru.aqsync.data.settings.AppSettings
+import earth.walkthru.aqsync.data.settings.DetailLevel
 import earth.walkthru.aqsync.data.sync.SyncPlan
+import earth.walkthru.aqsync.ui.components.ScreenMessage
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -66,6 +70,8 @@ data class FilesUiState(
     val transport: TransportKind? = null,
     /** Detailed level (or Developer) reveals the per-file "Metrics" inspector (the reader's on-phone proof). */
     val advancedMode: Boolean = false,
+    /** Simple shows times, sizes and states in words. Detailed adds the chart and inspector, Developer file names and transfer internals. */
+    val detailLevel: DetailLevel = DetailLevel.SIMPLE,
     /** "Chart by file": one column per archived file of the connected station (null while off). */
     val fileChart: FileChartState? = null,
 )
@@ -113,6 +119,7 @@ sealed interface FilesEffect {
 
 @HiltViewModel(assistedFactory = FilesViewModel.Factory::class)
 class FilesViewModel @AssistedInject constructor(
+    @param:ApplicationContext private val context: Context,
     manager: DeviceConnectionManager,
     @Assisted deviceAddress: String,
     private val archivedFileDao: ArchivedFileDao,
@@ -131,8 +138,8 @@ class FilesViewModel @AssistedInject constructor(
         fun create(deviceAddress: String): FilesViewModel
     }
 
-    private val localEvents = MutableSharedFlow<DeviceEvent>(extraBufferCapacity = 4)
-    val events: Flow<DeviceEvent> = merge(repository.events, localEvents)
+    private val localEvents = MutableSharedFlow<ScreenMessage>(extraBufferCapacity = 4)
+    val events: Flow<ScreenMessage> = merge(repository.events.map(ScreenMessage::Device), localEvents)
 
     private val _effects = MutableSharedFlow<FilesEffect>(extraBufferCapacity = 4)
     val effects: SharedFlow<FilesEffect> = _effects.asSharedFlow()
@@ -170,7 +177,7 @@ class FilesViewModel @AssistedInject constructor(
     val uiState: StateFlow<FilesUiState> = combine(
         repository.connectionState, repository.manifest, repository.plan, repository.sync, archivedFileDao.observeAll(), exporting,
         repository.reconnecting, repository.currentKnownDevice, autoSyncScheduler.observeActive(), repository.activeTransport,
-        settings.detailed, fileChart, archiveStation,
+        settings.detailLevel, fileChart, archiveStation,
     ) { values ->
         @Suppress("UNCHECKED_CAST")
         val archived = values[4] as List<ArchivedFile>
@@ -189,7 +196,8 @@ class FilesViewModel @AssistedInject constructor(
             autoSync = (values[7] as KnownDevice?)?.autoSync,
             backgroundSyncActive = values[8] as Boolean,
             transport = values[9] as TransportKind?,
-            advancedMode = values[10] as Boolean,
+            advancedMode = (values[10] as DetailLevel).detailed,
+            detailLevel = values[10] as DetailLevel,
             fileChart = values[11] as FileChartState?,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FilesUiState())
@@ -215,7 +223,7 @@ class FilesViewModel @AssistedInject constructor(
         val addr = repository.currentAddress ?: return
         viewModelScope.launch {
             repository.setAutoSync(addr, enabled)
-            localEvents.tryEmit(DeviceEvent.Info(if (enabled) "Auto-sync on: about every ${AutoSyncScheduler.PERIOD_MINUTES} min, app closed or not." else "Auto-sync off for this device."))
+            localEvents.tryEmit(ScreenMessage.Text(if (enabled) context.getString(R.string.files_autosync_event_on, AutoSyncScheduler.PERIOD_MINUTES.toInt()) else context.getString(R.string.files_autosync_event_off)))
         }
     }
 
@@ -229,7 +237,7 @@ class FilesViewModel @AssistedInject constructor(
         viewModelScope.launch {
             repository.disconnectNow()
             autoSyncScheduler.syncNow(addr)
-            localEvents.tryEmit(DeviceEvent.Info("Background sync queued. You can leave the app; the notification shows progress."))
+            localEvents.tryEmit(ScreenMessage.Text(context.getString(R.string.files_bg_event)))
         }
     }
     fun syncOne(name: String) = repository.syncOne(name)
@@ -264,7 +272,7 @@ class FilesViewModel @AssistedInject constructor(
             try {
                 val zip = export.buildDailyZip()
                 if (zip == null) {
-                    localEvents.tryEmit(DeviceEvent.Info("No daily files yet: they are built from synced files that carry a timestamp."))
+                    localEvents.tryEmit(ScreenMessage.Text(context.getString(R.string.files_no_daily)))
                     return@launch
                 }
                 _effects.tryEmit(FilesEffect.Launch(export.shareZipIntent(zip)))

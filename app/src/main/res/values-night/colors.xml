@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand paper, dark (lib/brand.ts sensing.dark.paper). -->
+    <color name="splash">#131F2A</color>
+</resources>

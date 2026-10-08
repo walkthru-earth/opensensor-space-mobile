@@ -11,10 +11,13 @@ import android.util.Log
 import androidx.core.content.edit
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.qualifiers.ApplicationContext
+import earth.walkthru.aqsync.data.coroutines.ApplicationScope
+import earth.walkthru.aqsync.data.coroutines.IoDispatcher
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -133,15 +136,17 @@ class SyncTriggers @Inject constructor(
 class WifiArrivalReceiver : BroadcastReceiver() {
     @Inject lateinit var triggers: SyncTriggers
 
+    @Inject @ApplicationScope
+    lateinit var appScope: CoroutineScope
+
+    @Inject @IoDispatcher
+    lateinit var io: CoroutineDispatcher
+
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != SyncTriggers.ACTION_WIFI_AVAILABLE) return
         val pending = goAsync()
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                triggers.onWifiAvailable()
-            } finally {
-                pending.finish()
-            }
+        launchReceiverWork(appScope, "SyncTriggers", finish = pending::finish) {
+            withContext(io) { triggers.onWifiAvailable() }
         }
     }
 }

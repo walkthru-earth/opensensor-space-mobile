@@ -1,6 +1,7 @@
 package earth.walkthru.aqsync.data.sync
 
 import earth.walkthru.aqsync.data.protocol.Frame
+import earth.walkthru.aqsync.data.protocol.SafeName
 
 /**
  * Where a manifest entry sits in the device's Hive tree.
@@ -46,20 +47,6 @@ sealed interface HivePartition {
             return Other(name.substringBeforeLast('/', missingDelimiterValue = ""))
         }
     }
-}
-
-/** Same character whitelist as `safe_name()` in the firmware: `[0-9a-z._=/-]`, no `..`, no `//`, ends in `.parquet`. */
-object SafeName {
-    private val ALLOWED = Regex("""^[0-9a-z._=/-]+$""")
-
-    fun isValid(name: String): Boolean =
-        name.isNotEmpty() &&
-            name.length <= 512 &&
-            ALLOWED.matches(name) &&
-            !name.contains("..") &&
-            !name.contains("//") &&
-            !name.startsWith("/") &&
-            name.endsWith(".parquet")
 }
 
 /** Identity of a file already held in the local archive. */
@@ -111,7 +98,7 @@ object SyncPlanner {
                     file.bytes,
                     partition,
                     FileSyncState.INVALID_NAME,
-                    detail = "name violates the safe_name() whitelist; refusing to store it"
+                    detail = "name violates the safe_name() whitelist, not stored"
                 )
                 local == null && partial in 1 until file.bytes -> ManifestEntry(
                     file.name,

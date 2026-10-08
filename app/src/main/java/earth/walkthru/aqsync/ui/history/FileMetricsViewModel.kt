@@ -10,11 +10,16 @@ import earth.walkthru.aqsync.data.history.parquet.ParquetCodec
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 import earth.walkthru.aqsync.data.history.parquet.ParquetFormatException
 import earth.walkthru.aqsync.data.history.parquet.ParquetType
+import earth.walkthru.aqsync.data.settings.AppSettings
+import earth.walkthru.aqsync.data.settings.DetailLevel
 import earth.walkthru.aqsync.data.sync.FileArchive
+import earth.walkthru.aqsync.ui.components.NO_VALUE
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -37,9 +42,13 @@ data class ColumnSummary(
 
 data class RowGroupSummary(val ordinal: Int, val rows: Long, val bytes: Long, val firstUtcNs: Long?, val lastUtcNs: Long?)
 
+enum class FailReason { NOT_IN_ARCHIVE, READER_REFUSED, UNREADABLE }
+
 sealed interface FileMetricsState {
     data object Loading : FileMetricsState
-    data class Failed(val message: String) : FileMetricsState
+
+    /** [detail] is the reader's technical message, shown at Developer level only. */
+    data class Failed(val reason: FailReason, val detail: String? = null) : FileMetricsState
     data class Loaded(
         val station: String,
         val name: String,
@@ -63,7 +72,11 @@ sealed interface FileMetricsState {
 @HiltViewModel
 class FileMetricsViewModel @Inject constructor(
     private val archive: FileArchive,
+    settings: AppSettings,
 ) : ViewModel() {
+
+    /** Detailed shows rows, time span and columns. Developer adds footer, codec, schema, row groups and metadata. */
+    val detailLevel: StateFlow<DetailLevel> = settings.detailLevel.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DetailLevel.DETAILED)
 
     private val _state = MutableStateFlow<FileMetricsState>(FileMetricsState.Loading)
     val state: StateFlow<FileMetricsState> = _state.asStateFlow()
@@ -77,7 +90,7 @@ class FileMetricsViewModel @Inject constructor(
 
     private fun describe(station: String, name: String): FileMetricsState {
         val file = archive.fileFor(station, name)
-        if (!file.isFile) return FileMetricsState.Failed("File is not in the archive: $name")
+        if (!file.isFile) return FileMetricsState.Failed(FailReason.NOT_IN_ARCHIVE, name)
         return try {
             val t0 = System.nanoTime()
             val pf = ParquetFile.open(file)
@@ -108,9 +121,9 @@ class FileMetricsViewModel @Inject constructor(
                 decodeMillis = decodeMs,
             )
         } catch (e: ParquetFormatException) {
-            FileMetricsState.Failed("The reader refused this file: ${e.message}")
+            FileMetricsState.Failed(FailReason.READER_REFUSED, e.message)
         } catch (e: java.io.IOException) {
-            FileMetricsState.Failed("Could not read the file: ${e.message}")
+            FileMetricsState.Failed(FailReason.UNREADABLE, e.message)
         }
     }
 
@@ -145,12 +158,12 @@ class FileMetricsViewModel @Inject constructor(
             }
         }
         val (minText, maxText) = when {
-            !any -> "—" to "—"
-            col is ColumnValues.Float32 || col is ColumnValues.Float64 -> (if (minD.isFinite()) trim(minD) else "—") to (if (maxD.isFinite()) trim(maxD) else "—")
-            col is ColumnValues.Binary -> "—" to "—"
+            !any -> NO_VALUE to NO_VALUE
+            col is ColumnValues.Float32 || col is ColumnValues.Float64 -> (if (minD.isFinite()) trim(minD) else NO_VALUE) to (if (maxD.isFinite()) trim(maxD) else NO_VALUE)
+            col is ColumnValues.Binary -> NO_VALUE to NO_VALUE
             else -> minL.toString() to maxL.toString()
         }
-        return ColumnSummary(name, type, timestamp, col.size, col.nullCount, minText, maxText, first ?: "—", last ?: "—", statsMin, statsMax)
+        return ColumnSummary(name, type, timestamp, col.size, col.nullCount, minText, maxText, first ?: NO_VALUE, last ?: NO_VALUE, statsMin, statsMax)
     }
 
     private fun format(col: ColumnValues, i: Int): String = when (col) {
@@ -158,7 +171,7 @@ class FileMetricsViewModel @Inject constructor(
         is ColumnValues.Float64 -> trim(col.values[i])
         is ColumnValues.Int32 -> col.values[i].toString()
         is ColumnValues.Int64 -> col.values[i].toString()
-        is ColumnValues.Binary -> if (col.length(i) <= 64) col.string(i) ?: "" else "${col.length(i)} bytes"
+        is ColumnValues.Binary -> if (col.length(i) <= 64) col.string(i) ?: "" else "${col.length(i)} B"
     }
 
     private fun trim(v: Double): String = if (v == Math.rint(v) && kotlin.math.abs(v) < 1e15) v.toLong().toString() else "%.4g".format(java.util.Locale.ROOT, v)

@@ -1,11 +1,13 @@
 package earth.walkthru.aqsync.ui.scan
 
 import android.content.Context
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import earth.walkthru.aqsync.BuildConfig
+import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.DeviceConnectionManager
 import earth.walkthru.aqsync.data.DeviceSnapshot
 import earth.walkthru.aqsync.data.background.AutoSyncScheduler
@@ -19,6 +21,8 @@ import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.local.database.KnownDevice
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
 import earth.walkthru.aqsync.data.local.database.MetricBucketDao
+import earth.walkthru.aqsync.data.settings.AppSettings
+import earth.walkthru.aqsync.data.settings.DetailLevel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -35,7 +39,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** What Home knows about a logger from the phone archive alone — no link needed. */
+/** What Home knows about a logger from the phone archive alone, no link needed. */
 data class LoggerSummary(
     val files: Int,
     val lastSyncedEpochMs: Long?,
@@ -61,6 +65,8 @@ data class ScanUiState(
     val summaries: Map<String, LoggerSummary> = emptyMap(),
     /** A manual or periodic background run is queued or running. */
     val backgroundSyncActive: Boolean = false,
+    /** Simple hides addresses, signal numbers and station IDs; Developer shows them. */
+    val detailLevel: DetailLevel = DetailLevel.SIMPLE,
 )
 
 @HiltViewModel
@@ -71,6 +77,7 @@ class ScanViewModel @Inject constructor(
     archivedFileDao: ArchivedFileDao,
     bucketDao: MetricBucketDao,
     private val autoSyncScheduler: AutoSyncScheduler,
+    settings: AppSettings,
 ) : ViewModel() {
 
     private val summaries: Flow<Map<String, LoggerSummary>> = combine(archivedFileDao.observeAll(), bucketDao.observeAllDays(Metrics.primary.id)) { files, days ->
@@ -101,6 +108,7 @@ class ScanViewModel @Inject constructor(
         summaries,
         autoSyncScheduler.observeActive(),
         manager.snapshots,
+        settings.detailLevel,
     ) { values ->
         @Suppress("UNCHECKED_CAST")
         val nearby = (values[2] as Map<String, ScannedDevice>).values
@@ -115,6 +123,7 @@ class ScanViewModel @Inject constructor(
             lanStations = (values[4] as Map<String, *>).keys,
             summaries = values[5] as Map<String, LoggerSummary>,
             backgroundSyncActive = values[6] as Boolean,
+            detailLevel = values[8] as DetailLevel,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ScanUiState())
 
@@ -150,7 +159,8 @@ class ScanViewModel @Inject constructor(
                             true
                         }
                         is BleScanner.Event.Failed -> {
-                            scanError.value = ev.message
+                            Log.w("ScanViewModel", "scan failed (${ev.errorCode}: ${ev.message})")
+                            scanError.value = context.getString(if (ev.errorCode == BleScanner.BLUETOOTH_OFF) R.string.scan_bluetooth_off else R.string.scan_failed)
                             false
                         }
                     }
@@ -158,7 +168,8 @@ class ScanViewModel @Inject constructor(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                scanError.value = "Could not scan: ${e.message ?: e::class.simpleName}"
+                Log.w("ScanViewModel", "scan failed (${e::class.simpleName}: ${e.message})")
+                scanError.value = context.getString(R.string.scan_failed)
             } finally {
                 // A stopped run can finish after a new run starts. Only its own generation may
                 // clear the current button state or cancel the current pruning loop.

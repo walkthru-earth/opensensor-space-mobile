@@ -11,12 +11,12 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import earth.walkthru.aqsync.ui.debug.DebugScreen
-import earth.walkthru.aqsync.ui.device.DeviceScreen
-import earth.walkthru.aqsync.ui.device.TodayScreen
+import earth.walkthru.aqsync.ui.device.DeviceRoute
+import earth.walkthru.aqsync.ui.device.TodayRoute
 import earth.walkthru.aqsync.ui.files.FilesScreen
 import earth.walkthru.aqsync.ui.history.FileMetricsScreen
 import earth.walkthru.aqsync.ui.history.HistoryScreen
-import earth.walkthru.aqsync.ui.permissions.rememberLanPermission
+import earth.walkthru.aqsync.ui.permissions.rememberLanGranted
 import earth.walkthru.aqsync.ui.scan.ScanScreen
 
 @Composable
@@ -47,7 +47,7 @@ fun MainNavigation(modifier: Modifier = Modifier) {
                 ScanScreen(onConnected = { address -> backStack.add(TodayKey(address)) })
             }
             entry<TodayKey> { key ->
-                TodayScreen(
+                TodayRoute(
                     address = key.address,
                     onOpenHistory = { openTab(HistoryKey(key.address)) },
                     onOpenFiles = { openTab(FilesKey(key.address)) },
@@ -82,7 +82,7 @@ fun MainNavigation(modifier: Modifier = Modifier) {
                 )
             }
             entry<DeviceKey> { key ->
-                DeviceScreen(
+                DeviceRoute(
                     address = key.address,
                     onOpenToday = { openTab(TodayKey(key.address)) },
                     onOpenHistory = { openTab(HistoryKey(key.address)) },
@@ -104,14 +104,14 @@ fun MainNavigation(modifier: Modifier = Modifier) {
 
 /**
  * Browse mDNS for `_aqsync._tcp` while the app is started and the local-network permission is
- * held (API 37+; always on below). Stopping on background keeps the radio and the permission
+ * already held (API 37+, always on below). It never asks. The Device screen asks from a Wi-Fi action. Stopping on background keeps the radio and the permission
  * honest: discovery is only ever running while the user is looking at the app.
  */
 @Composable
 private fun LanDiscoveryEffect(viewModel: LanDiscoveryViewModel = hiltViewModel()) {
-    val perm = rememberLanPermission()
-    LifecycleStartEffect(perm.granted) {
-        viewModel.setActive(perm.granted)
+    val granted = rememberLanGranted()
+    LifecycleStartEffect(granted) {
+        viewModel.setActive(granted)
         onStopOrDispose { viewModel.setActive(false) }
     }
 }

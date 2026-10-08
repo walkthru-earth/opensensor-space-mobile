@@ -18,11 +18,11 @@ enum class AirMood(
     val advice: String,
     val comparison: String,
 ) {
-    FRESH(15f, "Fresh air", "Nothing to do — enjoy it.", "like a clear day in the countryside"),
-    FINE(35f, "Fine", "Fine for everyone; sensitive people may notice on a long day.", "like a quiet town street"),
-    HAZY(55f, "Getting hazy", "Long outdoor effort is less pleasant; open windows only when it drops.", "like a busy road at rush hour"),
+    FRESH(15f, "Fresh air", "Nothing to do. Enjoy it.", "like a clear day in the countryside"),
+    FINE(35f, "Fine", "Fine for everyone. Sensitive people may notice on a long day.", "like a quiet town street"),
+    HAZY(55f, "Getting hazy", "Long outdoor effort is less pleasant. Open windows only when it drops.", "like a busy road at rush hour"),
     SMOKY(150f, "Smoky", "Keep windows shut and take it easy outdoors.", "like standing downwind of a barbecue"),
-    THICK(Float.POSITIVE_INFINITY, "Thick smoke", "Stay inside if you can; a filter helps.", "like a room where someone is smoking"),
+    THICK(Float.POSITIVE_INFINITY, "Thick smoke", "Stay inside if you can. A filter helps.", "like a room where someone is smoking"),
     ;
 
     companion object {
@@ -52,9 +52,9 @@ sealed interface NowReading {
 
         private fun hint(status: PmsStatus): String = when (status) {
             PmsStatus.ABSENT -> "No particle sensor is answering. Check its cable."
-            PmsStatus.WARMING -> "The sensor is warming up — about a minute after power-on."
-            PmsStatus.STALE -> "The last sensor frame is old; the reading is not trusted."
-            PmsStatus.ERROR -> "The sensor reports an error; its numbers are not shown."
+            PmsStatus.WARMING -> "The sensor is warming up. It takes about a minute after power-on."
+            PmsStatus.STALE -> "The last sensor reading is old, so it is not trusted."
+            PmsStatus.ERROR -> "The sensor reports an error, so its numbers are not shown."
             PmsStatus.VALID -> ""
         }
     }

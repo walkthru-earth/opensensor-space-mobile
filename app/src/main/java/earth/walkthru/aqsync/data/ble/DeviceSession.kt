@@ -20,6 +20,7 @@ import kotlinx.coroutines.selects.onTimeout
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlin.time.TimeSource
 
 /** The device answered a request with an `ERROR` frame. Subclasses type the v2 codes callers branch on. */
 open class DeviceErrorException(val frame: Frame.Error) : Exception(frame.describe()) {
@@ -68,6 +69,9 @@ data class WifiScanResult(val accessPoints: List<Frame.WifiAp>, val end: Frame.W
 data class LogTail(val text: String, val totalBytesSinceBoot: Long, val returned: Int, val receivedBytes: Int) {
     val complete: Boolean get() = returned == receivedBytes
 }
+
+/** A debug raw command named an opcode in [DeviceSession.RAW_COMMAND_DENYLIST]; nothing was sent. */
+class RawCommandRefusedException(val op: Int) : IllegalArgumentException("${Opcode.name(op)} is not sent from the raw command; use the Device screen, which asks for confirmation")
 
 /** The device sent a frame that does not belong to the request in flight, or one that cannot be decoded. */
 class ProtocolViolationException(message: String) : Exception(message)
@@ -359,20 +363,25 @@ class DeviceSession(val transport: AqTransport) {
      * frames are returned as [Frame.Error] placeholders with code −1 rather than thrown, so the user
      * sees exactly what arrived.
      */
-    suspend fun rawCommand(request: ByteArray, quietMs: Long = 1_500L, maxTotalMs: Long = FRAME_TIMEOUT_MS): List<Pair<ByteArray, Frame?>> =
-        request(NO_TERMINAL) {
-            require(request.isNotEmpty() && request.size <= 512) { "request must be 1..512 bytes" }
+    suspend fun rawCommand(request: ByteArray, quietMs: Long = 1_500L, maxTotalMs: Long = FRAME_TIMEOUT_MS): List<Pair<ByteArray, Frame?>> {
+        require(request.isNotEmpty() && request.size <= 512) { "request must be 1..512 bytes" }
+        // The data layer enforces the denylist itself, so a UI path that forgets its own guard
+        // still cannot reboot the device or change its configuration without a confirmation.
+        val op = request[0].toInt() and 0xFF
+        if (op in RAW_COMMAND_DENYLIST) throw RawCommandRefusedException(op)
+        return request(NO_TERMINAL) {
             frames.tx(request)
             transport.writeControl(request)
             val got = ArrayList<Pair<ByteArray, Frame?>>()
-            val started = System.currentTimeMillis()
-            while (System.currentTimeMillis() - started < maxTotalMs) {
+            val started = TimeSource.Monotonic.markNow()
+            while (started.elapsedNow().inWholeMilliseconds < maxTotalMs) {
                 val raw = receiveWithin(quietMs) ?: break
                 frames.rx(raw)
                 got += raw to runCatching { FrameCodec.decode(raw) }.getOrNull()
             }
             got
         }
+    }
 
     /**
      * Wait for the next frame of the request in flight. An `ERROR` frame whose `op` matches is the
@@ -537,6 +546,13 @@ class DeviceSession(val transport: AqTransport) {
 
         /** Pseudo-opcode for requests without a terminal frame (raw commands): drain on quiet only. */
         private const val NO_TERMINAL = -1
+
+        /**
+         * Opcodes the debug raw command never sends: `REBOOT` restarts the logger and `SET_CONFIG`
+         * can rotate the token, forget bonds or disable the passkey. Both need the Device screen's
+         * confirmation (root `AGENTS.md`).
+         */
+        val RAW_COMMAND_DENYLIST: Set<Int> = setOf(Opcode.REBOOT, Opcode.SET_CONFIG)
     }
 }
 

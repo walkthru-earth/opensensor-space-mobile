@@ -36,11 +36,19 @@ final class LanDiscovery {
         state.lanScanStarted()
         let browser = NWBrowser(for: .bonjourWithTXTRecord(type: state.lanServiceType, domain: "local."), using: .tcp)
         self.browser = browser
+        // The browser runs on the main queue, so its callbacks are already main-actor isolated
+        // and are handled in delivery order without a task hop each.
         browser.stateUpdateHandler = { [weak self, weak browser] update in
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 guard let self, let browser, self.browser === browser else { return }
                 switch update {
-                case .waiting: self.state.lanScanWaiting()
+                case .waiting(let error):
+                    // TN3179: only kDNSServiceErr_PolicyDenied identifies a Local Network denial.
+                    if LanPolicy.isLocalNetworkDenied(error) {
+                        self.state.lanScanAccessDenied()
+                    } else {
+                        self.state.lanScanWaiting()
+                    }
                 case .ready: self.state.lanScanReady()
                 case .failed:
                     self.state.lanScanUnavailable()
@@ -50,7 +58,7 @@ final class LanDiscovery {
             }
         }
         browser.browseResultsChangedHandler = { [weak self, weak browser] results, _ in
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 guard let self, let browser, self.browser === browser else { return }
                 var devices: [String: Device] = [:]
                 for result in results {
@@ -70,7 +78,7 @@ final class LanDiscovery {
         }
         browser.start(queue: .main)
         timer = Timer.scheduledTimer(withTimeInterval: 40, repeats: false) { [weak self] _ in
-            Task { @MainActor in self?.stop() }
+            MainActor.assumeIsolated { self?.stop() }
         }
     }
 
@@ -93,25 +101,16 @@ final class LanDiscovery {
         let attempt = UUID()
         attempts[name] = attempt
         sessions[name] = session
-        session.onClosed = { [weak self, weak session] error in
-            guard let self, let session, self.sessions[name] === session else { return }
-            self.sessions[name] = nil
-            self.claims.closeSession(name: name)
-            self.state.lanReadingExpired(name: name)
-            if self.isBackground, self.collecting.contains(name), self.canResume(error) {
-                self.queueResume(name)
-            }
-            self.report(name, message: self.pendingResume.contains(name) ? self.pauseMessage : error.localizedDescription)
-        }
-        session.onPush = { [weak self, weak session] kind, json in
-            guard let self, let session, self.sessions[name] === session, kind == "live" else { return }
-            self.state.lanReadingReceived(name: name, json: json)
-            self.freshness[name]?.invalidate()
-            self.freshness[name] = Timer.scheduledTimer(withTimeInterval: 35, repeats: false) {
-                [weak self, weak session] _ in
-                Task { @MainActor in
-                    guard let self, let session, self.sessions[name] === session else { return }
-                    self.state.lanReadingExpired(name: name)
+        // One ordered consumer per session. The stream finishes when the socket closes.
+        let events = session.events
+        Task { [weak self, weak session] in
+            for await event in events {
+                guard let self, let session, self.sessions[name] === session else { continue }
+                switch event {
+                case .push(let kind, let json):
+                    if kind == "live" { self.liveReceived(name: name, json: json, session: session) }
+                case .closed(let error):
+                    self.sessionClosed(name: name, error: error)
                 }
             }
         }
@@ -134,6 +133,27 @@ final class LanDiscovery {
                 self.report(name, message: error.localizedDescription)
             }
         }
+    }
+
+    private func liveReceived(name: String, json: String, session: LanSession) {
+        state.lanReadingReceived(name: name, json: json)
+        freshness[name]?.invalidate()
+        freshness[name] = Timer.scheduledTimer(withTimeInterval: 35, repeats: false) { [weak self, weak session] _ in
+            MainActor.assumeIsolated {
+                guard let self, let session, self.sessions[name] === session else { return }
+                self.state.lanReadingExpired(name: name)
+            }
+        }
+    }
+
+    private func sessionClosed(name: String, error: LanFailure) {
+        sessions[name] = nil
+        claims.closeSession(name: name)
+        state.lanReadingExpired(name: name)
+        if isBackground, collecting.contains(name), canResume(error) {
+            queueResume(name)
+        }
+        report(name, message: pendingResume.contains(name) ? pauseMessage : error.localizedDescription)
     }
 
     func sync(name: String) {
@@ -165,18 +185,14 @@ final class LanDiscovery {
                 for queued in Array(self.pendingResume) { self.resumePending(queued) }
             }
             do {
-                let support = try FileManager.default.url(
-                    for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-                var root = support.appendingPathComponent("SensorArchive", isDirectory: true)
-                let archive = try ArchiveIO(root: root)
-                var values = URLResourceValues()
-                values.isExcludedFromBackup = true
-                try root.setResourceValues(values)
-                try await session.collect(archive: archive) { done, total, bytes, rate in
-                    guard self.attempts[name] == attempt, self.sessions[name] === session else { return }
+                // The archive applies its protection class and backup exclusion when it creates the root.
+                let archive = try ArchiveIO(root: SensorArchive.defaultRoot())
+                // Transfer and framing run on the session queue. Only throttled progress reaches the main actor.
+                try await session.collect(archive: archive) { @MainActor [weak self] update in
+                    guard let self, self.attempts[name] == attempt, self.sessions[name] === session else { return }
                     self.report(
-                        name, connected: true, busy: true, message: "Syncing verified files", done: done, total: total,
-                        bytes: bytes, rate: rate)
+                        name, connected: true, busy: true, message: "Syncing verified files", done: update.filesDone,
+                        total: update.filesTotal, bytes: update.bytes, rate: update.rate)
                 }
                 guard self.attempts[name] == attempt, self.sessions[name] === session else { return }
                 self.report(name, connected: true, message: "Sync complete. Verified files saved on this phone.")
@@ -276,7 +292,7 @@ final class LanDiscovery {
     }
 
     private var pauseMessage: String {
-        "Sync paused. Saved files and partial bytes are kept; resuming when you return."
+        "Sync paused. Saved files and partial bytes are kept. It resumes when you return."
     }
     private func queueResume(_ name: String) {
         guard !cancelledCollections.contains(name) else { return }

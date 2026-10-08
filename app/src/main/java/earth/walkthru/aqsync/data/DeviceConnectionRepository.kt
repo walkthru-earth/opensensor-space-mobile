@@ -3,7 +3,7 @@ package earth.walkthru.aqsync.data
 import android.content.Context
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
-import earth.walkthru.aqsync.data.background.CompanionPresence
+import earth.walkthru.aqsync.data.background.CompanionUnlinker
 import earth.walkthru.aqsync.data.background.SyncForegroundService
 import earth.walkthru.aqsync.data.ble.AqTransport
 import earth.walkthru.aqsync.data.ble.ConfigSnapshot
@@ -16,17 +16,23 @@ import earth.walkthru.aqsync.data.ble.NotAllowedOnLinkException
 import earth.walkthru.aqsync.data.ble.TransportException
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.ble.WifiUnavailableException
-import earth.walkthru.aqsync.data.history.HistoryDeriver
+import earth.walkthru.aqsync.data.coroutines.ApplicationScope
+import earth.walkthru.aqsync.data.coroutines.IoDispatcher
+import earth.walkthru.aqsync.data.coroutines.MonotonicTime
+import earth.walkthru.aqsync.data.coroutines.WallClock
+import earth.walkthru.aqsync.data.coroutines.suspendRunCatching
+import earth.walkthru.aqsync.data.history.HistoryRefresher
 import earth.walkthru.aqsync.data.lan.LanConnectException
 import earth.walkthru.aqsync.data.lan.LanDevice
-import earth.walkthru.aqsync.data.lan.LanDiscoveryState
+import earth.walkthru.aqsync.data.lan.LanTargets
 import earth.walkthru.aqsync.data.lan.LanTokenPolicy
-import earth.walkthru.aqsync.data.lan.LanWifiLock
+import earth.walkthru.aqsync.data.lan.WifiLeases
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.local.database.KnownDevice
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
 import earth.walkthru.aqsync.data.local.database.StationEpoch
 import earth.walkthru.aqsync.data.local.database.StationEpochDao
+import earth.walkthru.aqsync.data.local.security.LanCredentialStore
 import earth.walkthru.aqsync.data.protocol.AqUuids
 import earth.walkthru.aqsync.data.protocol.ConfigPatch
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
@@ -51,9 +57,9 @@ import earth.walkthru.aqsync.data.sync.SyncPlan
 import earth.walkthru.aqsync.data.sync.SyncPlanner
 import earth.walkthru.aqsync.data.sync.SyncResumePolicy
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -71,7 +77,6 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -110,13 +115,6 @@ data class SyncProgress(
     val failures: List<FileOutcome> get() = outcomes.filter { it !is FileOutcome.Synced }
 }
 
-/** One-shot messages for snackbars. */
-sealed interface DeviceEvent {
-    data class Info(val message: String) : DeviceEvent
-    data class Error(val message: String) : DeviceEvent
-    data class ClockConfirmationRequired(val reason: String) : DeviceEvent
-}
-
 data class ArchiveTimeSummary(
     val files: Int = 0,
     val rows: Long = 0,
@@ -139,6 +137,8 @@ sealed interface WifiScanState {
     data object Idle : WifiScanState
     data object Scanning : WifiScanState
     data class Done(val accessPoints: List<Frame.WifiAp>, val atEpochMs: Long) : WifiScanState
+
+    /** [message] is technical detail for logs. The UI shows copy chosen by [unavailable]. */
     data class Failed(val message: String, val unavailable: Boolean) : WifiScanState
 }
 
@@ -185,20 +185,29 @@ data class BackgroundSyncResult(
 @OptIn(ExperimentalCoroutinesApi::class)
 class DeviceConnectionRepository @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val transportFactory: TransportFactory,
+    private val transportFactory: TransportSource,
     private val knownDeviceDao: KnownDeviceDao,
+    private val lanCredentials: LanCredentialStore,
     private val archivedFileDao: ArchivedFileDao,
     private val archive: FileArchive,
     private val syncEngine: SyncEngine,
-    private val lanDiscoveryState: LanDiscoveryState,
-    private val lanWifiLock: LanWifiLock,
-    private val historyDeriver: HistoryDeriver,
-    private val companionPresence: CompanionPresence,
+    private val lanDiscoveryState: LanTargets,
+    private val lanWifiLock: WifiLeases,
+    private val historyDeriver: HistoryRefresher,
+    private val companionPresence: CompanionUnlinker,
     private val collectionBudget: CollectionBudget,
     private val identityClaims: DeviceIdentityClaims,
     private val stationEpochDao: StationEpochDao,
+    @ApplicationScope applicationScope: CoroutineScope,
+    @IoDispatcher private val io: CoroutineDispatcher,
+    private val clock: WallClock,
+    private val monotonic: MonotonicTime,
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    /**
+     * Child of the process scope: one failed child never cancels its siblings, and cancelling the
+     * application scope (tests) ends every job this controller started.
+     */
+    private val scope = CoroutineScope(applicationScope.coroutineContext + SupervisorJob(applicationScope.coroutineContext[Job]) + io)
     private val tokenPolicy = LanTokenPolicy()
     private var identityLease: AutoCloseable? = null
 
@@ -245,7 +254,12 @@ class DeviceConnectionRepository @Inject constructor(
     private val _logTail = MutableStateFlow<LogTailState>(LogTailState.Idle)
     val logTail: StateFlow<LogTailState> = _logTail.asStateFlow()
 
-    /** Set while a config write / reboot / token fetch is in flight, to disable the buttons. */
+    /**
+     * Operation gate. [_busy] is set while a config write, reboot or token fetch is in flight, and
+     * [_backgroundOwner] while a worker owns the device. Both change only under `synchronized(this)`
+     * through [tryBeginCommand] / [tryBeginBackground], so a check and its set are one step and two
+     * overlapping commands can never both run or clear each other's flag.
+     */
     private val _busy = MutableStateFlow(false)
     private val _backgroundOwner = MutableStateFlow<String?>(null)
     val backgroundOwner: StateFlow<String?> = _backgroundOwner.asStateFlow()
@@ -386,10 +400,13 @@ class DeviceConnectionRepository @Inject constructor(
         }
     }
 
-    /** Body of [connect]; true when a session is Ready afterwards. Caller holds [connectMutex]. */
-    private suspend fun connectLocked(address: String, name: String?, fake: Boolean, preference: TransportPreference, claim: Long): Boolean {
+    /**
+     * Body of [connect]; true when a session is Ready afterwards. Caller holds [connectMutex].
+     * [listAfter] = false skips the background `LIST` when the caller lists itself and waits.
+     */
+    private suspend fun connectLocked(address: String, name: String?, fake: Boolean, preference: TransportPreference, claim: Long, listAfter: Boolean = true): Boolean {
         if (backgroundOwner.value != null) {
-            _events.tryEmit(DeviceEvent.Info("Background collection owns this device. Its progress remains available; reconnect after it finishes."))
+            _events.tryEmit(DeviceEvent.Info(DeviceMessage.BackgroundOwnsConnect))
             return false
         }
         val existing = _session.value
@@ -403,7 +420,7 @@ class DeviceConnectionRepository @Inject constructor(
         resetDerivedState()
 
         knownDeviceDao.insertIfAbsent(
-            KnownDevice(address, name, null, null, null, System.currentTimeMillis(), null)
+            KnownDevice(address, name, null, null, null, clock.nowEpochMs(), null)
         )
         val known = knownDeviceDao.get(address)
 
@@ -426,35 +443,32 @@ class DeviceConnectionRepository @Inject constructor(
             closeSessionLocked()
             return false
         }
-        refreshManifest()
+        if (listAfter) refreshManifest()
         return true
     }
 
-    /** Attempt a LAN session; null when not applicable or when it failed (the caller falls back to BLE). */
+    /**
+     * Attempt a LAN session; null when not applicable or when it failed (the caller falls back to
+     * BLE). The probe session is removed from the slot and its transport closed on every failure
+     * path, including an unexpected exception and cancellation.
+     */
     private suspend fun tryLan(address: String, name: String?, known: KnownDevice?): AqTransport? {
         val station = known?.station ?: return null
-        val tokenHex = known.lanToken ?: return null
+        if (!known.hasLanToken) return null
         val seen = lanDevices.value[station] ?: return null
         if (known.deviceId != null && !known.deviceId.equals(seen.dev, ignoreCase = true)) return null
         val host = seen.host ?: return null
-        val token = try {
-            tokenHex.hexToBytes()
-        } catch (e: IllegalArgumentException) {
-            Log.w(TAG, "stored LAN token is malformed; ignoring it")
-            return null
-        }
         val port = seen.port.takeIf { it in 1..65535 } ?: known.lanPort ?: return null
+        val token = lanTokenBytes(address) ?: return null
         val transport = transportFactory.lan(address, name, host, port, token)
         // Put the LAN attempt in the session slot so the UI shows "Authenticating on the LAN…".
         val probe = DeviceSession(transport).also { it.staleFrameLogger = { m -> Log.w(TAG, m) } }
         _session.value = probe
-        return try {
+        var connected = false
+        try {
             transport.connect()
-            transport
-        } catch (e: CancellationException) {
-            _session.value = null
-            transport.close()
-            throw e
+            connected = true
+            return transport
         } catch (e: LanConnectException) {
             Log.w(TAG, "LAN connect failed (${e.failure}); falling back to Bluetooth")
             if (tokenPolicy.invalidatesToken(e.failure)) {
@@ -462,17 +476,47 @@ class DeviceConnectionRepository @Inject constructor(
                 // drop it so the Bluetooth session we are about to open fetches a fresh one.
                 knownDeviceDao.setLanToken(address, null, null)
                 tokenPolicy.markStale(address)
-                _events.tryEmit(DeviceEvent.Info("Wi-Fi LAN: token rejected. Using Bluetooth and renewing the token."))
+                _events.tryEmit(DeviceEvent.Info(DeviceMessage.LanFallback(e.failure)))
             } else {
-                _events.tryEmit(DeviceEvent.Info("Wi-Fi LAN: ${e.message}. Using Bluetooth."))
+                _events.tryEmit(DeviceEvent.Info(DeviceMessage.LanFallback(e.failure)))
             }
-            _session.value = null
-            transport.close()
-            null
+            return null
         } catch (e: TransportException) {
-            _events.tryEmit(DeviceEvent.Info("Wi-Fi LAN failed (${e.message}). Using Bluetooth."))
-            _session.value = null
-            transport.close()
+            Log.w(TAG, "LAN connect failed (${e.message}); falling back to Bluetooth")
+            _events.tryEmit(DeviceEvent.Info(DeviceMessage.LanFallback(null)))
+            return null
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "LAN connect failed unexpectedly (${e::class.simpleName}); falling back to Bluetooth")
+            _events.tryEmit(DeviceEvent.Info(DeviceMessage.LanFallback(null)))
+            return null
+        } finally {
+            if (!connected) {
+                if (_session.value === probe) _session.value = null
+                transport.close()
+            }
+        }
+    }
+
+    /**
+     * The stored LAN token as bytes, decrypted only here, at the moment a LAN transport is built.
+     * Null (use Bluetooth) when none is stored, when it is malformed, or when the Keystore is
+     * unavailable right now. The last case keeps the credential for the next attempt.
+     */
+    private suspend fun lanTokenBytes(address: String): ByteArray? {
+        val hex = try {
+            lanCredentials.lanToken(address)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "stored LAN token unavailable (${e::class.simpleName}); using Bluetooth this time")
+            return null
+        } ?: return null
+        return try {
+            hex.hexToBytes()
+        } catch (e: IllegalArgumentException) {
+            Log.w(TAG, "stored LAN token is malformed; ignoring it")
             null
         }
     }
@@ -504,8 +548,9 @@ class DeviceConnectionRepository @Inject constructor(
         try {
             transport.connect()
         } catch (e: TransportException) {
-            connectionFailure.value = e.message ?: "Connection failed"
-            _events.tryEmit(DeviceEvent.Error(e.message ?: "connection failed"))
+            Log.w(TAG, "connect failed (${e.message})")
+            connectionFailure.value = e.message ?: "connection failed"
+            _events.tryEmit(DeviceEvent.Error(DeviceMessage.ConnectFailed))
             return false
         }
         startNotificationCollection(session)
@@ -513,24 +558,25 @@ class DeviceConnectionRepository @Inject constructor(
             val info = session.readInfo()
             val proto = info.proto
             if (proto != null && proto > AqUuids.PROTOCOL_VERSION) {
-                _events.tryEmit(DeviceEvent.Info("Device speaks protocol v$proto; this app implements v${AqUuids.PROTOCOL_VERSION}. Newer features are ignored."))
+                _events.tryEmit(DeviceEvent.Info(DeviceMessage.NewerProtocol(proto, AqUuids.PROTOCOL_VERSION)))
             }
-            val now = System.currentTimeMillis()
+            val now = clock.nowEpochMs()
             val previous = knownDeviceDao.get(address)
             val authenticatedBle = transport.kind == TransportKind.BLE || fake
             val expected = previous?.let { DeviceContinuityPolicy.Identity(it.address, it.deviceId, it.station) }
             val continuity = DeviceContinuityPolicy.evaluate(expected, DeviceContinuityPolicy.Identity(address, info.dev, info.station), authenticatedBle)
             if (continuity is DeviceContinuityPolicy.Decision.Reject) {
-                connectionFailure.value = continuity.reason.message
-                _events.tryEmit(DeviceEvent.Error(continuity.reason.message))
+                Log.w(TAG, "identity rejected (${continuity.reason})")
+                connectionFailure.value = continuity.reason.name
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.IdentityRejected(continuity.reason)))
                 return false
             }
             continuity as DeviceContinuityPolicy.Decision.Accept
             if (identityLease == null && info.dev != null) {
                 identityLease = identityClaims.claim(info.dev!!, this)
                 if (identityLease == null) {
-                    connectionFailure.value = "This hardware already has an active connection through another endpoint."
-                    _events.tryEmit(DeviceEvent.Error(connectionFailure.value!!))
+                    connectionFailure.value = "hardware already connected through another endpoint"
+                    _events.tryEmit(DeviceEvent.Error(DeviceMessage.HardwareInUse))
                     return false
                 }
             }
@@ -539,7 +585,7 @@ class DeviceConnectionRepository @Inject constructor(
             if (continuity.invalidateLanToken) {
                 knownDeviceDao.setLanToken(address, null, null)
                 tokenPolicy.markStale(address)
-                _events.tryEmit(DeviceEvent.Info("Device station changed after reset. Previous history is retained; LAN access will be renewed over Bluetooth."))
+                _events.tryEmit(DeviceEvent.Info(DeviceMessage.StationChanged))
             }
             knownDeviceDao.upsert(
                 KnownDevice(
@@ -558,11 +604,11 @@ class DeviceConnectionRepository @Inject constructor(
             )
             _info.value = info
             identityReady.value = true
-            runCatching { transport.readStatus().decodeToString() }.onSuccess { raw ->
+            suspendRunCatching { transport.readStatus().decodeToString() }.onSuccess { raw ->
                 _statusRaw.value = raw
-                runCatching { DeviceStatus.parse(raw) }.onSuccess { _status.value = TimedStatus(it, System.currentTimeMillis()) }
+                runCatching { DeviceStatus.parse(raw) }.onSuccess { _status.value = TimedStatus(it, clock.nowEpochMs()) }
             }
-            runCatching { session.readLive() }.onSuccess { _live.value = TimedLive(it, System.currentTimeMillis()) }
+            suspendRunCatching { session.readLive() }.onSuccess { _live.value = TimedLive(it, clock.nowEpochMs()) }
             info.station?.let { station -> scope.launch { if (_session.value === session) updateArchiveTimeSummary(station) } }
             recordDiagnostic("connect", "${transport.kind} ready; boot=${info.boot ?: "unknown"}; station=${info.station ?: "unknown"}")
 
@@ -572,17 +618,18 @@ class DeviceConnectionRepository @Inject constructor(
                 // said ours is stale, see tryLan). Never logged.
                 if (tokenPolicy.shouldFetch(transport.kind, proto, previous?.lanToken?.takeUnless { continuity.invalidateLanToken })) {
                     if (fetchTokenLocked(session, address, quiet = true) && tokenPolicy.onFetched(address)) {
-                        _events.tryEmit(DeviceEvent.Info("LAN token renewed"))
+                        _events.tryEmit(DeviceEvent.Info(DeviceMessage.LanTokenRenewed))
                     }
                 }
-                runCatching { session.getConfig() }
+                suspendRunCatching { session.getConfig() }
                     .onSuccess { _config.value = it }
                     .onFailure { Log.w(TAG, "GET_CONFIG failed: ${it.message}") }
             }
         } catch (e: Exception) {
             if (e is CancellationException) throw e
-            connectionFailure.value = "Device verification failed: ${e.message}"
-            _events.tryEmit(DeviceEvent.Error(connectionFailure.value!!))
+            Log.w(TAG, "device verification failed (${e.message})")
+            connectionFailure.value = "verification failed (${e.message})"
+            _events.tryEmit(DeviceEvent.Error(DeviceMessage.VerificationFailed))
             return false
         }
         // Verification and enrollment must finish before link loss can start an automatic
@@ -594,29 +641,31 @@ class DeviceConnectionRepository @Inject constructor(
     private suspend fun fetchTokenLocked(session: DeviceSession, address: String, quiet: Boolean): Boolean = try {
         val t = session.getToken()
         knownDeviceDao.setLanToken(address, t.token.toHex(), t.port)
-        if (!quiet) _events.tryEmit(DeviceEvent.Info("LAN token stored on this phone (port ${t.port})."))
+        if (!quiet) _events.tryEmit(DeviceEvent.Info(DeviceMessage.LanTokenStored))
         true
     } catch (e: NotAllowedOnLinkException) {
-        if (!quiet) _events.tryEmit(DeviceEvent.Error("The token can only be fetched over Bluetooth."))
+        if (!quiet) _events.tryEmit(DeviceEvent.Error(DeviceMessage.TokenNeedsBluetooth))
         false
     } catch (e: DeviceErrorException) {
-        if (!quiet) _events.tryEmit(DeviceEvent.Error(e.message ?: "GET_TOKEN rejected"))
+        Log.w(TAG, "GET_TOKEN rejected (${e.message})")
+        if (!quiet) _events.tryEmit(DeviceEvent.Error(DeviceMessage.CommandRejected(DeviceMessage.Command.GET_TOKEN)))
         false
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
         Log.w(TAG, "GET_TOKEN failed: ${e.message}")
-        if (!quiet) _events.tryEmit(DeviceEvent.Error("GET_TOKEN failed: ${e.message}"))
+        if (!quiet) _events.tryEmit(DeviceEvent.Error(DeviceMessage.CommandFailed(DeviceMessage.Command.GET_TOKEN)))
         false
     }
 
     private fun startNotificationCollection(session: DeviceSession) {
-        notificationJob?.cancel()
-        notificationJob = scope.launch {
-            launch { session.status.collect { if (_session.value === session) _status.value = TimedStatus(it, System.currentTimeMillis()) } }
+        val job = scope.launch(start = CoroutineStart.LAZY) {
+            launch { session.status.collect { if (_session.value === session) _status.value = TimedStatus(it, clock.nowEpochMs()) } }
             launch { session.statusJson.collect { if (_session.value === session) _statusRaw.value = it } }
-            launch { session.live.collect { if (_session.value === session) _live.value = TimedLive(it, System.currentTimeMillis()) } }
+            launch { session.live.collect { if (_session.value === session) _live.value = TimedLive(it, clock.nowEpochMs()) } }
         }
+        synchronized(this) { notificationJob.also { notificationJob = job } }?.cancel()
+        job.start()
     }
 
     fun disconnect() {
@@ -634,32 +683,47 @@ class DeviceConnectionRepository @Inject constructor(
         connectMutex.withLock { if (connectionIntent.owns(claim)) closeSessionLocked() }
     }
 
-    private suspend fun closeSessionLocked() {
-        linkWatchJob?.cancel()
-        linkWatchJob = null
-        val transfer = synchronized(this) { closing = true; syncJob.also { syncJob = null } }
+    /**
+     * Close the current session. Runs to the end even when the caller is being cancelled: a close
+     * that stopped half way would leak the transport, the identity claim or the `closing` flag.
+     */
+    private suspend fun closeSessionLocked() = withContext(NonCancellable) {
+        val (watch, transfer, notifications) = synchronized(this@DeviceConnectionRepository) {
+            closing = true
+            Triple(linkWatchJob, syncJob, notificationJob).also {
+                linkWatchJob = null
+                syncJob = null
+                notificationJob = null
+            }
+        }
+        watch?.cancel()
         transfer?.cancelAndJoin()
-        notificationJob?.cancel()
-        notificationJob = null
+        notifications?.cancel()
         // Drop the session from the slot *before* the transport reports Disconnected, so nothing
         // mistakes this deliberate close for a lost link.
         val s = _session.value
         _session.value = null
         identityReady.value = false
         if (s != null) {
-            runCatching { s.transport.disconnect() }
+            suspendRunCatching { s.transport.disconnect() }
             s.transport.close()
         }
         identityLease?.close()
         identityLease = null
         _sync.update { it.copy(running = false, current = null) }
-        synchronized(this) { closing = false }
+        synchronized(this@DeviceConnectionRepository) { closing = false }
     }
 
     // ------------------------------------------------------------- link watch
 
+    // Job handles below and in the sync section are read and written only under
+    // `synchronized(this)`, so a cancel from the notification's Stop (another thread) always sees
+    // the job that is about to run or is running, never a stale or half-published one.
     private var linkWatchJob: Job? = null
     private var reconnectJob: Job? = null
+
+    /** Bumped by [cancelReconnect]; a reconnect decided before the bump never starts. */
+    private var reconnectGeneration = 0L
 
     /**
      * Once [session] is Ready, wait for it to stop being Ready while it is still the current
@@ -672,16 +736,35 @@ class DeviceConnectionRepository @Inject constructor(
      * [SyncResumePolicy] — is resumed; a user Stop or a completed run is not.
      */
     private fun watchLink(session: DeviceSession, address: String, name: String?, fake: Boolean, claim: Long) {
-        linkWatchJob?.cancel()
-        linkWatchJob = scope.launch {
+        val watch = scope.launch(start = CoroutineStart.LAZY) {
             val lost = session.connectionState.first { !it.isReady && it !is ConnectionState.Connecting && !it.isBusy }
+            val generation = synchronized(this@DeviceConnectionRepository) { reconnectGeneration }
             if (_session.value !== session || !connectionIntent.owns(claim)) return@launch
             val reason = (lost as? ConnectionState.Failed)?.reason ?: "device closed the connection"
             val sync = _sync.value
-            val resume = SyncResumePolicy.shouldResume(sync.running, sync.endCause, sync.finishedAtEpochMs, System.currentTimeMillis())
+            val resume = SyncResumePolicy.shouldResume(sync.running, sync.endCause, sync.finishedAtEpochMs, clock.nowEpochMs())
             Log.w(TAG, "link lost ($reason); auto-reconnect starts, resumeSync=$resume (running=${sync.running}, lastEnd=${sync.endCause})")
-            reconnectJob = scope.launch { reconnectLoop(address, name, fake, reason, resume, claim) }
+            val reconnect = scope.launch(start = CoroutineStart.LAZY) { reconnectLoop(address, name, fake, reason, resume, claim) }
+            val me = coroutineContext[Job]
+            val start = synchronized(this@DeviceConnectionRepository) {
+                // A close replaced this watcher, or a Stop arrived after the loss was seen: no reconnect.
+                if (linkWatchJob !== me || reconnectGeneration != generation) {
+                    false
+                } else {
+                    reconnectJob?.cancel()
+                    reconnectJob = reconnect
+                    true
+                }
+            }
+            if (!start) {
+                reconnect.cancel()
+                return@launch
+            }
+            reconnect.invokeOnCompletion { synchronized(this@DeviceConnectionRepository) { if (reconnectJob === reconnect) reconnectJob = null } }
+            reconnect.start()
         }
+        synchronized(this) { linkWatchJob.also { linkWatchJob = watch } }?.cancel()
+        watch.start()
     }
 
     private suspend fun reconnectLoop(address: String, name: String?, fake: Boolean, reason: String, resumeSync: Boolean, claim: Long) {
@@ -689,14 +772,15 @@ class DeviceConnectionRepository @Inject constructor(
             for (attempt in 1..RECONNECT_ATTEMPTS) {
                 if (!connectionIntent.owns(claim)) return
                 _reconnecting.value = ReconnectState(attempt, RECONNECT_ATTEMPTS, reason)
-                _events.tryEmit(DeviceEvent.Info("Link lost ($reason). Reconnecting ($attempt/$RECONNECT_ATTEMPTS)…"))
+                _events.tryEmit(DeviceEvent.Info(DeviceMessage.Reconnecting(attempt, RECONNECT_ATTEMPTS)))
                 delay(RECONNECT_DELAY_MS)
                 val ok = connectMutex.withLock {
                     if (!connectionIntent.owns(claim)) return@withLock null
                     // A newer session appeared meanwhile (user action): stop.
                     val cur = _session.value
                     if (cur != null && cur.connectionState.value.isReady) return@withLock true
-                    val opened = connectLocked(address, name, fake, TransportPreference.AUTO, claim)
+                    // No LIST here when a resume follows: the resume issues its own and waits for it.
+                    val opened = connectLocked(address, name, fake, TransportPreference.AUTO, claim, listAfter = !resumeSync)
                     if (!connectionIntent.owns(claim)) {
                         closeSessionLocked()
                         null
@@ -706,18 +790,42 @@ class DeviceConnectionRepository @Inject constructor(
                 }
                 if (ok == null) return
                 if (ok) {
-                    if (resumeSync && connectionIntent.owns(claim)) {
-                        // The manifest refresh started by connectLocked feeds `plan`; sync once it is there.
-                        withTimeoutOrNull(MANIFEST_WAIT_MS) { plan.filterNotNull().first() }
-                        syncAll()
-                    }
+                    if (resumeSync && connectionIntent.owns(claim)) resumeAfterReconnect()
                     return
                 }
             }
-            if (connectionIntent.owns(claim)) _events.tryEmit(DeviceEvent.Error("Could not reconnect after $RECONNECT_ATTEMPTS attempts. Use Reconnect when the device is back."))
+            if (connectionIntent.owns(claim)) _events.tryEmit(DeviceEvent.Error(DeviceMessage.ReconnectFailed(RECONNECT_ATTEMPTS)))
         } finally {
             if (connectionIntent.owns(claim)) _reconnecting.value = null
         }
+    }
+
+    /**
+     * Resume a transfer on the session that was just re-established. The plan comes from this
+     * session's own `LIST` ([planFor]), never from the shared [plan] flow, which can still hold the
+     * previous session's plan for a moment after the reconnect.
+     */
+    private suspend fun resumeAfterReconnect() {
+        val session = _session.value ?: return
+        val plan = withTimeoutOrNull(MANIFEST_WAIT_MS) { if (refreshManifestNow(session)) planFor(session) else null }
+        if (plan == null) {
+            Log.w(TAG, "no plan for the re-established session; not resuming")
+            return
+        }
+        startSync(plan.toDownload)
+    }
+
+    /**
+     * The plan for [session], computed from the listing that session loaded and the archive as it
+     * is now. Null when the session is no longer current or has not listed yet.
+     */
+    private suspend fun planFor(session: DeviceSession): SyncPlan? {
+        if (_session.value !== session) return null
+        val station = _info.value?.station ?: return null
+        val loaded = _manifest.value.last ?: return null
+        val archived = archivedFileDao.observeAll().first().map { ArchivedIdentity(it.station, it.name, it.bytes, it.crc32) }
+        val plan = SyncPlanner.plan(station, loaded.files, archived, archive.partialLengths(station))
+        return plan.takeIf { _session.value === session }
     }
 
     // ----------------------------------------------------------------- manifest
@@ -740,7 +848,7 @@ class DeviceConnectionRepository @Inject constructor(
         return try {
             val (files, end) = session.list()
             if (_session.value !== session) return false
-            _manifest.update { it.loaded(files, end, System.currentTimeMillis()) }
+            _manifest.update { it.loaded(files, end, clock.nowEpochMs()) }
             true
         } catch (e: CancellationException) {
             throw e
@@ -767,7 +875,7 @@ class DeviceConnectionRepository @Inject constructor(
                 ClockSyncAction.ASK_USER -> if (clockConfirmed) {
                     if (!setTimeFromPhoneNow(session, quiet = false)) return@launch
                 } else {
-                    _events.emit(DeviceEvent.ClockConfirmationRequired(decision.reason))
+                    _events.emit(DeviceEvent.ClockConfirmationRequired(decision.quality))
                     return@launch
                 }
                 ClockSyncAction.SET_TIME -> {
@@ -776,7 +884,7 @@ class DeviceConnectionRepository @Inject constructor(
                 ClockSyncAction.CONTINUE -> Unit
             }
             val latest = plan.value ?: run {
-                _events.emit(DeviceEvent.Error("Cannot sync: the device file list is not ready"))
+                _events.emit(DeviceEvent.Error(DeviceMessage.FileListNotReady))
                 return@launch
             }
             recordDiagnostic("plan", "${latest.toDownload.size} file(s), ${latest.missingBytes} byte(s) missing")
@@ -798,13 +906,19 @@ class DeviceConnectionRepository @Inject constructor(
     }
 
     fun cancelSync() {
-        syncJob?.cancel()
+        synchronized(this) { syncJob }?.cancel()
     }
 
-    /** Stop an automatic reconnect (the user pressed Stop on the notification). */
+    /**
+     * Stop an automatic reconnect (the user pressed Stop on the notification). Also covers a
+     * reconnect that a link watcher has decided on but not yet started.
+     */
     fun cancelReconnect() {
-        reconnectJob?.cancel()
-        reconnectJob = null
+        val job = synchronized(this) {
+            reconnectGeneration++
+            reconnectJob.also { reconnectJob = null }
+        }
+        job?.cancel()
         _reconnecting.value = null
     }
 
@@ -831,26 +945,30 @@ class DeviceConnectionRepository @Inject constructor(
     @Synchronized
     private fun startSync(entries: List<ManifestEntry>, foregroundService: Boolean = true, refreshAfter: Boolean = foregroundService): Job? {
         if (foregroundService && backgroundOwner.value != null) {
-            _events.tryEmit(DeviceEvent.Info("Background collection owns this device. Wait for it to finish before starting an interactive sync."))
+            _events.tryEmit(DeviceEvent.Info(DeviceMessage.BackgroundOwnsSync))
+            return null
+        }
+        if (foregroundService && _busy.value) {
+            _events.tryEmit(DeviceEvent.Info(DeviceMessage.BusyBeforeSync))
             return null
         }
         if (_sync.value.running || closing) return null
         val session = _session.value ?: return null
         val info = _info.value
         val station = info?.station ?: run {
-            _events.tryEmit(DeviceEvent.Error("Cannot sync: device `info` has no station id"))
+            _events.tryEmit(DeviceEvent.Error(DeviceMessage.NoStationId))
             return null
         }
         // max_read on every link; ReadWindow records why BLE is not given a smaller window.
         val maxRead = ReadWindow.forTransport(session.transport, info.maxRead)
         if (entries.isEmpty()) {
-            _events.tryEmit(DeviceEvent.Info("Archive is already up to date"))
+            _events.tryEmit(DeviceEvent.Info(DeviceMessage.UpToDate))
             return null
         }
         val total = entries.sumOf { it.bytes - it.partialBytes }
-        val started = System.currentTimeMillis()
+        val started = clock.nowEpochMs()
         _sync.value = SyncProgress(running = true, filesTotal = entries.size, bytesTotal = total, startedAtEpochMs = started)
-        val meter = RateMeter()
+        val meter = RateMeter(monotonic)
         if (foregroundService) {
             // The fake device needs no protection, but in debug builds it runs under the service too
             // so the notification and its Stop action can be exercised without hardware.
@@ -903,12 +1021,13 @@ class DeviceConnectionRepository @Inject constructor(
                     outcomes += outcome
                     _sync.update { it.copy(filesDone = outcomes.size, outcomes = outcomes.toList(), bytesDone = bytesBefore) }
                     if (outcome !is FileOutcome.Synced) {
-                        _events.tryEmit(DeviceEvent.Error("${entry.name.substringAfterLast('/')}: ${describe(outcome)}"))
+                        Log.w(TAG, "${entry.name} not synced (${describe(outcome)})")
+                        _events.tryEmit(DeviceEvent.Error(DeviceMessage.FileNotSynced(entry.name.substringAfterLast('/'), problemOf(outcome))))
                     }
                 }
                 val synced = outcomes.count { it is FileOutcome.Synced }
                 endCause = SyncEndCause.COMPLETED
-                _events.tryEmit(DeviceEvent.Info("Synced $synced of ${entries.size} file(s)"))
+                _events.tryEmit(DeviceEvent.Info(DeviceMessage.SyncFinished(synced, entries.size)))
                 // Still under the foreground service and the WifiLock (see the KDoc): re-LIST now.
                 // A failure here is the refresh's, not the sync's — the files are verified and stored.
                 if (refreshAfter && session.connectionState.value.isReady) {
@@ -917,21 +1036,21 @@ class DeviceConnectionRepository @Inject constructor(
                 }
             } catch (e: CancellationException) {
                 endCause = SyncEndCause.STOPPED
-                _events.tryEmit(DeviceEvent.Info("Sync stopped; partial files are kept for resume"))
+                _events.tryEmit(DeviceEvent.Info(DeviceMessage.SyncStopped))
                 throw e
             } catch (e: TransportException) {
                 // The pipe failed under us (no response, link lost, socket error): if the link watcher
                 // sees the loss shortly and gets the device back, it resumes this sync (SyncResumePolicy).
                 endCause = SyncEndCause.TRANSPORT_FAILURE
                 Log.e(TAG, "sync aborted by the transport", e)
-                _events.tryEmit(DeviceEvent.Error("Sync aborted: ${e.message ?: e::class.simpleName}"))
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.SyncAborted))
             } catch (e: Exception) {
                 Log.e(TAG, "sync aborted", e)
-                _events.tryEmit(DeviceEvent.Error("Sync aborted: ${e.message ?: e::class.simpleName}"))
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.SyncAborted))
             } finally {
                 wifiLease?.close()
                 if (permit) collectionBudget.release()
-                _sync.update { it.copy(running = false, current = null, finishedAtEpochMs = System.currentTimeMillis(), endCause = endCause) }
+                _sync.update { it.copy(running = false, current = null, finishedAtEpochMs = clock.nowEpochMs(), endCause = endCause) }
                 // A run that ended early for a non-transport reason (a Stop, a local I/O error) still
                 // has a live link: refresh so the plan reflects what did arrive. COMPLETED refreshed
                 // above; TRANSPORT_FAILURE has no link to ask (watchLink re-LISTs after reconnecting).
@@ -940,7 +1059,7 @@ class DeviceConnectionRepository @Inject constructor(
                 }
                 // Bring the history tiers up to date with whatever arrived; cheap when nothing did.
                 scope.launch {
-                    runCatching {
+                    suspendRunCatching {
                         historyDeriver.deriveStale()
                         if (_session.value === session) updateArchiveTimeSummary(station)
                     }.onFailure {
@@ -951,6 +1070,7 @@ class DeviceConnectionRepository @Inject constructor(
             }
         }
         syncJob = job
+        job.invokeOnCompletion { synchronized(this) { if (syncJob === job) syncJob = null } }
         job.start()
         return job
     }
@@ -979,15 +1099,14 @@ class DeviceConnectionRepository @Inject constructor(
                 return if (cur.address == address) skip("the app has an interactive session with this device") else skip("another session is active (${cur.address})")
             }
             if (_reconnecting.value != null) return skip("a reconnect is in progress")
-            resetDerivedState()
             val transport: AqTransport = try {
                 if (lanTarget != null) {
-                    val tokenHex = known?.lanToken
                     val host = lanTarget.host
-                    if (tokenHex == null || host == null) return skip("no token or address for the LAN link")
+                    if (known?.hasLanToken != true || host == null) return skip("no token or address for the LAN link")
                     if (known.deviceId != null && !known.deviceId.equals(lanTarget.dev, ignoreCase = true)) return skip("LAN discovery identity disagrees with the enrolled device")
                     val port = lanTarget.port.takeIf { it in 1..65535 } ?: known.lanPort ?: return skip("no LAN port")
-                    transportFactory.lan(address, name, host, port, tokenHex.hexToBytes())
+                    val token = lanTokenBytes(address) ?: return skip("LAN token unavailable")
+                    transportFactory.lan(address, name, host, port, token)
                 } else {
                     transportFactory.bleUnattended(address, bleConnectTimeoutMs)
                 }
@@ -996,27 +1115,34 @@ class DeviceConnectionRepository @Inject constructor(
             } catch (e: IllegalArgumentException) {
                 return skip("malformed token or address")
             }
-            _backgroundOwner.value = owner
+            if (!tryBeginBackground(owner)) {
+                transport.close()
+                return skip("a device command is in progress")
+            }
+            resetDerivedState()
             val opened = try {
                 openSession(transport, address, name, fake = false, watch = false)
             } catch (e: CancellationException) {
-                withContext(NonCancellable) { closeSessionLocked(); _backgroundOwner.value = null }
+                withContext(NonCancellable) { closeSessionLocked(); endBackground(owner) }
                 throw e
             }
             if (!opened) {
                 closeSessionLocked()
-                _backgroundOwner.value = null
+                endBackground(owner)
                 if (lanTarget != null) tokenPolicy.clear(address)
                 return skip("connect failed", transport.kind)
             }
-            _session.value ?: return skip("session vanished", transport.kind)
+            _session.value ?: run {
+                endBackground(owner)
+                return skip("session vanished", transport.kind)
+            }
         }
         try {
             val displayName = session.transport.displayName ?: name
             val kind = session.transport.kind
             if (!refreshManifestNow(session)) return skip("LIST failed", kind).copy(deviceName = displayName)
-            val plan = withTimeoutOrNull(MANIFEST_WAIT_MS) { plan.filterNotNull().first() }
-                ?: return skip("no plan", kind).copy(deviceName = displayName)
+            // This session's own listing, not the shared plan flow (it can lag one session behind).
+            val plan = planFor(session) ?: return skip("no plan", kind).copy(deviceName = displayName)
             val wanted = plan.toDownload.size
             val job = startSync(plan.toDownload, foregroundService = false)
                 ?: return BackgroundSyncResult(address, displayName, kind, 0, 0, 0)
@@ -1036,7 +1162,7 @@ class DeviceConnectionRepository @Inject constructor(
             // Runs on cancellation too (the user pressed Stop on the worker's notification): the
             // sync job is cancelled and the link closed even though this coroutine is already dead.
             withContext(NonCancellable) {
-                connectMutex.withLock { if (_session.value === session) closeSessionLocked(); _backgroundOwner.value = null }
+                connectMutex.withLock { if (_session.value === session) closeSessionLocked(); endBackground(owner) }
             }
         }
     }
@@ -1048,7 +1174,7 @@ class DeviceConnectionRepository @Inject constructor(
     val interactiveSessionAddress: String? get() = _session.value?.address
 
     /** Per-device opt-in to unattended syncs; the scheduler observes the count and (un)registers the periodic work. */
-    suspend fun setAutoSync(address: String, enabled: Boolean) = withContext(Dispatchers.IO) {
+    suspend fun setAutoSync(address: String, enabled: Boolean) = withContext(io) {
         knownDeviceDao.setAutoSync(address, enabled)
     }
 
@@ -1056,7 +1182,7 @@ class DeviceConnectionRepository @Inject constructor(
      * Record the Companion Device Manager association behind "wake when nearby" (null = removed).
      * The framework holds the association itself; this is the app's memory of it.
      */
-    suspend fun setCompanionAssociation(address: String, associationId: Int?) = withContext(Dispatchers.IO) {
+    suspend fun setCompanionAssociation(address: String, associationId: Int?) = withContext(io) {
         knownDeviceDao.setCompanionAssociation(address, associationId)
     }
 
@@ -1081,12 +1207,18 @@ class DeviceConnectionRepository @Inject constructor(
             "${summary.files} file(s), ${summary.realTimeRows} UTC row(s), ${summary.estimatedRows} estimated row(s), ${summary.unplacedRows} unplaced row(s)",
         )
         if (summary.unplacedRows > 0) {
-            _events.emit(DeviceEvent.Info("${summary.unplacedRows} reading(s) are safely archived but cannot be placed on the calendar because that boot has no time anchor."))
+            _events.emit(DeviceEvent.Info(DeviceMessage.UnplacedReadings(summary.unplacedRows)))
         }
     }
 
     private fun recordDiagnostic(step: String, detail: String) {
-        _syncDiagnostics.update { (it + SyncDiagnostic(System.currentTimeMillis(), step, detail)).takeLast(100) }
+        _syncDiagnostics.update { (it + SyncDiagnostic(clock.nowEpochMs(), step, detail)).takeLast(100) }
+    }
+
+    private fun problemOf(o: FileOutcome): DeviceMessage.FileProblem = when (o) {
+        is FileOutcome.Mismatch -> DeviceMessage.FileProblem.CHECK_FAILED
+        is FileOutcome.DeviceError -> DeviceMessage.FileProblem.DEVICE_REFUSED
+        is FileOutcome.Synced, is FileOutcome.Failed -> DeviceMessage.FileProblem.FAILED
     }
 
     private fun describe(o: FileOutcome): String = when (o) {
@@ -1099,10 +1231,41 @@ class DeviceConnectionRepository @Inject constructor(
     /** A worker-owned session can be observed, but interactive commands cannot take it over. */
     private fun interactiveSession(): DeviceSession? {
         if (backgroundOwner.value != null) {
-            _events.tryEmit(DeviceEvent.Info("Background collection owns this device. Wait for it to finish before sending commands."))
+            _events.tryEmit(DeviceEvent.Info(DeviceMessage.BackgroundOwnsCommand))
             return null
         }
         return _session.value
+    }
+
+    // ------------------------------------------------------------ operation gate
+
+    /**
+     * Take the command slot. False when another command or a background run holds the device, or
+     * (with [refuseWhileSyncing]) a transfer is running. Check and set are one atomic step.
+     */
+    private fun tryBeginCommand(refuseWhileSyncing: Boolean = false): Boolean = synchronized(this) {
+        if (_busy.value || _backgroundOwner.value != null) return false
+        if (refuseWhileSyncing && _sync.value.running) return false
+        _busy.value = true
+        true
+    }
+
+    private fun endCommand() {
+        synchronized(this) { _busy.value = false }
+    }
+
+    private fun tryBeginBackground(owner: String): Boolean = synchronized(this) {
+        if (_busy.value || _backgroundOwner.value != null) return false
+        _backgroundOwner.value = owner
+        true
+    }
+
+    private fun endBackground(owner: String) {
+        synchronized(this) { if (_backgroundOwner.value == owner) _backgroundOwner.value = null }
+    }
+
+    private fun refuseBusy() {
+        _events.tryEmit(DeviceEvent.Info(DeviceMessage.Busy))
     }
 
     // ----------------------------------------------------------------- controls
@@ -1114,21 +1277,21 @@ class DeviceConnectionRepository @Inject constructor(
     }
 
     private suspend fun setTimeFromPhoneNow(session: DeviceSession, quiet: Boolean): Boolean = try {
-        val epoch = System.currentTimeMillis() / 1000
+        val epoch = clock.nowEpochMs() / 1000
         val r = session.setTime(epoch)
         recordDiagnostic("clock", "SET_TIME accepted at epoch ${r.epochSeconds}")
-        if (!quiet) _events.emit(DeviceEvent.Info("Device clock set. Rows from now on carry UTC; earlier same-boot rows can be estimated after sync."))
-        runCatching { session.readStatus() }.onSuccess { _status.value = TimedStatus(it, System.currentTimeMillis()) }
+        if (!quiet) _events.emit(DeviceEvent.Info(DeviceMessage.ClockSet))
+        suspendRunCatching { session.readStatus() }.onSuccess { _status.value = TimedStatus(it, clock.nowEpochMs()) }
         true
     } catch (e: DeviceErrorException) {
         recordDiagnostic("clock", "SET_TIME rejected: ${e.message}")
-        if (!quiet) _events.emit(DeviceEvent.Error(e.message ?: "SET_TIME rejected"))
+        if (!quiet) _events.emit(DeviceEvent.Error(DeviceMessage.CommandRejected(DeviceMessage.Command.SET_TIME)))
         false
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
         recordDiagnostic("clock", "SET_TIME failed: ${e.message ?: e::class.simpleName}")
-        if (!quiet) _events.emit(DeviceEvent.Error("SET_TIME failed: ${e.message}"))
+        if (!quiet) _events.emit(DeviceEvent.Error(DeviceMessage.CommandFailed(DeviceMessage.Command.SET_TIME)))
         false
     }
 
@@ -1138,21 +1301,23 @@ class DeviceConnectionRepository @Inject constructor(
         scope.launch {
             try {
                 val r = session.flush()
-                _events.tryEmit(DeviceEvent.Info("Finalized ${r.rows} buffered row(s); ${r.filesFinalized} files on the card"))
+                _events.tryEmit(DeviceEvent.Info(DeviceMessage.Finalized(r.rows, r.filesFinalized)))
                 refreshManifest()
             } catch (e: DeviceErrorException) {
-                _events.tryEmit(DeviceEvent.Error(e.message ?: "FLUSH rejected"))
+                Log.w(TAG, "FLUSH rejected (${e.message})")
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.CommandRejected(DeviceMessage.Command.FLUSH)))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _events.tryEmit(DeviceEvent.Error("FLUSH failed: ${e.message}"))
+                Log.w(TAG, "FLUSH failed (${e.message})")
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.CommandFailed(DeviceMessage.Command.FLUSH)))
             }
         }
     }
 
     fun requestStatus() {
         val session = interactiveSession() ?: return
-        scope.launch { runCatching { session.requestStatus() } }
+        scope.launch { suspendRunCatching { session.requestStatus() } }
     }
 
     // ---------------------------------------------------------------- v2 controls
@@ -1165,7 +1330,8 @@ class DeviceConnectionRepository @Inject constructor(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _events.tryEmit(DeviceEvent.Error("GET_CONFIG failed: ${e.message}"))
+                Log.w(TAG, "GET_CONFIG failed (${e.message})")
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.CommandFailed(DeviceMessage.Command.GET_CONFIG)))
             }
         }
     }
@@ -1174,30 +1340,27 @@ class DeviceConnectionRepository @Inject constructor(
      * `SET_CONFIG`. Validation already happened in [ConfigPatch]; `ERROR` 12 names the key the
      * device still rejected. A `ble.*` change is reported as pending until the next boot.
      */
-    fun applyConfig(patch: ConfigPatch, successMessage: String? = null) {
+    fun applyConfig(patch: ConfigPatch, change: DeviceMessage.ConfigChange = DeviceMessage.ConfigChange.SETTINGS) {
         val session = interactiveSession() ?: return
         if (patch.isEmpty) return
+        if (!tryBeginCommand()) return refuseBusy()
         scope.launch {
-            _busy.value = true
             try {
                 val snap = session.setConfig(patch)
                 _config.value = snap
-                val msg = successMessage ?: "Settings saved"
-                _events.tryEmit(
-                    DeviceEvent.Info(
-                        if (snap.rebootRequired) "$msg. Bluetooth changes apply after a reboot." else msg
-                    )
-                )
+                _events.tryEmit(DeviceEvent.Info(DeviceMessage.ConfigSaved(change, snap.rebootRequired)))
             } catch (e: InvalidConfigException) {
-                _events.tryEmit(DeviceEvent.Error("Device rejected `${e.key}`; nothing was changed."))
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.ConfigKeyRejected(e.key)))
             } catch (e: DeviceErrorException) {
-                _events.tryEmit(DeviceEvent.Error(e.message ?: "SET_CONFIG rejected"))
+                Log.w(TAG, "SET_CONFIG rejected (code ${e.frame.code})")
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.CommandRejected(DeviceMessage.Command.SET_CONFIG)))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _events.tryEmit(DeviceEvent.Error("SET_CONFIG failed: ${e.message}"))
+                Log.w(TAG, "SET_CONFIG failed (${e::class.simpleName})")
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.CommandFailed(DeviceMessage.Command.SET_CONFIG)))
             } finally {
-                _busy.value = false
+                endCommand()
             }
         }
     }
@@ -1205,12 +1368,11 @@ class DeviceConnectionRepository @Inject constructor(
     /** Await the device acknowledgement so installation history never records an unprovisioned label. */
     suspend fun applySensorConfig(patch: ConfigPatch): ConfigSnapshot {
         val session = interactiveSession() ?: throw IllegalStateException("Connect to the device first")
-        if (_busy.value || _sync.value.running) throw IllegalStateException("Wait for the current device task to finish")
-        _busy.value = true
+        if (!tryBeginCommand(refuseWhileSyncing = true)) throw IllegalStateException("Wait for the current device task to finish")
         try {
             return session.setConfig(patch).also { _config.value = it }
         } finally {
-            _busy.value = false
+            endCommand()
         }
     }
 
@@ -1221,15 +1383,15 @@ class DeviceConnectionRepository @Inject constructor(
             _wifiScan.value = WifiScanState.Scanning
             try {
                 val r = session.wifiScan()
-                _wifiScan.value = WifiScanState.Done(r.accessPoints.sortedByDescending { it.rssi }, System.currentTimeMillis())
+                _wifiScan.value = WifiScanState.Done(r.accessPoints.sortedByDescending { it.rssi }, clock.nowEpochMs())
             } catch (e: WifiUnavailableException) {
-                _wifiScan.value = WifiScanState.Failed("The device's Wi-Fi radio cannot scan right now.", unavailable = true)
+                _wifiScan.value = WifiScanState.Failed("WIFI_SCAN unavailable", unavailable = true)
             } catch (e: DeviceErrorException) {
                 _wifiScan.value = WifiScanState.Failed(e.message ?: "WIFI_SCAN rejected", unavailable = false)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _wifiScan.value = WifiScanState.Failed("WIFI_SCAN failed: ${e.message}", unavailable = false)
+                _wifiScan.value = WifiScanState.Failed("WIFI_SCAN failed (${e.message})", unavailable = false)
             }
         }
     }
@@ -1251,10 +1413,10 @@ class DeviceConnectionRepository @Inject constructor(
     fun rebootAndReconnect() {
         val session = interactiveSession() ?: return
         if (_sync.value.running) {
-            _events.tryEmit(DeviceEvent.Error("Not rebooting while a sync is running. Stop the sync first."))
+            _events.tryEmit(DeviceEvent.Error(DeviceMessage.NoRebootWhileSyncing))
             return
         }
-        if (!_busy.compareAndSet(expect = false, update = true)) return
+        if (!tryBeginCommand(refuseWhileSyncing = true)) return refuseBusy()
         val address = session.address
         val name = session.transport.displayName
         val fake = isFake
@@ -1264,7 +1426,7 @@ class DeviceConnectionRepository @Inject constructor(
                 if (!connectionIntent.owns(claim)) return@launch
                 if (_sync.value.running) throw IllegalStateException("a sync started meanwhile; not rebooting")
                 val r = session.reboot()
-                _events.tryEmit(DeviceEvent.Info("Device is rebooting (in ${r.delayMs} ms). Reconnecting…"))
+                _events.tryEmit(DeviceEvent.Info(DeviceMessage.Rebooting))
                 delay(r.delayMs.toLong().coerceIn(100L, 5_000L))
                 connectMutex.withLock { if (connectionIntent.owns(claim)) closeSessionLocked() }
                 if (!connectionIntent.owns(claim)) return@launch
@@ -1275,16 +1437,18 @@ class DeviceConnectionRepository @Inject constructor(
                     if (!connectionIntent.owns(claim)) closeSessionLocked()
                 }
             } catch (e: DeviceErrorException) {
-                _events.tryEmit(DeviceEvent.Error(e.message ?: "REBOOT rejected"))
+                Log.w(TAG, "REBOOT rejected (${e.message})")
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.CommandRejected(DeviceMessage.Command.REBOOT)))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _events.tryEmit(DeviceEvent.Error("REBOOT failed: ${e.message}"))
+                Log.w(TAG, "REBOOT failed (${e.message})")
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.CommandFailed(DeviceMessage.Command.REBOOT)))
             } finally {
                 // A rejected reboot keeps the original session. The new explicit intent invalidated
                 // its old link watcher, so re-arm it if that session still belongs to this action.
                 if (connectionIntent.owns(claim) && _session.value === session) watchLink(session, address, name, fake, claim)
-                _busy.value = false
+                endCommand()
             }
         }
     }
@@ -1295,7 +1459,7 @@ class DeviceConnectionRepository @Inject constructor(
         scope.launch {
             _logTail.value = LogTailState.Loading
             try {
-                _logTail.value = LogTailState.Loaded(session.logTail(maxBytes), System.currentTimeMillis())
+                _logTail.value = LogTailState.Loaded(session.logTail(maxBytes), clock.nowEpochMs())
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -1308,15 +1472,15 @@ class DeviceConnectionRepository @Inject constructor(
     fun fetchToken() {
         val session = interactiveSession() ?: return
         if (session.transport.kind == TransportKind.LAN) {
-            _events.tryEmit(DeviceEvent.Error("The token can only be fetched over Bluetooth. Reconnect over Bluetooth first."))
+            _events.tryEmit(DeviceEvent.Error(DeviceMessage.TokenNeedsBluetooth))
             return
         }
+        if (!tryBeginCommand()) return refuseBusy()
         scope.launch {
-            _busy.value = true
             try {
                 fetchTokenLocked(session, session.address, quiet = false)
             } finally {
-                _busy.value = false
+                endCommand()
             }
         }
     }
@@ -1328,34 +1492,36 @@ class DeviceConnectionRepository @Inject constructor(
     fun rotateToken() {
         val session = interactiveSession() ?: return
         val address = session.address
+        if (!tryBeginCommand()) return refuseBusy()
         scope.launch {
-            _busy.value = true
             try {
                 _config.value = session.setConfig(ConfigPatch.build { rotateToken() })
                 knownDeviceDao.setLanToken(address, null, null)
                 tokenPolicy.clear(address)
                 if (session.transport.kind == TransportKind.LAN) {
-                    _events.tryEmit(DeviceEvent.Info("Token rotated. This LAN session will drop; reconnect over Bluetooth to fetch the new token."))
+                    _events.tryEmit(DeviceEvent.Info(DeviceMessage.TokenRotated(DeviceMessage.TokenRotation.LAN_SESSION_DROPS)))
                 } else if (fetchTokenLocked(session, address, quiet = true)) {
-                    _events.tryEmit(DeviceEvent.Info("Token rotated and the new one stored on this phone."))
+                    _events.tryEmit(DeviceEvent.Info(DeviceMessage.TokenRotated(DeviceMessage.TokenRotation.STORED)))
                 } else {
-                    _events.tryEmit(DeviceEvent.Info("Token rotated. Use “Fetch token” to store the new one."))
+                    _events.tryEmit(DeviceEvent.Info(DeviceMessage.TokenRotated(DeviceMessage.TokenRotation.FETCH_LATER)))
                 }
             } catch (e: DeviceErrorException) {
-                _events.tryEmit(DeviceEvent.Error(e.message ?: "rotate_token rejected"))
+                Log.w(TAG, "rotate_token rejected (code ${e.frame.code})")
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.CommandRejected(DeviceMessage.Command.ROTATE_TOKEN)))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _events.tryEmit(DeviceEvent.Error("rotate_token failed: ${e.message}"))
+                Log.w(TAG, "rotate_token failed (${e::class.simpleName})")
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.CommandFailed(DeviceMessage.Command.ROTATE_TOKEN)))
             } finally {
-                _busy.value = false
+                endCommand()
             }
         }
     }
 
     /** `ble.clear_bonds=1`: the device forgets every phone, including this one. */
     fun clearBonds() {
-        applyConfig(ConfigPatch.build { clearBonds() }, "Device forgot all bonded phones. You will pair again on the next Bluetooth connection.")
+        applyConfig(ConfigPatch.build { clearBonds() }, DeviceMessage.ConfigChange.BONDS_CLEARED)
     }
 
     /** Whether the connected device has a stored LAN token (for the LAN card). */
@@ -1367,11 +1533,11 @@ class DeviceConnectionRepository @Inject constructor(
 
     val knownDevices: Flow<List<KnownDevice>> = knownDeviceDao.observeAll()
 
-    suspend fun touchSeen(address: String, name: String?) = withContext(Dispatchers.IO) {
-        knownDeviceDao.touch(address, name, System.currentTimeMillis())
+    suspend fun touchSeen(address: String, name: String?) = withContext(io) {
+        knownDeviceDao.touch(address, name, clock.nowEpochMs())
     }
 
-    suspend fun forget(address: String) = withContext(Dispatchers.IO) {
+    suspend fun forget(address: String) = withContext(io) {
         check(boundAddress == null || boundAddress == address) { "controller belongs to another device" }
         val claim = connectionIntent.claim()
         cancelPendingConnect()
@@ -1389,11 +1555,12 @@ class DeviceConnectionRepository @Inject constructor(
     }
 
     /** Rolling throughput over the last few seconds. */
-    private class RateMeter {
+    internal class RateMeter(time: MonotonicTime) {
+        private val origin = time.markNow()
         private val samples = ArrayDeque<Pair<Long, Long>>()
 
         fun update(bytesDone: Long): Double {
-            val now = System.nanoTime()
+            val now = origin.elapsedNow().inWholeNanoseconds
             // A corrupt partial can force a clean re-read, so the verified transfer progress
             // legitimately moves back to zero. Start a new rate window instead of showing a
             // negative throughput while that earlier attempt ages out of the sample window.

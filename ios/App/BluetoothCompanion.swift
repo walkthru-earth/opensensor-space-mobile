@@ -15,7 +15,10 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     private var tokenTimer: Timer?
     private var requestingToken = false
     var onCredentialSaved: (() -> Void)?
-    private var central: CBCentralManager!
+    /// Created on the first user scan. Creating a central manager shows the Bluetooth permission prompt.
+    private var central: CBCentralManager?
+    /// A scan the user asked for before the central manager reported its first state.
+    private var scanRequested = false
     private var discovered: [String: CBPeripheral] = [:]
     private var current: CBPeripheral?
     private var scanTimer: Timer?
@@ -37,37 +40,46 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         }
     }
 
-    override init() {
-        super.init()
-        central = CBCentralManager(delegate: self, queue: .main)
-    }
-
     func scan() {
-        guard foreground, central.state == .poweredOn, current == nil else { return }
+        guard foreground, current == nil else { return }
+        guard let central, central.state == .poweredOn else {
+            // The first tap creates the manager. Scanning waits for poweredOn.
+            scanRequested = true
+            if let existing = self.central {
+                centralManagerDidUpdateState(existing)
+            } else {
+                state.bluetoothChanged(available: false, explanation: "Bluetooth is getting ready…")
+                self.central = CBCentralManager(delegate: self, queue: .main)
+            }
+            return
+        }
+        scanRequested = false
         stopScan()
         discovered.removeAll()
         state.scanStarted()
         central.scanForPeripherals(withServices: [CBUUID(string: state.serviceUuid)])
         scanTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: false) { [weak self] _ in
-            Task { @MainActor in self?.stopScan() }
+            MainActor.assumeIsolated { self?.stopScan() }
         }
     }
 
     private func stopScan() {
         scanTimer?.invalidate()
         scanTimer = nil
-        if central.state == .poweredOn { central.stopScan() }
+        if let central, central.state == .poweredOn { central.stopScan() }
         state.scanStopped()
     }
 
     func connect(id: String) {
-        guard foreground, central.state == .poweredOn, current == nil, let peripheral = discovered[id] else { return }
+        guard foreground, let central, central.state == .poweredOn, current == nil, let peripheral = discovered[id] else {
+            return
+        }
         stopScan()
         current = peripheral
         peripheral.delegate = self
         state.connectionStarted(id: id)
         connectionTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: false) { [weak self] _ in
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 self?.disconnect(message: "Connection timed out. Keep the sensor nearby and try again.")
             }
         }
@@ -91,13 +103,14 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         if let peripheral = current {
             current = nil
             peripheral.delegate = nil
-            if central.state == .poweredOn { central.cancelPeripheralConnection(peripheral) }
+            if let central, central.state == .poweredOn { central.cancelPeripheralConnection(peripheral) }
         }
         state.connectionClosed(explanation: message)
     }
 
     func suspend() {
         foreground = false
+        scanRequested = false
         stopScan()
         disconnect(message: "Find your sensor again to resume live readings.")
     }
@@ -107,17 +120,22 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
         let message: String
         switch central.state {
-        case .poweredOn: message = "Find a nearby sensor to see its live readings."
+        case .poweredOn: message = ""
         case .poweredOff: message = "Turn on Bluetooth to find your sensors."
-        case .unauthorized: message = "Allow Bluetooth access for opensensor.space in Settings."
-        case .unsupported: message = "Bluetooth is unavailable on this device. Use an iPhone to connect to sensors."
+        case .unauthorized: message = "Allow Bluetooth for opensensor.space in Settings."
+        case .unsupported: message = "Bluetooth is not available on this device."
         default: message = "Bluetooth is getting ready…"
+        }
+        switch central.state {
+        case .poweredOn, .unknown, .resetting: break
+        default: scanRequested = false
         }
         if central.state != .poweredOn {
             stopScan()
             disconnect(message: message)
         }
         state.bluetoothChanged(available: central.state == .poweredOn, explanation: message)
+        if central.state == .poweredOn, scanRequested { scan() }
     }
 
     func centralManager(
@@ -195,9 +213,9 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         else { return }
         requestingToken = true
         state.wifiAccessChanged(available: true, busy: true, explanation: "Saving Wi-Fi access…")
-        operations = [.subscribe(response), .write(control, Data(wireHex: wire.tokenRequest())!)]
+        operations = [.subscribe(response), .write(control, wire.tokenRequest())]
         tokenTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: false) { [weak self] _ in
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 self?.disconnect(message: "Wi-Fi access timed out. Reconnect over Bluetooth and try again.")
             }
         }
@@ -252,14 +270,14 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         guard current === peripheral, foreground else { return }
         if characteristic.uuid == CBUUID(string: wire.responseUuid) {
             guard requestingToken, error == nil, let data = characteristic.value,
-                let reply = wire.decode(hex: data.wireHex)
+                let reply = wire.decode(data: data)
             else { return }
-            if reply.kind == "token", let identity, let token = Data(wireHex: reply.dataHex) {
+            if reply.kind == "token", let identity {
                 do {
                     try credentials.save(
                         LanCredential(
                             station: identity.station, device: identity.device,
-                            peripheral: peripheral.identifier.uuidString, token: token, port: Int(reply.port)))
+                            peripheral: peripheral.identifier.uuidString, token: reply.payload, port: Int(reply.port)))
                     finishTokenRequest("Wi-Fi access saved on this phone. Find this sensor on Wi-Fi to sync.")
                     onCredentialSaved?()
                 } catch { finishTokenRequest("Wi-Fi access could not be saved securely. Try again.") }
@@ -286,7 +304,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
             state.receiveLive(json: json)
             freshnessTimer?.invalidate()
             freshnessTimer = Timer.scheduledTimer(withTimeInterval: 35, repeats: false) { [weak self] _ in
-                Task { @MainActor in self?.state.readingExpired() }
+                MainActor.assumeIsolated { self?.state.readingExpired() }
             }
         case CBUUID(string: state.statusUuid): state.receiveStatus(json: json)
         default: return
