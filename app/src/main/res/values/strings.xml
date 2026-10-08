@@ -400,8 +400,7 @@
     <string name="files_listing">Reading the file list…</string>
     <string name="files_list_failed_simple">Could not read the file list. Try again.</string>
 
-    <!-- Settings. The screen's copy lives in feature/settings composeResources, shared with iOS. -->
-    <string name="settings_title">Settings</string>
+    <!-- Settings and the bottom bar tabs. Their copy lives in feature/settings and feature/shell composeResources, shared with iOS. -->
 
     <!-- On-demand permissions (permissions/RuntimeAccess.kt). Asked only from the action that needs them. -->
     <string name="perm_bt_title">Allow nearby devices</string>
@@ -861,7 +860,4 @@
     <string name="debug_raw_needs_confirmation">%1$s is not sent from here. Use the Device screen, which asks for confirmation.</string>
     <string name="debug_raw_no_response">No response frames within the quiet period.</string>
     <string name="conn_pairing_repair">Bluetooth pairing needs repair. If this sensor was reset or reflashed, forget it in Android Bluetooth settings and pair again. Your archived files are kept.</string>
-    <!-- Tabs. The Discover map copy lives in feature/discover composeResources, shared with iOS. -->
-    <string name="tab_discover">Discover</string>
-    <string name="tab_my_devices">My devices</string>
 </resources>

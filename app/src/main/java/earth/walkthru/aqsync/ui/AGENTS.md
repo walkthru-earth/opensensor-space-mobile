@@ -9,9 +9,11 @@ app types or `R.string`.
 
 - Known devices are devices the owner connected to; a nearby advertisement is
   only a scan result. Forget must stay forgotten until explicit reconnection.
-- One bottom bar (Discover, My devices, Settings), the shared `BrandBottomBar`, lives at the app root in `Navigation.kt`, and
-  Discover is always the start tab. Screens never draw a bottom bar. Device sections use
-  `DeviceSectionTabs` under the top bar. Per-tab back stack rules live in `TabNavigator`.
+- One bottom bar (Discover, My devices, Settings) lives in the shared `AppShell` (`:feature:shell`),
+  which `Navigation.kt` hosts with the Android entries, and Discover is always the start tab.
+  Screens never draw a bottom bar. Device sections use `DeviceSectionTabs` under the top bar.
+  Keys (`AppKey`) and per-tab back stack rules (`TabNavigator`) live in `:feature:shell`. A screen
+  that takes Back first uses `NavigationBackHandler`, never `BackHandler`.
 - Navigation 3 entries own screen ViewModels. Load once when an entry opens;
   collect observable Room/repository state with lifecycle awareness. Refresh
   only for explicit user action, reconnection, or changed request keys. A
