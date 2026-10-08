@@ -42,9 +42,9 @@ only, asked on a "Near me" tap (`NSLocationDefaultAccuracyReduced`). The
 discover map adds only anonymous, read-only feed and basemap GETs, and uploads stay a per-device
 opt-in ([devices-and-discovery.md](devices-and-discovery.md#network-boundary)).
 
-Since W12 (2026-10-08) the Compose root (`ios/shared/src/iosMain/.../AppRoot.kt`) has three tabs,
-Discover, My devices (the screen above) and Settings ("Show public sensors"). Discover is the start
-tab while no device access is saved (`LanCredentials.hasAny()`). It is the shared
+Since W12 (2026-10-08) the Compose root (`ios/shared/src/iosMain/.../AppRoot.kt`) has one bottom
+bar with three tabs, Discover, My devices (the screen above) and Settings ("Show public sensors").
+No other iOS screen draws a bar. Discover is always the start tab (owner decision 2026-10-08). It is the shared
 `:feature:discover` screen, reading the bundled sample through the common Parquet reader and the
 vendored H3 C library through cinterop. The Xcode target links `-lc++ -lz` and CoreFoundation,
 CoreGraphics, CoreText, Foundation, ImageIO, Metal and QuartzCore for maplibre-compose. Checked in

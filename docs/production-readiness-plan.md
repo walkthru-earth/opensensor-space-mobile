@@ -241,7 +241,7 @@ Parquet reader. Design reassessed 2026-10-08 in
 - No location prompt at launch. Centre on the last viewed area, the own device cell or the time
   zone region, with search over a bundled place list. A "Near me" button asks for approximate
   location on tap only.
-- Discover is the start tab when no device is paired.
+- Discover is always the start tab, under one app-wide bottom bar (owner decision 2026-10-08).
 - Status 2026-10-08 (first slice, not phone qualified). Built `:core:publicfeed`,
   `:feature:discover` and `tools/discover-fixture/` with the sample feed, the map, chips, window,
   legend, sample pill, first-run card, cell sheet, local city search and the "Show public sensors"

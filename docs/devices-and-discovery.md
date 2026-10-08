@@ -255,8 +255,11 @@ lonely child is drawn outline only, and tapping it shows this.
 hourly values only. An owned device keeps its own full-resolution history from local storage,
 and its settings hold "Share this sensor publicly", off by default.
 
-**Navigation.** Three tabs, Discover, My devices and Settings. With no paired device Discover
-is the start tab. With a paired device My devices is the start tab.
+**Navigation (owner decision 2026-10-08).** One bottom bar for the whole app, Discover, My
+devices and Settings, drawn once at the app root on Android and iOS. Discover is always the start
+tab, whether or not a device is paired. A device's Today, History, Files and Device sections are a
+tab row inside the device screens, never a second bottom bar. Each tab keeps its own back stack
+(`docs/screens.md`).
 
 ### Centring the map and Near me
 
