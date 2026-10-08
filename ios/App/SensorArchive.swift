@@ -19,6 +19,10 @@ final class SensorArchive {
         return crc
     }
     let root: URL
+    private struct Receipt: Codable {
+        let size: UInt64
+        let crc: UInt32
+    }
     init(root: URL) throws {
         self.root = root.standardizedFileURL
         try FileManager.default.createDirectory(at: self.root, withIntermediateDirectories: true)
@@ -52,10 +56,62 @@ final class SensorArchive {
         return result
     }
 
+    /// The firmware contract makes finalized names immutable. A local receipt avoids
+    /// opening every previously collected file on the sensor on each resumed run.
+    func completed(station: String, name: String, size: UInt64) throws -> Bool {
+        let final = try target(station: station, name: name)
+        let receipt = final.appendingPathExtension("verified.json")
+        guard FileManager.default.fileExists(atPath: final.path),
+            let attributes = try? FileManager.default.attributesOfItem(atPath: receipt.path)
+        else { return false }
+        guard attributes[.type] as? FileAttributeType == .typeRegular else { throw Failure.unsafePath }
+        guard ((attributes[.size] as? NSNumber)?.intValue ?? 0) <= 1024,
+            let saved = try? JSONDecoder().decode(Receipt.self, from: Data(contentsOf: receipt))
+        else { return false }
+        guard saved.size == size, try verified(final, size: size, crc: saved.crc) else {
+            throw Failure.conflictingArchive
+        }
+        return true
+    }
+
+    private func record(_ final: URL, size: UInt64, crc: UInt32) throws {
+        let receipt = final.appendingPathExtension("verified.json")
+        if let attributes = try? FileManager.default.attributesOfItem(atPath: receipt.path),
+            attributes[.type] as? FileAttributeType != .typeRegular
+        { throw Failure.unsafePath }
+        try JSONEncoder().encode(Receipt(size: size, crc: crc)).write(to: receipt, options: .atomic)
+    }
+
+    /// Export a snapshot containing finalized Parquet files only, with the Hive tree intact.
+    func export(to destination: URL) throws -> Int {
+        // Relative enumeration avoids Foundation's /var versus /private/var URL aliases.
+        guard let files = FileManager.default.enumerator(atPath: root.path)
+        else { throw Failure.invalidFile }
+        var count = 0
+        for case let relative as String in files {
+            try Task.checkCancellation()
+            let source = root.appendingPathComponent(relative)
+            let values = try source.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+            guard values.isSymbolicLink != true else { throw Failure.unsafePath }
+            guard values.isRegularFile == true, source.pathExtension == "parquet" else { continue }
+            let components = relative.split(separator: "/", maxSplits: 1).map(String.init)
+            guard components.count == 2,
+                try target(station: components[0], name: components[1]).path == source.path
+            else { throw Failure.unsafePath }
+            let copy = destination.appendingPathComponent(relative)
+            try FileManager.default.createDirectory(
+                at: copy.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try FileManager.default.copyItem(at: source, to: copy)
+            count += 1
+        }
+        return count
+    }
+
     func prepare(station: String, name: String, size: UInt64, crc: UInt32) throws -> Download? {
         let final = try target(station: station, name: name)
         if FileManager.default.fileExists(atPath: final.path) {
             guard try verified(final, size: size, crc: crc) else { throw Failure.conflictingArchive }
+            try record(final, size: size, crc: crc)
             return nil
         }
         try FileManager.default.createDirectory(
@@ -131,6 +187,7 @@ final class SensorArchive {
             } else {
                 try FileManager.default.moveItem(at: partial, to: final)
             }
+            try archive.record(final, size: size, crc: crc)
         }
     }
 }
@@ -141,6 +198,10 @@ actor ArchiveIO {
     private var download: SensorArchive.Download?
     init(root: URL) throws { archive = try SensorArchive(root: root) }
     func validate(station: String, name: String) throws { _ = try archive.target(station: station, name: name) }
+    func completed(station: String, name: String, size: UInt64) throws -> Bool {
+        try archive.completed(station: station, name: name, size: size)
+    }
+    func export(to destination: URL) throws -> Int { try archive.export(to: destination) }
     func prepare(station: String, name: String, size: UInt64, crc: UInt32) throws -> Bool {
         download = try archive.prepare(station: station, name: name, size: size, crc: crc)
         return download != nil

@@ -2,12 +2,13 @@ import Foundation
 
 @MainActor private final class ScriptedPipe: ArchivePipe {
     var replies: [ArchiveReply]
+    var opens: [String] = []
     var reads: [(UInt64, UInt64)] = []
     var closes: [Int32] = []
     var onReceive: (() -> Void)?
     init(_ replies: [ArchiveReply]) { self.replies = replies }
     func list() async throws {}
-    func open(name: String) async throws {}
+    func open(name: String) async throws { opens.append(name) }
     func read(handle: Int32, offset: UInt64, length: UInt64) async throws { reads.append((offset, length)) }
     func closeFile(handle: Int32) async throws { closes.append(handle) }
     func receive() async throws -> ArchiveReply {
@@ -91,14 +92,78 @@ import Foundation
         let reusedPipe = ScriptedPipe([
             ArchiveReply(kind: "file", name: "data.parquet", size: 15),
             ArchiveReply(kind: "listEnd", count: 1),
-            ArchiveReply(kind: "opened", name: "data.parquet", size: 15, crc: crc, handle: 7),
-            ArchiveReply(kind: "closed", handle: 7),
         ])
         var reusedRate = -1.0
         try await SensorTransfer.collect(pipe: reusedPipe, archive: archive, station: "a", maxRead: 16384) {
             _, _, _, rate in reusedRate = rate
         }
-        precondition(reusedPipe.reads.isEmpty && reusedRate == 0)
+        precondition(reusedPipe.opens.isEmpty && reusedPipe.reads.isEmpty && reusedRate == 0)
+
+        // Lose the connection during B's first window after fully completing A.
+        // Reconstruct the archive so resume cannot depend on retained actor state.
+        let interruptedPipe = ScriptedPipe([
+            ArchiveReply(kind: "file", name: "first.parquet", size: 15),
+            ArchiveReply(kind: "file", name: "second.parquet", size: 15),
+            ArchiveReply(kind: "listEnd", count: 2),
+            ArchiveReply(kind: "opened", name: "first.parquet", size: 15, crc: crc, handle: 7),
+            ArchiveReply(kind: "chunk", handle: 7, offset: 0, data: bytes.prefix(8)),
+            ArchiveReply(kind: "readEnd", handle: 7, offset: 8),
+            ArchiveReply(kind: "chunk", handle: 7, offset: 8, data: bytes.dropFirst(8)),
+            ArchiveReply(kind: "readEnd", handle: 7, offset: 15),
+            ArchiveReply(kind: "closed", handle: 7),
+            ArchiveReply(kind: "opened", name: "second.parquet", size: 15, crc: crc, handle: 8),
+            ArchiveReply(kind: "chunk", handle: 8, offset: 0, data: bytes.prefix(5)),
+            // The next receive fails before READ_END arrives.
+        ])
+        func interruptedCollection() async throws {
+            let interruptedArchive = try ArchiveIO(root: root)
+            try await SensorTransfer.collect(
+                pipe: interruptedPipe, archive: interruptedArchive, station: "restart", maxRead: 8
+            ) { _, _, _, _ in }
+        }
+        do {
+            try await interruptedCollection()
+            fatalError("interrupted collection unexpectedly completed")
+        } catch SensorTransfer.Failure.invalidReply {}
+        precondition(interruptedPipe.opens == ["first.parquet", "second.parquet"])
+        precondition(interruptedPipe.closes == [7])
+        let firstFinal = root.appendingPathComponent("restart/first.parquet")
+        let secondFinal = root.appendingPathComponent("restart/second.parquet")
+        let firstBeforeResume = try Data(contentsOf: firstFinal)
+        precondition(firstBeforeResume == bytes)
+        precondition(!FileManager.default.fileExists(atPath: secondFinal.path))
+
+        let reconstructedArchive = try ArchiveIO(root: root)
+        let resumedPipe = ScriptedPipe([
+            ArchiveReply(kind: "file", name: "first.parquet", size: 15),
+            ArchiveReply(kind: "file", name: "second.parquet", size: 15),
+            ArchiveReply(kind: "listEnd", count: 2),
+            ArchiveReply(kind: "opened", name: "second.parquet", size: 15, crc: crc, handle: 9),
+            ArchiveReply(kind: "chunk", handle: 9, offset: 5, data: bytes.dropFirst(5).prefix(8)),
+            ArchiveReply(kind: "readEnd", handle: 9, offset: 13),
+            ArchiveReply(kind: "chunk", handle: 9, offset: 13, data: bytes.dropFirst(13)),
+            ArchiveReply(kind: "readEnd", handle: 9, offset: 15),
+            ArchiveReply(kind: "closed", handle: 9),
+        ])
+        var resumeClock: TimeInterval = 0
+        resumedPipe.onReceive = { resumeClock += 0.1 }
+        var resumedProgress: [(Int, Int, Int64, Double)] = []
+        try await SensorTransfer.collect(
+            pipe: resumedPipe, archive: reconstructedArchive, station: "restart", maxRead: 8,
+            now: { resumeClock }
+        ) { resumedProgress.append(($0, $1, $2, $3)) }
+        precondition(resumedPipe.opens == ["second.parquet"])
+        precondition(resumedPipe.reads.count == 2)
+        precondition(resumedPipe.reads[0].0 == 5 && resumedPipe.reads[0].1 == 8)
+        precondition(resumedPipe.reads[1].0 == 13 && resumedPipe.reads[1].1 == 2)
+        precondition(resumedPipe.closes == [9])
+        precondition(resumedProgress.first?.0 == 1 && resumedProgress.first?.1 == 2)
+        precondition(resumedProgress.first?.2 == 0 && resumedProgress.first?.3 == 0)
+        precondition(resumedProgress.last?.0 == 2 && resumedProgress.last?.2 == 0)
+        precondition(abs(resumedProgress.last!.3 - 10 / resumeClock) < 0.000001)
+        let firstAfterResume = try Data(contentsOf: firstFinal)
+        let secondAfterResume = try Data(contentsOf: secondFinal)
+        precondition(firstAfterResume == firstBeforeResume && secondAfterResume == bytes)
 
         // A different session's handle must never write the downloaded payload.
         let bad = try ArchiveIO(root: root)
@@ -155,6 +220,6 @@ import Foundation
         _ = try await (a, b)
         precondition(FileManager.default.fileExists(atPath: root.appendingPathComponent("c/data.parquet").path))
         precondition(FileManager.default.fileExists(atPath: root.appendingPathComponent("d/data.parquet").path))
-        print("iOS transfer: resume, rate/throttle, offsets, handles, READ_END and concurrent stations passed")
+        print("iOS transfer: reconstructed interrupted resume, completed-file skip, rate/throttle, offsets, handles, READ_END and concurrent stations passed")
     }
 }

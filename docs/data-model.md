@@ -4,6 +4,22 @@
 **Code:** `data/local/database/AppDatabase.kt`, `KnownDevice.kt`, `StationEpoch.kt`, `SensorInstallation.kt`, `ArchivedFile.kt`, `History.kt`; `data/local/di/DatabaseModule.kt` (`aq-sync.db`); `app/schemas/earth.walkthru.aqsync.data.local.database.AppDatabase/1…10.json`; `data/DeviceContinuityPolicy.kt`; `data/settings/AppSettings.kt`; `data/sync/FileArchive.kt`; `data/history/DailyDerived.kt`; `res/xml/data_extraction_rules.xml`.
 **Related:** [sync-engine.md](sync-engine.md) (who writes `archived_file`), [history-pipeline.md](history-pipeline.md) (who writes the tiers), [transports.md](transports.md#lan-token-lifecycle) (the token).
 
+## Finding and exporting the mobile archive
+
+Android raw Parquet files live in app-private
+`/data/user/0/earth.walkthru.aqsync/files/archive/<station>/<relative Hive path>`.
+Ordinary file managers cannot browse this directory. Open the sensor's **Files** screen,
+then **⋮ → Save zip to…**, **Share archive as zip**, or **Share N Parquet files**.
+Derived daily exports are separate from the original sensor files.
+
+iOS raw files live in the app's private
+`Library/Application Support/SensorArchive/<station>/<relative Hive path>`, excluded from
+cloud backup. **Export Parquet files** opens Apple's Files picker to save a copy of all
+finalized files, preserving station/Hive directories. Partial downloads and `.verified.json`
+size/CRC receipts are not exported. The original archive stays private and supports resume;
+export is available without connecting a sensor. See [ios-migration.md](ios-migration.md)
+for lifecycle and validation limits.
+
 ## Room schema v10 (`aq-sync.db`)
 
 ```mermaid

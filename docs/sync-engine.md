@@ -5,6 +5,15 @@
 **Tests:** `SyncPlannerTest`, `DeviceSessionPollingTest`, `ConcurrentArchiveTest`, `WindowRecoveryTest` (fake with `dropLeadingChunks` / `closedDelayMs`), `SyncResumePolicyTest`, `ParquetVerifyTest`.
 **Related:** [transports.md](transports.md) (the pipe underneath), [data-model.md](data-model.md) (what is recorded), [history-pipeline.md](history-pipeline.md) (what runs after).
 
+The iOS native LAN engine follows the same immutable-file contract. `SensorArchive` writes
+atomic size/CRC receipts after finalization and verifies local bytes before skipping their
+remote OPEN/READ on later runs. Initial progress counts these completed files. Interrupted
+READ windows retain contiguous bytes; a new OPEN resumes from the partial's actual length
+only when size/CRC match. Legacy finalized files without receipts use OPEN and local
+verification to add one. UIKit background-time expiration pauses active collections, and
+foreground return reconnects/resumes after old task ownership ends. See
+[ios-migration.md](ios-migration.md) for bounded execution and phone qualification.
+
 ## One file
 
 ```mermaid

@@ -67,9 +67,25 @@ a conflicting file fails the collection rather than replacing data. Paths use th
 safe-name whitelist, reject traversal/symlinks, and keep station directories independent.
 File I/O and CRC verification run away from the UI actor. The archive is excluded from cloud backup.
 
-This remains foreground-only: entering the background stops discovery and closes BLE/LAN
-connections. Resume collection explicitly after returning. The app has no background BLE
-capability, automatic collection, archive charts or export UI. Native BLE uses Core Bluetooth's
+User-started LAN collection requests a UIKit background-task lease. Switching apps stops
+discovery and BLE/idle LAN connections, but active collections continue while iOS grants time.
+Expiration cancels the sockets and retains partial bytes/progress; returning reconnects the
+paused sensors and resumes collection after old task/archive ownership is released. Recoverable
+LAN failures while backgrounded also queue resume. Explicit Cancel removes that intent, and
+queued sensors wait for one of the two collection slots. This is bounded execution, not an
+indefinite background service or periodic automatic collection. Force-quitting/relaunching
+requires reconnecting and starting sync again; downloaded bytes and verification receipts persist.
+See Apple's [background execution guidance](https://developer.apple.com/documentation/uikit/extending-your-app-s-background-execution-time).
+
+Finalized files receive an atomic size/CRC verification receipt. Later collections validate
+the local bytes against it, count completed files immediately and skip their remote OPEN/READ.
+Legacy files without receipts use OPEN/local verification once to create the receipt. Conflicts
+preserve existing files. Partial files still require matching fresh OPENED size/CRC before resume.
+The offline **Export Parquet files** button copies only finalized `.parquet` files into a temporary
+station/Hive snapshot and opens Apple's Files export picker. Partials and receipts remain private;
+the snapshot is removed after export/cancel. Files are retained in Application Support; exporting
+does not move the archive. The app has no background BLE capability or archive charts.
+Native BLE uses Core Bluetooth's
 peripheral identifier; the Keychain identity also pins station and full hardware ID. New
 LAN/archive behavior has host/simulator/build evidence plus the owner's report of
 saved access and collection starting. Completed-file verification and throughput
@@ -135,11 +151,11 @@ accuracy, stale/background handling or authenticated Wi-Fi connections. See
 ## Remaining migration
 
 1. Port Parquet decoding/compression, history indexing and Android archive fixtures for charts.
-2. Port persistent archive indexes, offline history/exports and retained station-generation UI.
+2. Port history indexes, offline charts and retained station-generation UI.
 3. Share existing Android screens, resources and navigation incrementally.
 4. Qualify BLE token acquisition, Keychain persistence, authenticated LAN transfer, multi-phone
    collection, concurrent sensors, cancellation/resume and Local Network permissions on iPhones.
-5. Design and qualify iOS background collection under Apple's execution rules.
+5. Qualify bounded iOS LAN background collection, automatic foreground resume and Files exports on iPhones.
 
 LAN byte transfer and integrity verification use a native Swift platform engine with the shared
 Kotlin wire codec. Android's existing session/archive engine still depends on JVM file APIs,

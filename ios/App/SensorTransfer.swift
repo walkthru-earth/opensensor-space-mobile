@@ -29,6 +29,19 @@ struct ArchiveReply {
         now: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
         progress: (Int, Int, Int64, Double) -> Void
     ) async throws {
+        do {
+            try await collectFiles(pipe: pipe, archive: archive, station: station, maxRead: maxRead,
+                now: now, progress: progress)
+        } catch {
+            // Retain even a partly received READ window before closing the writer.
+            try? await archive.persist()
+            throw error
+        }
+    }
+    private static func collectFiles(
+        pipe: ArchivePipe, archive: ArchiveIO, station: String, maxRead: UInt64,
+        now: () -> TimeInterval, progress: (Int, Int, Int64, Double) -> Void
+    ) async throws {
         guard (1...16384).contains(maxRead) else { throw Failure.invalidReply }
         var updates = TransferProgress(startedAt: now())
         try await pipe.list()
@@ -46,9 +59,16 @@ struct ArchiveReply {
             try await archive.validate(station: station, name: frame.name)
             files.append((frame.name, UInt64(frame.size)))
         }
-        var finished = 0
+        var completed = Set<String>()
         for (name, size) in files {
             try Task.checkCancellation()
+            if try await archive.completed(station: station, name: name, size: size) { completed.insert(name) }
+        }
+        var finished = completed.count
+        progress(finished, files.count, 0, 0)
+        for (name, size) in files {
+            try Task.checkCancellation()
+            if completed.contains(name) { continue }
             try await pipe.open(name: name)
             let opened = try await pipe.receive()
             guard opened.kind == "opened", opened.name == name, opened.size >= 12, UInt64(opened.size) == size,
@@ -58,11 +78,14 @@ struct ArchiveReply {
             }
             if try await archive.prepare(station: station, name: name, size: size, crc: UInt32(opened.crc)) {
                 var offset = await archive.offset()
+                progress(finished, files.count, Int64(offset), 0)
                 while offset < size {
+                    try Task.checkCancellation()
                     let length = min(maxRead, size - offset)
                     let end = offset + length
                     try await pipe.read(handle: opened.handle, offset: offset, length: length)
                     while true {
+                        try Task.checkCancellation()
                         let frame = try await pipe.receive()
                         guard frame.handle == opened.handle else { throw SensorTransfer.Failure.invalidReply }
                         if frame.kind == "readEnd" {

@@ -24,7 +24,7 @@ import earth.walkthru.aqsync.data.history.NowReading
 import kotlin.math.round
 
 @Composable
-internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (String) -> Unit, disconnect: () -> Unit, scanLan: () -> Unit, saveWifiAccess: () -> Unit, connectLan: (String) -> Unit, syncLan: (String) -> Unit, disconnectLan: (String) -> Unit) {
+internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (String) -> Unit, disconnect: () -> Unit, scanLan: () -> Unit, saveWifiAccess: () -> Unit, connectLan: (String) -> Unit, syncLan: (String) -> Unit, disconnectLan: (String) -> Unit, exportArchive: () -> Unit) {
     MaterialTheme {
         Surface(Modifier.fillMaxSize()) {
             LazyColumn(
@@ -101,6 +101,7 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
                 }
                 items((state.lanDevices + state.lanSessions.keys).distinct().sorted(), key = { it }) { name ->
                     val session = state.lanSessions[name]
+                    val paused = name in state.lanPaused
                     val canConnect = session?.connected != true && session?.busy != true && name in state.lanDevices
                     Card(
                         Modifier.fillMaxWidth().then(
@@ -110,6 +111,7 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(name, style = MaterialTheme.typography.titleMedium)
                             val connectionLabel = when {
+                                paused -> "Wi-Fi · Sync paused"
                                 session?.connected == true -> "Wi-Fi · Connected"
                                 session?.busy == true -> "Wi-Fi · Connecting…"
                                 session == null -> "Wi-Fi · Discovered"
@@ -128,7 +130,7 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
                                 }
                             }
                             Text(session?.message ?: "Found on your local network. Save Wi-Fi access over Bluetooth first.")
-                            if (session?.busy == true && session.filesTotal > 0) {
+                            if (session != null && session.filesTotal > 0) {
                                 Text("${session.filesDone}/${session.filesTotal} files · ${session.bytesDone} bytes in current file")
                                 if (session.bytesPerSecond > 0.0) Text("${number(session.bytesPerSecond / 1024)} KiB/s average")
                             }
@@ -140,7 +142,7 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
                                     Button(onClick = { connectLan(name) }, enabled = canConnect) {
                                         Text(if (session?.busy == true) "Connecting…" else "Connect")
                                     }
-                                    if (session?.busy == true) {
+                                    if (session?.busy == true || paused) {
                                         OutlinedButton(onClick = { disconnectLan(name) }) { Text("Cancel") }
                                     }
                                 }
@@ -149,7 +151,16 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
                     }
                 }
                 item {
-                    Text("Pair over Bluetooth once per phone and save Wi-Fi access. Connect sensors on the same Wi-Fi to collect their Parquet files. Two sensors can sync at once. Keep the app open during collection; files remain available on this phone. Archived history charts are not available yet.", style = MaterialTheme.typography.bodySmall)
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = exportArchive, enabled = !state.exportBusy) {
+                            Text(if (state.exportBusy) "Preparing export…" else "Export Parquet files")
+                        }
+                        Text("Export verified files saved on this phone, even while offline. Choose a destination in Files to save the archive.", style = MaterialTheme.typography.bodySmall)
+                        if (state.exportMessage.isNotEmpty()) Text(state.exportMessage, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                item {
+                    Text("Pair over Bluetooth once per phone and save Wi-Fi access. Connect sensors on the same Wi-Fi to collect their Parquet files. Two sensors can sync at once. Sync continues for the background time iOS allows, pauses when necessary, and resumes when you return. Downloaded bytes stay on this phone. Archived history charts are not available yet.", style = MaterialTheme.typography.bodySmall)
                 }
             }
         }

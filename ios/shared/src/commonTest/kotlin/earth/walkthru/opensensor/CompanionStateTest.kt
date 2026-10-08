@@ -9,6 +9,26 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class CompanionStateTest {
+    @Test fun pausedCollectionRetainsProgressWithoutShowingAStaleTransferRate() {
+        val state = CompanionState()
+        state.lanSessionChanged("a", true, true, "syncing", 2, 4, 16384, 2048.0)
+        state.lanCollectionPaused("a", true)
+        state.lanSessionChanged("a", false, false, "Paused until you return", 2, 4, 16384, 2048.0)
+        val session = state.lanSessions.getValue("a")
+        assertEquals(2, session.filesDone)
+        assertEquals(4, session.filesTotal)
+        assertEquals(16384L, session.bytesDone)
+        assertEquals(0.0, session.bytesPerSecond)
+        assertFalse(session.busy)
+        assertFalse(session.connected)
+        assertTrue("a" in state.lanPaused)
+        state.lanCollectionPaused("b", true)
+        state.lanCollectionPaused("a", false)
+        assertFalse("a" in state.lanPaused)
+        assertTrue("b" in state.lanPaused)
+        assertEquals(2, state.lanSessions.getValue("a").filesDone)
+    }
+
     @Test fun lanTransferRatesAreIndependentAndClearWhenCollectionStops() {
         val state = CompanionState()
         state.lanSessionChanged("a", true, true, "syncing", 0, 4, 100, 2048.0)

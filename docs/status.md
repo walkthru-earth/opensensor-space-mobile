@@ -4,6 +4,35 @@
 **Code:** `./gradlew verify` (the gate), `.github/workflows/verify.yml`.
 **Related:** measured device behaviour is recorded in the board-specific `../aq-parquet/docs/boards/*/bench-verified.md`; anything not recorded there is unverified.
 
+## 2026-10-08 — iOS interruption recovery and Parquet export
+
+The owner reports that switching to another app during M5Stack collection stops sync,
+and the next run appears to start over. Code inspection confirms that the old scene
+background handler explicitly closed LAN connections; each sync reset its completed-file
+counter and OPENed every manifest entry, although finalized files and partial bytes were retained.
+
+The working copy now requests bounded UIKit background time for user-started LAN collection.
+Expiration/background transport failure queues resume; foreground return reconnects after old
+archive ownership is released. Cancel clears queued intent, including during cleanup/reconnection,
+and paused progress remains visible. Verification receipts let later runs count saved files
+immediately and skip remote OPEN/READ while still validating local CRC/size/PAR1. Older files
+without receipts are checked once through the existing path. Force-quit/relaunch does not retain
+automatic resume intent, but downloaded bytes/receipts survive and manual sync reuses them.
+
+The new offline **Export Parquet files** action saves a copy through Apple's Files picker,
+preserving station/Hive folders and excluding partials/receipts. Exports retain the private archive.
+Android already offers ZIP and individual-Parquet exports from the sensor's Files menu;
+exact storage paths and access are in [data-model.md](data-model.md#finding-and-exporting-the-mobile-archive).
+
+Local validation: `./gradlew --no-daemon verify verifyIos`, unsigned Xcode 27 Debug simulator
+build and `./ios/tests/verify-native.sh` passed. Native regressions fail an actual collection
+mid-window, reconstruct its archive and check completed-file skipping, exact partial offset,
+initial retained progress and newly transferred-byte rates. Receipt tests cover legacy upgrade,
+size conflict, same-length corruption and symlinks. Export tests check independent copies,
+Hive paths and exclusion of partials/receipts, including Apple's `/var` path alias behavior.
+These changes have not been installed on the iPhone. Background timing, pause/reconnect/Cancellation,
+screen-lock behavior and Files-picker completion remain real-iPhone qualification work.
+
 ## One-line status
 
 The Android app implements multi-device collection, station-epoch recovery and reviewed sensor

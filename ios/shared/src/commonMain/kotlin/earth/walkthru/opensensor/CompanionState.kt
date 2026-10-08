@@ -51,6 +51,21 @@ class CompanionState {
         private set
     internal var lanSessions by mutableStateOf<Map<String, LanSessionState>>(emptyMap())
         private set
+    internal var lanPaused by mutableStateOf<Set<String>>(emptySet())
+        private set
+    internal var exportBusy by mutableStateOf(false)
+        private set
+    internal var exportMessage by mutableStateOf("")
+        private set
+
+    fun exportChanged(busy: Boolean, explanation: String) {
+        exportBusy = busy
+        exportMessage = explanation
+    }
+
+    fun lanCollectionPaused(name: String, paused: Boolean) {
+        lanPaused = if (paused) lanPaused + name else lanPaused - name
+    }
 
     fun wifiAccessChanged(available: Boolean, busy: Boolean, explanation: String) {
         wifiAccessAvailable = available
