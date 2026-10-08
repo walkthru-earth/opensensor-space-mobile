@@ -101,4 +101,20 @@ class CellChartMathTest {
         assertEquals("37.5", formatEdge(37.5))
         assertEquals("15", formatEdge(15.0))
     }
+
+    @Test
+    fun aBarsFilterHoldsExactlyTheValuesTheBarCounts() {
+        // The map and the list keep the areas a touched bar counts, nothing more, nothing less,
+        // including values clamped into the outer bars and values on a WHO edge.
+        val values = listOf(-3.0, 0.0, 7.5, 15.0, 15.1, 22.0, 25.0, 30.0, 37.5, 80.0)
+        listOf(true, false).forEach { inclusive ->
+            val domain = ChartDomain(0.0, 37.5)
+            val bins = 5
+            val counts = histogram(values, domain, bins, upperInclusive = inclusive)
+            for (i in 0 until bins) {
+                val band = bandOf(i, domain, bins, inclusive)
+                assertEquals(counts[i], values.count { it in band }, "bar $i, upper inclusive $inclusive")
+            }
+        }
+    }
 }

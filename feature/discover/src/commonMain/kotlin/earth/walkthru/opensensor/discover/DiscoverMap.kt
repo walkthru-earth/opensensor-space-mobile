@@ -12,13 +12,19 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.serialization.json.jsonPrimitive
 import org.maplibre.compose.camera.CameraPosition
+import org.maplibre.compose.expressions.dsl.all
 import org.maplibre.compose.expressions.dsl.asBoolean
+import org.maplibre.compose.expressions.dsl.asNumber
 import org.maplibre.compose.expressions.dsl.asString
 import org.maplibre.compose.expressions.dsl.condition
 import org.maplibre.compose.expressions.dsl.const
 import org.maplibre.compose.expressions.dsl.convertToColor
 import org.maplibre.compose.expressions.dsl.eq
 import org.maplibre.compose.expressions.dsl.feature
+import org.maplibre.compose.expressions.dsl.gt
+import org.maplibre.compose.expressions.dsl.gte
+import org.maplibre.compose.expressions.dsl.lt
+import org.maplibre.compose.expressions.dsl.lte
 import org.maplibre.compose.expressions.dsl.not
 import org.maplibre.compose.expressions.dsl.switch
 import org.maplibre.compose.interaction.ClickResult
@@ -50,6 +56,7 @@ internal fun rememberDiscoverMapState(
     selectedHex: String?,
     ink: Color,
     location: LocationState?,
+    highlight: ValueBand?,
     onCellClick: (String?) -> Unit,
 ): MapState {
     val initial = when (start) {
@@ -62,12 +69,19 @@ internal fun rememberDiscoverMapState(
     return rememberMapState(baseStyle = BaseStyle.Json(styleJson), initialCameraPosition = initial) {
         val cells = rememberGeoJsonSource(GeoJsonData.JsonString(geoJson))
         val stale = feature["stale"].asBoolean()
+        // While a chart bar is touched or pinned, areas outside it fade so the bar's areas stand out.
+        val v = feature["v"].asNumber()
+        val inBand = when {
+            highlight == null -> const(true)
+            highlight.upperInclusive -> all(v gt const(highlight.low.toFloat()), v lte const(highlight.high.toFloat()))
+            else -> all(v gte const(highlight.low.toFloat()), v lt const(highlight.high.toFloat()))
+        }
         FillLayer(
             id = "discover-cells-fill",
             source = cells,
             filter = feature["measured"].asBoolean(),
             color = feature["color"].convertToColor(),
-            opacity = switch(condition(stale, const(0.4f)), fallback = const(0.72f)),
+            opacity = switch(condition(!inBand, const(0.08f)), condition(stale, const(0.4f)), fallback = const(0.72f)),
             onClick = { features ->
                 onCellClick(features.firstOrNull()?.properties?.get("h3")?.jsonPrimitive?.content)
                 ClickResult.Consume

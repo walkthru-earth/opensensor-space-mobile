@@ -109,6 +109,8 @@ object CellGeoJson {
             val value = property?.let { row.mean(it) }
             sb.append("{\"type\":\"Feature\",\"properties\":{\"h3\":\"").append(H3Index.toHex(row.h3)).append('"')
             sb.append(",\"measured\":").append(value != null)
+            // The mean itself, so a chart can filter the map without rebuilding this source.
+            if (value != null && value.isFinite()) sb.append(",\"v\":").append(value)
             sb.append(",\"stale\":").append(staleAt(row))
             val color = value?.let { scale?.color(it) }
             if (color != null) sb.append(",\"color\":\"").append(SequentialRamp.hex(color)).append('"')

@@ -175,8 +175,8 @@ Sheet heights.
 
 | Height | Nothing selected | Cell selected |
 | --- | --- | --- |
-| Peek (about 96 dp) | "12 sensor areas in view" and the freshness, or the first-run card | Cell headline value, device count, freshness |
-| Half (Material half expanded, Apple medium detent) | Spread chart of the chosen metric, then the cells in view by value | Spread chart with this cell marked, then a range row per other metric the cell reports |
+| Peek (about 200 dp) | The spread chart of the chosen metric first, so it stays in sight while the map is explored, then "12 sensor areas in view" and the freshness, or the first-run card | The spread chart with this cell marked, then the headline value, device count and freshness |
+| Half (Material half expanded, Apple medium detent) | The cells in view by value, filtered by the chart's touched or pinned bar | A range row per other metric the cell reports |
 | Full (expanded, large detent) | Same list, scrollable | Metrics plus the device list (crowd rule met) |
 
 Tapping a cell opens the sheet at half height. Tapping the map outside a cell returns to peek.
@@ -244,6 +244,12 @@ Sheet charts (2026-10-09). The feed carries one window of statistics per cell (n
 max), no hourly history, so the sheet draws no time series. Charts are Canvas in common Compose,
 identical on Android and iOS, and every one carries a spoken summary of its values.
 
+- **Chart and map cross filter.** Touch and slide across the spread chart to read each bar (its
+  range, how many areas it holds and the WHO step). While a bar is touched, areas outside it fade
+  on the map and the list keeps only its areas. A tap pins the bar, a second tap or a tap on the
+  map outside any area lets go. The other way, tapping an area marks it on the chart, and panning
+  redraws the chart for the areas in view. The map filters with a style expression on each
+  cell's mean (`v` in the GeoJSON), so nothing is rebuilt while a finger moves.
 - **Spread chart.** A histogram of the chosen metric's cell means in view. For PM2.5 and PM10
   (WHO, 2026-10-09) the value axis starts at zero and ends on the smallest WHO edge at or above
   the 95th percentile in view, at least the guideline (`HealthAxis.high`), so the guideline is

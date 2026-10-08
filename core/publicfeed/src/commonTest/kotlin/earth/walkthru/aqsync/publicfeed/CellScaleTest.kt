@@ -92,6 +92,8 @@ class CellScaleTest {
         // The unmeasured cell keeps no fill.
         assertEquals(3, Regex("\"type\":\"Feature\"").findAll(pm).count())
         assertTrue("\"measured\":false" in pm)
+        // Measured cells carry their mean, so a chart bar can filter the map without a rebuild.
+        assertEquals(listOf("10.0", "40.0"), Regex("\"v\":([0-9.]+)").findAll(pm).map { it.groupValues[1] }.toList())
 
         val co2 = CellGeoJson.build(grid, rows, "co2", CellScale.of("co2", listOf(400.0))) { false }
         val co2Colours = Regex("\"color\":\"(#[0-9a-f]{6})\"").findAll(co2).map { it.groupValues[1] }.toList()

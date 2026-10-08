@@ -82,7 +82,8 @@ import org.maplibre.compose.camera.CameraPosition
 import org.maplibre.compose.camera.CameraUpdate
 import org.maplibre.spatialk.geojson.Position
 
-private val PEEK_HEIGHT = 148.dp
+// Tall enough for the chart, so it stays in sight while the sheet is down and the map is explored.
+private val PEEK_HEIGHT = 200.dp
 
 /**
  * The Discover map, first screen at the Simple level (docs/devices-and-discovery.md, "First screen
@@ -128,6 +129,10 @@ private fun DiscoverContent(
     val scope = rememberCoroutineScope()
     val sheet = rememberBottomSheetScaffoldState(rememberStandardBottomSheetState(initialValue = SheetValue.PartiallyExpanded))
     var showAll by rememberSaveable { mutableStateOf(false) }
+    // The chart bar being touched or pinned. It filters the map and the list (a cross filter).
+    var highlight by remember { mutableStateOf<ValueBand?>(null) }
+    // Bumped to let go of a pinned bar, when the map is tapped outside any area.
+    var clearSignal by remember { mutableStateOf(0) }
     fun expand() = scope.launch { runCatching { sheet.bottomSheetState.expand() } }
     fun peek() = scope.launch { runCatching { sheet.bottomSheetState.partialExpand() } }
 
@@ -146,6 +151,9 @@ private fun DiscoverContent(
                 onPickProperty = { id -> controller.selectProperty(id); showAll = false; peek() },
                 onShowProperty = controller::selectProperty,
                 onPickCell = { hex -> controller.selectCell(hex) },
+                highlight = highlight,
+                clearSignal = clearSignal,
+                onHighlight = { highlight = it },
                 now = nowEpochMillis(),
             )
         },
@@ -156,7 +164,7 @@ private fun DiscoverContent(
             if (start != null && style != null) {
                 val selectedHex = state.selected?.let { H3Index.toHex(it.h3) }
                 val nearMe = rememberNearMe()
-                val mapState = rememberDiscoverMapState(start, style, state.geoJson, selectedHex, ink, nearMe.location) { hex ->
+                val mapState = rememberDiscoverMapState(start, style, state.geoJson, selectedHex, ink, nearMe.location, highlight) { hex ->
                     controller.selectCell(hex)
                     controller.dismissFirstRun()
                     showAll = false
@@ -175,6 +183,7 @@ private fun DiscoverContent(
                     onCamera = controller::onCamera,
                     onMapClick = {
                         controller.selectCell(null)
+                        clearSignal++
                         showAll = false
                         peek()
                     },
@@ -430,6 +439,9 @@ private fun SheetContent(
     onPickProperty: (String) -> Unit,
     onShowProperty: (String) -> Unit,
     onPickCell: (String) -> Unit,
+    highlight: ValueBand?,
+    clearSignal: Int,
+    onHighlight: (ValueBand?) -> Unit,
     now: Long,
 ) {
     // Sample data is a snapshot, so its freshness is read against its own newest hour.
@@ -438,9 +450,9 @@ private fun SheetContent(
         when {
             !state.available -> Text(strings.unavailable, style = MaterialTheme.typography.bodyLarge)
             showAll -> AllProperties(state, strings, onPickProperty)
-            state.selected != null -> CellDetail(state.selected, state, strings, infoButton, reference, onShowProperty)
+            state.selected != null -> CellDetail(state.selected, state, strings, infoButton, reference, clearSignal, onHighlight, onShowProperty)
             state.firstRun -> FirstRunCard(strings, onAddSensor, onExplore)
-            else -> InView(state, strings, reference, onPickCell)
+            else -> InView(state, strings, reference, highlight, clearSignal, onHighlight, onPickCell)
         }
     }
 }
@@ -462,7 +474,15 @@ private fun freshness(strings: DiscoverStrings, updated: Long?, reference: Long)
 }
 
 @Composable
-private fun InView(state: DiscoverUiState, strings: DiscoverStrings, reference: Long, onPickCell: (String) -> Unit) {
+private fun InView(
+    state: DiscoverUiState,
+    strings: DiscoverStrings,
+    reference: Long,
+    highlight: ValueBand?,
+    clearSignal: Int,
+    onHighlight: (ValueBand?) -> Unit,
+    onPickCell: (String) -> Unit,
+) {
     if (state.loading && state.rows.isEmpty()) {
         Text(strings.loading, style = MaterialTheme.typography.titleMedium)
         return
@@ -471,22 +491,27 @@ private fun InView(state: DiscoverUiState, strings: DiscoverStrings, reference: 
         Text(strings.noAreas, style = MaterialTheme.typography.titleMedium)
         return
     }
+    // The chart comes first, so the peeking sheet shows it while the map is explored. Text follows.
+    val property = state.property
+    val units = LocalDiscoverUnits.current
+    val values = property?.let { p -> state.rows.mapNotNull { it.mean(p.id) } }.orEmpty()
+    if (property != null && values.size >= 2) {
+        ChartTitle(property, strings, state)
+        Spacer(Modifier.height(8.dp))
+        SpreadChart(values, property, state.scale, strings, clearSignal = clearSignal, onHighlight = onHighlight)
+        Spacer(Modifier.height(12.dp))
+    }
     Text(strings.areasInView(state.rows.size), style = MaterialTheme.typography.titleMedium)
     freshness(strings, state.newestUpdateEpochMs, reference)?.let {
         Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
-    val property = state.property ?: return
-    val units = LocalDiscoverUnits.current
-    val values = state.rows.mapNotNull { it.mean(property.id) }
-    if (values.size >= 2) {
-        Spacer(Modifier.height(16.dp))
-        ChartTitle(property, strings, state)
-        Spacer(Modifier.height(8.dp))
-        SpreadChart(values, property, state.scale, strings)
-    }
+    property ?: return
     Spacer(Modifier.height(12.dp))
     HorizontalDivider()
-    val sorted = state.rows.filter { it.mean(property.id) != null }.sortedByDescending { it.mean(property.id) }
+    // The list follows the chart's touched or pinned bar, like the map.
+    val sorted = state.rows
+        .filter { r -> r.mean(property.id)?.let { highlight == null || it in highlight } == true }
+        .sortedByDescending { it.mean(property.id) }
     LazyColumn(Modifier.heightIn(max = 360.dp)) {
         items(sorted, key = { it.h3 }) { row ->
             Row(
@@ -530,9 +555,12 @@ private fun CellDetail(
     strings: DiscoverStrings,
     infoButton: @Composable (InfoText, Modifier) -> Unit,
     reference: Long,
+    clearSignal: Int,
+    onHighlight: (ValueBand?) -> Unit,
     onShowProperty: (String) -> Unit,
 ) {
-    // Peek shows the headline, the device count and the freshness. Charts sit below.
+    // Peek shows the chart with this area marked, so it stays in sight while the map is explored.
+    // The headline, the device count and the other measurements follow.
     Column(Modifier.verticalScroll(rememberScrollState())) {
         if (state.isSample) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -545,6 +573,25 @@ private fun CellDetail(
         val stat = property?.let { row.stats[it.id] }
         val headline = stat?.mean
         val headlineStep = headline?.let { (state.scale as? CellScale.Health)?.stepOf(it) }
+        if (property != null && headline != null) {
+            val min = stat.min
+            val max = stat.max
+            val span = if (min != null && max != null) "${strings.min} ${formatValue(min, property, units)}  ${strings.max} ${formatValue(max, property, units)}" else null
+            ChartTitle(property, strings, state, span)
+            Spacer(Modifier.height(8.dp))
+            SpreadChart(
+                state.rows.mapNotNull { it.mean(property.id) },
+                property,
+                state.scale,
+                strings,
+                here = headline,
+                hereMin = min,
+                hereMax = max,
+                clearSignal = clearSignal,
+                onHighlight = onHighlight,
+            )
+            Spacer(Modifier.height(12.dp))
+        }
         if (property != null && headline != null) {
             val unit = unitLabel(property, units)
             Row(Modifier.clearAndSetSemantics { contentDescription = "${property.label} ${formatValue(headline, property, units)} $unit" }) {
@@ -563,16 +610,7 @@ private fun CellDetail(
         val parts = listOfNotNull(strings.sensors(row.devices), if (stale) strings.stale else freshness(strings, row.updatedEpochMs, reference))
         Text(parts.joinToString("  "), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (property != null && headline != null) {
-            val values = state.rows.mapNotNull { it.mean(property.id) }
-            Spacer(Modifier.height(16.dp))
-            val min = stat.min
-            val max = stat.max
-            val span = if (min != null && max != null) "${strings.min} ${formatValue(min, property, units)}  ${strings.max} ${formatValue(max, property, units)}" else null
-            ChartTitle(property, strings, state, span)
-            Spacer(Modifier.height(8.dp))
-            SpreadChart(values, property, state.scale, strings, here = headline, hereMin = min, hereMax = max)
-            percentBelow(values, headline)?.let {
-                Spacer(Modifier.height(4.dp))
+            percentBelow(state.rows.mapNotNull { it.mean(property.id) }, headline)?.let {
                 Text(strings.higherThan(it), style = MaterialTheme.typography.bodyMedium)
             }
         }

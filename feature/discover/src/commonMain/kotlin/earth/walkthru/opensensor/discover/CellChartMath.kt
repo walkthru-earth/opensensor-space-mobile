@@ -53,6 +53,21 @@ internal fun histogram(values: List<Double>, domain: ChartDomain, bins: Int, upp
     return counts
 }
 
+/**
+ * The values one bar of [histogram] holds, the filter the map and the list apply while that bar is
+ * touched. The outer bars are open ended, because they also hold the values clamped into them.
+ */
+internal data class ValueBand(val low: Double, val high: Double, val upperInclusive: Boolean) {
+    operator fun contains(value: Double): Boolean = if (upperInclusive) value > low && value <= high else value >= low && value < high
+}
+
+internal fun bandOf(bin: Int, domain: ChartDomain, bins: Int, upperInclusive: Boolean): ValueBand {
+    val step = (domain.high - domain.low) / bins
+    val low = if (bin <= 0) Double.NEGATIVE_INFINITY else domain.low + step * bin
+    val high = if (bin >= bins - 1) Double.POSITIVE_INFINITY else domain.low + step * (bin + 1)
+    return ValueBand(low, high, upperInclusive)
+}
+
 /** The bin of [value] in [histogram]. A flat domain puts everything in the middle bin. */
 internal fun binOf(value: Double, domain: ChartDomain, bins: Int, upperInclusive: Boolean = false): Int {
     if (domain.high <= domain.low) return bins / 2

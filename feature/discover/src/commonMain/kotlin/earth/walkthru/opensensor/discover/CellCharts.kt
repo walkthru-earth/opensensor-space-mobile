@@ -18,9 +18,12 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -91,14 +94,23 @@ internal fun SpreadChart(
     here: Double? = null,
     hereMin: Double? = null,
     hereMax: Double? = null,
+    clearSignal: Int = 0,
+    onHighlight: (ValueBand?) -> Unit = {},
 ) {
     val domain = remember(values, property.id) { ChartDomain.forProperty(property.id, values) } ?: return
     val health = (scale as? CellScale.Health)?.scale
     val bins = remember(domain, property.id, values.size) { chartBins(property.id, domain, values.size) }
     val counts = remember(values, domain, bins, health) { histogram(values, domain, bins, upperInclusive = health != null) }
     val hereBin = here?.let { binOf(it, domain, bins, upperInclusive = health != null) }
-    // The bar under the finger while it touches the chart, or null. Released, the chart shows the area again.
+    // The bar under the finger while it touches the chart, and the bar a tap pinned. Either one filters
+    // the map and the list to that bar's areas. A new axis or [clearSignal] drops the pin.
     var scrub by remember(domain, bins) { mutableStateOf<Int?>(null) }
+    var pinned by remember(domain, bins, clearSignal) { mutableStateOf<Int?>(null) }
+    val active = scrub ?: pinned
+    val upperInclusive = health != null
+    val highlight by rememberUpdatedState(onHighlight)
+    LaunchedEffect(active, domain, bins) { highlight(active?.let { bandOf(it, domain, bins, upperInclusive) }) }
+    DisposableEffect(Unit) { onDispose { highlight(null) } }
     val haptics = LocalHapticFeedback.current
     val ink = MaterialTheme.colorScheme.onSurface
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
@@ -128,7 +140,7 @@ internal fun SpreadChart(
         }
         if (offScale != null) append(". ").append(offScale)
     }
-    val readout = scrub?.let { i ->
+    val readout = active?.let { i ->
         val from = domain.low + (domain.high - domain.low) * i / bins
         val to = domain.low + (domain.high - domain.low) * (i + 1) / bins
         val range = "${formatValue(from, property, units)} ${strings.to} ${formatValue(to, property, units)} $unit"
@@ -140,7 +152,7 @@ internal fun SpreadChart(
         // reads the bar under the finger.
         val labelStyle = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold)
         when {
-            readout != null -> PositionedLabels(listOf((scrub!! + 0.5f) / bins to readout), labelStyle, ink)
+            readout != null && active != null -> PositionedLabels(listOf((active + 0.5f) / bins to readout), labelStyle, ink)
             health != null -> PositionedLabels(listOf(domain.fraction(health.guideline) to "${strings.whoMark} ${formatEdge(health.guideline)}"), labelStyle, ink)
             else -> PositionedLabels(listOf(0f to " "), labelStyle, ink)
         }
@@ -148,16 +160,21 @@ internal fun SpreadChart(
         val height = BAR_AREA + 6.dp + AXIS + if (showBand) 6.dp + 10.dp else 0.dp
         Canvas(
             Modifier.fillMaxWidth().height(height).pointerInput(bins) {
-                // Touch and slide sideways to read each bar. A mostly vertical move is left to the sheet.
+                // Touch and slide sideways to read each bar. A tap pins a bar, a second tap on it lets go.
+                // A mostly vertical move is left to the sheet.
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     fun binAt(x: Float) = (x / size.width * bins).toInt().coerceIn(0, bins - 1)
                     scrub = binAt(down.position.x)
                     var total = Offset.Zero
                     var horizontal = false
+                    var tapped = false
                     while (true) {
                         val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
-                        if (!change.pressed) break
+                        if (!change.pressed) {
+                            tapped = !horizontal
+                            break
+                        }
                         total += change.positionChange()
                         if (!horizontal) {
                             if (abs(total.y) > viewConfiguration.touchSlop && abs(total.y) > abs(total.x)) break
@@ -170,6 +187,8 @@ internal fun SpreadChart(
                             scrub = b
                         }
                     }
+                    val bin = scrub
+                    if (tapped && bin != null) pinned = if (pinned == bin) null else bin
                     scrub = null
                 }
             },
@@ -192,12 +211,12 @@ internal fun SpreadChart(
                 if (health != null) {
                     val fill = Color(health.colorOf(binMid(i, domain, bins)) ?: SequentialRamp.at(0.5))
                     drawRoundRect(color = fill, topLeft = topLeft, size = barSize, cornerRadius = radius)
-                    val picked = i == (scrub ?: hereBin)
+                    val picked = i == (active ?: hereBin)
                     val edge = if (picked) ink else ink.copy(alpha = 0.35f)
                     val stroke = if (picked) 2.dp.toPx() else 1f
                     drawRoundRect(color = edge, topLeft = topLeft, size = barSize, cornerRadius = radius, style = Stroke(stroke))
                 } else {
-                    drawRoundRect(color = if (i == (scrub ?: hereBin)) ink else bar, topLeft = topLeft, size = barSize, cornerRadius = radius)
+                    drawRoundRect(color = if (i == (active ?: hereBin)) ink else bar, topLeft = topLeft, size = barSize, cornerRadius = radius)
                 }
             }
             if (health != null) {
@@ -215,7 +234,7 @@ internal fun SpreadChart(
                     cornerRadius = CornerRadius(axisH / 2),
                 )
             }
-            scrub?.let { i ->
+            active?.let { i ->
                 val sx = (i + 0.5f) * slot
                 drawLine(ink, Offset(sx, 0f), Offset(sx, axisTop + axisH), strokeWidth = 1.dp.toPx())
             }
