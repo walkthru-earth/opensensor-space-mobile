@@ -10,8 +10,16 @@ root for the relevant concern. No Android, Hilt, Room, `Context` or
 - Change firmware's shared contract first for wire or measurement schema edits;
   preserve old archived bytes. Tests here should exercise real fixtures and
   PyArrow/DuckDB oracles where the format is involved.
-- Add sensors through `history/.../Metrics.kt` (`MetricSpec`), with column,
-  unit, validity gate and display bands. A missing column produces no value.
+- The core is sensor agnostic. Air quality is one device family, and new
+  families arrive as data (a measurement dictionary and a family entry), never as
+  a code branch or a schema string check in a screen. Today add metrics through
+  `history/.../Metrics.kt` (`MetricSpec`), with column, unit, validity gate and
+  an optional scale. A missing column produces no value. When `:core:model`
+  lands (W11), families, capabilities, properties and scales move there. Read
+  `docs/devices-and-discovery.md` first. New shared types use generic names
+  (`Reading`, `MetricCard`), never `Air*`.
+- Public discover data carries H3 cells, never coordinates, and the phone never
+  computes a location for it. The feed publisher owns the H3 math.
 - Keep protocol and sensor-domain analysis pure and reusable by Android, iOS and
   host tools. Android files/DAO integration belongs in `:app` adapters; Apple OS
   integration belongs in `ios/` adapters.

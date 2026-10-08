@@ -228,6 +228,16 @@ See [devices-and-discovery.md](devices-and-discovery.md).
 - Feature modules (`:feature:today`, `:feature:history`, `:feature:files`, `:feature:device`)
   and baseline profiles once R8 is proven on a phone.
 
+## Docs that follow the new direction after Wave 1 merges
+
+Wave 1 agents own these files, so the lead aligns them with the sensor-agnostic and discover
+direction only after merging, to avoid conflicts. The list covers `screens.md` (Discover, My
+devices and Settings tabs, per-device sharing switch), `transports.md` and `background-sync.md`
+(the network rule now allows the public feed and basemap), `ios-migration.md` and
+`ios/AGENTS.md` (shared discover screens), and the `ui/` and `data/` `AGENTS.md` files (generic
+component and model names). README, `docs/README.md`, `architecture.md`, `core/AGENTS.md`,
+`history-pipeline.md` and the older location proposal were updated on 2026-10-08.
+
 ## Evidence rules for this plan
 
 A merged branch is host-verified only. R8, BLE throughput, background execution, Local Network

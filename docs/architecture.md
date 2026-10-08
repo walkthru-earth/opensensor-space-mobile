@@ -1,4 +1,4 @@
-# Architecture — Android, iOS, shared modules, and what a change touches
+# Architecture of Android, iOS, shared modules, and what a change touches
 
 **Scope:** module boundaries, dependency direction, package layout, and platform ownership.
 **Code:** `settings.gradle.kts`, `core/*/build.gradle.kts`, `app/build.gradle.kts`, `build.gradle.kts` (`verify` task); `data/DeviceConnectionManager.kt`, `DeviceConnectionRepository.kt`, `DeviceIdentityClaims.kt`.
@@ -34,6 +34,35 @@ adapters, indexing and calendar windows remain JVM-only. `:ios:shared` consumes 
 rules and renders the current Compose iOS screen; `ios/App` supplies native app integration,
 Core Bluetooth and Bonjour discovery. The Android app remains a separate platform entry point.
 See [ios-migration.md](ios-migration.md) for current scope and build commands.
+
+### Target module graph
+
+The graph above is today's code. The production plan moves toward the graph below, where every
+rule that must give the same answer on both phones is shared and platform code only adapts OS
+services. Device families and metrics become data in `:core:model`, so air quality is one
+family among many. See [production-readiness-plan.md](production-readiness-plan.md) and
+[devices-and-discovery.md](devices-and-discovery.md).
+
+```mermaid
+flowchart TB
+  subgraph shared["Kotlin commonMain, JVM and iOS"]
+    MO[":core:model<br/>devices, families, capabilities, properties, scales"]
+    PR2[":core:protocol"]
+    SY[":core:sync<br/>engine behind FrameLink and ArchiveStore"]
+    PQ2[":core:parquet"]
+    HI2[":core:history"]
+    PF[":core:publicfeed<br/>discover feed port and sample"]
+    DS[":core:designsystem<br/>tokens, theme, components"]
+    DI[":feature:discover<br/>map, cell sheet, device page"]
+  end
+  APP2[":app, Android adapters and screens"]
+  IOS2["ios/App, Swift adapters and :ios:shared"]
+  SY --> PR2 & PQ2 & MO
+  HI2 --> PQ2 & MO
+  DI --> PF & DS & MO
+  APP2 --> SY & HI2 & DI & DS
+  IOS2 --> SY & HI2 & DI & DS
+```
 
 ## Layers inside `:app`
 
