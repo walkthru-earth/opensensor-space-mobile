@@ -1,32 +1,23 @@
-// Common Kotlin is compiled for Android's JVM and for iOS. Legacy file/stream adapters stay JVM-only.
+// The firmware contract mirror. `commonMain` compiles for Android's JVM and for iOS; `jvmMain` keeps
+// the java.io/java.security adapters (file verification, SHA-256, LAN framing over streams).
 plugins {
-    alias(libs.plugins.kotlin.multiplatform)
+    id("opensensor.kmp.library")
     alias(libs.plugins.kotlin.serialization)
 }
 
 kotlin {
-    jvm { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
-    iosArm64()
-    iosSimulatorArm64()
     sourceSets {
-        commonMain {
-            dependencies {
-                implementation(libs.kotlinx.serialization.json)
-            }
+        commonMain.dependencies {
+            implementation(libs.kotlinx.serialization.json)
         }
-        commonTest { dependencies { implementation(libs.kotlin.test) } }
-        jvmMain {
-            kotlin.srcDir("src/main/kotlin")
-        }
-        jvmTest {
-            kotlin.srcDir("src/test/kotlin")
-            dependencies {
-                implementation(libs.junit)
-                implementation(libs.kotlinx.serialization.json)
-            }
+        jvmTest.dependencies {
+            implementation(libs.junit)
+            implementation(libs.kotlinx.serialization.json)
         }
     }
 }
 
-// Keep existing verify tasks, local hooks and CI entry points compatible.
-tasks.register("test") { dependsOn("jvmTest") }
+dependencies {
+    // Real device Parquet files for the CRC-32 and verification equivalence test.
+    "jvmTestImplementation"(testFixtures(project(":core:parquet")))
+}

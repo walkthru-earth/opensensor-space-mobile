@@ -2,7 +2,7 @@
 
 **Scope:** `:core:parquet`: what the reader accepts and refuses, the writer, GeoParquet 2.0, codecs, fixtures and the oracles that prove them.
 **Code:** `core/parquet/…/data/history/parquet/`: `ParquetFile.kt` (mmap reader), `ParquetFooterParser.kt`, `ParquetMetadata.kt`, `ColumnValues.kt`, `ParquetWriter.kt`, `ThriftCompact.kt` / `ThriftCompactWriter.kt`, `Lz4Block.kt`, `ParquetCodecs.kt` (SPI), `Geometry.kt` (WKB), `GeoParquetMetadata.kt`; `:app` `data/history/parquet/AppParquetCodecs.kt` (ZSTD via `zstd-jni`).
-**Fixtures:** `core/parquet/src/test/resources/parquet/{device,v3,expected.json}` and `…/geoparquet/{pyarrow,duckdb,expected.json}` (shared into `:core:history` tests).
+**Fixtures:** `core/parquet/src/test/resources/parquet/{device,v3,expected.json}` and `…/geoparquet/{pyarrow,duckdb,expected.json}` (published as `:core:parquet` test fixtures, see [Fixtures and oracles](#fixtures-and-oracles)).
 **Tools:** `tools/make_parquet_fixtures.py`, `tools/make_geoparquet_fixtures.py`, `tools/validate_parquet_samples.py` — run as `cd ../aq-parquet && pixi run python ../opensensor-space-android/tools/<script>`.
 **Related:** [history-pipeline.md](history-pipeline.md) (who reads/writes), [sync-engine.md](sync-engine.md) (PAR1/CRC verification is in `:core:protocol`, not here).
 
@@ -73,6 +73,12 @@ files are unchanged; import UI and map are separate decisions (D4/D5).
 | `parquet/v3/` | 12 firmware writer fixtures (up to 8 row groups, statistics, `TIMESTAMP(NANOS, UTC)`) | the firmware's own fixture writers, compiled by the script | same `expected.json` |
 | `geoparquet/pyarrow/` + `duckdb/` | 20 files: PyArrow 25 `{none,snappy,gzip,zstd} × {plain,dict} × {page v1,v2}` + native-only + multipage; DuckDB 1.5.5 `GEOPARQUET_VERSION 'V1'` and `'V2'` | `make_geoparquet_fixtures.py` (PyArrow + DuckDB) | `expected.json`; decoded cell-for-cell |
 | `RealArchiveTest` (`:core:history`) | sweeps **all 766 real files** when `../aq-parquet` is a sibling (67 272 rows, 58 868 column chunks, 136 statistics cross-checks, 0.2 s); skips otherwise | — | footer statistics vs decoded rows |
+
+The fixtures live once in `core/parquet/src/test/resources`. The build publishes that directory as
+this module's test fixtures (`java-test-fixtures`), and this module's own tests read them the same
+way. `:core:history` (indexing, aggregation) and `:core:protocol` (CRC-32 and `PAR1` equivalence on
+real device files) declare `testFixtures(project(":core:parquet"))` in `jvmTest`. `:app` still adds
+the directory to its unit-test resources. Never copy the files into another module.
 
 Regenerate fixtures when the firmware writer changes; commit the result. Writer samples land in
 `app/build/parquet-samples/` after the tests (or a phone's `derived/` copy) for
