@@ -15,8 +15,21 @@ internal expect fun nowEpochMillis(): Long
 /** The bundled sample feed, read from this module's Compose resources. */
 fun bundledSampleFeed(): PublicFeed = BundledSampleFeed { path -> Res.readBytes(path) }
 
-/** The basemap style, light or dark, bundled as a Compose resource (tools/discover-fixture). */
-internal suspend fun basemapStyle(dark: Boolean): String = Res.readBytes(if (dark) "files/basemap/dark.json" else "files/basemap/light.json").decodeToString()
+/**
+ * False where the map renderer cannot lay out right-to-left text or join Arabic letters. The iOS
+ * maplibre-native-ffi build uses a bidi stub, so names in those scripts would draw broken.
+ */
+internal expect val mapShapesComplexText: Boolean
+
+/**
+ * The basemap style, light or dark, bundled as a Compose resource (tools/discover-fixture). Without
+ * complex text shaping it is the "-latin" variant, labelled in English or Latin names only.
+ */
+internal suspend fun basemapStyle(dark: Boolean): String {
+    val flavour = if (dark) "dark" else "light"
+    val variant = if (mapShapesComplexText) flavour else "$flavour-latin"
+    return Res.readBytes("files/basemap/$variant.json").decodeToString()
+}
 
 /** A style with no network sources, for when public data is off or before the style loads. */
 internal fun paperStyle(color: String): String =

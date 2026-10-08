@@ -11,6 +11,9 @@ internal actual fun currentTimeZoneId(): String = NSTimeZone.localTimeZone.name
 
 internal actual fun nowEpochMillis(): Long = (NSDate().timeIntervalSince1970 * 1000.0).toLong()
 
+// maplibre-native-ffi 0.202609.5 builds Apple targets with platform/qt/src/mln/bidi.cpp, a stub.
+internal actual val mapShapesComplexText: Boolean = false
+
 /** [DiscoverPrefs] in NSUserDefaults. Only the map camera and chip choices, never a location fix. */
 class UserDefaultsDiscoverPrefs(private val defaults: NSUserDefaults = NSUserDefaults.standardUserDefaults) : DiscoverPrefs {
     override suspend fun load(): DiscoverSaved {

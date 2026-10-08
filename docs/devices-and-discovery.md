@@ -461,6 +461,12 @@ starts with the target layout from the producer guidance.
   and the FFI build enables it, but `maplibre-compose` documents no PMTiles API, so it is
   "verify on phone" on both platforms. Style from `@protomaps/basemaps` 5.7.2, the `white` or
   `grayscale` flavour recoloured to the sensing palette, light and dark.
+- **Right-to-left labels on iOS.** The Apple build of `maplibre-native-ffi` (0.202609.5, used by
+  maplibre-compose 0.19.0) compiles the Qt bidi stub `platform/qt/src/mln/bidi.cpp`, so it neither
+  reorders right-to-left text nor joins Arabic letters. Android links ICU and draws Arabic
+  correctly. Until the Apple build links ICU bidi, iOS loads the `light-latin` and `dark-latin`
+  styles, which label with `name:en`, else a Latin `name`, else nothing. Pinned by
+  `BasemapStyleTest`. Seen on an iPhone 16 Pro on 2026-10-08.
 - **Basemap offline (owner decision 2026-10-08).** Nothing is bundled. The app Settings (not a
   device's settings) offer an optional "Offline map" download, a small world extract
   (`pmtiles extract --maxzoom` 3 or 4, a few MB, measured before release) with its glyphs and
@@ -517,7 +523,7 @@ starts with the target layout from the producer guidance.
 | `:core:publicfeed` | `PublicFeed` and `FeedReader` ports, `ParquetFeedReader` (common, over the W8 reader), `BundledSampleFeed`, the `H3Grid` interface (`com.uber:h3` 4.5.0 on Android and JVM, the vendored H3 C 4.5.0 through cinterop on iOS), `H3Index` bit arithmetic and descendant ranges, `ViewportCover`, `PercentileScale`, `PropertyRanking`, `CellGeoJson`, `TimeZoneRegions`. Built 2026-10-08. Planned here: S3 listing, Ktor range source, footer and range cache |
 | `:core:parquet` | The portable reader from W8, with `SuspendByteReader`, the footer-first `SuspendParquetFile` and row group pruning by INT64 statistics. Page indexes come later |
 | `:feature:discover` | CMP `commonMain` map screen (`DiscoverScreen`), `DiscoverController` state holder, `DiscoverStrings` (Android passes `strings.xml`, iOS English), the bundled sample and basemap styles as Compose resources. Targets Android (`com.android.kotlin.multiplatform.library`) and iOS, not the JVM, because the maplibre-compose desktop variant needs Java 25. Planned here: the public device page |
-| `tools/discover-fixture/` | `make_discover_sample.py` writes the sample feed in the live layout (Python `h3` 4.5.0, PyArrow 25.0.1, SNAPPY, 24-row groups, page indexes, about 300 KB for 18 files). `make_basemap_style.mjs` writes the light and dark styles from `@protomaps/basemaps` 5.7.2. Output committed under `feature/discover/src/commonMain/composeResources/files/` |
+| `tools/discover-fixture/` | `make_discover_sample.py` writes the sample feed in the live layout (Python `h3` 4.5.0, PyArrow 25.0.1, SNAPPY, 24-row groups, page indexes, about 300 KB for 18 files). `make_basemap_style.mjs` writes the light and dark styles from `@protomaps/basemaps` 5.7.2, each with a `-latin` variant for iOS. Output committed under `feature/discover/src/commonMain/composeResources/files/` |
 
 `:feature:discover` is shared Compose, so Android and iOS show the same screens. Platform code
 provides only the strings, the saved state (`DiscoverPrefs`, DataStore on Android, NSUserDefaults on

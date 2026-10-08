@@ -48,7 +48,10 @@ No other iOS screen draws a bar. Discover is always the start tab (owner decisio
 `:feature:discover` screen, reading the bundled sample through the common Parquet reader and the
 vendored H3 C library through cinterop. The Xcode target links `-lc++ -lz` and CoreFoundation,
 CoreGraphics, CoreText, Foundation, ImageIO, Metal and QuartzCore for maplibre-compose. Checked in
-the iPhone 18 Pro simulator only (PMTiles basemap and sample cells drawn), not on an iPhone.
+the iPhone 18 Pro simulator (PMTiles basemap and sample cells drawn) and, on 2026-10-08, on an
+iPhone 16 Pro, which opened on Discover with no prompt. On that iPhone, Arabic place names drew
+unjoined, because the Apple maplibre-native-ffi build has no bidi or Arabic shaping. iOS now uses
+the English or Latin label styles (`devices-and-discovery.md`, "Right-to-left labels on iOS").
 
 Wi-Fi discovery is also available through `NWBrowser`, restricted to
 `_aqsync._tcp` in `local.`. Tapping **Find Wi-Fi sensors** starts a bounded browse
