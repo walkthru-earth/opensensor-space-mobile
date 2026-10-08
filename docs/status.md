@@ -259,14 +259,22 @@ after Developer Mode and profile trust were enabled by the owner, launch succeed
 and CoreDevice confirmed the app process was still running. No signing team,
 certificate or provisioning material was committed.
 
-Real-sensor discovery, pairing, LIVE/STATUS notifications, stale timeout and
-foreground/background behavior still need dated phone qualification under the
-correct board bench record. The first iOS app is a foreground live reader only:
+Real-phone evidence for app commit `e1a3c6d`: the owner's screenshot showed
+Bonjour discovery of `aq-6b40` on the iPhone. After reporting that the other phone
+was disconnected, the owner confirmed a Bluetooth connection and visible live
+readings in the iOS app. This is owner-reported foreground behavior, not a
+captured wire trace or a comparison of values with the board. The corresponding
+[CoreS3 bench note](../../aq-parquet/docs/boards/m5stack-cores3/bench-verified.md#2026-10-08--first-ios-companion-phone-observation)
+records the evidence and its limits. A fresh pairing/PIN flow, notification
+cadence, STATUS updates, stale timeout and foreground/background behavior still
+need qualification. The first iOS app is a foreground live reader only:
 Bonjour discovery is implemented with an explicit **Find Wi-Fi sensors** action,
 `NSLocalNetworkUsageDescription` and the `_aqsync._tcp` entry in `NSBonjourServices`.
 The browse stays active while iOS asks for permission; denial and unavailable Wi-Fi
 are not confused with Bluetooth failure. The shared LAN envelope/handshake now
-also compile for iOS. The local-network prompt and discovered sensor names still
-need a real-phone check. Parquet archive download, offline history, exports,
+also compile for iOS. A discovered sensor name is confirmed by the phone
+screenshot; the Local Network prompt itself and allow/deny/revoke behavior were
+not reported. Wi-Fi result cards are discovery-only, with no connection action.
+Parquet archive download, offline history, exports,
 authenticated LAN transfers and automatic background collection have not been ported. Minimum app deployment target is iOS 18.5;
 this stage includes Apple Silicon simulator and physical iPhone targets.

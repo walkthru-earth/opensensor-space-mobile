@@ -90,7 +90,12 @@ sensor, then verify disconnect, radio-off and background/resume behavior.
 Tap **Find Wi-Fi sensors** separately to test the Local Network prompt and
 Bonjour discovery on the phone. Decline/allow/revoke checks remain phone
 qualification work. An iOS simulator cannot exercise the real BLE transport. Keep dated real-phone
-results separate from compilation and common-test evidence.
+results separate from compilation and common-test evidence. On 2026-10-08 the
+owner confirmed Bluetooth connection and visible live readings on the connected
+iPhone; a supplied screenshot also confirmed Bonjour discovery of `aq-6b40`.
+These observations do not qualify pairing prompts, notification cadence, value
+accuracy, stale/background handling or authenticated Wi-Fi connections. See
+[status.md](status.md) for the dated evidence and remaining checks.
 
 ## Remaining migration
 
