@@ -4,6 +4,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,7 +19,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -29,7 +33,11 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.TextStyle
@@ -42,6 +50,7 @@ import earth.walkthru.aqsync.publicfeed.CellScale
 import earth.walkthru.aqsync.publicfeed.FeedProperty
 import earth.walkthru.aqsync.publicfeed.FeedWindow
 import earth.walkthru.aqsync.publicfeed.SequentialRamp
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /*
@@ -88,6 +97,9 @@ internal fun SpreadChart(
     val bins = remember(domain, property.id, values.size) { chartBins(property.id, domain, values.size) }
     val counts = remember(values, domain, bins, health) { histogram(values, domain, bins, upperInclusive = health != null) }
     val hereBin = here?.let { binOf(it, domain, bins, upperInclusive = health != null) }
+    // The bar under the finger while it touches the chart, or null. Released, the chart shows the area again.
+    var scrub by remember(domain, bins) { mutableStateOf<Int?>(null) }
+    val haptics = LocalHapticFeedback.current
     val ink = MaterialTheme.colorScheme.onSurface
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val bar = ink.copy(alpha = 0.22f)
@@ -116,17 +128,52 @@ internal fun SpreadChart(
         }
         if (offScale != null) append(". ").append(offScale)
     }
+    val readout = scrub?.let { i ->
+        val from = domain.low + (domain.high - domain.low) * i / bins
+        val to = domain.low + (domain.high - domain.low) * (i + 1) / bins
+        val range = "${formatValue(from, property, units)} ${strings.to} ${formatValue(to, property, units)} $unit"
+        val step = health?.stepOf(binMid(i, domain, bins))?.let { strings.stepName(it) }
+        listOfNotNull(range, strings.areaCount(counts[i]), step).joinToString(", ")
+    }
     Column(modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = spoken }) {
-        if (health != null) {
-            PositionedLabels(
-                listOf(domain.fraction(health.guideline) to "${strings.whoMark} ${formatEdge(health.guideline)}"),
-                MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                ink,
-            )
-            Spacer(Modifier.height(2.dp))
+        // One label row that never changes height. At rest it names the guideline, while touched it
+        // reads the bar under the finger.
+        val labelStyle = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold)
+        when {
+            readout != null -> PositionedLabels(listOf((scrub!! + 0.5f) / bins to readout), labelStyle, ink)
+            health != null -> PositionedLabels(listOf(domain.fraction(health.guideline) to "${strings.whoMark} ${formatEdge(health.guideline)}"), labelStyle, ink)
+            else -> PositionedLabels(listOf(0f to " "), labelStyle, ink)
         }
+        Spacer(Modifier.height(2.dp))
         val height = BAR_AREA + 6.dp + AXIS + if (showBand) 6.dp + 10.dp else 0.dp
-        Canvas(Modifier.fillMaxWidth().height(height)) {
+        Canvas(
+            Modifier.fillMaxWidth().height(height).pointerInput(bins) {
+                // Touch and slide sideways to read each bar. A mostly vertical move is left to the sheet.
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    fun binAt(x: Float) = (x / size.width * bins).toInt().coerceIn(0, bins - 1)
+                    scrub = binAt(down.position.x)
+                    var total = Offset.Zero
+                    var horizontal = false
+                    while (true) {
+                        val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                        if (!change.pressed) break
+                        total += change.positionChange()
+                        if (!horizontal) {
+                            if (abs(total.y) > viewConfiguration.touchSlop && abs(total.y) > abs(total.x)) break
+                            horizontal = abs(total.x) > viewConfiguration.touchSlop
+                        }
+                        if (horizontal) change.consume()
+                        val b = binAt(change.position.x)
+                        if (b != scrub) {
+                            haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                            scrub = b
+                        }
+                    }
+                    scrub = null
+                }
+            },
+        ) {
             val barArea = BAR_AREA.toPx()
             val axisTop = barArea + 6.dp.toPx()
             val axisH = AXIS.toPx()
@@ -145,11 +192,12 @@ internal fun SpreadChart(
                 if (health != null) {
                     val fill = Color(health.colorOf(binMid(i, domain, bins)) ?: SequentialRamp.at(0.5))
                     drawRoundRect(color = fill, topLeft = topLeft, size = barSize, cornerRadius = radius)
-                    val edge = if (i == hereBin) ink else ink.copy(alpha = 0.35f)
-                    val stroke = if (i == hereBin) 2.dp.toPx() else 1f
+                    val picked = i == (scrub ?: hereBin)
+                    val edge = if (picked) ink else ink.copy(alpha = 0.35f)
+                    val stroke = if (picked) 2.dp.toPx() else 1f
                     drawRoundRect(color = edge, topLeft = topLeft, size = barSize, cornerRadius = radius, style = Stroke(stroke))
                 } else {
-                    drawRoundRect(color = if (i == hereBin) ink else bar, topLeft = topLeft, size = barSize, cornerRadius = radius)
+                    drawRoundRect(color = if (i == (scrub ?: hereBin)) ink else bar, topLeft = topLeft, size = barSize, cornerRadius = radius)
                 }
             }
             if (health != null) {
@@ -166,6 +214,10 @@ internal fun SpreadChart(
                     size = Size(size.width, axisH),
                     cornerRadius = CornerRadius(axisH / 2),
                 )
+            }
+            scrub?.let { i ->
+                val sx = (i + 0.5f) * slot
+                drawLine(ink, Offset(sx, 0f), Offset(sx, axisTop + axisH), strokeWidth = 1.dp.toPx())
             }
             if (here == null || hereColor == null) return@Canvas
             val x = hereX * size.width

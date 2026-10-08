@@ -86,6 +86,10 @@ data class DiscoverStrings(
     ),
     /** Under a chart whose values run past its axis (highest value). */
     val offScale: (String) -> String = { v -> "Some areas go past the chart, up to $v" },
+    /** Joins two ends of a range, as in "15 to 25". */
+    val to: String = "to",
+    /** How many areas a touched bar holds. */
+    val areaCount: (Int) -> String = { n -> if (n == 1) "1 area" else "$n areas" },
     /** Spoken legend step (step name, upper edge or null for the last step, unit). */
     val whoStepSpoken: (String, String?, String) -> String = { name, upTo, unit -> if (upTo != null) "$name, up to $upTo $unit" else name },
 ) {

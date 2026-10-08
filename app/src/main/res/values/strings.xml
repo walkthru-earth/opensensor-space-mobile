@@ -945,6 +945,11 @@
         <item quantity="one">%1$s across %2$d area, from %3$s to %4$s %5$s</item>
         <item quantity="other">%1$s across %2$d areas, from %3$s to %4$s %5$s</item>
     </plurals>
+    <string name="discover_range_to">to</string>
+    <plurals name="discover_area_count">
+        <item quantity="one">%1$d area</item>
+        <item quantity="other">%1$d areas</item>
+    </plurals>
     <plurals name="discover_areas_in_view">
         <item quantity="one">%1$d sensor area in view</item>
         <item quantity="other">%1$d sensor areas in view</item>

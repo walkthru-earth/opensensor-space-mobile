@@ -136,6 +136,8 @@ private fun discoverStrings(): DiscoverStrings {
             ),
         ),
         offScale = { v -> res.getString(R.string.discover_off_scale, v) },
+        to = res.getString(R.string.discover_range_to),
+        areaCount = { n -> res.getQuantityString(R.plurals.discover_area_count, n, n) },
         whoStepSpoken = { name, upTo, unit -> if (upTo != null) res.getString(R.string.discover_who_step_spoken, name, upTo, unit) else name },
     )
 }
