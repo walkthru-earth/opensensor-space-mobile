@@ -9,8 +9,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.history.AirMood
 import earth.walkthru.aqsync.ui.theme.onBand
 
@@ -22,7 +24,7 @@ import earth.walkthru.aqsync.ui.theme.onBand
  * This is the data glyph. The peacock mascot is the friendly guide and never replaces it.
  */
 @Composable
-fun MoodFace(mood: AirMood?, color: Color, modifier: Modifier = Modifier, description: String? = mood?.title ?: "no reading") {
+fun MoodFace(mood: AirMood?, color: Color, modifier: Modifier = Modifier, description: String? = mood?.titleText() ?: stringResource(R.string.mood_none)) {
     val ink = onBand(color).copy(alpha = 0.78f)
     Canvas(if (description != null) modifier.semantics { contentDescription = description } else modifier) {
         val r = size.minDimension / 2

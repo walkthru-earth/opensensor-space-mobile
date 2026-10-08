@@ -1,6 +1,7 @@
 package earth.walkthru.aqsync.ui.components
 
 import android.content.Intent
+import android.content.res.Resources
 import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -43,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
@@ -76,15 +78,22 @@ fun formatRate(bytesPerSecond: Double): String = when {
     else -> String.format(Locale.US, "%.1f KiB/s", bytesPerSecond / 1024.0)
 }
 
-fun formatAgo(ageMs: Long): String {
+fun formatAgo(ageMs: Long, res: Resources): String {
     val s = ageMs / 1000
     return when {
-        ageMs < 0 -> "just now"
-        s < 60 -> "$s s ago"
-        s < 3600 -> "${s / 60} min ago"
-        s < 86_400 -> "${s / 3600} h ago"
-        else -> "${s / 86_400} d ago"
+        ageMs < 0 -> res.getString(R.string.ago_just_now)
+        s < 60 -> res.getString(R.string.ago_seconds, s)
+        s < 3600 -> res.getString(R.string.ago_minutes, s / 60)
+        s < 86_400 -> res.getString(R.string.ago_hours, s / 3600)
+        else -> res.getString(R.string.ago_days, s / 86_400)
     }
+}
+
+/** [formatAgo] bound to the current resources, for leaf `TickingText` lambdas. */
+@Composable
+fun agoFormatter(): (Long) -> String {
+    val res = LocalResources.current
+    return remember(res) { { ageMs -> formatAgo(ageMs, res) } }
 }
 
 fun formatUptime(seconds: Long): String {
@@ -190,7 +199,11 @@ fun ConnectionState.describe(technical: Boolean = false): String = when (this) {
     ConnectionState.Authenticating -> stringResource(if (technical) R.string.conn_lan_auth else R.string.conn_lan_checking)
     is ConnectionState.Ready -> if (technical) stringResource(R.string.conn_ready_mtu, mtu) else stringResource(R.string.conn_ready)
     // A pairing repair message is plain language and says what to do, so every level shows it.
-    is ConnectionState.Failed -> if (technical || BleConnectionFailure.needsPairingRepair(this)) reason else stringResource(R.string.conn_failed)
+    is ConnectionState.Failed -> when {
+        BleConnectionFailure.needsPairingRepair(this) -> stringResource(R.string.conn_pairing_repair)
+        technical -> reason
+        else -> stringResource(R.string.conn_failed)
+    }
 }
 
 @Composable
@@ -277,7 +290,17 @@ fun DeviceBottomBar(selected: DeviceTab, onSelect: (DeviceTab) -> Unit) {
     }
 }
 
-/** Small chip naming the active byte pipe: "Bluetooth" / "Wi-Fi LAN" (and "Fake device" in debug builds). */
+/** The name of a byte pipe, for chips and stat lines. */
+@Composable
+fun TransportKind.labelText(): String = stringResource(
+    when (this) {
+        TransportKind.BLE -> R.string.transport_ble
+        TransportKind.LAN -> R.string.transport_lan
+        TransportKind.FAKE -> R.string.transport_fake
+    },
+)
+
+/** Small chip naming the active byte pipe, Bluetooth or Wi-Fi LAN (and the fake device in debug builds). */
 @Composable
 fun TransportChip(kind: TransportKind?, modifier: Modifier = Modifier) {
     if (kind == null) return
@@ -289,7 +312,7 @@ fun TransportChip(kind: TransportKind?, modifier: Modifier = Modifier) {
     Surface(shape = MaterialTheme.shapes.small, color = container, contentColor = content, modifier = modifier) {
         Row(Modifier.padding(horizontal = 8.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Icon(icon, contentDescription = null, modifier = Modifier.size(14.dp))
-            Text(kind.label, style = MaterialTheme.typography.labelSmall)
+            Text(kind.labelText(), style = MaterialTheme.typography.labelSmall)
         }
     }
 }

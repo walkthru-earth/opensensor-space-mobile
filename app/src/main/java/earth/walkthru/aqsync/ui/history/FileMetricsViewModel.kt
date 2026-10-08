@@ -42,9 +42,13 @@ data class ColumnSummary(
 
 data class RowGroupSummary(val ordinal: Int, val rows: Long, val bytes: Long, val firstUtcNs: Long?, val lastUtcNs: Long?)
 
+enum class FailReason { NOT_IN_ARCHIVE, READER_REFUSED, UNREADABLE }
+
 sealed interface FileMetricsState {
     data object Loading : FileMetricsState
-    data class Failed(val message: String) : FileMetricsState
+
+    /** [detail] is the reader's technical message, shown at Developer level only. */
+    data class Failed(val reason: FailReason, val detail: String? = null) : FileMetricsState
     data class Loaded(
         val station: String,
         val name: String,
@@ -86,7 +90,7 @@ class FileMetricsViewModel @Inject constructor(
 
     private fun describe(station: String, name: String): FileMetricsState {
         val file = archive.fileFor(station, name)
-        if (!file.isFile) return FileMetricsState.Failed("File is not in the archive: $name")
+        if (!file.isFile) return FileMetricsState.Failed(FailReason.NOT_IN_ARCHIVE, name)
         return try {
             val t0 = System.nanoTime()
             val pf = ParquetFile.open(file)
@@ -117,9 +121,9 @@ class FileMetricsViewModel @Inject constructor(
                 decodeMillis = decodeMs,
             )
         } catch (e: ParquetFormatException) {
-            FileMetricsState.Failed("The reader refused this file: ${e.message}")
+            FileMetricsState.Failed(FailReason.READER_REFUSED, e.message)
         } catch (e: java.io.IOException) {
-            FileMetricsState.Failed("Could not read the file: ${e.message}")
+            FileMetricsState.Failed(FailReason.UNREADABLE, e.message)
         }
     }
 
@@ -167,7 +171,7 @@ class FileMetricsViewModel @Inject constructor(
         is ColumnValues.Float64 -> trim(col.values[i])
         is ColumnValues.Int32 -> col.values[i].toString()
         is ColumnValues.Int64 -> col.values[i].toString()
-        is ColumnValues.Binary -> if (col.length(i) <= 64) col.string(i) ?: "" else "${col.length(i)} bytes"
+        is ColumnValues.Binary -> if (col.length(i) <= 64) col.string(i) ?: "" else "${col.length(i)} B"
     }
 
     private fun trim(v: Double): String = if (v == Math.rint(v) && kotlin.math.abs(v) < 1e15) v.toLong().toString() else "%.4g".format(java.util.Locale.ROOT, v)

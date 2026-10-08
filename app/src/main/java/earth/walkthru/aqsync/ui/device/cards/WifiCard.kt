@@ -148,7 +148,7 @@ fun WifiCard(
             }
             is WifiScanState.Failed -> {
                 Spacer(Modifier.height(10.dp))
-                WarningNote(scan.message)
+                WarningNote(stringResource(if (scan.unavailable) R.string.wifi_scan_unavailable else R.string.wifi_scan_failed))
             }
             is WifiScanState.Done -> {
                 Spacer(Modifier.height(10.dp))

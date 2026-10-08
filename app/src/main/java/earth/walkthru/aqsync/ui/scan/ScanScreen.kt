@@ -69,7 +69,7 @@ import earth.walkthru.aqsync.ui.components.MascotGuide
 import earth.walkthru.aqsync.ui.components.MoodFace
 import earth.walkthru.aqsync.ui.components.SignalBars
 import earth.walkthru.aqsync.ui.components.TickingText
-import earth.walkthru.aqsync.ui.components.formatAgo
+import earth.walkthru.aqsync.ui.components.agoFormatter
 import earth.walkthru.aqsync.ui.components.titleText
 import earth.walkthru.aqsync.ui.permissions.AccessDialogs
 import earth.walkthru.aqsync.ui.permissions.rememberBluetoothAccess
@@ -304,19 +304,24 @@ private fun ArchiveLine(summary: LoggerSummary?, level: DetailLevel) {
         val mood = AirMood.of(mean.toDouble())
         val metric = Metrics.primary
         val day = DateTimeFormatter.ofPattern("d MMM").withZone(ZoneOffset.UTC).format(Instant.ofEpochSecond(dayStart))
-        val base = buildString {
-            append(mood.titleText()).append(", ").append(metric.label).append(" ")
-            append("%.0f".format(java.util.Locale.ROOT, mean)).append(" ").append(metric.unit).append(" on ").append(day)
-        }
-        val coverage = if (level.detailed) summary.lastDayCoverage?.let { " (${(it * 100).toInt()} %)" } ?: "" else ""
+        val base = stringResource(
+            R.string.scan_archive_day,
+            mood.titleText(),
+            metric.label,
+            "%.0f".format(java.util.Locale.ROOT, mean),
+            metric.unit,
+            day,
+        )
+        val coverage = if (level.detailed) summary.lastDayCoverage?.let { ", " + stringResource(R.string.scan_archive_coverage, (it * 100).toInt()) } ?: "" else ""
         val files = if (level.detailed) ", " + pluralStringResource(R.plurals.scan_files, summary.files, summary.files) else ""
         val syncedTemplate = stringResource(R.string.scan_synced)
+        val ago = agoFormatter()
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp)) {
             MoodFace(mood, mood.color(), Modifier.size(16.dp), description = null)
             val synced = summary.lastSyncedEpochMs
             if (synced != null) {
                 TickingText(
-                    { now -> "$base$coverage$files, ${syncedTemplate.format(formatAgo(now - synced))}" },
+                    { now -> "$base$coverage$files, ${syncedTemplate.format(ago(now - synced))}" },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 2,
@@ -347,9 +352,10 @@ private fun KnownRow(device: KnownDevice, summary: LoggerSummary?, level: Detail
                     if (onLan) Tag(stringResource(if (device.hasLanToken) R.string.scan_tag_on_lan else R.string.scan_tag_on_lan_no_token))
                 }
                 val seenTemplate = stringResource(R.string.scan_seen)
-                val station = if (level.developer && summary == null) device.station?.let { ", station ${it.take(8)}" } ?: "" else ""
+                val ago = agoFormatter()
+                val station = if (level.developer && summary == null) device.station?.let { ", " + stringResource(R.string.files_group_station, it.take(8)) } ?: "" else ""
                 TickingText(
-                    { now -> seenTemplate.format(formatAgo(now - device.lastSeenEpochMs)) + station },
+                    { now -> seenTemplate.format(ago(now - device.lastSeenEpochMs)) + station },
                     style = MaterialTheme.typography.bodySmall,
                 )
                 ArchiveLine(summary, level)

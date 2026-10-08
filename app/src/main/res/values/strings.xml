@@ -177,7 +177,10 @@
     <string name="sync_button">Sync now</string>
     <string name="sync_button_running">Syncing…</string>
     <string name="sync_clock_title">Smart Sync needs the time</string>
-    <string name="sync_clock_confirm">%1$s. Send this phone’s time first? Raw files are never changed.</string>
+    <string name="sync_clock_confirm">%1$s Send this phone’s time first? Raw files are never changed.</string>
+    <string name="clock_reason_missing">The sensor has no clock time, so new readings cannot be dated.</string>
+    <string name="clock_reason_rtc">The sensor restored its clock after a restart and this phone has not checked it.</string>
+    <string name="clock_reason_unknown">The sensor clock needs a check.</string>
     <string name="sync_clock_button">Set time and sync</string>
     <plurals name="sync_ready">
         <item quantity="one">%1$d verified file on this phone</item>
@@ -446,7 +449,8 @@
     <string name="conn_link_lost">Link lost. Reconnecting by itself…</string>
     <string name="conn_link_lost_detail">Link lost (%1$s). Reconnecting, attempt %2$d of %3$d…</string>
     <string name="conn_bluetooth_settings">Bluetooth settings</string>
-    <string name="scan_failed">Could not scan. %1$s</string>
+    <string name="scan_failed">Could not scan. Try again.</string>
+    <string name="scan_bluetooth_off">Bluetooth is off. Turn it on and scan again.</string>
 
     <!-- Bottom bar -->
     <string name="tab_today">Today</string>
@@ -576,9 +580,9 @@
     <string name="msg_sensor_not_confirmed">The sensor did not confirm the sticker.</string>
     <string name="msg_sensor_saved_on">Sticker saved. Batch estimate on.</string>
     <string name="msg_sensor_saved_off">Sticker saved. Batch estimate off.</string>
-    <string name="msg_sensor_failed">Sticker not saved. %1$s</string>
+    <string name="msg_sensor_failed">Sticker not saved. Check the link and try again.</string>
     <string name="msg_wake_no_dialog">Could not open the system dialog.</string>
-    <string name="msg_wake_failed">Wake when nearby is not set up. %1$s</string>
+    <string name="msg_wake_failed">Wake when nearby is not set up. This phone could not link the sensor.</string>
     <string name="msg_wake_cancelled">Wake when nearby is not set up.</string>
     <string name="msg_wake_no_link">Wake when nearby is not set up. Android recorded no link.</string>
     <string name="msg_wake_on">Wake when nearby is on. A sync starts when this phone is near the sensor.</string>
@@ -590,4 +594,274 @@
     <string name="msg_wifi_off">Wi-Fi off</string>
     <string name="msg_lan_on">Sync over Wi-Fi on</string>
     <string name="msg_lan_off">Sync over Wi-Fi off</string>
+    <string name="msg_settings_saved">Settings saved</string>
+    <string name="config_problem_pin">The PIN is exactly 6 digits.</string>
+    <string name="config_problem_ssid_empty">Enter the network name.</string>
+    <string name="config_problem_ssid_long">The network name is too long. The limit is 32 bytes.</string>
+    <string name="config_problem_psk_long">The password is too long. The limit is 63 bytes.</string>
+    <string name="config_problem_line_break">Line breaks are not allowed here.</string>
+    <string name="msg_bonds_cleared">The sensor forgot all paired phones. You pair again on the next Bluetooth connection.</string>
+    <string name="msg_saved_after_reboot">%1$s. Bluetooth changes apply after a restart.</string>
+    <string name="msg_config_key_rejected">The sensor refused %1$s. Nothing was changed.</string>
+
+    <!-- Device messages from the data layer (data/DeviceMessage.kt, mapped in components/DeviceMessages.kt) -->
+    <string name="msg_background_owns_connect">Background sync is using this sensor. Its progress stays visible. Connect again when it finishes.</string>
+    <string name="msg_background_owns_sync">Background sync is using this sensor. Wait for it to finish before syncing.</string>
+    <string name="msg_background_owns_command">Background sync is using this sensor. Wait for it to finish.</string>
+    <string name="msg_busy_before_sync">Wait for the current sensor task to finish before syncing.</string>
+    <string name="msg_busy">Wait for the current sensor task to finish.</string>
+    <string name="msg_lan_token_rejected">Wi-Fi token rejected. Using Bluetooth and renewing the token.</string>
+    <string name="msg_lan_unreachable">Sensor not reachable on this Wi-Fi. Using Bluetooth.</string>
+    <string name="msg_lan_timeout">Sensor did not answer on Wi-Fi in time. Using Bluetooth.</string>
+    <string name="msg_lan_busy">Another phone is connected over Wi-Fi. Using Bluetooth.</string>
+    <string name="msg_lan_failed">Wi-Fi connection failed. Using Bluetooth.</string>
+    <string name="msg_newer_protocol">The sensor speaks protocol v%1$d and this app v%2$d. Newer features are ignored.</string>
+    <string name="msg_hardware_in_use">This sensor is already connected another way.</string>
+    <string name="msg_verification_failed">Could not verify the sensor. Try again.</string>
+    <string name="msg_station_changed">The sensor was reset. Earlier history is kept and Wi-Fi access renews over Bluetooth.</string>
+    <string name="msg_reconnecting">Link lost. Reconnecting, attempt %1$d of %2$d…</string>
+    <plurals name="msg_reconnect_failed">
+        <item quantity="one">Could not reconnect. Tap Reconnect when the sensor is back.</item>
+        <item quantity="other">Could not reconnect after %1$d tries. Tap Reconnect when the sensor is back.</item>
+    </plurals>
+    <string name="msg_lan_token_renewed">Wi-Fi token renewed</string>
+    <string name="msg_lan_token_stored">Wi-Fi token stored on this phone.</string>
+    <string name="msg_token_needs_ble">The token comes over Bluetooth only. Reconnect over Bluetooth first.</string>
+    <string name="msg_token_rotated_lan">Token changed. This Wi-Fi session ends. Reconnect over Bluetooth to get the new token.</string>
+    <string name="msg_token_rotated_stored">Token changed and the new one stored on this phone.</string>
+    <string name="msg_token_rotated_fetch">Token changed. Use Fetch token to store the new one.</string>
+    <string name="msg_file_list_not_ready">The file list is not ready yet. Try again in a moment.</string>
+    <string name="msg_no_station">The sensor did not report its station. Reconnect and try again.</string>
+    <string name="msg_up_to_date">Everything is already on this phone.</string>
+    <string name="msg_file_check_failed">%1$s failed the checks. It stays on the sensor.</string>
+    <string name="msg_file_refused">The sensor refused to send %1$s.</string>
+    <string name="msg_file_failed">Could not copy %1$s. It is retried on the next sync.</string>
+    <plurals name="msg_sync_finished">
+        <item quantity="one">Synced %1$d of %2$d file</item>
+        <item quantity="other">Synced %1$d of %2$d files</item>
+    </plurals>
+    <string name="msg_sync_stopped">Sync stopped. Partial files resume next time.</string>
+    <string name="msg_sync_aborted">Sync stopped early. It resumes on the next sync.</string>
+    <plurals name="msg_unplaced">
+        <item quantity="one">%1$d reading is archived but has no time yet, so it is not on the calendar.</item>
+        <item quantity="other">%1$d readings are archived but have no time yet, so they are not on the calendar.</item>
+    </plurals>
+    <string name="msg_clock_set">Sensor clock set. New readings carry the time.</string>
+    <plurals name="msg_finalized">
+        <item quantity="one">Finalized %1$d reading. %2$d files on the card.</item>
+        <item quantity="other">Finalized %1$d readings. %2$d files on the card.</item>
+    </plurals>
+    <string name="msg_no_reboot_syncing">Not restarting while a sync runs. Stop the sync first.</string>
+    <string name="msg_rebooting">The sensor is restarting. Reconnecting…</string>
+    <string name="msg_rejected_get_token">The sensor refused to share its Wi-Fi token.</string>
+    <string name="msg_rejected_set_time">The sensor refused the time.</string>
+    <string name="msg_rejected_flush">The sensor refused to finalize its readings.</string>
+    <string name="msg_rejected_get_config">The sensor refused to share its settings.</string>
+    <string name="msg_rejected_set_config">The sensor refused the settings. Nothing was changed.</string>
+    <string name="msg_rejected_reboot">The sensor refused to restart.</string>
+    <string name="msg_rejected_rotate_token">The sensor refused to change its token.</string>
+    <string name="msg_failed_get_token">Could not get the Wi-Fi token. Try again.</string>
+    <string name="msg_failed_set_time">Could not set the sensor clock. Try again.</string>
+    <string name="msg_failed_flush">Could not finalize the readings. Try again.</string>
+    <string name="msg_failed_get_config">Could not read the sensor settings. Try again.</string>
+    <string name="msg_failed_set_config">Could not save the settings. Try again.</string>
+    <string name="msg_failed_reboot">Could not restart the sensor. Try again.</string>
+    <string name="msg_failed_rotate_token">Could not change the token. Try again.</string>
+    <string name="msg_identity_endpoint_changed">This sensor answers from a new address. Pair it again as a new sensor.</string>
+    <string name="msg_identity_hardware_changed">This is different hardware. Pair it as a new sensor.</string>
+    <string name="msg_identity_hardware_missing">The sensor no longer reports its hardware ID.</string>
+    <string name="msg_identity_hardware_malformed">The sensor reports an invalid hardware ID.</string>
+    <string name="msg_identity_station_missing">The sensor did not report its station.</string>
+    <string name="msg_identity_station_malformed">The sensor reports an invalid station.</string>
+    <string name="msg_identity_enroll_ble">Connect this sensor over Bluetooth first.</string>
+    <string name="msg_identity_station_ble">The sensor station changed. Reconnect over Bluetooth to check it.</string>
+    <string name="msg_identity_station_hardware">The sensor station changed without a matching hardware ID.</string>
+
+    <!-- Files group headers (files/FileGrouping.kt returns typed titles) -->
+    <string name="files_group_count">%1$d/%2$d · %3$s</string>
+    <string name="files_group_utc_day">%1$s, UTC day</string>
+    <string name="files_group_unsynced">Unsynced, no UTC</string>
+    <string name="files_group_benchmarks">Benchmarks</string>
+    <string name="files_group_legacy">Legacy Parquet</string>
+    <string name="files_group_root">Archive root</string>
+    <string name="files_group_station">station %1$s</string>
+    <string name="files_group_boot">boot %1$s</string>
+    <plurals name="files_group_utc_folders">
+        <item quantity="one">UTC folder %1$s</item>
+        <item quantity="other">UTC folders %1$s</item>
+    </plurals>
+    <string name="files_group_unrecognised">unrecognised layout</string>
+
+    <!-- Scan archive line. Mood, metric, value, unit, day. -->
+    <string name="scan_archive_day">%1$s, %2$s %3$s %4$s on %5$s</string>
+    <string name="scan_archive_coverage">%1$d %% of the day</string>
+
+    <!-- Relative time -->
+    <string name="ago_just_now">just now</string>
+    <string name="ago_seconds">%1$d s ago</string>
+    <string name="ago_minutes">%1$d min ago</string>
+    <string name="ago_hours">%1$d h ago</string>
+    <string name="ago_days">%1$d d ago</string>
+    <string name="action_back">Back</string>
+    <string name="transport_ble">Bluetooth</string>
+    <string name="transport_lan">Wi-Fi LAN</string>
+    <string name="transport_fake">Fake device</string>
+    <string name="level_simple">Simple</string>
+    <string name="level_detailed">Detailed</string>
+    <string name="level_developer">Developer</string>
+    <string name="clock_mode_ask_title">Ask first</string>
+    <string name="clock_mode_automatic_title">Automatic</string>
+    <string name="clock_mode_never_title">Never</string>
+    <string name="mood_none">No reading</string>
+    <string name="chart_who_24h">WHO 24 h</string>
+    <string name="history_week_of">week of %1$s</string>
+    <string name="history_no_readings_short">no readings</string>
+    <string name="history_peak_value">peak %1$s</string>
+    <string name="history_estimated_time">estimated time</string>
+    <string name="history_dev_title">Developer</string>
+    <string name="history_dev_source">source</string>
+    <string name="history_dev_tier">aggregate tier %1$d min</string>
+    <string name="history_dev_binned">rows binned to 1 min</string>
+    <string name="history_dev_raw">raw 10 s rows</string>
+    <string name="history_dev_points">points</string>
+    <string name="history_dev_valid_rows">valid rows</string>
+    <string name="history_dev_station">station</string>
+    <string name="file_chart_estimated">%1$s, estimated</string>
+    <string name="file_chart_unplaced">No place on the timeline yet. This boot has no clock time.</string>
+    <string name="file_chart_rows">%1$s · %2$d valid for %3$s · %4$s</string>
+    <string name="file_chart_stats">mean %1$s %2$s · min %3$s · max %4$s</string>
+    <string name="file_chart_no_valid">No valid %1$s readings in this file.</string>
+    <string name="device_schema_cols">%1$s, %2$s columns</string>
+    <string name="device_payload">payload %1$d B</string>
+    <string name="wifi_scan_unavailable">The sensor Wi-Fi radio cannot scan right now.</string>
+    <string name="wifi_scan_failed">The scan did not finish. Try again.</string>
+    <string name="share_file">Share Parquet file</string>
+    <plurals name="share_files">
+        <item quantity="one">Share %1$d Parquet file</item>
+        <item quantity="other">Share %1$d Parquet files</item>
+    </plurals>
+    <string name="share_archive">Share archive</string>
+    <string name="notif_channel_progress">Sync progress</string>
+    <string name="notif_channel_progress_desc">Shown while files are copied from a sensor. Keeps the transfer alive when the screen is off.</string>
+    <string name="notif_channel_summary">Sync results</string>
+    <string name="notif_channel_summary_desc">One notification when an automatic sync copied new files.</string>
+    <string name="notif_device">sensor</string>
+    <string name="notif_reconnecting">%1$s · reconnecting, %2$d of %3$d…</string>
+    <string name="notif_progress">%1$s · %2$d/%3$d files · %4$s</string>
+    <string name="notif_preparing">%1$s · preparing sync…</string>
+    <string name="notif_link_lost">Link lost. The sync resumes when the sensor is back.</string>
+    <string name="notif_listing">Listing files on the sensor…</string>
+    <plurals name="notif_synced">
+        <item quantity="one">Synced %1$d new file from %2$s · %3$s</item>
+        <item quantity="other">Synced %1$d new files from %2$s · %3$s</item>
+    </plurals>
+    <string name="notif_problems">Sync from %1$s had problems</string>
+    <plurals name="notif_failures">
+        <item quantity="one">%1$d file could not be verified. It is retried next time.</item>
+        <item quantity="other">%1$d files could not be verified. They are retried next time.</item>
+    </plurals>
+    <string name="notif_verified">Verified and stored in the archive on this phone.</string>
+    <string name="files_refresh_failed_simple">Refresh failed. Showing the last list.</string>
+
+    <!-- File inspector (history/FileMetricsScreen.kt). Detailed and Developer only. -->
+    <string name="fm_failed_missing">This file is not in the archive on this phone.</string>
+    <string name="fm_failed_refused">The app reader cannot decode this file.</string>
+    <string name="fm_failed_unreadable">Could not read this file from the phone storage.</string>
+    <string name="fm_failed_archive_safe">The archive copy is untouched. It passed the size, CRC-32 and PAR1 checks when it was synced. Only the app reader could not decode it.</string>
+    <string name="fm_file">File</string>
+    <string name="fm_size">size</string>
+    <string name="fm_size_footer">%1$s · footer %2$s</string>
+    <string name="fm_rows">rows</string>
+    <string name="fm_columns">columns</string>
+    <string name="fm_columns_codec">%1$d · codec %2$s</string>
+    <string name="fm_schema">schema</string>
+    <string name="fm_writer">writer</string>
+    <string name="fm_statistics">statistics</string>
+    <string name="fm_statistics_minmax">min and max per column (v6)</string>
+    <string name="fm_statistics_nulls">null counts only (v1 and v2)</string>
+    <string name="fm_index_source">index source</string>
+    <string name="fm_index_footer">footer statistics</string>
+    <string name="fm_index_rows">decoded rows</string>
+    <string name="fm_decode_time">decode time</string>
+    <string name="fm_decode_ms">%1$d ms for every column</string>
+    <string name="fm_benchmark">A benchmark copy of duplicated rows, purpose %1$s. Excluded from History.</string>
+    <string name="fm_time">Time</string>
+    <string name="fm_utc_rows">UTC rows</string>
+    <string name="fm_first">first</string>
+    <string name="fm_last">last</string>
+    <string name="fm_utc">UTC</string>
+    <string name="fm_utc_none">none, the sensor had no clock</string>
+    <string name="fm_valid_pm_rows">valid particle rows</string>
+    <string name="fm_uptime_span">uptime span</string>
+    <string name="fm_sequence">sequence</string>
+    <string name="fm_boot">boot</string>
+    <string name="fm_row_groups">Row groups</string>
+    <plurals name="fm_rows_count">
+        <item quantity="one">%1$d row</item>
+        <item quantity="other">%1$d rows</item>
+    </plurals>
+    <string name="fm_row_groups_note">Spans come from the footer statistics without decoding rows.</string>
+    <string name="fm_columns_decoded">Columns · decoded</string>
+    <string name="fm_col_name">name</string>
+    <string name="fm_col_nulls">nulls</string>
+    <string name="fm_col_min">min</string>
+    <string name="fm_col_max">max</string>
+    <string name="fm_col_timestamp">timestamp ns UTC</string>
+    <string name="fm_col_first_last">first %1$s · last %2$s</string>
+    <string name="fm_col_footer_agrees">footer agrees</string>
+    <string name="fm_col_footer_says">footer says %1$s to %2$s</string>
+    <string name="fm_metadata">File metadata</string>
+
+    <!-- Debug (debug/DebugScreen.kt). Developer level only. Protocol tokens are data. -->
+    <string name="debug_transport_title">Active transport</string>
+    <string name="debug_transport">transport</string>
+    <string name="debug_endpoint">endpoint</string>
+    <string name="debug_state">state</string>
+    <string name="debug_sync_title">Smart Sync diagnostics</string>
+    <string name="debug_archive">archive</string>
+    <string name="debug_real_utc">real UTC</string>
+    <string name="debug_estimate">same-boot estimate</string>
+    <string name="debug_unplaced">unplaced</string>
+    <plurals name="debug_boots">
+        <item quantity="one">%1$d boot</item>
+        <item quantity="other">%1$d boots</item>
+    </plurals>
+    <string name="debug_sync_none">No Smart Sync decisions recorded yet.</string>
+    <string name="debug_status_title">Status JSON, live</string>
+    <string name="debug_request_status">Request status</string>
+    <string name="debug_status_none">No status received yet.</string>
+    <string name="debug_config_title">Config JSON</string>
+    <string name="debug_config_none">No CONFIG received. A protocol v1 device, or not read yet.</string>
+    <plurals name="debug_frames_title">
+        <item quantity="one">Last raw frame</item>
+        <item quantity="other">Last %1$d raw frames, newest first</item>
+    </plurals>
+    <string name="debug_clear">Clear</string>
+    <string name="debug_frames_none">Nothing captured yet.</string>
+    <string name="debug_frames_note">TX are requests written to control. RX are frames from response. Pushed status and live JSON are not listed here. TOKEN bodies and SET_CONFIG requests are redacted.</string>
+    <string name="debug_log_title">Device log</string>
+    <string name="debug_log_fetch">Fetch</string>
+    <string name="debug_log_refresh">Refresh</string>
+    <string name="debug_log_idle">Fetches the newest 8 KiB of the device serial log. Text for humans, not an API.</string>
+    <string name="debug_log_loading">Fetching…</string>
+    <string name="debug_log_failed">Could not read the device log. %1$s</string>
+    <string name="debug_log_summary">%1$d B returned of %2$d B logged since boot</string>
+    <string name="debug_log_incomplete">Received %1$d B but LOG_END says %2$d B. A slice may be missing.</string>
+    <string name="debug_log_empty">Empty</string>
+    <string name="debug_raw_title">Raw command</string>
+    <string name="debug_raw_info1">Type the hex bytes of one control request. The first byte is the opcode.</string>
+    <string name="debug_raw_info2">Reply frames are collected until the device is quiet for 1.5 s. STATUS answers on the status channel only.</string>
+    <string name="debug_raw_info3">Only reads and the documented state changes are wise here. The device never deletes or rewrites anything on request, so the worst case is a rejected frame. REBOOT and SET_CONFIG stay on the Device screen.</string>
+    <string name="debug_raw_examples">01 LIST · 07 STATUS · 08 GET_CONFIG · 0c 0020 LOG_TAIL · 0d GET_TOKEN</string>
+    <string name="debug_raw_hex">hex</string>
+    <string name="debug_raw_send">Send</string>
+    <plurals name="debug_raw_frames">
+        <item quantity="one">%1$d frame</item>
+        <item quantity="other">%1$d frames</item>
+    </plurals>
+    <string name="debug_raw_invalid_hex">Not valid hex.</string>
+    <string name="debug_raw_bad_length">A request is 1 to 512 bytes.</string>
+    <string name="debug_raw_needs_confirmation">%1$s is not sent from here. Use the Device screen, which asks for confirmation.</string>
+    <string name="debug_raw_no_response">No response frames within the quiet period.</string>
+    <string name="conn_pairing_repair">Bluetooth pairing needs repair. If this sensor was reset or reflashed, forget it in Android Bluetooth settings and pair again. Your archived files are kept.</string>
 </resources>

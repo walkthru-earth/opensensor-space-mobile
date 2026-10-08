@@ -24,7 +24,7 @@ import earth.walkthru.aqsync.ui.components.NO_VALUE
 import earth.walkthru.aqsync.ui.components.StatLine
 import earth.walkthru.aqsync.ui.components.TickingText
 import earth.walkthru.aqsync.ui.components.WarningNote
-import earth.walkthru.aqsync.ui.components.formatAgo
+import earth.walkthru.aqsync.ui.components.agoFormatter
 import earth.walkthru.aqsync.ui.components.formatBytes
 import earth.walkthru.aqsync.ui.components.formatUptime
 
@@ -40,7 +40,8 @@ fun StorageCard(status: DeviceStatus?, receivedAtEpochMs: Long?, level: DetailLe
             Eyebrow(stringResource(R.string.storage_title), modifier = Modifier.weight(1f))
             if (receivedAtEpochMs != null) {
                 val template = stringResource(R.string.storage_status_age)
-                TickingText({ now -> template.format(formatAgo(now - receivedAtEpochMs)) })
+                val ago = agoFormatter()
+                TickingText({ now -> template.format(ago(now - receivedAtEpochMs)) })
             }
         }
         Spacer(Modifier.height(8.dp))

@@ -18,8 +18,9 @@ import earth.walkthru.aqsync.ui.components.Eyebrow
 import earth.walkthru.aqsync.ui.components.NO_VALUE
 import earth.walkthru.aqsync.ui.components.StatLine
 import earth.walkthru.aqsync.ui.components.TickingText
+import earth.walkthru.aqsync.ui.components.agoFormatter
 import earth.walkthru.aqsync.ui.components.describe
-import earth.walkthru.aqsync.ui.components.formatAgo
+import earth.walkthru.aqsync.ui.components.labelText
 
 /**
  * The device header card. Simple names the device and how it is connected, in words. Detailed adds
@@ -42,7 +43,7 @@ fun DeviceInfoCard(
         Spacer(Modifier.height(6.dp))
         Text(name ?: stringResource(R.string.device_unnamed), style = MaterialTheme.typography.titleLarge)
         Text(
-            if (connection.isReady && transport != null) stringResource(R.string.device_connected_over, transport.label) else connection.describe(level.developer),
+            if (connection.isReady && transport != null) stringResource(R.string.device_connected_over, transport.labelText()) else connection.describe(level.developer),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -52,7 +53,7 @@ fun DeviceInfoCard(
             StatLine(stringResource(R.string.device_protocol), info?.proto?.let { "v$it" } ?: NO_VALUE)
         }
         if (level.developer) {
-            StatLine(stringResource(R.string.device_schema), "${info?.schema ?: NO_VALUE}, ${info?.cols ?: "?"} cols")
+            StatLine(stringResource(R.string.device_schema), stringResource(R.string.device_schema_cols, info?.schema ?: NO_VALUE, info?.cols?.toString() ?: NO_VALUE))
             StatLine(stringResource(R.string.device_station), info?.station ?: NO_VALUE)
             StatLine(stringResource(R.string.device_id), info?.dev ?: NO_VALUE)
             StatLine(stringResource(R.string.device_boot), info?.boot?.take(16)?.plus("…") ?: NO_VALUE)
@@ -61,14 +62,15 @@ fun DeviceInfoCard(
             StatLine(
                 stringResource(R.string.device_link),
                 listOfNotNull(
-                    transport?.label,
+                    transport?.labelText(),
                     endpoint,
-                    (connection as? ConnectionState.Ready)?.let { "payload ${it.mtu - 3} B" },
+                    (connection as? ConnectionState.Ready)?.let { stringResource(R.string.device_payload, it.mtu - 3) },
                 ).joinToString(", ").ifEmpty { NO_VALUE },
             )
             if (configReadAtEpochMs != null) {
                 val label = stringResource(R.string.device_config_read)
-                TickingText({ now -> "$label ${formatAgo(now - configReadAtEpochMs)}" }, style = MaterialTheme.typography.bodyMedium)
+                val ago = agoFormatter()
+                TickingText({ now -> "$label ${ago(now - configReadAtEpochMs)}" }, style = MaterialTheme.typography.bodyMedium)
             }
         }
     }

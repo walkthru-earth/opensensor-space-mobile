@@ -34,6 +34,20 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 
+/** Why the raw command box refused or got nothing. The screen maps each to a string resource. */
+sealed interface RawError {
+    data object BackgroundOwns : RawError
+    data object InvalidHex : RawError
+    data object BadLength : RawError
+
+    /** [opcode] needs the Device screen and its confirmation. */
+    data class NeedsConfirmation(val opcode: String) : RawError
+    data object NoResponse : RawError
+
+    /** Transport or protocol detail, shown as is at Developer level. */
+    data class Failed(val detail: String) : RawError
+}
+
 /** One line of the raw-command result. */
 data class RawResult(val hex: String, val decoded: String)
 
@@ -50,7 +64,7 @@ data class DebugUiState(
     val log: LogTailState = LogTailState.Idle,
     val rawBusy: Boolean = false,
     val rawResults: List<RawResult> = emptyList(),
-    val rawError: String? = null,
+    val rawError: RawError? = null,
     val archiveTime: ArchiveTimeSummary = ArchiveTimeSummary(),
     val syncDiagnostics: List<SyncDiagnostic> = emptyList(),
     val advancedMode: Boolean = false,
@@ -75,7 +89,7 @@ class DebugViewModel @AssistedInject constructor(
     private val pretty = Json { prettyPrint = true; prettyPrintIndent = "  " }
     private val rawBusy = MutableStateFlow(false)
     private val rawResults = MutableStateFlow<List<RawResult>>(emptyList())
-    private val rawError = MutableStateFlow<String?>(null)
+    private val rawError = MutableStateFlow<RawError?>(null)
 
     private val frames = repository.session.flatMapLatest { it?.frames?.records ?: flowOf(emptyList()) }
 
@@ -119,7 +133,7 @@ class DebugViewModel @AssistedInject constructor(
             log = values[1] as LogTailState,
             rawBusy = values[2] as Boolean,
             rawResults = values[3] as List<RawResult>,
-            rawError = values[4] as String?,
+            rawError = values[4] as RawError?,
             advancedMode = values[5] as Boolean,
             archiveTime = values[6] as ArchiveTimeSummary,
             syncDiagnostics = values[7] as List<SyncDiagnostic>,
@@ -138,18 +152,18 @@ class DebugViewModel @AssistedInject constructor(
     /** Hex in (whitespace allowed) → frames out. Runs through the same session mutex as everything else. */
     fun sendRaw(hex: String) {
         if (repository.backgroundOwner.value != null) {
-            rawError.value = "Background collection owns this device. Wait for it to finish before sending raw commands."
+            rawError.value = RawError.BackgroundOwns
             return
         }
         val session = repository.session.value ?: return
         val bytes = try {
             hex.hexToBytes()
         } catch (e: IllegalArgumentException) {
-            rawError.value = "not valid hex: ${e.message}"
+            rawError.value = RawError.InvalidHex
             return
         }
         if (bytes.isEmpty() || bytes.size > 512) {
-            rawError.value = "request must be 1..512 bytes"
+            rawError.value = RawError.BadLength
             return
         }
         // The destructive requests need their confirmation dialog (AGENTS.md): REBOOT restarts the
@@ -157,7 +171,7 @@ class DebugViewModel @AssistedInject constructor(
         // box is for looking at frames, not for bypassing the Device screen.
         val op = bytes[0].toInt() and 0xFF
         if (op == Opcode.REBOOT || op == Opcode.SET_CONFIG) {
-            rawError.value = "${Opcode.name(op)} is not sent from here; use the Device screen, which asks for confirmation"
+            rawError.value = RawError.NeedsConfirmation(Opcode.name(op))
             return
         }
         viewModelScope.launch {
@@ -169,12 +183,12 @@ class DebugViewModel @AssistedInject constructor(
                     RawResult(
                         // A TOKEN frame is a bearer secret: show the type byte only.
                         hex = if (frame is Frame.Token) raw.copyOf(1).toHex() + " <redacted>" else raw.toHex(),
-                        decoded = frame?.let(::describe) ?: "undecodable (${raw.size} bytes)",
+                        decoded = frame?.let(::describe) ?: "? (${raw.size} B)",
                     )
                 }
-                if (got.isEmpty()) rawError.value = "no response frames within the quiet period (STATUS 0x07 answers on the status channel only)"
+                if (got.isEmpty()) rawError.value = RawError.NoResponse
             } catch (e: Exception) {
-                rawError.value = e.message ?: e::class.simpleName
+                rawError.value = RawError.Failed(e.message ?: e::class.simpleName.orEmpty())
             } finally {
                 rawBusy.value = false
             }
