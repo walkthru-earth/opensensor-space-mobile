@@ -10,6 +10,15 @@ Written 2026-10-08 from five parallel reviews (Android data, Android UI, shared 
 build and release) plus a lead pass. Every P0 item below was re-checked against the code by the
 lead before it was listed. Baseline `./gradlew --no-daemon verify verifyIos` passed on `00c64f5`.
 
+## Compatibility stance
+
+The app is still a prototype with no user base to protect, so the refactor may break app-side
+compatibility whenever that gives a more robust, faster or simpler design. No migrations for old
+app storage, settings, credentials or archive layouts, and no compatibility shims. Reinstalling
+the app is an acceptable upgrade path. The firmware contract in `../aq-parquet/docs/shared/`
+(frames, opcodes, UUIDs, JSON keys, Hive archive paths on the device) still stays exact, because
+devices in the field depend on it.
+
 ## Why this refactor
 
 The app works, but four structural problems block growth.
@@ -169,8 +178,8 @@ tests, `docs/lessons-learned.md`, `docs/transports.md`, `docs/sync-engine.md`,
 progress, rate meter, claims and liveness to `commonMain` behind three ports, `FrameLink`
 (send and receive frames), `ArchiveStore` (partial, append, persist, commit, completed) and
 `ArchiveIndex` (receipts). One canonical archive, partial and receipt layout, documented in
-[data-model.md](data-model.md), with a one-time migration for the other layout. Android's
-`SyncEngine` becomes an adapter with an unchanged API. Fakes in `commonTest` cover resume,
+[data-model.md](data-model.md). The old layouts are dropped, with no migration. Android's
+`SyncEngine` becomes an adapter. Fakes in `commonTest` cover resume,
 window retry, corruption and cancellation on JVM and iOS.
 
 **W7 Android repository decomposition.** Split `DeviceConnectionRepository` into
