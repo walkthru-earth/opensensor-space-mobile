@@ -26,8 +26,9 @@ import earth.walkthru.aqsync.data.history.NowReading
 import earth.walkthru.aqsync.data.protocol.LiveSample
 import earth.walkthru.aqsync.data.settings.DetailLevel
 import earth.walkthru.aqsync.ui.components.BrandCard
+import earth.walkthru.aqsync.ui.components.CardHeader
 import earth.walkthru.aqsync.ui.components.CardTone
-import earth.walkthru.aqsync.ui.components.Eyebrow
+import earth.walkthru.aqsync.ui.components.InfoContent
 import earth.walkthru.aqsync.ui.components.MoodFace
 import earth.walkthru.aqsync.ui.components.MoodPill
 import earth.walkthru.aqsync.ui.components.TiltedBadge
@@ -85,10 +86,16 @@ fun MetricHeroCard(
 
     BrandCard(modifier = modifier, tone = CardTone.HERO) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Eyebrow(stringResource(if (fresh) R.string.now_right_now else R.string.now_last_reading), color = quiet, modifier = Modifier.weight(1f))
+            val title = stringResource(if (fresh) R.string.now_right_now else R.string.now_last_reading)
+            CardHeader(
+                title,
+                modifier = Modifier.weight(1f),
+                info = InfoContent(title, stringResource(R.string.now_snapshot_note), stringResource(R.string.info_now_body)),
+                color = quiet,
+            )
             FreshnessLabel(receivedAtEpochMs, color = quiet)
         }
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(4.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             TiltedBadge(color = MaterialTheme.colorScheme.surfaceContainerLowest, size = 92.dp) {
                 MoodFace(mood, mood?.color() ?: MaterialTheme.colorScheme.outlineVariant, Modifier.size(66.dp), description = mood?.titleText() ?: stringResource(R.string.now_no_reading))
@@ -128,8 +135,6 @@ fun MetricHeroCard(
             }
             Spacer(Modifier.height(12.dp))
             Text(reading.mood.adviceText(), style = MaterialTheme.typography.bodyLarge)
-            Spacer(Modifier.height(6.dp))
-            Text(stringResource(R.string.now_snapshot_note), style = MaterialTheme.typography.bodySmall, color = quiet)
         }
         if (level.developer) {
             live?.seq?.let {

@@ -20,6 +20,7 @@ import earth.walkthru.aqsync.data.protocol.DeviceStatus
 import earth.walkthru.aqsync.data.settings.DetailLevel
 import earth.walkthru.aqsync.ui.components.BrandCard
 import earth.walkthru.aqsync.ui.components.Eyebrow
+import earth.walkthru.aqsync.ui.components.NO_VALUE
 import earth.walkthru.aqsync.ui.components.StatLine
 import earth.walkthru.aqsync.ui.components.TickingText
 import earth.walkthru.aqsync.ui.components.WarningNote
@@ -64,7 +65,7 @@ fun StorageCard(status: DeviceStatus?, receivedAtEpochMs: Long?, level: DetailLe
         StatLine(
             stringResource(R.string.storage_microsd),
             when {
-                status.sd == null -> "—"
+                status.sd == null -> NO_VALUE
                 !status.sdMounted -> stringResource(R.string.storage_not_mounted)
                 else -> stringResource(
                     R.string.storage_used_of,
@@ -76,14 +77,14 @@ fun StorageCard(status: DeviceStatus?, receivedAtEpochMs: Long?, level: DetailLe
         )
         StatLine(
             stringResource(R.string.storage_rotation),
-            status.intervalSeconds?.let { s -> stringResource(R.string.storage_minutes, s / 60) } ?: "—",
+            status.intervalSeconds?.let { s -> stringResource(R.string.storage_minutes, s / 60) } ?: NO_VALUE,
         )
         if (level.developer) {
             status.openRowGroups?.let { StatLine(stringResource(R.string.storage_open_row_groups), pluralStringResource(R.plurals.row_groups, it, it)) }
-            StatLine(stringResource(R.string.storage_codec), status.codec ?: "—")
-            StatLine(stringResource(R.string.storage_partial), status.part?.toString() ?: "—")
-            StatLine(stringResource(R.string.storage_uptime), status.upSeconds?.let(::formatUptime) ?: "—")
-            StatLine(stringResource(R.string.storage_heap), status.heap?.let { formatBytes(it) } ?: "—")
+            StatLine(stringResource(R.string.storage_codec), status.codec ?: NO_VALUE)
+            StatLine(stringResource(R.string.storage_partial), status.part?.toString() ?: NO_VALUE)
+            StatLine(stringResource(R.string.storage_uptime), status.upSeconds?.let(::formatUptime) ?: NO_VALUE)
+            StatLine(stringResource(R.string.storage_heap), status.heap?.let { formatBytes(it) } ?: NO_VALUE)
         }
         if (status.storageFailed) {
             Spacer(Modifier.height(8.dp))
@@ -95,7 +96,7 @@ fun StorageCard(status: DeviceStatus?, receivedAtEpochMs: Long?, level: DetailLe
 @Composable
 private fun Counter(label: String, value: Long?, color: Color? = null) {
     Column {
-        Text(value?.toString() ?: "—", style = MaterialTheme.typography.titleLarge, color = color ?: MaterialTheme.colorScheme.onSurface)
+        Text(value?.toString() ?: NO_VALUE, style = MaterialTheme.typography.titleLarge, color = color ?: MaterialTheme.colorScheme.onSurface)
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

@@ -1,5 +1,6 @@
 package earth.walkthru.aqsync.ui.files
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.lifecycle.ViewModel
@@ -8,6 +9,8 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.DeviceConnectionManager
 import earth.walkthru.aqsync.data.DeviceEvent
 import earth.walkthru.aqsync.data.ManifestState
@@ -116,6 +119,7 @@ sealed interface FilesEffect {
 
 @HiltViewModel(assistedFactory = FilesViewModel.Factory::class)
 class FilesViewModel @AssistedInject constructor(
+    @param:ApplicationContext private val context: Context,
     manager: DeviceConnectionManager,
     @Assisted deviceAddress: String,
     private val archivedFileDao: ArchivedFileDao,
@@ -219,7 +223,7 @@ class FilesViewModel @AssistedInject constructor(
         val addr = repository.currentAddress ?: return
         viewModelScope.launch {
             repository.setAutoSync(addr, enabled)
-            localEvents.tryEmit(DeviceEvent.Info(if (enabled) "Auto-sync on: about every ${AutoSyncScheduler.PERIOD_MINUTES} min, app closed or not." else "Auto-sync off for this device."))
+            localEvents.tryEmit(DeviceEvent.Info(if (enabled) context.getString(R.string.files_autosync_event_on, AutoSyncScheduler.PERIOD_MINUTES.toInt()) else context.getString(R.string.files_autosync_event_off)))
         }
     }
 
@@ -233,7 +237,7 @@ class FilesViewModel @AssistedInject constructor(
         viewModelScope.launch {
             repository.disconnectNow()
             autoSyncScheduler.syncNow(addr)
-            localEvents.tryEmit(DeviceEvent.Info("Background sync queued. You can leave the app; the notification shows progress."))
+            localEvents.tryEmit(DeviceEvent.Info(context.getString(R.string.files_bg_event)))
         }
     }
     fun syncOne(name: String) = repository.syncOne(name)
@@ -268,7 +272,7 @@ class FilesViewModel @AssistedInject constructor(
             try {
                 val zip = export.buildDailyZip()
                 if (zip == null) {
-                    localEvents.tryEmit(DeviceEvent.Info("No daily files yet: they are built from synced files that carry a timestamp."))
+                    localEvents.tryEmit(DeviceEvent.Info(context.getString(R.string.files_no_daily)))
                     return@launch
                 }
                 _effects.tryEmit(FilesEffect.Launch(export.shareZipIntent(zip)))

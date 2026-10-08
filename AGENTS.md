@@ -19,6 +19,7 @@ concern you are changing in `docs/README.md`.
 | Room, history, Parquet | `docs/data-model.md`, `docs/history-pipeline.md`, `docs/parquet.md` | `data/history/`, `data/local/`, `core/` |
 | Screens and interaction | `docs/screens.md`, `app/src/main/java/earth/walkthru/aqsync/ui/AGENTS.md` | `ui/` |
 | Build, hooks and release | `docs/build-and-release.md` | `tools/`, `.github/` |
+| Store forms, permission timing, privacy manifest | `docs/store-compliance.md` | `ui/permissions/`, `ios/App/` |
 
 ## Boundaries
 

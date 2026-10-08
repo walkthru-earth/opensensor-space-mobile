@@ -43,12 +43,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
+import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.ReconnectState
 import earth.walkthru.aqsync.data.ble.BleConnectionFailure
 import earth.walkthru.aqsync.data.ble.ConnectionState
@@ -58,6 +60,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
 import java.util.Locale
+
+/** Shown where a value is missing or not read yet. Never a long dash (copy rules). */
+const val NO_VALUE = "n/a"
 
 fun formatBytes(bytes: Long): String = when {
     bytes < 1024 -> "$bytes B"
@@ -174,17 +179,18 @@ fun StatusDot(color: Color, modifier: Modifier = Modifier, size: Int = 10) {
  * Human description of the link state, with the pairing hint where it matters. Link internals such
  * as the negotiated MTU appear only when [technical] is set (Developer level).
  */
+@Composable
 fun ConnectionState.describe(technical: Boolean = false): String = when (this) {
-    ConnectionState.Disconnected -> "Not connected"
-    ConnectionState.Connecting -> "Connecting…"
-    ConnectionState.DiscoveringServices -> if (technical) "Discovering services…" else "Connecting…"
-    ConnectionState.Bonding -> "Pairing. Enter the 6-digit code shown on the device"
-    ConnectionState.NegotiatingMtu -> if (technical) "Negotiating MTU…" else "Setting up the link…"
-    ConnectionState.EnablingNotifications -> if (technical) "Enabling notifications…" else "Setting up the link…"
-    ConnectionState.Authenticating -> if (technical) "Authenticating on the LAN…" else "Checking this phone on your Wi-Fi…"
-    is ConnectionState.Ready -> if (technical) "Connected, MTU $mtu" else "Connected"
+    ConnectionState.Disconnected -> stringResource(R.string.conn_disconnected)
+    ConnectionState.Connecting -> stringResource(R.string.conn_connecting)
+    ConnectionState.DiscoveringServices -> stringResource(if (technical) R.string.conn_discovering else R.string.conn_connecting)
+    ConnectionState.Bonding -> stringResource(R.string.conn_pairing)
+    ConnectionState.NegotiatingMtu -> stringResource(if (technical) R.string.conn_mtu else R.string.conn_setting_up)
+    ConnectionState.EnablingNotifications -> stringResource(if (technical) R.string.conn_notifications else R.string.conn_setting_up)
+    ConnectionState.Authenticating -> stringResource(if (technical) R.string.conn_lan_auth else R.string.conn_lan_checking)
+    is ConnectionState.Ready -> if (technical) stringResource(R.string.conn_ready_mtu, mtu) else stringResource(R.string.conn_ready)
     // A pairing repair message is plain language and says what to do, so every level shows it.
-    is ConnectionState.Failed -> if (technical || BleConnectionFailure.needsPairingRepair(this)) reason else "Could not connect. Move closer and try again"
+    is ConnectionState.Failed -> if (technical || BleConnectionFailure.needsPairingRepair(this)) reason else stringResource(R.string.conn_failed)
 }
 
 @Composable
@@ -220,16 +226,10 @@ fun ConnectionBanner(
                 if (reconnecting != null) {
                     Text(
                         if (technical) {
-                            "Link lost (${reconnecting.reason}). Reconnecting automatically, attempt ${reconnecting.attempt} of ${reconnecting.maxAttempts}…"
+                            stringResource(R.string.conn_link_lost_detail, reconnecting.reason, reconnecting.attempt, reconnecting.maxAttempts)
                         } else {
-                            "Link lost. Reconnecting by itself…"
+                            stringResource(R.string.conn_link_lost)
                         },
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-                if (state == ConnectionState.Bonding) {
-                    Text(
-                        "Enter the device’s 6-digit pairing code when Android asks. Read it from its display, or obtain the owner PIN over USB for a device without a display.",
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
@@ -237,7 +237,7 @@ fun ConnectionBanner(
                     TextButton(onClick = {
                         context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     }) {
-                        Text("Bluetooth settings")
+                        Text(stringResource(R.string.conn_bluetooth_settings))
                     }
                 }
             }
@@ -254,25 +254,25 @@ fun DeviceBottomBar(selected: DeviceTab, onSelect: (DeviceTab) -> Unit) {
             selected = selected == DeviceTab.TODAY,
             onClick = { onSelect(DeviceTab.TODAY) },
             icon = { Icon(Icons.Rounded.Sensors, contentDescription = null) },
-            label = { Text("Today") },
+            label = { Text(stringResource(R.string.tab_today)) },
         )
         NavigationBarItem(
             selected = selected == DeviceTab.HISTORY,
             onClick = { onSelect(DeviceTab.HISTORY) },
             icon = { Icon(Icons.Rounded.ShowChart, contentDescription = null) },
-            label = { Text("History") },
+            label = { Text(stringResource(R.string.tab_history)) },
         )
         NavigationBarItem(
             selected = selected == DeviceTab.FILES,
             onClick = { onSelect(DeviceTab.FILES) },
             icon = { Icon(Icons.Rounded.FolderOpen, contentDescription = null) },
-            label = { Text("Files") },
+            label = { Text(stringResource(R.string.tab_files)) },
         )
         NavigationBarItem(
             selected = selected == DeviceTab.DEVICE,
             onClick = { onSelect(DeviceTab.DEVICE) },
             icon = { Icon(Icons.Rounded.Tune, contentDescription = null) },
-            label = { Text("Device") },
+            label = { Text(stringResource(R.string.tab_device)) },
         )
     }
 }

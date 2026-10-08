@@ -29,7 +29,10 @@ import earth.walkthru.aqsync.data.protocol.PairMode
 import earth.walkthru.aqsync.ui.components.CollectEvents
 import earth.walkthru.aqsync.ui.device.cards.LanAccess
 import earth.walkthru.aqsync.ui.device.cards.StickerScan
-import earth.walkthru.aqsync.ui.permissions.rememberLanPermission
+import earth.walkthru.aqsync.ui.permissions.AccessDialogs
+import earth.walkthru.aqsync.ui.permissions.LanPermission
+import earth.walkthru.aqsync.ui.permissions.rememberBluetoothAccess
+import earth.walkthru.aqsync.ui.permissions.rememberLocalNetworkAccess
 import earth.walkthru.aqsync.ui.permissions.rememberNotificationPermission
 import earth.walkthru.aqsync.ui.settings.SettingsSheet
 
@@ -84,7 +87,11 @@ fun DeviceRoute(
     // The worker's progress and summary notifications need POST_NOTIFICATIONS on API 33+. Ask once
     // when Auto-sync is switched on (same helper as the first Sync tap). A denial still enables it.
     val notificationPermission = rememberNotificationPermission()
-    val lanPermission = rememberLanPermission()
+    // Bluetooth for Reconnect, local network for the Wi-Fi sync actions. Asked only from those taps.
+    val bluetooth = rememberBluetoothAccess()
+    val localNetwork = rememberLocalNetworkAccess()
+    AccessDialogs(bluetooth)
+    AccessDialogs(localNetwork)
 
     DeviceScreen(
         state = state,
@@ -92,7 +99,7 @@ fun DeviceRoute(
             sensorInstallation = sensorInstallation,
             sensorHistoryCount = sensorHistory.size,
             stickerScan = stickerScan,
-            lanAccess = LanAccess(lanPermission.granted, lanPermission.requestable, lanPermission.deniedOnce),
+            lanAccess = LanAccess(localNetwork.granted, requestable = LanPermission.name != null),
         ),
         snackbar = snackbar,
         onAction = { action ->
@@ -103,7 +110,7 @@ fun DeviceRoute(
                 DeviceAction.OpenDebug -> onOpenDebug()
                 DeviceAction.OpenSettings -> showSettings = true
                 DeviceAction.Disconnect -> { viewModel.disconnect(); onDisconnected() }
-                DeviceAction.Reconnect -> viewModel.reconnect()
+                DeviceAction.Reconnect -> bluetooth.run { viewModel.reconnect() }
                 DeviceAction.RefreshConfig -> viewModel.refreshConfig()
                 is DeviceAction.SetAutoSync -> notificationPermission.ensureThen { viewModel.setAutoSync(action.on) }
                 DeviceAction.SetupCompanion -> notificationPermission.ensureThen { viewModel.setupCompanion() }
@@ -126,11 +133,13 @@ fun DeviceRoute(
                 DeviceAction.ScanWifi -> viewModel.scanWifi()
                 DeviceAction.ClearWifiScan -> viewModel.clearScan()
                 is DeviceAction.JoinWifi -> viewModel.joinWifi(action.ssid, action.psk, action.open)
-                DeviceAction.RequestLanAccess -> lanPermission.request()
-                is DeviceAction.SetLanOn -> viewModel.setLanOn(action.on)
-                DeviceAction.FetchToken -> viewModel.fetchToken()
+                DeviceAction.RequestLanAccess -> localNetwork.run { }
+                is DeviceAction.SetLanOn -> if (action.on) localNetwork.run { viewModel.setLanOn(true) } else viewModel.setLanOn(false)
+                // The token is fetched over Bluetooth. Local network is asked for here because the
+                // token is only useful with it, but a refusal does not block the fetch.
+                DeviceAction.FetchToken -> localNetwork.run(onDeclined = { viewModel.fetchToken() }) { viewModel.fetchToken() }
                 DeviceAction.RequestRotateToken -> confirmRotate = true
-                DeviceAction.ReconnectOverBluetooth -> viewModel.reconnectOverBluetooth()
+                DeviceAction.ReconnectOverBluetooth -> bluetooth.run { viewModel.reconnectOverBluetooth() }
                 DeviceAction.RequestForgetBonds -> confirmBonds = true
             }
         },

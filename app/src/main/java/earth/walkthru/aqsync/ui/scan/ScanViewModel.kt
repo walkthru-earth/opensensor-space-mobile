@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import earth.walkthru.aqsync.BuildConfig
+import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.DeviceConnectionManager
 import earth.walkthru.aqsync.data.DeviceSnapshot
 import earth.walkthru.aqsync.data.background.AutoSyncScheduler
@@ -37,7 +38,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** What Home knows about a logger from the phone archive alone — no link needed. */
+/** What Home knows about a logger from the phone archive alone, no link needed. */
 data class LoggerSummary(
     val files: Int,
     val lastSyncedEpochMs: Long?,
@@ -165,7 +166,7 @@ class ScanViewModel @Inject constructor(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                scanError.value = "Could not scan: ${e.message ?: e::class.simpleName}"
+                scanError.value = context.getString(R.string.scan_failed, e.message ?: e::class.simpleName.orEmpty())
             } finally {
                 // A stopped run can finish after a new run starts. Only its own generation may
                 // clear the current button state or cancel the current pruning loop.

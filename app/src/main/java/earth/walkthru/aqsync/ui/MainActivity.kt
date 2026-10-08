@@ -10,7 +10,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import dagger.hilt.android.AndroidEntryPoint
-import earth.walkthru.aqsync.ui.permissions.BluetoothGate
 import earth.walkthru.aqsync.ui.theme.AqSyncTheme
 
 @AndroidEntryPoint
@@ -30,9 +29,8 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,
                 ) {
-                    BluetoothGate {
-                        MainNavigation()
-                    }
+                    // No permission wall. Each action asks for what it needs (ui/permissions).
+                    MainNavigation()
                 }
             }
         }

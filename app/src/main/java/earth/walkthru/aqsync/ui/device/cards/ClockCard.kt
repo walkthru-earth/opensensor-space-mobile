@@ -19,7 +19,8 @@ import earth.walkthru.aqsync.data.protocol.DeviceStatus
 import earth.walkthru.aqsync.data.protocol.LiveSample
 import earth.walkthru.aqsync.data.settings.DetailLevel
 import earth.walkthru.aqsync.ui.components.BrandCard
-import earth.walkthru.aqsync.ui.components.Eyebrow
+import earth.walkthru.aqsync.ui.components.CardHeader
+import earth.walkthru.aqsync.ui.components.InfoContent
 import earth.walkthru.aqsync.ui.components.OutlinePillButton
 import earth.walkthru.aqsync.ui.components.StatusDot
 import java.time.Instant
@@ -52,8 +53,7 @@ fun ClockCard(
         }
     }
     BrandCard(modifier = modifier) {
-        Eyebrow(stringResource(R.string.clock_title))
-        Spacer(Modifier.height(6.dp))
+        CardHeader(stringResource(R.string.clock_title), info = InfoContent(stringResource(R.string.clock_title), stringResource(R.string.clock_actions_explain)))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             StatusDot(
                 when (synced) {
@@ -90,14 +90,6 @@ fun ClockCard(
         FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinePillButton(stringResource(R.string.set_time), onClick = onSetTime, enabled = enabled)
             if (level.detailed) OutlinePillButton(stringResource(R.string.flush), onClick = onFlush, enabled = enabled)
-        }
-        if (level.detailed) {
-            Text(
-                stringResource(R.string.clock_actions_explain),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 8.dp),
-            )
         }
     }
 }

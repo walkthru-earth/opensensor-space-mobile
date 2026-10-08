@@ -21,8 +21,9 @@ import earth.walkthru.aqsync.data.ArchiveTimeSummary
 import earth.walkthru.aqsync.data.SyncProgress
 import earth.walkthru.aqsync.data.settings.DetailLevel
 import earth.walkthru.aqsync.ui.components.BrandCard
+import earth.walkthru.aqsync.ui.components.CardHeader
 import earth.walkthru.aqsync.ui.components.CardTone
-import earth.walkthru.aqsync.ui.components.Eyebrow
+import earth.walkthru.aqsync.ui.components.InfoContent
 import earth.walkthru.aqsync.ui.components.Peacock
 import earth.walkthru.aqsync.ui.components.PillButton
 
@@ -48,8 +49,7 @@ fun SmartSyncCard(sync: SyncProgress, archive: ArchiveTimeSummary, enabled: Bool
     BrandCard(modifier = modifier, tone = CardTone.SOFT) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Eyebrow(stringResource(R.string.sync_title))
-                Spacer(Modifier.height(6.dp))
+                CardHeader(stringResource(R.string.sync_title), info = InfoContent(stringResource(R.string.sync_title), stringResource(R.string.sync_explain)))
                 Text(
                     when (mood) {
                         SyncMood.RUNNING -> pluralStringResource(R.plurals.sync_running, sync.filesTotal, sync.filesDone, sync.filesTotal)
@@ -96,13 +96,5 @@ fun SmartSyncCard(sync: SyncProgress, archive: ArchiveTimeSummary, enabled: Bool
             enabled = enabled && !sync.running,
             modifier = Modifier.fillMaxWidth(),
         )
-        if (level.detailed) {
-            Text(
-                stringResource(R.string.sync_explain),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-        }
     }
 }

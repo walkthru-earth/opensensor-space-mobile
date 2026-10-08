@@ -13,12 +13,19 @@ need the same behavior.
   only for explicit user action, reconnection, or changed request keys. A
   composable recomposition must never start transport/file work. Cancel screen
   jobs on pop; process-owned controllers and WorkManager may outlive the screen.
-- Simple mode must explain the current reading and archive state without
+- Simple mode must show the current reading and archive state without
   Debug. Advanced mode only reveals extra information; it must not alter sync.
 - Distinguish stale, unavailable and unverified readings from zero. Keep
   archived history usable when a device is disconnected or a worker owns it.
-- Device-changing actions require an explanation, and destructive ones require
-  confirmation. Preserve the explicit reboot path in root `AGENTS.md`.
+- Device-changing actions require an explanation (in the card's info sheet), and destructive ones
+  require a short confirmation. Preserve the explicit reboot path in root `AGENTS.md`.
+- No paragraph copy in the default view. A card is a title, its value or state, and one primary
+  action, with at most one short supporting line. Explanations go behind `InfoButton` through
+  `CardHeader(title, info = InfoContent(...))`, radio option descriptions included
+  (`docs/screens.md`, Copy and the info affordance).
+- Never request a permission at launch or from composition. Use `rememberBluetoothAccess()`,
+  `rememberLocalNetworkAccess()` or `rememberNotificationPermission()` and call them from the tap
+  that needs them, with `AccessDialogs` beside the screen. Timing table in `docs/screens.md`.
 
 ## Design system and detail levels
 

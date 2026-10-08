@@ -85,14 +85,15 @@ data class DeviceExtras(
     val sensorInstallation: SensorInstallation? = null,
     val sensorHistoryCount: Int = 0,
     val stickerScan: StickerScan? = null,
-    val lanAccess: LanAccess = LanAccess(granted = true, requestable = false, deniedOnce = false),
+    val lanAccess: LanAccess = LanAccess(granted = true, requestable = false),
 )
 
 /**
  * Device configuration, stateless: device header, Auto-sync, the fitted sensor (where the device
  * has one), Bluetooth pairing, Wi-Fi, LAN and bonds. Every write is one validated `SET_CONFIG`.
- * Simple keeps each card to its state in words and its actions. Detailed and Developer add the
- * explanations and identifiers (see each card).
+ * Simple shows the device, Auto-sync, Wi-Fi and Sync over Wi-Fi as state in words with their
+ * actions. Detailed adds the sensor, pairing and paired phones cards. Explanations sit behind each
+ * card's info button at every level.
  */
 @Composable
 fun DeviceScreen(
@@ -169,7 +170,9 @@ fun DeviceScreen(
                         level = state.detailLevel,
                     )
                 }
-                if (state.capabilities.sensorIdentity) {
+                // Device configuration beyond Auto-sync and Wi-Fi is Detailed. Simple still shows the
+                // pairing card when it needs attention (default PIN or a pending restart).
+                if (state.capabilities.sensorIdentity && state.detailLevel.detailed) {
                     item(key = "sensor") {
                         SensorIdentityCard(
                             state = state,
@@ -192,7 +195,9 @@ fun DeviceScreen(
                 if (state.info != null && !state.isV2) {
                     item(key = "v1") { ProtocolV1Card() }
                 }
-                if (state.isV2) {
+                val ble = state.config?.config?.ble
+                val pairingNeedsAttention = (ble?.isPinDefault == true && ble.pairMode == PairMode.FIXED) || state.config?.rebootRequired == true
+                if (state.isV2 && (state.detailLevel.detailed || pairingNeedsAttention)) {
                     item(key = "pairing") {
                         PairingCard(
                             state,
@@ -200,6 +205,8 @@ fun DeviceScreen(
                             onReboot = { onAction(DeviceAction.RequestReboot) },
                         )
                     }
+                }
+                if (state.isV2) {
                     item(key = "wifi") {
                         WifiCard(
                             state = state,
@@ -221,7 +228,9 @@ fun DeviceScreen(
                             onReconnectBle = { onAction(DeviceAction.ReconnectOverBluetooth) },
                         )
                     }
-                    item(key = "bonds") { BondsCard(state, onForgetAll = { onAction(DeviceAction.RequestForgetBonds) }) }
+                    if (state.detailLevel.detailed) {
+                        item(key = "bonds") { BondsCard(state, onForgetAll = { onAction(DeviceAction.RequestForgetBonds) }) }
+                    }
                 }
             }
         }

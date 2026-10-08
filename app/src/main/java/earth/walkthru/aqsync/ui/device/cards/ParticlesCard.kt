@@ -18,6 +18,7 @@ import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.protocol.LiveSample
 import earth.walkthru.aqsync.ui.components.BrandCard
 import earth.walkthru.aqsync.ui.components.Eyebrow
+import earth.walkthru.aqsync.ui.components.NO_VALUE
 
 /** Detailed level: particle counts per 0.1 L by size bin. */
 @Composable
@@ -37,7 +38,7 @@ fun ParticlesCard(live: LiveSample?, modifier: Modifier = Modifier) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             counts.forEach { (label, n) ->
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(n?.toString() ?: "—", style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+                    Text(n?.toString() ?: NO_VALUE, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
                     Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }

@@ -16,6 +16,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.ui.components.Eyebrow
+import earth.walkthru.aqsync.ui.components.NO_VALUE
 import earth.walkthru.aqsync.ui.components.StatusDot
 import earth.walkthru.aqsync.ui.components.formatAgo
 import earth.walkthru.aqsync.ui.components.rememberNowMillis
@@ -26,7 +27,7 @@ const val STALE_AFTER_MS = 30_000L
 
 /** Readings print without a trailing `.0` and with one decimal otherwise. */
 fun fmt(v: Double?): String = when {
-    v == null -> "—"
+    v == null -> NO_VALUE
     v == Math.floor(v) && v < 1000 -> String.format(Locale.US, "%.0f", v)
     else -> String.format(Locale.US, "%.1f", v)
 }

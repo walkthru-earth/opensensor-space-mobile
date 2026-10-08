@@ -29,8 +29,9 @@ import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.protocol.ConfigPatch
 import earth.walkthru.aqsync.data.protocol.PairMode
 import earth.walkthru.aqsync.ui.components.BrandCard
-import earth.walkthru.aqsync.ui.components.Eyebrow
-import earth.walkthru.aqsync.ui.components.InfoNote
+import earth.walkthru.aqsync.ui.components.CardHeader
+import earth.walkthru.aqsync.ui.components.InfoContent
+import earth.walkthru.aqsync.ui.components.NO_VALUE
 import earth.walkthru.aqsync.ui.components.OutlinePillButton
 import earth.walkthru.aqsync.ui.components.StatLine
 import earth.walkthru.aqsync.ui.components.StatusDot
@@ -49,13 +50,23 @@ fun PairingCard(state: DeviceUiState, onSave: (PairMode, String?) -> Unit, onReb
     var pin by rememberSaveable { mutableStateOf("") }
 
     BrandCard(modifier = modifier) {
-        Eyebrow(stringResource(R.string.pairing_title))
-        Spacer(Modifier.height(6.dp))
+        val title = stringResource(R.string.pairing_title)
+        CardHeader(
+            title,
+            info = InfoContent(
+                title,
+                stringResource(R.string.info_pairing_body),
+                stringResource(R.string.pairing_random),
+                stringResource(R.string.pairing_fixed),
+                stringResource(R.string.pairing_none),
+                stringResource(R.string.pairing_next_boot),
+            ),
+        )
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             StatusDot(if (current != null) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outline)
             Text(
                 when {
-                    current != null -> stringResource(R.string.pairing_mode, current.label)
+                    current != null -> stringResource(R.string.pairing_mode, pairModeLabel(current))
                     state.config == null -> stringResource(R.string.config_not_read)
                     else -> stringResource(R.string.pairing_unknown)
                 },
@@ -68,7 +79,7 @@ fun PairingCard(state: DeviceUiState, onSave: (PairMode, String?) -> Unit, onReb
                 when (ble.display) {
                     1 -> stringResource(R.string.value_yes)
                     0 -> stringResource(R.string.value_no)
-                    else -> "—"
+                    else -> NO_VALUE
                 },
             )
         }
@@ -87,20 +98,7 @@ fun PairingCard(state: DeviceUiState, onSave: (PairMode, String?) -> Unit, onReb
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 RadioButton(selected = selected == mode, onClick = { selected = mode }, enabled = state.canEdit)
-                Column {
-                    Text(mode.label, style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        stringResource(
-                            when (mode) {
-                                PairMode.RANDOM -> R.string.pairing_random
-                                PairMode.FIXED -> R.string.pairing_fixed
-                                PairMode.NONE -> R.string.pairing_none
-                            },
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                Text(pairModeLabel(mode), style = MaterialTheme.typography.bodyMedium)
             }
         }
         if (selected == PairMode.FIXED) {
@@ -118,7 +116,6 @@ fun PairingCard(state: DeviceUiState, onSave: (PairMode, String?) -> Unit, onReb
                 isError = pin.isNotEmpty() && pin.length != 6,
             )
         }
-        if (state.detailLevel.detailed) InfoNote(stringResource(R.string.pairing_next_boot))
         Spacer(Modifier.height(10.dp))
         val pinOk = selected != PairMode.FIXED || pin.length == 6 || (pin.isEmpty() && current == PairMode.FIXED)
         val needsPin = selected == PairMode.FIXED && current != PairMode.FIXED && pin.length != 6
@@ -133,3 +130,13 @@ fun PairingCard(state: DeviceUiState, onSave: (PairMode, String?) -> Unit, onReb
         }
     }
 }
+
+/** The short name of a pairing mode. Its explanation lives in the card's info sheet. */
+@Composable
+fun pairModeLabel(mode: PairMode): String = stringResource(
+    when (mode) {
+        PairMode.RANDOM -> R.string.pairing_label_random
+        PairMode.FIXED -> R.string.pairing_label_fixed
+        PairMode.NONE -> R.string.pairing_label_none
+    },
+)

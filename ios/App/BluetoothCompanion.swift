@@ -15,7 +15,10 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     private var tokenTimer: Timer?
     private var requestingToken = false
     var onCredentialSaved: (() -> Void)?
-    private var central: CBCentralManager!
+    /// Created on the first user scan. Creating a central manager shows the Bluetooth permission prompt.
+    private var central: CBCentralManager?
+    /// A scan the user asked for before the central manager reported its first state.
+    private var scanRequested = false
     private var discovered: [String: CBPeripheral] = [:]
     private var current: CBPeripheral?
     private var scanTimer: Timer?
@@ -37,13 +40,20 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         }
     }
 
-    override init() {
-        super.init()
-        central = CBCentralManager(delegate: self, queue: .main)
-    }
-
     func scan() {
-        guard foreground, central.state == .poweredOn, current == nil else { return }
+        guard foreground, current == nil else { return }
+        guard let central, central.state == .poweredOn else {
+            // The first tap creates the manager. Scanning waits for poweredOn.
+            scanRequested = true
+            if let existing = self.central {
+                centralManagerDidUpdateState(existing)
+            } else {
+                state.bluetoothChanged(available: false, explanation: "Bluetooth is getting ready…")
+                self.central = CBCentralManager(delegate: self, queue: .main)
+            }
+            return
+        }
+        scanRequested = false
         stopScan()
         discovered.removeAll()
         state.scanStarted()
@@ -56,12 +66,14 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     private func stopScan() {
         scanTimer?.invalidate()
         scanTimer = nil
-        if central.state == .poweredOn { central.stopScan() }
+        if let central, central.state == .poweredOn { central.stopScan() }
         state.scanStopped()
     }
 
     func connect(id: String) {
-        guard foreground, central.state == .poweredOn, current == nil, let peripheral = discovered[id] else { return }
+        guard foreground, let central, central.state == .poweredOn, current == nil, let peripheral = discovered[id] else {
+            return
+        }
         stopScan()
         current = peripheral
         peripheral.delegate = self
@@ -91,13 +103,14 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         if let peripheral = current {
             current = nil
             peripheral.delegate = nil
-            if central.state == .poweredOn { central.cancelPeripheralConnection(peripheral) }
+            if let central, central.state == .poweredOn { central.cancelPeripheralConnection(peripheral) }
         }
         state.connectionClosed(explanation: message)
     }
 
     func suspend() {
         foreground = false
+        scanRequested = false
         stopScan()
         disconnect(message: "Find your sensor again to resume live readings.")
     }
@@ -107,17 +120,22 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
         let message: String
         switch central.state {
-        case .poweredOn: message = "Find a nearby sensor to see its live readings."
+        case .poweredOn: message = ""
         case .poweredOff: message = "Turn on Bluetooth to find your sensors."
-        case .unauthorized: message = "Allow Bluetooth access for opensensor.space in Settings."
-        case .unsupported: message = "Bluetooth is unavailable on this device. Use an iPhone to connect to sensors."
+        case .unauthorized: message = "Allow Bluetooth for opensensor.space in Settings."
+        case .unsupported: message = "Bluetooth is not available on this device."
         default: message = "Bluetooth is getting ready…"
+        }
+        switch central.state {
+        case .poweredOn, .unknown, .resetting: break
+        default: scanRequested = false
         }
         if central.state != .poweredOn {
             stopScan()
             disconnect(message: message)
         }
         state.bluetoothChanged(available: central.state == .poweredOn, explanation: message)
+        if central.state == .poweredOn, scanRequested { scan() }
     }
 
     func centralManager(

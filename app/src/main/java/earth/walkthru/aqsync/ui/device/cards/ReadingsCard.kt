@@ -18,6 +18,7 @@ import earth.walkthru.aqsync.data.protocol.PmsStatus
 import earth.walkthru.aqsync.data.settings.DetailLevel
 import earth.walkthru.aqsync.ui.components.BrandCard
 import earth.walkthru.aqsync.ui.components.Eyebrow
+import earth.walkthru.aqsync.ui.components.NO_VALUE
 import earth.walkthru.aqsync.ui.components.titleText
 
 /**
@@ -34,8 +35,8 @@ fun ReadingsCard(live: LiveSample?, receivedAtEpochMs: Long?, level: DetailLevel
         }
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-            BigValue(Metrics.PM10.label, if (showPm) fmt(live?.pm10) else "—", Metrics.PM10.unit, Modifier.weight(1f))
-            BigValue(Metrics.PM1.label, if (showPm) fmt(live?.pm1) else "—", Metrics.PM10.unit, Modifier.weight(1f))
+            BigValue(Metrics.PM10.label, if (showPm) fmt(live?.pm10) else NO_VALUE, Metrics.PM10.unit, Modifier.weight(1f))
+            BigValue(Metrics.PM1.label, if (showPm) fmt(live?.pm1) else NO_VALUE, Metrics.PM10.unit, Modifier.weight(1f))
         }
         if (!showPm) {
             val status = live?.pmsStatus
