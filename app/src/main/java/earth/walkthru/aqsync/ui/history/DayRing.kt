@@ -24,7 +24,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import earth.walkthru.aqsync.R
-import earth.walkthru.aqsync.data.history.AirMood
 import earth.walkthru.aqsync.data.history.HistoryColumn
 import earth.walkthru.aqsync.data.history.MetricSpec
 import earth.walkthru.aqsync.ui.components.LocalUnits
@@ -32,6 +31,7 @@ import earth.walkthru.aqsync.ui.components.MoodFace
 import earth.walkthru.aqsync.ui.components.NO_VALUE
 import earth.walkthru.aqsync.ui.theme.color
 import earth.walkthru.aqsync.ui.theme.textColorOnSurface
+import earth.walkthru.aqsync.ui.theme.valueColor
 import java.time.Instant
 import java.time.ZoneId
 import kotlin.math.PI
@@ -40,7 +40,7 @@ import kotlin.math.sin
 
 /**
  * The day as a clock: one segment per elapsed hour (23 or 25 across DST), midnight at the top, each coloured by
- * its band, faded by its coverage, dashed when on estimated time, dark where nothing was recorded;
+ * its WHO step (neutral ink without a scale), faded by its coverage, dashed when on estimated time, dark where nothing was recorded;
  * a tick for "now" when the day is today; the day's average and its mood in the middle. Reads like
  * a watch face — you see at once *when* the air was bad — and it is the shape the iOS widget can take.
  */
@@ -60,7 +60,6 @@ fun DayRing(
 ) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val onSurface = MaterialTheme.colorScheme.onSurface
-    val primary = MaterialTheme.colorScheme.primary
     val empty = MaterialTheme.colorScheme.surfaceContainerHighest
     val labelPx = with(LocalDensity.current) { 11.sp.toPx() }
     val labelPaint = remember(muted, labelPx) { textPaint(muted, labelPx) }
@@ -82,7 +81,7 @@ fun DayRing(
                 val sweep = ((col.endS - col.startS) / daySeconds) * 360f
                 val m = col.mean
                 if (m == null) continue
-                val color = if (metric.banded) (metric.moodOf(m.toDouble()) ?: AirMood.FRESH).color() else primary
+                val color = metric.valueColor(m.toDouble(), muted)
                 val alpha = 0.3f + 0.7f * col.coverage
                 val isSel = selected != null && selected.startS == col.startS
                 drawArc(

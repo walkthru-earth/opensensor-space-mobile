@@ -45,7 +45,6 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import earth.walkthru.aqsync.R
-import earth.walkthru.aqsync.data.history.AirMood
 import earth.walkthru.aqsync.data.history.Columns
 import earth.walkthru.aqsync.data.history.HistoryColumn
 import earth.walkthru.aqsync.data.history.HistoryRange
@@ -64,6 +63,7 @@ import earth.walkthru.aqsync.ui.components.NO_VALUE
 import earth.walkthru.aqsync.ui.components.SectionCard
 import earth.walkthru.aqsync.ui.components.StatLine
 import earth.walkthru.aqsync.ui.components.TransportChip
+import earth.walkthru.aqsync.ui.components.labelText
 import earth.walkthru.aqsync.ui.components.titleText
 import earth.walkthru.aqsync.ui.theme.color
 import earth.walkthru.aqsync.ui.theme.textColorOnSurface
@@ -193,6 +193,7 @@ fun HistoryScreen(
                                 stringResource(R.string.info_history_body2),
                                 stringResource(R.string.info_history_body3),
                                 stringResource(R.string.info_history_body4),
+                                stringResource(R.string.info_history_body5),
                             ),
                         )
                     },
@@ -304,6 +305,12 @@ private fun ChartCard(state: HistoryUiState, zone: ZoneId, onOpenDay: (Long) -> 
                         height = if (state.range == HistoryRange.DAY) 170.dp else 200.dp,
                         zone = zone,
                     )
+                    Text(
+                        averagingNote(state.range, state.metric),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
                     SelectedColumn(selected, state, zone)
                     Spacer(Modifier.height(8.dp))
                     Summary(s)
@@ -313,7 +320,7 @@ private fun ChartCard(state: HistoryUiState, zone: ZoneId, onOpenDay: (Long) -> 
     }
 }
 
-/** What the touched column says. Time slot, value with its mood, peak, coverage, estimated or not. */
+/** What the touched column says. Time slot, value with its mood and WHO step in words, peak, coverage, estimated or not. */
 @Composable
 private fun SelectedColumn(c: HistoryColumn?, state: HistoryUiState, zone: ZoneId) {
     val text = if (c == null) {
@@ -339,7 +346,7 @@ private fun SelectedColumn(c: HistoryColumn?, state: HistoryUiState, zone: ZoneI
             listOfNotNull(
                 slot,
                 fmt(units.value(m, unit)) + " " + units.unit(unit),
-                state.metric.moodOf(m.toDouble())?.titleText(),
+                state.metric.moodOf(m.toDouble())?.let { "${it.titleText()}, ${it.step.labelText()}" },
                 c.max?.takeIf { it > m * 1.15f }?.let { stringResource(R.string.history_peak_value, fmt(units.value(it, unit))) },
                 stringResource(R.string.history_covered, (c.coverage * 100).toInt()),
                 stringResource(R.string.history_estimated_time).takeIf { c.estimated },

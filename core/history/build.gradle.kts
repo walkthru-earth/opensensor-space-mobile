@@ -10,6 +10,8 @@ kotlin {
         commonMain.dependencies {
             api(project(":core:protocol"))
             api(project(":core:parquet"))
+            // WHO 2021 health scales (edges, steps, colours) are part of the MetricSpec and AirMood API.
+            api(project(":core:airquality"))
             // TimeZone and LocalDate are part of the public HistoryWindow and Columns API.
             api(libs.kotlinx.datetime)
         }

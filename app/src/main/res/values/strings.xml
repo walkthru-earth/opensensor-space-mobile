@@ -92,22 +92,32 @@
     <string name="fresh_updated">updated %1$s</string>
     <string name="fresh_stale">stale, updated %1$s</string>
 
-    <!-- Moods. The band edges live in AirMood (core). Only the words are here. -->
+    <!-- Moods, one per WHO 2021 step. The edges live in :core:airquality. Only the words are here. -->
     <string name="mood_fresh_title">Fresh air</string>
-    <string name="mood_fresh_advice">Nothing to do. Enjoy it.</string>
+    <string name="mood_fresh_advice">Within the WHO guideline. Enjoy it.</string>
     <string name="mood_fresh_like">Like a clear day in the countryside</string>
-    <string name="mood_fine_title">Fine</string>
-    <string name="mood_fine_advice">Fine for everyone. Sensitive people may notice it on a long day.</string>
-    <string name="mood_fine_like">Like a quiet town street</string>
+    <string name="mood_fair_title">Fair</string>
+    <string name="mood_fair_advice">A little above the WHO guideline. Fine for most people.</string>
+    <string name="mood_fair_like">Like a quiet town street</string>
     <string name="mood_hazy_title">Getting hazy</string>
-    <string name="mood_hazy_advice">Long outdoor effort is less pleasant. Open windows when it drops.</string>
+    <string name="mood_hazy_advice">Sensitive people may notice it. Open windows when it drops.</string>
     <string name="mood_hazy_like">Like a busy road at rush hour</string>
+    <string name="mood_poor_title">Poor</string>
+    <string name="mood_poor_advice">Keep windows shut and take long outdoor effort easy.</string>
+    <string name="mood_poor_like">Like a city on a smoggy day</string>
     <string name="mood_smoky_title">Smoky</string>
-    <string name="mood_smoky_advice">Keep windows shut and take it easy outdoors.</string>
+    <string name="mood_smoky_advice">Stay inside if you can. A filter helps.</string>
     <string name="mood_smoky_like">Like standing downwind of a barbecue</string>
     <string name="mood_thick_title">Thick smoke</string>
-    <string name="mood_thick_advice">Stay inside if you can. A filter helps.</string>
+    <string name="mood_thick_advice">Stay inside with windows shut and run a filter.</string>
     <string name="mood_thick_like">Like a room where someone is smoking</string>
+    <!-- WHO 2021 steps, named in text so colour is never the only carrier. -->
+    <string name="who_step_guideline">within the WHO guideline</string>
+    <string name="who_step_it4">within WHO interim target 4</string>
+    <string name="who_step_it3">within WHO interim target 3</string>
+    <string name="who_step_it2">within WHO interim target 2</string>
+    <string name="who_step_it1">within WHO interim target 1</string>
+    <string name="who_step_above_it1">above every WHO target</string>
 
     <!-- Sensor states -->
     <string name="pms_absent_title">No particle sensor</string>
@@ -422,13 +432,14 @@
     <string name="info_connect_body2">On the first connection Android asks for a 6 digit code. Read it on the sensor screen. A sensor without a screen uses the PIN its owner set over USB.</string>
     <string name="info_privacy">Bluetooth and your local Wi-Fi reach only your own sensors. No account, no analytics, no location and no uploads. Your files stay on this phone unless you share them.</string>
     <string name="info_collect_body">Collects from your known sensors over Wi-Fi when this phone holds their token, otherwise over Bluetooth. Up to two run at once with a notification, so you can leave the app. Sensors with an open connection are skipped.</string>
-    <string name="info_now_body">A 10 second snapshot from the sensor, not a daily average. The face, the word and the colour all show the same band.</string>
+    <string name="info_now_body">A 10 second snapshot from the sensor. It is not an AQI and not a 24 hour mean, so read it as a hint. The face, the word and the colour all show the same WHO step.</string>
     <string name="info_wifi_body">The sensor joins your Wi-Fi so this phone can sync without Bluetooth.</string>
     <string name="info_pairing_body">How a phone proves it is allowed to connect.</string>
     <string name="info_history_body1">Averages use only readings the sensor marked valid, warmed up, fresh and without error.</string>
     <string name="info_history_body2">Coverage is the share of the window with such readings. Three readings in an hour is 1 percent, not an hourly average.</string>
     <string name="info_history_body3">Dashed stretches were logged before the sensor had a clock. Their time is estimated from a later time set on the same power on.</string>
     <string name="info_history_body4">Earlier station readings stay available after a device reset.</string>
+    <string name="info_history_body5">PM2.5 and PM10 colours follow the WHO 2021 air quality guidelines. The guideline and its four interim targets are 24 hour means.</string>
     <string name="info_settings_body1">The detail level changes only what you see. Every level reads the same data, and nothing is hidden from the archive or the export.</string>
     <string name="info_settings_body2">Smart Sync never rewrites raw files. Finalizing buffered rows stays a separate confirmed action.</string>
     <string name="info_file_chart_body">One column per synced file in file order. Faint columns have few valid readings, for example during warm up. Dashed columns have an estimated time. Touch a column to read its file, rows, time span and mean.</string>
@@ -713,7 +724,11 @@
     <string name="clock_mode_automatic_title">Automatic</string>
     <string name="clock_mode_never_title">Never</string>
     <string name="mood_none">No reading</string>
-    <string name="chart_who_24h">WHO 24 h</string>
+    <string name="chart_who_24h">WHO 24 h guideline</string>
+    <string name="chart_mean_hourly">Bars are hourly means.</string>
+    <string name="chart_mean_daily">Bars are daily means.</string>
+    <string name="chart_mean_weekly">Bars are weekly means.</string>
+    <string name="chart_guideline_note">The dashed line is the WHO 24 hour guideline.</string>
     <string name="history_week_of">week of %1$s</string>
     <string name="history_no_readings_short">no readings</string>
     <string name="history_peak_value">peak %1$s</string>

@@ -2,6 +2,7 @@ package earth.walkthru.aqsync.ui.theme
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import earth.walkthru.aqsync.airquality.WhoStep
 import earth.walkthru.aqsync.data.history.AirMood
 import earth.walkthru.opensensor.designsystem.BrandDarkScheme
 import earth.walkthru.opensensor.designsystem.BrandLightScheme
@@ -35,11 +36,16 @@ class BrandTokensTest {
         )
     }
 
-    @Test fun bandsAreUnchangedScientificColours() {
+    @Test fun everyBandColourIsItsWhoStepColour() {
+        // One mapping: the six moods paint the six WHO steps, light to dark, from :core:airquality.
         assertEquals(
-            listOf("#4CC38A", "#E9C46A", "#F4A261", "#E76F51", "#9B2226"),
+            listOf("#C6EBA8", "#F5D75E", "#F2A14A", "#DC5A4A", "#9A3F8E", "#5C1A33"),
             AirMood.entries.map { hex(it.color()) },
         )
+        for (step in WhoStep.entries) assertEquals(step.color, step.color().toArgb())
+        // Light to dark, so the order survives greyscale.
+        val lum = WhoStep.entries.map { relativeLuminance(it.color()) }
+        assertEquals(lum.sortedDescending(), lum)
     }
 
     @Test fun textRolesReachBodyContrastOnBothThemes() {
@@ -69,10 +75,12 @@ class BrandTokensTest {
             val ratio = contrastRatio(mood.onColor(), mood.color())
             assertTrue("${mood.name} ink contrast $ratio", ratio >= BODY_TEXT_CONTRAST)
         }
+        // The contrast helper agrees with the scale's own light-ink flag.
+        for (step in WhoStep.entries) assertEquals(step.name, step.darkFill, step.onColor() == BandInkLight)
     }
 
     @Test fun contrastMathMatchesKnownValues() {
         assertEquals(21.0, contrastRatio(Color.Black, Color.White), 0.01)
-        assertEquals(1.0, contrastRatio(BandGood, BandGood), 0.0001)
+        assertEquals(1.0, contrastRatio(WhoStep.GUIDELINE.color(), WhoStep.GUIDELINE.color()), 0.0001)
     }
 }

@@ -201,12 +201,12 @@ fun TiltedBadge(color: Color, modifier: Modifier = Modifier, size: Dp = 88.dp, c
     ) { content() }
 }
 
-/** The mood name on its own band colour, with ink chosen for contrast (`AirMood.onColor`). A small curved card. */
+/** The mood name on its own WHO step colour, with ink chosen for contrast (`AirMood.onColor`). A small curved card. */
 @Composable
 fun MoodPill(mood: AirMood, modifier: Modifier = Modifier) {
     Surface(shape = FloatingControl.SmallShape, color = mood.color(), contentColor = mood.onColor(), modifier = modifier) {
         Text(
-            mood.title,
+            mood.titleText(),
             style = MaterialTheme.typography.labelLarge,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),

@@ -17,9 +17,10 @@ import earth.walkthru.aqsync.data.history.AirMood
 import earth.walkthru.aqsync.ui.theme.onBand
 
 /**
- * Five moods as a face: eyes level or drooping, mouth from smile to flat to frown, grey and neutral
- * when there is no reading. Colour is never the only carrier, the shape changes too. The features
- * use the ink that contrasts with the band (`onBand`), so the darkest band gets light features.
+ * Six moods, one per WHO step, as a face: eyes round or narrowing, mouth from smile to flat to
+ * frown, a mask on the two worst steps, grey and neutral when there is no reading. Colour is never
+ * the only carrier, the shape changes too. The features use the ink that contrasts with the step
+ * colour (`onBand`), so the two darkest steps get light features.
  *
  * This is the data glyph. The peacock mascot is the friendly guide and never replaces it.
  */
@@ -35,8 +36,8 @@ fun MoodFace(mood: AirMood?, color: Color, modifier: Modifier = Modifier, descri
         val eyeY = c.y - r * 0.18f
         val eyeDx = r * 0.36f
         val eyeH = when (mood) {
-            null, AirMood.FRESH, AirMood.FINE -> r * 0.13f
-            AirMood.HAZY -> r * 0.09f
+            null, AirMood.FRESH, AirMood.FAIR -> r * 0.13f
+            AirMood.HAZY, AirMood.POOR -> r * 0.09f
             AirMood.SMOKY, AirMood.THICK -> r * 0.05f
         }
         for (dx in listOf(-eyeDx, eyeDx)) {
@@ -45,9 +46,10 @@ fun MoodFace(mood: AirMood?, color: Color, modifier: Modifier = Modifier, descri
         // Mouth curvature, +1 smile to -1 frown.
         val curve = when (mood) {
             AirMood.FRESH -> 1f
-            AirMood.FINE -> 0.5f
-            AirMood.HAZY -> 0f
-            AirMood.SMOKY -> -0.5f
+            AirMood.FAIR -> 0.6f
+            AirMood.HAZY -> 0.2f
+            AirMood.POOR -> -0.2f
+            AirMood.SMOKY -> -0.6f
             AirMood.THICK -> -1f
             null -> 0f
         }

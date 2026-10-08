@@ -225,8 +225,9 @@ native: Material 3 here, SwiftUI + Swift Charts there.
 
 ### 4.2 Friendly layer — what the number means, honestly
 
-- **One character, five moods**, mapped to the PM2.5 bands the app already has
-  (`pm25Band`: ≤ 15 · ≤ 35 · ≤ 55 · ≤ 150 · above, WHO 2021 24-h guideline = 15 µg/m³). A capybara
+- **One character, six moods**, one per WHO 2021 PM2.5 step (at or below 15 · 25 · 37.5 · 50 ·
+  75 · above µg/m³, the guideline then interim targets 4 to 1, `:core:airquality`). Was five moods
+  on 15 · 35 · 55 · 150 until 2026-10. A capybara
   works well: calm by nature, non-threatening, gender/culture-neutral; moods e.g. *soaking happily* /
   *content* / *sniffing the air* / *wearing a mask* / *indoors with the window shut*. Ship it as
   vector art, not Unicode emoji (emoji render differently on Android and iOS and cannot be tinted or
@@ -264,7 +265,8 @@ measured need appears (a site with many loggers on one Wi-Fi is exactly where co
 ### 4.4 History screen (Simple and Detailed)
 
 - Ranges: Day · Week · Month · Year · custom; the chart is a Compose `Canvas` (Swift Charts on iOS)
-  drawing **band shading** behind the series so the capybara colours and the chart agree, a
+  drawing bars coloured by their WHO step on a neutral background (shipped 2026-10, replacing the
+  planned band shading) so the face colours and the chart agree, a
   min/max envelope plus mean line for aggregated ranges, raw dots/line for ≤ 3 days.
 - Data path: Day (≤ 3 days) → daily derived files (§2), column-projected; Week → 15-min tier;
   Month → 1-h tier; Year → 1-day tier. Zooming re-queries the next tier. Nothing above a few thousand
@@ -319,7 +321,7 @@ makes the "Give the logger the time" nudge on Home worth being prominent.
 | D4 | Location | Amend `AGENTS.md` as in §3.1; **design B** (opaque `deployment_id` to the board via a firmware-repo contract PR; coordinates only on the phone) |
 | D5 | Map | MapLibre Compose; no network tiles by default; bundled low-zoom PMTiles + explicit "download this area" opt-in (§3.3) |
 | D6 | Detail levels | Simple · Detailed · Developer, replacing the Boolean Advanced switch with a migration (§4.1) |
-| D7 | Character | one vector capybara, five moods, labels + actions, reduced-motion aware; no Unicode emoji as the primary carrier (§4.2) |
+| D7 | Character | one vector capybara, six moods (WHO steps since 2026-10), labels + actions, reduced-motion aware; no Unicode emoji as the primary carrier (§4.2) |
 | D8 | Many loggers | **M1** Home cards + sequential "collect from all nearby" queue; M2 (concurrent, LAN first) only after a measured need (§4.3) |
 | D9 | Unsynced time | implement the estimate of §4.6 in the derive step, clearly labelled |
 | D10 | Charts | Compose `Canvas` with a written design spec that Swift Charts follows (§4.5) |

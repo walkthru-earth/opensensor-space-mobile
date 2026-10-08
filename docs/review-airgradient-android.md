@@ -17,6 +17,10 @@ BLE/LAN Parquet file sync, so everything below is domain, UX or process.
 
 ## Findings about *our* code that the comparison surfaced
 
+Status 2026-10: items 1 and 2 are superseded. The edges now live once in `:core:airquality`
+(`WhoGuidelines`, WHO 2021 steps 15 · 25 · 37.5 · 50 · 75 for PM2.5, inclusive from below),
+`MetricSpec.healthScale` replaced `Band`, and every colour goes through `WhoStep.color()`.
+
 1. **PM2.5 band edges exist twice with different boundary semantics (bug).**
    `ui/theme/Theme.kt` `pm25Band()` hard-codes 15/35/55/150 with `<=`; `AirMood.of` (`:core:history`)
    uses `pm25 < upTo`. PM values are integers in our files, so a reading of exactly 15, 35, 55 or 150
