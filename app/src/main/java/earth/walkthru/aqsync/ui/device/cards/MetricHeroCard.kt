@@ -25,18 +25,18 @@ import earth.walkthru.aqsync.data.history.Metrics
 import earth.walkthru.aqsync.data.history.NowReading
 import earth.walkthru.aqsync.data.protocol.LiveSample
 import earth.walkthru.aqsync.data.settings.DetailLevel
-import earth.walkthru.aqsync.ui.components.BrandCard
-import earth.walkthru.aqsync.ui.components.CardHeader
-import earth.walkthru.aqsync.ui.components.CardTone
-import earth.walkthru.aqsync.ui.components.InfoContent
 import earth.walkthru.aqsync.ui.components.MoodFace
 import earth.walkthru.aqsync.ui.components.MoodPill
-import earth.walkthru.aqsync.ui.components.TiltedBadge
 import earth.walkthru.aqsync.ui.components.adviceText
 import earth.walkthru.aqsync.ui.components.comparisonText
 import earth.walkthru.aqsync.ui.components.hintText
 import earth.walkthru.aqsync.ui.components.titleText
 import earth.walkthru.aqsync.ui.theme.color
+import earth.walkthru.opensensor.designsystem.BrandCard
+import earth.walkthru.opensensor.designsystem.CardHeader
+import earth.walkthru.opensensor.designsystem.CardTone
+import earth.walkthru.opensensor.designsystem.InfoContent
+import earth.walkthru.opensensor.designsystem.TiltedBadge
 import kotlinx.coroutines.delay
 
 /**

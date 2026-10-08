@@ -6,9 +6,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.BatteryChargingFull
-import androidx.compose.material.icons.rounded.BatteryStd
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -23,10 +20,12 @@ import earth.walkthru.aqsync.data.protocol.LiveProfile
 import earth.walkthru.aqsync.data.protocol.LiveSample
 import earth.walkthru.aqsync.data.protocol.TemperatureSource
 import earth.walkthru.aqsync.data.settings.DetailLevel
-import earth.walkthru.aqsync.ui.components.BrandCard
-import earth.walkthru.aqsync.ui.components.Eyebrow
 import earth.walkthru.aqsync.ui.components.LocalUnits
 import earth.walkthru.aqsync.ui.components.NO_VALUE
+import earth.walkthru.opensensor.designsystem.AppIcons
+import earth.walkthru.opensensor.designsystem.BigValue
+import earth.walkthru.opensensor.designsystem.BrandCard
+import earth.walkthru.opensensor.designsystem.Eyebrow
 
 /**
  * Detailed level: the board's own temperature and the battery. Millivolts and USB bus voltage are
@@ -60,7 +59,7 @@ fun BoardCard(live: LiveSample?, profile: LiveProfile?, level: DetailLevel, modi
                 Eyebrow(Metrics.BATTERY.label, uppercase = false)
                 Row(verticalAlignment = Alignment.Bottom) {
                     Icon(
-                        if (live?.chg == 1) Icons.Rounded.BatteryChargingFull else Icons.Rounded.BatteryStd,
+                        if (live?.chg == 1) AppIcons.BatteryChargingFull else AppIcons.BatteryStd,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(bottom = 8.dp),

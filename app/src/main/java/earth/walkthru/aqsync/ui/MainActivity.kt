@@ -17,9 +17,9 @@ import dagger.hilt.android.AndroidEntryPoint
 import earth.walkthru.aqsync.data.settings.AppSettings
 import earth.walkthru.aqsync.ui.components.LocalUnits
 import earth.walkthru.aqsync.ui.components.resolveUnits
-import earth.walkthru.aqsync.ui.theme.AqSyncTheme
 import earth.walkthru.aqsync.units.UnitFormatter
 import earth.walkthru.aqsync.units.UnitSystem
+import earth.walkthru.opensensor.designsystem.OpenSensorTheme
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -41,7 +41,7 @@ class MainActivity : ComponentActivity() {
             val choice by settings.unitSystem.collectAsStateWithLifecycle(UnitSystem.AUTO)
             val units = remember(choice) { UnitFormatter(resolveUnits(choice)) }
             CompositionLocalProvider(LocalUnits provides units) {
-                AqSyncTheme {
+                OpenSensorTheme {
                     Surface(
                         modifier = Modifier.fillMaxSize(),
                         color = MaterialTheme.colorScheme.background,

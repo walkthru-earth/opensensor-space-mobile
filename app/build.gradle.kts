@@ -273,8 +273,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
 
-    // Icons and SAF helpers
-    implementation(libs.androidx.compose.material.icons.extended)
+    // SAF helpers. Icons are vendored vectors in :ui:designsystem (AppIcons), not material-icons-extended.
     implementation(libs.androidx.documentfile)
     // System-hosted barcode UI; no app camera permission. Manual entry remains available offline.
     implementation(libs.google.code.scanner)

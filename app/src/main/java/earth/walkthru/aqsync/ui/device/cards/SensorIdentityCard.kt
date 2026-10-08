@@ -28,16 +28,16 @@ import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.SensorLabel
 import earth.walkthru.aqsync.data.local.database.SensorInstallation
 import earth.walkthru.aqsync.data.protocol.PlantowerBatchCandidate
-import earth.walkthru.aqsync.ui.components.BrandCard
-import earth.walkthru.aqsync.ui.components.CardHeader
-import earth.walkthru.aqsync.ui.components.InfoContent
-import earth.walkthru.aqsync.ui.components.InfoNote
-import earth.walkthru.aqsync.ui.components.OutlinePillButton
-import earth.walkthru.aqsync.ui.components.PillButton
-import earth.walkthru.aqsync.ui.components.StatLine
-import earth.walkthru.aqsync.ui.components.WarningNote
 import earth.walkthru.aqsync.ui.device.DeviceUiState
+import earth.walkthru.opensensor.designsystem.BrandCard
+import earth.walkthru.opensensor.designsystem.CardHeader
 import earth.walkthru.opensensor.designsystem.FloatingControl
+import earth.walkthru.opensensor.designsystem.InfoContent
+import earth.walkthru.opensensor.designsystem.InfoNote
+import earth.walkthru.opensensor.designsystem.OutlinePillButton
+import earth.walkthru.opensensor.designsystem.PillButton
+import earth.walkthru.opensensor.designsystem.StatLine
+import earth.walkthru.opensensor.designsystem.WarningNote
 
 /** The result of one barcode scan, delivered by the route. [id] makes a repeated scan distinct. */
 data class StickerScan(val value: String?, val error: String?, val id: Long)

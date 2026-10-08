@@ -17,10 +17,11 @@ import earth.walkthru.aqsync.data.history.Metrics
 import earth.walkthru.aqsync.data.protocol.LiveProfile
 import earth.walkthru.aqsync.data.protocol.LiveSample
 import earth.walkthru.aqsync.data.protocol.TemperatureSource
-import earth.walkthru.aqsync.ui.components.BrandCard
-import earth.walkthru.aqsync.ui.components.CardTone
-import earth.walkthru.aqsync.ui.components.Eyebrow
 import earth.walkthru.aqsync.ui.components.LocalUnits
+import earth.walkthru.opensensor.designsystem.BigValue
+import earth.walkthru.opensensor.designsystem.BrandCard
+import earth.walkthru.opensensor.designsystem.CardTone
+import earth.walkthru.opensensor.designsystem.Eyebrow
 
 /** The registry metric that a reviewed profile's LIVE `t` field measures. */
 fun temperatureMetric(source: TemperatureSource?): MetricSpec =

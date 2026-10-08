@@ -22,7 +22,6 @@
     <string name="value_not_set">not set</string>
     <string name="value_unknown">unknown</string>
     <string name="config_not_read">Settings not read yet</string>
-    <string name="signal_bars">Signal %1$d of 4</string>
     <string name="event_clock_on_today">Open Today and run Smart Sync to confirm the clock update.</string>
 
     <!-- Scan (Home) -->
@@ -411,9 +410,6 @@
     <string name="settings_about">About</string>
     <string name="settings_about_body">opensensor.space %1$s</string>
     <string name="settings_fonts">Quicksand and Cairo fonts under the SIL Open Font License 1.1. Peacock mascot from opensensor.space.</string>
-
-    <!-- Info affordance (components/InfoButton.kt). Explanations live in these sheets, never in the default view. -->
-    <string name="info_more">More about %1$s</string>
 
     <!-- On-demand permissions (permissions/RuntimeAccess.kt). Asked only from the action that needs them. -->
     <string name="perm_bt_title">Allow nearby devices</string>

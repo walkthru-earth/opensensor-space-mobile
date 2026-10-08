@@ -11,9 +11,6 @@ import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Bluetooth
-import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -33,6 +30,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.ble.BluetoothStatus
+import earth.walkthru.opensensor.designsystem.AppIcons
 
 /** The runtime permissions behind every Bluetooth action (scan, connect, pair). Never location. */
 val BluetoothPermissions = arrayOf(
@@ -146,7 +144,7 @@ fun rememberBluetoothAccess(): RuntimeAccess {
             rationaleBody = R.string.perm_bt_body,
             settingsTitle = R.string.perm_bt_settings_title,
             settingsBody = R.string.perm_bt_settings_body,
-            icon = Icons.Rounded.Bluetooth,
+            icon = AppIcons.Bluetooth,
         ),
     )
     val turnOn = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { access.onTurnOnResult() }
@@ -168,7 +166,7 @@ fun rememberLocalNetworkAccess(): RuntimeAccess = rememberRuntimeAccess(
         rationaleBody = R.string.perm_lan_body,
         settingsTitle = R.string.perm_lan_settings_title,
         settingsBody = R.string.perm_lan_settings_body,
-        icon = Icons.Rounded.Wifi,
+        icon = AppIcons.Wifi,
     ),
 )
 
