@@ -106,6 +106,12 @@ val BrandLightScheme = brandColorScheme(BrandTokens.Light, dark = false)
 val BrandDarkScheme = brandColorScheme(BrandTokens.Dark, dark = true)
 
 /**
+ * The one content card radius, 32 dp like the website's `.brand-panel` (2rem). Every content card
+ * on both platforms uses it ([BrandCard]). It is also the theme's `shapes.extraLarge`.
+ */
+val CardShape: RoundedCornerShape = RoundedCornerShape(32.dp)
+
+/**
  * Large rounded corners like the website's cards (`.brand-panel` is 2rem, `.brand-icon` 1.15rem).
  * Buttons, chips and badges use the `FloatingControl` card curves, never a full pill or circle.
  */
@@ -114,14 +120,15 @@ val BrandShapes = Shapes(
     small = RoundedCornerShape(12.dp),
     medium = RoundedCornerShape(18.dp),
     large = RoundedCornerShape(24.dp),
-    extraLarge = RoundedCornerShape(32.dp),
+    extraLarge = CardShape,
 )
 
 /**
  * The opensensor.space theme for shared Compose code: brand colours, shapes and the bundled brand
- * type scale ([rememberBrandTypography], Cairo for Arabic-script locales). The Android app's
- * `AqSyncTheme` uses the same typography. The iOS framework uses this theme directly, so neither
- * platform falls back to the Material baseline purple or the system font.
+ * type scale ([rememberBrandTypography], Cairo for Arabic-script locales). The Android app and the
+ * iOS framework both use this theme, so neither platform falls back to the Material baseline purple
+ * or the system font. Wallpaper-derived dynamic colour is never used, the app's identity is the
+ * website's. Air-quality step colours never follow the theme.
  */
 @Composable
 fun OpenSensorTheme(

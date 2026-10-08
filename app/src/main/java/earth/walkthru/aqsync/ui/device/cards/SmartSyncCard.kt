@@ -20,12 +20,12 @@ import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.ArchiveTimeSummary
 import earth.walkthru.aqsync.data.SyncProgress
 import earth.walkthru.aqsync.data.settings.DetailLevel
-import earth.walkthru.aqsync.ui.components.BrandCard
-import earth.walkthru.aqsync.ui.components.CardHeader
-import earth.walkthru.aqsync.ui.components.CardTone
-import earth.walkthru.aqsync.ui.components.InfoContent
-import earth.walkthru.aqsync.ui.components.Peacock
-import earth.walkthru.aqsync.ui.components.PillButton
+import earth.walkthru.opensensor.designsystem.BrandCard
+import earth.walkthru.opensensor.designsystem.CardHeader
+import earth.walkthru.opensensor.designsystem.CardTone
+import earth.walkthru.opensensor.designsystem.InfoContent
+import earth.walkthru.opensensor.designsystem.Peacock
+import earth.walkthru.opensensor.designsystem.PillButton
 
 /** Plain-language sync state, derived only from what the repository reports. */
 enum class SyncMood { RUNNING, CAUGHT_UP, SOME_FAILED, READY, EMPTY }

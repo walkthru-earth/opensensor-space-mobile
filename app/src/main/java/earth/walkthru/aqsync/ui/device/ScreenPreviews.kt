@@ -19,7 +19,7 @@ import earth.walkthru.aqsync.data.protocol.LiveSample
 import earth.walkthru.aqsync.data.settings.DetailLevel
 import earth.walkthru.aqsync.ui.components.ThemePreviews
 import earth.walkthru.aqsync.ui.device.cards.MetricHeroCard
-import earth.walkthru.aqsync.ui.theme.AqSyncTheme
+import earth.walkthru.opensensor.designsystem.OpenSensorTheme
 
 /** Fake state for previews only. No transport, no Room, no ViewModel. */
 internal object PreviewFakes {
@@ -71,19 +71,19 @@ internal object PreviewFakes {
 
 @ThemePreviews
 @Composable
-private fun TodaySimplePreview() = AqSyncTheme { TodayScreen(PreviewFakes.today(DetailLevel.SIMPLE), onAction = {}) }
+private fun TodaySimplePreview() = OpenSensorTheme { TodayScreen(PreviewFakes.today(DetailLevel.SIMPLE), onAction = {}) }
 
 @ThemePreviews
 @Composable
-private fun TodayDeveloperPreview() = AqSyncTheme { TodayScreen(PreviewFakes.today(DetailLevel.DEVELOPER), onAction = {}) }
+private fun TodayDeveloperPreview() = OpenSensorTheme { TodayScreen(PreviewFakes.today(DetailLevel.DEVELOPER), onAction = {}) }
 
 @ThemePreviews
 @Composable
-private fun DeviceSimplePreview() = AqSyncTheme { DeviceScreen(PreviewFakes.device(DetailLevel.SIMPLE), DeviceExtras(), onAction = {}) }
+private fun DeviceSimplePreview() = OpenSensorTheme { DeviceScreen(PreviewFakes.device(DetailLevel.SIMPLE), DeviceExtras(), onAction = {}) }
 
 @ThemePreviews
 @Composable
-private fun MetricHeroStatesPreview() = AqSyncTheme {
+private fun MetricHeroStatesPreview() = OpenSensorTheme {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         val now = System.currentTimeMillis()
         MetricHeroCard(LiveSample(pms = 4, pm25 = 9.4), now, DetailLevel.SIMPLE)
@@ -95,4 +95,4 @@ private fun MetricHeroStatesPreview() = AqSyncTheme {
 
 @ThemePreviews
 @Composable
-private fun DeviceDeveloperPreview() = AqSyncTheme { DeviceScreen(PreviewFakes.device(DetailLevel.DEVELOPER), DeviceExtras(), onAction = {}) }
+private fun DeviceDeveloperPreview() = OpenSensorTheme { DeviceScreen(PreviewFakes.device(DetailLevel.DEVELOPER), DeviceExtras(), onAction = {}) }

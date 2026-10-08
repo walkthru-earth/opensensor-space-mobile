@@ -38,9 +38,9 @@ interfaces.
 
 This is the target shape from [platform-parity-plan.md](platform-parity-plan.md). It is not
 today's code. Today Android runs `app/.../data/sync/SyncEngine.kt` and iOS runs a second engine in
-`ios/App/SensorTransfer.swift` and `SensorArchive.swift`. The ports `FrameLink`, `ArchiveStore`,
-`ArchiveIndex` and `CredentialStore` do not exist yet. `:core:sync` and `:core:archive` exist only
-as empty skeletons. Shared today are the wire codec, `ParquetVerify`, `Crc32` and `SafeName` in
+`ios/App/SensorTransfer.swift` and `SensorArchive.swift`. `:core:archive` holds the archive layout, verifier, records and the `ArchiveStore` and
+`ArchiveIndex` ports, which Android adapts in `app/.../data/archive/` and iOS adopts in wave 3. The
+ports `FrameLink` and `CredentialStore` do not exist yet. `:core:sync` is an empty skeleton. Shared today are the wire codec, `ParquetVerify`, `Crc32` and `SafeName` in
 `:core:protocol`, which the Swift engine does not call yet.
 
 ```mermaid
@@ -171,8 +171,8 @@ because the shared screens are Compose.
   actions for its other options.
 
 Never use Material's baseline colours on either platform. Both entry points wrap content in the
-brand theme (`AqSyncTheme` on Android, `OpenSensorTheme` on iOS), so nothing renders in the
-default purple.
+brand theme (`OpenSensorTheme` from `:ui:designsystem`, the same on Android and iOS), so nothing
+renders in the default purple.
 
 ### Health scales and charts (the global data rule)
 
@@ -220,10 +220,11 @@ logs and diagnostics. A new field states its level in code, and screenshot tests
 
 ### Copy
 
-Write user-facing text so both platforms say the same thing. A shared string catalogue does not
-exist yet. Android uses `res/values*/strings.xml`, Discover uses `DiscoverStrings.kt`, and the iOS
-screen keeps its strings in `:ios:shared` Kotlin. The plan moves them to Compose resources
-([platform-parity-plan.md](platform-parity-plan.md)).
+Write user-facing text so both platforms say the same thing. Shared screens keep their copy in
+Compose resources, one catalogue for both apps (`feature/<name>/src/commonMain/composeResources/values/strings.xml`,
+today Discover and Settings). Android-only screens still use `res/values*/strings.xml`, and the iOS
+companion screen keeps its strings in `:ios:shared` Kotlin until it moves
+([platform-parity-plan.md](platform-parity-plan.md)). `CopyRulesTest` checks every catalogue.
 No em dashes, colons or semicolons in user-facing copy. Errors say what happened and what to do,
 in words a person without the firmware docs understands.
 

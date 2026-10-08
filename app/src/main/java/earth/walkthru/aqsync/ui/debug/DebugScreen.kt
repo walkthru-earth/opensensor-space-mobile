@@ -19,10 +19,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.automirrored.rounded.Send
-import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -59,19 +55,20 @@ import earth.walkthru.aqsync.data.LogTailState
 import earth.walkthru.aqsync.data.ble.FrameDirection
 import earth.walkthru.aqsync.ui.components.CollectEvents
 import earth.walkthru.aqsync.ui.components.ConnectionBanner
-import earth.walkthru.aqsync.ui.components.InfoButton
-import earth.walkthru.aqsync.ui.components.InfoContent
-import earth.walkthru.aqsync.ui.components.InfoNote
 import earth.walkthru.aqsync.ui.components.NO_VALUE
-import earth.walkthru.aqsync.ui.components.SectionCard
-import earth.walkthru.aqsync.ui.components.StatLine
-import earth.walkthru.aqsync.ui.components.TickingText
 import earth.walkthru.aqsync.ui.components.TransportChip
-import earth.walkthru.aqsync.ui.components.WarningNote
 import earth.walkthru.aqsync.ui.components.agoFormatter
 import earth.walkthru.aqsync.ui.components.labelText
 import earth.walkthru.aqsync.ui.components.showDeviceEvent
+import earth.walkthru.opensensor.designsystem.AppIcons
 import earth.walkthru.opensensor.designsystem.FloatingControl
+import earth.walkthru.opensensor.designsystem.InfoButton
+import earth.walkthru.opensensor.designsystem.InfoContent
+import earth.walkthru.opensensor.designsystem.InfoNote
+import earth.walkthru.opensensor.designsystem.SectionCard
+import earth.walkthru.opensensor.designsystem.StatLine
+import earth.walkthru.opensensor.designsystem.TickingText
+import earth.walkthru.opensensor.designsystem.WarningNote
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -115,7 +112,7 @@ fun DebugScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = stringResource(R.string.action_back)) } },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(AppIcons.ArrowBack, contentDescription = stringResource(R.string.action_back)) } },
                 title = {
                     Column {
                         Text(stringResource(R.string.nav_debug), style = MaterialTheme.typography.titleLarge)
@@ -173,7 +170,7 @@ fun DebugScreen(
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 state.statusAtEpochMs?.let { at -> TickingText({ now -> ago(now - at) }) }
                                 IconButton(onClick = { viewModel.requestStatus() }, enabled = state.connection.isReady) {
-                                    Icon(Icons.Rounded.Refresh, contentDescription = stringResource(R.string.debug_request_status))
+                                    Icon(AppIcons.Refresh, contentDescription = stringResource(R.string.debug_request_status))
                                 }
                             }
                         },
@@ -238,7 +235,7 @@ fun DebugScreen(
                                 if (log is LogTailState.Loading) {
                                     CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                                 } else {
-                                    Icon(Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Icon(AppIcons.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                                 }
                                 Spacer(Modifier.width(6.dp))
                                 Text(stringResource(if (log is LogTailState.Idle) R.string.debug_log_fetch else R.string.debug_log_refresh))
@@ -299,7 +296,7 @@ fun DebugScreen(
                                 isError = state.rawError != null,
                             )
                             FilledTonalButton(onClick = { viewModel.sendRaw(hex) }, enabled = state.connection.isReady && !state.rawBusy, shape = FloatingControl.SmallShape) {
-                                if (state.rawBusy) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp) else Icon(Icons.AutoMirrored.Rounded.Send, contentDescription = stringResource(R.string.debug_raw_send))
+                                if (state.rawBusy) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp) else Icon(AppIcons.Send, contentDescription = stringResource(R.string.debug_raw_send))
                             }
                         }
                         state.rawError?.let {

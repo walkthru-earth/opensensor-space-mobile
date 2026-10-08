@@ -1,7 +1,7 @@
 # Transports — BLE, LAN, pairing, the token, reconnect
 
 **Scope:** the two byte pipes behind `AqTransport`, how the repository picks one, pairing, the LAN token lifecycle, link loss.
-**Code:** `data/ble/AqTransport.kt`, `BleTransport.kt`, `BleScanner.kt`, `DeviceSession.kt`; `data/lan/TcpTransport.kt`, `LanDiscovery.kt`, `LanTokenPolicy.kt`, `LanWifiLock.kt`; `data/TransportFactory.kt`; `data/DeviceConnectionManager.kt`, `DeviceConnectionRepository.kt` (`connect`, `tryLan`, `reconnectLoop`, `activeTransport`), `DeviceContinuityPolicy.kt`, `DeviceIdentityClaims.kt`; `ui/permissions/LanPermission.kt`.
+**Code:** Android `data/ble/BleTransport.kt`, `BleScanner.kt`; `data/lan/TcpTransport.kt`, `LanDiscovery.kt`, `LanWifiLock.kt`; `data/TransportFactory.kt`; `data/DeviceConnectionManager.kt`, `DeviceConnectionRepository.kt` (`connect`, `tryLan`, `reconnectLoop`, `activeTransport`), `DeviceIdentityClaims.kt`; `ui/permissions/LanPermission.kt`. Shared in `core/sync` commonMain: `data/ble/AqTransport.kt`, `DeviceSession.kt`, `FrameRecorder.kt`; `data/lan/LanTokenPolicy.kt`, `LanFailure.kt`; `data/DeviceContinuityPolicy.kt`, `TransportSelector.kt`, `ConnectionIntent.kt`. `core/protocol` `LanFrameSplitter.kt` (socket slices to frames).
 **Related:** [protocol-quickref.md](protocol-quickref.md), [sync-engine.md](sync-engine.md) (what runs on top), [background-sync.md](background-sync.md) (unattended links, WifiLock).
 
 ## Choosing a link

@@ -8,9 +8,6 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Bluetooth
-import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -21,6 +18,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.ble.BluetoothStatus
+import earth.walkthru.opensensor.designsystem.AppIcons
 import earth.walkthru.opensensor.permissions.AccessDialogTexts
 import earth.walkthru.opensensor.permissions.AccessHooks
 import earth.walkthru.opensensor.permissions.AccessKind
@@ -110,7 +108,7 @@ private fun accessTexts(kind: AccessKind): AccessDialogTexts = when (kind) {
         notNow = stringResource(R.string.action_not_now),
         openSettings = stringResource(R.string.perm_open_settings),
         cancel = stringResource(R.string.action_cancel),
-        icon = Icons.Rounded.Wifi,
+        icon = AppIcons.Wifi,
     )
     else -> AccessDialogTexts(
         rationaleTitle = stringResource(R.string.perm_bt_title),
@@ -121,7 +119,7 @@ private fun accessTexts(kind: AccessKind): AccessDialogTexts = when (kind) {
         notNow = stringResource(R.string.action_not_now),
         openSettings = stringResource(R.string.perm_open_settings),
         cancel = stringResource(R.string.action_cancel),
-        icon = Icons.Rounded.Bluetooth,
+        icon = AppIcons.Bluetooth,
     )
 }
 

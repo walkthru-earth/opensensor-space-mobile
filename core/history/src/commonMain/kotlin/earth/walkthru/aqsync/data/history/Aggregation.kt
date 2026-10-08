@@ -50,7 +50,7 @@ data class Bucket(
  * Pure aggregation of decoded columns into [Bucket]s for every metric in the registry. Feed it any
  * number of files (a UTC day's worth, in practice) through [add]; [buckets] returns one entry per
  * non-empty (resolution, start). Rows without UTC are skipped unless a [TimeEstimate.Anchor] dates
- * them (§4.6). Rows already seen under the same `(boot, sequence)` are skipped, like the daily file.
+ * them (§4.6). A row already seen under the same [RowKey] is skipped, as in the daily file and the day chart.
  */
 class Aggregator(
     private val station: String,
@@ -68,7 +68,7 @@ class Aggregator(
     }
 
     private val accs = HashMap<Pair<Resolution, Long>, Acc>()
-    private val seen = HashSet<Triple<Long, Long, Long>>()
+    private val seen = RowKeys()
     private val gateColumns: List<String> = metrics.mapNotNull { it.gate?.column }.distinct()
 
     /** Adds every timed row of [file]; with an [anchor] for the file's boot, unsynced rows get an estimated time. */
@@ -91,10 +91,7 @@ class Aggregator(
                 estimated = true
                 applicable?.estimateNs(m)
             } ?: continue
-            if (seq != null) {
-                val key = Triple(bootHi?.asLong(i) ?: 0L, bootLo?.asLong(i) ?: 0L, seq.asLong(i) ?: -1L)
-                if (key.third >= 0 && !seen.add(key)) continue
-            }
+            if (!seen.firstSight(bootHi?.asLong(i), bootLo?.asLong(i), seq?.asLong(i), ns)) continue
             val s = ns.floorDiv(1_000_000_000L)
             for (r in resolutions) {
                 val acc = accs.getOrPut(r to r.bucketStart(s)) { Acc(metrics.size) }

@@ -14,9 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ChevronLeft
-import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -54,20 +51,21 @@ import earth.walkthru.aqsync.data.history.MetricSpec
 import earth.walkthru.aqsync.data.history.Metrics
 import earth.walkthru.aqsync.ui.components.DeviceSectionTabs
 import earth.walkthru.aqsync.ui.components.DeviceTab
-import earth.walkthru.aqsync.ui.components.Eyebrow
-import earth.walkthru.aqsync.ui.components.InfoButton
-import earth.walkthru.aqsync.ui.components.InfoContent
-import earth.walkthru.aqsync.ui.components.InfoNote
 import earth.walkthru.aqsync.ui.components.LocalUnits
 import earth.walkthru.aqsync.ui.components.NO_VALUE
-import earth.walkthru.aqsync.ui.components.SectionCard
-import earth.walkthru.aqsync.ui.components.StatLine
 import earth.walkthru.aqsync.ui.components.TransportChip
 import earth.walkthru.aqsync.ui.components.labelText
 import earth.walkthru.aqsync.ui.components.titleText
 import earth.walkthru.aqsync.ui.theme.color
 import earth.walkthru.aqsync.ui.theme.textColorOnSurface
+import earth.walkthru.opensensor.designsystem.AppIcons
+import earth.walkthru.opensensor.designsystem.Eyebrow
 import earth.walkthru.opensensor.designsystem.FloatingControl
+import earth.walkthru.opensensor.designsystem.InfoButton
+import earth.walkthru.opensensor.designsystem.InfoContent
+import earth.walkthru.opensensor.designsystem.InfoNote
+import earth.walkthru.opensensor.designsystem.SectionCard
+import earth.walkthru.opensensor.designsystem.StatLine
 import kotlinx.datetime.toJavaZoneId
 import kotlinx.datetime.toKotlinTimeZone
 import java.time.Instant
@@ -156,9 +154,9 @@ fun HistoryScreen(
             }
             item(key = "span") {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { viewModel.page(-1) }) { Icon(Icons.Rounded.ChevronLeft, contentDescription = stringResource(R.string.history_page_earlier)) }
+                    IconButton(onClick = { viewModel.page(-1) }) { Icon(AppIcons.ChevronLeft, contentDescription = stringResource(R.string.history_page_earlier)) }
                     Text(spanLabel(state.range, state.window), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                    IconButton(onClick = { viewModel.page(1) }, enabled = state.canPageForward) { Icon(Icons.Rounded.ChevronRight, contentDescription = stringResource(R.string.history_page_later)) }
+                    IconButton(onClick = { viewModel.page(1) }, enabled = state.canPageForward) { Icon(AppIcons.ChevronRight, contentDescription = stringResource(R.string.history_page_later)) }
                 }
             }
             item(key = "chart") {

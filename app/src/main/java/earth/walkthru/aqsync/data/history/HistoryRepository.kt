@@ -135,7 +135,7 @@ class HistoryRepository @Inject constructor(
         val times = ArrayList<Long>()
         val values = ArrayList<Float>() // NaN = invalid / null
         val estimatedFlags = ArrayList<Boolean>()
-        val seen = HashSet<Triple<Long, Long, Long>>()
+        val seen = RowKeys()
         var estimatedRows = 0L
         for (f in files) {
             val file = archive.fileFor(f.station, f.name)
@@ -159,10 +159,7 @@ class HistoryRepository @Inject constructor(
                 } ?: continue
                 val s = Math.floorDiv(ns, 1_000_000_000L)
                 if (s < fromS || s >= toS) continue
-                if (seq != null) {
-                    val key = Triple(bootHi?.asLong(i) ?: 0L, bootLo?.asLong(i) ?: 0L, seq.asLong(i) ?: -1L)
-                    if (key.third >= 0 && !seen.add(key)) continue
-                }
+                if (!seen.firstSight(bootHi?.asLong(i), bootLo?.asLong(i), seq?.asLong(i), ns)) continue
                 val ok = metric.accepts(gate?.asLong(i))
                 val v = if (ok) col?.asDouble(i)?.toFloat()?.takeIf { it.isFinite() } else null
                 times += s

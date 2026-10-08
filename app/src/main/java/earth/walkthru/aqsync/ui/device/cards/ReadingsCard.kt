@@ -16,10 +16,11 @@ import earth.walkthru.aqsync.data.history.Metrics
 import earth.walkthru.aqsync.data.protocol.LiveSample
 import earth.walkthru.aqsync.data.protocol.PmsStatus
 import earth.walkthru.aqsync.data.settings.DetailLevel
-import earth.walkthru.aqsync.ui.components.BrandCard
-import earth.walkthru.aqsync.ui.components.Eyebrow
 import earth.walkthru.aqsync.ui.components.NO_VALUE
 import earth.walkthru.aqsync.ui.components.titleText
+import earth.walkthru.opensensor.designsystem.BigValue
+import earth.walkthru.opensensor.designsystem.BrandCard
+import earth.walkthru.opensensor.designsystem.Eyebrow
 
 /**
  * Detailed level: the other particle sizes beside the hero's PM2.5. Developer adds the CF=1 raw

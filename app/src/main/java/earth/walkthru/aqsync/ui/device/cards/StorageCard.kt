@@ -18,15 +18,15 @@ import androidx.compose.ui.unit.dp
 import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.protocol.DeviceStatus
 import earth.walkthru.aqsync.data.settings.DetailLevel
-import earth.walkthru.aqsync.ui.components.BrandCard
-import earth.walkthru.aqsync.ui.components.Eyebrow
 import earth.walkthru.aqsync.ui.components.NO_VALUE
-import earth.walkthru.aqsync.ui.components.StatLine
-import earth.walkthru.aqsync.ui.components.TickingText
-import earth.walkthru.aqsync.ui.components.WarningNote
 import earth.walkthru.aqsync.ui.components.agoFormatter
 import earth.walkthru.aqsync.ui.components.formatBytes
 import earth.walkthru.aqsync.ui.components.formatUptime
+import earth.walkthru.opensensor.designsystem.BrandCard
+import earth.walkthru.opensensor.designsystem.Eyebrow
+import earth.walkthru.opensensor.designsystem.StatLine
+import earth.walkthru.opensensor.designsystem.TickingText
+import earth.walkthru.opensensor.designsystem.WarningNote
 
 /**
  * Detailed level: the logger's storage counters and microSD use. Problem counters (dropped, errors,

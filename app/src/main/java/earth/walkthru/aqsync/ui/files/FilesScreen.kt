@@ -16,20 +16,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.CheckCircle
-import androidx.compose.material.icons.rounded.CloudOff
-import androidx.compose.material.icons.rounded.CloudSync
-import androidx.compose.material.icons.rounded.Download
-import androidx.compose.material.icons.rounded.Error
-import androidx.compose.material.icons.rounded.IosShare
-import androidx.compose.material.icons.rounded.LinkOff
-import androidx.compose.material.icons.rounded.MoreVert
-import androidx.compose.material.icons.rounded.Refresh
-import androidx.compose.material.icons.rounded.Stop
-import androidx.compose.material.icons.rounded.Sync
-import androidx.compose.material.icons.rounded.SyncLock
-import androidx.compose.material.icons.rounded.TableChart
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -74,16 +60,17 @@ import earth.walkthru.aqsync.ui.components.CollectEvents
 import earth.walkthru.aqsync.ui.components.ConnectionBanner
 import earth.walkthru.aqsync.ui.components.DeviceSectionTabs
 import earth.walkthru.aqsync.ui.components.DeviceTab
-import earth.walkthru.aqsync.ui.components.Eyebrow
-import earth.walkthru.aqsync.ui.components.MascotGuide
-import earth.walkthru.aqsync.ui.components.TickingText
 import earth.walkthru.aqsync.ui.components.TransportChip
 import earth.walkthru.aqsync.ui.components.agoFormatter
 import earth.walkthru.aqsync.ui.components.formatBytes
 import earth.walkthru.aqsync.ui.components.formatRate
 import earth.walkthru.aqsync.ui.components.showScreenMessage
 import earth.walkthru.aqsync.ui.permissions.rememberNotificationPermission
+import earth.walkthru.opensensor.designsystem.AppIcons
+import earth.walkthru.opensensor.designsystem.Eyebrow
 import earth.walkthru.opensensor.designsystem.FloatingTextButton
+import earth.walkthru.opensensor.designsystem.MascotGuide
+import earth.walkthru.opensensor.designsystem.TickingText
 
 @Composable
 fun FilesScreen(
@@ -143,23 +130,23 @@ fun FilesScreen(
                     },
                     actions = {
                         IconButton(onClick = { viewModel.refresh() }, enabled = state.connection.isReady && !state.manifest.isLoading) {
-                            Icon(Icons.Rounded.Refresh, contentDescription = stringResource(R.string.files_refresh))
+                            Icon(AppIcons.Refresh, contentDescription = stringResource(R.string.files_refresh))
                         }
-                        IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, contentDescription = stringResource(R.string.files_more)) }
+                        IconButton(onClick = { menu = true }) { Icon(AppIcons.MoreVert, contentDescription = stringResource(R.string.files_more)) }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                             val hasFiles = state.archived.isNotEmpty() && !state.exporting
                             // Background sync: a one-time WorkManager job (leave the app, watch the
                             // notification) and the per-device Auto-sync switch, both also on the Device screen.
                             DropdownMenuItem(
                                 text = { Text(stringResource(if (state.backgroundSyncActive) R.string.files_bg_queued else R.string.files_bg_sync)) },
-                                leadingIcon = { Icon(Icons.Rounded.CloudSync, contentDescription = null) },
+                                leadingIcon = { Icon(AppIcons.CloudSync, contentDescription = null) },
                                 enabled = state.connection.isReady && !state.sync.running && !state.backgroundSyncActive,
                                 onClick = { menu = false; withNotificationPermission { viewModel.syncNowInBackground() } },
                             )
                             state.autoSync?.let { on ->
                                 DropdownMenuItem(
                                     text = { Text(stringResource(if (on) R.string.files_autosync_on else R.string.files_autosync_off, AutoSyncScheduler.PERIOD_MINUTES.toInt())) },
-                                    leadingIcon = { Icon(if (on) Icons.Rounded.SyncLock else Icons.Rounded.Sync, contentDescription = null) },
+                                    leadingIcon = { Icon(if (on) AppIcons.SyncLock else AppIcons.Sync, contentDescription = null) },
                                     trailingIcon = { Switch(checked = on, onCheckedChange = null) },
                                     onClick = { menu = false; withNotificationPermission { viewModel.setAutoSync(!on) } },
                                 )
@@ -167,13 +154,13 @@ fun FilesScreen(
                             HorizontalDivider()
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.files_share_zip)) },
-                                leadingIcon = { Icon(Icons.Rounded.IosShare, contentDescription = null) },
+                                leadingIcon = { Icon(AppIcons.IosShare, contentDescription = null) },
                                 enabled = hasFiles,
                                 onClick = { menu = false; viewModel.shareZip() },
                             )
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.files_save_zip)) },
-                                leadingIcon = { Icon(Icons.Rounded.Download, contentDescription = null) },
+                                leadingIcon = { Icon(AppIcons.Download, contentDescription = null) },
                                 enabled = hasFiles,
                                 onClick = { menu = false; viewModel.saveZip() },
                             )
@@ -184,13 +171,13 @@ fun FilesScreen(
                             )
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.files_share_daily)) },
-                                leadingIcon = { Icon(Icons.Rounded.IosShare, contentDescription = null) },
+                                leadingIcon = { Icon(AppIcons.IosShare, contentDescription = null) },
                                 enabled = hasFiles,
                                 onClick = { menu = false; viewModel.shareDailyZip() },
                             )
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.nav_disconnect)) },
-                                leadingIcon = { Icon(Icons.Rounded.LinkOff, contentDescription = null) },
+                                leadingIcon = { Icon(AppIcons.LinkOff, contentDescription = null) },
                                 onClick = { menu = false; viewModel.disconnect(); onDisconnected() },
                             )
                         }
@@ -212,12 +199,12 @@ fun FilesScreen(
                     text = stringResource(R.string.files_stop),
                     onClick = { viewModel.cancelSync() },
                     primary = false,
-                    icon = { Icon(Icons.Rounded.Stop, contentDescription = null) },
+                    icon = { Icon(AppIcons.Stop, contentDescription = null) },
                 )
                 plan != null && plan.missingCount > 0 && state.connection.isReady -> FloatingTextButton(
                     text = pluralStringResource(R.plurals.files_sync_all, plan.missingCount, plan.missingCount, formatBytes(plan.missingBytes)),
                     onClick = { withNotificationPermission { viewModel.syncAll() } },
-                    icon = { Icon(Icons.Rounded.Download, contentDescription = null) },
+                    icon = { Icon(AppIcons.Download, contentDescription = null) },
                 )
             }
         },
@@ -422,12 +409,12 @@ private fun SyncProgressCard(sync: SyncProgress, level: DetailLevel) {
 @Composable
 private fun FileRow(entry: ManifestEntry, localTime: String?, showName: Boolean, showDetail: Boolean, canSync: Boolean, onSync: () -> Unit, onShare: () -> Unit, onInspect: (() -> Unit)? = null) {
     val (icon, tint, label) = when (entry.state) {
-        FileSyncState.SYNCED -> Triple(Icons.Rounded.CheckCircle, MaterialTheme.colorScheme.secondary, stringResource(R.string.file_synced))
+        FileSyncState.SYNCED -> Triple(AppIcons.CheckCircle, MaterialTheme.colorScheme.secondary, stringResource(R.string.file_synced))
         FileSyncState.SYNCING -> Triple(null, MaterialTheme.colorScheme.primary, stringResource(R.string.file_syncing, formatBytes(entry.partialBytes), formatBytes(entry.bytes)))
-        FileSyncState.PARTIAL -> Triple(Icons.Rounded.Download, MaterialTheme.colorScheme.tertiary, stringResource(R.string.file_partial, formatBytes(entry.partialBytes)))
-        FileSyncState.NOT_SYNCED -> Triple(Icons.Rounded.CloudOff, MaterialTheme.colorScheme.onSurfaceVariant, stringResource(R.string.file_not_synced))
-        FileSyncState.MISMATCH -> Triple(Icons.Rounded.Error, MaterialTheme.colorScheme.error, stringResource(R.string.file_mismatch))
-        FileSyncState.INVALID_NAME -> Triple(Icons.Rounded.Error, MaterialTheme.colorScheme.error, stringResource(R.string.file_invalid))
+        FileSyncState.PARTIAL -> Triple(AppIcons.Download, MaterialTheme.colorScheme.tertiary, stringResource(R.string.file_partial, formatBytes(entry.partialBytes)))
+        FileSyncState.NOT_SYNCED -> Triple(AppIcons.CloudOff, MaterialTheme.colorScheme.onSurfaceVariant, stringResource(R.string.file_not_synced))
+        FileSyncState.MISMATCH -> Triple(AppIcons.Error, MaterialTheme.colorScheme.error, stringResource(R.string.file_mismatch))
+        FileSyncState.INVALID_NAME -> Triple(AppIcons.Error, MaterialTheme.colorScheme.error, stringResource(R.string.file_invalid))
     }
     val clickable = when (entry.state) {
         FileSyncState.SYNCED -> true
@@ -468,11 +455,11 @@ private fun FileRow(entry: ManifestEntry, localTime: String?, showName: Boolean,
                     // Advanced mode: open the file in the app's Parquet reader (rows, time span, every column).
                     if (onInspect != null) {
                         IconButton(onClick = onInspect, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Rounded.TableChart, contentDescription = stringResource(R.string.file_metrics), tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                            Icon(AppIcons.TableChart, contentDescription = stringResource(R.string.file_metrics), tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                         }
                         Spacer(Modifier.width(4.dp))
                     }
-                    Icon(Icons.Rounded.IosShare, contentDescription = stringResource(R.string.file_share), tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                    Icon(AppIcons.IosShare, contentDescription = stringResource(R.string.file_share), tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                 }
             }
             if (entry.state == FileSyncState.SYNCING) {

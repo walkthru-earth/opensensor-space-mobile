@@ -15,12 +15,15 @@ flowchart TB
     HI[":core:history<br/>sensor rules, file index, aggregation, calendar windows"]
     PF[":core:publicfeed<br/>Discover feed port, H3, viewport cover, sample"]
     UN[":core:units<br/>display units, axis ticks"]
-    SK[":core:sync, :core:archive, :core:settings<br/>empty skeletons, planned"]
+    AR1[":core:archive<br/>layout, verifier, records, store ports"]
+    SE[":core:settings<br/>app preferences on DataStore, detail level"]
+    SY1[":core:sync<br/>device session, policies, planner, progress, LAN framing"]
   end
   subgraph ui["Compose Multiplatform, Android and iOS"]
     DS[":ui:designsystem<br/>tokens, theme, fonts, floating controls"]
     PM[":ui:permissions<br/>trigger table, permission policy, settings link"]
     DI[":feature:discover<br/>map, cell sheet, chart"]
+    FS[":feature:settings<br/>Settings screen and controller"]
   end
   APP[":app (Android)<br/>Hilt, Room v10, DataStore, WorkManager, Compose, zstd-jni"]
   IOS["ios/App (Xcode + Swift)<br/>Core Bluetooth, Bonjour, own sync engine and archive"]
@@ -28,8 +31,10 @@ flowchart TB
   HI --> PQ & PR & AQ
   PF --> PQ & AQ
   DI --> PF & UN & DS & PM
-  APP --> HI & PF & UN & DI & DS & PM
-  IS --> HI & PR & UN & DI & DS & PM
+  SE --> UN
+  FS --> SE & DS
+  APP --> HI & PF & UN & DI & DS & SE & FS & PM
+  IS --> HI & PR & UN & DI & DS & SE & FS & PM
   IOS --> IS
 ```
 
@@ -41,7 +46,7 @@ flowchart TB
 Tests live in `src/commonTest` (JVM and iOS simulator) or `src/jvmTest` / `src/iosTest`. Calendar
 windows use kotlinx-datetime. Android passes its `ZoneId` through `toKotlinTimeZone()`.
 
-`:ui:designsystem`, `:ui:permissions` and `:feature:discover` target Android (the AGP KMP library target, not `jvm`)
+`:ui:designsystem`, `:ui:permissions`, `:feature:discover` and `:feature:settings` target Android (the AGP KMP library target, not `jvm`)
 and iOS. `:ios:shared` targets iOS only, so its `commonMain` consumes them directly. It renders the
 current Compose iOS screen. `ios/App` supplies native app integration, Core Bluetooth, Bonjour
 discovery, and today a second sync engine and archive in Swift. The Android app remains a separate
@@ -51,8 +56,8 @@ platform entry point. See [ios-migration.md](ios-migration.md) for current scope
 
 The graph above is today's code. [platform-parity-plan.md](platform-parity-plan.md) moves toward
 the graph below, where every rule that must give the same answer on both phones is shared and
-platform code only adapts OS services. Nothing below `:core:sync`, `:core:archive` and
-`:core:settings` exists yet beyond their empty skeletons. `:core:model` (device families and metrics
+platform code only adapts OS services. `:core:sync`, `:core:archive`, `:core:settings` and
+`:feature:settings` exist. The sync engine itself and the store ports' Room KMP backing are wave 3. `:core:model` (device families and metrics
 as data) is planned in [production-readiness-plan.md](production-readiness-plan.md) W11 and
 [devices-and-discovery.md](devices-and-discovery.md).
 
@@ -62,8 +67,8 @@ flowchart TB
     MO[":core:model (planned)<br/>devices, families, capabilities, properties, scales"]
     PR2[":core:protocol"]
     SY[":core:sync (planned)<br/>engine behind FrameLink, ArchiveStore, ArchiveIndex, CredentialStore"]
-    AR[":core:archive (planned)<br/>layout, verifier, records, store ports"]
-    ST[":core:settings (planned)<br/>DataStore preferences"]
+    AR[":core:archive<br/>layout, verifier, records, store ports"]
+    ST[":core:settings<br/>DataStore preferences"]
     PQ2[":core:parquet"]
     HI2[":core:history"]
     PF[":core:publicfeed"]
@@ -147,7 +152,7 @@ flowchart LR
 | `data/background/` | `SyncForegroundService`, `SyncNotifications`, `SyncWorker`, `AutoSyncScheduler`, `AutoSyncRunner` (pure), `AppAutoSyncGateway`; triggers `CompanionPresence` + `CompanionPresenceService`, `AdvertFlagScan` + `AdvertScanReceiver`, `SyncTriggers` + `WifiArrivalReceiver` + `BootReceiver` | yes (runner: no) |
 | `data/history/` | `HistoryIndexer`, `HistoryDeriver`, `DailyDerived*`, `HistoryRepository`, `parquet/AppParquetCodecs` (ZSTD) | Room + files |
 | `data/local/database/` | `AppDatabase` (v10), `KnownDevice`, `StationEpoch`, `ArchivedFile`, `History.kt` (`MetricBucket`, `DerivedDay`) | yes |
-| `data/settings/AppSettings.kt` | DataStore: `DetailLevel` Simple · Detailed · Developer | yes |
+| `data/settings/AppSettings.kt` | Android view of `:core:settings` (`DetailLevel` Simple · Detailed · Developer, clock consent, units, public sensors) | yes |
 | `data/export/ExportManager.kt` | share / zip / SAF | yes |
 | `data/fake/FakeTransport.kt` | in-process protocol-v2 device with fault hooks | no (JVM) |
 | `ui/scan · device (Today, Device, NowCard) · history · files · debug · settings · permissions · theme` | Compose; `Navigation.kt`, `NavigationKeys.kt` | yes |
@@ -164,7 +169,9 @@ for iOS-specific guidance. SwiftUI review rules apply only if native SwiftUI vie
 | `publicfeed` → `publicfeed/` | `commonMain`: `Feed`, `ParquetFeedReader`, `H3`, `CellMap`, `CellScale`, `ViewportCover`, `TimeZoneRegions`. `jvmMain`: `UberH3Grid`. `iosMain`: `IosH3Grid` (vendored H3 C through cinterop) |
 | `units` → `units/` | `commonMain`: `Units`, `AxisTicks`. `jvmMain` and `iosMain`: `SystemUnits` (locale default) |
 | `airquality` → `airquality/` | `commonMain`: `HealthScale` (WHO 2021 guideline, interim targets, palette) |
-| `sync`, `archive`, `settings` | empty skeletons with one placeholder object each. Filled by [platform-parity-plan.md](platform-parity-plan.md) wave 2 |
+| `archive` → `data/archive/` | `commonMain`: `ArchiveLayout` (Hive paths, partials, derived days), `ArchiveVerifier` (size, CRC-32, `PAR1`), `ArchiveRecord`, `ArchivePorts` (`ArchiveStore`, `ArchiveIndex`). Android adapts the ports in `app/.../data/archive/`, iOS in wave 3 |
+| `sync` → `data/`, `data/ble/`, `data/lan/`, `data/sync/` (packages kept) | `commonMain`: `DeviceSession`, `AqTransport`, `FrameRecorder`, `DeviceContinuityPolicy`, `ManifestState`, `ConnectionIntent`, `SyncProgress`, `TransportSelector`, `LanTokenPolicy`, `LanFailure`, `SyncResumePolicy`, `ReadWindow`, `WindowRetryPolicy`, `SyncPlanner`, `FileProgress`, `FileProgressReporter`, `RateMeter`, `SyncLock` (`expect`). The engine (`SyncEngine`, `FileArchive`) stays in `app` until wave 3 |
+| `settings` → `settings/` | `commonMain`: `SettingsRepository` on DataStore preferences, `SettingsKeys`, `AppPrefs`, `DetailLevel`, `ClockSyncMode`. File `datastore/settings.preferences_pb` with Android's keys. `iosMain`: Application Support path and one-time UserDefaults import |
 
 ### Shared sync rules in `:core:protocol`
 

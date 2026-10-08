@@ -37,5 +37,7 @@ include(":ui:designsystem")
 // When each permission is asked and where its settings link goes, for both apps.
 include(":ui:permissions")
 include(":feature:discover")
+// The Settings screen, shared Compose for Android and iOS (docs/platform-parity-plan.md).
+include(":feature:settings")
 
 include(":ios:shared")

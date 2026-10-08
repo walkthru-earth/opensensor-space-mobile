@@ -12,11 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Lock
-import androidx.compose.material.icons.rounded.LockOpen
-import androidx.compose.material.icons.rounded.Visibility
-import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -45,19 +40,20 @@ import earth.walkthru.aqsync.data.WifiScanState
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.protocol.WifiState
-import earth.walkthru.aqsync.ui.components.BrandCard
-import earth.walkthru.aqsync.ui.components.CardHeader
-import earth.walkthru.aqsync.ui.components.InfoContent
-import earth.walkthru.aqsync.ui.components.InfoNote
 import earth.walkthru.aqsync.ui.components.NO_VALUE
-import earth.walkthru.aqsync.ui.components.OutlinePillButton
-import earth.walkthru.aqsync.ui.components.PillButton
-import earth.walkthru.aqsync.ui.components.SignalBars
-import earth.walkthru.aqsync.ui.components.StatLine
-import earth.walkthru.aqsync.ui.components.StatusDot
-import earth.walkthru.aqsync.ui.components.WarningNote
 import earth.walkthru.aqsync.ui.device.DeviceUiState
+import earth.walkthru.opensensor.designsystem.AppIcons
+import earth.walkthru.opensensor.designsystem.BrandCard
+import earth.walkthru.opensensor.designsystem.CardHeader
 import earth.walkthru.opensensor.designsystem.FloatingControl
+import earth.walkthru.opensensor.designsystem.InfoContent
+import earth.walkthru.opensensor.designsystem.InfoNote
+import earth.walkthru.opensensor.designsystem.OutlinePillButton
+import earth.walkthru.opensensor.designsystem.PillButton
+import earth.walkthru.opensensor.designsystem.SignalBars
+import earth.walkthru.opensensor.designsystem.StatLine
+import earth.walkthru.opensensor.designsystem.StatusDot
+import earth.walkthru.opensensor.designsystem.WarningNote
 
 /**
  * Wi-Fi on the device: state in words, scan, pick, passphrase, save and connect. The ViewModel
@@ -192,7 +188,7 @@ fun WifiCard(
                             trailingIcon = {
                                 IconButton(onClick = { showPsk = !showPsk }) {
                                     Icon(
-                                        if (showPsk) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
+                                        if (showPsk) AppIcons.VisibilityOff else AppIcons.Visibility,
                                         contentDescription = stringResource(if (showPsk) R.string.wifi_hide_passphrase else R.string.wifi_show_passphrase),
                                     )
                                 }
@@ -226,7 +222,7 @@ private fun AccessPointRow(ap: Frame.WifiAp, selected: Boolean, showDetails: Boo
     ) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(
-                if (ap.wifiAuth.secured) Icons.Rounded.Lock else Icons.Rounded.LockOpen,
+                if (ap.wifiAuth.secured) AppIcons.Lock else AppIcons.LockOpen,
                 contentDescription = stringResource(if (ap.wifiAuth.secured) R.string.wifi_secured else R.string.wifi_open),
                 tint = if (selected) FloatingControl.OnSelected else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(18.dp),

@@ -54,9 +54,7 @@ object LanFraming {
         if (b0 < 0) return null
         val b1 = input.read()
         if (b1 < 0) throw EOFException("stream ended inside a frame length")
-        val len = (b0 and 0xFF) or ((b1 and 0xFF) shl 8)
-        if (len == 0) throw FrameDecodeException("zero-length LAN frame")
-        if (len > maxLen) throw FrameDecodeException("LAN frame of $len bytes exceeds payload_max $maxLen")
+        val len = LanProtocol.frameLength(b0, b1, maxLen)
         val body = ByteArray(len)
         var got = 0
         while (got < len) {

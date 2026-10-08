@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Settings copy for Android and iOS, one catalogue. Copy rules (docs/screens.md, CopyRulesTest).
+  No em or en dashes, no colons or semicolons. Minimal copy, explanations live in the info sheet.
+  Compose resources keep a plain apostrophe, there is no backslash escape here.
+-->
+<resources>
+    <string name="settings_title">Settings</string>
+    <string name="info_settings_body1">The detail level changes only what you see. Every level reads the same data, and nothing is hidden from the archive or the export.</string>
+    <string name="info_settings_body2">Smart Sync never rewrites raw files. Finalizing buffered rows stays a separate confirmed action.</string>
+
+    <string name="settings_detail_level">Detail level</string>
+    <string name="level_simple">Simple</string>
+    <string name="level_detailed">Detailed</string>
+    <string name="level_developer">Developer</string>
+    <string name="settings_level_simple">The reading, today and sync.</string>
+    <string name="settings_level_detailed">Adds every measurement and file details.</string>
+    <string name="settings_level_developer">Adds identifiers and the Debug screen.</string>
+
+    <string name="settings_clock">Smart Sync clock</string>
+    <string name="clock_mode_ask_title">Ask first</string>
+    <string name="clock_mode_automatic_title">Automatic</string>
+    <string name="clock_mode_never_title">Never</string>
+    <string name="clock_mode_ask">Ask before sending this phone’s time.</string>
+    <string name="clock_mode_automatic">Send this phone’s time when the sensor clock is missing.</string>
+    <string name="clock_mode_never">Only copy files. You still see a warning for undated readings.</string>
+
+    <string name="settings_units">Units</string>
+    <string name="units_auto">Automatic</string>
+    <string name="units_metric">Metric</string>
+    <string name="units_imperial">Imperial</string>
+    <string name="settings_units_auto">Follows your phone's region, now %1$s</string>
+
+    <string name="settings_public_sensors">Show public sensors</string>
+    <string name="settings_public_sensors_body">When off, the map uses no internet and shows only sample data.</string>
+
+    <string name="settings_about">About</string>
+    <string name="settings_about_body">opensensor.space %1$s</string>
+    <string name="info_privacy">Bluetooth and your local Wi-Fi reach only your own sensors. No account, no analytics and no uploads. Approximate location is used only when you tap Near me, to move the map. Your files stay on this phone unless you share them.</string>
+    <string name="settings_fonts">Quicksand and Cairo fonts under the SIL Open Font License 1.1. Peacock mascot from opensensor.space.</string>
+    <string name="settings_more_about">More about %1$s</string>
+</resources>

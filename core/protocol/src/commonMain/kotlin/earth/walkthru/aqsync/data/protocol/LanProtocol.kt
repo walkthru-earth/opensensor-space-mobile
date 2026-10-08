@@ -35,6 +35,18 @@ object LanProtocol {
         return HANDSHAKE_MAGIC.encodeToByteArray() + token
     }
 
+    /**
+     * The body length from the two prefix bytes [lo] and [hi], checked against `1..maxLen`. A
+     * zero-length frame has no type byte to dispatch on, and an oversize one means framing is lost,
+     * so both throw [FrameDecodeException] and the caller drops the link.
+     */
+    fun frameLength(lo: Int, hi: Int, maxLen: Int): Int {
+        val len = (lo and 0xFF) or ((hi and 0xFF) shl 8)
+        if (len == 0) throw FrameDecodeException("zero-length LAN frame")
+        if (len > maxLen) throw FrameDecodeException("LAN frame of $len bytes exceeds payload_max $maxLen")
+        return len
+    }
+
     /** `len` u16 LE + body. */
     fun encode(body: ByteArray): ByteArray {
         require(body.size in 1..0xFFFF) { "frame body must be 1..65535 bytes, was ${body.size}" }

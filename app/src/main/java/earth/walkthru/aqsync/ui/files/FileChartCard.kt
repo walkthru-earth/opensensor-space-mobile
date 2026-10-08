@@ -9,9 +9,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -37,11 +34,12 @@ import earth.walkthru.aqsync.data.history.HistoryColumn
 import earth.walkthru.aqsync.data.history.HistoryRange
 import earth.walkthru.aqsync.data.history.MetricSpec
 import earth.walkthru.aqsync.data.history.Metrics
-import earth.walkthru.aqsync.ui.components.InfoButton
-import earth.walkthru.aqsync.ui.components.InfoContent
 import earth.walkthru.aqsync.ui.components.LocalUnits
 import earth.walkthru.aqsync.ui.history.BandColumnChart
+import earth.walkthru.opensensor.designsystem.AppIcons
 import earth.walkthru.opensensor.designsystem.FloatingControl
+import earth.walkthru.opensensor.designsystem.InfoButton
+import earth.walkthru.opensensor.designsystem.InfoContent
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -136,7 +134,7 @@ fun FileChartCard(
                 )
             }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { onPage(-1) }, enabled = state.canPageBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = stringResource(R.string.chart_older)) }
+                IconButton(onClick = { onPage(-1) }, enabled = state.canPageBack) { Icon(AppIcons.ArrowBack, contentDescription = stringResource(R.string.chart_older)) }
                 Spacer(Modifier.weight(1f))
                 Text(
                     stringResource(R.string.chart_page, state.offset + 1, state.offset + state.page.size, state.total),
@@ -144,7 +142,7 @@ fun FileChartCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.weight(1f))
-                IconButton(onClick = { onPage(1) }, enabled = state.canPageForward) { Icon(Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = stringResource(R.string.chart_newer)) }
+                IconButton(onClick = { onPage(1) }, enabled = state.canPageForward) { Icon(AppIcons.ArrowForward, contentDescription = stringResource(R.string.chart_newer)) }
             }
         }
     }

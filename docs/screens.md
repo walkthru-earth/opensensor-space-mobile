@@ -88,7 +88,7 @@ shared setting lands (platform-parity-plan.md, Wave 2).
 Every card shows a title, its value or state in words, and one primary action. A card may add one
 short supporting line when the state needs it (a warning, "Restart the sensor to apply the
 change"). Anything longer lives behind a small outlined **i** next to the card title:
-`InfoButton(InfoContent(title, paragraphs…))` in `ui/components/InfoButton.kt`, placed through
+`InfoButton(InfoContent(title, paragraphs…))` in `:ui:designsystem` (`InfoButton.kt`), placed through
 `CardHeader(title, info = …, trailing = { Switch(…) })`. It opens `InfoSheet`, a bottom sheet with
 the heading and short paragraphs. Its content description is "More about <title>". The same
 pattern serves radio options: pairing modes show only their label, and their descriptions are
@@ -152,27 +152,32 @@ palette `sensing`. `BrandTokensTest` pins every value and checks text contrast o
   website) for Arabic-script locales and for display numbers, because Quicksand has
   proportional digits and no `tnum` while Cairo's digits share one width. Both fonts and the
   type scale live in `:ui:designsystem` (`Typography.kt`, Compose resources under
-  `composeResources/font/`), so Android (`AqSyncTheme`) and iOS (`OpenSensorTheme`) render the
-  same faces. Each weight pins the variable `wght` axis through `FontVariation.Settings`, which
+  `composeResources/font/`), and both apps wrap content in the one `OpenSensorTheme`, so they
+  render the same faces. Each weight pins the variable `wght` axis through `FontVariation.Settings`, which
   Compose resources apply on Android and on iOS (Skia `makeClone`). The language comes from
   `Configuration.locales[0]` on Android and `NSLocale.preferredLanguages` on iOS.
   `TypographyTest` checks the Arabic-script rule, the tabular display styles and that every
   weight sits inside the bundled axis. License texts ship in `composeResources/files/licenses/`.
-- **Shape and components.** 32 dp card corners (`BrandCard`, tones Plain, Soft, Hero). Every
+- **Shape and components.** One content card radius, 32 dp (`CardShape`, used by `BrandCard`,
+  tones Plain, Soft, Hero). The components live in `:ui:designsystem` for both apps. Every
   control uses a curved card, never a circle or full pill. `PillButton` (Signal blue with ink
   text and a trailing arrow, the one primary action) and `OutlinePillButton` use
   `FloatingControl.Shape`. Chips, `MoodPill`, small buttons and segmented rows use
   `FloatingControl.SmallShape` (`FloatingControl.segmentShape`), tags and the transport chip use
   `FloatingControl.BadgeShape`. Selected chips, the active segment, the selected Wi-Fi network
   and the bottom bar indicator use `FloatingControl.chipColors`, `segmentedColors` and
-  `navigationItemColors`, Signal blue with ink text (6.5 to 1 contrast). Circles stay only for
+  `FloatingControl.Selected`, Signal blue with ink text (6.5 to 1 contrast). The bottom bar is
+  `BrandBottomBar`, one component for Android and iOS, its selected icon on a curved card, not a pill. Circles stay only for
   round things (status dots, the mascot, the mood face, ring charts, radio buttons and switches).
   `SignalBars` and `TiltedBadge` (the website's -5 degree icon tilt, hero only) complete the set.
+  Icons are `AppIcons`, the Material vectors the apps use, vendored node for node so neither app
+  ships `material-icons-extended`.
 - **Floating controls.** Anything over the map or a list uses `FloatingSurface`,
   `FloatingIconButton` or `FloatingTextButton` (the Scan and Sync all actions) and the
   `FloatingControl` shapes and tint (curved cards, Signal blue only for the selection).
   The rules are in `docs/cross-platform-guide.md`, "Floating controls".
-- **Mascot.** The peacock (`res/drawable-nodpi/peacock.webp`, from the website's
+- **Mascot.** The peacock (`ui/designsystem/src/commonMain/composeResources/drawable/peacock.webp`,
+  `Res.drawable.peacock`, from the website's
   `public/mascots/`) is a guide on the welcome and no-device states (Devices), the all-synced
   state (Files) and a clean Smart Sync run (Today). Never beside charts or numbers. It enters
   with a finite fade that the system animator setting can turn off.
@@ -206,7 +211,7 @@ no mood or standards band.
 | **Files** | Device manifest grouped by **local calendar day** (dated files: the SD path `day=` and the name's `HHMM` are UTC, so `FileGrouping` converts the window start to the phone's zone; the header's subtitle names the UTC folder(s), each row shows its local start time) then unsynced-boot / benchmarks / legacy. **Sync all** downloads what the archive lacks with per-file + overall progress and "recovered N lost windows". Per-file state: not synced · partial · syncing · synced (verified) · mismatch · invalid name. A `LIST` refresh (manual, post-connect, post-sync) keeps the previous list on screen — "refreshing…" while in flight, "Refresh failed: … — showing the last listing." on failure (`ManifestState.last`); the red full-width "LIST failed" card appears only when no listing exists yet. Share/Inspect resolves the exact storage `(INFO/enrolled station, filename)`, including legacy/benchmark paths and retained producer-station paths; missing ownership refuses a cross-device fallback. Menu: **Sync now in background** (expedited worker), **Auto-sync** toggle, table icon → Metrics (Detailed). | `SyncPlanner`, repository `sync` state |
 | **Export** (from Files) | Share one file or a zip of the raw archive; *Save to…* via SAF; **Share daily files (derived)** zips `derived/v1/<station>/day=….parquet` + manifests. | `ExportManager` |
 | **Device** | **Auto-sync** card (any proto): per-device switch; **wake when nearby** line + *Set up wake when nearby* (one system dialog; a BLE session is dropped for it and restored) / *Turn off*. Waveshare: **air quality sensor** card selects the supported Plantower PMS5003T, scans its barcode with Google Code Scanner or accepts manual sticker entry, shows the batch, and offers an opt-in unvalidated batch estimate for the reviewed 2026-04-08 batch. Board acknowledgement precedes the phone's installation history entry. Barcode scanning may download a Google Play services module on first use; manual entry remains available. v2 (Detailed): Bluetooth pairing mode (Random code, Fixed PIN, No code, descriptions in the card's info sheet), **Restart device** (confirm). The default PIN warning and the pending restart notice also show at Simple. **Wi-Fi**: state/IP/RSSI, *Scan networks* → pick → hidden passphrase → *Save and connect*, polled while `connecting`, radio on/off. **LAN**: server on/off, token held?, *Get Wi-Fi token* (BLE only), *Replace token* (Detailed, confirm), *Allow local network* (API 37+, asked from the action). **Forget all paired phones** (Detailed, confirm). Every write is one validated `SET_CONFIG`. Worker-owned sessions mark controls busy; interactive sync/config/raw commands wait for that run to finish. Disruptive buttons are disabled while a sync runs (`canDisrupt = canEdit && !syncRunning`). | `DeviceSession.getConfig/setConfig/wifiScan/reboot/getToken` via repository |
-| **Settings** (tab) | **Detail level** plus Smart Sync clock consent: **Ask first** (default), **Automatic**, or **Never**, one short line each. **Show public sensors**, the one switch for Discover network use. **Units**, Automatic (default, the phone's measurement system, imperial for the US, Liberia and Myanmar), Metric or Imperial, applied live to every reading, chart label and spoken summary on Today, History, Files and Discover. Conversion lives once in `:core:units` (°C to °F, hPa to inHg, mm to in, m/s and km/h to mph, m to ft, km to mi and a few more). µg/m³, ppm, %, mV and unknown units pass through. Bands, moods, colours, chart geometry and stored data stay SI. Same row on iOS. Notes behind the info button. About shows the version and the one line privacy note. Device settings stay in the Device section. | `AppSettings.setDetailLevel`, `setClockSyncMode`, `setUnitSystem` |
+| **Settings** (tab) | **Detail level** plus Smart Sync clock consent: **Ask first** (default), **Automatic**, or **Never**, one short line each. **Show public sensors**, the one switch for Discover network use. **Units**, Automatic (default, the phone's measurement system, imperial for the US, Liberia and Myanmar), Metric or Imperial, applied live to every reading, chart label and spoken summary on Today, History, Files and Discover. Conversion lives once in `:core:units` (°C to °F, hPa to inHg, mm to in, m/s and km/h to mph, m to ft, km to mi and a few more). µg/m³, ppm, %, mV and unknown units pass through. Bands, moods, colours, chart geometry and stored data stay SI. One shared screen and copy for both apps (`:feature:settings`). iOS hides the clock consent until it has Smart Sync. Notes behind the info button. About shows the version, the one line privacy note and the font licence. Device settings stay in the Device section. | `SettingsController` over `SettingsRepository` (`:core:settings`) |
 | **Metrics** (Detailed) | One archived file through the app's own reader: rows, row groups, schema/writer version, codec, footer size, UTC/uptime span, sequence range, PMS-valid rows, per-row-group spans from footer statistics, every column decoded (nulls/min/max/first/last/"footer agrees"), key/value metadata. The archive copy is never touched. | `ParquetFile` (`:core:parquet`) |
 | **Debug** (Developer) | Active transport + endpoint + `payload_max`; Smart Sync decision trace and archive time accounting (real / same-boot estimate / unplaceable); live `status` JSON; last 200 raw frames (dir, type, len, first 16 bytes; `TOKEN` and `SET_CONFIG` redacted); **Device log** (`LOG_TAIL 8192`); **Raw command** (hex → decoded frames; refuses `REBOOT` and `SET_CONFIG`, which need the Device screen's confirmation). | `FrameRecorder`, `DeviceSession.raw`, repository diagnostics |
 

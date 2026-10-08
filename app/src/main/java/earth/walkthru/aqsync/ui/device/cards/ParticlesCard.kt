@@ -16,9 +16,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.protocol.LiveSample
-import earth.walkthru.aqsync.ui.components.BrandCard
-import earth.walkthru.aqsync.ui.components.Eyebrow
 import earth.walkthru.aqsync.ui.components.NO_VALUE
+import earth.walkthru.opensensor.designsystem.BrandCard
+import earth.walkthru.opensensor.designsystem.Eyebrow
 
 /** Detailed level: particle counts per 0.1 L by size bin. */
 @Composable

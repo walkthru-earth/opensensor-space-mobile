@@ -204,6 +204,8 @@ dependencies {
     implementation(project(":core:protocol"))
     implementation(project(":core:parquet"))
     implementation(project(":core:history"))
+    // Request session, sync policies, planner and progress maths, shared with iOS.
+    implementation(project(":core:sync"))
     // The Discover map (shared Compose with iOS) and the public feed port behind it.
     implementation(project(":feature:discover"))
     implementation(project(":ui:designsystem"))
@@ -211,6 +213,10 @@ dependencies {
     implementation(project(":ui:permissions"))
     implementation(project(":core:publicfeed"))
     implementation(project(":core:units"))
+    // App preferences on the shared DataStore, same file and keys as before (data/settings).
+    implementation(project(":core:settings"))
+    // The Settings screen, shared Compose with iOS.
+    implementation(project(":feature:settings"))
     h3Natives(libs.h3)
     // ZSTD pages of external GeoParquet (PyArrow/GDAL default in many pipelines): the one native library,
     // registered into :core:parquet's codec SPI by data/history/parquet/AppParquetCodecs. Prebuilt AAR;
@@ -275,8 +281,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
 
-    // Icons and SAF helpers
-    implementation(libs.androidx.compose.material.icons.extended)
+    // SAF helpers. Icons are vendored vectors in :ui:designsystem (AppIcons), not material-icons-extended.
     implementation(libs.androidx.documentfile)
     // System-hosted barcode UI; no app camera permission. Manual entry remains available offline.
     implementation(libs.google.code.scanner)
