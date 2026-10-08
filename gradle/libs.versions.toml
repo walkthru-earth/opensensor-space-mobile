@@ -25,7 +25,7 @@ kotlinxDatetime = "0.8.0"
 androidxDocumentfile = "1.1.0"
 androidxDatastore = "1.2.1"
 androidxWork = "2.12.0"
-zstdJni = "1.5.7-17"
+zstdJni = "1.5.7-20"
 googleCodeScanner = "16.1.0"
 # Discover map (docs/devices-and-discovery.md). maplibre-compose pins Kotlin 2.4.20 and CMP 1.12.1.
 maplibreCompose = "0.19.0"
