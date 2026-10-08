@@ -142,7 +142,7 @@ tests, `docs/lessons-learned.md`, `docs/transports.md`, `docs/sync-engine.md`,
   token-based Material 3 theme with light and dark schemes. Air-quality band colours stay
   scientific and independent of brand colours.
 - Progressive disclosure through the existing detail level. Simple shows what a person needs
-  (air now, today, sync state, one primary action). Detailed adds per-file and per-metric detail.
+  (the headline readings now, today, sync state, one primary action). Detailed adds per-file and per-metric detail.
   Developer alone shows raw frames, logs, CRC, offsets, handles, schema names and diagnostics.
 - Split oversized screens into a stateful route and a stateless `Screen(state, onAction)`, one
   file per card. Move the Wi-Fi polling loop out of the composable.
@@ -192,6 +192,27 @@ face, now card, band chart drawn with `drawText` and `drawWithCache`) to a Compo
 semantics for charts and live regions, previews and host screenshot tests, a device shell for
 tab navigation, `SavedStateHandle` for selections.
 
+**W11 Device-agnostic domain.** Owns new `:core:model`, `Metrics.kt`, `AirMood.kt` and the
+capability mapping in `:core:history`. Adds `Device`, `DeviceFamily`, `Capability`,
+`ObservedProperty`, `Datastream` and `Scale`, following the firmware observation model. Air
+quality becomes one family and `AirMood` one scale. Screens ask for capabilities, never schema
+strings. A bundled dictionary per known schema ID is the fallback until the firmware dictionary
+ships. Why. The product covers many sensor kinds, and a new family must be data, not new code.
+See [devices-and-discovery.md](devices-and-discovery.md).
+
+**W12 Discover map with sample data.** Starts after W9 and W11 merge. Owns new
+`:core:publicfeed`, `:feature:discover` (Compose Multiplatform `commonMain`) and
+`tools/discover-fixture/`, plus the navigation wiring in both apps.
+- A `PublicFeed` port with a JSON fixture source in the shape of the proposed feed contract,
+  made by a committed Python `h3` script. The map labels it "Sample data".
+- A map with H3 cells coloured by the chosen metric and window, a cell sheet with avg, min and
+  max per metric and the device list (crowd rule of three), and a public device page with range,
+  aggregation and metric filters.
+- MapLibre through `maplibre-compose`, or an `expect`/`actual` MapLibre Native wrapper if it does
+  not fit the pinned Kotlin and CMP versions. One GeoJSON source and no composable per cell.
+- No location permission. Centre on the last viewed area or the time zone region.
+- Discover is the start tab when no device is paired.
+
 ### Wave 3 (after Wave 2)
 
 - iOS adopts `:core:sync`. Swift keeps only Core Bluetooth, Network.framework, Keychain and
@@ -200,6 +221,9 @@ tab navigation, `SavedStateHandle` for selections.
   `beginBackgroundTask` fallback, Core Bluetooth state restoration.
 - Android platform rules. Connection priority and 2M PHY during transfers (measured first),
   user-initiated data transfer jobs, notification IDs derived from work IDs.
+- Real public feed. The host publisher writes cell and device Parquet to S3 or source.coop. The
+  phone reads it with the portable Parquet reader, caches with ETags, and has a Settings switch.
+- Opt-in publishing of an owned device to an owner-chosen H3 cell, with a random public ID.
 - Feature modules (`:feature:today`, `:feature:history`, `:feature:files`, `:feature:device`)
   and baseline profiles once R8 is proven on a phone.
 

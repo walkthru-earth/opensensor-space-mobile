@@ -105,12 +105,13 @@ flowchart LR
 3. Add the transport choice to the shared transport selection policy and its tests.
 4. No change to the engine, verify or archive code should be needed. If one is, the port is wrong.
 
-### Adding a sensor type
+### Adding a sensor type or device family
 
-1. Add the metric to the shared metric registry and live profile in `:core:history` `commonMain`.
-2. Add a capability entry (what the device can do) to the shared capability mapping, never a
-   schema string check in a screen.
-3. Both platforms pick it up through shared presentation and design system code.
+Air quality is one family among many. Follow "Adding a device family" in
+[devices-and-discovery.md](devices-and-discovery.md). In short, the firmware contract names the
+properties, `:core:model` gets a dictionary and a `DeviceFamily` entry with `commonTest`
+coverage, and screens pick it up through capabilities and the generic `MetricCard`. Never a
+schema string check in a screen.
 
 ## Design parity
 
@@ -144,7 +145,7 @@ Shared screens still respect each OS where people notice:
 
 ### Simple by default
 
-Every screen designs for the Simple detail level first. Simple shows the air now, today's
+Every screen designs for the Simple detail level first. Simple shows the headline readings now, today's
 summary, sync state in words, and one primary action. Detailed adds per-file and per-metric
 information. Developer alone shows raw frames, offsets, handles, CRC values, schema names,
 logs and diagnostics. A new field states its level in code, and screenshot tests cover Simple.
