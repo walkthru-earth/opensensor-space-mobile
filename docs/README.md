@@ -1,15 +1,28 @@
-# docs/ — shared mobile project guide, by concern
+# docs/, the shared mobile project guide, by concern
 
 One file per concern. Each starts with a **Scope / Code / Related** header so you can decide in a
 few lines whether it is the right file, then a compact Mermaid diagram, then the facts and the
 decisions that belong to that concern only. Current verification is recorded in [status.md](status.md); dated results describe their original revision.
+
+## Product direction in one paragraph
+
+opensensor.space supports open sensors of every kind, and air quality is the first family. A new
+user lands on a public H3 discover map (sample data until the S3 and source.coop feed is live),
+then pairs and collects their own devices over BLE or LAN into a verified local archive. Simple
+screens explain readings in plain words. Technical detail lives behind the Detailed and
+Developer levels. Android and iOS share rules, sync and design. Read
+[devices-and-discovery.md](devices-and-discovery.md), [cross-platform-guide.md](cross-platform-guide.md)
+and [production-readiness-plan.md](production-readiness-plan.md) before planning new work. Older
+files describe the current Android-first, air-quality-first implementation and stay accurate for
+that code until the plan's workstreams replace it.
 
 ## Routing table
 
 | I need to… | Read | Then open the code in |
 | --- | --- | --- |
 | Know what is verified on Android, iOS simulator, and real devices | [status.md](status.md) | `../aq-parquet/docs/boards/*/bench-verified.md` |
-| Keep design and sync behaviour the same on iOS and Android, add a sensor or transport | [cross-platform-guide.md](cross-platform-guide.md) | `core/*/src/commonMain/`, `ios/App/`, `app/` |
+| Keep design and sync behaviour the same on iOS and Android, add a sensor family or transport | [cross-platform-guide.md](cross-platform-guide.md) | `core/*/src/commonMain/`, `ios/App/`, `app/` |
+| Understand the product direction, device families, the public H3 discover map and sharing rules | [devices-and-discovery.md](devices-and-discovery.md) | `core/`, planned `feature/discover/` |
 | See the production refactor plan and its workstreams | [production-readiness-plan.md](production-readiness-plan.md) | every module |
 | Understand the opensensor.space rebrand, concurrent multi-device collection and reset/reflash recovery | [opensensor-space.md](opensensor-space.md) (implementation and remaining qualification) | `data/DeviceConnectionRepository.kt`, `data/background/`, `data/sync/`, `ui/`; new firmware owner `../aq-parquet/docs/shared/` |
 | Build or extend the iOS app and shared Kotlin core | [ios-migration.md](ios-migration.md), `../ios/AGENTS.md` | `core/*/src/commonMain/`, `ios/` |
@@ -24,17 +37,19 @@ decisions that belong to that concern only. Current verification is recorded in 
 | Touch the Parquet reader/writer, GeoParquet, codecs, fixtures, oracles | [parquet.md](parquet.md) | `core/parquet/`, `tools/*.py` |
 | Build, sign, release, run hooks/CI, use the fake device | [build-and-release.md](build-and-release.md) | `tools/`, `.github/workflows/`, `data/fake/` |
 | Avoid a mistake that was already made | [lessons-learned.md](lessons-learned.md) | (grouped by the concern above) |
-| The long-form evaluation: history UX, data layer, iOS parity, D1–D11 | [history-ux-and-data-layer.md](history-ux-and-data-layer.md) | — |
+| The long-form evaluation: history UX, data layer, iOS parity, D1–D11 (its location section is superseded by H3 cells) | [history-ux-and-data-layer.md](history-ux-and-data-layer.md) | — |
 | What the AirGradient Android app does differently, and verdicts | [review-airgradient-android.md](review-airgradient-android.md) | — |
 
 Rules (non-negotiables and AI delegation guidance) live in [`../AGENTS.md`](../AGENTS.md).
 The iOS app boundary is documented in [`../ios/AGENTS.md`](../ios/AGENTS.md). The protocol
-contract lives in the firmware repo: `../aq-parquet/docs/shared/ble-sync-protocol.md` — never here.
+contract lives in the firmware repo, `../aq-parquet/docs/shared/ble-sync-protocol.md`, never here.
 
 ## How the concerns connect
 
 ```mermaid
 flowchart LR
+  F[devices-and-discovery] --> U[screens]
+  F --> D
   P[protocol-quickref] --> T[transports]
   T --> S[sync-engine]
   S --> B[background-sync]
@@ -42,15 +57,18 @@ flowchart LR
   D --> H[history-pipeline]
   Q[parquet] --> S
   Q --> H
-  H --> U[screens]
+  H --> U
   T --> U
   B --> U
+  X[cross-platform-guide] -.rules for.-> S & U & F
 ```
 
 Read left to right: a byte on the wire (`protocol`) travels a pipe (`transports`), is verified and
-archived (`sync-engine`) — interactively or by the worker (`background-sync`) — into files + Room
+archived (`sync-engine`), interactively or by the worker (`background-sync`), into files + Room
 (`data-model`), which the `history-pipeline` turns into tiers and charts for the `screens`.
 `parquet` is the codec both the sync verifier and the history pipeline read with.
+`devices-and-discovery` defines what a device and a metric are, and the public map that sits
+beside your own devices. `cross-platform-guide` holds the rules that keep both phones the same.
 
 ## Conventions in these files
 

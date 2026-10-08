@@ -1,7 +1,7 @@
-# Build, verify, release — stack, hooks, CI, signing, the fake device
+# Build, verify, release. Stack, hooks, CI, signing, the fake device
 
 **Scope:** toolchain versions, permissions declared, the `verify` gate, git hooks, GitHub Actions, release signing, and the debug-only fake device used by tests and demos.
-**Code:** `gradle/libs.versions.toml`, `build.gradle.kts` (`verify`), `app/build.gradle.kts`, `.pre-commit-config.yaml`, `.editorconfig`, `.github/workflows/{verify,release}.yml`, `tools/setup-hooks.sh`, `tools/setup-signing.sh`, `data/fake/FakeTransport.kt`, `AndroidManifest.xml`.
+**Code:** `gradle/libs.versions.toml`, `gradle.properties`, `build.gradle.kts` (`verify`), `app/build.gradle.kts`, `app/src/main/keepRules/aqsync.keep`, `app/lint-baseline.xml`, `.pre-commit-config.yaml`, `.editorconfig`, `.github/workflows/{verify,release}.yml`, `.github/dependabot.yml`, `tools/setup-hooks.sh`, `tools/setup-signing.sh`, `data/fake/FakeTransport.kt`, `AndroidManifest.xml`.
 **Related:** [architecture.md](architecture.md) (modules the gate builds), [status.md](status.md) (what the gate proves and what it cannot).
 
 ## Gate
@@ -13,20 +13,25 @@ flowchart LR
   V --> T[":app lintDebug + assembleDebug + testDebugUnitTest<br/>+ every :core module's test"]
   GH[GitHub push / PR] --> W["verify.yml: pre-commit --all-files + ./gradlew verify → debug APK + reports"]
   GH --> I["verify.yml: macOS → Kotlin iOS tests + unsigned simulator Debug / device Release builds"]
-  GH --> R["release.yml: main → rolling 'latest' pre-release · v* tag → permanent release"]
+  GH --> R["release.yml: apk job (read-only, R8 + signing) → publish job (contents: write) · main → rolling 'latest' · v* tag → permanent release"]
 ```
 
 ```sh
 export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"   # JBR (JDK 25) or any JDK ≥ 17
 tools/setup-hooks.sh                 # once per clone
-./gradlew --no-daemon clean verify   # the gate; everything must pass before a commit
-python3 tools/validate_station_epoch_migration.py   # stdlib SQLite, actual v8→v9 SQL vs Room exports
+./gradlew --no-daemon clean verify verifyIos   # the gate; verifyIos needs macOS with Xcode
+python3 tools/validate_station_epoch_migration.py        # stdlib SQLite, actual v8→v9 SQL vs Room exports
+python3 tools/validate_sensor_installation_migration.py  # v9→v10
+./gradlew --no-daemon :app:assembleRelease -Paqsync.localRelease=true   # R8 check, debug key, never publish
 adb install app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Lint errors fail the build by design; **14 existing warnings** are known at 2026-09-29 (seven source warnings and seven
-dependency-update notices) — do not add more
-carelessly. `testOptions.unitTests.isReturnDefaultValues = true` so `android.util.Log` in a class
+Lint fails the build on errors and on any new warning (`warningsAsErrors = true`). Warnings that
+existed on 2026-10-08 are recorded in `app/lint-baseline.xml`. Fix a baselined warning rather than
+adding to the file. Regenerate it with `./gradlew :app:updateLintBaseline` only after reviewing every
+new entry. The dependency version notices (`GradleDependency`, `NewerVersionAvailable`,
+`AndroidGradlePluginVersion`) are disabled because Dependabot owns updates and those checks would
+fail the gate on a date rather than on a code change. `testOptions.unitTests.isReturnDefaultValues = true` so `android.util.Log` in a class
 under JVM test does not throw. A ktlint hook that reformats a file fails the commit once; re-stage
 and commit again. CI has **no phone or Android emulator**; the iOS job runs shared Kotlin
 tests on a simulator. BLE, mDNS, permissions and background behavior require hardware
@@ -37,9 +42,9 @@ checks, recorded separately in [status.md](status.md) and the firmware repo's `b
 | | |
 | --- | --- |
 | Language / UI | Kotlin 2.4.20, Jetpack Compose (BOM 2026.09.00, material3 1.4.0), Material 3 dynamic color, Navigation 3 (1.1.7) |
-| DI / data | Hilt 2.60.1, Room 2.8.5 (**schema v9**), DataStore Preferences 1.2.1, WorkManager 2.11.2 + `androidx.hilt:hilt-work` 1.4.0, kotlinx.serialization 1.11.0, coroutines 1.11.0 |
-| Native | `zstd-jni` 1.5.7-17 (`@aar`) — the only native library |
-| Build | AGP 9.4.0, Gradle 9.7.1, KSP 2.3.12, version catalog; Parquet stays JVM, protocol and sensor-domain logic target JVM (Java 17) and iOS |
+| DI / data | Hilt 2.60.1, Room 2.8.5 (**schema v10**), DataStore Preferences 1.2.1, WorkManager 2.11.2 + `androidx.hilt:hilt-work` 1.4.0, kotlinx.serialization 1.11.0, coroutines 1.11.0 |
+| Native | `zstd-jni` 1.5.7-17 (`@aar`), the only native library |
+| Build | AGP 9.4.0, Gradle 9.7.1 (configuration cache on), KSP 2.3.12, version catalog, R8 for release; Parquet stays JVM, protocol and sensor-domain logic target JVM (Java 17) and iOS |
 | SDK | `compileSdk`/`targetSdk` **37**, `minSdk` **31** (modern Bluetooth permission model; no legacy branches) |
 | Style | ktlint `intellij_idea`, `max_line_length = off`, house rules off (`{ a; b }` one-liners, compact `when`, one-line enums, `_x` backing fields, `function-signature`) |
 
@@ -112,7 +117,7 @@ Its cache choice follows the [Gradle action documentation](https://github.com/gr
 Local checks use the Xcode version actually installed on the developer's Mac;
 record hosted results separately against the run's exact commit.
 
-Local validation on 2026-10-08 used Xcode 27.0 (27A266a): all **17 common iOS tests**
+Local validation on 2026-10-08 used Xcode 27.0 (27A266a). All common iOS tests
 passed on the installed iOS 26.5 simulator; unsigned Debug simulator and optimized
 Release device builds passed with the iOS 27 SDK. Simulator app/result-bundle ZIP
 packaging and workflow linting also passed. This confirms local compilation with
@@ -165,6 +170,50 @@ Both host migration validators run in verification and release CI:
 stops at the next migration declaration so later migrations cannot contaminate
 earlier fixtures.
 
+## Gradle settings (`gradle.properties`)
+
+The build cache, parallel execution and the configuration cache are on. The configuration cache
+uses the stable key `org.gradle.configuration-cache=true` with `problems=fail`, so a build script
+that reads the environment or files outside providers fails at once instead of silently disabling
+the cache. The Gradle daemon has a 4 GB heap and the Kotlin daemon 3 GB, sized for Kotlin/Native
+linking of the iOS framework and R8 on the release APK. A second run of the gate reports
+"Configuration cache entry reused".
+
+## Release build optimization (R8)
+
+The release build type uses the AGP 9.3+ `optimization { enable = true }` block, which turns on R8
+code optimization and resource shrinking with the default `proguard-android-optimize` rules. Project
+keep rules live in `app/src/main/keepRules/aqsync.keep`, the source set the new DSL reads. See
+[Enable app optimization](https://developer.android.com/topic/performance/app-optimization/enable-app-optimization).
+
+| Rule | Why |
+| --- | --- |
+| `-keep class com.github.luben.zstd.** { *; }` | zstd-jni native code looks up its Java classes, fields and methods by name |
+| `-keepnames class * extends java.lang.Throwable` | messages fall back to `e::class.simpleName`, which people and diagnostics see |
+| `-keepnames` for `ConnectionState`, `Frame`, `Request` and their subtypes | their simple names appear in the Debug screen, frame log and protocol errors |
+| `-keepattributes InnerClasses,EnclosingMethod` | `getSimpleName` of a nested class reads these attributes |
+| kotlinx.serialization companion rules for `earth.walkthru.aqsync.**` | `serializer<T>()` lookups of the app's `@Serializable` types, in addition to the library's consumer rules |
+| `-keepnames class * implements NavKey` | Navigation 3 saves keys by class name and restores them with `Class.forName` |
+| `-keepattributes SourceFile,LineNumberTable` | readable stack traces after retrace |
+
+Each release publishes `mapping-<version>.txt` next to the APK, and the release workflow fails if
+the mapping is missing. Retrace a stack trace with `retrace` from the Android SDK command-line tools
+and that mapping.
+
+**Local check without the release key.** `-Paqsync.localRelease=true` lets
+`./gradlew :app:assembleRelease -Paqsync.localRelease=true` build the minified release signed with
+the debug key. Without the flag, release tasks still require all four `AQSYNC_*` signing variables.
+The flag is refused when `CI` is set, so it can not produce a published artifact. A debug-signed
+release can not update an installed release build, so uninstall first when testing it on a phone.
+
+Host evidence on 2026-10-08 (AGP 9.4.0, local machine, not a phone run). The unminified universal
+release APK was 55,080,672 bytes and the minified one 6,596,149 bytes. `mapping.txt` was produced.
+`dexdump` showed the `com.github.luben.zstd` classes, the four zstd-jni native ABIs, readable
+`ConnectionState`, `Frame` and exception class names, and `InnerClass` annotations on nested
+states. **R8 runtime behavior is not yet qualified on a phone.** Before the first tagged release
+with R8, install the minified APK on a phone and check BLE and LAN sync, ZSTD GeoParquet import,
+History charts, background sync, error messages and back stack restore after process death.
+
 ## Permissions (`AndroidManifest.xml`)
 
 | Permission | Why | Runtime? |
@@ -189,11 +238,12 @@ qualify a controlled v8→v9 Android Room migration; that scenario remains unver
 
 ## Releases
 
-Every push to `main` refreshes the rolling **`latest`** pre-release (one universal APK — no native
-ABI split matters since the app is Android 12+ and `zstd-jni` ships all ABIs — plus
+Every push to `main` refreshes the rolling **`latest`** pre-release (one universal APK, since no native
+ABI split matters for an Android 12+ app and `zstd-jni` ships all ABIs, plus
 `SHA256SUMS.txt`); a `v*` tag publishes a permanent release. Artifact retention 14 days (org max).
 Signing is **fail-closed**. Release tasks require all four `AQSYNC_*` signing variables and an
-existing keystore; Gradle never substitutes the debug signing config. The release job requires the
+existing keystore. Gradle substitutes the debug signing config only for the explicit local
+`-Paqsync.localRelease=true` check, which is refused on CI. The release job requires the
 four keystore secrets plus `RELEASE_CERT_SHA256`, validates that the alias/private-key entry opens,
 compares its certificate fingerprint to the configured value, runs the full `verify` suite in the
 same job, builds the APK, and checks the APK signer with `apksigner` before publishing. A missing,
@@ -205,10 +255,15 @@ partial, wrong, or debug configuration fails before release creation. The expect
 (`AQSYNC_KEYSTORE_FILE/PASSWORD`, `AQSYNC_KEY_ALIAS/PASSWORD`, `AQSYNC_VERSION_CODE/NAME`) and
 uploaded the four Actions secrets. Local signed release:
 `set -a; source secrets/.env; set +a; ./gradlew :app:assembleRelease`. `secrets/` is git-ignored.
-**Back the keystore up** — without it no future release installs over an existing one.
+**Back the keystore up.** Without it no future release installs over an existing one.
+
+The workflow runs as two jobs. The `apk` job validates the keystore, runs `verify`, builds and
+checks the signed APK, writes the notes and uploads `dist/` with a `contents: read` token and a
+read-only Gradle cache, so a release build never writes a cache entry. The `publish` job is the only
+one with `contents: write`. It downloads `dist/` and moves the tag and release.
 
 Rolling publication uses GitHub's [reference REST API](https://docs.github.com/en/rest/git/refs)
-with the existing `contents: write` workflow token. It creates or updates `latest`
+with the publish job's `contents: write` token. It creates or updates `latest`
 to the exact verified build SHA and checks that reference before publishing. A
 queued build whose SHA is no longer `main` uploads its APK artifact but skips
 rolling publication. GitHub may require workflow-write permission when tagging
@@ -230,6 +285,20 @@ artifact. A simulator ZIP is not a signed iPhone app, and an unsigned device com
 check is not a TestFlight release. Do not claim an iOS validation run passed merely
 because Android publication succeeded.
 
+### CI supply chain
+
+Every action in `.github/workflows/` is pinned to a full commit SHA with the release tag in a
+trailing comment, for example `actions/checkout@<sha> # v7.0.1`. Resolve a new pin with
+`git ls-remote https://github.com/<owner>/<repo> refs/tags/<tag>` and use the peeled `^{}` commit
+for annotated tags. `.github/dependabot.yml` opens grouped weekly updates for Gradle (Kotlin
+toolchain, Android build, Compose, AndroidX, other), GitHub Actions and pre-commit hooks, after a
+seven day cooldown. Each update must pass `verify.yml`. Real BLE, LAN and background behavior after
+an update still needs a phone run before a release.
+
+Gradle jobs restore `~/.konan` (Kotlin/Native compiler and dependencies) keyed by OS, architecture
+and the build definitions. The iOS job adds the Xcode version to the key. The verify workflow writes
+the Gradle cache only on `main`. Release builds only read it.
+
 ### Rolling tag failure (2026-10-08)
 
 [Release run 22](https://github.com/walkthru-earth/opensensor-space-mobile/actions/runs/37740192533/job/113192946568)
@@ -245,7 +314,7 @@ Hosted publication must pass before this recovery is considered verified.
 After the repository rename and merge at `06ab6cc`, the
 [main verification run](https://github.com/walkthru-earth/opensensor-space-mobile/actions/runs/36584773614)
 passed all hooks, the station-epoch validator, Gradle verification, and artifact uploads.
-Downloaded reports contain 219 tests: **218 passed, one skipped**, zero failures, and 14 lint warnings.
+Downloaded reports showed zero test failures and only the lint warnings known at the time.
 The renamed repository resolves the Actions versions and retains its existing keystore secrets.
 `RELEASE_CERT_SHA256` was added from the trusted local keystore's public certificate; no signing key changed.
 
@@ -260,13 +329,13 @@ validated certificate. A fresh main run must pass this corrected check before pu
 ## Fake device (debug builds, `FakeTransport`)
 
 Menu → *Debug: fake device* (`FA:KE:00:00:00:01`) speaks protocol v2 in-process: three small
-`PAR1…PAR1` files + one **1 MiB** benchmark file (≈ 8 s at the fake's chunk pace — enough to watch
+`PAR1…PAR1` files + one **1 MiB** benchmark file (≈ 8 s at the fake's chunk pace, enough to watch
 the notification, Stop, and a `.partial` resume), correct CRCs, `live` JSON every **10 s**, a fake
 configuration (pairing, Wi-Fi, LAN), a Wi-Fi scan list (`home` / `walkthru-field` / `CoffeeShop
 Guest` can be joined; anything else → `failed`), a fake token, an 8 KiB serial log, and a `REBOOT`
 that drops the link and applies pending `ble.*` changes. Persists for the process, like NVS.
 *Debug: fake device (as LAN)* (`FA:KE:00:00:00:02`) is the same device with `payload_max` 1024 and
-`GET_TOKEN` → `ERROR` 13 — **not a socket**. Fault hooks for tests: `dropLeadingChunks(readIndex)`,
+`GET_TOKEN` → `ERROR` 13, **not a socket**. Fault hooks for tests: `dropLeadingChunks(readIndex)`,
 `closedDelayMs`. Extend the fake rather than mocking.
 
 ## Provenance and generator gotchas
@@ -277,7 +346,7 @@ cd opensensor-space-android && rm -rf .git
 /opt/homebrew/bin/bash customizer.sh earth.walkthru.aqsync Device "AQ Sync"   # bash ≥ 4; macOS ships 3
 ```
 
-`customizer.sh` cannot take a spaced application name (`class AQ Sync`, `Theme.AQ Sync`) — fixed by
+`customizer.sh` cannot take a spaced application name (`class AQ Sync`, `Theme.AQ Sync`), fixed by
 hand after generation; the raw output is the first commit so the fix is visible.
 
 ## Uses → affects
@@ -289,3 +358,6 @@ hand after generation; the raw output is the first commit so the fix is visible.
 | manifest permissions | AGENTS.md non-negotiables; `LanPermission`, `NotificationPermission`, `BluetoothGate` |
 | `FakeTransport` behaviour | `WindowRecoveryTest`, `AutoSyncRunnerTest`, `HistoryDeriverTest` and every debug demo |
 | `.editorconfig` ktlint rules | the pre-commit hook and CI's `pre-commit --all-files` |
+| `app/src/main/keepRules/*.keep` or the release `optimization` block | the published APK; needs a host `-Paqsync.localRelease=true` build and a phone run |
+| `app/lint-baseline.xml` | `lintDebug` in `verify`; new warnings fail the gate |
+| action SHA pins, `.github/dependabot.yml` | every workflow run; keep the version comment in step with the SHA |

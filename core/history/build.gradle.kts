@@ -1,33 +1,25 @@
-// Common Kotlin is compiled for Android's JVM and for iOS. Legacy file/stream adapters stay JVM-only.
+// Sensor-domain analysis. `commonMain` compiles for Android's JVM and for iOS; `jvmMain` keeps the
+// file-backed indexing and aggregation that still read Parquet through :core:parquet.
 plugins {
-    alias(libs.plugins.kotlin.multiplatform)
+    id("opensensor.kmp.library")
 }
 
 kotlin {
-    jvm { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
-    iosArm64()
-    iosSimulatorArm64()
     sourceSets {
-        commonMain {
-            dependencies {
-                api(project(":core:protocol"))
-            }
+        commonMain.dependencies {
+            api(project(":core:protocol"))
         }
-        commonTest { dependencies { implementation(libs.kotlin.test) } }
-        jvmMain {
-            kotlin.srcDir("src/main/kotlin")
-            dependencies { api(project(":core:parquet")) }
+        jvmMain.dependencies {
+            api(project(":core:parquet"))
         }
-        jvmTest {
-            kotlin.srcDir("src/test/kotlin")
-            resources.srcDir(rootProject.file("core/parquet/src/test/resources"))
-            dependencies {
-                implementation(libs.junit)
-                implementation(libs.kotlinx.serialization.json)
-            }
+        jvmTest.dependencies {
+            implementation(libs.junit)
+            implementation(libs.kotlinx.serialization.json)
         }
     }
 }
 
-// Keep existing verify tasks, local hooks and CI entry points compatible.
-tasks.register("test") { dependsOn("jvmTest") }
+dependencies {
+    // Real device Parquet files and PyArrow expectations, published once by :core:parquet.
+    "jvmTestImplementation"(testFixtures(project(":core:parquet")))
+}

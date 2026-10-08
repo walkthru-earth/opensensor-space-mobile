@@ -12,6 +12,7 @@ concern you are changing in `docs/README.md`.
 | --- | --- | --- |
 | Current status and real-phone evidence | `docs/status.md`, then `../aq-parquet/docs/boards/*/bench-verified.md` | — |
 | Cross-platform design and sync rules, production refactor plan | `docs/cross-platform-guide.md`, `docs/production-readiness-plan.md` | `core/`, `app/`, `ios/` |
+| Device families, sensor-agnostic model, public H3 discover map | `docs/devices-and-discovery.md` | `core/`, planned `feature/discover/` |
 | iOS app, shared Kotlin, simulator and iPhone builds | `docs/ios-migration.md`, `ios/AGENTS.md` | `core/`, `ios/` |
 | App layers and dependencies | `docs/architecture.md`, `core/AGENTS.md` | `core/`, `app/` |
 | BLE, LAN, sync, pairing, background work | `docs/transports.md`, `docs/sync-engine.md`, `docs/background-sync.md`, `app/src/main/java/earth/walkthru/aqsync/data/AGENTS.md` | `data/` |
@@ -26,8 +27,12 @@ concern you are changing in `docs/README.md`.
   opcodes, UUIDs, JSON keys and Hive archive paths across both repositories.
 - The phone archive is local and works without internet. BLE is always available;
   LAN connects only to devices found through `_aqsync._tcp` mDNS, using a token
-  obtained over bonded BLE. No cloud connection without a separate explicit
-  opt-in. No analytics, accounts or location permission.
+  obtained over bonded BLE. The only other network use is anonymous, read-only
+  GETs of the public discover feed and basemap, which a Settings switch turns off
+  (`docs/devices-and-discovery.md`). Uploading a device's data is off by default
+  and is enabled only per device, from that device's settings, with
+  confirmation. No analytics, accounts or location permission. Public data
+  carries H3 cells, never coordinates.
 - A downloaded file becomes synced only after size, CRC-32 and `PAR1` head/tail
   checks pass. Missing measurements stay null. Never ask firmware to delete,
   rename or rewrite archive files.
