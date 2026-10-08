@@ -12,6 +12,7 @@ import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.local.database.DerivedDayDao
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
 import earth.walkthru.aqsync.data.local.database.MetricBucketDao
+import earth.walkthru.aqsync.data.local.database.SensorInstallationDao
 import earth.walkthru.aqsync.data.local.database.StationEpochDao
 import earth.walkthru.aqsync.data.local.security.LanTokenCipher
 import earth.walkthru.aqsync.data.local.security.LanTokenCipherContract
@@ -48,6 +49,9 @@ class DatabaseModule {
 
     @Provides
     fun provideStationEpochDao(db: AppDatabase): StationEpochDao = db.stationEpochDao()
+
+    @Provides
+    fun provideSensorInstallationDao(db: AppDatabase): SensorInstallationDao = db.sensorInstallationDao()
 
     @Provides
     @Singleton

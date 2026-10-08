@@ -53,12 +53,14 @@ import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.ArchiveTimeSummary
 import earth.walkthru.aqsync.data.DeviceEvent
 import earth.walkthru.aqsync.data.SyncProgress
+import earth.walkthru.aqsync.data.ble.ConfigSnapshot
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.history.NowReading
 import earth.walkthru.aqsync.data.protocol.DeviceStatus
 import earth.walkthru.aqsync.data.protocol.LiveProfile
 import earth.walkthru.aqsync.data.protocol.LiveProfiles
 import earth.walkthru.aqsync.data.protocol.LiveSample
+import earth.walkthru.aqsync.data.protocol.PlantowerBatchCandidate
 import earth.walkthru.aqsync.data.protocol.PmsStatus
 import earth.walkthru.aqsync.data.protocol.TemperatureSource
 import earth.walkthru.aqsync.ui.components.ConnectionBanner
@@ -93,6 +95,7 @@ fun TodayScreen(
     viewModel: TodayViewModel = hiltViewModel<TodayViewModel, TodayViewModel.Factory>(key = address, creationCallback = { it.create(address) }),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val deviceConfig by viewModel.deviceConfig.collectAsStateWithLifecycle()
     val profile = LiveProfiles.resolve(state.info)
     val showParticles = profile != null && state.live?.sample?.pms?.let { it != PmsStatus.ABSENT.code } == true
     val snackbar = remember { SnackbarHostState() }
@@ -189,6 +192,13 @@ fun TodayScreen(
                         )
                     } else {
                         SensorReadingsCard(profile, state.live?.sample, ageMs)
+                    }
+                }
+                if (profile != null && state.info?.schema == "waveshare-sim7670g-telemetry-v2" &&
+                    deviceConfig?.config?.sensor?.batchCandidate == 1
+                ) {
+                    item(key = "batch-estimate") {
+                        BatchEstimateCard(state.live?.sample, state.live?.receivedAtEpochMs, deviceConfig, now)
                     }
                 }
                 if (showParticles && profile.temperature == TemperatureSource.AMBIENT) {
@@ -373,6 +383,37 @@ private fun ReadingsCard(live: LiveSample?, receivedAt: Long?, now: Long) {
             live?.seq?.let {
                 Text("sample #$it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+        }
+    }
+}
+
+@Composable
+private fun BatchEstimateCard(live: LiveSample?, receivedAt: Long?, config: ConfigSnapshot?, now: Long) {
+    val serial = config?.config?.sensor?.serial
+    val fresh = receivedAt != null && now - receivedAt <= STALE_AFTER_MS && receivedAt >= (config?.atEpochMs ?: Long.MAX_VALUE)
+    val estimate = if (fresh) {
+        PlantowerBatchCandidate.estimate(
+            serial,
+            config?.config?.sensor?.batchCandidate,
+            live?.pms,
+            live?.n03,
+        )
+    } else {
+        null
+    }
+    Surface(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(horizontal = 24.dp, vertical = 18.dp)) {
+            Eyebrow("PM2.5 batch estimate · unvalidated")
+            Spacer(Modifier.height(6.dp))
+            Text(
+                if (estimate != null) "${fmt(estimate)} µg/m³" else "Waiting for a fresh valid count…",
+                style = MaterialTheme.typography.titleLarge
+            )
+            Text(
+                "${PlantowerBatchCandidate.FACTOR} × particles >0.3 µm per 0.1 L. Raw PM₂.₅ above remains the main reading; a Cairo reference comparison is still needed.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

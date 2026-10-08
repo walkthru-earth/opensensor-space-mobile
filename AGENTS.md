@@ -7,6 +7,7 @@ file, then open only the concern you are changing in `docs/README.md`.
 | Task | Open next | Code |
 | --- | --- | --- |
 | Current status and real-phone evidence | `docs/status.md`, then `../aq-parquet/docs/boards/*/bench-verified.md` | — |
+| iOS migration, shared Kotlin, simulator and iPhone builds | `docs/ios-migration.md` | `core/`, `ios/` |
 | App layers and dependencies | `docs/architecture.md`, `core/AGENTS.md` | `core/`, `app/` |
 | BLE, LAN, sync, pairing, background work | `docs/transports.md`, `docs/sync-engine.md`, `docs/background-sync.md`, `app/src/main/java/earth/walkthru/aqsync/data/AGENTS.md` | `data/` |
 | Room, history, Parquet | `docs/data-model.md`, `docs/history-pipeline.md`, `docs/parquet.md` | `data/history/`, `data/local/`, `core/` |
@@ -29,7 +30,9 @@ file, then open only the concern you are changing in `docs/README.md`.
   LAN tokens remain encrypted at rest. Device-changing actions are explicit UI
   actions; reboot, token rotation, forgetting bonds and pairing mode `none`
   require confirmation. Debug raw commands cannot invoke `REBOOT` or `SET_CONFIG`.
-- `:core:*` stays plain JVM and reusable without Android, Hilt or Room.
+- `:core:*` stays reusable without Android, Hilt or Room. `protocol` and the
+  sensor-domain part of `history` compile for JVM and iOS; platform file/stream
+  adapters stay in JVM source sets. Common code cannot import `java.*`.
   Transport and storage work stays out of composables. Sensor semantics come
   from the metric registry, never fabricated defaults.
 - Treat host tests and phone observations separately. Record new phone results

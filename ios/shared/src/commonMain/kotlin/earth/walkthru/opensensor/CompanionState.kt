@@ -1,0 +1,159 @@
+package earth.walkthru.opensensor
+
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import earth.walkthru.aqsync.data.history.NowReading
+import earth.walkthru.aqsync.data.protocol.AqGatt
+import earth.walkthru.aqsync.data.protocol.DeviceInfo
+import earth.walkthru.aqsync.data.protocol.DeviceStatus
+import earth.walkthru.aqsync.data.protocol.LanProtocol
+import earth.walkthru.aqsync.data.protocol.LiveProfiles
+import earth.walkthru.aqsync.data.protocol.LiveSample
+
+internal data class NearbyDevice(val id: String, val name: String, val rssi: Int)
+
+/** Main-thread callbacks from the native BLE adapter. Never contains pairing or Wi-Fi secrets. */
+class CompanionState {
+    internal var devices by mutableStateOf<List<NearbyDevice>>(emptyList())
+        private set
+    internal var scanning by mutableStateOf(false)
+        private set
+    internal var bluetoothAvailable by mutableStateOf(false)
+        private set
+    internal var message by mutableStateOf("Turn on Bluetooth to find your sensors.")
+        private set
+    internal var selectedId by mutableStateOf<String?>(null)
+        private set
+    internal var connected by mutableStateOf(false)
+        private set
+    internal var info by mutableStateOf<DeviceInfo?>(null)
+        private set
+    internal var status by mutableStateOf<DeviceStatus?>(null)
+        private set
+    internal var live by mutableStateOf<LiveSample?>(null)
+        private set
+    internal val reading: NowReading get() = NowReading.of(live)
+    internal val profile get() = LiveProfiles.resolve(info)
+
+    internal var lanDevices by mutableStateOf<List<String>>(emptyList())
+        private set
+    internal var lanScanning by mutableStateOf(false)
+        private set
+    internal var lanMessage by mutableStateOf("Find sensors connected to the same Wi-Fi network.")
+        private set
+
+    // Export strings through this facade; platform adapters do not duplicate the wire contract.
+    val lanServiceType: String get() = LanProtocol.SERVICE_TYPE
+    val serviceUuid: String get() = AqGatt.SERVICE
+    val infoUuid: String get() = AqGatt.INFO
+    val liveUuid: String get() = AqGatt.LIVE
+    val statusUuid: String get() = AqGatt.STATUS
+
+    fun lanScanStarted() {
+        lanDevices = emptyList()
+        lanScanning = true
+        lanMessage = "Looking on your local network… Allow access if iOS asks."
+    }
+
+    fun lanDevicesFound(names: List<String>) {
+        if (!lanScanning) return
+        lanDevices = names.distinct().sorted()
+        lanMessage = if (lanDevices.isEmpty()) "Looking on your local network…" else "Sensors available on your Wi-Fi network"
+    }
+
+    fun lanScanStopped() {
+        if (!lanScanning) return
+        lanScanning = false
+        if (lanDevices.isEmpty()) lanMessage = "No Wi-Fi sensors found. Check the sensor's Wi-Fi connection and Local Network access in Settings."
+    }
+
+    fun lanScanWaiting() {
+        if (lanScanning) lanMessage = "Waiting for Wi-Fi or Local Network access. Allow access if iOS asks."
+    }
+
+    fun lanScanReady() {
+        if (lanScanning && lanDevices.isEmpty()) lanMessage = "Looking on your local network…"
+    }
+
+    fun lanScanUnavailable() {
+        lanScanning = false
+        lanDevices = emptyList()
+        lanMessage = "Local discovery is unavailable. Check Wi-Fi and Local Network access in Settings."
+    }
+
+    fun bluetoothChanged(available: Boolean, explanation: String) {
+        bluetoothAvailable = available
+        message = explanation
+        if (!available) {
+            scanning = false
+            connectionClosed(explanation)
+        }
+    }
+
+    fun scanStarted() {
+        devices = emptyList()
+        scanning = true
+        message = "Looking for nearby sensors…"
+    }
+
+    fun scanStopped() {
+        scanning = false
+        if (selectedId == null) message = if (devices.isEmpty()) "No sensors found. Keep your sensor nearby and try again." else "Choose a sensor to see its readings."
+    }
+
+    fun deviceFound(id: String, name: String, rssi: Int) {
+        val device = NearbyDevice(id, name, rssi)
+        devices = (devices.filterNot { it.id == id } + device).sortedByDescending { it.rssi }
+    }
+
+    fun connectionStarted(id: String) {
+        selectedId = id
+        connected = false
+        scanning = false
+        info = null
+        status = null
+        live = null
+        message = "Connecting… If asked, enter the pairing PIN shown by your sensor."
+    }
+
+    /** Returns false for malformed or unsupported INFO; the adapter must close that connection. */
+    fun receiveInfo(json: String): Boolean {
+        val decoded = runCatching { DeviceInfo.parse(json) }.getOrNull()
+        if (decoded == null || decoded.proto !in 1..AqGatt.PROTOCOL_VERSION || decoded.dev.isNullOrBlank()) {
+            connectionClosed("This sensor has invalid or unsupported device information.")
+            return false
+        }
+        info = decoded
+        connected = true
+        message = "Connected · live readings"
+        return true
+    }
+
+    fun receiveStatus(json: String) {
+        if (!connected) return
+        status = runCatching { DeviceStatus.parse(json) }.getOrNull()
+        if (status == null) message = "The sensor sent an unreadable status."
+    }
+
+    fun receiveLive(json: String) {
+        if (!connected) return
+        // A bad notification must not leave an earlier number looking current.
+        live = runCatching { LiveSample.parse(json) }.getOrNull()
+        message = if (live == null) "The sensor sent an unreadable reading." else "Connected · live readings"
+    }
+
+    fun readingExpired() {
+        live = null
+        if (connected) message = "Waiting for a fresh reading…"
+    }
+
+    fun connectionClosed(explanation: String) {
+        selectedId = null
+        connected = false
+        info = null
+        status = null
+        live = null
+        message = explanation
+    }
+}

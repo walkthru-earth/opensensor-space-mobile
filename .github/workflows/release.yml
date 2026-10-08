@@ -106,6 +106,7 @@ jobs:
           AQSYNC_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           python3 tools/validate_station_epoch_migration.py
+          python3 tools/validate_sensor_installation_migration.py
           ./gradlew --no-daemon verify :app:assembleRelease
 
       - name: Verify the built APK signer

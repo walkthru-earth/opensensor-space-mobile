@@ -30,6 +30,13 @@ class LiveProfileTest {
     }
 
     @Test
+    fun `Waveshare v2 dictionary retains ambient interpretation`() {
+        val profile = LiveProfiles.resolve(DeviceInfo(schema = "waveshare-sim7670g-telemetry-v2", dict = LiveProfiles.WAVESHARE_V2_DICTIONARY))!!
+        assertEquals(TemperatureSource.AMBIENT, profile.temperature)
+        assertTrue(profile.humidity)
+    }
+
+    @Test
     fun `unknown or changed dictionary never borrows a temperature interpretation`() {
         assertNull(LiveProfiles.resolve(null))
         assertNull(LiveProfiles.resolve(DeviceInfo(fw = "cores3-parquet-v6")))

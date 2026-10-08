@@ -143,6 +143,32 @@ class DeviceSessionPollingTest {
         assertTrue(next.await().first.isEmpty())
     }
 
+    @Test
+    fun `GET_CONFIG reassembles ordered BLE chunks before parsing JSON`() = runTest {
+        val transport = ResponseTransport()
+        val session = DeviceSession(transport)
+        val json = """{"sensor":{"vendor":"Plantower","model":"PMS5003T","serial":"PMS5003T-202604081332","batch_candidate":1}}"""
+        val bytes = json.toByteArray()
+        val request = async { session.getConfig() }
+        runCurrent()
+        transport.responseFrames.send(FrameCodec.encode(Frame.ConfigChunk(0, bytes.size, 0, bytes.copyOfRange(0, 40))))
+        transport.responseFrames.send(FrameCodec.encode(Frame.ConfigChunk(0, bytes.size, 40, bytes.copyOfRange(40, bytes.size))))
+        runCurrent()
+        assertEquals("PMS5003T-202604081332", request.await().config.sensor?.serial)
+    }
+
+    @Test
+    fun `GET_CONFIG rejects missing chunk instead of accepting partial JSON`() = runTest {
+        val transport = ResponseTransport()
+        val session = DeviceSession(transport)
+        val request = async { runCatching { session.getConfig() } }
+        runCurrent()
+        transport.responseFrames.send(FrameCodec.encode(Frame.ConfigChunk(0, 10, 0, byteArrayOf(1, 2))))
+        transport.responseFrames.send(FrameCodec.encode(Frame.ConfigChunk(0, 10, 3, byteArrayOf(3, 4))))
+        runCurrent()
+        assertTrue(request.await().exceptionOrNull() is ProtocolViolationException)
+    }
+
     private class ResponseTransport : AqTransport {
         override val address = "test-poll-boundary"
         override val displayName = "Test device"

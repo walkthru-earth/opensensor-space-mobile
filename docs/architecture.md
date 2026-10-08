@@ -22,8 +22,12 @@ flowchart TB
 ```
 
 `:core:history` exposes `:core:parquet` and `:core:protocol` as `api`, so `:app` sees all three.
-The boundary is enforced by the build: a `:core` class cannot import `android.*`. The pure side is
-what the iOS app transliterates and what a hub/laptop tool can reuse unchanged.
+The boundary is enforced by the build: a `:core` class cannot import `android.*`.
+`protocol` and the sensor-domain part of `history` now compile for JVM and iOS from
+`src/commonMain`; their legacy `src/main` trees map to `jvmMain`. Parquet, Java file/stream
+adapters, indexing and calendar windows remain JVM-only. `:ios:shared` consumes the common
+core and renders the first Compose iOS screen; `ios/App` supplies native Core Bluetooth and Bonjour discovery.
+See [ios-migration.md](ios-migration.md) for current scope and build commands.
 
 ## Layers inside `:app`
 

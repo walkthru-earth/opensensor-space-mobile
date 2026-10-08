@@ -54,6 +54,8 @@ jobs:
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
       - name: Validate station epoch migration
         run: python3 tools/validate_station_epoch_migration.py
+      - name: Validate sensor installation migration
+        run: python3 tools/validate_sensor_installation_migration.py
       - run: ./gradlew --no-daemon verify
       - name: Upload debug APK
         if: success()

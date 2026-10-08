@@ -2,7 +2,7 @@ package earth.walkthru.aqsync.data.protocol
 
 /**
  * Advertising service data, protocol revision 2.1 (firmware `-v6.3`): ten little-endian bytes the
- * device broadcasts under [AqUuids.SERVICE] so a phone learns "something changed" without
+ * device broadcasts under [AqGatt.SERVICE] so a phone learns "something changed" without
  * connecting — and so an offloaded scan filter can wake the app on a flag bit. Layout and rules:
  * `../aq-parquet/docs/shared/ble-sync-protocol.md`, "Advertising payload (v2.1)".
  *
@@ -50,7 +50,7 @@ data class Advertisement(
         const val FLAGS_OFFSET = 1
 
         /**
-         * Decode the service-data bytes for [AqUuids.SERVICE]. Null for a pre-2.1 device (no service
+         * Decode the service-data bytes for [AqGatt.SERVICE]. Null for a pre-2.1 device (no service
          * data), an unknown version or a short payload; the two reserved bytes are ignored.
          */
         fun decode(bytes: ByteArray?): Advertisement? {

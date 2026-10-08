@@ -35,6 +35,8 @@ import androidx.compose.material.icons.rounded.WifiFind
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -60,6 +62,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -67,14 +70,18 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import earth.walkthru.aqsync.data.DeviceEvent
+import earth.walkthru.aqsync.data.SensorLabel
 import earth.walkthru.aqsync.data.WifiScanState
 import earth.walkthru.aqsync.data.background.AutoSyncScheduler
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.TransportKind
+import earth.walkthru.aqsync.data.local.database.SensorInstallation
 import earth.walkthru.aqsync.data.protocol.ConfigPatch
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.protocol.PairMode
+import earth.walkthru.aqsync.data.protocol.PlantowerBatchCandidate
 import earth.walkthru.aqsync.data.protocol.WifiState
 import earth.walkthru.aqsync.ui.components.ConnectionBanner
 import earth.walkthru.aqsync.ui.components.DeviceBottomBar
@@ -108,6 +115,8 @@ fun DeviceScreen(
     viewModel: DeviceViewModel = hiltViewModel<DeviceViewModel, DeviceViewModel.Factory>(key = address, creationCallback = { it.create(address) }),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val sensorInstallation by viewModel.sensorInstallation.collectAsStateWithLifecycle()
+    val sensorHistory by viewModel.sensorHistory.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val listState = rememberLazyListState()
     val now = rememberNowMillis()
@@ -206,6 +215,16 @@ fun DeviceScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 item(key = "info") { DeviceInfoCard(state, now) }
+                if (state.info?.schema?.startsWith("waveshare-sim7670g-telemetry-") == true) {
+                    item(key = "sensor") {
+                        SensorIdentityCard(
+                            state = state,
+                            installation = sensorInstallation,
+                            historyCount = sensorHistory.size,
+                            onSave = viewModel::setSensorIdentity,
+                        )
+                    }
+                }
                 item(key = "autosync") {
                     AutoSyncCard(
                         state,
@@ -383,6 +402,122 @@ private fun DeviceInfoCard(state: DeviceUiState, now: Long) {
         StatLine("boot", info?.boot?.take(16)?.plus("…") ?: "—")
         StatLine("link", listOfNotNull(state.transport?.label, state.endpoint).joinToString(" · ").ifEmpty { "—" })
         state.config?.let { StatLine("config read", formatAgo(now - it.atEpochMs)) }
+    }
+}
+
+/** Sticker entry is a physical installation claim; the board must acknowledge it before Room records it. */
+@Composable
+private fun SensorIdentityCard(
+    state: DeviceUiState,
+    installation: SensorInstallation?,
+    historyCount: Int,
+    onSave: (String, Boolean, String) -> Unit,
+) {
+    val context = LocalContext.current
+    val boardSensor = state.config?.config?.sensor
+    var vendorMenu by remember { mutableStateOf(false) }
+    var modelMenu by remember { mutableStateOf(false) }
+    var serial by rememberSaveable(boardSensor?.serial) { mutableStateOf(boardSensor?.serial.orEmpty()) }
+    var source by rememberSaveable(boardSensor?.serial) { mutableStateOf("manual") }
+    var useBatch by rememberSaveable(boardSensor?.serial, boardSensor?.batchCandidate) {
+        mutableStateOf(boardSensor?.batchCandidate == 1)
+    }
+    var scanError by remember { mutableStateOf<String?>(null) }
+    val label = SensorLabel.parse(serial)
+    val matchesInstalledModel = label?.model == "PMS5003T"
+    val knownBatch = matchesInstalledModel && label?.batch == PlantowerBatchCandidate.BATCH
+    val effectiveBatch = useBatch && knownBatch
+
+    SectionCard("air quality sensor") {
+        Text("Installed PM module", style = MaterialTheme.typography.bodyMedium)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column {
+                Text("Vendor", style = MaterialTheme.typography.labelSmall)
+                OutlinedButton(onClick = { vendorMenu = true }) { Text("Plantower") }
+                DropdownMenu(expanded = vendorMenu, onDismissRequest = { vendorMenu = false }) {
+                    DropdownMenuItem(text = { Text("Plantower") }, onClick = { vendorMenu = false })
+                }
+            }
+            Column {
+                Text("Model", style = MaterialTheme.typography.labelSmall)
+                OutlinedButton(onClick = { modelMenu = true }) { Text("PMS5003T") }
+                DropdownMenu(expanded = modelMenu, onDismissRequest = { modelMenu = false }) {
+                    DropdownMenuItem(text = { Text("PMS5003T · supported UART layout") }, onClick = { modelMenu = false })
+                    DropdownMenuItem(text = { Text("PMS5003 · firmware support needed") }, onClick = {}, enabled = false)
+                    DropdownMenuItem(text = { Text("PMSA003 · firmware support needed") }, onClick = {}, enabled = false)
+                }
+            }
+        }
+        InfoNote("This Waveshare firmware reads Plantower PMS5003T frames. Verify the printed model on the fitted module before saving.")
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedButton(
+                onClick = {
+                    scanError = null
+                    GmsBarcodeScanning.getClient(context).startScan()
+                        .addOnSuccessListener { barcode ->
+                            val value = barcode.rawValue.orEmpty()
+                            if (SensorLabel.parse(value) == null) {
+                                scanError = "This barcode is not a recognized Plantower sensor sticker. Enter it manually if needed."
+                            } else {
+                                serial = value.trim()
+                                source = "barcode"
+                            }
+                        }
+                        .addOnFailureListener { scanError = "Scanner unavailable. Enter the sticker below." }
+                },
+                enabled = state.canEdit && !state.syncRunning,
+            ) { Text("Scan barcode") }
+            Text("or enter the sticker", style = MaterialTheme.typography.bodySmall)
+        }
+        scanError?.let { WarningNote(it) }
+        OutlinedTextField(
+            value = serial,
+            onValueChange = { serial = it; source = "manual"; scanError = null },
+            label = { Text("Sensor sticker") },
+            placeholder = { Text("PMS5003T-202604081332") },
+            singleLine = true,
+            enabled = state.canEdit && !state.syncRunning,
+            modifier = Modifier.fillMaxWidth(),
+            isError = serial.isNotBlank() && !matchesInstalledModel,
+        )
+        if (label != null) {
+            StatLine("recognized batch", label.batch)
+        } else if (serial.isNotBlank()) {
+            WarningNote("Expected a PMS5003T label with a valid YYYYMMDD date and 1–9 unit digits.")
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("Store optional batch estimate", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            Switch(
+                checked = effectiveBatch,
+                onCheckedChange = { useBatch = it },
+                enabled = state.canEdit && !state.syncRunning && knownBatch,
+            )
+        }
+        InfoNote(
+            if (knownBatch) {
+                "For this batch only: estimate = ${PlantowerBatchCandidate.FACTOR} × count of particles >0.3 µm per 0.1 L. " +
+                    "This is an unvalidated manufacturer batch estimate, not a Cairo reference calibration or legal compliance value. Raw PM₂.₅ remains available."
+            } else {
+                "No reviewed batch factor for this sticker. A Cairo reference comparison is needed before claiming calibrated accuracy."
+            }
+        )
+        Spacer(Modifier.height(8.dp))
+        Button(
+            onClick = { onSave(serial, effectiveBatch, source) },
+            enabled = state.canEdit && !state.syncRunning && matchesInstalledModel,
+        ) { Text("Save sensor identity to device") }
+        Spacer(Modifier.height(8.dp))
+        StatLine("device sticker", boardSensor?.serial ?: "not set")
+        StatLine("batch estimate", if (boardSensor?.batchCandidate == 1) "on · unvalidated" else "off")
+        installation?.let {
+            StatLine("phone installation record", it.serial ?: "unknown")
+            StatLine("records on phone", historyCount.toString())
+            if (boardSensor != null && boardSensor.serial != it.serial) {
+                WarningNote("The board sticker differs from this phone's last installation record. Verify the fitted module and save its sticker again.")
+            }
+        }
     }
 }
 

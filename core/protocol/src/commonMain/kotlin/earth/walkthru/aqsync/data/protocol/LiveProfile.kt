@@ -16,12 +16,15 @@ enum class TemperatureSource(val label: String) {
 object LiveProfiles {
     const val CORES3_DICTIONARY = "20f850852413abb1165f3f7ca95b4831a0e90a34ae7c7fcb41c44b108d3513c3"
     const val WAVESHARE_DICTIONARY = "e840c946c10378d28831b38f71daf66981d2ea99cf47ccba80fcd2e64f920ffd"
+    const val WAVESHARE_V2_DICTIONARY = "715685cf83ac8d6975fde845ce58fd15fa6eaaf3df32644ec15dfc89875d2e9e"
 
     fun resolve(info: DeviceInfo?): LiveProfile? = when (info?.schema) {
         "cores3-telemetry-v2", "cores3-telemetry-v3" ->
             if (info.dict == CORES3_DICTIONARY) LiveProfile(TemperatureSource.BOARD, humidity = false) else null
         "waveshare-sim7670g-telemetry-v1" ->
             if (info.dict == WAVESHARE_DICTIONARY) LiveProfile(TemperatureSource.AMBIENT, humidity = true) else null
+        "waveshare-sim7670g-telemetry-v2" ->
+            if (info.dict == WAVESHARE_V2_DICTIONARY) LiveProfile(TemperatureSource.AMBIENT, humidity = true) else null
         else -> null
     }
 }

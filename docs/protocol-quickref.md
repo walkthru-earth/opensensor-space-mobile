@@ -49,7 +49,7 @@ sequenceDiagram
 
 | v1 | v2 | LAN-only |
 | --- | --- | --- |
-| `0x10` FILE · `0x11` LIST_END · `0x20` OPENED · `0x21` CHUNK · `0x22` READ_END · `0x23` CLOSED · `0x30` TIME_SET · `0x31` FLUSHED | `0x40` CONFIG · `0x41` WIFI_AP · `0x42` WIFI_SCAN_END · `0x43` REBOOTING · `0x44` LOG · `0x45` LOG_END · `0x46` TOKEN | `0x47` HELLO · `0x48` STATUS push · `0x49` LIVE push |
+| `0x10` FILE · `0x11` LIST_END · `0x20` OPENED · `0x21` CHUNK · `0x22` READ_END · `0x23` CLOSED · `0x30` TIME_SET · `0x31` FLUSHED | `0x40` CONFIG · `0x41` WIFI_AP · `0x42` WIFI_SCAN_END · `0x43` REBOOTING · `0x44` LOG · `0x45` LOG_END · `0x46` TOKEN · `0x4A` CONFIG_CHUNK (BLE when CONFIG exceeds one notification) | `0x47` HELLO · `0x48` STATUS push · `0x49` LIVE push |
 
 ## Error codes (`ProtocolError`)
 
@@ -82,9 +82,17 @@ anything else is a `ProtocolViolationException`.
 
 `ble.pair` (random / fixed / none) · `ble.pin` (six ASCII digits; arrives as a number, shown
 zero-padded) · `ble.clear_bonds=1` · `wifi.on` · `wifi.ssid` (1–32 bytes) · `wifi.psk` (≤ 63 bytes,
-**write-only, never echoed or logged**) · `lan.on` · `lan.rotate_token=1`. No line breaks in
+**write-only, never echoed or logged**) · `lan.on` · `lan.rotate_token=1` · Waveshare
+`sensor.vendor=Plantower`, `sensor.model=PMS5003T`, `sensor.serial=PMS5003T-YYYYMMDD` plus 1–9 unit digits,
+`sensor.batch_candidate=0|1`. `CONFIG.sensor` echoes these four fields. A mismatched physical
+model is rejected; the batch estimate is enabled only for the reviewed `PMS5003T-20260408` batch.
+It is a stored candidate alongside unchanged raw fields, not a reference calibration. No line breaks in
 values; validated on the phone before sending. `CONFIG.flags` bit 0 = `ble.*` change pending
 until reboot.
+
+BLE may return ordered `CONFIG_CHUNK` frames instead of one `CONFIG`: flags u8, total JSON
+bytes u16 LE, offset u16 LE, then a raw UTF-8 slice. The phone rejects gaps, overlaps,
+inconsistent flags/total, and incomplete replies before parsing JSON. LAN retains one CONFIG.
 
 ## Verification (`ParquetVerify`)
 

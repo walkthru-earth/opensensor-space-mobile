@@ -1,8 +1,5 @@
 package earth.walkthru.aqsync.data.protocol
 
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
-
 /**
  * Binary `control` requests and `response` frames from docs/ble-sync-protocol.md (protocol v2;
  * v1 is a strict subset).
@@ -42,7 +39,7 @@ object Opcode {
         REBOOT -> "REBOOT"
         LOG_TAIL -> "LOG_TAIL"
         GET_TOKEN -> "GET_TOKEN"
-        else -> "0x%02x".format(op)
+        else -> "0x${op.toString(16).padStart(2, '0')}"
     }
 }
 
@@ -73,6 +70,9 @@ object FrameType {
 
     /** LAN only: pushed `live` JSON. */
     const val LIVE: Int = 0x49
+
+    /** BLE-only slices of a CONFIG JSON body when one notification cannot carry it. */
+    const val CONFIG_CHUNK: Int = 0x4A
     const val ERROR: Int = 0x7F
 
     fun name(type: Int): String = when (type) {
@@ -93,9 +93,10 @@ object FrameType {
         TOKEN -> "TOKEN"
         HELLO -> "HELLO"
         STATUS -> "STATUS"
+        CONFIG_CHUNK -> "CONFIG_CHUNK"
         LIVE -> "LIVE"
         ERROR -> "ERROR"
-        else -> "0x%02x".format(type)
+        else -> "0x${type.toString(16).padStart(2, '0')}"
     }
 }
 
@@ -136,8 +137,8 @@ sealed interface Request {
     data class Open(val name: String) : Request {
         override val opcode: Int = Opcode.OPEN
         override fun encode(): ByteArray {
-            val utf8 = name.toByteArray(Charsets.UTF_8)
-            return ByteBuffer.allocate(1 + utf8.size).order(ByteOrder.LITTLE_ENDIAN)
+            val utf8 = name.encodeToByteArray()
+            return WireBuffer.allocate(1 + utf8.size)
                 .put(opcode.toByte()).put(utf8).array()
         }
     }
@@ -145,7 +146,7 @@ sealed interface Request {
     /** `handle` u16, `offset` u32, `length` u32. */
     data class Read(val handle: Int, val offset: Long, val length: Long) : Request {
         override val opcode: Int = Opcode.READ
-        override fun encode(): ByteArray = ByteBuffer.allocate(11).order(ByteOrder.LITTLE_ENDIAN)
+        override fun encode(): ByteArray = WireBuffer.allocate(11)
             .put(opcode.toByte())
             .putShort(handle.toShort())
             .putInt(offset.toInt())
@@ -155,14 +156,14 @@ sealed interface Request {
 
     data class Close(val handle: Int) : Request {
         override val opcode: Int = Opcode.CLOSE
-        override fun encode(): ByteArray = ByteBuffer.allocate(3).order(ByteOrder.LITTLE_ENDIAN)
+        override fun encode(): ByteArray = WireBuffer.allocate(3)
             .put(opcode.toByte()).putShort(handle.toShort()).array()
     }
 
     /** `epoch_s` i64. */
     data class SetTime(val epochSeconds: Long) : Request {
         override val opcode: Int = Opcode.SET_TIME
-        override fun encode(): ByteArray = ByteBuffer.allocate(9).order(ByteOrder.LITTLE_ENDIAN)
+        override fun encode(): ByteArray = WireBuffer.allocate(9)
             .put(opcode.toByte()).putLong(epochSeconds).array()
     }
 
@@ -187,8 +188,8 @@ sealed interface Request {
     data class SetConfig(val patch: ConfigPatch) : Request {
         override val opcode: Int = Opcode.SET_CONFIG
         override fun encode(): ByteArray {
-            val utf8 = patch.encode().toByteArray(Charsets.UTF_8)
-            return ByteBuffer.allocate(1 + utf8.size).put(opcode.toByte()).put(utf8).array()
+            val utf8 = patch.encode().encodeToByteArray()
+            return WireBuffer.allocate(1 + utf8.size).put(opcode.toByte()).put(utf8).array()
         }
 
         /** Never echo the PSK. */
@@ -212,7 +213,7 @@ sealed interface Request {
         }
 
         override val opcode: Int = Opcode.LOG_TAIL
-        override fun encode(): ByteArray = ByteBuffer.allocate(3).order(ByteOrder.LITTLE_ENDIAN)
+        override fun encode(): ByteArray = WireBuffer.allocate(3)
             .put(opcode.toByte()).putShort(maxBytes.toShort()).array()
     }
 
@@ -271,9 +272,14 @@ sealed interface Frame {
 
     // ------------------------------------------------------------------ v2
 
-    /** `flags` u8 (bit 0 = reboot required for a pending `ble.*` change), JSON ≤ 400 bytes. */
+    /** `flags` u8 (bit 0 = reboot required for a pending `ble.*` change), JSON ≤ 480 bytes. */
     data class Config(val flags: Int, val json: String) : Frame {
         val rebootRequired: Boolean get() = flags and 0x01 != 0
+    }
+
+    /** `flags` u8, total JSON bytes u16 LE, offset u16 LE, raw UTF-8 slice. */
+    class ConfigChunk(val flags: Int, val total: Int, val offset: Int, val bytes: ByteArray) : Frame {
+        override fun toString(): String = "ConfigChunk(flags=$flags, total=$total, offset=$offset, len=${bytes.size})"
     }
 
     /** `rssi` i8, `auth` u8, `channel` u8, `ssid` utf8. */
@@ -337,7 +343,7 @@ object FrameCodec {
     /** Decode one `response` notification. Throws [FrameDecodeException] on truncated/unknown frames. */
     fun decode(raw: ByteArray): Frame {
         if (raw.isEmpty()) throw FrameDecodeException("empty frame")
-        val buf = ByteBuffer.wrap(raw).order(ByteOrder.LITTLE_ENDIAN)
+        val buf = WireBuffer.wrap(raw)
         val type = buf.get().toInt() and 0xFF
         return try {
             when (type) {
@@ -365,6 +371,12 @@ object FrameCodec {
                 FrameType.TIME_SET -> Frame.TimeSet(epochSeconds = buf.long, monotonicMicros = buf.long)
                 FrameType.FLUSHED -> Frame.Flushed(rows = buf.u16(), filesFinalized = buf.u32())
                 FrameType.CONFIG -> Frame.Config(flags = buf.u8(), json = buf.restUtf8())
+                FrameType.CONFIG_CHUNK -> Frame.ConfigChunk(
+                    flags = buf.u8(),
+                    total = buf.u16(),
+                    offset = buf.u16(),
+                    bytes = ByteArray(buf.remaining()).also { buf.get(it) },
+                )
                 FrameType.WIFI_AP -> Frame.WifiAp(
                     rssi = buf.get().toInt(),
                     auth = buf.u8(),
@@ -386,10 +398,10 @@ object FrameCodec {
                 FrameType.STATUS -> Frame.StatusPush(buf.restUtf8())
                 FrameType.LIVE -> Frame.LivePush(buf.restUtf8())
                 FrameType.ERROR -> Frame.Error(op = buf.u8(), code = buf.u8(), detail = buf.restUtf8())
-                else -> throw FrameDecodeException("unknown frame type 0x%02x".format(type))
+                else -> throw FrameDecodeException("unknown frame type 0x${type.toString(16).padStart(2, '0')}")
             }
-        } catch (e: java.nio.BufferUnderflowException) {
-            throw FrameDecodeException("truncated frame type 0x%02x (%d bytes)".format(type, raw.size))
+        } catch (e: WireUnderflowException) {
+            throw FrameDecodeException("truncated frame type 0x${type.toString(16).padStart(2, '0')} (${raw.size} bytes)")
         }
     }
 
@@ -398,17 +410,17 @@ object FrameCodec {
      * fake device and for round-trip tests of the decoder.
      */
     fun encode(frame: Frame): ByteArray {
-        fun le(size: Int) = ByteBuffer.allocate(size).order(ByteOrder.LITTLE_ENDIAN)
+        fun le(size: Int) = WireBuffer.allocate(size)
         return when (frame) {
             is Frame.File -> {
-                val n = frame.name.toByteArray(Charsets.UTF_8)
+                val n = frame.name.encodeToByteArray()
                 le(5 + n.size).put(FrameType.FILE.toByte()).putInt(frame.bytes.toInt()).put(n).array()
             }
             is Frame.ListEnd -> le(13).put(FrameType.LIST_END.toByte())
                 .putShort(frame.count.toShort()).putShort(frame.partials.toShort())
                 .putInt(frame.sdKib.toInt()).putInt(frame.sdUsedKib.toInt()).array()
             is Frame.Opened -> {
-                val n = frame.name.toByteArray(Charsets.UTF_8)
+                val n = frame.name.encodeToByteArray()
                 le(11 + n.size).put(FrameType.OPENED.toByte()).putShort(frame.handle.toShort())
                     .putInt(frame.size.toInt()).putInt(frame.crc32.toInt()).put(n).array()
             }
@@ -422,15 +434,18 @@ object FrameCodec {
             is Frame.Flushed -> le(7).put(FrameType.FLUSHED.toByte())
                 .putShort(frame.rows.toShort()).putInt(frame.filesFinalized.toInt()).array()
             is Frame.Error -> {
-                val d = frame.detail.toByteArray(Charsets.UTF_8)
+                val d = frame.detail.encodeToByteArray()
                 le(3 + d.size).put(FrameType.ERROR.toByte()).put(frame.op.toByte()).put(frame.code.toByte()).put(d).array()
             }
             is Frame.Config -> {
-                val j = frame.json.toByteArray(Charsets.UTF_8)
+                val j = frame.json.encodeToByteArray()
                 le(2 + j.size).put(FrameType.CONFIG.toByte()).put(frame.flags.toByte()).put(j).array()
             }
+            is Frame.ConfigChunk -> le(6 + frame.bytes.size).put(FrameType.CONFIG_CHUNK.toByte())
+                .put(frame.flags.toByte()).putShort(frame.total.toShort()).putShort(frame.offset.toShort())
+                .put(frame.bytes).array()
             is Frame.WifiAp -> {
-                val s = frame.ssid.toByteArray(Charsets.UTF_8)
+                val s = frame.ssid.encodeToByteArray()
                 le(4 + s.size).put(FrameType.WIFI_AP.toByte()).put(frame.rssi.toByte())
                     .put(frame.auth.toByte()).put(frame.channel.toByte()).put(s).array()
             }
@@ -441,15 +456,15 @@ object FrameCodec {
             is Frame.LogEnd -> le(7).put(FrameType.LOG_END.toByte()).putInt(frame.total.toInt()).putShort(frame.returned.toShort()).array()
             is Frame.Token -> le(3 + LAN_TOKEN_BYTES).put(FrameType.TOKEN.toByte()).putShort(frame.port.toShort()).put(frame.token).array()
             is Frame.Hello -> {
-                val j = frame.infoJson.toByteArray(Charsets.UTF_8)
+                val j = frame.infoJson.encodeToByteArray()
                 le(4 + j.size).put(FrameType.HELLO.toByte()).put(frame.proto.toByte()).putShort(frame.payloadMax.toShort()).put(j).array()
             }
             is Frame.StatusPush -> {
-                val j = frame.json.toByteArray(Charsets.UTF_8)
+                val j = frame.json.encodeToByteArray()
                 le(1 + j.size).put(FrameType.STATUS.toByte()).put(j).array()
             }
             is Frame.LivePush -> {
-                val j = frame.json.toByteArray(Charsets.UTF_8)
+                val j = frame.json.encodeToByteArray()
                 le(1 + j.size).put(FrameType.LIVE.toByte()).put(j).array()
             }
         }
@@ -458,17 +473,17 @@ object FrameCodec {
     /** Frame type byte of a raw frame, or null when empty. Cheap dispatch without a full decode. */
     fun typeOf(raw: ByteArray): Int? = raw.firstOrNull()?.toInt()?.and(0xFF)
 
-    private fun ByteBuffer.u8(): Int = get().toInt() and 0xFF
-    private fun ByteBuffer.u16(): Int = short.toInt() and 0xFFFF
-    private fun ByteBuffer.u32(): Long = int.toLong() and 0xFFFF_FFFFL
-    private fun ByteBuffer.restUtf8(): String {
+    private fun WireBuffer.u8(): Int = get().toInt() and 0xFF
+    private fun WireBuffer.u16(): Int = short.toInt() and 0xFFFF
+    private fun WireBuffer.u32(): Long = int.toLong() and 0xFFFF_FFFFL
+    private fun WireBuffer.restUtf8(): String {
         val bytes = ByteArray(remaining()).also { get(it) }
-        return String(bytes, Charsets.UTF_8)
+        return bytes.decodeToString()
     }
 }
 
 /** Hex helpers for logs and test fixtures. */
-fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
+fun ByteArray.toHex(): String = joinToString("") { (it.toInt() and 0xFF).toString(16).padStart(2, '0') }
 
 fun String.hexToBytes(): ByteArray {
     val clean = filterNot { it.isWhitespace() }

@@ -10,6 +10,7 @@ decisions that belong to that concern only. Current verification is recorded in 
 | --- | --- | --- |
 | Know what is verified, on what hardware, and what is next | [status.md](status.md) | `../aq-parquet/docs/boards/m5stack-cores3/bench-verified.md` |
 | Understand the opensensor.space rebrand, concurrent multi-device collection and reset/reflash recovery | [opensensor-space.md](opensensor-space.md) (implementation and remaining qualification) | `data/DeviceConnectionRepository.kt`, `data/background/`, `data/sync/`, `ui/`; new firmware owner `../aq-parquet/docs/shared/` |
+| Build or extend the iOS app and shared Kotlin core | [ios-migration.md](ios-migration.md) | `core/*/src/commonMain/`, `ios/` |
 | Understand modules, layers, who depends on whom, "what a change touches" | [architecture.md](architecture.md) | `core/*/build.gradle.kts`, `app/build.gradle.kts` |
 | Change a screen, the nav graph, detail levels | [screens.md](screens.md) | `app/…/ui/`, `data/settings/AppSettings.kt` |
 | Look up an opcode, frame type, error code, UUID, LAN framing constant | [protocol-quickref.md](protocol-quickref.md) | `core/protocol/…/Frames.kt`, `AqUuids.kt`, `LanFraming.kt` |

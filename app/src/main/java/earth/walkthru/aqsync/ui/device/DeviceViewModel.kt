@@ -9,6 +9,7 @@ import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import earth.walkthru.aqsync.data.DeviceConnectionManager
 import earth.walkthru.aqsync.data.DeviceEvent
+import earth.walkthru.aqsync.data.SensorLabel
 import earth.walkthru.aqsync.data.TimedStatus
 import earth.walkthru.aqsync.data.TransportFactory
 import earth.walkthru.aqsync.data.TransportPreference
@@ -22,11 +23,14 @@ import earth.walkthru.aqsync.data.fake.FakeTransport
 import earth.walkthru.aqsync.data.lan.LanDevice
 import earth.walkthru.aqsync.data.local.database.KnownDevice
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
+import earth.walkthru.aqsync.data.local.database.SensorInstallation
+import earth.walkthru.aqsync.data.local.database.SensorInstallationDao
 import earth.walkthru.aqsync.data.protocol.ConfigPatch
 import earth.walkthru.aqsync.data.protocol.ConfigValidationException
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.protocol.PairMode
 import earth.walkthru.aqsync.data.settings.AppSettings
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asExecutor
 import kotlinx.coroutines.flow.Flow
@@ -94,10 +98,17 @@ class DeviceViewModel @AssistedInject constructor(
     private val companionPresence: CompanionPresence,
     settings: AppSettings,
     knownDeviceDao: KnownDeviceDao,
+    private val sensorInstallationDao: SensorInstallationDao,
 ) : ViewModel() {
     private val repository = manager.controller(deviceAddress)
     private val enrolledDevice = knownDeviceDao.observeAll().map { devices -> devices.firstOrNull { it.address == deviceAddress } }
     private val fakeEndpoint = deviceAddress == FakeTransport.FAKE_ADDRESS || deviceAddress == FakeTransport.FAKE_LAN_ADDRESS
+
+    val sensorInstallation: StateFlow<SensorInstallation?> = sensorInstallationDao.observeCurrent(deviceAddress)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    val sensorHistory: StateFlow<List<SensorInstallation>> = sensorInstallationDao.observeHistory(deviceAddress)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     @AssistedFactory
     interface Factory {
@@ -169,6 +180,52 @@ class DeviceViewModel @AssistedInject constructor(
 
     fun refreshConfig() = repository.refreshConfig()
     fun disconnect() = repository.disconnect()
+
+    /** Save the physical module label only after the board echoes its full identity. */
+    fun setSensorIdentity(sticker: String, batchCandidate: Boolean, source: String) {
+        val state = uiState.value
+        val label = SensorLabel.parse(sticker)
+        if (label == null || label.model != "PMS5003T") {
+            localEvents.tryEmit(DeviceEvent.Error("Enter the PMS5003T sticker as PMS5003T-YYYYMMDD plus its unit digits"))
+            return
+        }
+        if (!state.canEdit || state.syncRunning || state.info?.schema?.startsWith("waveshare-sim7670g-telemetry-") != true) {
+            localEvents.tryEmit(DeviceEvent.Error("Connect to the Waveshare logger and wait for device tasks to finish"))
+            return
+        }
+        val info = state.info ?: return
+        val station = info.station ?: return
+        val patch = ConfigPatch.build { sensorIdentity(label.serial, batchCandidate) }
+        viewModelScope.launch {
+            try {
+                val acknowledged = repository.applySensorConfig(patch).config.sensor
+                if (acknowledged?.serial != label.serial || acknowledged?.model != label.model ||
+                    acknowledged?.vendor != label.vendor || acknowledged?.batchCandidate != (if (batchCandidate) 1 else 0)
+                ) {
+                    localEvents.tryEmit(DeviceEvent.Error("Board did not confirm the sensor identity"))
+                    return@launch
+                }
+                sensorInstallationDao.record(
+                    SensorInstallation(
+                        address = deviceAddress,
+                        station = station,
+                        deviceId = info.dev,
+                        vendor = label.vendor,
+                        model = label.model,
+                        serial = label.serial,
+                        batch = label.batch,
+                        startedAtEpochMs = System.currentTimeMillis(),
+                        source = source,
+                    )
+                )
+                localEvents.tryEmit(DeviceEvent.Info("Sensor identity saved. Batch estimate ${if (batchCandidate) "on" else "off"}."))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                localEvents.tryEmit(DeviceEvent.Error("Sensor identity was not saved: ${e.message}"))
+            }
+        }
+    }
 
     // ------------------------------------------------------------ auto-sync
 

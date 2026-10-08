@@ -60,6 +60,9 @@ object Metrics {
     const val PMS_SETTLE_S = 180L
 
     val PM25 = MetricSpec("pm25", "pm25_atmospheric_ug_m3", "PM2.5", "µg/m³", MetricKind.PARTICLE_MASS, PMS_VALID, PM25_BANDS, envelope = true, axisFloor = 60f, settleSeconds = PMS_SETTLE_S)
+
+    /** Optional Plantower batch equation, gated separately and never used as the primary PM2.5 reading. */
+    val PM25_BATCH_ESTIMATE = MetricSpec("pm25_batch", "pm25_batch_candidate_ug_m3", "PM2.5 batch estimate (unvalidated)", "µg/m³", MetricKind.PARTICLE_MASS, Gate("pm25_batch_candidate_status", 3), null, envelope = true, axisFloor = 60f, settleSeconds = PMS_SETTLE_S)
     val PM10 = MetricSpec("pm10", "pm10_atmospheric_ug_m3", "PM10", "µg/m³", MetricKind.PARTICLE_MASS, PMS_VALID, null, envelope = true, axisFloor = 60f, settleSeconds = PMS_SETTLE_S)
     val PM1 = MetricSpec("pm1", "pm1_atmospheric_ug_m3", "PM1", "µg/m³", MetricKind.PARTICLE_MASS, PMS_VALID, null, envelope = true, axisFloor = 60f, settleSeconds = PMS_SETTLE_S)
     val PARTICLES_GT03 = MetricSpec("n03", "particles_gt03_per_01l", "Particles > 0.3 µm", "per 0.1 L", MetricKind.PARTICLE_COUNT, PMS_VALID, null, chartable = false, settleSeconds = PMS_SETTLE_S)
@@ -73,7 +76,7 @@ object Metrics {
     val VBUS = MetricSpec("vbus", "vbus_mv", "USB voltage", "mV", MetricKind.POWER, null, null, chartable = false)
 
     /** Every metric the tiers keep. Order = picker order. */
-    val all: List<MetricSpec> = listOf(PM25, PM10, PM1, PARTICLES_GT03, PARTICLES_GT25, BOARD_TEMP, AMBIENT_TEMP, HUMIDITY, BATTERY, VBUS)
+    val all: List<MetricSpec> = listOf(PM25, PM25_BATCH_ESTIMATE, PM10, PM1, PARTICLES_GT03, PARTICLES_GT25, BOARD_TEMP, AMBIENT_TEMP, HUMIDITY, BATTERY, VBUS)
     val chartable: List<MetricSpec> get() = all.filter { it.chartable }
 
     fun byId(id: String): MetricSpec? = all.firstOrNull { it.id == id }

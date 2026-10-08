@@ -78,6 +78,8 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.AqSync"
         tools:targetApi="31">
+        <!-- Play services hosts the optional barcode UI; no camera permission is requested. -->
+        <meta-data android:name="com.google.mlkit.vision.DEPENDENCIES" android:value="barcode_ui" />
         <activity
             android:name=".ui.MainActivity"
             android:exported="true"

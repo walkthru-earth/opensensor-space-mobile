@@ -30,8 +30,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  *   explicit migration seeds existing known stations without claiming recorded BLE verification.
  */
 @Database(
-    entities = [KnownDevice::class, ArchivedFile::class, MetricBucket::class, DerivedDay::class, StationEpoch::class],
-    version = 9,
+    entities = [KnownDevice::class, ArchivedFile::class, MetricBucket::class, DerivedDay::class, StationEpoch::class, SensorInstallation::class],
+    version = 10,
     exportSchema = true,
     autoMigrations = [AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6), AutoMigration(from = 6, to = 7, spec = AppDatabase.DropWideTiers::class), AutoMigration(from = 7, to = 8)],
 )
@@ -41,6 +41,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun metricBucketDao(): MetricBucketDao
     abstract fun derivedDayDao(): DerivedDayDao
     abstract fun stationEpochDao(): StationEpochDao
+    abstract fun sensorInstallationDao(): SensorInstallationDao
 
     @DeleteTable(tableName = "aggregate_bucket")
     class DropWideTiers : AutoMigrationSpec
@@ -77,6 +78,13 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("INSERT OR IGNORE INTO station_epoch (address, station, deviceId, firstSeenEpochMs, observedFromAuthenticatedBle) SELECT sourceDevice, station, NULL, MIN(syncedAtEpochMs), 0 FROM archived_file GROUP BY sourceDevice, station")
             }
         }
-        val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_8_9)
+        val MIGRATION_9_10: Migration = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS sensor_installation (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, address TEXT NOT NULL, station TEXT NOT NULL, deviceId TEXT, vendor TEXT NOT NULL, model TEXT NOT NULL, serial TEXT, batch TEXT, startedAtEpochMs INTEGER NOT NULL, endedAtEpochMs INTEGER, source TEXT NOT NULL)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_sensor_installation_address ON sensor_installation (address)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_sensor_installation_station ON sensor_installation (station)")
+            }
+        }
+        val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_8_9, MIGRATION_9_10)
     }
 }

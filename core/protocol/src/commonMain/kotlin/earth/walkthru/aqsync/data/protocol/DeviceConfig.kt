@@ -2,7 +2,6 @@ package earth.walkthru.aqsync.data.protocol
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import java.util.Locale
 
 /**
  * The `CONFIG` JSON (protocol v2, "Device configuration"). Every field is nullable and every
@@ -12,7 +11,8 @@ import java.util.Locale
  * ```json
  * {"ble":{"pair":"random","pin":123456,"pin_default":1,"bonds":1,"display":1},
  *  "wifi":{"on":1,"ssid":"home","psk_set":1,"state":"connected","ip":"192.168.1.42","rssi":-58,"mac":"e0..6b40"},
- *  "lan":{"on":1,"port":47390,"host":"aq-6b40","clients":0}}
+ *  "lan":{"on":1,"port":47390,"host":"aq-6b40","clients":0},
+ *  "sensor":{"vendor":"Plantower","model":"PMS5003T","serial":"PMS5003T-202604081332","batch_candidate":0}}
  * ```
  */
 @Serializable
@@ -20,11 +20,21 @@ data class DeviceConfig(
     val ble: BleConfig? = null,
     val wifi: WifiConfig? = null,
     val lan: LanConfig? = null,
+    val sensor: SensorConfig? = null,
 ) {
     companion object {
         fun parse(text: String): DeviceConfig = AqJson.decodeFromString(serializer(), text)
     }
 }
+
+/** Board-provisioned identity of the replaceable PM module. Not a calibration certificate. */
+@Serializable
+data class SensorConfig(
+    val vendor: String? = null,
+    val model: String? = null,
+    val serial: String? = null,
+    @SerialName("batch_candidate") val batchCandidate: Int? = null,
+)
 
 /** `ble.pair` values. */
 enum class PairMode(val wire: String, val label: String) {
@@ -54,7 +64,7 @@ data class BleConfig(
     val isPinDefault: Boolean get() = pinDefault == 1
 
     /** Six-digit rendering of [pin], restoring leading zeros lost on the wire. */
-    val pinText: String? get() = pin?.let { String.format(Locale.ROOT, "%06d", it) }
+    val pinText: String? get() = pin?.let { it.toString().padStart(6, '0') }
 }
 
 /** `wifi.state` values. */
@@ -139,7 +149,7 @@ class ConfigPatch private constructor(private val lines: List<Pair<String, Strin
 
         /** ≤ 32 bytes UTF-8, no line breaks (the wire format is line-based). */
         fun wifiSsid(ssid: String): Builder {
-            val bytes = ssid.toByteArray(Charsets.UTF_8).size
+            val bytes = ssid.encodeToByteArray().size
             if (bytes == 0) throw ConfigValidationException("SSID is empty")
             if (bytes > SSID_MAX_BYTES) throw ConfigValidationException("SSID is $bytes bytes; max $SSID_MAX_BYTES")
             requireSingleLine(ssid, "SSID")
@@ -148,7 +158,7 @@ class ConfigPatch private constructor(private val lines: List<Pair<String, Strin
 
         /** ≤ 63 bytes UTF-8; empty for an open network. */
         fun wifiPsk(psk: String): Builder {
-            val bytes = psk.toByteArray(Charsets.UTF_8).size
+            val bytes = psk.encodeToByteArray().size
             if (bytes > PSK_MAX_BYTES) throw ConfigValidationException("passphrase is $bytes bytes; max $PSK_MAX_BYTES")
             requireSingleLine(psk, "passphrase")
             return add("wifi.psk", psk)
@@ -157,6 +167,18 @@ class ConfigPatch private constructor(private val lines: List<Pair<String, Strin
         fun lanOn(on: Boolean): Builder = add("lan.on", if (on) "1" else "0")
 
         fun rotateToken(): Builder = add("lan.rotate_token", "1")
+
+        /** Waveshare's current UART/parser contract is specifically Plantower PMS5003T. */
+        fun sensorIdentity(serial: String, enableBatchCandidate: Boolean): Builder {
+            val normalized = serial.trim().uppercase()
+            if (!Regex("PMS5003T-[0-9]{9,17}").matches(normalized)) {
+                throw ConfigValidationException("Sensor sticker must have PMS5003T-YYYYMMDD plus 1–9 unit digits")
+            }
+            add("sensor.vendor", "Plantower")
+            add("sensor.model", "PMS5003T")
+            add("sensor.serial", normalized)
+            return add("sensor.batch_candidate", if (enableBatchCandidate) "1" else "0")
+        }
 
         fun build(): ConfigPatch = ConfigPatch(lines.toList())
 

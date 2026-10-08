@@ -38,11 +38,26 @@ WorkManager plumbing are verified only on hardware and recorded in the firmware 
 | Language / UI | Kotlin 2.4.20, Jetpack Compose (BOM 2026.09.00, material3 1.4.0), Material 3 dynamic color, Navigation 3 (1.1.7) |
 | DI / data | Hilt 2.60.1, Room 2.8.5 (**schema v9**), DataStore Preferences 1.2.1, WorkManager 2.11.2 + `androidx.hilt:hilt-work` 1.4.0, kotlinx.serialization 1.11.0, coroutines 1.11.0 |
 | Native | `zstd-jni` 1.5.7-17 (`@aar`) — the only native library |
-| Build | AGP 9.4.0, Gradle 9.7.1, KSP 2.3.12, version catalog; `:core:*` are `kotlin("jvm")` targeting Java 17 |
+| Build | AGP 9.4.0, Gradle 9.7.1, KSP 2.3.12, version catalog; Parquet stays JVM, protocol and sensor-domain logic target JVM (Java 17) and iOS |
 | SDK | `compileSdk`/`targetSdk` **37**, `minSdk` **31** (modern Bluetooth permission model; no legacy branches) |
 | Style | ktlint `intellij_idea`, `max_line_length = off`, house rules off (`{ a; b }` one-liners, compact `when`, one-line enums, `_x` backing fields, `function-signature`) |
 
 Bump `libs.versions.toml` only to versions you have verified build, and note the date here.
+
+## iOS build (migration started 2026-10-08)
+
+The iOS app lives in `ios/OpenSensor.xcodeproj`, with the Compose framework in
+`:ios:shared`. `verify` now includes its JVM presentation-state tests and shared
+core tests. `verifyIos` is a separate macOS gate for simulator tests/framework
+linking; Xcode compiles the Swift app. Signing teams stay in local Xcode settings
+or command-line overrides. See [ios-migration.md](ios-migration.md) for commands,
+current feature scope and simulator versus phone qualification.
+
+Both host migration validators run in verification and release CI:
+`validate_station_epoch_migration.py` checks v8→v9, and
+`validate_sensor_installation_migration.py` checks v9→v10. Their SQL extraction
+stops at the next migration declaration so later migrations cannot contaminate
+earlier fixtures.
 
 ## Permissions (`AndroidManifest.xml`)
 

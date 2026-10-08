@@ -1202,6 +1202,18 @@ class DeviceConnectionRepository @Inject constructor(
         }
     }
 
+    /** Await the device acknowledgement so installation history never records an unprovisioned label. */
+    suspend fun applySensorConfig(patch: ConfigPatch): ConfigSnapshot {
+        val session = interactiveSession() ?: throw IllegalStateException("Connect to the device first")
+        if (_busy.value || _sync.value.running) throw IllegalStateException("Wait for the current device task to finish")
+        _busy.value = true
+        try {
+            return session.setConfig(patch).also { _config.value = it }
+        } finally {
+            _busy.value = false
+        }
+    }
+
     fun startWifiScan() {
         val session = interactiveSession() ?: return
         if (_wifiScan.value is WifiScanState.Scanning) return

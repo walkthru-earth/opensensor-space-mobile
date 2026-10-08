@@ -14,40 +14,29 @@ import java.io.OutputStream
  */
 object LanFraming {
     /** DNS-SD service type; the instance name is the BLE local name (`AQ-xxxx`). */
-    const val SERVICE_TYPE = "_aqsync._tcp"
-    const val SERVICE_TYPE_DOT = "_aqsync._tcp."
-    const val DEFAULT_PORT = 47390
-    const val HANDSHAKE_MAGIC = "AQS1"
-    const val HANDSHAKE_TIMEOUT_MS = 5_000L
+    const val SERVICE_TYPE = LanProtocol.SERVICE_TYPE
+    const val SERVICE_TYPE_DOT = LanProtocol.SERVICE_TYPE_DOT
+    const val DEFAULT_PORT = LanProtocol.DEFAULT_PORT
+    const val HANDSHAKE_MAGIC = LanProtocol.HANDSHAKE_MAGIC
+    const val HANDSHAKE_TIMEOUT_MS = LanProtocol.HANDSHAKE_TIMEOUT_MS
 
     /** Largest device → phone frame; also what the transport reports as `mtu − 3`. */
-    const val PAYLOAD_MAX = 1024
-    const val REQUEST_MAX = 512
+    const val PAYLOAD_MAX = LanProtocol.PAYLOAD_MAX
+    const val REQUEST_MAX = LanProtocol.REQUEST_MAX
 
     /** Idle limit on the device side; the phone pings (`STATUS`, 0x07) well before it. */
-    const val DEVICE_IDLE_LIMIT_MS = 300_000L
-    const val KEEPALIVE_AFTER_IDLE_MS = 120_000L
+    const val DEVICE_IDLE_LIMIT_MS = LanProtocol.DEVICE_IDLE_LIMIT_MS
+    const val KEEPALIVE_AFTER_IDLE_MS = LanProtocol.KEEPALIVE_AFTER_IDLE_MS
 
     /** TXT keys advertised with the service. */
-    const val TXT_PROTO = "proto"
-    const val TXT_STATION = "station"
-    const val TXT_DEV = "dev"
-    const val TXT_FW = "fw"
+    const val TXT_PROTO = LanProtocol.TXT_PROTO
+    const val TXT_STATION = LanProtocol.TXT_STATION
+    const val TXT_DEV = LanProtocol.TXT_DEV
+    const val TXT_FW = LanProtocol.TXT_FW
 
-    fun handshake(token: ByteArray): ByteArray {
-        require(token.size == LAN_TOKEN_BYTES) { "token must be $LAN_TOKEN_BYTES bytes" }
-        return HANDSHAKE_MAGIC.toByteArray(Charsets.US_ASCII) + token
-    }
+    fun handshake(token: ByteArray): ByteArray = LanProtocol.handshake(token)
 
-    /** `len` u16 LE + body. */
-    fun encode(body: ByteArray): ByteArray {
-        require(body.size in 1..0xFFFF) { "frame body must be 1..65535 bytes, was ${body.size}" }
-        val out = ByteArray(2 + body.size)
-        out[0] = (body.size and 0xFF).toByte()
-        out[1] = ((body.size ushr 8) and 0xFF).toByte()
-        body.copyInto(out, 2)
-        return out
-    }
+    fun encode(body: ByteArray): ByteArray = LanProtocol.encode(body)
 
     fun write(out: OutputStream, body: ByteArray) {
         out.write(encode(body))

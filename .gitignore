@@ -31,3 +31,10 @@ keystore.properties
 /secrets/
 .env
 .env.*
+
+# Xcode and Python generated state; shared schemes remain versioned.
+DerivedData/
+xcuserdata/
+*.xcuserstate
+__pycache__/
+*.py[cod]

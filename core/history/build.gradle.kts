@@ -1,24 +1,33 @@
-// Analysis logic over archived files: file index, metric registry, aggregation into tiers, time estimate
-// for unsynced boots, chart binning, the friendly layer. Pure JVM; depends only on :core:parquet and
-// :core:protocol. Anything that touches Room, files on the phone or Android stays in :app.
+// Common Kotlin is compiled for Android's JVM and for iOS. Legacy file/stream adapters stay JVM-only.
 plugins {
-    alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.kotlin.multiplatform)
 }
 
-java {
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
-}
 kotlin {
-    compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) }
+    jvm { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
+    iosArm64()
+    iosSimulatorArm64()
+    sourceSets {
+        commonMain {
+            dependencies {
+                api(project(":core:protocol"))
+            }
+        }
+        commonTest { dependencies { implementation(libs.kotlin.test) } }
+        jvmMain {
+            kotlin.srcDir("src/main/kotlin")
+            dependencies { api(project(":core:parquet")) }
+        }
+        jvmTest {
+            kotlin.srcDir("src/test/kotlin")
+            resources.srcDir(rootProject.file("core/parquet/src/test/resources"))
+            dependencies {
+                implementation(libs.junit)
+                implementation(libs.kotlinx.serialization.json)
+            }
+        }
+    }
 }
 
-dependencies {
-    api(project(":core:parquet"))
-    api(project(":core:protocol"))
-    testImplementation(libs.junit)
-    testImplementation(libs.kotlinx.serialization.json)
-}
-
-// The real-file fixtures live once, in :core:parquet.
-sourceSets.test { resources.srcDir(rootProject.file("core/parquet/src/test/resources")) }
+// Keep existing verify tasks, local hooks and CI entry points compatible.
+tasks.register("test") { dependsOn("jvmTest") }

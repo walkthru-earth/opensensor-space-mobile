@@ -1,4 +1,6 @@
 [versions]
+composeMultiplatform = "1.12.1"
+composeMultiplatformMaterial3 = "1.9.0"
 androidGradlePlugin = "9.4.0"
 androidxCore = "1.19.0"
 androidxLifecycle = "2.11.0"
@@ -21,8 +23,13 @@ androidxDocumentfile = "1.1.0"
 androidxDatastore = "1.2.1"
 androidxWork = "2.11.2"
 zstdJni = "1.5.7-17"
+googleCodeScanner = "16.1.0"
 
 [libraries]
+compose-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "composeMultiplatform" }
+compose-foundation = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "composeMultiplatform" }
+compose-material3 = { module = "org.jetbrains.compose.material3:material3", version.ref = "composeMultiplatformMaterial3" }
+kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidxCore" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidxActivity" }
 androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "androidxComposeBom" }
@@ -61,9 +68,12 @@ androidx-work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version
 androidx-hilt-work = { module = "androidx.hilt:hilt-work", version.ref = "androidxHilt" }
 # ZSTD for Parquet pages (GeoParquet from PyArrow/GDAL): JVM jar in :core:parquet tests, AAR in :app.
 zstd-jni = { module = "com.github.luben:zstd-jni", version.ref = "zstdJni" }
+google-code-scanner = { module = "com.google.android.gms:play-services-code-scanner", version.ref = "googleCodeScanner" }
 androidx-hilt-compiler = { module = "androidx.hilt:hilt-compiler", version.ref = "androidxHilt" }
 
 [plugins]
+kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+compose-multiplatform = { id = "org.jetbrains.compose", version.ref = "composeMultiplatform" }
 android-application = { id = "com.android.application", version.ref = "androidGradlePlugin" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp"}

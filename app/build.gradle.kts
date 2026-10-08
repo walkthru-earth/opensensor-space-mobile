@@ -206,6 +206,8 @@ dependencies {
     // Icons and SAF helpers
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.documentfile)
+    // System-hosted barcode UI; no app camera permission. Manual entry remains available offline.
+    implementation(libs.google.code.scanner)
 
     // Preferences (Advanced mode switch)
     implementation(libs.androidx.datastore.preferences)

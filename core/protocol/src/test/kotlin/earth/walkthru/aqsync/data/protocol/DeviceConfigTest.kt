@@ -124,4 +124,16 @@ class DeviceConfigTest {
         assertTrue(p.isEmpty)
         assertEquals("", p.encode())
     }
+
+    @Test
+    fun `sensor identity patch and board echo agree`() {
+        val patch = ConfigPatch.build { sensorIdentity("pms5003t-202604081332", true) }
+        assertEquals(
+            "sensor.vendor=Plantower\nsensor.model=PMS5003T\nsensor.serial=PMS5003T-202604081332\nsensor.batch_candidate=1\n",
+            patch.encode(),
+        )
+        val config = DeviceConfig.parse("""{"sensor":{"vendor":"Plantower","model":"PMS5003T","serial":"PMS5003T-202604081332","batch_candidate":1}}""")
+        assertEquals("PMS5003T-202604081332", config.sensor?.serial)
+        assertEquals(1, config.sensor?.batchCandidate)
+    }
 }

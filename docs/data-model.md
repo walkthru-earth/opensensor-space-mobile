@@ -1,10 +1,10 @@
 # Data model — Room, DataStore, files on disk, backup
 
 **Scope:** what the phone stores, where, and how it moves between phones. Not how it is computed (see history-pipeline) or fetched (see sync-engine).
-**Code:** `data/local/database/AppDatabase.kt`, `KnownDevice.kt`, `StationEpoch.kt`, `ArchivedFile.kt`, `History.kt`; `data/local/di/DatabaseModule.kt` (`aq-sync.db`); `app/schemas/earth.walkthru.aqsync.data.local.database.AppDatabase/1…9.json`; `data/DeviceContinuityPolicy.kt`; `data/settings/AppSettings.kt`; `data/sync/FileArchive.kt`; `data/history/DailyDerived.kt`; `res/xml/data_extraction_rules.xml`.
+**Code:** `data/local/database/AppDatabase.kt`, `KnownDevice.kt`, `StationEpoch.kt`, `SensorInstallation.kt`, `ArchivedFile.kt`, `History.kt`; `data/local/di/DatabaseModule.kt` (`aq-sync.db`); `app/schemas/earth.walkthru.aqsync.data.local.database.AppDatabase/1…10.json`; `data/DeviceContinuityPolicy.kt`; `data/settings/AppSettings.kt`; `data/sync/FileArchive.kt`; `data/history/DailyDerived.kt`; `res/xml/data_extraction_rules.xml`.
 **Related:** [sync-engine.md](sync-engine.md) (who writes `archived_file`), [history-pipeline.md](history-pipeline.md) (who writes the tiers), [transports.md](transports.md#lan-token-lifecycle) (the token).
 
-## Room schema v9 (`aq-sync.db`)
+## Room schema v10 (`aq-sync.db`)
 
 ```mermaid
 erDiagram
@@ -101,6 +101,16 @@ keeps its row with `indexError`).
 | 6 → 7 | `AutoMigration` + `DropWideTiers` (`@DeleteTable aggregate_bucket`) | `metric_bucket` one row per metric; `DERIVE_VERSION` 2 forces a rebuild |
 | 7 → 8 | `AutoMigration` | nullable `known_device.companionAssociationId` |
 | 8 → 9 | explicit | `station_epoch`; seed current known stations and historical `(sourceDevice, station)` associations from archived files, preserving files, credentials and settings |
+| 9 → 10 | explicit | `sensor_installation`; the replaceable module's phone-local identity and assertion time, with one current row per device address and prior rows retained when the asserted module changes |
+
+`sensor_installation` is an owner-entered identity record, not evidence of a calibration. It stores
+the full sticker, vendor/model, batch, source (`barcode` or `manual`), phone UTC assertion time,
+and logger/station identifiers. The record is written after the logger echoes `SET_CONFIG`.
+It does not backdate an installation or change archived raw rows. The optional batch estimate
+is a separate Parquet field and History metric; the primary PM₂.₅ metric remains atmospheric raw.
+
+Check the v9→v10 migration against the exported schemas with
+`python3 tools/validate_sensor_installation_migration.py`.
 
 The v8→v9 SQL can be checked without Android or extra Python dependencies:
 

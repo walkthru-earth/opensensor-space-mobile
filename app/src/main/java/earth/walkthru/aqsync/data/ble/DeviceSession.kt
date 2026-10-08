@@ -1,5 +1,6 @@
 package earth.walkthru.aqsync.data.ble
 
+import earth.walkthru.aqsync.data.protocol.ConfigChunkAccumulator
 import earth.walkthru.aqsync.data.protocol.ConfigPatch
 import earth.walkthru.aqsync.data.protocol.DeviceConfig
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
@@ -246,7 +247,7 @@ class DeviceSession(val transport: AqTransport) {
     /** `GET_CONFIG` → `CONFIG`. */
     suspend fun getConfig(): ConfigSnapshot = request(Opcode.GET_CONFIG) {
         write(Request.GetConfig)
-        configFrom("GET_CONFIG", nextFrame(Opcode.GET_CONFIG, FRAME_TIMEOUT_MS))
+        configFrom("GET_CONFIG", Opcode.GET_CONFIG, nextFrame(Opcode.GET_CONFIG, FRAME_TIMEOUT_MS))
     }
 
     /**
@@ -256,11 +257,29 @@ class DeviceSession(val transport: AqTransport) {
     suspend fun setConfig(patch: ConfigPatch): ConfigSnapshot = request(Opcode.SET_CONFIG) {
         require(!patch.isEmpty) { "empty config patch" }
         write(Request.SetConfig(patch))
-        configFrom("SET_CONFIG", nextFrame(Opcode.SET_CONFIG, FRAME_TIMEOUT_MS))
+        configFrom("SET_CONFIG", Opcode.SET_CONFIG, nextFrame(Opcode.SET_CONFIG, FRAME_TIMEOUT_MS))
     }
 
-    private fun configFrom(request: String, frame: Frame): ConfigSnapshot {
-        if (frame !is Frame.Config) throw unexpected(request, frame)
+    private suspend fun configFrom(request: String, opcode: Int, first: Frame): ConfigSnapshot {
+        val frame = when (first) {
+            is Frame.Config -> first
+            is Frame.ConfigChunk -> {
+                val accumulator = ConfigChunkAccumulator()
+                var next: Frame = first
+                var complete: Frame.Config? = null
+                while (complete == null) {
+                    if (next !is Frame.ConfigChunk) throw unexpected(request, next)
+                    complete = try {
+                        accumulator.add(next)
+                    } catch (e: Exception) {
+                        throw ProtocolViolationException("CONFIG_CHUNK invalid: ${e.message}")
+                    }
+                    if (complete == null) next = nextFrame(opcode, FRAME_TIMEOUT_MS)
+                }
+                complete
+            }
+            else -> throw unexpected(request, first)
+        }
         val parsed = try {
             DeviceConfig.parse(frame.json)
         } catch (e: Exception) {
@@ -476,7 +495,9 @@ class DeviceSession(val transport: AqTransport) {
             Opcode.CLOSE -> frame is Frame.Closed
             Opcode.SET_TIME -> frame is Frame.TimeSet
             Opcode.FLUSH -> frame is Frame.Flushed
-            Opcode.GET_CONFIG, Opcode.SET_CONFIG -> frame is Frame.Config
+            Opcode.GET_CONFIG, Opcode.SET_CONFIG ->
+                frame is Frame.Config ||
+                    (frame is Frame.ConfigChunk && frame.offset + frame.bytes.size == frame.total)
             Opcode.WIFI_SCAN -> frame is Frame.WifiScanEnd
             Opcode.REBOOT -> frame is Frame.Rebooting
             Opcode.LOG_TAIL -> frame is Frame.LogEnd

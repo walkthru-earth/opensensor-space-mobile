@@ -13,6 +13,7 @@ import earth.walkthru.aqsync.data.ReconnectState
 import earth.walkthru.aqsync.data.SyncProgress
 import earth.walkthru.aqsync.data.TimedLive
 import earth.walkthru.aqsync.data.TimedStatus
+import earth.walkthru.aqsync.data.ble.ConfigSnapshot
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.fake.FakeTransport
@@ -80,6 +81,7 @@ class TodayViewModel @AssistedInject constructor(
     }
 
     val events: SharedFlow<DeviceEvent> = repository.events
+    val deviceConfig: StateFlow<ConfigSnapshot?> = repository.config
     private val dayStart = localDayStart().stateIn(viewModelScope, SharingStarted.Eagerly, currentDayStart())
 
     /**

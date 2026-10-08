@@ -69,6 +69,15 @@ flowchart LR
 | Lessons learned, grouped by concern | [`docs/lessons-learned.md`](docs/lessons-learned.md) |
 | Long-form evaluation: history UX, data layer, iOS parity, D1–D11 | [`docs/history-ux-and-data-layer.md`](docs/history-ux-and-data-layer.md) |
 
+## iOS migration
+
+The first iOS app uses Kotlin Multiplatform and Compose Multiplatform. Its live-reading
+screen shares Android's protocol models, sensor validity rules and display bands. Native
+Core Bluetooth handles discovery, pairing, reads and notifications. Bonjour discovery
+requests Local Network access when you search for Wi-Fi sensors. Archives, LAN transfers
+and background collection remain Android-only in this first stage. Build and qualification
+instructions are in [docs/ios-migration.md](docs/ios-migration.md).
+
 ## Build
 
 ```sh

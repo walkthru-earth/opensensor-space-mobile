@@ -41,10 +41,13 @@ def create_database(schema):
     return connection
 
 
-def migration_sql():
+def migration_sql(from_version=8, to_version=9):
     source = DATABASE_SOURCE.read_text()
-    require(source.count("val MIGRATION_8_9:") == 1, "Migration declaration missing or ambiguous")
-    body = source.split("val MIGRATION_8_9:", 1)[1].split("val MIGRATIONS:", 1)[0]
+    declaration = f"val MIGRATION_{from_version}_{to_version}:"
+    require(source.count(declaration) == 1, "Migration declaration missing or ambiguous")
+    # Stop at the next migration as well as the registry: a new migration must not
+    # accidentally become part of an older migration's SQL fixture.
+    body = source.split(declaration, 1)[1].split("val MIGRATION", 1)[0]
     body = re.sub(r"//[^\n]*", "", body)
     constants = re.findall(r'db\.execSQL\(\s*("(?:[^"\\]|\\.)*")\s*\)', body)
     require(len(constants) == body.count("db.execSQL("), "Migration must use literal SQL statements")

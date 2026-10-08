@@ -24,6 +24,14 @@ companion presence and the Wi-Fi-arrival run are not.
 
 ## Current host gate (2026-09-30)
 
+The pending PMS5003T identity/batch-candidate change has a separate host check:
+`./gradlew --no-daemon verify` passes with the new protocol, live estimate, History metric,
+Room v10 and barcode/manual Device card; `python3 tools/validate_sensor_installation_migration.py`
+passes against the v9/v10 Room exports. The gate also covers BLE CONFIG chunk reassembly for
+smaller negotiated MTUs and its missing-chunk failure path. This build has **not** been installed on a phone or
+tested against flashed Waveshare v2 firmware. The optional Google Code Scanner depends on
+Google Play services and may download its module at first use; manual entry needs neither.
+
 `./gradlew --no-daemon clean verify`: **247 tests passed, zero skipped or failed** across
 `:app` and the three `:core` modules; zero lint errors. The debug APK builds.
 The optional real-archive test now finds the sibling `aq-parquet` checkout and
@@ -225,3 +233,40 @@ estimate, `RealArchiveTest`). Debug APK 68.4 MiB unminified.
 OnePlus 7 Pro, Android 16, Wi-Fi ADB `adb connect 192.168.100.173:38457` (port changes after
 reboot). `run-as` is refused on this ROM: inspect via logcat tags `HistoryIndexer HistoryDeriver
 SyncEngine DeviceConnection TcpTransport BleTransport AutoSync SyncWorker SyncFgs`, not files.
+
+
+## 2026-10-08 — Kotlin Multiplatform iOS migration started
+
+The Android app and first iOS app now compile the same portable protocol and
+sensor-domain implementations. JVM-only Parquet/file adapters and existing
+Android screens remain in place. [ios-migration.md](ios-migration.md) describes
+the exact source-set split, build commands and remaining feature work.
+
+Host verification: `./gradlew --no-daemon verify` passed after formatting,
+with **274 tests passed, no failures or skips**, and no Android lint errors.
+Both actual-SQL migration validators passed (v8→v9 and v9→v10). `verifyIos`
+passed **17 common tests** on the installed iOS simulator and linked the
+Compose framework; iPhone arm64 framework linking also passed. Xcode 27 built
+both the simulator and signed device app. These are compilation/test results,
+not sensor or radio qualification.
+
+The first simulator launch exposed a required Compose plist setting; adding
+`CADisableMinimumFrameDurationOnPhone = true` fixed the startup crash. The
+corrected iPhone 17 Pro simulator on **iOS 26.5** rendered the discovery screen
+and remained running. Its unavailable-Bluetooth explanation was visually checked.
+The corrected app was installed on the owner's **iPhone 16 Pro, iOS 26.6.2**;
+after Developer Mode and profile trust were enabled by the owner, launch succeeded
+and CoreDevice confirmed the app process was still running. No signing team,
+certificate or provisioning material was committed.
+
+Real-sensor discovery, pairing, LIVE/STATUS notifications, stale timeout and
+foreground/background behavior still need dated phone qualification under the
+correct board bench record. The first iOS app is a foreground live reader only:
+Bonjour discovery is implemented with an explicit **Find Wi-Fi sensors** action,
+`NSLocalNetworkUsageDescription` and the `_aqsync._tcp` entry in `NSBonjourServices`.
+The browse stays active while iOS asks for permission; denial and unavailable Wi-Fi
+are not confused with Bluetooth failure. The shared LAN envelope/handshake now
+also compile for iOS. The local-network prompt and discovered sensor names still
+need a real-phone check. Parquet archive download, offline history, exports,
+authenticated LAN transfers and automatic background collection have not been ported. Minimum app deployment target is iOS 18.5;
+this stage includes Apple Silicon simulator and physical iPhone targets.
