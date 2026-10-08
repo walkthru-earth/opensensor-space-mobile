@@ -30,7 +30,7 @@ enum ArchiveChecks {
         } catch SensorArchive.Failure.conflictingArchive {}
         for unsafe in [
             "../escape.parquet", "/escape.parquet", "a//b.parquet", "a/./b.parquet", "a\\b.parquet", "a\0b.parquet",
-            "UPPER.parquet", "a..b.parquet", String(repeating: "a", count: 392) + ".parquet",
+            "UPPER.parquet", ".parquet", "a..b.parquet", String(repeating: "a", count: 392) + ".parquet",
         ] {
             do {
                 _ = try archive.target(station: station, name: unsafe)

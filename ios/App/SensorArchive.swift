@@ -76,7 +76,7 @@ final class SensorArchive {
             !name.hasPrefix("/"), name.utf8.count <= Self.maxNameBytes, !name.contains(".."),
             name.unicodeScalars.allSatisfy({
                 CharacterSet(charactersIn: "0123456789abcdefghijklmnopqrstuvwxyz._=/-").contains($0)
-            }), name.hasSuffix(".parquet")
+            }), name.hasSuffix(".parquet"), name.utf8.count > 8
         else { throw Failure.unsafePath }
         let components = name.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
         guard !components.isEmpty, components.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }) else {

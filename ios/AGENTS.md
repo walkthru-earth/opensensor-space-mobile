@@ -46,6 +46,56 @@ The iOS app entry point is the Xcode project in this directory. Read the root
   starting operations, serialize connection/session work, and keep PINs, tokens,
   and Wi-Fi credentials out of logs and screenshots.
 
+## Concurrency model
+
+- The app target builds in Swift 5 mode with `SWIFT_STRICT_CONCURRENCY = complete` and must stay
+  free of concurrency warnings. The test target and `tests/verify-native.sh` use the same level,
+  and the host harness treats warnings as errors.
+- UI-facing adapters (`BluetoothCompanion`, `LanDiscovery`, scene delegates) are `@MainActor`.
+  Core Bluetooth, `NWBrowser` and `Timer` callbacks are delivered on the main queue and enter
+  with `MainActor.assumeIsolated`. Do not wrap each callback in `Task { @MainActor in }`, which
+  gives up delivery order.
+- `LanSession` is an actor whose executor is its own serial queue. `NWConnection` callbacks and
+  `DispatchSourceTimer` handlers run on that queue and enter with `assumeIsolated`. Owners learn
+  about pushes and closure through the ordered `events` stream. `close()` is nonisolated.
+- `SensorTransfer` is nonisolated. `ArchiveIO` owns file I/O. Values that cross domains
+  (`ArchiveReply`, `TransferUpdate`, `LanFailure`, `LanCredential`) are Sendable Swift values.
+  Kotlin framework objects are not Sendable. Keep each one inside a single isolation domain.
+
+### Remaining for the Swift 6 language mode
+
+Checked against the [Swift 6 migration guide](https://www.swift.org/migration/documentation/migrationguide/)
+and Xcode 27.0. Complete checking already reports nothing, so the switch itself is
+`SWIFT_VERSION = 6` for both targets plus `-swift-version 6` in `verify-native.sh`. Before that,
+decide these explicitly.
+
+- Swift 6 turns the dynamic isolation checks behind `assumeIsolated` into hard runtime traps.
+  Keep every delegate, browser and timer on the queue that matches its isolation.
+- `BluetoothCompanion` uses `@preconcurrency` delegate conformances. Swift 6 keeps them but
+  checks isolation at run time. Inferred isolated conformances (SE-0470) could replace them.
+- Approachable Concurrency (`SWIFT_APPROACHABLE_CONCURRENCY`) enables
+  `NonisolatedNonsendingByDefault` (SE-0461). Nonisolated async functions such as
+  `SensorTransfer.collect` would then run on the caller's actor, which is the session queue for
+  LAN collection. That removes a hop per frame, but review the `@Sendable` closure parameters
+  before enabling it.
+- Default MainActor isolation (`SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, SE-0466) would move
+  `SensorTransfer`, `SensorArchive`, `TransferProgress`, `LanFrameBuffer` and `LanPolicy` onto the
+  main actor. Do not adopt it without marking that engine code `nonisolated`, or the transfer
+  returns to the UI thread.
+- The Keychain record JSON-encodes `LanCredential`, which creates a base64 String copy of the
+  token at save and load. Storing the token as a separate raw item needs a migration.
+
+## Tests
+
+`OpenSensorTests` is a hostless Swift Testing bundle. It compiles `App/SensorArchive.swift`,
+`App/SensorTransfer.swift` and `App/LanPolicy.swift` with `tests/ArchiveChecks.swift` and
+`tests/TransferChecks.swift`, so it needs neither the app host nor the Kotlin framework. Run it
+with `xcodebuild ... -destination 'platform=iOS Simulator,name=<installed iPhone>'
+CODE_SIGNING_ALLOWED=NO test`. `tests/verify-native.sh` runs the same checks on the Mac host.
+Add new transfer or archive cases to the shared check files so both runners exercise them.
+Code that imports `OpenSensorShared` cannot join the hostless bundle and still needs
+simulator builds and iPhone runs.
+
 When reviewing iOS changes, report only concrete findings with file and line,
 the relevant platform rule, and a focused fix. Separate build/test results from
 simulator and real-device observations.
