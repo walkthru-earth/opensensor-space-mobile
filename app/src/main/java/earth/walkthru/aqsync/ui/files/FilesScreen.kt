@@ -33,7 +33,6 @@ import androidx.compose.material.icons.rounded.TableChart
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -84,6 +83,7 @@ import earth.walkthru.aqsync.ui.components.formatBytes
 import earth.walkthru.aqsync.ui.components.formatRate
 import earth.walkthru.aqsync.ui.components.showScreenMessage
 import earth.walkthru.aqsync.ui.permissions.rememberNotificationPermission
+import earth.walkthru.opensensor.designsystem.FloatingTextButton
 
 @Composable
 fun FilesScreen(
@@ -208,15 +208,16 @@ fun FilesScreen(
         },
         floatingActionButton = {
             when {
-                state.sync.running -> ExtendedFloatingActionButton(
+                state.sync.running -> FloatingTextButton(
+                    text = stringResource(R.string.files_stop),
                     onClick = { viewModel.cancelSync() },
+                    primary = false,
                     icon = { Icon(Icons.Rounded.Stop, contentDescription = null) },
-                    text = { Text(stringResource(R.string.files_stop)) },
                 )
-                plan != null && plan.missingCount > 0 && state.connection.isReady -> ExtendedFloatingActionButton(
+                plan != null && plan.missingCount > 0 && state.connection.isReady -> FloatingTextButton(
+                    text = pluralStringResource(R.plurals.files_sync_all, plan.missingCount, plan.missingCount, formatBytes(plan.missingBytes)),
                     onClick = { withNotificationPermission { viewModel.syncAll() } },
                     icon = { Icon(Icons.Rounded.Download, contentDescription = null) },
-                    text = { Text(pluralStringResource(R.plurals.files_sync_all, plan.missingCount, plan.missingCount, formatBytes(plan.missingBytes))) },
                 )
             }
         },

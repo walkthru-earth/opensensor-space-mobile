@@ -23,7 +23,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -45,6 +44,7 @@ import earth.walkthru.aqsync.data.history.AirMood
 import earth.walkthru.aqsync.ui.theme.color
 import earth.walkthru.aqsync.ui.theme.onColor
 import earth.walkthru.opensensor.designsystem.BrandTokens
+import earth.walkthru.opensensor.designsystem.FloatingControl
 
 /** How loud a card is. Hero is the one card per screen that carries the answer. */
 enum class CardTone { PLAIN, SOFT, HERO }
@@ -79,7 +79,7 @@ fun BrandCard(
 }
 
 /**
- * The primary action: a dark ink pill with a trailing arrow, as on the website. One per screen.
+ * The primary action: a Signal blue curved card with ink text and a trailing arrow. One per screen.
  */
 @Composable
 fun PillButton(
@@ -92,8 +92,8 @@ fun PillButton(
     Button(
         onClick = onClick,
         enabled = enabled,
-        shape = CircleShape,
-        colors = ButtonDefaults.buttonColors(),
+        shape = FloatingControl.Shape,
+        colors = FloatingControl.primaryButtonColors(),
         contentPadding = PaddingValues(start = 24.dp, end = if (arrow) 18.dp else 24.dp, top = 14.dp, bottom = 14.dp),
         modifier = modifier,
     ) {
@@ -105,13 +105,13 @@ fun PillButton(
     }
 }
 
-/** A quieter pill for the secondary action next to a [PillButton]. */
+/** A quieter outlined card for the secondary action next to a [PillButton], same curve. */
 @Composable
 fun OutlinePillButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
     OutlinedButton(
         onClick = onClick,
         enabled = enabled,
-        shape = CircleShape,
+        shape = FloatingControl.Shape,
         border = BorderStroke(1.5.dp, if (enabled) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outlineVariant),
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
         modifier = modifier,
@@ -201,10 +201,10 @@ fun TiltedBadge(color: Color, modifier: Modifier = Modifier, size: Dp = 88.dp, c
     ) { content() }
 }
 
-/** The mood name on its own band colour, with ink chosen for contrast (`AirMood.onColor`). */
+/** The mood name on its own band colour, with ink chosen for contrast (`AirMood.onColor`). A small curved card. */
 @Composable
 fun MoodPill(mood: AirMood, modifier: Modifier = Modifier) {
-    Surface(shape = CircleShape, color = mood.color(), contentColor = mood.onColor(), modifier = modifier) {
+    Surface(shape = FloatingControl.SmallShape, color = mood.color(), contentColor = mood.onColor(), modifier = modifier) {
         Text(
             mood.title,
             style = MaterialTheme.typography.labelLarge,

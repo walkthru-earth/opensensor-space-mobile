@@ -23,7 +23,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -68,6 +67,7 @@ import earth.walkthru.aqsync.ui.components.TransportChip
 import earth.walkthru.aqsync.ui.components.titleText
 import earth.walkthru.aqsync.ui.theme.color
 import earth.walkthru.aqsync.ui.theme.textColorOnSurface
+import earth.walkthru.opensensor.designsystem.FloatingControl
 import kotlinx.datetime.toJavaZoneId
 import kotlinx.datetime.toKotlinTimeZone
 import java.time.Instant
@@ -132,6 +132,8 @@ fun HistoryScreen(
                                     selected = state.station == station,
                                     onClick = { viewModel.selectStation(station) },
                                     label = { Text(label) },
+                                    shape = FloatingControl.SmallShape,
+                                    colors = FloatingControl.chipColors(),
                                     modifier = Modifier.semantics { contentDescription = chipDescription },
                                 )
                             }
@@ -145,7 +147,8 @@ fun HistoryScreen(
                         SegmentedButton(
                             selected = state.range == r,
                             onClick = { viewModel.setRange(r) },
-                            shape = SegmentedButtonDefaults.itemShape(i, HistoryRange.entries.size),
+                            shape = FloatingControl.segmentShape(i, HistoryRange.entries.size),
+                            colors = FloatingControl.segmentedColors(),
                             label = { Text(r.label) },
                         )
                     }
@@ -168,7 +171,13 @@ fun HistoryScreen(
             item(key = "metric") {
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     state.availableMetrics.forEach { m ->
-                        FilterChip(selected = state.metric.id == m.id, onClick = { viewModel.setMetric(m) }, label = { Text(m.label) })
+                        FilterChip(
+                            selected = state.metric.id == m.id,
+                            onClick = { viewModel.setMetric(m) },
+                            label = { Text(m.label) },
+                            shape = FloatingControl.SmallShape,
+                            colors = FloatingControl.chipColors(),
+                        )
                     }
                 }
             }

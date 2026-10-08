@@ -42,6 +42,7 @@ import earth.walkthru.aqsync.ui.history.HistoryScreen
 import earth.walkthru.aqsync.ui.permissions.rememberLanGranted
 import earth.walkthru.aqsync.ui.scan.ScanScreen
 import earth.walkthru.aqsync.ui.settings.SettingsScreen
+import earth.walkthru.opensensor.designsystem.FloatingControl
 
 /**
  * The app root: one bottom bar (Discover, My devices, Settings) around one [NavDisplay]. Discover
@@ -165,6 +166,7 @@ private fun AppBottomBar(selected: TopTab, onSelect: (TopTab) -> Unit) {
             NavigationBarItem(
                 selected = tab == selected,
                 onClick = { onSelect(tab) },
+                colors = FloatingControl.navigationItemColors(),
                 icon = {
                     Icon(
                         when (tab) {

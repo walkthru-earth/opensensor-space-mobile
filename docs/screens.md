@@ -126,8 +126,9 @@ The identity follows the website (`walkthru-earth.github.io`). Tokens live in th
 `accent`, `deep`, `text`, `muted`, `border`), light and dark, copied from `lib/brand.ts`
 palette `sensing`. `BrandTokensTest` pins every value and checks text contrast on both themes.
 
-- **Colour.** `brandColorScheme` maps roles to Material 3. Light primary is the dark `ink` pill
-  on `paper`, dark primary is `main` blue with `ink` text. The brand scheme is the default on
+- **Colour.** `brandColorScheme` maps roles to Material 3. Light primary is `ink` on `paper`,
+  dark primary is `main` blue with `ink` text. The primary action (`PillButton`) and any
+  selection use `FloatingControl.Selected` (Signal blue with ink) in both themes. The brand scheme is the default on
   every phone. Wallpaper dynamic colour stays off (identity first). Air-quality bands
   (`AirMood.color()`) are a scientific metric scale, never brand colours. Ink on a band uses
   `onColor()`, band-coloured text uses `textColorOnSurface()` and falls back to the text colour
@@ -136,11 +137,19 @@ palette `sensing`. `BrandTokensTest` pins every value and checks text contrast o
   website) for Arabic-script locales and for display numbers, because Quicksand has
   proportional digits and no `tnum` while Cairo's digits share one width. License texts ship in
   `assets/licenses/`.
-- **Shape and components.** 32 dp card corners (`BrandCard`, tones Plain, Soft, Hero), pill
-  actions (`PillButton` with a trailing arrow, `OutlinePillButton`), `MoodPill`, `SignalBars`,
-  `TiltedBadge` (the website's -5 degree icon tilt, hero only).
-- **Floating controls.** Anything over the map uses `FloatingSurface`, `FloatingIconButton`
-  and the `FloatingControl` shapes and tint (curved cards, Signal blue only for the selection).
+- **Shape and components.** 32 dp card corners (`BrandCard`, tones Plain, Soft, Hero). Every
+  control uses a curved card, never a circle or full pill. `PillButton` (Signal blue with ink
+  text and a trailing arrow, the one primary action) and `OutlinePillButton` use
+  `FloatingControl.Shape`. Chips, `MoodPill`, small buttons and segmented rows use
+  `FloatingControl.SmallShape` (`FloatingControl.segmentShape`), tags and the transport chip use
+  `FloatingControl.BadgeShape`. Selected chips, the active segment, the selected Wi-Fi network
+  and the bottom bar indicator use `FloatingControl.chipColors`, `segmentedColors` and
+  `navigationItemColors`, Signal blue with ink text (6.5 to 1 contrast). Circles stay only for
+  round things (status dots, the mascot, the mood face, ring charts, radio buttons and switches).
+  `SignalBars` and `TiltedBadge` (the website's -5 degree icon tilt, hero only) complete the set.
+- **Floating controls.** Anything over the map or a list uses `FloatingSurface`,
+  `FloatingIconButton` or `FloatingTextButton` (the Scan and Sync all actions) and the
+  `FloatingControl` shapes and tint (curved cards, Signal blue only for the selection).
   The rules are in `docs/cross-platform-guide.md`, "Floating controls".
 - **Mascot.** The peacock (`res/drawable-nodpi/peacock.webp`, from the website's
   `public/mascots/`) is a guide on the welcome and no-device states (Devices), the all-synced

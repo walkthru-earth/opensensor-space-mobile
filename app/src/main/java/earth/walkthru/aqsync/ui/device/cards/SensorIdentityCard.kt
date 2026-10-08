@@ -37,6 +37,7 @@ import earth.walkthru.aqsync.ui.components.PillButton
 import earth.walkthru.aqsync.ui.components.StatLine
 import earth.walkthru.aqsync.ui.components.WarningNote
 import earth.walkthru.aqsync.ui.device.DeviceUiState
+import earth.walkthru.opensensor.designsystem.FloatingControl
 
 /** The result of one barcode scan, delivered by the route. [id] makes a repeated scan distinct. */
 data class StickerScan(val value: String?, val error: String?, val id: Long)
@@ -86,14 +87,14 @@ fun SensorIdentityCard(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Column {
                 Text(stringResource(R.string.sensor_vendor), style = MaterialTheme.typography.labelSmall)
-                OutlinedButton(onClick = { vendorMenu = true }) { Text("Plantower") }
+                OutlinedButton(onClick = { vendorMenu = true }, shape = FloatingControl.SmallShape) { Text("Plantower") }
                 DropdownMenu(expanded = vendorMenu, onDismissRequest = { vendorMenu = false }) {
                     DropdownMenuItem(text = { Text("Plantower") }, onClick = { vendorMenu = false })
                 }
             }
             Column {
                 Text(stringResource(R.string.sensor_model), style = MaterialTheme.typography.labelSmall)
-                OutlinedButton(onClick = { modelMenu = true }) { Text("PMS5003T") }
+                OutlinedButton(onClick = { modelMenu = true }, shape = FloatingControl.SmallShape) { Text("PMS5003T") }
                 DropdownMenu(expanded = modelMenu, onDismissRequest = { modelMenu = false }) {
                     DropdownMenuItem(text = { Text(stringResource(R.string.sensor_model_supported, "PMS5003T")) }, onClick = { modelMenu = false })
                     DropdownMenuItem(text = { Text(stringResource(R.string.sensor_model_unsupported, "PMS5003")) }, onClick = {}, enabled = false)

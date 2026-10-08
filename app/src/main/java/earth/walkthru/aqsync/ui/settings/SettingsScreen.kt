@@ -12,7 +12,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -35,6 +34,7 @@ import earth.walkthru.aqsync.ui.components.InfoButton
 import earth.walkthru.aqsync.ui.components.InfoContent
 import earth.walkthru.aqsync.ui.components.resolveUnits
 import earth.walkthru.aqsync.units.UnitSystem
+import earth.walkthru.opensensor.designsystem.FloatingControl
 
 /**
  * The Settings tab: the **detail level** (Simple, Detailed, Developer, persisted in DataStore),
@@ -75,7 +75,8 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                     SegmentedButton(
                         selected = level == l,
                         onClick = { viewModel.setDetailLevel(l) },
-                        shape = SegmentedButtonDefaults.itemShape(i, DetailLevel.entries.size),
+                        shape = FloatingControl.segmentShape(i, DetailLevel.entries.size),
+                        colors = FloatingControl.segmentedColors(),
                         label = {
                             Text(
                                 stringResource(
@@ -110,7 +111,8 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                     SegmentedButton(
                         selected = clockMode == mode,
                         onClick = { viewModel.setClockSyncMode(mode) },
-                        shape = SegmentedButtonDefaults.itemShape(i, ClockSyncMode.entries.size),
+                        shape = FloatingControl.segmentShape(i, ClockSyncMode.entries.size),
+                        colors = FloatingControl.segmentedColors(),
                         label = {
                             Text(
                                 stringResource(
@@ -171,7 +173,8 @@ private fun UnitsRow(choice: UnitSystem, onChoice: (UnitSystem) -> Unit) {
             SegmentedButton(
                 selected = choice == system,
                 onClick = { onChoice(system) },
-                shape = SegmentedButtonDefaults.itemShape(i, UnitSystem.entries.size),
+                shape = FloatingControl.segmentShape(i, UnitSystem.entries.size),
+                colors = FloatingControl.segmentedColors(),
                 label = { Text(stringResource(label(system))) },
             )
         }
