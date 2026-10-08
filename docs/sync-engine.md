@@ -1,8 +1,8 @@
 # Sync engine — pull, verify, archive
 
 **Scope:** the file transfer: planner → engine → archive; integrity; lost windows; stale-frame drain; resume; the state-changing requests.
-**Code:** `data/sync/SyncPlanner.kt`, `SyncEngine.kt`, `FileArchive.kt`, `ReadWindow.kt`, `SyncResumePolicy.kt`; `data/ble/DeviceSession.kt` (`read`, `drainStale`, `reboot`); `core/protocol/…/ParquetVerify.kt`.
-**Tests:** `SyncPlannerTest`, `DeviceSessionPollingTest`, `ConcurrentArchiveTest`, `WindowRecoveryTest` (fake with `dropLeadingChunks` / `closedDelayMs`), `SyncResumePolicyTest`, `ParquetVerifyTest`.
+**Code:** Android `data/sync/SyncEngine.kt`, `FileArchive.kt`. Shared in `core/sync` commonMain: `data/sync/SyncPlanner.kt`, `ReadWindow.kt`, `WindowRetryPolicy.kt`, `SyncResumePolicy.kt`, `FileProgress.kt`, `FileProgressReporter.kt`, `RateMeter.kt`, `data/ManifestState.kt`, `data/SyncProgress.kt`, `data/ble/DeviceSession.kt` (`read`, `drainStale`, `reboot`). `core/protocol/…/ParquetVerify.kt`, `Sha256.kt`.
+**Tests:** `:core:sync` commonTest `SyncPlannerTest`, `DeviceSessionPollingTest`, `WindowRetryPolicyTest`, `RateMeterTest`, `SyncResumePolicyTest`. App `ConcurrentArchiveTest`, `WindowRecoveryTest` (fake with `dropLeadingChunks` / `closedDelayMs`). `:core:protocol` `ParquetVerifyTest`, `Sha256Test`.
 **Related:** [transports.md](transports.md) (the pipe underneath), [data-model.md](data-model.md) (what is recorded), [history-pipeline.md](history-pipeline.md) (what runs after).
 
 The iOS native LAN engine follows the same immutable-file contract. `SensorArchive` writes
