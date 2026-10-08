@@ -36,7 +36,7 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
                     Text("opensensor.space", style = MaterialTheme.typography.headlineLarge)
                     Text("Your sensors, nearby", style = MaterialTheme.typography.titleMedium)
                 }
-                item { Text(state.message, style = MaterialTheme.typography.bodyLarge) }
+                if (state.message.isNotEmpty()) item { Text(state.message, style = MaterialTheme.typography.bodyLarge) }
                 if (state.selectedId != null) {
                     item {
                         Card(Modifier.fillMaxWidth()) {
@@ -53,14 +53,14 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
                                 val sample = state.live
                                 val profile = state.profile
                                 if (profile != null && sample?.pmValid == true) {
-                                    sample.t?.takeIf { it.isFinite() }?.let { Text("${profile.temperature.label}: ${number(it)} °C") }
-                                    if (profile.humidity) sample.rh?.takeIf { it.isFinite() }?.let { Text("Humidity: ${number(it)} %") }
+                                    sample.t?.takeIf { it.isFinite() }?.let { Text("${profile.temperature.label} ${number(it)} °C") }
+                                    if (profile.humidity) sample.rh?.takeIf { it.isFinite() }?.let { Text("Humidity ${number(it)} %") }
                                 }
                                 state.status?.let { status ->
                                     if (status.storageFailed) Text("The sensor reports a storage error.")
                                     status.fin?.let { Text("$it files finalized on the sensor") }
                                 }
-                                state.info?.fw?.let { Text("Firmware: $it", style = MaterialTheme.typography.bodySmall) }
+                                state.info?.fw?.let { Text("Firmware $it", style = MaterialTheme.typography.bodySmall) }
                             }
                         }
                     }
@@ -77,7 +77,8 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
                     item { OutlinedButton(onClick = disconnect) { Text("Disconnect") } }
                 } else {
                     item {
-                        Button(onClick = scan, enabled = state.bluetoothAvailable && !state.scanning) {
+                        // Tapping creates the Bluetooth manager, so iOS asks for Bluetooth here and not at launch.
+                        Button(onClick = scan, enabled = !state.scanning) {
                             Text(if (state.scanning) "Scanning…" else "Find sensors")
                         }
                     }
@@ -95,10 +96,12 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
                 }
                 item {
                     Text("On your Wi-Fi", style = MaterialTheme.typography.titleLarge)
-                    Text(
-                        state.lanMessage,
-                        color = if (state.lanAccessDenied) MaterialTheme.colorScheme.error else Color.Unspecified,
-                    )
+                    if (state.lanMessage.isNotEmpty()) {
+                        Text(
+                            state.lanMessage,
+                            color = if (state.lanAccessDenied) MaterialTheme.colorScheme.error else Color.Unspecified,
+                        )
+                    }
                     OutlinedButton(onClick = scanLan, enabled = !state.lanScanning) {
                         Text(if (state.lanScanning) "Looking on Wi-Fi…" else "Find Wi-Fi sensors")
                     }
@@ -133,7 +136,7 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
                                     NowReading.Waiting -> Text("Waiting for a fresh live reading…")
                                 }
                             }
-                            Text(session?.message ?: "Found on your local network. Save Wi-Fi access over Bluetooth first.")
+                            Text(session?.message ?: "Save Wi-Fi access over Bluetooth first.")
                             if (session != null && session.filesTotal > 0) {
                                 Text("${session.filesDone}/${session.filesTotal} files · ${session.bytesDone} bytes in current file")
                                 if (session.bytesPerSecond > 0.0) Text("${number(session.bytesPerSecond / 1024)} KiB/s average")
@@ -159,12 +162,8 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
                         OutlinedButton(onClick = exportArchive, enabled = !state.exportBusy) {
                             Text(if (state.exportBusy) "Preparing export…" else "Export Parquet files")
                         }
-                        Text("Export verified files saved on this phone, even while offline. Choose a destination in Files to save the archive.", style = MaterialTheme.typography.bodySmall)
                         if (state.exportMessage.isNotEmpty()) Text(state.exportMessage, style = MaterialTheme.typography.bodySmall)
                     }
-                }
-                item {
-                    Text("Pair over Bluetooth once per phone and save Wi-Fi access. Connect sensors on the same Wi-Fi to collect their Parquet files. Two sensors can sync at once. Sync continues for the background time iOS allows, pauses when necessary, and resumes when you return. Downloaded bytes stay on this phone. Archived history charts are not available yet.", style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
