@@ -226,10 +226,11 @@ Parquet reader. Design reassessed 2026-10-08 in
   list (crowd rule of three applied by the publisher), and a public device page with range,
   aggregation and metric filters.
 - `maplibre-compose` 0.19.0, which pins our Kotlin and CMP versions. One GeoJSON source, a
-  cover of at most 1,024 cells, redrawn after 400 ms of camera rest. A small bundled basemap
-  for offline and "© OpenStreetMap" always reachable.
-- No location permission. Centre on the last viewed area, the own device cell or the time zone
-  region, with search over a bundled place list.
+  cover of at most 1,024 cells, redrawn after 400 ms of camera rest. No bundled basemap, an
+  optional "Offline map" download in the app Settings, and "© OpenStreetMap" always reachable.
+- No location prompt at launch. Centre on the last viewed area, the own device cell or the time
+  zone region, with search over a bundled place list. A "Near me" button asks for approximate
+  location on tap only.
 - Discover is the start tab when no device is paired.
 
 ### Wave 3 (after Wave 2)

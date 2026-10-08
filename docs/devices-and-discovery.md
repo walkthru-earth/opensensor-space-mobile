@@ -74,12 +74,14 @@ below was checked on that date. Items marked "verify on phone" are not yet prove
 | 2 | One non-modal bottom sheet with three heights. It never stacks a second sheet | First screen |
 | 3 | Public values are hourly means, published at least one hour late. The window chip offers Last hour, 24 hours and 7 days, never "now" | Privacy rules |
 | 4 | The crowd rule of three applies to every published number, not only the device list, with a differencing guard on parents | Privacy rules |
-| 5 | Only outdoor devices can be published. Public names are generated, never free text | Privacy rules |
+| 5 | Only outdoor devices can be published. No accounts, no passkeys. Each shared device gets its own anonymous key made on the phone, and its public ID and generated name come from that key, never free text | Privacy rules |
 | 6 | The phone reads the same Parquet files as the website `/indices` explorer, one plain file per H3 resolution, through HTTP range reads and the repo's own portable Parquet reader. No JSON side feed | Feed contract |
 | 7 | `maplibre-compose` 0.19.0 is the renderer. Its pins match ours (Kotlin 2.4.20, CMP 1.12.1) | Map technology |
 | 8 | H3 runs on the phone (files carry no geometry). Viewport cover of at most 1,024 cells, one GeoJSON source, redrawn after 400 ms of camera rest | Map technology |
-| 9 | A small bundled world basemap for offline, an online Protomaps PMTiles basemap on our own storage, and "© OpenStreetMap" always reachable | Map technology, Compliance |
-| 10 | Location stays off in W12. An on-demand approximate "Near me" button is recommended for later, pending an owner decision | Centring |
+| 9 | An online Protomaps PMTiles basemap, an optional "Offline map" download in the app Settings (nothing bundled), and "© OpenStreetMap" always reachable | Map technology, Compliance |
+| 10 | A "Near me" button asks for approximate location only when tapped. Precise location is never requested | Centring |
+| 11 | Shared data is published under CC BY 4.0 and cannot be withdrawn. "Stop sharing" takes effect from the next UTC day | Privacy rules, Compliance |
+| 12 | Hosting is source.coop (Radiant Earth partnership, AWS Open Data). The phone never holds source.coop write credentials | Feed contract, Compliance |
 
 ### UX benchmark
 
@@ -256,9 +258,9 @@ and its settings hold "Share this sensor publicly", off by default.
 **Navigation.** Three tabs, Discover, My devices and Settings. With no paired device Discover
 is the start tab. With a paired device My devices is the start tab.
 
-### Centring the map without location permission
+### Centring the map and Near me
 
-W12 ships with no location permission. The map opens on the first of these that exists.
+The map never asks for location at launch. It opens on the first of these that exists.
 
 1. The last viewed area (saved camera).
 2. The cell of the user's own published device.
@@ -269,9 +271,9 @@ W12 ships with no location permission. The map opens on the first of these that 
 Search uses a bundled place list (GeoNames cities with population 15,000 or more, licensed
 CC BY 4.0, credited in About). Search is local, so typing never leaves the phone.
 
-**"Near me", recommended later.** An optional button that asks for approximate location only at
-the moment it is tapped is worth adding, because a time-zone guess fails for large zones and
-store rules allow it cleanly.
+**"Near me" (owner decision 2026-10-08).** A map button that asks for approximate location only
+at the moment it is tapped, because a time-zone guess fails for large zones and store rules
+allow it cleanly. Precise location is never requested on either platform.
 
 - Android. Declare only `ACCESS_COARSE_LOCATION` (about 3 km², similar to a resolution 7 cell).
   Foreground only, so no Play location declaration or background disclosure is needed. Check
@@ -283,8 +285,12 @@ store rules allow it cleanly.
 - Use. The fix only moves the camera. It is never stored, never sent and never published, so it
   is not "collected" under either store's privacy rules.
 
-This conflicts with the `AGENTS.md` line "No ... location permission", so it needs an owner
-decision before it is built. Until then, search and time zone centring are the answer.
+- Decline. The map stays where it is and search remains. Asking again happens only on the next
+  tap, never on launch.
+- The same approximate fix may preselect the cell in the sharing cell picker. The owner still
+  confirms or moves the cell, and the fix itself is not kept.
+
+`AGENTS.md` records this boundary.
 
 ### Privacy rules
 
@@ -293,7 +299,8 @@ particle series reveal occupancy, cooking and even how many people are home. The
 treat each public series as personal data until it is aggregated.
 
 1. **No points, only cells.** Public data carries an H3 cell, never coordinates. The owner picks
-   the cell on the map when opting in. The phone never reads GPS for this. No jitter is added to
+   the cell on the map when opting in, optionally starting from an approximate "Near me" fix.
+   Coordinates never leave the phone. No jitter is added to
    cells, since snapping already coarsens the place and noise only helps for points.
 2. **Precision.** Resolution 7 (5.16 km², edge about 1.4 km) is the default published
    resolution. Resolution 8 (0.74 km², edge about 0.5 km) is the finest, used only where a
@@ -310,17 +317,28 @@ treat each public series as personal data until it is aggregated.
 6. **Outdoor only.** A device must be marked outdoor to publish. The indoor or outdoor choice
    defaults to indoor. Indoor devices never appear in public data (Netatmo and
    Sensor.Community do the same).
-7. **Public identity.** A random public ID, regenerated whenever the owner turns sharing off and
-   on again. Never derived from the station UUID, MAC address or serial. The public name is
-   generated (two words and a number, for example "Blue Heron 41"), with a "New name" button.
-   No free text, which also keeps the feature out of store user-generated content rules. The
-   station UUID, MAC, BLE name, Wi-Fi and LAN token never leave the phone through this feature.
-8. **Opt in per device.** Reading the feed is anonymous and read-only. Uploading is off for every
-   device by default and is turned on only in that device's settings ("Share this sensor
-   publicly"), never globally, in onboarding or in pairing. One confirmation shows the cell
-   picker, the generated name, what is shared (hourly outdoor readings and the area) and what
-   never is (exact location, IDs, Wi-Fi, PIN, token). Turning it off stops uploads at once and
-   asks the publisher to delete that device's public history (see Compliance).
+7. **Device identity, not user identity (owner decision 2026-10-08).** No accounts, no sign-in
+   and no passkey at app start. Passkeys need a relying party server and are an account in
+   store terms, which brings sign-in screens and in-app account deletion for no gain here.
+   Instead, turning sharing on makes a fresh P-256 key pair for that device in the Android
+   Keystore or the iOS Keychain (Secure Enclave where available). The private key never leaves
+   the phone and signs each upload. The public ID is a truncated SHA-256 of the public key, and
+   the public name is derived from the same hash as two words and a number (for example "Blue
+   Heron 41"), so there is no free text and nothing to moderate. Turning sharing on again later
+   makes a new key, ID and name. Nothing is derived from the station UUID, MAC address, serial
+   or the owner. The station UUID, MAC, BLE name, Wi-Fi and LAN token never leave the phone.
+   If the firmware later uploads by itself, the key moves to the board through an
+   `aq-parquet` contract change.
+8. **Opt in per device, with an open licence.** Reading the feed is anonymous and read-only.
+   Uploading is off for every device by default and is turned on only in that device's settings
+   ("Share this sensor publicly"), never globally, in onboarding or in pairing. One
+   confirmation shows the cell picker, the generated name, what is shared (hourly outdoor
+   readings and the area), what never is (exact location, IDs, Wi-Fi, PIN, token), and that
+   published data is released under CC BY 4.0 and cannot be taken back.
+9. **Stop sharing (owner decision 2026-10-08).** Stored with that device's settings. It takes
+   effect from the next UTC day, so the current day's hours still publish and nothing after
+   it does. Data already published stays public under its licence. Sharing can be turned on
+   again at any time with a new identity (rule 7).
 
 The publisher enforces every rule before a file is written. The phone never receives a
 suppressed cell or a lone device, so a modified client cannot reveal one.
@@ -341,8 +359,14 @@ pairing and sync work exactly as before. `AGENTS.md` records this boundary.
 
 The feed mirrors the website's `/indices` explorer (`walkthru-earth.github.io`,
 `docs/indices.md` and `docs/parquet-producer-guidance.md`), so one dataset serves the website,
-the phone and anyone with DuckDB. Static files on source.coop, no server. The host publisher
-(not this repo) runs once an hour, applies the privacy rules above, and writes immutable files.
+the phone and anyone with DuckDB. Static files on source.coop (owner decision 2026-10-08, a
+Radiant Earth partnership on AWS Open Data), no server for reading. The publisher (not this
+repo) runs once an hour, applies the privacy rules above, and writes immutable files.
+
+**Upload path.** The phone never holds source.coop write credentials. Signed hourly uploads go
+to a small ingest endpoint owned by the publisher, which checks the signature against the
+device's registered public key and keeps raw rows private until the hourly run aggregates them.
+Who builds and runs the publisher and ingest is still open.
 
 ```
 opensensor/discover/v1/
@@ -368,6 +392,8 @@ opensensor/discover/v1/
   RLE_DICTIONARY encodings, no DELTA, no BOOLEAN, no nested types. Min and max statistics on
   every column. Row groups small enough for pruning (start near 16,384 rows and measure), plus
   column and offset indexes. The website already reads SNAPPY.
+  The owner plans to republish existing datasets with SNAPPY or LZ4 later. Until then W12
+  builds on the sample feed, which already follows these rules.
 
 Reading on the phone.
 
@@ -431,12 +457,12 @@ starts with the target layout from the producer guidance.
   and the FFI build enables it, but `maplibre-compose` documents no PMTiles API, so it is
   "verify on phone" on both platforms. Style from `@protomaps/basemaps` 5.7.2, the `white` or
   `grayscale` flavour recoloured to the sensing palette, light and dark.
-- **Basemap offline.** PMTiles sources are not cached by MapLibre, so the app bundles a small
-  world basemap (a `pmtiles extract --maxzoom` of 3 or 4, budget 8 MB, measured before
-  committing) with its glyphs and sprites from basemaps-assets. A world extract to zoom 6 is
-  about 60 MB, too large to bundle. Without network the cells still draw on the bundled map. If
-  the budget is exceeded, bundle Natural Earth land polygons (public domain) instead, as the
-  website does with local land and border GeoJSON.
+- **Basemap offline (owner decision 2026-10-08).** Nothing is bundled. The app Settings (not a
+  device's settings) offer an optional "Offline map" download, a small world extract
+  (`pmtiles extract --maxzoom` 3 or 4, a few MB, measured before release) with its glyphs and
+  sprites, stored in app storage and removable from the same row. PMTiles sources are not
+  cached by MapLibre, so without the download and without network the cells draw on the plain
+  paper background.
 - **Ornaments.** Use `MapOverlay.AttributionOnly` or draw our own attribution, scale bar off at
   Simple. Compass only after rotation. Flat Web Mercator, no globe.
 
@@ -451,11 +477,12 @@ starts with the target layout from the producer guidance.
 - **Privacy policy.** Required by both stores for every app, as a public URL in the console and
   inside the app (Settings, About). It names the feed and basemap hosts, says each request
   carries the phone's IP address as any web request does, and says we keep no request logs.
-- **Data safety and privacy label.** With no request logs on our buckets, nothing is collected.
-  Play Data safety declares no data collected or shared. Apple's label is "Data Not Collected",
-  since an IP address sent in a request and not retained need not be disclosed. If bucket or
-  CDN access logs are ever enabled, both answers change. Confirm the source.coop logging policy
-  before release.
+- **Data safety and privacy label.** Reading the feed sends no identifier, and we receive no
+  request logs, so nothing is collected. Play Data safety declares no data collected or shared.
+  Apple's label is "Data Not Collected", since an IP address sent in a request and not retained
+  need not be disclosed. Confirm in writing with Radiant Earth what source.coop and AWS log for
+  public reads and that it is not shared with us. If that changes, both answers change. The
+  Near me fix is used on the phone only and is not collected.
 - **Privacy manifest.** `PrivacyInfo.xcprivacy` with `NSPrivacyTracking` false and the required
   reason entries for the APIs the binary uses (UserDefaults, file timestamps, disk space).
   Audit the built framework, since Kotlin/Native, Compose and MapLibre may call them.
@@ -467,11 +494,13 @@ starts with the target layout from the producer guidance.
   tracking. Play "Approximate location" and the closest sensor category, collected, user
   initiated, optional, not shared with third parties beyond public publication. Disclose that
   the data becomes public.
-- **Deletion.** No accounts, so account deletion rules do not apply. Still provide a per-device
-  "Stop sharing and delete public data" action that removes the device's series and public ID
-  from the next publisher run, with a stated deadline (proposed 7 days, well inside Play's 90
-  day guidance), and describe it in the privacy policy. Uploads need proof of ownership of the
-  public ID (a per-device upload key kept in the phone's encrypted store), never an account.
+- **Licence and stopping.** No accounts, so account deletion rules do not apply. Published data
+  is CC BY 4.0, which the opt-in confirmation states before anything uploads. "Stop sharing"
+  stops new data from the next UTC day and does not withdraw what is published. The privacy
+  policy says this, and keeps a contact address for legal removal requests, since per-device
+  series could still count as personal data under laws such as the GDPR even when the licence
+  is irrevocable. Uploads prove ownership with the per-device key (privacy rule 7), never an
+  account.
 - **User-generated content.** Generated names keep the feature out of Apple 1.2 and Play UGC
   rules. If free-text names are ever allowed, the app must add filtering, reporting, blocking
   and a contact address first.
@@ -490,17 +519,24 @@ starts with the target layout from the producer guidance.
 provides only the HTTP engine, the cache directory and the H3 binding. Ktor 3.6.0 is the latest client. Its
 use with Kotlin 2.4.20 still has to pass `verify` and `verifyIos` before it is pinned.
 
-### Open questions for the owner
+### Owner decisions and open questions
 
-1. "Near me" with approximate location on demand, which changes the `AGENTS.md` boundary.
-2. Generated public names only, or free text with moderation duties.
-3. The deletion deadline for public data after "Stop sharing".
-4. Hosting. Our own bucket behind a CDN or source.coop, and whether either keeps access logs.
-5. The bundled basemap budget (proposed 8 MB).
-6. Whether the phone may ship H3 as native code (JNI on Android, cinterop on iOS), which the
-   feed layout now requires, or whether the publisher should also write a small boundary column
-   for resolutions 7 and 8 only.
-7. Who builds the host publisher and when, since it owns the privacy rules.
+Decided on 2026-10-08.
+
+1. "Near me" ships, approximate location only, asked on tap.
+2. No accounts or passkeys. A per-device anonymous key, with the ID and name derived from it.
+3. Published data is CC BY 4.0 and permanent. "Stop sharing" applies from the next UTC day.
+4. Hosting is source.coop. Logging terms to confirm with Radiant Earth.
+5. No bundled basemap. An optional "Offline map" download in the app Settings.
+6. H3 runs on the phone as native code by default (`com.uber:h3` on Android, the C library on
+   iOS). It is needed anyway for the viewport cover, Near me and the cell picker. The
+   publisher still does all aggregation and privacy work, so the phone only does geometry.
+
+Still open.
+
+1. Who builds and runs the hourly publisher and the upload ingest, and in which repository.
+   This is the job that turns raw uploads into the public cell files and enforces the crowd
+   rule. The read only map in W12 works without it, on the sample data.
 
 ### Sources
 

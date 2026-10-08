@@ -35,7 +35,8 @@ invalid, disconnected and expired readings remain unavailable. Ambiguous
 board temperature and humidity are shown only for reviewed schema/dictionary
 profiles. Core Bluetooth owns pairing prompts. Operations are serialized and
 scan/connection timers bound attempts. The app sends no firmware-changing
-commands and has no accounts, analytics, cloud connection or location permission. The planned
+commands and has no accounts, analytics or cloud connection. Location is planned as approximate
+only, asked on a "Near me" tap (`NSLocationDefaultAccuracyReduced`). The planned
 discover map adds only anonymous, read-only feed and basemap GETs, and uploads stay a per-device
 opt-in ([devices-and-discovery.md](devices-and-discovery.md#network-boundary)).
 
