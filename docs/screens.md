@@ -167,7 +167,8 @@ palette `sensing`. `BrandTokensTest` pins every value and checks text contrast o
   `FloatingIconButton` or `FloatingTextButton` (the Scan and Sync all actions) and the
   `FloatingControl` shapes and tint (curved cards, Signal blue only for the selection).
   The rules are in `docs/cross-platform-guide.md`, "Floating controls".
-- **Mascot.** The peacock (`res/drawable-nodpi/peacock.webp`, from the website's
+- **Mascot.** The peacock (`ui/designsystem/src/commonMain/composeResources/drawable/peacock.webp`,
+  `Res.drawable.peacock`, from the website's
   `public/mascots/`) is a guide on the welcome and no-device states (Devices), the all-synced
   state (Files) and a clean Smart Sync run (Today). Never beside charts or numbers. It enters
   with a finite fade that the system animator setting can turn off.

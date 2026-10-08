@@ -28,6 +28,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
 /** One destination in [BrandBottomBar]: the caller's [key], its label and its icon. */
@@ -91,7 +93,10 @@ private fun BottomBarItem(tab: BottomBarTab<*>, selected: Boolean, onClick: () -
             style = MaterialTheme.typography.labelMedium,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
             color = if (selected) colors.onSurface else colors.onSurfaceVariant,
-            maxLines = 1,
+            // Two lines at large font scales, never clipped mid-word.
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
         )
     }
 }

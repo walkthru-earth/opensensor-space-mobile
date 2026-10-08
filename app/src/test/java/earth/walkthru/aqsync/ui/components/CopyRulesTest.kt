@@ -22,11 +22,11 @@ class CopyRulesTest {
     private fun strings(): Map<String, String> = parse(File(root, "app/src/main/res/values/strings.xml"))
 
     /**
-     * The Compose resource catalogues shared with iOS (`feature/<name>/src/commonMain/composeResources`),
-     * by module name.
+     * The Compose resource catalogues shared with iOS (`feature/<name>` and `ui/<name>`
+     * `src/commonMain/composeResources`), by module name.
      */
     private fun sharedStrings(): Map<String, Map<String, String>> =
-        File(root, "feature").listFiles().orEmpty().sortedBy { it.name }.mapNotNull { module ->
+        listOf("feature", "ui").flatMap { File(root, it).listFiles().orEmpty().toList() }.sortedBy { it.name }.mapNotNull { module ->
             val file = File(module, "src/commonMain/composeResources/values/strings.xml")
             if (file.isFile) module.name to parse(file) else null
         }.toMap()
@@ -57,7 +57,7 @@ class CopyRulesTest {
     @Test
     fun `no dashes semicolons or sentence colons`() {
         val shared = sharedStrings()
-        assertTrue("Shared catalogues missing: ${shared.keys}", shared.keys.containsAll(listOf("discover", "settings")))
+        assertTrue("Shared catalogues missing: ${shared.keys}", shared.keys.containsAll(listOf("discover", "settings", "designsystem")))
         val all = strings() + shared.flatMap { (module, values) -> values.map { (k, v) -> "$module/$k" to v } }
         val broken = all.filter { (_, text) ->
             val sentence = text.replace(Regex("%\\d+\\$[a-z]"), "X").replace(Regex("\\d:\\d"), "0")
