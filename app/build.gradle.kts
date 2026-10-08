@@ -204,6 +204,8 @@ dependencies {
     implementation(project(":core:protocol"))
     implementation(project(":core:parquet"))
     implementation(project(":core:history"))
+    // Request session, sync policies, planner and progress maths, shared with iOS.
+    implementation(project(":core:sync"))
     // The Discover map (shared Compose with iOS) and the public feed port behind it.
     implementation(project(":feature:discover"))
     implementation(project(":ui:designsystem"))

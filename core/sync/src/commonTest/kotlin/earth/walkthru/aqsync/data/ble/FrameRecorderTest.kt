@@ -2,15 +2,15 @@ package earth.walkthru.aqsync.data.ble
 
 import earth.walkthru.aqsync.data.protocol.FrameType
 import earth.walkthru.aqsync.data.protocol.Opcode
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertSame
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 class FrameRecorderTest {
     @Test
-    fun `chunk snapshots are bounded but terminal frames publish complete ring history`() {
+    fun chunkSnapshotsAreBoundedButTerminalFramesPublishCompleteRingHistory() {
         var now = 0L
         val recorder = FrameRecorder(capacity = 4, monotonicMs = { now })
         recorder.rx(byteArrayOf(FrameType.CHUNK.toByte(), 1))
@@ -29,7 +29,7 @@ class FrameRecorderTest {
     }
 
     @Test
-    fun `secrets stay redacted and previews keep exact byte values and lengths`() {
+    fun secretsStayRedactedAndPreviewsKeepExactByteValuesAndLengths() {
         val recorder = FrameRecorder()
         recorder.rx(byteArrayOf(FrameType.TOKEN.toByte(), 0x12, 0x34))
         recorder.tx(byteArrayOf(Opcode.SET_CONFIG.toByte(), 0x56, 0x78))
@@ -47,7 +47,7 @@ class FrameRecorderTest {
     }
 
     @Test
-    fun `failed request flush exposes its final chunks without waiting for a terminal frame`() {
+    fun failedRequestFlushExposesItsFinalChunksWithoutWaitingForATerminalFrame() {
         val recorder = FrameRecorder(monotonicMs = { 0 })
         recorder.rx(byteArrayOf(FrameType.CHUNK.toByte(), 1))
         recorder.rx(byteArrayOf(FrameType.CHUNK.toByte(), 2))
@@ -60,7 +60,7 @@ class FrameRecorderTest {
     }
 
     @Test
-    fun `clearing resets both ring and snapshot cadence`() {
+    fun clearingResetsBothRingAndSnapshotCadence() {
         val recorder = FrameRecorder(monotonicMs = { 0 })
         recorder.rx(byteArrayOf(FrameType.CHUNK.toByte(), 1))
         recorder.clear()

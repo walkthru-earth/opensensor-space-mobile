@@ -33,15 +33,15 @@ enum class TransportKind { BLE, LAN, FAKE }
 
 /**
  * The five GATT attributes of the AQ Sync service, abstracted so the same protocol/sync code runs
- * over a real [BluetoothGatt][android.bluetooth.BluetoothGatt] link, a LAN TCP socket
- * ([earth.walkthru.aqsync.data.lan.TcpTransport]) or an in-process fake device.
+ * over a real Bluetooth GATT link (`BleTransport` in `app/`), a LAN TCP socket (`TcpTransport` in
+ * `app/`) or an in-process fake device.
  *
  * Byte-level only: framing and JSON live one layer up in [DeviceSession].
  */
 interface AqTransport {
     /**
      * Stable identity of the peer: the Bluetooth address (or a fake id) — also over LAN, so a device
-     * is the same [earth.walkthru.aqsync.data.local.database.KnownDevice] whichever pipe is active.
+     * is the same known device (Room `KnownDevice` on Android) whichever pipe is active.
      */
     val address: String
     val displayName: String?

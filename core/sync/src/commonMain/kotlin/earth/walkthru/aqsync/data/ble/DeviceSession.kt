@@ -12,6 +12,8 @@ import earth.walkthru.aqsync.data.protocol.LiveSample
 import earth.walkthru.aqsync.data.protocol.Opcode
 import earth.walkthru.aqsync.data.protocol.ProtocolError
 import earth.walkthru.aqsync.data.protocol.Request
+import earth.walkthru.aqsync.sync.monotonicMs
+import earth.walkthru.aqsync.sync.nowEpochMs
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -289,7 +291,7 @@ class DeviceSession(val transport: AqTransport) {
         } catch (e: Exception) {
             throw ProtocolViolationException("CONFIG JSON did not parse: ${e.message}")
         }
-        return ConfigSnapshot(parsed, frame.rebootRequired, frame.json, System.currentTimeMillis())
+        return ConfigSnapshot(parsed, frame.rebootRequired, frame.json, nowEpochMs())
     }
 
     /**
@@ -330,12 +332,12 @@ class DeviceSession(val transport: AqTransport) {
     /** `LOG_TAIL max_bytes` → `LOG` × n, then `LOG_END`. Text for humans, not an API. */
     suspend fun logTail(maxBytes: Int = LOG_RING_BYTES): LogTail = request(Opcode.LOG_TAIL) {
         write(Request.LogTail(maxBytes.coerceIn(0, 0xFFFF)))
-        val out = java.io.ByteArrayOutputStream()
+        val slices = ArrayList<ByteArray>()
         while (true) {
             when (val frame = nextFrame(Opcode.LOG_TAIL, FRAME_TIMEOUT_MS)) {
-                is Frame.Log -> out.write(frame.bytes)
+                is Frame.Log -> slices += frame.bytes
                 is Frame.LogEnd -> {
-                    val bytes = out.toByteArray()
+                    val bytes = concat(slices)
                     return LogTail(bytes.decodeToString(), frame.total, frame.returned, bytes.size)
                 }
                 else -> throw unexpected("LOG_TAIL", frame)
@@ -471,12 +473,12 @@ class DeviceSession(val transport: AqTransport) {
         pendingDrain = null
         var dropped = 0
         var terminalSeen = false
-        val deadline = System.currentTimeMillis() + FRAME_TIMEOUT_MS
+        val deadline = monotonicMs() + FRAME_TIMEOUT_MS
         while (true) {
             val raw = if (pending == null) {
                 transport.responseFrames.tryReceive().getOrNull() ?: break
             } else {
-                val remaining = deadline - System.currentTimeMillis()
+                val remaining = deadline - monotonicMs()
                 if (remaining <= 0) break
                 receiveWithin(minOf(DRAIN_QUIET_MS, remaining)) ?: break
             }
@@ -519,6 +521,16 @@ class DeviceSession(val transport: AqTransport) {
 
     /** Overridable so unit tests stay free of android.util.Log. */
     var staleFrameLogger: (String) -> Unit = {}
+
+    private fun concat(slices: List<ByteArray>): ByteArray {
+        val out = ByteArray(slices.sumOf { it.size })
+        var at = 0
+        for (slice in slices) {
+            slice.copyInto(out, at)
+            at += slice.size
+        }
+        return out
+    }
 
     private fun unexpected(request: String, frame: Frame) =
         ProtocolViolationException("unexpected ${frame::class.simpleName} frame in response to $request")

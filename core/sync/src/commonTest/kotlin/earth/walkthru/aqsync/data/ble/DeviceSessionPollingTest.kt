@@ -15,18 +15,18 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import org.junit.Assert.assertArrayEquals
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class DeviceSessionPollingTest {
     private val opened = Frame.Opened(1, 12, 0, "legacy-parquet/boundary.parquet")
 
     @Test
-    fun `response arriving at polling boundary is delivered even before receiver resumes`() = runTest {
+    fun responseArrivingAtPollingBoundaryIsDeliveredEvenBeforeReceiverResumes() = runTest {
         val transport = ResponseTransport()
         // Schedule the sender's timer first. At 250 ms send extracts a waiting receiver, but its
         // continuation queues behind the poll timer. withTimeoutOrNull used to lose OPENED here.
@@ -37,7 +37,7 @@ class DeviceSessionPollingTest {
             runCurrent()
             advanceTimeBy(250)
             runCurrent()
-            assertTrue("polling must not discard an already-selected response", request.isCompleted)
+            assertTrue(request.isCompleted, "polling must not discard an already-selected response")
             assertEquals(opened, request.await())
         } finally {
             request.cancelAndJoin()
@@ -45,7 +45,7 @@ class DeviceSessionPollingTest {
     }
 
     @Test
-    fun `poll timeout wins without consuming the response arriving on the next tick`() = runTest {
+    fun pollTimeoutWinsWithoutConsumingTheResponseArrivingOnTheNextTick() = runTest {
         val transport = ResponseTransport()
         launch { delay(251); transport.responseFrames.send(FrameCodec.encode(opened)) }
         runCurrent()
@@ -65,7 +65,7 @@ class DeviceSessionPollingTest {
     }
 
     @Test
-    fun `raw command quiet boundary preserves the selected response`() = runTest {
+    fun rawCommandQuietBoundaryPreservesTheSelectedResponse() = runTest {
         val transport = ResponseTransport()
         launch { delay(250); transport.responseFrames.send(FrameCodec.encode(opened)) }
         runCurrent()
@@ -77,7 +77,7 @@ class DeviceSessionPollingTest {
     }
 
     @Test
-    fun `quiet timeout leaves a later response in the transport channel`() = runTest {
+    fun quietTimeoutLeavesALaterResponseInTheTransportChannel() = runTest {
         val transport = ResponseTransport()
         val raw = FrameCodec.encode(opened)
         launch { delay(251); transport.responseFrames.send(raw) }
@@ -89,11 +89,11 @@ class DeviceSessionPollingTest {
         assertTrue(request.await().isEmpty())
         advanceTimeBy(1)
         runCurrent()
-        assertArrayEquals(raw, transport.responseFrames.tryReceive().getOrThrow())
+        assertContentEquals(raw, transport.responseFrames.tryReceive().getOrThrow())
     }
 
     @Test
-    fun `lost link is detected at the same polling interval`() = runTest {
+    fun lostLinkIsDetectedAtTheSamePollingInterval() = runTest {
         val transport = ResponseTransport()
         val request = async { runCatching { DeviceSession(transport).open(opened.name) } }
         runCurrent()
@@ -106,7 +106,7 @@ class DeviceSessionPollingTest {
     }
 
     @Test
-    fun `cancelling a request frees the receiver and the next request drains its late terminal`() = runTest {
+    fun cancellingARequestFreesTheReceiverAndTheNextRequestDrainsItsLateTerminal() = runTest {
         val transport = ResponseTransport()
         val stale = ArrayList<String>()
         val session = DeviceSession(transport).also { it.staleFrameLogger = stale::add }
@@ -124,7 +124,7 @@ class DeviceSessionPollingTest {
     }
 
     @Test
-    fun `stale drain quiet boundary consumes the old terminal before the new request`() = runTest {
+    fun staleDrainQuietBoundaryConsumesTheOldTerminalBeforeTheNewRequest() = runTest {
         val transport = ResponseTransport()
         val stale = ArrayList<String>()
         val session = DeviceSession(transport).also { it.staleFrameLogger = stale::add }
@@ -144,11 +144,11 @@ class DeviceSessionPollingTest {
     }
 
     @Test
-    fun `GET_CONFIG reassembles ordered BLE chunks before parsing JSON`() = runTest {
+    fun getConfigReassemblesOrderedBleChunksBeforeParsingJson() = runTest {
         val transport = ResponseTransport()
         val session = DeviceSession(transport)
         val json = """{"sensor":{"vendor":"Plantower","model":"PMS5003T","serial":"PMS5003T-202604081332","batch_candidate":1}}"""
-        val bytes = json.toByteArray()
+        val bytes = json.encodeToByteArray()
         val request = async { session.getConfig() }
         runCurrent()
         transport.responseFrames.send(FrameCodec.encode(Frame.ConfigChunk(0, bytes.size, 0, bytes.copyOfRange(0, 40))))
@@ -158,7 +158,7 @@ class DeviceSessionPollingTest {
     }
 
     @Test
-    fun `GET_CONFIG rejects missing chunk instead of accepting partial JSON`() = runTest {
+    fun getConfigRejectsMissingChunkInsteadOfAcceptingPartialJson() = runTest {
         val transport = ResponseTransport()
         val session = DeviceSession(transport)
         val request = async { runCatching { session.getConfig() } }
