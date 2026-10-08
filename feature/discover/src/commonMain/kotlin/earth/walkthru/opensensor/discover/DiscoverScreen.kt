@@ -224,7 +224,7 @@ private fun DiscoverContent(
                     }
                     Spacer(Modifier.weight(1f))
                     Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        NearMeButton(nearMe, mapState, strings.nearMe, Modifier.padding(end = 8.dp))
+                        NearMeButton(nearMe, mapState, strings.nearMe, strings.nearMeAccess, Modifier.padding(end = 8.dp))
                         if (networkAllowed) Attribution(strings, attributionOpen, infoButton)
                     }
                 }

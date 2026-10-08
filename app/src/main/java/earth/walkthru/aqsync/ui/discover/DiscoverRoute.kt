@@ -20,10 +20,12 @@ import earth.walkthru.aqsync.ui.components.InfoButton
 import earth.walkthru.aqsync.ui.components.InfoContent
 import earth.walkthru.aqsync.ui.components.LocalUnits
 import earth.walkthru.opensensor.discover.DiscoverController
+import earth.walkthru.opensensor.discover.DiscoverIcons
 import earth.walkthru.opensensor.discover.DiscoverScreen
 import earth.walkthru.opensensor.discover.DiscoverStrings
 import earth.walkthru.opensensor.discover.InfoText
 import earth.walkthru.opensensor.discover.bundledSampleFeed
+import earth.walkthru.opensensor.permissions.AccessDialogTexts
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -101,6 +103,17 @@ private fun discoverStrings(): DiscoverStrings {
         updatedHoursAgo = { n -> res.getQuantityString(R.plurals.discover_updated_hours_ago, n, n) },
         updatedRecently = stringResource(R.string.discover_updated_recently),
         nearMe = stringResource(R.string.discover_near_me),
+        nearMeAccess = AccessDialogTexts(
+            rationaleTitle = stringResource(R.string.discover_near_me_access_title),
+            rationaleBody = stringResource(R.string.discover_near_me_access_body),
+            settingsTitle = stringResource(R.string.discover_near_me_settings_title),
+            settingsBody = stringResource(R.string.discover_near_me_settings_body),
+            continueLabel = stringResource(R.string.perm_continue),
+            notNow = stringResource(R.string.action_not_now),
+            openSettings = stringResource(R.string.perm_open_settings),
+            cancel = stringResource(R.string.action_cancel),
+            icon = DiscoverIcons.MyLocation,
+        ),
         windowShortHour = stringResource(R.string.discover_window_short_hour),
         windowShortDay = stringResource(R.string.discover_window_short_day),
         windowShortWeek = stringResource(R.string.discover_window_short_week),

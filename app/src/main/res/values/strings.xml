@@ -919,6 +919,10 @@
     <string name="discover_clear_search">Clear search</string>
     <string name="discover_updated_recently">Updated within the hour</string>
     <string name="discover_near_me">Near me</string>
+    <string name="discover_near_me_access_title">Allow approximate location</string>
+    <string name="discover_near_me_access_body">Near me moves the map to your area. Your location stays on this phone.</string>
+    <string name="discover_near_me_settings_title">Location is off</string>
+    <string name="discover_near_me_settings_body">Turn on location for opensensor.space in settings to use Near me.</string>
     <string name="discover_window_short_hour">1h</string>
     <string name="discover_window_short_day">24h</string>
     <string name="discover_window_short_week">7d</string>

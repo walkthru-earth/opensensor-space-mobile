@@ -3,33 +3,38 @@ package earth.walkthru.opensensor.discover
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
+import earth.walkthru.opensensor.permissions.AccessHooks
+import earth.walkthru.opensensor.permissions.AccessKind
+import earth.walkthru.opensensor.permissions.RuntimeAccess
+import earth.walkthru.opensensor.permissions.rememberOpenAppSettings
 
 // Only ACCESS_COARSE_LOCATION, the one location permission the app manifest declares. Never FINE.
+// After a permanent denial Android answers at once without a prompt and no rationale is due, so the
+// shared flow offers the app's settings page.
 @Composable
-internal actual fun rememberApproximateLocationPermission(): ApproximateLocationPermission {
+internal actual fun rememberApproximateLocationAccess(): RuntimeAccess {
     val context = LocalContext.current
-    val pending = remember { arrayOfNulls<(Boolean) -> Unit>(1) }
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        pending[0]?.invoke(granted)
-        pending[0] = null
-    }
-    return remember(context, launcher) {
-        object : ApproximateLocationPermission {
-            override val granted: Boolean get() = context.hasCoarseLocation()
-
-            override fun request(onResult: (Boolean) -> Unit) {
-                pending[0] = onResult
-                // After a permanent denial Android returns false at once without a prompt.
-                launcher.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
-            }
-        }
-    }
+    val activity = LocalActivity.current
+    val access = remember { RuntimeAccess(AccessKind.APPROX_LOCATION) }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { access.onPermissionResult() }
+    val openSettings = rememberOpenAppSettings()
+    access.bind(
+        AccessHooks.rationaleBased(
+            granted = { context.hasCoarseLocation() },
+            rationaleDue = { activity?.shouldShowRequestPermissionRationale(COARSE) == true },
+            requestPermission = { launcher.launch(COARSE) },
+            openSettings = openSettings,
+        ),
+    )
+    return access
 }
 
-private fun Context.hasCoarseLocation(): Boolean =
-    checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+private const val COARSE = Manifest.permission.ACCESS_COARSE_LOCATION
+
+private fun Context.hasCoarseLocation(): Boolean = checkSelfPermission(COARSE) == PackageManager.PERMISSION_GRANTED

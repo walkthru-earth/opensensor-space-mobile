@@ -2,6 +2,7 @@ package earth.walkthru.opensensor.discover
 
 import androidx.compose.runtime.Immutable
 import earth.walkthru.aqsync.airquality.WhoStep
+import earth.walkthru.opensensor.permissions.AccessDialogTexts
 
 /**
  * Every word Discover shows. Android builds this from `res/values/strings.xml` (so `CopyRulesTest`
@@ -51,6 +52,18 @@ data class DiscoverStrings(
     },
     /** The map button that centres on approximate location, spoken only. */
     val nearMe: String = "Near me",
+    /**
+     * Near me's approximate location dialogs. The rationale shows only when Android says it is due,
+     * the settings dialog only after the system stops asking. iOS never shows the rationale.
+     */
+    val nearMeAccess: AccessDialogTexts = AccessDialogTexts(
+        rationaleTitle = "Allow approximate location",
+        rationaleBody = "Near me moves the map to your area. Your location stays on this phone.",
+        settingsTitle = "Location is off",
+        settingsBody = "Turn on location for opensensor.space in Settings to use Near me.",
+        openSettings = "Open Settings",
+        icon = DiscoverIcons.MyLocation,
+    ),
     /** Short labels beside the time slider stops. The full window names are spoken. */
     val windowShortHour: String = "1h",
     val windowShortDay: String = "24h",
