@@ -112,7 +112,7 @@
     <string name="mood_thick_advice">Stay inside with windows shut and run a filter.</string>
     <string name="mood_thick_like">Like a room where someone is smoking</string>
     <!-- WHO 2021 steps, named in text so colour is never the only carrier. One set for every screen,
-         Discover included. Keep identical to DiscoverStrings.whoSteps in feature/discover. -->
+         Discover included. Keep identical to feature/discover composeResources, CopyRulesTest checks. -->
     <string name="who_step_guideline">Within the WHO guideline</string>
     <string name="who_step_it4">Within WHO interim target 4</string>
     <string name="who_step_it3">Within WHO interim target 3</string>
@@ -886,77 +886,9 @@
     <string name="debug_raw_needs_confirmation">%1$s is not sent from here. Use the Device screen, which asks for confirmation.</string>
     <string name="debug_raw_no_response">No response frames within the quiet period.</string>
     <string name="conn_pairing_repair">Bluetooth pairing needs repair. If this sensor was reset or reflashed, forget it in Android Bluetooth settings and pair again. Your archived files are kept.</string>
-    <!-- Discover map (feature/discover). Keep in step with DiscoverStrings.English for iOS. -->
+    <!-- Tabs. The Discover map copy lives in feature/discover composeResources, shared with iOS. -->
     <string name="tab_discover">Discover</string>
     <string name="tab_my_devices">My devices</string>
-    <string name="discover_search_places">Search places</string>
-    <string name="discover_add_sensor">Add your sensor</string>
-    <string name="discover_more">More</string>
-    <string name="discover_window_last_hour">Last hour</string>
-    <string name="discover_window_24_hours">24 hours</string>
-    <string name="discover_window_7_days">7 days</string>
-    <string name="discover_sample_data">Sample data</string>
-    <string name="discover_sample_info">These numbers are made up for a preview. Real sensors appear here when the public feed goes live.</string>
-    <string name="discover_scale_title">Colour scale</string>
-    <string name="discover_scale_info1">No health scale is published for this measurement. Colours stretch from low to high across the areas in view, leaving out the lowest and highest 5 percent.</string>
-    <string name="discover_scale_info2">Each area shows hourly means from three or more sensors. A faded area has no new value for 3 hours. An outline only means the area does not measure this.</string>
-    <string name="discover_osm">© OpenStreetMap</string>
-    <string name="discover_map_title">Map data</string>
-    <string name="discover_map_info1">Map data © OpenStreetMap contributors, under the Open Database License. See openstreetmap.org/copyright.</string>
-    <string name="discover_map_info2">Basemap by Protomaps.</string>
-    <string name="discover_no_areas">No sensor areas here yet</string>
-    <string name="discover_not_measured">Not measured here</string>
-    <string name="discover_stale">No new value for 3 hours</string>
-    <string name="discover_avg">avg</string>
-    <string name="discover_min">min</string>
-    <string name="discover_max">max</string>
-    <string name="discover_first_run">Public sensors near you, shown as areas</string>
-    <string name="discover_explore">Explore</string>
-    <string name="discover_all_measurements">All measurements</string>
-    <string name="discover_unavailable">Public sensors are not available on this phone yet</string>
-    <string name="discover_loading">Loading</string>
-    <string name="discover_no_places">No matching places</string>
-    <string name="discover_clear_search">Clear search</string>
-    <string name="discover_updated_recently">Updated within the hour</string>
-    <string name="discover_near_me">Near me</string>
-    <string name="discover_window_short_hour">1h</string>
-    <string name="discover_window_short_day">24h</string>
-    <string name="discover_window_short_week">7d</string>
-    <string name="discover_time_window">Time window</string>
-    <string name="discover_higher_than">Higher than %1$d%% of areas in view</string>
-    <string name="discover_range_summary">%1$s average %2$s, range %3$s to %4$s %5$s</string>
-    <string name="discover_average_summary">%1$s average %2$s %3$s</string>
-    <string name="discover_who_mark">WHO</string>
-    <string name="discover_who_caption_day">WHO 24-hour guideline</string>
-    <string name="discover_who_caption_compared">Compared with the WHO 24-hour guideline</string>
-    <string name="discover_no_health_scale">No health scale published</string>
-    <string name="discover_who_title">WHO air quality guideline</string>
-    <string name="discover_who_info1">Colours are fixed steps from the WHO global air quality guidelines, 2021, so a colour means the same in every place and every view.</string>
-    <string name="discover_who_info2">The lightest green meets the WHO guideline. Interim targets 4 to 1 are steps on the way to it, each less strict than the one before. The darkest colour is above all four targets.</string>
-    <string name="discover_who_info3">The guideline and the targets are 24-hour means. In the last hour and 7 day views, those means are compared with the same values.</string>
-    <string name="discover_off_scale">Some areas go past the chart, up to %1$s</string>
-    <string name="discover_who_step_spoken">%1$s, up to %2$s %3$s</string>
-    <plurals name="discover_spread_summary">
-        <item quantity="one">%1$s across %2$d area, from %3$s to %4$s %5$s</item>
-        <item quantity="other">%1$s across %2$d areas, from %3$s to %4$s %5$s</item>
-    </plurals>
-    <string name="discover_range_to">to</string>
-    <plurals name="discover_area_count">
-        <item quantity="one">%1$d area</item>
-        <item quantity="other">%1$d areas</item>
-    </plurals>
-    <plurals name="discover_areas_in_view">
-        <item quantity="one">%1$d sensor area in view</item>
-        <item quantity="other">%1$d sensor areas in view</item>
-    </plurals>
-    <plurals name="discover_sensors">
-        <item quantity="one">%1$d sensor</item>
-        <item quantity="other">%1$d sensors</item>
-    </plurals>
-    <plurals name="discover_updated_hours_ago">
-        <item quantity="one">Updated %1$d h ago</item>
-        <item quantity="other">Updated %1$d h ago</item>
-    </plurals>
     <string name="settings_public_sensors">Show public sensors</string>
     <string name="settings_public_sensors_body">When off, the map uses no internet and shows only sample data.</string>
     <string name="settings_units">Units</string>

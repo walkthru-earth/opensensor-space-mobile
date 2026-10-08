@@ -91,19 +91,20 @@ private val PEEK_HEIGHT = 200.dp
  * "Sample data" pill and the sheet at peek height. Explanations sit behind info buttons.
  *
  * [networkAllowed] is the Settings switch. Off, the basemap is a plain paper background and no
- * request leaves the phone. [infoButton] lets the host reuse its own info affordance. [units] is
+ * request leaves the phone. The copy comes from this module's Compose resources. [infoButton] lets the host reuse its own info affordance. [units] is
  * the host's resolved Settings choice (METRIC or IMPERIAL). It changes labels only, never the scale.
  */
 @Composable
 fun DiscoverScreen(
     controller: DiscoverController,
-    strings: DiscoverStrings,
     networkAllowed: Boolean,
     onAddSensor: () -> Unit,
     modifier: Modifier = Modifier,
     infoButton: @Composable (InfoText, Modifier) -> Unit = { info, m -> DefaultInfoButton(info, m) },
     units: UnitSystem = UnitSystem.METRIC,
 ) {
+    // One catalogue for both apps (composeResources/values/strings.xml).
+    val strings = discoverStrings()
     val formatter = remember(units) { UnitFormatter(units) }
     CompositionLocalProvider(LocalDiscoverUnits provides formatter) {
         DiscoverContent(controller, strings, networkAllowed, onAddSensor, modifier, infoButton)
@@ -467,6 +468,7 @@ private fun FirstRunCard(strings: DiscoverStrings, onAddSensor: () -> Unit, onEx
     }
 }
 
+@Composable
 private fun freshness(strings: DiscoverStrings, updated: Long?, reference: Long): String? {
     updated ?: return null
     val hours = ((reference - updated) / 3_600_000L).toInt()

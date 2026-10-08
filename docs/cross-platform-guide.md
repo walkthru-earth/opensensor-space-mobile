@@ -220,10 +220,11 @@ logs and diagnostics. A new field states its level in code, and screenshot tests
 
 ### Copy
 
-Write user-facing text so both platforms say the same thing. A shared string catalogue does not
-exist yet. Android uses `res/values*/strings.xml`, Discover uses `DiscoverStrings.kt`, and the iOS
-screen keeps its strings in `:ios:shared` Kotlin. The plan moves them to Compose resources
-([platform-parity-plan.md](platform-parity-plan.md)).
+Write user-facing text so both platforms say the same thing. Shared screens keep their copy in
+Compose resources, one catalogue for both apps (`feature/<name>/src/commonMain/composeResources/values/strings.xml`,
+today Discover and Settings). Android-only screens still use `res/values*/strings.xml`, and the iOS
+companion screen keeps its strings in `:ios:shared` Kotlin until it moves
+([platform-parity-plan.md](platform-parity-plan.md)). `CopyRulesTest` checks every catalogue.
 No em dashes, colons or semicolons in user-facing copy. Errors say what happened and what to do,
 in words a person without the firmware docs understands.
 

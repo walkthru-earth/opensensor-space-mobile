@@ -56,7 +56,6 @@ import earth.walkthru.opensensor.designsystem.OpenSensorTheme
 import earth.walkthru.opensensor.discover.DiscoverController
 import earth.walkthru.opensensor.discover.DiscoverIcons
 import earth.walkthru.opensensor.discover.DiscoverScreen
-import earth.walkthru.opensensor.discover.DiscoverStrings
 import earth.walkthru.opensensor.discover.UserDefaultsDiscoverPrefs
 import earth.walkthru.opensensor.discover.bundledSampleFeed
 import platform.Foundation.NSCurrentLocaleDidChangeNotification
@@ -106,7 +105,6 @@ internal fun AppRoot(companion: @Composable (UnitSystem) -> Unit) {
                 when (tab) {
                     Tab.DISCOVER -> DiscoverScreen(
                         controller = controller,
-                        strings = DiscoverStrings.English,
                         networkAllowed = showPublic,
                         onAddSensor = { tab = Tab.MY_DEVICES },
                         units = units,
