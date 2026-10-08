@@ -60,6 +60,12 @@ Measured 2026-09-18 (`bench-verified.md`, "advertising payload wakes the phone")
 
 **Exemptions that come with CDM** (AOSP `CompanionExemptionProcessor`, *while an associated device is present*): `REQUEST_COMPANION_RUN_IN_BACKGROUND` → permanent power-save allowlist; `REQUEST_COMPANION_USE_DATA_IN_BACKGROUND` → background data allowed — the exemption the measured screen-off socket kill ("Destroyed live tcp sockets") called for; `REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND` → the worker's `setForeground` should stop being refused. All normal permissions, no location. Whether they hold on the OnePlus's ROM is exactly what the next phone run must show.
 
+Both receivers that use `goAsync()` (`WifiArrivalReceiver`, `AdvertScanReceiver`) run their work in
+the injected `@ApplicationScope` (a `SupervisorJob` with a logging exception handler) through
+`launchReceiverWork`, bounded by `withTimeout(9 s)` below the system's 10 s allowance, and call
+`PendingResult.finish()` on every path. A failure is logged by class name and never cancels other
+work in the scope.
+
 ## Scheduling (`AutoSyncScheduler`)
 
 | Request | Details |
@@ -86,7 +92,7 @@ Measured 2026-09-18 (`bench-verified.md`, "advertising payload wakes the phone")
 | Path | Mechanism |
 | --- | --- |
 | User-started transfer | `SyncForegroundService` (`foregroundServiceType="dataSync"`), started by a controller **while the app is in the foreground** (API 31+ start rule). Owns no logic: aggregates manager snapshots for active interactive transfers/reconnects into one ongoing notification (files, bytes, progress; one device's reconnect message only when it is the sole active device). **Stop** and API 35+ timeout cancel interactive transfers/reconnects across controllers, leaving workers to their own cancel actions. Updates are paced at `NOTIFY_INTERVAL_MS` 500 ms; the service stops `STOP_GRACE_MS` 1.5 s after no interactive controller needs it. It is not kept alive over an idle link. |
-| Worker | `setForeground(ForegroundInfo(runNotificationId, …, FOREGROUND_SERVICE_TYPE_DATA_SYNC))` with the same `SyncNotifications.progress`. Each worker has its own notification ID and WorkManager cancel intent; it aggregates only controllers whose `backgroundOwner` equals that run ID. Its Stop cancels that run's device jobs. `ForegroundServiceStartNotAllowedException` (app in background) → log one line, continue as a plain job; with notifications permission a progress notification can still be posted. With a companion association and the device present, `REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND` should make the refusal go away — unverified. |
+| Worker | `setForeground(ForegroundInfo(runNotificationId, …, FOREGROUND_SERVICE_TYPE_DATA_SYNC))` with the same `SyncNotifications.progress`. Each worker has its own notification ID, derived from the WorkRequest id (`SyncWorker.notificationIdFor`, at or above 10 000 so it never collides with the fixed IDs), so a retry or a restarted process reuses it, and its own WorkManager cancel intent; it aggregates only controllers whose `backgroundOwner` equals that run ID. Its Stop cancels that run's device jobs. `ForegroundServiceStartNotAllowedException` (app in background) → log one line, continue as a plain job; with notifications permission a progress notification can still be posted. With a companion association and the device present, `REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND` should make the refusal go away — unverified. |
 | Manifest | WorkManager's `SystemForegroundService` merged with `foregroundServiceType="dataSync"` (`tools:node="merge"`), or Android 14+ throws; default `WorkManagerInitializer` removed from `InitializationProvider` because of the Hilt worker factory. |
 | Notifications | Channels `sync_progress`, `sync_summary`; interactive `FOREGROUND_ID` 1001, distinct worker IDs allocated from 10001, `SUMMARY_ID` 1003. The old `WORKER_ID` constant is no longer used by workers. Summary: "Synced 23 new files from AQ-6b40 · 1.1 MiB" (several sources → "from 2 devices"), only when something arrived or failed. `POST_NOTIFICATIONS` is requested on the first Sync tap / Auto-sync switch-on (API 33+); denial hides ordinary progress/summary notifications. |
 

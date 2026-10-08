@@ -19,6 +19,11 @@ import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** Brings derived history up to date after new files arrive; [HistoryDeriver] in the app. */
+fun interface HistoryRefresher {
+    suspend fun deriveStale(): HistoryDeriver.Result
+}
+
 /**
  * Keeps the aggregate tiers (`aggregate_bucket`) in step with the archive, one UTC station-day at a
  * time. A day is (re)built when the set of verified, indexed, telemetry files that carry UTC rows
@@ -36,7 +41,7 @@ class HistoryDeriver @Inject constructor(
     private val dayDao: DerivedDayDao,
     private val store: DerivedStore,
     private val indexer: HistoryIndexer,
-) {
+) : HistoryRefresher {
     data class Result(val daysChecked: Int, val daysRebuilt: Int, val rowsAggregated: Long)
 
     private val dailyBuilder = DailyDerivedBuilder(store) { station, name -> archive.fileFor(station, name) }
@@ -71,6 +76,8 @@ class HistoryDeriver @Inject constructor(
      * Rebuilds every stale station-day. Cheap when nothing changed; a full first pass over a year of one
      * station is ~365 day rebuilds of ≤ 96 files each. Safe to call from any screen or worker; idempotent.
      */
+    override suspend fun deriveStale(): Result = deriveStale(null)
+
     suspend fun deriveStale(stations: Collection<String>? = null): Result = mutex.withLock {
         withContext(Dispatchers.IO) {
             var checked = 0

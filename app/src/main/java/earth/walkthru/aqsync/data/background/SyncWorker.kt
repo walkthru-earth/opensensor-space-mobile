@@ -14,6 +14,7 @@ import dagger.assisted.AssistedInject
 import earth.walkthru.aqsync.data.DeviceConnectionManager
 import earth.walkthru.aqsync.data.SyncProgress
 import earth.walkthru.aqsync.data.collectionProgress
+import earth.walkthru.aqsync.data.coroutines.suspendRunCatching
 import earth.walkthru.aqsync.data.history.HistoryDeriver
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
@@ -24,6 +25,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 /**
  * The auto-sync worker. Scheduled by [AutoSyncScheduler] every 15 min (WorkManager's minimum) while
@@ -51,7 +53,9 @@ class SyncWorker @AssistedInject constructor(
     private val advertScan: AdvertFlagScan,
 ) : CoroutineWorker(appContext, params) {
     private val owner = id.toString()
-    private val notificationId = workerNotificationIds.incrementAndGet()
+
+    // Stable for this WorkRequest across process restarts and retries, unlike a per-process counter.
+    private val notificationId = notificationIdFor(id)
 
     override suspend fun getForegroundInfo(): ForegroundInfo =
         foregroundInfo("opensensor.space", collectionProgress(manager.snapshots.value.filter { it.backgroundOwner == owner }))
@@ -118,11 +122,11 @@ class SyncWorker @AssistedInject constructor(
         if (inputData.getString(KEY_TRIGGER) == null && inputData.getString(KEY_ADDRESS) == null && !inputData.getBoolean(KEY_ALL_KNOWN, false)) {
             // Periodic run: the cheapest place to re-arm the offloaded flag scan, which a Bluetooth
             // toggle silently drops (stop + start, de-duplicated by the receiver).
-            runCatching { advertScan.ensureRegisteredNow() }.onFailure { Log.w(TAG, "flag scan re-register failed: ${it.message}") }
+            suspendRunCatching { advertScan.ensureRegisteredNow() }.onFailure { Log.w(TAG, "flag scan re-register failed: ${it.message}") }
         }
         if (report.newFiles > 0) {
             // Still inside the worker's run: the tiers for the days that just gained files.
-            runCatching { historyDeriver.deriveStale() }.onFailure { Log.w(TAG, "derive failed: ${it.message}") }
+            suspendRunCatching { historyDeriver.deriveStale() }.onFailure { Log.w(TAG, "derive failed: ${it.message}") }
         }
         if (report.shouldNotify) {
             notifications.postSummary(report.summaryDeviceName, report.newFiles, report.newBytes, report.failures)
@@ -135,7 +139,13 @@ class SyncWorker @AssistedInject constructor(
         if (runAttemptCount < MAX_RETRIES) Result.retry() else Result.success()
 
     companion object {
-        private val workerNotificationIds = java.util.concurrent.atomic.AtomicInteger(10_000)
+        /** Worker notification IDs start here, above the fixed IDs in [SyncNotifications]. */
+        internal const val NOTIFICATION_ID_BASE = 10_000
+
+        /** Notification ID derived from the WorkRequest id, in `[NOTIFICATION_ID_BASE, NOTIFICATION_ID_BASE + 2^28)`. */
+        internal fun notificationIdFor(workId: UUID): Int =
+            NOTIFICATION_ID_BASE + ((workId.mostSignificantBits xor workId.leastSignificantBits).hashCode() and 0x0FFF_FFFF)
+
         private const val TAG = "SyncWorker"
         private const val NOTIFY_INTERVAL_MS = 500L
 

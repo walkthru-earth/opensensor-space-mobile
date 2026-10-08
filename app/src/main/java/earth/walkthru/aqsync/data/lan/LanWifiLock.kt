@@ -7,6 +7,11 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** A Wi-Fi performance lease held while LAN bytes flow; null when the phone has no lock to give. */
+fun interface WifiLeases {
+    fun acquireLease(): AutoCloseable?
+}
+
 /**
  * One [WifiManager.WifiLock] held for exactly as long as a file transfer runs over the LAN pipe.
  *
@@ -32,13 +37,13 @@ import javax.inject.Singleton
  * app holds no CPU wake lock.
  */
 @Singleton
-class LanWifiLock @Inject constructor(@ApplicationContext private val context: Context) {
+class LanWifiLock @Inject constructor(@ApplicationContext private val context: Context) : WifiLeases {
 
     private var lock: WifiManager.WifiLock? = null
     private val leases = LanTransferLeases(::acquireResource, ::releaseResource)
 
     /** Each transfer closes its own lease in finally; the last LAN transfer releases the radio. */
-    fun acquireLease(): AutoCloseable? = leases.acquire()
+    override fun acquireLease(): AutoCloseable? = leases.acquire()
 
     private fun acquireResource(): Boolean {
         val wifi = context.getSystemService(WifiManager::class.java) ?: run {

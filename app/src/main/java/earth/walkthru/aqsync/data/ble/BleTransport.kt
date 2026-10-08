@@ -91,8 +91,8 @@ class BleTransport(
     private val opMutex = Mutex()
     private val connectMutex = Mutex()
 
-    /** Exactly one GATT operation may be in flight; its continuation lives here. */
-    private val pendingOp = AtomicReference<kotlinx.coroutines.CancellableContinuation<GattResult>?>(null)
+    /** Exactly one GATT operation may be in flight; its continuation and expected callback live here. */
+    private val pendingOp = PendingGattOperation<GattResult> { Log.d(TAG, it) }
     private val pendingConnect = AtomicReference<kotlinx.coroutines.CancellableContinuation<Int>?>(null)
     private val linkFailure = BleConnectionFailure()
 
@@ -136,7 +136,7 @@ class BleTransport(
             } else {
                 val failureStatus = linkFailure.recordDisconnected(status)
                 pendingConnect.getAndSet(null)?.resume(failureStatus)
-                pendingOp.getAndSet(null)?.resume(GattResult(failureStatus))
+                pendingOp.failAny(GattResult(failureStatus))
                 _state.value = if (failureStatus == GATT_DISCONNECTED || failureStatus == GATT_CONN_TERMINATE_PEER_USER) {
                     ConnectionState.Disconnected
                 } else {
@@ -146,31 +146,32 @@ class BleTransport(
         }
 
         override fun onServicesDiscovered(g: BluetoothGatt, status: Int) {
-            pendingOp.getAndSet(null)?.resume(GattResult(status))
+            pendingOp.complete(GattCallbackKind.SERVICES_DISCOVERED, null, GattResult(status))
         }
 
         override fun onMtuChanged(g: BluetoothGatt, mtu: Int, status: Int) {
-            pendingOp.getAndSet(null)?.resume(GattResult(status, extra = mtu))
+            pendingOp.complete(GattCallbackKind.MTU_CHANGED, null, GattResult(status, extra = mtu))
         }
 
         override fun onCharacteristicRead(g: BluetoothGatt, c: BluetoothGattCharacteristic, value: ByteArray, status: Int) {
-            pendingOp.getAndSet(null)?.resume(GattResult(status, value))
+            pendingOp.complete(GattCallbackKind.CHARACTERISTIC_READ, c.uuid, GattResult(status, value))
         }
 
         @Deprecated("Pre-API 33 callback")
         override fun onCharacteristicRead(g: BluetoothGatt, c: BluetoothGattCharacteristic, status: Int) {
             if (Build.VERSION.SDK_INT < 33) {
                 @Suppress("DEPRECATION")
-                pendingOp.getAndSet(null)?.resume(GattResult(status, c.value ?: ByteArray(0)))
+                pendingOp.complete(GattCallbackKind.CHARACTERISTIC_READ, c.uuid, GattResult(status, c.value ?: ByteArray(0)))
             }
         }
 
         override fun onCharacteristicWrite(g: BluetoothGatt, c: BluetoothGattCharacteristic, status: Int) {
-            pendingOp.getAndSet(null)?.resume(GattResult(status))
+            pendingOp.complete(GattCallbackKind.CHARACTERISTIC_WRITE, c.uuid, GattResult(status))
         }
 
         override fun onDescriptorWrite(g: BluetoothGatt, d: BluetoothGattDescriptor, status: Int) {
-            pendingOp.getAndSet(null)?.resume(GattResult(status))
+            // Every CCCD has the same UUID; match on the characteristic that owns it.
+            pendingOp.complete(GattCallbackKind.DESCRIPTOR_WRITE, d.characteristic?.uuid, GattResult(status))
         }
 
         override fun onCharacteristicChanged(g: BluetoothGatt, c: BluetoothGattCharacteristic, value: ByteArray) {
@@ -223,12 +224,12 @@ class BleTransport(
             // Missing bond keys can drop the link during this settle. Preserve that callback's
             // status instead of replacing it with discoverServices' generic false-start error.
             linkFailure.throwIfFailed()
-            val disc = op("discoverServices", 20_000) { gattRef.discoverServices() }
+            val disc = op("discoverServices", GattCallbackKind.SERVICES_DISCOVERED, null, 20_000) { gattRef.discoverServices() }
             if (disc.status != BluetoothGatt.GATT_SUCCESS) throw TransportException("service discovery failed (GATT status ${disc.status})", disc.status)
             bindCharacteristics(gattRef)
 
             _state.value = ConnectionState.NegotiatingMtu
-            val m = op("requestMtu", 10_000) { gattRef.requestMtu(AqUuids.MTU_REQUEST) }
+            val m = op("requestMtu", GattCallbackKind.MTU_CHANGED, null, 10_000) { gattRef.requestMtu(AqUuids.MTU_REQUEST) }
             mtu = if (m.status == BluetoothGatt.GATT_SUCCESS && m.extra > 0) m.extra else 23
             if (mtu < AqUuids.MTU_MINIMUM) {
                 throw TransportException("device only granted MTU $mtu; the protocol requires ≥ ${AqUuids.MTU_MINIMUM}")
@@ -314,7 +315,7 @@ class BleTransport(
         }
         val cccd = c.getDescriptor(AqUuids.CCCD)
             ?: throw TransportException("CCCD missing on ${c.uuid}")
-        val r = opWithAuthRetry("writeCCCD ${c.uuid}") {
+        val r = opWithAuthRetry("writeCCCD ${c.uuid}", GattCallbackKind.DESCRIPTOR_WRITE, c.uuid) {
             writeDescriptorCompat(g, cccd, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
         }
         if (r.status != BluetoothGatt.GATT_SUCCESS) {
@@ -328,27 +329,27 @@ class BleTransport(
      * Run one GATT operation: [start] issues the call; the matching callback resumes us. Exactly one
      * operation may be outstanding, enforced by [opMutex].
      */
-    private suspend fun op(name: String, timeoutMs: Long = OP_TIMEOUT_MS, start: () -> Boolean): GattResult =
+    private suspend fun op(name: String, kind: GattCallbackKind, characteristic: UUID?, timeoutMs: Long = OP_TIMEOUT_MS, start: () -> Boolean): GattResult =
         opMutex.withLock {
             linkFailure.throwIfFailed()
             try {
                 withTimeout(timeoutMs) {
                     suspendCancellableCoroutine { cont ->
-                        pendingOp.set(cont)
-                        cont.invokeOnCancellation { pendingOp.compareAndSet(cont, null) }
+                        pendingOp.arm(kind, characteristic, cont)
+                        cont.invokeOnCancellation { pendingOp.disarm(cont) }
                         val started = try {
                             linkFailure.throwIfFailed()
                             start()
                         } catch (e: Exception) {
                             false
                         }
-                        if (!started && pendingOp.compareAndSet(cont, null)) {
+                        if (!started && pendingOp.disarm(cont)) {
                             cont.resumeWithException(linkFailure.exceptionOrNull() ?: TransportException("$name could not be issued (stack busy or link down)"))
                         }
                     }
                 }
             } catch (e: TimeoutCancellationException) {
-                pendingOp.set(null)
+                // invokeOnCancellation already disarmed this operation; a late callback is dropped.
                 throw TransportException("$name timed out", cause = e)
             }
         }
@@ -358,10 +359,10 @@ class BleTransport(
      * GATT_INSUFFICIENT_ENCRYPTION (15) or the catch-all 133. The stack then starts pairing on its
      * own; we wait for the bond to complete and retry the same operation once.
      */
-    private suspend fun opWithAuthRetry(name: String, timeoutMs: Long = OP_TIMEOUT_MS, start: () -> Boolean): GattResult {
+    private suspend fun opWithAuthRetry(name: String, kind: GattCallbackKind, characteristic: UUID?, timeoutMs: Long = OP_TIMEOUT_MS, start: () -> Boolean): GattResult {
         var attempt = 0
         while (true) {
-            val r = op(name, timeoutMs, start)
+            val r = op(name, kind, characteristic, timeoutMs, start)
             // A terminal auth disconnect cannot be repaired by retrying an ATT operation on it.
             linkFailure.throwIfFailed()
             if (r.status in AUTH_STATUSES && attempt == 0) {
@@ -397,7 +398,7 @@ class BleTransport(
     private suspend fun readCharacteristic(c: BluetoothGattCharacteristic?, name: String): ByteArray {
         val g = requireReady()
         val ch = c ?: missing(name)
-        val r = opWithAuthRetry("read $name") { g.readCharacteristic(ch) }
+        val r = opWithAuthRetry("read $name", GattCallbackKind.CHARACTERISTIC_READ, ch.uuid) { g.readCharacteristic(ch) }
         if (r.status != BluetoothGatt.GATT_SUCCESS) throw TransportException("read $name failed (GATT status ${r.status})", r.status)
         return r.value ?: ByteArray(0)
     }
@@ -410,7 +411,7 @@ class BleTransport(
         require(request.size <= 512) { "control request is ${request.size} bytes; max 512" }
         val g = requireReady()
         val ch = control ?: missing("control")
-        val r = opWithAuthRetry("write control") {
+        val r = opWithAuthRetry("write control", GattCallbackKind.CHARACTERISTIC_WRITE, ch.uuid) {
             writeCharacteristicCompat(g, ch, request, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
         }
         if (r.status != BluetoothGatt.GATT_SUCCESS) throw TransportException("control write failed (GATT status ${r.status})", r.status)
@@ -448,7 +449,7 @@ class BleTransport(
 
     private fun teardown() {
         acceptConnectionCallbacks = false
-        pendingOp.getAndSet(null)?.resume(GattResult(GATT_DISCONNECTED))
+        pendingOp.failAny(GattResult(GATT_DISCONNECTED))
         pendingConnect.getAndSet(null)?.resume(GATT_DISCONNECTED)
         gatt?.let {
             runCatching { it.disconnect() }
@@ -469,6 +470,10 @@ class BleTransport(
         if (bondReceiverRegistered) return
         val filter = IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
         if (Build.VERSION.SDK_INT >= 33) {
+            // EXPORTED on purpose. ACTION_BOND_STATE_CHANGED is sent by the Bluetooth app, a
+            // privileged app that does not run as the system UID, and developer.android.com
+            // ("Context-registered receivers") says a NOT_EXPORTED receiver misses broadcasts from
+            // such apps. The action is protected, so another app cannot forge it.
             context.registerReceiver(bondReceiver, filter, Context.RECEIVER_EXPORTED)
         } else {
             @Suppress("UnspecifiedRegisterReceiverFlag")
