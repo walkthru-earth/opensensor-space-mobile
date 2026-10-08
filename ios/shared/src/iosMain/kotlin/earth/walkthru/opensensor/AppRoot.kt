@@ -299,12 +299,12 @@ private fun IosSettings(
     }
 }
 
-/** One group of settings on a brand surface card, curved like a floating control. */
+/** One group of settings on a brand surface card, with the content card radius ([CardShape]). */
 @Composable
 private fun SettingsCard(content: @Composable () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = FloatingControl.Shape,
+        shape = CardShape,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
