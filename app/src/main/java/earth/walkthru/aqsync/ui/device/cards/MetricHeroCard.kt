@@ -96,15 +96,16 @@ fun MetricHeroCard(
             Spacer(Modifier.width(20.dp))
             when (reading) {
                 is NowReading.Reading -> Column(Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.Bottom) {
+                    Row {
                         Text(
                             fmtPm(reading.pm25),
                             style = MaterialTheme.typography.displayLarge,
                             color = if (fresh) onCard else quiet,
                             maxLines = 1,
+                            modifier = Modifier.alignByBaseline(),
                         )
                         Spacer(Modifier.width(6.dp))
-                        Text(metric.unit, style = MaterialTheme.typography.titleSmall, color = quiet, modifier = Modifier.padding(bottom = 16.dp))
+                        Text(metric.unit, style = MaterialTheme.typography.titleMedium, color = quiet, modifier = Modifier.alignByBaseline())
                     }
                     Text(metric.label, style = MaterialTheme.typography.labelLarge, color = quiet)
                 }
