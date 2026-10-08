@@ -172,15 +172,18 @@ the current generation. Collection routing and history interpretation must prese
 
 No destructive fallback. Every version's JSON is exported to `app/schemas/`. Token encryption does
 not change the SQL schema: `SecureKnownDeviceDao` encrypts new values with AES-256-GCM under a
-non-exportable Android Keystore key and decrypts at the DAO boundary. On first launch after upgrade,
+non-exportable Android Keystore key. Row reads return the ciphertext unchanged, so ViewModels never
+hold plaintext, and an upsert of a read row stores the same ciphertext again. Only
+`LanCredentialStore.lanToken(address)` decrypts, in the data layer, when a LAN transport is built. On first launch after upgrade,
 existing 64-character plaintext values are encrypted in place before the scheduler or event triggers
 start; a dedicated `LanTokenMigration` binding avoids casting the DAO implementation. A marker in
 `noBackupFilesDir` makes that migration idempotent without putting key state into backup. If an
-encrypted value cannot be authenticated, has malformed `enc1` framing, or its Keystore key is gone
-(for example after device-to-device transfer), the secure DAO clears only that row's `lanToken` and
-`lanPort`, preserves the device and settings, and exposes no credential until a later bonded BLE
-session refreshes it. Those credential failures are handled; unrelated crypto/programming/database
-failures still propagate.
+encrypted value cannot be authenticated (`AEADBadTagException`, also the result when the key was
+regenerated, for example after device-to-device transfer), its key was permanently invalidated, or it
+has malformed `enc1` framing, `lanToken` clears only that row's `lanToken` and `lanPort`, preserves
+the device and settings, and returns no credential until a later bonded BLE session refreshes it. A
+transient `KeyStoreException` or `UnrecoverableKeyException` propagates and keeps the credential.
+Unrelated crypto, programming and database failures also propagate.
 
 ### Write semantics that bit us
 
