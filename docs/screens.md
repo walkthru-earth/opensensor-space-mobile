@@ -219,7 +219,7 @@ state change, de-duplicated). Never derive it per screen from the session object
 | --- | --- |
 | `NavigationKeys.kt` | `Navigation.kt` entry providers, back-stack restore |
 | `DetailLevel` / `AppSettings` | every `detailed`/`advancedMode` collector; Debug visibility; Files table icon |
-| `ui/device/cards/MetricHeroCard.kt`, `components/MoodFace.kt`, mood copy in `strings.xml` | Today, Home cards (same moods), iOS parity (iOS still reads the copy in `AirMood`, kept word for word equal to `strings.xml` by `CopyRulesTest`) |
+| `ui/device/cards/MetricHeroCard.kt`, `components/MoodFace.kt`, mood copy in `strings.xml` | Today, Home cards (same moods), iOS parity (iOS still reads the copy in `AirMood`, meant to match `strings.xml` word for word, not yet checked by a test, tracked in #25) |
 | `ui/theme/BrandTokens.kt` | Every screen, `BrandTokensTest` (website values and contrast) |
 | `DeviceCapabilities` (`:core:history`) | Today hero and batch card, Device sensor card, `setSensorIdentity` guard |
 | `BandColumnChart.kt`, `DayRing.kt`, `CalendarHeatmap.kt` | History and Files › Chart by file (share `Columns` + `HistoryColumn`) |
