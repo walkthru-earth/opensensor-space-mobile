@@ -401,16 +401,8 @@
     <string name="files_listing">Reading the file list…</string>
     <string name="files_list_failed_simple">Could not read the file list. Try again.</string>
 
-    <!-- Settings -->
+    <!-- Settings. The screen's copy lives in feature/settings composeResources, shared with iOS. -->
     <string name="settings_title">Settings</string>
-    <string name="settings_detail_level">Detail level</string>
-    <string name="settings_level_simple">The reading, today and sync.</string>
-    <string name="settings_level_detailed">Adds every measurement and file details.</string>
-    <string name="settings_level_developer">Adds identifiers and the Debug screen.</string>
-    <string name="settings_clock">Smart Sync clock</string>
-    <string name="settings_about">About</string>
-    <string name="settings_about_body">opensensor.space %1$s</string>
-    <string name="settings_fonts">Quicksand and Cairo fonts under the SIL Open Font License 1.1. Peacock mascot from opensensor.space.</string>
 
     <!-- Info affordance (components/InfoButton.kt). Explanations live in these sheets, never in the default view. -->
     <string name="info_more">More about %1$s</string>
@@ -441,8 +433,6 @@
     <string name="info_history_body3">Dashed stretches were logged before the sensor had a clock. Their time is estimated from a later time set on the same power on.</string>
     <string name="info_history_body4">Earlier station readings stay available after a device reset.</string>
     <string name="info_history_body5">PM2.5 and PM10 colours follow the WHO 2021 air quality guidelines. The guideline and its four interim targets are 24 hour means.</string>
-    <string name="info_settings_body1">The detail level changes only what you see. Every level reads the same data, and nothing is hidden from the archive or the export.</string>
-    <string name="info_settings_body2">Smart Sync never rewrites raw files. Finalizing buffered rows stays a separate confirmed action.</string>
     <string name="info_file_chart_body">One column per synced file in file order. Faint columns have few valid readings, for example during warm up. Dashed columns have an estimated time. Touch a column to read its file, rows, time span and mean.</string>
 
     <!-- Connection banner -->
@@ -469,11 +459,6 @@
     <string name="tab_history">History</string>
     <string name="tab_files">Files</string>
     <string name="tab_device">Device</string>
-
-    <!-- Settings clock modes -->
-    <string name="clock_mode_ask">Ask before sending this phone’s time.</string>
-    <string name="clock_mode_automatic">Send this phone’s time when the sensor clock is missing.</string>
-    <string name="clock_mode_never">Only copy files. You still see a warning for undated readings.</string>
 
     <!-- Files -->
     <string name="files_in_archive">%1$d in archive, %2$s</string>
@@ -718,12 +703,6 @@
     <string name="transport_ble">Bluetooth</string>
     <string name="transport_lan">Wi-Fi LAN</string>
     <string name="transport_fake">Fake device</string>
-    <string name="level_simple">Simple</string>
-    <string name="level_detailed">Detailed</string>
-    <string name="level_developer">Developer</string>
-    <string name="clock_mode_ask_title">Ask first</string>
-    <string name="clock_mode_automatic_title">Automatic</string>
-    <string name="clock_mode_never_title">Never</string>
     <string name="mood_none">No reading</string>
     <string name="chart_who_24h">WHO 24 h guideline</string>
     <string name="chart_mean_hourly">Bars are hourly means.</string>
@@ -889,11 +868,4 @@
     <!-- Tabs. The Discover map copy lives in feature/discover composeResources, shared with iOS. -->
     <string name="tab_discover">Discover</string>
     <string name="tab_my_devices">My devices</string>
-    <string name="settings_public_sensors">Show public sensors</string>
-    <string name="settings_public_sensors_body">When off, the map uses no internet and shows only sample data.</string>
-    <string name="settings_units">Units</string>
-    <string name="units_auto">Automatic</string>
-    <string name="units_metric">Metric</string>
-    <string name="units_imperial">Imperial</string>
-    <string name="settings_units_auto">Follows your phone\'s region, now %1$s</string>
 </resources>

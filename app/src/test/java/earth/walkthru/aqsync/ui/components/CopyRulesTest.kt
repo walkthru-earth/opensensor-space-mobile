@@ -57,7 +57,7 @@ class CopyRulesTest {
     @Test
     fun `no dashes semicolons or sentence colons`() {
         val shared = sharedStrings()
-        assertTrue("Shared catalogues missing: ${shared.keys}", shared.keys.containsAll(listOf("discover")))
+        assertTrue("Shared catalogues missing: ${shared.keys}", shared.keys.containsAll(listOf("discover", "settings")))
         val all = strings() + shared.flatMap { (module, values) -> values.map { (k, v) -> "$module/$k" to v } }
         val broken = all.filter { (_, text) ->
             val sentence = text.replace(Regex("%\\d+\\$[a-z]"), "X").replace(Regex("\\d:\\d"), "0")
@@ -76,6 +76,7 @@ class CopyRulesTest {
         val shared = sharedStrings()
         val both = mapOf(
             "discover" to listOf("who_step_guideline", "who_step_it4", "who_step_it3", "who_step_it2", "who_step_it1", "who_step_above_it1"),
+            "settings" to listOf("settings_title", "info_privacy"),
         )
         both.forEach { (module, keys) ->
             keys.forEach { key -> assertEquals("$module/$key", shown(s.getValue(key)), shared.getValue(module).getValue(key)) }

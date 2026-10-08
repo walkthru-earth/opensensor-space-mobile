@@ -15,11 +15,13 @@ flowchart TB
     HI[":core:history<br/>sensor rules, file index, aggregation, calendar windows"]
     PF[":core:publicfeed<br/>Discover feed port, H3, viewport cover, sample"]
     UN[":core:units<br/>display units, axis ticks"]
-    SK[":core:sync, :core:archive, :core:settings<br/>empty skeletons, planned"]
+    SE[":core:settings<br/>app preferences on DataStore, detail level"]
+    SK[":core:sync, :core:archive<br/>empty skeletons, planned"]
   end
   subgraph ui["Compose Multiplatform, Android and iOS"]
     DS[":ui:designsystem<br/>tokens, theme, fonts, floating controls"]
     DI[":feature:discover<br/>map, cell sheet, chart"]
+    FS[":feature:settings<br/>Settings screen and controller"]
   end
   APP[":app (Android)<br/>Hilt, Room v10, DataStore, WorkManager, Compose, zstd-jni"]
   IOS["ios/App (Xcode + Swift)<br/>Core Bluetooth, Bonjour, own sync engine and archive"]
@@ -27,8 +29,10 @@ flowchart TB
   HI --> PQ & PR & AQ
   PF --> PQ & AQ
   DI --> PF & UN & DS
-  APP --> HI & PF & UN & DI & DS
-  IS --> HI & PR & UN & DI & DS
+  SE --> UN
+  FS --> SE & DS
+  APP --> HI & PF & UN & DI & DS & SE & FS
+  IS --> HI & PR & UN & DI & DS & SE & FS
   IOS --> IS
 ```
 
@@ -40,7 +44,7 @@ flowchart TB
 Tests live in `src/commonTest` (JVM and iOS simulator) or `src/jvmTest` / `src/iosTest`. Calendar
 windows use kotlinx-datetime. Android passes its `ZoneId` through `toKotlinTimeZone()`.
 
-`:ui:designsystem` and `:feature:discover` target Android (the AGP KMP library target, not `jvm`)
+`:ui:designsystem`, `:feature:discover` and `:feature:settings` target Android (the AGP KMP library target, not `jvm`)
 and iOS. `:ios:shared` targets iOS only, so its `commonMain` consumes them directly. It renders the
 current Compose iOS screen. `ios/App` supplies native app integration, Core Bluetooth, Bonjour
 discovery, and today a second sync engine and archive in Swift. The Android app remains a separate
@@ -50,8 +54,8 @@ platform entry point. See [ios-migration.md](ios-migration.md) for current scope
 
 The graph above is today's code. [platform-parity-plan.md](platform-parity-plan.md) moves toward
 the graph below, where every rule that must give the same answer on both phones is shared and
-platform code only adapts OS services. Nothing below `:core:sync`, `:core:archive` and
-`:core:settings` exists yet beyond their empty skeletons. `:core:model` (device families and metrics
+platform code only adapts OS services. `:core:settings` and `:feature:settings` exist. Nothing
+below `:core:sync` and `:core:archive` exists yet beyond their empty skeletons. `:core:model` (device families and metrics
 as data) is planned in [production-readiness-plan.md](production-readiness-plan.md) W11 and
 [devices-and-discovery.md](devices-and-discovery.md).
 
@@ -62,7 +66,7 @@ flowchart TB
     PR2[":core:protocol"]
     SY[":core:sync (planned)<br/>engine behind FrameLink, ArchiveStore, ArchiveIndex, CredentialStore"]
     AR[":core:archive (planned)<br/>layout, verifier, records, store ports"]
-    ST[":core:settings (planned)<br/>DataStore preferences"]
+    ST[":core:settings<br/>DataStore preferences"]
     PQ2[":core:parquet"]
     HI2[":core:history"]
     PF[":core:publicfeed"]
@@ -146,7 +150,7 @@ flowchart LR
 | `data/background/` | `SyncForegroundService`, `SyncNotifications`, `SyncWorker`, `AutoSyncScheduler`, `AutoSyncRunner` (pure), `AppAutoSyncGateway`; triggers `CompanionPresence` + `CompanionPresenceService`, `AdvertFlagScan` + `AdvertScanReceiver`, `SyncTriggers` + `WifiArrivalReceiver` + `BootReceiver` | yes (runner: no) |
 | `data/history/` | `HistoryIndexer`, `HistoryDeriver`, `DailyDerived*`, `HistoryRepository`, `parquet/AppParquetCodecs` (ZSTD) | Room + files |
 | `data/local/database/` | `AppDatabase` (v10), `KnownDevice`, `StationEpoch`, `ArchivedFile`, `History.kt` (`MetricBucket`, `DerivedDay`) | yes |
-| `data/settings/AppSettings.kt` | DataStore: `DetailLevel` Simple · Detailed · Developer | yes |
+| `data/settings/AppSettings.kt` | Android view of `:core:settings` (`DetailLevel` Simple · Detailed · Developer, clock consent, units, public sensors) | yes |
 | `data/export/ExportManager.kt` | share / zip / SAF | yes |
 | `data/fake/FakeTransport.kt` | in-process protocol-v2 device with fault hooks | no (JVM) |
 | `ui/scan · device (Today, Device, NowCard) · history · files · debug · settings · permissions · theme` | Compose; `Navigation.kt`, `NavigationKeys.kt` | yes |
