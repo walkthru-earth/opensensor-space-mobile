@@ -2,9 +2,9 @@ pluginManagement {
     // Convention plugins for the shared modules (see build-logic/ and docs/architecture.md).
     includeBuild("build-logic")
     repositories {
-        gradlePluginPortal()
         google()
         mavenCentral()
+        gradlePluginPortal()
     }
 }
 
