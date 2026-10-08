@@ -37,6 +37,8 @@ import earth.walkthru.aqsync.units.UnitFormatter
 import earth.walkthru.aqsync.units.UnitSystem
 import earth.walkthru.aqsync.units.formatFixed
 import earth.walkthru.aqsync.units.formatPm
+import earth.walkthru.opensensor.permissions.PermissionFlow
+import earth.walkthru.opensensor.permissions.SettingsLink
 import kotlin.math.floor
 
 /*
@@ -76,6 +78,8 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
                 }
             }
             if (state.message.isNotEmpty()) item { Text(state.message, style = MaterialTheme.typography.bodyLarge) }
+            // Shown only after iOS reports a Bluetooth denial, which first needs a Find sensors tap.
+            if (PermissionFlow.offersSettings(state.bluetoothAccess)) item { SettingsLink(OPEN_SETTINGS) }
             if (state.selectedId != null) {
                 item {
                     BrandCard {
@@ -159,6 +163,7 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
                             color = if (state.lanAccessDenied) MaterialTheme.colorScheme.error else Color.Unspecified,
                         )
                     }
+                    if (PermissionFlow.offersSettings(state.lanAccess)) SettingsLink(OPEN_SETTINGS)
                     OutlinedButton(onClick = scanLan, enabled = !state.lanScanning, shape = MaterialTheme.shapes.small) {
                         Text(if (state.lanScanning) "Looking on Wi-Fi…" else "Find Wi-Fi sensors")
                     }
@@ -254,3 +259,6 @@ private fun BrandCard(modifier: Modifier = Modifier, content: @Composable () -> 
 /** Temperature, humidity and rates, as Android `fmt` prints them. PM values go through [formatPm]. */
 private fun number(value: Double): String =
     if (value == floor(value) && value < 1000) formatFixed(value, 0) else formatFixed(value, 1)
+
+// The iOS name of the Settings app, as on the Discover settings dialog.
+private const val OPEN_SETTINGS = "Open Settings"

@@ -2,6 +2,8 @@ package earth.walkthru.opensensor
 
 import earth.walkthru.aqsync.data.history.NowReading
 import earth.walkthru.aqsync.data.protocol.LiveSample
+import earth.walkthru.opensensor.permissions.AccessStatus
+import earth.walkthru.opensensor.permissions.PermissionFlow
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -176,5 +178,29 @@ class CompanionStateTest {
         assertEquals(-60, state.devices.first().rssi)
         state.scanStarted()
         assertTrue(state.devices.isEmpty())
+    }
+
+    @Test fun settingsLinksFollowTheReportedDenials() {
+        val state = CompanionState()
+        // Nothing is known, and no link is offered, before the first tap.
+        assertEquals(AccessStatus.NOT_DETERMINED, state.bluetoothAccess)
+        assertEquals(AccessStatus.UNKNOWN, state.lanAccess)
+        assertFalse(PermissionFlow.offersSettings(state.bluetoothAccess))
+        assertFalse(PermissionFlow.offersSettings(state.lanAccess))
+
+        state.bluetoothAuthorizationChanged(2) // CBManagerAuthorization.denied
+        assertTrue(PermissionFlow.offersSettings(state.bluetoothAccess))
+        state.bluetoothAuthorizationChanged(1) // restricted, nothing the user can change
+        assertFalse(PermissionFlow.offersSettings(state.bluetoothAccess))
+        state.bluetoothAuthorizationChanged(3)
+        assertEquals(AccessStatus.GRANTED, state.bluetoothAccess)
+
+        state.lanScanStarted()
+        state.lanScanWaiting()
+        assertFalse(PermissionFlow.offersSettings(state.lanAccess))
+        state.lanScanAccessDenied()
+        assertTrue(PermissionFlow.offersSettings(state.lanAccess))
+        state.lanScanReady()
+        assertEquals(AccessStatus.UNKNOWN, state.lanAccess)
     }
 }
