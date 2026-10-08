@@ -88,7 +88,7 @@ shared setting lands (platform-parity-plan.md, Wave 2).
 Every card shows a title, its value or state in words, and one primary action. A card may add one
 short supporting line when the state needs it (a warning, "Restart the sensor to apply the
 change"). Anything longer lives behind a small outlined **i** next to the card title:
-`InfoButton(InfoContent(title, paragraphs…))` in `ui/components/InfoButton.kt`, placed through
+`InfoButton(InfoContent(title, paragraphs…))` in `:ui:designsystem` (`InfoButton.kt`), placed through
 `CardHeader(title, info = …, trailing = { Switch(…) })`. It opens `InfoSheet`, a bottom sheet with
 the heading and short paragraphs. Its content description is "More about <title>". The same
 pattern serves radio options: pairing modes show only their label, and their descriptions are
@@ -143,22 +143,26 @@ palette `sensing`. `BrandTokensTest` pins every value and checks text contrast o
   website) for Arabic-script locales and for display numbers, because Quicksand has
   proportional digits and no `tnum` while Cairo's digits share one width. Both fonts and the
   type scale live in `:ui:designsystem` (`Typography.kt`, Compose resources under
-  `composeResources/font/`), so Android (`AqSyncTheme`) and iOS (`OpenSensorTheme`) render the
-  same faces. Each weight pins the variable `wght` axis through `FontVariation.Settings`, which
+  `composeResources/font/`), and both apps wrap content in the one `OpenSensorTheme`, so they
+  render the same faces. Each weight pins the variable `wght` axis through `FontVariation.Settings`, which
   Compose resources apply on Android and on iOS (Skia `makeClone`). The language comes from
   `Configuration.locales[0]` on Android and `NSLocale.preferredLanguages` on iOS.
   `TypographyTest` checks the Arabic-script rule, the tabular display styles and that every
   weight sits inside the bundled axis. License texts ship in `composeResources/files/licenses/`.
-- **Shape and components.** 32 dp card corners (`BrandCard`, tones Plain, Soft, Hero). Every
+- **Shape and components.** One content card radius, 32 dp (`CardShape`, used by `BrandCard`,
+  tones Plain, Soft, Hero). The components live in `:ui:designsystem` for both apps. Every
   control uses a curved card, never a circle or full pill. `PillButton` (Signal blue with ink
   text and a trailing arrow, the one primary action) and `OutlinePillButton` use
   `FloatingControl.Shape`. Chips, `MoodPill`, small buttons and segmented rows use
   `FloatingControl.SmallShape` (`FloatingControl.segmentShape`), tags and the transport chip use
   `FloatingControl.BadgeShape`. Selected chips, the active segment, the selected Wi-Fi network
   and the bottom bar indicator use `FloatingControl.chipColors`, `segmentedColors` and
-  `navigationItemColors`, Signal blue with ink text (6.5 to 1 contrast). Circles stay only for
+  `FloatingControl.Selected`, Signal blue with ink text (6.5 to 1 contrast). The bottom bar is
+  `BrandBottomBar`, one component for Android and iOS, its selected icon on a curved card, not a pill. Circles stay only for
   round things (status dots, the mascot, the mood face, ring charts, radio buttons and switches).
   `SignalBars` and `TiltedBadge` (the website's -5 degree icon tilt, hero only) complete the set.
+  Icons are `AppIcons`, the Material vectors the apps use, vendored node for node so neither app
+  ships `material-icons-extended`.
 - **Floating controls.** Anything over the map or a list uses `FloatingSurface`,
   `FloatingIconButton` or `FloatingTextButton` (the Scan and Sync all actions) and the
   `FloatingControl` shapes and tint (curved cards, Signal blue only for the selection).

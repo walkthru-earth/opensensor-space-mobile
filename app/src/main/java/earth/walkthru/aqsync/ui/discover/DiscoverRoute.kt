@@ -13,9 +13,9 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import earth.walkthru.aqsync.data.settings.AppSettings
 import earth.walkthru.aqsync.data.settings.DiscoverStore
 import earth.walkthru.aqsync.publicfeed.platformH3Grid
-import earth.walkthru.aqsync.ui.components.InfoButton
-import earth.walkthru.aqsync.ui.components.InfoContent
 import earth.walkthru.aqsync.ui.components.LocalUnits
+import earth.walkthru.opensensor.designsystem.InfoButton
+import earth.walkthru.opensensor.designsystem.InfoContent
 import earth.walkthru.opensensor.discover.DiscoverController
 import earth.walkthru.opensensor.discover.DiscoverScreen
 import earth.walkthru.opensensor.discover.bundledSampleFeed

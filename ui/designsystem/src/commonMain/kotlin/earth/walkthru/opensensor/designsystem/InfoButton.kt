@@ -1,4 +1,4 @@
-package earth.walkthru.aqsync.ui.components
+package earth.walkthru.opensensor.designsystem
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,8 +10,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -27,12 +26,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import earth.walkthru.aqsync.R
-import earth.walkthru.aqsync.ui.theme.AqSyncTheme
+import earth.walkthru.opensensor.designsystem.resources.Res
+import earth.walkthru.opensensor.designsystem.resources.info_more
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * One explanation behind a small "i". The default view of a card shows a title, its value and one
@@ -45,7 +44,7 @@ data class InfoContent(val title: String, val body: List<String>) {
 
 /**
  * An outlined info icon (48 dp touch target) that opens [InfoSheet]. Its content description is
- * "More about <title>", so TalkBack names the topic before the sheet opens.
+ * "More about <title>", so TalkBack and VoiceOver name the topic before the sheet opens.
  */
 @Composable
 fun InfoButton(
@@ -55,12 +54,13 @@ fun InfoButton(
 ) {
     var open by rememberSaveable { mutableStateOf(false) }
     IconButton(onClick = { open = true }, modifier = modifier) {
-        Icon(Icons.Outlined.Info, contentDescription = stringResource(R.string.info_more, info.title), tint = tint)
+        Icon(AppIcons.Outlined.Info, contentDescription = stringResource(Res.string.info_more, info.title), tint = tint)
     }
     if (open) InfoSheet(info, onDismiss = { open = false })
 }
 
 /** The bottom sheet behind [InfoButton]: a heading and short paragraphs, dismissed by swipe or scrim. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InfoSheet(info: InfoContent, onDismiss: () -> Unit) {
     ModalBottomSheet(
@@ -104,16 +104,5 @@ fun CardHeader(
             if (info != null) InfoButton(info, tint = color)
         }
         trailing?.invoke(this)
-    }
-}
-
-@ThemePreviews
-@Composable
-private fun CardHeaderPreview() {
-    AqSyncTheme {
-        BrandCard {
-            CardHeader("Bluetooth pairing", info = InfoContent("Bluetooth pairing", "How a phone proves it is allowed to connect."))
-            Text("Mode Random code", style = MaterialTheme.typography.bodyLarge)
-        }
     }
 }

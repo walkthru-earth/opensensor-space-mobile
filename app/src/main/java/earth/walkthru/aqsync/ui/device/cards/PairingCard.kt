@@ -28,15 +28,15 @@ import androidx.compose.ui.unit.dp
 import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.protocol.ConfigPatch
 import earth.walkthru.aqsync.data.protocol.PairMode
-import earth.walkthru.aqsync.ui.components.BrandCard
-import earth.walkthru.aqsync.ui.components.CardHeader
-import earth.walkthru.aqsync.ui.components.InfoContent
 import earth.walkthru.aqsync.ui.components.NO_VALUE
-import earth.walkthru.aqsync.ui.components.OutlinePillButton
-import earth.walkthru.aqsync.ui.components.StatLine
-import earth.walkthru.aqsync.ui.components.StatusDot
-import earth.walkthru.aqsync.ui.components.WarningNote
 import earth.walkthru.aqsync.ui.device.DeviceUiState
+import earth.walkthru.opensensor.designsystem.BrandCard
+import earth.walkthru.opensensor.designsystem.CardHeader
+import earth.walkthru.opensensor.designsystem.InfoContent
+import earth.walkthru.opensensor.designsystem.OutlinePillButton
+import earth.walkthru.opensensor.designsystem.StatLine
+import earth.walkthru.opensensor.designsystem.StatusDot
+import earth.walkthru.opensensor.designsystem.WarningNote
 
 /**
  * Bluetooth pairing mode and PIN. Saving mode `none` and rebooting are confirmed by the route.

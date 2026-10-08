@@ -1,8 +1,7 @@
 package earth.walkthru.aqsync.ui.permissions
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Bluetooth
 import earth.walkthru.aqsync.R
+import earth.walkthru.opensensor.designsystem.AppIcons
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -35,7 +34,7 @@ class PermissionFlowTest {
         var asked = 0
         var turnOn = 0
         var settings = 0
-        val access = RuntimeAccess(AccessTexts(R.string.perm_bt_title, R.string.perm_bt_body, R.string.perm_bt_settings_title, R.string.perm_bt_settings_body, Icons.Rounded.Bluetooth)).also {
+        val access = RuntimeAccess(AccessTexts(R.string.perm_bt_title, R.string.perm_bt_body, R.string.perm_bt_settings_title, R.string.perm_bt_settings_body, AppIcons.Bluetooth)).also {
             it.check = { granted }
             it.rationaleDue = { rationale }
             it.radioCheck = { radio }

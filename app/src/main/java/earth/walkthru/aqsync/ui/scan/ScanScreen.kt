@@ -16,13 +16,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.BugReport
-import androidx.compose.material.icons.rounded.CloudSync
-import androidx.compose.material.icons.rounded.Link
-import androidx.compose.material.icons.rounded.MoreVert
-import androidx.compose.material.icons.rounded.Radar
-import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -60,21 +53,22 @@ import earth.walkthru.aqsync.data.history.Metrics
 import earth.walkthru.aqsync.data.local.database.KnownDevice
 import earth.walkthru.aqsync.data.settings.DetailLevel
 import earth.walkthru.aqsync.ui.components.ConnectionBanner
-import earth.walkthru.aqsync.ui.components.Eyebrow
-import earth.walkthru.aqsync.ui.components.InfoButton
-import earth.walkthru.aqsync.ui.components.InfoContent
-import earth.walkthru.aqsync.ui.components.MascotGuide
 import earth.walkthru.aqsync.ui.components.MoodFace
-import earth.walkthru.aqsync.ui.components.SignalBars
-import earth.walkthru.aqsync.ui.components.TickingText
 import earth.walkthru.aqsync.ui.components.agoFormatter
 import earth.walkthru.aqsync.ui.components.titleText
 import earth.walkthru.aqsync.ui.permissions.AccessDialogs
 import earth.walkthru.aqsync.ui.permissions.rememberBluetoothAccess
 import earth.walkthru.aqsync.ui.permissions.rememberNotificationPermission
 import earth.walkthru.aqsync.ui.theme.color
+import earth.walkthru.opensensor.designsystem.AppIcons
+import earth.walkthru.opensensor.designsystem.Eyebrow
 import earth.walkthru.opensensor.designsystem.FloatingControl
 import earth.walkthru.opensensor.designsystem.FloatingTextButton
+import earth.walkthru.opensensor.designsystem.InfoButton
+import earth.walkthru.opensensor.designsystem.InfoContent
+import earth.walkthru.opensensor.designsystem.MascotGuide
+import earth.walkthru.opensensor.designsystem.SignalBars
+import earth.walkthru.opensensor.designsystem.TickingText
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -127,16 +121,16 @@ fun ScanScreen(
                     )
                     if (state.showFakeEntry) {
                         var open by remember { mutableStateOf(false) }
-                        IconButton(onClick = { open = true }) { Icon(Icons.Rounded.MoreVert, contentDescription = stringResource(R.string.scan_more)) }
+                        IconButton(onClick = { open = true }) { Icon(AppIcons.MoreVert, contentDescription = stringResource(R.string.scan_more)) }
                         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.scan_fake)) },
-                                leadingIcon = { Icon(Icons.Rounded.BugReport, contentDescription = null) },
+                                leadingIcon = { Icon(AppIcons.BugReport, contentDescription = null) },
                                 onClick = { open = false; viewModel.connectFake(); onConnected(FakeTransport.FAKE_ADDRESS) },
                             )
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.scan_fake_lan)) },
-                                leadingIcon = { Icon(Icons.Rounded.BugReport, contentDescription = null) },
+                                leadingIcon = { Icon(AppIcons.BugReport, contentDescription = null) },
                                 onClick = { open = false; viewModel.connectFakeLan(); onConnected(FakeTransport.FAKE_LAN_ADDRESS) },
                             )
                         }
@@ -149,7 +143,7 @@ fun ScanScreen(
                 text = stringResource(if (state.scanning) R.string.scan_button_stop else R.string.scan_button_scan),
                 onClick = { if (state.scanning) viewModel.stopScan() else bluetooth.run { viewModel.startScan() } },
                 primary = !state.scanning,
-                icon = { Icon(if (state.scanning) Icons.Rounded.Stop else Icons.Rounded.Radar, contentDescription = null) },
+                icon = { Icon(if (state.scanning) AppIcons.Stop else AppIcons.Radar, contentDescription = null) },
             )
         },
     ) { padding ->
@@ -241,7 +235,7 @@ fun ScanScreen(
                             shape = FloatingControl.SmallShape,
                             modifier = Modifier.weight(1f),
                         ) {
-                            Icon(Icons.Rounded.CloudSync, contentDescription = null)
+                            Icon(AppIcons.CloudSync, contentDescription = null)
                             Spacer(Modifier.width(8.dp))
                             Text(if (state.backgroundSyncActive) stringResource(R.string.scan_collect_running) else pluralStringResource(R.plurals.scan_collect_all, state.known.size, state.known.size))
                         }
@@ -362,7 +356,7 @@ private fun KnownRow(device: KnownDevice, summary: LoggerSummary?, level: Detail
                 )
                 ArchiveLine(summary, level)
             }
-            Icon(Icons.Rounded.Link, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(AppIcons.Link, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             ForgetMenu(onForget)
         }
     }
@@ -371,7 +365,7 @@ private fun KnownRow(device: KnownDevice, summary: LoggerSummary?, level: Detail
 @Composable
 private fun ForgetMenu(onForget: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
-    IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, contentDescription = stringResource(R.string.scan_options)) }
+    IconButton(onClick = { menu = true }) { Icon(AppIcons.MoreVert, contentDescription = stringResource(R.string.scan_options)) }
     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
         DropdownMenuItem(text = { Text(stringResource(R.string.scan_forget)) }, onClick = { menu = false; onForget() })
     }

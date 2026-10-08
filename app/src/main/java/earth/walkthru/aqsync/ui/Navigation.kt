@@ -3,16 +3,8 @@ package earth.walkthru.aqsync.ui
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Map
-import androidx.compose.material.icons.outlined.Sensors
-import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -42,7 +34,9 @@ import earth.walkthru.aqsync.ui.history.HistoryScreen
 import earth.walkthru.aqsync.ui.permissions.rememberLanGranted
 import earth.walkthru.aqsync.ui.scan.ScanScreen
 import earth.walkthru.aqsync.ui.settings.SettingsScreen
-import earth.walkthru.opensensor.designsystem.FloatingControl
+import earth.walkthru.opensensor.designsystem.AppIcons
+import earth.walkthru.opensensor.designsystem.BottomBarTab
+import earth.walkthru.opensensor.designsystem.BrandBottomBar
 
 /**
  * The app root: one bottom bar (Discover, My devices, Settings) around one [NavDisplay]. Discover
@@ -159,38 +153,18 @@ fun MainNavigation(modifier: Modifier = Modifier) {
     }
 }
 
+/** The shared bottom bar ([BrandBottomBar]), the same component the iOS app uses. */
 @Composable
 private fun AppBottomBar(selected: TopTab, onSelect: (TopTab) -> Unit) {
-    NavigationBar {
-        TopTab.entries.forEach { tab ->
-            NavigationBarItem(
-                selected = tab == selected,
-                onClick = { onSelect(tab) },
-                colors = FloatingControl.navigationItemColors(),
-                icon = {
-                    Icon(
-                        when (tab) {
-                            TopTab.DISCOVER -> Icons.Outlined.Map
-                            TopTab.MY_DEVICES -> Icons.Outlined.Sensors
-                            TopTab.SETTINGS -> Icons.Outlined.Settings
-                        },
-                        contentDescription = null,
-                    )
-                },
-                label = {
-                    Text(
-                        stringResource(
-                            when (tab) {
-                                TopTab.DISCOVER -> R.string.tab_discover
-                                TopTab.MY_DEVICES -> R.string.tab_my_devices
-                                TopTab.SETTINGS -> R.string.settings_title
-                            },
-                        ),
-                    )
-                },
-            )
-        }
-    }
+    BrandBottomBar(
+        tabs = listOf(
+            BottomBarTab(TopTab.DISCOVER, stringResource(R.string.tab_discover), AppIcons.Outlined.Map),
+            BottomBarTab(TopTab.MY_DEVICES, stringResource(R.string.tab_my_devices), AppIcons.Outlined.Sensors),
+            BottomBarTab(TopTab.SETTINGS, stringResource(R.string.settings_title), AppIcons.Outlined.Settings),
+        ),
+        selected = selected,
+        onSelect = onSelect,
+    )
 }
 
 /**

@@ -1,8 +1,5 @@
 package earth.walkthru.aqsync.ui.device
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Schedule
-import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.SnackbarHostState
@@ -26,6 +23,7 @@ import earth.walkthru.aqsync.ui.components.showDeviceEvent
 import earth.walkthru.aqsync.ui.permissions.AccessDialogs
 import earth.walkthru.aqsync.ui.permissions.rememberBluetoothAccess
 import earth.walkthru.aqsync.ui.permissions.rememberNotificationPermission
+import earth.walkthru.opensensor.designsystem.AppIcons
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -89,7 +87,7 @@ fun TodayRoute(
     if (confirmTime) {
         AlertDialog(
             onDismissRequest = { confirmTime = false },
-            icon = { Icon(Icons.Rounded.Schedule, contentDescription = null) },
+            icon = { Icon(AppIcons.Schedule, contentDescription = null) },
             title = { Text(stringResource(R.string.set_time)) },
             text = { Text(stringResource(R.string.set_time_confirm, phoneClock())) },
             confirmButton = { TextButton(onClick = { confirmTime = false; viewModel.setTimeFromPhone() }) { Text(stringResource(R.string.set_time_button)) } },
@@ -99,7 +97,7 @@ fun TodayRoute(
     confirmSmartSyncClock?.let { reason ->
         AlertDialog(
             onDismissRequest = { confirmSmartSyncClock = null },
-            icon = { Icon(Icons.Rounded.Schedule, contentDescription = null) },
+            icon = { Icon(AppIcons.Schedule, contentDescription = null) },
             title = { Text(stringResource(R.string.sync_clock_title)) },
             text = { Text(stringResource(R.string.sync_clock_confirm, stringResource(reason.reasonRes()))) },
             confirmButton = {
@@ -111,7 +109,7 @@ fun TodayRoute(
     if (confirmFlush) {
         AlertDialog(
             onDismissRequest = { confirmFlush = false },
-            icon = { Icon(Icons.Rounded.Storage, contentDescription = null) },
+            icon = { Icon(AppIcons.Storage, contentDescription = null) },
             title = { Text(stringResource(R.string.flush)) },
             text = { Text(stringResource(R.string.flush_confirm)) },
             confirmButton = { TextButton(onClick = { confirmFlush = false; viewModel.flush() }) { Text(stringResource(R.string.flush_button)) } },

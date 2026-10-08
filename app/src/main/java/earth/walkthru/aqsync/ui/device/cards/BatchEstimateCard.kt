@@ -12,9 +12,9 @@ import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.ble.ConfigSnapshot
 import earth.walkthru.aqsync.data.protocol.LiveSample
 import earth.walkthru.aqsync.data.protocol.PlantowerBatchCandidate
-import earth.walkthru.aqsync.ui.components.BrandCard
-import earth.walkthru.aqsync.ui.components.CardHeader
-import earth.walkthru.aqsync.ui.components.InfoContent
+import earth.walkthru.opensensor.designsystem.BrandCard
+import earth.walkthru.opensensor.designsystem.CardHeader
+import earth.walkthru.opensensor.designsystem.InfoContent
 
 /**
  * Detailed level, on the reviewed Waveshare v2 dictionary after the board acknowledged the opt-in:

@@ -1,4 +1,4 @@
-package earth.walkthru.aqsync.ui.components
+package earth.walkthru.opensensor.designsystem
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -11,12 +11,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import earth.walkthru.aqsync.R
-import earth.walkthru.opensensor.designsystem.FloatingControl
+import earth.walkthru.opensensor.designsystem.resources.Res
+import earth.walkthru.opensensor.designsystem.resources.signal_bars
+import org.jetbrains.compose.resources.stringResource
 
 /** Signal strength in four bars from an RSSI (-50 dBm is excellent, -90 barely there). */
 fun signalBars(rssi: Int): Int = when {
@@ -27,14 +27,14 @@ fun signalBars(rssi: Int): Int = when {
 }
 
 /**
- * Four signal bars. The dBm number is a Developer fact ([showDbm]); the bars carry the meaning for
+ * Four signal bars. The dBm number is a Developer fact ([showDbm]), the bars carry the meaning for
  * everyone and are announced as "signal N of 4". On a selected (Signal blue) row pass [onSelected]
  * so the bars and the number switch to ink.
  */
 @Composable
 fun SignalBars(rssi: Int, modifier: Modifier = Modifier, showDbm: Boolean = false, onSelected: Boolean = false) {
     val bars = signalBars(rssi)
-    val description = stringResource(R.string.signal_bars, bars)
+    val description = stringResource(Res.string.signal_bars, bars)
     Column(modifier.semantics { contentDescription = description }, horizontalAlignment = Alignment.End) {
         Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
             for (i in 1..4) {

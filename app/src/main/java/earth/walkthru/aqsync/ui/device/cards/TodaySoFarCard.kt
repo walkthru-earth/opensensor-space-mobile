@@ -17,12 +17,12 @@ import androidx.compose.ui.unit.dp
 import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.history.TodaySoFar
 import earth.walkthru.aqsync.data.settings.DetailLevel
-import earth.walkthru.aqsync.ui.components.BrandCard
-import earth.walkthru.aqsync.ui.components.CardTone
-import earth.walkthru.aqsync.ui.components.Eyebrow
 import earth.walkthru.aqsync.ui.components.MoodFace
 import earth.walkthru.aqsync.ui.components.titleText
 import earth.walkthru.aqsync.ui.theme.color
+import earth.walkthru.opensensor.designsystem.BrandCard
+import earth.walkthru.opensensor.designsystem.CardTone
+import earth.walkthru.opensensor.designsystem.Eyebrow
 
 /**
  * Today so far: the local day's real average from the phone archive, with how much of the day it

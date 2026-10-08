@@ -1,22 +1,13 @@
 package earth.walkthru.opensensor
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -31,11 +22,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import earth.walkthru.aqsync.publicfeed.platformH3Grid
 import earth.walkthru.aqsync.settings.DetailLevel
@@ -43,10 +30,12 @@ import earth.walkthru.aqsync.settings.SettingsRepository
 import earth.walkthru.aqsync.settings.iosSettingsRepository
 import earth.walkthru.aqsync.units.UnitSystem
 import earth.walkthru.aqsync.units.systemUnitSystem
+import earth.walkthru.opensensor.designsystem.AppIcons
+import earth.walkthru.opensensor.designsystem.BottomBarTab
+import earth.walkthru.opensensor.designsystem.BrandBottomBar
 import earth.walkthru.opensensor.designsystem.FloatingControl
 import earth.walkthru.opensensor.designsystem.OpenSensorTheme
 import earth.walkthru.opensensor.discover.DiscoverController
-import earth.walkthru.opensensor.discover.DiscoverIcons
 import earth.walkthru.opensensor.discover.DiscoverScreen
 import earth.walkthru.opensensor.discover.UserDefaultsDiscoverPrefs
 import earth.walkthru.opensensor.discover.bundledSampleFeed
@@ -120,7 +109,7 @@ internal fun AppRoot(companion: @Composable (UnitSystem, DetailLevel) -> Unit) {
                     )
                 }
             }
-            TabBar(selected = tab, onSelect = { tab = it })
+            BrandBottomBar(tabs = tabs(), selected = tab, onSelect = { tab = it })
         }
     }
 }
@@ -150,65 +139,11 @@ private fun rememberSystemUnits(): UnitSystem {
     return system
 }
 
-private class TabSpec(val tab: Tab, val label: @Composable () -> String, val icon: ImageVector)
-
-private val Tabs = listOf(
-    TabSpec(Tab.DISCOVER, { "Discover" }, DiscoverIcons.Map),
-    TabSpec(Tab.MY_DEVICES, { "My devices" }, DiscoverIcons.Sensors),
-    TabSpec(Tab.SETTINGS, { settingsTitle() }, DiscoverIcons.Settings),
+/** The same three tabs as Android, on the shared [BrandBottomBar]. */
+@Composable
+private fun tabs(): List<BottomBarTab<Tab>> = listOf(
+    BottomBarTab(Tab.DISCOVER, "Discover", AppIcons.Outlined.Map),
+    BottomBarTab(Tab.MY_DEVICES, "My devices", AppIcons.Outlined.Sensors),
+    BottomBarTab(Tab.SETTINGS, settingsTitle(), AppIcons.Outlined.Settings),
 )
 
-/**
- * The bottom tab bar. A neutral brand surface with a hairline on top. Only the selected tab is
- * tinted, Signal blue behind its icon in a curved card (the floating control rule), never a pill.
- */
-@Composable
-private fun TabBar(selected: Tab, onSelect: (Tab) -> Unit) {
-    Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
-        Column {
-            HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .windowInsetsPadding(WindowInsets.navigationBars)
-                    .padding(horizontal = FloatingControl.Margin, vertical = 6.dp)
-                    .selectableGroup(),
-                horizontalArrangement = Arrangement.spacedBy(FloatingControl.Inset),
-            ) {
-                Tabs.forEach { spec ->
-                    TabItem(spec, selected = spec.tab == selected, onClick = { onSelect(spec.tab) }, modifier = Modifier.weight(1f))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun TabItem(spec: TabSpec, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val colors = MaterialTheme.colorScheme
-    Column(
-        modifier
-            .heightIn(min = FloatingControl.Size)
-            .clip(FloatingControl.Shape)
-            .selectable(selected = selected, onClick = onClick, role = Role.Tab)
-            .padding(vertical = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        Box(
-            Modifier
-                .size(width = 56.dp, height = 32.dp)
-                .clip(FloatingControl.SmallShape)
-                .background(if (selected) FloatingControl.Selected else Color.Transparent),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(spec.icon, contentDescription = null, tint = if (selected) FloatingControl.OnSelected else colors.onSurfaceVariant)
-        }
-        Text(
-            spec.label(),
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (selected) colors.onSurface else colors.onSurfaceVariant,
-        )
-    }
-}

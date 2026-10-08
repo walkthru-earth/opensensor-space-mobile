@@ -4,8 +4,6 @@ import android.app.Activity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.SnackbarHostState
@@ -35,6 +33,7 @@ import earth.walkthru.aqsync.ui.permissions.LanPermission
 import earth.walkthru.aqsync.ui.permissions.rememberBluetoothAccess
 import earth.walkthru.aqsync.ui.permissions.rememberLocalNetworkAccess
 import earth.walkthru.aqsync.ui.permissions.rememberNotificationPermission
+import earth.walkthru.opensensor.designsystem.AppIcons
 
 /**
  * Stateful entry for the Device screen: the ViewModel, one-off events, the companion-device and
@@ -145,7 +144,7 @@ fun DeviceRoute(
     if (confirmReboot) {
         AlertDialog(
             onDismissRequest = { confirmReboot = false },
-            icon = { Icon(Icons.Rounded.RestartAlt, contentDescription = null) },
+            icon = { Icon(AppIcons.RestartAlt, contentDescription = null) },
             title = { Text(stringResource(R.string.reboot_title)) },
             text = { Text(stringResource(R.string.reboot_confirm)) },
             // The only path to REBOOT in the app. Single-fire. The flag is cleared before the call,

@@ -1,26 +1,20 @@
 package earth.walkthru.aqsync.ui.device.cards
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import earth.walkthru.aqsync.R
-import earth.walkthru.aqsync.ui.components.Eyebrow
 import earth.walkthru.aqsync.ui.components.NO_VALUE
-import earth.walkthru.aqsync.ui.components.StatusDot
 import earth.walkthru.aqsync.ui.components.agoFormatter
-import earth.walkthru.aqsync.ui.components.rememberNowMillis
 import earth.walkthru.aqsync.units.formatPm
+import earth.walkthru.opensensor.designsystem.StatusDot
+import earth.walkthru.opensensor.designsystem.rememberNowMillis
 import java.util.Locale
 
 /** A reading older than this is shown as stale (the device samples every 10 s). */
@@ -57,18 +51,5 @@ fun FreshnessLabel(receivedAtEpochMs: Long?, color: Color = MaterialTheme.colorS
             style = MaterialTheme.typography.labelSmall,
             color = color,
         )
-    }
-}
-
-/** A labelled number with its unit, for the secondary measurements. */
-@Composable
-fun BigValue(label: String, value: String, unit: String, modifier: Modifier = Modifier) {
-    Column(modifier) {
-        Eyebrow(label, uppercase = false)
-        Row {
-            Text(value, style = MaterialTheme.typography.displaySmall, modifier = Modifier.alignByBaseline())
-            Spacer(Modifier.width(6.dp))
-            Text(unit, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.alignByBaseline())
-        }
     }
 }

@@ -11,11 +11,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.BugReport
-import androidx.compose.material.icons.rounded.LinkOff
-import androidx.compose.material.icons.rounded.Refresh
-import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -38,7 +33,6 @@ import earth.walkthru.aqsync.data.protocol.PairMode
 import earth.walkthru.aqsync.ui.components.ConnectionBanner
 import earth.walkthru.aqsync.ui.components.DeviceSectionTabs
 import earth.walkthru.aqsync.ui.components.DeviceTab
-import earth.walkthru.aqsync.ui.components.PillButton
 import earth.walkthru.aqsync.ui.components.TransportChip
 import earth.walkthru.aqsync.ui.device.cards.AutoSyncCard
 import earth.walkthru.aqsync.ui.device.cards.BondsCard
@@ -50,6 +44,8 @@ import earth.walkthru.aqsync.ui.device.cards.ProtocolV1Card
 import earth.walkthru.aqsync.ui.device.cards.SensorIdentityCard
 import earth.walkthru.aqsync.ui.device.cards.StickerScan
 import earth.walkthru.aqsync.ui.device.cards.WifiCard
+import earth.walkthru.opensensor.designsystem.AppIcons
+import earth.walkthru.opensensor.designsystem.PillButton
 
 /** Everything the Device screen can ask for. Device-changing ones are confirmed by the route. */
 sealed interface DeviceAction {
@@ -122,13 +118,13 @@ fun DeviceScreen(
                     },
                     actions = {
                         IconButton(onClick = { onAction(DeviceAction.RefreshConfig) }, enabled = state.ready && state.isV2) {
-                            Icon(Icons.Rounded.Refresh, contentDescription = stringResource(R.string.device_refresh))
+                            Icon(AppIcons.Refresh, contentDescription = stringResource(R.string.device_refresh))
                         }
                         if (state.detailLevel.developer) {
-                            IconButton(onClick = { onAction(DeviceAction.OpenDebug) }) { Icon(Icons.Rounded.BugReport, contentDescription = stringResource(R.string.nav_debug)) }
+                            IconButton(onClick = { onAction(DeviceAction.OpenDebug) }) { Icon(AppIcons.BugReport, contentDescription = stringResource(R.string.nav_debug)) }
                         }
-                        IconButton(onClick = { onAction(DeviceAction.OpenSettings) }) { Icon(Icons.Rounded.Settings, contentDescription = stringResource(R.string.nav_settings)) }
-                        IconButton(onClick = { onAction(DeviceAction.Disconnect) }) { Icon(Icons.Rounded.LinkOff, contentDescription = stringResource(R.string.nav_disconnect)) }
+                        IconButton(onClick = { onAction(DeviceAction.OpenSettings) }) { Icon(AppIcons.Settings, contentDescription = stringResource(R.string.nav_settings)) }
+                        IconButton(onClick = { onAction(DeviceAction.Disconnect) }) { Icon(AppIcons.LinkOff, contentDescription = stringResource(R.string.nav_disconnect)) }
                     },
                 )
                 DeviceSectionTabs(DeviceTab.DEVICE) {

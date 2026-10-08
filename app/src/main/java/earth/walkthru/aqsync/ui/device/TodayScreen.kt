@@ -11,10 +11,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.BugReport
-import androidx.compose.material.icons.rounded.LinkOff
-import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -38,7 +34,6 @@ import earth.walkthru.aqsync.data.protocol.TemperatureSource
 import earth.walkthru.aqsync.ui.components.ConnectionBanner
 import earth.walkthru.aqsync.ui.components.DeviceSectionTabs
 import earth.walkthru.aqsync.ui.components.DeviceTab
-import earth.walkthru.aqsync.ui.components.PillButton
 import earth.walkthru.aqsync.ui.components.TransportChip
 import earth.walkthru.aqsync.ui.device.cards.BatchEstimateCard
 import earth.walkthru.aqsync.ui.device.cards.BoardCard
@@ -51,6 +46,8 @@ import earth.walkthru.aqsync.ui.device.cards.ReadingsCard
 import earth.walkthru.aqsync.ui.device.cards.SmartSyncCard
 import earth.walkthru.aqsync.ui.device.cards.StorageCard
 import earth.walkthru.aqsync.ui.device.cards.TodaySoFarCard
+import earth.walkthru.opensensor.designsystem.AppIcons
+import earth.walkthru.opensensor.designsystem.PillButton
 
 /** Everything Today can ask for. The route maps each to a ViewModel call, a dialog or navigation. */
 sealed interface TodayAction {
@@ -117,10 +114,10 @@ fun TodayScreen(
                     actions = {
                         TextButton(onClick = { onAction(TodayAction.OpenDevices) }) { Text(stringResource(R.string.nav_devices)) }
                         if (level.developer) {
-                            IconButton(onClick = { onAction(TodayAction.OpenDebug) }) { Icon(Icons.Rounded.BugReport, contentDescription = stringResource(R.string.nav_debug)) }
+                            IconButton(onClick = { onAction(TodayAction.OpenDebug) }) { Icon(AppIcons.BugReport, contentDescription = stringResource(R.string.nav_debug)) }
                         }
-                        IconButton(onClick = { onAction(TodayAction.OpenSettings) }) { Icon(Icons.Rounded.Settings, contentDescription = stringResource(R.string.nav_settings)) }
-                        IconButton(onClick = { onAction(TodayAction.Disconnect) }) { Icon(Icons.Rounded.LinkOff, contentDescription = stringResource(R.string.nav_disconnect)) }
+                        IconButton(onClick = { onAction(TodayAction.OpenSettings) }) { Icon(AppIcons.Settings, contentDescription = stringResource(R.string.nav_settings)) }
+                        IconButton(onClick = { onAction(TodayAction.Disconnect) }) { Icon(AppIcons.LinkOff, contentDescription = stringResource(R.string.nav_disconnect)) }
                     },
                 )
                 DeviceSectionTabs(DeviceTab.TODAY) {

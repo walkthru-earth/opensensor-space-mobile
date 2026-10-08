@@ -1,4 +1,4 @@
-package earth.walkthru.aqsync.ui.components
+package earth.walkthru.opensensor.designsystem
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
@@ -8,6 +8,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -19,13 +20,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowForward
-import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,24 +31,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import earth.walkthru.aqsync.R
-import earth.walkthru.aqsync.data.history.AirMood
-import earth.walkthru.aqsync.ui.theme.color
-import earth.walkthru.aqsync.ui.theme.onColor
-import earth.walkthru.opensensor.designsystem.BrandTokens
-import earth.walkthru.opensensor.designsystem.FloatingControl
+import earth.walkthru.opensensor.designsystem.resources.Res
+import earth.walkthru.opensensor.designsystem.resources.peacock
+import org.jetbrains.compose.resources.painterResource
 
 /** How loud a card is. Hero is the one card per screen that carries the answer. */
 enum class CardTone { PLAIN, SOFT, HERO }
 
 /**
- * The website's rounded panel (`.brand-panel`, 2rem corners, thin border) as a card. [CardTone.HERO]
- * sits on the soft brand blue, [CardTone.SOFT] on the surface tint, [CardTone.PLAIN] on the low
- * container with a thin outline.
+ * The website's rounded panel (`.brand-panel`, 2rem corners, thin border) as a card, on the one
+ * content card radius [CardShape]. [CardTone.HERO] sits on the soft brand blue, [CardTone.SOFT] on
+ * the surface tint, [CardTone.PLAIN] on the low container with a thin outline.
  */
 @Composable
 fun BrandCard(
@@ -68,7 +59,7 @@ fun BrandCard(
         CardTone.PLAIN -> scheme.surfaceContainerLow to scheme.onSurface
     }
     Surface(
-        shape = MaterialTheme.shapes.extraLarge,
+        shape = CardShape,
         color = container,
         contentColor = onContainer,
         border = if (tone == CardTone.PLAIN) BorderStroke(1.dp, scheme.outlineVariant) else null,
@@ -78,45 +69,24 @@ fun BrandCard(
     }
 }
 
-/**
- * The primary action: a Signal blue curved card with ink text and a trailing arrow. One per screen.
- */
+/** Card wrapper used by the Device and Debug screens: an eyebrow title, an optional trailing control, then the body. */
 @Composable
-fun PillButton(
-    text: String,
-    onClick: () -> Unit,
+fun SectionCard(
+    title: String,
     modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-    arrow: Boolean = true,
+    trailing: (@Composable () -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit,
 ) {
-    Button(
-        onClick = onClick,
-        enabled = enabled,
-        shape = FloatingControl.Shape,
-        colors = FloatingControl.primaryButtonColors(),
-        contentPadding = PaddingValues(start = 24.dp, end = if (arrow) 18.dp else 24.dp, top = 14.dp, bottom = 14.dp),
-        modifier = modifier,
-    ) {
-        Text(text, style = MaterialTheme.typography.labelLarge)
-        if (arrow) {
-            Spacer(Modifier.width(10.dp))
-            Icon(Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
+    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = modifier.fillMaxWidth()) {
+        Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Eyebrow(title)
+                Spacer(Modifier.weight(1f))
+                trailing?.invoke()
+            }
+            Spacer(Modifier.height(8.dp))
+            content()
         }
-    }
-}
-
-/** A quieter outlined card for the secondary action next to a [PillButton], same curve. */
-@Composable
-fun OutlinePillButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
-    OutlinedButton(
-        onClick = onClick,
-        enabled = enabled,
-        shape = FloatingControl.Shape,
-        border = BorderStroke(1.5.dp, if (enabled) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outlineVariant),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
-        modifier = modifier,
-    ) {
-        Text(text, style = MaterialTheme.typography.labelLarge)
     }
 }
 
@@ -136,7 +106,7 @@ fun Peacock(modifier: Modifier = Modifier, size: Dp = 120.dp, contentDescription
         modifier = modifier,
     ) {
         Image(
-            painter = painterResource(R.drawable.peacock),
+            painter = painterResource(Res.drawable.peacock),
             contentDescription = contentDescription,
             modifier = Modifier.size(size),
         )
@@ -171,20 +141,6 @@ fun MascotGuide(
     }
 }
 
-/** The website hero's bottom stripe (`.brand-hero-art`): main, accent, deep, surface, main. */
-@Composable
-fun BrandStripe(modifier: Modifier = Modifier, height: Dp = 6.dp) {
-    val dark = MaterialTheme.colorScheme.background.luminanceIsDark()
-    val p = if (dark) BrandTokens.Dark else BrandTokens.Light
-    Row(modifier.fillMaxWidth().height(height).clip(CircleShape)) {
-        listOf(p.main, p.accent, p.deep, p.surface, p.main).forEach { c ->
-            Box(Modifier.weight(1f).height(height).background(c))
-        }
-    }
-}
-
-private fun Color.luminanceIsDark(): Boolean = (0.2126f * red + 0.7152f * green + 0.0722f * blue) < 0.5f
-
 /**
  * A badge tilted like the website's `.brand-icon` (rotate -5deg, rounded square). Only for the
  * hero card's character, never for numbers or charts.
@@ -201,15 +157,24 @@ fun TiltedBadge(color: Color, modifier: Modifier = Modifier, size: Dp = 88.dp, c
     ) { content() }
 }
 
-/** The mood name on its own WHO step colour, with ink chosen for contrast (`AirMood.onColor`). A small curved card. */
+/** A warning strip inside a card. */
 @Composable
-fun MoodPill(mood: AirMood, modifier: Modifier = Modifier) {
-    Surface(shape = FloatingControl.SmallShape, color = mood.color(), contentColor = mood.onColor(), modifier = modifier) {
-        Text(
-            mood.titleText(),
-            style = MaterialTheme.typography.labelLarge,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-        )
+fun WarningNote(text: String, modifier: Modifier = Modifier) {
+    Surface(color = MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.medium, modifier = modifier.fillMaxWidth()) {
+        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Icon(AppIcons.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer, modifier = Modifier.size(20.dp))
+            Text(text, color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodySmall)
+        }
     }
+}
+
+/** An informational strip inside a card. */
+@Composable
+fun InfoNote(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text,
+        modifier = modifier.padding(top = 6.dp),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }

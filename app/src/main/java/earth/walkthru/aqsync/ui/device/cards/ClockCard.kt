@@ -18,11 +18,11 @@ import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.protocol.DeviceStatus
 import earth.walkthru.aqsync.data.protocol.LiveSample
 import earth.walkthru.aqsync.data.settings.DetailLevel
-import earth.walkthru.aqsync.ui.components.BrandCard
-import earth.walkthru.aqsync.ui.components.CardHeader
-import earth.walkthru.aqsync.ui.components.InfoContent
-import earth.walkthru.aqsync.ui.components.OutlinePillButton
-import earth.walkthru.aqsync.ui.components.StatusDot
+import earth.walkthru.opensensor.designsystem.BrandCard
+import earth.walkthru.opensensor.designsystem.CardHeader
+import earth.walkthru.opensensor.designsystem.InfoContent
+import earth.walkthru.opensensor.designsystem.OutlinePillButton
+import earth.walkthru.opensensor.designsystem.StatusDot
 import java.time.Instant
 import java.time.format.DateTimeFormatter
 

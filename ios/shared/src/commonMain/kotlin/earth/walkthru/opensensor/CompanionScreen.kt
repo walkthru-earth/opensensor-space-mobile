@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -37,26 +36,20 @@ import earth.walkthru.aqsync.units.UnitFormatter
 import earth.walkthru.aqsync.units.UnitSystem
 import earth.walkthru.aqsync.units.formatFixed
 import earth.walkthru.aqsync.units.formatPm
+import earth.walkthru.opensensor.designsystem.CardShape
 import kotlin.math.floor
 
 /*
  * The My devices tab. It renders inside the brand theme that AppRoot applies (OpenSensorTheme), so
- * it reads colours and shapes from MaterialTheme and never sets a theme of its own. This file is
- * commonMain, which also compiles for the JVM, so it cannot use :ui:designsystem directly. The
- * curves match the floating control rule through the brand shapes, small (12 dp) for buttons and
- * [CardShape] for cards. Cards sit on the brand surface with a hairline, buttons are curved cards,
- * not pills.
+ * it reads colours and shapes from MaterialTheme and never sets a theme of its own. The curves
+ * match the floating control rule through the brand shapes, small (12 dp) for buttons and the
+ * design system's [CardShape] (32 dp, the same as the Android BrandCard) for cards. Cards sit on
+ * the brand surface with a hairline, buttons are curved cards, not pills.
  *
  * Detail level. iOS shows the Simple level for now (docs/screens.md, Detail levels). Signal dBm,
  * firmware, finalized file counts, byte counters and transfer rate stay behind [showTechnical]
  * until the shared detail level setting lands.
  */
-
-/**
- * The content card radius, the website's 2rem panel. Same value as the Android BrandCard
- * (`shapes.extraLarge`, 32 dp). A literal until the shared design system components land.
- */
-internal val CardShape = RoundedCornerShape(32.dp)
 
 @Composable
 internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (String) -> Unit, disconnect: () -> Unit, scanLan: () -> Unit, saveWifiAccess: () -> Unit, connectLan: (String) -> Unit, syncLan: (String) -> Unit, disconnectLan: (String) -> Unit, exportArchive: () -> Unit, units: UnitSystem = UnitSystem.METRIC, showTechnical: Boolean = false) {
