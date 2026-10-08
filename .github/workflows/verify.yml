@@ -1,7 +1,7 @@
 # The gate from AGENTS.md, enforced: `./gradlew verify` = :app lintDebug + assembleDebug +
 # testDebugUnitTest + every :core module's tests, plus the same pre-commit hooks a developer runs.
-# What CI does NOT run: anything that needs a phone or an emulator (BLE, mDNS, the foreground
-# service, WorkManager plumbing) — those results live in the firmware repo's bench-verified.md.
+# iOS adds shared Kotlin simulator tests and unsigned simulator/device builds on Apple Silicon.
+# Real BLE, mDNS, permissions and background behavior still need dated phone evidence.
 name: verify
 
 on:
@@ -73,5 +73,98 @@ jobs:
             app/build/reports/lint-results-debug.html
             app/build/reports/tests/
             core/*/build/reports/tests/
+            ios/shared/build/reports/tests/jvmTest/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  ios:
+    name: iOS native validation
+    runs-on: xcode-27
+    timeout-minutes: 60
+    env:
+      # Project policy: validate with Xcode 27; do not inherit a moving/beta default.
+      XCODE_VERSION: "27.0"
+      DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
+      # Standard macOS runners have 7 GB RAM; bound concurrent native compilation.
+      GRADLE_OPTS: -Dorg.gradle.workers.max=2
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+      - name: Cache Kotlin Native toolchain
+        uses: actions/cache@v6
+        with:
+          path: ~/.konan
+          key: konan-${{ runner.os }}-${{ runner.arch }}-xcode-${{ env.XCODE_VERSION }}-${{ hashFiles('gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties', 'core/*/build.gradle.kts', 'ios/shared/build.gradle.kts') }}
+      - name: Check Apple toolchain
+        run: |
+          test "$(uname -m)" = arm64
+          test -d "$DEVELOPER_DIR"
+          mkdir -p ios/build/ci
+          {
+            xcodebuild -version
+            xcodebuild -showsdks
+            xcrun simctl list runtimes
+            java -version
+          } 2>&1 | tee ios/build/ci/toolchain.log
+      - name: Run shared Kotlin tests on iOS simulator
+        run: ./gradlew --no-daemon --stacktrace verifyIos 2>&1 | tee ios/build/ci/kotlin-tests.log
+      - name: Build unsigned simulator app
+        run: |
+          xcodebuild -project ios/OpenSensor.xcodeproj -scheme OpenSensor \
+            -configuration Debug -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath ios/build/DerivedData-simulator \
+            -resultBundlePath ios/build/ci/simulator.xcresult \
+            CODE_SIGNING_ALLOWED=NO build 2>&1 | tee ios/build/ci/simulator-build.log
+      - name: Build unsigned device Release app
+        run: |
+          xcodebuild -project ios/OpenSensor.xcodeproj -scheme OpenSensor \
+            -configuration Release -destination 'generic/platform=iOS' \
+            -derivedDataPath ios/build/DerivedData-device \
+            -resultBundlePath ios/build/ci/device-release.xcresult \
+            CODE_SIGNING_ALLOWED=NO build 2>&1 | tee ios/build/ci/device-release-build.log
+      - name: Package simulator app
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent \
+            ios/build/DerivedData-simulator/Build/Products/Debug-iphonesimulator/OpenSensor.app \
+            ios/build/ci/OpenSensor-simulator.zip
+      - name: Upload simulator app
+        uses: actions/upload-artifact@v7
+        with:
+          name: opensensor-space-ios-simulator-xcode-${{ env.XCODE_VERSION }}-${{ github.sha }}
+          path: ios/build/ci/OpenSensor-simulator.zip
+          retention-days: 14
+          if-no-files-found: error
+      - name: Package Xcode result bundles
+        if: always()
+        run: |
+          for bundle in ios/build/ci/*.xcresult; do
+            if [ -d "$bundle" ]; then
+              ditto -c -k --sequesterRsrc --keepParent "$bundle" "$bundle.zip"
+            fi
+          done
+      - name: Upload iOS logs and test reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-reports-xcode-${{ env.XCODE_VERSION }}-${{ github.sha }}
+          path: |
+            ios/build/ci/*.log
+            ios/build/ci/*.xcresult.zip
+            core/protocol/build/reports/tests/iosSimulatorArm64Test/
+            core/protocol/build/test-results/iosSimulatorArm64Test/
+            core/history/build/reports/tests/iosSimulatorArm64Test/
+            core/history/build/test-results/iosSimulatorArm64Test/
+            ios/shared/build/reports/tests/iosSimulatorArm64Test/
+            ios/shared/build/test-results/iosSimulatorArm64Test/
           retention-days: 14
           if-no-files-found: ignore

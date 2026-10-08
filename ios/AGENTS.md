@@ -19,6 +19,10 @@ The iOS app entry point is the Xcode project in this directory. Read the root
 - Preserve the generated framework name, Xcode build phase, bundle identity,
   deployment target, privacy strings, and Gradle/Xcode integration unless the task
   requires a reviewed change. Check generated framework API changes from Swift.
+- For CI or release work, read `../docs/build-and-release.md`. Keep the unsigned
+  simulator/device validation job independent of signing secrets. Check the pinned
+  Kotlin/Xcode compatibility and hosted image inventory together; do not inherit
+  a moving Xcode default or add release tooling before distribution requires it.
 - Core Bluetooth and Bonjour behavior needs iOS simulator/build checks plus real
   iPhone evidence where radio or privacy behavior is involved. Simulator success
   does not establish BLE, Local Network permission, background, or transfer behavior.

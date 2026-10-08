@@ -79,6 +79,13 @@ tests and the iOS presentation state's JVM tests. It works without Xcode on Linu
 it needs an installed simulator runtime. The Xcode build compiles the Swift BLE
 adapter and app too. Neither a simulator build nor shared tests qualify radio behavior.
 
+GitHub Actions adds an Apple Silicon macOS job for `verifyIos`, an unsigned Debug
+simulator build, and an unsigned Release device build. Its Xcode pin, downloadable
+simulator artifact, failure reports and later TestFlight signing plan are documented
+in [build-and-release.md](build-and-release.md#github-actions-ios-validation-researched-2026-10-08).
+Keep the existing Xcode build phase as the framework integration point; a separate
+framework-link command before `xcodebuild` is unnecessary.
+
 Open `ios/OpenSensor.xcodeproj` in Xcode and choose an installed simulator to run
 the screen. For the connected iPhone, select your Apple development team in
 Signing & Capabilities, choose the phone, enable Developer Mode if required,

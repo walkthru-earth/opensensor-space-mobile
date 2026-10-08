@@ -83,6 +83,10 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 
 The iOS build requires macOS and Xcode. Follow [`docs/ios-migration.md`](docs/ios-migration.md)
 for simulator framework linking, the Xcode build, and real-iPhone qualification steps.
+GitHub Actions validates shared Kotlin iOS tests and unsigned simulator Debug/device
+Release builds on Apple Silicon with Xcode 27 and the iOS 27 SDK. Simulator apps and failure reports are retained
+as workflow artifacts; iOS signing and TestFlight setup are documented in
+[`docs/build-and-release.md`](docs/build-and-release.md#github-actions-ios-validation-researched-2026-10-08).
 
 Ready-made APKs: every push to `main` refreshes the rolling [`latest`](../../releases/tag/latest)
 pre-release; a `v*` tag publishes a permanent release. Details, signing and the debug fake device:
