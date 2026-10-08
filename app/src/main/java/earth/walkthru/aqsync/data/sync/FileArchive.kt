@@ -2,6 +2,7 @@ package earth.walkthru.aqsync.data.sync
 
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
+import earth.walkthru.aqsync.data.protocol.SafeName
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.File

@@ -10,6 +10,7 @@ import earth.walkthru.aqsync.data.local.database.ArchivedFile
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.protocol.ParquetVerify
 import earth.walkthru.aqsync.data.protocol.ProtocolError
+import earth.walkthru.aqsync.data.protocol.SafeName
 import earth.walkthru.aqsync.data.protocol.sha256Hex
 import earth.walkthru.aqsync.data.protocol.verify
 import kotlinx.coroutines.NonCancellable

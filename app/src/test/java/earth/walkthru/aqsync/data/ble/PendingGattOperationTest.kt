@@ -1,6 +1,7 @@
 package earth.walkthru.aqsync.data.ble
 
 import earth.walkthru.aqsync.data.protocol.AqUuids
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.test.runCurrent
@@ -10,6 +11,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class PendingGattOperationTest {
     @Test
     fun `late write callback cannot complete the next read`() = runTest {

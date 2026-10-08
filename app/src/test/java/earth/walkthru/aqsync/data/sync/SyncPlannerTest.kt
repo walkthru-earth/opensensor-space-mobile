@@ -1,6 +1,7 @@
 package earth.walkthru.aqsync.data.sync
 
 import earth.walkthru.aqsync.data.protocol.Frame
+import earth.walkthru.aqsync.data.protocol.SafeName
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

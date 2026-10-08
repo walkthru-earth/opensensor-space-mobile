@@ -1,6 +1,7 @@
 package earth.walkthru.aqsync.data.sync
 
 import earth.walkthru.aqsync.data.protocol.Frame
+import earth.walkthru.aqsync.data.protocol.SafeName
 
 /**
  * Where a manifest entry sits in the device's Hive tree.
@@ -46,27 +47,6 @@ sealed interface HivePartition {
             return Other(name.substringBeforeLast('/', missingDelimiterValue = ""))
         }
     }
-}
-
-/**
- * Same character whitelist as `safe_name()` in the firmware: `[0-9a-z._=/-]`, no `..`, no `//`,
- * ends in `.parquet`, at most [MAX_BYTES] UTF-8 bytes (`ble-sync-protocol.md`, "names are ≤ 399
- * bytes", so every `OPENED` fits one PDU at MTU 517).
- */
-object SafeName {
-    /** Contract limit on a file name, in bytes. */
-    const val MAX_BYTES = 399
-
-    private val ALLOWED = Regex("""^[0-9a-z._=/-]+$""")
-
-    fun isValid(name: String): Boolean =
-        name.isNotEmpty() &&
-            name.encodeToByteArray().size <= MAX_BYTES &&
-            ALLOWED.matches(name) &&
-            !name.contains("..") &&
-            !name.contains("//") &&
-            !name.startsWith("/") &&
-            name.endsWith(".parquet")
 }
 
 /** Identity of a file already held in the local archive. */
