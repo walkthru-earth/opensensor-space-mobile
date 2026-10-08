@@ -33,8 +33,13 @@ data class ScannedDevice(
 object BleScanner {
     private const val TAG = "BleScanner"
 
+    /** [Event.Failed.errorCode] when the adapter is missing or off. */
+    const val BLUETOOTH_OFF = -1
+
     sealed interface Event {
         data class Seen(val device: ScannedDevice) : Event
+
+        /** [message] is technical, for logs. [errorCode] is [BLUETOOTH_OFF] or the Android scan error. */
         data class Failed(val errorCode: Int, val message: String) : Event
     }
 
@@ -42,7 +47,7 @@ object BleScanner {
         val adapter = BluetoothStatus.adapter(context)
         val scanner = adapter?.bluetoothLeScanner
         if (adapter == null || !adapter.isEnabled || scanner == null) {
-            trySend(Event.Failed(-1, "Bluetooth is off"))
+            trySend(Event.Failed(BLUETOOTH_OFF, "Bluetooth is off"))
             close()
             return@callbackFlow
         }

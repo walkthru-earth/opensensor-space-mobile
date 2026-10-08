@@ -39,14 +39,14 @@ class SyncNotifications @Inject constructor(@ApplicationContext private val cont
 
     fun ensureChannels() {
         manager.createNotificationChannel(
-            NotificationChannel(CHANNEL_PROGRESS, "Sync progress", NotificationManager.IMPORTANCE_LOW).apply {
-                description = "Shown while Parquet files are being copied from a sensor device. Keeps the transfer alive when the screen is off."
+            NotificationChannel(CHANNEL_PROGRESS, context.getString(R.string.notif_channel_progress), NotificationManager.IMPORTANCE_LOW).apply {
+                description = context.getString(R.string.notif_channel_progress_desc)
                 setShowBadge(false)
             }
         )
         manager.createNotificationChannel(
-            NotificationChannel(CHANNEL_SUMMARY, "Sync results", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                description = "One notification when an automatic sync copied new files."
+            NotificationChannel(CHANNEL_SUMMARY, context.getString(R.string.notif_channel_summary), NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = context.getString(R.string.notif_channel_summary_desc)
             }
         )
     }
@@ -62,18 +62,18 @@ class SyncNotifications @Inject constructor(@ApplicationContext private val cont
      */
     fun progress(deviceName: String?, progress: SyncProgress, stopIntent: PendingIntent?, reconnecting: ReconnectState? = null): Notification {
         ensureChannels()
-        val name = deviceName ?: "device"
+        val name = deviceName ?: context.getString(R.string.notif_device)
         val title = when {
-            reconnecting != null -> "$name · reconnecting (${reconnecting.attempt}/${reconnecting.maxAttempts})…"
-            progress.filesTotal > 0 -> "$name · ${progress.filesDone}/${progress.filesTotal} files · ${formatBytes(progress.bytesDone)}"
-            else -> "$name · preparing sync…"
+            reconnecting != null -> context.getString(R.string.notif_reconnecting, name, reconnecting.attempt, reconnecting.maxAttempts)
+            progress.filesTotal > 0 -> context.getString(R.string.notif_progress, name, progress.filesDone, progress.filesTotal, formatBytes(progress.bytesDone))
+            else -> context.getString(R.string.notif_preparing, name)
         }
         val current = progress.current
         val text = when {
-            reconnecting != null -> "Link lost: ${reconnecting.reason}. The sync resumes when the device is back."
+            reconnecting != null -> context.getString(R.string.notif_link_lost)
             current != null -> current.name.substringAfterLast('/') + " · ${formatBytes(current.bytesDone)} / ${formatBytes(current.bytesTotal)}"
-            progress.bytesTotal > 0 -> "${formatBytes(progress.bytesDone)} of ${formatBytes(progress.bytesTotal)}"
-            else -> "Listing files on the device…"
+            progress.bytesTotal > 0 -> context.getString(R.string.files_bytes_of, formatBytes(progress.bytesDone), formatBytes(progress.bytesTotal))
+            else -> context.getString(R.string.notif_listing)
         }
         val builder = NotificationCompat.Builder(context, CHANNEL_PROGRESS)
             .setSmallIcon(R.drawable.ic_stat_sync)
@@ -92,7 +92,7 @@ class SyncNotifications @Inject constructor(@ApplicationContext private val cont
             builder.setProgress(0, 0, true)
         }
         if (stopIntent != null) {
-            builder.addAction(NotificationCompat.Action.Builder(0, "Stop", stopIntent).build())
+            builder.addAction(NotificationCompat.Action.Builder(0, context.getString(R.string.files_stop), stopIntent).build())
         }
         return builder.build()
     }
@@ -102,13 +102,10 @@ class SyncNotifications @Inject constructor(@ApplicationContext private val cont
         if (newFiles <= 0 && failures <= 0) return
         if (!canPost) return
         ensureChannels()
-        val name = deviceName ?: "device"
-        val title = if (newFiles > 0) "Synced $newFiles new file${if (newFiles == 1) "" else "s"} from $name · ${formatBytes(newBytes)}" else "Sync from $name had problems"
-        val text = when {
-            newFiles > 0 && failures > 0 -> "$failures file${if (failures == 1) "" else "s"} could not be verified; they will be retried."
-            newFiles > 0 -> "Verified and stored in the archive on this phone."
-            else -> "$failures file${if (failures == 1) "" else "s"} could not be verified; they will be retried."
-        }
+        val name = deviceName ?: context.getString(R.string.notif_device)
+        val res = context.resources
+        val title = if (newFiles > 0) res.getQuantityString(R.plurals.notif_synced, newFiles, newFiles, name, formatBytes(newBytes)) else context.getString(R.string.notif_problems, name)
+        val text = if (failures > 0) res.getQuantityString(R.plurals.notif_failures, failures, failures) else context.getString(R.string.notif_verified)
         val n = NotificationCompat.Builder(context, CHANNEL_SUMMARY)
             .setSmallIcon(R.drawable.ic_stat_sync)
             .setContentTitle(title)
