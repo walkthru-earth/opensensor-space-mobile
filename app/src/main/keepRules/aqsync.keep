@@ -52,3 +52,9 @@
 # Class.forName plus the key's serializer. Stable names keep restore readable and
 # robust against class merging.
 -keepnames class * implements androidx.navigation3.runtime.NavKey
+
+# com.uber:h3 (Discover map). The JNI library binds com.uber.h3core.NativeMethods by
+# name and constructs LatLng, H3Exception and ArrayList from native code
+# (META-INF/native-image/com.uber/h3/jni-config.json), so the package stays intact.
+-keep class com.uber.h3core.** { *; }
+-dontwarn com.uber.h3core.**

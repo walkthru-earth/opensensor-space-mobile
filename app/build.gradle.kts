@@ -96,6 +96,10 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            // com.uber:h3 ships its JNI library for every OS as jar resources. Android cannot load
+            // a library from a jar, so ExtractH3Jni below copies the Android ones into jniLibs and
+            // the jar copies stay out of the APK.
+            excludes += setOf("/darwin-*/**", "/linux-*/**", "/windows-*/**", "/freebsd-*/**", "/android-*/**")
         }
     }
 
@@ -140,6 +144,56 @@ ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
 
+/**
+ * Copies the Android builds of the H3 JNI library out of the `com.uber:h3` jar into a jniLibs
+ * directory (`arm64-v8a`, `armeabi-v7a`), where `System.loadLibrary("h3-java")` finds them.
+ * The jar has no x86_64 build, so x86_64 devices show the Discover empty state.
+ */
+abstract class ExtractH3Jni : DefaultTask() {
+    @get:InputFiles
+    abstract val jar: ConfigurableFileCollection
+
+    @get:OutputDirectory
+    abstract val output: DirectoryProperty
+
+    @get:Inject
+    abstract val files: FileSystemOperations
+
+    @get:Inject
+    abstract val archives: ArchiveOperations
+
+    @TaskAction
+    fun extract() {
+        val abis = mapOf("android-arm64" to "arm64-v8a", "android-arm" to "armeabi-v7a")
+        files.sync {
+            into(output)
+            jar.forEach { file ->
+                abis.forEach { (from, abi) ->
+                    from(archives.zipTree(file)) {
+                        include("$from/libh3-java.so")
+                        eachFile { path = "$abi/$name" }
+                        includeEmptyDirs = false
+                    }
+                }
+            }
+        }
+    }
+}
+
+val h3Natives: Configuration by configurations.creating {
+    isCanBeConsumed = false
+    isTransitive = false
+}
+val extractH3Jni = tasks.register<ExtractH3Jni>("extractH3Jni") {
+    jar.from(h3Natives)
+    output.set(layout.buildDirectory.dir("generated/h3Jni"))
+}
+androidComponents {
+    onVariants { variant ->
+        variant.sources.jniLibs?.addGeneratedSourceDirectory(extractH3Jni, ExtractH3Jni::output)
+    }
+}
+
 android.sourceSets.getByName("test") {
     // The Parquet fixtures (real device files + PyArrow expectations) live once, in :core:parquet.
     resources.srcDir(rootProject.file("core/parquet/src/test/resources"))
@@ -150,6 +204,10 @@ dependencies {
     implementation(project(":core:protocol"))
     implementation(project(":core:parquet"))
     implementation(project(":core:history"))
+    // The Discover map (shared Compose with iOS) and the public feed port behind it.
+    implementation(project(":feature:discover"))
+    implementation(project(":core:publicfeed"))
+    h3Natives(libs.h3)
     // ZSTD pages of external GeoParquet (PyArrow/GDAL default in many pipelines): the one native library,
     // registered into :core:parquet's codec SPI by data/history/parquet/AppParquetCodecs. Prebuilt AAR;
     // the pure module never links it (docs/history-ux-and-data-layer.md §7, G1).

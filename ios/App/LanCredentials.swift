@@ -47,6 +47,14 @@ final class LanCredentials {
         else { return nil }
         return value
     }
+    /// True when access to at least one device was saved. Reads no secret, only whether an item exists.
+    func hasAny() -> Bool {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+        return SecItemCopyMatching(query as CFDictionary, nil) == errSecSuccess
+    }
     func remove(device: String) {
         SecItemDelete(
             [

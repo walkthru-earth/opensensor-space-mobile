@@ -3,7 +3,11 @@ package earth.walkthru.aqsync.ui
 import androidx.navigation3.runtime.NavKey
 import kotlinx.serialization.Serializable
 
-/** Find and pick a logger. Home. */
+/** The public sensor map. The start tab when no device is paired (docs/devices-and-discovery.md). */
+@Serializable
+data object DiscoverKey : NavKey
+
+/** Find and pick a logger. My devices, and the start tab once a device is paired. */
 @Serializable
 data object ScanKey : NavKey
 
