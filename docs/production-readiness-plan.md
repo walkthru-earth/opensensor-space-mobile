@@ -211,15 +211,25 @@ See [devices-and-discovery.md](devices-and-discovery.md).
 
 **W12 Discover map with sample data.** Starts after W9 and W11 merge. Owns new
 `:core:publicfeed`, `:feature:discover` (Compose Multiplatform `commonMain`) and
-`tools/discover-fixture/`, plus the navigation wiring in both apps.
-- A `PublicFeed` port with a JSON fixture source in the shape of the proposed feed contract,
-  made by a committed Python `h3` script. The map labels it "Sample data".
-- A map with H3 cells coloured by the chosen metric and window, a cell sheet with avg, min and
-  max per metric and the device list (crowd rule of three), and a public device page with range,
+`tools/discover-fixture/`, plus the navigation wiring in both apps. Needs W8's portable
+Parquet reader. Design reassessed 2026-10-08 in
+[devices-and-discovery.md](devices-and-discovery.md) Part 2.
+- A `PublicFeed` port over the website `/indices` layout (one Parquet file per H3 resolution,
+  INT64 sorted `h3_index`, `date=`/`hour=` partitions, S3 listing as manifest). The sample feed
+  is bundled Parquet in that exact layout, written by a committed Python `h3` and PyArrow
+  script, read through the same `:core:parquet` reader. The map labels it "Sample data".
+- A suspend HTTP range `ByteReader` (Ktor) with row group pruning by H3 descendant ranges and a
+  footer and range cache. An H3 interface with `com.uber:h3` on Android and H3 C through
+  cinterop on iOS, because the files carry no geometry.
+- A map with H3 cells coloured by the chosen metric and window (hourly values only), a
+  non-modal sheet with peek, half and full heights, avg, min and max per metric, the device
+  list (crowd rule of three applied by the publisher), and a public device page with range,
   aggregation and metric filters.
-- MapLibre through `maplibre-compose`, or an `expect`/`actual` MapLibre Native wrapper if it does
-  not fit the pinned Kotlin and CMP versions. One GeoJSON source and no composable per cell.
-- No location permission. Centre on the last viewed area or the time zone region.
+- `maplibre-compose` 0.19.0, which pins our Kotlin and CMP versions. One GeoJSON source, a
+  cover of at most 1,024 cells, redrawn after 400 ms of camera rest. A small bundled basemap
+  for offline and "© OpenStreetMap" always reachable.
+- No location permission. Centre on the last viewed area, the own device cell or the time zone
+  region, with search over a bundled place list.
 - Discover is the start tab when no device is paired.
 
 ### Wave 3 (after Wave 2)
