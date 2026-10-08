@@ -49,7 +49,7 @@ fun rememberBluetoothAccess(): RuntimeAccess {
     val context = LocalContext.current
     val access = remember { RuntimeAccess(AccessKind.BLUETOOTH) }
     val turnOn = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { access.onTurnOnResult() }
-    bindRuntimeAccess(
+    BindRuntimeAccess(
         access = access,
         permissions = BluetoothPermissions,
         radioCheck = { BluetoothStatus.isEnabled(context) },
@@ -66,12 +66,12 @@ fun rememberBluetoothAccess(): RuntimeAccess {
 @Composable
 fun rememberLocalNetworkAccess(): RuntimeAccess {
     val access = remember { RuntimeAccess(AccessKind.LOCAL_NETWORK) }
-    bindRuntimeAccess(access, permissions = listOfNotNull(LanPermission.name).toTypedArray(), radioCheck = { true })
+    BindRuntimeAccess(access, permissions = listOfNotNull(LanPermission.name).toTypedArray(), radioCheck = { true })
     return access
 }
 
 @Composable
-private fun bindRuntimeAccess(
+private fun BindRuntimeAccess(
     access: RuntimeAccess,
     permissions: Array<String>,
     radioCheck: () -> Boolean,
@@ -91,8 +91,6 @@ private fun bindRuntimeAccess(
             requestTurnOn = requestTurnOn,
         ),
     )
-    // The first read, so `ready` is right on the first frame. Reading never asks.
-    remember(access) { access.refresh() }
     // Returning from system settings may have changed the answer.
     LifecycleResumeEffect(access) {
         access.refresh()

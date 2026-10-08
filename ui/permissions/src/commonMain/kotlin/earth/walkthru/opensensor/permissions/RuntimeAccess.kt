@@ -85,9 +85,18 @@ class RuntimeAccess(val kind: AccessKind) {
     private var onReady: (() -> Unit)? = null
     private var onDeclined: (() -> Unit)? = null
 
-    /** Connects the platform. Call again on every composition with fresh launchers. */
+    private var bound = false
+
+    /**
+     * Connects the platform. Call again on every composition with fresh launchers. The first bind
+     * reads the grant, so `ready` is right on the first frame. Reading never asks.
+     */
     fun bind(hooks: AccessHooks) {
         this.hooks = hooks
+        if (!bound) {
+            bound = true
+            refresh()
+        }
     }
 
     /** Re-reads the grant and radio, for example on resume after system settings. Never asks. */

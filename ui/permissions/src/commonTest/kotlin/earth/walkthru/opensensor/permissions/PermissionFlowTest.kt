@@ -157,6 +157,15 @@ class PermissionFlowTest {
     }
 
     @Test
+    fun firstBindReadsTheGrantWithoutAsking() {
+        var asked = 0
+        val access = RuntimeAccess(AccessKind.BLUETOOTH)
+        access.bind(AccessHooks.rationaleBased(granted = { true }, rationaleDue = { false }, requestPermission = { asked++ }, openSettings = {}))
+        assertTrue(access.ready)
+        assertEquals(0, asked)
+    }
+
+    @Test
     fun grantedActionRunsWithoutAnyDialog() {
         val f = Fake().apply { granted = true }
         var ran = false
