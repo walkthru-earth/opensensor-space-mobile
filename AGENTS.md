@@ -1,13 +1,17 @@
-# Agent map — opensensor.space Android
+# Agent map — opensensor.space mobile (Android + iOS)
 
-Hardware-neutral Android companion for `../aq-parquet`. This checkout is named
-`opensensor-space-android`; its remote is `opensensor-space-android`. Start with this
-file, then open only the concern you are changing in `docs/README.md`.
+Mobile companion for `../aq-parquet`. Android and iOS apps live in this repository with
+shared Kotlin modules. The Gradle project is `opensensor-space-mobile`; the Android
+application ID and Android/core package remain `earth.walkthru.aqsync` for install/update
+compatibility; the iOS shared presentation package is `earth.walkthru.opensensor`.
+Confirm the checkout and GitHub repository names from Git before recording
+them; do not infer them from the directory name. Start with this file, then open only the
+concern you are changing in `docs/README.md`.
 
 | Task | Open next | Code |
 | --- | --- | --- |
 | Current status and real-phone evidence | `docs/status.md`, then `../aq-parquet/docs/boards/*/bench-verified.md` | — |
-| iOS migration, shared Kotlin, simulator and iPhone builds | `docs/ios-migration.md` | `core/`, `ios/` |
+| iOS app, shared Kotlin, simulator and iPhone builds | `docs/ios-migration.md`, `ios/AGENTS.md` | `core/`, `ios/` |
 | App layers and dependencies | `docs/architecture.md`, `core/AGENTS.md` | `core/`, `app/` |
 | BLE, LAN, sync, pairing, background work | `docs/transports.md`, `docs/sync-engine.md`, `docs/background-sync.md`, `app/src/main/java/earth/walkthru/aqsync/data/AGENTS.md` | `data/` |
 | Room, history, Parquet | `docs/data-model.md`, `docs/history-pipeline.md`, `docs/parquet.md` | `data/history/`, `data/local/`, `core/` |
@@ -32,12 +36,35 @@ file, then open only the concern you are changing in `docs/README.md`.
   require confirmation. Debug raw commands cannot invoke `REBOOT` or `SET_CONFIG`.
 - `:core:*` stays reusable without Android, Hilt or Room. `protocol` and the
   sensor-domain part of `history` compile for JVM and iOS; platform file/stream
-  adapters stay in JVM source sets. Common code cannot import `java.*`.
+  adapters stay in JVM source sets. Common code cannot import `java.*`; platform
+  source sets may depend on common code, never the reverse.
   Transport and storage work stays out of composables. Sensor semantics come
   from the metric registry, never fabricated defaults.
-- Treat host tests and phone observations separately. Record new phone results
-  in the board's `bench-verified.md` and update `docs/status.md`; do not present
-  a host fixture as hardware qualification.
+- Platform entry points own their UI and OS services. Android Compose and Android
+  framework APIs stay in `app/`; iOS app code and Apple frameworks stay in `ios/`.
+  The current iOS screen uses Compose Multiplatform; native Swift files are adapters.
+  Apply SwiftUI guidance only to native SwiftUI code. Keep KMP APIs consumed from
+  Swift narrow and documented, and use the existing direct Xcode framework setup.
+- Keep host/JVM tests, iOS simulator builds, Android phone runs, and iPhone runs
+  distinct. A host or simulator result does not establish real-device radio behavior.
+  Record app observations in `docs/status.md` and firmware/board observations in
+  the relevant `bench-verified.md`; do not present a host fixture as hardware qualification.
+
+## AI investigation and delegation
+
+- For broad investigations or changes spanning independent concerns, use multiple
+  subagents when available. Give each a bounded question or file set; ask for source
+  links and concrete findings. Avoid overlapping edits. The lead agent reconciles
+  findings against this repository, firmware-owned contracts, and dated evidence,
+  then owns the integrated changes. Small, single-concern tasks do not need delegation.
+- For evolving Kotlin, Apple, or toolchain behavior, check current primary sources
+  and this repo's pinned versions. Do not copy version assumptions from a third-party
+  skill into this project without checking its deployment target and build.
+- The linked [SwiftUI Agent Skill](https://github.com/twostraws/swiftui-agent-skill)
+  is a reference for SwiftUI reviews (state ownership, navigation, accessibility,
+  performance, and API availability), not an installed dependency. Do not apply its
+  SwiftUI rules to the current Compose iOS screen. See `ios/AGENTS.md` for local
+  platform boundaries and review guidance.
 
 ## Gate
 

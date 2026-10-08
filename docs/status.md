@@ -6,11 +6,13 @@
 
 ## One-line status
 
-The **opensensor.space** initial implementation adds independent device controllers, bounded
-concurrent collection, station-epoch recovery and reviewed sensor profiles. The preceding build
-has a one-file foreground BLE sync and navigation/resume check on a phone; multi-device
-Bluetooth/LAN, Android notification lifetime, upgrade migration and reset/reflash recovery
-still require phone qualification. See [opensensor-space.md](opensensor-space.md).
+The Android app implements multi-device collection, station-epoch recovery and reviewed sensor
+profiles; its latest recorded phone checks cover one-file BLE sync and navigation/resume, with
+multi-device, LAN and background qualifications outstanding. The iOS app shares protocol and
+sensor rules and has a dated iPhone live-reading check plus Bonjour discovery observation; archive,
+LAN transfer and background collection are not implemented there. See [opensensor-space.md](opensensor-space.md)
+and [ios-migration.md](ios-migration.md). Android, iOS simulator, and iPhone evidence are recorded
+separately in the platform records and the relevant firmware board bench files.
 
 
 Implements **protocol v2** (+ the 2.1 advertising payload) + **Auto-sync** with event-driven

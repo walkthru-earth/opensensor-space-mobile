@@ -12,7 +12,7 @@ multi-device Android companion. Host tests do not establish phone or board behav
 ## Evidence and scope (2026-09-29)
 
 The existing pending changes were committed and pushed to GitHub `main` first:
-[`abf74ed`](https://github.com/walkthru-earth/opensensor-space-android/commit/abf74ed)
+[`abf74ed`](https://github.com/walkthru-earth/opensensor-space-mobile/commit/abf74ed)
 (Smart Sync, encrypted LAN credentials and fail-closed release signing).
 `./gradlew --no-daemon clean verify` passed: 171 tests reported, 170 passed, one skipped,
 zero failures/errors; lint reported zero errors and 14 warnings. Seven warnings concern newer

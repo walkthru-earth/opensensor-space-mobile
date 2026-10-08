@@ -1,6 +1,6 @@
-# Architecture — modules, layers, and what a change touches
+# Architecture — Android, iOS, shared modules, and what a change touches
 
-**Scope:** module boundaries, dependency direction, package layout, the three "pure" modules vs `:app`.
+**Scope:** module boundaries, dependency direction, package layout, and platform ownership.
 **Code:** `settings.gradle.kts`, `core/*/build.gradle.kts`, `app/build.gradle.kts`, `build.gradle.kts` (`verify` task); `data/DeviceConnectionManager.kt`, `DeviceConnectionRepository.kt`, `DeviceIdentityClaims.kt`.
 **Related:** [data-model.md](data-model.md) (storage), [transports.md](transports.md) · [sync-engine.md](sync-engine.md) · [history-pipeline.md](history-pipeline.md) (the layers in detail).
 
@@ -8,25 +8,31 @@
 
 ```mermaid
 flowchart TB
-  subgraph pure["pure Kotlin/JVM · Java 17 · no Android, Hilt, Room, Log"]
-    PR[":core:protocol<br/>UUIDs, frames v1+v2, CONFIG, LAN framing, JSON, PAR1/CRC verify"]
+  subgraph core["Kotlin core · no Android, Hilt, Room, Log"]
+    PR[":core:protocol<br/>common wire rules + JVM adapters"]
     PQ[":core:parquet<br/>reader + writer, Thrift compact, LZ4/Snappy/GZIP, codec SPI, WKB"]
-    HI[":core:history<br/>Metrics registry, Aggregator, TimeEstimate, Columns, AirMood, ParquetIndexer"]
+    HI[":core:history<br/>common sensor rules + JVM file history"]
   end
-  APP[":app (Android)<br/>Hilt · Room v9 · DataStore · WorkManager · Compose · zstd-jni"]
+  APP[":app (Android)<br/>Hilt · Room v10 · DataStore · WorkManager · Compose · zstd-jni"]
+  IOS["ios/App (Xcode + Swift)<br/>Core Bluetooth · Bonjour · app entry point"]
+  IS[":ios:shared<br/>Kotlin state + Compose Multiplatform screen"]
   HI --> PQ
   HI --> PR
   APP --> HI
   APP --> PQ
   APP --> PR
+  IS --> HI
+  IS --> PR
+  IOS --> IS
 ```
 
-`:core:history` exposes `:core:parquet` and `:core:protocol` as `api`, so `:app` sees all three.
+`:core:history` exposes `:core:parquet` and `:core:protocol` as `api`, so Android can see all three.
 The boundary is enforced by the build: a `:core` class cannot import `android.*`.
-`protocol` and the sensor-domain part of `history` now compile for JVM and iOS from
+`protocol` and the sensor-domain part of `history` compile for JVM and iOS from
 `src/commonMain`; their legacy `src/main` trees map to `jvmMain`. Parquet, Java file/stream
-adapters, indexing and calendar windows remain JVM-only. `:ios:shared` consumes the common
-core and renders the first Compose iOS screen; `ios/App` supplies native Core Bluetooth and Bonjour discovery.
+adapters, indexing and calendar windows remain JVM-only. `:ios:shared` consumes common core
+rules and renders the current Compose iOS screen; `ios/App` supplies native app integration,
+Core Bluetooth and Bonjour discovery. The Android app remains a separate platform entry point.
 See [ios-migration.md](ios-migration.md) for current scope and build commands.
 
 ## Layers inside `:app`
@@ -66,6 +72,10 @@ flowchart LR
 | `data/fake/FakeTransport.kt` | in-process protocol-v2 device with fault hooks | no (JVM) |
 | `ui/scan · device (Today, Device, NowCard) · history · files · debug · settings · permissions · theme` | Compose; `Navigation.kt`, `NavigationKeys.kt` | yes |
 
+The iOS entry point is `ios/OpenSensor.xcodeproj`. Its Swift adapters own Apple services;
+the current screen and presentation state live in `ios/shared`. Follow [`../ios/AGENTS.md`](../ios/AGENTS.md)
+for iOS-specific guidance. SwiftUI review rules apply only if native SwiftUI views are introduced.
+
 | `:core` module (`core/<m>/src/main/kotlin/earth/walkthru/aqsync/`) | Files |
 | --- | --- |
 | `protocol` → `data/protocol/` | `AqUuids`, `Frames`, `DeviceConfig`, `LanFraming`, `JsonModels`, `ParquetVerify` |
@@ -79,7 +89,7 @@ flowchart LR
 - **A new analysis is a pure object in `:core:history`** with a test over the real fixtures, fed by `:app` from Room/files. Never a query inside a composable.
 - **A new transport is an `AqTransport`** implementation behind `TransportFactory`; the session, engine and archive do not change ([transports.md](transports.md)).
 - **Transport work never lives in a composable or Activity**; manager-owned controllers keep session/sync state through rotation and navigation. Opening another device selects another controller without closing existing connections.
-- **The one native library** is `zstd-jni` (`@aar`), registered from `:app` into `:core:parquet`'s codec SPI (`AppParquetCodecs`). `:core:*` stays JVM-only.
+- **The one native Android library** is `zstd-jni` (`@aar`), registered from `:app` into `:core:parquet`'s codec SPI (`AppParquetCodecs`). `:core:parquet` and file-backed history stay JVM-only; protocol and sensor-domain rules target JVM and iOS.
 
 ## Concurrent collection and ownership
 

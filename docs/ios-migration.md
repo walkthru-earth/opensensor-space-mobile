@@ -7,6 +7,10 @@ macOS builds and remaining feature migration.
 **Related:** [architecture.md](architecture.md), [transports.md](transports.md),
 [build-and-release.md](build-and-release.md), [status.md](status.md).
 
+For code changes, also follow [`../ios/AGENTS.md`](../ios/AGENTS.md) and the root
+[`../AGENTS.md`](../AGENTS.md). This guide describes the current implementation and
+its migration gaps; it is not a claim of Android/iOS feature parity.
+
 ## First stage
 
 Android and iOS compile the same wire frame codec, JSON/configuration models,
@@ -110,3 +114,36 @@ accuracy, stale/background handling or authenticated Wi-Fi connections. See
 
 Compilation, automated tests and device observations for this change are recorded
 in [status.md](status.md); features listed above are not implemented on iOS yet.
+
+## KMP and Apple contributor guidance
+
+- Keep platform entry points separate. `:core:protocol` and the sensor-domain part
+  of `:core:history` share rules through `commonMain`; their JVM adapters and the
+  JVM-only Parquet implementation remain platform-specific. Android services stay
+  in `:app`; Apple services stay in `ios/App/` or the existing iOS source sets.
+- Prefer small shared interfaces instantiated by the app entry point for substantial
+  platform behavior. Keep the generated Kotlin framework API narrow and documented
+  for Swift callers. Current Xcode integration uses direct Gradle framework
+  integration and Objective-C interop; evaluate alternatives against current docs
+  and this repository's pinned versions before changing it.
+- Kotlin source-set and architecture references: [source sets](https://kotlinlang.org/docs/multiplatform/multiplatform-discover-project.html),
+  [project configuration](https://kotlinlang.org/docs/multiplatform/multiplatform-project-configuration.html),
+  [recommended structure](https://kotlinlang.org/docs/multiplatform/multiplatform-project-recommended-structure.html),
+  [Objective-C interop](https://kotlinlang.org/docs/native-objc-interop.html). Check them
+  when changing the boundary; current documentation and tool versions can move.
+- The linked [SwiftUI Agent Skill](https://github.com/twostraws/swiftui-agent-skill)
+  highlights real review concerns such as state flow, navigation, accessibility,
+  API availability and rendering performance. This project currently uses Compose
+  Multiplatform for its iOS screen, so apply SwiftUI-specific checks only if native
+  SwiftUI code is added. Do not adopt the skill's assumed iOS/Swift versions without
+  checking this project's iOS 18.5 deployment target and installed Xcode. Apple
+  references: [SwiftUI model data](https://developer.apple.com/documentation/swiftui/model-data),
+  [accessible descriptions](https://developer.apple.com/documentation/swiftui/accessible-descriptions),
+  and [NavigationStack](https://developer.apple.com/documentation/swiftui/navigationstack).
+- Bonjour privacy is behavior-driven: plist declarations do not themselves show the
+  prompt; a real browse does. Keep waiting/error states accurate and distinguish
+  permission denial from unavailable network conditions. See [Apple's Local Network
+  privacy note](https://developer.apple.com/documentation/technotes/tn3179-understanding-local-network-privacy).
+- Keep host/common test results, simulator builds, and dated iPhone behavior separate.
+  Simulator success cannot qualify BLE pairing, Local Network prompts, radio behavior,
+  background execution, or real transfer reliability.

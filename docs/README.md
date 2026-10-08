@@ -1,4 +1,4 @@
-# docs/ — where to look, by concern
+# docs/ — shared mobile project guide, by concern
 
 One file per concern. Each starts with a **Scope / Code / Related** header so you can decide in a
 few lines whether it is the right file, then a compact Mermaid diagram, then the facts and the
@@ -8,9 +8,9 @@ decisions that belong to that concern only. Current verification is recorded in 
 
 | I need to… | Read | Then open the code in |
 | --- | --- | --- |
-| Know what is verified, on what hardware, and what is next | [status.md](status.md) | `../aq-parquet/docs/boards/m5stack-cores3/bench-verified.md` |
+| Know what is verified on Android, iOS simulator, and real devices | [status.md](status.md) | `../aq-parquet/docs/boards/*/bench-verified.md` |
 | Understand the opensensor.space rebrand, concurrent multi-device collection and reset/reflash recovery | [opensensor-space.md](opensensor-space.md) (implementation and remaining qualification) | `data/DeviceConnectionRepository.kt`, `data/background/`, `data/sync/`, `ui/`; new firmware owner `../aq-parquet/docs/shared/` |
-| Build or extend the iOS app and shared Kotlin core | [ios-migration.md](ios-migration.md) | `core/*/src/commonMain/`, `ios/` |
+| Build or extend the iOS app and shared Kotlin core | [ios-migration.md](ios-migration.md), `../ios/AGENTS.md` | `core/*/src/commonMain/`, `ios/` |
 | Understand modules, layers, who depends on whom, "what a change touches" | [architecture.md](architecture.md) | `core/*/build.gradle.kts`, `app/build.gradle.kts` |
 | Change a screen, the nav graph, detail levels | [screens.md](screens.md) | `app/…/ui/`, `data/settings/AppSettings.kt` |
 | Look up an opcode, frame type, error code, UUID, LAN framing constant | [protocol-quickref.md](protocol-quickref.md) | `core/protocol/…/Frames.kt`, `AqUuids.kt`, `LanFraming.kt` |
@@ -25,8 +25,9 @@ decisions that belong to that concern only. Current verification is recorded in 
 | The long-form evaluation: history UX, data layer, iOS parity, D1–D11 | [history-ux-and-data-layer.md](history-ux-and-data-layer.md) | — |
 | What the AirGradient Android app does differently, and verdicts | [review-airgradient-android.md](review-airgradient-android.md) | — |
 
-Rules (non-negotiables) live in [`../AGENTS.md`](../AGENTS.md). The protocol contract lives in the
-firmware repo: `../aq-parquet/docs/shared/ble-sync-protocol.md` — never in this repo.
+Rules (non-negotiables and AI delegation guidance) live in [`../AGENTS.md`](../AGENTS.md).
+The iOS app boundary is documented in [`../ios/AGENTS.md`](../ios/AGENTS.md). The protocol
+contract lives in the firmware repo: `../aq-parquet/docs/shared/ble-sync-protocol.md` — never here.
 
 ## How the concerns connect
 
@@ -51,10 +52,14 @@ archived (`sync-engine`) — interactively or by the worker (`background-sync`) 
 
 ## Conventions in these files
 
-- **Code paths** are relative to `app/src/main/java/earth/walkthru/aqsync/` for `:app` and
-  `core/<module>/src/main/kotlin/earth/walkthru/aqsync/` for `:core:*` (package names are shared
-  across modules: `earth.walkthru.aqsync.data.*`).
+- **Code paths** in Android docs are relative to `app/src/main/java/earth/walkthru/aqsync/`;
+  shared KMP rules live in `core/<module>/src/commonMain/`, with JVM adapters in `jvmMain/`;
+  iOS app and Apple adapters live under `ios/App/`, with Kotlin presentation code in
+  `ios/shared/`. Android/core packages are `earth.walkthru.aqsync`; the iOS presentation
+  package is `earth.walkthru.opensensor`.
 - **"Uses → affects"** sections say what a file consumes and what breaks or changes downstream if
   you edit it — search there before editing.
 - Dates are the day a decision was made or a fact was measured; "unverified" means not in
   `bench-verified.md`.
+- Host/JVM tests, iOS simulator builds, Android phone runs, and iPhone runs are separate
+  evidence. A result for one platform does not qualify another.

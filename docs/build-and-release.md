@@ -104,13 +104,13 @@ uploaded the four Actions secrets. Local signed release:
 ### Pipeline check (2026-09-29)
 
 After the repository rename and merge at `06ab6cc`, the
-[main verification run](https://github.com/walkthru-earth/opensensor-space-android/actions/runs/36584773614)
+[main verification run](https://github.com/walkthru-earth/opensensor-space-mobile/actions/runs/36584773614)
 passed all hooks, the station-epoch validator, Gradle verification, and artifact uploads.
 Downloaded reports contain 219 tests: **218 passed, one skipped**, zero failures, and 14 lint warnings.
 The renamed repository resolves the Actions versions and retains its existing keystore secrets.
 `RELEASE_CERT_SHA256` was added from the trusted local keystore's public certificate; no signing key changed.
 
-The [release run](https://github.com/walkthru-earth/opensensor-space-android/actions/runs/36584773885)
+The [release run](https://github.com/walkthru-earth/opensensor-space-mobile/actions/runs/36584773885)
 then passed keystore/certificate validation and the full verified release build, but the final
 signer check rejected a changed `apksigner` output label (`V2 Signer:` rather than `Signer #1`).
 The APK verified cryptographically and reported the expected project certificate; publication
