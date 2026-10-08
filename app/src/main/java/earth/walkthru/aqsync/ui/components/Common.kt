@@ -18,18 +18,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Bluetooth
 import androidx.compose.material.icons.rounded.BugReport
-import androidx.compose.material.icons.rounded.FolderOpen
-import androidx.compose.material.icons.rounded.Sensors
-import androidx.compose.material.icons.rounded.ShowChart
-import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -260,33 +256,36 @@ fun ConnectionBanner(
 
 enum class DeviceTab { TODAY, HISTORY, FILES, DEVICE }
 
+/**
+ * The four sections of one device, as a tab row under the screen's top bar. The app's bottom bar
+ * stays below with My devices selected, so a device never draws a second bottom bar.
+ */
 @Composable
-fun DeviceBottomBar(selected: DeviceTab, onSelect: (DeviceTab) -> Unit) {
-    NavigationBar {
-        NavigationBarItem(
-            selected = selected == DeviceTab.TODAY,
-            onClick = { onSelect(DeviceTab.TODAY) },
-            icon = { Icon(Icons.Rounded.Sensors, contentDescription = null) },
-            label = { Text(stringResource(R.string.tab_today)) },
-        )
-        NavigationBarItem(
-            selected = selected == DeviceTab.HISTORY,
-            onClick = { onSelect(DeviceTab.HISTORY) },
-            icon = { Icon(Icons.Rounded.ShowChart, contentDescription = null) },
-            label = { Text(stringResource(R.string.tab_history)) },
-        )
-        NavigationBarItem(
-            selected = selected == DeviceTab.FILES,
-            onClick = { onSelect(DeviceTab.FILES) },
-            icon = { Icon(Icons.Rounded.FolderOpen, contentDescription = null) },
-            label = { Text(stringResource(R.string.tab_files)) },
-        )
-        NavigationBarItem(
-            selected = selected == DeviceTab.DEVICE,
-            onClick = { onSelect(DeviceTab.DEVICE) },
-            icon = { Icon(Icons.Rounded.Tune, contentDescription = null) },
-            label = { Text(stringResource(R.string.tab_device)) },
-        )
+fun DeviceSectionTabs(
+    selected: DeviceTab,
+    containerColor: Color = MaterialTheme.colorScheme.background,
+    onSelect: (DeviceTab) -> Unit,
+) {
+    PrimaryTabRow(selectedTabIndex = selected.ordinal, containerColor = containerColor) {
+        DeviceTab.entries.forEach { tab ->
+            Tab(
+                selected = tab == selected,
+                onClick = { if (tab != selected) onSelect(tab) },
+                text = {
+                    Text(
+                        stringResource(
+                            when (tab) {
+                                DeviceTab.TODAY -> R.string.tab_today
+                                DeviceTab.HISTORY -> R.string.tab_history
+                                DeviceTab.FILES -> R.string.tab_files
+                                DeviceTab.DEVICE -> R.string.tab_device
+                            },
+                        ),
+                        maxLines = 1,
+                    )
+                },
+            )
+        }
     }
 }
 

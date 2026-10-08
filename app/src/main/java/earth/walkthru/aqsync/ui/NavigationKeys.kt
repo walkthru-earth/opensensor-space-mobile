@@ -3,9 +3,17 @@ package earth.walkthru.aqsync.ui
 import androidx.navigation3.runtime.NavKey
 import kotlinx.serialization.Serializable
 
-/** Find and pick a logger. Home. */
+/** The public sensor map. Always the start tab (docs/devices-and-discovery.md). */
+@Serializable
+data object DiscoverKey : NavKey
+
+/** Find and pick a logger. The root of the My devices tab. */
 @Serializable
 data object ScanKey : NavKey
+
+/** App settings, the root of the Settings tab. Device settings live in the Device section. */
+@Serializable
+data object SettingsKey : NavKey
 
 /** Live readings and device health for the connected logger. */
 @Serializable

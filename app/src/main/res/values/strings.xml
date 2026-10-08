@@ -870,4 +870,50 @@
     <string name="debug_raw_needs_confirmation">%1$s is not sent from here. Use the Device screen, which asks for confirmation.</string>
     <string name="debug_raw_no_response">No response frames within the quiet period.</string>
     <string name="conn_pairing_repair">Bluetooth pairing needs repair. If this sensor was reset or reflashed, forget it in Android Bluetooth settings and pair again. Your archived files are kept.</string>
+    <!-- Discover map (feature/discover). Keep in step with DiscoverStrings.English for iOS. -->
+    <string name="tab_discover">Discover</string>
+    <string name="tab_my_devices">My devices</string>
+    <string name="discover_search_places">Search places</string>
+    <string name="discover_add_sensor">Add your sensor</string>
+    <string name="discover_more">More</string>
+    <string name="discover_window_last_hour">Last hour</string>
+    <string name="discover_window_24_hours">24 hours</string>
+    <string name="discover_window_7_days">7 days</string>
+    <string name="discover_sample_data">Sample data</string>
+    <string name="discover_sample_info">These numbers are made up for a preview. Real sensors appear here when the public feed goes live.</string>
+    <string name="discover_scale_title">Colour scale</string>
+    <string name="discover_scale_info1">Colours stretch from low to high across the areas in view, leaving out the lowest and highest 5 percent.</string>
+    <string name="discover_scale_info2">Each area shows hourly means from three or more sensors. A faded area has no new value for 3 hours. An outline only means the area does not measure this.</string>
+    <string name="discover_osm">© OpenStreetMap</string>
+    <string name="discover_map_title">Map data</string>
+    <string name="discover_map_info1">Map data © OpenStreetMap contributors, under the Open Database License. See openstreetmap.org/copyright.</string>
+    <string name="discover_map_info2">Basemap by Protomaps.</string>
+    <string name="discover_no_areas">No sensor areas here yet</string>
+    <string name="discover_not_measured">Not measured here</string>
+    <string name="discover_stale">No new value for 3 hours</string>
+    <string name="discover_avg">avg</string>
+    <string name="discover_min">min</string>
+    <string name="discover_max">max</string>
+    <string name="discover_first_run">Public sensors near you, shown as areas</string>
+    <string name="discover_explore">Explore</string>
+    <string name="discover_all_measurements">All measurements</string>
+    <string name="discover_unavailable">Public sensors are not available on this phone yet</string>
+    <string name="discover_loading">Loading</string>
+    <string name="discover_no_places">No matching places</string>
+    <string name="discover_clear_search">Clear search</string>
+    <string name="discover_updated_recently">Updated within the hour</string>
+    <plurals name="discover_areas_in_view">
+        <item quantity="one">%1$d sensor area in view</item>
+        <item quantity="other">%1$d sensor areas in view</item>
+    </plurals>
+    <plurals name="discover_sensors">
+        <item quantity="one">%1$d sensor</item>
+        <item quantity="other">%1$d sensors</item>
+    </plurals>
+    <plurals name="discover_updated_hours_ago">
+        <item quantity="one">Updated %1$d h ago</item>
+        <item quantity="other">Updated %1$d h ago</item>
+    </plurals>
+    <string name="settings_public_sensors">Show public sensors</string>
+    <string name="settings_public_sensors_body">When off, the map uses no internet and shows only sample data.</string>
 </resources>

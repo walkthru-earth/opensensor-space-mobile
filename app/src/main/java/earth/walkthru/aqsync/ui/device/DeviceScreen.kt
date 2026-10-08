@@ -36,7 +36,7 @@ import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.local.database.SensorInstallation
 import earth.walkthru.aqsync.data.protocol.PairMode
 import earth.walkthru.aqsync.ui.components.ConnectionBanner
-import earth.walkthru.aqsync.ui.components.DeviceBottomBar
+import earth.walkthru.aqsync.ui.components.DeviceSectionTabs
 import earth.walkthru.aqsync.ui.components.DeviceTab
 import earth.walkthru.aqsync.ui.components.PillButton
 import earth.walkthru.aqsync.ui.components.TransportChip
@@ -108,36 +108,36 @@ fun DeviceScreen(
         modifier = modifier,
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
-                title = {
-                    Column {
-                        Text(stringResource(R.string.device_screen_title), style = MaterialTheme.typography.titleLarge)
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            TransportChip(state.transport)
-                            Text(state.name ?: stringResource(R.string.device_unnamed), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Column {
+                TopAppBar(
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+                    title = {
+                        Column {
+                            Text(stringResource(R.string.device_screen_title), style = MaterialTheme.typography.titleLarge)
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                TransportChip(state.transport)
+                                Text(state.name ?: stringResource(R.string.device_unnamed), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
+                    },
+                    actions = {
+                        IconButton(onClick = { onAction(DeviceAction.RefreshConfig) }, enabled = state.ready && state.isV2) {
+                            Icon(Icons.Rounded.Refresh, contentDescription = stringResource(R.string.device_refresh))
+                        }
+                        if (state.detailLevel.developer) {
+                            IconButton(onClick = { onAction(DeviceAction.OpenDebug) }) { Icon(Icons.Rounded.BugReport, contentDescription = stringResource(R.string.nav_debug)) }
+                        }
+                        IconButton(onClick = { onAction(DeviceAction.OpenSettings) }) { Icon(Icons.Rounded.Settings, contentDescription = stringResource(R.string.nav_settings)) }
+                        IconButton(onClick = { onAction(DeviceAction.Disconnect) }) { Icon(Icons.Rounded.LinkOff, contentDescription = stringResource(R.string.nav_disconnect)) }
+                    },
+                )
+                DeviceSectionTabs(DeviceTab.DEVICE) {
+                    when (it) {
+                        DeviceTab.TODAY -> onAction(DeviceAction.OpenToday)
+                        DeviceTab.HISTORY -> onAction(DeviceAction.OpenHistory)
+                        DeviceTab.FILES -> onAction(DeviceAction.OpenFiles)
+                        DeviceTab.DEVICE -> Unit
                     }
-                },
-                actions = {
-                    IconButton(onClick = { onAction(DeviceAction.RefreshConfig) }, enabled = state.ready && state.isV2) {
-                        Icon(Icons.Rounded.Refresh, contentDescription = stringResource(R.string.device_refresh))
-                    }
-                    if (state.detailLevel.developer) {
-                        IconButton(onClick = { onAction(DeviceAction.OpenDebug) }) { Icon(Icons.Rounded.BugReport, contentDescription = stringResource(R.string.nav_debug)) }
-                    }
-                    IconButton(onClick = { onAction(DeviceAction.OpenSettings) }) { Icon(Icons.Rounded.Settings, contentDescription = stringResource(R.string.nav_settings)) }
-                    IconButton(onClick = { onAction(DeviceAction.Disconnect) }) { Icon(Icons.Rounded.LinkOff, contentDescription = stringResource(R.string.nav_disconnect)) }
-                },
-            )
-        },
-        bottomBar = {
-            DeviceBottomBar(DeviceTab.DEVICE) {
-                when (it) {
-                    DeviceTab.TODAY -> onAction(DeviceAction.OpenToday)
-                    DeviceTab.HISTORY -> onAction(DeviceAction.OpenHistory)
-                    DeviceTab.FILES -> onAction(DeviceAction.OpenFiles)
-                    DeviceTab.DEVICE -> Unit
                 }
             }
         },

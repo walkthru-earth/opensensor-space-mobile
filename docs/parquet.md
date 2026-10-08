@@ -1,7 +1,7 @@
 # Parquet — the app's own reader and writer
 
-**Scope:** `:core:parquet`: what the reader accepts and refuses, the writer, GeoParquet 2.0, codecs, fixtures and the oracles that prove them.
-**Code:** `core/parquet/…/data/history/parquet/`: `ParquetFile.kt` (mmap reader), `ParquetFooterParser.kt`, `ParquetMetadata.kt`, `ColumnValues.kt`, `ParquetWriter.kt`, `ThriftCompact.kt` / `ThriftCompactWriter.kt`, `Lz4Block.kt`, `ParquetCodecs.kt` (SPI), `Geometry.kt` (WKB), `GeoParquetMetadata.kt`; `:app` `data/history/parquet/AppParquetCodecs.kt` (ZSTD via `zstd-jni`).
+**Scope:** `:core:parquet`: what the reader accepts and refuses, the writer, GeoParquet 2.0, codecs, storage seams, fixtures and the oracles that prove them.
+**Code:** `core/parquet/src/commonMain/…/data/history/parquet/` (JVM and iOS): `ParquetFile.kt` (`ParquetFile`, `SuspendParquetFile`, the chunk decoder), `ByteReader.kt`, `Bytes.kt`, `ParquetFooterParser.kt`, `ParquetMetadata.kt`, `ColumnValues.kt`, `ParquetWriter.kt` (`ParquetSink`), `ThriftCompact.kt` / `ThriftCompactWriter.kt`, `Lz4Block.kt`, `ParquetCodecs.kt` (SPI, Snappy, `expect` gzip), `Geometry.kt` (WKB), `GeoParquetMetadata.kt`, `LocalFile.kt`. `src/jvmMain`: `MappedFileReader` (`FileChannel.map`), gzip via `java.util.zip`, `ParquetWriter(OutputStream, …)`. `src/iosMain`: `MappedDataReader` (mapped `NSData`), gzip via the system zlib. `:app` `data/history/parquet/AppParquetCodecs.kt` (ZSTD via `zstd-jni`).
 **Fixtures:** `core/parquet/src/test/resources/parquet/{device,v3,expected.json}` and `…/geoparquet/{pyarrow,duckdb,expected.json}` (published as `:core:parquet` test fixtures, see [Fixtures and oracles](#fixtures-and-oracles)).
 **Tools:** `tools/make_parquet_fixtures.py`, `tools/make_geoparquet_fixtures.py`, `tools/validate_parquet_samples.py` — run as `cd ../aq-parquet && pixi run python ../opensensor-space-android/tools/<script>`.
 **Related:** [history-pipeline.md](history-pipeline.md) (who reads/writes), [sync-engine.md](sync-engine.md) (PAR1/CRC verification is in `:core:protocol`, not here).
@@ -10,11 +10,44 @@
 
 Kotlin DataFrame cannot read Parquet on Android (`dataframe-arrow` needs Arrow's native Dataset
 JNI, no Android build) and boxes values; DuckDB for Android is an experimental self-build (Swift is
-official). Settled — do not re-research (evaluation §1). The reader is ~zero-copy: `FileChannel.map`
-+ absolute reads; only the requested column chunks are touched (3 of 77 for a PM2.5 chart); pages
-decode once into `IntArray`/`LongArray`/`FloatArray`/`DoubleArray`/binary with a `BooleanArray`
-validity mask (`ColumnValues`), no per-row objects. All 881 columns of the device/v3 fixtures decode
-byte-identically to PyArrow in ~0.15 s.
+official). Settled, do not re-research (evaluation §1). No Parquet library exists for Kotlin/Native
+either, so the same reader serves iOS. Only the requested column chunks are read (3 of 77 for a PM2.5
+chart), one range read per chunk from a memory-mapped file. Pages decode once into
+`IntArray`/`LongArray`/`FloatArray`/`DoubleArray`/binary with a `BooleanArray` validity mask
+(`ColumnValues`), no per-row objects. All 881 columns of the device/v3 fixtures decode
+byte-identically to PyArrow, on the JVM and on the iOS simulator. `RealArchiveTest` reads all 767 real
+archive files in about 0.45 s on the JVM (2026-10-08, M-series Mac).
+
+## Portability and storage (W8, 2026-10-08)
+
+The module is Kotlin Multiplatform (`opensensor.kmp.library`). Common code never imports `java.*`.
+Bytes reach the decoder through one narrow seam.
+
+| Type | What it is | Implementations |
+| --- | --- | --- |
+| `ByteReader` | `size` and `read(offset, length)`, absolute and thread-safe | `ByteArrayReader`, `MappedFileReader` (JVM `FileChannel.map`), `MappedDataReader` (iOS `NSData`, `NSDataReadingMappedIfSafe`) |
+| `SuspendByteReader` | suspending `size()` and `read(offset, length)` for round-trip sources | W12's HTTP range source (planned), `ByteReader.asSuspend()` for local files and tests |
+| `LocalFile` | `expect class`, `java.io.File` on the JVM (a typealias), a path on iOS | `ParquetFile.open(LocalFile)` maps it |
+| `ParquetSink` | where `ParquetWriter` writes, `write(bytes)` and `flush()` | `OutputStreamSink` on the JVM, any sink on iOS |
+
+- `ParquetFile.open(file)`, `ParquetFile.open(reader, source)` and `ParquetFile.wrap(bytes)` read the
+  footer at once and each column chunk on demand, as `[first page, first page + total_compressed_size)`.
+  A writer whose chunk size undercounts gets one wider read up to the footer.
+- `SuspendParquetFile.open(reader)` reads the footer first from the tail (64 KiB by default, one more
+  read only when the footer is longer), then one range read per requested chunk. It checks the head
+  `PAR1` only when the tail read reaches the start of the file, so a remote file costs no extra request.
+- `ParquetFileMetadata.longStatistics(column)` returns the footer min, max and null count of an INT32
+  or INT64 column per row group without reading a page. `rowGroupsOverlapping(column, ranges)` keeps the
+  row groups whose `[min, max]` meets any inclusive `LongRange` (H3 descendant ranges in W12). A chunk
+  without statistics is kept, an all-null one dropped. Column and offset indexes (page pruning) are a
+  follow-up.
+- `ColumnValues.longValues()` and `doubleValues()` hand out primitive arrays without boxing, the stored
+  array when the type already matches.
+- GZIP is an `expect` function, `java.util.zip` on the JVM and `inflateInit2` from `platform.zlib` on
+  iOS (also concatenated members). ZSTD stays behind the codec SPI on Android only. iOS has no ZSTD in
+  its system libraries, which is why the public feed is written with SNAPPY or LZ4_RAW.
+- kotlinx-io is not used. Its API is still alpha and has no random access, so the module keeps its own
+  `ByteReader` and the platform file APIs at the edges.
 
 ## What is accepted
 
@@ -42,8 +75,11 @@ firmware's per-row-group statistics (the index takes spans from them without dec
 | --- | --- | --- |
 | UNCOMPRESSED, **LZ4_RAW** | `builtIn`, own ~60-line block decoder + compressor (`Lz4Block`) | the firmware's codec |
 | **SNAPPY** | `builtIn`, own decoder | PyArrow / DuckDB / GDAL default |
-| **GZIP** | `builtIn`, `java.util.zip` | |
-| **ZSTD** | `AppParquetCodecs` in `:app` registers `zstd-jni` (`@aar`) | the **one native library**; kept out of `:core:*`; `AppParquetCodecsTest` |
+| **GZIP** | `builtIn`, `java.util.zip` (JVM), system zlib (iOS) | `expect fun gunzip` |
+| **ZSTD** | `AppParquetCodecs` in `:app` registers `zstd-jni` (`@aar`) | the **one native library**, kept out of `:core:*`, `AppParquetCodecsTest`. Android only |
+
+`PageDecompressor.decompress(input: ByteArray, uncompressedSize)` receives exactly the compressed page
+bytes (it used to receive a `java.nio.ByteBuffer`).
 
 ## Writer (`ParquetWriter`) — the mirror of the reader
 
@@ -75,10 +111,19 @@ files are unchanged; import UI and map are separate decisions (D4/D5).
 | `RealArchiveTest` (`:core:history`) | sweeps **all 766 real files** when `../aq-parquet` is a sibling (67 272 rows, 58 868 column chunks, 136 statistics cross-checks, 0.2 s); skips otherwise | — | footer statistics vs decoded rows |
 
 The fixtures live once in `core/parquet/src/test/resources`. The build publishes that directory as
-this module's test fixtures (`java-test-fixtures`), and this module's own tests read them the same
-way. `:core:history` (indexing, aggregation) and `:core:protocol` (CRC-32 and `PAR1` equivalence on
-real device files) declare `testFixtures(project(":core:parquet"))` in `jvmTest`. `:app` still adds
-the directory to its unit-test resources. Never copy the files into another module.
+this module's test fixtures. A multiplatform module cannot apply `java-test-fixtures`, so
+`core/parquet/build.gradle.kts` declares the same variant by hand (a resources jar with the
+`<group>:parquet-test-fixtures` capability). `:core:history` (indexing, aggregation) and
+`:core:protocol` (CRC-32 and `PAR1` equivalence on real device files) keep declaring
+`testFixtures(project(":core:parquet"))` in `jvmTest`. `:app` still adds the directory to its
+unit-test resources. Never copy the files into another module.
+
+The oracle tests (`ParquetFileTest`, `GeoParquetFileTest`, `ParquetWriterTest`, `ByteReaderTest`,
+`GzipTest`) live in `commonTest` and run on the JVM (`verify`) and on the iOS simulator (`verifyIos`).
+The JVM loads fixtures from the classpath. The simulator test binary reads them straight from the
+checkout through `PARQUET_FIXTURES`, which the build passes as `SIMCTL_CHILD_PARQUET_FIXTURES`. iOS
+skips the ZSTD fixtures. `JvmParquetFileTest` (mapping, threads, `OutputStream`) and
+`IosParquetFileTest` (`NSData` mapping) cover the platform edges.
 
 Regenerate fixtures when the firmware writer changes; commit the result. Writer samples land in
 `app/build/parquet-samples/` after the tests (or a phone's `derived/` copy) for
@@ -91,5 +136,6 @@ Regenerate fixtures when the firmware writer changes; commit the result. Writer 
 | `ParquetFile` decoding | `ParquetIndexer`, `Aggregator`, `HistoryRepository` day rows, Metrics screen, `RealArchiveTest` |
 | `ParquetWriter` | daily derived files → re-run PyArrow/DuckDB oracle; `ParquetWriterTest` |
 | `ParquetCodecs` SPI | `AppParquetCodecs` registration order at app start; fixtures per codec |
+| `ByteReader`, `SuspendParquetFile`, `longStatistics` | W12 public feed range source and row group pruning; `ByteReaderTest` |
 | `ThriftCompact*` | every footer read/write — the fixtures are the regression net |
 | `Geometry` / `GeoParquetMetadata` | `GeoParquetFileTest`; a future import UI / map (D4/D5) |

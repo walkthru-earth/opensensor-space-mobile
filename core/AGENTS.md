@@ -18,15 +18,18 @@ root for the relevant concern. No Android, Hilt, Room, `Context` or
   lands (W11), families, capabilities, properties and scales move there. Read
   `docs/devices-and-discovery.md` first. New shared types use generic names
   (`Reading`, `MetricCard`), never `Air*`.
-- Public discover data carries H3 cells, never coordinates, and the phone never
-  computes a location for it. The feed publisher owns the H3 math.
+- Public discover data carries H3 cells, never coordinates. The publisher owns aggregation and
+  the privacy rules. The phone uses H3 (`publicfeed`, `H3Grid`) only for geometry, the viewport
+  cover and descendant ranges, never to place or publish a location.
 - Keep protocol and sensor-domain analysis pure and reusable by Android, iOS and
   host tools. Android files/DAO integration belongs in `:app` adapters; Apple OS
   integration belongs in `ios/` adapters.
-- `protocol` and the sensor-domain part of `history` are Kotlin Multiplatform with the standard
-  layout. `src/commonMain` compiles for JVM and iOS, and `src/jvmMain` keeps Java APIs (files,
-  streams, `java.time`, SHA-256). `parquet` (`src/main`) and file-backed history stay JVM until
-  their adapters are ported.
+- `protocol`, `parquet` and `history` are Kotlin Multiplatform with the standard layout.
+  `src/commonMain` compiles for JVM and iOS, and `src/jvmMain` / `src/iosMain` keep the platform
+  edges (files, streams, SHA-256, `FileChannel` and `NSData` mapping, gzip). Calendar math uses
+  kotlinx-datetime (`TimeZone`, `LocalDate`), never `java.time`, in common code. Parquet bytes come
+  through `ByteReader` / `SuspendByteReader` (docs/parquet.md), so a new source (an HTTP range
+  reader, a cache) implements that interface instead of touching the decoder.
 - Module build files apply a convention plugin from `../build-logic/` (`opensensor.kmp.library`,
   `opensensor.jvm.library`, `opensensor.kmp.ios-framework`). Change targets, bytecode level or test
   wiring there, once, not in a module. See `docs/architecture.md`.
@@ -35,8 +38,10 @@ root for the relevant concern. No Android, Hilt, Room, `Context` or
   and `SafeName` is the firmware name rule (charset, no `..` or `//`, 399-byte cap). Platform code
   measures and calls them, it does not re-implement them.
 - Shared tests live in `commonTest` with `kotlin.test` and run on JVM through `verify` and on the
-  iOS simulator through `verifyIos` (macOS). Keep a test in `jvmTest` only when it needs a JVM API
-  or the Parquet fixtures, which reach tests as `testFixtures(project(":core:parquet"))`.
+  iOS simulator through `verifyIos` (macOS). Keep a test in `jvmTest` only when it needs a JVM API.
+  The Parquet fixtures reach other modules' JVM tests as `testFixtures(project(":core:parquet"))`
+  (a hand-declared variant, see `core/parquet/build.gradle.kts`). Inside `:core:parquet`, common
+  tests read them with `fixtureBytes(path)` on both platforms.
   Test names in `commonTest` cannot contain commas or other characters Kotlin/Native rejects.
   See `docs/ios-migration.md`.
 - Common code must compile for every declared target and cannot import Java, Android,

@@ -15,5 +15,9 @@ kotlin {
             implementation(libs.compose.foundation)
             implementation(libs.compose.material3)
         }
+        // The Discover tab. iOS only: :feature:discover targets Android and iOS, not the JVM.
+        iosMain.dependencies {
+            implementation(project(":feature:discover"))
+        }
     }
 }

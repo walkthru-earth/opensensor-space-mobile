@@ -56,6 +56,17 @@ class AppSettings @Inject constructor(@ApplicationContext private val context: C
         prefs[CLOCK_SYNC_MODE]?.let { name -> ClockSyncMode.entries.firstOrNull { it.name == name } } ?: ClockSyncMode.ASK
     }
 
+    /**
+     * "Show public sensors". On by default. Off, Discover makes no network request at all (no
+     * basemap, no public feed) and shows the bundled sample on a plain background
+     * (AGENTS.md network boundary).
+     */
+    val showPublicSensors: Flow<Boolean> = context.settingsStore.data.map { prefs -> prefs[SHOW_PUBLIC_SENSORS] ?: true }
+
+    suspend fun setShowPublicSensors(on: Boolean) {
+        context.settingsStore.edit { it[SHOW_PUBLIC_SENSORS] = on }
+    }
+
     /** Detailed or Developer. */
     val detailed: Flow<Boolean> = detailLevel.map { it.detailed }
 
@@ -80,5 +91,6 @@ class AppSettings @Inject constructor(@ApplicationContext private val context: C
         val ADVANCED_MODE = booleanPreferencesKey("advanced_mode")
         val DETAIL_LEVEL = stringPreferencesKey("detail_level")
         val CLOCK_SYNC_MODE = stringPreferencesKey("clock_sync_mode")
+        val SHOW_PUBLIC_SENSORS = booleanPreferencesKey("show_public_sensors")
     }
 }

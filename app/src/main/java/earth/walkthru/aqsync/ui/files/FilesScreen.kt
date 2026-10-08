@@ -73,7 +73,7 @@ import earth.walkthru.aqsync.data.sync.FileSyncState
 import earth.walkthru.aqsync.data.sync.ManifestEntry
 import earth.walkthru.aqsync.ui.components.CollectEvents
 import earth.walkthru.aqsync.ui.components.ConnectionBanner
-import earth.walkthru.aqsync.ui.components.DeviceBottomBar
+import earth.walkthru.aqsync.ui.components.DeviceSectionTabs
 import earth.walkthru.aqsync.ui.components.DeviceTab
 import earth.walkthru.aqsync.ui.components.Eyebrow
 import earth.walkthru.aqsync.ui.components.MascotGuide
@@ -126,83 +126,83 @@ fun FilesScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(stringResource(R.string.files_title))
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            TransportChip(state.transport)
-                            Text(
-                                stringResource(R.string.files_in_archive, state.archived.size, formatBytes(state.archivedBytes)),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+            Column {
+                TopAppBar(
+                    title = {
+                        Column {
+                            Text(stringResource(R.string.files_title))
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                TransportChip(state.transport)
+                                Text(
+                                    stringResource(R.string.files_in_archive, state.archived.size, formatBytes(state.archivedBytes)),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { viewModel.refresh() }, enabled = state.connection.isReady && !state.manifest.isLoading) {
-                        Icon(Icons.Rounded.Refresh, contentDescription = stringResource(R.string.files_refresh))
-                    }
-                    IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, contentDescription = stringResource(R.string.files_more)) }
-                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                        val hasFiles = state.archived.isNotEmpty() && !state.exporting
-                        // Background sync: a one-time WorkManager job (leave the app, watch the
-                        // notification) and the per-device Auto-sync switch, both also on the Device screen.
-                        DropdownMenuItem(
-                            text = { Text(stringResource(if (state.backgroundSyncActive) R.string.files_bg_queued else R.string.files_bg_sync)) },
-                            leadingIcon = { Icon(Icons.Rounded.CloudSync, contentDescription = null) },
-                            enabled = state.connection.isReady && !state.sync.running && !state.backgroundSyncActive,
-                            onClick = { menu = false; withNotificationPermission { viewModel.syncNowInBackground() } },
-                        )
-                        state.autoSync?.let { on ->
+                    },
+                    actions = {
+                        IconButton(onClick = { viewModel.refresh() }, enabled = state.connection.isReady && !state.manifest.isLoading) {
+                            Icon(Icons.Rounded.Refresh, contentDescription = stringResource(R.string.files_refresh))
+                        }
+                        IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, contentDescription = stringResource(R.string.files_more)) }
+                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            val hasFiles = state.archived.isNotEmpty() && !state.exporting
+                            // Background sync: a one-time WorkManager job (leave the app, watch the
+                            // notification) and the per-device Auto-sync switch, both also on the Device screen.
                             DropdownMenuItem(
-                                text = { Text(stringResource(if (on) R.string.files_autosync_on else R.string.files_autosync_off, AutoSyncScheduler.PERIOD_MINUTES.toInt())) },
-                                leadingIcon = { Icon(if (on) Icons.Rounded.SyncLock else Icons.Rounded.Sync, contentDescription = null) },
-                                trailingIcon = { Switch(checked = on, onCheckedChange = null) },
-                                onClick = { menu = false; withNotificationPermission { viewModel.setAutoSync(!on) } },
+                                text = { Text(stringResource(if (state.backgroundSyncActive) R.string.files_bg_queued else R.string.files_bg_sync)) },
+                                leadingIcon = { Icon(Icons.Rounded.CloudSync, contentDescription = null) },
+                                enabled = state.connection.isReady && !state.sync.running && !state.backgroundSyncActive,
+                                onClick = { menu = false; withNotificationPermission { viewModel.syncNowInBackground() } },
+                            )
+                            state.autoSync?.let { on ->
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(if (on) R.string.files_autosync_on else R.string.files_autosync_off, AutoSyncScheduler.PERIOD_MINUTES.toInt())) },
+                                    leadingIcon = { Icon(if (on) Icons.Rounded.SyncLock else Icons.Rounded.Sync, contentDescription = null) },
+                                    trailingIcon = { Switch(checked = on, onCheckedChange = null) },
+                                    onClick = { menu = false; withNotificationPermission { viewModel.setAutoSync(!on) } },
+                                )
+                            }
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.files_share_zip)) },
+                                leadingIcon = { Icon(Icons.Rounded.IosShare, contentDescription = null) },
+                                enabled = hasFiles,
+                                onClick = { menu = false; viewModel.shareZip() },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.files_save_zip)) },
+                                leadingIcon = { Icon(Icons.Rounded.Download, contentDescription = null) },
+                                enabled = hasFiles,
+                                onClick = { menu = false; viewModel.saveZip() },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(pluralStringResource(R.plurals.files_share_all, state.archived.size, state.archived.size)) },
+                                enabled = hasFiles,
+                                onClick = { menu = false; viewModel.shareAllLoose() },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.files_share_daily)) },
+                                leadingIcon = { Icon(Icons.Rounded.IosShare, contentDescription = null) },
+                                enabled = hasFiles,
+                                onClick = { menu = false; viewModel.shareDailyZip() },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.nav_disconnect)) },
+                                leadingIcon = { Icon(Icons.Rounded.LinkOff, contentDescription = null) },
+                                onClick = { menu = false; viewModel.disconnect(); onDisconnected() },
                             )
                         }
-                        HorizontalDivider()
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.files_share_zip)) },
-                            leadingIcon = { Icon(Icons.Rounded.IosShare, contentDescription = null) },
-                            enabled = hasFiles,
-                            onClick = { menu = false; viewModel.shareZip() },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.files_save_zip)) },
-                            leadingIcon = { Icon(Icons.Rounded.Download, contentDescription = null) },
-                            enabled = hasFiles,
-                            onClick = { menu = false; viewModel.saveZip() },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(pluralStringResource(R.plurals.files_share_all, state.archived.size, state.archived.size)) },
-                            enabled = hasFiles,
-                            onClick = { menu = false; viewModel.shareAllLoose() },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.files_share_daily)) },
-                            leadingIcon = { Icon(Icons.Rounded.IosShare, contentDescription = null) },
-                            enabled = hasFiles,
-                            onClick = { menu = false; viewModel.shareDailyZip() },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.nav_disconnect)) },
-                            leadingIcon = { Icon(Icons.Rounded.LinkOff, contentDescription = null) },
-                            onClick = { menu = false; viewModel.disconnect(); onDisconnected() },
-                        )
+                    },
+                )
+                DeviceSectionTabs(DeviceTab.FILES, containerColor = MaterialTheme.colorScheme.surface) {
+                    when (it) {
+                        DeviceTab.TODAY -> onOpenToday()
+                        DeviceTab.HISTORY -> onOpenHistory()
+                        DeviceTab.DEVICE -> onOpenDevice()
+                        DeviceTab.FILES -> Unit
                     }
-                },
-            )
-        },
-        bottomBar = {
-            DeviceBottomBar(DeviceTab.FILES) {
-                when (it) {
-                    DeviceTab.TODAY -> onOpenToday()
-                    DeviceTab.HISTORY -> onOpenHistory()
-                    DeviceTab.DEVICE -> onOpenDevice()
-                    DeviceTab.FILES -> Unit
                 }
             }
         },

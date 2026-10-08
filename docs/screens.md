@@ -1,23 +1,48 @@
 # Screens — what the user sees, and which data path feeds it
 
 **Scope:** navigation graph, every destination's behaviour, detail levels, the transport chip.
-**Code:** `ui/Navigation.kt`, `ui/NavigationKeys.kt`, `ui/<screen>/*Screen.kt` + `*ViewModel.kt`, `data/settings/AppSettings.kt`.
+**Code:** `ui/Navigation.kt`, `ui/TabNavigator.kt`, `ui/NavigationKeys.kt`, `ui/<screen>/*Screen.kt` + `*ViewModel.kt`, `data/settings/AppSettings.kt`.
 **Related:** [history-pipeline.md](history-pipeline.md) (what History/Today read), [transports.md](transports.md) (what the Device screen writes), [background-sync.md](background-sync.md) (Auto-sync card, Sync in background).
 
 ## Navigation (Navigation 3 keys)
 
 ```mermaid
 flowchart LR
-  Scan["ScanKey<br/>Devices (Home)"] --> Today["TodayKey(address)"]
-  Today --> History["HistoryKey"]
-  Today --> Files["FilesKey"]
-  Today --> Device["DeviceKey"]
+  subgraph Bar["One bottom bar (app root)"]
+    Discover["DiscoverKey<br/>Discover (start)"]
+    Scan["ScanKey<br/>My devices"]
+    Settings["SettingsKey<br/>Settings"]
+  end
+  Scan --> Today["TodayKey(address)"]
+  Today <--> History["HistoryKey"]
+  Today <--> Files["FilesKey"]
+  Today <--> Device["DeviceKey"]
   Today -. Developer .-> Debug["DebugKey"]
   Files -. Detailed .-> Metrics["FileMetricsKey(station, name)"]
-  Today -. sheet .-> Settings["SettingsSheet"]
+  Discover -. Add your sensor .-> Scan
 ```
 
-Every destination except Scan is keyed by the device's **Bluetooth address**, on both pipes — the
+**One bottom bar (owner decision 2026-10-08).** The app root (`MainNavigation`) is one
+`Scaffold` whose bottom bar holds Discover, My devices and Settings, around one `NavDisplay`. No
+screen draws its own bottom bar. Discover is always the start tab, with or without a paired
+device, and nothing is asked at launch.
+
+- Each tab has its own Navigation 3 back stack, decorated separately, so an open device keeps its
+  ViewModels while another tab is shown. The rules live in `TabNavigator` (plain class, covered
+  by `TabNavigatorTest`).
+- Reselecting the active tab pops it to its root.
+- System Back pops the active tab's stack. At the root of My devices or Settings it returns to
+  Discover. At the Discover root the app closes. On Discover an open cell sheet returns to peek
+  first.
+- Inside a device, Today, History, Files and Device are a tab row under the top bar
+  (`DeviceSectionTabs`), siblings that replace each other. The bottom bar stays visible with My
+  devices selected.
+- The bottom bar is hidden only on Debug and Metrics, the full-screen inspectors with their own
+  back arrow.
+- "Add your sensor" on Discover opens the My devices root. A device screen that loses its session
+  returns there too. The settings icon on Today and Device opens the Settings tab.
+
+Every destination except Discover, Scan and Settings is keyed by the device's **Bluetooth address**, on both pipes — the
 address keys the enrolled Room row and controller, including reconnect after a worker closes its
 session. Archive/history use station epochs; a full
 `info.dev` check guards continuity. Returning to Devices retains other controllers and their work.
@@ -81,7 +106,7 @@ Developer-level line.
 
 ## Permission timing
 
-There is no permission wall. The app opens on Devices and asks only from the tap that needs a
+There is no permission wall. The app opens on Discover and asks only from the tap that needs a
 permission (`ui/permissions/RuntimeAccess.kt`, rules in `PermissionFlow`, tested by
 `PermissionFlowTest`). An in-app rationale appears only when Android reports one is due. After a
 permanent denial the next tap offers the app's system settings page. Store answers live in
@@ -122,7 +147,7 @@ palette `sensing`. `BrandTokensTest` pins every value and checks text contrast o
 ## Route and screen split
 
 Today and Device are a stateful `XRoute` (ViewModel, one-off events through `CollectEvents`
-while STARTED, launchers, permissions, confirmation dialogs, settings sheet) and a stateless
+while STARTED, launchers, permissions, confirmation dialogs) and a stateless
 `XScreen(state, onAction)` with one file per card in `ui/device/cards/`. Previews in
 `ui/device/ScreenPreviews.kt` render light and dark at Simple and Developer from fake state.
 The Wi-Fi `connecting` poll lives in `DeviceViewModel`. Capability questions (sensor sticker,
@@ -148,7 +173,7 @@ no mood or standards band.
 | **Files** | Device manifest grouped by **local calendar day** (dated files: the SD path `day=` and the name's `HHMM` are UTC, so `FileGrouping` converts the window start to the phone's zone; the header's subtitle names the UTC folder(s), each row shows its local start time) then unsynced-boot / benchmarks / legacy. **Sync all** downloads what the archive lacks with per-file + overall progress and "recovered N lost windows". Per-file state: not synced · partial · syncing · synced (verified) · mismatch · invalid name. A `LIST` refresh (manual, post-connect, post-sync) keeps the previous list on screen — "refreshing…" while in flight, "Refresh failed: … — showing the last listing." on failure (`ManifestState.last`); the red full-width "LIST failed" card appears only when no listing exists yet. Share/Inspect resolves the exact storage `(INFO/enrolled station, filename)`, including legacy/benchmark paths and retained producer-station paths; missing ownership refuses a cross-device fallback. Menu: **Sync now in background** (expedited worker), **Auto-sync** toggle, table icon → Metrics (Detailed). | `SyncPlanner`, repository `sync` state |
 | **Export** (from Files) | Share one file or a zip of the raw archive; *Save to…* via SAF; **Share daily files (derived)** zips `derived/v1/<station>/day=….parquet` + manifests. | `ExportManager` |
 | **Device** | **Auto-sync** card (any proto): per-device switch; **wake when nearby** line + *Set up wake when nearby* (one system dialog; a BLE session is dropped for it and restored) / *Turn off*. Waveshare: **air quality sensor** card selects the supported Plantower PMS5003T, scans its barcode with Google Code Scanner or accepts manual sticker entry, shows the batch, and offers an opt-in unvalidated batch estimate for the reviewed 2026-04-08 batch. Board acknowledgement precedes the phone's installation history entry. Barcode scanning may download a Google Play services module on first use; manual entry remains available. v2 (Detailed): Bluetooth pairing mode (Random code, Fixed PIN, No code, descriptions in the card's info sheet), **Restart device** (confirm). The default PIN warning and the pending restart notice also show at Simple. **Wi-Fi**: state/IP/RSSI, *Scan networks* → pick → hidden passphrase → *Save and connect*, polled while `connecting`, radio on/off. **LAN**: server on/off, token held?, *Get Wi-Fi token* (BLE only), *Replace token* (Detailed, confirm), *Allow local network* (API 37+, asked from the action). **Forget all paired phones** (Detailed, confirm). Every write is one validated `SET_CONFIG`. Worker-owned sessions mark controls busy; interactive sync/config/raw commands wait for that run to finish. Disruptive buttons are disabled while a sync runs (`canDisrupt = canEdit && !syncRunning`). | `DeviceSession.getConfig/setConfig/wifiScan/reboot/getToken` via repository |
-| **Settings** (sheet) | **Detail level** plus Smart Sync clock consent: **Ask first** (default), **Automatic**, or **Never**, one short line each. Notes behind the info button. About shows the version and the one line privacy note. | `AppSettings.setDetailLevel`, `setClockSyncMode` |
+| **Settings** (tab) | **Detail level** plus Smart Sync clock consent: **Ask first** (default), **Automatic**, or **Never**, one short line each. **Show public sensors**, the one switch for Discover network use. Notes behind the info button. About shows the version and the one line privacy note. Device settings stay in the Device section. | `AppSettings.setDetailLevel`, `setClockSyncMode` |
 | **Metrics** (Detailed) | One archived file through the app's own reader: rows, row groups, schema/writer version, codec, footer size, UTC/uptime span, sequence range, PMS-valid rows, per-row-group spans from footer statistics, every column decoded (nulls/min/max/first/last/"footer agrees"), key/value metadata. The archive copy is never touched. | `ParquetFile` (`:core:parquet`) |
 | **Debug** (Developer) | Active transport + endpoint + `payload_max`; Smart Sync decision trace and archive time accounting (real / same-boot estimate / unplaceable); live `status` JSON; last 200 raw frames (dir, type, len, first 16 bytes; `TOKEN` and `SET_CONFIG` redacted); **Device log** (`LOG_TAIL 8192`); **Raw command** (hex → decoded frames; refuses `REBOOT` and `SET_CONFIG`, which need the Device screen's confirmation). | `FrameRecorder`, `DeviceSession.raw`, repository diagnostics |
 

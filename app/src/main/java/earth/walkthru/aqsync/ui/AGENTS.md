@@ -8,6 +8,9 @@ need the same behavior.
 
 - Known devices are devices the owner connected to; a nearby advertisement is
   only a scan result. Forget must stay forgotten until explicit reconnection.
+- One bottom bar (Discover, My devices, Settings) lives at the app root in `Navigation.kt`, and
+  Discover is always the start tab. Screens never draw a bottom bar. Device sections use
+  `DeviceSectionTabs` under the top bar. Per-tab back stack rules live in `TabNavigator`.
 - Navigation 3 entries own screen ViewModels. Load once when an entry opens;
   collect observable Room/repository state with lifecycle awareness. Refresh
   only for explicit user action, reconnection, or changed request keys. A

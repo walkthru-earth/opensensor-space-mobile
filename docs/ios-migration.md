@@ -18,11 +18,13 @@ advertisement decoder, LAN envelope/handshake constants, reviewed live profiles,
 metric registry, sensor validity/mood rules and monotonic-time estimates.
 The firmware protocol and all existing wire values are preserved.
 
-`core:protocol` and `core:history` retain a Java 17 JVM target for Android and host
+`core:protocol`, `core:parquet` and `core:history` retain a Java 17 JVM target for Android and host
 consumers, with `iosArm64` and `iosSimulatorArm64` added. Portable source lives
-in `commonMain`; the old `src/main/kotlin` and `src/test/kotlin` directories remain
+in `commonMain`. The old `src/main/kotlin` and `src/test/kotlin` directories remain
 mapped to `jvmMain` and `jvmTest` for platform adapters and existing tests.
-`core:parquet` stays JVM-only. The `test` compatibility tasks still run `jvmTest`.
+`core:parquet` reads mapped `NSData` and inflates GZIP with the system zlib on iOS (W8,
+2026-10-08), and its oracle tests decode the real fixtures on the simulator. The iOS app does
+not call the reader yet. The `test` compatibility tasks still run `jvmTest`.
 
 The iOS app uses Compose Multiplatform 1.12.1 (Material 3 1.9.0), the existing
 Kotlin 2.4.20 and Xcode direct framework integration. `ios:shared` also has a JVM
@@ -36,9 +38,20 @@ board temperature and humidity are shown only for reviewed schema/dictionary
 profiles. Core Bluetooth owns pairing prompts. Operations are serialized and
 scan/connection timers bound attempts. The app sends no firmware-changing
 commands and has no accounts, analytics or cloud connection. Location is planned as approximate
-only, asked on a "Near me" tap (`NSLocationDefaultAccuracyReduced`). The planned
+only, asked on a "Near me" tap (`NSLocationDefaultAccuracyReduced`). The
 discover map adds only anonymous, read-only feed and basemap GETs, and uploads stay a per-device
 opt-in ([devices-and-discovery.md](devices-and-discovery.md#network-boundary)).
+
+Since W12 (2026-10-08) the Compose root (`ios/shared/src/iosMain/.../AppRoot.kt`) has one bottom
+bar with three tabs, Discover, My devices (the screen above) and Settings ("Show public sensors").
+No other iOS screen draws a bar. Discover is always the start tab (owner decision 2026-10-08). It is the shared
+`:feature:discover` screen, reading the bundled sample through the common Parquet reader and the
+vendored H3 C library through cinterop. The Xcode target links `-lc++ -lz` and CoreFoundation,
+CoreGraphics, CoreText, Foundation, ImageIO, Metal and QuartzCore for maplibre-compose. Checked in
+the iPhone 18 Pro simulator (PMTiles basemap and sample cells drawn) and, on 2026-10-08, on an
+iPhone 16 Pro, which opened on Discover with no prompt. On that iPhone, Arabic place names drew
+unjoined, because the Apple maplibre-native-ffi build has no bidi or Arabic shaping. iOS now uses
+the English or Latin label styles (`devices-and-discovery.md`, "Right-to-left labels on iOS").
 
 Wi-Fi discovery is also available through `NWBrowser`, restricted to
 `_aqsync._tcp` in `local.`. Tapping **Find Wi-Fi sensors** starts a bounded browse
@@ -190,8 +203,9 @@ accuracy, stale/background handling or authenticated Wi-Fi connections. See
 
 ## Remaining migration
 
-1. Port Parquet decoding/compression, history indexing and Android archive fixtures for charts.
-2. Port history indexes, offline charts and retained station-generation UI.
+1. Wire the shared Parquet reader, `ParquetIndexer` and `Aggregator` (common since W8) into the iOS
+   archive, with an iOS store for the index in place of Room.
+2. Port offline charts and retained station-generation UI.
 3. Share existing Android screens, resources and navigation incrementally.
 4. Qualify BLE token acquisition, Keychain persistence, authenticated LAN transfer, multi-phone
    collection, concurrent sensors, cancellation/resume and Local Network permissions on iPhones.
@@ -209,9 +223,9 @@ in [status.md](status.md); features listed above are not implemented on iOS yet.
 
 ## KMP and Apple contributor guidance
 
-- Keep platform entry points separate. `:core:protocol` and the sensor-domain part
-  of `:core:history` share rules through `commonMain`; their JVM adapters and the
-  JVM-only Parquet implementation remain platform-specific. Android services stay
+- Keep platform entry points separate. `:core:protocol`, `:core:parquet` and `:core:history`
+  share rules through `commonMain`. Their JVM and iOS adapters (file mapping, gzip, streams)
+  remain platform-specific. Android services stay
   in `:app`; Apple services stay in `ios/App/` or the existing iOS source sets.
 - Prefer small shared interfaces instantiated by the app entry point for substantial
   platform behavior. Keep the generated Kotlin framework API narrow and documented
