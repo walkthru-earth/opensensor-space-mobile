@@ -5,15 +5,11 @@ import earth.walkthru.aqsync.data.history.parquet.ParquetCodec
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 import earth.walkthru.aqsync.data.history.parquet.ParquetType
 import earth.walkthru.aqsync.data.history.parquet.ParquetWriter
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import kotlin.test.Test
 
 class AggregationTest {
 
-    private fun bytes(path: String) = checkNotNull(javaClass.classLoader?.getResourceAsStream("parquet/$path")).readBytes()
+    private fun bytes(path: String) = fixtureBytes("parquet/$path")
 
     private val station = "53315f5f-cb85-4d8d-b623-d56266084189"
 
@@ -21,7 +17,7 @@ class AggregationTest {
     private val boardFile get() = ParquetFile.wrap(bytes("device/v3-board-2rg-105rows.parquet"))
 
     @Test
-    fun `board file lands in the right 15-minute, hourly and daily buckets`() {
+    fun `board file lands in the right 15-minute and hourly and daily buckets`() {
         val agg = Aggregator(station)
         agg.add(boardFile)
         val buckets = agg.buckets()
@@ -56,7 +52,7 @@ class AggregationTest {
     @Test
     fun `rows without UTC or without a valid PMS reading are handled`() {
         // A tiny file written with our own writer: 4 rows, the third without UTC, the second with a stale sensor.
-        val out = java.io.ByteArrayOutputStream()
+        val out = MemorySink()
         val w = ParquetWriter(
             out,
             listOf(

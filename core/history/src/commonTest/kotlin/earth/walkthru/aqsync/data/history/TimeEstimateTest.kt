@@ -1,11 +1,7 @@
 package earth.walkthru.aqsync.data.history
 
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import kotlin.test.Test
 
 /**
  * §4.6 on real files of one boot (`e452563e…`, 2026-09-08): two unsynced files logged before the
@@ -14,7 +10,7 @@ import org.junit.Test
  */
 class TimeEstimateTest {
 
-    private fun bytes(path: String) = checkNotNull(javaClass.classLoader?.getResourceAsStream("parquet/$path")).readBytes()
+    private fun bytes(path: String) = fixtureBytes("parquet/$path")
     private val station = "53315f5f-cb85-4d8d-b623-d56266084189"
 
     private fun indexedRow(resource: String, name: String): IndexedFileInfo {
