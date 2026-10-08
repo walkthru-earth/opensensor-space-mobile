@@ -69,11 +69,18 @@ final class SensorArchive {
         #endif
     }
 
+    private static let stationAllowed = CharacterSet(
+        charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-")
+
+    /// `[0-9A-Za-z._-]+`, as Android (FileArchive.kt:131) and SyncWire. The station is one directory
+    /// name, so no slash can pass, and `.` or `..` alone is refused.
+    static func isStationId(_ station: String) -> Bool {
+        !station.isEmpty && station != "." && station != ".."
+            && station.unicodeScalars.allSatisfy({ stationAllowed.contains($0) })
+    }
+
     func target(station: String, name: String) throws -> URL {
-        let stationAllowed = CharacterSet(
-            charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
-        guard !station.isEmpty, station.unicodeScalars.allSatisfy({ stationAllowed.contains($0) }),
-            !name.hasPrefix("/"), name.utf8.count <= Self.maxNameBytes, !name.contains(".."),
+        guard Self.isStationId(station), !name.hasPrefix("/"), name.utf8.count <= Self.maxNameBytes, !name.contains(".."),
             name.unicodeScalars.allSatisfy({
                 CharacterSet(charactersIn: "0123456789abcdefghijklmnopqrstuvwxyz._=/-").contains($0)
             }), name.hasSuffix(".parquet"), name.utf8.count > 8
@@ -163,6 +170,7 @@ final class SensorArchive {
         try FileManager.default.createDirectory(
             at: final.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: Self.protection)
         let partial = final.appendingPathExtension("\(size)-\(String(crc, radix: 16)).partial")
+        try removeStalePartials(of: final, keeping: partial)
         if FileManager.default.fileExists(atPath: partial.path) {
             let attrs = try FileManager.default.attributesOfItem(atPath: partial.path)
             guard attrs[.type] as? FileAttributeType == .typeRegular else { throw Failure.unsafePath }
@@ -173,6 +181,28 @@ final class SensorArchive {
             else { throw Failure.invalidFile }
         }
         return try Download(archive: self, final: final, partial: partial, size: size, crc: crc)
+    }
+
+    /// The partial name carries OPENED's size and CRC. When those change for the same name, older
+    /// partials can never complete, so they are removed (Android resets on meta mismatch,
+    /// FileArchive.kt:97-102).
+    private func removeStalePartials(of final: URL, keeping current: URL) throws {
+        let directory = final.deletingLastPathComponent()
+        let prefix = final.lastPathComponent + "."
+        let manager = FileManager.default
+        for entry in try manager.contentsOfDirectory(atPath: directory.path)
+        where entry.hasPrefix(prefix) && entry.hasSuffix(".partial") && entry != current.lastPathComponent {
+            // Only `<size>-<crc hex>.partial`, so a longer final name sharing the prefix is never touched.
+            let tag = entry.dropFirst(prefix.count).dropLast(".partial".count)
+            let parts = tag.split(separator: "-", omittingEmptySubsequences: false)
+            guard parts.count == 2, !parts[0].isEmpty, !parts[1].isEmpty,
+                parts[0].allSatisfy({ $0.isASCII && $0.isNumber }), parts[1].allSatisfy({ $0.isASCII && $0.isHexDigit })
+            else { continue }
+            let stale = directory.appendingPathComponent(entry)
+            guard (try? manager.attributesOfItem(atPath: stale.path))?[.type] as? FileAttributeType == .typeRegular
+            else { continue }
+            try manager.removeItem(at: stale)
+        }
     }
 
     func verified(_ url: URL, size: UInt64, crc: UInt32) throws -> Bool {

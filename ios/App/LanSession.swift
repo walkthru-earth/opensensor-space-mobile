@@ -60,8 +60,14 @@ actor LanSession: ArchivePipe {
 
     private static let maxQueuedReplies = 32
     private static let receiveChunk = 64 * 1024
+    /// Connect, send and HELLO.
     private static let requestTimeout: TimeInterval = 10
+    /// File replies between frames, Android's FRAME_TIMEOUT_MS (DeviceSession.kt:528).
+    private static let replyTimeout: TimeInterval = 15
+    /// OPENED, Android's OPEN_TIMEOUT_MS (DeviceSession.kt:531). The device CRCs the whole file first.
+    private static let openTimeout: TimeInterval = 60
     private static let idleTimeout: TimeInterval = 180
+    private var openPending = false
 
     init(endpoint: NWEndpoint) {
         queue = DispatchSerialQueue(label: "earth.walkthru.opensensor.lan-session")
@@ -85,7 +91,8 @@ actor LanSession: ArchivePipe {
         }
         // The Kotlin side zeroes its token copies. Only the outgoing frame holds the token afterwards.
         try await sendRaw(wire.handshake(token: credential.token))
-        let hello = try await reply()
+        let hello = try await reply(timeout: Self.requestTimeout)
+        try Self.refuse(hello)
         guard hello.kind == "hello", hello.code == 2, (64...1024).contains(Int(hello.count)),
             let identity = wire.identity(json: hello.json)
         else { throw LanFailure.invalidReply }
@@ -101,9 +108,13 @@ actor LanSession: ArchivePipe {
         guard let identity, !collecting else { throw LanFailure.disconnected }
         collecting = true
         defer { collecting = false }
-        try await SensorTransfer.collect(
+        let summary = try await SensorTransfer.collect(
             pipe: self, archive: archive, station: identity.station, maxRead: UInt64(identity.maxRead),
             progress: progress)
+        // Every other file was tried first. A file that was not saved still fails the run so it is seen.
+        if !summary.failures.isEmpty {
+            throw SensorTransfer.Failure.filesFailed(failed: summary.failures.count, total: summary.files)
+        }
     }
 
     /// Safe from any thread. Closing is enqueued on the session queue; pending waits end as disconnected.
@@ -114,12 +125,35 @@ actor LanSession: ArchivePipe {
     // MARK: ArchivePipe
 
     func list() async throws { try await send(wire.listRequest()) }
-    func open(name: String) async throws { try await send(wire.openRequest(name: name)) }
+    func open(name: String) async throws {
+        openPending = true
+        try await send(wire.openRequest(name: name))
+    }
     func read(handle: Int32, offset: UInt64, length: UInt64) async throws {
         try await send(wire.readRequest(handle: handle, offset: Int64(offset), length: Int64(length)))
     }
     func closeFile(handle: Int32) async throws { try await send(wire.closeRequest(handle: handle)) }
-    func receive() async throws -> ArchiveReply { try await reply() }
+    func receive() async throws -> ArchiveReply {
+        let timeout = openPending ? Self.openTimeout : Self.replyTimeout
+        openPending = false
+        let frame = try await reply(timeout: timeout)
+        // An ERROR answering OPEN, READ or CLOSE fails only that file. SensorTransfer decides.
+        if frame.kind == "error", frame.code != 14, [SensorTransfer.Op.open, SensorTransfer.Op.read,
+            SensorTransfer.Op.close].contains(frame.op)
+        {
+            return frame
+        }
+        try Self.refuse(frame)
+        return frame
+    }
+
+    /// Session ERROR frames (handshake, a full session pool, authentication) end the connection.
+    private static func refuse(_ frame: ArchiveReply) throws {
+        guard frame.kind == "error" else { return }
+        if frame.code == 14 { throw LanFailure.authentication }
+        if frame.code == 7 { throw LanFailure.busy }
+        throw LanFailure.invalidReply
+    }
 
     // MARK: Requests and replies
 
@@ -139,7 +173,7 @@ actor LanSession: ArchivePipe {
         liveness.sent(now: ProcessInfo.processInfo.systemUptime)
     }
 
-    private func reply() async throws -> ArchiveReply {
+    private func reply(timeout: TimeInterval) async throws -> ArchiveReply {
         try Task.checkCancellation()
         let frame: ArchiveReply
         if !replies.isEmpty {
@@ -150,13 +184,8 @@ actor LanSession: ArchivePipe {
             guard !closed else { throw LanFailure.disconnected }
             guard replyWaiter == nil else { throw LanFailure.invalidReply }
             frame = try await withCheckedThrowingContinuation { continuation in
-                replyWaiter = Waiter(continuation: continuation, deadline: deadline(after: Self.requestTimeout, .reply))
+                replyWaiter = Waiter(continuation: continuation, deadline: deadline(after: timeout, .reply))
             }
-        }
-        if frame.kind == "error" {
-            if frame.code == 14 { throw LanFailure.authentication }
-            if frame.code == 7 { throw LanFailure.busy }
-            throw LanFailure.invalidReply
         }
         return frame
     }
@@ -222,7 +251,7 @@ actor LanSession: ArchivePipe {
         guard let reply = wire.decode(data: body) else { return nil }
         return ArchiveReply(
             kind: reply.kind, name: reply.name, size: reply.size, crc: reply.crc, handle: reply.handle,
-            offset: reply.offset, code: reply.code, count: reply.count,
+            offset: reply.offset, code: reply.code, op: reply.op, count: reply.count,
             data: reply.kind == "chunk" ? reply.payload : nil, json: reply.json)
     }
 

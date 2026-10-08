@@ -65,7 +65,46 @@ enum ArchiveChecks {
         } catch SensorArchive.Failure.invalidFile {}
         precondition(!FileManager.default.fileExists(atPath: bad.partial.path))
         try completedAndExportChecks(bytes: bytes, crc: crc, station: station, name: name)
-        print("iOS archive: resume, receipt reconstruction/integrity, export snapshot, offset, CRC, immutable conflict, path and symlink checks passed")
+        try stationAndPartialChecks(bytes: bytes, crc: crc)
+        print(
+            "iOS archive: resume, receipt reconstruction/integrity, export snapshot, offset, CRC, immutable conflict, "
+                + "path, symlink, station id and stale partial checks passed")
+    }
+
+    /// Station ids follow Android's `[0-9A-Za-z._-]+` (FileArchive.kt:131), and a changed size or CRC
+    /// for one name removes the older partial (FileArchive.kt:97-102).
+    private static func stationAndPartialChecks(bytes: Data, crc: UInt32) throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let archive = try SensorArchive(root: root)
+        for station in ["aq.lab_1-b", "v2.0", "a..b"] {
+            precondition(SensorArchive.isStationId(station))
+            let path = try archive.target(station: station, name: "data.parquet").path
+            precondition(path == root.appendingPathComponent("\(station)/data.parquet").path)
+        }
+        for unsafe in ["", ".", "..", "a/b", "../x", "a\\b", "a b", "é"] {
+            precondition(!SensorArchive.isStationId(unsafe))
+            do {
+                _ = try archive.target(station: unsafe, name: "data.parquet")
+                fatalError("unsafe station accepted")
+            } catch SensorArchive.Failure.unsafePath {}
+        }
+
+        let size = UInt64(bytes.count)
+        let first = try archive.prepare(station: "s", name: "data.parquet", size: size, crc: crc + 1)!
+        try first.append(bytes.prefix(4), at: 0, windowEnd: size)
+        try first.persist()
+        // A longer final name that shares the prefix keeps its own partial.
+        let neighbour = try archive.prepare(station: "s", name: "data.parquet.parquet", size: size, crc: crc)!
+        precondition(FileManager.default.fileExists(atPath: first.partial.path))
+        let second = try archive.prepare(station: "s", name: "data.parquet", size: size, crc: crc)!
+        precondition(second.offset == 0)
+        precondition(!FileManager.default.fileExists(atPath: first.partial.path))
+        precondition(FileManager.default.fileExists(atPath: neighbour.partial.path))
+        try second.append(bytes, at: 0, windowEnd: size)
+        try second.commit()
+        let left = try FileManager.default.contentsOfDirectory(atPath: root.appendingPathComponent("s").path)
+        precondition(Set(left) == Set(["data.parquet", "data.parquet.verified.json", neighbour.partial.lastPathComponent]))
     }
 
     private static func completedAndExportChecks(bytes: Data, crc: UInt32, station: String, name: String) throws {

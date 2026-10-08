@@ -42,8 +42,7 @@ final class LanCredentials {
             let value = try? JSONDecoder().decode(LanCredential.self, from: data), value.token.count == 32,
             value.device.lowercased() == device.lowercased(), value.device.count == 12,
             value.device.allSatisfy({ $0.isHexDigit }), UUID(uuidString: value.peripheral) != nil,
-            (1...65535).contains(value.port), !value.station.isEmpty,
-            value.station.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") })
+            (1...65535).contains(value.port), SensorArchive.isStationId(value.station)
         else { return nil }
         return value
     }

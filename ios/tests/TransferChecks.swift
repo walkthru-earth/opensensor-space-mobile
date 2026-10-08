@@ -49,10 +49,11 @@ enum TransferChecks {
     static let bytes = Data("PAR1payloadPAR1".utf8)
     static let crc: Int64 = 0xc907_1203
 
+    @discardableResult
     static func collect(
         _ pipe: ScriptedPipe, _ archive: ArchiveIO, station: String, maxRead: UInt64 = 16384,
         clock: TestClock? = nil, recorder: Recorder = Recorder()
-    ) async throws {
+    ) async throws -> TransferSummary {
         try await SensorTransfer.collect(
             pipe: pipe, archive: archive, station: station, maxRead: maxRead, now: { clock?.now ?? 0 },
             pause: { await recorder.pause($0) }, progress: { await recorder.add($0) })
@@ -64,9 +65,12 @@ enum TransferChecks {
         policyChecks()
         try await transferChecks()
         try await windowRetryChecks()
+        try await perFileChecks()
+        try await corruptResumeChecks()
         print(
             "iOS transfer: window retry (short, gap, overlap, duplicate, exhaustion, status), framing, LAN policy, "
-                + "reconstructed resume, completed-file skip, rate/throttle, handles and concurrent stations passed")
+                + "reconstructed resume, completed-file skip, rate/throttle, handles, concurrent stations, per-file "
+                + "failures and corrupt resume restart passed")
     }
 
     private static func stateChecks() {
@@ -195,12 +199,14 @@ enum TransferChecks {
         check(await reused.updates.last?.rate == 0)
 
         // The contract's 399-byte name limit applies to LIST entries before any path is built.
+        // It fails only that entry.
         let longName = String(repeating: "a", count: SensorArchive.maxNameBytes - 7) + ".parquet"
-        do {
-            try await collect(
-                ScriptedPipe([ArchiveReply(kind: "file", name: longName, size: 15)]), archive, station: "a")
-            fatalError("400-byte name accepted")
-        } catch SensorTransfer.Failure.invalidReply {}
+        let longPipe = ScriptedPipe([
+            ArchiveReply(kind: "file", name: longName, size: 15), ArchiveReply(kind: "listEnd", count: 1),
+        ])
+        let longSummary = try await collect(longPipe, archive, station: "a")
+        check(longSummary == TransferSummary(files: 1, failures: [FileFailure(name: longName, reason: .invalidEntry)]))
+        check(await longPipe.opens.isEmpty)
 
         // Lose the connection during B's first window after fully completing A.
         // Reconstruct the archive so resume cannot depend on retained actor state.
@@ -288,9 +294,10 @@ enum TransferChecks {
             frames[3] = ArchiveReply(kind: "chunk", handle: 7, offset: 0, data: bytes)
             return frames
         }
-        async let a: Void = collect(ScriptedPipe(wholeScript()), first, station: "c")
-        async let b: Void = collect(ScriptedPipe(wholeScript()), second, station: "d")
-        _ = try await (a, b)
+        async let a = collect(ScriptedPipe(wholeScript()), first, station: "c")
+        async let b = collect(ScriptedPipe(wholeScript()), second, station: "d")
+        let (summaryC, summaryD) = try await (a, b)
+        precondition(summaryC.failures.isEmpty && summaryD.failures.isEmpty)
         precondition(FileManager.default.fileExists(atPath: root.appendingPathComponent("c/data.parquet").path))
         precondition(FileManager.default.fileExists(atPath: root.appendingPathComponent("d/data.parquet").path))
     }
@@ -366,13 +373,13 @@ enum TransferChecks {
         // Retries are bounded with linear backoff. Held bytes survive for a later resume.
         var failing = head + [chunk(0, 3), end(15)]
         for _ in 0..<SensorTransfer.windowRetries { failing += [end(15)] }
-        let exhausted = ScriptedPipe(failing)
+        let exhausted = ScriptedPipe(failing + [closed])
         let exhaustedLog = Recorder()
         let exhaustedArchive = try ArchiveIO(root: root)
-        do {
-            try await collect(exhausted, exhaustedArchive, station: "exhausted", recorder: exhaustedLog)
-            fatalError("endless window failure accepted")
-        } catch SensorTransfer.Failure.windowLost {}
+        // Giving up on one file is a per-file outcome. The handle is still closed.
+        let exhaustedSummary = try await collect(exhausted, exhaustedArchive, station: "exhausted", recorder: exhaustedLog)
+        check(exhaustedSummary.failures == [FileFailure(name: "data.parquet", reason: .windowLost)])
+        check(await exhausted.closes == [7])
         let backoff = SensorTransfer.windowRetryBackoff
         check(await exhaustedLog.pauses == (1...SensorTransfer.windowRetries).map { backoff * Double($0) })
         let exhaustedReads = await exhausted.reads
@@ -382,12 +389,11 @@ enum TransferChecks {
         precondition(!FileManager.default.fileExists(atPath: root.appendingPathComponent("exhausted/data.parquet").path))
 
         // A device read error is reported, not retried, and keeps the bytes held so far.
-        let status = ScriptedPipe(head + [chunk(0, 6), end(6, code: 7)])
+        let status = ScriptedPipe(head + [chunk(0, 6), end(6, code: 7), closed])
         let statusArchive = try ArchiveIO(root: root)
-        do {
-            try await collect(status, statusArchive, station: "status")
-            fatalError("READ_END error status accepted")
-        } catch SensorTransfer.Failure.readFailed(7) {}
+        let statusSummary = try await collect(status, statusArchive, station: "status")
+        check(statusSummary.failures == [FileFailure(name: "data.parquet", reason: .readFailed(7))])
+        check(await status.remaining == 0)
         check(await statusArchive.offset() == 6)
 
         // Resume after exhaustion starts from the retained offset and completes with the right CRC.
@@ -398,5 +404,170 @@ enum TransferChecks {
         check(await resumed.closes == [7])
         let resumedFinal = root.appendingPathComponent("exhausted/data.parquet")
         check(try SensorArchive(root: root).verified(resumedFinal, size: 15, crc: UInt32(crc)))
+    }
+
+    private static func listed(_ names: [String]) -> [ArchiveReply] {
+        names.map { ArchiveReply(kind: "file", name: $0, size: 15) } + [
+            ArchiveReply(kind: "listEnd", count: Int32(names.count))
+        ]
+    }
+
+    private static func whole(_ name: String, handle: Int32) -> [ArchiveReply] {
+        [
+            ArchiveReply(kind: "opened", name: name, size: 15, crc: crc, handle: handle),
+            ArchiveReply(kind: "chunk", handle: handle, offset: 0, data: bytes),
+            ArchiveReply(kind: "readEnd", handle: handle, offset: 15),
+            ArchiveReply(kind: "closed", handle: handle),
+        ]
+    }
+
+    /// One bad file is reported and the run continues with the next one (Android SyncEngine.kt:116-216,
+    /// SyncPlanner.kt:96). Connection and protocol faults still end the run.
+    private static func perFileChecks() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        func saved(_ station: String, _ name: String) -> Bool {
+            FileManager.default.fileExists(atPath: root.appendingPathComponent("\(station)/\(name)").path)
+        }
+
+        // LIST: an unsafe name, a duplicate and a file too small for Parquet each fail alone.
+        // The station id contains a dot, which Android accepts.
+        let list = ScriptedPipe(
+            [
+                ArchiveReply(kind: "file", name: "../escape.parquet", size: 15),
+                ArchiveReply(kind: "file", name: "ok.parquet", size: 15),
+                ArchiveReply(kind: "file", name: "ok.parquet", size: 15),
+                ArchiveReply(kind: "file", name: "tiny.parquet", size: 11),
+                ArchiveReply(kind: "listEnd", count: 4),
+            ] + whole("ok.parquet", handle: 3))
+        let listSummary = try await collect(list, try ArchiveIO(root: root), station: "list.v2")
+        check(
+            listSummary
+                == TransferSummary(
+                    files: 4,
+                    failures: [
+                        FileFailure(name: "../escape.parquet", reason: .invalidEntry),
+                        FileFailure(name: "ok.parquet", reason: .invalidEntry),
+                        FileFailure(name: "tiny.parquet", reason: .invalidEntry),
+                    ]))
+        check(await list.opens == ["ok.parquet"])
+        precondition(saved("list.v2", "ok.parquet"))
+
+        // An OPENED that disagrees with LIST, an ERROR for OPEN and an ERROR for READ fail one file each.
+        let recorder = Recorder()
+        let mixed = ScriptedPipe(
+            listed(["a.parquet", "b.parquet", "c.parquet", "d.parquet"]) + [
+                ArchiveReply(kind: "opened", name: "a.parquet", size: 16, crc: crc, handle: 1),
+                ArchiveReply(kind: "closed", handle: 1),
+                ArchiveReply(kind: "error", code: 4, op: SensorTransfer.Op.open),
+                ArchiveReply(kind: "opened", name: "c.parquet", size: 15, crc: crc, handle: 3),
+                ArchiveReply(kind: "chunk", handle: 3, offset: 0, data: bytes.prefix(6)),
+                ArchiveReply(kind: "error", code: 8, op: SensorTransfer.Op.read),
+                ArchiveReply(kind: "error", code: 5, op: SensorTransfer.Op.close),
+            ] + whole("d.parquet", handle: 4))
+        let mixedSummary = try await collect(mixed, try ArchiveIO(root: root), station: "mixed", recorder: recorder)
+        check(
+            mixedSummary.failures == [
+                FileFailure(name: "a.parquet", reason: .mismatch),
+                FileFailure(name: "b.parquet", reason: .deviceError(4)),
+                FileFailure(name: "c.parquet", reason: .deviceError(8)),
+            ])
+        check(await mixed.opens == ["a.parquet", "b.parquet", "c.parquet", "d.parquet"])
+        // A refused OPEN has no handle. CLOSE is best effort and its ERROR fails nothing.
+        check(await mixed.closes == [1, 3, 4])
+        check(await mixed.remaining == 0)
+        precondition(saved("mixed", "d.parquet") && !saved("mixed", "a.parquet") && !saved("mixed", "c.parquet"))
+        check(await recorder.updates.last?.filesDone == 4)
+        check(await recorder.updates.last?.filesTotal == 4)
+
+        // An ERROR answering a different request is a protocol fault and ends the run.
+        let wrongOp = ScriptedPipe(
+            listed(["a.parquet", "b.parquet"]) + [ArchiveReply(kind: "error", code: 4, op: SensorTransfer.Op.read)]
+                + whole("b.parquet", handle: 2))
+        do {
+            try await collect(wrongOp, try ArchiveIO(root: root), station: "wrong-op")
+            fatalError("ERROR for another request accepted")
+        } catch SensorTransfer.Failure.invalidReply {}
+        check(await wrongOp.opens == ["a.parquet"])
+
+        // A finalized local copy that no longer matches its receipt is preserved and reported
+        // without an OPEN, and the other files still sync.
+        let local = try ArchiveIO(root: root)
+        try await collect(ScriptedPipe(listed(["a.parquet"]) + whole("a.parquet", handle: 1)), local, station: "local")
+        let localFinal = root.appendingPathComponent("local/a.parquet")
+        var tampered = bytes
+        tampered[5] ^= 1
+        try tampered.write(to: localFinal)
+        let afterTamper = ScriptedPipe(listed(["a.parquet", "b.parquet"]) + whole("b.parquet", handle: 2))
+        let tamperSummary = try await collect(afterTamper, local, station: "local")
+        check(tamperSummary.failures == [FileFailure(name: "a.parquet", reason: .localConflict)])
+        check(await afterTamper.opens == ["b.parquet"])
+        check(try Data(contentsOf: localFinal) == tampered)
+        precondition(saved("local", "b.parquet"))
+        // Without a receipt the final is checked against OPENED. The conflict is reported and the handle closed.
+        try FileManager.default.removeItem(at: localFinal.appendingPathExtension("verified.json"))
+        let reopened = ScriptedPipe(
+            listed(["a.parquet"]) + [
+                ArchiveReply(kind: "opened", name: "a.parquet", size: 15, crc: crc, handle: 5),
+                ArchiveReply(kind: "closed", handle: 5),
+            ])
+        let reopenedSummary = try await collect(reopened, local, station: "local")
+        check(reopenedSummary.failures == [FileFailure(name: "a.parquet", reason: .localConflict)])
+        check(await reopened.closes == [5])
+        check(try Data(contentsOf: localFinal) == tampered)
+    }
+
+    /// A resumed partial with a corrupt prefix fails verification. It is discarded and the file is read
+    /// once more from zero with the same handle (Android SyncEngine.kt:231-243). A second failure, or a
+    /// failure without a resumed prefix, fails only that file.
+    private static func corruptResumeChecks() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let head = listed(["data.parquet"]) + [
+            ArchiveReply(kind: "opened", name: "data.parquet", size: 15, crc: crc, handle: 7)
+        ]
+        var corruptBytes = bytes
+        corruptBytes[4] ^= 1
+        func chunk(_ source: Data, _ from: Int, _ to: Int) -> ArchiveReply {
+            ArchiveReply(kind: "chunk", handle: 7, offset: Int64(from), data: source.subdata(in: from..<to))
+        }
+        let end = ArchiveReply(kind: "readEnd", handle: 7, offset: 15)
+        let closed = ArchiveReply(kind: "closed", handle: 7)
+        func seedCorruptPrefix(_ station: String) async throws {
+            let archive = try ArchiveIO(root: root)
+            _ = try await archive.prepare(station: station, name: "data.parquet", size: 15, crc: UInt32(crc))
+            try await archive.write(corruptBytes.prefix(5), at: 0, end: 15)
+        }
+        func partials(_ station: String) throws -> [String] {
+            try FileManager.default.contentsOfDirectory(atPath: root.appendingPathComponent(station).path)
+                .filter { $0.hasSuffix(".partial") }
+        }
+
+        try await seedCorruptPrefix("restart")
+        let restart = ScriptedPipe(head + [chunk(bytes, 5, 15), end, chunk(bytes, 0, 15), end, closed])
+        let restartSummary = try await collect(restart, try ArchiveIO(root: root), station: "restart")
+        check(restartSummary.failures.isEmpty)
+        let restartReads = await restart.reads
+        precondition(restartReads.count == 2 && restartReads[0] == (5, 10) && restartReads[1] == (0, 15))
+        check(await restart.opens == ["data.parquet"])
+        check(await restart.closes == [7])
+        let restartFinal = root.appendingPathComponent("restart/data.parquet")
+        check(try SensorArchive(root: root).verified(restartFinal, size: 15, crc: UInt32(crc)))
+
+        // The restart happens once. Bad bytes again fail the file and leave no partial behind.
+        try await seedCorruptPrefix("twice")
+        let twice = ScriptedPipe(head + [chunk(bytes, 5, 15), end, chunk(corruptBytes, 0, 15), end, closed])
+        let twiceSummary = try await collect(twice, try ArchiveIO(root: root), station: "twice")
+        check(twiceSummary.failures == [FileFailure(name: "data.parquet", reason: .verifyFailed)])
+        check(await twice.reads.count == 2)
+        check(await twice.closes == [7])
+        check(try partials("twice").isEmpty)
+
+        // A download from zero that fails verification is not read again.
+        let fresh = ScriptedPipe(head + [chunk(corruptBytes, 0, 15), end, closed])
+        let freshSummary = try await collect(fresh, try ArchiveIO(root: root), station: "fresh")
+        check(freshSummary.failures == [FileFailure(name: "data.parquet", reason: .verifyFailed)])
+        check(await fresh.reads.count == 1)
+        precondition(!FileManager.default.fileExists(atPath: root.appendingPathComponent("fresh/data.parquet").path))
     }
 }
