@@ -11,8 +11,8 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import earth.walkthru.aqsync.ui.debug.DebugScreen
-import earth.walkthru.aqsync.ui.device.DeviceScreen
-import earth.walkthru.aqsync.ui.device.TodayScreen
+import earth.walkthru.aqsync.ui.device.DeviceRoute
+import earth.walkthru.aqsync.ui.device.TodayRoute
 import earth.walkthru.aqsync.ui.files.FilesScreen
 import earth.walkthru.aqsync.ui.history.FileMetricsScreen
 import earth.walkthru.aqsync.ui.history.HistoryScreen
@@ -47,7 +47,7 @@ fun MainNavigation(modifier: Modifier = Modifier) {
                 ScanScreen(onConnected = { address -> backStack.add(TodayKey(address)) })
             }
             entry<TodayKey> { key ->
-                TodayScreen(
+                TodayRoute(
                     address = key.address,
                     onOpenHistory = { openTab(HistoryKey(key.address)) },
                     onOpenFiles = { openTab(FilesKey(key.address)) },
@@ -82,7 +82,7 @@ fun MainNavigation(modifier: Modifier = Modifier) {
                 )
             }
             entry<DeviceKey> { key ->
-                DeviceScreen(
+                DeviceRoute(
                     address = key.address,
                     onOpenToday = { openTab(TodayKey(key.address)) },
                     onOpenHistory = { openTab(HistoryKey(key.address)) },

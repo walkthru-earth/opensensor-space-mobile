@@ -32,19 +32,70 @@ or when the user requests it. Compose recomposition only renders the latest stat
 
 | Level | Shows | Notes |
 | --- | --- | --- |
-| **Simple** (default) | Now card, clock state and actions; History and Files one tap away | |
-| **Detailed** | + PM10/PM1, particle counts, board temperature, battery/USB, storage counters, device card, file **Metrics** inspector, History source card | `AppSettings.detailed` |
-| **Developer** | + **Debug** destination | `AppSettings.advancedMode`; an old `advanced_mode = true` with no `detail_level` reads as Developer |
+| **Simple** (default) | The reading now (hero card), today so far, sync state in words with one primary action, the clock with **Set time from phone**, History and Files one tap away. Device settings as state in words and their actions | Designed first. No identifiers, hex, byte offsets, CRC, MTU, RSSI numbers, schema or firmware build strings, log tails or diagnostics |
+| **Detailed** | + other particle sizes, particle counts, board temperature and battery, storage counters, batch estimate card, device card (firmware, protocol), **Finalize buffered rows**, Files chart and **Metrics** inspector (rows, time span, columns), transfer rate, explanations on every Device card | `AppSettings.detailed` |
+| **Developer** | + identifiers and internals everywhere (station, device and boot IDs, schema, dictionary, max_read, payload, endpoint, MAC, dBm, file names, partial counts, CF=1 raw values, codec, heap, uptime, footer, row groups, metadata) and the **Debug** destination | `AppSettings.advancedMode`. An old `advanced_mode = true` with no `detail_level` reads as Developer |
 
-Cosmetic only: every level reads the same data. Nothing the Simple experience needs may depend on
-Developer.
+Only presentation changes. Every level reads the same data, and nothing the Simple experience
+needs may depend on Developer. A new field states its level in code (`level.detailed`,
+`level.developer`).
+
+### What moved where (W4 audit, 2026-10-08)
+
+| Screen | Simple | Detailed adds | Developer adds |
+| --- | --- | --- | --- |
+| Devices (Scan) | Name, paired and known tags, signal bars, archive line (mood, primary metric, day, synced ago), peacock guide when nothing is nearby | Coverage percent and file count on the archive line, scan hints when devices are known | MAC address, RSSI dBm, station prefix |
+| Connection banner | Connected, Connecting, Setting up the link, pairing repair message | Failure reason | Service discovery, MTU, LAN authentication steps, reconnect reason and attempt count |
+| Today | Hero (face, number, mood pill, advice, snapshot note), today so far, temperature and humidity on ambient boards, Smart Sync, clock with Set time | Readings since midnight, placed and unplaced counts, Smart Sync explanation, Finalize, batch estimate, PM10 and PM1, particles, board and battery, storage (problem counters only when not zero), device card | Station in the top bar, sample number, CF=1 raw, mV and USB mV, codec, partials, uptime, heap, dropped, errors and missed always, anchor generation, last sample instant, schema, IDs, dictionary, max_read, payload |
+| Device | Device name and link in words, Auto-sync one line, wake when nearby, sensor sticker entry, pairing mode and actions, Wi-Fi state, scan and join, Wi-Fi sync switch and token actions, bonds | Firmware and protocol, Wi-Fi and Bluetooth reachability lines, every explanation, network name, passphrase state, IP address, discovery errors, phone installation record | Display flag, RSSI, MAC, access point security and channel, mDNS host, port, clients, discovered address, IDs, endpoint, settings read age |
+| Files | Local time per file, friendly size, state, Sync all, peacock when all synced, file count | Chart by file, Metrics inspector, transfer rate, current file progress, LIST failure text | File names, UTC folder subtitles, partial and microSD counts, FILE frame mismatch, resumed offsets, recovered windows |
+| Metrics (Detailed only) | n/a | Size, rows, columns, UTC first and last, valid particle rows, column min and max | Footer, codec, schema, writer, statistics, index source, decode time, uptime span, sequence, boot, row groups, column types and footer agreement, key value metadata |
+| History | Chart, metric chips, range, archive summary, Current and Earlier station chips | (unchanged) | Station ID on chips, Developer source card |
+| Debug | Not reachable | Not reachable | Whole screen (pops itself when the level drops) |
+
+## Design system
+
+The identity follows the website (`walkthru-earth.github.io`). Tokens live in
+`ui/theme/BrandTokens.kt` with the website role names (`main`, `ink`, `paper`, `surface`,
+`accent`, `deep`, `text`, `muted`, `border`), light and dark, copied from `lib/brand.ts`
+palette `sensing`. `BrandTokensTest` pins every value and checks text contrast on both themes.
+
+- **Colour.** `brandColorScheme` maps roles to Material 3. Light primary is the dark `ink` pill
+  on `paper`, dark primary is `main` blue with `ink` text. The brand scheme is the default on
+  every phone. Wallpaper dynamic colour stays off (identity first). Air-quality bands
+  (`AirMood.color()`) are a scientific metric scale, never brand colours. Ink on a band uses
+  `onColor()`, band-coloured text uses `textColorOnSurface()` and falls back to the text colour
+  where a band cannot reach 3:1 (yellow on light paper, dark red on dark paper).
+- **Type.** Quicksand (OFL variable TTF from google/fonts) for text, Cairo (OFL, from the
+  website) for Arabic-script locales and for display numbers, because Quicksand has
+  proportional digits and no `tnum` while Cairo's digits share one width. License texts ship in
+  `assets/licenses/`.
+- **Shape and components.** 32 dp card corners (`BrandCard`, tones Plain, Soft, Hero), pill
+  actions (`PillButton` with a trailing arrow, `OutlinePillButton`), `MoodPill`, `SignalBars`,
+  `TiltedBadge` (the website's -5 degree icon tilt, hero only).
+- **Mascot.** The peacock (`res/drawable-nodpi/peacock.webp`, from the website's
+  `public/mascots/`) is a guide on the welcome and no-device states (Devices), the all-synced
+  state (Files) and a clean Smart Sync run (Today). Never beside charts or numbers. It enters
+  with a finite fade that the system animator setting can turn off.
+
+## Route and screen split
+
+Today and Device are a stateful `XRoute` (ViewModel, one-off events through `CollectEvents`
+while STARTED, launchers, permissions, confirmation dialogs, settings sheet) and a stateless
+`XScreen(state, onAction)` with one file per card in `ui/device/cards/`. Previews in
+`ui/device/ScreenPreviews.kt` render light and dark at Simple and Developer from fake state.
+The Wi-Fi `connecting` poll lives in `DeviceViewModel`. Capability questions (sensor sticker,
+batch estimate, live profile, configurable) come from `DeviceCapabilities.from(info)` in
+`:core:history` `commonMain`, never from schema strings in the UI. The 1 Hz clock is read only
+by leaf texts (`TickingText`, `FreshnessLabel`), and the hero uses `rememberIsFresh`, which
+flips once when a reading goes stale.
 
 ## Destinations
 
 | Screen | Behaviour | Data path |
 | --- | --- | --- |
 | **Devices** (Home) | Scans for service UUID `c0a5e9f0-0001-…`, lists `AQ-xxxx` with RSSI + bond state, remembers known devices. Active controller rows show per-device connection/progress and open that controller. Each known device's card shows what the **phone archive** holds (files, last sync, last UTC day with valid readings as mood + average + coverage) — no link needed. ≥ 2 known devices → **Collect from all N devices** (one worker pass, LAN if discovered + token else bond, up to two concurrent devices, missing files only; each already-owned device is skipped). | `BleScanner`, `KnownDeviceDao`, `metric_bucket` DAY tier, `AutoSyncScheduler.collectAll` |
-| **Today** | Reviewed schema/dictionary profiles interpret CoreS3 board temperature and Waveshare ambient temperature/humidity. Unknown profiles retain file collection with an explanatory live placeholder. **Now card**: five-mood face (Canvas placeholder for the capybara), title, advice, comparison, PM2.5 labelled a 10-s snapshot, **Today so far** = the *local* day's weighted average + coverage from the hourly tier (re-evaluated every minute), or a nudge to set the time. Sensor state (warming up / stale / error) in words before any number. **Smart Sync** checks clock quality, applies the user's consent policy, downloads/verifies missing files and reports real/estimated/unplaceable readings plainly. **Devices** returns Home while retaining the connection; Disconnect closes only this device. Always: UTC state, **Set time from phone**, **Finalize buffered rows**, each explained. Detailed adds every measurement card + device card (`status.open`/`open_rg` only when present). | `live`/`status` pushes via repository, reviewed `LiveProfile` + `NowReading.of(live)`, `HistoryRepository` |
+| **Today** | Reviewed schema/dictionary profiles interpret CoreS3 board temperature and Waveshare ambient temperature/humidity. Unknown profiles retain file collection with an explanatory live placeholder. **Hero card** (`MetricHeroCard`, the primary registry metric): five-mood face on a tilted badge, big number with label and unit from `Metrics.primary`, mood pill, advice and comparison, labelled a 10 second snapshot, **Today so far** = the *local* day's weighted average + coverage from the hourly tier (re-evaluated every minute), or a nudge to set the time. Sensor state (warming up / stale / error) in words before any number. **Smart Sync** checks clock quality, applies the user's consent policy, downloads/verifies missing files and reports real/estimated/unplaceable readings plainly. **Devices** returns Home while retaining the connection; Disconnect closes only this device. Always: clock state and **Set time from phone**. Detailed adds **Finalize buffered rows**, every measurement card and the device card (`status.open`/`open_rg` only when present). | `live`/`status` pushes via repository, reviewed `LiveProfile` + `NowReading.of(live)`, `HistoryRepository` |
 
 For the reviewed Waveshare v2 dictionary, Today shows a separate **unvalidated batch estimate**
 when the board has opted in, its sticker is in the known batch, and a fresh valid particle count
@@ -73,7 +124,9 @@ state change, de-duplicated). Never derive it per screen from the session object
 | --- | --- |
 | `NavigationKeys.kt` | `Navigation.kt` entry providers, back-stack restore |
 | `DetailLevel` / `AppSettings` | every `detailed`/`advancedMode` collector; Debug visibility; Files table icon |
-| `NowCard.kt` / `AirMood` copy | Today, Home cards (same moods), iOS parity (`MoodFace` is replaced one-for-one) |
+| `ui/device/cards/MetricHeroCard.kt`, `components/MoodFace.kt`, mood copy in `strings.xml` | Today, Home cards (same moods), iOS parity (iOS still reads the copy in `AirMood`) |
+| `ui/theme/BrandTokens.kt` | Every screen, `BrandTokensTest` (website values and contrast) |
+| `DeviceCapabilities` (`:core:history`) | Today hero and batch card, Device sensor card, `setSensorIdentity` guard |
 | `BandColumnChart.kt`, `DayRing.kt`, `CalendarHeatmap.kt` | History and Files › Chart by file (share `Columns` + `HistoryColumn`) |
 | `ui/files/FileGrouping.kt` | Files list headers and per-row local time (pure: `zone`/`locale` parameters, `FileGroupingTest`); the firmware's `day=`/`data_HHMM_` naming in `../aq-parquet/docs/shared/telemetry-pipeline.md` is what it parses |
-| `DeviceScreen` confirmation dialogs | the **only** call path to `rebootAndReconnect()` — keep it that way ([sync-engine.md](sync-engine.md#state-changing-requests)) |
+| `DeviceRoute` confirmation dialogs | the **only** call path to `rebootAndReconnect()`. Keep it that way ([sync-engine.md](sync-engine.md#state-changing-requests)) |

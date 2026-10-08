@@ -19,6 +19,7 @@ import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.fake.FakeTransport
 import earth.walkthru.aqsync.data.history.ArchiveDayQuery
 import earth.walkthru.aqsync.data.history.ArchiveQueryResult
+import earth.walkthru.aqsync.data.history.DeviceCapabilities
 import earth.walkthru.aqsync.data.history.HistoryRepository
 import earth.walkthru.aqsync.data.history.Metrics
 import earth.walkthru.aqsync.data.history.TodaySoFar
@@ -60,7 +61,17 @@ data class TodayUiState(
     val archiveTime: ArchiveTimeSummary = ArchiveTimeSummary(),
     /** Today (local calendar day) for this station from the hourly tier, once the phone archive has timed rows for it. */
     val todaySoFar: TodaySoFar? = null,
-)
+    /** The last `GET_CONFIG` answer (the board's sensor opt-in for the batch estimate). */
+    val config: ConfigSnapshot? = null,
+    /** What this device can do, from `INFO` (shared mapping, no schema strings in the UI). */
+    val capabilities: DeviceCapabilities = DeviceCapabilities.NONE,
+) {
+    /** The particle reading (mood and PM2.5) applies to this device and sample. */
+    val showsParticles: Boolean get() = capabilities.showsParticles(live?.sample)
+
+    /** The board opted in to the unvalidated batch estimate and its dictionary is reviewed. */
+    val showsBatchEstimate: Boolean get() = capabilities.showsBatchEstimate(config?.config?.sensor?.batchCandidate)
+}
 
 @HiltViewModel(assistedFactory = TodayViewModel.Factory::class)
 class TodayViewModel @AssistedInject constructor(
@@ -81,7 +92,6 @@ class TodayViewModel @AssistedInject constructor(
     }
 
     val events: SharedFlow<DeviceEvent> = repository.events
-    val deviceConfig: StateFlow<ConfigSnapshot?> = repository.config
     private val dayStart = localDayStart().stateIn(viewModelScope, SharingStarted.Eagerly, currentDayStart())
 
     /**
@@ -105,6 +115,7 @@ class TodayViewModel @AssistedInject constructor(
     val uiState: StateFlow<TodayUiState> = combine(
         repository.session, repository.connectionState, repository.info, repository.status, repository.live, repository.sync,
         settings.detailLevel, repository.reconnecting, repository.activeTransport, todaySoFar, settings.clockSyncMode, repository.archiveTimeSummary, enrolledDevice, dayStart,
+        repository.config,
     ) { values ->
         val session = values[0] as earth.walkthru.aqsync.data.ble.DeviceSession?
         val info = values[2] as DeviceInfo?
@@ -128,6 +139,8 @@ class TodayViewModel @AssistedInject constructor(
             todaySoFar = today.forQuery(ArchiveDayQuery(info?.station, values[13] as Long, zone)),
             clockSyncMode = values[10] as ClockSyncMode,
             archiveTime = values[11] as ArchiveTimeSummary,
+            config = values[14] as ConfigSnapshot?,
+            capabilities = DeviceCapabilities.from(info),
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TodayUiState())
 

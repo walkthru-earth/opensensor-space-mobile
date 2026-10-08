@@ -20,6 +20,7 @@ import earth.walkthru.aqsync.data.ble.ConfigSnapshot
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.fake.FakeTransport
+import earth.walkthru.aqsync.data.history.DeviceCapabilities
 import earth.walkthru.aqsync.data.lan.LanDevice
 import earth.walkthru.aqsync.data.local.database.KnownDevice
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
@@ -29,16 +30,23 @@ import earth.walkthru.aqsync.data.protocol.ConfigPatch
 import earth.walkthru.aqsync.data.protocol.ConfigValidationException
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.protocol.PairMode
+import earth.walkthru.aqsync.data.protocol.WifiState
 import earth.walkthru.aqsync.data.settings.AppSettings
+import earth.walkthru.aqsync.data.settings.DetailLevel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asExecutor
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.stateIn
@@ -64,7 +72,7 @@ data class DeviceUiState(
     /** A file transfer is running on this session (interactive or worker-fed). */
     val syncRunning: Boolean = false,
     val isFake: Boolean = false,
-    val advancedMode: Boolean = false,
+    val detailLevel: DetailLevel = DetailLevel.SIMPLE,
     /** The phone has the companion-device feature (the "wake when nearby" setup can be offered). */
     val companionSupported: Boolean = false,
     /** A companion association request is in flight (system dialog pending or just launched). */
@@ -78,7 +86,11 @@ data class DeviceUiState(
 
     /** Unattended BLE needs a bond; LAN needs a stored token. Without either the switch would do nothing. */
     val autoSyncReachable: Boolean get() = known?.hasLanToken == true || bonded
-    val isV2: Boolean get() = (info?.proto ?: 1) >= 2
+
+    /** What this device can do, from `INFO` (shared mapping, no schema strings in the UI). */
+    val capabilities: DeviceCapabilities get() = DeviceCapabilities.from(info)
+    val advancedMode: Boolean get() = detailLevel.developer
+    val isV2: Boolean get() = capabilities.configurable
     val ready: Boolean get() = connection.isReady
     val canEdit: Boolean get() = ready && isV2 && !busy
 
@@ -115,10 +127,17 @@ class DeviceViewModel @AssistedInject constructor(
         fun create(deviceAddress: String): DeviceViewModel
     }
 
+    companion object {
+        const val WIFI_POLL_MS = 3_000L
+        const val WIFI_POLL_ATTEMPTS = 20
+    }
+
     private val localEvents = MutableSharedFlow<DeviceEvent>(extraBufferCapacity = 4)
 
-    /** System dialogs the screen must launch (`StartIntentSenderForResult`): the companion association confirm. */
-    val launchRequests = MutableSharedFlow<IntentSender>(extraBufferCapacity = 1)
+    private val _launchRequests = MutableSharedFlow<IntentSender>(extraBufferCapacity = 1)
+
+    /** System dialogs the route must launch (`StartIntentSenderForResult`), the companion association confirm. Read-only. */
+    val launchRequests: SharedFlow<IntentSender> = _launchRequests.asSharedFlow()
     private val companionBusy = MutableStateFlow(false)
 
     /** Set while a companion setup dropped a Bluetooth session that should come back afterwards. */
@@ -162,8 +181,8 @@ class DeviceViewModel @AssistedInject constructor(
         repository.wifiScan,
         lan,
         activity,
-        combine(settings.advancedMode, companionBusy) { a, b -> a to b },
-    ) { base, scan, (lanDevices, lanErr, known), (busy, syncRunning, transport), (advanced, companionBusy) ->
+        combine(settings.detailLevel, companionBusy) { a, b -> a to b },
+    ) { base, scan, (lanDevices, lanErr, known), (busy, syncRunning, transport), (level, companionBusy) ->
         base.copy(
             transport = transport,
             wifiScan = scan,
@@ -172,11 +191,29 @@ class DeviceViewModel @AssistedInject constructor(
             lanDiscoveryError = lanErr,
             busy = busy,
             syncRunning = syncRunning,
-            advancedMode = advanced,
+            detailLevel = level,
             companionSupported = companionPresence.supported && !base.isFake,
             companionBusy = companionBusy,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DeviceUiState())
+
+    init {
+        // While the device reports Wi-Fi `connecting` on a ready link, re-read the config every 3 s
+        // (up to a minute) so the card shows the join progress. This used to be a LaunchedEffect in
+        // the composable. It now lives with the screen's ViewModel and stops when the entry is popped.
+        viewModelScope.launch {
+            combine(repository.config, repository.connectionState) { config, conn ->
+                config?.config?.wifi?.wifiState == WifiState.CONNECTING && conn.isReady
+            }.distinctUntilChanged().collectLatest { polling ->
+                if (polling) {
+                    repeat(WIFI_POLL_ATTEMPTS) {
+                        delay(WIFI_POLL_MS)
+                        repository.refreshConfig()
+                    }
+                }
+            }
+        }
+    }
 
     fun refreshConfig() = repository.refreshConfig()
     fun disconnect() = repository.disconnect()
@@ -189,7 +226,7 @@ class DeviceViewModel @AssistedInject constructor(
             localEvents.tryEmit(DeviceEvent.Error("Enter the PMS5003T sticker as PMS5003T-YYYYMMDD plus its unit digits"))
             return
         }
-        if (!state.canEdit || state.syncRunning || state.info?.schema?.startsWith("waveshare-sim7670g-telemetry-") != true) {
+        if (!state.canEdit || state.syncRunning || !state.capabilities.sensorIdentity) {
             localEvents.tryEmit(DeviceEvent.Error("Connect to the Waveshare logger and wait for device tasks to finish"))
             return
         }
@@ -268,7 +305,7 @@ class DeviceViewModel @AssistedInject constructor(
                 addr,
                 Dispatchers.Main.asExecutor(),
                 onIntent = { sender ->
-                    if (!launchRequests.tryEmit(sender)) {
+                    if (!_launchRequests.tryEmit(sender)) {
                         finishCompanion(addr, "Could not open the system dialog")
                     }
                 },

@@ -65,6 +65,7 @@ fun FileMetricsScreen(
 ) {
     LaunchedEffect(station, name) { viewModel.load(station, name) }
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val level by viewModel.detailLevel.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -82,13 +83,13 @@ fun FileMetricsScreen(
                 WarningNote(s.message)
                 InfoNote("The archive copy is untouched: it was verified by size, CRC-32 and PAR1 magic when it was synced. Only the app's reader could not decode it.")
             }
-            is FileMetricsState.Loaded -> Loaded(s, padding)
+            is FileMetricsState.Loaded -> Loaded(s, padding, level.developer)
         }
     }
 }
 
 @Composable
-private fun Loaded(s: FileMetricsState.Loaded, padding: PaddingValues) {
+private fun Loaded(s: FileMetricsState.Loaded, padding: PaddingValues, developer: Boolean) {
     val idx = s.index
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(padding),
@@ -99,17 +100,19 @@ private fun Loaded(s: FileMetricsState.Loaded, padding: PaddingValues) {
             SectionCard("File") {
                 Text(s.name, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(8.dp))
-                StatLine("size", "${formatBytes(s.sizeBytes)} · footer ${formatBytes(s.footerBytes.toLong())}")
-                StatLine("rows", "${idx.rows} in ${idx.rowGroups} row group${if (idx.rowGroups == 1) "" else "s"}")
-                StatLine("columns", "${idx.columns} · codec ${s.codec ?: "—"}")
-                StatLine("schema", idx.schemaVersion ?: "—")
-                StatLine("writer", idx.createdBy ?: "—")
-                StatLine("statistics", if (s.columnOrders > 0) "min/max per column (v6)" else "null counts only (v1–v2)")
-                StatLine("index source", if (idx.fromStatistics) "footer statistics" else "decoded rows")
-                StatLine("decode time", "${s.decodeMillis} ms for every column")
+                StatLine("size", if (developer) "${formatBytes(s.sizeBytes)} · footer ${formatBytes(s.footerBytes.toLong())}" else formatBytes(s.sizeBytes))
+                StatLine("rows", if (developer) "${idx.rows} in ${idx.rowGroups} row group${if (idx.rowGroups == 1) "" else "s"}" else idx.rows.toString())
+                StatLine("columns", if (developer) "${idx.columns} · codec ${s.codec ?: "—"}" else idx.columns.toString())
+                if (developer) {
+                    StatLine("schema", idx.schemaVersion ?: "—")
+                    StatLine("writer", idx.createdBy ?: "—")
+                    StatLine("statistics", if (s.columnOrders > 0) "min/max per column (v6)" else "null counts only (v1 and v2)")
+                    StatLine("index source", if (idx.fromStatistics) "footer statistics" else "decoded rows")
+                    StatLine("decode time", "${s.decodeMillis} ms for every column")
+                }
                 if (!idx.isTelemetry) {
                     Spacer(Modifier.height(8.dp))
-                    WarningNote("purpose = ${idx.purpose}: a benchmark copy of duplicated rows. Excluded from History.")
+                    WarningNote("A benchmark copy of duplicated rows (purpose ${idx.purpose}). Excluded from History.")
                 }
             }
         }
@@ -120,15 +123,17 @@ private fun Loaded(s: FileMetricsState.Loaded, padding: PaddingValues) {
                     StatLine("first", idx.firstUtcNs?.let(::formatUtcNs) ?: "—")
                     StatLine("last", idx.lastUtcNs?.let(::formatUtcNs) ?: "—")
                 } else {
-                    StatLine("UTC", "none — the logger had no time anchor")
+                    StatLine("UTC", "none, the sensor had no clock")
                 }
-                StatLine("uptime span", "${idx.firstMonoUs?.let(::formatMonoUs) ?: "—"} → ${idx.lastMonoUs?.let(::formatMonoUs) ?: "—"}")
-                StatLine("sequence", "${idx.firstSeq ?: "—"} – ${idx.lastSeq ?: "—"}")
-                StatLine("PMS valid rows", "${idx.pmValidRows} of ${idx.rows}")
-                StatLine("boot", idx.bootId?.take(12)?.plus("…") ?: "—")
+                StatLine("valid particle rows", "${idx.pmValidRows} of ${idx.rows}")
+                if (developer) {
+                    StatLine("uptime span", "${idx.firstMonoUs?.let(::formatMonoUs) ?: "—"} → ${idx.lastMonoUs?.let(::formatMonoUs) ?: "—"}")
+                    StatLine("sequence", "${idx.firstSeq ?: "—"} to ${idx.lastSeq ?: "—"}")
+                    StatLine("boot", idx.bootId?.take(12)?.plus("…") ?: "—")
+                }
             }
         }
-        if (s.rowGroups.size > 1) {
+        if (developer && s.rowGroups.size > 1) {
             item(key = "groups") {
                 SectionCard("Row groups") {
                     s.rowGroups.forEach { g ->
@@ -160,23 +165,27 @@ private fun Loaded(s: FileMetricsState.Loaded, padding: PaddingValues) {
                     Cell(c.min, 1.4f)
                     Cell(c.max, 1.4f)
                 }
-                val sub = buildString {
-                    append(c.type.name.lowercase())
-                    if (c.timestamp) append(" · timestamp ns UTC")
-                    if (c.first != "—") append(" · first ${c.first} · last ${c.last}")
-                    if (c.statsMin != null && c.statsMax != null) {
-                        append(if (c.statsMin == c.min && c.statsMax == c.max) " · footer agrees" else " · footer says ${c.statsMin}–${c.statsMax}")
+                if (developer) {
+                    val sub = buildString {
+                        append(c.type.name.lowercase())
+                        if (c.timestamp) append(" · timestamp ns UTC")
+                        if (c.first != "—") append(" · first ${c.first} · last ${c.last}")
+                        if (c.statsMin != null && c.statsMax != null) {
+                            append(if (c.statsMin == c.min && c.statsMax == c.max) " · footer agrees" else " · footer says ${c.statsMin}–${c.statsMax}")
+                        }
                     }
+                    Text(sub, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                Text(sub, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
-        item(key = "metadata") {
-            SectionCard("File metadata", modifier = Modifier.padding(top = 8.dp)) {
-                s.metadata.entries.sortedBy { it.key }.forEach { (k, v) ->
-                    Text(k, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(v, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
-                    Spacer(Modifier.height(4.dp))
+        if (developer) {
+            item(key = "metadata") {
+                SectionCard("File metadata", modifier = Modifier.padding(top = 8.dp)) {
+                    s.metadata.entries.sortedBy { it.key }.forEach { (k, v) ->
+                        Text(k, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(v, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                        Spacer(Modifier.height(4.dp))
+                    }
                 }
             }
         }

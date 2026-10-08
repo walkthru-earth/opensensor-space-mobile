@@ -36,19 +36,27 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import earth.walkthru.aqsync.data.ReconnectState
 import earth.walkthru.aqsync.data.ble.BleConnectionFailure
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.TransportKind
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.withContext
 import java.util.Locale
 
 fun formatBytes(bytes: Long): String = when {
@@ -85,7 +93,11 @@ fun formatUptime(seconds: Long): String {
     }
 }
 
-/** A clock that ticks once a second so "updated N s ago" stays honest. */
+/**
+ * A clock that ticks once a second so "updated N s ago" stays honest. Read it only inside the leaf
+ * that prints the age (see [TickingText]): a read at screen level recomposes the whole screen at
+ * 1 Hz.
+ */
 @Composable
 fun rememberNowMillis(periodMs: Long = 1000): Long {
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -96,6 +108,34 @@ fun rememberNowMillis(periodMs: Long = 1000): Long {
         }
     }
     return now
+}
+
+/** A leaf text that re-renders once a second with the current time, so its parent does not. */
+@Composable
+fun TickingText(
+    text: (nowMs: Long) -> String,
+    modifier: Modifier = Modifier,
+    style: TextStyle = MaterialTheme.typography.labelSmall,
+    color: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    maxLines: Int = 1,
+) {
+    val now = rememberNowMillis()
+    Text(text(now), modifier = modifier, style = style, color = color, maxLines = maxLines, overflow = TextOverflow.Ellipsis)
+}
+
+/**
+ * Collect one-off UI events only while the screen is at least STARTED: a snackbar or a system dialog
+ * is never fired at a stopped activity. Events are buffered by the producer's `extraBufferCapacity`.
+ */
+@Composable
+fun <T> CollectEvents(events: Flow<T>, onEvent: suspend (T) -> Unit) {
+    val owner = LocalLifecycleOwner.current
+    val latest by rememberUpdatedState(onEvent)
+    LaunchedEffect(events, owner) {
+        owner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            withContext(Dispatchers.Main.immediate) { events.collect { latest(it) } }
+        }
+    }
 }
 
 /**
@@ -130,21 +170,30 @@ fun StatusDot(color: Color, modifier: Modifier = Modifier, size: Int = 10) {
     )
 }
 
-/** Human description of the link state, with the pairing hint where it matters. */
-fun ConnectionState.describe(): String = when (this) {
+/**
+ * Human description of the link state, with the pairing hint where it matters. Link internals such
+ * as the negotiated MTU appear only when [technical] is set (Developer level).
+ */
+fun ConnectionState.describe(technical: Boolean = false): String = when (this) {
     ConnectionState.Disconnected -> "Not connected"
     ConnectionState.Connecting -> "Connecting…"
-    ConnectionState.DiscoveringServices -> "Discovering services…"
-    ConnectionState.Bonding -> "Pairing — enter the 6-digit code shown on the device"
-    ConnectionState.NegotiatingMtu -> "Negotiating MTU…"
-    ConnectionState.EnablingNotifications -> "Enabling notifications…"
-    ConnectionState.Authenticating -> "Authenticating on the LAN…"
-    is ConnectionState.Ready -> "Connected · MTU $mtu"
-    is ConnectionState.Failed -> "Failed: $reason"
+    ConnectionState.DiscoveringServices -> if (technical) "Discovering services…" else "Connecting…"
+    ConnectionState.Bonding -> "Pairing. Enter the 6-digit code shown on the device"
+    ConnectionState.NegotiatingMtu -> if (technical) "Negotiating MTU…" else "Setting up the link…"
+    ConnectionState.EnablingNotifications -> if (technical) "Enabling notifications…" else "Setting up the link…"
+    ConnectionState.Authenticating -> if (technical) "Authenticating on the LAN…" else "Checking this phone on your Wi-Fi…"
+    is ConnectionState.Ready -> if (technical) "Connected, MTU $mtu" else "Connected"
+    // A pairing repair message is plain language and says what to do, so every level shows it.
+    is ConnectionState.Failed -> if (technical || BleConnectionFailure.needsPairingRepair(this)) reason else "Could not connect. Move closer and try again"
 }
 
 @Composable
-fun ConnectionBanner(state: ConnectionState, modifier: Modifier = Modifier, reconnecting: ReconnectState? = null) {
+fun ConnectionBanner(
+    state: ConnectionState,
+    modifier: Modifier = Modifier,
+    reconnecting: ReconnectState? = null,
+    technical: Boolean = false,
+) {
     val context = LocalContext.current
     val (container, content) = when (state) {
         is ConnectionState.Ready -> MaterialTheme.colorScheme.surfaceContainer to MaterialTheme.colorScheme.onSurface
@@ -167,10 +216,14 @@ fun ConnectionBanner(state: ConnectionState, modifier: Modifier = Modifier, reco
             }
             Spacer(Modifier.width(12.dp))
             Column {
-                Text(state.describe(), style = MaterialTheme.typography.bodyMedium)
+                Text(state.describe(technical), style = MaterialTheme.typography.bodyMedium)
                 if (reconnecting != null) {
                     Text(
-                        "Link lost (${reconnecting.reason}). Reconnecting automatically, attempt ${reconnecting.attempt} of ${reconnecting.maxAttempts}…",
+                        if (technical) {
+                            "Link lost (${reconnecting.reason}). Reconnecting automatically, attempt ${reconnecting.attempt} of ${reconnecting.maxAttempts}…"
+                        } else {
+                            "Link lost. Reconnecting by itself…"
+                        },
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
