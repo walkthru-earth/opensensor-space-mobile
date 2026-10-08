@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copy owned by the shared components. Plain words, no long dashes, colons or semicolons. -->
+<resources>
+    <!-- InfoButton content description, the argument is the topic. -->
+    <string name="info_more">More about %1$s</string>
+    <!-- SignalBars content description, the argument is 1 to 4. -->
+    <string name="signal_bars">Signal %1$d of 4</string>
+</resources>
