@@ -29,9 +29,25 @@ advertising and mDNS names; the app rebrand does not change them.
 `DeviceConnectionManager` owns one controller per enrolled public Bluetooth endpoint. Each has
 its own session, reconnect, manifest and sync state; selecting another device does not close it.
 `DeviceIdentityClaims` refuses a second active controller claiming the same full hardware ID, so
-two apparent endpoints cannot race one physical device's single open-file slot. Operations remain
+two apparent endpoints cannot create duplicate collection sessions for one physical device on the same phone. Operations remain
 serialized within each GATT pipe and each session. LAN transfers hold independent leases on a
 shared `LanWifiLock`; the last transfer releases it.
+
+## Concurrent Wi-Fi collection
+
+The shared firmware supports up to three LAN clients per sensor alongside its
+single BLE connection. Each phone has an independent file handle and offsets;
+one phone connecting or opening a file does not disconnect another. A full
+sensor returns busy instead of replacing an active phone. Each phone still
+obtains its LAN token through Bluetooth pairing once, then reconnects over the
+same local Wi-Fi without internet.
+
+Android already keeps separate controllers for several sensors and limits
+concurrent file transfers to two per phone. Its existing framed TCP transport
+uses the same protocol with the firmware's multi-client pool. iOS collection
+support and its validation scope are documented in [ios-migration.md](ios-migration.md).
+Real multi-phone/multi-sensor throughput and radio behavior require phone and
+board qualification; host tests alone do not establish these results.
 
 ## Side by side
 

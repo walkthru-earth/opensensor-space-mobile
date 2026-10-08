@@ -43,6 +43,38 @@ class CompanionState {
     internal var lanMessage by mutableStateOf("Find sensors connected to the same Wi-Fi network.")
         private set
 
+    internal var wifiAccessAvailable by mutableStateOf(false)
+        private set
+    internal var wifiAccessBusy by mutableStateOf(false)
+        private set
+    internal var wifiAccessMessage by mutableStateOf("")
+        private set
+    internal var lanSessions by mutableStateOf<Map<String, LanSessionState>>(emptyMap())
+        private set
+
+    fun wifiAccessChanged(available: Boolean, busy: Boolean, explanation: String) {
+        wifiAccessAvailable = available
+        wifiAccessBusy = busy
+        wifiAccessMessage = explanation
+    }
+
+    /** Native sessions are independent: a callback updates only its own sensor card. */
+    fun lanSessionChanged(name: String, connected: Boolean, busy: Boolean, message: String, filesDone: Int, filesTotal: Int, bytesDone: Long) {
+        lanSessions = lanSessions + (name to LanSessionState(connected, busy, message, filesDone, filesTotal, bytesDone))
+    }
+
+    internal var lanReadings by mutableStateOf<Map<String, NowReading>>(emptyMap())
+        private set
+
+    fun lanReadingReceived(name: String, json: String) {
+        val sample = runCatching { LiveSample.parse(json) }.getOrNull()
+        lanReadings = lanReadings + (name to NowReading.of(sample))
+    }
+
+    fun lanReadingExpired(name: String) {
+        lanReadings = lanReadings - name
+    }
+
     // Export strings through this facade; platform adapters do not duplicate the wire contract.
     val lanServiceType: String get() = LanProtocol.SERVICE_TYPE
     val serviceUuid: String get() = AqGatt.SERVICE
@@ -157,3 +189,5 @@ class CompanionState {
         message = explanation
     }
 }
+
+internal data class LanSessionState(val connected: Boolean, val busy: Boolean, val message: String, val filesDone: Int, val filesTotal: Int, val bytesDone: Long)

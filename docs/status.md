@@ -9,8 +9,9 @@
 The Android app implements multi-device collection, station-epoch recovery and reviewed sensor
 profiles; its latest recorded phone checks cover one-file BLE sync and navigation/resume, with
 multi-device, LAN and background qualifications outstanding. The iOS app shares protocol and
-sensor rules and has a dated iPhone live-reading check plus Bonjour discovery observation; archive,
-LAN transfer and background collection are not implemented there. See [opensensor-space.md](opensensor-space.md)
+sensor rules and has a dated iPhone BLE live-reading check plus Bonjour discovery observation.
+Authenticated foreground LAN collection, concurrent sensor sessions and verified local archives now
+have host/simulator/build checks; their real-phone qualification and background collection remain outstanding. See [opensensor-space.md](opensensor-space.md)
 and [ios-migration.md](ios-migration.md). Android, iOS simulator, and iPhone evidence are recorded
 separately in the platform records and the relevant firmware board bench files.
 
@@ -269,14 +270,44 @@ captured wire trace or a comparison of values with the board. The corresponding
 [CoreS3 bench note](../../aq-parquet/docs/boards/m5stack-cores3/bench-verified.md#2026-10-08--first-ios-companion-phone-observation)
 records the evidence and its limits. A fresh pairing/PIN flow, notification
 cadence, STATUS updates, stale timeout and foreground/background behavior still
-need qualification. The first iOS app is a foreground live reader only:
+need qualification. At that first-stage commit, the iOS app was a foreground live reader only:
 Bonjour discovery is implemented with an explicit **Find Wi-Fi sensors** action,
 `NSLocalNetworkUsageDescription` and the `_aqsync._tcp` entry in `NSBonjourServices`.
 The browse stays active while iOS asks for permission; denial and unavailable Wi-Fi
 are not confused with Bluetooth failure. The shared LAN envelope/handshake now
 also compile for iOS. A discovered sensor name is confirmed by the phone
 screenshot; the Local Network prompt itself and allow/deny/revoke behavior were
-not reported. Wi-Fi result cards are discovery-only, with no connection action.
-Parquet archive download, offline history, exports,
-authenticated LAN transfers and automatic background collection have not been ported. Minimum app deployment target is iOS 18.5;
+not reported. At that commit, Wi-Fi result cards were discovery-only with no connection action;
+Parquet archive download, offline history, exports, authenticated LAN transfers and automatic
+background collection were not implemented. The later Wi-Fi implementation is recorded below. Minimum app deployment target is iOS 18.5;
 this stage includes Apple Silicon simulator and physical iPhone targets.
+
+
+## 2026-10-08 — iOS authenticated Wi-Fi collection implemented
+
+The foreground iOS app now supports explicit BLE **Save Wi-Fi access** (`GET_TOKEN`),
+device-only Keychain credentials, Bonjour TXT/endpoint discovery and independent authenticated
+LAN sessions. Wi-Fi cards expose Connect, Sync and Cancel/Disconnect, with per-sensor live
+PM2.5 and collection progress. Two sensors can transfer concurrently on one phone. The TCP
+reader separates pushes from file replies and bounds buffering; a STATUS keepalive follows
+120 seconds without outgoing phone traffic, independently of received LIVE pushes. Backgrounding
+closes all connections. Returning to the foreground requires an explicit reconnect/sync.
+
+Verified Parquet files are retained in Application Support under station/original relative path.
+Partial files resume only for the same size/CRC identity. Size, streamed CRC-32 and PAR1 checks
+must pass before immutable finalization; unsafe paths, foreign handles, wrong offsets, malformed
+READ_END and conflicting finalized archives fail without replacing saved data. Native I/O and
+CRC work run on a separate archive actor.
+
+Validation on 2026-10-08: `./gradlew --no-daemon verify verifyIos` passed, the unsigned Xcode
+Debug simulator and unsigned Release device builds passed, and `./ios/tests/verify-native.sh` passed against the production
+Swift archive/transfer engine. New shared tests cover request/frame codec bridging, token
+redaction, identity validation and independent per-sensor presentation state. Native tests cover
+resume, CRC failure, immutable conflict, traversal/symlink rejection, foreign handles,
+READ_END consistency, two concurrent stations, hardware claims retained through cancellation,
+and outbound keepalive timing.
+These are host/simulator/build results, not a new iPhone radio observation. BLE GET_TOKEN,
+Keychain persistence, LAN live/collection, cancellation/background/resume and multi-phone
+behavior need dated phone runs. Offline archive charts, export UI and automatic background
+collection remain unimplemented on iOS. The preceding first-stage iPhone observation applies
+only to the older BLE live-reading and Bonjour-discovery app.

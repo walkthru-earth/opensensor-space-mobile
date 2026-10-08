@@ -22,7 +22,7 @@ import earth.walkthru.aqsync.data.history.NowReading
 import kotlin.math.round
 
 @Composable
-internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (String) -> Unit, disconnect: () -> Unit, scanLan: () -> Unit) {
+internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (String) -> Unit, disconnect: () -> Unit, scanLan: () -> Unit, saveWifiAccess: () -> Unit, connectLan: (String) -> Unit, syncLan: (String) -> Unit, disconnectLan: (String) -> Unit) {
     MaterialTheme {
         Surface(Modifier.fillMaxSize()) {
             LazyColumn(
@@ -61,6 +61,16 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
                             }
                         }
                     }
+                    item {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (state.wifiAccessAvailable) {
+                                OutlinedButton(onClick = saveWifiAccess, enabled = !state.wifiAccessBusy) {
+                                    Text(if (state.wifiAccessBusy) "Saving access…" else "Save Wi-Fi access")
+                                }
+                                Text(state.wifiAccessMessage, style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
                     item { OutlinedButton(onClick = disconnect) { Text("Disconnect") } }
                 } else {
                     item {
@@ -87,16 +97,34 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
                         Text(if (state.lanScanning) "Looking on Wi-Fi…" else "Find Wi-Fi sensors")
                     }
                 }
-                items(state.lanDevices, key = { it }) { name ->
+                items((state.lanDevices + state.lanSessions.keys).distinct().sorted(), key = { it }) { name ->
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp)) {
                             Text(name, style = MaterialTheme.typography.titleMedium)
-                            Text("Found on your local network")
+                            (state.lanReadings[name] as? NowReading.Reading)?.let { reading ->
+                                Text("${number(reading.pm25)} µg/m³ · PM2.5 · ${reading.mood.title}")
+                            }
+                            val session = state.lanSessions[name]
+                            Text(session?.message ?: "Found on your local network. Save Wi-Fi access over Bluetooth first.")
+                            if (session?.busy == true && session.filesTotal > 0) {
+                                Text("${session.filesDone}/${session.filesTotal} files · ${session.bytesDone} bytes in current file")
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                if (session?.connected == true) {
+                                    Button(onClick = { syncLan(name) }, enabled = !session.busy) { Text("Sync") }
+                                    OutlinedButton(onClick = { disconnectLan(name) }) { Text(if (session.busy) "Cancel" else "Disconnect") }
+                                } else {
+                                    Button(onClick = { connectLan(name) }, enabled = session?.busy != true && name in state.lanDevices) { Text("Connect") }
+                                    if (session?.busy == true) {
+                                        OutlinedButton(onClick = { disconnectLan(name) }) { Text("Cancel") }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
                 item {
-                    Text("This iOS preview shows live readings over Bluetooth. Wi-Fi discovery is available; Wi-Fi transfers and archived history are not available yet.", style = MaterialTheme.typography.bodySmall)
+                    Text("Pair over Bluetooth once per phone and save Wi-Fi access. Connect sensors on the same Wi-Fi to collect their Parquet files. Two sensors can sync at once. Keep the app open during collection; files remain available on this phone. Archived history charts are not available yet.", style = MaterialTheme.typography.bodySmall)
                 }
             }
         }

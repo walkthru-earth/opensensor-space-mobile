@@ -116,6 +116,8 @@ jobs:
             xcrun simctl list runtimes
             java -version
           } 2>&1 | tee ios/build/ci/toolchain.log
+      - name: Run native archive and transfer checks
+        run: ios/tests/verify-native.sh 2>&1 | tee ios/build/ci/native-tests.log
       - name: Run shared Kotlin tests on iOS simulator
         run: ./gradlew --no-daemon --stacktrace verifyIos 2>&1 | tee ios/build/ci/kotlin-tests.log
       - name: Build unsigned simulator app

@@ -36,6 +36,22 @@ class CompanionStateTest {
         assertIs<NowReading.Reading>(state.reading)
     }
 
+    @Test fun independentLanSessionsAndLiveReadingsNeverOverwriteEachOther() {
+        val state = CompanionState()
+        state.lanSessionChanged("a", true, true, "syncing", 1, 4, 100)
+        state.lanSessionChanged("b", true, false, "ready", 0, 0, 0)
+        state.lanReadingReceived("a", "{\"pms\":4,\"pm25\":12.0}")
+        state.lanReadingReceived("b", "{\"pms\":4,\"pm25\":22.0}")
+        assertTrue(state.lanSessions.getValue("a").busy)
+        assertFalse(state.lanSessions.getValue("b").busy)
+        assertEquals(12.0, (state.lanReadings.getValue("a") as NowReading.Reading).pm25)
+        state.lanReadingExpired("a")
+        assertFalse("a" in state.lanReadings)
+        assertEquals(22.0, (state.lanReadings.getValue("b") as NowReading.Reading).pm25)
+        state.lanReadingReceived("b", "bad JSON")
+        assertEquals(NowReading.Waiting, state.lanReadings["b"])
+    }
+
     private fun connected(): CompanionState = CompanionState().also {
         it.connectionStarted("device")
         assertTrue(it.receiveInfo("{\"proto\":2,\"dev\":\"112233445566\"}"))

@@ -79,6 +79,7 @@ and the [Xcode 27 image inventory](https://github.com/actions/runner-images/blob
 | `setup-gradle` with `cache-provider: basic` | Owns Gradle caching and wrapper validation, using standard GitHub caching. Do not also enable Gradle caching in `setup-java`. |
 | Separate `~/.konan` cache | Reuses the native compiler/dependencies, keyed by architecture, Xcode and dependency/build definitions. No DerivedData cache. |
 | Two Gradle workers | Limits simultaneous native compilation on the standard runner's 7 GB RAM. |
+| `ios/tests/verify-native.sh` | Compiles the production Swift archive/transfer engine into a host harness; checks resume, CRC/PAR1, immutable conflicts, peer handles, concurrent stations and keepalive policy. No radio or UI qualification. |
 | `verifyIos` | Runs protocol, history and presentation common tests on the iOS simulator and links the Debug framework. |
 | Xcode Debug simulator build | Compiles Swift adapters, app entry point and the Compose framework through the existing direct-integration build phase. |
 | Xcode Release device build, signing disabled | Checks optimized Kotlin and Swift for device ARM64. Catches failures hidden by Debug/simulator builds; produces no distributable IPA. |

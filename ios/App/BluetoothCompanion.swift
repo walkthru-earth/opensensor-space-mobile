@@ -3,8 +3,18 @@ import Foundation
 import OpenSensorShared
 
 /// Foreground-only BLE reader. Core Bluetooth owns pairing; no firmware-changing requests are sent.
-final class BluetoothCompanion: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
+@MainActor
+final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelegate, @preconcurrency CBPeripheralDelegate
+{
     let state = CompanionState()
+    private let wire = SyncWire()
+    private let credentials = LanCredentials()
+    private var control: CBCharacteristic?
+    private var response: CBCharacteristic?
+    private var identity: SyncIdentity?
+    private var tokenTimer: Timer?
+    private var requestingToken = false
+    var onCredentialSaved: (() -> Void)?
     private var central: CBCentralManager!
     private var discovered: [String: CBPeripheral] = [:]
     private var current: CBPeripheral?
@@ -18,9 +28,11 @@ final class BluetoothCompanion: NSObject, CBCentralManagerDelegate, CBPeripheral
     private enum Operation {
         case read(CBCharacteristic)
         case subscribe(CBCharacteristic)
+        case write(CBCharacteristic, Data)
         var characteristic: CBCharacteristic {
             switch self {
-            case .read(let characteristic), .subscribe(let characteristic): return characteristic
+            case .read(let characteristic), .subscribe(let characteristic), .write(let characteristic, _):
+                return characteristic
             }
         }
     }
@@ -36,7 +48,9 @@ final class BluetoothCompanion: NSObject, CBCentralManagerDelegate, CBPeripheral
         discovered.removeAll()
         state.scanStarted()
         central.scanForPeripherals(withServices: [CBUUID(string: state.serviceUuid)])
-        scanTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: false) { [weak self] _ in self?.stopScan() }
+        scanTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: false) { [weak self] _ in
+            Task { @MainActor in self?.stopScan() }
+        }
     }
 
     private func stopScan() {
@@ -53,7 +67,9 @@ final class BluetoothCompanion: NSObject, CBCentralManagerDelegate, CBPeripheral
         peripheral.delegate = self
         state.connectionStarted(id: id)
         connectionTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: false) { [weak self] _ in
-            self?.disconnect(message: "Connection timed out. Keep the sensor nearby and try again.")
+            Task { @MainActor in
+                self?.disconnect(message: "Connection timed out. Keep the sensor nearby and try again.")
+            }
         }
         central.connect(peripheral)
     }
@@ -63,6 +79,13 @@ final class BluetoothCompanion: NSObject, CBCentralManagerDelegate, CBPeripheral
         freshnessTimer?.invalidate()
         connectionTimer = nil
         freshnessTimer = nil
+        tokenTimer?.invalidate()
+        tokenTimer = nil
+        requestingToken = false
+        identity = nil
+        control = nil
+        response = nil
+        state.wifiAccessChanged(available: false, busy: false, explanation: "")
         operations.removeAll()
         pending = nil
         if let peripheral = current {
@@ -97,8 +120,10 @@ final class BluetoothCompanion: NSObject, CBCentralManagerDelegate, CBPeripheral
         state.bluetoothChanged(available: central.state == .poweredOn, explanation: message)
     }
 
-    func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral,
-                        advertisementData: [String: Any], rssi RSSI: NSNumber) {
+    func centralManager(
+        _ central: CBCentralManager, didDiscover peripheral: CBPeripheral,
+        advertisementData: [String: Any], rssi RSSI: NSNumber
+    ) {
         guard foreground, current == nil else { return }
         let id = peripheral.identifier.uuidString
         discovered[id] = peripheral
@@ -107,7 +132,10 @@ final class BluetoothCompanion: NSObject, CBCentralManagerDelegate, CBPeripheral
     }
 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
-        guard current === peripheral, foreground else { central.cancelPeripheralConnection(peripheral); return }
+        guard current === peripheral, foreground else {
+            central.cancelPeripheralConnection(peripheral)
+            return
+        }
         peripheral.discoverServices([CBUUID(string: state.serviceUuid)])
     }
 
@@ -123,24 +151,75 @@ final class BluetoothCompanion: NSObject, CBCentralManagerDelegate, CBPeripheral
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         guard current === peripheral else { return }
-        guard error == nil, let service = peripheral.services?.first(where: { $0.uuid == CBUUID(string: state.serviceUuid) }) else {
-            disconnect(message: "The AQ Sync service could not be opened."); return
+        guard error == nil,
+            let service = peripheral.services?.first(where: { $0.uuid == CBUUID(string: state.serviceUuid) })
+        else {
+            disconnect(message: "The AQ Sync service could not be opened.")
+            return
         }
-        peripheral.discoverCharacteristics([CBUUID(string: state.infoUuid), CBUUID(string: state.liveUuid), CBUUID(string: state.statusUuid)], for: service)
+        peripheral.discoverCharacteristics(
+            [
+                CBUUID(string: state.infoUuid), CBUUID(string: state.liveUuid), CBUUID(string: state.statusUuid),
+                CBUUID(string: wire.controlUuid), CBUUID(string: wire.responseUuid),
+            ], for: service)
     }
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
         guard current === peripheral else { return }
         let characteristics = service.characteristics ?? []
         guard error == nil,
-              let info = characteristics.first(where: { $0.uuid == CBUUID(string: state.infoUuid) }),
-              let live = characteristics.first(where: { $0.uuid == CBUUID(string: state.liveUuid) }),
-              let status = characteristics.first(where: { $0.uuid == CBUUID(string: state.statusUuid) }),
-              info.properties.contains(.read), live.properties.contains([.read, .notify]), status.properties.contains([.read, .notify]) else {
-            disconnect(message: "This sensor is missing the required live-reading characteristics."); return
+            let info = characteristics.first(where: { $0.uuid == CBUUID(string: state.infoUuid) }),
+            let live = characteristics.first(where: { $0.uuid == CBUUID(string: state.liveUuid) }),
+            let status = characteristics.first(where: { $0.uuid == CBUUID(string: state.statusUuid) }),
+            info.properties.contains(.read), live.properties.contains([.read, .notify]),
+            status.properties.contains([.read, .notify])
+        else {
+            disconnect(message: "This sensor is missing the required live-reading characteristics.")
+            return
         }
+        control = characteristics.first(where: {
+            $0.uuid == CBUUID(string: wire.controlUuid) && $0.properties.contains(.write)
+        })
+        response = characteristics.first(where: {
+            $0.uuid == CBUUID(string: wire.responseUuid) && $0.properties.contains(.notify)
+        })
         // Serialize discovery follow-up, encrypted subscription and reads through their delegate callbacks.
         operations = [.read(info), .subscribe(live), .read(live), .subscribe(status), .read(status)]
+        performNext()
+    }
+
+    func saveWifiAccess() {
+        guard foreground, let peripheral = current, let control, let response, identity != nil,
+            pending == nil, operations.isEmpty, !requestingToken,
+            peripheral.maximumWriteValueLength(for: .withResponse) >= 1
+        else { return }
+        requestingToken = true
+        state.wifiAccessChanged(available: true, busy: true, explanation: "Saving Wi-Fi access…")
+        operations = [.subscribe(response), .write(control, Data(wireHex: wire.tokenRequest())!)]
+        tokenTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                self?.disconnect(message: "Wi-Fi access timed out. Reconnect over Bluetooth and try again.")
+            }
+        }
+        performNext()
+    }
+
+    private func finishTokenRequest(_ explanation: String) {
+        requestingToken = false
+        tokenTimer?.invalidate()
+        tokenTimer = nil
+        state.wifiAccessChanged(available: true, busy: false, explanation: explanation)
+    }
+
+    func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
+        guard current === peripheral, case .write(let expected, _) = pending, expected === characteristic else {
+            return
+        }
+        if error != nil {
+            disconnect(message: "Wi-Fi access could not be requested. Check pairing and try again.")
+            return
+        }
+        pending = nil
         performNext()
     }
 
@@ -151,13 +230,17 @@ final class BluetoothCompanion: NSObject, CBCentralManagerDelegate, CBPeripheral
         switch operation {
         case .read(let characteristic): peripheral.readValue(for: characteristic)
         case .subscribe(let characteristic): peripheral.setNotifyValue(true, for: characteristic)
+        case .write(let characteristic, let data): peripheral.writeValue(data, for: characteristic, type: .withResponse)
         }
     }
 
-    func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?) {
+    func peripheral(
+        _ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?
+    ) {
         guard current === peripheral else { return }
         guard error == nil, characteristic.isNotifying else {
-            disconnect(message: "Notifications could not be enabled. Check the pairing PIN and try again."); return
+            disconnect(message: "Notifications could not be enabled. Check the pairing PIN and try again.")
+            return
         }
         if case .subscribe(let expected) = pending, expected === characteristic {
             pending = nil
@@ -167,16 +250,44 @@ final class BluetoothCompanion: NSObject, CBCentralManagerDelegate, CBPeripheral
 
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
         guard current === peripheral, foreground else { return }
+        if characteristic.uuid == CBUUID(string: wire.responseUuid) {
+            guard requestingToken, error == nil, let data = characteristic.value,
+                let reply = wire.decode(hex: data.wireHex)
+            else { return }
+            if reply.kind == "token", let identity, let token = Data(wireHex: reply.dataHex) {
+                do {
+                    try credentials.save(
+                        LanCredential(
+                            station: identity.station, device: identity.device,
+                            peripheral: peripheral.identifier.uuidString, token: token, port: Int(reply.port)))
+                    finishTokenRequest("Wi-Fi access saved on this phone. Find this sensor on Wi-Fi to sync.")
+                    onCredentialSaved?()
+                } catch { finishTokenRequest("Wi-Fi access could not be saved securely. Try again.") }
+            } else {
+                finishTokenRequest("The sensor rejected Wi-Fi access. Check pairing and try again.")
+            }
+            return
+        }
         guard error == nil, let data = characteristic.value, let json = String(data: data, encoding: .utf8) else {
-            disconnect(message: "The sensor could not be read. Check the pairing PIN and try again."); return
+            disconnect(message: "The sensor could not be read. Check the pairing PIN and try again.")
+            return
         }
         switch characteristic.uuid {
         case CBUUID(string: state.infoUuid):
-            guard state.receiveInfo(json: json) else { disconnect(message: "Unsupported or invalid sensor information."); return }
+            guard state.receiveInfo(json: json) else {
+                disconnect(message: "Unsupported or invalid sensor information.")
+                return
+            }
+            identity = wire.identity(json: json)
+            state.wifiAccessChanged(
+                available: identity != nil && control != nil && response != nil, busy: false,
+                explanation: "Save access once over Bluetooth before using Wi-Fi on this phone.")
         case CBUUID(string: state.liveUuid):
             state.receiveLive(json: json)
             freshnessTimer?.invalidate()
-            freshnessTimer = Timer.scheduledTimer(withTimeInterval: 35, repeats: false) { [weak self] _ in self?.state.readingExpired() }
+            freshnessTimer = Timer.scheduledTimer(withTimeInterval: 35, repeats: false) { [weak self] _ in
+                Task { @MainActor in self?.state.readingExpired() }
+            }
         case CBUUID(string: state.statusUuid): state.receiveStatus(json: json)
         default: return
         }

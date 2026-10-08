@@ -3,8 +3,9 @@
 Mobile companion for devices running the shared
 [`aq-parquet`](../aq-parquet) sync contract. Android connects multiple devices over Bluetooth
 LE or local Wi-Fi/LAN, collects immutable **Parquet** files into a verified local archive, and
-supports offline history. iOS currently discovers and connects one device for live readings,
-using the same protocol and reviewed sensor rules. Reviewed live profiles cover M5Stack CoreS3
+supports offline history. iOS supports one BLE live-reading connection and independent
+Wi-Fi sessions for several sensors, collecting verified local Parquet archives with
+the same protocol and reviewed sensor rules. Reviewed live profiles cover M5Stack CoreS3
 and Waveshare ESP32-S3-SIM7670G V2; Android can archive other schemas without guessing their
 live meanings.
 
@@ -15,14 +16,15 @@ over the bonded BLE link). Cloud backup or sharing is a *later, opt-in* step, of
 `INTERNET` is declared **only so LAN sockets exist**; the code connects exclusively to addresses
 from mDNS discovery of `_aqsync._tcp`. No cloud endpoint, no location permission, no analytics, no
 accounts. Android data leaves the phone through the share sheet or the file picker. iOS currently
-uses foreground BLE and Bonjour discovery; its archive and LAN transfer are not implemented.
+uses foreground BLE, Bonjour-discovered authenticated LAN sessions and verified local
+archives. Its history/export UI and background collection remain migration work.
 
 ## Platform status
 
 | Platform | Current scope | Verification |
 | --- | --- | --- |
 | Android | Multi-device BLE/LAN collection, verified local archive, offline history, and background sync | Host gate passes; phone qualification is tracked separately in [`docs/status.md`](docs/status.md) and the [CoreS3](../aq-parquet/docs/boards/m5stack-cores3/bench-verified.md) and [Waveshare](../aq-parquet/docs/boards/waveshare-esp32-s3-sim7670g/bench-verified.md) records. |
-| iOS | Foreground BLE live readings and Bonjour discovery; no archive, authenticated LAN transfer, or background collection yet | An owner-confirmed iPhone run showed live readings and a Bonjour result on 2026-10-08. Other behavior remains unqualified; see [`docs/ios-migration.md`](docs/ios-migration.md). |
+| iOS | Foreground BLE enrollment/live readings; multi-sensor authenticated LAN sessions and verified local Parquet archive collection | Shared/native host tests and simulator/device builds pass. The earlier iPhone observation covers BLE live/discovery; new LAN transfer still needs real-phone qualification. See [`docs/ios-migration.md`](docs/ios-migration.md). |
 
 Host tests, simulator builds, and phone observations are different evidence. The Android
 application ID and signing identity remain stable for existing installations. Read the
@@ -63,8 +65,11 @@ flowchart LR
 
 The iOS app uses Kotlin Multiplatform for shared protocol and sensor rules, with a
 Compose Multiplatform live-reading screen and native Core Bluetooth and Bonjour adapters.
-The Android app retains its native Compose UI and platform data stack. Archive history,
-LAN transfers and background collection are currently Android-only. Build and qualification
+The Android app retains its native Compose UI and platform data stack. Both platforms
+can collect over Wi-Fi after each phone saves access through BLE pairing. The shared
+firmware allows three Wi-Fi clients per sensor alongside one BLE connection; both apps
+can sync two sensors concurrently per phone. History/export UI and background collection
+remain Android features while iOS migration continues. Build and qualification
 instructions are in [docs/ios-migration.md](docs/ios-migration.md); local iOS coding
 instructions are in [ios/AGENTS.md](ios/AGENTS.md). On 2026-10-08, the owner confirmed
 live readings on a connected iPhone and a Bonjour discovery result; pairing prompts,

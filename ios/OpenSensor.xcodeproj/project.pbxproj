@@ -11,9 +11,9 @@
 		00000000000000000000000D = { isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		000000000000000000000006 = { isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = OpenSensor.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		000000000000000000000002 = { isa = PBXGroup; children = (000000000000000000000003, 000000000000000000000004); sourceTree = "<group>"; };
-		000000000000000000000003 = { isa = PBXGroup; children = (000000000000000000000016, 00000000000000000000000B, 00000000000000000000000C, 00000000000000000000000D); path = App; sourceTree = "<group>"; };
+		000000000000000000000003 = { isa = PBXGroup; children = (000000000000000000000020, 000000000000000000000018, 000000000000000000000019, 00000000000000000000001A, 000000000000000000000016, 00000000000000000000000B, 00000000000000000000000C, 00000000000000000000000D); path = App; sourceTree = "<group>"; };
 		000000000000000000000004 = { isa = PBXGroup; children = (000000000000000000000006); name = Products; sourceTree = "<group>"; };
-		000000000000000000000007 = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (000000000000000000000017, 00000000000000000000000E, 00000000000000000000000F); runOnlyForDeploymentPostprocessing = 0; };
+		000000000000000000000007 = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (000000000000000000000021, 00000000000000000000001C, 00000000000000000000001D, 00000000000000000000001E, 000000000000000000000017, 00000000000000000000000E, 00000000000000000000000F); runOnlyForDeploymentPostprocessing = 0; };
 		000000000000000000000008 = { isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 		000000000000000000000009 = { isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 		00000000000000000000000A = { isa = PBXShellScriptBuildPhase; alwaysOutOfDate = 1; buildActionMask = 2147483647; files = (); inputPaths = (); name = "Build shared Kotlin framework"; outputPaths = (); runOnlyForDeploymentPostprocessing = 0; shellPath = /bin/sh; shellScript = "set -eu\ncd \"$SRCROOT/..\"\nif [ -z \"${JAVA_HOME:-}\" ] && [ -d \"/Applications/Android Studio.app/Contents/jbr/Contents/Home\" ]; then\n    export JAVA_HOME=\"/Applications/Android Studio.app/Contents/jbr/Contents/Home\"\nfi\n./gradlew --no-daemon :ios:shared:embedAndSignAppleFrameworkForXcode\n"; };
@@ -28,6 +28,14 @@
         000000000000000000000016 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanDiscovery.swift; sourceTree = "<group>"; };
         000000000000000000000017 = { isa = PBXBuildFile; fileRef = 000000000000000000000016; };
 
+        000000000000000000000018 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SensorArchive.swift; sourceTree = "<group>"; };
+        00000000000000000000001C = { isa = PBXBuildFile; fileRef = 000000000000000000000018; };
+        000000000000000000000019 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanCredentials.swift; sourceTree = "<group>"; };
+        00000000000000000000001D = { isa = PBXBuildFile; fileRef = 000000000000000000000019; };
+        00000000000000000000001A = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanSession.swift; sourceTree = "<group>"; };
+        00000000000000000000001E = { isa = PBXBuildFile; fileRef = 00000000000000000000001A; };
+        000000000000000000000020 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SensorTransfer.swift; sourceTree = "<group>"; };
+        000000000000000000000021 = { isa = PBXBuildFile; fileRef = 000000000000000000000020; };
 	};
 	rootObject = 000000000000000000000001;
 }

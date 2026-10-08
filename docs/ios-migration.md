@@ -44,16 +44,34 @@ and lets iOS request Local Network access. `Info.plist` declares
 alone does not request access; the real browse triggers the system decision.
 Browser waiting states retain the browse while the user answers; they can also
 mean unavailable Wi-Fi, so the UI never falsely labels them as a permission denial.
-Discovered service names are shown without opening TCP sockets or obtaining tokens.
-Bluetooth and local discovery states are independent; declining local access does
-not disable the BLE path. A later transfer stage must authenticate through bonded BLE.
-See [Apple's local network privacy guidance](https://developer.apple.com/documentation/technotes/tn3179-understanding-local-network-privacy).
+Discovery retains Bonjour service endpoints and station/hardware TXT hints. Each phone
+must first connect over Bluetooth and tap **Save Wi-Fi access**; `GET_TOKEN` is sent through
+the encrypted BLE control/response characteristics. The token and BLE-established identity
+are saved in device-only Keychain storage and never displayed or logged. A matching discovered
+service can then connect with the existing `AQS1` handshake. HELLO must match the enrolled
+station and full hardware identity; discovery alone cannot enroll a replacement.
 
-This stage is foreground-only: entering the background stops scanning and closes
-the connection. It does not declare background BLE capability or promise Android
-WorkManager/foreground-service parity. No token or Wi-Fi secret is requested,
-stored or logged. Native BLE uses Core Bluetooth's peripheral identifier, not an
-Android MAC address; station/hardware continuity must be ported before archives.
+The Wi-Fi cards support independent connections, live particle readings and **Sync**. Two
+sensors can collect files concurrently on one phone. Each TCP socket has one reader, bounded
+reply buffering, push demultiplexing, a keepalive measured from outgoing phone traffic, and
+bounded request/idle waits. Cancellation closes the socket and resumes pending operations;
+old task callbacks cannot update a newer session. Alias services cannot open two controllers
+for the same hardware on this phone.
+
+Collections mirror immutable files under Application Support as
+`SensorArchive/<station>/<relative path>`. Interrupted downloads retain partial bytes keyed
+by size/CRC and resume from the phone's own received offset. READ handles, offsets, window
+lengths and READ_END are checked. A final filename appears only after size, streamed IEEE
+CRC-32 and `PAR1` head/tail verification. Existing finalized files are verified and preserved;
+a conflicting file fails the collection rather than replacing data. Paths use the firmware's
+safe-name whitelist, reject traversal/symlinks, and keep station directories independent.
+File I/O and CRC verification run away from the UI actor. The archive is excluded from cloud backup.
+
+This remains foreground-only: entering the background stops discovery and closes BLE/LAN
+connections. Resume collection explicitly after returning. The app has no background BLE
+capability, automatic collection, archive charts or export UI. Native BLE uses Core Bluetooth's
+peripheral identifier; the Keychain identity also pins station and full hardware ID. New
+LAN/archive behavior has host/simulator/build evidence only, pending an iPhone run.
 
 ## Build and run
 
@@ -71,13 +89,17 @@ xcodebuild -project ios/OpenSensor.xcodeproj -scheme OpenSensor \
   -configuration Debug -destination 'generic/platform=iOS Simulator' \
   -derivedDataPath ios/build/DerivedData CODE_SIGNING_ALLOWED=NO build
 ./gradlew --no-daemon verifyIos
+./ios/tests/verify-native.sh
 ```
 
 `verify` includes Android lint/APK/unit tests, existing JVM core tests, shared core
 tests and the iOS presentation state's JVM tests. It works without Xcode on Linux.
 `verifyIos` runs common tests on the simulator and links the shared framework;
 it needs an installed simulator runtime. The Xcode build compiles the Swift BLE
-adapter and app too. Neither a simulator build nor shared tests qualify radio behavior.
+adapter and app too. The native Swift harness exercises the production archive and transfer engine with scripted
+replies: resume, CRC verification, immutable conflicts, path/symlink rejection, foreign handles,
+READ_END consistency, independent concurrent stations and outbound keepalive timing.
+Neither a simulator build nor these tests qualifies real radio behavior.
 
 GitHub Actions adds an Apple Silicon macOS job for `verifyIos`, an unsigned Debug
 simulator build, and an unsigned Release device build. Its Xcode pin, downloadable
@@ -110,14 +132,16 @@ accuracy, stale/background handling or authenticated Wi-Fi connections. See
 
 ## Remaining migration
 
-1. Port Parquet byte/file access, compression, CRC/SHA verification and fixtures.
-2. Extract sync/session logic behind platform transport and archive interfaces;
-   preserve verified immutable commits, resume policy and identity/epoch rules.
-3. Port Room storage, offline history/exports and retained station generations.
-4. Share existing Android screens, resources and navigation incrementally.
-5. Add authenticated LAN transfer and encrypted token storage; only use discovered
-   devices and tokens acquired through authenticated BLE.
-6. Design and qualify iOS background collection under Apple's execution rules.
+1. Port Parquet decoding/compression, history indexing and Android archive fixtures for charts.
+2. Port persistent archive indexes, offline history/exports and retained station-generation UI.
+3. Share existing Android screens, resources and navigation incrementally.
+4. Qualify BLE token acquisition, Keychain persistence, authenticated LAN transfer, multi-phone
+   collection, concurrent sensors, cancellation/resume and Local Network permissions on iPhones.
+5. Design and qualify iOS background collection under Apple's execution rules.
+
+LAN byte transfer and integrity verification use a native Swift platform engine with the shared
+Kotlin wire codec. Android's existing session/archive engine still depends on JVM file APIs,
+Room and Android lifetime services; it is not imported into the iOS app.
 
 Compilation, automated tests and device observations for this change are recorded
 in [status.md](status.md); features listed above are not implemented on iOS yet.
