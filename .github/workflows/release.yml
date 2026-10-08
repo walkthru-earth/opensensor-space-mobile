@@ -1,7 +1,7 @@
 # APKs anyone can install, without a store.
 #
 # - Every push to `main` refreshes ONE rolling pre-release tagged `latest` (tag moved to the commit,
-#   assets replaced), so the newest build is always at .../releases/tag/latest.
+#   assets replaced after upload), so the newest build is at .../releases/tag/latest.
 # - A `v*` tag (e.g. `v1.2.0`) publishes a proper, permanent release with the same assets.
 #
 # One universal APK includes every ABI supplied by zstd-jni. Room uses the platform's SQLite;
@@ -158,22 +158,52 @@ jobs:
             if [ -n "$prev" ]; then git log --format='- %s (%h)' "$prev..HEAD" | head -50; else git log --format='- %s (%h)' -n 20; fi
           } > dist/NOTES.md
 
-      - name: Move the rolling tag to this commit
+      - name: Keep the APK as a workflow artifact too
+        uses: actions/upload-artifact@v7
+        with:
+          name: opensensor-space-${{ steps.meta.outputs.version_name }}
+          path: dist/
+          retention-days: 14   # the organisation maximum
+
+      - name: Move the rolling tag to the verified commit
         if: steps.meta.outputs.channel == 'rolling'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          # Delete the previous rolling release so the new one is created cleanly at this commit.
-          gh release delete latest --yes --cleanup-tag 2>/dev/null || true
-          git tag -f latest "$GITHUB_SHA"
-          git push -f origin refs/tags/latest
+        id: rolling
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const repo = context.repo;
+            // Older queued builds must not replace latest or tag a commit whose workflows
+            // differ from current main (GITHUB_TOKEN cannot gain workflows permission).
+            const head = await github.rest.git.getRef({ ...repo, ref: 'heads/main' });
+            if (head.data.object.sha !== context.sha) {
+              core.notice('Skipping rolling publication: main has advanced beyond this build. The APK is retained as a workflow artifact.');
+              core.setOutput('publish', 'false');
+              return;
+            }
+            let latest;
+            try {
+              latest = await github.rest.git.getRef({ ...repo, ref: 'tags/latest' });
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            if (!latest) {
+              await github.rest.git.createRef({ ...repo, ref: 'refs/tags/latest', sha: context.sha });
+            } else if (latest.data.object.sha !== context.sha) {
+              await github.rest.git.updateRef({ ...repo, ref: 'tags/latest', sha: context.sha, force: true });
+            }
+            const updated = await github.rest.git.getRef({ ...repo, ref: 'tags/latest' });
+            if (updated.data.object.sha !== context.sha) {
+              throw new Error('Rolling tag does not point to the verified commit');
+            }
+            core.setOutput('publish', 'true');
 
       - name: Publish (create or replace)
+        if: steps.meta.outputs.channel == 'tag' || steps.rolling.outputs.publish == 'true'
+        id: publish
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           name: ${{ steps.meta.outputs.channel == 'rolling' && 'Latest build (rolling)' || format('opensensor.space {0}', steps.meta.outputs.version_name) }}
           prerelease: ${{ steps.meta.outputs.channel == 'rolling' }}
           make_latest: ${{ steps.meta.outputs.channel == 'tag' }}
@@ -183,10 +213,23 @@ jobs:
             dist/SHA256SUMS.txt
             dist/mapping-*.txt
           fail_on_unmatched_files: false
+          overwrite_files: true
 
-      - name: Keep the APK as a workflow artifact too
-        uses: actions/upload-artifact@v7
+      - name: Remove previous rolling build assets after successful upload
+        if: steps.meta.outputs.channel == 'rolling' && steps.rolling.outputs.publish == 'true'
+        uses: actions/github-script@v9
+        env:
+          RELEASE_ID: ${{ steps.publish.outputs.id }}
         with:
-          name: opensensor-space-${{ steps.meta.outputs.version_name }}
-          path: dist/
-          retention-days: 14   # the organisation maximum
+          script: |
+            const fs = require('node:fs');
+            const currentFiles = new Set(fs.readdirSync('dist'));
+            const assets = await github.paginate(github.rest.repos.listReleaseAssets, {
+              ...context.repo, release_id: Number(process.env.RELEASE_ID), per_page: 100,
+            });
+            for (const asset of assets) {
+              const generated = /^opensensor-space-.*-universal\.apk$/.test(asset.name) || /^mapping-.*\.txt$/.test(asset.name);
+              if (generated && !currentFiles.has(asset.name)) {
+                await github.rest.repos.deleteReleaseAsset({ ...context.repo, asset_id: asset.id });
+              }
+            }

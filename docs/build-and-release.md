@@ -201,6 +201,31 @@ uploaded the four Actions secrets. Local signed release:
 `set -a; source secrets/.env; set +a; ./gradlew :app:assembleRelease`. `secrets/` is git-ignored.
 **Back the keystore up** — without it no future release installs over an existing one.
 
+Rolling publication uses GitHub's [reference REST API](https://docs.github.com/en/rest/git/refs)
+with the existing `contents: write` workflow token. It creates or updates `latest`
+to the exact verified build SHA and checks that reference before publishing. A
+queued build whose SHA is no longer `main` uploads its APK artifact but skips
+rolling publication. GitHub may require workflow-write permission when tagging
+commits whose workflow files differ from the default branch; REST is not a general
+permission bypass. Never retarget an older APK to a newer source SHA to avoid that
+restriction. See the [release API permission rules](https://docs.github.com/en/rest/releases/releases#create-a-release).
+
+Update the rolling release in place. Keep its existing assets until the new upload
+succeeds, then remove only generated APK/mapping assets from previous builds.
+Do not delete the release or tag before a potentially failing update. The signed
+APK artifact is uploaded before publication, so publication failures still leave
+the verified build available. No `gh` CLI or additional credential is needed.
+
+### Rolling tag failure (2026-10-08)
+
+[Release run 22](https://github.com/walkthru-earth/opensensor-space-mobile/actions/runs/37740192533/job/113192946568)
+passed verification, APK assembly and signer validation for `cdd133c`, then failed
+while pushing `latest`: the GitHub App token could not update workflow files without
+`workflows` permission. A newer `main` commit had already changed `verify.yml`.
+The revised workflow skips outdated rolling runs, moves the tag through REST,
+retains the release until upload succeeds, and preserves the APK before publishing.
+Hosted publication must pass before this recovery is considered verified.
+
 ### Pipeline check (2026-09-29)
 
 After the repository rename and merge at `06ab6cc`, the
