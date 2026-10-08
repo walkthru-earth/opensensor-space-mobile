@@ -104,17 +104,16 @@ actor LanSession: ArchivePipe {
         startHeartbeat()
     }
 
-    func collect(archive: ArchiveIO, progress: @escaping @Sendable (TransferUpdate) async -> Void) async throws {
+    /// Per-file failures come back in the summary. The session stays open, like Android.
+    func collect(
+        archive: ArchiveIO, progress: @escaping @Sendable (TransferUpdate) async -> Void
+    ) async throws -> TransferSummary {
         guard let identity, !collecting else { throw LanFailure.disconnected }
         collecting = true
         defer { collecting = false }
-        let summary = try await SensorTransfer.collect(
+        return try await SensorTransfer.collect(
             pipe: self, archive: archive, station: identity.station, maxRead: UInt64(identity.maxRead),
             progress: progress)
-        // Every other file was tried first. A file that was not saved still fails the run so it is seen.
-        if !summary.failures.isEmpty {
-            throw SensorTransfer.Failure.filesFailed(failed: summary.failures.count, total: summary.files)
-        }
     }
 
     /// Safe from any thread. Closing is enqueued on the session queue; pending waits end as disconnected.

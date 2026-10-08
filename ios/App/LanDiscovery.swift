@@ -188,14 +188,19 @@ final class LanDiscovery {
                 // The archive applies its protection class and backup exclusion when it creates the root.
                 let archive = try ArchiveIO(root: SensorArchive.defaultRoot())
                 // Transfer and framing run on the session queue. Only throttled progress reaches the main actor.
-                try await session.collect(archive: archive) { @MainActor [weak self] update in
+                let summary = try await session.collect(archive: archive) { @MainActor [weak self] update in
                     guard let self, self.attempts[name] == attempt, self.sessions[name] === session else { return }
                     self.report(
                         name, connected: true, busy: true, message: "Syncing verified files", done: update.filesDone,
                         total: update.filesTotal, bytes: update.bytes, rate: update.rate)
                 }
                 guard self.attempts[name] == attempt, self.sessions[name] === session else { return }
-                self.report(name, connected: true, message: "Sync complete. Verified files saved on this phone.")
+                // Files that were not saved fail alone. The session stays open so a retry is one tap.
+                let message = summary.failures.isEmpty
+                    ? "Sync complete. Verified files saved on this phone."
+                    : SensorTransfer.Failure.filesFailed(failed: summary.failures.count, total: summary.files)
+                        .localizedDescription
+                self.report(name, connected: true, message: message)
             } catch {
                 session.close()
                 guard self.attempts[name] == attempt else { return }
