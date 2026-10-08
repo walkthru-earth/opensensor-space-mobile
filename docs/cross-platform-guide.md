@@ -125,7 +125,7 @@ signal blue and teal) and `app/globals.css` (type and shape). The apps follow it
 | Brand tokens (colour roles, type, radii, spacing) | `:ui:designsystem` `commonMain`, values copied from the website registry | Light and dark from the same role names (`main`, `ink`, `paper`, `surface`, `accent`, `deep`, `text`, `muted`, `border`) |
 | Scientific colours (air-quality bands) | `AirMood` in `:core:history` plus the design system mapping | Never derived from brand colours, never changed for aesthetics |
 | Material 3 theme | `:ui:designsystem` maps tokens to a `ColorScheme`, `Typography` and `Shapes` | Android and iOS render the same theme through Compose |
-| Fonts | Quicksand (Latin) and Cairo (Arabic), both OFL, bundled in the app | No runtime font download, the app works offline |
+| Fonts | Quicksand (Latin) and Cairo (Arabic), both OFL variable TTFs, Compose resources in `:ui:designsystem` with their licence texts | No runtime font download, the app works offline. Same faces and weights on Android and iOS |
 | Floating controls | `:ui:designsystem` `FloatingControls.kt` | One style for every control over content, see below |
 | Characters | The peacock mascot from `public/mascots/peacock.webp` | A friendly guide on empty, welcome and success states, never on data |
 

@@ -134,8 +134,14 @@ palette `sensing`. `BrandTokensTest` pins every value and checks text contrast o
   where a band cannot reach 3:1 (yellow on light paper, dark red on dark paper).
 - **Type.** Quicksand (OFL variable TTF from google/fonts) for text, Cairo (OFL, from the
   website) for Arabic-script locales and for display numbers, because Quicksand has
-  proportional digits and no `tnum` while Cairo's digits share one width. License texts ship in
-  `assets/licenses/`.
+  proportional digits and no `tnum` while Cairo's digits share one width. Both fonts and the
+  type scale live in `:ui:designsystem` (`Typography.kt`, Compose resources under
+  `composeResources/font/`), so Android (`AqSyncTheme`) and iOS (`OpenSensorTheme`) render the
+  same faces. Each weight pins the variable `wght` axis through `FontVariation.Settings`, which
+  Compose resources apply on Android and on iOS (Skia `makeClone`). The language comes from
+  `Configuration.locales[0]` on Android and `NSLocale.preferredLanguages` on iOS.
+  `TypographyTest` checks the Arabic-script rule, the tabular display styles and that every
+  weight sits inside the bundled axis. License texts ship in `composeResources/files/licenses/`.
 - **Shape and components.** 32 dp card corners (`BrandCard`, tones Plain, Soft, Hero), pill
   actions (`PillButton` with a trailing arrow, `OutlinePillButton`), `MoodPill`, `SignalBars`,
   `TiltedBadge` (the website's -5 degree icon tilt, hero only).

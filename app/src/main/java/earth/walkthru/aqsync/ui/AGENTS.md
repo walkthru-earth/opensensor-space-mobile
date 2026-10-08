@@ -32,7 +32,7 @@ need the same behavior.
 
 ## Design system and detail levels
 
-- Use the tokens in `theme/` (`BrandTokens`, `brandColorScheme`, `BrandShapes`, `brandTypography`)
+- Use the tokens in `:ui:designsystem` (`BrandTokens`, `brandColorScheme`, `BrandShapes`, `rememberBrandTypography`)
   and the components in `components/Brand.kt`. No raw colours or font families in screens.
   Values come from the website's `lib/brand.ts` (`sensing`), pinned by `BrandTokensTest`.
 - Band colours are a scientific metric scale. Never restyle them. Put text on a band with
@@ -47,7 +47,7 @@ need the same behavior.
 - Read `rememberNowMillis()` only in leaf texts (`TickingText`). Capability checks come from
   `DeviceCapabilities`, never schema strings.
 - The peacock is for welcome, empty and success states only. Fonts are OFL (Quicksand, Cairo).
-  Keep `assets/licenses/` with them.
+  Keep `ui/designsystem/src/commonMain/composeResources/files/licenses/` with them.
 - User-facing copy lives in `res/values/strings.xml`, with plurals for counts. No em dashes,
   colons or semicolons (`CopyRulesTest` checks). Data-layer snackbars arrive as
   `DeviceMessage` codes and are mapped in `components/DeviceMessages.kt`. Typed UI values

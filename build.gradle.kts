@@ -14,7 +14,7 @@ plugins {
 tasks.register("verify") {
     group = "verification"
     description = "lintDebug + assembleDebug + unit tests of :app and every :core module"
-    dependsOn(":ios:shared:jvmTest", ":app:lintDebug", ":app:assembleDebug", ":app:testDebugUnitTest", ":core:protocol:test", ":core:parquet:test", ":core:history:test", ":core:publicfeed:test", ":core:units:test", ":feature:discover:testAndroidHostTest")
+    dependsOn(":ios:shared:jvmTest", ":app:lintDebug", ":app:assembleDebug", ":app:testDebugUnitTest", ":core:protocol:test", ":core:parquet:test", ":core:history:test", ":core:publicfeed:test", ":core:units:test", ":feature:discover:testAndroidHostTest", ":ui:designsystem:testAndroidHostTest")
 }
 
 // Native validation is explicit: the Android/Linux verification gate never requires Xcode.
