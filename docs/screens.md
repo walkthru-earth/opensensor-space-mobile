@@ -63,7 +63,12 @@ or when the user requests it. Compose recomposition only renders the latest stat
 
 Only presentation changes. Every level reads the same data, and nothing the Simple experience
 needs may depend on Developer. A new field states its level in code (`level.detailed`,
-`level.developer`).
+`level.developer`). In ViewModel state, `advancedMode` always means Developer and `detailed`
+means Detailed or Developer. Files reads `detailLevel` directly.
+
+iOS has no level setting yet and shows Simple. `CompanionScreen` keeps signal dBm, firmware,
+finalized file counts, byte counters and transfer rate behind `showTechnical` (off) until the
+shared setting lands (platform-parity-plan.md, Wave 2).
 
 ### What moved where (W4 audit, 2026-10-08)
 
@@ -117,7 +122,7 @@ permanent denial the next tap offers the app's system settings page. Store answe
 | Bluetooth (`BLUETOOTH_SCAN` neverForLocation, `BLUETOOTH_CONNECT`; iOS Core Bluetooth) | Scan, opening a sensor, Reconnect, Reconnect over Bluetooth. Turning the adapter on uses the system dialog from the same tap. Once held, Devices scans while visible | First Find sensors tap creates `CBCentralManager` | Archive views (History, Files) still open. A declined open shows the sensor without a link |
 | Local network (`ACCESS_LOCAL_NETWORK`, API 37+; iOS Local Network) | Sync over Wi-Fi switch on, Allow local network, Get Wi-Fi token. Discovery runs only once held | First Find Wi-Fi sensors tap starts `NWBrowser` | Bluetooth sync works. The token fetch still runs |
 | Notifications (`POST_NOTIFICATIONS`, API 33+) | Sync now, Sync all, file sync, Sync now in background, Collect from all, Auto-sync on, Set up wake when nearby. Asked once per screen | Not requested | The sync runs, its progress notification is hidden |
-| Location | Not declared today. Planned Discover Near me asks for coarse location on that tap only | Same, When In Use with reduced accuracy | The map opens on the last area or the time zone region |
+| Location (`ACCESS_COARSE_LOCATION` only, never fine) | Discover **Near me** asks for approximate location on that tap only. It only moves the map and is never stored or sent. The Devices privacy note says so | Same tap, When In Use with reduced accuracy | The map opens on the last area or the time zone region |
 
 ## Design system
 
@@ -209,7 +214,7 @@ state change, de-duplicated). Never derive it per screen from the session object
 | --- | --- |
 | `NavigationKeys.kt` | `Navigation.kt` entry providers, back-stack restore |
 | `DetailLevel` / `AppSettings` | every `detailed`/`advancedMode` collector; Debug visibility; Files table icon |
-| `ui/device/cards/MetricHeroCard.kt`, `components/MoodFace.kt`, mood copy in `strings.xml` | Today, Home cards (same moods), iOS parity (iOS still reads the copy in `AirMood`) |
+| `ui/device/cards/MetricHeroCard.kt`, `components/MoodFace.kt`, mood copy in `strings.xml` | Today, Home cards (same moods), iOS parity (iOS still reads the copy in `AirMood`, kept word for word equal to `strings.xml` by `CopyRulesTest`) |
 | `ui/theme/BrandTokens.kt` | Every screen, `BrandTokensTest` (website values and contrast) |
 | `DeviceCapabilities` (`:core:history`) | Today hero and batch card, Device sensor card, `setSensorIdentity` guard |
 | `BandColumnChart.kt`, `DayRing.kt`, `CalendarHeatmap.kt` | History and Files › Chart by file (share `Columns` + `HistoryColumn`) |

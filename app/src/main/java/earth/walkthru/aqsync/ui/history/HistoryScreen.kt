@@ -346,7 +346,7 @@ private fun SelectedColumn(c: HistoryColumn?, state: HistoryUiState, zone: ZoneI
             listOfNotNull(
                 slot,
                 fmt(units.value(m, unit)) + " " + units.unit(unit),
-                state.metric.moodOf(m.toDouble())?.let { "${it.titleText()}, ${it.step.labelText()}" },
+                state.metric.moodOf(m.toDouble())?.let { "${it.titleText()} · ${it.step.labelText()}" },
                 c.max?.takeIf { it > m * 1.15f }?.let { stringResource(R.string.history_peak_value, fmt(units.value(it, unit))) },
                 stringResource(R.string.history_covered, (c.coverage * 100).toInt()),
                 stringResource(R.string.history_estimated_time).takeIf { c.estimated },

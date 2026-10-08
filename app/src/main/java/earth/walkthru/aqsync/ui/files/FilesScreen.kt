@@ -349,7 +349,7 @@ fun FilesScreen(
                                 viewModel.archivedFor(entry.name)
                                     ?.let(viewModel::share)
                             },
-                            onInspect = if (state.advancedMode) {
+                            onInspect = if (level.detailed) {
                                 {
                                     viewModel.archivedFor(entry.name)
                                         ?.let { onOpenFileMetrics(it.station, it.name) }
