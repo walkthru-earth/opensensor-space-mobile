@@ -148,19 +148,20 @@ private fun SelectedFile(s: FileSummary, metric: MetricSpec, fmt: DateTimeFormat
     val first = s.firstS
     val last = s.lastS
     val span = if (first != null && last != null) {
-        "${fmt.format(Instant.ofEpochSecond(first))} → ${fmt.format(Instant.ofEpochSecond(last))}" + if (s.timedRows == 0) " (estimated)" else ""
+        val range = "${fmt.format(Instant.ofEpochSecond(first))} → ${fmt.format(Instant.ofEpochSecond(last))}"
+        if (s.timedRows == 0) stringResource(R.string.file_chart_estimated, range) else range
     } else {
-        "no place on the timeline (no UTC, no later clock for this boot)"
+        stringResource(R.string.file_chart_unplaced)
     }
     Column(Modifier.padding(top = 4.dp)) {
         Text(s.name.substringAfterLast('/'), style = MaterialTheme.typography.labelMedium, fontFamily = FontFamily.Monospace)
         Text(
-            "${s.rows} rows · ${a?.n ?: 0} valid for ${metric.label} · $span",
+            pluralStringResource(R.plurals.file_chart_rows, a?.n ?: 0, pluralStringResource(R.plurals.fm_rows_count, s.rows.toInt(), s.rows), a?.n ?: 0, metric.label, span),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
-            if (a != null) "mean ${fmt1(a.mean)} ${metric.unit} · min ${fmt1(a.min)} · max ${fmt1(a.max)}" else "no valid ${metric.label} readings in this file",
+            if (a != null) stringResource(R.string.file_chart_stats, fmt1(a.mean), metric.unit, fmt1(a.min), fmt1(a.max)) else stringResource(R.string.file_chart_no_valid, metric.label),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

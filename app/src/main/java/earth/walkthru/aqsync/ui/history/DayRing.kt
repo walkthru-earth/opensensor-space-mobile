@@ -18,10 +18,12 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.history.AirMood
 import earth.walkthru.aqsync.data.history.HistoryColumn
 import earth.walkthru.aqsync.data.history.MetricSpec
@@ -116,8 +118,8 @@ fun DayRing(
                 fontWeight = FontWeight.SemiBold,
                 color = mood?.textColorOnSurface() ?: onSurface,
             )
-            Text(if (mean == null) "no readings" else metric.unit, style = MaterialTheme.typography.labelSmall, color = muted)
-            if (mean != null) Text("${(coverage * 100).toInt()} % of the day", style = MaterialTheme.typography.labelSmall, color = muted)
+            Text(if (mean == null) stringResource(R.string.history_no_readings_short) else metric.unit, style = MaterialTheme.typography.labelSmall, color = muted)
+            if (mean != null) Text(stringResource(R.string.scan_archive_coverage, (coverage * 100).toInt()), style = MaterialTheme.typography.labelSmall, color = muted)
         }
     }
 }

@@ -14,12 +14,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import earth.walkthru.aqsync.R
-import earth.walkthru.aqsync.data.DeviceEvent
+import earth.walkthru.aqsync.data.sync.ClockQuality
 import earth.walkthru.aqsync.ui.components.CollectEvents
+import earth.walkthru.aqsync.ui.components.reasonRes
+import earth.walkthru.aqsync.ui.components.showDeviceEvent
 import earth.walkthru.aqsync.ui.permissions.AccessDialogs
 import earth.walkthru.aqsync.ui.permissions.rememberBluetoothAccess
 import earth.walkthru.aqsync.ui.permissions.rememberNotificationPermission
@@ -48,7 +51,8 @@ fun TodayRoute(
     val snackbar = remember { SnackbarHostState() }
     var showSettings by remember { mutableStateOf(false) }
     var confirmTime by remember { mutableStateOf(false) }
-    var confirmSmartSyncClock by remember { mutableStateOf<String?>(null) }
+    var confirmSmartSyncClock by remember { mutableStateOf<ClockQuality?>(null) }
+    val res = LocalResources.current
     var confirmFlush by remember { mutableStateOf(false) }
     // Asked only from a tap: Reconnect needs Bluetooth, Sync shows a progress notification.
     val bluetooth = rememberBluetoothAccess()
@@ -56,11 +60,7 @@ fun TodayRoute(
     val notificationPermission = rememberNotificationPermission()
 
     CollectEvents(viewModel.events) { ev ->
-        when (ev) {
-            is DeviceEvent.Error -> snackbar.showSnackbar(ev.message)
-            is DeviceEvent.Info -> snackbar.showSnackbar(ev.message)
-            is DeviceEvent.ClockConfirmationRequired -> confirmSmartSyncClock = ev.reason
-        }
+        snackbar.showDeviceEvent(res, ev) { confirmSmartSyncClock = it }
     }
     // The repository dropped the session (user disconnected, or another device was picked).
     LaunchedEffect(state.address) {
@@ -104,7 +104,7 @@ fun TodayRoute(
             onDismissRequest = { confirmSmartSyncClock = null },
             icon = { Icon(Icons.Rounded.Schedule, contentDescription = null) },
             title = { Text(stringResource(R.string.sync_clock_title)) },
-            text = { Text(stringResource(R.string.sync_clock_confirm, reason)) },
+            text = { Text(stringResource(R.string.sync_clock_confirm, stringResource(reason.reasonRes()))) },
             confirmButton = {
                 TextButton(onClick = { confirmSmartSyncClock = null; viewModel.smartSync(clockConfirmed = true) }) { Text(stringResource(R.string.sync_clock_button)) }
             },

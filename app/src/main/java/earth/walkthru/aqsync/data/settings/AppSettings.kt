@@ -20,10 +20,15 @@ private val Context.settingsStore: DataStore<Preferences> by preferencesDataStor
  * How much the UI shows. Cosmetic only: every level reads the same data; higher levels *reveal*,
  * nothing the Simple experience needs depends on them (AGENTS.md).
  */
-enum class DetailLevel(val title: String, val description: String) {
-    SIMPLE("Simple", "What the air is like right now and today, in plain words, with the PM2.5 number. History and files stay one tap away."),
-    DETAILED("Detailed", "Adds every measurement: PM10, PM1, particle counts, board temperature, battery and USB, storage counters, the file inspector and the History source card."),
-    DEVELOPER("Developer", "Everything in Detailed plus the Debug screen: raw status JSON, the last frames on the link, the device's serial log and a raw command box."),
+enum class DetailLevel {
+    /** The current reading and today, in plain words. History and files stay one tap away. */
+    SIMPLE,
+
+    /** Every measurement, storage counters, the file inspector and the History source card. */
+    DETAILED,
+
+    /** Detailed plus the Debug screen (raw status JSON, frames, serial log, raw commands). */
+    DEVELOPER,
     ;
 
     val detailed: Boolean get() = this != SIMPLE

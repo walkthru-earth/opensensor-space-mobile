@@ -1,6 +1,7 @@
 package earth.walkthru.aqsync.ui.scan
 
 import android.content.Context
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -158,7 +159,8 @@ class ScanViewModel @Inject constructor(
                             true
                         }
                         is BleScanner.Event.Failed -> {
-                            scanError.value = ev.message
+                            Log.w("ScanViewModel", "scan failed (${ev.errorCode}: ${ev.message})")
+                            scanError.value = context.getString(if (ev.errorCode == BleScanner.BLUETOOTH_OFF) R.string.scan_bluetooth_off else R.string.scan_failed)
                             false
                         }
                     }
@@ -166,7 +168,8 @@ class ScanViewModel @Inject constructor(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                scanError.value = context.getString(R.string.scan_failed, e.message ?: e::class.simpleName.orEmpty())
+                Log.w("ScanViewModel", "scan failed (${e::class.simpleName}: ${e.message})")
+                scanError.value = context.getString(R.string.scan_failed)
             } finally {
                 // A stopped run can finish after a new run starts. Only its own generation may
                 // clear the current button state or cancel the current pruning loop.

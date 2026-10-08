@@ -64,6 +64,7 @@ import earth.walkthru.aqsync.ui.components.NO_VALUE
 import earth.walkthru.aqsync.ui.components.SectionCard
 import earth.walkthru.aqsync.ui.components.StatLine
 import earth.walkthru.aqsync.ui.components.TransportChip
+import earth.walkthru.aqsync.ui.components.titleText
 import earth.walkthru.aqsync.ui.theme.color
 import earth.walkthru.aqsync.ui.theme.textColorOnSurface
 import java.time.Instant
@@ -203,20 +204,20 @@ fun HistoryScreen(
             }
             if (state.advancedMode) {
                 item(key = "dev") {
-                    SectionCard("Developer") {
+                    SectionCard(stringResource(R.string.history_dev_title)) {
                         val s = state.series
                         StatLine(
-                            "source",
+                            stringResource(R.string.history_dev_source),
                             when {
                                 s == null -> NO_VALUE
-                                state.range.tier != null -> "aggregate tier ${state.range.tier!!.seconds / 60} min"
-                                s.binned -> "rows binned to 1 min"
-                                else -> "raw 10 s rows"
+                                state.range.tier != null -> stringResource(R.string.history_dev_tier, state.range.tier!!.seconds / 60)
+                                s.binned -> stringResource(R.string.history_dev_binned)
+                                else -> stringResource(R.string.history_dev_raw)
                             }
                         )
-                        StatLine("points", s?.points?.size?.toString() ?: NO_VALUE)
-                        StatLine("valid rows", s?.validRows?.toString() ?: NO_VALUE)
-                        StatLine("station", state.station ?: NO_VALUE)
+                        StatLine(stringResource(R.string.history_dev_points), s?.points?.size?.toString() ?: NO_VALUE)
+                        StatLine(stringResource(R.string.history_dev_valid_rows), s?.validRows?.toString() ?: NO_VALUE)
+                        StatLine(stringResource(R.string.history_dev_station), state.station ?: NO_VALUE)
                     }
                 }
             }
@@ -314,20 +315,21 @@ private fun SelectedColumn(c: HistoryColumn?, state: HistoryUiState, zone: ZoneI
         }.withZone(zone)
         val slot = when (state.range) {
             HistoryRange.MONTH -> fmt.format(Instant.ofEpochSecond(c.startS))
-            HistoryRange.YEAR -> "week of ${fmt.format(Instant.ofEpochSecond(c.startS))}"
-            else -> "${fmt.format(Instant.ofEpochSecond(c.startS))}–${DateTimeFormatter.ofPattern("HH:mm XXX").withZone(zone).format(Instant.ofEpochSecond(c.endS))}"
+            HistoryRange.YEAR -> stringResource(R.string.history_week_of, fmt.format(Instant.ofEpochSecond(c.startS)))
+            else -> "${fmt.format(Instant.ofEpochSecond(c.startS))} → ${DateTimeFormatter.ofPattern("HH:mm XXX").withZone(zone).format(Instant.ofEpochSecond(c.endS))}"
         }
         val m = c.mean
         if (m == null) {
-            "$slot · no readings"
+            "$slot · " + stringResource(R.string.history_no_readings_short)
         } else {
-            buildString {
-                append(slot).append(" · ").append(fmt(m)).append(' ').append(state.metric.unit)
-                state.metric.moodOf(m.toDouble())?.let { append(" · ").append(it.title) }
-                c.max?.takeIf { it > m * 1.15f }?.let { append(" · peak ").append(fmt(it)) }
-                append(" · ").append((c.coverage * 100).toInt()).append(" % covered")
-                if (c.estimated) append(" · estimated time")
-            }
+            listOfNotNull(
+                slot,
+                fmt(m) + " " + state.metric.unit,
+                state.metric.moodOf(m.toDouble())?.titleText(),
+                c.max?.takeIf { it > m * 1.15f }?.let { stringResource(R.string.history_peak_value, fmt(it)) },
+                stringResource(R.string.history_covered, (c.coverage * 100).toInt()),
+                stringResource(R.string.history_estimated_time).takeIf { c.estimated },
+            ).joinToString(" · ")
         }
     }
     Text(text, style = MaterialTheme.typography.bodySmall, color = if (c == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(top = 6.dp), maxLines = 2)

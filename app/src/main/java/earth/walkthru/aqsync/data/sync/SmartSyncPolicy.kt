@@ -3,19 +3,15 @@ package earth.walkthru.aqsync.data.sync
 import earth.walkthru.aqsync.data.protocol.DeviceStatus
 
 /** User consent for the state-changing SET_TIME step of Smart Sync. */
-enum class ClockSyncMode(val title: String, val description: String) {
-    ASK(
-        "Ask first",
-        "Detect clock problems automatically, but ask before sending this phone's time.",
-    ),
-    AUTOMATIC(
-        "Automatic",
-        "When Smart Sync finds no UTC or an RTC-restored clock, send this phone's time before downloading.",
-    ),
-    NEVER(
-        "Never",
-        "Only download files. The app will still warn when readings cannot be placed on the timeline.",
-    ),
+enum class ClockSyncMode {
+    /** Detect clock problems, but ask before sending this phone's time. */
+    ASK,
+
+    /** With no UTC or an RTC-restored clock, send this phone's time before downloading. */
+    AUTOMATIC,
+
+    /** Only download files. The app still warns when readings cannot be placed on the timeline. */
+    NEVER,
 }
 
 enum class ClockQuality { HOST_ANCHORED, RTC_RESTORED, MISSING, UNKNOWN }
@@ -45,7 +41,7 @@ object SmartSyncPolicy {
             return ClockSyncDecision(quality, ClockSyncAction.CONTINUE, "automatic clock updates are disabled")
         }
         val reason = when (quality) {
-            ClockQuality.MISSING -> "device has no UTC anchor; new rows are going to the unsynced tree"
+            ClockQuality.MISSING -> "device has no UTC anchor, new rows go to the unsynced tree"
             ClockQuality.RTC_RESTORED -> "device clock was restored from the RTC and has not been checked by this phone"
             ClockQuality.HOST_ANCHORED, ClockQuality.UNKNOWN -> error("handled above")
         }

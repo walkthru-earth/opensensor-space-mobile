@@ -150,7 +150,7 @@ class DeviceConnectionRepositoryTest {
         val renewed = h.knownDao.lanToken(ADDRESS)
         assertNotNull("a fresh token was fetched over the Bluetooth session", renewed)
         assertFalse(renewed == OLD_TOKEN)
-        assertTrue(h.events.any { it is DeviceEvent.Info && it.message.contains("token rejected") })
+        assertTrue(h.events.contains(DeviceEvent.Info(DeviceMessage.LanFallback(LanFailure.AUTH_FAILED))))
     }
 
     @Test
@@ -165,6 +165,7 @@ class DeviceConnectionRepositoryTest {
         assertTrue(h.factory.lanTransports.single().closed)
         assertEquals(TransportKind.FAKE, h.repo.activeTransport.value)
         assertEquals("a non-auth failure keeps the stored token", OLD_TOKEN, h.knownDao.lanToken(ADDRESS))
+        assertTrue("the detail stays in the log", h.events.contains(DeviceEvent.Info(DeviceMessage.LanFallback(null))))
     }
 
     @Test
@@ -176,7 +177,7 @@ class DeviceConnectionRepositoryTest {
         h.repo.applyConfig(ConfigPatch.build { lanOn(false) })
         runCurrent()
         assertTrue(h.repo.busy.value)
-        assertTrue(h.events.any { it is DeviceEvent.Info && it.message.startsWith("Wait for the current device task") })
+        assertTrue(h.events.contains(DeviceEvent.Info(DeviceMessage.Busy)))
         try {
             h.repo.applySensorConfig(ConfigPatch.build { lanOn(true) })
             fail("a second command must not run while the first holds the gate")
@@ -184,6 +185,35 @@ class DeviceConnectionRepositoryTest {
             // expected
         }
         h.until { !h.repo.busy.value }
+    }
+
+    @Test
+    fun `a saved setting is reported as a typed code`() = harnessTest { h ->
+        h.repo.connect(ADDRESS, "AQ-6b40", fake = true)
+        h.until { h.repo.connectionState.value.isReady && h.repo.config.value != null }
+
+        h.repo.applyConfig(ConfigPatch.build { lanOn(true) }, DeviceMessage.ConfigChange.LAN_ON)
+        h.until { h.events.any { it is DeviceEvent.Info && it.message is DeviceMessage.ConfigSaved } }
+
+        val saved = h.events.filterIsInstance<DeviceEvent.Info>().map { it.message }.filterIsInstance<DeviceMessage.ConfigSaved>().single()
+        assertEquals(DeviceMessage.ConfigChange.LAN_ON, saved.change)
+    }
+
+    @Test
+    fun `clearing bonds and a default save report which settings changed`() = harnessTest { h ->
+        h.repo.connect(ADDRESS, "AQ-6b40", fake = true)
+        h.until { h.repo.connectionState.value.isReady && h.repo.config.value != null }
+
+        h.repo.clearBonds()
+        h.until { h.events.any { it is DeviceEvent.Info && it.message is DeviceMessage.ConfigSaved } }
+        val saved = h.events.filterIsInstance<DeviceEvent.Info>().map { it.message }.filterIsInstance<DeviceMessage.ConfigSaved>().single()
+        assertEquals(DeviceMessage.ConfigChange.BONDS_CLEARED, saved.change)
+        h.until { !h.repo.busy.value }
+
+        h.repo.applyConfig(ConfigPatch.build { lanOn(false) })
+        h.until { h.events.count { it is DeviceEvent.Info && it.message is DeviceMessage.ConfigSaved } == 2 }
+        val second = h.events.filterIsInstance<DeviceEvent.Info>().map { it.message }.filterIsInstance<DeviceMessage.ConfigSaved>().last()
+        assertEquals("the default change is a plain settings save", DeviceMessage.ConfigChange.SETTINGS, second.change)
     }
 
     @Test

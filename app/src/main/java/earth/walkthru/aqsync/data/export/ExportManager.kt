@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.core.content.FileProvider
 import dagger.hilt.android.qualifiers.ApplicationContext
+import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.history.DerivedStore
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
 import earth.walkthru.aqsync.data.sync.FileArchive
@@ -51,7 +52,7 @@ class ExportManager @Inject constructor(
             putExtra(Intent.EXTRA_SUBJECT, file.name.substringAfterLast('/'))
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             clipData = android.content.ClipData.newRawUri(file.name, uri)
-        }.let { Intent.createChooser(it, "Share Parquet file") }
+        }.let { Intent.createChooser(it, context.getString(R.string.share_file)) }
     }
 
     fun shareIntent(files: List<ArchivedFile>): Intent? {
@@ -65,7 +66,7 @@ class ExportManager @Inject constructor(
             clipData = android.content.ClipData.newRawUri("parquet", uris.first()).also { cd ->
                 uris.drop(1).forEach { cd.addItem(android.content.ClipData.Item(it)) }
             }
-        }.let { Intent.createChooser(it, "Share ${uris.size} Parquet files") }
+        }.let { Intent.createChooser(it, context.resources.getQuantityString(R.plurals.share_files, uris.size, uris.size)) }
     }
 
     /** Suggested filename for the archive zip. */
@@ -135,7 +136,7 @@ class ExportManager @Inject constructor(
             putExtra(Intent.EXTRA_SUBJECT, zip.name)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             clipData = android.content.ClipData.newRawUri(zip.name, uri)
-        }.let { Intent.createChooser(it, "Share archive") }
+        }.let { Intent.createChooser(it, context.getString(R.string.share_archive)) }
     }
 
     /** Copy [zip] to a document Uri returned by ACTION_CREATE_DOCUMENT. */

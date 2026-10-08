@@ -45,6 +45,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -53,26 +55,30 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import earth.walkthru.aqsync.R
-import earth.walkthru.aqsync.data.DeviceEvent
 import earth.walkthru.aqsync.data.LogTailState
 import earth.walkthru.aqsync.data.ble.FrameDirection
 import earth.walkthru.aqsync.ui.components.CollectEvents
 import earth.walkthru.aqsync.ui.components.ConnectionBanner
+import earth.walkthru.aqsync.ui.components.InfoButton
+import earth.walkthru.aqsync.ui.components.InfoContent
 import earth.walkthru.aqsync.ui.components.InfoNote
+import earth.walkthru.aqsync.ui.components.NO_VALUE
 import earth.walkthru.aqsync.ui.components.SectionCard
 import earth.walkthru.aqsync.ui.components.StatLine
 import earth.walkthru.aqsync.ui.components.TickingText
 import earth.walkthru.aqsync.ui.components.TransportChip
 import earth.walkthru.aqsync.ui.components.WarningNote
-import earth.walkthru.aqsync.ui.components.formatAgo
+import earth.walkthru.aqsync.ui.components.agoFormatter
+import earth.walkthru.aqsync.ui.components.labelText
+import earth.walkthru.aqsync.ui.components.showDeviceEvent
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 /**
- * Advanced mode only. Everything here is raw and read-mostly: the status JSON as received, the
- * last frames on the link, the device's serial log ring, and a raw command box. Reachable only
- * while the Advanced switch is on; the route pops itself when the switch is turned off.
+ * Developer level only. Everything here is raw and read-mostly: the status JSON as received, the
+ * last frames on the link, the device's serial log ring, and a raw command box. The route pops
+ * itself when the level drops below Developer.
  */
 @Composable
 fun DebugScreen(
@@ -84,14 +90,12 @@ fun DebugScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val listState = rememberLazyListState()
+    val ago = agoFormatter()
 
     val clockHint = stringResource(R.string.event_clock_on_today)
+    val res = LocalResources.current
     CollectEvents(viewModel.events) { ev ->
-        when (ev) {
-            is DeviceEvent.Error -> snackbar.showSnackbar(ev.message)
-            is DeviceEvent.Info -> snackbar.showSnackbar(ev.message)
-            is DeviceEvent.ClockConfirmationRequired -> snackbar.showSnackbar(clockHint)
-        }
+        snackbar.showDeviceEvent(res, ev) { snackbar.showSnackbar(clockHint) }
     }
     LaunchedEffect(state.address) {
         if (state.address != null && state.address != address) onDisconnected()
@@ -110,10 +114,10 @@ fun DebugScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back") } },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = stringResource(R.string.action_back)) } },
                 title = {
                     Column {
-                        Text("Debug", style = MaterialTheme.typography.titleLarge)
+                        Text(stringResource(R.string.nav_debug), style = MaterialTheme.typography.titleLarge)
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             TransportChip(state.transport)
                             Text(state.endpoint ?: address, style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -135,56 +139,59 @@ fun DebugScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 item(key = "link") {
-                    SectionCard("active transport") {
-                        StatLine("transport", state.transport?.label ?: "—")
-                        StatLine("endpoint", state.endpoint ?: "—")
-                        StatLine("payload_max", state.payloadMax?.let { "$it B" } ?: "—")
-                        StatLine("state", state.connection.let { c -> c::class.simpleName ?: "?" })
+                    SectionCard(stringResource(R.string.debug_transport_title)) {
+                        StatLine(stringResource(R.string.debug_transport), state.transport?.labelText() ?: NO_VALUE)
+                        StatLine(stringResource(R.string.debug_endpoint), state.endpoint ?: NO_VALUE)
+                        StatLine("payload_max", state.payloadMax?.let { "$it B" } ?: NO_VALUE)
+                        StatLine(stringResource(R.string.debug_state), state.connection.let { c -> c::class.simpleName ?: NO_VALUE })
                     }
                 }
                 item(key = "sync-diagnostics") {
-                    SectionCard("smart sync diagnostics") {
+                    SectionCard(stringResource(R.string.debug_sync_title)) {
                         val a = state.archiveTime
-                        StatLine("archive", "${a.files} files · ${a.rows} rows")
-                        StatLine("real UTC", "${a.realTimeRows} rows")
-                        StatLine("same-boot estimate", "${a.estimatedRows} rows in ${a.estimatedFiles} files")
-                        StatLine("unplaced", "${a.unplacedRows} rows in ${a.unplacedFiles} files · ${a.unplacedBoots} boot(s)")
+                        StatLine(stringResource(R.string.debug_archive), files(a.files) + " · " + rows(a.rows))
+                        StatLine(stringResource(R.string.debug_real_utc), rows(a.realTimeRows))
+                        StatLine(stringResource(R.string.debug_estimate), rows(a.estimatedRows) + " · " + files(a.estimatedFiles))
+                        StatLine(
+                            stringResource(R.string.debug_unplaced),
+                            rows(a.unplacedRows) + " · " + files(a.unplacedFiles) + " · " + pluralStringResource(R.plurals.debug_boots, a.unplacedBoots, a.unplacedBoots),
+                        )
                         Spacer(Modifier.height(8.dp))
                         MonoBox(
                             state.syncDiagnostics.asReversed().joinToString("\n") { d ->
                                 "${timeOf(d.atEpochMs)}  ${d.step.padEnd(10)} ${d.detail}"
-                            }.ifEmpty { "No Smart Sync decisions recorded yet." },
+                            }.ifEmpty { stringResource(R.string.debug_sync_none) },
                             maxHeight = 240,
                         )
                     }
                 }
                 item(key = "status") {
                     SectionCard(
-                        "status json (live)",
+                        stringResource(R.string.debug_status_title),
                         trailing = {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                state.statusAtEpochMs?.let { at -> TickingText({ now -> formatAgo(now - at) }) }
+                                state.statusAtEpochMs?.let { at -> TickingText({ now -> ago(now - at) }) }
                                 IconButton(onClick = { viewModel.requestStatus() }, enabled = state.connection.isReady) {
-                                    Icon(Icons.Rounded.Refresh, contentDescription = "Request status (0x07)")
+                                    Icon(Icons.Rounded.Refresh, contentDescription = stringResource(R.string.debug_request_status))
                                 }
                             }
                         },
                     ) {
-                        MonoBox(state.statusJsonPretty ?: "no status received yet", maxHeight = 320)
+                        MonoBox(state.statusJsonPretty ?: stringResource(R.string.debug_status_none), maxHeight = 320)
                     }
                 }
                 item(key = "config") {
-                    SectionCard("config json") {
-                        MonoBox(state.configJsonPretty ?: "no CONFIG received (protocol v1 device, or not read yet)", maxHeight = 320)
+                    SectionCard(stringResource(R.string.debug_config_title)) {
+                        MonoBox(state.configJsonPretty ?: stringResource(R.string.debug_config_none), maxHeight = 320)
                     }
                 }
                 item(key = "frames") {
                     SectionCard(
-                        "last ${state.frames.size} raw frames (newest first)",
-                        trailing = { TextButton(onClick = { viewModel.clearFrames() }) { Text("Clear") } },
+                        pluralStringResource(R.plurals.debug_frames_title, state.frames.size, state.frames.size),
+                        trailing = { TextButton(onClick = { viewModel.clearFrames() }) { Text(stringResource(R.string.debug_clear)) } },
                     ) {
                         if (state.frames.isEmpty()) {
-                            Text("Nothing captured yet.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(stringResource(R.string.debug_frames_none), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         } else {
                             Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
                                 state.frames.forEach { f ->
@@ -218,13 +225,13 @@ fun DebugScreen(
                                 }
                             }
                         }
-                        InfoNote("TX = requests written to `control`; RX = frames from `response`. Pushed status/live JSON is not listed here. TOKEN bodies and SET_CONFIG requests are redacted.")
+                        InfoNote(stringResource(R.string.debug_frames_note))
                     }
                 }
                 item(key = "log") {
                     val log = state.log
                     SectionCard(
-                        "device log (LOG_TAIL 8192)",
+                        stringResource(R.string.debug_log_title),
                         trailing = {
                             FilledTonalButton(onClick = { viewModel.refreshLog() }, enabled = state.connection.isReady && log !is LogTailState.Loading) {
                                 if (log is LogTailState.Loading) {
@@ -233,36 +240,50 @@ fun DebugScreen(
                                     Icon(Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                                 }
                                 Spacer(Modifier.width(6.dp))
-                                Text(if (log is LogTailState.Idle) "Device log" else "Refresh")
+                                Text(stringResource(if (log is LogTailState.Idle) R.string.debug_log_fetch else R.string.debug_log_refresh))
                             }
                         },
                     ) {
                         when (log) {
-                            LogTailState.Idle -> Text("Fetches the newest 8 KiB of the device's serial log ring — the same PARQUET / BLE / WIFI lines a bench capture shows. Text for humans, not an API.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            LogTailState.Loading -> Text("Fetching…", style = MaterialTheme.typography.bodySmall)
-                            is LogTailState.Failed -> WarningNote(log.message)
+                            LogTailState.Idle -> Text(stringResource(R.string.debug_log_idle), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            LogTailState.Loading -> Text(stringResource(R.string.debug_log_loading), style = MaterialTheme.typography.bodySmall)
+                            is LogTailState.Failed -> WarningNote(stringResource(R.string.debug_log_failed, log.message))
                             is LogTailState.Loaded -> {
+                                val summary = stringResource(R.string.debug_log_summary, log.tail.returned, log.tail.totalBytesSinceBoot)
                                 TickingText(
-                                    { now -> "${log.tail.returned} B returned of ${log.tail.totalBytesSinceBoot} B logged since boot · ${formatAgo(now - log.atEpochMs)}" },
+                                    { now -> "$summary · ${ago(now - log.atEpochMs)}" },
                                     maxLines = 2,
                                 )
                                 if (!log.tail.complete) {
                                     Spacer(Modifier.height(4.dp))
-                                    WarningNote("Received ${log.tail.receivedBytes} B but LOG_END says ${log.tail.returned}: a slice may be missing.")
+                                    WarningNote(stringResource(R.string.debug_log_incomplete, log.tail.receivedBytes, log.tail.returned))
                                 }
                                 Spacer(Modifier.height(6.dp))
-                                MonoBox(log.tail.text.ifEmpty { "(empty)" }, maxHeight = 420)
+                                MonoBox(log.tail.text.ifEmpty { stringResource(R.string.debug_log_empty) }, maxHeight = 420)
                             }
                         }
                     }
                 }
                 item(key = "raw") {
                     var hex by rememberSaveable { mutableStateOf("08") }
-                    SectionCard("raw command") {
+                    val rawTitle = stringResource(R.string.debug_raw_title)
+                    SectionCard(
+                        rawTitle,
+                        trailing = {
+                            InfoButton(
+                                InfoContent(
+                                    rawTitle,
+                                    stringResource(R.string.debug_raw_info1),
+                                    stringResource(R.string.debug_raw_info2),
+                                    stringResource(R.string.debug_raw_info3),
+                                ),
+                            )
+                        },
+                    ) {
                         Text(
-                            "Hex bytes of one `control` request (first byte = opcode). The reply frames are collected until the device is quiet for 1.5 s. " +
-                                "Examples: 01 LIST · 07 STATUS · 08 GET_CONFIG · 0c 0020 LOG_TAIL 8192 · 0d GET_TOKEN (BLE only).",
+                            stringResource(R.string.debug_raw_examples),
                             style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Spacer(Modifier.height(8.dp))
@@ -270,35 +291,50 @@ fun DebugScreen(
                             OutlinedTextField(
                                 value = hex,
                                 onValueChange = { hex = it },
-                                label = { Text("hex") },
+                                label = { Text(stringResource(R.string.debug_raw_hex)) },
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, capitalization = KeyboardCapitalization.None),
                                 modifier = Modifier.weight(1f),
                                 isError = state.rawError != null,
                             )
                             FilledTonalButton(onClick = { viewModel.sendRaw(hex) }, enabled = state.connection.isReady && !state.rawBusy) {
-                                if (state.rawBusy) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp) else Icon(Icons.AutoMirrored.Rounded.Send, contentDescription = "Send")
+                                if (state.rawBusy) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp) else Icon(Icons.AutoMirrored.Rounded.Send, contentDescription = stringResource(R.string.debug_raw_send))
                             }
                         }
                         state.rawError?.let {
                             Spacer(Modifier.height(6.dp))
-                            WarningNote(it)
+                            WarningNote(rawErrorText(it))
                         }
                         if (state.rawResults.isNotEmpty()) {
                             Spacer(Modifier.height(8.dp))
-                            Text("${state.rawResults.size} frame(s)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(pluralStringResource(R.plurals.debug_raw_frames, state.rawResults.size, state.rawResults.size), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             MonoBox(
                                 state.rawResults.joinToString("\n") { r -> "${r.decoded}\n    ${r.hex.take(96)}${if (r.hex.length > 96) "…" else ""}" },
                                 maxHeight = 320,
                             )
                         }
-                        InfoNote("Only reads and the documented state changes are wise here; the device never deletes or rewrites anything on request, so the worst case is a rejected frame.")
                     }
                 }
             }
         }
     }
 }
+
+@Composable
+private fun rawErrorText(e: RawError): String = when (e) {
+    RawError.BackgroundOwns -> stringResource(R.string.msg_background_owns_command)
+    RawError.InvalidHex -> stringResource(R.string.debug_raw_invalid_hex)
+    RawError.BadLength -> stringResource(R.string.debug_raw_bad_length)
+    is RawError.NeedsConfirmation -> stringResource(R.string.debug_raw_needs_confirmation, e.opcode)
+    RawError.NoResponse -> stringResource(R.string.debug_raw_no_response)
+    is RawError.Failed -> e.detail
+}
+
+@Composable
+private fun files(n: Int): String = pluralStringResource(R.plurals.scan_files, n, n)
+
+@Composable
+private fun rows(n: Long): String = pluralStringResource(R.plurals.fm_rows_count, n.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(), n)
 
 @Composable
 private fun MonoBox(text: String, maxHeight: Int) {

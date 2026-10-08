@@ -33,11 +33,11 @@ class FileGroupingTest {
         val groups = FileGrouping.group(listOf(dated(17, "2045", 1), dated(17, "2100", 3), dated(18, "0300", 5)), zone, Locale.US)
         assertEquals(2, groups.size)
         // Newest local day first.
-        assertEquals("Fri 18 Sep 2026", groups[0].title)
-        assertEquals("station 53315f5f · UTC folders 2026-09-17, 2026-09-18", groups[0].subtitle)
+        assertEquals(GroupTitle.LocalDay("Fri 18 Sep 2026"), groups[0].title)
+        assertEquals(GroupDetail(station = "53315f5f", utcFolders = listOf("2026-09-17", "2026-09-18")), groups[0].detail)
         assertEquals(listOf("06:00", "00:00"), groups[0].entries.map { it.localTime })
-        assertEquals("Thu 17 Sep 2026", groups[1].title)
-        assertEquals("station 53315f5f · UTC folder 2026-09-17", groups[1].subtitle)
+        assertEquals(GroupTitle.LocalDay("Thu 17 Sep 2026"), groups[1].title)
+        assertEquals(GroupDetail(station = "53315f5f", utcFolders = listOf("2026-09-17")), groups[1].detail)
         assertEquals(listOf("23:45"), groups[1].entries.map { it.localTime })
     }
 
@@ -45,7 +45,7 @@ class FileGroupingTest {
     fun `dated files are grouped by local day west of Greenwich`() {
         val zone = ZoneId.of("America/Los_Angeles") // UTC-7 in September
         val groups = FileGrouping.group(listOf(dated(18, "0300", 1), dated(18, "1500", 3)), zone, Locale.US)
-        assertEquals(listOf("Fri 18 Sep 2026", "Thu 17 Sep 2026"), groups.map { it.title })
+        assertEquals(listOf("Fri 18 Sep 2026", "Thu 17 Sep 2026"), groups.map { (it.title as GroupTitle.LocalDay).text })
         assertEquals("08:00", groups[0].entries.single().localTime)
         assertEquals("20:00", groups[1].entries.single().localTime)
     }
@@ -53,7 +53,7 @@ class FileGroupingTest {
     @Test
     fun `in UTC the grouping matches the SD card folders`() {
         val groups = FileGrouping.group(listOf(dated(17, "2045", 1), dated(18, "0300", 5)), ZoneId.of("UTC"), Locale.US)
-        assertEquals(listOf("Fri 18 Sep 2026", "Thu 17 Sep 2026"), groups.map { it.title })
+        assertEquals(listOf("Fri 18 Sep 2026", "Thu 17 Sep 2026"), groups.map { (it.title as GroupTitle.LocalDay).text })
         assertEquals("03:00", groups[0].entries.single().localTime)
     }
 
@@ -69,7 +69,11 @@ class FileGroupingTest {
             ZoneId.of("UTC"),
             Locale.US,
         )
-        assertEquals(listOf("Thu 17 Sep 2026", "Unsynced (no UTC)", "Benchmarks", "Legacy Parquet"), groups.map { it.title })
+        assertEquals(
+            listOf(GroupTitle.LocalDay("Thu 17 Sep 2026"), GroupTitle.Unsynced, GroupTitle.Benchmarks, GroupTitle.Legacy),
+            groups.map { it.title },
+        )
+        assertEquals(GroupDetail(boot = "b41d37a48c04"), groups[1].detail)
         assertEquals(listOf(null), groups[1].entries.map { it.localTime })
     }
 }

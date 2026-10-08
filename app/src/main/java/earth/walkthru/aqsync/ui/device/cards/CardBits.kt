@@ -18,7 +18,7 @@ import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.ui.components.Eyebrow
 import earth.walkthru.aqsync.ui.components.NO_VALUE
 import earth.walkthru.aqsync.ui.components.StatusDot
-import earth.walkthru.aqsync.ui.components.formatAgo
+import earth.walkthru.aqsync.ui.components.agoFormatter
 import earth.walkthru.aqsync.ui.components.rememberNowMillis
 import java.util.Locale
 
@@ -44,13 +44,14 @@ fun FreshnessLabel(receivedAtEpochMs: Long?, color: Color = MaterialTheme.colorS
     val now = rememberNowMillis()
     val ageMs = receivedAtEpochMs?.let { now - it }
     val stale = ageMs == null || ageMs > STALE_AFTER_MS
+    val ago = agoFormatter()
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         StatusDot(if (stale) color.copy(alpha = 0.4f) else color, size = 8)
         Text(
             when {
                 ageMs == null -> stringResource(R.string.fresh_none)
-                stale -> stringResource(R.string.fresh_stale, formatAgo(ageMs))
-                else -> stringResource(R.string.fresh_updated, formatAgo(ageMs))
+                stale -> stringResource(R.string.fresh_stale, ago(ageMs))
+                else -> stringResource(R.string.fresh_updated, ago(ageMs))
             },
             style = MaterialTheme.typography.labelSmall,
             color = color,

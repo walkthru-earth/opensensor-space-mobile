@@ -79,7 +79,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UIDocumentPickerD
                 self.preparedExport = (snapshot, count)
                 self.presentExportIfReady()
             } catch {
-                self.finishExport("Could not prepare the export. Collected files remain saved; try again.")
+                self.finishExport("Could not prepare the export. Collected files remain saved. Try again.")
             }
         }
     }

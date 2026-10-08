@@ -20,9 +20,11 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.history.AirMood
 import earth.walkthru.aqsync.data.history.ChartAxes
 import earth.walkthru.aqsync.data.history.HistoryColumn
@@ -67,6 +69,7 @@ fun BandColumnChart(
     val gridColor = muted.copy(alpha = 0.18f)
     val labelPx = with(LocalDensity.current) { 11.sp.toPx() }
     val labelPaint = remember(muted, labelPx) { textPaint(muted, labelPx) }
+    val whoLabel = stringResource(R.string.chart_who_24h)
     val capPaint = remember(onSurface, labelPx) { textPaint(onSurface, labelPx * 0.95f, bold = true) }
 
     // The metric's own floor (PM2.5: 60, so the whole "Getting hazy" band is always visible); spikes beyond are capped.
@@ -119,7 +122,7 @@ fun BandColumnChart(
         if (ChartAxes.hasPm25Guideline(metric) && WHO_PM25_24H < yMax) {
             val yy = y(WHO_PM25_24H)
             drawLine(AirMood.FINE.color().copy(alpha = 0.9f), Offset(plot.left, yy), Offset(plot.right, yy), 1.5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f)))
-            val label = "WHO 24 h"
+            val label = whoLabel
             val w = labelPaint.measureText(label)
             drawContext.canvas.nativeCanvas.drawText(label, plot.right - w, yy - labelPx * 0.4f, labelPaint)
         }

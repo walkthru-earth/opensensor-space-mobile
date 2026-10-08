@@ -21,9 +21,33 @@ data class FileItem(val entry: ManifestEntry, val localTime: String?)
  * Greenwich the evening's files sit in tomorrow's folder and, west of it, the morning's in
  * yesterday's. The archive path stays verbatim; only the header changes.
  */
-data class PartitionGroup(val partition: HivePartition, val title: String, val subtitle: String?, val entries: List<FileItem>) {
+data class PartitionGroup(val partition: HivePartition, val title: GroupTitle, val detail: GroupDetail, val entries: List<FileItem>) {
     val bytes: Long get() = entries.sumOf { it.entry.bytes }
+    val key: String get() = "$title|$detail"
 }
+
+/** What a group header names. The UI maps each to a string resource (`FilesScreen`). */
+sealed interface GroupTitle {
+    /** A local calendar day, already formatted for the locale. */
+    data class LocalDay(val text: String) : GroupTitle
+
+    /** A dated folder whose file names carry no window time, named by its UTC day. */
+    data class UtcDay(val isoDate: String) : GroupTitle
+    data object Unsynced : GroupTitle
+    data object Benchmarks : GroupTitle
+    data object Legacy : GroupTitle
+
+    /** An unrecognised folder; [directory] is empty for the archive root. */
+    data class Other(val directory: String) : GroupTitle
+}
+
+/** Developer facts under a group header: identifiers, never sentences. */
+data class GroupDetail(
+    val station: String? = null,
+    val boot: String? = null,
+    val utcFolders: List<String> = emptyList(),
+    val unrecognised: Boolean = false,
+)
 
 /** Pure display grouping of a sync plan's entries; `zone` is a parameter so tests can pin it. */
 object FileGrouping {
@@ -60,26 +84,25 @@ object FileGrouping {
             val p = key.partition
             val items = list.sortedWith(compareByDescending<ManifestEntry> { windowStartUtc(it) ?: Instant.MIN }.thenByDescending { it.name })
                 .map { e -> FileItem(e, windowStartUtc(e)?.let { timeFmt.format(it) }) }
-            val (title, subtitle) = when {
+            val (title, detail) = when {
                 p is HivePartition.Dated && key.localDay != null -> {
                     val utcDays = list.map { (it.partition as HivePartition.Dated).isoDate }.distinct().sorted()
-                    val folder = if (utcDays.size == 1) "UTC folder ${utcDays.single()}" else "UTC folders ${utcDays.joinToString(", ")}"
-                    dayFmt.format(key.localDay) to "station ${p.station.take(8)} · $folder"
+                    GroupTitle.LocalDay(dayFmt.format(key.localDay)) to GroupDetail(station = p.station.take(8), utcFolders = utcDays)
                 }
                 // A dated folder whose file names carry no window time: shown as the UTC day it came from.
-                p is HivePartition.Dated -> "${p.isoDate} (UTC day)" to "station ${p.station.take(8)}"
-                p is HivePartition.Unsynced -> "Unsynced (no UTC)" to "boot ${p.boot.take(12)}"
-                p is HivePartition.Benchmarks -> "Benchmarks" to p.boot?.let { "boot ${it.take(12)}" }
-                p is HivePartition.Legacy -> "Legacy Parquet" to null
-                p is HivePartition.Other -> (p.directory.ifEmpty { "(root)" }) to "unrecognised layout"
+                p is HivePartition.Dated -> GroupTitle.UtcDay(p.isoDate) to GroupDetail(station = p.station.take(8))
+                p is HivePartition.Unsynced -> GroupTitle.Unsynced to GroupDetail(boot = p.boot.take(12))
+                p is HivePartition.Benchmarks -> GroupTitle.Benchmarks to GroupDetail(boot = p.boot?.take(12))
+                p is HivePartition.Legacy -> GroupTitle.Legacy to GroupDetail()
+                p is HivePartition.Other -> GroupTitle.Other(p.directory) to GroupDetail(unrecognised = true)
                 else -> error("unreachable")
             }
-            key to PartitionGroup(p, title, subtitle, items)
+            key to PartitionGroup(p, title, detail, items)
         }.sortedWith(
             compareBy<Pair<Key, PartitionGroup>> { it.first.rank }
                 .thenByDescending { it.first.localDay ?: LocalDate.MIN }
                 .thenByDescending { (it.first.partition as? HivePartition.Dated)?.isoDate ?: "" }
-                .thenBy { it.second.title }
+                .thenBy { it.second.key }
         ).map { it.second }
     }
 

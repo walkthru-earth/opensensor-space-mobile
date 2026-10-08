@@ -55,6 +55,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
@@ -63,7 +64,6 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import earth.walkthru.aqsync.R
-import earth.walkthru.aqsync.data.DeviceEvent
 import earth.walkthru.aqsync.data.ManifestState
 import earth.walkthru.aqsync.data.SyncProgress
 import earth.walkthru.aqsync.data.background.AutoSyncScheduler
@@ -79,9 +79,10 @@ import earth.walkthru.aqsync.ui.components.Eyebrow
 import earth.walkthru.aqsync.ui.components.MascotGuide
 import earth.walkthru.aqsync.ui.components.TickingText
 import earth.walkthru.aqsync.ui.components.TransportChip
-import earth.walkthru.aqsync.ui.components.formatAgo
+import earth.walkthru.aqsync.ui.components.agoFormatter
 import earth.walkthru.aqsync.ui.components.formatBytes
 import earth.walkthru.aqsync.ui.components.formatRate
+import earth.walkthru.aqsync.ui.components.showScreenMessage
 import earth.walkthru.aqsync.ui.permissions.rememberNotificationPermission
 
 @Composable
@@ -97,6 +98,7 @@ fun FilesScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
+    val res = LocalResources.current
     val level = state.detailLevel
     val clockHint = stringResource(R.string.event_clock_on_today)
 
@@ -110,11 +112,7 @@ fun FilesScreen(
     fun withNotificationPermission(action: () -> Unit) = notificationPermission.ensureThen(action)
 
     CollectEvents(viewModel.events) { ev ->
-        when (ev) {
-            is DeviceEvent.Error -> snackbar.showSnackbar(ev.message)
-            is DeviceEvent.Info -> snackbar.showSnackbar(ev.message)
-            is DeviceEvent.ClockConfirmationRequired -> snackbar.showSnackbar(clockHint)
-        }
+        snackbar.showScreenMessage(res, ev) { snackbar.showSnackbar(clockHint) }
     }
     CollectEvents(viewModel.effects) { fx ->
         when (fx) {
@@ -261,7 +259,7 @@ fun FilesScreen(
                 }
                 manifestState is ManifestState.Error && m == null -> item {
                     Surface(color = MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth()) {
-                        Text(if (level.detailed) stringResource(R.string.files_list_failed_detail, manifestState.message) else stringResource(R.string.files_list_failed_simple), Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onErrorContainer)
+                        Text(if (level.developer) stringResource(R.string.files_list_failed_detail, manifestState.message) else stringResource(R.string.files_list_failed_simple), Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onErrorContainer)
                     }
                 }
             }
@@ -288,14 +286,15 @@ fun FilesScreen(
                             }
                         } else {
                             val listed = stringResource(R.string.files_listed)
-                            TickingText({ now -> listed.format(formatAgo(now - m.atEpochMs)) }, style = MaterialTheme.typography.bodySmall)
+                            val ago = agoFormatter()
+                            TickingText({ now -> listed.format(ago(now - m.atEpochMs)) }, style = MaterialTheme.typography.bodySmall)
                         }
                     }
                     manifestState.error?.let { reason ->
                         // The refresh failed; the list below is the one from `listed … ago` and is
                         // still valid (device files are immutable). Refresh, or wait for the reconnect.
                         Text(
-                            stringResource(R.string.files_refresh_failed, reason),
+                            if (level.developer) stringResource(R.string.files_refresh_failed, reason) else stringResource(R.string.files_refresh_failed_simple),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error,
                         )
@@ -315,18 +314,23 @@ fun FilesScreen(
                 }
                 if (m.files.isEmpty()) item { Hint(stringResource(if (level.detailed) R.string.files_none_detailed else R.string.files_none_simple)) }
                 state.groups.forEach { group ->
-                    item(key = "g:" + group.title + group.subtitle) {
+                    item(key = "g:" + group.key) {
                         Column(Modifier.padding(top = 8.dp)) {
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                Text(group.title, style = MaterialTheme.typography.titleMedium)
+                                Text(groupTitle(group.title), style = MaterialTheme.typography.titleMedium)
                                 Spacer(Modifier.weight(1f))
                                 Text(
-                                    "${group.entries.count { it.entry.state == FileSyncState.SYNCED }}/${group.entries.size} · ${formatBytes(group.bytes)}",
+                                    stringResource(
+                                        R.string.files_group_count,
+                                        group.entries.count { it.entry.state == FileSyncState.SYNCED },
+                                        group.entries.size,
+                                        formatBytes(group.bytes),
+                                    ),
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
-                            group.subtitle?.takeIf { level.developer }?.let {
+                            groupDetail(group.detail)?.takeIf { level.developer }?.let {
                                 Text(it, style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
@@ -337,6 +341,7 @@ fun FilesScreen(
                             entry = entry,
                             localTime = item.localTime,
                             showName = level.developer || item.localTime == null,
+                            showDetail = level.developer,
                             canSync = state.connection.isReady && !state.sync.running,
                             onSync = { withNotificationPermission { viewModel.syncOne(entry.name) } },
                             onShare = {
@@ -375,7 +380,8 @@ private fun SyncProgressCard(sync: SyncProgress, level: DetailLevel) {
                     if (level.detailed) Text(formatRate(sync.bytesPerSecond), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
                 } else {
                     sync.finishedAtEpochMs?.let { done ->
-                        TickingText({ now -> formatAgo(now - done) }, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        val ago = agoFormatter()
+                        TickingText({ now -> ago(now - done) }, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
                     }
                 }
             }
@@ -413,7 +419,7 @@ private fun SyncProgressCard(sync: SyncProgress, level: DetailLevel) {
 }
 
 @Composable
-private fun FileRow(entry: ManifestEntry, localTime: String?, showName: Boolean, canSync: Boolean, onSync: () -> Unit, onShare: () -> Unit, onInspect: (() -> Unit)? = null) {
+private fun FileRow(entry: ManifestEntry, localTime: String?, showName: Boolean, showDetail: Boolean, canSync: Boolean, onSync: () -> Unit, onShare: () -> Unit, onInspect: (() -> Unit)? = null) {
     val (icon, tint, label) = when (entry.state) {
         FileSyncState.SYNCED -> Triple(Icons.Rounded.CheckCircle, MaterialTheme.colorScheme.secondary, stringResource(R.string.file_synced))
         FileSyncState.SYNCING -> Triple(null, MaterialTheme.colorScheme.primary, stringResource(R.string.file_syncing, formatBytes(entry.partialBytes), formatBytes(entry.bytes)))
@@ -474,9 +480,28 @@ private fun FileRow(entry: ManifestEntry, localTime: String?, showName: Boolean,
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 )
             }
-            entry.detail?.let {
+            entry.detail?.takeIf { showDetail }?.let {
                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 4.dp))
             }
         }
     }
 }
+
+@Composable
+private fun groupTitle(title: GroupTitle): String = when (title) {
+    is GroupTitle.LocalDay -> title.text
+    is GroupTitle.UtcDay -> stringResource(R.string.files_group_utc_day, title.isoDate)
+    GroupTitle.Unsynced -> stringResource(R.string.files_group_unsynced)
+    GroupTitle.Benchmarks -> stringResource(R.string.files_group_benchmarks)
+    GroupTitle.Legacy -> stringResource(R.string.files_group_legacy)
+    is GroupTitle.Other -> title.directory.ifEmpty { stringResource(R.string.files_group_root) }
+}
+
+/** Developer line under a group header, null when there is nothing to show. */
+@Composable
+private fun groupDetail(detail: GroupDetail): String? = listOfNotNull(
+    detail.station?.let { stringResource(R.string.files_group_station, it) },
+    detail.utcFolders.takeIf { it.isNotEmpty() }?.let { pluralStringResource(R.plurals.files_group_utc_folders, it.size, it.joinToString(", ")) },
+    detail.boot?.let { stringResource(R.string.files_group_boot, it) },
+    stringResource(R.string.files_group_unrecognised).takeIf { detail.unrecognised },
+).joinToString(" · ").ifEmpty { null }

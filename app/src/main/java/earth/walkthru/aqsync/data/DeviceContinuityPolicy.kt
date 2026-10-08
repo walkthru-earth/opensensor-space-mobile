@@ -15,16 +15,17 @@ object DeviceContinuityPolicy {
         data class Reject(val reason: Reason) : Decision
     }
 
-    enum class Reason(val message: String) {
-        ENDPOINT_CHANGED("The device endpoint changed. Pair and enroll the replacement explicitly."),
-        HARDWARE_CHANGED("The device hardware identity changed. Enroll the replacement explicitly."),
-        HARDWARE_MISSING("The enrolled device no longer reports its hardware identity."),
-        HARDWARE_MALFORMED("The device reports an invalid hardware identity."),
-        STATION_MISSING("The device did not report a station identity."),
-        STATION_MALFORMED("The device reports an invalid station identity."),
-        ENROLLMENT_REQUIRES_BLE("Enroll this device over Bluetooth first."),
-        STATION_CHANGE_REQUIRES_BLE("The station identity changed. Reconnect over Bluetooth to verify it."),
-        STATION_CHANGE_REQUIRES_HARDWARE("The station identity changed without a matching full hardware identity."),
+    /** Mapped to copy in the UI (`DeviceMessages.kt`). */
+    enum class Reason {
+        ENDPOINT_CHANGED,
+        HARDWARE_CHANGED,
+        HARDWARE_MISSING,
+        HARDWARE_MALFORMED,
+        STATION_MISSING,
+        STATION_MALFORMED,
+        ENROLLMENT_REQUIRES_BLE,
+        STATION_CHANGE_REQUIRES_BLE,
+        STATION_CHANGE_REQUIRES_HARDWARE,
     }
 
     fun evaluate(expected: Identity?, observed: Identity, authenticatedBle: Boolean): Decision {

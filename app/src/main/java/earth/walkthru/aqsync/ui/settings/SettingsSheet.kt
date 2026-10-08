@@ -55,7 +55,17 @@ fun SettingsSheet(onDismiss: () -> Unit, viewModel: SettingsViewModel = hiltView
                         selected = level == l,
                         onClick = { viewModel.setDetailLevel(l) },
                         shape = SegmentedButtonDefaults.itemShape(i, DetailLevel.entries.size),
-                        label = { Text(l.title) },
+                        label = {
+                            Text(
+                                stringResource(
+                                    when (l) {
+                                        DetailLevel.SIMPLE -> R.string.level_simple
+                                        DetailLevel.DETAILED -> R.string.level_detailed
+                                        DetailLevel.DEVELOPER -> R.string.level_developer
+                                    },
+                                ),
+                            )
+                        },
                     )
                 }
             }
@@ -80,7 +90,17 @@ fun SettingsSheet(onDismiss: () -> Unit, viewModel: SettingsViewModel = hiltView
                         selected = clockMode == mode,
                         onClick = { viewModel.setClockSyncMode(mode) },
                         shape = SegmentedButtonDefaults.itemShape(i, ClockSyncMode.entries.size),
-                        label = { Text(mode.title) },
+                        label = {
+                            Text(
+                                stringResource(
+                                    when (mode) {
+                                        ClockSyncMode.ASK -> R.string.clock_mode_ask_title
+                                        ClockSyncMode.AUTOMATIC -> R.string.clock_mode_automatic_title
+                                        ClockSyncMode.NEVER -> R.string.clock_mode_never_title
+                                    },
+                                ),
+                            )
+                        },
                     )
                 }
             }

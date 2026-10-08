@@ -199,7 +199,7 @@ class SyncEngine(
                                     return FileOutcome.Failed(
                                         name,
                                         "window at $offset lost $attempt× in a row (last: ${e.message}); " +
-                                            "notifications keep getting lost on this link — move closer and retry"
+                                            "notifications keep getting lost on this link, move closer and retry"
                                     )
                                 }
                                 delay(windowRetryBackoffMs * attempt)
