@@ -8,20 +8,19 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import kotlinx.datetime.toKotlinTimeZone
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
-import org.junit.Test
-import java.time.ZoneId
+import kotlinx.datetime.TimeZone
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ArchiveQueriesTest {
-    private val zone = ZoneId.of("UTC")
+    private val zone = TimeZone.UTC
 
     @Test
-    fun `station metric range and paging changes hide old data before new reads complete`() = runTest {
-        val first = ArchiveSeriesQuery("station-a", Metrics.PM25, HistoryRange.DAY, HistoryWindow.endingAt(86_400L, HistoryRange.DAY, zone.toKotlinTimeZone()))
+    fun `station and metric and range and paging changes hide old data before new reads complete`() = runTest {
+        val first = ArchiveSeriesQuery("station-a", Metrics.PM25, HistoryRange.DAY, HistoryWindow.endingAt(86_400L, HistoryRange.DAY, zone))
         val queries = MutableStateFlow(first)
         var result: ArchiveQueryResult<ArchiveSeriesQuery, String>? = null
         backgroundScope.launch {
@@ -32,7 +31,7 @@ class ArchiveQueriesTest {
         runCurrent()
         assertEquals("station-a", result?.forQuery(first))
 
-        for (next in listOf(first.copy(station = "station-b"), first.copy(metric = Metrics.HUMIDITY), first.copy(range = HistoryRange.WEEK, window = HistoryWindow.endingAt(first.toS, HistoryRange.WEEK, zone.toKotlinTimeZone())), first.copy(window = HistoryWindow.endingAt(172_800L, HistoryRange.DAY, zone.toKotlinTimeZone())))) {
+        for (next in listOf(first.copy(station = "station-b"), first.copy(metric = Metrics.HUMIDITY), first.copy(range = HistoryRange.WEEK, window = HistoryWindow.endingAt(first.toS, HistoryRange.WEEK, zone)), first.copy(window = HistoryWindow.endingAt(172_800L, HistoryRange.DAY, zone)))) {
             queries.value = next
             // The UI label can update before the result collector is scheduled: old data must be hidden already.
             assertNull(result?.forQuery(next))

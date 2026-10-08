@@ -6,8 +6,7 @@ import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
-import kotlinx.datetime.toKotlinTimeZone
-import java.time.ZoneId
+import kotlinx.datetime.TimeZone
 
 /** Includes the range as well as both derived bounds, so paging and midnight cannot reuse a result. */
 data class ArchiveSeriesQuery(val station: String?, val metric: MetricSpec, val range: HistoryRange, val window: HistoryWindow) {
@@ -15,8 +14,9 @@ data class ArchiveSeriesQuery(val station: String?, val metric: MetricSpec, val 
     val toS: Long get() = window.toS
 }
 
-data class ArchiveDayQuery(val station: String?, val dayStartS: Long, val zone: ZoneId = ZoneId.systemDefault()) {
-    val window: HistoryWindow get() = HistoryWindow.dayContaining(dayStartS, zone.toKotlinTimeZone())
+/** One local day of one station. On the JVM a `java.time.ZoneId` overload builds it too (jvmMain). */
+data class ArchiveDayQuery(val station: String?, val dayStartS: Long, val zone: TimeZone = TimeZone.currentSystemDefault()) {
+    val window: HistoryWindow get() = HistoryWindow.dayContaining(dayStartS, zone)
 }
 
 /** Carries provenance through asynchronous reads and independently combined UI label flows. */

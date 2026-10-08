@@ -38,9 +38,9 @@ interfaces.
 
 This is the target shape from [platform-parity-plan.md](platform-parity-plan.md). It is not
 today's code. Today Android runs `app/.../data/sync/SyncEngine.kt` and iOS runs a second engine in
-`ios/App/SensorTransfer.swift` and `SensorArchive.swift`. The ports `FrameLink`, `ArchiveStore`,
-`ArchiveIndex` and `CredentialStore` do not exist yet. `:core:sync` and `:core:archive` exist only
-as empty skeletons. Shared today are the wire codec, `ParquetVerify`, `Crc32` and `SafeName` in
+`ios/App/SensorTransfer.swift` and `SensorArchive.swift`. `:core:archive` holds the archive layout, verifier, records and the `ArchiveStore` and
+`ArchiveIndex` ports, which Android adapts in `app/.../data/archive/` and iOS adopts in wave 3. The
+ports `FrameLink` and `CredentialStore` do not exist yet. `:core:sync` is an empty skeleton. Shared today are the wire codec, `ParquetVerify`, `Crc32` and `SafeName` in
 `:core:protocol`, which the Swift engine does not call yet.
 
 ```mermaid

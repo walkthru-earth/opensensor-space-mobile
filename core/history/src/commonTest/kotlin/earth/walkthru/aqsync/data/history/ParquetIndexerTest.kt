@@ -6,19 +6,14 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import kotlin.test.Test
 
 class ParquetIndexerTest {
 
-    private fun bytes(path: String) = checkNotNull(javaClass.classLoader?.getResourceAsStream("parquet/$path")).readBytes()
+    private fun bytes(path: String) = fixtureBytes("parquet/$path")
 
     private fun expected(label: String) = Json.parseToJsonElement(
-        checkNotNull(javaClass.classLoader?.getResourceAsStream("parquet/expected.json")).bufferedReader().use { it.readText() }
+        fixtureBytes("parquet/expected.json").decodeToString()
     ).jsonObject["files"]!!.jsonArray.map { it.jsonObject }.first { it["label"]!!.jsonPrimitive.content == label }
 
     private fun column(label: String, name: String) =

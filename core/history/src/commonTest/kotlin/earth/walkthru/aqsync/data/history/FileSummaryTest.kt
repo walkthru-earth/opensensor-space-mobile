@@ -1,16 +1,11 @@
 package earth.walkthru.aqsync.data.history
 
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import kotlin.test.Test
 
 class FileSummaryTest {
 
-    private fun bytes(path: String) = checkNotNull(javaClass.classLoader?.getResourceAsStream("parquet/$path")).readBytes()
+    private fun bytes(path: String) = fixtureBytes("parquet/$path")
 
     @Test
     fun `a timed board file is one column with the PyArrow mean and its UTC span`() {

@@ -5,7 +5,8 @@
 implements the reader/writer and codec SPI; `history/` owns metrics, indexing,
 aggregation and presentation-ready analysis; `publicfeed/` owns the Discover feed
 port, H3 and the viewport cover; `units/` owns display units; `airquality/` owns
-the WHO 2021 scales and palette. `sync/`, `archive/` and `settings/` are empty
+the WHO 2021 scales and palette. `archive/` owns the archive layout, verifier,
+records and the `ArchiveStore` and `ArchiveIndex` ports. `sync/` and `settings/` are empty
 skeletons that `docs/platform-parity-plan.md` fills. See `docs/README.md` in the repo
 root for the relevant concern. No Android, Hilt, Room, `Context` or
 `android.util.Log` in any `:core:*` module.
