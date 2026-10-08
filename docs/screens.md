@@ -88,7 +88,7 @@ permanent denial the next tap offers the app's system settings page. Store answe
 | Bluetooth (`BLUETOOTH_SCAN` neverForLocation, `BLUETOOTH_CONNECT`; iOS Core Bluetooth) | Scan, opening a sensor, Reconnect, Reconnect over Bluetooth. Turning the adapter on uses the system dialog from the same tap. Once held, Devices scans while visible | First Find sensors tap creates `CBCentralManager` | Archive views (History, Files) still open. A declined open shows the sensor without a link |
 | Local network (`ACCESS_LOCAL_NETWORK`, API 37+; iOS Local Network) | Sync over Wi-Fi switch on, Allow local network, Get Wi-Fi token. Discovery runs only once held | First Find Wi-Fi sensors tap starts `NWBrowser` | Bluetooth sync works. The token fetch still runs |
 | Notifications (`POST_NOTIFICATIONS`, API 33+) | Sync now, Sync all, file sync, Sync now in background, Collect from all, Auto-sync on, Set up wake when nearby. Asked once per screen | Not requested | The sync runs, its progress notification is hidden |
-| Location | Never | Never | |
+| Location | Not declared today. Planned Discover Near me asks for coarse location on that tap only | Same, When In Use with reduced accuracy | The map opens on the last area or the time zone region |
 
 ## Design system
 

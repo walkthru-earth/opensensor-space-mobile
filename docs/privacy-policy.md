@@ -9,7 +9,7 @@ Effective date [date]. Publisher [legal name], contact [privacy contact email].
 ## Summary
 
 The opensensor.space app copies readings from your own air quality sensors to your phone. It has
-no account, no ads, no analytics and no tracking, and it never asks for your location.
+no account, no ads, no analytics and no tracking. Your location is never sent anywhere.
 
 ## What the app does with data
 
@@ -21,7 +21,8 @@ no account, no ads, no analytics and no tracking, and it never asks for your loc
   sent anywhere else.
 - **Permissions.** Bluetooth (Nearby devices) to find and connect to your sensors, local network
   to reach them on your Wi-Fi, and notifications to show sync progress. Each is asked only when you
-  use the feature. Location is never requested.
+  use the feature. If you tap Near me on the public map, the app asks for your approximate
+  location, uses it on your phone to move the map, and does not send or store it.
 
 ## Public sensor map (when available)
 

@@ -14,7 +14,9 @@ State as of 2026-10-08. Re-check the linked store pages before each submission. 
 - Bluetooth LE and the local Wi-Fi (mDNS `_aqsync._tcp`) reach only the user's own sensors.
 - Readings and Parquet files stay on the phone. They leave only when the user shares or exports them
   through the system share sheet or document picker.
-- No account, no analytics, no crash reporting SDK, no ads, no location permission.
+- No account, no analytics, no crash reporting SDK, no ads. No location permission today. The
+  planned Discover "Near me" asks for approximate location only on that tap, uses it on the phone
+  to move the map and never sends it (AGENTS.md).
 - No server today. The planned Discover feed (anonymous read-only GETs) and per-device opt-in
   uploads change the answers below. See "Before Discover or uploads ship".
 
@@ -24,7 +26,7 @@ State as of 2026-10-08. Re-check the linked store pages before each submission. 
 | --- | --- | --- |
 | Target API | Targets 37. Play requires API 36 for new apps and updates from 2026-08-31 ([target SDK](https://developer.android.com/google/play/requirements/target-sdk)) | `app/build.gradle.kts` |
 | Runtime permissions | Asked in context from the action that needs them, never at launch. In-app rationale only when `shouldShowRequestPermissionRationale` is true, settings link after a permanent denial | `ui/permissions/RuntimeAccess.kt`, `PermissionFlowTest` |
-| Location | None declared. `BLUETOOTH_SCAN` carries `neverForLocation`. No background location | `ManifestPermissionsTest` |
+| Location | None declared today. `BLUETOOTH_SCAN` carries `neverForLocation`. No background location. When Near me ships, declare only `ACCESS_COARSE_LOCATION` (iOS When In Use with reduced accuracy), ask on the tap, keep it on the phone, and add it to `ManifestPermissionsTest`. Data safety stays "not collected" because it never leaves the phone | `ManifestPermissionsTest` |
 | Prominent disclosure | Not required. It applies when an app collects personal or sensitive data in a way users would not expect. Nothing leaves the phone without a user share | Play [User Data policy](https://support.google.com/googleplay/android-developer/answer/10144311) |
 | Data safety form | "No data collected" and "No data shared". Data processed only on the device, and data the user sends with the share sheet, are not collection | Play [Data safety help](https://support.google.com/googleplay/android-developer/answer/10787469) |
 | Encryption in transit | Answer "No" for data in transit, since no user data is sent to a developer server. BLE links are encrypted by pairing. The LAN stream is not encrypted and stays on the local network | `docs/transports.md` |
@@ -78,7 +80,8 @@ not legal advice. Have counsel read the privacy policy before the first public r
 4. **Export compliance.** HTTPS through the platform stacks only. No custom cryptography.
    `ITSAppUsesNonExemptEncryption` stays false.
 5. **Privacy policy.** [privacy-policy.md](privacy-policy.md) is the draft to host at a public URL
-   and link in Play Console, App Store Connect and the app's Settings About line. It describes
+   and link in Play Console, App Store Connect and the app's Settings About line. The owner
+   commits to it at publish time, not before. It describes
    today's behaviour and already covers the opt-in sharing rules above.
 6. **Children.** Target audience 13 and over in Play's target audience form, and no claims of
    being made for children, so the Families policy and COPPA rules for child-directed apps do not
@@ -86,8 +89,8 @@ not legal advice. Have counsel read the privacy policy before the first public r
 7. **Play foreground service declaration.** Type `dataSync`. Description to paste: "Copies air
    quality data files from the user's own Bluetooth or Wi-Fi sensor to the phone when the user
    starts a sync, or on the schedule the user turned on per device. The transfer must finish
-   while the screen is off. A progress notification with a Stop action is shown." Attach a short
-   screen recording of Sync now with the notification.
+   while the screen is off. A progress notification with a Stop action is shown." The screen
+   recording of Sync now with its notification is made at publish time.
 
 ## Gate before each submission
 
@@ -95,4 +98,5 @@ not legal advice. Have counsel read the privacy policy before the first public r
 - [ ] Fresh install on a phone shows no permission prompt at launch (Android and iPhone), recorded in `docs/status.md`.
 - [ ] Xcode Organizer privacy report of the archive matches `PrivacyInfo.xcprivacy`.
 - [ ] Data safety form and App privacy answers match this page.
-- [ ] The privacy policy URL is live and matches what the release does.
+- [ ] At publish time, the privacy policy URL is live and matches what the release does.
+- [ ] At publish time, the Play foreground service declaration has its video.
