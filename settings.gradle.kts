@@ -34,6 +34,8 @@ include(":core:archive")
 include(":core:settings")
 // The Discover map, shared Compose for Android and iOS.
 include(":ui:designsystem")
+// The shared English copy and the repository copy lint (docs/screens.md, Copy).
+include(":ui:strings")
 include(":feature:discover")
 // The Settings screen, shared Compose for Android and iOS (docs/platform-parity-plan.md).
 include(":feature:settings")

@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The shared English copy for the iOS companion screen and the shared screens to come, one catalogue
+  for Android and iOS. Copy rules (docs/screens.md, CopyLintTest). No em or en dashes, no colons or
+  semicolons. Compose resources keep a plain apostrophe, there is no backslash escape here.
+  A key that Android res/values/strings.xml already has keeps its name and its exact words
+  (StringsMatchAndroidTest).
+-->
+<resources>
+    <!-- Same keys and words as Android. -->
+    <string name="app_name">opensensor.space</string>
+    <string name="now_waiting">Waiting for a reading…</string>
+    <string name="nav_disconnect">Disconnect</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="conn_ready">Connected</string>
+    <string name="conn_connecting">Connecting…</string>
+    <string name="conn_disconnected">Not connected</string>
+    <string name="batch_value">%1$s µg/m³</string>
+
+    <!-- My devices on iOS, Bluetooth. -->
+    <string name="companion_subtitle">Your sensors, nearby</string>
+    <string name="companion_now">Now</string>
+    <string name="companion_pm25_mood">PM2.5 · %1$s</string>
+    <string name="companion_storage_error">The sensor reports a storage error.</string>
+    <plurals name="companion_files_finalized">
+        <item quantity="one">%1$s file finalized on the sensor</item>
+        <item quantity="other">%1$s files finalized on the sensor</item>
+    </plurals>
+    <string name="companion_firmware">Firmware %1$s</string>
+    <string name="companion_wifi_access_save">Save Wi-Fi access</string>
+    <string name="companion_wifi_access_saving">Saving access…</string>
+    <string name="companion_find_sensors">Find sensors</string>
+    <string name="companion_scanning">Scanning…</string>
+    <string name="companion_signal_dbm">%1$d dBm</string>
+    <string name="companion_connect">Connect</string>
+    <string name="companion_scan_looking">Looking for nearby sensors…</string>
+    <string name="companion_scan_none">No sensors found. Keep your sensor nearby and try again.</string>
+    <string name="companion_scan_choose">Choose a sensor to see its readings.</string>
+    <string name="companion_connecting_pin">Connecting… If asked, enter the pairing PIN shown by your sensor.</string>
+    <string name="companion_info_invalid">This sensor has invalid or unsupported device information.</string>
+    <string name="companion_live">Connected · live readings</string>
+    <string name="companion_status_unreadable">The sensor sent an unreadable status.</string>
+    <string name="companion_live_unreadable">The sensor sent an unreadable reading.</string>
+
+    <!-- My devices on iOS, Wi-Fi. -->
+    <string name="companion_lan_title">On your Wi-Fi</string>
+    <string name="companion_lan_find">Find Wi-Fi sensors</string>
+    <string name="companion_lan_finding">Looking on Wi-Fi…</string>
+    <string name="companion_lan_looking">Looking on your Wi-Fi…</string>
+    <string name="companion_lan_found">Sensors on your Wi-Fi</string>
+    <string name="companion_lan_none">No Wi-Fi sensors found. Check Local Network in Settings.</string>
+    <string name="companion_lan_waiting">Waiting for Wi-Fi or Local Network access.</string>
+    <string name="companion_lan_denied">Turn on Local Network for opensensor.space in Settings.</string>
+    <string name="companion_lan_unavailable">Wi-Fi search is not available. Check Wi-Fi and Local Network in Settings.</string>
+    <string name="companion_lan_connect_label">Connect to %1$s over Wi-Fi</string>
+    <string name="companion_lan_link">Wi-Fi · %1$s</string>
+    <string name="companion_lan_paused">Sync paused</string>
+    <string name="companion_lan_discovered">Discovered</string>
+    <string name="companion_lan_needs_access">Save Wi-Fi access over Bluetooth first.</string>
+    <plurals name="companion_lan_files">
+        <item quantity="one">%1$d of %2$d file</item>
+        <item quantity="other">%1$d of %2$d files</item>
+    </plurals>
+    <string name="companion_lan_bytes">%1$s bytes in current file</string>
+    <string name="companion_lan_rate">%1$s KiB/s average</string>
+    <string name="companion_sync">Sync</string>
+
+    <!-- Export. -->
+    <string name="companion_export">Export Parquet files</string>
+    <string name="companion_export_preparing">Preparing export…</string>
+</resources>
