@@ -7,16 +7,6 @@
 <resources>
     <string name="app_name">opensensor.space</string>
 
-    <!-- Permissions and Bluetooth -->
-    <string name="perm_title">Connect your sensors</string>
-    <string name="perm_body">opensensor.space connects to compatible sensor devices over Bluetooth Low Energy and copies their Parquet files onto this phone. It asks for Bluetooth scanning and connecting. It never asks for location. Network access is used only to reach a sensor device on your own Wi-Fi network, found with mDNS. There is no cloud endpoint, and nothing leaves this phone unless you share it.</string>
-    <string name="perm_grant">Allow Bluetooth</string>
-    <string name="perm_denied">Bluetooth permission was denied. Enable it in system settings to find your sensors.</string>
-    <string name="perm_open_settings">Open app settings</string>
-    <string name="bt_off_title">Bluetooth is off</string>
-    <string name="bt_off_body">Turn Bluetooth on to find your sensors.</string>
-    <string name="bt_turn_on">Turn on Bluetooth</string>
-
     <!-- Common -->
     <string name="action_cancel">Cancel</string>
     <string name="action_hide">Hide</string>
@@ -38,14 +28,12 @@
     <!-- Scan (Home) -->
     <string name="scan_title">Sensors nearby</string>
     <string name="scan_known">Known sensors</string>
-    <string name="scan_hint">Bring the phone near a compatible Bluetooth sensor device. Current firmware advertises as AQ-xxxx.</string>
-    <string name="scan_pair_hint">On first connection, enter the device’s 6-digit pairing code. Read it from its display, or obtain the owner PIN over USB for a device without a display.</string>
     <string name="scan_fake">Debug fake device</string>
     <string name="scan_fake_lan">Debug fake device (as LAN)</string>
     <string name="scan_welcome_title">Hello, I am your guide</string>
-    <string name="scan_welcome_body">Turn on your sensor and keep this phone close. It shows up here in a few seconds.</string>
+    <string name="scan_welcome_body">Turn on your sensor, keep this phone close and tap Scan.</string>
     <string name="scan_none_nearby_title">Nothing nearby yet</string>
-    <string name="scan_none_nearby_body">Your known sensors are listed below. Move closer to one to connect, or look at its saved history anytime.</string>
+    <string name="scan_none_nearby_body">Move closer to connect. Saved history stays below.</string>
     <string name="scan_nearby">Nearby</string>
     <string name="scan_connections">Connected now</string>
     <string name="scan_button_scan">Scan</string>
@@ -54,7 +42,7 @@
     <string name="scan_options">Device options</string>
     <string name="scan_forget">Forget</string>
     <string name="scan_forget_title">Forget %1$s?</string>
-    <string name="scan_forget_body">This removes the saved device, its Wi-Fi access and automatic collection from this phone. Files already collected stay here. The device may still appear under Nearby while it is advertising.</string>
+    <string name="scan_forget_body">Removes it from this phone. Collected files stay.</string>
     <string name="scan_forget_button">Forget device</string>
     <string name="scan_unnamed">Unnamed sensor</string>
     <string name="scan_tag_paired">paired</string>
@@ -71,10 +59,9 @@
         <item quantity="other">Collect from all %1$d devices</item>
     </plurals>
     <string name="scan_collect_running">Collecting in the background…</string>
-    <string name="scan_collect_explain">Collects from known devices over Wi-Fi when this phone holds their token, otherwise over their Bluetooth pairing. Up to two transfers run at once with a progress notification, so you can leave the app. Devices with an open connection are skipped.</string>
     <plurals name="scan_no_clock">
-        <item quantity="one">%1$d file saved, without a clock yet. Give the sensor the time from Today.</item>
-        <item quantity="other">%1$d files saved, none with a clock yet. Give the sensor the time from Today.</item>
+        <item quantity="one">%1$d file saved, no clock yet</item>
+        <item quantity="other">%1$d files saved, no clock yet</item>
     </plurals>
     <string name="scan_seen">seen %1$s</string>
     <string name="scan_synced">synced %1$s</string>
@@ -88,8 +75,8 @@
     <string name="today_so_far">Today so far</string>
     <string name="today_average">Average %1$s µg/m³</string>
     <string name="today_of_the_day">of the day covered</string>
-    <string name="today_none">No timed readings on this phone yet today.</string>
-    <string name="today_none_clock">No timed readings on this phone yet today. Give the sensor the time, then sync, and the day’s average appears here.</string>
+    <string name="today_none">No timed readings yet today.</string>
+    <string name="today_none_clock">No timed readings yet. Set the sensor time, then sync.</string>
     <string name="today_station_short">ID %1$s…</string>
     <plurals name="today_readings_since_midnight">
         <item quantity="one">%1$d reading since midnight</item>
@@ -135,7 +122,7 @@
 
     <!-- Measurement cards -->
     <string name="env_title">Temperature and humidity</string>
-    <string name="env_unsupported">Live readings are not supported for this firmware yet. Sync its verified files to browse the archive.</string>
+    <string name="env_unsupported">Live readings need newer firmware. Synced files still work.</string>
     <string name="readings_title">More particle sizes</string>
     <string name="readings_absent">Particle values are missing (shown as empty, not zero)</string>
     <string name="readings_cf1">CF=1 raw %1$s, %2$s, %3$s µg/m³ (PM1, PM2.5, PM10)</string>
@@ -149,7 +136,7 @@
     <string name="batch_title">Batch estimate, unvalidated</string>
     <string name="batch_value">%1$s µg/m³</string>
     <string name="batch_waiting">Waiting for a fresh valid count…</string>
-    <string name="batch_explain">%1$s times particles above 0.3 µm per 0.1 L. The raw reading above stays the main value. A reference comparison is still needed.</string>
+    <string name="batch_explain">%1$s times particles above 0.3 µm per 0.1 L. The raw reading stays the main value. It still needs a reference comparison.</string>
 
     <!-- Storage -->
     <string name="storage_title">Storage</string>
@@ -185,12 +172,12 @@
     </plurals>
     <string name="sync_caught_up">All caught up. Everything is safe on this phone.</string>
     <string name="sync_empty">Copy the sensor’s files to this phone and check them.</string>
-    <string name="sync_unplaced_simple">Some readings have no clock time yet. They are kept, and nothing was thrown away.</string>
-    <string name="sync_explain">Smart Sync checks the clock, downloads missing files, verifies them and updates the charts. Finalizing the newest buffered rows stays separate so background sync does not create short files.</string>
+    <string name="sync_unplaced_simple">Some readings have no time yet. They are kept.</string>
+    <string name="sync_explain">Smart Sync checks the sensor clock, copies the files this phone is missing, checks each one and updates the charts.</string>
     <string name="sync_button">Sync now</string>
     <string name="sync_button_running">Syncing…</string>
     <string name="sync_clock_title">Smart Sync needs the time</string>
-    <string name="sync_clock_confirm">%1$s. Send this phone’s time before downloading? This only timestamps future rows. Raw files are never rewritten.</string>
+    <string name="sync_clock_confirm">%1$s. Send this phone’s time first? Raw files are never changed.</string>
     <string name="sync_clock_button">Set time and sync</string>
     <plurals name="sync_ready">
         <item quantity="one">%1$d verified file on this phone</item>
@@ -201,31 +188,31 @@
         <item quantity="other">%1$d files did not sync. Try again.</item>
     </plurals>
     <plurals name="sync_unplaced_detail">
-        <item quantity="one">%1$d reading is saved but has no trustworthy calendar time. It stays exportable, and the app does not invent timestamps for a power on with no clock.</item>
-        <item quantity="other">%1$d readings are saved but have no trustworthy calendar time. They stay exportable, and the app does not invent timestamps for a power on with no clock.</item>
+        <item quantity="one">%1$d reading has no trusted time. It is kept and exportable.</item>
+        <item quantity="other">%1$d readings have no trusted time. They are kept and exportable.</item>
     </plurals>
     <plurals name="sync_estimated_detail">
-        <item quantity="one">%1$d earlier reading was placed in time from a later clock setting on the same power on.</item>
-        <item quantity="other">%1$d earlier readings were placed in time from a later clock setting on the same power on.</item>
+        <item quantity="one">%1$d earlier reading got its time from a later clock setting.</item>
+        <item quantity="other">%1$d earlier readings got their time from a later clock setting.</item>
     </plurals>
 
     <!-- Clock -->
     <string name="clock_title">Clock</string>
     <string name="clock_host">Clock is set and checked by a phone</string>
-    <string name="clock_rtc">Clock restored from the device battery. Smart Sync can refresh it</string>
+    <string name="clock_rtc">Clock restored from the device battery</string>
     <string name="clock_none">The sensor does not know the time</string>
     <string name="clock_set">Clock is set</string>
     <string name="clock_unknown">Clock state unknown</string>
-    <string name="clock_none_explain">New readings are kept without a date until you set the time.</string>
+    <string name="clock_none_explain">New readings get no date until you set the time.</string>
     <string name="clock_generation">anchor generation %1$d</string>
     <string name="clock_last_sample">last sample at %1$s</string>
-    <string name="clock_actions_explain">Set time gives a date to readings from now on. Finalize writes the readings waiting in memory to a short file so they can be synced now.</string>
+    <string name="clock_actions_explain">Set time gives a date to readings from now on. Finalize writes the readings waiting in memory to a short file so you can sync them now.</string>
     <string name="set_time">Set time from phone</string>
     <string name="set_time_button">Set time</string>
-    <string name="set_time_confirm">Sends this phone’s clock (%1$s) to the sensor. Only readings taken after this moment get a date and a dated folder. Readings already recorded stay undated and are never rewritten. Do this only if you trust the phone’s time.</string>
+    <string name="set_time_confirm">Sends this phone’s time (%1$s). Only new readings get a date. Earlier ones stay as they are.</string>
     <string name="flush">Finalize buffered rows</string>
     <string name="flush_button">Finalize</string>
-    <string name="flush_confirm">The sensor keeps the newest rows in memory until its file interval ends. Finalizing writes them to the card now as a short Parquet file so you can sync everything up to this moment. On firmware v6 it also closes the open file’s row groups already on the card. It does not change the interval.</string>
+    <string name="flush_confirm">Writes the readings waiting in memory to a short file now, so you can sync them.</string>
 
     <!-- Device -->
     <string name="device_screen_title">Device</string>
@@ -247,14 +234,14 @@
 
     <string name="autosync_title">Auto-sync</string>
     <plurals name="autosync_on">
-        <item quantity="one">On. About every %1$d minute this phone copies new files, even with the app closed.</item>
-        <item quantity="other">On. About every %1$d minutes this phone copies new files, even with the app closed.</item>
+        <item quantity="one">On. Every %1$d minute, even with the app closed.</item>
+        <item quantity="other">On. Every %1$d minutes, even with the app closed.</item>
     </plurals>
     <plurals name="autosync_off">
-        <item quantity="one">Off. Turn on to copy new files about every %1$d minute in the background.</item>
-        <item quantity="other">Off. Turn on to copy new files about every %1$d minutes in the background.</item>
+        <item quantity="one">Off</item>
+        <item quantity="other">Off</item>
     </plurals>
-    <string name="autosync_unreachable">This phone cannot reach the device on its own yet. Connect once over Bluetooth to pair, or fetch a Wi-Fi token.</string>
+    <string name="autosync_unreachable">Connect once over Bluetooth first.</string>
     <string name="autosync_wifi">Wi-Fi</string>
     <string name="autosync_wifi_token">token stored, tried first on this network</string>
     <string name="autosync_wifi_no_token">no token yet</string>
@@ -268,9 +255,9 @@
     <string name="autosync_wake_setup">Set up wake when nearby</string>
     <string name="autosync_wake_waiting">Waiting for Android…</string>
     <string name="autosync_wake_turn_off">Turn off wake when nearby</string>
-    <string name="autosync_wake_explain">One system dialog. Android then watches for this device by itself, wakes the app when it is in range and lets it use the network in the background while the device is present.</string>
-    <string name="autosync_wake_ble_drop">The Bluetooth link is dropped for the dialog, since the device must be advertising, and restored afterwards.</string>
-    <string name="autosync_explain">Runs as a background job with a progress notification. A summary appears only when new files arrived. Android picks the exact moment within each period and needs a battery that is not low. Joining a Wi-Fi network also starts a check. Files are pulled and verified exactly as with Sync all, and the device is never asked to delete anything.</string>
+    <string name="autosync_wake_explain">One system dialog. Android then watches for this sensor by itself, wakes the app when it is in range and lets it sync in the background while it is near.</string>
+    <string name="autosync_wake_ble_drop">The Bluetooth link drops for the dialog and comes back after it.</string>
+    <string name="autosync_explain">A background job copies new files with a progress notification. Android picks the exact moment and skips it on low battery. Joining a Wi-Fi network also starts a check. Files are checked exactly like Sync all, and the sensor is never asked to delete anything.</string>
 
     <string name="sensor_title">Particle sensor</string>
     <string name="sensor_installed">Installed particle module</string>
@@ -278,50 +265,53 @@
     <string name="sensor_model">Model</string>
     <string name="sensor_model_supported">%1$s, supported</string>
     <string name="sensor_model_unsupported">%1$s, needs firmware support</string>
-    <string name="sensor_check_model">This firmware reads Plantower PMS5003T frames. Check the model printed on the fitted module before saving.</string>
+    <string name="sensor_check_model">This firmware reads Plantower PMS5003T sensors. Check the model printed on the fitted module before saving.</string>
     <string name="sensor_scan">Scan barcode</string>
     <string name="sensor_or_enter">or type the sticker</string>
     <string name="sensor_scan_unrecognized">This barcode is not a recognized Plantower sticker. Type it in if needed.</string>
     <string name="sensor_scan_unavailable">The scanner is not available. Type the sticker below.</string>
     <string name="sensor_sticker">Sensor sticker</string>
-    <string name="sensor_sticker_invalid">Expected a PMS5003T label with a valid date (YYYYMMDD) and 1 to 9 unit digits.</string>
+    <string name="sensor_sticker_invalid">Expected PMS5003T, a date (YYYYMMDD) and 1 to 9 unit digits.</string>
     <string name="sensor_batch">recognized batch</string>
     <string name="sensor_store_estimate">Store the optional batch estimate</string>
-    <string name="sensor_estimate_explain">For this batch only, estimate equals %1$s times the count of particles above 0.3 µm per 0.1 L. This is an unvalidated manufacturer batch estimate, not a reference calibration or a legal compliance value. The raw reading stays available.</string>
-    <string name="sensor_estimate_none">No reviewed batch factor for this sticker. A reference comparison is needed before claiming calibrated accuracy.</string>
+    <string name="sensor_estimate_explain">For this batch only, the estimate is %1$s times the count of particles above 0.3 µm per 0.1 L. It is an unvalidated manufacturer batch estimate, not a reference calibration. The raw reading stays available.</string>
+    <string name="sensor_estimate_none">No reviewed batch factor for this sticker.</string>
     <string name="sensor_save">Save to device</string>
     <string name="sensor_device_sticker">device sticker</string>
     <string name="sensor_estimate_state">batch estimate</string>
     <string name="sensor_estimate_on">on, unvalidated</string>
     <string name="sensor_phone_record">phone installation record</string>
     <string name="sensor_records">records on phone</string>
-    <string name="sensor_mismatch">The device sticker differs from this phone’s last installation record. Check the fitted module and save its sticker again.</string>
+    <string name="sensor_mismatch">The sticker on the sensor differs from this phone’s record. Save it again.</string>
 
     <string name="pairing_title">Bluetooth pairing</string>
     <string name="pairing_mode">Mode %1$s</string>
     <string name="pairing_unknown">Mode unknown</string>
     <string name="pairing_display">display found at first boot</string>
-    <string name="pairing_default_pin">The PIN is still the default %1$s. Change it, since a known PIN encrypts the link but does not stop a determined neighbour.</string>
-    <string name="pairing_reboot_pending">A pairing change is saved and waits for the next restart. Restart the device to apply it.</string>
-    <string name="pairing_random">Fresh 6 digits each time, shown on the device screen. Proves you are next to it.</string>
-    <string name="pairing_fixed">One 6-digit PIN you choose. For devices without a display.</string>
-    <string name="pairing_none">Encrypted but no code and no prompt. For lab benches only.</string>
+    <string name="pairing_default_pin">The PIN is still the default %1$s. Change it.</string>
+    <string name="pairing_reboot_pending">Restart the sensor to apply the change.</string>
+    <string name="pairing_label_random">Random code</string>
+    <string name="pairing_label_fixed">Fixed PIN</string>
+    <string name="pairing_label_none">No code</string>
+    <string name="pairing_random">Random code. A fresh 6 digit code on the sensor screen each time. It proves you are next to it.</string>
+    <string name="pairing_fixed">Fixed PIN. One 6 digit PIN you choose. For sensors without a screen.</string>
+    <string name="pairing_none">No code. Still encrypted, but any phone nearby can pair without a prompt. For lab benches only.</string>
     <string name="pairing_pin">PIN (6 digits)</string>
     <string name="pairing_new_pin">New PIN (6 digits, leave empty to keep)</string>
     <string name="pairing_six_digits">Exactly six digits</string>
-    <string name="pairing_next_boot">Pairing settings apply at the next restart, because Bluetooth security is fixed when it starts.</string>
+    <string name="pairing_next_boot">Pairing changes apply at the next restart, because Bluetooth security is set when the sensor starts.</string>
     <string name="pairing_save">Save pairing</string>
     <string name="pairing_none_title">Turn off the pairing code?</string>
-    <string name="pairing_none_confirm">With no code, any phone in range can pair without a prompt. The link is still encrypted, but anyone nearby could read your device. Use this on a lab bench only.</string>
+    <string name="pairing_none_confirm">Any phone nearby can pair without a code. Use this on a lab bench only.</string>
     <string name="pairing_none_button">Turn off code</string>
     <string name="reboot_title">Restart device</string>
-    <string name="reboot_confirm">The sensor saves the rows it holds in memory to a short Parquet file, then restarts. No rows are lost. Pending pairing changes take effect now. The app disconnects and reconnects by itself.</string>
+    <string name="reboot_confirm">The sensor saves its readings, restarts and reconnects. Pending pairing changes apply.</string>
     <string name="reboot_button">Restart</string>
 
     <string name="wifi_title">Wi-Fi</string>
     <string name="wifi_connected">Connected to %1$s</string>
     <string name="wifi_connecting">Connecting to %1$s…</string>
-    <string name="wifi_failed">Could not join %1$s. Check the passphrase. The device retries every 30 seconds.</string>
+    <string name="wifi_failed">Could not join %1$s. Check the passphrase.</string>
     <string name="wifi_on_idle">Wi-Fi on, not connected</string>
     <string name="wifi_off">Wi-Fi off</string>
     <string name="wifi_unknown">Wi-Fi state unknown</string>
@@ -334,15 +324,15 @@
     <string name="wifi_mac">MAC</string>
     <string name="wifi_scan">Find networks</string>
     <string name="wifi_refresh">Check again</string>
-    <string name="wifi_over_lan">You are connected over Wi-Fi, so changing Wi-Fi settings usually drops this session. Use Bluetooth for setup when you can.</string>
-    <string name="wifi_scanning">Looking for networks. This takes a few seconds.</string>
-    <string name="wifi_none_found">No networks found. Hidden networks are not listed.</string>
+    <string name="wifi_over_lan">Changing Wi-Fi may drop this Wi-Fi link.</string>
+    <string name="wifi_scanning">Looking for networks…</string>
+    <string name="wifi_none_found">No networks found.</string>
     <string name="wifi_join">Join %1$s</string>
     <string name="wifi_open_network">Open network, no passphrase.</string>
     <string name="wifi_passphrase_label">Passphrase (up to 63 characters)</string>
     <string name="wifi_show_passphrase">Show passphrase</string>
     <string name="wifi_hide_passphrase">Hide passphrase</string>
-    <string name="wifi_psk_storage">Stored on the device unencrypted, by project rule. It is never shown again.</string>
+    <string name="wifi_psk_storage">The passphrase travels over the encrypted Bluetooth link. The sensor stores it without encryption and never shows it again. Hidden networks are not listed.</string>
     <string name="wifi_save_connect">Save and connect</string>
     <string name="wifi_secured">secured</string>
     <string name="wifi_open">open</string>
@@ -354,61 +344,250 @@
     </plurals>
 
     <string name="lan_title">Sync over Wi-Fi</string>
-    <string name="lan_explain">The same protocol over your own network, found automatically. Faster than Bluetooth. The stream is not encrypted, so it carries only what the device would show on its screen.</string>
+    <string name="lan_explain">The same sync over your own Wi-Fi, found automatically and faster than Bluetooth. The Wi-Fi stream is not encrypted, so it carries only what the sensor would show on its screen.</string>
     <string name="lan_server">server</string>
     <string name="lan_server_on">on while Wi-Fi is connected</string>
     <string name="lan_host">mDNS host</string>
     <string name="lan_port">port</string>
     <string name="lan_clients">clients now</string>
-    <string name="lan_no_access">This phone does not allow local network access</string>
+    <string name="lan_no_access">Local network not allowed</string>
     <string name="lan_seen">Found on this network</string>
     <string name="lan_seen_at">Found on this network at %1$s</string>
     <string name="lan_discovery_error">Could not search this network. %1$s</string>
     <string name="lan_not_seen">Not on this network right now</string>
-    <string name="lan_access_explain">Android asks before an app may talk to devices on your local network. opensensor.space only connects to a sensor it found on your network.</string>
-    <string name="lan_access_denied">Without it the app cannot find the device on Wi-Fi. Bluetooth keeps working. You can allow it later in system settings.</string>
     <string name="lan_allow">Allow local network</string>
     <string name="lan_token_held">This phone can sync over Wi-Fi</string>
     <string name="lan_token_missing">This phone has no Wi-Fi token yet</string>
-    <string name="lan_token_explain">The token lets this phone sync over Wi-Fi. It can only be fetched over Bluetooth, is stored privately and encrypted on this phone, and is never shown or logged.</string>
+    <string name="lan_token_explain">The Wi-Fi token lets this phone sync over Wi-Fi. It is fetched over Bluetooth only, stored encrypted on this phone and never shown.</string>
     <string name="lan_fetch">Get Wi-Fi token</string>
     <string name="lan_fetch_again">Get token again</string>
     <string name="lan_reconnect_ble">Reconnect over Bluetooth</string>
     <string name="lan_rotate">Replace token</string>
-    <string name="lan_fetch_ble_only">The token can only be fetched over Bluetooth.</string>
+    <string name="lan_fetch_ble_only">Get the token over Bluetooth.</string>
     <string name="rotate_title">Replace Wi-Fi token</string>
-    <string name="rotate_confirm">The device makes a new token and drops every Wi-Fi session. Every phone, including this one, must fetch the new token over Bluetooth before syncing over Wi-Fi again. Do this if a phone that had the token was lost.</string>
+    <string name="rotate_confirm">Every phone must get the new token over Bluetooth. Use this if a phone was lost.</string>
     <string name="rotate_button">Replace</string>
 
     <string name="bonds_title">Paired phones</string>
     <string name="bonds_count">phones paired with the device</string>
-    <string name="bonds_explain">The device remembers up to 3 phones and forgets the oldest. Forgetting all also forgets this phone, so the next Bluetooth connection pairs again.</string>
+    <string name="bonds_explain">The sensor remembers up to 3 phones and forgets the oldest. Forgetting all also forgets this phone, so the next Bluetooth connection asks for the code again.</string>
     <string name="bonds_forget">Forget all paired phones</string>
     <string name="bonds_forget_button">Forget</string>
-    <string name="bonds_confirm">The device forgets every paired phone, including this one. Your files on this phone are untouched. You will type the pairing code again on the next Bluetooth connection.</string>
+    <string name="bonds_confirm">The sensor forgets every phone, including this one. You will enter the code again.</string>
     <string name="v1_title">Settings</string>
-    <string name="v1_body">This device uses protocol v1. Pairing, Wi-Fi and network settings need newer firmware. File sync works as before.</string>
+    <string name="v1_body">Settings need newer firmware. Sync still works.</string>
 
     <!-- Files -->
     <string name="files_title">Files</string>
     <string name="files_all_synced_title">All synced</string>
-    <string name="files_all_synced_body">Everything on the sensor’s card is on this phone and checked.</string>
-    <string name="files_none_simple">No finished files yet. The sensor saves a new file every few minutes.</string>
-    <string name="files_none_detailed">No finished Parquet files yet. Use Finalize buffered rows on Today to create one.</string>
+    <string name="files_all_synced_body">Everything is on this phone and checked.</string>
+    <string name="files_none_simple">No files yet. The sensor saves one every few minutes.</string>
+    <string name="files_none_detailed">No finished files yet. Use Finalize on Today to make one.</string>
     <string name="files_connect_to_list">Connect to list the files on the sensor.</string>
     <string name="files_listing">Reading the file list…</string>
-    <string name="files_list_failed_simple">Could not read the file list. Pull to refresh or reconnect.</string>
+    <string name="files_list_failed_simple">Could not read the file list. Try again.</string>
 
     <!-- Settings -->
     <string name="settings_title">Settings</string>
     <string name="settings_detail_level">Detail level</string>
-    <string name="settings_level_simple">What you need, in plain words. The reading now, today, sync state and one action at a time.</string>
-    <string name="settings_level_detailed">Adds every measurement, per-file details, storage counters and the file inspector.</string>
-    <string name="settings_level_developer">Everything in Detailed plus identifiers, link internals and the Debug screen with raw frames, the device log and a raw command box.</string>
-    <string name="settings_level_note">Only what you see changes. Every level reads the same data, and nothing is hidden from the archive or the export.</string>
+    <string name="settings_level_simple">The reading, today and sync.</string>
+    <string name="settings_level_detailed">Adds every measurement and file details.</string>
+    <string name="settings_level_developer">Adds identifiers and the Debug screen.</string>
     <string name="settings_clock">Smart Sync clock</string>
-    <string name="settings_clock_note">Smart Sync never rewrites raw files. Finalizing buffered rows stays a separate confirmed action.</string>
     <string name="settings_about">About</string>
-    <string name="settings_about_body">opensensor.space %1$s, offline first. The network is used only to reach a sensor found on your own Wi-Fi. There is no cloud endpoint.</string>
+    <string name="settings_about_body">opensensor.space %1$s</string>
     <string name="settings_fonts">Quicksand and Cairo fonts under the SIL Open Font License 1.1. Peacock mascot from opensensor.space.</string>
+
+    <!-- Info affordance (components/InfoButton.kt). Explanations live in these sheets, never in the default view. -->
+    <string name="info_more">More about %1$s</string>
+
+    <!-- On-demand permissions (permissions/RuntimeAccess.kt). Asked only from the action that needs them. -->
+    <string name="perm_bt_title">Allow nearby devices</string>
+    <string name="perm_bt_body">Bluetooth finds your sensors and copies their readings. It never uses your location.</string>
+    <string name="perm_bt_settings_title">Nearby devices is off</string>
+    <string name="perm_bt_settings_body">Turn on Nearby devices for opensensor.space in settings to connect to your sensors.</string>
+    <string name="perm_lan_title">Allow local network</string>
+    <string name="perm_lan_body">Finds your sensor on your Wi-Fi so syncing is faster. Bluetooth works without it.</string>
+    <string name="perm_lan_settings_title">Local network is off</string>
+    <string name="perm_lan_settings_body">Turn on local network access for opensensor.space in settings. Bluetooth keeps working.</string>
+    <string name="perm_continue">Continue</string>
+    <string name="perm_open_settings">Open settings</string>
+
+    <!-- Info sheets -->
+    <string name="info_connect_title">Connect a sensor</string>
+    <string name="info_connect_body1">Turn on your sensor and keep this phone close. It appears here in a few seconds.</string>
+    <string name="info_connect_body2">On the first connection Android asks for a 6 digit code. Read it on the sensor screen. A sensor without a screen uses the PIN its owner set over USB.</string>
+    <string name="info_privacy">Bluetooth and your local Wi-Fi reach only your own sensors. No account, no analytics, no location and no uploads. Your files stay on this phone unless you share them.</string>
+    <string name="info_collect_body">Collects from your known sensors over Wi-Fi when this phone holds their token, otherwise over Bluetooth. Up to two run at once with a notification, so you can leave the app. Sensors with an open connection are skipped.</string>
+    <string name="info_now_body">A 10 second snapshot from the sensor, not a daily average. The face, the word and the colour all show the same band.</string>
+    <string name="info_wifi_body">The sensor joins your Wi-Fi so this phone can sync without Bluetooth.</string>
+    <string name="info_pairing_body">How a phone proves it is allowed to connect.</string>
+    <string name="info_history_body1">Averages use only readings the sensor marked valid, warmed up, fresh and without error.</string>
+    <string name="info_history_body2">Coverage is the share of the window with such readings. Three readings in an hour is 1 percent, not an hourly average.</string>
+    <string name="info_history_body3">Dashed stretches were logged before the sensor had a clock. Their time is estimated from a later time set on the same power on.</string>
+    <string name="info_history_body4">Earlier station readings stay available after a device reset.</string>
+    <string name="info_settings_body1">The detail level changes only what you see. Every level reads the same data, and nothing is hidden from the archive or the export.</string>
+    <string name="info_settings_body2">Smart Sync never rewrites raw files. Finalizing buffered rows stays a separate confirmed action.</string>
+    <string name="info_file_chart_body">One column per synced file in file order. Faint columns have few valid readings, for example during warm up. Dashed columns have an estimated time. Touch a column to read its file, rows, time span and mean.</string>
+
+    <!-- Connection banner -->
+    <string name="conn_disconnected">Not connected</string>
+    <string name="conn_connecting">Connecting…</string>
+    <string name="conn_discovering">Discovering services…</string>
+    <string name="conn_pairing">Pairing. Enter the code shown on the sensor</string>
+    <string name="conn_mtu">Negotiating MTU…</string>
+    <string name="conn_notifications">Enabling notifications…</string>
+    <string name="conn_setting_up">Setting up the link…</string>
+    <string name="conn_lan_auth">Authenticating on the LAN…</string>
+    <string name="conn_lan_checking">Checking this phone on your Wi-Fi…</string>
+    <string name="conn_ready">Connected</string>
+    <string name="conn_ready_mtu">Connected, MTU %1$d</string>
+    <string name="conn_failed">Could not connect. Move closer and try again</string>
+    <string name="conn_link_lost">Link lost. Reconnecting by itself…</string>
+    <string name="conn_link_lost_detail">Link lost (%1$s). Reconnecting, attempt %2$d of %3$d…</string>
+    <string name="conn_bluetooth_settings">Bluetooth settings</string>
+    <string name="scan_failed">Could not scan. %1$s</string>
+
+    <!-- Bottom bar -->
+    <string name="tab_today">Today</string>
+    <string name="tab_history">History</string>
+    <string name="tab_files">Files</string>
+    <string name="tab_device">Device</string>
+
+    <!-- Settings clock modes -->
+    <string name="clock_mode_ask">Ask before sending this phone’s time.</string>
+    <string name="clock_mode_automatic">Send this phone’s time when the sensor clock is missing.</string>
+    <string name="clock_mode_never">Only copy files. You still see a warning for undated readings.</string>
+
+    <!-- Files -->
+    <string name="files_in_archive">%1$d in archive, %2$s</string>
+    <string name="files_refresh">Refresh list</string>
+    <string name="files_more">More</string>
+    <string name="files_bg_queued">Background sync queued…</string>
+    <string name="files_bg_sync">Sync now in background</string>
+    <string name="files_autosync_on">Auto-sync every %1$d min is on</string>
+    <string name="files_autosync_off">Auto-sync every %1$d min is off</string>
+    <string name="files_share_zip">Share archive as zip</string>
+    <string name="files_save_zip">Save zip to…</string>
+    <plurals name="files_share_all">
+        <item quantity="one">Share %1$d Parquet file</item>
+        <item quantity="other">Share %1$d Parquet files</item>
+    </plurals>
+    <string name="files_share_daily">Share daily files</string>
+    <string name="files_stop">Stop</string>
+    <plurals name="files_sync_all">
+        <item quantity="one">Sync %1$d file, %2$s</item>
+        <item quantity="other">Sync all, %1$d files, %2$s</item>
+    </plurals>
+    <string name="files_list_failed_detail">Could not read the file list. %1$s</string>
+    <plurals name="files_dev_summary">
+        <item quantity="one">%1$d finalized file, %2$d partial, %3$s of %4$s</item>
+        <item quantity="other">%1$d finalized files, %2$d partial, %3$s of %4$s</item>
+    </plurals>
+    <string name="files_refreshing">refreshing…</string>
+    <string name="files_listed">listed %1$s</string>
+    <string name="files_refresh_failed">Refresh failed. Showing the last list. %1$s</string>
+    <plurals name="files_frame_mismatch">
+        <item quantity="one">Device announced %1$d file but sent %2$d FILE frames.</item>
+        <item quantity="other">Device announced %1$d files but sent %2$d FILE frames.</item>
+    </plurals>
+    <string name="files_syncing">syncing</string>
+    <string name="files_last_sync">last sync</string>
+    <plurals name="files_of_total">
+        <item quantity="one">of %1$d file</item>
+        <item quantity="other">of %1$d files</item>
+    </plurals>
+    <string name="files_bytes_of">%1$s of %2$s</string>
+    <plurals name="files_recovered">
+        <item quantity="one">recovered %1$d lost window</item>
+        <item quantity="other">recovered %1$d lost windows</item>
+    </plurals>
+    <string name="files_resumed">resumed from %1$s</string>
+    <string name="file_synced">synced and checked</string>
+    <string name="file_syncing">syncing %1$s of %2$s</string>
+    <string name="file_partial">partial %1$s, resumable</string>
+    <string name="file_not_synced">not synced</string>
+    <string name="file_mismatch">mismatch</string>
+    <string name="file_invalid">invalid name</string>
+    <string name="file_metrics">Metrics</string>
+    <string name="file_share">Share</string>
+    <string name="files_autosync_event_on">Auto-sync is on, about every %1$d min.</string>
+    <string name="files_autosync_event_off">Auto-sync is off for this sensor.</string>
+    <string name="files_bg_event">Background sync queued. You can leave the app.</string>
+    <string name="files_no_daily">No daily files yet. They need synced files with a time.</string>
+    <string name="chart_by_file">Chart by file</string>
+    <plurals name="chart_by_file_summary">
+        <item quantity="one">%1$d file, %2$s</item>
+        <item quantity="other">%1$d files, %2$s</item>
+    </plurals>
+    <string name="chart_reading_files">Reading files…</string>
+    <string name="chart_no_files">No files on this phone yet.</string>
+    <string name="chart_touch">Touch a column to read it</string>
+    <string name="chart_older">Older files</string>
+    <string name="chart_newer">Newer files</string>
+    <string name="chart_page">files %1$d to %2$d of %3$d</string>
+    <string name="chart_no_time">no time</string>
+
+    <!-- History -->
+    <string name="history_title">History</string>
+    <string name="history_loading">Loading archive…</string>
+    <string name="history_from">History from</string>
+    <string name="history_current">Current</string>
+    <string name="history_earlier">Earlier</string>
+    <string name="history_station_chip">%1$s, station %2$s</string>
+    <string name="history_page_earlier">Earlier</string>
+    <string name="history_page_later">Later</string>
+    <string name="history_untimed">Readings have no time yet. See them in Files.</string>
+    <string name="history_nothing_indexed">No readings indexed yet.</string>
+    <string name="history_archive">On this phone</string>
+    <string name="history_days">days with readings</string>
+    <string name="history_none_yet">none yet</string>
+    <string name="history_span_utc">first and last UTC day</string>
+    <string name="history_files_time">files with time</string>
+    <string name="history_of">%1$d of %2$d</string>
+    <string name="history_waiting_index">waiting to index</string>
+    <string name="history_index_failed">could not index</string>
+    <string name="history_estimated">files with estimated time</string>
+    <plurals name="history_other_station">
+        <item quantity="one">%1$d copy belongs to another station</item>
+        <item quantity="other">%1$d copies belong to another station</item>
+    </plurals>
+    <plurals name="history_untimed_files">
+        <item quantity="one">%1$d file has no time</item>
+        <item quantity="other">%1$d files have no time</item>
+    </plurals>
+    <string name="history_never_connected">Connect this sensor once to see its history.</string>
+    <string name="history_loading_short">Loading…</string>
+    <string name="history_covered">%1$d %% covered</string>
+    <string name="history_average">average</string>
+    <string name="history_peak">peak</string>
+    <string name="history_coverage">coverage</string>
+    <plurals name="history_readings">
+        <item quantity="one">%1$d reading</item>
+        <item quantity="other">%1$d readings</item>
+    </plurals>
+    <string name="history_low_coverage">Less than half of this window has readings.</string>
+    <string name="history_no_readings">No timed readings in this window.</string>
+    <string name="history_latest">Latest readings are from %1$s.</string>
+    <string name="history_tap_day">Tap a day to open it.</string>
+    <!-- Device and Files messages (snackbars) -->
+    <string name="msg_sticker_invalid">Enter the sticker as PMS5003T, its date and unit digits.</string>
+    <string name="msg_sensor_busy">Connect to the sensor and wait for its tasks to finish.</string>
+    <string name="msg_sensor_not_confirmed">The sensor did not confirm the sticker.</string>
+    <string name="msg_sensor_saved_on">Sticker saved. Batch estimate on.</string>
+    <string name="msg_sensor_saved_off">Sticker saved. Batch estimate off.</string>
+    <string name="msg_sensor_failed">Sticker not saved. %1$s</string>
+    <string name="msg_wake_no_dialog">Could not open the system dialog.</string>
+    <string name="msg_wake_failed">Wake when nearby is not set up. %1$s</string>
+    <string name="msg_wake_cancelled">Wake when nearby is not set up.</string>
+    <string name="msg_wake_no_link">Wake when nearby is not set up. Android recorded no link.</string>
+    <string name="msg_wake_on">Wake when nearby is on. A sync starts when this phone is near the sensor.</string>
+    <string name="msg_wake_off">Wake when nearby is off.</string>
+    <string name="msg_pairing_saved">Pairing settings saved</string>
+    <string name="msg_pin_saved">PIN saved</string>
+    <string name="msg_wifi_sent">Wi-Fi settings sent. The sensor is connecting.</string>
+    <string name="msg_wifi_on">Wi-Fi on</string>
+    <string name="msg_wifi_off">Wi-Fi off</string>
+    <string name="msg_lan_on">Sync over Wi-Fi on</string>
+    <string name="msg_lan_off">Sync over Wi-Fi off</string>
 </resources>

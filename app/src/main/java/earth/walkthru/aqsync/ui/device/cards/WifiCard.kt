@@ -46,8 +46,10 @@ import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.protocol.WifiState
 import earth.walkthru.aqsync.ui.components.BrandCard
-import earth.walkthru.aqsync.ui.components.Eyebrow
+import earth.walkthru.aqsync.ui.components.CardHeader
+import earth.walkthru.aqsync.ui.components.InfoContent
 import earth.walkthru.aqsync.ui.components.InfoNote
+import earth.walkthru.aqsync.ui.components.NO_VALUE
 import earth.walkthru.aqsync.ui.components.OutlinePillButton
 import earth.walkthru.aqsync.ui.components.PillButton
 import earth.walkthru.aqsync.ui.components.SignalBars
@@ -82,8 +84,8 @@ fun WifiCard(
     val ssid = wifi?.ssid ?: "?"
 
     BrandCard(modifier = modifier) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Eyebrow(stringResource(R.string.wifi_title), modifier = Modifier.weight(1f))
+        val title = stringResource(R.string.wifi_title)
+        CardHeader(title, info = InfoContent(title, stringResource(R.string.info_wifi_body), stringResource(R.string.wifi_psk_storage))) {
             Switch(checked = wifi?.isOn == true, onCheckedChange = onToggleWifi, enabled = state.canEdit && wifi != null)
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -112,20 +114,20 @@ fun WifiCard(
         }
         if (level.detailed) {
             Spacer(Modifier.height(6.dp))
-            StatLine(stringResource(R.string.wifi_network), wifi?.ssid?.ifEmpty { "—" } ?: "—")
+            StatLine(stringResource(R.string.wifi_network), wifi?.ssid?.ifEmpty { NO_VALUE } ?: NO_VALUE)
             StatLine(
                 stringResource(R.string.wifi_passphrase),
                 when (wifi?.pskSet) {
                     1 -> stringResource(R.string.wifi_psk_stored)
                     0 -> stringResource(R.string.wifi_psk_open)
-                    else -> "—"
+                    else -> NO_VALUE
                 },
             )
-            StatLine(stringResource(R.string.wifi_ip), wifi?.ip?.ifEmpty { "—" } ?: "—")
+            StatLine(stringResource(R.string.wifi_ip), wifi?.ip?.ifEmpty { NO_VALUE } ?: NO_VALUE)
         }
         if (level.developer) {
-            StatLine(stringResource(R.string.wifi_rssi), wifi?.rssi?.takeIf { it != 0 }?.let { "$it dBm" } ?: "—")
-            StatLine(stringResource(R.string.wifi_mac), wifi?.mac ?: "—")
+            StatLine(stringResource(R.string.wifi_rssi), wifi?.rssi?.takeIf { it != 0 }?.let { "$it dBm" } ?: NO_VALUE)
+            StatLine(stringResource(R.string.wifi_mac), wifi?.mac ?: NO_VALUE)
         }
 
         Spacer(Modifier.height(12.dp))
@@ -197,14 +199,6 @@ fun WifiCard(
                             modifier = Modifier.fillMaxWidth(),
                             enabled = state.canEdit,
                         )
-                        if (level.detailed) {
-                            Text(
-                                stringResource(R.string.wifi_psk_storage),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 4.dp),
-                            )
-                        }
                     }
                     Spacer(Modifier.height(10.dp))
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {

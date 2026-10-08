@@ -4,18 +4,22 @@
 
     <!--
       Offline-first. Bluetooth LE is the primary link: BLUETOOTH_SCAN is declared neverForLocation
-      so no location permission is implied, BLUETOOTH_CONNECT for GATT.
+      so no location permission is implied, BLUETOOTH_CONNECT for GATT. Runtime permissions are
+      requested only from the action that needs them (ui/permissions/RuntimeAccess.kt). There is no
+      permission wall at launch. Timing table in docs/screens.md, store answers in
+      docs/store-compliance.md.
 
       INTERNET exists only so that sockets exist at all: the protocol v2 LAN transport opens one
       plain TCP connection to a device discovered via mDNS `_aqsync._tcp` on the current network
-      (data/lan/). The code never connects to any address it did not obtain from that discovery;
-      there is still no cloud endpoint, no analytics and no account. A future cloud step needs its
-      own explicit opt-in setting and review (AGENTS.md).
+      (data/lan/). The code never connects to any address it did not obtain from that discovery.
+      No analytics and no account. The planned public Discover feed (anonymous read-only GETs, a
+      Settings switch) and per-device opt-in uploads follow the network rule in AGENTS.md and
+      docs/devices-and-discovery.md.
 
       ACCESS_LOCAL_NETWORK (API 37+) is required for any local-network traffic — TCP, mDNS,
       NsdManager — on phones targeting SDK 37. It is in the NEARBY_DEVICES group with the Bluetooth
-      permissions, so it is usually granted with them; the app still checks and requests it before
-      any LAN action and keeps working over Bluetooth when it is denied. Below API 37 the permission
+      permissions, so it is usually granted with them. The app asks for it only from a Wi-Fi sync
+      action on the Device screen and keeps working over Bluetooth when it is denied. Below API 37 the permission
       does not exist and is never requested.
 
       FOREGROUND_SERVICE + FOREGROUND_SERVICE_DATA_SYNC: every file transfer runs under a `dataSync`
@@ -23,8 +27,9 @@
       went off, ConnectivityService "Destroyed live tcp sockets for uids={<ours>}" and the LAN sync
       died with "Software caused connection abort" — the background network restriction. A
       foreground service keeps the uid out of that firewall chain for the duration of the transfer
-      and not a second longer. POST_NOTIFICATIONS is requested at runtime on API 33+ so the progress
-      notification is visible; a denial only hides the notification, the service still runs.
+      and not a second longer. POST_NOTIFICATIONS is requested on API 33+ only when the user starts
+      a sync or turns on Auto-sync, so the progress notification is visible. A denial only hides
+      the notification, the service still runs.
       The auto-sync WorkManager worker (data/background/SyncWorker) uses the same type through
       WorkManager's SystemForegroundService, merged below.
 

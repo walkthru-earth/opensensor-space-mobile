@@ -63,12 +63,16 @@ import earth.walkthru.aqsync.data.local.database.KnownDevice
 import earth.walkthru.aqsync.data.settings.DetailLevel
 import earth.walkthru.aqsync.ui.components.ConnectionBanner
 import earth.walkthru.aqsync.ui.components.Eyebrow
+import earth.walkthru.aqsync.ui.components.InfoButton
+import earth.walkthru.aqsync.ui.components.InfoContent
 import earth.walkthru.aqsync.ui.components.MascotGuide
 import earth.walkthru.aqsync.ui.components.MoodFace
 import earth.walkthru.aqsync.ui.components.SignalBars
 import earth.walkthru.aqsync.ui.components.TickingText
 import earth.walkthru.aqsync.ui.components.formatAgo
 import earth.walkthru.aqsync.ui.components.titleText
+import earth.walkthru.aqsync.ui.permissions.AccessDialogs
+import earth.walkthru.aqsync.ui.permissions.rememberBluetoothAccess
 import earth.walkthru.aqsync.ui.permissions.rememberNotificationPermission
 import earth.walkthru.aqsync.ui.theme.color
 import java.time.Instant
@@ -84,9 +88,12 @@ fun ScanScreen(
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     var forgetTarget by remember { mutableStateOf<Pair<String, String?>?>(null) }
 
-    // Scan while the screen is visible; the radio is not free.
-    LifecycleStartEffect(Unit) {
-        viewModel.startScan()
+    // Bluetooth is asked for only from a tap (Scan, or opening a sensor). Once it is allowed and the
+    // radio is on, the screen scans while visible. The radio is not free.
+    val bluetooth = rememberBluetoothAccess()
+    AccessDialogs(bluetooth)
+    LifecycleStartEffect(bluetooth.ready) {
+        if (bluetooth.ready) viewModel.startScan()
         onStopOrDispose { viewModel.stopScan() }
     }
 
@@ -95,9 +102,12 @@ fun ScanScreen(
     fun withNotificationPermission(action: () -> Unit) = notificationPermission.ensureThen(action)
 
     // Detail owns persistent link/error state and remains useful with only the local archive.
+    // Without Bluetooth the device still opens on its archive (History, Files) without a link.
     fun openDevice(address: String, name: String?) {
-        viewModel.connect(address, name)
-        onConnected(address)
+        bluetooth.run(onDeclined = { onConnected(address) }) {
+            viewModel.connect(address, name)
+            onConnected(address)
+        }
     }
 
     Scaffold(
@@ -107,6 +117,14 @@ fun ScanScreen(
                 title = { Text(stringResource(R.string.scan_title)) },
                 scrollBehavior = scrollBehavior,
                 actions = {
+                    InfoButton(
+                        InfoContent(
+                            stringResource(R.string.info_connect_title),
+                            stringResource(R.string.info_connect_body1),
+                            stringResource(R.string.info_connect_body2),
+                            stringResource(R.string.info_privacy),
+                        ),
+                    )
                     if (state.showFakeEntry) {
                         var open by remember { mutableStateOf(false) }
                         IconButton(onClick = { open = true }) { Icon(Icons.Rounded.MoreVert, contentDescription = stringResource(R.string.scan_more)) }
@@ -128,7 +146,7 @@ fun ScanScreen(
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
-                onClick = { if (state.scanning) viewModel.stopScan() else viewModel.startScan() },
+                onClick = { if (state.scanning) viewModel.stopScan() else bluetooth.run { viewModel.startScan() } },
                 icon = { Icon(if (state.scanning) Icons.Rounded.Stop else Icons.Rounded.Radar, contentDescription = null) },
                 text = { Text(stringResource(if (state.scanning) R.string.scan_button_stop else R.string.scan_button_scan)) },
             )
@@ -183,15 +201,6 @@ fun ScanScreen(
                         )
                     }
                 }
-                if (state.known.isEmpty() || level.detailed) {
-                    item(key = "hints") {
-                        Column(Modifier.padding(horizontal = 4.dp, vertical = 4.dp)) {
-                            Text(stringResource(R.string.scan_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Spacer(Modifier.height(6.dp))
-                            Text(stringResource(R.string.scan_pair_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
             } else {
                 item { Eyebrow(stringResource(R.string.scan_nearby)) }
             }
@@ -224,22 +233,18 @@ fun ScanScreen(
             // Several loggers: one bounded background pass over all of them, LAN then bond per device.
             if (state.known.size >= 2) {
                 item(key = "collect") {
-                    Column(Modifier.padding(top = 8.dp)) {
+                    Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         FilledTonalButton(
                             onClick = { withNotificationPermission { viewModel.collectAll() } },
                             enabled = !state.backgroundSyncActive,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.weight(1f),
                         ) {
                             Icon(Icons.Rounded.CloudSync, contentDescription = null)
                             Spacer(Modifier.width(8.dp))
                             Text(if (state.backgroundSyncActive) stringResource(R.string.scan_collect_running) else pluralStringResource(R.plurals.scan_collect_all, state.known.size, state.known.size))
                         }
-                        Text(
-                            stringResource(R.string.scan_collect_explain),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 6.dp, start = 4.dp, end = 4.dp),
-                        )
+                        val collectTitle = pluralStringResource(R.plurals.scan_collect_all, state.known.size, state.known.size)
+                        InfoButton(InfoContent(collectTitle, stringResource(R.string.info_collect_body)))
                     }
                 }
             }

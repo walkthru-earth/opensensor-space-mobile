@@ -26,6 +26,7 @@ import earth.walkthru.aqsync.data.history.AirMood
 import earth.walkthru.aqsync.data.history.HistoryColumn
 import earth.walkthru.aqsync.data.history.MetricSpec
 import earth.walkthru.aqsync.ui.components.MoodFace
+import earth.walkthru.aqsync.ui.components.NO_VALUE
 import earth.walkthru.aqsync.ui.theme.color
 import earth.walkthru.aqsync.ui.theme.textColorOnSurface
 import java.time.Instant
@@ -110,7 +111,7 @@ fun DayRing(
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.size(size * 0.5f), verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center) {
             if (mood != null) MoodFace(mood, mood.color(), Modifier.size(size * 0.16f))
             Text(
-                mean?.let { if (it >= 100) it.toInt().toString() else "%.1f".format(java.util.Locale.ROOT, it) } ?: "—",
+                mean?.let { if (it >= 100) it.toInt().toString() else "%.1f".format(java.util.Locale.ROOT, it) } ?: NO_VALUE,
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = mood?.textColorOnSurface() ?: onSurface,

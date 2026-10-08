@@ -13,7 +13,8 @@ import earth.walkthru.aqsync.data.ble.ConfigSnapshot
 import earth.walkthru.aqsync.data.protocol.LiveSample
 import earth.walkthru.aqsync.data.protocol.PlantowerBatchCandidate
 import earth.walkthru.aqsync.ui.components.BrandCard
-import earth.walkthru.aqsync.ui.components.Eyebrow
+import earth.walkthru.aqsync.ui.components.CardHeader
+import earth.walkthru.aqsync.ui.components.InfoContent
 
 /**
  * Detailed level, on the reviewed Waveshare v2 dictionary after the board acknowledged the opt-in:
@@ -29,16 +30,11 @@ fun BatchEstimateCard(live: LiveSample?, receivedAtEpochMs: Long?, config: Confi
         null
     }
     BrandCard(modifier = modifier) {
-        Eyebrow(stringResource(R.string.batch_title))
-        Spacer(Modifier.height(6.dp))
+        val title = stringResource(R.string.batch_title)
+        CardHeader(title, info = InfoContent(title, stringResource(R.string.batch_explain, PlantowerBatchCandidate.FACTOR.toString())))
         Text(
             if (estimate != null) stringResource(R.string.batch_value, fmt(estimate)) else stringResource(R.string.batch_waiting),
             style = MaterialTheme.typography.titleLarge,
-        )
-        Text(
-            stringResource(R.string.batch_explain, PlantowerBatchCandidate.FACTOR.toString()),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

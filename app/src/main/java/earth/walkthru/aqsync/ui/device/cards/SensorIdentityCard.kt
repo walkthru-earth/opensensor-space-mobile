@@ -29,7 +29,8 @@ import earth.walkthru.aqsync.data.SensorLabel
 import earth.walkthru.aqsync.data.local.database.SensorInstallation
 import earth.walkthru.aqsync.data.protocol.PlantowerBatchCandidate
 import earth.walkthru.aqsync.ui.components.BrandCard
-import earth.walkthru.aqsync.ui.components.Eyebrow
+import earth.walkthru.aqsync.ui.components.CardHeader
+import earth.walkthru.aqsync.ui.components.InfoContent
 import earth.walkthru.aqsync.ui.components.InfoNote
 import earth.walkthru.aqsync.ui.components.OutlinePillButton
 import earth.walkthru.aqsync.ui.components.PillButton
@@ -72,8 +73,15 @@ fun SensorIdentityCard(
     val editable = state.canEdit && !state.syncRunning
 
     BrandCard(modifier = modifier) {
-        Eyebrow(stringResource(R.string.sensor_title))
-        Spacer(Modifier.height(6.dp))
+        val title = stringResource(R.string.sensor_title)
+        CardHeader(
+            title,
+            info = InfoContent(
+                title,
+                stringResource(R.string.sensor_check_model),
+                stringResource(R.string.sensor_estimate_explain, PlantowerBatchCandidate.FACTOR.toString()),
+            ),
+        )
         Text(stringResource(R.string.sensor_installed), style = MaterialTheme.typography.bodyMedium)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Column {
@@ -93,7 +101,6 @@ fun SensorIdentityCard(
                 }
             }
         }
-        InfoNote(stringResource(R.string.sensor_check_model))
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             OutlinePillButton(stringResource(R.string.sensor_scan), onClick = onScan, enabled = editable)
@@ -120,13 +127,7 @@ fun SensorIdentityCard(
             Text(stringResource(R.string.sensor_store_estimate), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
             Switch(checked = effectiveBatch, onCheckedChange = { useBatch = it }, enabled = editable && knownBatch)
         }
-        InfoNote(
-            if (knownBatch) {
-                stringResource(R.string.sensor_estimate_explain, PlantowerBatchCandidate.FACTOR.toString())
-            } else {
-                stringResource(R.string.sensor_estimate_none)
-            },
-        )
+        if (!knownBatch && label != null) InfoNote(stringResource(R.string.sensor_estimate_none))
         Spacer(Modifier.height(10.dp))
         PillButton(
             stringResource(R.string.sensor_save),

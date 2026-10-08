@@ -20,6 +20,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.DeviceEvent
 import earth.walkthru.aqsync.ui.components.CollectEvents
+import earth.walkthru.aqsync.ui.permissions.AccessDialogs
+import earth.walkthru.aqsync.ui.permissions.rememberBluetoothAccess
+import earth.walkthru.aqsync.ui.permissions.rememberNotificationPermission
 import earth.walkthru.aqsync.ui.settings.SettingsSheet
 import java.time.Instant
 import java.time.ZoneId
@@ -47,6 +50,10 @@ fun TodayRoute(
     var confirmTime by remember { mutableStateOf(false) }
     var confirmSmartSyncClock by remember { mutableStateOf<String?>(null) }
     var confirmFlush by remember { mutableStateOf(false) }
+    // Asked only from a tap: Reconnect needs Bluetooth, Sync shows a progress notification.
+    val bluetooth = rememberBluetoothAccess()
+    AccessDialogs(bluetooth)
+    val notificationPermission = rememberNotificationPermission()
 
     CollectEvents(viewModel.events) { ev ->
         when (ev) {
@@ -72,8 +79,8 @@ fun TodayRoute(
                 TodayAction.OpenDevices -> onDisconnected()
                 TodayAction.OpenSettings -> showSettings = true
                 TodayAction.Disconnect -> { viewModel.disconnect(); onDisconnected() }
-                TodayAction.Reconnect -> viewModel.reconnect()
-                TodayAction.SmartSync -> viewModel.smartSync()
+                TodayAction.Reconnect -> bluetooth.run { viewModel.reconnect() }
+                TodayAction.SmartSync -> notificationPermission.ensureThen { viewModel.smartSync() }
                 TodayAction.RequestSetTime -> confirmTime = true
                 TodayAction.RequestFlush -> confirmFlush = true
             }

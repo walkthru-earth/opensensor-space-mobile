@@ -15,6 +15,7 @@ import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.settings.DetailLevel
 import earth.walkthru.aqsync.ui.components.BrandCard
 import earth.walkthru.aqsync.ui.components.Eyebrow
+import earth.walkthru.aqsync.ui.components.NO_VALUE
 import earth.walkthru.aqsync.ui.components.StatLine
 import earth.walkthru.aqsync.ui.components.TickingText
 import earth.walkthru.aqsync.ui.components.describe
@@ -47,15 +48,15 @@ fun DeviceInfoCard(
         )
         if (level.detailed) {
             Spacer(Modifier.height(8.dp))
-            StatLine(stringResource(R.string.device_firmware), info?.fw ?: "—")
-            StatLine(stringResource(R.string.device_protocol), info?.proto?.let { "v$it" } ?: "—")
+            StatLine(stringResource(R.string.device_firmware), info?.fw ?: NO_VALUE)
+            StatLine(stringResource(R.string.device_protocol), info?.proto?.let { "v$it" } ?: NO_VALUE)
         }
         if (level.developer) {
-            StatLine(stringResource(R.string.device_schema), "${info?.schema ?: "—"}, ${info?.cols ?: "?"} cols")
-            StatLine(stringResource(R.string.device_station), info?.station ?: "—")
-            StatLine(stringResource(R.string.device_id), info?.dev ?: "—")
-            StatLine(stringResource(R.string.device_boot), info?.boot?.take(16)?.plus("…") ?: "—")
-            StatLine(stringResource(R.string.device_dictionary), info?.dict?.take(12)?.plus("…") ?: "—")
+            StatLine(stringResource(R.string.device_schema), "${info?.schema ?: NO_VALUE}, ${info?.cols ?: "?"} cols")
+            StatLine(stringResource(R.string.device_station), info?.station ?: NO_VALUE)
+            StatLine(stringResource(R.string.device_id), info?.dev ?: NO_VALUE)
+            StatLine(stringResource(R.string.device_boot), info?.boot?.take(16)?.plus("…") ?: NO_VALUE)
+            StatLine(stringResource(R.string.device_dictionary), info?.dict?.take(12)?.plus("…") ?: NO_VALUE)
             StatLine(stringResource(R.string.device_max_read), info?.maxRead?.let { "$it B" } ?: stringResource(R.string.device_default))
             StatLine(
                 stringResource(R.string.device_link),
@@ -63,7 +64,7 @@ fun DeviceInfoCard(
                     transport?.label,
                     endpoint,
                     (connection as? ConnectionState.Ready)?.let { "payload ${it.mtu - 3} B" },
-                ).joinToString(", ").ifEmpty { "—" },
+                ).joinToString(", ").ifEmpty { NO_VALUE },
             )
             if (configReadAtEpochMs != null) {
                 val label = stringResource(R.string.device_config_read)

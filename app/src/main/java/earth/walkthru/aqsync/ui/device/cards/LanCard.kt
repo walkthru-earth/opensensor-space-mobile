@@ -19,15 +19,17 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.ui.components.BrandCard
-import earth.walkthru.aqsync.ui.components.Eyebrow
+import earth.walkthru.aqsync.ui.components.CardHeader
+import earth.walkthru.aqsync.ui.components.InfoContent
 import earth.walkthru.aqsync.ui.components.InfoNote
+import earth.walkthru.aqsync.ui.components.NO_VALUE
 import earth.walkthru.aqsync.ui.components.OutlinePillButton
 import earth.walkthru.aqsync.ui.components.StatLine
 import earth.walkthru.aqsync.ui.components.StatusDot
 import earth.walkthru.aqsync.ui.device.DeviceUiState
 
 /** What the card needs from the platform's local-network permission (API 37+, always granted below). */
-data class LanAccess(val granted: Boolean, val requestable: Boolean, val deniedOnce: Boolean)
+data class LanAccess(val granted: Boolean, val requestable: Boolean)
 
 /**
  * Sync over the user's own Wi-Fi. Simple shows the server switch, whether the device is seen on
@@ -50,26 +52,27 @@ fun LanCard(
     val level = state.detailLevel
 
     BrandCard(modifier = modifier) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Eyebrow(stringResource(R.string.lan_title), modifier = Modifier.weight(1f))
+        val title = stringResource(R.string.lan_title)
+        CardHeader(
+            title,
+            info = InfoContent(title, stringResource(R.string.lan_explain), stringResource(R.string.lan_token_explain), stringResource(R.string.perm_lan_body)),
+        ) {
             Switch(checked = lan?.isOn == true, onCheckedChange = onToggleLan, enabled = state.canEdit && lan != null)
         }
         if (level.detailed) {
-            Text(stringResource(R.string.lan_explain), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(8.dp))
+            StatLine(
+                stringResource(R.string.lan_server),
+                when (lan?.isOn) {
+                    true -> stringResource(R.string.lan_server_on)
+                    false -> stringResource(R.string.value_off)
+                    null -> NO_VALUE
+                },
+            )
         }
-        StatLine(
-            stringResource(R.string.lan_server),
-            when (lan?.isOn) {
-                true -> stringResource(R.string.lan_server_on)
-                false -> stringResource(R.string.value_off)
-                null -> "—"
-            },
-        )
         if (level.developer) {
-            StatLine(stringResource(R.string.lan_host), lan?.host?.let { "$it.local" } ?: "—")
-            StatLine(stringResource(R.string.lan_port), lan?.port?.toString() ?: "—")
-            StatLine(stringResource(R.string.lan_clients), lan?.clients?.toString() ?: "—")
+            StatLine(stringResource(R.string.lan_host), lan?.host?.let { "$it.local" } ?: NO_VALUE)
+            StatLine(stringResource(R.string.lan_port), lan?.port?.toString() ?: NO_VALUE)
+            StatLine(stringResource(R.string.lan_clients), lan?.clients?.toString() ?: NO_VALUE)
         }
 
         Spacer(Modifier.height(10.dp))
@@ -90,7 +93,6 @@ fun LanCard(
             )
         }
         if (!access.granted && access.requestable) {
-            InfoNote(stringResource(if (access.deniedOnce) R.string.lan_access_denied else R.string.lan_access_explain))
             Spacer(Modifier.height(6.dp))
             OutlinePillButton(stringResource(R.string.lan_allow), onClick = onRequestAccess)
         }
@@ -100,7 +102,6 @@ fun LanCard(
             StatusDot(if (hasToken) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outline)
             Text(stringResource(if (hasToken) R.string.lan_token_held else R.string.lan_token_missing), style = MaterialTheme.typography.bodyLarge)
         }
-        if (level.detailed) InfoNote(stringResource(R.string.lan_token_explain))
         Spacer(Modifier.height(10.dp))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (state.overBle) {
@@ -108,7 +109,7 @@ fun LanCard(
             } else {
                 OutlinePillButton(stringResource(R.string.lan_reconnect_ble), onClick = onReconnectBle, enabled = state.ready && !state.busy)
             }
-            OutlinePillButton(stringResource(R.string.lan_rotate), onClick = onRotateToken, enabled = state.canDisrupt)
+            if (level.detailed) OutlinePillButton(stringResource(R.string.lan_rotate), onClick = onRotateToken, enabled = state.canDisrupt)
         }
         if (!state.overBle) InfoNote(stringResource(R.string.lan_fetch_ble_only))
     }

@@ -25,6 +25,7 @@ import earth.walkthru.aqsync.data.protocol.TemperatureSource
 import earth.walkthru.aqsync.data.settings.DetailLevel
 import earth.walkthru.aqsync.ui.components.BrandCard
 import earth.walkthru.aqsync.ui.components.Eyebrow
+import earth.walkthru.aqsync.ui.components.NO_VALUE
 
 /**
  * Detailed level: the board's own temperature and the battery. Millivolts and USB bus voltage are
@@ -37,7 +38,7 @@ fun BoardCard(live: LiveSample?, profile: LiveProfile?, level: DetailLevel, modi
             Column(Modifier.weight(1f)) {
                 BigValue(
                     temperatureMetric(profile?.temperature).label,
-                    if (profile != null) fmt(live?.t) else "—",
+                    if (profile != null) fmt(live?.t) else NO_VALUE,
                     temperatureMetric(profile?.temperature).unit,
                 )
                 Text(
@@ -61,7 +62,7 @@ fun BoardCard(live: LiveSample?, profile: LiveProfile?, level: DetailLevel, modi
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(bottom = 8.dp),
                     )
-                    Text(live?.pct?.let { "$it" } ?: "—", style = MaterialTheme.typography.displaySmall)
+                    Text(live?.pct?.let { "$it" } ?: NO_VALUE, style = MaterialTheme.typography.displaySmall)
                     Spacer(Modifier.width(4.dp))
                     Text(Metrics.BATTERY.unit, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 7.dp))
                 }

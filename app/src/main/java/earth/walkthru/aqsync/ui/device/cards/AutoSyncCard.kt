@@ -17,8 +17,8 @@ import androidx.compose.ui.unit.dp
 import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.background.AutoSyncScheduler
 import earth.walkthru.aqsync.ui.components.BrandCard
-import earth.walkthru.aqsync.ui.components.Eyebrow
-import earth.walkthru.aqsync.ui.components.InfoNote
+import earth.walkthru.aqsync.ui.components.CardHeader
+import earth.walkthru.aqsync.ui.components.InfoContent
 import earth.walkthru.aqsync.ui.components.OutlinePillButton
 import earth.walkthru.aqsync.ui.components.StatLine
 import earth.walkthru.aqsync.ui.components.WarningNote
@@ -43,8 +43,18 @@ fun AutoSyncCard(
     BrandCard(modifier = modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Eyebrow(stringResource(R.string.autosync_title))
-                Spacer(Modifier.height(4.dp))
+                val title = stringResource(R.string.autosync_title)
+                CardHeader(
+                    title,
+                    info = InfoContent(
+                        title,
+                        listOfNotNull(
+                            stringResource(R.string.autosync_explain),
+                            stringResource(R.string.autosync_wake_explain).takeIf { state.companionSupported },
+                            stringResource(R.string.autosync_wake_ble_drop).takeIf { state.companionSupported },
+                        ),
+                    ),
+                )
                 Text(
                     pluralStringResource(if (state.autoSync) R.plurals.autosync_on else R.plurals.autosync_off, minutes.toInt(), minutes),
                     style = MaterialTheme.typography.bodyMedium,
@@ -82,14 +92,7 @@ fun AutoSyncCard(
                     onClick = onSetupCompanion,
                     enabled = !state.companionBusy,
                 )
-                if (level.detailed) {
-                    InfoNote(
-                        stringResource(R.string.autosync_wake_explain) +
-                            if (state.overBle && state.ready) " " + stringResource(R.string.autosync_wake_ble_drop) else "",
-                    )
-                }
             }
         }
-        if (level.detailed) InfoNote(stringResource(R.string.autosync_explain))
     }
 }

@@ -33,6 +33,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import earth.walkthru.aqsync.ui.components.Eyebrow
 import earth.walkthru.aqsync.ui.components.InfoNote
+import earth.walkthru.aqsync.ui.components.NO_VALUE
 import earth.walkthru.aqsync.ui.components.SectionCard
 import earth.walkthru.aqsync.ui.components.StatLine
 import earth.walkthru.aqsync.ui.components.WarningNote
@@ -81,7 +82,7 @@ fun FileMetricsScreen(
             }
             is FileMetricsState.Failed -> Column(Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
                 WarningNote(s.message)
-                InfoNote("The archive copy is untouched: it was verified by size, CRC-32 and PAR1 magic when it was synced. Only the app's reader could not decode it.")
+                InfoNote("The archive copy is untouched. It passed the size, CRC-32 and PAR1 checks when it was synced. Only the app reader could not decode it.")
             }
             is FileMetricsState.Loaded -> Loaded(s, padding, level.developer)
         }
@@ -102,10 +103,10 @@ private fun Loaded(s: FileMetricsState.Loaded, padding: PaddingValues, developer
                 Spacer(Modifier.height(8.dp))
                 StatLine("size", if (developer) "${formatBytes(s.sizeBytes)} · footer ${formatBytes(s.footerBytes.toLong())}" else formatBytes(s.sizeBytes))
                 StatLine("rows", if (developer) "${idx.rows} in ${idx.rowGroups} row group${if (idx.rowGroups == 1) "" else "s"}" else idx.rows.toString())
-                StatLine("columns", if (developer) "${idx.columns} · codec ${s.codec ?: "—"}" else idx.columns.toString())
+                StatLine("columns", if (developer) "${idx.columns} · codec ${s.codec ?: NO_VALUE}" else idx.columns.toString())
                 if (developer) {
-                    StatLine("schema", idx.schemaVersion ?: "—")
-                    StatLine("writer", idx.createdBy ?: "—")
+                    StatLine("schema", idx.schemaVersion ?: NO_VALUE)
+                    StatLine("writer", idx.createdBy ?: NO_VALUE)
                     StatLine("statistics", if (s.columnOrders > 0) "min/max per column (v6)" else "null counts only (v1 and v2)")
                     StatLine("index source", if (idx.fromStatistics) "footer statistics" else "decoded rows")
                     StatLine("decode time", "${s.decodeMillis} ms for every column")
@@ -120,16 +121,16 @@ private fun Loaded(s: FileMetricsState.Loaded, padding: PaddingValues, developer
             SectionCard("Time") {
                 if (idx.hasUtc) {
                     StatLine("UTC rows", "${idx.utcRows} of ${idx.rows}")
-                    StatLine("first", idx.firstUtcNs?.let(::formatUtcNs) ?: "—")
-                    StatLine("last", idx.lastUtcNs?.let(::formatUtcNs) ?: "—")
+                    StatLine("first", idx.firstUtcNs?.let(::formatUtcNs) ?: NO_VALUE)
+                    StatLine("last", idx.lastUtcNs?.let(::formatUtcNs) ?: NO_VALUE)
                 } else {
                     StatLine("UTC", "none, the sensor had no clock")
                 }
                 StatLine("valid particle rows", "${idx.pmValidRows} of ${idx.rows}")
                 if (developer) {
-                    StatLine("uptime span", "${idx.firstMonoUs?.let(::formatMonoUs) ?: "—"} → ${idx.lastMonoUs?.let(::formatMonoUs) ?: "—"}")
-                    StatLine("sequence", "${idx.firstSeq ?: "—"} to ${idx.lastSeq ?: "—"}")
-                    StatLine("boot", idx.bootId?.take(12)?.plus("…") ?: "—")
+                    StatLine("uptime span", "${idx.firstMonoUs?.let(::formatMonoUs) ?: NO_VALUE} → ${idx.lastMonoUs?.let(::formatMonoUs) ?: NO_VALUE}")
+                    StatLine("sequence", "${idx.firstSeq ?: NO_VALUE} to ${idx.lastSeq ?: NO_VALUE}")
+                    StatLine("boot", idx.bootId?.take(12)?.plus("…") ?: NO_VALUE)
                 }
             }
         }
@@ -139,10 +140,10 @@ private fun Loaded(s: FileMetricsState.Loaded, padding: PaddingValues, developer
                     s.rowGroups.forEach { g ->
                         StatLine(
                             "#${g.ordinal} · ${g.rows} rows · ${formatBytes(g.bytes)}",
-                            if (g.firstUtcNs != null && g.lastUtcNs != null) "${formatUtcNs(g.firstUtcNs).substring(11)} – ${formatUtcNs(g.lastUtcNs).substring(11)}" else "—",
+                            if (g.firstUtcNs != null && g.lastUtcNs != null) "${formatUtcNs(g.firstUtcNs).substring(11)} – ${formatUtcNs(g.lastUtcNs).substring(11)}" else NO_VALUE,
                         )
                     }
-                    InfoNote("Spans come from the footer statistics without decoding the rows — what a range query prunes on.")
+                    InfoNote("Spans come from the footer statistics without decoding rows.")
                 }
             }
         }
@@ -169,7 +170,7 @@ private fun Loaded(s: FileMetricsState.Loaded, padding: PaddingValues, developer
                     val sub = buildString {
                         append(c.type.name.lowercase())
                         if (c.timestamp) append(" · timestamp ns UTC")
-                        if (c.first != "—") append(" · first ${c.first} · last ${c.last}")
+                        if (c.first != NO_VALUE) append(" · first ${c.first} · last ${c.last}")
                         if (c.statsMin != null && c.statsMax != null) {
                             append(if (c.statsMin == c.min && c.statsMax == c.max) " · footer agrees" else " · footer says ${c.statsMin}–${c.statsMax}")
                         }

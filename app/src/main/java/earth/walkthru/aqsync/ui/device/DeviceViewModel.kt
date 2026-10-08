@@ -1,5 +1,6 @@
 package earth.walkthru.aqsync.ui.device
 
+import android.content.Context
 import android.content.IntentSender
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -7,6 +8,8 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.DeviceConnectionManager
 import earth.walkthru.aqsync.data.DeviceEvent
 import earth.walkthru.aqsync.data.SensorLabel
@@ -104,6 +107,7 @@ data class DeviceUiState(
 
 @HiltViewModel(assistedFactory = DeviceViewModel.Factory::class)
 class DeviceViewModel @AssistedInject constructor(
+    @param:ApplicationContext private val context: Context,
     manager: DeviceConnectionManager,
     @Assisted private val deviceAddress: String,
     private val transportFactory: TransportFactory,
@@ -223,11 +227,11 @@ class DeviceViewModel @AssistedInject constructor(
         val state = uiState.value
         val label = SensorLabel.parse(sticker)
         if (label == null || label.model != "PMS5003T") {
-            localEvents.tryEmit(DeviceEvent.Error("Enter the PMS5003T sticker as PMS5003T-YYYYMMDD plus its unit digits"))
+            localEvents.tryEmit(DeviceEvent.Error(context.getString(R.string.msg_sticker_invalid)))
             return
         }
         if (!state.canEdit || state.syncRunning || !state.capabilities.sensorIdentity) {
-            localEvents.tryEmit(DeviceEvent.Error("Connect to the Waveshare logger and wait for device tasks to finish"))
+            localEvents.tryEmit(DeviceEvent.Error(context.getString(R.string.msg_sensor_busy)))
             return
         }
         val info = state.info ?: return
@@ -239,7 +243,7 @@ class DeviceViewModel @AssistedInject constructor(
                 if (acknowledged?.serial != label.serial || acknowledged?.model != label.model ||
                     acknowledged?.vendor != label.vendor || acknowledged?.batchCandidate != (if (batchCandidate) 1 else 0)
                 ) {
-                    localEvents.tryEmit(DeviceEvent.Error("Board did not confirm the sensor identity"))
+                    localEvents.tryEmit(DeviceEvent.Error(context.getString(R.string.msg_sensor_not_confirmed)))
                     return@launch
                 }
                 sensorInstallationDao.record(
@@ -255,11 +259,11 @@ class DeviceViewModel @AssistedInject constructor(
                         source = source,
                     )
                 )
-                localEvents.tryEmit(DeviceEvent.Info("Sensor identity saved. Batch estimate ${if (batchCandidate) "on" else "off"}."))
+                localEvents.tryEmit(DeviceEvent.Info(context.getString(if (batchCandidate) R.string.msg_sensor_saved_on else R.string.msg_sensor_saved_off)))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                localEvents.tryEmit(DeviceEvent.Error("Sensor identity was not saved: ${e.message}"))
+                localEvents.tryEmit(DeviceEvent.Error(context.getString(R.string.msg_sensor_failed, e.message.orEmpty())))
             }
         }
     }
@@ -274,9 +278,9 @@ class DeviceViewModel @AssistedInject constructor(
             localEvents.tryEmit(
                 DeviceEvent.Info(
                     if (enabled) {
-                        "Auto-sync on: new files are pulled about every ${AutoSyncScheduler.PERIOD_MINUTES} min, even with the app closed."
+                        context.getString(R.string.files_autosync_event_on, AutoSyncScheduler.PERIOD_MINUTES.toInt())
                     } else {
-                        "Auto-sync off for this device."
+                        context.getString(R.string.files_autosync_event_off)
                     }
                 )
             )
@@ -306,10 +310,10 @@ class DeviceViewModel @AssistedInject constructor(
                 Dispatchers.Main.asExecutor(),
                 onIntent = { sender ->
                     if (!_launchRequests.tryEmit(sender)) {
-                        finishCompanion(addr, "Could not open the system dialog")
+                        finishCompanion(addr, context.getString(R.string.msg_wake_no_dialog))
                     }
                 },
-                onError = { reason -> finishCompanion(addr, "Wake when nearby not set up: $reason") },
+                onError = { reason -> finishCompanion(addr, context.getString(R.string.msg_wake_failed, reason)) },
             )
         }
     }
@@ -319,16 +323,16 @@ class DeviceViewModel @AssistedInject constructor(
         val addr = uiState.value.address ?: reconnectAfterCompanion?.first ?: return
         viewModelScope.launch {
             if (!approved) {
-                finishCompanion(addr, "Wake when nearby not set up (cancelled)")
+                finishCompanion(addr, context.getString(R.string.msg_wake_cancelled))
                 return@launch
             }
             val id = companionPresence.onAssociated(addr)
             if (id == null) {
-                finishCompanion(addr, "Wake when nearby not set up: the system recorded no association")
+                finishCompanion(addr, context.getString(R.string.msg_wake_no_link))
                 return@launch
             }
             repository.setCompanionAssociation(addr, id)
-            finishCompanion(addr, "Wake when nearby is on: a sync starts when this phone comes into range of the logger.", ok = true)
+            finishCompanion(addr, context.getString(R.string.msg_wake_on), ok = true)
         }
     }
 
@@ -339,7 +343,7 @@ class DeviceViewModel @AssistedInject constructor(
         viewModelScope.launch {
             companionPresence.disassociate(addr, s.known?.companionAssociationId)
             repository.setCompanionAssociation(addr, null)
-            localEvents.tryEmit(DeviceEvent.Info("Wake when nearby is off."))
+            localEvents.tryEmit(DeviceEvent.Info(context.getString(R.string.msg_wake_off)))
         }
     }
 
@@ -364,7 +368,7 @@ class DeviceViewModel @AssistedInject constructor(
             localEvents.tryEmit(DeviceEvent.Error(e.message ?: "invalid value"))
             return
         }
-        repository.applyConfig(patch, "Pairing settings stored")
+        repository.applyConfig(patch, context.getString(R.string.msg_pairing_saved))
     }
 
     fun setPin(pin: String) {
@@ -374,7 +378,7 @@ class DeviceViewModel @AssistedInject constructor(
             localEvents.tryEmit(DeviceEvent.Error(e.message ?: "invalid PIN"))
             return
         }
-        repository.applyConfig(patch, "PIN stored")
+        repository.applyConfig(patch, context.getString(R.string.msg_pin_saved))
     }
 
     fun reboot() = repository.rebootAndReconnect()
@@ -396,11 +400,11 @@ class DeviceViewModel @AssistedInject constructor(
             localEvents.tryEmit(DeviceEvent.Error(e.message ?: "invalid Wi-Fi settings"))
             return
         }
-        repository.applyConfig(patch, "Wi-Fi settings sent; the device is connecting")
+        repository.applyConfig(patch, context.getString(R.string.msg_wifi_sent))
     }
 
-    fun setWifiOn(on: Boolean) = repository.applyConfig(ConfigPatch.build { wifiOn(on) }, if (on) "Wi-Fi radio on" else "Wi-Fi radio off")
-    fun setLanOn(on: Boolean) = repository.applyConfig(ConfigPatch.build { lanOn(on) }, if (on) "LAN sync server on" else "LAN sync server off")
+    fun setWifiOn(on: Boolean) = repository.applyConfig(ConfigPatch.build { wifiOn(on) }, context.getString(if (on) R.string.msg_wifi_on else R.string.msg_wifi_off))
+    fun setLanOn(on: Boolean) = repository.applyConfig(ConfigPatch.build { lanOn(on) }, context.getString(if (on) R.string.msg_lan_on else R.string.msg_lan_off))
 
     // ------------------------------------------------------------------ LAN
 

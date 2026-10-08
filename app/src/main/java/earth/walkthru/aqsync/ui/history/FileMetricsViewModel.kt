@@ -13,6 +13,7 @@ import earth.walkthru.aqsync.data.history.parquet.ParquetType
 import earth.walkthru.aqsync.data.settings.AppSettings
 import earth.walkthru.aqsync.data.settings.DetailLevel
 import earth.walkthru.aqsync.data.sync.FileArchive
+import earth.walkthru.aqsync.ui.components.NO_VALUE
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -153,12 +154,12 @@ class FileMetricsViewModel @Inject constructor(
             }
         }
         val (minText, maxText) = when {
-            !any -> "—" to "—"
-            col is ColumnValues.Float32 || col is ColumnValues.Float64 -> (if (minD.isFinite()) trim(minD) else "—") to (if (maxD.isFinite()) trim(maxD) else "—")
-            col is ColumnValues.Binary -> "—" to "—"
+            !any -> NO_VALUE to NO_VALUE
+            col is ColumnValues.Float32 || col is ColumnValues.Float64 -> (if (minD.isFinite()) trim(minD) else NO_VALUE) to (if (maxD.isFinite()) trim(maxD) else NO_VALUE)
+            col is ColumnValues.Binary -> NO_VALUE to NO_VALUE
             else -> minL.toString() to maxL.toString()
         }
-        return ColumnSummary(name, type, timestamp, col.size, col.nullCount, minText, maxText, first ?: "—", last ?: "—", statsMin, statsMax)
+        return ColumnSummary(name, type, timestamp, col.size, col.nullCount, minText, maxText, first ?: NO_VALUE, last ?: NO_VALUE, statsMin, statsMax)
     }
 
     private fun format(col: ColumnValues, i: Int): String = when (col) {
