@@ -8,7 +8,7 @@ final class SensorArchive {
             switch self {
             case .unsafePath: return "The sensor supplied an unsafe archive path."
             case .invalidFile: return "File verification failed (size, CRC-32 or PAR1). Retry sync."
-            case .conflictingArchive: return "An existing archive differs; it was preserved."
+            case .conflictingArchive: return "An existing archive differs. It was preserved."
             case .invalidChunk: return "The sensor sent an unexpected file offset or length."
             }
         }

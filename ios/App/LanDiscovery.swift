@@ -292,7 +292,7 @@ final class LanDiscovery {
     }
 
     private var pauseMessage: String {
-        "Sync paused. Saved files and partial bytes are kept; resuming when you return."
+        "Sync paused. Saved files and partial bytes are kept. It resumes when you return."
     }
     private func queueResume(_ name: String) {
         guard !cancelledCollections.contains(name) else { return }
