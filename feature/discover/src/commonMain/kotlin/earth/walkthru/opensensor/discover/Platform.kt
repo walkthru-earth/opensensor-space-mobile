@@ -3,6 +3,7 @@ package earth.walkthru.opensensor.discover
 import earth.walkthru.aqsync.publicfeed.BundledSampleFeed
 import earth.walkthru.aqsync.publicfeed.FeedProperty
 import earth.walkthru.aqsync.publicfeed.PublicFeed
+import earth.walkthru.aqsync.units.UnitFormatter
 import earth.walkthru.opensensor.discover.resources.Res
 import kotlin.math.abs
 import kotlin.math.roundToLong
@@ -37,9 +38,15 @@ internal fun paperStyle(color: String): String =
 
 /**
  * A value at the property's precision from the dictionary (1 → "14", 0.5 → "21.5"). Without a
- * precision, one decimal. Common code has no `String.format`.
+ * precision, one decimal. Common code has no `String.format`. Under [units] a convertible unit is
+ * converted for display and shown at that unit's own precision (21.5 °C → "70.7" °F). Scales,
+ * colours and statistics stay on the feed's SI values.
  */
-fun formatValue(value: Double, property: FeedProperty?): String {
+fun formatValue(value: Double, property: FeedProperty?, units: UnitFormatter = UnitFormatter.Metric): String {
+    val unit = property?.unit
+    if (unit != null) {
+        units.decimals(unit)?.let { return formatDecimals(units.value(value, unit), it) }
+    }
     val step = property?.precision
     val decimals = when {
         step == null -> 1
@@ -49,6 +56,9 @@ fun formatValue(value: Double, property: FeedProperty?): String {
     }
     return formatDecimals(value, decimals)
 }
+
+/** The property's unit as shown under [units] ("°C" → "°F" for imperial). */
+fun unitLabel(property: FeedProperty, units: UnitFormatter = UnitFormatter.Metric): String = units.unit(property.unit)
 
 internal fun formatDecimals(value: Double, decimals: Int): String {
     if (!value.isFinite()) return value.toString()

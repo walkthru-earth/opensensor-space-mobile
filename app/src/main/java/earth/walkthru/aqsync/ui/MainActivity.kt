@@ -8,12 +8,24 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dagger.hilt.android.AndroidEntryPoint
+import earth.walkthru.aqsync.data.settings.AppSettings
+import earth.walkthru.aqsync.ui.components.LocalUnits
+import earth.walkthru.aqsync.ui.components.resolveUnits
 import earth.walkthru.aqsync.ui.theme.AqSyncTheme
+import earth.walkthru.aqsync.units.UnitFormatter
+import earth.walkthru.aqsync.units.UnitSystem
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    @Inject lateinit var settings: AppSettings
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(
@@ -24,13 +36,19 @@ class MainActivity : ComponentActivity() {
         )
         super.onCreate(savedInstanceState)
         setContent {
-            AqSyncTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background,
-                ) {
-                    // No permission wall. Each action asks for what it needs (ui/permissions).
-                    MainNavigation()
+            // Display units for every screen, live from Settings. A locale change recreates the
+            // activity, so Automatic re-resolves with it.
+            val choice by settings.unitSystem.collectAsStateWithLifecycle(UnitSystem.AUTO)
+            val units = remember(choice) { UnitFormatter(resolveUnits(choice)) }
+            CompositionLocalProvider(LocalUnits provides units) {
+                AqSyncTheme {
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.background,
+                    ) {
+                        // No permission wall. Each action asks for what it needs (ui/permissions).
+                        MainNavigation()
+                    }
                 }
             }
         }

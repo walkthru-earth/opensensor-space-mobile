@@ -14,9 +14,9 @@ State as of 2026-10-08. Re-check the linked store pages before each submission. 
 - Bluetooth LE and the local Wi-Fi (mDNS `_aqsync._tcp`) reach only the user's own sensors.
 - Readings and Parquet files stay on the phone. They leave only when the user shares or exports them
   through the system share sheet or document picker.
-- No account, no analytics, no crash reporting SDK, no ads. No location permission today. The
-  planned Discover "Near me" asks for approximate location only on that tap, uses it on the phone
-  to move the map and never sends it (AGENTS.md).
+- No account, no analytics, no crash reporting SDK, no ads. The only location permission is
+  approximate, asked by the Discover "Near me" button on that tap. The fix moves the map and draws
+  a puck on the phone, and is never stored or sent (AGENTS.md).
 - No server today. The planned Discover feed (anonymous read-only GETs) and per-device opt-in
   uploads change the answers below. See "Before Discover or uploads ship".
 
@@ -26,7 +26,7 @@ State as of 2026-10-08. Re-check the linked store pages before each submission. 
 | --- | --- | --- |
 | Target API | Targets 37. Play requires API 36 for new apps and updates from 2026-08-31 ([target SDK](https://developer.android.com/google/play/requirements/target-sdk)) | `app/build.gradle.kts` |
 | Runtime permissions | Asked in context from the action that needs them, never at launch. In-app rationale only when `shouldShowRequestPermissionRationale` is true, settings link after a permanent denial | `ui/permissions/RuntimeAccess.kt`, `PermissionFlowTest` |
-| Location | None declared today. `BLUETOOTH_SCAN` carries `neverForLocation`. No background location. When Near me ships, declare only `ACCESS_COARSE_LOCATION` (iOS When In Use with reduced accuracy), ask on the tap, keep it on the phone, and add it to `ManifestPermissionsTest`. Data safety stays "not collected" because it never leaves the phone | `ManifestPermissionsTest` |
+| Location | Only `ACCESS_COARSE_LOCATION`, asked on the Near me tap, foreground only. `BLUETOOTH_SCAN` carries `neverForLocation`. No fine or background location, so no Play location declaration. Data safety stays "not collected" because the fix never leaves the phone | `ManifestPermissionsTest`, `feature/discover/.../NearMe*.kt` |
 | Prominent disclosure | Not required. It applies when an app collects personal or sensitive data in a way users would not expect. Nothing leaves the phone without a user share | Play [User Data policy](https://support.google.com/googleplay/android-developer/answer/10144311) |
 | Data safety form | "No data collected" and "No data shared". Data processed only on the device, and data the user sends with the share sheet, are not collection | Play [Data safety help](https://support.google.com/googleplay/android-developer/answer/10787469) |
 | Encryption in transit | Answer "No" for data in transit, since no user data is sent to a developer server. BLE links are encrypted by pairing. The LAN stream is not encrypted and stays on the local network | `docs/transports.md` |
@@ -43,9 +43,9 @@ State as of 2026-10-08. Re-check the linked store pages before each submission. 
 
 | Item | Answer today | Evidence |
 | --- | --- | --- |
-| Purpose strings | `NSBluetoothAlwaysUsageDescription` "Finds and connects to your opensensor devices nearby to copy their readings." `NSLocalNetworkUsageDescription` "Finds your opensensor devices on your Wi-Fi to sync faster." `NSBonjourServices` `_aqsync._tcp` only | `ios/App/Info.plist` |
+| Purpose strings | `NSBluetoothAlwaysUsageDescription` "Finds and connects to your opensensor devices nearby to copy their readings." `NSLocalNetworkUsageDescription` "Finds your opensensor devices on your Wi-Fi to sync faster." `NSBonjourServices` `_aqsync._tcp` only. `NSLocationWhenInUseUsageDescription` "Centres the public sensor map near you. Your location stays on this phone." with `NSLocationDefaultAccuracyReduced` true, asked only from the Discover Near me tap | `ios/App/Info.plist` |
 | Prompt timing | `CBCentralManager` is created on the first Find sensors tap. `NWBrowser` starts on the first Find Wi-Fi sensors tap. Launch shows no prompt | `BluetoothCompanion.swift`, `LanDiscovery.swift` |
-| Privacy manifest | `PrivacyInfo.xcprivacy` in the app bundle. Tracking false, no tracking domains, no collected data types. Required reason APIs, file timestamp `C617.1` (`stat`, `fstat`, `attributesOfItem` on files in the app container) and system boot time `35F9.1` (`ProcessInfo.systemUptime` for elapsed transfer timing). No UserDefaults, disk space or keyboard APIs found in the binary | [Apple required reason APIs](https://developer.apple.com/documentation/bundleresources/describing-use-of-required-reason-api) |
+| Privacy manifest | `PrivacyInfo.xcprivacy` in the app bundle. Tracking false, no tracking domains, no collected data types. Required reason APIs, file timestamp `C617.1` (`stat`, `fstat`, `attributesOfItem` on files in the app container) system boot time `35F9.1` (`ProcessInfo.systemUptime` for elapsed transfer timing) and UserDefaults `CA92.1` (`NSUserDefaults` holds the Discover map camera, chip choices and app settings, read only by this app). No disk space or keyboard APIs found in the binary | [Apple required reason APIs](https://developer.apple.com/documentation/bundleresources/describing-use-of-required-reason-api) |
 | Privacy nutrition label | "Data Not Collected" | [App privacy details](https://developer.apple.com/app-store/app-privacy-details/) |
 | Export compliance | `ITSAppUsesNonExemptEncryption` false. Only OS encryption (BLE pairing, Keychain, file protection) | `Info.plist` |
 | Background modes | None declared | `Info.plist` |
@@ -100,9 +100,12 @@ Have counsel read the privacy policy before the first public release.
 8. **"Near me"** (owner decision). Android declares only `ACCESS_COARSE_LOCATION`, asked on the
    tap, never in the background. iOS uses When In Use with `NSLocationDefaultAccuracyReduced`.
    The fix only moves the map and may preselect the sharing cell, it is never stored or sent, so
-   it is not collected. Check the Android system location button rule against the target SDK
-   before building it. The same change adds `ACCESS_COARSE_LOCATION` to the expected set in
-   `ManifestPermissionsTest` and keeps it rejecting fine and background location.
+   it is not collected. Built 2026-10-09. `ManifestPermissionsTest` expects `ACCESS_COARSE_LOCATION`
+   and rejects fine and background location. The Android 17 location button (Jetpack
+   `androidx.core.locationbutton`) is optional, not a targetSdk 37 rule, and it grants one time
+   precise location, so the app keeps the standard coarse runtime prompt. The iOS privacy
+   manifest needs no change, since the fix is not collected and location is not a required
+   reason API.
 9. **Upload identity.** No accounts or passkeys. A per-device P-256 key in the Android Keystore
    or iOS Keychain signs uploads. Platform signing for authentication keeps the export exemption.
 

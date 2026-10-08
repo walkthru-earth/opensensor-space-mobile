@@ -36,7 +36,9 @@ Rules.
 
 1. **The dictionary comes from the device.** The firmware's versioned measurement dictionary is
    the source of property identity, unit, procedure and time semantics. The app ships a bundled
-   copy for known schema IDs only as a fallback. The app never invents a unit or a band.
+   copy for known schema IDs only as a fallback. The app never invents a unit or a band. The
+   Settings **Units** choice only relabels a known SI unit for display (`:core:units`, for example
+   °C as °F). The feed, the percentile scale and every statistic stay on the dictionary's unit.
 2. **Unknown is fine.** A column that is not in the dictionary still shows with its raw name and
    no scale, at Detailed level. It is never hidden, coerced or given a default.
 3. **Scales are optional and scientific.** A `Scale` names its source (for example US EPA AQI or
@@ -72,7 +74,7 @@ below was checked on that date. Items marked "verify on phone" are not yet prove
 | --- | --- | --- |
 | 1 | Map first. No sign-in, no onboarding wall, no permission prompt at launch | First screen |
 | 2 | One non-modal bottom sheet with three heights. It never stacks a second sheet | First screen |
-| 3 | Public values are hourly means, published at least one hour late. The window chip offers Last hour, 24 hours and 7 days, never "now" | Privacy rules |
+| 3 | Public values are hourly means, published at least one hour late. The time slider offers Last hour, 24 hours and 7 days, never "now" | Privacy rules |
 | 4 | The crowd rule of three applies to every published number, not only the device list, with a differencing guard on parents | Privacy rules |
 | 5 | Only outdoor devices can be published. No accounts, no passkeys. Each shared device gets its own anonymous key made on the phone, and its public ID and generated name come from that key, never free text | Privacy rules |
 | 6 | The phone reads the same Parquet files as the website `/indices` explorer, one plain file per H3 resolution, through HTTP range reads and the repo's own portable Parquet reader. No JSON side feed | Feed contract |
@@ -119,7 +121,7 @@ sheets stacked on top of each other.
 
 ### First screen at the Simple level
 
-Zero taps shows the map, the metric and window chips, the legend, the "Sample data" pill while
+Zero taps shows the map, the metric chips, the time slider, the legend, the "Sample data" pill while
 the feed is a fixture, and the sheet at peek height. Nothing else. Every explanation sits behind
 an info button.
 
@@ -130,7 +132,12 @@ an info button.
   At most three property chips show, then a "More" chip opens the sheet at full height with every
   property grouped by category from the metric registry (Air, Weather, Water, Soil, Noise,
   Energy). Choosing one from "More" moves it into the row. The last choice is remembered.
-- **Window chip.** One chip at the end of the row, cycling Last hour, 24 hours, 7 days.
+- **Time slider.** A 44dp pill on the left edge of the map, not in the chip row. At rest it
+  shows only the chosen window. A touch grows it into one snap stop per window, 1h at the top,
+  then 24h and 7d, with a tinted thumb that follows a vertical drag (a haptic tick at each stop).
+  Tap a stop to pick it. It folds back about two seconds after the last touch. Screen readers get
+  one control named Time window, its state is the full window name, and its actions pick the
+  others. The chip row holds metrics only.
 - **Legend.** Bottom left, just above the sheet. A thin colour bar with the unit and the end
   values. Tap to expand into the band names. Its info button names the scale source (for
   example US EPA AQI). A property with a published `Scale` uses its fixed bands. A property
@@ -155,7 +162,7 @@ Sheet heights.
 | Height | Nothing selected | Cell selected |
 | --- | --- | --- |
 | Peek (about 96 dp) | "12 sensor areas in view" and the freshness, or the first-run card | Cell headline value, device count, freshness |
-| Half (Material half expanded, Apple medium detent) | List of the cells in view by value | Avg, min and max per metric the cell reports |
+| Half (Material half expanded, Apple medium detent) | Spread chart of the chosen metric, then the cells in view by value | Spread chart with this cell marked, then a range row per other metric the cell reports |
 | Full (expanded, large detent) | Same list, scrollable | Metrics plus the device list (crowd rule met) |
 
 Tapping a cell opens the sheet at half height. Tapping the map outside a cell returns to peek.
@@ -168,12 +175,13 @@ the medium and large detents.
 ```
 +--------------------------------------+
 | [Search places              ] [ + ]  |
-| (PM2.5) (Temp) (Humidity) (More)(24h)|
+| (PM2.5) (Temp) (Humidity) (More)     |
 |                       (Sample data i)|
-|      __    __                        |
-|     /  \__/  \__      map of hexes   |
-|     \__/  \__/  \                    |
-|        \__/  \__/                    |
+| .1h   __    __                       |
+| |    /  \__/  \__      map of hexes  |
+| o24h \__/  \__/  \                   |
+| |       \__/  \__/                   |
+| .7d                                  |
 |                                      |
 | [green..yellow..red  µg/m³]  © OSM i |
 +--------------------------------------+
@@ -190,18 +198,24 @@ the medium and large detents.
 
 ```
 +--------------------------------------+
-| (PM2.5) (Temp) (Humidity) (More)(24h)|
-|   map, selected hex outlined          |
+| (PM2.5) (Temp) (Humidity) (More)     |
+| time slider, map, selected hex outlined|
 +--------------------------------------+
 | ----                                 |
 | Sample data                        i |
-| 14 µg/m³  Moderate                   |
+| 14 µg/m³  PM2.5                      |
 | 5 sensors  Updated 1 h ago           |
+|                                      |
+| PM2.5 µg/m³ avg 24 hours min 6 max 31|
+|   . : # : .   .   grey bars, ink bin |
+|       |             rule at the mean |
+| [viridis axis===(o)================] |
+|     (=====|======)  min to max band  |
+| 4                                 40 |
+| Higher than 72% of areas in view     |
 |--------------------------------------|
-|          avg     min     max         |
-| PM2.5    14      6       31   µg/m³  |
-| Temp     21.5    18.0    24.5  °C    |
-| Humidity 48      35      62    %     |
+| Temp     °C  [--(==o==)------]  21.5 |
+| Humidity  %  [------(=o===)--]    48 |
 |--------------------------------------|
 | Sensors here                         |
 | (air) Blue Heron 41   12   1 h ago > |
@@ -209,6 +223,25 @@ the medium and large detents.
 | (wx)  Amber Kite 22   21.0 2 h ago > |
 +--------------------------------------+
 ```
+
+Sheet charts (2026-10-09). The feed carries one window of statistics per cell (n, mean, min,
+max), no hourly history, so the sheet draws no time series. Charts are Canvas in common Compose,
+identical on Android and iOS, and every one carries a spoken summary of its values.
+
+- **Spread chart.** A histogram of the chosen metric's cell means in view, thin grey bars on an
+  axis drawn as the map's own colour scale (viridis, clamped at the 5th and 95th percentile like
+  the cells). The axis runs from the lowest to the highest value in view, widened to hold the
+  selected cell's min and max, and its end values sit under it. With a cell selected its bin turns
+  ink, an ink rule and a ringed dot in the cell colour mark its mean, and a band below the axis
+  spans its min to max. "Higher than N% of areas in view" follows when three or more areas report
+  the metric. With nothing selected the same chart, unmarked, sits above the list of cells.
+- **Range rows.** One row per other metric the cell reports, in dictionary order, grouped by
+  category past five rows. Label and unit, a track for that metric's extent in view, the cell's
+  min to max band, the mean as a ringed dot in the colour the map would give it, and the mean as
+  text. Tapping a row makes it the chosen metric (chips, map and hero follow) without closing the
+  sheet. A missing min or max leaves the band out, never draws zero.
+- Marks are ink and grey from the theme (onSurface), text is never in a data colour, and the only
+  hue is the scale, so light and dark both read. Marker moves animate for 350 ms.
 
 **Cell tapped, fewer than 3 devices**
 
@@ -279,14 +312,23 @@ at the moment it is tapped, because a time-zone guess fails for large zones and 
 allow it cleanly. Precise location is never requested on either platform.
 
 - Android. Declare only `ACCESS_COARSE_LOCATION` (about 3 km², similar to a resolution 7 cell).
-  Foreground only, so no Play location declaration or background disclosure is needed. Check
-  the newer Android rule that session-only location on recent SDK targets should use the system
-  location button, against our `targetSdk` before building it.
+  Foreground only, so no Play location declaration or background disclosure is needed. Checked
+  2026-10-09 against `targetSdk` 37. The Android 17 location button (Jetpack
+  `androidx.core.locationbutton`) is optional and grants one time precise location, so the
+  standard coarse runtime prompt stays.
 - iOS. When In Use with `NSLocationDefaultAccuracyReduced` set to true, so the prompt offers
   approximate location by default. Search stays the alternative when the user declines (App
   Review 5.1.1).
 - Use. The fix only moves the camera. It is never stored, never sent and never published, so it
   is not "collected" under either store's privacy rules.
+- Built (2026-10-09, host builds only). A tonal my-location button sits bottom right above the
+  attribution. One shared implementation in `feature/discover` `NearMe.kt` uses maplibre-compose
+  0.19.0 location (`rememberDefaultLocationProvider`, `rememberLocationState` with
+  `LocationAccuracy.Low`, `LocationIndicatorLayer` for the puck). Only the prompt is per platform
+  (`NearMe.android.kt` asks for `ACCESS_COARSE_LOCATION` alone, `NearMe.ios.kt` calls
+  `requestWhenInUseAuthorization`). No provider exists before the tap. After a grant the camera
+  moves to the first fix at zoom 10.5 and the puck follows the fix while the map is open.
+  `DiscoverPrefs` saves only the camera, never the fix.
 
 - Decline. The map stays where it is and search remains. Asking again happens only on the next
   tap, never on launch.
@@ -533,10 +575,10 @@ iOS), the H3 binding and later the HTTP engine and the cache directory.
 phone run).** Discover opens on the last camera or the time zone region, reads the bundled sample
 through the common Parquet reader with row group pruning, covers the viewport with at most 1,024
 cells at `round(zoom * 0.8)` clamped to 2..7, and redraws one GeoJSON source after 400 ms of camera
-rest. Chips rank properties by visible cells (three, then More), the window chip cycles Last hour,
-24 hours and 7 days, the legend shows the 5th to 95th percentile of the cells in view on a viridis
+rest. Chips rank properties by visible cells (three, then More), a vertical time slider on the left
+snaps between Last hour, 24 hours and 7 days, the legend shows the 5th to 95th percentile of the cells in view on a viridis
 ramp, and the sheet peeks with the first-run card or the area count and opens on a cell tap with
-avg, min and max per property. Search moves the map over a small built-in city list. The basemap is
+a spread chart of the chosen property and a range row per other property. Search moves the map over a small built-in city list. The basemap is
 the Protomaps OpenStreetMap PMTiles build on source.coop (`pmtiles://` rendered on the Android
 emulator and the iOS simulator), "© OpenStreetMap" shows at launch and collapses to an info button.
 "Show public sensors" in Settings (both apps) swaps in a plain background style, so no request

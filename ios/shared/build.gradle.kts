@@ -11,6 +11,7 @@ kotlin {
         commonMain.dependencies {
             implementation(project(":core:protocol"))
             implementation(project(":core:history"))
+            implementation(project(":core:units"))
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
             implementation(libs.compose.material3)
@@ -18,6 +19,7 @@ kotlin {
         // The Discover tab. iOS only: :feature:discover targets Android and iOS, not the JVM.
         iosMain.dependencies {
             implementation(project(":feature:discover"))
+            implementation(project(":ui:designsystem"))
         }
     }
 }

@@ -25,6 +25,7 @@ import earth.walkthru.aqsync.data.protocol.TemperatureSource
 import earth.walkthru.aqsync.data.settings.DetailLevel
 import earth.walkthru.aqsync.ui.components.BrandCard
 import earth.walkthru.aqsync.ui.components.Eyebrow
+import earth.walkthru.aqsync.ui.components.LocalUnits
 import earth.walkthru.aqsync.ui.components.NO_VALUE
 
 /**
@@ -36,10 +37,12 @@ fun BoardCard(live: LiveSample?, profile: LiveProfile?, level: DetailLevel, modi
     BrandCard(modifier = modifier) {
         Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
             Column(Modifier.weight(1f)) {
+                val temp = temperatureMetric(profile?.temperature)
+                val units = LocalUnits.current
                 BigValue(
-                    temperatureMetric(profile?.temperature).label,
-                    if (profile != null) fmt(live?.t) else NO_VALUE,
-                    temperatureMetric(profile?.temperature).unit,
+                    temp.label,
+                    if (profile != null) fmt(units.value(live?.t, temp.unit)) else NO_VALUE,
+                    units.unit(temp.unit),
                 )
                 Text(
                     stringResource(

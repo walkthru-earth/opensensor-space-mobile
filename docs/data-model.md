@@ -197,6 +197,7 @@ Unrelated crypto, programming and database failures also propagate.
 | --- | --- | --- |
 | `detail_level` | string (`SIMPLE` / `DETAILED` / `DEVELOPER`) | the one user setting |
 | `advanced_mode` | boolean (legacy) | unset `detail_level` + `advanced_mode = true` → `DEVELOPER` |
+| `unit_system` | string (`AUTO` / `METRIC` / `IMPERIAL`) | display units, missing = `AUTO`. Display only, Room, Parquet and exports stay SI. iOS keeps the same names in `NSUserDefaults` key `settings.unitSystem` |
 
 ## Files under `filesDir`
 

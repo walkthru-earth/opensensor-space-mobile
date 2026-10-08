@@ -39,6 +39,7 @@ import earth.walkthru.aqsync.data.history.MetricSpec
 import earth.walkthru.aqsync.data.history.Metrics
 import earth.walkthru.aqsync.ui.components.InfoButton
 import earth.walkthru.aqsync.ui.components.InfoContent
+import earth.walkthru.aqsync.ui.components.LocalUnits
 import earth.walkthru.aqsync.ui.history.BandColumnChart
 import java.time.Instant
 import java.time.ZoneId
@@ -145,6 +146,8 @@ fun FileChartCard(
 @Composable
 private fun SelectedFile(s: FileSummary, metric: MetricSpec, fmt: DateTimeFormatter) {
     val a = s.agg(metric)
+    val units = LocalUnits.current
+    val u = metric.unit
     val first = s.firstS
     val last = s.lastS
     val span = if (first != null && last != null) {
@@ -161,7 +164,7 @@ private fun SelectedFile(s: FileSummary, metric: MetricSpec, fmt: DateTimeFormat
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
-            if (a != null) stringResource(R.string.file_chart_stats, fmt1(a.mean), metric.unit, fmt1(a.min), fmt1(a.max)) else stringResource(R.string.file_chart_no_valid, metric.label),
+            if (a != null) stringResource(R.string.file_chart_stats, fmt1(units.value(a.mean, u)), units.unit(u), fmt1(units.value(a.min, u)), fmt1(units.value(a.max, u))) else stringResource(R.string.file_chart_no_valid, metric.label),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

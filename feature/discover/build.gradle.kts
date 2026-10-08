@@ -29,6 +29,9 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(project(":core:publicfeed"))
+            // DiscoverScreen takes the resolved UnitSystem from its host.
+            api(project(":core:units"))
+            api(project(":ui:designsystem"))
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
             implementation(libs.compose.material3)
@@ -40,6 +43,8 @@ kotlin {
         androidMain.dependencies {
             // One render backend for Android. OpenGL first, Vulkan after a phone check.
             runtimeOnly(libs.maplibre.compose.runtime.opengl.android)
+            // The "Near me" coarse location prompt (NearMe.android.kt).
+            implementation(libs.androidx.activity.compose)
         }
         getByName("androidHostTest").dependencies {
             implementation(libs.junit)

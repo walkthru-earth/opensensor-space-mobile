@@ -24,7 +24,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AssistChip
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledIconButton
@@ -33,6 +33,7 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SheetValue
@@ -43,6 +44,7 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.material3.rememberStandardBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -58,15 +60,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import earth.walkthru.aqsync.publicfeed.CellRow
 import earth.walkthru.aqsync.publicfeed.FeedProperty
-import earth.walkthru.aqsync.publicfeed.FeedWindow
 import earth.walkthru.aqsync.publicfeed.H3Index
 import earth.walkthru.aqsync.publicfeed.SequentialRamp
+import earth.walkthru.aqsync.units.UnitFormatter
+import earth.walkthru.aqsync.units.UnitSystem
+import earth.walkthru.opensensor.designsystem.FloatingControl
+import earth.walkthru.opensensor.designsystem.FloatingSurface
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.maplibre.compose.camera.CameraPosition
@@ -81,7 +86,8 @@ private val PEEK_HEIGHT = 148.dp
  * "Sample data" pill and the sheet at peek height. Explanations sit behind info buttons.
  *
  * [networkAllowed] is the Settings switch. Off, the basemap is a plain paper background and no
- * request leaves the phone. [infoButton] lets the host reuse its own info affordance.
+ * request leaves the phone. [infoButton] lets the host reuse its own info affordance. [units] is
+ * the host's resolved Settings choice (METRIC or IMPERIAL). It changes labels only, never the scale.
  */
 @Composable
 fun DiscoverScreen(
@@ -91,6 +97,22 @@ fun DiscoverScreen(
     onAddSensor: () -> Unit,
     modifier: Modifier = Modifier,
     infoButton: @Composable (InfoText, Modifier) -> Unit = { info, m -> DefaultInfoButton(info, m) },
+    units: UnitSystem = UnitSystem.METRIC,
+) {
+    val formatter = remember(units) { UnitFormatter(units) }
+    CompositionLocalProvider(LocalDiscoverUnits provides formatter) {
+        DiscoverContent(controller, strings, networkAllowed, onAddSensor, modifier, infoButton)
+    }
+}
+
+@Composable
+private fun DiscoverContent(
+    controller: DiscoverController,
+    strings: DiscoverStrings,
+    networkAllowed: Boolean,
+    onAddSensor: () -> Unit,
+    modifier: Modifier,
+    infoButton: @Composable (InfoText, Modifier) -> Unit,
 ) {
     val state by controller.state.collectAsState()
     val dark = isSystemInDarkTheme()
@@ -118,6 +140,7 @@ fun DiscoverScreen(
                 onAddSensor = { controller.dismissFirstRun(); onAddSensor() },
                 onExplore = { controller.dismissFirstRun() },
                 onPickProperty = { id -> controller.selectProperty(id); showAll = false; peek() },
+                onShowProperty = controller::selectProperty,
                 onPickCell = { hex -> controller.selectCell(hex) },
                 now = nowEpochMillis(),
             )
@@ -128,7 +151,8 @@ fun DiscoverScreen(
             val style = styleJson
             if (start != null && style != null) {
                 val selectedHex = state.selected?.let { H3Index.toHex(it.h3) }
-                val mapState = rememberDiscoverMapState(start, style, state.geoJson, selectedHex, ink) { hex ->
+                val nearMe = rememberNearMe()
+                val mapState = rememberDiscoverMapState(start, style, state.geoJson, selectedHex, ink, nearMe.location) { hex ->
                     controller.selectCell(hex)
                     controller.dismissFirstRun()
                     showAll = false
@@ -168,8 +192,13 @@ fun DiscoverScreen(
                     },
                     onProperty = controller::selectProperty,
                     onMore = { showAll = true; expand() },
-                    onWindow = controller::cycleWindow,
                     modifier = Modifier.align(Alignment.TopStart),
+                )
+                WindowSlider(
+                    window = state.window,
+                    strings = strings,
+                    onWindow = controller::selectWindow,
+                    modifier = Modifier.align(Alignment.CenterStart).padding(start = FloatingControl.Margin),
                 )
                 Row(
                     Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 12.dp, end = 4.dp, bottom = PEEK_HEIGHT + 8.dp),
@@ -181,7 +210,10 @@ fun DiscoverScreen(
                         Legend(property, scale.low, scale.high, strings, infoButton)
                     }
                     Spacer(Modifier.weight(1f))
-                    if (networkAllowed) Attribution(strings, attributionOpen, infoButton)
+                    Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        NearMeButton(nearMe, mapState, strings.nearMe, Modifier.padding(end = 8.dp))
+                        if (networkAllowed) Attribution(strings, attributionOpen, infoButton)
+                    }
                 }
             }
         }
@@ -202,7 +234,6 @@ private fun TopControls(
     onPlace: (Place) -> Unit,
     onProperty: (String) -> Unit,
     onMore: () -> Unit,
-    onWindow: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
@@ -221,7 +252,7 @@ private fun TopControls(
                     }
                 },
                 singleLine = true,
-                shape = RoundedCornerShape(28.dp),
+                shape = FloatingControl.Shape,
                 colors = TextFieldDefaults.colors(
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent,
@@ -231,17 +262,17 @@ private fun TopControls(
                 modifier = Modifier.weight(1f).heightIn(min = 52.dp),
             )
             Spacer(Modifier.width(8.dp))
-            FilledIconButton(onClick = onAddSensor, modifier = Modifier.size(52.dp)) {
+            FilledIconButton(
+                onClick = onAddSensor,
+                modifier = Modifier.size(52.dp),
+                shape = FloatingControl.Shape,
+                colors = IconButtonDefaults.filledIconButtonColors(containerColor = FloatingControl.Selected, contentColor = FloatingControl.OnSelected),
+            ) {
                 Icon(DiscoverIcons.Add, contentDescription = strings.addSensor)
             }
         }
         if (query.isNotBlank()) {
-            Surface(
-                Modifier.padding(horizontal = 12.dp, vertical = 4.dp).fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                tonalElevation = 3.dp,
-                shadowElevation = 3.dp,
-            ) {
+            FloatingSurface(Modifier.padding(horizontal = 12.dp, vertical = 4.dp).fillMaxWidth()) {
                 Column(Modifier.padding(vertical = 4.dp)) {
                     if (results.isEmpty()) {
                         Text(strings.noPlaces, Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -263,32 +294,23 @@ private fun TopControls(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            val chipColors = FilterChipDefaults.filterChipColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+            val chipColors = FilterChipDefaults.filterChipColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                selectedContainerColor = FloatingControl.Selected,
+                selectedLabelColor = FloatingControl.OnSelected,
+            )
             state.chips.forEach { p ->
                 FilterChip(
                     selected = p.id == state.property?.id,
                     onClick = { onProperty(p.id) },
                     label = { Text(p.label) },
                     colors = chipColors,
+                    shape = FloatingControl.SmallShape,
                 )
             }
             if (state.dictionary.size > state.chips.size) {
-                FilterChip(selected = false, onClick = onMore, label = { Text(strings.more) }, colors = chipColors)
+                FilterChip(selected = false, onClick = onMore, label = { Text(strings.more) }, colors = chipColors, shape = FloatingControl.SmallShape)
             }
-            AssistChip(
-                onClick = onWindow,
-                label = {
-                    Text(
-                        when (state.window) {
-                            FeedWindow.LAST_HOUR -> strings.windowLastHour
-                            FeedWindow.DAY -> strings.window24Hours
-                            FeedWindow.WEEK -> strings.window7Days
-                        },
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                },
-                colors = androidx.compose.material3.AssistChipDefaults.assistChipColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-            )
         }
         if (state.isSample && state.available) {
             Row(Modifier.align(Alignment.End).padding(end = 12.dp)) { SamplePill(strings, infoButton) }
@@ -298,7 +320,7 @@ private fun TopControls(
 
 @Composable
 private fun SamplePill(strings: DiscoverStrings, infoButton: @Composable (InfoText, Modifier) -> Unit) {
-    Surface(color = MaterialTheme.colorScheme.tertiaryContainer, contentColor = MaterialTheme.colorScheme.onTertiaryContainer, shape = CircleShape) {
+    Surface(color = MaterialTheme.colorScheme.tertiaryContainer, contentColor = MaterialTheme.colorScheme.onTertiaryContainer, shape = FloatingControl.SmallShape) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 14.dp)) {
             Text(strings.sampleData, style = MaterialTheme.typography.labelLarge)
             infoButton(strings.sampleInfo, Modifier.size(40.dp))
@@ -314,10 +336,11 @@ private fun Legend(
     strings: DiscoverStrings,
     infoButton: @Composable (InfoText, Modifier) -> Unit,
 ) {
-    Surface(shape = RoundedCornerShape(12.dp), tonalElevation = 2.dp, shadowElevation = 2.dp, color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)) {
+    val units = LocalDiscoverUnits.current
+    FloatingSurface {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 10.dp)) {
             Column(Modifier.widthIn(min = 140.dp, max = 180.dp).padding(vertical = 8.dp)) {
-                Text("${property.label}  ${property.unit}", style = MaterialTheme.typography.labelMedium)
+                Text("${property.label}  ${unitLabel(property, units)}", style = MaterialTheme.typography.labelMedium)
                 Spacer(Modifier.height(4.dp))
                 Box(
                     Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp))
@@ -325,9 +348,9 @@ private fun Legend(
                 )
                 Spacer(Modifier.height(2.dp))
                 Row(Modifier.fillMaxWidth()) {
-                    Text(formatValue(low, property), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(formatValue(low, property, units), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.weight(1f))
-                    Text(formatValue(high, property), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(formatValue(high, property, units), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             infoButton(strings.scaleInfo, Modifier.size(40.dp))
@@ -337,7 +360,7 @@ private fun Legend(
 
 @Composable
 private fun Attribution(strings: DiscoverStrings, open: Boolean, infoButton: @Composable (InfoText, Modifier) -> Unit) {
-    Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)) {
+    FloatingSurface(shape = FloatingControl.SmallShape) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = if (open) 10.dp else 0.dp)) {
             if (open) Text(strings.osm, style = MaterialTheme.typography.labelSmall)
             infoButton(strings.mapInfo, Modifier.size(36.dp))
@@ -354,6 +377,7 @@ private fun SheetContent(
     onAddSensor: () -> Unit,
     onExplore: () -> Unit,
     onPickProperty: (String) -> Unit,
+    onShowProperty: (String) -> Unit,
     onPickCell: (String) -> Unit,
     now: Long,
 ) {
@@ -363,7 +387,7 @@ private fun SheetContent(
         when {
             !state.available -> Text(strings.unavailable, style = MaterialTheme.typography.bodyLarge)
             showAll -> AllProperties(state, strings, onPickProperty)
-            state.selected != null -> CellDetail(state.selected, state, strings, infoButton, reference)
+            state.selected != null -> CellDetail(state.selected, state, strings, infoButton, reference, onShowProperty)
             state.firstRun -> FirstRunCard(strings, onAddSensor, onExplore)
             else -> InView(state, strings, reference, onPickCell)
         }
@@ -401,6 +425,14 @@ private fun InView(state: DiscoverUiState, strings: DiscoverStrings, reference: 
         Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     val property = state.property ?: return
+    val units = LocalDiscoverUnits.current
+    val values = state.rows.mapNotNull { it.mean(property.id) }
+    if (values.size >= 2) {
+        Spacer(Modifier.height(16.dp))
+        ChartTitle(property, strings, state)
+        Spacer(Modifier.height(8.dp))
+        SpreadChart(values, property, state.scale, strings)
+    }
     Spacer(Modifier.height(12.dp))
     HorizontalDivider()
     val sorted = state.rows.filter { it.mean(property.id) != null }.sortedByDescending { it.mean(property.id) }
@@ -413,10 +445,26 @@ private fun InView(state: DiscoverUiState, strings: DiscoverStrings, reference: 
                 val value = row.mean(property.id)!!
                 Box(Modifier.size(14.dp).clip(CircleShape).background(Color(state.scale?.color(value) ?: SequentialRamp.stops.first())))
                 Spacer(Modifier.width(12.dp))
-                Text("${formatValue(value, property)} ${property.unit}", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                Text("${formatValue(value, property, units)} ${unitLabel(property, units)}", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                 Text(strings.sensors(row.devices), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
+    }
+}
+
+/** Label, unit and window over a chart, with an optional [trailing] note at the end. */
+@Composable
+private fun ChartTitle(property: FeedProperty, strings: DiscoverStrings, state: DiscoverUiState, trailing: String? = null) {
+    Row(verticalAlignment = Alignment.Bottom) {
+        Text("${property.label}  ${unitLabel(property, LocalDiscoverUnits.current)}", style = MaterialTheme.typography.titleSmall)
+        Spacer(Modifier.width(8.dp))
+        Text(
+            "${strings.avg}  ${windowLabel(state.window, strings)}",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+        if (trailing != null) Text(trailing, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -427,45 +475,61 @@ private fun CellDetail(
     strings: DiscoverStrings,
     infoButton: @Composable (InfoText, Modifier) -> Unit,
     reference: Long,
+    onShowProperty: (String) -> Unit,
 ) {
-    if (state.isSample) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(strings.sampleData, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.weight(1f))
-            infoButton(strings.sampleInfo, Modifier.size(40.dp))
-        }
-    }
-    val property = state.property
-    val headline = property?.let { row.mean(it.id) }
-    if (property != null && headline != null) {
-        Text(
-            "${formatValue(headline, property)} ${property.unit}",
-            style = MaterialTheme.typography.headlineMedium,
-            modifier = Modifier.semantics { contentDescription = "${property.label} ${formatValue(headline, property)} ${property.unit}" },
-        )
-    } else {
-        Text(strings.notMeasured, style = MaterialTheme.typography.titleMedium)
-    }
-    val stale = reference - row.updatedEpochMs >= earth.walkthru.aqsync.publicfeed.CellFreshness.STALE_AFTER_MS
-    val parts = listOfNotNull(strings.sensors(row.devices), if (stale) strings.stale else freshness(strings, row.updatedEpochMs, reference))
-    Text(parts.joinToString("  "), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    Spacer(Modifier.height(12.dp))
-    HorizontalDivider()
-    Spacer(Modifier.height(8.dp))
-    Row(Modifier.fillMaxWidth()) {
-        Spacer(Modifier.weight(1.4f))
-        listOf(strings.avg, strings.min, strings.max).forEach {
-            Text(it, Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-    state.dictionary.filter { row.stats[it.id]?.mean != null }.forEach { p ->
-        val stat = row.stats.getValue(p.id)
-        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1.4f)) {
-                Text(p.label, style = MaterialTheme.typography.bodyLarge)
-                Text(p.unit, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    // Peek shows the headline, the device count and the freshness. Charts sit below.
+    Column(Modifier.verticalScroll(rememberScrollState())) {
+        if (state.isSample) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(strings.sampleData, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.weight(1f))
+                infoButton(strings.sampleInfo, Modifier.size(40.dp))
             }
-            listOf(stat.mean, stat.min, stat.max).forEach { v ->
-                Text(v?.let { formatValue(it, p) } ?: "", Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+        }
+        val property = state.property
+        val units = LocalDiscoverUnits.current
+        val stat = property?.let { row.stats[it.id] }
+        val headline = stat?.mean
+        if (property != null && headline != null) {
+            val unit = unitLabel(property, units)
+            Row(Modifier.clearAndSetSemantics { contentDescription = "${property.label} ${formatValue(headline, property, units)} $unit" }) {
+                Text(formatValue(headline, property, units), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.alignByBaseline())
+                Spacer(Modifier.width(6.dp))
+                Text(unit, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.alignByBaseline())
+                Spacer(Modifier.width(10.dp))
+                Text(property.label, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.alignByBaseline())
+            }
+        } else {
+            Text(strings.notMeasured, style = MaterialTheme.typography.titleMedium)
+        }
+        val stale = reference - row.updatedEpochMs >= earth.walkthru.aqsync.publicfeed.CellFreshness.STALE_AFTER_MS
+        val parts = listOfNotNull(strings.sensors(row.devices), if (stale) strings.stale else freshness(strings, row.updatedEpochMs, reference))
+        Text(parts.joinToString("  "), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (property != null && headline != null) {
+            val values = state.rows.mapNotNull { it.mean(property.id) }
+            Spacer(Modifier.height(16.dp))
+            val min = stat.min
+            val max = stat.max
+            val span = if (min != null && max != null) "${strings.min} ${formatValue(min, property, units)}  ${strings.max} ${formatValue(max, property, units)}" else null
+            ChartTitle(property, strings, state, span)
+            Spacer(Modifier.height(8.dp))
+            SpreadChart(values, property, state.scale, strings, here = headline, hereMin = min, hereMax = max)
+            percentBelow(values, headline)?.let {
+                Spacer(Modifier.height(4.dp))
+                Text(strings.higherThan(it), style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+        val others = metricRanges(row, state.rows, state.dictionary).filter { it.property.id != property?.id || headline == null }
+        if (others.isNotEmpty()) {
+            Spacer(Modifier.height(16.dp))
+            HorizontalDivider()
+            Spacer(Modifier.height(4.dp))
+            // Group by the dictionary category once the list gets long.
+            val groups = if (others.size > 5) others.groupBy { it.property.category } else mapOf("" to others)
+            groups.forEach { (category, ranges) ->
+                if (category.isNotEmpty()) {
+                    Text(category, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 12.dp, bottom = 2.dp))
+                }
+                ranges.forEach { r -> RangeRow(r, strings) { onShowProperty(r.property.id) } }
             }
         }
     }

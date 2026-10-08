@@ -38,6 +38,24 @@ data class DiscoverStrings(
     val sensors: (Int) -> String,
     val updatedHoursAgo: (Int) -> String,
     val updatedRecently: String,
+    /** Under the hero chart, where the area sits among the areas in view (percent below). */
+    val higherThan: (Int) -> String = { n -> "Higher than $n% of areas in view" },
+    /** Spoken summary of one range row (label, average, min, max, unit). Min or max may be null. */
+    val rangeSummary: (String, String, String?, String?, String) -> String = { label, avg, min, max, unit ->
+        if (min != null && max != null) "$label average $avg, range $min to $max $unit" else "$label average $avg $unit"
+    },
+    /** Spoken summary of a distribution chart (label, areas, lowest, highest, unit). */
+    val spreadSummary: (String, Int, String, String, String) -> String = { label, n, low, high, unit ->
+        "$label across $n areas, from $low to $high $unit"
+    },
+    /** The map button that centres on approximate location, spoken only. */
+    val nearMe: String = "Near me",
+    /** Short labels beside the time slider stops. The full window names are spoken. */
+    val windowShortHour: String = "1h",
+    val windowShortDay: String = "24h",
+    val windowShortWeek: String = "7d",
+    /** The time pill, spoken only. Its state is the full window name. */
+    val timeWindow: String = "Time window",
 ) {
     companion object {
         /** English copy for iOS. Keep it in step with the Android `discover_*` strings. */

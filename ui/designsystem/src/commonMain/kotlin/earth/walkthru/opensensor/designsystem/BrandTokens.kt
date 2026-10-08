@@ -1,4 +1,4 @@
-package earth.walkthru.aqsync.ui.theme
+package earth.walkthru.opensensor.designsystem
 
 import androidx.compose.ui.graphics.Color
 

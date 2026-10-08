@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import earth.walkthru.aqsync.data.sync.ClockSyncMode
+import earth.walkthru.aqsync.units.UnitSystem
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
@@ -67,6 +68,16 @@ class AppSettings @Inject constructor(@ApplicationContext private val context: C
         context.settingsStore.edit { it[SHOW_PUBLIC_SENSORS] = on }
     }
 
+    /**
+     * Display units, Automatic (the phone's region) by default. Display only, the archive, exports
+     * and the Discover scale stay SI (`:core:units`).
+     */
+    val unitSystem: Flow<UnitSystem> = context.settingsStore.data.map { prefs -> UnitSystem.parse(prefs[UNIT_SYSTEM]) }
+
+    suspend fun setUnitSystem(system: UnitSystem) {
+        context.settingsStore.edit { it[UNIT_SYSTEM] = system.name }
+    }
+
     /** Detailed or Developer. */
     val detailed: Flow<Boolean> = detailLevel.map { it.detailed }
 
@@ -92,5 +103,6 @@ class AppSettings @Inject constructor(@ApplicationContext private val context: C
         val DETAIL_LEVEL = stringPreferencesKey("detail_level")
         val CLOCK_SYNC_MODE = stringPreferencesKey("clock_sync_mode")
         val SHOW_PUBLIC_SENSORS = booleanPreferencesKey("show_public_sensors")
+        val UNIT_SYSTEM = stringPreferencesKey("unit_system")
     }
 }

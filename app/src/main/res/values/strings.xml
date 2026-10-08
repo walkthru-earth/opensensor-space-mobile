@@ -902,6 +902,18 @@
     <string name="discover_no_places">No matching places</string>
     <string name="discover_clear_search">Clear search</string>
     <string name="discover_updated_recently">Updated within the hour</string>
+    <string name="discover_near_me">Near me</string>
+    <string name="discover_window_short_hour">1h</string>
+    <string name="discover_window_short_day">24h</string>
+    <string name="discover_window_short_week">7d</string>
+    <string name="discover_time_window">Time window</string>
+    <string name="discover_higher_than">Higher than %1$d%% of areas in view</string>
+    <string name="discover_range_summary">%1$s average %2$s, range %3$s to %4$s %5$s</string>
+    <string name="discover_average_summary">%1$s average %2$s %3$s</string>
+    <plurals name="discover_spread_summary">
+        <item quantity="one">%1$s across %2$d area, from %3$s to %4$s %5$s</item>
+        <item quantity="other">%1$s across %2$d areas, from %3$s to %4$s %5$s</item>
+    </plurals>
     <plurals name="discover_areas_in_view">
         <item quantity="one">%1$d sensor area in view</item>
         <item quantity="other">%1$d sensor areas in view</item>
@@ -916,4 +928,9 @@
     </plurals>
     <string name="settings_public_sensors">Show public sensors</string>
     <string name="settings_public_sensors_body">When off, the map uses no internet and shows only sample data.</string>
+    <string name="settings_units">Units</string>
+    <string name="units_auto">Automatic</string>
+    <string name="units_metric">Metric</string>
+    <string name="units_imperial">Imperial</string>
+    <string name="settings_units_auto">Follows your phone\'s region, now %1$s</string>
 </resources>

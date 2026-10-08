@@ -122,10 +122,11 @@ signal blue and teal) and `app/globals.css` (type and shape). The apps follow it
 
 | Layer | Owner | Notes |
 | --- | --- | --- |
-| Brand tokens (colour roles, type, radii, spacing) | `:core:designsystem` `commonMain`, values copied from the website registry | Light and dark from the same role names (`main`, `ink`, `paper`, `surface`, `accent`, `deep`, `text`, `muted`, `border`) |
+| Brand tokens (colour roles, type, radii, spacing) | `:ui:designsystem` `commonMain`, values copied from the website registry | Light and dark from the same role names (`main`, `ink`, `paper`, `surface`, `accent`, `deep`, `text`, `muted`, `border`) |
 | Scientific colours (air-quality bands) | `AirMood` in `:core:history` plus the design system mapping | Never derived from brand colours, never changed for aesthetics |
-| Material 3 theme | `:core:designsystem` maps tokens to a `ColorScheme`, `Typography` and `Shapes` | Android and iOS render the same theme through Compose |
+| Material 3 theme | `:ui:designsystem` maps tokens to a `ColorScheme`, `Typography` and `Shapes` | Android and iOS render the same theme through Compose |
 | Fonts | Quicksand (Latin) and Cairo (Arabic), both OFL, bundled in the app | No runtime font download, the app works offline |
+| Floating controls | `:ui:designsystem` `FloatingControls.kt` | One style for every control over content, see below |
 | Characters | The peacock mascot from `public/mascots/peacock.webp` | A friendly guide on empty, welcome and success states, never on data |
 
 The [W3C Design Tokens format](https://www.designtokens.org/) (DTCG JSON) is the common way teams
@@ -133,6 +134,32 @@ keep web, Android and iOS tokens in one file and generate code per platform. Whe
 consumer appears, move the registry to a DTCG JSON file and generate Kotlin and TypeScript from
 it. Until then, the Kotlin token file names its website source and the values are compared in a
 unit test.
+
+### Floating controls (the global UI rule)
+
+Every control that floats over content (the map, a chart, a photo) follows one set of rules on
+both platforms. They borrow the principles of Apple's Liquid Glass guidance
+([reference](https://www.conor.fyi/writing/liquid-glass-reference)), not its SwiftUI APIs,
+because the shared screens are Compose.
+
+- **One layer.** Controls float above content and never stack on each other. Content is never
+  styled as a control.
+- **Compact at rest, grows in use.** A control shows only its current state and expands into
+  its options while touched, then folds back (the Discover time pill is the model).
+- **Curved cards, not circles.** `FloatingControl.Shape` (16 dp) for controls, `SmallShape`
+  (12 dp) for chips and small pills. Anything nested is concentric, its radius is the outer
+  radius minus the inset (`FloatingControl.concentric()`).
+- **Tint means something.** Only the selected or primary thing uses the brand's Signal blue
+  (`FloatingControl.Selected` with `OnSelected` ink). Everything else is neutral surface.
+- **Readable over anything.** `FloatingSurface` is a near opaque surface with a hairline border
+  and a soft shadow. Touch targets are at least 44 dp (`FloatingControl.Size`), spacing to the
+  screen edge is `FloatingControl.Margin`.
+- **Accessible.** A collapsed control is one accessibility element with a name, a state and
+  actions for its other options.
+
+Never use Material's baseline colours on either platform. Both entry points wrap content in the
+brand theme (`AqSyncTheme` on Android, `OpenSensorTheme` on iOS), so nothing renders in the
+default purple.
 
 ### Platform conventions that stay native
 

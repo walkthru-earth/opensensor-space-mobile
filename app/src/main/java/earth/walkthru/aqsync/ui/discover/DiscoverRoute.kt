@@ -18,6 +18,7 @@ import earth.walkthru.aqsync.data.settings.DiscoverStore
 import earth.walkthru.aqsync.publicfeed.platformH3Grid
 import earth.walkthru.aqsync.ui.components.InfoButton
 import earth.walkthru.aqsync.ui.components.InfoContent
+import earth.walkthru.aqsync.ui.components.LocalUnits
 import earth.walkthru.opensensor.discover.DiscoverController
 import earth.walkthru.opensensor.discover.DiscoverScreen
 import earth.walkthru.opensensor.discover.DiscoverStrings
@@ -63,6 +64,7 @@ fun DiscoverRoute(onAddSensor: () -> Unit, viewModel: DiscoverViewModel = hiltVi
         onAddSensor = onAddSensor,
         modifier = Modifier.fillMaxSize(),
         infoButton = { info, modifier -> InfoButton(InfoContent(info.title, info.body), modifier) },
+        units = LocalUnits.current.system,
     )
 }
 
@@ -98,5 +100,19 @@ private fun discoverStrings(): DiscoverStrings {
         sensors = { n -> res.getQuantityString(R.plurals.discover_sensors, n, n) },
         updatedHoursAgo = { n -> res.getQuantityString(R.plurals.discover_updated_hours_ago, n, n) },
         updatedRecently = stringResource(R.string.discover_updated_recently),
+        nearMe = stringResource(R.string.discover_near_me),
+        windowShortHour = stringResource(R.string.discover_window_short_hour),
+        windowShortDay = stringResource(R.string.discover_window_short_day),
+        windowShortWeek = stringResource(R.string.discover_window_short_week),
+        timeWindow = stringResource(R.string.discover_time_window),
+        higherThan = { n -> res.getString(R.string.discover_higher_than, n) },
+        rangeSummary = { label, avg, min, max, unit ->
+            if (min != null && max != null) {
+                res.getString(R.string.discover_range_summary, label, avg, min, max, unit)
+            } else {
+                res.getString(R.string.discover_average_summary, label, avg, unit)
+            }
+        },
+        spreadSummary = { label, n, low, high, unit -> res.getQuantityString(R.plurals.discover_spread_summary, n, label, n, low, high, unit) },
     )
 }

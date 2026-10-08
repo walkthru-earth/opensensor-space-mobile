@@ -6,6 +6,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import earth.walkthru.aqsync.data.settings.AppSettings
 import earth.walkthru.aqsync.data.settings.DetailLevel
 import earth.walkthru.aqsync.data.sync.ClockSyncMode
+import earth.walkthru.aqsync.units.UnitSystem
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -18,6 +19,12 @@ class SettingsViewModel @Inject constructor(private val settings: AppSettings) :
     val clockSyncMode: StateFlow<ClockSyncMode> = settings.clockSyncMode.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ClockSyncMode.ASK)
 
     val showPublicSensors: StateFlow<Boolean> = settings.showPublicSensors.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    val unitSystem: StateFlow<UnitSystem> = settings.unitSystem.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UnitSystem.AUTO)
+
+    fun setUnitSystem(system: UnitSystem) {
+        viewModelScope.launch { settings.setUnitSystem(system) }
+    }
 
     fun setShowPublicSensors(on: Boolean) {
         viewModelScope.launch { settings.setShowPublicSensors(on) }

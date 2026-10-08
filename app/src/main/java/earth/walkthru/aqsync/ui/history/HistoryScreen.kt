@@ -60,6 +60,7 @@ import earth.walkthru.aqsync.ui.components.Eyebrow
 import earth.walkthru.aqsync.ui.components.InfoButton
 import earth.walkthru.aqsync.ui.components.InfoContent
 import earth.walkthru.aqsync.ui.components.InfoNote
+import earth.walkthru.aqsync.ui.components.LocalUnits
 import earth.walkthru.aqsync.ui.components.NO_VALUE
 import earth.walkthru.aqsync.ui.components.SectionCard
 import earth.walkthru.aqsync.ui.components.StatLine
@@ -241,7 +242,7 @@ private fun ChartCard(state: HistoryUiState, zone: ZoneId, onOpenDay: (Long) -> 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Eyebrow(state.metric.label)
                 Spacer(Modifier.width(6.dp))
-                Eyebrow(state.metric.unit, uppercase = false)
+                Eyebrow(LocalUnits.current.unit(state.metric.unit), uppercase = false)
                 Spacer(Modifier.weight(1f))
                 if (s != null && !s.isEmpty) Eyebrow(stringResource(R.string.history_covered, (s.coverage * 100).toInt()), uppercase = false)
             }
@@ -321,14 +322,16 @@ private fun SelectedColumn(c: HistoryColumn?, state: HistoryUiState, zone: ZoneI
             else -> "${fmt.format(Instant.ofEpochSecond(c.startS))} → ${DateTimeFormatter.ofPattern("HH:mm XXX").withZone(zone).format(Instant.ofEpochSecond(c.endS))}"
         }
         val m = c.mean
+        val units = LocalUnits.current
+        val unit = state.metric.unit
         if (m == null) {
             "$slot · " + stringResource(R.string.history_no_readings_short)
         } else {
             listOfNotNull(
                 slot,
-                fmt(m) + " " + state.metric.unit,
+                fmt(units.value(m, unit)) + " " + units.unit(unit),
                 state.metric.moodOf(m.toDouble())?.titleText(),
-                c.max?.takeIf { it > m * 1.15f }?.let { stringResource(R.string.history_peak_value, fmt(it)) },
+                c.max?.takeIf { it > m * 1.15f }?.let { stringResource(R.string.history_peak_value, fmt(units.value(it, unit))) },
                 stringResource(R.string.history_covered, (c.coverage * 100).toInt()),
                 stringResource(R.string.history_estimated_time).takeIf { c.estimated },
             ).joinToString(" · ")
@@ -339,11 +342,14 @@ private fun SelectedColumn(c: HistoryColumn?, state: HistoryUiState, zone: ZoneI
 
 @Composable
 private fun Summary(s: HistorySeries) {
+    // Moods and colours read the SI value. Only the printed number converts.
+    val units = LocalUnits.current
+    val unit = s.metric.unit
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Column {
             Eyebrow(stringResource(R.string.history_average))
             Text(
-                s.mean?.let { fmt(it) } ?: NO_VALUE,
+                s.mean?.let { fmt(units.value(it, unit)) } ?: NO_VALUE,
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.SemiBold,
                 color = s.mean?.let { s.metric.moodOf(it.toDouble())?.textColorOnSurface() } ?: MaterialTheme.colorScheme.onSurface,
@@ -351,7 +357,7 @@ private fun Summary(s: HistorySeries) {
         }
         Column {
             Eyebrow(stringResource(R.string.history_peak))
-            Text(s.max?.let { fmt(it) } ?: NO_VALUE, style = MaterialTheme.typography.headlineSmall, color = s.max?.let { s.metric.moodOf(it.toDouble())?.textColorOnSurface() } ?: MaterialTheme.colorScheme.onSurface)
+            Text(s.max?.let { fmt(units.value(it, unit)) } ?: NO_VALUE, style = MaterialTheme.typography.headlineSmall, color = s.max?.let { s.metric.moodOf(it.toDouble())?.textColorOnSurface() } ?: MaterialTheme.colorScheme.onSurface)
         }
         Column(horizontalAlignment = Alignment.End) {
             Eyebrow(stringResource(R.string.history_coverage))

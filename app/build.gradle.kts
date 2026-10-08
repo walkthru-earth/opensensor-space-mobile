@@ -206,7 +206,9 @@ dependencies {
     implementation(project(":core:history"))
     // The Discover map (shared Compose with iOS) and the public feed port behind it.
     implementation(project(":feature:discover"))
+    implementation(project(":ui:designsystem"))
     implementation(project(":core:publicfeed"))
+    implementation(project(":core:units"))
     h3Natives(libs.h3)
     // ZSTD pages of external GeoParquet (PyArrow/GDAL default in many pipelines): the one native library,
     // registered into :core:parquet's codec SPI by data/history/parquet/AppParquetCodecs. Prebuilt AAR;

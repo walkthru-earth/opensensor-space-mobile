@@ -3,6 +3,10 @@ package earth.walkthru.aqsync.ui.theme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import earth.walkthru.aqsync.data.history.AirMood
+import earth.walkthru.opensensor.designsystem.BrandDarkScheme
+import earth.walkthru.opensensor.designsystem.BrandLightScheme
+import earth.walkthru.opensensor.designsystem.BrandPalette
+import earth.walkthru.opensensor.designsystem.BrandTokens
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test

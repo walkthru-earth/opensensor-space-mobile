@@ -63,7 +63,7 @@ flowchart TB
     parquet[":core:parquet"]
     history[":core:history"]
     sync[":core:sync<br/>engine, plan, resume, verify, archive layout"]
-    ds[":core:designsystem<br/>tokens, theme, shared components"]
+    ds[":ui:designsystem<br/>tokens, theme, shared components"]
   end
   subgraph android[":app (Android)"]
     ble[BLE adapter]
@@ -205,7 +205,9 @@ only, because its API is still alpha and has no random access.
 
 **W9 Shared design system and iOS restyle.** Extract tokens, theme and shared components (mood
 face, now card, band chart drawn with `drawText` and `drawWithCache`) to a Compose Multiplatform
-`:core:designsystem`. Restyle the iOS screen with it, using the same detail-level rules.
+`:ui:designsystem` (started 2026-10-09 with the brand tokens, theme, shapes and floating controls,
+so iOS no longer falls back to Material purple). Restyle the iOS screen with it, using the same
+detail-level rules.
 
 **W10 UI quality.** String resources and typed events (no English in ViewModels), accessibility
 semantics for charts and live regions, previews and host screenshot tests, a device shell for

@@ -20,6 +20,7 @@ import earth.walkthru.aqsync.data.protocol.TemperatureSource
 import earth.walkthru.aqsync.ui.components.BrandCard
 import earth.walkthru.aqsync.ui.components.CardTone
 import earth.walkthru.aqsync.ui.components.Eyebrow
+import earth.walkthru.aqsync.ui.components.LocalUnits
 
 /** The registry metric that a reviewed profile's LIVE `t` field measures. */
 fun temperatureMetric(source: TemperatureSource?): MetricSpec =
@@ -43,10 +44,12 @@ fun EnvironmentCard(profile: LiveProfile?, live: LiveSample?, receivedAtEpochMs:
             return@BrandCard
         }
         Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+            val temp = temperatureMetric(profile.temperature)
+            val units = LocalUnits.current
             BigValue(
-                temperatureMetric(profile.temperature).label,
-                fmt(live?.t),
-                temperatureMetric(profile.temperature).unit,
+                temp.label,
+                fmt(units.value(live?.t, temp.unit)),
+                units.unit(temp.unit),
                 Modifier.weight(1f),
             )
             if (profile.humidity) BigValue(Metrics.HUMIDITY.label, fmt(live?.rh), Metrics.HUMIDITY.unit, Modifier.weight(1f))

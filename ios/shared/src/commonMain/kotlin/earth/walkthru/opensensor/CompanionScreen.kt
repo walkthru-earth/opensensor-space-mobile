@@ -21,11 +21,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import earth.walkthru.aqsync.data.history.Metrics
 import earth.walkthru.aqsync.data.history.NowReading
+import earth.walkthru.aqsync.data.protocol.TemperatureSource
+import earth.walkthru.aqsync.units.UnitFormatter
+import earth.walkthru.aqsync.units.UnitSystem
 import kotlin.math.round
 
 @Composable
-internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (String) -> Unit, disconnect: () -> Unit, scanLan: () -> Unit, saveWifiAccess: () -> Unit, connectLan: (String) -> Unit, syncLan: (String) -> Unit, disconnectLan: (String) -> Unit, exportArchive: () -> Unit) {
+internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (String) -> Unit, disconnect: () -> Unit, scanLan: () -> Unit, saveWifiAccess: () -> Unit, connectLan: (String) -> Unit, syncLan: (String) -> Unit, disconnectLan: (String) -> Unit, exportArchive: () -> Unit, units: UnitSystem = UnitSystem.METRIC) {
+    // Display units from Settings. Readings stay SI everywhere else.
+    val formatter = UnitFormatter(units)
     MaterialTheme {
         Surface(Modifier.fillMaxSize()) {
             LazyColumn(
@@ -53,7 +59,10 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
                                 val sample = state.live
                                 val profile = state.profile
                                 if (profile != null && sample?.pmValid == true) {
-                                    sample.t?.takeIf { it.isFinite() }?.let { Text("${profile.temperature.label} ${number(it)} °C") }
+                                    sample.t?.takeIf { it.isFinite() }?.let { t ->
+                                        val metric = if (profile.temperature == TemperatureSource.AMBIENT) Metrics.AMBIENT_TEMP else Metrics.BOARD_TEMP
+                                        Text("${profile.temperature.label} ${number(formatter.value(t, metric.unit))} ${formatter.unit(metric.unit)}")
+                                    }
                                     if (profile.humidity) sample.rh?.takeIf { it.isFinite() }?.let { Text("Humidity ${number(it)} %") }
                                 }
                                 state.status?.let { status ->

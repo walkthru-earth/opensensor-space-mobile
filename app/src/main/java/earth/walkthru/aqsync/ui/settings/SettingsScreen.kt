@@ -33,6 +33,8 @@ import earth.walkthru.aqsync.data.sync.ClockSyncMode
 import earth.walkthru.aqsync.ui.components.Eyebrow
 import earth.walkthru.aqsync.ui.components.InfoButton
 import earth.walkthru.aqsync.ui.components.InfoContent
+import earth.walkthru.aqsync.ui.components.resolveUnits
+import earth.walkthru.aqsync.units.UnitSystem
 
 /**
  * The Settings tab: the **detail level** (Simple, Detailed, Developer, persisted in DataStore),
@@ -45,6 +47,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
     val level by viewModel.detailLevel.collectAsStateWithLifecycle()
     val clockMode by viewModel.clockSyncMode.collectAsStateWithLifecycle()
     val showPublic by viewModel.showPublicSensors.collectAsStateWithLifecycle()
+    val units by viewModel.unitSystem.collectAsStateWithLifecycle()
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val title = stringResource(R.string.settings_title)
     Scaffold(
@@ -135,6 +138,8 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                 color = muted,
             )
             Spacer(Modifier.height(24.dp))
+            UnitsRow(units, viewModel::setUnitSystem)
+            Spacer(Modifier.height(24.dp))
             // The one switch for Discover network use (feed and basemap), AGENTS.md boundary.
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(R.string.settings_public_sensors), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
@@ -148,5 +153,35 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
             Text(stringResource(R.string.info_privacy), style = MaterialTheme.typography.bodySmall, color = muted, modifier = Modifier.padding(top = 4.dp))
             Text(stringResource(R.string.settings_fonts), style = MaterialTheme.typography.bodySmall, color = muted, modifier = Modifier.padding(top = 4.dp))
         }
+    }
+}
+
+/** Display units. Automatic, Metric or Imperial. Changes labels only, never stored data. */
+@Composable
+private fun UnitsRow(choice: UnitSystem, onChoice: (UnitSystem) -> Unit) {
+    fun label(system: UnitSystem) = when (system) {
+        UnitSystem.AUTO -> R.string.units_auto
+        UnitSystem.METRIC -> R.string.units_metric
+        UnitSystem.IMPERIAL -> R.string.units_imperial
+    }
+    Text(stringResource(R.string.settings_units), style = MaterialTheme.typography.titleMedium)
+    Spacer(Modifier.height(8.dp))
+    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+        UnitSystem.entries.forEachIndexed { i, system ->
+            SegmentedButton(
+                selected = choice == system,
+                onClick = { onChoice(system) },
+                shape = SegmentedButtonDefaults.itemShape(i, UnitSystem.entries.size),
+                label = { Text(stringResource(label(system))) },
+            )
+        }
+    }
+    if (choice == UnitSystem.AUTO) {
+        Spacer(Modifier.height(8.dp))
+        Text(
+            stringResource(R.string.settings_units_auto, stringResource(label(resolveUnits(UnitSystem.AUTO)))),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }

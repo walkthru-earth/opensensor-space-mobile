@@ -54,7 +54,7 @@ flowchart TB
     PQ2[":core:parquet"]
     HI2[":core:history"]
     PF[":core:publicfeed<br/>discover feed port and sample"]
-    DS[":core:designsystem<br/>tokens, theme, components"]
+    DS[":ui:designsystem<br/>tokens, theme, components"]
     DI[":feature:discover<br/>map, cell sheet, device page"]
   end
   APP2[":app, Android adapters and screens"]

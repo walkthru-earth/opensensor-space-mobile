@@ -131,8 +131,8 @@ class DiscoverController(
         restyle(id)
     }
 
-    fun cycleWindow() {
-        val next = _state.value.window.next()
+    fun selectWindow(next: FeedWindow) {
+        if (_state.value.window == next) return
         saved = saved.copy(window = next)
         persist()
         _state.update { it.copy(window = next, loading = true) }

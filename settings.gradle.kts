@@ -24,7 +24,10 @@ include(":core:parquet")
 include(":core:history")
 // The public Discover feed: port, H3, viewport cover, bundled sample (docs/devices-and-discovery.md).
 include(":core:publicfeed")
+// Display units, metric or imperial, for every screen on both platforms (docs/screens.md, Settings).
+include(":core:units")
 // The Discover map, shared Compose for Android and iOS.
+include(":ui:designsystem")
 include(":feature:discover")
 
 include(":ios:shared")

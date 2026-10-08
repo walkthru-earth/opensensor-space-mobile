@@ -25,6 +25,8 @@ import org.maplibre.compose.interaction.ClickResult
 import org.maplibre.compose.interaction.MapInteractions
 import org.maplibre.compose.layers.FillLayer
 import org.maplibre.compose.layers.LineLayer
+import org.maplibre.compose.layers.LocationIndicatorLayer
+import org.maplibre.compose.location.LocationState
 import org.maplibre.compose.map.MapState
 import org.maplibre.compose.map.MaplibreMap
 import org.maplibre.compose.map.rememberMapState
@@ -37,7 +39,8 @@ import org.maplibre.spatialk.geojson.Position
 /**
  * The map and its one GeoJSON source of H3 cells. Measured cells are filled with the scale colour
  * (faded when stale), unmeasured cells are an outline only, and the selected cell has a thick ink
- * outline. Clicks on a cell select it, clicks elsewhere clear the selection.
+ * outline. Clicks on a cell select it, clicks elsewhere clear the selection. [location] is the
+ * "Near me" puck, null until the user taps it and grants approximate location.
  */
 @Composable
 internal fun rememberDiscoverMapState(
@@ -46,6 +49,7 @@ internal fun rememberDiscoverMapState(
     geoJson: String,
     selectedHex: String?,
     ink: Color,
+    location: LocationState?,
     onCellClick: (String?) -> Unit,
 ): MapState {
     val initial = when (start) {
@@ -94,6 +98,10 @@ internal fun rememberDiscoverMapState(
             color = const(ink),
             width = const(3.dp),
         )
+        if (location != null) {
+            // The library's standard blue puck and accuracy circle, drawn above the cells.
+            LocationIndicatorLayer(id = "discover-near-me", locationState = location)
+        }
     }
 }
 

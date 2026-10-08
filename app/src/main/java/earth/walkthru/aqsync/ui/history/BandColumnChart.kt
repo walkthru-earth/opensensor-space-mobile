@@ -30,6 +30,7 @@ import earth.walkthru.aqsync.data.history.ChartAxes
 import earth.walkthru.aqsync.data.history.HistoryColumn
 import earth.walkthru.aqsync.data.history.HistoryRange
 import earth.walkthru.aqsync.data.history.MetricSpec
+import earth.walkthru.aqsync.ui.components.LocalUnits
 import earth.walkthru.aqsync.ui.theme.color
 import java.time.Instant
 import java.time.ZoneId
@@ -75,6 +76,8 @@ fun BandColumnChart(
     // The metric's own floor (PM2.5: 60, so the whole "Getting hazy" band is always visible); spikes beyond are capped.
     val axis = remember(columns, metric) { ChartAxes.of(columns, metric) }
     val yMax = axis.max
+    // Geometry, ticks and bands stay on the SI values. Only the printed labels convert.
+    val units = LocalUnits.current
 
     Canvas(
         modifier
@@ -115,7 +118,7 @@ fun BandColumnChart(
         while (v <= yMax + 1e-3f) {
             val yy = y(v)
             drawLine(gridColor, Offset(plot.left, yy), Offset(plot.right, yy), 1f)
-            drawContext.canvas.nativeCanvas.drawText(fmtAxis(v), 0f, yy + labelPx * 0.35f, labelPaint)
+            drawContext.canvas.nativeCanvas.drawText(fmtAxis(units.value(v, metric.unit)), 0f, yy + labelPx * 0.35f, labelPaint)
             v += step
         }
         // WHO guideline (PM2.5 only), dashed, labelled at the right.
@@ -183,7 +186,7 @@ fun BandColumnChart(
                 }
                 drawPath(cap, color)
                 if (labelCap[ci]) {
-                    val text = fmtAxis((peak ?: m))
+                    val text = fmtAxis(units.value(peak ?: m, metric.unit))
                     val tw = capPaint.measureText(text)
                     drawContext.canvas.nativeCanvas.drawText(text, (x0 + w / 2 - tw / 2).coerceIn(plot.left, plot.right - tw), plot.top - labelPx * 0.45f, capPaint)
                 }

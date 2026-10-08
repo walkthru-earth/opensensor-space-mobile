@@ -42,9 +42,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.history.AirMood
-import earth.walkthru.aqsync.ui.theme.BrandTokens
 import earth.walkthru.aqsync.ui.theme.color
 import earth.walkthru.aqsync.ui.theme.onColor
+import earth.walkthru.opensensor.designsystem.BrandTokens
 
 /** How loud a card is. Hero is the one card per screen that carries the answer. */
 enum class CardTone { PLAIN, SOFT, HERO }

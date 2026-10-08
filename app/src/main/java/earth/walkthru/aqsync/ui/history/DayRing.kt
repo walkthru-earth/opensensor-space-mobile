@@ -27,6 +27,7 @@ import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.history.AirMood
 import earth.walkthru.aqsync.data.history.HistoryColumn
 import earth.walkthru.aqsync.data.history.MetricSpec
+import earth.walkthru.aqsync.ui.components.LocalUnits
 import earth.walkthru.aqsync.ui.components.MoodFace
 import earth.walkthru.aqsync.ui.components.NO_VALUE
 import earth.walkthru.aqsync.ui.theme.color
@@ -64,6 +65,7 @@ fun DayRing(
     val labelPx = with(LocalDensity.current) { 11.sp.toPx() }
     val labelPaint = remember(muted, labelPx) { textPaint(muted, labelPx) }
     val mood = mean?.let { metric.moodOf(it.toDouble()) }
+    val units = LocalUnits.current
 
     Box(modifier.size(size), contentAlignment = Alignment.Center) {
         Canvas(Modifier.fillMaxSize()) {
@@ -113,12 +115,12 @@ fun DayRing(
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.size(size * 0.5f), verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center) {
             if (mood != null) MoodFace(mood, mood.color(), Modifier.size(size * 0.16f))
             Text(
-                mean?.let { if (it >= 100) it.toInt().toString() else "%.1f".format(java.util.Locale.ROOT, it) } ?: NO_VALUE,
+                units.value(mean, metric.unit)?.let { if (it >= 100) it.toInt().toString() else "%.1f".format(java.util.Locale.ROOT, it) } ?: NO_VALUE,
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = mood?.textColorOnSurface() ?: onSurface,
             )
-            Text(if (mean == null) stringResource(R.string.history_no_readings_short) else metric.unit, style = MaterialTheme.typography.labelSmall, color = muted)
+            Text(if (mean == null) stringResource(R.string.history_no_readings_short) else units.unit(metric.unit), style = MaterialTheme.typography.labelSmall, color = muted)
             if (mean != null) Text(stringResource(R.string.scan_archive_coverage, (coverage * 100).toInt()), style = MaterialTheme.typography.labelSmall, color = muted)
         }
     }

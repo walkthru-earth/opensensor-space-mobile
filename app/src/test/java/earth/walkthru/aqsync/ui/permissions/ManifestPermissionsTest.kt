@@ -1,15 +1,15 @@
 package earth.walkthru.aqsync.ui.permissions
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.w3c.dom.Element
 import java.io.File
 import javax.xml.parsers.DocumentBuilderFactory
 
 /**
- * The manifest declares only what the app uses, never location, and Bluetooth scanning stays
- * `neverForLocation` (docs/store-compliance.md). A new permission must be added here on purpose.
+ * The manifest declares only what the app uses. Location is approximate only (Discover "Near me"),
+ * never fine or background, and Bluetooth scanning stays `neverForLocation`
+ * (docs/store-compliance.md). A new permission must be added here on purpose.
  */
 class ManifestPermissionsTest {
     private val android = "http://schemas.android.com/apk/res/android"
@@ -39,15 +39,16 @@ class ManifestPermissionsTest {
                 "android.permission.REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND",
                 "android.permission.REQUEST_OBSERVE_COMPANION_DEVICE_PRESENCE",
                 "android.permission.RECEIVE_BOOT_COMPLETED",
+                "android.permission.ACCESS_COARSE_LOCATION",
             ),
             permissions().keys,
         )
     }
 
     @Test
-    fun noLocationAndScanIsNeverForLocation() {
+    fun coarseLocationOnlyAndScanIsNeverForLocation() {
         val perms = permissions()
-        assertTrue(perms.keys.none { "LOCATION" in it })
+        assertEquals(setOf("android.permission.ACCESS_COARSE_LOCATION"), perms.keys.filter { "LOCATION" in it }.toSet())
         assertEquals("neverForLocation", perms.getValue("android.permission.BLUETOOTH_SCAN").getAttributeNS(android, "usesPermissionFlags"))
     }
 }
