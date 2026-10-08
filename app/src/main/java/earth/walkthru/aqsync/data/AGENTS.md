@@ -29,5 +29,8 @@ background sync; do not fork transfer logic.
 - Work that outlives a screen uses WorkManager and its `dataSync` foreground
   notification. The worker does not pair or scan. A LAN WifiLock is held only
   during an active LAN transfer and released in `finally`.
+- Network use outside BLE and LAN is limited to the planned anonymous, read-only
+  discover feed and basemap GETs, and per-device opt-in uploads
+  (`docs/devices-and-discovery.md`). No other remote call belongs in this layer.
 - Preserve immutable Hive paths and station epochs. Room migrations must keep
   old archives and be validated against exported schemas.

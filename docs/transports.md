@@ -223,7 +223,10 @@ After `REBOOTING(delay_ms)`: wait `delay_ms`, drop the session, wait `REBOOT_REC
 own. It is in the NEARBY_DEVICES group with the Bluetooth permissions so it is *usually* granted with
 them — but a runtime permission can be missing while its group is granted, and below API 37 the
 constant does not exist. `LanPermission` returns "granted" below 37 and asks above; a denial hides
-LAN with an explanation while BLE keeps working. `INTERNET` exists only for these sockets.
+LAN with an explanation while BLE keeps working. Today `INTERNET` exists only for these sockets.
+The planned discover feed adds anonymous, read-only GETs of the public feed and basemap behind
+the "Show public sensors" switch, and per-device opt-in uploads later
+([devices-and-discovery.md](devices-and-discovery.md#network-boundary)).
 
 ## `NsdManager` two code paths
 
