@@ -3,17 +3,21 @@ package earth.walkthru.aqsync.ui.settings
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -31,24 +35,36 @@ import earth.walkthru.aqsync.ui.components.InfoButton
 import earth.walkthru.aqsync.ui.components.InfoContent
 
 /**
- * The app's settings: the **detail level** (Simple, Detailed, Developer, persisted in DataStore),
+ * The Settings tab: the **detail level** (Simple, Detailed, Developer, persisted in DataStore),
  * the Smart Sync clock consent and "Show public sensors" for the Discover map. Everything else the
- * user can change lives on the device and is edited from the Device screen. Same three levels, same names, on iOS.
+ * user can change lives on the device and is edited from the Device section. Same three levels,
+ * same names, on iOS.
  */
 @Composable
-fun SettingsSheet(onDismiss: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
+fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
     val level by viewModel.detailLevel.collectAsStateWithLifecycle()
     val clockMode by viewModel.clockSyncMode.collectAsStateWithLifecycle()
     val showPublic by viewModel.showPublicSensors.collectAsStateWithLifecycle()
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surface) {
-        Column(Modifier.navigationBarsPadding().padding(horizontal = 24.dp).padding(bottom = 32.dp)) {
-            val title = stringResource(R.string.settings_title)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(title, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
-                InfoButton(InfoContent(title, stringResource(R.string.info_settings_body1), stringResource(R.string.info_settings_body2)))
-            }
-            Spacer(Modifier.height(16.dp))
+    val title = stringResource(R.string.settings_title)
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+                title = { Text(title) },
+                actions = { InfoButton(InfoContent(title, stringResource(R.string.info_settings_body1), stringResource(R.string.info_settings_body2))) },
+            )
+        },
+    ) { padding ->
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp)
+                .padding(top = 8.dp, bottom = 32.dp),
+        ) {
             Text(stringResource(R.string.settings_detail_level), style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {

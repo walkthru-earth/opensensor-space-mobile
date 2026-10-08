@@ -36,7 +36,7 @@ import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.protocol.TemperatureSource
 import earth.walkthru.aqsync.ui.components.ConnectionBanner
-import earth.walkthru.aqsync.ui.components.DeviceBottomBar
+import earth.walkthru.aqsync.ui.components.DeviceSectionTabs
 import earth.walkthru.aqsync.ui.components.DeviceTab
 import earth.walkthru.aqsync.ui.components.PillButton
 import earth.walkthru.aqsync.ui.components.TransportChip
@@ -92,44 +92,44 @@ fun TodayScreen(
         modifier = modifier,
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
-                title = {
-                    Column {
-                        Text(state.name ?: stringResource(R.string.device_unnamed), style = MaterialTheme.typography.titleLarge)
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            TransportChip(state.transport)
-                            if (level.developer) {
-                                state.info?.station?.let {
-                                    Text(
-                                        stringResource(R.string.today_station_short, it.take(8)),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontFamily = FontFamily.Monospace,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1,
-                                    )
+            Column {
+                TopAppBar(
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+                    title = {
+                        Column {
+                            Text(state.name ?: stringResource(R.string.device_unnamed), style = MaterialTheme.typography.titleLarge)
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                TransportChip(state.transport)
+                                if (level.developer) {
+                                    state.info?.station?.let {
+                                        Text(
+                                            stringResource(R.string.today_station_short, it.take(8)),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontFamily = FontFamily.Monospace,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                        )
+                                    }
                                 }
                             }
                         }
+                    },
+                    actions = {
+                        TextButton(onClick = { onAction(TodayAction.OpenDevices) }) { Text(stringResource(R.string.nav_devices)) }
+                        if (level.developer) {
+                            IconButton(onClick = { onAction(TodayAction.OpenDebug) }) { Icon(Icons.Rounded.BugReport, contentDescription = stringResource(R.string.nav_debug)) }
+                        }
+                        IconButton(onClick = { onAction(TodayAction.OpenSettings) }) { Icon(Icons.Rounded.Settings, contentDescription = stringResource(R.string.nav_settings)) }
+                        IconButton(onClick = { onAction(TodayAction.Disconnect) }) { Icon(Icons.Rounded.LinkOff, contentDescription = stringResource(R.string.nav_disconnect)) }
+                    },
+                )
+                DeviceSectionTabs(DeviceTab.TODAY) {
+                    when (it) {
+                        DeviceTab.HISTORY -> onAction(TodayAction.OpenHistory)
+                        DeviceTab.FILES -> onAction(TodayAction.OpenFiles)
+                        DeviceTab.DEVICE -> onAction(TodayAction.OpenDevice)
+                        DeviceTab.TODAY -> Unit
                     }
-                },
-                actions = {
-                    TextButton(onClick = { onAction(TodayAction.OpenDevices) }) { Text(stringResource(R.string.nav_devices)) }
-                    if (level.developer) {
-                        IconButton(onClick = { onAction(TodayAction.OpenDebug) }) { Icon(Icons.Rounded.BugReport, contentDescription = stringResource(R.string.nav_debug)) }
-                    }
-                    IconButton(onClick = { onAction(TodayAction.OpenSettings) }) { Icon(Icons.Rounded.Settings, contentDescription = stringResource(R.string.nav_settings)) }
-                    IconButton(onClick = { onAction(TodayAction.Disconnect) }) { Icon(Icons.Rounded.LinkOff, contentDescription = stringResource(R.string.nav_disconnect)) }
-                },
-            )
-        },
-        bottomBar = {
-            DeviceBottomBar(DeviceTab.TODAY) {
-                when (it) {
-                    DeviceTab.HISTORY -> onAction(TodayAction.OpenHistory)
-                    DeviceTab.FILES -> onAction(TodayAction.OpenFiles)
-                    DeviceTab.DEVICE -> onAction(TodayAction.OpenDevice)
-                    DeviceTab.TODAY -> Unit
                 }
             }
         },

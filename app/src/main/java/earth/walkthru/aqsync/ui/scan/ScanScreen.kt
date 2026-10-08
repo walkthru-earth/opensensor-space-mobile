@@ -18,7 +18,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.CloudSync
 import androidx.compose.material.icons.rounded.Link
@@ -83,7 +82,6 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun ScanScreen(
     onConnected: (address: String) -> Unit,
-    onOpenDiscover: () -> Unit,
     viewModel: ScanViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -119,9 +117,6 @@ fun ScanScreen(
                 title = { Text(stringResource(R.string.scan_title)) },
                 scrollBehavior = scrollBehavior,
                 actions = {
-                    IconButton(onClick = onOpenDiscover) {
-                        Icon(Icons.Outlined.Map, contentDescription = stringResource(R.string.scan_discover))
-                    }
                     InfoButton(
                         InfoContent(
                             stringResource(R.string.info_connect_title),

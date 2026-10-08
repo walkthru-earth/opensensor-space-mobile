@@ -26,15 +26,14 @@ import earth.walkthru.aqsync.ui.components.showDeviceEvent
 import earth.walkthru.aqsync.ui.permissions.AccessDialogs
 import earth.walkthru.aqsync.ui.permissions.rememberBluetoothAccess
 import earth.walkthru.aqsync.ui.permissions.rememberNotificationPermission
-import earth.walkthru.aqsync.ui.settings.SettingsSheet
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
- * Stateful entry for Today: owns the ViewModel, one-off events, confirmation dialogs and the
- * settings sheet, and hands [TodayScreen] plain state. Every device-changing action here
+ * Stateful entry for Today: owns the ViewModel, one-off events and confirmation dialogs, and
+ * hands [TodayScreen] plain state. Every device-changing action here
  * (set time, finalize, Smart Sync's clock update) is confirmed first.
  */
 @Composable
@@ -44,12 +43,12 @@ fun TodayRoute(
     onOpenFiles: () -> Unit,
     onOpenDevice: () -> Unit,
     onOpenDebug: () -> Unit,
+    onOpenSettings: () -> Unit,
     onDisconnected: () -> Unit,
     viewModel: TodayViewModel = hiltViewModel<TodayViewModel, TodayViewModel.Factory>(key = address, creationCallback = { it.create(address) }),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
-    var showSettings by remember { mutableStateOf(false) }
     var confirmTime by remember { mutableStateOf(false) }
     var confirmSmartSyncClock by remember { mutableStateOf<ClockQuality?>(null) }
     val res = LocalResources.current
@@ -77,7 +76,7 @@ fun TodayRoute(
                 TodayAction.OpenDevice -> onOpenDevice()
                 TodayAction.OpenDebug -> onOpenDebug()
                 TodayAction.OpenDevices -> onDisconnected()
-                TodayAction.OpenSettings -> showSettings = true
+                TodayAction.OpenSettings -> onOpenSettings()
                 TodayAction.Disconnect -> { viewModel.disconnect(); onDisconnected() }
                 TodayAction.Reconnect -> bluetooth.run { viewModel.reconnect() }
                 TodayAction.SmartSync -> notificationPermission.ensureThen { viewModel.smartSync() }
@@ -86,8 +85,6 @@ fun TodayRoute(
             }
         },
     )
-
-    if (showSettings) SettingsSheet(onDismiss = { showSettings = false })
 
     if (confirmTime) {
         AlertDialog(

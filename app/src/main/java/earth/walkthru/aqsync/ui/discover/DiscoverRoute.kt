@@ -1,21 +1,9 @@
 package earth.walkthru.aqsync.ui.discover
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Map
-import androidx.compose.material.icons.outlined.Sensors
-import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
@@ -30,7 +18,6 @@ import earth.walkthru.aqsync.data.settings.DiscoverStore
 import earth.walkthru.aqsync.publicfeed.platformH3Grid
 import earth.walkthru.aqsync.ui.components.InfoButton
 import earth.walkthru.aqsync.ui.components.InfoContent
-import earth.walkthru.aqsync.ui.settings.SettingsSheet
 import earth.walkthru.opensensor.discover.DiscoverController
 import earth.walkthru.opensensor.discover.DiscoverScreen
 import earth.walkthru.opensensor.discover.DiscoverStrings
@@ -58,49 +45,25 @@ class DiscoverViewModel @Inject constructor(store: DiscoverStore, settings: AppS
 }
 
 /**
- * Discover, the start tab when no device is paired. The map is shared Compose
- * (`:feature:discover`). This route supplies Android strings, the app's info button and the
- * bottom tabs (Discover, My devices, Settings).
+ * Discover, always the start tab. The map is shared Compose (`:feature:discover`). This route
+ * supplies Android strings and the app's info button. The bottom bar belongs to the app root
+ * (`Navigation.kt`).
  */
 @Composable
-fun DiscoverRoute(onAddSensor: () -> Unit, onMyDevices: () -> Unit, viewModel: DiscoverViewModel = hiltViewModel()) {
+fun DiscoverRoute(onAddSensor: () -> Unit, viewModel: DiscoverViewModel = hiltViewModel()) {
     val showPublic by viewModel.showPublicSensors.collectAsStateWithLifecycle()
     val state by viewModel.controller.state.collectAsStateWithLifecycle()
-    var showSettings by rememberSaveable { mutableStateOf(false) }
     // Back first returns the sheet to peek, then leaves the screen.
     BackHandler(enabled = state.selected != null) { viewModel.controller.selectCell(null) }
 
-    Column(Modifier.fillMaxSize()) {
-        DiscoverScreen(
-            controller = viewModel.controller,
-            strings = discoverStrings(),
-            networkAllowed = showPublic,
-            onAddSensor = onAddSensor,
-            modifier = Modifier.weight(1f),
-            infoButton = { info, modifier -> InfoButton(InfoContent(info.title, info.body), modifier) },
-        )
-        NavigationBar {
-            NavigationBarItem(
-                selected = true,
-                onClick = {},
-                icon = { Icon(Icons.Outlined.Map, contentDescription = null) },
-                label = { Text(stringResource(R.string.tab_discover)) },
-            )
-            NavigationBarItem(
-                selected = false,
-                onClick = onMyDevices,
-                icon = { Icon(Icons.Outlined.Sensors, contentDescription = null) },
-                label = { Text(stringResource(R.string.tab_my_devices)) },
-            )
-            NavigationBarItem(
-                selected = false,
-                onClick = { showSettings = true },
-                icon = { Icon(Icons.Outlined.Settings, contentDescription = null) },
-                label = { Text(stringResource(R.string.settings_title)) },
-            )
-        }
-    }
-    if (showSettings) SettingsSheet(onDismiss = { showSettings = false })
+    DiscoverScreen(
+        controller = viewModel.controller,
+        strings = discoverStrings(),
+        networkAllowed = showPublic,
+        onAddSensor = onAddSensor,
+        modifier = Modifier.fillMaxSize(),
+        infoButton = { info, modifier -> InfoButton(InfoContent(info.title, info.body), modifier) },
+    )
 }
 
 @Composable

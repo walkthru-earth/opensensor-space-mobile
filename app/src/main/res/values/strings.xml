@@ -916,5 +916,4 @@
     </plurals>
     <string name="settings_public_sensors">Show public sensors</string>
     <string name="settings_public_sensors_body">When off, the map uses no internet and shows only sample data.</string>
-    <string name="scan_discover">Discover map</string>
 </resources>

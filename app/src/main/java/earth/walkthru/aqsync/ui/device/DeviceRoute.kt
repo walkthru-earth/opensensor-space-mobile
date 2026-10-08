@@ -35,7 +35,6 @@ import earth.walkthru.aqsync.ui.permissions.LanPermission
 import earth.walkthru.aqsync.ui.permissions.rememberBluetoothAccess
 import earth.walkthru.aqsync.ui.permissions.rememberLocalNetworkAccess
 import earth.walkthru.aqsync.ui.permissions.rememberNotificationPermission
-import earth.walkthru.aqsync.ui.settings.SettingsSheet
 
 /**
  * Stateful entry for the Device screen: the ViewModel, one-off events, the companion-device and
@@ -51,6 +50,7 @@ fun DeviceRoute(
     onOpenHistory: () -> Unit,
     onOpenFiles: () -> Unit,
     onOpenDebug: () -> Unit,
+    onOpenSettings: () -> Unit,
     onDisconnected: () -> Unit,
     viewModel: DeviceViewModel = hiltViewModel<DeviceViewModel, DeviceViewModel.Factory>(key = address, creationCallback = { it.create(address) }),
 ) {
@@ -59,7 +59,6 @@ fun DeviceRoute(
     val sensorHistory by viewModel.sensorHistory.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
-    var showSettings by remember { mutableStateOf(false) }
     var confirmReboot by remember { mutableStateOf(false) }
     var confirmRotate by remember { mutableStateOf(false) }
     var confirmBonds by remember { mutableStateOf(false) }
@@ -106,7 +105,7 @@ fun DeviceRoute(
                 DeviceAction.OpenHistory -> onOpenHistory()
                 DeviceAction.OpenFiles -> onOpenFiles()
                 DeviceAction.OpenDebug -> onOpenDebug()
-                DeviceAction.OpenSettings -> showSettings = true
+                DeviceAction.OpenSettings -> onOpenSettings()
                 DeviceAction.Disconnect -> { viewModel.disconnect(); onDisconnected() }
                 DeviceAction.Reconnect -> bluetooth.run { viewModel.reconnect() }
                 DeviceAction.RefreshConfig -> viewModel.refreshConfig()
@@ -142,8 +141,6 @@ fun DeviceRoute(
             }
         },
     )
-
-    if (showSettings) SettingsSheet(onDismiss = { showSettings = false })
 
     if (confirmReboot) {
         AlertDialog(

@@ -54,7 +54,7 @@ import earth.walkthru.aqsync.data.history.HistorySeries
 import earth.walkthru.aqsync.data.history.HistoryWindow
 import earth.walkthru.aqsync.data.history.MetricSpec
 import earth.walkthru.aqsync.data.history.Metrics
-import earth.walkthru.aqsync.ui.components.DeviceBottomBar
+import earth.walkthru.aqsync.ui.components.DeviceSectionTabs
 import earth.walkthru.aqsync.ui.components.DeviceTab
 import earth.walkthru.aqsync.ui.components.Eyebrow
 import earth.walkthru.aqsync.ui.components.InfoButton
@@ -92,18 +92,18 @@ fun HistoryScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.history_title)) },
-                actions = { TransportChip(state.transport, Modifier.padding(end = 12.dp)) },
-            )
-        },
-        bottomBar = {
-            DeviceBottomBar(DeviceTab.HISTORY) {
-                when (it) {
-                    DeviceTab.TODAY -> onOpenToday()
-                    DeviceTab.FILES -> onOpenFiles()
-                    DeviceTab.DEVICE -> onOpenDevice()
-                    DeviceTab.HISTORY -> Unit
+            Column {
+                TopAppBar(
+                    title = { Text(stringResource(R.string.history_title)) },
+                    actions = { TransportChip(state.transport, Modifier.padding(end = 12.dp)) },
+                )
+                DeviceSectionTabs(DeviceTab.HISTORY, containerColor = MaterialTheme.colorScheme.surface) {
+                    when (it) {
+                        DeviceTab.TODAY -> onOpenToday()
+                        DeviceTab.FILES -> onOpenFiles()
+                        DeviceTab.DEVICE -> onOpenDevice()
+                        DeviceTab.HISTORY -> Unit
+                    }
                 }
             }
         },

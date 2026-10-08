@@ -45,13 +45,13 @@ private enum class Tab { DISCOVER, MY_DEVICES, SETTINGS }
 private const val SHOW_PUBLIC_KEY = "discover.showPublicSensors"
 
 /**
- * The iOS root: three tabs, Discover, My devices and Settings, as on Android. Discover is the start
- * tab when no device is paired ([startOnDiscover], from the app's saved device access).
+ * The iOS root: one bottom bar with three tabs, Discover, My devices and Settings, as on Android.
+ * Discover is always the start tab (owner decision 2026-10-08). No other screen draws a bar.
  */
 @Composable
-internal fun AppRoot(startOnDiscover: Boolean, companion: @Composable () -> Unit) {
+internal fun AppRoot(companion: @Composable () -> Unit) {
     val defaults = remember { NSUserDefaults.standardUserDefaults }
-    var tab by rememberSaveable { mutableStateOf(if (startOnDiscover) Tab.DISCOVER else Tab.MY_DEVICES) }
+    var tab by rememberSaveable { mutableStateOf(Tab.DISCOVER) }
     var showPublic by remember { mutableStateOf(defaults.objectForKey(SHOW_PUBLIC_KEY) == null || defaults.boolForKey(SHOW_PUBLIC_KEY)) }
     val scope = rememberCoroutineScope()
     val controller = remember {
