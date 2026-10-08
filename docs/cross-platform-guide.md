@@ -123,7 +123,7 @@ signal blue and teal) and `app/globals.css` (type and shape). The apps follow it
 | Layer | Owner | Notes |
 | --- | --- | --- |
 | Brand tokens (colour roles, type, radii, spacing) | `:ui:designsystem` `commonMain`, values copied from the website registry | Light and dark from the same role names (`main`, `ink`, `paper`, `surface`, `accent`, `deep`, `text`, `muted`, `border`) |
-| Scientific colours (air-quality bands) | `AirMood` in `:core:history` plus the design system mapping | Never derived from brand colours, never changed for aesthetics |
+| Scientific colours (health scales) | `:core:airquality` `WhoGuidelines` and `WhoStep` | WHO 2021 guideline and interim targets, one colour-blind checked palette, never derived from brand colours, never changed for aesthetics |
 | Material 3 theme | `:ui:designsystem` maps tokens to a `ColorScheme`, `Typography` and `Shapes` | Android and iOS render the same theme through Compose |
 | Fonts | Quicksand (Latin) and Cairo (Arabic), both OFL variable TTFs, Compose resources in `:ui:designsystem` with their licence texts | No runtime font download, the app works offline. Same faces and weights on Android and iOS |
 | Floating controls | `:ui:designsystem` `FloatingControls.kt` | One style for every control over content, see below |
@@ -160,6 +160,34 @@ because the shared screens are Compose.
 Never use Material's baseline colours on either platform. Both entry points wrap content in the
 brand theme (`AqSyncTheme` on Android, `OpenSensorTheme` on iOS), so nothing renders in the
 default purple.
+
+### Health scales and charts (the global data rule)
+
+Every value that has a published health scale is judged against it, the same way on the map,
+in charts, on cards and in the mood face. The scale lives once in `:core:airquality`.
+
+- **WHO 2021, cited.** PM2.5 and PM10 use the WHO global air quality guidelines (2021), the
+  24-hour guideline and its four interim targets (PM2.5 15, 25, 37.5, 50, 75 µg/m³. PM10 45,
+  50, 75, 100, 150 µg/m³). A value at or below an edge belongs to the cleaner step. Properties
+  without a WHO value (CO₂, temperature, humidity) have no scale and use the neutral viridis
+  ramp. The app never invents a scale.
+- **Fixed, not relative.** A step colour means the same thing in every viewport, window and
+  screen. Percentile stretching is only for properties without a scale.
+- **Say the averaging.** The WHO values are 24-hour means. A 1-hour or 7-day mean is still
+  coloured by the steps, and the legend says it is compared with the 24-hour guideline.
+- **Charts.** Bars or points take the step colour, the background stays neutral, the y axis
+  starts at zero, the guideline is a labelled dashed line, and the y maximum snaps up to a WHO
+  edge so the guideline is always in view and charts compare. Outliers above the 95th
+  percentile are capped and labelled.
+- **Colour is never alone.** Every coloured value also shows its step name in text, and the
+  palette runs light to dark so its order survives greyscale and colour-blind vision
+  (`WhoPaletteTest`).
+- **Not an AQI.** A WHO step is not an index. The live number is a short snapshot and is never
+  presented as a 24-hour mean.
+
+Sources: [WHO global air quality guidelines, 2021](https://www.who.int/publications/i/item/9789240034228),
+[Mazama Science, qualitative display of air quality data](https://working-with-data.mazamascience.com/2021/03/18/qualitative-display-of-air-quality-data/),
+[South Coast AQMD accessible AQI scale](https://www.aqmd.gov/home/research/pubs-docs-reports/newsletters/may-june-july-2022/accessible-aqi-scale).
 
 ### Platform conventions that stay native
 
