@@ -1,8 +1,8 @@
 # Store compliance checklist (Google Play and App Store)
 
 **Scope:** what the store forms ask and how this app answers today. Permission timing, purpose
-strings, privacy manifest, Data safety and privacy label answers, and the open items that need an
-owner decision before the first store submission.
+strings, privacy manifest, Data safety and privacy label answers, and the conservative decisions taken for
+Discover and uploads before the first store submission.
 **Code:** `app/src/main/AndroidManifest.xml`, `ui/permissions/`, `ios/App/Info.plist`,
 `ios/App/PrivacyInfo.xcprivacy`. **Related:** [screens.md](screens.md) (permission timing table),
 [devices-and-discovery.md](devices-and-discovery.md) (network boundary, public feed, uploads).
@@ -50,27 +50,44 @@ State as of 2026-10-08. Re-check the linked store pages before each submission. 
 | Account deletion (Guideline 5.1.1(v)) | Not applicable, no account | |
 | Tracking (ATT) | No tracking, no IDFA | |
 
-## Before Discover or uploads ship (owner decisions)
+## Decisions for Discover and uploads (conservative defaults, 2026-10-08)
 
-1. **Feed requests reveal an IP address.** Anonymous GETs to the public feed and basemap still send
-   the phone's IP address to the host. Decide whether the host logs it. If logs are kept, Play Data
-   safety and the Apple label likely need "approximate location" or "other identifiers" with
-   purpose "App functionality", not linked to identity. If the host keeps no logs, record that.
-   Add the feed and basemap domains to the privacy manifest only if they track, which they must not.
-2. **Upload cell resolution versus "approximate location".** Uploads carry an H3 cell. Play
-   treats location finer than about 3 km² as precise (verify against the current Data safety
-   help before relying on this figure). H3 resolution 8 is about 0.7 km², resolution 7 about
-   5 km². Publishing at resolution 8 likely means declaring precise location as collected and
-   shared. Capping the published cell at resolution 7 keeps it approximate on both stores.
-3. **Uploads make the app collect data.** With any upload on, Data safety needs collected and
-   shared data types (sensor readings under "App activity" or "Other", plus location as above),
-   encryption in transit "Yes" (HTTPS), and a deletion path for a device's published data. The
-   Apple label changes from "Data Not Collected" to listed types, not linked to the user, no
-   tracking.
-4. **Export compliance with HTTPS uploads.** Standard HTTPS through `URLSession` stays exempt, so
-   `ITSAppUsesNonExemptEncryption` can stay false. Re-check if any custom crypto is added.
-5. **Privacy policy URL.** Both stores require one. Today it can state "no data collected". Update
-   it in the same release that adds the feed or uploads.
+The owner asked for the legally safe choice wherever a question was open. These are product rules,
+not legal advice. Have counsel read the privacy policy before the first public release.
+
+1. **Published cells are capped at H3 resolution 7** (about 5 km²). Play's Data safety guidance
+   treats location finer than about 3 km² as precise. Resolution 8 (about 0.7 km²) could count as
+   precise location, resolution 7 stays approximate on both stores. The owner may pick a coarser
+   cell, never a finer one. `docs/devices-and-discovery.md` (owned by the Discover work) must be
+   updated to match: its "Precision cap" says resolution 8 today.
+2. **Feed and basemap hosting keeps no access logs.** Use static hosting with request logging off,
+   no cookies, no query identifiers and no third-party scripts or tiles. If a host cannot turn
+   logging off, declare it. Play Data safety "Device or other IDs" and Apple "Device ID", both for
+   App functionality, not linked to the user, no tracking. Never add a tracking domain to the
+   privacy manifest.
+3. **Uploads stay opt-in per device, off by default**, with one confirmation that lists what is
+   shared (readings, the resolution 7 cell, the public name) and what never is (exact location,
+   station UUID, MAC address, Wi-Fi, PIN, token). The release that adds uploads must also add a
+   "Stop sharing and delete" action that removes that device's published data from the feed, and
+   update both store forms in the same release.
+   - Play Data safety. Collected and shared, "Approximate location" and "Other app activity or
+     Other" (sensor readings), purpose App functionality, optional, encrypted in transit (HTTPS),
+     deletion available.
+   - App Store label. "Coarse Location" and "Other Data", not linked to the user, not used for
+     tracking.
+4. **Export compliance.** HTTPS through the platform stacks only. No custom cryptography.
+   `ITSAppUsesNonExemptEncryption` stays false.
+5. **Privacy policy.** [privacy-policy.md](privacy-policy.md) is the draft to host at a public URL
+   and link in Play Console, App Store Connect and the app's Settings About line. It describes
+   today's behaviour and already covers the opt-in sharing rules above.
+6. **Children.** Target audience 13 and over in Play's target audience form, and no claims of
+   being made for children, so the Families policy and COPPA rules for child-directed apps do not
+   apply.
+7. **Play foreground service declaration.** Type `dataSync`. Description to paste: "Copies air
+   quality data files from the user's own Bluetooth or Wi-Fi sensor to the phone when the user
+   starts a sync, or on the schedule the user turned on per device. The transfer must finish
+   while the screen is off. A progress notification with a Stop action is shown." Attach a short
+   screen recording of Sync now with the notification.
 
 ## Gate before each submission
 
@@ -78,3 +95,4 @@ State as of 2026-10-08. Re-check the linked store pages before each submission. 
 - [ ] Fresh install on a phone shows no permission prompt at launch (Android and iPhone), recorded in `docs/status.md`.
 - [ ] Xcode Organizer privacy report of the archive matches `PrivacyInfo.xcprivacy`.
 - [ ] Data safety form and App privacy answers match this page.
+- [ ] The privacy policy URL is live and matches what the release does.
