@@ -3,6 +3,8 @@ package earth.walkthru.aqsync.data.sync
 import earth.walkthru.aqsync.data.ble.DeviceErrorException
 import earth.walkthru.aqsync.data.ble.DeviceSession
 import earth.walkthru.aqsync.data.ble.WindowLostException
+import earth.walkthru.aqsync.data.coroutines.WallClock
+import earth.walkthru.aqsync.data.coroutines.suspendRunCatching
 import earth.walkthru.aqsync.data.history.HistoryIndexer
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
@@ -13,7 +15,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -60,13 +62,21 @@ class SyncAbortedException(message: String, cause: Throwable? = null) : Exceptio
  * keeps failing is the *file* marked [FileOutcome.Failed]; the sync goes on with the next file.
  */
 @Singleton
-class SyncEngine @Inject constructor(
+class SyncEngine(
     private val archive: FileArchive,
     private val archivedFileDao: ArchivedFileDao,
     private val historyIndexer: HistoryIndexer,
+    /** `windowRetryBackoffMs × attempt` between re-reads of a lost window; tests shorten it. */
+    private val windowRetryBackoffMs: Long = WINDOW_RETRY_BACKOFF_MS,
+    private val clock: WallClock = WallClock.System,
 ) {
-    /** `WINDOW_RETRY_BACKOFF_MS × attempt` between re-reads of a lost window; tests shorten it. */
-    var windowRetryBackoffMs: Long = WINDOW_RETRY_BACKOFF_MS
+    @Inject
+    constructor(
+        archive: FileArchive,
+        archivedFileDao: ArchivedFileDao,
+        historyIndexer: HistoryIndexer,
+        clock: WallClock,
+    ) : this(archive, archivedFileDao, historyIndexer, WINDOW_RETRY_BACKOFF_MS, clock)
 
     suspend fun download(
         session: DeviceSession,
@@ -131,7 +141,7 @@ class SyncEngine @Inject constructor(
                                 bytes = opened.size,
                                 crc32 = opened.crc32,
                                 sha256 = sha256,
-                                syncedAtEpochMs = System.currentTimeMillis(),
+                                syncedAtEpochMs = clock.nowEpochMs(),
                                 sourceDevice = sourceDevice,
                             ),
                             existing,
@@ -236,7 +246,7 @@ class SyncEngine @Inject constructor(
                     bytes = opened.size,
                     crc32 = opened.crc32,
                     sha256 = sha256,
-                    syncedAtEpochMs = System.currentTimeMillis(),
+                    syncedAtEpochMs = clock.nowEpochMs(),
                     sourceDevice = sourceDevice,
                 )
                 // Index the verified bytes now (rows, time span, …) so History never has to re-open the file.
@@ -249,7 +259,7 @@ class SyncEngine @Inject constructor(
         } finally {
             // Best effort, even when we are being cancelled: the device closes implicitly on the
             // next OPEN or on disconnect anyway, so a failure here is not an error.
-            runCatching { withContext(NonCancellable) { withTimeout(3_000) { session.close(handle) } } }
+            withContext(NonCancellable) { suspendRunCatching { withTimeoutOrNull(CLOSE_TIMEOUT_MS) { session.close(handle) } } }
         }
     }
 
@@ -259,5 +269,8 @@ class SyncEngine @Inject constructor(
 
         /** Linear backoff: 300 ms, 600 ms, … lets a busy link catch up without stalling the sync. */
         const val WINDOW_RETRY_BACKOFF_MS = 300L
+
+        /** Best-effort `CLOSE` budget; the device closes implicitly on the next `OPEN` anyway. */
+        const val CLOSE_TIMEOUT_MS = 3_000L
     }
 }

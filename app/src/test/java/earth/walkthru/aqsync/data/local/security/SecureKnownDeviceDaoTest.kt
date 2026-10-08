@@ -12,11 +12,12 @@ import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.security.KeyStoreException
+import java.security.UnrecoverableKeyException
 import javax.crypto.AEADBadTagException
 
 class SecureKnownDeviceDaoTest {
     @Test
-    fun `DAO stores ciphertext and returns plaintext`() = runTest {
+    fun `DAO stores ciphertext and only the credential store returns plaintext`() = runTest {
         val delegate = FakeKnownDeviceDao()
         val cipher = FakeTokenCipher()
         val secure = SecureKnownDeviceDao(delegate, cipher)
@@ -24,9 +25,37 @@ class SecureKnownDeviceDaoTest {
 
         secure.upsert(device(token))
 
-        assertFalse(delegate.rows.single().lanToken == token)
         assertEquals("enc1:$token", delegate.rows.single().lanToken)
-        assertEquals(token, secure.get(ADDRESS)!!.lanToken)
+        val row = secure.get(ADDRESS)!!
+        assertTrue(row.hasLanToken)
+        assertEquals("row reads stay ciphertext", "enc1:$token", row.lanToken)
+        assertEquals("enc1:$token", secure.observeAll().first().single().lanToken)
+        assertEquals(token, secure.lanToken(ADDRESS))
+    }
+
+    @Test
+    fun `row reads never decrypt`() = runTest {
+        val delegate = FakeKnownDeviceDao(device("enc1:tampered", autoSync = true))
+        val cipher = FakeTokenCipher().apply { decryptFailure = AssertionError("row reads must not decrypt") }
+        val secure = SecureKnownDeviceDao(delegate, cipher)
+
+        secure.observeAll().first()
+        secure.get(ADDRESS)
+        secure.autoSyncDevices()
+        secure.allByLastConnected()
+        secure.findByStation("station")
+
+        assertEquals(0, cipher.decrypts)
+    }
+
+    @Test
+    fun `upserting a read row keeps its ciphertext unchanged`() = runTest {
+        val delegate = FakeKnownDeviceDao(device("enc1:" + "cd".repeat(32)))
+        val secure = SecureKnownDeviceDao(delegate, FakeTokenCipher())
+
+        secure.upsert(secure.get(ADDRESS)!!.copy(firmware = "v6"))
+
+        assertEquals("enc1:" + "cd".repeat(32), delegate.rows.single().lanToken)
     }
 
     @Test
@@ -68,45 +97,48 @@ class SecureKnownDeviceDaoTest {
     }
 
     @Test
-    fun `missing key clears only token and port while preserving row`() = runTest {
-        val original = device("enc1:lost", autoSync = true)
+    fun `transient keystore failure keeps the credential`() = runTest {
+        val original = device("enc1:kept", autoSync = true)
         val delegate = FakeKnownDeviceDao(original)
-        val cipher = FakeTokenCipher().apply { decryptFailure = KeyStoreException("missing key") }
+        val cipher = FakeTokenCipher().apply { decryptFailure = KeyStoreException("keystore busy") }
         val secure = SecureKnownDeviceDao(delegate, cipher)
 
-        val read = secure.get(ADDRESS)!!
+        val failure = runCatching { secure.lanToken(ADDRESS) }.exceptionOrNull()
 
-        assertEquals(original.copy(lanToken = null, lanPort = null), read)
-        assertEquals(original.copy(lanToken = null, lanPort = null), delegate.rows.single())
+        assertTrue(failure is KeyStoreException)
+        assertEquals(original, delegate.rows.single())
     }
 
     @Test
-    fun `authentication failure clears token and port on list reads`() = runTest {
+    fun `unrecoverable key failure keeps the credential`() = runTest {
+        val original = device("enc1:kept")
+        val delegate = FakeKnownDeviceDao(original)
+        val cipher = FakeTokenCipher().apply { decryptFailure = UnrecoverableKeyException("locked") }
+        val secure = SecureKnownDeviceDao(delegate, cipher)
+
+        assertTrue(runCatching { secure.lanToken(ADDRESS) }.exceptionOrNull() is UnrecoverableKeyException)
+        assertEquals(original, delegate.rows.single())
+    }
+
+    @Test
+    fun `authentication failure clears only token and port`() = runTest {
         val original = device("enc1:tampered", autoSync = true)
         val delegate = FakeKnownDeviceDao(original)
         val cipher = FakeTokenCipher().apply { decryptFailure = AEADBadTagException("bad tag") }
         val secure = SecureKnownDeviceDao(delegate, cipher)
 
-        val reads = listOf(
-            secure.autoSyncDevices().single(),
-            secure.allByLastConnected().single(),
-            secure.findByStation("station")!!,
-        )
-
-        reads.forEach { assertEquals(original.copy(lanToken = null, lanPort = null), it) }
+        assertEquals(null, secure.lanToken(ADDRESS))
         assertEquals(original.copy(lanToken = null, lanPort = null), delegate.rows.single())
     }
 
     @Test
-    fun `malformed encrypted ciphertext does not crash flow`() = runTest {
+    fun `malformed encrypted ciphertext is cleared`() = runTest {
         val original = device("enc1:malformed")
         val delegate = FakeKnownDeviceDao(original)
         val cipher = FakeTokenCipher().apply { decryptFailure = IllegalArgumentException("Malformed encrypted LAN token") }
         val secure = SecureKnownDeviceDao(delegate, cipher)
 
-        val emitted = secure.observeAll().first().single()
-
-        assertEquals(original.copy(lanToken = null, lanPort = null), emitted)
+        assertEquals(null, secure.lanToken(ADDRESS))
         assertEquals(original.copy(lanToken = null, lanPort = null), delegate.rows.single())
     }
 
@@ -116,7 +148,7 @@ class SecureKnownDeviceDaoTest {
         val cipher = FakeTokenCipher().apply { decryptFailure = IllegalArgumentException("invalid token programming error") }
         val secure = SecureKnownDeviceDao(delegate, cipher)
 
-        val failure = runCatching { secure.get(ADDRESS) }.exceptionOrNull()
+        val failure = runCatching { secure.lanToken(ADDRESS) }.exceptionOrNull()
         assertTrue(failure is IllegalArgumentException)
         assertEquals("not-encrypted", delegate.rows.single().lanToken)
     }
@@ -127,7 +159,7 @@ class SecureKnownDeviceDaoTest {
         val cipher = FakeTokenCipher().apply { decryptFailure = AEADBadTagException("bad tag") }
         val secure = SecureKnownDeviceDao(delegate, cipher)
 
-        val failure = runCatching { secure.get(ADDRESS) }.exceptionOrNull()
+        val failure = runCatching { secure.lanToken(ADDRESS) }.exceptionOrNull()
         assertTrue(failure is IllegalStateException)
     }
 
@@ -153,7 +185,8 @@ class SecureKnownDeviceDaoTest {
         private val migrationNeeded: Boolean = false,
     ) : LanTokenCipherContract {
         var encryptFailure: Throwable? = null
-        var decryptFailure: Exception? = null
+        var decryptFailure: Throwable? = null
+        var decrypts = 0
         var markedComplete = false
         val events = mutableListOf<String>()
 
@@ -164,6 +197,7 @@ class SecureKnownDeviceDaoTest {
         }
 
         override fun decrypt(stored: String): String {
+            decrypts++
             decryptFailure?.let { throw it }
             return stored.removePrefix("enc1:")
         }

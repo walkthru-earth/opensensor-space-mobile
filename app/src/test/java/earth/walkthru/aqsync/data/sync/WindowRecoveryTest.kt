@@ -41,7 +41,7 @@ class WindowRecoveryTest {
         tmp = Files.createTempDirectory("aqsync-window").toFile()
         fake = FakeTransport(chunkDelayMs = 0, liveIntervalMs = 3_600_000)
         session = DeviceSession(fake).also { it.staleFrameLogger = staleLog::add }
-        engine = FileArchive(tmp).let { a -> SyncEngine(a, dao, HistoryIndexer(a, dao)) }.also { it.windowRetryBackoffMs = 5 }
+        engine = FileArchive(tmp).let { a -> SyncEngine(a, dao, HistoryIndexer(a, dao), windowRetryBackoffMs = 5) }
         withTimeout(10_000) { fake.connect() }
     }
 

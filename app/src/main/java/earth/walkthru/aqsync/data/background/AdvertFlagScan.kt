@@ -19,12 +19,15 @@ import androidx.core.content.edit
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.qualifiers.ApplicationContext
 import earth.walkthru.aqsync.data.TransportFactory
+import earth.walkthru.aqsync.data.coroutines.ApplicationScope
+import earth.walkthru.aqsync.data.coroutines.IoDispatcher
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
 import earth.walkthru.aqsync.data.protocol.Advertisement
 import earth.walkthru.aqsync.data.protocol.AqUuids
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -172,6 +175,12 @@ class AdvertFlagScan @Inject constructor(
 class AdvertScanReceiver : BroadcastReceiver() {
     @Inject lateinit var scan: AdvertFlagScan
 
+    @Inject @ApplicationScope
+    lateinit var appScope: CoroutineScope
+
+    @Inject @IoDispatcher
+    lateinit var io: CoroutineDispatcher
+
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != AdvertFlagScan.ACTION_SCAN_RESULT) return
         val error = intent.getIntExtra(BluetoothLeScanner.EXTRA_ERROR_CODE, 0)
@@ -182,12 +191,8 @@ class AdvertScanReceiver : BroadcastReceiver() {
         val type = intent.getIntExtra(BluetoothLeScanner.EXTRA_CALLBACK_TYPE, ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
         val results = IntentCompat.getParcelableArrayListExtra(intent, BluetoothLeScanner.EXTRA_LIST_SCAN_RESULT, ScanResult::class.java) ?: return
         val pending = goAsync()
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                scan.onResults(type, results)
-            } finally {
-                pending.finish()
-            }
+        launchReceiverWork(appScope, "AdvertFlagScan", finish = pending::finish) {
+            withContext(io) { scan.onResults(type, results) }
         }
     }
 }

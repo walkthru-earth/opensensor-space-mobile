@@ -36,6 +36,17 @@ class SyncPlannerTest {
     }
 
     @Test
+    fun `safe name accepts 399 bytes and rejects 400 per the contract`() {
+        val suffix = ".parquet"
+        val at399 = "a".repeat(399 - suffix.length) + suffix
+        val at400 = "a".repeat(400 - suffix.length) + suffix
+        assertEquals(399, at399.encodeToByteArray().size)
+        assertTrue(SafeName.isValid(at399))
+        assertFalse(SafeName.isValid(at400))
+        assertFalse("the old 512 limit must not come back", SafeName.isValid("a".repeat(512 - suffix.length) + suffix))
+    }
+
+    @Test
     fun `plan downloads only what the archive lacks and orders dated files first`() {
         val manifest = listOf(
             Frame.File(14_080, bench),

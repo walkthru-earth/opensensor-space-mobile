@@ -391,7 +391,7 @@ class AutoSyncRunnerTest {
         val peers = java.util.concurrent.ConcurrentHashMap<String, FakeTransport>()
         var beforeSync: suspend (KnownDevice) -> Unit = {}
         val dao = InMemoryDao()
-        private val engine = FileArchive(tmp).let { a -> SyncEngine(a, dao, HistoryIndexer(a, dao)) }.also { it.windowRetryBackoffMs = 1 }
+        private val engine = FileArchive(tmp).let { a -> SyncEngine(a, dao, HistoryIndexer(a, dao), windowRetryBackoffMs = 1) }
 
         val devices = ArrayList<KnownDevice>()
         var session: String? = null

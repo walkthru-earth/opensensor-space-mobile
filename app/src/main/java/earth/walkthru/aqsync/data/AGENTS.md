@@ -19,7 +19,13 @@ background sync; do not fork transfer logic.
   device-reported offset over received bytes. Keep read windows measured.
 - No secret is logged. `SET_CONFIG` is recorded as opcode only. Pairing and
   state-changing calls need the explicit paths and confirmations in root
-  `AGENTS.md`; raw debug commands cannot bypass them.
+  `AGENTS.md`; `DeviceSession.rawCommand` refuses `REBOOT` and `SET_CONFIG`.
+- Plaintext LAN tokens stay in the data layer. DAO rows carry ciphertext; only
+  `LanCredentialStore` decrypts, when a LAN transport is built.
+- Coroutines: wrap suspend calls in `suspendRunCatching`, never `runCatching`.
+  Inject dispatchers, `@ApplicationScope`, `WallClock` and `MonotonicTime`
+  (`data/coroutines/`, `data/di/CoroutinesModule.kt`). Commands and background
+  runs take the repository's operation gate; job handles change under its lock.
 - Work that outlives a screen uses WorkManager and its `dataSync` foreground
   notification. The worker does not pair or scan. A LAN WifiLock is held only
   during an active LAN transfer and released in `finally`.
