@@ -17,6 +17,10 @@ kotlin {
             implementation(project(":core:settings"))
             implementation(project(":feature:discover"))
             implementation(project(":feature:settings"))
+            // The shared shell: bottom bar, per-tab stacks, Back and the iOS edge swipe.
+            implementation(project(":feature:shell"))
+            // viewModel { } holders for controllers kept per navigation entry.
+            implementation(libs.jetbrains.lifecycle.viewmodel.compose)
             implementation(project(":ui:designsystem"))
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
