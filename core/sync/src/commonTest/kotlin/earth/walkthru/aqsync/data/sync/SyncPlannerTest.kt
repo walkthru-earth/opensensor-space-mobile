@@ -2,10 +2,10 @@ package earth.walkthru.aqsync.data.sync
 
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.protocol.SafeName
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class SyncPlannerTest {
     private val station = "53315f5f-cb85-4d8d-b623-d56266084189"
@@ -15,7 +15,7 @@ class SyncPlannerTest {
     private val legacy = "legacy-parquet/f1179d54856fa20c31038836e5ec177e-0-6-0.parquet"
 
     @Test
-    fun `hive partitions are recognised from real device names`() {
+    fun hivePartitionsAreRecognisedFromRealDeviceNames() {
         val d = HivePartition.of(dated) as HivePartition.Dated
         assertEquals("2026-09-16", d.isoDate)
         assertEquals(station, d.station)
@@ -26,7 +26,13 @@ class SyncPlannerTest {
     }
 
     @Test
-    fun `safe name mirrors the firmware whitelist`() {
+    fun singleDigitMonthAndDayArePaddedInTheIsoDate() {
+        val d = HivePartition.of("station=$station/year=2026/month=3/day=7/data.parquet") as HivePartition.Dated
+        assertEquals("2026-03-07", d.isoDate)
+    }
+
+    @Test
+    fun safeNameMirrorsTheFirmwareWhitelist() {
         assertTrue(SafeName.isValid(dated))
         assertTrue(SafeName.isValid(legacy))
         assertFalse(SafeName.isValid("../etc/passwd.parquet"))
@@ -37,18 +43,18 @@ class SyncPlannerTest {
     }
 
     @Test
-    fun `safe name accepts 399 bytes and rejects 400 per the contract`() {
+    fun safeNameAccepts399BytesAndRejects400PerTheContract() {
         val suffix = ".parquet"
         val at399 = "a".repeat(399 - suffix.length) + suffix
         val at400 = "a".repeat(400 - suffix.length) + suffix
         assertEquals(399, at399.encodeToByteArray().size)
         assertTrue(SafeName.isValid(at399))
         assertFalse(SafeName.isValid(at400))
-        assertFalse("the old 512 limit must not come back", SafeName.isValid("a".repeat(512 - suffix.length) + suffix))
+        assertFalse(SafeName.isValid("a".repeat(512 - suffix.length) + suffix), "the old 512 limit must not come back")
     }
 
     @Test
-    fun `plan downloads only what the archive lacks and orders dated files first`() {
+    fun planDownloadsOnlyWhatTheArchiveLacksAndOrdersDatedFilesFirst() {
         val manifest = listOf(
             Frame.File(14_080, bench),
             Frame.File(18_745, unsynced),
@@ -67,7 +73,7 @@ class SyncPlannerTest {
     }
 
     @Test
-    fun `size drift on an immutable file is a mismatch not a re-download`() {
+    fun sizeDriftOnAnImmutableFileIsAMismatchNotAReDownload() {
         val plan = SyncPlanner.plan(
             station,
             listOf(Frame.File(9_427, dated)),
@@ -79,7 +85,7 @@ class SyncPlannerTest {
     }
 
     @Test
-    fun `partial download resumes and counts only the remaining bytes`() {
+    fun partialDownloadResumesAndCountsOnlyTheRemainingBytes() {
         val plan = SyncPlanner.plan(
             station,
             listOf(Frame.File(41_986, unsynced)),
@@ -93,14 +99,14 @@ class SyncPlannerTest {
     }
 
     @Test
-    fun `unsafe names are never stored`() {
+    fun unsafeNamesAreNeverStored() {
         val plan = SyncPlanner.plan(station, listOf(Frame.File(10, "../x.parquet")), emptyList())
         assertEquals(FileSyncState.INVALID_NAME, plan.entries.single().state)
         assertTrue(plan.toDownload.isEmpty())
     }
 
     @Test
-    fun `archive identity is scoped to the station`() {
+    fun archiveIdentityIsScopedToTheStation() {
         val plan = SyncPlanner.plan(
             station,
             listOf(Frame.File(9_427, dated)),

@@ -13,7 +13,7 @@ import earth.walkthru.aqsync.data.protocol.SafeName
 sealed interface HivePartition {
     /** Rows with UTC: `station=…/year=YYYY/month=MM/day=DD/`. */
     data class Dated(val station: String, val year: Int, val month: Int, val day: Int) : HivePartition {
-        val isoDate: String get() = "%04d-%02d-%02d".format(year, month, day)
+        val isoDate: String get() = "${pad(year, 4)}-${pad(month, 2)}-${pad(day, 2)}"
     }
 
     /** Rows sampled before the clock was set: `station=…/unsynced/boot=<id>/`. */
@@ -29,6 +29,8 @@ sealed interface HivePartition {
     data class Other(val directory: String) : HivePartition
 
     companion object {
+        private fun pad(value: Int, width: Int): String = value.toString().padStart(width, '0')
+
         private val DATED = Regex("""^station=([^/]+)/year=(\d{4})/month=(\d{1,2})/day=(\d{1,2})/[^/]+$""")
         private val UNSYNCED = Regex("""^station=([^/]+)/unsynced/boot=([^/]+)/[^/]+$""")
         private val BENCH = Regex("""^benchmarks/(?:boot=([^/]+)/)?[^/]+$""")

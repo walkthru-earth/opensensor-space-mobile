@@ -1,12 +1,14 @@
 package earth.walkthru.aqsync.data.sync
 
+import earth.walkthru.aqsync.sync.monotonicMs as platformMonotonicMs
+
 /** Bound UI/rate-meter work without delaying writes, final byte counts or recovery events. */
-internal class FileProgressReporter(
+class FileProgressReporter(
     private val name: String,
     private val bytesTotal: Long,
     private val resumedFrom: Long,
     private val onProgress: (FileProgress) -> Unit,
-    private val monotonicMs: () -> Long = { System.nanoTime() / 1_000_000 },
+    private val monotonicMs: () -> Long = ::platformMonotonicMs,
 ) {
     private var last: FileProgress? = null
     private var lastReportedAt = 0L

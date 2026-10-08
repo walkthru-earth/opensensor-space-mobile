@@ -1,11 +1,11 @@
 package earth.walkthru.aqsync.data.sync
 
-import org.junit.Assert.assertEquals
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertEquals
 
 class FileProgressReporterTest {
     @Test
-    fun `burst progress is bounded and complete bytes bypass the cadence`() {
+    fun burstProgressIsBoundedAndCompleteBytesBypassTheCadence() {
         var now = 0L
         val updates = ArrayList<FileProgress>()
         val reporter = FileProgressReporter("file", 1_000, 0, updates::add, monotonicMs = { now })
@@ -24,7 +24,7 @@ class FileProgressReporterTest {
     }
 
     @Test
-    fun `recovery events and final partial bytes bypass the cadence without losing resume accounting`() {
+    fun recoveryEventsAndFinalPartialBytesBypassTheCadenceWithoutLosingResumeAccounting() {
         val updates = ArrayList<FileProgress>()
         val reporter = FileProgressReporter("file", 1_000, 400, updates::add, monotonicMs = { 0 })
         reporter.report(400, 0)
