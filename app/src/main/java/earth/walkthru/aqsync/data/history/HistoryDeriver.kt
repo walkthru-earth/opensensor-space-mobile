@@ -174,8 +174,8 @@ class HistoryDeriver @Inject constructor(
     companion object {
         private const val TAG = "HistoryDeriver"
 
-        /** Part of every day's signature: bump when the tiers' meaning changes so every day is rebuilt. 2 = per-metric rows. */
-        const val DERIVE_VERSION = 2
+        /** Part of every day's signature: bump when the tiers' meaning changes so every day is rebuilt. 2 = per-metric rows, 3 = one shared RowKey (D12). */
+        const val DERIVE_VERSION = 3
         const val DAY_NS = StationDays.DAY_NS
     }
 }

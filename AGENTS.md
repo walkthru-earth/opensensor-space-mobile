@@ -43,8 +43,8 @@ concern you are changing in `docs/README.md`.
   actions; reboot, token rotation, forgetting bonds and pairing mode `none`
   require confirmation. Debug raw commands cannot invoke `REBOOT` or `SET_CONFIG`.
 - `:core:*` stays reusable without Android, Hilt or Room. Every `:core` module
-  (`protocol`, `parquet`, `history`, `publicfeed`, `units`, `airquality`, and the
-  empty `sync`, `archive`, `settings`) compiles for JVM and iOS from `commonMain`.
+  (`protocol`, `parquet`, `history`, `publicfeed`, `units`, `airquality`, `archive`, and the
+  empty `sync`, `settings`) compiles for JVM and iOS from `commonMain`.
   Platform adapters stay in `jvmMain` and `iosMain` (streams, file mapping, zlib,
   H3). `:ui:designsystem` and `:feature:discover` are Compose for Android and iOS.
   `:ios:shared` is iOS only. Common code cannot import `java.*`; platform

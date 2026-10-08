@@ -19,7 +19,7 @@ metric registry, sensor validity/mood rules and monotonic-time estimates.
 The firmware protocol and all existing wire values are preserved.
 
 Every `:core` module (`protocol`, `parquet`, `history`, `publicfeed`, `units`, `airquality`,
-and the empty `sync`, `archive` and `settings` skeletons) has a Java 17 JVM target for Android and
+`archive`, and the empty `sync` and `settings` skeletons) has a Java 17 JVM target for Android and
 host consumers, plus `iosArm64` and `iosSimulatorArm64`. Portable source lives in `commonMain`,
 platform adapters in `jvmMain` and `iosMain`. The W2 source move is complete. No module maps
 `src/main/kotlin` any more.

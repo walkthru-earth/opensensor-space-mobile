@@ -15,7 +15,8 @@ flowchart TB
     HI[":core:history<br/>sensor rules, file index, aggregation, calendar windows"]
     PF[":core:publicfeed<br/>Discover feed port, H3, viewport cover, sample"]
     UN[":core:units<br/>display units, axis ticks"]
-    SK[":core:sync, :core:archive, :core:settings<br/>empty skeletons, planned"]
+    AR1[":core:archive<br/>layout, verifier, records, store ports"]
+    SK[":core:sync, :core:settings<br/>empty skeletons, planned"]
   end
   subgraph ui["Compose Multiplatform, Android and iOS"]
     DS[":ui:designsystem<br/>tokens, theme, fonts, floating controls"]
@@ -50,8 +51,8 @@ platform entry point. See [ios-migration.md](ios-migration.md) for current scope
 
 The graph above is today's code. [platform-parity-plan.md](platform-parity-plan.md) moves toward
 the graph below, where every rule that must give the same answer on both phones is shared and
-platform code only adapts OS services. Nothing below `:core:sync`, `:core:archive` and
-`:core:settings` exists yet beyond their empty skeletons. `:core:model` (device families and metrics
+platform code only adapts OS services. Nothing below `:core:sync` and `:core:settings`
+exists yet beyond their empty skeletons. `:core:archive` exists and Android adapts it, iOS adopts it in wave 3. `:core:model` (device families and metrics
 as data) is planned in [production-readiness-plan.md](production-readiness-plan.md) W11 and
 [devices-and-discovery.md](devices-and-discovery.md).
 
@@ -61,7 +62,7 @@ flowchart TB
     MO[":core:model (planned)<br/>devices, families, capabilities, properties, scales"]
     PR2[":core:protocol"]
     SY[":core:sync (planned)<br/>engine behind FrameLink, ArchiveStore, ArchiveIndex, CredentialStore"]
-    AR[":core:archive (planned)<br/>layout, verifier, records, store ports"]
+    AR[":core:archive<br/>layout, verifier, records, store ports"]
     ST[":core:settings (planned)<br/>DataStore preferences"]
     PQ2[":core:parquet"]
     HI2[":core:history"]
@@ -163,7 +164,8 @@ for iOS-specific guidance. SwiftUI review rules apply only if native SwiftUI vie
 | `publicfeed` → `publicfeed/` | `commonMain`: `Feed`, `ParquetFeedReader`, `H3`, `CellMap`, `CellScale`, `ViewportCover`, `TimeZoneRegions`. `jvmMain`: `UberH3Grid`. `iosMain`: `IosH3Grid` (vendored H3 C through cinterop) |
 | `units` → `units/` | `commonMain`: `Units`, `AxisTicks`. `jvmMain` and `iosMain`: `SystemUnits` (locale default) |
 | `airquality` → `airquality/` | `commonMain`: `HealthScale` (WHO 2021 guideline, interim targets, palette) |
-| `sync`, `archive`, `settings` | empty skeletons with one placeholder object each. Filled by [platform-parity-plan.md](platform-parity-plan.md) wave 2 |
+| `archive` → `data/archive/` | `commonMain`: `ArchiveLayout` (Hive paths, partials, derived days), `ArchiveVerifier` (size, CRC-32, `PAR1`), `ArchiveRecord`, `ArchivePorts` (`ArchiveStore`, `ArchiveIndex`). Android adapts the ports in `app/.../data/archive/`, iOS in wave 3 |
+| `sync`, `settings` | empty skeletons with one placeholder object each. Filled by [platform-parity-plan.md](platform-parity-plan.md) wave 2 |
 
 ### Shared sync rules in `:core:protocol`
 
