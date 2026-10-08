@@ -37,6 +37,44 @@ import earth.walkthru.aqsync.units.UnitSystem
 import earth.walkthru.aqsync.units.formatFixed
 import earth.walkthru.aqsync.units.formatPm
 import earth.walkthru.opensensor.designsystem.CardShape
+import earth.walkthru.opensensor.strings.resolve
+import earth.walkthru.opensensor.strings.resources.Res
+import earth.walkthru.opensensor.strings.resources.action_cancel
+import earth.walkthru.opensensor.strings.resources.app_name
+import earth.walkthru.opensensor.strings.resources.batch_value
+import earth.walkthru.opensensor.strings.resources.companion_connect
+import earth.walkthru.opensensor.strings.resources.companion_export
+import earth.walkthru.opensensor.strings.resources.companion_export_preparing
+import earth.walkthru.opensensor.strings.resources.companion_files_finalized
+import earth.walkthru.opensensor.strings.resources.companion_find_sensors
+import earth.walkthru.opensensor.strings.resources.companion_firmware
+import earth.walkthru.opensensor.strings.resources.companion_lan_bytes
+import earth.walkthru.opensensor.strings.resources.companion_lan_connect_label
+import earth.walkthru.opensensor.strings.resources.companion_lan_discovered
+import earth.walkthru.opensensor.strings.resources.companion_lan_files
+import earth.walkthru.opensensor.strings.resources.companion_lan_find
+import earth.walkthru.opensensor.strings.resources.companion_lan_finding
+import earth.walkthru.opensensor.strings.resources.companion_lan_link
+import earth.walkthru.opensensor.strings.resources.companion_lan_needs_access
+import earth.walkthru.opensensor.strings.resources.companion_lan_paused
+import earth.walkthru.opensensor.strings.resources.companion_lan_rate
+import earth.walkthru.opensensor.strings.resources.companion_lan_title
+import earth.walkthru.opensensor.strings.resources.companion_now
+import earth.walkthru.opensensor.strings.resources.companion_pm25_mood
+import earth.walkthru.opensensor.strings.resources.companion_scanning
+import earth.walkthru.opensensor.strings.resources.companion_signal_dbm
+import earth.walkthru.opensensor.strings.resources.companion_storage_error
+import earth.walkthru.opensensor.strings.resources.companion_subtitle
+import earth.walkthru.opensensor.strings.resources.companion_sync
+import earth.walkthru.opensensor.strings.resources.companion_wifi_access_save
+import earth.walkthru.opensensor.strings.resources.companion_wifi_access_saving
+import earth.walkthru.opensensor.strings.resources.conn_connecting
+import earth.walkthru.opensensor.strings.resources.conn_disconnected
+import earth.walkthru.opensensor.strings.resources.conn_ready
+import earth.walkthru.opensensor.strings.resources.nav_disconnect
+import earth.walkthru.opensensor.strings.resources.now_waiting
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 import kotlin.math.floor
 
 /*
@@ -64,16 +102,16 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
         ) {
             item {
                 Column {
-                    Text("opensensor.space", style = MaterialTheme.typography.headlineMedium)
-                    Text("Your sensors, nearby", style = MaterialTheme.typography.titleMedium, color = muted)
+                    Text(stringResource(Res.string.app_name), style = MaterialTheme.typography.headlineMedium)
+                    Text(stringResource(Res.string.companion_subtitle), style = MaterialTheme.typography.titleMedium, color = muted)
                 }
             }
-            if (state.message.isNotEmpty()) item { Text(state.message, style = MaterialTheme.typography.bodyLarge) }
+            if (!state.message.isEmpty) item { Text(state.message.resolve(), style = MaterialTheme.typography.bodyLarge) }
             if (state.selectedId != null) {
                 item {
                     BrandCard {
                         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Text("Now", style = MaterialTheme.typography.titleLarge)
+                            Text(stringResource(Res.string.companion_now), style = MaterialTheme.typography.titleLarge)
                             val sample = state.live
                             val profile = state.profile
                             // As on Android Today, a board without a particle sensor leads with its temperature.
@@ -81,11 +119,11 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
                             if (particles || profile == null || sample == null) {
                                 when (val reading = state.reading) {
                                     is NowReading.Reading -> {
-                                        Text("${formatPm(reading.pm25)} µg/m³", style = MaterialTheme.typography.displaySmall)
-                                        Text("PM2.5 · ${reading.mood.title}")
+                                        Text(stringResource(Res.string.batch_value, formatPm(reading.pm25)), style = MaterialTheme.typography.displaySmall)
+                                        Text(stringResource(Res.string.companion_pm25_mood, reading.mood.title))
                                     }
                                     is NowReading.SensorNotReady -> Text(reading.hint)
-                                    NowReading.Waiting -> Text(WAITING_FOR_READING)
+                                    NowReading.Waiting -> Text(stringResource(Res.string.now_waiting))
                                 }
                             }
                             if (profile != null && sample != null) {
@@ -95,16 +133,16 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
                                 if (ambient || !particles || showTechnical) {
                                     sample.t?.takeIf { it.isFinite() }?.let { t ->
                                         val metric = if (ambient) Metrics.AMBIENT_TEMP else Metrics.BOARD_TEMP
-                                        Text("${metric.label} ${number(formatter.value(t, metric.unit))} ${formatter.unit(metric.unit)}")
+                                        Text(listOf(metric.label, number(formatter.value(t, metric.unit)), formatter.unit(metric.unit)).joinToString(" "))
                                     }
                                 }
-                                if (profile.humidity) sample.rh?.takeIf { it.isFinite() }?.let { Text("${Metrics.HUMIDITY.label} ${number(it)} ${Metrics.HUMIDITY.unit}") }
+                                if (profile.humidity) sample.rh?.takeIf { it.isFinite() }?.let { Text(listOf(Metrics.HUMIDITY.label, number(it), Metrics.HUMIDITY.unit).joinToString(" ")) }
                             }
                             state.status?.let { status ->
-                                if (status.storageFailed) Text("The sensor reports a storage error.", color = MaterialTheme.colorScheme.error)
-                                if (showTechnical) status.fin?.let { Text("$it files finalized on the sensor", color = muted) }
+                                if (status.storageFailed) Text(stringResource(Res.string.companion_storage_error), color = MaterialTheme.colorScheme.error)
+                                if (showTechnical) status.fin?.let { Text(pluralStringResource(Res.plurals.companion_files_finalized, it.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(), it), color = muted) }
                             }
-                            if (showTechnical) state.info?.fw?.let { Text("Firmware $it", style = MaterialTheme.typography.bodySmall, color = muted) }
+                            if (showTechnical) state.info?.fw?.let { Text(stringResource(Res.string.companion_firmware, it), style = MaterialTheme.typography.bodySmall, color = muted) }
                         }
                     }
                 }
@@ -112,18 +150,18 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (state.wifiAccessAvailable) {
                             OutlinedButton(onClick = saveWifiAccess, enabled = !state.wifiAccessBusy, shape = MaterialTheme.shapes.small) {
-                                Text(if (state.wifiAccessBusy) "Saving access…" else "Save Wi-Fi access")
+                                Text(stringResource(if (state.wifiAccessBusy) Res.string.companion_wifi_access_saving else Res.string.companion_wifi_access_save))
                             }
-                            Text(state.wifiAccessMessage, style = MaterialTheme.typography.bodySmall, color = muted)
+                            Text(state.wifiAccessMessage.resolve(), style = MaterialTheme.typography.bodySmall, color = muted)
                         }
                     }
                 }
-                item { OutlinedButton(onClick = disconnect, shape = MaterialTheme.shapes.small) { Text("Disconnect") } }
+                item { OutlinedButton(onClick = disconnect, shape = MaterialTheme.shapes.small) { Text(stringResource(Res.string.nav_disconnect)) } }
             } else {
                 item {
                     // Tapping creates the Bluetooth manager, so iOS asks for Bluetooth here and not at launch.
                     Button(onClick = scan, enabled = !state.scanning, shape = MaterialTheme.shapes.small) {
-                        Text(if (state.scanning) "Scanning…" else "Find sensors")
+                        Text(stringResource(if (state.scanning) Res.string.companion_scanning else Res.string.companion_find_sensors))
                     }
                 }
                 items(state.devices, key = { it.id }) { device ->
@@ -135,9 +173,9 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
                         ) {
                             Column(Modifier.weight(1f)) {
                                 Text(device.name, style = MaterialTheme.typography.titleMedium)
-                                if (showTechnical) Text("${device.rssi} dBm", style = MaterialTheme.typography.bodySmall, color = muted)
+                                if (showTechnical) Text(stringResource(Res.string.companion_signal_dbm, device.rssi), style = MaterialTheme.typography.bodySmall, color = muted)
                             }
-                            Button(onClick = { connect(device.id) }, shape = MaterialTheme.shapes.small) { Text("Connect") }
+                            Button(onClick = { connect(device.id) }, shape = MaterialTheme.shapes.small) { Text(stringResource(Res.string.companion_connect)) }
                         }
                     }
                 }
@@ -145,15 +183,15 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Spacer(Modifier.height(8.dp))
-                    Text("On your Wi-Fi", style = MaterialTheme.typography.titleLarge)
-                    if (state.lanMessage.isNotEmpty()) {
+                    Text(stringResource(Res.string.companion_lan_title), style = MaterialTheme.typography.titleLarge)
+                    if (!state.lanMessage.isEmpty) {
                         Text(
-                            state.lanMessage,
+                            state.lanMessage.resolve(),
                             color = if (state.lanAccessDenied) MaterialTheme.colorScheme.error else Color.Unspecified,
                         )
                     }
                     OutlinedButton(onClick = scanLan, enabled = !state.lanScanning, shape = MaterialTheme.shapes.small) {
-                        Text(if (state.lanScanning) "Looking on Wi-Fi…" else "Find Wi-Fi sensors")
+                        Text(stringResource(if (state.lanScanning) Res.string.companion_lan_finding else Res.string.companion_lan_find))
                     }
                 }
             }
@@ -161,21 +199,22 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
                 val session = state.lanSessions[name]
                 val paused = name in state.lanPaused
                 val canConnect = session?.connected != true && session?.busy != true && name in state.lanDevices
+                val connectLabel = stringResource(Res.string.companion_lan_connect_label, name)
                 BrandCard(
                     Modifier.then(
-                        if (canConnect) Modifier.clickable(onClickLabel = "Connect to $name over Wi-Fi") { connectLan(name) } else Modifier,
+                        if (canConnect) Modifier.clickable(onClickLabel = connectLabel) { connectLan(name) } else Modifier,
                     ),
                 ) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(name, style = MaterialTheme.typography.titleMedium)
-                        val connectionLabel = when {
-                            paused -> "Wi-Fi · Sync paused"
-                            session?.connected == true -> "Wi-Fi · Connected"
-                            session?.busy == true -> "Wi-Fi · Connecting…"
-                            session == null -> "Wi-Fi · Discovered"
-                            else -> "Wi-Fi · Not connected"
+                        val connectionState = when {
+                            paused -> Res.string.companion_lan_paused
+                            session?.connected == true -> Res.string.conn_ready
+                            session?.busy == true -> Res.string.conn_connecting
+                            session == null -> Res.string.companion_lan_discovered
+                            else -> Res.string.conn_disconnected
                         }
-                        Text(connectionLabel, style = MaterialTheme.typography.labelLarge, color = muted)
+                        Text(stringResource(Res.string.companion_lan_link, stringResource(connectionState)), style = MaterialTheme.typography.labelLarge, color = muted)
                         if (session?.busy == true) {
                             LinearProgressIndicator(
                                 Modifier.fillMaxWidth(),
@@ -187,31 +226,31 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
                         if (session?.connected == true) {
                             when (val reading = state.lanReadings[name] ?: NowReading.Waiting) {
                                 is NowReading.Reading -> {
-                                    Text("${formatPm(reading.pm25)} µg/m³", style = MaterialTheme.typography.headlineMedium)
-                                    Text("PM2.5 · ${reading.mood.title}")
+                                    Text(stringResource(Res.string.batch_value, formatPm(reading.pm25)), style = MaterialTheme.typography.headlineMedium)
+                                    Text(stringResource(Res.string.companion_pm25_mood, reading.mood.title))
                                 }
                                 is NowReading.SensorNotReady -> Text(reading.hint)
-                                NowReading.Waiting -> Text(WAITING_FOR_READING)
+                                NowReading.Waiting -> Text(stringResource(Res.string.now_waiting))
                             }
                         }
-                        Text(session?.message ?: "Save Wi-Fi access over Bluetooth first.")
+                        Text(session?.message ?: stringResource(Res.string.companion_lan_needs_access))
                         if (session != null && session.filesTotal > 0) {
-                            Text("${session.filesDone} of ${session.filesTotal} files", style = MaterialTheme.typography.bodySmall, color = muted)
+                            Text(pluralStringResource(Res.plurals.companion_lan_files, session.filesTotal, session.filesDone, session.filesTotal), style = MaterialTheme.typography.bodySmall, color = muted)
                             if (showTechnical) {
-                                Text("${session.bytesDone} bytes in current file", style = MaterialTheme.typography.bodySmall, color = muted)
-                                if (session.bytesPerSecond > 0.0) Text("${number(session.bytesPerSecond / 1024)} KiB/s average", style = MaterialTheme.typography.bodySmall, color = muted)
+                                Text(stringResource(Res.string.companion_lan_bytes, session.bytesDone.toString()), style = MaterialTheme.typography.bodySmall, color = muted)
+                                if (session.bytesPerSecond > 0.0) Text(stringResource(Res.string.companion_lan_rate, number(session.bytesPerSecond / 1024)), style = MaterialTheme.typography.bodySmall, color = muted)
                             }
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             if (session?.connected == true) {
-                                Button(onClick = { syncLan(name) }, enabled = !session.busy, shape = MaterialTheme.shapes.small) { Text("Sync") }
-                                OutlinedButton(onClick = { disconnectLan(name) }, shape = MaterialTheme.shapes.small) { Text(if (session.busy) "Cancel" else "Disconnect") }
+                                Button(onClick = { syncLan(name) }, enabled = !session.busy, shape = MaterialTheme.shapes.small) { Text(stringResource(Res.string.companion_sync)) }
+                                OutlinedButton(onClick = { disconnectLan(name) }, shape = MaterialTheme.shapes.small) { Text(stringResource(if (session.busy) Res.string.action_cancel else Res.string.nav_disconnect)) }
                             } else {
                                 Button(onClick = { connectLan(name) }, enabled = canConnect, shape = MaterialTheme.shapes.small) {
-                                    Text(if (session?.busy == true) "Connecting…" else "Connect")
+                                    Text(stringResource(if (session?.busy == true) Res.string.conn_connecting else Res.string.companion_connect))
                                 }
                                 if (session?.busy == true || paused) {
-                                    OutlinedButton(onClick = { disconnectLan(name) }, shape = MaterialTheme.shapes.small) { Text("Cancel") }
+                                    OutlinedButton(onClick = { disconnectLan(name) }, shape = MaterialTheme.shapes.small) { Text(stringResource(Res.string.action_cancel)) }
                                 }
                             }
                         }
@@ -221,9 +260,9 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = exportArchive, enabled = !state.exportBusy, shape = MaterialTheme.shapes.small) {
-                        Text(if (state.exportBusy) "Preparing export…" else "Export Parquet files")
+                        Text(stringResource(if (state.exportBusy) Res.string.companion_export_preparing else Res.string.companion_export))
                     }
-                    if (state.exportMessage.isNotEmpty()) Text(state.exportMessage, style = MaterialTheme.typography.bodySmall, color = muted)
+                    if (!state.exportMessage.isEmpty) Text(state.exportMessage.resolve(), style = MaterialTheme.typography.bodySmall, color = muted)
                 }
             }
         }
