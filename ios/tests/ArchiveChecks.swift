@@ -1,7 +1,8 @@
 import Foundation
 
-@main struct ArchiveChecks {
-    @MainActor static func main() async throws {
+/// Archive integrity checks shared by the host harness (verify-native.sh) and the Xcode test target.
+enum ArchiveChecks {
+    static func run() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         let archive = try SensorArchive(root: root)
@@ -64,7 +65,6 @@ import Foundation
         } catch SensorArchive.Failure.invalidFile {}
         precondition(!FileManager.default.fileExists(atPath: bad.partial.path))
         try completedAndExportChecks(bytes: bytes, crc: crc, station: station, name: name)
-        try await TransferChecks.run()
         print("iOS archive: resume, receipt reconstruction/integrity, export snapshot, offset, CRC, immutable conflict, path and symlink checks passed")
     }
 

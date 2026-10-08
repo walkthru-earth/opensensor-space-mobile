@@ -8,6 +8,7 @@ swiftc -module-cache-path "$test_dir/module-cache" -strict-concurrency=complete 
   "$repo_root/ios/App/SensorTransfer.swift" \
   "$repo_root/ios/App/LanPolicy.swift" \
   "$repo_root/ios/tests/TransferChecks.swift" \
-  "$repo_root/ios/tests/archive-main.swift" \
+  "$repo_root/ios/tests/ArchiveChecks.swift" \
+  "$repo_root/ios/tests/native-main.swift" \
   -o "$test_dir/archive-checks"
 "$test_dir/archive-checks"
