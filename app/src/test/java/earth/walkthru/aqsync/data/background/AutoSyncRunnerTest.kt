@@ -4,7 +4,6 @@ import earth.walkthru.aqsync.data.BackgroundSyncResult
 import earth.walkthru.aqsync.data.ble.DeviceSession
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.fake.FakeTransport
-import earth.walkthru.aqsync.data.history.HistoryIndexer
 import earth.walkthru.aqsync.data.lan.LanDevice
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
@@ -15,6 +14,7 @@ import earth.walkthru.aqsync.data.sync.FileArchive
 import earth.walkthru.aqsync.data.sync.FileOutcome
 import earth.walkthru.aqsync.data.sync.SyncEngine
 import earth.walkthru.aqsync.data.sync.SyncPlanner
+import earth.walkthru.aqsync.data.sync.androidSyncEngine
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -391,7 +391,7 @@ class AutoSyncRunnerTest {
         val peers = java.util.concurrent.ConcurrentHashMap<String, FakeTransport>()
         var beforeSync: suspend (KnownDevice) -> Unit = {}
         val dao = InMemoryDao()
-        private val engine = FileArchive(tmp).let { a -> SyncEngine(a, dao, HistoryIndexer(a, dao), windowRetryBackoffMs = 1) }
+        private val engine = androidSyncEngine(FileArchive(tmp), dao, windowRetryBackoffMs = 1)
 
         val devices = ArrayList<KnownDevice>()
         var session: String? = null

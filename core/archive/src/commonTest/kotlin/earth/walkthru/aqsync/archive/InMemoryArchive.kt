@@ -66,8 +66,6 @@ class InMemoryArchiveStore : ArchiveStore {
         if (station != null && parts[1] != station) return@mapNotNull null
         if (!ArchiveLayout.isSafeStation(parts[1]) || !ArchiveLayout.isArchiveName(parts[2])) null else ArchiveKey(parts[1], parts[2])
     }
-
-    override suspend fun delete(key: ArchiveKey): Boolean = files.remove(ArchiveLayout.finalPath(key)) != null
 }
 
 /** An [ArchiveIndex] over a list, with the same ordering and predicates the Room adapter has. */

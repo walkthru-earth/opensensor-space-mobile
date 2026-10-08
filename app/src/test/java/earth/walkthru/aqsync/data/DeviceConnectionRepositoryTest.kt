@@ -9,7 +9,6 @@ import earth.walkthru.aqsync.data.ble.TransportException
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.fake.FakeTransport
 import earth.walkthru.aqsync.data.history.HistoryDeriver
-import earth.walkthru.aqsync.data.history.HistoryIndexer
 import earth.walkthru.aqsync.data.lan.LanConnectException
 import earth.walkthru.aqsync.data.lan.LanDevice
 import earth.walkthru.aqsync.data.lan.LanFailure
@@ -27,7 +26,7 @@ import earth.walkthru.aqsync.data.protocol.LanFraming
 import earth.walkthru.aqsync.data.protocol.Opcode
 import earth.walkthru.aqsync.data.sync.FileArchive
 import earth.walkthru.aqsync.data.sync.FileOutcome
-import earth.walkthru.aqsync.data.sync.SyncEngine
+import earth.walkthru.aqsync.data.sync.androidSyncEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
@@ -277,7 +276,7 @@ class DeviceConnectionRepositoryTest {
                 lanCredentials = knownDao,
                 archivedFileDao = archived,
                 archive = fileArchive,
-                syncEngine = SyncEngine(fileArchive, archived, HistoryIndexer(fileArchive, archived), windowRetryBackoffMs = 1) { test.testScheduler.currentTime },
+                syncEngine = androidSyncEngine(fileArchive, archived, windowRetryBackoffMs = 1) { test.testScheduler.currentTime },
                 lanDiscoveryState = lan,
                 lanWifiLock = { null },
                 historyDeriver = { HistoryDeriver.Result(0, 0, 0) },

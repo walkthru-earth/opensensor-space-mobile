@@ -72,19 +72,6 @@ abstract class ArchiveStoreContract {
     }
 
     @Test
-    fun `forgetting a file removes its record and its bytes together`() = runTest {
-        val store = newStore()
-        val index = newIndex()
-        store.openPartial(key, meta).use { w -> w.writeAt(0, bytes) }
-        store.commit(key)
-        index.put(ArchiveRecord(station, key.name, meta.size, meta.crc32, "sha", 1, "fake"))
-        assertTrue(forgetArchived(store, index, key))
-        assertNull(index.get(key))
-        assertFalse(store.exists(key))
-        assertFalse(forgetArchived(store, index, key))
-    }
-
-    @Test
     fun `the index replaces on station and name and orders unindexed rows first`() = runTest {
         val index = newIndex()
         val a = ArchiveRecord(station, "a.parquet", 1, 1, "s", 1, "d")

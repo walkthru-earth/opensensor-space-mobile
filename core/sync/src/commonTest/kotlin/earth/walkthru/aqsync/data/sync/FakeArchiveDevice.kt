@@ -1,0 +1,143 @@
+package earth.walkthru.aqsync.data.sync
+
+import earth.walkthru.aqsync.data.ble.AqTransport
+import earth.walkthru.aqsync.data.ble.ConnectionState
+import earth.walkthru.aqsync.data.ble.TransportKind
+import earth.walkthru.aqsync.data.protocol.Frame
+import earth.walkthru.aqsync.data.protocol.FrameCodec
+import earth.walkthru.aqsync.data.protocol.Opcode
+import earth.walkthru.aqsync.data.protocol.ParquetVerify
+import earth.walkthru.aqsync.data.protocol.ProtocolError
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.ReceiveChannel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.launch
+import kotlin.random.Random
+
+/**
+ * The file half of a CoreS3 over [AqTransport], enough for the engine: LIST, OPEN, READ in CHUNKs of
+ * `mtu - 10` bytes and CLOSE. Replies are sent from [scope] like the firmware's storage worker, so
+ * a test's virtual clock drives every delay. Fault hooks match Android's debug `FakeTransport`.
+ */
+class FakeArchiveDevice(
+    private val scope: CoroutineScope,
+    override val address: String = "fake-0",
+    val station: String = "53315f5f-cb85-4d8d-b623-d56266084189",
+    val maxRead: Int = 16_384,
+    override val mtu: Int = 517,
+) : AqTransport {
+    class FakeFile(val name: String, val bytes: ByteArray) {
+        val crc32: Long = ParquetVerify.crc32(bytes)
+    }
+
+    val files: MutableList<FakeFile> = mutableListOf(
+        FakeFile("station=$station/year=2026/month=09/day=15/data_1000_b41d_15000-15089-90.parquet", fakeParquet(1, 24_000)),
+        FakeFile("station=$station/year=2026/month=09/day=15/data_1015_b41d_15090-15179-90.parquet", fakeParquet(2, 23_400)),
+        FakeFile("station=$station/unsynced/boot=b41d/data_0000_b41d_1-60-60.parquet", fakeParquet(3, 9_800)),
+    )
+
+    /** `READ` requests handled so far. The hooks below are keyed on it (1-based). */
+    var readCount: Int = 0
+        private set
+
+    /** Leading CHUNKs of the k-th READ window to drop, as a lossy BLE link does. READ_END still says the true offset. */
+    var dropLeadingChunks: (readIndex: Int) -> Int = { 0 }
+
+    /** Delay before CLOSED, so a caller's timeout fires first. */
+    var closedDelayMs: Long = 0
+
+    /** Delay between CHUNKs, so concurrent transfers interleave. */
+    var chunkDelayMs: Long = 0
+
+    private val responses = Channel<ByteArray>(Channel.UNLIMITED)
+    private val state = MutableStateFlow<ConnectionState>(ConnectionState.Ready(mtu))
+    private var openFile: FakeFile? = null
+    private var openHandle = 0
+    private var nextHandle = 1
+
+    override val displayName: String = "AQ-fake"
+    override val kind: TransportKind = TransportKind.FAKE
+    override val endpoint: String = "in-process fake"
+    override val connectionState: StateFlow<ConnectionState> = state
+    override val statusNotifications: Flow<ByteArray> = emptyFlow()
+    override val liveNotifications: Flow<ByteArray> = emptyFlow()
+    override val responseFrames: ReceiveChannel<ByteArray> get() = responses
+
+    override suspend fun connect() = Unit
+    override suspend fun disconnect() = Unit
+    override suspend fun readInfo(): ByteArray = """{"proto":2,"station":"$station","max_read":$maxRead}""".encodeToByteArray()
+    override suspend fun readStatus(): ByteArray = "{}".encodeToByteArray()
+    override suspend fun readLive(): ByteArray = "{}".encodeToByteArray()
+    override fun close() {
+        responses.close()
+    }
+
+    override suspend fun writeControl(request: ByteArray) {
+        scope.launch { handle(request) }
+    }
+
+    private fun send(frame: Frame) {
+        responses.trySend(FrameCodec.encode(frame))
+    }
+
+    private fun u16(b: ByteArray, at: Int): Int = (b[at].toInt() and 0xFF) or ((b[at + 1].toInt() and 0xFF) shl 8)
+    private fun u32(b: ByteArray, at: Int): Long = (u16(b, at).toLong()) or (u16(b, at + 2).toLong() shl 16)
+
+    private suspend fun handle(req: ByteArray) {
+        val op = req[0].toInt() and 0xFF
+        when (op) {
+            Opcode.LIST -> {
+                files.forEach { send(Frame.File(it.bytes.size.toLong(), it.name)) }
+                send(Frame.ListEnd(files.size, 0, 0, 0))
+            }
+            Opcode.OPEN -> {
+                val name = req.copyOfRange(1, req.size).decodeToString()
+                val f = files.firstOrNull { it.name == name } ?: return send(Frame.Error(op, ProtocolError.INVALID_NAME.code, ""))
+                openHandle = nextHandle++
+                openFile = f
+                send(Frame.Opened(openHandle, f.bytes.size.toLong(), f.crc32, f.name))
+            }
+            Opcode.READ -> {
+                val handle = u16(req, 1)
+                val offset = u32(req, 3)
+                val length = u32(req, 7)
+                val f = openFile
+                if (f == null || handle != openHandle) return send(Frame.Error(op, ProtocolError.BAD_HANDLE.code, ""))
+                val end = minOf(f.bytes.size.toLong(), offset + minOf(length, maxRead.toLong()))
+                val chunkMax = mtu - 10
+                var toDrop = dropLeadingChunks(++readCount)
+                var pos = offset
+                while (pos < end) {
+                    val n = minOf(chunkMax.toLong(), end - pos).toInt()
+                    if (toDrop > 0) toDrop-- else send(Frame.Chunk(handle, pos, f.bytes.copyOfRange(pos.toInt(), pos.toInt() + n)))
+                    pos += n
+                    if (chunkDelayMs > 0) delay(chunkDelayMs)
+                }
+                send(Frame.ReadEnd(handle, pos, 0))
+            }
+            Opcode.CLOSE -> {
+                val handle = u16(req, 1)
+                if (handle != openHandle) return send(Frame.Error(op, ProtocolError.BAD_HANDLE.code, ""))
+                openFile = null
+                if (closedDelayMs > 0) delay(closedDelayMs)
+                send(Frame.Closed(handle))
+            }
+            else -> send(Frame.Error(op, ProtocolError.MALFORMED_REQUEST.code, ""))
+        }
+    }
+
+    companion object {
+        /** `PAR1`, seeded noise, `PAR1`: what [ParquetVerify] checks, nothing more. */
+        fun fakeParquet(seed: Int, size: Int): ByteArray {
+            val bytes = Random(seed).nextBytes(size)
+            ParquetVerify.MAGIC.copyInto(bytes, 0)
+            ParquetVerify.MAGIC.copyInto(bytes, size - ParquetVerify.MAGIC.size)
+            return bytes
+        }
+    }
+}

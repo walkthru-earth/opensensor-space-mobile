@@ -1,31 +1,47 @@
 package earth.walkthru.aqsync.data.sync
 
+import earth.walkthru.aqsync.archive.ArchiveIndex
+import earth.walkthru.aqsync.archive.ArchiveKey
+import earth.walkthru.aqsync.archive.ArchiveLayout
+import earth.walkthru.aqsync.archive.ArchiveRecord
+import earth.walkthru.aqsync.archive.ArchiveStore
+import earth.walkthru.aqsync.archive.ArchiveVerifier
+import earth.walkthru.aqsync.archive.PartialMeta
 import earth.walkthru.aqsync.data.ble.DeviceErrorException
 import earth.walkthru.aqsync.data.ble.DeviceSession
 import earth.walkthru.aqsync.data.ble.WindowLostException
-import earth.walkthru.aqsync.data.coroutines.WallClock
-import earth.walkthru.aqsync.data.coroutines.suspendRunCatching
-import earth.walkthru.aqsync.data.history.HistoryIndexer
-import earth.walkthru.aqsync.data.local.database.ArchivedFile
-import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
+import earth.walkthru.aqsync.data.history.parquet.ByteReader
 import earth.walkthru.aqsync.data.protocol.ParquetVerify
 import earth.walkthru.aqsync.data.protocol.ProtocolError
-import earth.walkthru.aqsync.data.protocol.SafeName
-import earth.walkthru.aqsync.data.protocol.sha256Hex
-import earth.walkthru.aqsync.data.protocol.verify
+import earth.walkthru.aqsync.data.protocol.Sha256
+import earth.walkthru.aqsync.data.protocol.toHex
+import earth.walkthru.aqsync.sync.nowEpochMs
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import javax.inject.Inject
-import javax.inject.Singleton
 
 class SyncAbortedException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
 /**
- * The per-file half of the phone sync algorithm in docs/ble-sync-protocol.md:
+ * Fills a record's index columns (rows, time span) from the committed file, in the same write as the
+ * record itself. Android reads the Parquet footer here. A platform without a history index keeps the
+ * record as it is. Never throws: a file the reader refuses gets `indexError` and stays archived.
+ */
+fun interface ArchiveRecordIndexer {
+    suspend fun indexed(record: ArchiveRecord): ArchiveRecord
+
+    companion object {
+        /** Stores the receipt columns only. */
+        val None: ArchiveRecordIndexer = ArchiveRecordIndexer { it }
+    }
+}
+
+/**
+ * The per-file half of the phone sync algorithm in docs/ble-sync-protocol.md, shared by Android and iOS:
  *
  * ```
  * OPEN name → OPENED handle,size,crc32
@@ -34,31 +50,24 @@ class SyncAbortedException(message: String, cause: Throwable? = null) : Exceptio
  * CLOSE handle
  * ```
  *
- * Chunks are written at their absolute offsets into a `.partial` file so an interrupted transfer
- * resumes after re-`OPEN` as long as `size` and `crc32` still match.
+ * Chunks are written at their absolute offsets into the [ArchiveStore] partial so an interrupted
+ * transfer resumes after re-`OPEN` as long as `size` and `crc32` still match. A file is synced only
+ * after [ArchiveVerifier] passed, the store committed it and the [ArchiveIndex] holds its record.
  *
  * A window that arrives incomplete ([WindowLostException]: notifications were lost between the
- * device and this code) is re-read from the last good offset — `READ` is idempotent on an
- * immutable file — up to [WINDOW_RETRIES] times with a short backoff. Only when the same window
- * keeps failing is the *file* marked [FileOutcome.Failed]; the sync goes on with the next file.
+ * device and this code) is re-read from the last good offset (`READ` is idempotent on an immutable
+ * file) up to [WINDOW_RETRIES] times with a short backoff. Only when the same window keeps failing is
+ * the *file* marked [FileOutcome.Failed]. The sync goes on with the next file.
  */
-@Singleton
 class SyncEngine(
-    private val archive: FileArchive,
-    private val archivedFileDao: ArchivedFileDao,
-    private val historyIndexer: HistoryIndexer,
-    /** `windowRetryBackoffMs × attempt` between re-reads of a lost window; tests shorten it. */
+    private val store: ArchiveStore,
+    private val index: ArchiveIndex,
+    private val indexer: ArchiveRecordIndexer = ArchiveRecordIndexer.None,
+    /** `windowRetryBackoffMs × attempt` between re-reads of a lost window. Tests shorten it. */
     private val windowRetryBackoffMs: Long = WINDOW_RETRY_BACKOFF_MS,
-    private val clock: WallClock = WallClock.System,
+    private val clock: () -> Long = ::nowEpochMs,
+    private val leases: WriterLeases = WriterLeases(),
 ) {
-    @Inject
-    constructor(
-        archive: FileArchive,
-        archivedFileDao: ArchivedFileDao,
-        historyIndexer: HistoryIndexer,
-        clock: WallClock,
-    ) : this(archive, archivedFileDao, historyIndexer, WINDOW_RETRY_BACKOFF_MS, clock)
-
     suspend fun download(
         session: DeviceSession,
         station: String,
@@ -68,22 +77,21 @@ class SyncEngine(
         maxRead: Int,
         onProgress: (FileProgress) -> Unit,
     ): FileOutcome {
-        if (!SafeName.isValid(name)) return FileOutcome.Failed(name, "refusing unsafe name")
-
-        return archive.withWriterLease(station, name) {
-            downloadLocked(session, station, sourceDevice, name, expectedBytes, maxRead, onProgress)
-        }
+        if (!ArchiveLayout.isArchiveName(name)) return FileOutcome.Failed(name, "refusing unsafe name")
+        // An unsafe station is a caller bug (the device identity was validated), so it throws.
+        val key = ArchiveKey(station, name)
+        return leases.withLease(key) { downloadLocked(session, key, sourceDevice, expectedBytes, maxRead, onProgress) }
     }
 
     private suspend fun downloadLocked(
         session: DeviceSession,
-        station: String,
+        key: ArchiveKey,
         sourceDevice: String,
-        name: String,
         expectedBytes: Long,
         maxRead: Int,
         onProgress: (FileProgress) -> Unit,
     ): FileOutcome {
+        val name = key.name
         val opened = try {
             session.open(name)
         } catch (e: DeviceErrorException) {
@@ -100,44 +108,17 @@ class SyncEngine(
             if (opened.name.isNotEmpty() && opened.name != name) {
                 return FileOutcome.Mismatch(name, "OPENED echoed a different name: ${opened.name}")
             }
+            val meta = PartialMeta(opened.size, opened.crc32)
 
             // Another collector may have committed while this caller waited for its writer lease.
             // Verify again against OPENED, and never replace immutable history with different bytes.
-            val existing = archive.fileFor(station, name)
-            if (existing.exists()) {
-                if (!existing.isFile) return FileOutcome.Mismatch(name, "archive destination is not a file")
-                val verdict = ParquetVerify.verify(existing, opened.size, opened.crc32)
-                if (!verdict.ok) return FileOutcome.Mismatch(name, "existing archive conflicts with device: ${verdict.describe()}")
-                val sha256 = ParquetVerify.sha256Hex(existing)
-                val row = archivedFileDao.get(station, name)
-                if (row != null && (row.bytes != opened.size || row.crc32 != opened.crc32 || row.sha256 != sha256)) {
-                    return FileOutcome.Mismatch(name, "existing archive conflicts with its recorded fingerprint")
-                }
-                if (row == null) {
-                    archivedFileDao.upsert(
-                        historyIndexer.indexed(
-                            ArchivedFile(
-                                station = station,
-                                name = name,
-                                bytes = opened.size,
-                                crc32 = opened.crc32,
-                                sha256 = sha256,
-                                syncedAtEpochMs = clock.nowEpochMs(),
-                                sourceDevice = sourceDevice,
-                            ),
-                            existing,
-                        )
-                    )
-                }
-                archive.discardPartial(station, name)
-                onProgress(FileProgress(name, opened.size, opened.size, opened.size))
-                return FileOutcome.Synced(name, opened.size, sha256, alreadyArchived = true)
-            }
+            if (store.exists(key)) return adoptExisting(key, meta, sourceDevice, onProgress)
 
             var windowsRecovered = 0
             var retriedWithoutPartial = false
             while (true) {
-                val (writer, resumeFrom) = archive.openPartial(station, name, opened.size, opened.crc32)
+                val writer = store.openPartial(key, meta)
+                val resumeFrom = writer.resumeFrom
                 var offset = resumeFrom
                 val progress = FileProgressReporter(name, opened.size, resumeFrom, onProgress)
                 progress.report(offset, windowsRecovered)
@@ -163,16 +144,16 @@ class SyncEngine(
                                                 offset = chunk.offset + chunk.payload.size
                                             }
                                         }
-                                        // The session checks continuity before calling us; this is a safety net.
+                                        // The session checks continuity before calling us. This is a safety net.
                                         else -> throw WindowLostException(offset, "gap in stream: expected offset $offset, got CHUNK at ${chunk.offset}")
                                     }
                                     progress.report(offset, windowsRecovered)
                                 }
                             } catch (e: WindowLostException) {
                                 attempt++
-                                // Bytes written before the gap are good (absolute offsets); the next READ starts
-                                // at our own `offset`, which is what is actually on disk (the contract says never
-                                // trust the device's count over ours; e.receivedUpTo is the session's view of it).
+                                // Bytes written before the gap are good (absolute offsets). The next READ starts
+                                // at our own `offset`, which is what is actually stored (the contract says never
+                                // trust the device's count over ours. e.receivedUpTo is the session's view of it).
                                 if (WindowRetryPolicy.givesUp(attempt)) {
                                     return FileOutcome.Failed(
                                         name,
@@ -206,33 +187,32 @@ class SyncEngine(
                     }
                 }
 
-                val verdict = ParquetVerify.verify(writer.file, opened.size, opened.crc32)
+                val (verdict, sha256) = verifyAndHash(store.reader(key, partial = true), meta)
                 if (!verdict.ok) {
-                    archive.discardPartial(station, name)
-                    // The metadata records only the device's size and CRC, not a checksum of the
-                    // partial prefix. A corrupted prefix can therefore survive resume and fail the
-                    // final check. Re-read once from zero while this handle is still open, rather
-                    // than making the owner wait for another scheduled or manual sync.
+                    store.discardPartial(key)
+                    // The meta records only the device's size and CRC, not a checksum of the partial
+                    // prefix. A corrupted prefix can therefore survive resume and fail the final check.
+                    // Re-read once from zero while this handle is still open, rather than making the
+                    // owner wait for another scheduled or manual sync.
                     if (resumeFrom > 0 && !retriedWithoutPartial) {
                         retriedWithoutPartial = true
                         continue
                     }
                     return FileOutcome.Mismatch(name, verdict.describe())
                 }
-                val sha256 = ParquetVerify.sha256Hex(writer.file)
-                val committed = archive.commit(station, name)
-                val row = ArchivedFile(
-                    station = station,
+                store.commit(key)
+                val record = ArchiveRecord(
+                    station = key.station,
                     name = name,
                     bytes = opened.size,
                     crc32 = opened.crc32,
                     sha256 = sha256,
-                    syncedAtEpochMs = clock.nowEpochMs(),
+                    syncedAtEpochMs = clock(),
                     sourceDevice = sourceDevice,
                 )
                 // Index the verified bytes now (rows, time span, …) so History never has to re-open the file.
-                // A file the reader refuses keeps its row with `indexError`; the archive copy is untouched.
-                archivedFileDao.upsert(historyIndexer.indexed(row, committed))
+                // A file the reader refuses keeps its record with `indexError`. The archive copy is untouched.
+                index.put(indexer.indexed(record))
                 return FileOutcome.Synced(name, opened.size, sha256)
             }
         } catch (e: DeviceErrorException) {
@@ -240,8 +220,65 @@ class SyncEngine(
         } finally {
             // Best effort, even when we are being cancelled: the device closes implicitly on the
             // next OPEN or on disconnect anyway, so a failure here is not an error.
-            withContext(NonCancellable) { suspendRunCatching { withTimeoutOrNull(CLOSE_TIMEOUT_MS) { session.close(handle) } } }
+            withContext(NonCancellable) {
+                try {
+                    withTimeoutOrNull(CLOSE_TIMEOUT_MS) { session.close(handle) }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Throwable) {
+                    // Ignored, see above.
+                }
+            }
         }
+    }
+
+    /** The waiter's path: the file was committed while it waited. Rechecks the bytes and the record. */
+    private suspend fun adoptExisting(
+        key: ArchiveKey,
+        meta: PartialMeta,
+        sourceDevice: String,
+        onProgress: (FileProgress) -> Unit,
+    ): FileOutcome {
+        val name = key.name
+        val reader = try {
+            store.reader(key)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            return FileOutcome.Mismatch(name, "archive destination is not a file")
+        }
+        val (verdict, sha256) = verifyAndHash(reader, meta)
+        if (!verdict.ok) return FileOutcome.Mismatch(name, "existing archive conflicts with device: ${verdict.describe()}")
+        val row = index.get(key)
+        if (row != null && (row.bytes != meta.size || row.crc32 != meta.crc32 || row.sha256 != sha256)) {
+            return FileOutcome.Mismatch(name, "existing archive conflicts with its recorded fingerprint")
+        }
+        if (row == null) {
+            index.put(
+                indexer.indexed(
+                    ArchiveRecord(
+                        station = key.station,
+                        name = name,
+                        bytes = meta.size,
+                        crc32 = meta.crc32,
+                        sha256 = sha256,
+                        syncedAtEpochMs = clock(),
+                        sourceDevice = sourceDevice,
+                    )
+                )
+            )
+        }
+        store.discardPartial(key)
+        onProgress(FileProgress(name, meta.size, meta.size, meta.size))
+        return FileOutcome.Synced(name, meta.size, sha256, alreadyArchived = true)
+    }
+
+    /** Size, CRC-32 and `PAR1` in one streamed pass, with the SHA-256 of the same bytes. */
+    private fun verifyAndHash(reader: ByteReader, meta: PartialMeta): Pair<ParquetVerify.Result, String> {
+        val sha = Sha256()
+        val verdict = ArchiveVerifier.verify(reader, meta) { bytes, n -> sha.update(bytes, 0, n) }
+        val hex = sha.digest().toHex()
+        return verdict to hex
     }
 
     companion object {
@@ -251,7 +288,7 @@ class SyncEngine(
         /** Base of the linear backoff between re-reads ([WindowRetryPolicy.BACKOFF_MS]). */
         const val WINDOW_RETRY_BACKOFF_MS = WindowRetryPolicy.BACKOFF_MS
 
-        /** Best-effort `CLOSE` budget; the device closes implicitly on the next `OPEN` anyway. */
+        /** Best-effort `CLOSE` budget. The device closes implicitly on the next `OPEN` anyway. */
         const val CLOSE_TIMEOUT_MS = 3_000L
     }
 }

@@ -60,6 +60,4 @@ class FileArchiveStore @Inject constructor(
             if (ArchiveLayout.isSafeStation(s) && ArchiveLayout.isArchiveName(name)) ArchiveKey(s, name) else null
         }
     }
-
-    override suspend fun delete(key: ArchiveKey): Boolean = withContext(io) { archive.delete(key.station, key.name) }
 }

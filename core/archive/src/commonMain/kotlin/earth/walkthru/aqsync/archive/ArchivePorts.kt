@@ -5,7 +5,8 @@ import kotlinx.coroutines.flow.Flow
 
 /**
  * The bytes of the phone archive, laid out as [ArchiveLayout] says. Adapters do file I/O only,
- * every decision (what to resume, when a file is complete) is made by common callers.
+ * every decision (what to resume, when a file is complete) is made by common callers. There is no
+ * delete: a verified copy is immutable history, and the index record is its receipt (audit C, B6).
  *
  * Android adapts `FileArchive` (`filesDir`). The iOS adapter (Application Support, protection class,
  * backup exclusion, symlink checks) arrives with the shared engine (platform parity plan, wave 3).
@@ -37,12 +38,6 @@ interface ArchiveStore {
 
     /** Every final file, of one station or of all. Partials, metas and legacy receipts are never listed. */
     suspend fun listFinal(station: String? = null): List<ArchiveKey>
-
-    /**
-     * Removes the final copy. Callers go through [forgetArchived] so the index record goes too.
-     * @return true when a file was removed.
-     */
-    suspend fun delete(key: ArchiveKey): Boolean
 }
 
 /** Writes CHUNK payloads at their absolute offsets. Closing syncs to storage. */
@@ -86,14 +81,4 @@ interface ArchiveIndex {
     suspend fun indexedForStation(station: String): List<ArchiveRecord>
 
     suspend fun stations(): List<String>
-}
-
-/**
- * Deletes one archived file and its record together (audit C, B6). The record goes first: if the file
- * removal then fails, the copy is merely unrecorded and the next sync re-verifies and records it, while
- * the opposite order would leave a record claiming a file that is gone, which the planner trusts.
- */
-suspend fun forgetArchived(store: ArchiveStore, index: ArchiveIndex, key: ArchiveKey): Boolean {
-    index.remove(key)
-    return store.delete(key)
 }

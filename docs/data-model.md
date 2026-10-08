@@ -223,8 +223,8 @@ These relative paths are defined once, in `ArchiveLayout` (`:core:archive`), for
 root is Android `filesDir`. iOS still keeps its finals under `Application Support/SensorArchive/`
 with partials beside them and a `<name>.verified.json` receipt each. `ArchiveLayout` names those
 legacy forms so the wave 3 move onto this layout can recognise them. The "is synced" receipt is the
-`archived_file` record (`ArchiveRecord` behind the `ArchiveIndex` port), never a file. A delete goes
-through `forgetArchived`, which removes the record before the file.
+`archived_file` record (`ArchiveRecord` behind the `ArchiveIndex` port), never a file. The archive
+ports have no delete. A verified copy is never removed by the app (audit C, B6).
 
 ## Backup
 

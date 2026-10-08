@@ -12,6 +12,8 @@ kotlin {
         commonMain.dependencies {
             // Frames, opcodes and JSON models are part of the session API.
             api(project(":core:protocol"))
+            // The engine writes through the archive ports and verifies with ArchiveVerifier.
+            api(project(":core:archive"))
             // Flow, StateFlow and Channel are part of the transport and session API.
             api(libs.kotlinx.coroutines.core)
         }
