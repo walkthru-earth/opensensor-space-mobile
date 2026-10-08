@@ -76,8 +76,10 @@ bucket for a future "n settling" hint. No humidity correction, no "AQI".
 360 / 8 640). Identity `(station, metricId, resolution, startEpochS)`; per row: `rows`,
 `validRows` (passed the gate), `estimatedRows`, `mean`, `min`, `max`. `coverage = validRows /
 expected`. Rows without UTC are off the timeline unless dated by `TimeEstimate`. Built per UTC
-station-day, replaced atomically per day. **Duplicate rows** across files are skipped on
-`(boot_id_hi, boot_id_lo, sequence)` in both the tiers and the daily file so the two agree.
+station-day, replaced atomically per day. **Duplicate rows** across files are skipped on one
+shared key, `RowKey` in `:core:history`: `(boot_id_hi, boot_id_lo, sequence)`, or
+`(boot_id_hi, boot_id_lo, timeline ns)` when the sequence is absent or null, a missing boot half
+counting as 0. The tiers, the day chart and the daily file all use it, so their row counts agree.
 Means over a span are weighted by valid rows — never averages of averages.
 
 ## Derived daily Parquet (`DailyDerivedBuilder`)

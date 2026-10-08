@@ -72,7 +72,7 @@ data class DailyBuildResult(val file: File, val manifest: File, val rows: Int, v
  * Builds one derived daily Parquet file per UTC station-day from the verified device files:
  *
  * - every row whose `event_time_utc_ns` falls in the day, in time order, de-duplicated on
- *   `(boot_id_hi, boot_id_lo, sequence)`;
+ *   [RowKey], the same key the tiers and the day chart use;
  * - the union of the sources' columns in first-seen order (v1 files leave the four v2 columns null),
  *   plus `source_file_index` (INT32 into the manifest's `sources`) — flat numeric only, so the app's
  *   own reader reads the file back; the station is in the path and the metadata as on the SD card;
@@ -103,7 +103,7 @@ class DailyDerivedBuilder(private val store: DerivedStore, private val fileFor: 
         var anyEstimated = false
         val columnOrder = LinkedHashMap<String, ParquetType>()
         val timestampColumns = HashSet<String>()
-        val seenExact = HashSet<Triple<Long, Long, Long>>()
+        val seen = RowKeys()
         for (src in sources.sortedBy { it.firstUtcNs ?: Long.MAX_VALUE }) {
             val f = fileFor(src.station, src.name)
             if (!f.isFile) continue
@@ -120,8 +120,7 @@ class DailyDerivedBuilder(private val store: DerivedStore, private val fileFor: 
             for (i in 0 until utc.size) {
                 val ns = utc.asLong(i) ?: estimated?.get(i)?.takeIf { it != Long.MIN_VALUE } ?: continue
                 if (ns < dayStartNs || ns >= dayEndNs) continue
-                val key = Triple(bootHi?.asLong(i) ?: 0L, bootLo?.asLong(i) ?: 0L, seq?.asLong(i) ?: (ns))
-                if (!seenExact.add(key)) continue
+                if (!seen.firstSight(bootHi?.asLong(i), bootLo?.asLong(i), seq?.asLong(i), ns)) continue
                 keep += i
             }
             // A source whose rows are all duplicates (or outside the day) stays in the manifest with rows_used 0: provenance, not data.
