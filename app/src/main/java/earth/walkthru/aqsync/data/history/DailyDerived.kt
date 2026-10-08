@@ -2,6 +2,7 @@ package earth.walkthru.aqsync.data.history
 
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
+import earth.walkthru.aqsync.archive.ArchiveLayout
 import earth.walkthru.aqsync.data.history.parquet.ColumnValues
 import earth.walkthru.aqsync.data.history.parquet.ParquetCodec
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
@@ -15,28 +16,27 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.time.Instant
-import java.time.ZoneOffset
-import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Where the derived layer lives: `filesDir/derived/v1/<station>/day=YYYY-MM-DD.parquet` + `.manifest.json`. Never inside `archive/`. */
+/** Where the derived layer lives, `filesDir/derived/v1/<station>/day=YYYY-MM-DD.parquet` + `.manifest.json` ([ArchiveLayout]). Never inside `archive/`. */
 @Singleton
 class DerivedStore(baseDir: File) {
     @Inject
     constructor(@ApplicationContext context: Context) : this(context.filesDir)
 
-    val root: File = File(baseDir, "derived/v1")
+    private val base: File = baseDir
+    val root: File = File(baseDir, ArchiveLayout.DERIVED)
 
-    fun dayFile(station: String, epochDay: Long): File = File(File(root, station), "day=${dayLabel(epochDay)}.parquet")
-    fun manifestFile(station: String, epochDay: Long): File = File(File(root, station), "day=${dayLabel(epochDay)}.manifest.json")
+    fun dayFile(station: String, epochDay: Long): File = File(base, ArchiveLayout.derivedDayPath(station, epochDay))
+    fun manifestFile(station: String, epochDay: Long): File = File(base, ArchiveLayout.derivedManifestPath(station, epochDay))
 
     /** Every daily file on this phone, as (station, file). */
     fun listAll(): List<Pair<String, File>> =
         (root.listFiles { f -> f.isDirectory } ?: emptyArray()).flatMap { dir -> (dir.listFiles { f -> f.isFile && f.extension == "parquet" } ?: emptyArray()).map { dir.name to it } }
 
     companion object {
-        fun dayLabel(epochDay: Long): String = DateTimeFormatter.ISO_LOCAL_DATE.withZone(ZoneOffset.UTC).format(Instant.ofEpochSecond(epochDay * 86_400))
+        fun dayLabel(epochDay: Long): String = ArchiveLayout.dayLabel(epochDay)
     }
 }
 
