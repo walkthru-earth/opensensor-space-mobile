@@ -4,6 +4,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import earth.walkthru.aqsync.airquality.WhoStep
 import earth.walkthru.opensensor.discover.resources.Res
+import earth.walkthru.opensensor.discover.resources.discover_access_cancel
+import earth.walkthru.opensensor.discover.resources.discover_access_continue
+import earth.walkthru.opensensor.discover.resources.discover_access_not_now
+import earth.walkthru.opensensor.discover.resources.discover_access_open_settings
 import earth.walkthru.opensensor.discover.resources.discover_add_sensor
 import earth.walkthru.opensensor.discover.resources.discover_all_measurements
 import earth.walkthru.opensensor.discover.resources.discover_area_count
@@ -22,6 +26,10 @@ import earth.walkthru.opensensor.discover.resources.discover_max
 import earth.walkthru.opensensor.discover.resources.discover_min
 import earth.walkthru.opensensor.discover.resources.discover_more
 import earth.walkthru.opensensor.discover.resources.discover_near_me
+import earth.walkthru.opensensor.discover.resources.discover_near_me_access_body
+import earth.walkthru.opensensor.discover.resources.discover_near_me_access_title
+import earth.walkthru.opensensor.discover.resources.discover_near_me_settings_body
+import earth.walkthru.opensensor.discover.resources.discover_near_me_settings_title
 import earth.walkthru.opensensor.discover.resources.discover_no_areas
 import earth.walkthru.opensensor.discover.resources.discover_no_health_scale
 import earth.walkthru.opensensor.discover.resources.discover_no_places
@@ -63,6 +71,7 @@ import earth.walkthru.opensensor.discover.resources.who_step_it1
 import earth.walkthru.opensensor.discover.resources.who_step_it2
 import earth.walkthru.opensensor.discover.resources.who_step_it3
 import earth.walkthru.opensensor.discover.resources.who_step_it4
+import earth.walkthru.opensensor.permissions.AccessDialogTexts
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -102,6 +111,11 @@ class DiscoverStrings internal constructor(
     val updatedRecently: String,
     /** The map button that centres on approximate location, spoken only. */
     val nearMe: String,
+    /**
+     * Near me's approximate location dialogs. The rationale shows only when Android says it is due,
+     * the settings dialog only after the system stops asking. iOS never shows the rationale.
+     */
+    val nearMeAccess: AccessDialogTexts,
     /** Short labels beside the time slider stops. The full window names are spoken. */
     val windowShortHour: String,
     val windowShortDay: String,
@@ -202,6 +216,17 @@ fun discoverStrings(): DiscoverStrings = DiscoverStrings(
     clearSearch = stringResource(Res.string.discover_clear_search),
     updatedRecently = stringResource(Res.string.discover_updated_recently),
     nearMe = stringResource(Res.string.discover_near_me),
+    nearMeAccess = AccessDialogTexts(
+        rationaleTitle = stringResource(Res.string.discover_near_me_access_title),
+        rationaleBody = stringResource(Res.string.discover_near_me_access_body),
+        settingsTitle = stringResource(Res.string.discover_near_me_settings_title),
+        settingsBody = stringResource(Res.string.discover_near_me_settings_body),
+        continueLabel = stringResource(Res.string.discover_access_continue),
+        notNow = stringResource(Res.string.discover_access_not_now),
+        openSettings = stringResource(Res.string.discover_access_open_settings),
+        cancel = stringResource(Res.string.discover_access_cancel),
+        icon = DiscoverIcons.MyLocation,
+    ),
     windowShortHour = stringResource(Res.string.discover_window_short_hour),
     windowShortDay = stringResource(Res.string.discover_window_short_day),
     windowShortWeek = stringResource(Res.string.discover_window_short_week),

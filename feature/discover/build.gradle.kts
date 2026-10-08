@@ -18,6 +18,8 @@ kotlin {
             // DiscoverScreen takes the resolved UnitSystem from its host.
             api(project(":core:units"))
             api(project(":ui:designsystem"))
+            // Near me follows the shared permission policy and its settings link.
+            api(project(":ui:permissions"))
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.maplibre.compose)
         }

@@ -18,6 +18,18 @@ enum LanPolicy {
         return parameters
     }
 
+    /// Local Network access as the shared permission policy reads it (`IosAuthorization.localNetwork`).
+    /// iOS has no status API for it, so it is unknown until the policy denial, then denied, which
+    /// makes the shared screen offer the app's Settings page.
+    enum LocalNetworkAccess: Sendable, Equatable {
+        case unknown
+        case denied
+    }
+
+    static func localNetworkAccess(_ error: NWError) -> LocalNetworkAccess {
+        isLocalNetworkDenied(error) ? .denied : .unknown
+    }
+
     /// TN3179: a browser waiting with kDNSServiceErr_PolicyDenied means Local Network access is off.
     /// Every other waiting reason (no Wi-Fi, prompt still showing) stays ambiguous.
     static func isLocalNetworkDenied(_ error: NWError) -> Bool {

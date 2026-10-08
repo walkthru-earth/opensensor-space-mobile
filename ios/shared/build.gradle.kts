@@ -18,6 +18,7 @@ kotlin {
             implementation(project(":feature:discover"))
             implementation(project(":feature:settings"))
             implementation(project(":ui:designsystem"))
+            implementation(project(":ui:permissions"))
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
             implementation(libs.compose.material3)

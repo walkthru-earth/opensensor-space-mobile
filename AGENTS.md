@@ -46,7 +46,8 @@ concern you are changing in `docs/README.md`.
   (`protocol`, `parquet`, `history`, `publicfeed`, `units`, `airquality`, `archive`, and the
   empty `sync`, `settings`) compiles for JVM and iOS from `commonMain`.
   Platform adapters stay in `jvmMain` and `iosMain` (streams, file mapping, zlib,
-  H3). `:ui:designsystem` and `:feature:discover` are Compose for Android and iOS.
+  H3). `:ui:designsystem`, `:ui:permissions` and `:feature:discover` are Compose
+  for Android and iOS.
   `:ios:shared` is iOS only. Common code cannot import `java.*`; platform
   source sets may depend on common code, never the reverse.
   Transport and storage work stays out of composables. Sensor semantics come
