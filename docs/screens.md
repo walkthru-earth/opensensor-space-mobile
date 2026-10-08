@@ -1,7 +1,7 @@
 # Screens — what the user sees, and which data path feeds it
 
 **Scope:** navigation graph, every destination's behaviour, detail levels, the transport chip.
-**Code:** `ui/Navigation.kt`, `ui/TabNavigator.kt`, `ui/NavigationKeys.kt`, `ui/<screen>/*Screen.kt` + `*ViewModel.kt`, `data/settings/AppSettings.kt`.
+**Code:** `feature/shell` (`AppKey.kt`, `TabNavigator.kt`, `AppShell.kt`), `ui/Navigation.kt` (Android entries), `ios/shared/.../AppRoot.kt` (iOS entries), `ui/<screen>/*Screen.kt` + `*ViewModel.kt`, `data/settings/AppSettings.kt`.
 **Related:** [history-pipeline.md](history-pipeline.md) (what History/Today read), [transports.md](transports.md) (what the Device screen writes), [background-sync.md](background-sync.md) (Auto-sync card, Sync in background).
 
 ## Navigation (Navigation 3 keys)
@@ -22,18 +22,21 @@ flowchart LR
   Discover -. Add your sensor .-> Scan
 ```
 
-**One bottom bar (owner decision 2026-10-08).** The app root (`MainNavigation`) is one
-`Scaffold` whose bottom bar holds Discover, My devices and Settings, around one `NavDisplay`. No
-screen draws its own bottom bar. Discover is always the start tab, with or without a paired
+**One bottom bar (owner decision 2026-10-08).** Both apps host the shared `AppShell`
+(`:feature:shell`, [ADR 0001](adr/0001-shared-navigation.md)), one `Scaffold` whose bottom bar
+(`BrandBottomBar`) holds Discover, My devices and Settings, around one `NavDisplay`. Android passes
+its screens in from `MainNavigation`, iOS from `AppRoot`. No screen draws its own bottom bar. Discover is always the start tab, with or without a paired
 device, and nothing is asked at launch.
 
 - Each tab has its own Navigation 3 back stack, decorated separately, so an open device keeps its
-  ViewModels while another tab is shown. The rules live in `TabNavigator` (plain class, covered
-  by `TabNavigatorTest`).
+  ViewModels while another tab is shown. The rules live in `TabNavigator` (plain class in
+  `commonMain`, covered by `TabNavigatorTest` on the host and the iOS simulator). Every key is an
+  `AppKey` saved through `AppNavConfig`.
 - Reselecting the active tab pops it to its root.
-- System Back pops the active tab's stack. At the root of My devices or Settings it returns to
-  Discover. At the Discover root the app closes. On Discover an open cell sheet returns to peek
-  first.
+- Back (Android predictive back, the iOS start edge swipe) pops the active tab's stack. At the
+  root of My devices or Settings it returns to Discover. At the Discover root the Android app
+  closes. On Discover an open cell sheet returns to peek first, through a `NavigationBackHandler`
+  that wins over the shell's.
 - Inside a device, Today, History, Files and Device are a tab row under the top bar
   (`DeviceSectionTabs`), siblings that replace each other. The bottom bar stays visible with My
   devices selected.
@@ -217,7 +220,7 @@ state change, de-duplicated). Never derive it per screen from the session object
 
 | Edit… | Affects… |
 | --- | --- |
-| `NavigationKeys.kt` | `Navigation.kt` entry providers, back-stack restore |
+| `feature/shell/.../AppKey.kt` | `AppNavConfig` saved state, Android and iOS entry providers, `AppNavConfigTest` |
 | `DetailLevel` / `AppSettings` | every `detailed`/`advancedMode` collector; Debug visibility; Files table icon |
 | `ui/device/cards/MetricHeroCard.kt`, `components/MoodFace.kt`, mood copy in `strings.xml` | Today, Home cards (same moods), iOS parity (iOS still reads the copy in `AirMood`, kept word for word equal to `strings.xml` by `CopyRulesTest`) |
 | `ui/theme/BrandTokens.kt` | Every screen, `BrandTokensTest` (website values and contrast) |
