@@ -35,5 +35,7 @@ include(":core:settings")
 // The Discover map, shared Compose for Android and iOS.
 include(":ui:designsystem")
 include(":feature:discover")
+// The Settings screen, shared Compose for Android and iOS (docs/platform-parity-plan.md).
+include(":feature:settings")
 
 include(":ios:shared")

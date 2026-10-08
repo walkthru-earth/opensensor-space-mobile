@@ -191,13 +191,21 @@ Unrelated crypto, programming and database failures also propagate.
 - **`openSession` rewrites every `KnownDevice` column.** The post-`info` upsert carries `previous?.autoSync` and `previous?.companionAssociationId`; future columns must be preserved too. Identity checks run before the upsert, and a station change deliberately discards the old token and port.
 - `derived_day.dailyFile == null` means the daily Parquet failed → its signature is treated as stale next pass.
 
-## DataStore (`AppSettings`)
+## DataStore (`:core:settings`, `SettingsRepository`)
+
+One Preferences DataStore on both platforms, `datastore/settings.preferences_pb`. Android keeps it
+under `filesDir` (the file the old `preferencesDataStore("settings")` wrote, so an upgrade keeps every
+value). iOS keeps it under Application Support and imports its old `NSUserDefaults` keys
+`discover.showPublicSensors` and `settings.unitSystem` once, then removes them. Android reads it
+through `AppSettings`. `SettingsRepositoryTest` holds the golden key list.
 
 | Key | Type | Meaning |
 | --- | --- | --- |
-| `detail_level` | string (`SIMPLE` / `DETAILED` / `DEVELOPER`) | the one user setting |
-| `advanced_mode` | boolean (legacy) | unset `detail_level` + `advanced_mode = true` → `DEVELOPER` |
-| `unit_system` | string (`AUTO` / `METRIC` / `IMPERIAL`) | display units, missing = `AUTO`. Display only, Room, Parquet and exports stay SI. iOS keeps the same names in `NSUserDefaults` key `settings.unitSystem` |
+| `detail_level` | string (`SIMPLE` / `DETAILED` / `DEVELOPER`) | the detail level |
+| `advanced_mode` | boolean (legacy) | unset `detail_level` + `advanced_mode = true` → `DEVELOPER`. Still written with the level |
+| `clock_sync_mode` | string (`ASK` / `AUTOMATIC` / `NEVER`) | Smart Sync clock consent, missing = `ASK` |
+| `show_public_sensors` | boolean | Discover network switch, missing = on |
+| `unit_system` | string (`AUTO` / `METRIC` / `IMPERIAL`) | display units, missing = `AUTO`. Display only, Room, Parquet and exports stay SI |
 
 ## Files under `filesDir`
 
