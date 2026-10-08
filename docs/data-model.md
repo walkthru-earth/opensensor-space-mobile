@@ -211,6 +211,13 @@ derived/v1/<station>/day=YYYY-MM-DD.manifest.json  sources (name, crc32, time_an
 Derived files are written atomically (temp + rename) and **never inside `archive/`**, so the raw
 zip stays the byte-exact mirror and the derived zip is the small analysis-ready export.
 
+These relative paths are defined once, in `ArchiveLayout` (`:core:archive`), for both phones. The
+root is Android `filesDir`. iOS still keeps its finals under `Application Support/SensorArchive/`
+with partials beside them and a `<name>.verified.json` receipt each. `ArchiveLayout` names those
+legacy forms so the wave 3 move onto this layout can recognise them. The "is synced" receipt is the
+`archived_file` record (`ArchiveRecord` behind the `ArchiveIndex` port), never a file. A delete goes
+through `forgetArchived`, which removes the record before the file.
+
 ## Backup
 
 `res/xml/data_extraction_rules.xml`, 2026-09-17.
