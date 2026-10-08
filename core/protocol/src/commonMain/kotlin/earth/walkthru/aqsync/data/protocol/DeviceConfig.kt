@@ -105,7 +105,11 @@ data class LanConfig(
     val isOn: Boolean get() = on == 1
 }
 
-class ConfigValidationException(message: String) : IllegalArgumentException(message)
+/** Which local check a [ConfigPatch] value failed. Apps map it to their own copy. */
+enum class ConfigProblem { PIN_FORMAT, SSID_EMPTY, SSID_TOO_LONG, PSK_TOO_LONG, STICKER_FORMAT, LINE_BREAK }
+
+/** [message] is technical (for logs and tests) and never contains the rejected value. */
+class ConfigValidationException(val problem: ConfigProblem, message: String) : IllegalArgumentException(message)
 
 /**
  * Builds the `SET_CONFIG` body: `key=value` lines, UTF-8, `\n`-separated. Partial by contract —
@@ -138,7 +142,7 @@ class ConfigPatch private constructor(private val lines: List<Pair<String, Strin
         /** Exactly six ASCII digits, `000000`–`999999`. */
         fun blePin(pin: String): Builder {
             if (pin.length != 6 || !pin.all { it in '0'..'9' }) {
-                throw ConfigValidationException("PIN must be exactly 6 digits")
+                throw ConfigValidationException(ConfigProblem.PIN_FORMAT, "PIN must be exactly 6 digits")
             }
             return add(KEY_BLE_PIN, pin)
         }
@@ -150,8 +154,8 @@ class ConfigPatch private constructor(private val lines: List<Pair<String, Strin
         /** ≤ 32 bytes UTF-8, no line breaks (the wire format is line-based). */
         fun wifiSsid(ssid: String): Builder {
             val bytes = ssid.encodeToByteArray().size
-            if (bytes == 0) throw ConfigValidationException("SSID is empty")
-            if (bytes > SSID_MAX_BYTES) throw ConfigValidationException("SSID is $bytes bytes; max $SSID_MAX_BYTES")
+            if (bytes == 0) throw ConfigValidationException(ConfigProblem.SSID_EMPTY, "SSID is empty")
+            if (bytes > SSID_MAX_BYTES) throw ConfigValidationException(ConfigProblem.SSID_TOO_LONG, "SSID is $bytes bytes, max $SSID_MAX_BYTES")
             requireSingleLine(ssid, "SSID")
             return add("wifi.ssid", ssid)
         }
@@ -159,7 +163,7 @@ class ConfigPatch private constructor(private val lines: List<Pair<String, Strin
         /** ≤ 63 bytes UTF-8; empty for an open network. */
         fun wifiPsk(psk: String): Builder {
             val bytes = psk.encodeToByteArray().size
-            if (bytes > PSK_MAX_BYTES) throw ConfigValidationException("passphrase is $bytes bytes; max $PSK_MAX_BYTES")
+            if (bytes > PSK_MAX_BYTES) throw ConfigValidationException(ConfigProblem.PSK_TOO_LONG, "passphrase is $bytes bytes, max $PSK_MAX_BYTES")
             requireSingleLine(psk, "passphrase")
             return add("wifi.psk", psk)
         }
@@ -172,7 +176,7 @@ class ConfigPatch private constructor(private val lines: List<Pair<String, Strin
         fun sensorIdentity(serial: String, enableBatchCandidate: Boolean): Builder {
             val normalized = serial.trim().uppercase()
             if (!Regex("PMS5003T-[0-9]{9,17}").matches(normalized)) {
-                throw ConfigValidationException("Sensor sticker must have PMS5003T-YYYYMMDD plus 1–9 unit digits")
+                throw ConfigValidationException(ConfigProblem.STICKER_FORMAT, "sensor sticker must be PMS5003T-YYYYMMDD plus 1 to 9 unit digits")
             }
             add("sensor.vendor", "Plantower")
             add("sensor.model", "PMS5003T")
@@ -190,7 +194,7 @@ class ConfigPatch private constructor(private val lines: List<Pair<String, Strin
 
         private fun requireSingleLine(value: String, what: String) {
             if (value.any { it == '\n' || it == '\r' || it == '\u0000' }) {
-                throw ConfigValidationException("$what must not contain line breaks")
+                throw ConfigValidationException(ConfigProblem.LINE_BREAK, "$what must not contain line breaks")
             }
         }
     }

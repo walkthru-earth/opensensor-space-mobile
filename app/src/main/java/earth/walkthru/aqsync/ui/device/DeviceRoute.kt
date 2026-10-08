@@ -18,15 +18,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import earth.walkthru.aqsync.R
-import earth.walkthru.aqsync.data.DeviceEvent
 import earth.walkthru.aqsync.data.SensorLabel
 import earth.walkthru.aqsync.data.protocol.PairMode
 import earth.walkthru.aqsync.ui.components.CollectEvents
+import earth.walkthru.aqsync.ui.components.showScreenMessage
 import earth.walkthru.aqsync.ui.device.cards.LanAccess
 import earth.walkthru.aqsync.ui.device.cards.StickerScan
 import earth.walkthru.aqsync.ui.permissions.AccessDialogs
@@ -67,13 +68,10 @@ fun DeviceRoute(
     val scanUnrecognized = stringResource(R.string.sensor_scan_unrecognized)
     val scanUnavailable = stringResource(R.string.sensor_scan_unavailable)
     val clockHint = stringResource(R.string.event_clock_on_today)
+    val res = LocalResources.current
 
     CollectEvents(viewModel.events) { ev ->
-        when (ev) {
-            is DeviceEvent.Error -> snackbar.showSnackbar(ev.message)
-            is DeviceEvent.Info -> snackbar.showSnackbar(ev.message)
-            is DeviceEvent.ClockConfirmationRequired -> snackbar.showSnackbar(clockHint)
-        }
+        snackbar.showScreenMessage(res, ev) { snackbar.showSnackbar(clockHint) }
     }
     // The companion-device association is a system dialog launched from an IntentSender.
     val companionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->

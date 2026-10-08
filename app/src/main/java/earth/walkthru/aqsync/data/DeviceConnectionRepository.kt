@@ -115,13 +115,6 @@ data class SyncProgress(
     val failures: List<FileOutcome> get() = outcomes.filter { it !is FileOutcome.Synced }
 }
 
-/** One-shot messages for snackbars. */
-sealed interface DeviceEvent {
-    data class Info(val message: String) : DeviceEvent
-    data class Error(val message: String) : DeviceEvent
-    data class ClockConfirmationRequired(val reason: String) : DeviceEvent
-}
-
 data class ArchiveTimeSummary(
     val files: Int = 0,
     val rows: Long = 0,
@@ -144,6 +137,8 @@ sealed interface WifiScanState {
     data object Idle : WifiScanState
     data object Scanning : WifiScanState
     data class Done(val accessPoints: List<Frame.WifiAp>, val atEpochMs: Long) : WifiScanState
+
+    /** [message] is technical detail for logs. The UI shows copy chosen by [unavailable]. */
     data class Failed(val message: String, val unavailable: Boolean) : WifiScanState
 }
 
@@ -411,7 +406,7 @@ class DeviceConnectionRepository @Inject constructor(
      */
     private suspend fun connectLocked(address: String, name: String?, fake: Boolean, preference: TransportPreference, claim: Long, listAfter: Boolean = true): Boolean {
         if (backgroundOwner.value != null) {
-            _events.tryEmit(DeviceEvent.Info("Background collection owns this device. Its progress remains available; reconnect after it finishes."))
+            _events.tryEmit(DeviceEvent.Info(DeviceMessage.BackgroundOwnsConnect))
             return false
         }
         val existing = _session.value
@@ -481,19 +476,20 @@ class DeviceConnectionRepository @Inject constructor(
                 // drop it so the Bluetooth session we are about to open fetches a fresh one.
                 knownDeviceDao.setLanToken(address, null, null)
                 tokenPolicy.markStale(address)
-                _events.tryEmit(DeviceEvent.Info("Wi-Fi LAN: token rejected. Using Bluetooth and renewing the token."))
+                _events.tryEmit(DeviceEvent.Info(DeviceMessage.LanFallback(e.failure)))
             } else {
-                _events.tryEmit(DeviceEvent.Info("Wi-Fi LAN: ${e.message}. Using Bluetooth."))
+                _events.tryEmit(DeviceEvent.Info(DeviceMessage.LanFallback(e.failure)))
             }
             return null
         } catch (e: TransportException) {
-            _events.tryEmit(DeviceEvent.Info("Wi-Fi LAN failed (${e.message}). Using Bluetooth."))
+            Log.w(TAG, "LAN connect failed (${e.message}); falling back to Bluetooth")
+            _events.tryEmit(DeviceEvent.Info(DeviceMessage.LanFallback(null)))
             return null
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             Log.w(TAG, "LAN connect failed unexpectedly (${e::class.simpleName}); falling back to Bluetooth")
-            _events.tryEmit(DeviceEvent.Info("Wi-Fi LAN failed. Using Bluetooth."))
+            _events.tryEmit(DeviceEvent.Info(DeviceMessage.LanFallback(null)))
             return null
         } finally {
             if (!connected) {
@@ -552,8 +548,9 @@ class DeviceConnectionRepository @Inject constructor(
         try {
             transport.connect()
         } catch (e: TransportException) {
-            connectionFailure.value = e.message ?: "Connection failed"
-            _events.tryEmit(DeviceEvent.Error(e.message ?: "connection failed"))
+            Log.w(TAG, "connect failed (${e.message})")
+            connectionFailure.value = e.message ?: "connection failed"
+            _events.tryEmit(DeviceEvent.Error(DeviceMessage.ConnectFailed))
             return false
         }
         startNotificationCollection(session)
@@ -561,7 +558,7 @@ class DeviceConnectionRepository @Inject constructor(
             val info = session.readInfo()
             val proto = info.proto
             if (proto != null && proto > AqUuids.PROTOCOL_VERSION) {
-                _events.tryEmit(DeviceEvent.Info("Device speaks protocol v$proto; this app implements v${AqUuids.PROTOCOL_VERSION}. Newer features are ignored."))
+                _events.tryEmit(DeviceEvent.Info(DeviceMessage.NewerProtocol(proto, AqUuids.PROTOCOL_VERSION)))
             }
             val now = clock.nowEpochMs()
             val previous = knownDeviceDao.get(address)
@@ -569,16 +566,17 @@ class DeviceConnectionRepository @Inject constructor(
             val expected = previous?.let { DeviceContinuityPolicy.Identity(it.address, it.deviceId, it.station) }
             val continuity = DeviceContinuityPolicy.evaluate(expected, DeviceContinuityPolicy.Identity(address, info.dev, info.station), authenticatedBle)
             if (continuity is DeviceContinuityPolicy.Decision.Reject) {
-                connectionFailure.value = continuity.reason.message
-                _events.tryEmit(DeviceEvent.Error(continuity.reason.message))
+                Log.w(TAG, "identity rejected (${continuity.reason})")
+                connectionFailure.value = continuity.reason.name
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.IdentityRejected(continuity.reason)))
                 return false
             }
             continuity as DeviceContinuityPolicy.Decision.Accept
             if (identityLease == null && info.dev != null) {
                 identityLease = identityClaims.claim(info.dev!!, this)
                 if (identityLease == null) {
-                    connectionFailure.value = "This hardware already has an active connection through another endpoint."
-                    _events.tryEmit(DeviceEvent.Error(connectionFailure.value!!))
+                    connectionFailure.value = "hardware already connected through another endpoint"
+                    _events.tryEmit(DeviceEvent.Error(DeviceMessage.HardwareInUse))
                     return false
                 }
             }
@@ -587,7 +585,7 @@ class DeviceConnectionRepository @Inject constructor(
             if (continuity.invalidateLanToken) {
                 knownDeviceDao.setLanToken(address, null, null)
                 tokenPolicy.markStale(address)
-                _events.tryEmit(DeviceEvent.Info("Device station changed after reset. Previous history is retained; LAN access will be renewed over Bluetooth."))
+                _events.tryEmit(DeviceEvent.Info(DeviceMessage.StationChanged))
             }
             knownDeviceDao.upsert(
                 KnownDevice(
@@ -620,7 +618,7 @@ class DeviceConnectionRepository @Inject constructor(
                 // said ours is stale, see tryLan). Never logged.
                 if (tokenPolicy.shouldFetch(transport.kind, proto, previous?.lanToken?.takeUnless { continuity.invalidateLanToken })) {
                     if (fetchTokenLocked(session, address, quiet = true) && tokenPolicy.onFetched(address)) {
-                        _events.tryEmit(DeviceEvent.Info("LAN token renewed"))
+                        _events.tryEmit(DeviceEvent.Info(DeviceMessage.LanTokenRenewed))
                     }
                 }
                 suspendRunCatching { session.getConfig() }
@@ -629,8 +627,9 @@ class DeviceConnectionRepository @Inject constructor(
             }
         } catch (e: Exception) {
             if (e is CancellationException) throw e
-            connectionFailure.value = "Device verification failed: ${e.message}"
-            _events.tryEmit(DeviceEvent.Error(connectionFailure.value!!))
+            Log.w(TAG, "device verification failed (${e.message})")
+            connectionFailure.value = "verification failed (${e.message})"
+            _events.tryEmit(DeviceEvent.Error(DeviceMessage.VerificationFailed))
             return false
         }
         // Verification and enrollment must finish before link loss can start an automatic
@@ -642,19 +641,20 @@ class DeviceConnectionRepository @Inject constructor(
     private suspend fun fetchTokenLocked(session: DeviceSession, address: String, quiet: Boolean): Boolean = try {
         val t = session.getToken()
         knownDeviceDao.setLanToken(address, t.token.toHex(), t.port)
-        if (!quiet) _events.tryEmit(DeviceEvent.Info("LAN token stored on this phone (port ${t.port})."))
+        if (!quiet) _events.tryEmit(DeviceEvent.Info(DeviceMessage.LanTokenStored))
         true
     } catch (e: NotAllowedOnLinkException) {
-        if (!quiet) _events.tryEmit(DeviceEvent.Error("The token can only be fetched over Bluetooth."))
+        if (!quiet) _events.tryEmit(DeviceEvent.Error(DeviceMessage.TokenNeedsBluetooth))
         false
     } catch (e: DeviceErrorException) {
-        if (!quiet) _events.tryEmit(DeviceEvent.Error(e.message ?: "GET_TOKEN rejected"))
+        Log.w(TAG, "GET_TOKEN rejected (${e.message})")
+        if (!quiet) _events.tryEmit(DeviceEvent.Error(DeviceMessage.CommandRejected(DeviceMessage.Command.GET_TOKEN)))
         false
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
         Log.w(TAG, "GET_TOKEN failed: ${e.message}")
-        if (!quiet) _events.tryEmit(DeviceEvent.Error("GET_TOKEN failed: ${e.message}"))
+        if (!quiet) _events.tryEmit(DeviceEvent.Error(DeviceMessage.CommandFailed(DeviceMessage.Command.GET_TOKEN)))
         false
     }
 
@@ -772,7 +772,7 @@ class DeviceConnectionRepository @Inject constructor(
             for (attempt in 1..RECONNECT_ATTEMPTS) {
                 if (!connectionIntent.owns(claim)) return
                 _reconnecting.value = ReconnectState(attempt, RECONNECT_ATTEMPTS, reason)
-                _events.tryEmit(DeviceEvent.Info("Link lost ($reason). Reconnecting ($attempt/$RECONNECT_ATTEMPTS)…"))
+                _events.tryEmit(DeviceEvent.Info(DeviceMessage.Reconnecting(attempt, RECONNECT_ATTEMPTS)))
                 delay(RECONNECT_DELAY_MS)
                 val ok = connectMutex.withLock {
                     if (!connectionIntent.owns(claim)) return@withLock null
@@ -794,7 +794,7 @@ class DeviceConnectionRepository @Inject constructor(
                     return
                 }
             }
-            if (connectionIntent.owns(claim)) _events.tryEmit(DeviceEvent.Error("Could not reconnect after $RECONNECT_ATTEMPTS attempts. Use Reconnect when the device is back."))
+            if (connectionIntent.owns(claim)) _events.tryEmit(DeviceEvent.Error(DeviceMessage.ReconnectFailed(RECONNECT_ATTEMPTS)))
         } finally {
             if (connectionIntent.owns(claim)) _reconnecting.value = null
         }
@@ -875,7 +875,7 @@ class DeviceConnectionRepository @Inject constructor(
                 ClockSyncAction.ASK_USER -> if (clockConfirmed) {
                     if (!setTimeFromPhoneNow(session, quiet = false)) return@launch
                 } else {
-                    _events.emit(DeviceEvent.ClockConfirmationRequired(decision.reason))
+                    _events.emit(DeviceEvent.ClockConfirmationRequired(decision.quality))
                     return@launch
                 }
                 ClockSyncAction.SET_TIME -> {
@@ -884,7 +884,7 @@ class DeviceConnectionRepository @Inject constructor(
                 ClockSyncAction.CONTINUE -> Unit
             }
             val latest = plan.value ?: run {
-                _events.emit(DeviceEvent.Error("Cannot sync: the device file list is not ready"))
+                _events.emit(DeviceEvent.Error(DeviceMessage.FileListNotReady))
                 return@launch
             }
             recordDiagnostic("plan", "${latest.toDownload.size} file(s), ${latest.missingBytes} byte(s) missing")
@@ -945,24 +945,24 @@ class DeviceConnectionRepository @Inject constructor(
     @Synchronized
     private fun startSync(entries: List<ManifestEntry>, foregroundService: Boolean = true, refreshAfter: Boolean = foregroundService): Job? {
         if (foregroundService && backgroundOwner.value != null) {
-            _events.tryEmit(DeviceEvent.Info("Background collection owns this device. Wait for it to finish before starting an interactive sync."))
+            _events.tryEmit(DeviceEvent.Info(DeviceMessage.BackgroundOwnsSync))
             return null
         }
         if (foregroundService && _busy.value) {
-            _events.tryEmit(DeviceEvent.Info("Wait for the current device task to finish before starting a sync."))
+            _events.tryEmit(DeviceEvent.Info(DeviceMessage.BusyBeforeSync))
             return null
         }
         if (_sync.value.running || closing) return null
         val session = _session.value ?: return null
         val info = _info.value
         val station = info?.station ?: run {
-            _events.tryEmit(DeviceEvent.Error("Cannot sync: device `info` has no station id"))
+            _events.tryEmit(DeviceEvent.Error(DeviceMessage.NoStationId))
             return null
         }
         // max_read on every link; ReadWindow records why BLE is not given a smaller window.
         val maxRead = ReadWindow.forTransport(session.transport, info.maxRead)
         if (entries.isEmpty()) {
-            _events.tryEmit(DeviceEvent.Info("Archive is already up to date"))
+            _events.tryEmit(DeviceEvent.Info(DeviceMessage.UpToDate))
             return null
         }
         val total = entries.sumOf { it.bytes - it.partialBytes }
@@ -1021,12 +1021,13 @@ class DeviceConnectionRepository @Inject constructor(
                     outcomes += outcome
                     _sync.update { it.copy(filesDone = outcomes.size, outcomes = outcomes.toList(), bytesDone = bytesBefore) }
                     if (outcome !is FileOutcome.Synced) {
-                        _events.tryEmit(DeviceEvent.Error("${entry.name.substringAfterLast('/')}: ${describe(outcome)}"))
+                        Log.w(TAG, "${entry.name} not synced (${describe(outcome)})")
+                        _events.tryEmit(DeviceEvent.Error(DeviceMessage.FileNotSynced(entry.name.substringAfterLast('/'), problemOf(outcome))))
                     }
                 }
                 val synced = outcomes.count { it is FileOutcome.Synced }
                 endCause = SyncEndCause.COMPLETED
-                _events.tryEmit(DeviceEvent.Info("Synced $synced of ${entries.size} file(s)"))
+                _events.tryEmit(DeviceEvent.Info(DeviceMessage.SyncFinished(synced, entries.size)))
                 // Still under the foreground service and the WifiLock (see the KDoc): re-LIST now.
                 // A failure here is the refresh's, not the sync's — the files are verified and stored.
                 if (refreshAfter && session.connectionState.value.isReady) {
@@ -1035,17 +1036,17 @@ class DeviceConnectionRepository @Inject constructor(
                 }
             } catch (e: CancellationException) {
                 endCause = SyncEndCause.STOPPED
-                _events.tryEmit(DeviceEvent.Info("Sync stopped; partial files are kept for resume"))
+                _events.tryEmit(DeviceEvent.Info(DeviceMessage.SyncStopped))
                 throw e
             } catch (e: TransportException) {
                 // The pipe failed under us (no response, link lost, socket error): if the link watcher
                 // sees the loss shortly and gets the device back, it resumes this sync (SyncResumePolicy).
                 endCause = SyncEndCause.TRANSPORT_FAILURE
                 Log.e(TAG, "sync aborted by the transport", e)
-                _events.tryEmit(DeviceEvent.Error("Sync aborted: ${e.message ?: e::class.simpleName}"))
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.SyncAborted))
             } catch (e: Exception) {
                 Log.e(TAG, "sync aborted", e)
-                _events.tryEmit(DeviceEvent.Error("Sync aborted: ${e.message ?: e::class.simpleName}"))
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.SyncAborted))
             } finally {
                 wifiLease?.close()
                 if (permit) collectionBudget.release()
@@ -1206,12 +1207,18 @@ class DeviceConnectionRepository @Inject constructor(
             "${summary.files} file(s), ${summary.realTimeRows} UTC row(s), ${summary.estimatedRows} estimated row(s), ${summary.unplacedRows} unplaced row(s)",
         )
         if (summary.unplacedRows > 0) {
-            _events.emit(DeviceEvent.Info("${summary.unplacedRows} reading(s) are safely archived but cannot be placed on the calendar because that boot has no time anchor."))
+            _events.emit(DeviceEvent.Info(DeviceMessage.UnplacedReadings(summary.unplacedRows)))
         }
     }
 
     private fun recordDiagnostic(step: String, detail: String) {
         _syncDiagnostics.update { (it + SyncDiagnostic(clock.nowEpochMs(), step, detail)).takeLast(100) }
+    }
+
+    private fun problemOf(o: FileOutcome): DeviceMessage.FileProblem = when (o) {
+        is FileOutcome.Mismatch -> DeviceMessage.FileProblem.CHECK_FAILED
+        is FileOutcome.DeviceError -> DeviceMessage.FileProblem.DEVICE_REFUSED
+        is FileOutcome.Synced, is FileOutcome.Failed -> DeviceMessage.FileProblem.FAILED
     }
 
     private fun describe(o: FileOutcome): String = when (o) {
@@ -1224,7 +1231,7 @@ class DeviceConnectionRepository @Inject constructor(
     /** A worker-owned session can be observed, but interactive commands cannot take it over. */
     private fun interactiveSession(): DeviceSession? {
         if (backgroundOwner.value != null) {
-            _events.tryEmit(DeviceEvent.Info("Background collection owns this device. Wait for it to finish before sending commands."))
+            _events.tryEmit(DeviceEvent.Info(DeviceMessage.BackgroundOwnsCommand))
             return null
         }
         return _session.value
@@ -1258,7 +1265,7 @@ class DeviceConnectionRepository @Inject constructor(
     }
 
     private fun refuseBusy() {
-        _events.tryEmit(DeviceEvent.Info("Wait for the current device task to finish."))
+        _events.tryEmit(DeviceEvent.Info(DeviceMessage.Busy))
     }
 
     // ----------------------------------------------------------------- controls
@@ -1273,18 +1280,18 @@ class DeviceConnectionRepository @Inject constructor(
         val epoch = clock.nowEpochMs() / 1000
         val r = session.setTime(epoch)
         recordDiagnostic("clock", "SET_TIME accepted at epoch ${r.epochSeconds}")
-        if (!quiet) _events.emit(DeviceEvent.Info("Device clock set. Rows from now on carry UTC; earlier same-boot rows can be estimated after sync."))
+        if (!quiet) _events.emit(DeviceEvent.Info(DeviceMessage.ClockSet))
         suspendRunCatching { session.readStatus() }.onSuccess { _status.value = TimedStatus(it, clock.nowEpochMs()) }
         true
     } catch (e: DeviceErrorException) {
         recordDiagnostic("clock", "SET_TIME rejected: ${e.message}")
-        if (!quiet) _events.emit(DeviceEvent.Error(e.message ?: "SET_TIME rejected"))
+        if (!quiet) _events.emit(DeviceEvent.Error(DeviceMessage.CommandRejected(DeviceMessage.Command.SET_TIME)))
         false
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
         recordDiagnostic("clock", "SET_TIME failed: ${e.message ?: e::class.simpleName}")
-        if (!quiet) _events.emit(DeviceEvent.Error("SET_TIME failed: ${e.message}"))
+        if (!quiet) _events.emit(DeviceEvent.Error(DeviceMessage.CommandFailed(DeviceMessage.Command.SET_TIME)))
         false
     }
 
@@ -1294,14 +1301,16 @@ class DeviceConnectionRepository @Inject constructor(
         scope.launch {
             try {
                 val r = session.flush()
-                _events.tryEmit(DeviceEvent.Info("Finalized ${r.rows} buffered row(s); ${r.filesFinalized} files on the card"))
+                _events.tryEmit(DeviceEvent.Info(DeviceMessage.Finalized(r.rows, r.filesFinalized)))
                 refreshManifest()
             } catch (e: DeviceErrorException) {
-                _events.tryEmit(DeviceEvent.Error(e.message ?: "FLUSH rejected"))
+                Log.w(TAG, "FLUSH rejected (${e.message})")
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.CommandRejected(DeviceMessage.Command.FLUSH)))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _events.tryEmit(DeviceEvent.Error("FLUSH failed: ${e.message}"))
+                Log.w(TAG, "FLUSH failed (${e.message})")
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.CommandFailed(DeviceMessage.Command.FLUSH)))
             }
         }
     }
@@ -1321,7 +1330,8 @@ class DeviceConnectionRepository @Inject constructor(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _events.tryEmit(DeviceEvent.Error("GET_CONFIG failed: ${e.message}"))
+                Log.w(TAG, "GET_CONFIG failed (${e.message})")
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.CommandFailed(DeviceMessage.Command.GET_CONFIG)))
             }
         }
     }
@@ -1330,7 +1340,7 @@ class DeviceConnectionRepository @Inject constructor(
      * `SET_CONFIG`. Validation already happened in [ConfigPatch]; `ERROR` 12 names the key the
      * device still rejected. A `ble.*` change is reported as pending until the next boot.
      */
-    fun applyConfig(patch: ConfigPatch, successMessage: String? = null) {
+    fun applyConfig(patch: ConfigPatch, change: DeviceMessage.ConfigChange = DeviceMessage.ConfigChange.SETTINGS) {
         val session = interactiveSession() ?: return
         if (patch.isEmpty) return
         if (!tryBeginCommand()) return refuseBusy()
@@ -1338,20 +1348,17 @@ class DeviceConnectionRepository @Inject constructor(
             try {
                 val snap = session.setConfig(patch)
                 _config.value = snap
-                val msg = successMessage ?: "Settings saved"
-                _events.tryEmit(
-                    DeviceEvent.Info(
-                        if (snap.rebootRequired) "$msg. Bluetooth changes apply after a reboot." else msg
-                    )
-                )
+                _events.tryEmit(DeviceEvent.Info(DeviceMessage.ConfigSaved(change, snap.rebootRequired)))
             } catch (e: InvalidConfigException) {
-                _events.tryEmit(DeviceEvent.Error("Device rejected `${e.key}`; nothing was changed."))
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.ConfigKeyRejected(e.key)))
             } catch (e: DeviceErrorException) {
-                _events.tryEmit(DeviceEvent.Error(e.message ?: "SET_CONFIG rejected"))
+                Log.w(TAG, "SET_CONFIG rejected (code ${e.frame.code})")
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.CommandRejected(DeviceMessage.Command.SET_CONFIG)))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _events.tryEmit(DeviceEvent.Error("SET_CONFIG failed: ${e.message}"))
+                Log.w(TAG, "SET_CONFIG failed (${e::class.simpleName})")
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.CommandFailed(DeviceMessage.Command.SET_CONFIG)))
             } finally {
                 endCommand()
             }
@@ -1378,13 +1385,13 @@ class DeviceConnectionRepository @Inject constructor(
                 val r = session.wifiScan()
                 _wifiScan.value = WifiScanState.Done(r.accessPoints.sortedByDescending { it.rssi }, clock.nowEpochMs())
             } catch (e: WifiUnavailableException) {
-                _wifiScan.value = WifiScanState.Failed("The device's Wi-Fi radio cannot scan right now.", unavailable = true)
+                _wifiScan.value = WifiScanState.Failed("WIFI_SCAN unavailable", unavailable = true)
             } catch (e: DeviceErrorException) {
                 _wifiScan.value = WifiScanState.Failed(e.message ?: "WIFI_SCAN rejected", unavailable = false)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _wifiScan.value = WifiScanState.Failed("WIFI_SCAN failed: ${e.message}", unavailable = false)
+                _wifiScan.value = WifiScanState.Failed("WIFI_SCAN failed (${e.message})", unavailable = false)
             }
         }
     }
@@ -1406,7 +1413,7 @@ class DeviceConnectionRepository @Inject constructor(
     fun rebootAndReconnect() {
         val session = interactiveSession() ?: return
         if (_sync.value.running) {
-            _events.tryEmit(DeviceEvent.Error("Not rebooting while a sync is running. Stop the sync first."))
+            _events.tryEmit(DeviceEvent.Error(DeviceMessage.NoRebootWhileSyncing))
             return
         }
         if (!tryBeginCommand(refuseWhileSyncing = true)) return refuseBusy()
@@ -1419,7 +1426,7 @@ class DeviceConnectionRepository @Inject constructor(
                 if (!connectionIntent.owns(claim)) return@launch
                 if (_sync.value.running) throw IllegalStateException("a sync started meanwhile; not rebooting")
                 val r = session.reboot()
-                _events.tryEmit(DeviceEvent.Info("Device is rebooting (in ${r.delayMs} ms). Reconnecting…"))
+                _events.tryEmit(DeviceEvent.Info(DeviceMessage.Rebooting))
                 delay(r.delayMs.toLong().coerceIn(100L, 5_000L))
                 connectMutex.withLock { if (connectionIntent.owns(claim)) closeSessionLocked() }
                 if (!connectionIntent.owns(claim)) return@launch
@@ -1430,11 +1437,13 @@ class DeviceConnectionRepository @Inject constructor(
                     if (!connectionIntent.owns(claim)) closeSessionLocked()
                 }
             } catch (e: DeviceErrorException) {
-                _events.tryEmit(DeviceEvent.Error(e.message ?: "REBOOT rejected"))
+                Log.w(TAG, "REBOOT rejected (${e.message})")
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.CommandRejected(DeviceMessage.Command.REBOOT)))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _events.tryEmit(DeviceEvent.Error("REBOOT failed: ${e.message}"))
+                Log.w(TAG, "REBOOT failed (${e.message})")
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.CommandFailed(DeviceMessage.Command.REBOOT)))
             } finally {
                 // A rejected reboot keeps the original session. The new explicit intent invalidated
                 // its old link watcher, so re-arm it if that session still belongs to this action.
@@ -1463,7 +1472,7 @@ class DeviceConnectionRepository @Inject constructor(
     fun fetchToken() {
         val session = interactiveSession() ?: return
         if (session.transport.kind == TransportKind.LAN) {
-            _events.tryEmit(DeviceEvent.Error("The token can only be fetched over Bluetooth. Reconnect over Bluetooth first."))
+            _events.tryEmit(DeviceEvent.Error(DeviceMessage.TokenNeedsBluetooth))
             return
         }
         if (!tryBeginCommand()) return refuseBusy()
@@ -1490,18 +1499,20 @@ class DeviceConnectionRepository @Inject constructor(
                 knownDeviceDao.setLanToken(address, null, null)
                 tokenPolicy.clear(address)
                 if (session.transport.kind == TransportKind.LAN) {
-                    _events.tryEmit(DeviceEvent.Info("Token rotated. This LAN session will drop; reconnect over Bluetooth to fetch the new token."))
+                    _events.tryEmit(DeviceEvent.Info(DeviceMessage.TokenRotated(DeviceMessage.TokenRotation.LAN_SESSION_DROPS)))
                 } else if (fetchTokenLocked(session, address, quiet = true)) {
-                    _events.tryEmit(DeviceEvent.Info("Token rotated and the new one stored on this phone."))
+                    _events.tryEmit(DeviceEvent.Info(DeviceMessage.TokenRotated(DeviceMessage.TokenRotation.STORED)))
                 } else {
-                    _events.tryEmit(DeviceEvent.Info("Token rotated. Use “Fetch token” to store the new one."))
+                    _events.tryEmit(DeviceEvent.Info(DeviceMessage.TokenRotated(DeviceMessage.TokenRotation.FETCH_LATER)))
                 }
             } catch (e: DeviceErrorException) {
-                _events.tryEmit(DeviceEvent.Error(e.message ?: "rotate_token rejected"))
+                Log.w(TAG, "rotate_token rejected (code ${e.frame.code})")
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.CommandRejected(DeviceMessage.Command.ROTATE_TOKEN)))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _events.tryEmit(DeviceEvent.Error("rotate_token failed: ${e.message}"))
+                Log.w(TAG, "rotate_token failed (${e::class.simpleName})")
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.CommandFailed(DeviceMessage.Command.ROTATE_TOKEN)))
             } finally {
                 endCommand()
             }
@@ -1510,7 +1521,7 @@ class DeviceConnectionRepository @Inject constructor(
 
     /** `ble.clear_bonds=1`: the device forgets every phone, including this one. */
     fun clearBonds() {
-        applyConfig(ConfigPatch.build { clearBonds() }, "Device forgot all bonded phones. You will pair again on the next Bluetooth connection.")
+        applyConfig(ConfigPatch.build { clearBonds() }, DeviceMessage.ConfigChange.BONDS_CLEARED)
     }
 
     /** Whether the connected device has a stored LAN token (for the LAN card). */

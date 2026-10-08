@@ -12,7 +12,6 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.DeviceConnectionManager
-import earth.walkthru.aqsync.data.DeviceEvent
 import earth.walkthru.aqsync.data.ManifestState
 import earth.walkthru.aqsync.data.ReconnectState
 import earth.walkthru.aqsync.data.SyncProgress
@@ -33,6 +32,7 @@ import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
 import earth.walkthru.aqsync.data.settings.AppSettings
 import earth.walkthru.aqsync.data.settings.DetailLevel
 import earth.walkthru.aqsync.data.sync.SyncPlan
+import earth.walkthru.aqsync.ui.components.ScreenMessage
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -138,8 +138,8 @@ class FilesViewModel @AssistedInject constructor(
         fun create(deviceAddress: String): FilesViewModel
     }
 
-    private val localEvents = MutableSharedFlow<DeviceEvent>(extraBufferCapacity = 4)
-    val events: Flow<DeviceEvent> = merge(repository.events, localEvents)
+    private val localEvents = MutableSharedFlow<ScreenMessage>(extraBufferCapacity = 4)
+    val events: Flow<ScreenMessage> = merge(repository.events.map(ScreenMessage::Device), localEvents)
 
     private val _effects = MutableSharedFlow<FilesEffect>(extraBufferCapacity = 4)
     val effects: SharedFlow<FilesEffect> = _effects.asSharedFlow()
@@ -223,7 +223,7 @@ class FilesViewModel @AssistedInject constructor(
         val addr = repository.currentAddress ?: return
         viewModelScope.launch {
             repository.setAutoSync(addr, enabled)
-            localEvents.tryEmit(DeviceEvent.Info(if (enabled) context.getString(R.string.files_autosync_event_on, AutoSyncScheduler.PERIOD_MINUTES.toInt()) else context.getString(R.string.files_autosync_event_off)))
+            localEvents.tryEmit(ScreenMessage.Text(if (enabled) context.getString(R.string.files_autosync_event_on, AutoSyncScheduler.PERIOD_MINUTES.toInt()) else context.getString(R.string.files_autosync_event_off)))
         }
     }
 
@@ -237,7 +237,7 @@ class FilesViewModel @AssistedInject constructor(
         viewModelScope.launch {
             repository.disconnectNow()
             autoSyncScheduler.syncNow(addr)
-            localEvents.tryEmit(DeviceEvent.Info(context.getString(R.string.files_bg_event)))
+            localEvents.tryEmit(ScreenMessage.Text(context.getString(R.string.files_bg_event)))
         }
     }
     fun syncOne(name: String) = repository.syncOne(name)
@@ -272,7 +272,7 @@ class FilesViewModel @AssistedInject constructor(
             try {
                 val zip = export.buildDailyZip()
                 if (zip == null) {
-                    localEvents.tryEmit(DeviceEvent.Info(context.getString(R.string.files_no_daily)))
+                    localEvents.tryEmit(ScreenMessage.Text(context.getString(R.string.files_no_daily)))
                     return@launch
                 }
                 _effects.tryEmit(FilesEffect.Launch(export.shareZipIntent(zip)))
