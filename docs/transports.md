@@ -175,7 +175,7 @@ stateDiagram-v2
   None --> Stored: BLE session Ready, proto ≥ 2 → GET_TOKEN
   Stored --> Stored: LAN HELLO ok
   Stored --> Stale: LAN ERROR 14 (rotated elsewhere) → lanToken cleared
-  Stale --> Stored: next BLE session refetches, snackbar "LAN token renewed"
+  Stale --> Stored: next BLE session refetches, snackbar LanTokenRenewed
   Stored --> Stale: unreadable encrypted value → token + port cleared
   Stored --> Stale: verified BLE station-generation change → token + port cleared
   Stored --> None: Forget device / deliberate Rotate token

@@ -17,6 +17,9 @@ background sync; do not fork transfer logic.
 - Serialize GATT operations and session requests. A lost chunk or bad
   `READ_END.next_offset` retries from locally verified bytes; never trust a
   device-reported offset over received bytes. Keep read windows measured.
+- No user-facing sentences here. Snackbar events carry a `DeviceMessage` code with typed
+  arguments (`DeviceMessage.kt`); the UI maps it to a string resource. Exception text and
+  protocol detail go to the log or a Developer-level field only.
 - No secret is logged. `SET_CONFIG` is recorded as opcode only. Pairing and
   state-changing calls need the explicit paths and confirmations in root
   `AGENTS.md`; `DeviceSession.rawCommand` refuses `REBOOT` and `SET_CONFIG`.

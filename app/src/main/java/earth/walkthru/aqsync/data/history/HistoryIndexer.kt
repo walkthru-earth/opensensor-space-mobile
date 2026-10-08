@@ -38,7 +38,7 @@ class HistoryIndexer @Inject constructor(
             else -> null
         }
         if (producer != null && producer != row.station) {
-            row.copy(indexedAtEpochMs = nowEpochMs, indexError = "File belongs to station $producer. Raw bytes are saved; history is excluded from current station ${row.station}.")
+            row.copy(indexedAtEpochMs = nowEpochMs, indexError = "file belongs to station $producer, raw bytes kept, excluded from the history of station ${row.station}")
         } else {
             val index = ParquetIndexer.index(ParquetFile.open(file))
             row.copy(

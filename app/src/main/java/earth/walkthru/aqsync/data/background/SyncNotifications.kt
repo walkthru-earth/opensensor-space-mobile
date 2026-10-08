@@ -65,7 +65,7 @@ class SyncNotifications @Inject constructor(@ApplicationContext private val cont
         val name = deviceName ?: context.getString(R.string.notif_device)
         val title = when {
             reconnecting != null -> context.getString(R.string.notif_reconnecting, name, reconnecting.attempt, reconnecting.maxAttempts)
-            progress.filesTotal > 0 -> context.getString(R.string.notif_progress, name, progress.filesDone, progress.filesTotal, formatBytes(progress.bytesDone))
+            progress.filesTotal > 0 -> context.resources.getQuantityString(R.plurals.notif_progress, progress.filesTotal, name, progress.filesDone, progress.filesTotal, formatBytes(progress.bytesDone))
             else -> context.getString(R.string.notif_preparing, name)
         }
         val current = progress.current

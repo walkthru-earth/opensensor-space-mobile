@@ -615,7 +615,7 @@
     <string name="msg_lan_timeout">Sensor did not answer on Wi-Fi in time. Using Bluetooth.</string>
     <string name="msg_lan_busy">Another phone is connected over Wi-Fi. Using Bluetooth.</string>
     <string name="msg_lan_failed">Wi-Fi connection failed. Using Bluetooth.</string>
-    <string name="msg_newer_protocol">The sensor speaks protocol v%1$d and this app v%2$d. Newer features are ignored.</string>
+    <string name="msg_newer_protocol">Sensor protocol v%1$d, app protocol v%2$d. Newer features are ignored.</string>
     <string name="msg_hardware_in_use">This sensor is already connected another way.</string>
     <string name="msg_verification_failed">Could not verify the sensor. Try again.</string>
     <string name="msg_station_changed">The sensor was reset. Earlier history is kept and Wi-Fi access renews over Bluetooth.</string>
@@ -728,7 +728,10 @@
     <string name="history_dev_station">station</string>
     <string name="file_chart_estimated">%1$s, estimated</string>
     <string name="file_chart_unplaced">No place on the timeline yet. This boot has no clock time.</string>
-    <string name="file_chart_rows">%1$s · %2$d valid for %3$s · %4$s</string>
+    <plurals name="file_chart_rows">
+        <item quantity="one">%1$s · %2$d valid %3$s reading · %4$s</item>
+        <item quantity="other">%1$s · %2$d valid %3$s readings · %4$s</item>
+    </plurals>
     <string name="file_chart_stats">mean %1$s %2$s · min %3$s · max %4$s</string>
     <string name="file_chart_no_valid">No valid %1$s readings in this file.</string>
     <string name="device_schema_cols">%1$s, %2$s columns</string>
@@ -747,7 +750,10 @@
     <string name="notif_channel_summary_desc">One notification when an automatic sync copied new files.</string>
     <string name="notif_device">sensor</string>
     <string name="notif_reconnecting">%1$s · reconnecting, %2$d of %3$d…</string>
-    <string name="notif_progress">%1$s · %2$d/%3$d files · %4$s</string>
+    <plurals name="notif_progress">
+        <item quantity="one">%1$s · %2$d/%3$d file · %4$s</item>
+        <item quantity="other">%1$s · %2$d/%3$d files · %4$s</item>
+    </plurals>
     <string name="notif_preparing">%1$s · preparing sync…</string>
     <string name="notif_link_lost">Link lost. The sync resumes when the sensor is back.</string>
     <string name="notif_listing">Listing files on the sensor…</string>

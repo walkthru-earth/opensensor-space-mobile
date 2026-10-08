@@ -156,7 +156,7 @@ private fun SelectedFile(s: FileSummary, metric: MetricSpec, fmt: DateTimeFormat
     Column(Modifier.padding(top = 4.dp)) {
         Text(s.name.substringAfterLast('/'), style = MaterialTheme.typography.labelMedium, fontFamily = FontFamily.Monospace)
         Text(
-            stringResource(R.string.file_chart_rows, pluralStringResource(R.plurals.fm_rows_count, s.rows.toInt(), s.rows), a?.n ?: 0, metric.label, span),
+            pluralStringResource(R.plurals.file_chart_rows, a?.n ?: 0, pluralStringResource(R.plurals.fm_rows_count, s.rows.toInt(), s.rows), a?.n ?: 0, metric.label, span),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

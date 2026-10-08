@@ -98,7 +98,7 @@ object SyncPlanner {
                     file.bytes,
                     partition,
                     FileSyncState.INVALID_NAME,
-                    detail = "name violates the safe_name() whitelist; refusing to store it"
+                    detail = "name violates the safe_name() whitelist, not stored"
                 )
                 local == null && partial in 1 until file.bytes -> ManifestEntry(
                     file.name,

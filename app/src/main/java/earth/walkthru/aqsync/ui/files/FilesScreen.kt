@@ -341,6 +341,7 @@ fun FilesScreen(
                             entry = entry,
                             localTime = item.localTime,
                             showName = level.developer || item.localTime == null,
+                            showDetail = level.developer,
                             canSync = state.connection.isReady && !state.sync.running,
                             onSync = { withNotificationPermission { viewModel.syncOne(entry.name) } },
                             onShare = {
@@ -418,7 +419,7 @@ private fun SyncProgressCard(sync: SyncProgress, level: DetailLevel) {
 }
 
 @Composable
-private fun FileRow(entry: ManifestEntry, localTime: String?, showName: Boolean, canSync: Boolean, onSync: () -> Unit, onShare: () -> Unit, onInspect: (() -> Unit)? = null) {
+private fun FileRow(entry: ManifestEntry, localTime: String?, showName: Boolean, showDetail: Boolean, canSync: Boolean, onSync: () -> Unit, onShare: () -> Unit, onInspect: (() -> Unit)? = null) {
     val (icon, tint, label) = when (entry.state) {
         FileSyncState.SYNCED -> Triple(Icons.Rounded.CheckCircle, MaterialTheme.colorScheme.secondary, stringResource(R.string.file_synced))
         FileSyncState.SYNCING -> Triple(null, MaterialTheme.colorScheme.primary, stringResource(R.string.file_syncing, formatBytes(entry.partialBytes), formatBytes(entry.bytes)))
@@ -479,7 +480,7 @@ private fun FileRow(entry: ManifestEntry, localTime: String?, showName: Boolean,
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 )
             }
-            entry.detail?.let {
+            entry.detail?.takeIf { showDetail }?.let {
                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 4.dp))
             }
         }
