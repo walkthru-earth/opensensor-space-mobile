@@ -43,6 +43,10 @@ class CompanionState {
     internal var lanMessage by mutableStateOf("Find sensors connected to the same Wi-Fi network.")
         private set
 
+    /** True only after iOS reports the Local Network policy denial (TN3179), never for plain waiting. */
+    internal var lanAccessDenied by mutableStateOf(false)
+        private set
+
     internal var wifiAccessAvailable by mutableStateOf(false)
         private set
     internal var wifiAccessBusy by mutableStateOf(false)
@@ -101,6 +105,7 @@ class CompanionState {
     val statusUuid: String get() = AqGatt.STATUS
 
     fun lanScanStarted() {
+        lanAccessDenied = false
         lanDevices = emptyList()
         lanScanning = true
         lanMessage = "Looking on your local network… Allow access if iOS asks."
@@ -119,10 +124,20 @@ class CompanionState {
     }
 
     fun lanScanWaiting() {
-        if (lanScanning) lanMessage = "Waiting for Wi-Fi or Local Network access. Allow access if iOS asks."
+        if (!lanScanning) return
+        lanAccessDenied = false
+        lanMessage = "Waiting for Wi-Fi or Local Network access. Allow access if iOS asks."
+    }
+
+    /** The browse keeps running, so turning access on in Settings resumes discovery without a restart. */
+    fun lanScanAccessDenied() {
+        if (!lanScanning) return
+        lanAccessDenied = true
+        lanMessage = "Local Network access is off for opensensor.space. Turn it on in Settings, Privacy & Security, Local Network."
     }
 
     fun lanScanReady() {
+        lanAccessDenied = false
         if (lanScanning && lanDevices.isEmpty()) lanMessage = "Looking on your local network…"
     }
 

@@ -1,7 +1,8 @@
 import Foundation
 
-@main struct ArchiveChecks {
-    @MainActor static func main() async throws {
+/// Archive integrity checks shared by the host harness (verify-native.sh) and the Xcode test target.
+enum ArchiveChecks {
+    static func run() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         let archive = try SensorArchive(root: root)
@@ -29,13 +30,19 @@ import Foundation
         } catch SensorArchive.Failure.conflictingArchive {}
         for unsafe in [
             "../escape.parquet", "/escape.parquet", "a//b.parquet", "a/./b.parquet", "a\\b.parquet", "a\0b.parquet",
-            "UPPER.parquet", "a..b.parquet", String(repeating: "a", count: 392) + ".parquet",
+            "UPPER.parquet", ".parquet", "a..b.parquet", String(repeating: "a", count: 392) + ".parquet",
         ] {
             do {
                 _ = try archive.target(station: station, name: unsafe)
                 fatalError("unsafe path accepted")
             } catch SensorArchive.Failure.unsafePath {}
         }
+        // Exactly 399 UTF-8 bytes is the contract maximum and remains a valid archive path.
+        _ = try archive.target(
+            station: station, name: String(repeating: "a", count: SensorArchive.maxNameBytes - 8) + ".parquet")
+        // The root is excluded from backup when created, without a per-sync attribute write.
+        let rootValues = try archive.root.resourceValues(forKeys: [.isExcludedFromBackupKey])
+        precondition(rootValues.isExcludedFromBackup == true)
         let link = root.appendingPathComponent(station).appendingPathComponent("link")
         try FileManager.default.createSymbolicLink(atPath: link.path, withDestinationPath: root.path)
         do {
@@ -58,7 +65,6 @@ import Foundation
         } catch SensorArchive.Failure.invalidFile {}
         precondition(!FileManager.default.fileExists(atPath: bad.partial.path))
         try completedAndExportChecks(bytes: bytes, crc: crc, station: station, name: name)
-        try await TransferChecks.run()
         print("iOS archive: resume, receipt reconstruction/integrity, export snapshot, offset, CRC, immutable conflict, path and symlink checks passed")
     }
 

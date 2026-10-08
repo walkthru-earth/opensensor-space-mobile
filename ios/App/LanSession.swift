@@ -19,63 +19,72 @@ enum LanFailure: Error, LocalizedError {
     }
 }
 
-extension Data {
-    var wireHex: String { map { String(format: "%02x", $0) }.joined() }
-    init?(wireHex: String) {
-        guard wireHex.count % 2 == 0 else { return nil }
-        var data = Data()
-        var index = wireHex.startIndex
-        while index < wireHex.endIndex {
-            let end = wireHex.index(index, offsetBy: 2)
-            guard let byte = UInt8(wireHex[index..<end], radix: 16) else { return nil }
-            data.append(byte)
-            index = end
-        }
-        self = data
+/// One serialized consumer per socket. The actor's executor is the session's own serial queue,
+/// which also receives every Network callback and timer, so callbacks enter actor state in order
+/// through `assumeIsolated` without spawning a task each. Framing parses an accumulating buffer
+/// fed by receives of up to 64 KiB. Unsolicited STATUS and LIVE never enter file replies. They
+/// reach the owner through `events` in arrival order, followed by `closed` when the socket ends.
+actor LanSession: ArchivePipe {
+    enum Event: Sendable {
+        case push(kind: String, json: String)
+        case closed(LanFailure)
     }
-}
 
-/// One serialized consumer per socket; unsolicited STATUS/LIVE never enter file replies.
-@MainActor
-final class LanSession {
+    nonisolated let events: AsyncStream<Event>
+    private nonisolated let eventSink: AsyncStream<Event>.Continuation
+    private let queue: DispatchSerialQueue
+    nonisolated var unownedExecutor: UnownedSerialExecutor { queue.asUnownedSerialExecutor() }
+
     private let connection: NWConnection
     private let wire = SyncWire()
-    private var cap = 1024
+    private var frames = LanFrameBuffer()
+    private var receiving = false
     private var closed = false
-    private var pendingOperations: [UUID: () -> Void] = [:]
-    private var reader: Task<Void, Never>?
-    private var keepalive: Task<Void, Never>?
-    private var replies: [SyncReply] = []
-    private var readerGate: CheckedContinuation<Void, Never>?
-    private var replyWaiter: ((Result<SyncReply, Error>) -> Void)?
+    private var replies: [ArchiveReply] = []
+    private var replyWaiter: Waiter<ArchiveReply>?
+    private var connectWaiter: Waiter<Void>?
+    private var sendWaiters: [UUID: Waiter<Void>] = [:]
+    private var heartbeat: DispatchSourceTimer?
+    private var lastReceived = ProcessInfo.processInfo.systemUptime
     private var liveness = LanLiveness(lastSent: ProcessInfo.processInfo.systemUptime)
     private var collecting = false
-    var onClosed: ((Error) -> Void)?
-    var onPush: ((String, String) -> Void)?
-    private(set) var identity: SyncIdentity?
+    private var identity: SyncIdentity?
+
+    private struct Waiter<T> {
+        let continuation: CheckedContinuation<T, Error>
+        let deadline: DispatchSourceTimer
+    }
+    private enum Deadline {
+        case connect, reply, send(UUID)
+    }
+
+    private static let maxQueuedReplies = 32
+    private static let receiveChunk = 64 * 1024
+    private static let requestTimeout: TimeInterval = 10
+    private static let idleTimeout: TimeInterval = 180
+
     init(endpoint: NWEndpoint) {
-        let tcp = NWProtocolTCP.Options()
-        tcp.noDelay = true
-        connection = NWConnection(to: endpoint, using: NWParameters(tls: nil, tcp: tcp))
+        queue = DispatchSerialQueue(label: "earth.walkthru.opensensor.lan-session")
+        connection = NWConnection(to: endpoint, using: LanPolicy.connectionParameters())
+        (events, eventSink) = AsyncStream.makeStream(of: Event.self, bufferingPolicy: .bufferingNewest(64))
+    }
+
+    deinit {
+        connection.cancel()
+        eventSink.finish()
     }
 
     func connect(credential: LanCredential) async throws {
-        try await operation { completion in
-            self.connection.stateUpdateHandler = { update in
-                Task { @MainActor in
-                    switch update {
-                    case .ready:
-                        self.connection.stateUpdateHandler = nil
-                        completion(.success(()))
-                    case .failed: completion(.failure(LanFailure.disconnected))
-                    case .cancelled: completion(.failure(LanFailure.disconnected))
-                    default: break
-                    }
-                }
+        guard !closed, connectWaiter == nil, identity == nil else { throw LanFailure.disconnected }
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            connectWaiter = Waiter(continuation: continuation, deadline: deadline(after: Self.requestTimeout, .connect))
+            connection.stateUpdateHandler = { [weak self] update in
+                self?.assumeIsolated { $0.stateChanged(update) }
             }
-            self.connection.start(queue: .main)
+            connection.start(queue: queue)
         }
-        try await sendRaw(Data(wireHex: wire.handshake(tokenHex: credential.token.wireHex))!)
+        // The Kotlin side zeroes its token copies. Only the outgoing frame holds the token afterwards.
+        try await sendRaw(wire.handshake(token: credential.token))
         let hello = try await reply()
         guard hello.kind == "hello", hello.code == 2, (64...1024).contains(Int(hello.count)),
             let identity = wire.identity(json: hello.json)
@@ -83,118 +92,65 @@ final class LanSession {
         guard identity.station == credential.station, identity.device == credential.device else {
             throw LanFailure.identityChanged
         }
-        cap = Int(hello.count)
+        frames.cap = Int(hello.count)
         self.identity = identity
-        reader = Task { [weak self] in
-            guard let self else { return }
-            do {
-                while !self.closed {
-                    if self.replies.count >= 32 { await withCheckedContinuation { self.readerGate = $0 } }
-                    guard !self.closed else { break }
-                    let frame = try await self.receiveFrame(idle: true)
-                    if frame.kind == "status" || frame.kind == "live" {
-                        self.onPush?(frame.kind, frame.json)
-                        continue
-                    }
-                    if let waiter = self.replyWaiter {
-                        self.replyWaiter = nil
-                        waiter(.success(frame))
-                    } else {
-                        self.replies.append(frame)
-                    }
-                }
-            } catch {
-                if !self.closed { self.close(reason: error) }
-            }
-        }
-        keepalive = Task { [weak self] in
-            guard let self else { return }
-            do {
-                while !self.closed {
-                    try await Task.sleep(nanoseconds: 15_000_000_000)
-                    if self.liveness.needsKeepalive(
-                        now: ProcessInfo.processInfo.systemUptime, collecting: self.collecting)
-                    {
-                        try await self.send(self.wire.statusRequest())
-                    }
-                }
-            } catch {
-                if !self.closed { self.close(reason: error) }
-            }
-        }
+        startHeartbeat()
     }
 
-    func send(_ body: String) async throws {
-        guard let data = Data(wireHex: wire.envelope(bodyHex: body)) else { throw LanFailure.invalidReply }
-        try await sendRaw(data)
+    func collect(archive: ArchiveIO, progress: @escaping @Sendable (TransferUpdate) async -> Void) async throws {
+        guard let identity, !collecting else { throw LanFailure.disconnected }
+        collecting = true
+        defer { collecting = false }
+        try await SensorTransfer.collect(
+            pipe: self, archive: archive, station: identity.station, maxRead: UInt64(identity.maxRead),
+            progress: progress)
     }
+
+    /// Safe from any thread. Closing is enqueued on the session queue; pending waits end as disconnected.
+    nonisolated func close() {
+        queue.async { [self] in assumeIsolated { $0.shutdown(reason: nil) } }
+    }
+
+    // MARK: ArchivePipe
+
+    func list() async throws { try await send(wire.listRequest()) }
+    func open(name: String) async throws { try await send(wire.openRequest(name: name)) }
+    func read(handle: Int32, offset: UInt64, length: UInt64) async throws {
+        try await send(wire.readRequest(handle: handle, offset: Int64(offset), length: Int64(length)))
+    }
+    func closeFile(handle: Int32) async throws { try await send(wire.closeRequest(handle: handle)) }
+    func receive() async throws -> ArchiveReply { try await reply() }
+
+    // MARK: Requests and replies
+
+    private func send(_ body: Data) async throws { try await sendRaw(wire.envelope(body: body)) }
+
     private func sendRaw(_ data: Data) async throws {
-        try await operation { completion in
-            self.connection.send(
+        guard !closed else { throw LanFailure.disconnected }
+        let id = UUID()
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            sendWaiters[id] = Waiter(continuation: continuation, deadline: deadline(after: Self.requestTimeout, .send(id)))
+            connection.send(
                 content: data,
-                completion: .contentProcessed { error in
-                    completion(error == nil ? .success(()) : .failure(LanFailure.disconnected))
+                completion: .contentProcessed { [weak self] error in
+                    self?.assumeIsolated { $0.sendFinished(id, failed: error != nil) }
                 })
         }
         liveness.sent(now: ProcessInfo.processInfo.systemUptime)
     }
-    private func exact(_ length: Int, timeout: TimeInterval = 10) async throws -> Data {
-        var bytes = Data()
-        while bytes.count < length {
-            let remaining = length - bytes.count
-            let next: Data = try await operation(timeout: timeout) { completion in
-                self.connection.receive(minimumIncompleteLength: 1, maximumLength: remaining) {
-                    data, _, complete, error in
-                    if error != nil || data?.isEmpty != false {
-                        completion(.failure(LanFailure.disconnected))
-                    } else {
-                        completion(.success(data!))
-                    }
-                }
-            }
-            bytes.append(next)
 
-        }
-        return bytes
-    }
-    private func receiveFrame(idle: Bool = false) async throws -> SyncReply {
-        let prefix = try await exact(2, timeout: idle ? 180 : 10)
-        let count = Int(prefix[0]) | (Int(prefix[1]) << 8)
-        guard (1...cap).contains(count), let frame = wire.decode(hex: (try await exact(count)).wireHex) else {
-            throw LanFailure.invalidReply
-        }
-        return frame
-    }
-    func reply() async throws -> SyncReply {
+    private func reply() async throws -> ArchiveReply {
         try Task.checkCancellation()
-        let frame: SyncReply
-        if reader == nil {
-            frame = try await receiveFrame()
-        } else if !replies.isEmpty {
+        let frame: ArchiveReply
+        if !replies.isEmpty {
             frame = replies.removeFirst()
-            let gate = readerGate
-            readerGate = nil
-            gate?.resume()
+            // Queued frames may be waiting behind the reply bound; parse them and keep reading.
+            pump()
         } else {
+            guard !closed else { throw LanFailure.disconnected }
+            guard replyWaiter == nil else { throw LanFailure.invalidReply }
             frame = try await withCheckedThrowingContinuation { continuation in
-                var completed = false
-                let deadline = DispatchSource.makeTimerSource(queue: .main)
-                let complete: (Result<SyncReply, Error>) -> Void = { result in
-                    guard !completed else { return }
-                    completed = true
-                    deadline.cancel()
-                    deadline.setEventHandler(handler: nil)
-                    continuation.resume(with: result)
-                }
-                replyWaiter = complete
-                deadline.schedule(deadline: .now() + 10)
-                deadline.setEventHandler { [weak self] in
-                    guard !completed else { return }
-                    self?.replyWaiter = nil
-                    complete(.failure(LanFailure.timeout))
-                    self?.close(reason: LanFailure.timeout)
-                }
-                deadline.resume()
+                replyWaiter = Waiter(continuation: continuation, deadline: deadline(after: Self.requestTimeout, .reply))
             }
         }
         if frame.kind == "error" {
@@ -204,73 +160,174 @@ final class LanSession {
         }
         return frame
     }
-    func close(reason: Error? = nil) {
-        guard !closed else { return }
-        closed = true
-        reader?.cancel()
-        keepalive?.cancel()
-        let gate = readerGate
-        readerGate = nil
-        gate?.resume()
-        let cancel = Array(pendingOperations.values)
-        pendingOperations.removeAll()
-        for completion in cancel { completion() }
-        let waiter = replyWaiter
-        replyWaiter = nil
-        waiter?(.failure(LanFailure.disconnected))
-        connection.stateUpdateHandler = nil
-        connection.cancel()
-        if let reason { onClosed?(reason) }
-    }
-    private func operation<T>(timeout: TimeInterval = 10, _ setup: (@escaping (Result<T, Error>) -> Void) -> Void)
-        async throws -> T
-    {
-        guard !closed else { throw LanFailure.disconnected }
-        return try await withCheckedThrowingContinuation { continuation in
-            let operationID = UUID()
-            var completed = false
-            let deadline = DispatchSource.makeTimerSource(queue: .main)
-            let complete: (Result<T, Error>) -> Void = { result in
-                guard !completed else { return }
-                completed = true
-                deadline.cancel()
-                deadline.setEventHandler(handler: nil)
-                self.pendingOperations[operationID] = nil
-                continuation.resume(with: result)
-            }
-            pendingOperations[operationID] = { complete(.failure(LanFailure.disconnected)) }
-            deadline.schedule(deadline: .now() + timeout)
-            deadline.setEventHandler { [weak self] in
-                guard !completed else { return }
-                complete(.failure(LanFailure.timeout))
-                self?.close(reason: LanFailure.timeout)
-            }
-            deadline.resume()
-            setup(complete)
+
+    // MARK: Socket callbacks (always on `queue`)
+
+    private func stateChanged(_ update: NWConnection.State) {
+        switch update {
+        case .ready:
+            guard let waiter = connectWaiter else { return }
+            connectWaiter = nil
+            waiter.deadline.cancel()
+            pump()
+            waiter.continuation.resume()
+        case .failed, .cancelled:
+            shutdown(reason: .disconnected)
+        default:
+            // .waiting and .preparing stay bounded by the connect deadline and TCP connection timeout.
+            break
         }
     }
 
-    func collect(archive: ArchiveIO, progress: (Int, Int, Int64, Double) -> Void) async throws {
-        guard let identity, !collecting else { throw LanFailure.disconnected }
-        collecting = true
-        defer { collecting = false }
-        try await SensorTransfer.collect(
-            pipe: self, archive: archive, station: identity.station, maxRead: UInt64(identity.maxRead),
-            progress: progress)
+    /// Parses buffered frames while the reply queue has room, then keeps one receive outstanding.
+    private func pump() {
+        parse()
+        guard !closed, !receiving, replies.count < Self.maxQueuedReplies, connection.state == .ready else { return }
+        receiving = true
+        connection.receive(minimumIncompleteLength: 1, maximumLength: Self.receiveChunk) {
+            [weak self] data, _, complete, error in
+            self?.assumeIsolated { $0.received(data, complete: complete, failed: error != nil) }
+        }
     }
-}
 
-extension LanSession: ArchivePipe {
-    func list() async throws { try await send(wire.listRequest()) }
-    func open(name: String) async throws { try await send(wire.openRequest(name: name)) }
-    func read(handle: Int32, offset: UInt64, length: UInt64) async throws {
-        try await send(wire.readRequest(handle: handle, offset: Int64(offset), length: Int64(length)))
+    private func parse() {
+        guard !closed else { return }
+        do {
+            while replies.count < Self.maxQueuedReplies, let body = try frames.next() {
+                guard let reply = decode(body) else { throw LanFailure.invalidReply }
+                route(reply)
+            }
+        } catch {
+            shutdown(reason: .invalidReply)
+        }
     }
-    func closeFile(handle: Int32) async throws { try await send(wire.closeRequest(handle: handle)) }
-    func receive() async throws -> ArchiveReply {
-        let frame = try await reply()
+
+    private func received(_ data: Data?, complete: Bool, failed: Bool) {
+        receiving = false
+        guard !closed else { return }
+        if let data, !data.isEmpty {
+            lastReceived = ProcessInfo.processInfo.systemUptime
+            frames.append(data)
+        }
+        if failed || complete {
+            // A reply that arrived with the end of stream still reaches a waiting request first.
+            parse()
+            shutdown(reason: .disconnected)
+        } else {
+            pump()
+        }
+    }
+
+    private func decode(_ body: Data) -> ArchiveReply? {
+        guard let reply = wire.decode(data: body) else { return nil }
         return ArchiveReply(
-            kind: frame.kind, name: frame.name, size: frame.size, crc: frame.crc, handle: frame.handle,
-            offset: frame.offset, code: frame.code, count: frame.count, data: Data(wireHex: frame.dataHex))
+            kind: reply.kind, name: reply.name, size: reply.size, crc: reply.crc, handle: reply.handle,
+            offset: reply.offset, code: reply.code, count: reply.count,
+            data: reply.kind == "chunk" ? reply.payload : nil, json: reply.json)
+    }
+
+    private func route(_ reply: ArchiveReply) {
+        if reply.kind == "status" || reply.kind == "live" {
+            eventSink.yield(.push(kind: reply.kind, json: reply.json))
+            return
+        }
+        if let waiter = replyWaiter {
+            replyWaiter = nil
+            waiter.deadline.cancel()
+            waiter.continuation.resume(returning: reply)
+        } else {
+            replies.append(reply)
+        }
+    }
+
+    private func sendFinished(_ id: UUID, failed: Bool) {
+        guard let waiter = sendWaiters.removeValue(forKey: id) else { return }
+        waiter.deadline.cancel()
+        if failed {
+            waiter.continuation.resume(throwing: LanFailure.disconnected)
+        } else {
+            waiter.continuation.resume()
+        }
+    }
+
+    private func deadline(after seconds: TimeInterval, _ kind: Deadline) -> DispatchSourceTimer {
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + seconds)
+        timer.setEventHandler { [weak self] in self?.assumeIsolated { $0.expired(kind) } }
+        timer.resume()
+        return timer
+    }
+
+    private func expired(_ kind: Deadline) {
+        let waiter: Waiter<Void>?
+        switch kind {
+        case .reply:
+            guard let reply = replyWaiter else { return }
+            replyWaiter = nil
+            reply.continuation.resume(throwing: LanFailure.timeout)
+            shutdown(reason: .timeout)
+            return
+        case .connect:
+            waiter = connectWaiter
+            connectWaiter = nil
+        case .send(let id):
+            waiter = sendWaiters.removeValue(forKey: id)
+        }
+        guard let waiter else { return }
+        waiter.continuation.resume(throwing: LanFailure.timeout)
+        shutdown(reason: .timeout)
+    }
+
+    /// Outgoing keepalive while idle (the firmware idle timer counts phone traffic) and an
+    /// incoming idle bound, checked every 15 seconds.
+    private func startHeartbeat() {
+        guard heartbeat == nil, !closed else { return }
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + 15, repeating: 15)
+        timer.setEventHandler { [weak self] in self?.assumeIsolated { $0.beat() } }
+        timer.resume()
+        heartbeat = timer
+    }
+
+    private func beat() {
+        guard !closed else { return }
+        let now = ProcessInfo.processInfo.systemUptime
+        if now - lastReceived >= Self.idleTimeout {
+            shutdown(reason: .timeout)
+            return
+        }
+        guard liveness.needsKeepalive(now: now, collecting: collecting) else { return }
+        liveness.sent(now: now)
+        connection.send(
+            content: wire.envelope(body: wire.statusRequest()),
+            completion: .contentProcessed { [weak self] error in
+                guard error != nil else { return }
+                self?.assumeIsolated { $0.shutdown(reason: .disconnected) }
+            })
+    }
+
+    private func shutdown(reason: LanFailure?) {
+        guard !closed else { return }
+        closed = true
+        heartbeat?.cancel()
+        heartbeat = nil
+        replies.removeAll()
+        var waiters = Array(sendWaiters.values)
+        sendWaiters.removeAll()
+        if let connect = connectWaiter { waiters.append(connect) }
+        connectWaiter = nil
+        for waiter in waiters {
+            waiter.deadline.cancel()
+            waiter.continuation.resume(throwing: LanFailure.disconnected)
+        }
+        if let reply = replyWaiter {
+            replyWaiter = nil
+            reply.deadline.cancel()
+            reply.continuation.resume(throwing: LanFailure.disconnected)
+        }
+        connection.stateUpdateHandler = nil
+        connection.cancel()
+        if let reason { eventSink.yield(.closed(reason)) }
+        eventSink.finish()
     }
 }

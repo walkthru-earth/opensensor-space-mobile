@@ -72,6 +72,24 @@ class CompanionStateTest {
         assertIs<NowReading.Reading>(state.reading)
     }
 
+    @Test fun localNetworkDenialIsAnExplicitHintThatClearsWhenAccessReturns() {
+        val state = CompanionState()
+        state.lanScanAccessDenied()
+        assertFalse(state.lanAccessDenied)
+        state.lanScanStarted()
+        state.lanScanWaiting()
+        assertFalse(state.lanAccessDenied)
+        state.lanScanAccessDenied()
+        assertTrue(state.lanAccessDenied)
+        assertTrue(state.lanScanning)
+        assertTrue(state.lanMessage.contains("Settings"))
+        state.lanScanReady()
+        assertFalse(state.lanAccessDenied)
+        state.lanScanAccessDenied()
+        state.lanScanStarted()
+        assertFalse(state.lanAccessDenied)
+    }
+
     @Test fun independentLanSessionsAndLiveReadingsNeverOverwriteEachOther() {
         val state = CompanionState()
         state.lanSessionChanged("a", true, true, "syncing", 1, 4, 100)
