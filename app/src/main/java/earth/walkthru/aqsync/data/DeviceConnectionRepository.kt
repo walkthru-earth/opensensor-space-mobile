@@ -434,11 +434,9 @@ class DeviceConnectionRepository @Inject constructor(
      */
     private suspend fun tryLan(address: String, name: String?, known: KnownDevice?): AqTransport? {
         val station = known?.station ?: return null
-        if (!known.hasLanToken) return null
         val seen = lanDevices.value[station] ?: return null
-        if (known.deviceId != null && !known.deviceId.equals(seen.dev, ignoreCase = true)) return null
         val host = seen.host ?: return null
-        val port = seen.port.takeIf { it in 1..65535 } ?: known.lanPort ?: return null
+        val port = TransportSelector.lanPort(known.hasLanToken, known.deviceId, seen.dev, seen.port, known.lanPort) ?: return null
         val token = lanTokenBytes(address) ?: return null
         val transport = transportFactory.lan(address, name, host, port, token)
         // Put the LAN attempt in the session slot so the UI shows "Authenticating on the LAN…".
