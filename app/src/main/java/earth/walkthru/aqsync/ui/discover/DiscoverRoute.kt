@@ -114,5 +114,28 @@ private fun discoverStrings(): DiscoverStrings {
             }
         },
         spreadSummary = { label, n, low, high, unit -> res.getQuantityString(R.plurals.discover_spread_summary, n, label, n, low, high, unit) },
+        whoSteps = listOf(
+            stringResource(R.string.discover_who_step_guideline),
+            stringResource(R.string.discover_who_step_it4),
+            stringResource(R.string.discover_who_step_it3),
+            stringResource(R.string.discover_who_step_it2),
+            stringResource(R.string.discover_who_step_it1),
+            stringResource(R.string.discover_who_step_above),
+        ),
+        whoMark = stringResource(R.string.discover_who_mark),
+        whoCaptionDay = stringResource(R.string.discover_who_caption_day),
+        whoCaptionCompared = stringResource(R.string.discover_who_caption_compared),
+        noHealthScale = stringResource(R.string.discover_no_health_scale),
+        whoInfo = InfoText(
+            stringResource(R.string.discover_who_title),
+            listOf(
+                stringResource(R.string.discover_who_info1),
+                stringResource(R.string.discover_who_info2),
+                stringResource(R.string.discover_who_info3),
+                stringResource(R.string.discover_scale_info2),
+            ),
+        ),
+        offScale = { v -> res.getString(R.string.discover_off_scale, v) },
+        whoStepSpoken = { name, upTo, unit -> if (upTo != null) res.getString(R.string.discover_who_step_spoken, name, upTo, unit) else name },
     )
 }
