@@ -171,8 +171,8 @@ because the shared screens are Compose.
   actions for its other options.
 
 Never use Material's baseline colours on either platform. Both entry points wrap content in the
-brand theme (`AqSyncTheme` on Android, `OpenSensorTheme` on iOS), so nothing renders in the
-default purple.
+brand theme (`OpenSensorTheme` from `:ui:designsystem`, the same on Android and iOS), so nothing
+renders in the default purple.
 
 ### Health scales and charts (the global data rule)
 

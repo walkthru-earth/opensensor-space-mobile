@@ -3,12 +3,13 @@
 Open root `docs/screens.md` for navigation and screen roles; open
 `docs/history-pipeline.md` for metric meaning. Composables render ViewModel
 state and dispatch intent. BLE, file, Room and long-running work belong in the
-data layer. Reuse shared components in `components/` when multiple screens
-need the same behavior.
+data layer. Reuse the shared components in `:ui:designsystem` (cards, buttons, rows, info sheet,
+signal bars, the bottom bar, `AppIcons`), shared with iOS. `components/` keeps only what still needs
+app types or `R.string`.
 
 - Known devices are devices the owner connected to; a nearby advertisement is
   only a scan result. Forget must stay forgotten until explicit reconnection.
-- One bottom bar (Discover, My devices, Settings) lives at the app root in `Navigation.kt`, and
+- One bottom bar (Discover, My devices, Settings), the shared `BrandBottomBar`, lives at the app root in `Navigation.kt`, and
   Discover is always the start tab. Screens never draw a bottom bar. Device sections use
   `DeviceSectionTabs` under the top bar. Per-tab back stack rules live in `TabNavigator`.
 - Navigation 3 entries own screen ViewModels. Load once when an entry opens;
@@ -33,7 +34,8 @@ need the same behavior.
 ## Design system and detail levels
 
 - Use the tokens in `:ui:designsystem` (`BrandTokens`, `brandColorScheme`, `BrandShapes`, `rememberBrandTypography`)
-  and the components in `components/Brand.kt`. No raw colours or font families in screens.
+  and its components (`BrandCard`, `PillButton`, `CardHeader`, `StatLine`, ...). Icons come from
+  `AppIcons` (vendored Material vectors), never `material-icons-extended`. No raw colours or font families in screens.
   Values come from the website's `lib/brand.ts` (`sensing`), pinned by `BrandTokensTest`.
 - Band colours are the WHO 2021 steps from `:core:airquality` (`WhoStep.color()` in `theme/Color.kt`,
   the one mapping). Never restyle them. Put text on a band with `onColor()` and band-coloured text
