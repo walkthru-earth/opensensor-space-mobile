@@ -27,16 +27,23 @@ import androidx.compose.ui.unit.sp
 import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.history.AirMood
 import earth.walkthru.aqsync.data.history.ChartAxes
+import earth.walkthru.aqsync.data.history.ChartAxis
 import earth.walkthru.aqsync.data.history.HistoryColumn
 import earth.walkthru.aqsync.data.history.HistoryRange
 import earth.walkthru.aqsync.data.history.MetricSpec
 import earth.walkthru.aqsync.ui.components.LocalUnits
 import earth.walkthru.aqsync.ui.theme.color
+import earth.walkthru.aqsync.units.UnitConversion
+import earth.walkthru.aqsync.units.UnitSystem
+import earth.walkthru.aqsync.units.displayAxisTicks
+import earth.walkthru.aqsync.units.formatFixed
+import earth.walkthru.aqsync.units.tickDecimals
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.roundToInt
 
 /** WHO 2021 24-hour guideline for PM2.5, µg/m³ — the one reference line the chart draws. */
 const val WHO_PM25_24H = 15f
@@ -76,8 +83,9 @@ fun BandColumnChart(
     // The metric's own floor (PM2.5: 60, so the whole "Getting hazy" band is always visible); spikes beyond are capped.
     val axis = remember(columns, metric) { ChartAxes.of(columns, metric) }
     val yMax = axis.max
-    // Geometry, ticks and bands stay on the SI values. Only the printed labels convert.
+    // Geometry, data and bands stay on the SI values. Ticks are chosen round in the unit shown.
     val units = LocalUnits.current
+    val yTicks = remember(axis, metric.unit, units.system) { yAxisTicks(axis, metric.unit, units.system) }
 
     Canvas(
         modifier
@@ -112,14 +120,11 @@ fun BandColumnChart(
         fun y(v: Float) = plot.bottom - axis.fraction(v) * plot.height
         val zeroY = y(0f)
 
-        // Grid + y labels.
-        val step = axis.step
-        var v = axis.min
-        while (v <= yMax + 1e-3f) {
-            val yy = y(v)
+        // Grid + y labels, at round values in the unit shown. The tick sits at its SI position.
+        for ((at, label) in yTicks) {
+            val yy = y(at)
             drawLine(gridColor, Offset(plot.left, yy), Offset(plot.right, yy), 1f)
-            drawContext.canvas.nativeCanvas.drawText(fmtAxis(units.value(v, metric.unit)), 0f, yy + labelPx * 0.35f, labelPaint)
-            v += step
+            drawContext.canvas.nativeCanvas.drawText(label, 0f, yy + labelPx * 0.35f, labelPaint)
         }
         // WHO guideline (PM2.5 only), dashed, labelled at the right.
         if (ChartAxes.hasPm25Guideline(metric) && WHO_PM25_24H < yMax) {
@@ -223,6 +228,27 @@ internal fun textPaint(color: Color, sizePx: Float, bold: Boolean = false) = and
     textSize = sizePx
     isAntiAlias = true
     isFakeBoldText = bold
+}
+
+/**
+ * Y-axis gridlines as `(SI position, label)`. A unit shown as is keeps the SI ticks from
+ * [ChartAxes] (min to max by step). A converted unit gets round ticks in the shown unit at the same
+ * density, each mapped back to SI with [UnitConversion.toSource], so 0 to 40 °C reads 40, 60, 80, 100 °F.
+ */
+internal fun yAxisTicks(axis: ChartAxis, unit: String, system: UnitSystem): List<Pair<Float, String>> {
+    if (!UnitConversion.converts(unit, system)) {
+        val out = ArrayList<Pair<Float, String>>()
+        var v = axis.min
+        while (v <= axis.max + 1e-3f) {
+            out += v to fmtAxis(v)
+            v += axis.step
+        }
+        return out
+    }
+    val target = if (axis.step > 0f) (axis.span / axis.step).roundToInt() + 1 else 5
+    val ticks = displayAxisTicks(axis.min.toDouble(), axis.max.toDouble(), unit, system, target.coerceIn(3, 9))
+    val decimals = if (ticks.size >= 2) tickDecimals(ticks[1].shown - ticks[0].shown) else UnitConversion.displayDecimals(unit, system) ?: 0
+    return ticks.map { it.source.toFloat() to formatFixed(it.shown, decimals) }
 }
 
 internal fun fmtAxis(v: Float): String = if (v == Math.rint(v.toDouble()).toFloat()) v.toInt().toString() else "%.1f".format(java.util.Locale.ROOT, v)
