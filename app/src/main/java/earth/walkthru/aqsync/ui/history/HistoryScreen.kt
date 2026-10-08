@@ -67,6 +67,8 @@ import earth.walkthru.aqsync.ui.components.TransportChip
 import earth.walkthru.aqsync.ui.components.titleText
 import earth.walkthru.aqsync.ui.theme.color
 import earth.walkthru.aqsync.ui.theme.textColorOnSurface
+import kotlinx.datetime.toJavaZoneId
+import kotlinx.datetime.toKotlinTimeZone
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -252,8 +254,8 @@ private fun ChartCard(state: HistoryUiState, zone: ZoneId, onOpenDay: (Long) -> 
                     val columns = remember(s, zone) {
                         when (state.range) {
                             HistoryRange.DAY, HistoryRange.WEEK -> Columns.rebinHours(s)
-                            HistoryRange.MONTH -> Columns.rebinLocalDays(s, zone)
-                            HistoryRange.YEAR -> Columns.rebinLocalWeeks(s, zone)
+                            HistoryRange.MONTH -> Columns.rebinLocalDays(s, zone.toKotlinTimeZone())
+                            HistoryRange.YEAR -> Columns.rebinLocalWeeks(s, zone.toKotlinTimeZone())
                         }
                     }
                     when (state.range) {
@@ -274,7 +276,7 @@ private fun ChartCard(state: HistoryUiState, zone: ZoneId, onOpenDay: (Long) -> 
                             Spacer(Modifier.height(8.dp))
                         }
                         HistoryRange.MONTH, HistoryRange.YEAR -> {
-                            val days = remember(s, zone) { Columns.rebinLocalDays(s, zone) }
+                            val days = remember(s, zone) { Columns.rebinLocalDays(s, zone.toKotlinTimeZone()) }
                             CalendarHeatmap(days, state.metric, s.fromS, s.toS, onPickDay = { onOpenDay(it.startS) }, zone = zone)
                             InfoNote(stringResource(R.string.history_tap_day))
                             Spacer(Modifier.height(8.dp))
@@ -379,7 +381,7 @@ private fun fmt(v: Float): String = if (v >= 100) v.toInt().toString() else "%.1
 private fun spanLabel(range: HistoryRange, window: HistoryWindow): String {
     val from = Instant.ofEpochSecond(window.fromS)
     val to = Instant.ofEpochSecond(window.toS - 1)
-    val zone = window.zone
+    val zone = window.zone.toJavaZoneId()
     return when (range) {
         HistoryRange.DAY -> DateTimeFormatter.ofPattern("EEEE d MMMM").withZone(zone).format(from)
         HistoryRange.WEEK, HistoryRange.MONTH -> {

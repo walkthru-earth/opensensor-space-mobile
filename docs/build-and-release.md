@@ -37,14 +37,14 @@ and commit again. CI has **no phone or Android emulator**; the iOS job runs shar
 tests on a simulator. BLE, mDNS, permissions and background behavior require hardware
 checks, recorded separately in [status.md](status.md) and the firmware repo's `bench-verified.md`.
 
-## Stack (verified building 2026-09-29; dependency versions unchanged)
+## Stack (verified building 2026-10-08; kotlinx-datetime 0.8.0 added for W8)
 
 | | |
 | --- | --- |
 | Language / UI | Kotlin 2.4.20, Jetpack Compose (BOM 2026.09.00, material3 1.4.0), Material 3 dynamic color, Navigation 3 (1.1.7) |
-| DI / data | Hilt 2.60.1, Room 2.8.5 (**schema v10**), DataStore Preferences 1.2.1, WorkManager 2.11.2 + `androidx.hilt:hilt-work` 1.4.0, kotlinx.serialization 1.11.0, coroutines 1.11.0 |
+| DI / data | Hilt 2.60.1, Room 2.8.5 (**schema v10**), DataStore Preferences 1.2.1, WorkManager 2.11.2 + `androidx.hilt:hilt-work` 1.4.0, kotlinx.serialization 1.11.0, kotlinx-datetime 0.8.0 (shared calendar math, added 2026-10-08), coroutines 1.11.0 |
 | Native | `zstd-jni` 1.5.7-17 (`@aar`), the only native library |
-| Build | AGP 9.4.0, Gradle 9.7.1 (configuration cache on), KSP 2.3.12, version catalog, R8 for release; Parquet stays JVM, protocol and sensor-domain logic target JVM (Java 17) and iOS |
+| Build | AGP 9.4.0, Gradle 9.7.1 (configuration cache on), KSP 2.3.12, version catalog, R8 for release; protocol, Parquet and history target JVM (Java 17) and iOS |
 | SDK | `compileSdk`/`targetSdk` **37**, `minSdk` **31** (modern Bluetooth permission model; no legacy branches) |
 | Style | ktlint `intellij_idea`, `max_line_length = off`, house rules off (`{ a; b }` one-liners, compact `when`, one-line enums, `_x` backing fields, `function-signature`) |
 

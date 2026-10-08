@@ -10,8 +10,8 @@
 flowchart TB
   subgraph core["Kotlin core · no Android, Hilt, Room, Log"]
     PR[":core:protocol<br/>common wire rules + JVM adapters"]
-    PQ[":core:parquet<br/>reader + writer, Thrift compact, LZ4/Snappy/GZIP, codec SPI, WKB"]
-    HI[":core:history<br/>common sensor rules + JVM file history"]
+    PQ[":core:parquet<br/>reader + writer, ByteReader, Thrift compact, LZ4/Snappy/GZIP, codec SPI, WKB"]
+    HI[":core:history<br/>sensor rules, file index, aggregation, calendar windows"]
   end
   APP[":app (Android)<br/>Hilt · Room v10 · DataStore · WorkManager · Compose · zstd-jni"]
   IOS["ios/App (Xcode + Swift)<br/>Core Bluetooth · Bonjour · app entry point"]
@@ -28,10 +28,11 @@ flowchart TB
 
 `:core:history` exposes `:core:parquet` and `:core:protocol` as `api`, so Android can see all three.
 The boundary is enforced by the build. A `:core` class cannot import `android.*`.
-`protocol` and the sensor-domain part of `history` compile for JVM and iOS from
-`src/commonMain`. Their Java file and stream adapters live in `src/jvmMain`, and their tests in
-`src/commonTest` (JVM and iOS simulator) or `src/jvmTest` (JVM only). Parquet, indexing and
-calendar windows remain JVM-only. `:ios:shared` consumes common core
+`protocol`, `parquet` and `history` compile for JVM and iOS from `src/commonMain`. Their platform
+edges live in `src/jvmMain` (Java files, streams, `FileChannel` mapping, `java.util.zip`) and
+`src/iosMain` (`NSData` mapping, system zlib), and their tests in `src/commonTest` (JVM and iOS
+simulator) or `src/jvmTest` / `src/iosTest`. Calendar windows use kotlinx-datetime. Android passes
+its `ZoneId` through `toKotlinTimeZone()`. `:ios:shared` consumes common core
 rules and renders the current Compose iOS screen. `ios/App` supplies native app integration,
 Core Bluetooth and Bonjour discovery. The Android app remains a separate platform entry point.
 See [ios-migration.md](ios-migration.md) for current scope and build commands.
@@ -72,8 +73,8 @@ It holds three convention plugins, so a new shared module is one `plugins {}` li
 
 | Plugin | Applied by | Sets |
 | --- | --- | --- |
-| `opensensor.kmp.library` | `:core:protocol`, `:core:history` | Kotlin Multiplatform with `jvm` (bytecode 17), `iosArm64`, `iosSimulatorArm64`, `kotlin-test` in `commonTest`, and a `test` task that runs `jvmTest` |
-| `opensensor.jvm.library` | `:core:parquet` | Kotlin/JVM with Java and Kotlin bytecode 17 |
+| `opensensor.kmp.library` | `:core:protocol`, `:core:parquet`, `:core:history` | Kotlin Multiplatform with `jvm` (bytecode 17), `iosArm64`, `iosSimulatorArm64`, `kotlin-test` in `commonTest`, and a `test` task that runs `jvmTest` |
+| `opensensor.jvm.library` | none today (kept for a future JVM-only module) | Kotlin/JVM with Java and Kotlin bytecode 17 |
 | `opensensor.kmp.ios-framework` | `:ios:shared` | the KMP library conventions plus the static `OpenSensorShared` framework for each iOS target |
 
 The conventions compile against the Kotlin Gradle plugin as `compileOnly`. The root
@@ -83,11 +84,13 @@ Studio JBR and CI provide JDK 21 only and a toolchain would need a network downl
 Warnings are not errors yet, since existing code still has a few.
 
 The real Parquet fixtures live once in `core/parquet/src/test/resources` and are published as
-`:core:parquet` test fixtures (`java-test-fixtures`). `:core:history` and `:core:protocol` tests
+`:core:parquet` test fixtures (a hand-declared variant with the `java-test-fixtures` capability,
+because a multiplatform module cannot apply that plugin). `:core:history` and `:core:protocol` tests
 declare `testFixtures(project(":core:parquet"))` instead of pointing at another module's
 directory. `:app` still adds that directory to its unit-test resources.
 
-The root `verify` and `verifyIos` tasks are unchanged and aggregate the module tasks.
+The root `verify` and `verifyIos` tasks aggregate the module tasks. `verifyIos` includes
+`:core:parquet:iosSimulatorArm64Test`, which decodes the real fixtures on the simulator.
 
 ## Layers inside `:app`
 
@@ -133,8 +136,8 @@ for iOS-specific guidance. SwiftUI review rules apply only if native SwiftUI vie
 | `:core` module (`core/<m>/src/<set>/kotlin/earth/walkthru/aqsync/`) | Files |
 | --- | --- |
 | `protocol` → `data/protocol/` | `commonMain`: `AqGatt`, `Frames`, `WireBuffer`, `DeviceConfig`, `ConfigChunkAccumulator`, `JsonModels`, `LanProtocol`, `Advertisement`, `LiveProfile`, `PlantowerBatchCandidate`, `Crc32` (`expect`), `ParquetVerify`, `SafeName`. `jvmMain`: `AqUuids`, `LanFraming`, `Crc32` (`java.util.zip`), `ParquetVerifyJvm` (file, stream and SHA-256 extensions). `iosMain`: `Crc32` (portable table) |
-| `parquet` → `data/history/parquet/` (`src/main`) | `ParquetFile`, `ParquetFooterParser`, `ParquetMetadata`, `ColumnValues`, `ParquetWriter`, `ThriftCompact(+Writer)`, `Lz4Block`, `ParquetCodecs`, `Geometry`, `GeoParquetMetadata` |
-| `history` → `data/history/` | `commonMain`: `Metrics`, `AirMood`, `TimeEstimate`. `jvmMain`: `Aggregation`, `ChartAxis`, `Columns`, `HistoryModel`, `HistoryWindow`, `FileSummary`, `ParquetIndexer` |
+| `parquet` → `data/history/parquet/` | `commonMain`: `ParquetFile`, `SuspendParquetFile`, `ByteReader`, `SuspendByteReader`, `LocalFile` (`expect`), `ParquetFooterParser`, `ParquetMetadata`, `ColumnValues`, `ParquetWriter`, `ParquetSink`, `ThriftCompact(+Writer)`, `Lz4Block`, `ParquetCodecs`, `Geometry`, `GeoParquetMetadata`. `jvmMain`: `MappedFileReader`, gzip, `ParquetWriter(OutputStream, …)`, `OutputStreamSink`. `iosMain`: `MappedDataReader`, gzip (zlib) |
+| `history` → `data/history/` | `commonMain`: `Metrics`, `AirMood`, `TimeEstimate`, `Aggregation`, `ChartAxis`, `Columns`, `HistoryModel`, `HistoryWindow`, `FileSummary`, `ParquetIndexer` |
 
 ### Shared sync rules in `:core:protocol`
 

@@ -181,6 +181,8 @@ jobs:
             core/protocol/build/test-results/iosSimulatorArm64Test/
             core/history/build/reports/tests/iosSimulatorArm64Test/
             core/history/build/test-results/iosSimulatorArm64Test/
+            core/parquet/build/reports/tests/iosSimulatorArm64Test/
+            core/parquet/build/test-results/iosSimulatorArm64Test/
             ios/shared/build/reports/tests/iosSimulatorArm64Test/
             ios/shared/build/test-results/iosSimulatorArm64Test/
           retention-days: 14

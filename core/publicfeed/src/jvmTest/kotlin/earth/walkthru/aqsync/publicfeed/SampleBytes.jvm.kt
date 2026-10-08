@@ -1,0 +1,6 @@
+package earth.walkthru.aqsync.publicfeed
+
+import java.io.File
+
+actual fun sampleBytes(path: String): ByteArray =
+    File(System.getProperty("discover.sample.root") ?: error("discover.sample.root is not set"), path).readBytes()

@@ -20,6 +20,8 @@ ksp = "2.3.12"
 nav3Core = "1.1.7"
 lifecycleViewmodelNav3 = "2.11.0"
 kotlinxSerialization = "1.11.0"
+# Calendar math in shared code (time zones, local dates). 0.8.0 uses kotlin.time.Instant and Clock.
+kotlinxDatetime = "0.8.0"
 androidxDocumentfile = "1.1.0"
 androidxDatastore = "1.2.1"
 androidxWork = "2.11.2"
@@ -68,6 +70,7 @@ androidx-navigation3-ui = { module = "androidx.navigation3:navigation3-ui", vers
 androidx-lifecycle-viewmodel-navigation3 = { module = "androidx.lifecycle:lifecycle-viewmodel-navigation3", version.ref = "lifecycleViewmodelNav3" }
 
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
+kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinxDatetime" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 androidx-compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
 androidx-documentfile = { module = "androidx.documentfile:documentfile", version.ref = "androidxDocumentfile" }

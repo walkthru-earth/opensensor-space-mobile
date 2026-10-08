@@ -1,5 +1,8 @@
 package earth.walkthru.aqsync.publicfeed
 
+import earth.walkthru.aqsync.data.history.parquet.ByteArrayReader
+import earth.walkthru.aqsync.data.history.parquet.SuspendByteReader
+import earth.walkthru.aqsync.data.history.parquet.asSuspend
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -65,22 +68,20 @@ data class CellsTable(
 }
 
 /**
- * The narrow Parquet port of the feed. One cells file in, matching rows out. The JVM binding reads
- * through `:core:parquet`. Range reads over HTTP come later and change only the byte source.
+ * The narrow Parquet port of the feed. One cells file in, matching rows out. [ParquetFeedReader]
+ * implements it in common code over the portable `:core:parquet` reader. The byte source is the
+ * only thing that changes between the bundled sample (memory) and the live feed (HTTP ranges).
  */
 interface FeedReader {
-    /** False when this platform cannot read Parquet yet. */
+    /** False when this platform cannot read Parquet. */
     val available: Boolean get() = true
 
     /**
      * Rows whose `h3_index` falls in [ranges] (all rows when null). Row groups whose `h3_index`
-     * statistics miss every range are skipped without decoding.
+     * statistics miss every range are skipped without reading their pages.
      */
-    fun readCells(bytes: ByteArray, source: String, ranges: List<LongRange>?): CellsTable
+    suspend fun readCells(reader: SuspendByteReader, source: String, ranges: List<LongRange>?): CellsTable
 }
-
-/** The platform Parquet binding for the feed. */
-expect fun platformFeedReader(): FeedReader
 
 /** The public feed port. The bundled sample and, later, the live source.coop feed implement it. */
 interface PublicFeed {
@@ -114,7 +115,7 @@ object FeedPaths {
  * stands in for the S3 listing until the live feed exists.
  */
 class BundledSampleFeed(
-    private val reader: FeedReader,
+    private val reader: FeedReader = ParquetFeedReader(),
     private val root: String = "files/discover-sample/v1",
     private val load: suspend (String) -> ByteArray,
 ) : PublicFeed {
@@ -131,6 +132,6 @@ class BundledSampleFeed(
         if (!reader.available) return CellsTable.EMPTY
         val path = "$root/${FeedPaths.cells(partition, window, res)}"
         val data = bytes[path] ?: load(path).also { bytes[path] = it }
-        return reader.readCells(data, path, ranges)
+        return reader.readCells(ByteArrayReader(data).asSuspend(), path, ranges)
     }
 }

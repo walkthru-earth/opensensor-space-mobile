@@ -3,7 +3,6 @@ package earth.walkthru.opensensor.discover
 import earth.walkthru.aqsync.publicfeed.BundledSampleFeed
 import earth.walkthru.aqsync.publicfeed.FeedProperty
 import earth.walkthru.aqsync.publicfeed.PublicFeed
-import earth.walkthru.aqsync.publicfeed.platformFeedReader
 import earth.walkthru.opensensor.discover.resources.Res
 import kotlin.math.abs
 import kotlin.math.roundToLong
@@ -14,7 +13,7 @@ internal expect fun currentTimeZoneId(): String
 internal expect fun nowEpochMillis(): Long
 
 /** The bundled sample feed, read from this module's Compose resources. */
-fun bundledSampleFeed(): PublicFeed = BundledSampleFeed(platformFeedReader()) { path -> Res.readBytes(path) }
+fun bundledSampleFeed(): PublicFeed = BundledSampleFeed { path -> Res.readBytes(path) }
 
 /** The basemap style, light or dark, bundled as a Compose resource (tools/discover-fixture). */
 internal suspend fun basemapStyle(dark: Boolean): String = Res.readBytes(if (dark) "files/basemap/dark.json" else "files/basemap/light.json").decodeToString()

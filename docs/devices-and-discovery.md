@@ -512,7 +512,7 @@ starts with the target layout from the producer guidance.
 | --- | --- |
 | `:core:model` | `Device`, `DeviceFamily`, `Capability`, `ObservedProperty`, `Scale`, registry |
 | `:core:publicfeed` | `PublicFeed` port, S3 listing, Ktor range source, footer and range cache, H3 interface and viewport cover, bundled sample source |
-| `:core:parquet` | The portable reader from W8, used unchanged except for a suspend range `ByteReader` and later page indexes |
+| `:core:parquet` | The portable reader from W8, with `SuspendByteReader`, the footer-first `SuspendParquetFile` and row group pruning by INT64 statistics. Page indexes come later |
 | `:feature:discover` | CMP `commonMain` screens for the map, cell sheet and public device page, ViewModels |
 | `tools/discover-fixture/` | Script that writes the sample feed in the live layout (Python `h3`, PyArrow), committed output |
 
