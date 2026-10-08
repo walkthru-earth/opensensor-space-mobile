@@ -28,7 +28,9 @@ need the same behavior.
   (`docs/screens.md`, Copy and the info affordance).
 - Never request a permission at launch or from composition. Use `rememberBluetoothAccess()`,
   `rememberLocalNetworkAccess()` or `rememberNotificationPermission()` and call them from the tap
-  that needs them, with `AccessDialogs` beside the screen. Timing table in `docs/screens.md`.
+  that needs them, with `AccessDialogs` beside the screen. The decisions and the trigger table
+  live in the shared `:ui:permissions` module. This package only launches the system dialogs.
+  Timing table in `docs/screens.md`.
 
 ## Design system and detail levels
 

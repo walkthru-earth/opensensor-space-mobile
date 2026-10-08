@@ -25,7 +25,7 @@ State as of 2026-10-08. Re-check the linked store pages before each submission. 
 | Item | Answer today | Evidence |
 | --- | --- | --- |
 | Target API | Targets 37. Play requires API 36 for new apps and updates from 2026-08-31 ([target SDK](https://developer.android.com/google/play/requirements/target-sdk)) | `app/build.gradle.kts` |
-| Runtime permissions | Asked in context from the action that needs them, never at launch. In-app rationale only when `shouldShowRequestPermissionRationale` is true, settings link after a permanent denial | `ui/permissions/RuntimeAccess.kt`, `PermissionFlowTest` |
+| Runtime permissions | Asked in context from the action that needs them, never at launch (`PermissionTriggers`). In-app rationale only when `shouldShowRequestPermissionRationale` is true. Settings link after a permanent denial on Android and after a reported denial on iOS, for Bluetooth, Local Network and Near me location | `:ui:permissions` (`PermissionFlow`, `PermissionTriggers`, `PermissionFlowTest`), `app/.../ui/permissions/RuntimeAccess.kt`, `ios/App/BluetoothCompanion.swift`, `ios/App/LanPolicy.swift` |
 | Location | Only `ACCESS_COARSE_LOCATION`, asked on the Near me tap, foreground only. `BLUETOOTH_SCAN` carries `neverForLocation`. No fine or background location, so no Play location declaration. Data safety stays "not collected" because the fix never leaves the phone | `ManifestPermissionsTest`, `feature/discover/.../NearMe*.kt` |
 | Prominent disclosure | Not required. It applies when an app collects personal or sensitive data in a way users would not expect. Nothing leaves the phone without a user share | Play [User Data policy](https://support.google.com/googleplay/android-developer/answer/10144311) |
 | Data safety form | "No data collected" and "No data shared". Data processed only on the device, and data the user sends with the share sheet, are not collection | Play [Data safety help](https://support.google.com/googleplay/android-developer/answer/10787469) |
@@ -111,7 +111,7 @@ Have counsel read the privacy policy before the first public release.
 
 ## Gate before each submission
 
-- [ ] `ManifestPermissionsTest` and `PermissionFlowTest` pass, the manifest set is unchanged or reviewed.
+- [ ] `ManifestPermissionsTest` and `PermissionFlowTest` (`:ui:permissions`, Android host and iOS simulator) pass, the manifest set is unchanged or reviewed.
 - [ ] Fresh install on a phone shows no permission prompt at launch (Android and iPhone), recorded in `docs/status.md`.
 - [ ] Xcode Organizer privacy report of the archive matches `PrivacyInfo.xcprivacy`.
 - [ ] Data safety form and App privacy answers match this page.

@@ -19,6 +19,7 @@ flowchart TB
   end
   subgraph ui["Compose Multiplatform, Android and iOS"]
     DS[":ui:designsystem<br/>tokens, theme, fonts, floating controls"]
+    PM[":ui:permissions<br/>trigger table, permission policy, settings link"]
     DI[":feature:discover<br/>map, cell sheet, chart"]
   end
   APP[":app (Android)<br/>Hilt, Room v10, DataStore, WorkManager, Compose, zstd-jni"]
@@ -26,9 +27,9 @@ flowchart TB
   IS[":ios:shared (iOS only)<br/>CompanionScreen, AppRoot, static OpenSensorShared framework"]
   HI --> PQ & PR & AQ
   PF --> PQ & AQ
-  DI --> PF & UN & DS
-  APP --> HI & PF & UN & DI & DS
-  IS --> HI & PR & UN & DI & DS
+  DI --> PF & UN & DS & PM
+  APP --> HI & PF & UN & DI & DS & PM
+  IS --> HI & PR & UN & DI & DS & PM
   IOS --> IS
 ```
 
@@ -40,7 +41,7 @@ flowchart TB
 Tests live in `src/commonTest` (JVM and iOS simulator) or `src/jvmTest` / `src/iosTest`. Calendar
 windows use kotlinx-datetime. Android passes its `ZoneId` through `toKotlinTimeZone()`.
 
-`:ui:designsystem` and `:feature:discover` target Android (the AGP KMP library target, not `jvm`)
+`:ui:designsystem`, `:ui:permissions` and `:feature:discover` target Android (the AGP KMP library target, not `jvm`)
 and iOS. `:ios:shared` targets iOS only, so its `commonMain` consumes them directly. It renders the
 current Compose iOS screen. `ios/App` supplies native app integration, Core Bluetooth, Bonjour
 discovery, and today a second sync engine and archive in Swift. The Android app remains a separate
@@ -89,7 +90,7 @@ It holds four convention plugins, so a new shared module is one `plugins {}` lin
 | Plugin | Applied by | Sets |
 | --- | --- | --- |
 | `opensensor.kmp.library` | every `:core` module | Kotlin Multiplatform with `jvm` (bytecode 17), `iosArm64`, `iosSimulatorArm64`, `kotlin-test` in `commonTest`, a `test` task that runs `jvmTest`. Adds `jvmTest` to `verify` and `iosSimulatorArm64Test` to `verifyIos` |
-| `opensensor.kmp.compose-feature` | `:ui:designsystem`, `:feature:discover` | the AGP KMP Android library target (namespace `earth.walkthru.opensensor.<module>`, SDK 37, min 31, Android resources, host tests), `iosArm64`, `iosSimulatorArm64`, Compose runtime, foundation, Material 3, UI and resources, internal resources class in `<namespace>.resources`, `kotlin-test` in `commonTest` (runs in the Android host test and on the simulator), a `test` task that runs `testAndroidHostTest`. Adds `testAndroidHostTest` to `verify` and `iosSimulatorArm64Test` to `verifyIos` |
+| `opensensor.kmp.compose-feature` | `:ui:designsystem`, `:ui:permissions`, `:feature:discover` | the AGP KMP Android library target (namespace `earth.walkthru.opensensor.<module>`, SDK 37, min 31, Android resources, host tests), `iosArm64`, `iosSimulatorArm64`, Compose runtime, foundation, Material 3, UI and resources, internal resources class in `<namespace>.resources`, `kotlin-test` in `commonTest` (runs in the Android host test and on the simulator), a `test` task that runs `testAndroidHostTest`. Adds `testAndroidHostTest` to `verify` and `iosSimulatorArm64Test` to `verifyIos` |
 | `opensensor.kmp.ios-framework` | `:ios:shared` | iOS only Kotlin Multiplatform with the static `OpenSensorShared` framework for each iOS target. Adds `iosSimulatorArm64Test` and `linkDebugFrameworkIosSimulatorArm64` to `verifyIos` |
 | `opensensor.jvm.library` | none today (kept for a future JVM-only module) | Kotlin/JVM with Java and Kotlin bytecode 17 |
 

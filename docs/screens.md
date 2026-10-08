@@ -112,10 +112,19 @@ Developer-level line.
 ## Permission timing
 
 There is no permission wall. The app opens on Discover and asks only from the tap that needs a
-permission (`ui/permissions/RuntimeAccess.kt`, rules in `PermissionFlow`, tested by
-`PermissionFlowTest`). An in-app rationale appears only when Android reports one is due. After a
-permanent denial the next tap offers the app's system settings page. Store answers live in
-[store-compliance.md](store-compliance.md).
+permission. The shared `:ui:permissions` module holds the policy for both apps. `PermissionTriggers`
+is the one table from user action to permission, `PermissionFlow` decides ask, explain or settings,
+and `RuntimeAccess` runs it. `PermissionFlowTest` (commonTest, Android host and iOS simulator)
+covers the table, both decision paths and the iOS status mapping. The Android launchers stay in
+`app/.../ui/permissions/RuntimeAccess.kt`, the iOS ones in `ios/App` and the Near me actuals.
+
+An in-app rationale appears only when Android reports one is due. After a permanent denial the
+next tap offers the app's system settings page (`rememberOpenAppSettings`, the app details intent
+on Android, `UIApplication.openSettingsURLString` on iOS). iOS shows each prompt once and never
+explains first. A fresh "no" is quiet. The next tap, or the Bluetooth and Local Network messages
+on the iOS screen, offer Settings. Restricted access gets no link, since the user cannot change it.
+iOS has no Local Network status API (TN3179), so it stays unknown until the browser reports
+`PolicyDenied`. Store answers live in [store-compliance.md](store-compliance.md).
 
 | Permission | Android trigger | iOS trigger | Without it |
 | --- | --- | --- | --- |
