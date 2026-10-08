@@ -62,10 +62,10 @@ fun FreshnessLabel(receivedAtEpochMs: Long?, color: Color = MaterialTheme.colorS
 fun BigValue(label: String, value: String, unit: String, modifier: Modifier = Modifier) {
     Column(modifier) {
         Eyebrow(label, uppercase = false)
-        Row(verticalAlignment = Alignment.Bottom) {
-            Text(value, style = MaterialTheme.typography.displaySmall)
+        Row {
+            Text(value, style = MaterialTheme.typography.displaySmall, modifier = Modifier.alignByBaseline())
             Spacer(Modifier.width(6.dp))
-            Text(unit, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 7.dp))
+            Text(unit, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.alignByBaseline())
         }
     }
 }

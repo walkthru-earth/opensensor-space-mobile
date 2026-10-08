@@ -2,11 +2,13 @@ package earth.walkthru.aqsync.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.ExperimentalTextApi
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.sp
 import earth.walkthru.aqsync.R
 
@@ -49,6 +51,9 @@ val Cairo = FontFamily(
     variable(R.font.cairo, 800),
 )
 
+/** Cairo's tall Arabic ascent and descent would pad big numbers; trim the line box to the digits. */
+private val TrimmedNumbers = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both)
+
 /** The face for live and summary numbers (fixed-width digits). */
 val NumberFamily: FontFamily = Cairo
 
@@ -71,6 +76,8 @@ fun brandTypography(text: FontFamily = Quicksand, numbers: FontFamily = NumberFa
             lineHeight = 88.sp,
             letterSpacing = (-2).sp,
             fontFeatureSettings = TABULAR,
+            lineHeightStyle = TrimmedNumbers,
+            platformStyle = PlatformTextStyle(includeFontPadding = false),
         ),
         displayMedium = TextStyle(
             fontFamily = numbers,
@@ -79,6 +86,8 @@ fun brandTypography(text: FontFamily = Quicksand, numbers: FontFamily = NumberFa
             lineHeight = 54.sp,
             letterSpacing = (-1).sp,
             fontFeatureSettings = TABULAR,
+            lineHeightStyle = TrimmedNumbers,
+            platformStyle = PlatformTextStyle(includeFontPadding = false),
         ),
         displaySmall = TextStyle(
             fontFamily = numbers,
@@ -87,6 +96,8 @@ fun brandTypography(text: FontFamily = Quicksand, numbers: FontFamily = NumberFa
             lineHeight = 38.sp,
             letterSpacing = (-0.5).sp,
             fontFeatureSettings = TABULAR,
+            lineHeightStyle = TrimmedNumbers,
+            platformStyle = PlatformTextStyle(includeFontPadding = false),
         ),
         headlineLarge = base.headlineLarge.brand(FontWeight.Bold).copy(letterSpacing = (-0.5).sp),
         headlineMedium = base.headlineMedium.brand(FontWeight.Bold).copy(letterSpacing = (-0.4).sp),

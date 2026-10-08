@@ -90,7 +90,7 @@
     <string name="today_of_the_day">of the day covered</string>
     <string name="today_none">No timed readings on this phone yet today.</string>
     <string name="today_none_clock">No timed readings on this phone yet today. Give the sensor the time, then sync, and the day’s average appears here.</string>
-    <string name="today_station_short">station %1$s…</string>
+    <string name="today_station_short">ID %1$s…</string>
     <plurals name="today_readings_since_midnight">
         <item quantity="one">%1$d reading since midnight</item>
         <item quantity="other">%1$d readings since midnight</item>
