@@ -242,6 +242,13 @@ Parquet reader. Design reassessed 2026-10-08 in
   zone region, with search over a bundled place list. A "Near me" button asks for approximate
   location on tap only.
 - Discover is the start tab when no device is paired.
+- Status 2026-10-08 (first slice, not phone qualified). Built `:core:publicfeed`,
+  `:feature:discover` and `tools/discover-fixture/` with the sample feed, the map, chips, window,
+  legend, sample pill, first-run card, cell sheet, local city search and the "Show public sensors"
+  switch, on Android and iOS. Both read the sample through W8's common reader. H3 is `com.uber:h3`
+  on Android (JNI copied into `jniLibs`, arm64 and arm only) and the vendored H3 C through cinterop
+  on iOS. Still open. Ktor range source and cache, S3 listing, Near me, GeoNames search, device list
+  and page, offline map download, half sheet height, our own basemap extract, phone runs.
 
 ### Wave 3 (after Wave 2)
 

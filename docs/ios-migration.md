@@ -38,9 +38,17 @@ board temperature and humidity are shown only for reviewed schema/dictionary
 profiles. Core Bluetooth owns pairing prompts. Operations are serialized and
 scan/connection timers bound attempts. The app sends no firmware-changing
 commands and has no accounts, analytics or cloud connection. Location is planned as approximate
-only, asked on a "Near me" tap (`NSLocationDefaultAccuracyReduced`). The planned
+only, asked on a "Near me" tap (`NSLocationDefaultAccuracyReduced`). The
 discover map adds only anonymous, read-only feed and basemap GETs, and uploads stay a per-device
 opt-in ([devices-and-discovery.md](devices-and-discovery.md#network-boundary)).
+
+Since W12 (2026-10-08) the Compose root (`ios/shared/src/iosMain/.../AppRoot.kt`) has three tabs,
+Discover, My devices (the screen above) and Settings ("Show public sensors"). Discover is the start
+tab while no device access is saved (`LanCredentials.hasAny()`). It is the shared
+`:feature:discover` screen, reading the bundled sample through the common Parquet reader and the
+vendored H3 C library through cinterop. The Xcode target links `-lc++ -lz` and CoreFoundation,
+CoreGraphics, CoreText, Foundation, ImageIO, Metal and QuartzCore for maplibre-compose. Checked in
+the iPhone 18 Pro simulator only (PMTiles basemap and sample cells drawn), not on an iPhone.
 
 Wi-Fi discovery is also available through `NWBrowser`, restricted to
 `_aqsync._tcp` in `local.`. Tapping **Find Wi-Fi sensors** starts a bounded browse

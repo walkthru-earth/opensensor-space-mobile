@@ -1,0 +1,94 @@
+package earth.walkthru.opensensor.discover
+
+import androidx.compose.runtime.Immutable
+
+/**
+ * Every word Discover shows. Android builds this from `res/values/strings.xml` (so `CopyRulesTest`
+ * checks it and translations work), iOS uses [English] until it has its own string catalogue.
+ * Copy rules. No em or en dashes, no colons or semicolons. Minimal copy, explanations live in
+ * info sheets.
+ */
+@Immutable
+data class DiscoverStrings(
+    val searchPlaces: String,
+    val addSensor: String,
+    val more: String,
+    val windowLastHour: String,
+    val window24Hours: String,
+    val window7Days: String,
+    val sampleData: String,
+    val sampleInfo: InfoText,
+    val scaleInfo: InfoText,
+    val osm: String,
+    val mapInfo: InfoText,
+    val noAreas: String,
+    val notMeasured: String,
+    val stale: String,
+    val avg: String,
+    val min: String,
+    val max: String,
+    val firstRunLine: String,
+    val explore: String,
+    val allMeasurements: String,
+    val unavailable: String,
+    val loading: String,
+    val noPlaces: String,
+    val clearSearch: String,
+    val areasInView: (Int) -> String,
+    val sensors: (Int) -> String,
+    val updatedHoursAgo: (Int) -> String,
+    val updatedRecently: String,
+) {
+    companion object {
+        /** English copy for iOS. Keep it in step with the Android `discover_*` strings. */
+        val English = DiscoverStrings(
+            searchPlaces = "Search places",
+            addSensor = "Add your sensor",
+            more = "More",
+            windowLastHour = "Last hour",
+            window24Hours = "24 hours",
+            window7Days = "7 days",
+            sampleData = "Sample data",
+            sampleInfo = InfoText(
+                "Sample data",
+                listOf("These numbers are made up for a preview. Real sensors appear here when the public feed goes live."),
+            ),
+            scaleInfo = InfoText(
+                "Colour scale",
+                listOf(
+                    "Colours stretch from low to high across the areas in view, leaving out the lowest and highest 5 percent.",
+                    "Each area shows hourly means from three or more sensors. A faded area has no new value for 3 hours. An outline only means the area does not measure this.",
+                ),
+            ),
+            osm = "© OpenStreetMap",
+            mapInfo = InfoText(
+                "Map data",
+                listOf(
+                    "Map data © OpenStreetMap contributors, under the Open Database License. See openstreetmap.org/copyright.",
+                    "Basemap by Protomaps.",
+                ),
+            ),
+            noAreas = "No sensor areas here yet",
+            notMeasured = "Not measured here",
+            stale = "No new value for 3 hours",
+            avg = "avg",
+            min = "min",
+            max = "max",
+            firstRunLine = "Public sensors near you, shown as areas",
+            explore = "Explore",
+            allMeasurements = "All measurements",
+            unavailable = "Public sensors are not available on this phone yet",
+            loading = "Loading",
+            noPlaces = "No matching places",
+            clearSearch = "Clear search",
+            areasInView = { n -> if (n == 1) "1 sensor area in view" else "$n sensor areas in view" },
+            sensors = { n -> if (n == 1) "1 sensor" else "$n sensors" },
+            updatedHoursAgo = { n -> if (n == 1) "Updated 1 h ago" else "Updated $n h ago" },
+            updatedRecently = "Updated within the hour",
+        )
+    }
+}
+
+/** A title and short paragraphs for an info sheet. */
+@Immutable
+data class InfoText(val title: String, val body: List<String>)

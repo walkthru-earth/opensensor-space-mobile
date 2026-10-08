@@ -2,7 +2,7 @@
 
 **Scope:** how the app supports any sensor family (air quality is one of many), and how a new user
 sees public sensor data near them on first open through a privacy-preserving H3 map.
-**Code:** planned `:core:model`, `:core:publicfeed`, `:feature:discover`. **Related:**
+**Code:** `core/publicfeed/`, `feature/discover/`, `tools/discover-fixture/`, planned `:core:model`. **Related:**
 [production-readiness-plan.md](production-readiness-plan.md) (W11, W12),
 [cross-platform-guide.md](cross-platform-guide.md),
 `../aq-parquet/docs/shared/table-and-observation-model.md`.
@@ -511,13 +511,30 @@ starts with the target layout from the producer guidance.
 | Module | Owns |
 | --- | --- |
 | `:core:model` | `Device`, `DeviceFamily`, `Capability`, `ObservedProperty`, `Scale`, registry |
-| `:core:publicfeed` | `PublicFeed` port, S3 listing, Ktor range source, footer and range cache, H3 interface and viewport cover, bundled sample source |
+| `:core:publicfeed` | `PublicFeed` and `FeedReader` ports, `ParquetFeedReader` (common, over the W8 reader), `BundledSampleFeed`, the `H3Grid` interface (`com.uber:h3` 4.5.0 on Android and JVM, the vendored H3 C 4.5.0 through cinterop on iOS), `H3Index` bit arithmetic and descendant ranges, `ViewportCover`, `PercentileScale`, `PropertyRanking`, `CellGeoJson`, `TimeZoneRegions`. Built 2026-10-08. Planned here: S3 listing, Ktor range source, footer and range cache |
 | `:core:parquet` | The portable reader from W8, with `SuspendByteReader`, the footer-first `SuspendParquetFile` and row group pruning by INT64 statistics. Page indexes come later |
-| `:feature:discover` | CMP `commonMain` screens for the map, cell sheet and public device page, ViewModels |
-| `tools/discover-fixture/` | Script that writes the sample feed in the live layout (Python `h3`, PyArrow), committed output |
+| `:feature:discover` | CMP `commonMain` map screen (`DiscoverScreen`), `DiscoverController` state holder, `DiscoverStrings` (Android passes `strings.xml`, iOS English), the bundled sample and basemap styles as Compose resources. Targets Android (`com.android.kotlin.multiplatform.library`) and iOS, not the JVM, because the maplibre-compose desktop variant needs Java 25. Planned here: the public device page |
+| `tools/discover-fixture/` | `make_discover_sample.py` writes the sample feed in the live layout (Python `h3` 4.5.0, PyArrow 25.0.1, SNAPPY, 24-row groups, page indexes, about 300 KB for 18 files). `make_basemap_style.mjs` writes the light and dark styles from `@protomaps/basemaps` 5.7.2. Output committed under `feature/discover/src/commonMain/composeResources/files/` |
 
 `:feature:discover` is shared Compose, so Android and iOS show the same screens. Platform code
-provides only the HTTP engine, the cache directory and the H3 binding. Ktor 3.6.0 is the latest client. Its
+provides only the strings, the saved state (`DiscoverPrefs`, DataStore on Android, NSUserDefaults on
+iOS), the H3 binding and later the HTTP engine and the cache directory.
+
+**What the first slice does (W12, 2026-10-08, host, Android emulator and iOS simulator only, no
+phone run).** Discover opens on the last camera or the time zone region, reads the bundled sample
+through the common Parquet reader with row group pruning, covers the viewport with at most 1,024
+cells at `round(zoom * 0.8)` clamped to 2..7, and redraws one GeoJSON source after 400 ms of camera
+rest. Chips rank properties by visible cells (three, then More), the window chip cycles Last hour,
+24 hours and 7 days, the legend shows the 5th to 95th percentile of the cells in view on a viridis
+ramp, and the sheet peeks with the first-run card or the area count and opens on a cell tap with
+avg, min and max per property. Search moves the map over a small built-in city list. The basemap is
+the Protomaps OpenStreetMap PMTiles build on source.coop (`pmtiles://` rendered on the Android
+emulator and the iOS simulator), "© OpenStreetMap" shows at launch and collapses to an info button.
+"Show public sensors" in Settings (both apps) swaps in a plain background style, so no request
+leaves the phone. Not built yet. Near me, the GeoNames place list, the offline map download (TODO),
+the half sheet height, stale outline dashes, the device list and device page, the live feed, the
+peacock on the first-run card and recolouring the basemap to the sensing palette. The basemap
+still points at the Protomaps build on source.coop, not at our own extract. Ktor 3.6.0 is the latest client. Its
 use with Kotlin 2.4.20 still has to pass `verify` and `verifyIos` before it is pinned.
 
 ### Owner decisions and open questions

@@ -1,0 +1,3 @@
+headers = h3api.h
+package = earth.walkthru.aqsync.publicfeed.h3c
+staticLibraries = libh3.a

@@ -27,6 +27,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UIDocumentPickerD
         guard let windowScene = scene as? UIWindowScene else { return }
         let controller = MainViewControllerKt.mainViewController(
             state: bluetooth.state,
+            // Discover is the start tab until a device is paired (saved device access).
+            startOnDiscover: !LanCredentials().hasAny(),
             scan: { [weak self] in self?.bluetooth.scan() },
             connect: { [weak self] id in self?.bluetooth.connect(id: id) },
             disconnect: { [weak self] in self?.bluetooth.disconnect() },

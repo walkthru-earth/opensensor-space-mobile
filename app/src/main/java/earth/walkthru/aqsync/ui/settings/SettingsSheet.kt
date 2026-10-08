@@ -12,6 +12,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -30,14 +31,15 @@ import earth.walkthru.aqsync.ui.components.InfoButton
 import earth.walkthru.aqsync.ui.components.InfoContent
 
 /**
- * The app's settings: the **detail level** (Simple, Detailed, Developer, persisted in DataStore)
- * and the Smart Sync clock consent. Everything else the user can change lives on the device and
- * is edited from the Device screen. Same three levels, same names, on iOS.
+ * The app's settings: the **detail level** (Simple, Detailed, Developer, persisted in DataStore),
+ * the Smart Sync clock consent and "Show public sensors" for the Discover map. Everything else the
+ * user can change lives on the device and is edited from the Device screen. Same three levels, same names, on iOS.
  */
 @Composable
 fun SettingsSheet(onDismiss: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
     val level by viewModel.detailLevel.collectAsStateWithLifecycle()
     val clockMode by viewModel.clockSyncMode.collectAsStateWithLifecycle()
+    val showPublic by viewModel.showPublicSensors.collectAsStateWithLifecycle()
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surface) {
         Column(Modifier.navigationBarsPadding().padding(horizontal = 24.dp).padding(bottom = 32.dp)) {
@@ -116,6 +118,13 @@ fun SettingsSheet(onDismiss: () -> Unit, viewModel: SettingsViewModel = hiltView
                 style = MaterialTheme.typography.bodySmall,
                 color = muted,
             )
+            Spacer(Modifier.height(24.dp))
+            // The one switch for Discover network use (feed and basemap), AGENTS.md boundary.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.settings_public_sensors), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                Switch(checked = showPublic, onCheckedChange = viewModel::setShowPublicSensors)
+            }
+            Text(stringResource(R.string.settings_public_sensors_body), style = MaterialTheme.typography.bodySmall, color = muted)
             Spacer(Modifier.height(24.dp))
             Eyebrow(stringResource(R.string.settings_about))
             Spacer(Modifier.height(4.dp))

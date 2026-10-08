@@ -17,6 +17,12 @@ class SettingsViewModel @Inject constructor(private val settings: AppSettings) :
     val detailLevel: StateFlow<DetailLevel> = settings.detailLevel.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DetailLevel.SIMPLE)
     val clockSyncMode: StateFlow<ClockSyncMode> = settings.clockSyncMode.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ClockSyncMode.ASK)
 
+    val showPublicSensors: StateFlow<Boolean> = settings.showPublicSensors.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    fun setShowPublicSensors(on: Boolean) {
+        viewModelScope.launch { settings.setShowPublicSensors(on) }
+    }
+
     fun setDetailLevel(level: DetailLevel) {
         viewModelScope.launch { settings.setDetailLevel(level) }
     }

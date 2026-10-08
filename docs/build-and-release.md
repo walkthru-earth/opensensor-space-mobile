@@ -43,8 +43,8 @@ checks, recorded separately in [status.md](status.md) and the firmware repo's `b
 | --- | --- |
 | Language / UI | Kotlin 2.4.20, Jetpack Compose (BOM 2026.09.00, material3 1.4.0), Material 3 dynamic color, Navigation 3 (1.1.7) |
 | DI / data | Hilt 2.60.1, Room 2.8.5 (**schema v10**), DataStore Preferences 1.2.1, WorkManager 2.11.2 + `androidx.hilt:hilt-work` 1.4.0, kotlinx.serialization 1.11.0, kotlinx-datetime 0.8.0 (shared calendar math, added 2026-10-08), coroutines 1.11.0 |
-| Native | `zstd-jni` 1.5.7-17 (`@aar`), the only native library |
-| Build | AGP 9.4.0, Gradle 9.7.1 (configuration cache on), KSP 2.3.12, version catalog, R8 for release; protocol, Parquet and history target JVM (Java 17) and iOS |
+| Native | `zstd-jni` 1.5.7-17 (`@aar`). Discover (W12, 2026-10-08) adds `maplibre-compose` 0.19.0 with its OpenGL Android runtime (MapLibre Native through `maplibre-native-ffi`, armeabi-v7a, arm64-v8a, x86_64) and `com.uber:h3` 4.5.0 (JNI). `app/build.gradle.kts` (`ExtractH3Jni`) copies the h3 arm64 and arm libraries out of the jar into `jniLibs` and excludes the jar copies. The jar has no x86_64 build, so Discover shows its empty state there. iOS compiles the vendored H3 C 4.5.0 (`core/publicfeed/src/nativeInterop/h3c`) with `xcrun clang` and binds it through cinterop |
+| Build | AGP 9.4.0, Gradle 9.7.1 (configuration cache on), KSP 2.3.12, version catalog, R8 for release; protocol, Parquet, history and publicfeed target JVM (Java 17) and iOS. `:feature:discover` is Compose Multiplatform 1.12.1 for Android (`com.android.kotlin.multiplatform.library`) and iOS, not the JVM, because the maplibre-compose desktop variant needs Java 25 |
 | SDK | `compileSdk`/`targetSdk` **37**, `minSdk` **31** (modern Bluetooth permission model; no legacy branches) |
 | Style | ktlint `intellij_idea`, `max_line_length = off`, house rules off (`{ a; b }` one-liners, compact `when`, one-line enums, `_x` backing fields, `function-signature`) |
 
@@ -195,6 +195,7 @@ keep rules live in `app/src/main/keepRules/aqsync.keep`, the source set the new 
 | kotlinx.serialization companion rules for `earth.walkthru.aqsync.**` | `serializer<T>()` lookups of the app's `@Serializable` types, in addition to the library's consumer rules |
 | `-keepnames class * implements NavKey` | Navigation 3 saves keys by class name and restores them with `Class.forName` |
 | `-keepattributes SourceFile,LineNumberTable` | readable stack traces after retrace |
+| `-keep class com.uber.h3core.** { *; }` | the h3 JNI library binds `NativeMethods` by name and constructs `LatLng`, `H3Exception` and `ArrayList` from native code |
 
 Each release publishes `mapping-<version>.txt` next to the APK, and the release workflow fails if
 the mapping is missing. Retrace a stack trace with `retrace` from the Android SDK command-line tools
@@ -210,7 +211,17 @@ Host evidence on 2026-10-08 (AGP 9.4.0, local machine, not a phone run). The unm
 release APK was 55,080,672 bytes and the minified one 6,596,149 bytes. `mapping.txt` was produced.
 `dexdump` showed the `com.github.luben.zstd` classes, the four zstd-jni native ABIs, readable
 `ConnectionState`, `Frame` and exception class names, and `InnerClass` annotations on nested
-states. **R8 runtime behavior is not yet qualified on a phone.** Before the first tagged release
+states.
+
+W12 Discover on 2026-10-08 (same host, emulator only). The minified universal release APK grew to
+49,525,502 bytes. Native libraries are about 42.6 MB of it uncompressed (MapLibre Native about
+14 to 16 MB per ABI for arm64-v8a, armeabi-v7a and x86_64), dex 5.2 MB, the sample feed and
+basemap styles 0.14 MB. A Play App Bundle delivers one ABI per phone, so the download is roughly a
+third of the native share. The minified build started on Discover on a fresh install of the API 36
+arm64 emulator, drew H3 cells (h3 JNI after R8) and switched to the plain style when "Show public
+sensors" was off. Not a phone run.
+
+**R8 runtime behavior is not yet qualified on a phone.** Before the first tagged release
 with R8, install the minified APK on a phone and check BLE and LAN sync, ZSTD GeoParquet import,
 History charts, background sync, error messages and back stack restore after process death.
 
@@ -219,7 +230,8 @@ History charts, background sync, error messages and back stack restore after pro
 | Permission | Why | Runtime? |
 | --- | --- | --- |
 | `BLUETOOTH_SCAN` (`neverForLocation`), `BLUETOOTH_CONNECT` | the BLE pipe | yes |
-| `INTERNET` | **only** LAN sockets to hosts from mDNS `_aqsync._tcp` discovery; no cloud endpoint | – |
+| `INTERNET` | LAN sockets to hosts from mDNS `_aqsync._tcp` discovery, and the anonymous read-only Discover basemap GETs (Protomaps PMTiles on source.coop, glyphs and sprites from protomaps.github.io), which "Show public sensors" turns off. No other endpoint | – |
+| `ACCESS_NETWORK_STATE` | merged from the maplibre-compose library manifest (not in our source manifest), a normal permission | – |
 | `ACCESS_LOCAL_NETWORK` | mDNS + LAN on API 37+; denial leaves BLE working | yes, API 37+ only |
 | `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_DATA_SYNC` | `SyncForegroundService` and the worker's `setForeground` | – |
 | `POST_NOTIFICATIONS` | progress + summary notifications | yes, API 33+ |
@@ -227,7 +239,7 @@ History charts, background sync, error messages and back stack restore after pro
 | `REQUEST_COMPANION_RUN_IN_BACKGROUND`, `REQUEST_COMPANION_USE_DATA_IN_BACKGROUND`, `REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND`, `REQUEST_OBSERVE_COMPANION_DEVICE_PRESENCE` | "wake when nearby": the system's presence exemptions apply only while an associated logger is in range ([background-sync.md](background-sync.md#triggers--starting-a-run-before-the-period-is-up)) | – (normal); the association itself is one system dialog |
 | `RECEIVE_BOOT_COMPLETED` | restart the process after boot so the Wi-Fi-arrival and advertising-flag registrations are re-armed; schedules nothing itself | – |
 
-Only approximate location (`ACCESS_COARSE_LOCATION`), requested when "Near me" is tapped and never precise or in the background. No analytics/crash SDKs, no accounts. `allowBackup` with
+No location permission yet. "Near me" is not built. When it is, only approximate location (`ACCESS_COARSE_LOCATION`), requested when "Near me" is tapped and never precise or in the background. No analytics/crash SDKs, no accounts. `allowBackup` with
 `dataExtractionRules` ([data-model.md](data-model.md#backup)).
 
 CI verification and release builds also run the station-epoch migration validator. It checks
