@@ -9,151 +9,125 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.BatteryChargingFull
-import androidx.compose.material.icons.rounded.BatteryStd
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.LinkOff
-import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.material.icons.rounded.Storage
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import earth.walkthru.aqsync.R
-import earth.walkthru.aqsync.data.ArchiveTimeSummary
-import earth.walkthru.aqsync.data.DeviceEvent
-import earth.walkthru.aqsync.data.SyncProgress
-import earth.walkthru.aqsync.data.ble.ConfigSnapshot
 import earth.walkthru.aqsync.data.ble.ConnectionState
-import earth.walkthru.aqsync.data.history.NowReading
-import earth.walkthru.aqsync.data.protocol.DeviceStatus
-import earth.walkthru.aqsync.data.protocol.LiveProfile
-import earth.walkthru.aqsync.data.protocol.LiveProfiles
-import earth.walkthru.aqsync.data.protocol.LiveSample
-import earth.walkthru.aqsync.data.protocol.PlantowerBatchCandidate
-import earth.walkthru.aqsync.data.protocol.PmsStatus
 import earth.walkthru.aqsync.data.protocol.TemperatureSource
 import earth.walkthru.aqsync.ui.components.ConnectionBanner
 import earth.walkthru.aqsync.ui.components.DeviceBottomBar
 import earth.walkthru.aqsync.ui.components.DeviceTab
-import earth.walkthru.aqsync.ui.components.Eyebrow
-import earth.walkthru.aqsync.ui.components.StatLine
-import earth.walkthru.aqsync.ui.components.StatusDot
+import earth.walkthru.aqsync.ui.components.PillButton
 import earth.walkthru.aqsync.ui.components.TransportChip
-import earth.walkthru.aqsync.ui.components.formatAgo
-import earth.walkthru.aqsync.ui.components.formatBytes
-import earth.walkthru.aqsync.ui.components.formatUptime
-import earth.walkthru.aqsync.ui.components.rememberNowMillis
-import earth.walkthru.aqsync.ui.settings.SettingsSheet
-import earth.walkthru.aqsync.ui.theme.pm25Band
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.util.Locale
+import earth.walkthru.aqsync.ui.device.cards.BatchEstimateCard
+import earth.walkthru.aqsync.ui.device.cards.BoardCard
+import earth.walkthru.aqsync.ui.device.cards.ClockCard
+import earth.walkthru.aqsync.ui.device.cards.DeviceInfoCard
+import earth.walkthru.aqsync.ui.device.cards.EnvironmentCard
+import earth.walkthru.aqsync.ui.device.cards.MetricHeroCard
+import earth.walkthru.aqsync.ui.device.cards.ParticlesCard
+import earth.walkthru.aqsync.ui.device.cards.ReadingsCard
+import earth.walkthru.aqsync.ui.device.cards.SmartSyncCard
+import earth.walkthru.aqsync.ui.device.cards.StorageCard
+import earth.walkthru.aqsync.ui.device.cards.TodaySoFarCard
 
-/** A reading older than this is shown as stale (the device samples every 10 s). */
-private const val STALE_AFTER_MS = 30_000L
+/** Everything Today can ask for. The route maps each to a ViewModel call, a dialog or navigation. */
+sealed interface TodayAction {
+    data object OpenHistory : TodayAction
+    data object OpenFiles : TodayAction
+    data object OpenDevice : TodayAction
+    data object OpenDebug : TodayAction
+    data object OpenDevices : TodayAction
+    data object OpenSettings : TodayAction
+    data object Disconnect : TodayAction
+    data object Reconnect : TodayAction
+    data object SmartSync : TodayAction
+    data object RequestSetTime : TodayAction
+    data object RequestFlush : TodayAction
+}
 
+/**
+ * Today, stateless. Simple shows the hero reading, today so far, the sync state in words with one
+ * primary action, and the clock. Detailed adds the other measurements, board, storage, batch
+ * estimate and the device card. Developer adds identifiers and link internals on those cards.
+ * Conditional items sit after the first item so a level change never moves the top of the list.
+ */
 @Composable
 fun TodayScreen(
-    address: String,
-    onOpenHistory: () -> Unit,
-    onOpenFiles: () -> Unit,
-    onOpenDevice: () -> Unit,
-    onOpenDebug: () -> Unit,
-    onDisconnected: () -> Unit,
-    viewModel: TodayViewModel = hiltViewModel<TodayViewModel, TodayViewModel.Factory>(key = address, creationCallback = { it.create(address) }),
+    state: TodayUiState,
+    onAction: (TodayAction) -> Unit,
+    modifier: Modifier = Modifier,
+    snackbar: SnackbarHostState = remember { SnackbarHostState() },
 ) {
-    val state by viewModel.uiState.collectAsStateWithLifecycle()
-    val deviceConfig by viewModel.deviceConfig.collectAsStateWithLifecycle()
-    val profile = LiveProfiles.resolve(state.info)
-    val showParticles = profile != null && state.live?.sample?.pms?.let { it != PmsStatus.ABSENT.code } == true
-    val snackbar = remember { SnackbarHostState() }
-    val now = rememberNowMillis()
+    val level = state.detailLevel
+    val profile = state.capabilities.liveProfile
+    val live = state.live?.sample
+    val receivedAt = state.live?.receivedAtEpochMs
     // Hoisted so the scroll position belongs to the screen, not to whichever LazyColumn node
-    // happens to be composed: a "Set time" tap must never reset it (see the keyed items below).
+    // happens to be composed. A "Set time" tap must never reset it (see the keyed items below).
     val listState = rememberLazyListState()
-    var showSettings by remember { mutableStateOf(false) }
-    var confirmTime by remember { mutableStateOf(false) }
-    var confirmSmartSyncClock by remember { mutableStateOf<String?>(null) }
-    var confirmFlush by remember { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) {
-        viewModel.events.collect { ev ->
-            when (ev) {
-                is DeviceEvent.Error -> snackbar.showSnackbar(ev.message)
-                is DeviceEvent.Info -> snackbar.showSnackbar(ev.message)
-                is DeviceEvent.ClockConfirmationRequired -> confirmSmartSyncClock = ev.reason
-            }
-        }
-    }
-    // The repository dropped the session (user disconnected, or another device was picked).
-    LaunchedEffect(state.address) {
-        if (state.address != null && state.address != address) onDisconnected()
-    }
 
     Scaffold(
+        modifier = modifier,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 title = {
                     Column {
-                        Text(state.name ?: address, style = MaterialTheme.typography.titleLarge)
+                        Text(state.name ?: stringResource(R.string.device_unnamed), style = MaterialTheme.typography.titleLarge)
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             TransportChip(state.transport)
-                            state.info?.station?.let {
-                                Text("station ${it.take(8)}…", style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (level.developer) {
+                                state.info?.station?.let {
+                                    Text(
+                                        stringResource(R.string.today_station_short, it.take(8)),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontFamily = FontFamily.Monospace,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
                             }
                         }
                     }
                 },
                 actions = {
-                    TextButton(onClick = onDisconnected) { Text("Devices") }
-                    if (state.advancedMode) {
-                        IconButton(onClick = onOpenDebug) { Icon(Icons.Rounded.BugReport, contentDescription = "Debug") }
+                    TextButton(onClick = { onAction(TodayAction.OpenDevices) }) { Text(stringResource(R.string.nav_devices)) }
+                    if (level.developer) {
+                        IconButton(onClick = { onAction(TodayAction.OpenDebug) }) { Icon(Icons.Rounded.BugReport, contentDescription = stringResource(R.string.nav_debug)) }
                     }
-                    IconButton(onClick = { showSettings = true }) { Icon(Icons.Rounded.Settings, contentDescription = "Settings") }
-                    IconButton(onClick = { viewModel.disconnect(); onDisconnected() }) {
-                        Icon(Icons.Rounded.LinkOff, contentDescription = "Disconnect")
-                    }
+                    IconButton(onClick = { onAction(TodayAction.OpenSettings) }) { Icon(Icons.Rounded.Settings, contentDescription = stringResource(R.string.nav_settings)) }
+                    IconButton(onClick = { onAction(TodayAction.Disconnect) }) { Icon(Icons.Rounded.LinkOff, contentDescription = stringResource(R.string.nav_disconnect)) }
                 },
             )
         },
         bottomBar = {
             DeviceBottomBar(DeviceTab.TODAY) {
                 when (it) {
-                    DeviceTab.HISTORY -> onOpenHistory()
-                    DeviceTab.FILES -> onOpenFiles()
-                    DeviceTab.DEVICE -> onOpenDevice()
+                    DeviceTab.HISTORY -> onAction(TodayAction.OpenHistory)
+                    DeviceTab.FILES -> onAction(TodayAction.OpenFiles)
+                    DeviceTab.DEVICE -> onAction(TodayAction.OpenDevice)
                     DeviceTab.TODAY -> Unit
                 }
             }
@@ -161,534 +135,80 @@ fun TodayScreen(
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(top = padding.calculateTopPadding())) {
-            // The banner lives outside the list: when it appears or disappears no list index shifts,
+            // The banner lives outside the list. When it appears or disappears no list index shifts,
             // so the scroll position cannot jump.
             if (state.connection !is ConnectionState.Ready) {
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-                    ConnectionBanner(state.connection, reconnecting = state.reconnecting)
+                    ConnectionBanner(state.connection, reconnecting = state.reconnecting, technical = level.developer)
                     if (state.reconnecting == null && (state.connection is ConnectionState.Failed || state.connection is ConnectionState.Disconnected)) {
                         Spacer(Modifier.height(8.dp))
-                        Button(onClick = { viewModel.reconnect() }, modifier = Modifier.fillMaxWidth()) { Text("Reconnect") }
+                        PillButton(stringResource(R.string.action_reconnect), onClick = { onAction(TodayAction.Reconnect) }, modifier = Modifier.fillMaxWidth())
                     }
                 }
             }
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = padding.calculateBottomPadding() + 24.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = padding.calculateBottomPadding() + 24.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                // The friendly reading comes first at every level; the measurement cards are Detailed.
-                // Conditional items sit *after* the first item so a level change never moves the top.
                 item(key = "now") {
-                    val ageMs = state.live?.receivedAtEpochMs?.let { now - it }
-                    if (showParticles) {
-                        NowCard(
-                            reading = NowReading.of(state.live?.sample),
-                            today = state.todaySoFar,
-                            fresh = ageMs != null && ageMs <= STALE_AFTER_MS,
-                            showNumber = true,
-                            onSetTime = if (state.status?.status?.utcSynced == false) ({ confirmTime = true }) else null,
-                        )
+                    if (state.showsParticles) {
+                        MetricHeroCard(live, receivedAt, level)
                     } else {
-                        SensorReadingsCard(profile, state.live?.sample, ageMs)
+                        EnvironmentCard(profile, live, receivedAt, hero = true)
                     }
                 }
-                if (profile != null && state.info?.schema == "waveshare-sim7670g-telemetry-v2" &&
-                    deviceConfig?.config?.sensor?.batchCandidate == 1
-                ) {
-                    item(key = "batch-estimate") {
-                        BatchEstimateCard(state.live?.sample, state.live?.receivedAtEpochMs, deviceConfig, now)
-                    }
+                item(key = "today") {
+                    TodaySoFarCard(state.todaySoFar, clockMissing = state.status?.status?.utcSynced == false, level = level)
                 }
-                if (showParticles && profile.temperature == TemperatureSource.AMBIENT) {
-                    item(key = "environment") { SensorReadingsCard(profile, state.live?.sample, state.live?.receivedAtEpochMs?.let { now - it }) }
-                }
-                if (state.detailLevel.detailed) {
-                    if (showParticles) {
-                        item(key = "readings") { ReadingsCard(state.live?.sample, state.live?.receivedAtEpochMs, now) }
-                        item(key = "particles") { ParticleRow(state.live?.sample) }
-                    }
-                    item(key = "board") { BoardCard(state.live?.sample, profile) }
-                    item(key = "storage") { StorageCard(state.status?.status, state.status?.receivedAtEpochMs, now) }
+                if (state.showsParticles && profile?.temperature == TemperatureSource.AMBIENT) {
+                    item(key = "environment") { EnvironmentCard(profile, live, receivedAt, hero = false) }
                 }
                 item(key = "smart-sync") {
                     SmartSyncCard(
                         sync = state.sync,
                         archive = state.archiveTime,
                         enabled = state.connection.isReady,
-                        onSync = { viewModel.smartSync() },
+                        level = level,
+                        onSync = { onAction(TodayAction.SmartSync) },
                     )
                 }
                 item(key = "clock") {
                     ClockCard(
                         status = state.status?.status,
-                        live = state.live?.sample,
+                        live = live,
                         enabled = state.connection.isReady,
-                        onSetTime = { confirmTime = true },
-                        onFlush = { confirmFlush = true },
+                        level = level,
+                        onSetTime = { onAction(TodayAction.RequestSetTime) },
+                        onFlush = { onAction(TodayAction.RequestFlush) },
                     )
                 }
-                state.info?.takeIf { state.detailLevel.detailed }?.let { info ->
-                    item(key = "info") {
-                        Column(Modifier.padding(horizontal = 4.dp, vertical = 8.dp)) {
-                            Eyebrow("device")
-                            Spacer(Modifier.height(6.dp))
-                            StatLine("firmware", info.fw ?: "—")
-                            StatLine("schema", "${info.schema ?: "—"} · ${info.cols ?: "?"} cols")
-                            StatLine("protocol", "v${info.proto ?: "?"}")
-                            StatLine("device id", info.dev ?: "—")
-                            StatLine("boot", info.boot?.take(12)?.plus("…") ?: "—")
-                            StatLine("dictionary", info.dict?.take(12)?.plus("…") ?: "—")
-                            StatLine("max_read", info.maxRead?.let { "$it B" } ?: "— (using default)")
-                            StatLine("link", "${state.transport?.label ?: "—"}${state.connection.let { c -> if (c is ConnectionState.Ready) " · payload ${c.mtu - 3} B" else "" }}")
+                if (level.detailed) {
+                    if (state.showsBatchEstimate) {
+                        item(key = "batch-estimate") { BatchEstimateCard(live, receivedAt, state.config) }
+                    }
+                    if (state.showsParticles) {
+                        item(key = "readings") { ReadingsCard(live, receivedAt, level) }
+                        item(key = "particles") { ParticlesCard(live) }
+                    }
+                    item(key = "board") { BoardCard(live, profile, level) }
+                    item(key = "storage") { StorageCard(state.status?.status, state.status?.receivedAtEpochMs, level) }
+                    if (state.info != null) {
+                        item(key = "info") {
+                            DeviceInfoCard(
+                                name = state.name,
+                                info = state.info,
+                                connection = state.connection,
+                                transport = state.transport,
+                                endpoint = null,
+                                configReadAtEpochMs = null,
+                                level = level,
+                            )
                         }
                     }
                 }
             }
         }
     }
-
-    if (showSettings) SettingsSheet(onDismiss = { showSettings = false })
-
-    if (confirmTime) {
-        AlertDialog(
-            onDismissRequest = { confirmTime = false },
-            icon = { Icon(Icons.Rounded.Schedule, contentDescription = null) },
-            title = { Text(stringResource(R.string.set_time)) },
-            text = {
-                Text(
-                    "Sends this phone's clock (${phoneClock()}) to the logger as its UTC anchor. " +
-                        "Only rows sampled after this moment get a UTC timestamp and a dated folder; " +
-                        "rows already recorded stay in the `unsynced` tree by contract and are never rewritten. " +
-                        "Do this only if you trust the phone's time."
-                )
-            },
-            confirmButton = { TextButton(onClick = { confirmTime = false; viewModel.setTimeFromPhone() }) { Text("Set time") } },
-            dismissButton = { TextButton(onClick = { confirmTime = false }) { Text("Cancel") } },
-        )
-    }
-    confirmSmartSyncClock?.let { reason ->
-        AlertDialog(
-            onDismissRequest = { confirmSmartSyncClock = null },
-            icon = { Icon(Icons.Rounded.Schedule, contentDescription = null) },
-            title = { Text("Smart Sync needs a clock anchor") },
-            text = {
-                Text(
-                    "$reason. Send this phone's trusted time before downloading? This only timestamps future rows; raw files are never rewritten."
-                )
-            },
-            confirmButton = { TextButton(onClick = { confirmSmartSyncClock = null; viewModel.smartSync(clockConfirmed = true) }) { Text("Set time and sync") } },
-            dismissButton = { TextButton(onClick = { confirmSmartSyncClock = null }) { Text("Not now") } },
-        )
-    }
-    if (confirmFlush) {
-        AlertDialog(
-            onDismissRequest = { confirmFlush = false },
-            icon = { Icon(Icons.Rounded.Storage, contentDescription = null) },
-            title = { Text(stringResource(R.string.flush)) },
-            text = {
-                Text(
-                    "The logger keeps the newest rows in RAM until the rotation interval ends. Finalizing writes them " +
-                        "to the card now as a short Parquet file so you can sync everything up to this moment. " +
-                        "On firmware v6 it also closes the open file's row groups that are already on the card. " +
-                        "It does not change the rotation interval."
-                )
-            },
-            confirmButton = { TextButton(onClick = { confirmFlush = false; viewModel.flush() }) { Text("Finalize") } },
-            dismissButton = { TextButton(onClick = { confirmFlush = false }) { Text("Cancel") } },
-        )
-    }
-}
-
-private fun phoneClock(): String =
-    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss z", Locale.US).withZone(ZoneId.systemDefault()).format(Instant.now())
-
-// ------------------------------------------------------------------ readings
-
-@Composable
-private fun SensorReadingsCard(profile: LiveProfile?, live: LiveSample?, ageMs: Long?) {
-    Surface(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(horizontal = 24.dp, vertical = 22.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Eyebrow("Sensor readings")
-                Spacer(Modifier.weight(1f))
-                FreshnessLabel(ageMs, ageMs == null || ageMs > STALE_AFTER_MS)
-            }
-            Spacer(Modifier.height(12.dp))
-            if (profile == null) {
-                Text("Live readings are not supported for this firmware yet. Sync its verified Parquet files to browse the archive.", style = MaterialTheme.typography.bodyMedium)
-            } else {
-                Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                    BigValue(profile.temperature.label, fmt(live?.t), "°C", Modifier.weight(1f))
-                    if (profile.humidity) BigValue("Humidity", fmt(live?.rh), "%", Modifier.weight(1f))
-                }
-                if (live == null) {
-                    Spacer(Modifier.height(8.dp))
-                    Text("Waiting for the first sample…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ReadingsCard(live: LiveSample?, receivedAt: Long?, now: Long) {
-    val ageMs = receivedAt?.let { now - it }
-    val stale = ageMs == null || ageMs > STALE_AFTER_MS
-    val pmsStatus = live?.pmsStatus
-    val showPm = live?.pmValid == true
-
-    Surface(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(horizontal = 24.dp, vertical = 22.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Eyebrow("PM2.5")
-                Spacer(Modifier.weight(1f))
-                FreshnessLabel(ageMs, stale)
-            }
-            Spacer(Modifier.height(4.dp))
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(
-                    text = if (showPm) fmt(live?.pm25) else "—",
-                    style = MaterialTheme.typography.displayLarge,
-                    color = if (stale) MaterialTheme.colorScheme.onSurfaceVariant else pm25Band(if (showPm) live.pm25 else null),
-                )
-                Spacer(Modifier.width(10.dp))
-                Text("µg/m³", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 14.dp))
-            }
-            if (!showPm) {
-                Text(
-                    when (pmsStatus) {
-                        null -> if (live == null) "Waiting for the first sample…" else "PM values absent (null, not zero)"
-                        PmsStatus.VALID -> ""
-                        else -> "PM sensor: ${pmsStatus.label}"
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Spacer(Modifier.height(16.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                BigValue("PM10", if (showPm) fmt(live?.pm10) else "—", "µg/m³", Modifier.weight(1f))
-                BigValue("PM1", if (showPm) fmt(live?.pm1) else "—", "µg/m³", Modifier.weight(1f))
-            }
-            if (showPm && (live?.c25 != null || live?.c1 != null || live?.c10 != null)) {
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    "CF=1 raw: ${fmt(live.c1)} / ${fmt(live.c25)} / ${fmt(live.c10)} µg/m³ (PM1 / PM2.5 / PM10)",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            live?.seq?.let {
-                Text("sample #$it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-    }
-}
-
-@Composable
-private fun BatchEstimateCard(live: LiveSample?, receivedAt: Long?, config: ConfigSnapshot?, now: Long) {
-    val serial = config?.config?.sensor?.serial
-    val fresh = receivedAt != null && now - receivedAt <= STALE_AFTER_MS && receivedAt >= (config?.atEpochMs ?: Long.MAX_VALUE)
-    val estimate = if (fresh) {
-        PlantowerBatchCandidate.estimate(
-            serial,
-            config?.config?.sensor?.batchCandidate,
-            live?.pms,
-            live?.n03,
-        )
-    } else {
-        null
-    }
-    Surface(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(horizontal = 24.dp, vertical = 18.dp)) {
-            Eyebrow("PM2.5 batch estimate · unvalidated")
-            Spacer(Modifier.height(6.dp))
-            Text(
-                if (estimate != null) "${fmt(estimate)} µg/m³" else "Waiting for a fresh valid count…",
-                style = MaterialTheme.typography.titleLarge
-            )
-            Text(
-                "${PlantowerBatchCandidate.FACTOR} × particles >0.3 µm per 0.1 L. Raw PM₂.₅ above remains the main reading; a Cairo reference comparison is still needed.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
-
-@Composable
-private fun FreshnessLabel(ageMs: Long?, stale: Boolean) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        StatusDot(if (stale) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary, size = 8)
-        Text(
-            when {
-                ageMs == null -> "no sample yet"
-                stale -> "stale · updated ${formatAgo(ageMs)}"
-                else -> "updated ${formatAgo(ageMs)}"
-            },
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-@Composable
-private fun BigValue(label: String, value: String, unit: String, modifier: Modifier = Modifier) {
-    Column(modifier) {
-        Eyebrow(label)
-        Row(verticalAlignment = Alignment.Bottom) {
-            Text(value, style = MaterialTheme.typography.displaySmall)
-            Spacer(Modifier.width(6.dp))
-            Text(unit, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 5.dp))
-        }
-    }
-}
-
-@Composable
-private fun ParticleRow(live: LiveSample?) {
-    val counts = listOf(
-        ">0.3" to live?.n03,
-        ">0.5" to live?.n05,
-        ">1" to live?.n1,
-        ">2.5" to live?.n25,
-        ">5" to live?.n5,
-        ">10" to live?.n10,
-    )
-    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
-            // Not uppercased: "µ".uppercase() is the Greek capital mu, which rendered as "(MM)".
-            Eyebrow("PARTICLES PER 0.1 L, BY SIZE (µm)", uppercase = false)
-            Spacer(Modifier.height(8.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                counts.forEach { (label, n) ->
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(n?.toString() ?: "—", style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
-                        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun BoardCard(live: LiveSample?, profile: LiveProfile?) {
-    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(horizontal = 20.dp, vertical = 16.dp), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-            Column(Modifier.weight(1f)) {
-                Eyebrow(profile?.temperature?.label ?: "Temperature")
-                Row(verticalAlignment = Alignment.Bottom) {
-                    Text(if (profile != null) fmt(live?.t) else "—", style = MaterialTheme.typography.displaySmall)
-                    Spacer(Modifier.width(4.dp))
-                    Text("°C", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 5.dp))
-                }
-                Text(
-                    when (profile?.temperature) {
-                        TemperatureSource.BOARD -> stringResource(R.string.board_temp)
-                        TemperatureSource.AMBIENT -> "Ambient temperature from the sensor"
-                        null -> "Live temperature is not supported for this firmware yet"
-                    },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.tertiary,
-                )
-            }
-            Column(Modifier.weight(1f)) {
-                Eyebrow("battery")
-                Row(verticalAlignment = Alignment.Bottom) {
-                    Icon(
-                        if (live?.chg == 1) Icons.Rounded.BatteryChargingFull else Icons.Rounded.BatteryStd,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(bottom = 6.dp),
-                    )
-                    Text(live?.pct?.let { "$it" } ?: "—", style = MaterialTheme.typography.displaySmall)
-                    Spacer(Modifier.width(4.dp))
-                    Text("%", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 5.dp))
-                }
-                Text(
-                    buildString {
-                        live?.bat?.let { append(it).append(" mV") }
-                        if (live?.chg == 1) append(" · charging")
-                        live?.vbus?.takeIf { it > 0 }?.let { append(" · USB ").append(it).append(" mV") }
-                        if (isEmpty()) append("—")
-                    },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun StorageCard(status: DeviceStatus?, receivedAt: Long?, now: Long) {
-    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Eyebrow("storage")
-                Spacer(Modifier.weight(1f))
-                receivedAt?.let {
-                    Text("status ${formatAgo(now - it)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-            if (status == null) {
-                Text("No status yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                return@Column
-            }
-            val warn = MaterialTheme.colorScheme.error
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                // `status.fin` counts files finalized since the device booted, not the card total
-                // (that is `LIST_END.count` on the Files screen), so say so.
-                Counter("files this boot", status.fin)
-                Counter("buffered rows", status.buf?.toLong())
-                // Firmware v6 keeps an open multi-row-group file on the card between batches; those
-                // rows are safe from a reset but not listable yet. Older firmware never sends the key.
-                status.open?.let { Counter("on card, open", it.toLong()) }
-                Counter("dropped", status.drop, if ((status.drop ?: 0) > 0) warn else null)
-                Counter("errors", status.err, if ((status.err ?: 0) > 0) warn else null)
-                Counter("missed", status.miss, if ((status.miss ?: 0) > 0) warn else null)
-            }
-            Spacer(Modifier.height(10.dp))
-            StatLine(
-                "microSD",
-                when {
-                    status.sd == null -> "—"
-                    !status.sdMounted -> "not mounted"
-                    else -> "${status.sdUsedKib?.let { formatBytes(it * 1024) } ?: "?"} of ${status.sdKib?.let { formatBytes(it * 1024) } ?: "?"} used"
-                },
-                valueColor = if (status.sd == 0) warn else MaterialTheme.colorScheme.onSurface,
-            )
-            StatLine("codec", status.codec ?: "—")
-            StatLine(
-                "rotation",
-                status.intervalSeconds?.let { s -> "${s / 60} min" + (status.openRowGroups?.let { " · open file: $it row group${if (it == 1) "" else "s"}" } ?: "") } ?: "—",
-            )
-            StatLine("retained .partial", status.part?.toString() ?: "—")
-            StatLine("uptime", status.upSeconds?.let(::formatUptime) ?: "—")
-            StatLine("free heap", status.heap?.let { formatBytes(it) } ?: "—")
-            if (status.storageFailed) {
-                Spacer(Modifier.height(8.dp))
-                Surface(color = MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.medium) {
-                    Text(
-                        "Storage worker has stopped writing after an error. New rows are not being saved.",
-                        Modifier.padding(12.dp),
-                        color = MaterialTheme.colorScheme.onErrorContainer,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun Counter(label: String, value: Long?, color: Color? = null) {
-    Column {
-        Text(value?.toString() ?: "—", style = MaterialTheme.typography.titleLarge, color = color ?: MaterialTheme.colorScheme.onSurface)
-        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-
-@Composable
-private fun SmartSyncCard(sync: SyncProgress, archive: ArchiveTimeSummary, enabled: Boolean, onSync: () -> Unit) {
-    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
-            Eyebrow("smart sync")
-            Spacer(Modifier.height(6.dp))
-            Text(
-                when {
-                    sync.running -> "Syncing ${sync.filesDone} of ${sync.filesTotal} file(s)…"
-                    archive.unplacedRows > 0 -> "${archive.unplacedRows} reading(s) are saved but have no trustworthy calendar time"
-                    archive.estimatedRows > 0 -> "Archive ready · ${archive.estimatedRows} earlier reading(s) placed from a same-boot anchor"
-                    archive.files > 0 -> "Archive ready · ${archive.files} verified file(s)"
-                    else -> "Checks the clock, downloads missing files, verifies them and updates charts"
-                },
-                style = MaterialTheme.typography.bodyLarge,
-            )
-            if (archive.unplacedRows > 0) {
-                Text(
-                    "Nothing was discarded. Those readings remain exportable; this app will not invent timestamps for a boot with no anchor.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-            }
-            Spacer(Modifier.height(12.dp))
-            Button(onClick = onSync, enabled = enabled && !sync.running, modifier = Modifier.fillMaxWidth()) {
-                Text(if (sync.running) "Syncing…" else "Smart Sync")
-            }
-            Text(
-                "Finalizing the newest buffered rows stays separate so background sync does not create short files.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-        }
-    }
-}
-
-@Composable
-private fun ClockCard(status: DeviceStatus?, live: LiveSample?, enabled: Boolean, onSetTime: () -> Unit, onFlush: () -> Unit) {
-    val synced = status?.utcSynced
-    val clockLabel = when (status?.clockSource) {
-        1 -> "UTC checked by a host (generation ${status.gen ?: "?"})"
-        2 -> "UTC restored from RTC — Smart Sync can refresh it"
-        0 -> "No UTC — rows go to the `unsynced` tree"
-        else -> when (synced) {
-            true -> "UTC anchored (generation ${status.gen ?: "?"})"
-            false -> "No UTC — rows go to the `unsynced` tree"
-            null -> "Unknown"
-        }
-    }
-    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
-            Eyebrow("clock")
-            Spacer(Modifier.height(6.dp))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                StatusDot(
-                    when (synced) {
-                        true -> MaterialTheme.colorScheme.primary
-                        false -> MaterialTheme.colorScheme.tertiary
-                        null -> MaterialTheme.colorScheme.outline
-                    }
-                )
-                Text(clockLabel, style = MaterialTheme.typography.bodyLarge)
-            }
-            live?.utc?.let { ns ->
-                val inst = Instant.ofEpochSecond(ns / 1_000_000_000L, ns % 1_000_000_000L)
-                Text(
-                    "last sample at " + DateTimeFormatter.ISO_INSTANT.format(inst),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontFamily = FontFamily.Monospace,
-                )
-            }
-            Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                FilledTonalButton(onClick = onSetTime, enabled = enabled, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Rounded.Schedule, contentDescription = null)
-                    Spacer(Modifier.width(6.dp))
-                    Text(stringResource(R.string.set_time))
-                }
-                OutlinedButton(onClick = onFlush, enabled = enabled, modifier = Modifier.weight(1f)) {
-                    Text(stringResource(R.string.flush))
-                }
-            }
-            Text(
-                "Set time: only rows after this get UTC. Finalize: writes the RAM batch to a short file so it can be synced now.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-        }
-    }
-}
-
-private fun fmt(v: Double?): String = when {
-    v == null -> "—"
-    v == Math.floor(v) && v < 1000 -> String.format(Locale.US, "%.0f", v)
-    else -> String.format(Locale.US, "%.1f", v)
 }

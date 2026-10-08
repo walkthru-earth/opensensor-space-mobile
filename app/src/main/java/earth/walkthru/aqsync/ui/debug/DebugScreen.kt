@@ -45,23 +45,26 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.DeviceEvent
 import earth.walkthru.aqsync.data.LogTailState
 import earth.walkthru.aqsync.data.ble.FrameDirection
+import earth.walkthru.aqsync.ui.components.CollectEvents
 import earth.walkthru.aqsync.ui.components.ConnectionBanner
 import earth.walkthru.aqsync.ui.components.InfoNote
 import earth.walkthru.aqsync.ui.components.SectionCard
 import earth.walkthru.aqsync.ui.components.StatLine
+import earth.walkthru.aqsync.ui.components.TickingText
 import earth.walkthru.aqsync.ui.components.TransportChip
 import earth.walkthru.aqsync.ui.components.WarningNote
 import earth.walkthru.aqsync.ui.components.formatAgo
-import earth.walkthru.aqsync.ui.components.rememberNowMillis
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -81,15 +84,13 @@ fun DebugScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val listState = rememberLazyListState()
-    val now = rememberNowMillis()
 
-    LaunchedEffect(Unit) {
-        viewModel.events.collect { ev ->
-            when (ev) {
-                is DeviceEvent.Error -> snackbar.showSnackbar(ev.message)
-                is DeviceEvent.Info -> snackbar.showSnackbar(ev.message)
-                is DeviceEvent.ClockConfirmationRequired -> snackbar.showSnackbar("Open Today and run Smart Sync to confirm the clock update.")
-            }
+    val clockHint = stringResource(R.string.event_clock_on_today)
+    CollectEvents(viewModel.events) { ev ->
+        when (ev) {
+            is DeviceEvent.Error -> snackbar.showSnackbar(ev.message)
+            is DeviceEvent.Info -> snackbar.showSnackbar(ev.message)
+            is DeviceEvent.ClockConfirmationRequired -> snackbar.showSnackbar(clockHint)
         }
     }
     LaunchedEffect(state.address) {
@@ -162,7 +163,7 @@ fun DebugScreen(
                         "status json (live)",
                         trailing = {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                state.statusAtEpochMs?.let { Text(formatAgo(now - it), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                                state.statusAtEpochMs?.let { at -> TickingText({ now -> formatAgo(now - at) }) }
                                 IconButton(onClick = { viewModel.requestStatus() }, enabled = state.connection.isReady) {
                                     Icon(Icons.Rounded.Refresh, contentDescription = "Request status (0x07)")
                                 }
@@ -241,10 +242,9 @@ fun DebugScreen(
                             LogTailState.Loading -> Text("Fetching…", style = MaterialTheme.typography.bodySmall)
                             is LogTailState.Failed -> WarningNote(log.message)
                             is LogTailState.Loaded -> {
-                                Text(
-                                    "${log.tail.returned} B returned of ${log.tail.totalBytesSinceBoot} B logged since boot · ${formatAgo(now - log.atEpochMs)}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                TickingText(
+                                    { now -> "${log.tail.returned} B returned of ${log.tail.totalBytesSinceBoot} B logged since boot · ${formatAgo(now - log.atEpochMs)}" },
+                                    maxLines = 2,
                                 )
                                 if (!log.tail.complete) {
                                     Spacer(Modifier.height(4.dp))

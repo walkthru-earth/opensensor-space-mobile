@@ -10,11 +10,15 @@ import earth.walkthru.aqsync.data.history.parquet.ParquetCodec
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 import earth.walkthru.aqsync.data.history.parquet.ParquetFormatException
 import earth.walkthru.aqsync.data.history.parquet.ParquetType
+import earth.walkthru.aqsync.data.settings.AppSettings
+import earth.walkthru.aqsync.data.settings.DetailLevel
 import earth.walkthru.aqsync.data.sync.FileArchive
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -63,7 +67,11 @@ sealed interface FileMetricsState {
 @HiltViewModel
 class FileMetricsViewModel @Inject constructor(
     private val archive: FileArchive,
+    settings: AppSettings,
 ) : ViewModel() {
+
+    /** Detailed shows rows, time span and columns. Developer adds footer, codec, schema, row groups and metadata. */
+    val detailLevel: StateFlow<DetailLevel> = settings.detailLevel.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DetailLevel.DETAILED)
 
     private val _state = MutableStateFlow<FileMetricsState>(FileMetricsState.Loading)
     val state: StateFlow<FileMetricsState> = _state.asStateFlow()

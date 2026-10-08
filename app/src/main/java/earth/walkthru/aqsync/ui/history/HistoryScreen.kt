@@ -60,6 +60,7 @@ import earth.walkthru.aqsync.ui.components.SectionCard
 import earth.walkthru.aqsync.ui.components.StatLine
 import earth.walkthru.aqsync.ui.components.TransportChip
 import earth.walkthru.aqsync.ui.theme.color
+import earth.walkthru.aqsync.ui.theme.textColorOnSurface
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -115,7 +116,13 @@ fun HistoryScreen(
                         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             state.stations.forEach { station ->
                                 val current = station == state.stations.last()
-                                val label = "${if (current) "Current" else "Earlier"} · ${station.take(8)}"
+                                val label = if (state.advancedMode) {
+                                    "${if (current) "Current" else "Earlier"} · ${station.take(8)}"
+                                } else if (current) {
+                                    "Current"
+                                } else {
+                                    "Earlier"
+                                }
                                 FilterChip(
                                     selected = state.station == station,
                                     onClick = { viewModel.selectStation(station) },
@@ -333,12 +340,12 @@ private fun Summary(s: HistorySeries) {
                 s.mean?.let { fmt(it) } ?: "—",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.SemiBold,
-                color = s.mean?.let { s.metric.moodOf(it.toDouble())?.color() } ?: MaterialTheme.colorScheme.onSurface,
+                color = s.mean?.let { s.metric.moodOf(it.toDouble())?.textColorOnSurface() } ?: MaterialTheme.colorScheme.onSurface,
             )
         }
         Column {
             Eyebrow("peak")
-            Text(s.max?.let { fmt(it) } ?: "—", style = MaterialTheme.typography.headlineSmall, color = s.max?.let { s.metric.moodOf(it.toDouble())?.color() } ?: MaterialTheme.colorScheme.onSurface)
+            Text(s.max?.let { fmt(it) } ?: "—", style = MaterialTheme.typography.headlineSmall, color = s.max?.let { s.metric.moodOf(it.toDouble())?.textColorOnSurface() } ?: MaterialTheme.colorScheme.onSurface)
         }
         Column(horizontalAlignment = Alignment.End) {
             Eyebrow("coverage")

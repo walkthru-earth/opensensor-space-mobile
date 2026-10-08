@@ -1,22 +1,16 @@
 package earth.walkthru.aqsync.ui.theme
 
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import earth.walkthru.aqsync.data.history.AirMood
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.pow
 
-// Fallback seed palette when dynamic color is unavailable (it always is on API 31+, but a
-// custom scheme keeps previews and tests deterministic). Ink, teal, and a warm accent for warnings.
-val Ink = Color(0xFF0F1B1E)
-val InkSoft = Color(0xFF1A2A2F)
-val Teal = Color(0xFF3CC9B0)
-val TealDeep = Color(0xFF0E7C6B)
-val Mist = Color(0xFFDDEDEA)
-val Sand = Color(0xFFF2E5C8)
-val Ember = Color(0xFFE8734A)
-val Rose = Color(0xFFD64A5C)
-
-// Air-quality bands for PM2.5 in µg/m³ (WHO 2021 24-h guideline is 15; these are display bands,
-// not an AQI: no averaging window is applied to a 10-second snapshot). The edges themselves live in
-// `AirMood` (:core:history) — never repeat them here.
+// Air-quality bands for PM2.5 in µg/m³ (WHO 2021 24-h guideline is 15. These are display bands,
+// not an AQI, and no averaging window is applied to a 10-second snapshot). The edges themselves live
+// in `AirMood` (:core:history). Never repeat them here, and never derive these from brand tokens.
 val BandGood = Color(0xFF4CC38A)
 val BandModerate = Color(0xFFE9C46A)
 val BandElevated = Color(0xFFF4A261)
@@ -34,4 +28,50 @@ fun AirMood.color(): Color = when (this) {
     AirMood.HAZY -> BandElevated
     AirMood.SMOKY -> BandHigh
     AirMood.THICK -> BandVeryHigh
+}
+
+/** Dark ink used for text and face features drawn on a light band. */
+val BandInkDark = Color(0xFF14181B)
+
+/** Light ink used on the darkest band. */
+val BandInkLight = Color(0xFFFFFFFF)
+
+/**
+ * Text or face features drawn **on** a band colour: whichever of dark or light ink contrasts more.
+ * The band itself never changes; only the ink on top of it adapts (see `ContrastTest`).
+ */
+fun AirMood.onColor(): Color = onBand(color())
+
+fun onBand(band: Color): Color =
+    if (contrastRatio(BandInkDark, band) >= contrastRatio(BandInkLight, band)) BandInkDark else BandInkLight
+
+/**
+ * A band colour used **as text** on the current surface. Large text needs 3:1 (WCAG 1.4.3); a band
+ * that cannot reach it on this theme's surface (yellow on light paper, dark red on dark paper)
+ * falls back to the normal text colour, and the screen shows the band as a swatch instead.
+ */
+@Composable
+fun AirMood.textColorOnSurface(): Color {
+    val surface = MaterialTheme.colorScheme.surface
+    val band = color()
+    return if (contrastRatio(band, surface) >= LARGE_TEXT_CONTRAST) band else MaterialTheme.colorScheme.onSurface
+}
+
+const val LARGE_TEXT_CONTRAST = 3.0
+const val BODY_TEXT_CONTRAST = 4.5
+
+/** WCAG 2 relative luminance of an opaque sRGB colour. */
+fun relativeLuminance(c: Color): Double {
+    fun channel(v: Float): Double {
+        val d = v.toDouble()
+        return if (d <= 0.04045) d / 12.92 else ((d + 0.055) / 1.055).pow(2.4)
+    }
+    return 0.2126 * channel(c.red) + 0.7152 * channel(c.green) + 0.0722 * channel(c.blue)
+}
+
+/** WCAG 2 contrast ratio, 1 to 21. */
+fun contrastRatio(a: Color, b: Color): Double {
+    val la = relativeLuminance(a)
+    val lb = relativeLuminance(b)
+    return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
 }

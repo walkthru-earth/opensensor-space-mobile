@@ -25,8 +25,9 @@ import androidx.compose.ui.unit.sp
 import earth.walkthru.aqsync.data.history.AirMood
 import earth.walkthru.aqsync.data.history.HistoryColumn
 import earth.walkthru.aqsync.data.history.MetricSpec
-import earth.walkthru.aqsync.ui.device.MoodFace
+import earth.walkthru.aqsync.ui.components.MoodFace
 import earth.walkthru.aqsync.ui.theme.color
+import earth.walkthru.aqsync.ui.theme.textColorOnSurface
 import java.time.Instant
 import java.time.ZoneId
 import kotlin.math.PI
@@ -112,7 +113,7 @@ fun DayRing(
                 mean?.let { if (it >= 100) it.toInt().toString() else "%.1f".format(java.util.Locale.ROOT, it) } ?: "—",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.SemiBold,
-                color = mood?.color() ?: onSurface,
+                color = mood?.textColorOnSurface() ?: onSurface,
             )
             Text(if (mean == null) "no readings" else metric.unit, style = MaterialTheme.typography.labelSmall, color = muted)
             if (mean != null) Text("${(coverage * 100).toInt()} % of the day", style = MaterialTheme.typography.labelSmall, color = muted)

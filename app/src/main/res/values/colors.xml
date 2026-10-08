@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="splash">#0F1B1E</color>
+    <!-- Brand paper (lib/brand.ts sensing.light.paper), so launch matches the first screen. -->
+    <color name="splash">#F4FAFF</color>
 </resources>

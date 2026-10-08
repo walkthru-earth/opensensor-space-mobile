@@ -55,27 +55,33 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.DeviceEvent
 import earth.walkthru.aqsync.data.ManifestState
 import earth.walkthru.aqsync.data.SyncProgress
 import earth.walkthru.aqsync.data.background.AutoSyncScheduler
 import earth.walkthru.aqsync.data.ble.ConnectionState
+import earth.walkthru.aqsync.data.settings.DetailLevel
 import earth.walkthru.aqsync.data.sync.FileSyncState
 import earth.walkthru.aqsync.data.sync.ManifestEntry
+import earth.walkthru.aqsync.ui.components.CollectEvents
 import earth.walkthru.aqsync.ui.components.ConnectionBanner
 import earth.walkthru.aqsync.ui.components.DeviceBottomBar
 import earth.walkthru.aqsync.ui.components.DeviceTab
 import earth.walkthru.aqsync.ui.components.Eyebrow
+import earth.walkthru.aqsync.ui.components.MascotGuide
+import earth.walkthru.aqsync.ui.components.TickingText
 import earth.walkthru.aqsync.ui.components.TransportChip
 import earth.walkthru.aqsync.ui.components.formatAgo
 import earth.walkthru.aqsync.ui.components.formatBytes
 import earth.walkthru.aqsync.ui.components.formatRate
-import earth.walkthru.aqsync.ui.components.rememberNowMillis
 import earth.walkthru.aqsync.ui.permissions.rememberNotificationPermission
 
 @Composable
@@ -91,7 +97,8 @@ fun FilesScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
-    val now = rememberNowMillis()
+    val level = state.detailLevel
+    val clockHint = stringResource(R.string.event_clock_on_today)
 
     val createDoc = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
         viewModel.onDocumentCreated(uri)
@@ -102,21 +109,17 @@ fun FilesScreen(
     val notificationPermission = rememberNotificationPermission()
     fun withNotificationPermission(action: () -> Unit) = notificationPermission.ensureThen(action)
 
-    LaunchedEffect(Unit) {
-        viewModel.events.collect { ev ->
-            when (ev) {
-                is DeviceEvent.Error -> snackbar.showSnackbar(ev.message)
-                is DeviceEvent.Info -> snackbar.showSnackbar(ev.message)
-                is DeviceEvent.ClockConfirmationRequired -> snackbar.showSnackbar("Open Today and run Smart Sync to confirm the clock update.")
-            }
+    CollectEvents(viewModel.events) { ev ->
+        when (ev) {
+            is DeviceEvent.Error -> snackbar.showSnackbar(ev.message)
+            is DeviceEvent.Info -> snackbar.showSnackbar(ev.message)
+            is DeviceEvent.ClockConfirmationRequired -> snackbar.showSnackbar(clockHint)
         }
     }
-    LaunchedEffect(Unit) {
-        viewModel.effects.collect { fx ->
-            when (fx) {
-                is FilesEffect.Launch -> context.startActivity(fx.intent)
-                is FilesEffect.CreateDocument -> createDoc.launch(fx.suggestedName)
-            }
+    CollectEvents(viewModel.effects) { fx ->
+        when (fx) {
+            is FilesEffect.Launch -> context.startActivity(fx.intent)
+            is FilesEffect.CreateDocument -> createDoc.launch(fx.suggestedName)
         }
     }
 
@@ -227,19 +230,21 @@ fun FilesScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             if (state.connection !is ConnectionState.Ready) {
-                item { ConnectionBanner(state.connection, reconnecting = state.reconnecting) }
+                item { ConnectionBanner(state.connection, reconnecting = state.reconnecting, technical = level.developer) }
             }
             if (state.sync.running || state.sync.outcomes.isNotEmpty()) {
-                item { SyncProgressCard(state.sync, now) }
+                item { SyncProgressCard(state.sync, level) }
             }
             // From the archive alone, so it works without a session: one column per synced file.
-            item(key = "file-chart") {
-                FileChartCard(
-                    state = state.fileChart,
-                    onToggle = viewModel::setFileChart,
-                    onMetric = viewModel::setFileChartMetric,
-                    onPage = viewModel::pageFileChart,
-                )
+            if (level.detailed) {
+                item(key = "file-chart") {
+                    FileChartCard(
+                        state = state.fileChart,
+                        onToggle = viewModel::setFileChart,
+                        onMetric = viewModel::setFileChartMetric,
+                        onPage = viewModel::pageFileChart,
+                    )
+                }
             }
             // The last successful listing stays on screen through a refresh and through its failure
             // (ManifestState keeps `last`); Loading/Error only add a line above it. Without a listing
@@ -247,16 +252,16 @@ fun FilesScreen(
             val manifestState = state.manifest
             val m = manifestState.last
             when {
-                manifestState is ManifestState.Idle -> item { Hint("Connect to list the files on the card.") }
+                manifestState is ManifestState.Idle -> item { Hint(stringResource(R.string.files_connect_to_list)) }
                 manifestState.isLoading && m == null -> item {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                        Text("Listing files on the microSD…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(R.string.files_listing), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 manifestState is ManifestState.Error && m == null -> item {
                     Surface(color = MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth()) {
-                        Text("LIST failed: ${manifestState.message}", Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onErrorContainer)
+                        Text(if (level.detailed) "LIST failed. ${manifestState.message}" else stringResource(R.string.files_list_failed_simple), Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onErrorContainer)
                     }
                 }
             }
@@ -266,7 +271,11 @@ fun FilesScreen(
                     // slot so the two never run into each other (seen as "…GiBlisted 2 min ago").
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
                         Text(
-                            "${m.end.count} finalized files · ${m.end.partials} .partial · ${formatBytes(m.end.sdUsedKib * 1024)} of ${formatBytes(m.end.sdKib * 1024)}",
+                            if (level.developer) {
+                                "${m.end.count} finalized files · ${m.end.partials} .partial · ${formatBytes(m.end.sdUsedKib * 1024)} of ${formatBytes(m.end.sdKib * 1024)}"
+                            } else {
+                                pluralStringResource(R.plurals.scan_files, m.end.count.toInt(), m.end.count.toInt())
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.weight(1f),
@@ -278,12 +287,7 @@ fun FilesScreen(
                                 Text("refreshing…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                             }
                         } else {
-                            Text(
-                                "listed ${formatAgo(now - m.atEpochMs)}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                            )
+                            TickingText({ now -> "listed ${formatAgo(now - m.atEpochMs)}" }, style = MaterialTheme.typography.bodySmall)
                         }
                     }
                     manifestState.error?.let { reason ->
@@ -295,7 +299,7 @@ fun FilesScreen(
                             color = MaterialTheme.colorScheme.error,
                         )
                     }
-                    if (m.files.size != m.end.count) {
+                    if (level.developer && m.files.size != m.end.count) {
                         Text(
                             "Device announced ${m.end.count} files but sent ${m.files.size} FILE frames.",
                             style = MaterialTheme.typography.bodySmall,
@@ -304,9 +308,11 @@ fun FilesScreen(
                     }
                 }
                 if (plan != null && plan.entries.isNotEmpty() && plan.missingCount == 0) {
-                    item { Hint("Everything on the card is in the archive and verified.") }
+                    item(key = "all-synced") {
+                        MascotGuide(title = stringResource(R.string.files_all_synced_title), body = stringResource(R.string.files_all_synced_body))
+                    }
                 }
-                if (m.files.isEmpty()) item { Hint("No finalized Parquet files yet. Use \"Finalize buffered rows\" on Today to create one.") }
+                if (m.files.isEmpty()) item { Hint(stringResource(if (level.detailed) R.string.files_none_detailed else R.string.files_none_simple)) }
                 state.groups.forEach { group ->
                     item(key = "g:" + group.title + group.subtitle) {
                         Column(Modifier.padding(top = 8.dp)) {
@@ -319,7 +325,7 @@ fun FilesScreen(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
-                            group.subtitle?.let {
+                            group.subtitle?.takeIf { level.developer }?.let {
                                 Text(it, style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
@@ -329,6 +335,7 @@ fun FilesScreen(
                         FileRow(
                             entry = entry,
                             localTime = item.localTime,
+                            showName = level.developer || item.localTime == null,
                             canSync = state.connection.isReady && !state.sync.running,
                             onSync = { withNotificationPermission { viewModel.syncOne(entry.name) } },
                             onShare = {
@@ -357,17 +364,17 @@ private fun Hint(text: String) {
 }
 
 @Composable
-private fun SyncProgressCard(sync: SyncProgress, now: Long) {
+private fun SyncProgressCard(sync: SyncProgress, level: DetailLevel) {
     Surface(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Eyebrow(if (sync.running) "syncing" else "last sync", color = MaterialTheme.colorScheme.onPrimaryContainer)
                 Spacer(Modifier.weight(1f))
                 if (sync.running) {
-                    Text(formatRate(sync.bytesPerSecond), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    if (level.detailed) Text(formatRate(sync.bytesPerSecond), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
                 } else {
-                    sync.finishedAtEpochMs?.let {
-                        Text(formatAgo(now - it), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    sync.finishedAtEpochMs?.let { done ->
+                        TickingText({ now -> formatAgo(now - done) }, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
                     }
                 }
             }
@@ -381,32 +388,32 @@ private fun SyncProgressCard(sync: SyncProgress, now: Long) {
             Spacer(Modifier.height(6.dp))
             Text(
                 "${formatBytes(sync.bytesDone)} of ${formatBytes(sync.bytesTotal)}" +
-                    if (sync.windowsRecovered > 0) " · recovered ${sync.windowsRecovered} lost window${if (sync.windowsRecovered == 1) "" else "s"}" else "",
+                    if (level.developer && sync.windowsRecovered > 0) " · recovered ${sync.windowsRecovered} lost window${if (sync.windowsRecovered == 1) "" else "s"}" else "",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
             )
-            sync.current?.let { cur ->
+            sync.current?.takeIf { level.detailed }?.let { cur ->
                 Spacer(Modifier.height(8.dp))
-                Text(cur.name.substringAfterLast('/'), style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                if (level.developer) Text(cur.name.substringAfterLast('/'), style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onPrimaryContainer)
                 LinearProgressIndicator(progress = { cur.fraction }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp))
                 Text(
-                    "${formatBytes(cur.bytesDone)} / ${formatBytes(cur.bytesTotal)}" + if (cur.resumedFrom > 0) " · resumed from ${formatBytes(cur.resumedFrom)}" else "",
+                    "${formatBytes(cur.bytesDone)} / ${formatBytes(cur.bytesTotal)}" + if (level.developer && cur.resumedFrom > 0) " · resumed from ${formatBytes(cur.resumedFrom)}" else "",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                 )
             }
             if (!sync.running && sync.failures.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
-                Text("${sync.failures.size} file(s) failed — see rows marked below", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                Text(pluralStringResource(R.plurals.sync_some_failed, sync.failures.size, sync.failures.size), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             }
         }
     }
 }
 
 @Composable
-private fun FileRow(entry: ManifestEntry, localTime: String?, canSync: Boolean, onSync: () -> Unit, onShare: () -> Unit, onInspect: (() -> Unit)? = null) {
+private fun FileRow(entry: ManifestEntry, localTime: String?, showName: Boolean, canSync: Boolean, onSync: () -> Unit, onShare: () -> Unit, onInspect: (() -> Unit)? = null) {
     val (icon, tint, label) = when (entry.state) {
-        FileSyncState.SYNCED -> Triple(Icons.Rounded.CheckCircle, MaterialTheme.colorScheme.primary, "synced · verified")
+        FileSyncState.SYNCED -> Triple(Icons.Rounded.CheckCircle, MaterialTheme.colorScheme.secondary, "synced and checked")
         FileSyncState.SYNCING -> Triple(null, MaterialTheme.colorScheme.primary, "syncing ${formatBytes(entry.partialBytes)} / ${formatBytes(entry.bytes)}")
         FileSyncState.PARTIAL -> Triple(Icons.Rounded.Download, MaterialTheme.colorScheme.tertiary, "partial ${formatBytes(entry.partialBytes)} · resumable")
         FileSyncState.NOT_SYNCED -> Triple(Icons.Rounded.CloudOff, MaterialTheme.colorScheme.onSurfaceVariant, "not synced")
@@ -435,15 +442,15 @@ private fun FileRow(entry: ManifestEntry, localTime: String?, canSync: Boolean, 
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
-                        entry.name.substringAfterLast('/'),
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontFamily = FontFamily.Monospace,
+                        if (showName) entry.name.substringAfterLast('/') else localTime.orEmpty(),
+                        style = if (showName) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.titleSmall,
+                        fontFamily = if (showName) FontFamily.Monospace else null,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                     // The name's HHMM is the UTC window start; the phone's local time goes first so the two never get confused.
                     Text(
-                        (localTime?.let { "$it · " } ?: "") + "${formatBytes(entry.bytes)} · $label",
+                        (localTime?.takeIf { showName }?.let { "$it · " } ?: "") + "${formatBytes(entry.bytes)} · $label",
                         style = MaterialTheme.typography.labelSmall,
                         color = if (entry.state == FileSyncState.MISMATCH || entry.state == FileSyncState.INVALID_NAME) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
