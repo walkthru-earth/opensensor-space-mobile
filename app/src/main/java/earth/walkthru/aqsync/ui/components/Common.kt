@@ -53,6 +53,7 @@ import earth.walkthru.aqsync.data.ReconnectState
 import earth.walkthru.aqsync.data.ble.BleConnectionFailure
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.TransportKind
+import earth.walkthru.opensensor.designsystem.FloatingControl
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -308,7 +309,7 @@ fun TransportChip(kind: TransportKind?, modifier: Modifier = Modifier) {
         TransportKind.LAN -> Triple(Icons.Rounded.Wifi, MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.onTertiaryContainer)
         TransportKind.FAKE -> Triple(Icons.Rounded.BugReport, MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant)
     }
-    Surface(shape = MaterialTheme.shapes.small, color = container, contentColor = content, modifier = modifier) {
+    Surface(shape = FloatingControl.BadgeShape, color = container, contentColor = content, modifier = modifier) {
         Row(Modifier.padding(horizontal = 8.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Icon(icon, contentDescription = null, modifier = Modifier.size(14.dp))
             Text(kind.labelText(), style = MaterialTheme.typography.labelSmall)

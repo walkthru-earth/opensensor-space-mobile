@@ -71,6 +71,7 @@ import earth.walkthru.aqsync.ui.components.WarningNote
 import earth.walkthru.aqsync.ui.components.agoFormatter
 import earth.walkthru.aqsync.ui.components.labelText
 import earth.walkthru.aqsync.ui.components.showDeviceEvent
+import earth.walkthru.opensensor.designsystem.FloatingControl
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -233,7 +234,7 @@ fun DebugScreen(
                     SectionCard(
                         stringResource(R.string.debug_log_title),
                         trailing = {
-                            FilledTonalButton(onClick = { viewModel.refreshLog() }, enabled = state.connection.isReady && log !is LogTailState.Loading) {
+                            FilledTonalButton(onClick = { viewModel.refreshLog() }, enabled = state.connection.isReady && log !is LogTailState.Loading, shape = FloatingControl.SmallShape) {
                                 if (log is LogTailState.Loading) {
                                     CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                                 } else {
@@ -297,7 +298,7 @@ fun DebugScreen(
                                 modifier = Modifier.weight(1f),
                                 isError = state.rawError != null,
                             )
-                            FilledTonalButton(onClick = { viewModel.sendRaw(hex) }, enabled = state.connection.isReady && !state.rawBusy) {
+                            FilledTonalButton(onClick = { viewModel.sendRaw(hex) }, enabled = state.connection.isReady && !state.rawBusy, shape = FloatingControl.SmallShape) {
                                 if (state.rawBusy) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp) else Icon(Icons.AutoMirrored.Rounded.Send, contentDescription = stringResource(R.string.debug_raw_send))
                             }
                         }

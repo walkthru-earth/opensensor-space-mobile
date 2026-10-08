@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.CloudSync
@@ -27,7 +26,6 @@ import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -75,6 +73,8 @@ import earth.walkthru.aqsync.ui.permissions.AccessDialogs
 import earth.walkthru.aqsync.ui.permissions.rememberBluetoothAccess
 import earth.walkthru.aqsync.ui.permissions.rememberNotificationPermission
 import earth.walkthru.aqsync.ui.theme.color
+import earth.walkthru.opensensor.designsystem.FloatingControl
+import earth.walkthru.opensensor.designsystem.FloatingTextButton
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -145,10 +145,11 @@ fun ScanScreen(
             )
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
+            FloatingTextButton(
+                text = stringResource(if (state.scanning) R.string.scan_button_stop else R.string.scan_button_scan),
                 onClick = { if (state.scanning) viewModel.stopScan() else bluetooth.run { viewModel.startScan() } },
+                primary = !state.scanning,
                 icon = { Icon(if (state.scanning) Icons.Rounded.Stop else Icons.Rounded.Radar, contentDescription = null) },
-                text = { Text(stringResource(if (state.scanning) R.string.scan_button_stop else R.string.scan_button_scan)) },
             )
         },
     ) { padding ->
@@ -237,6 +238,7 @@ fun ScanScreen(
                         FilledTonalButton(
                             onClick = { withNotificationPermission { viewModel.collectAll() } },
                             enabled = !state.backgroundSyncActive,
+                            shape = FloatingControl.SmallShape,
                             modifier = Modifier.weight(1f),
                         ) {
                             Icon(Icons.Rounded.CloudSync, contentDescription = null)
@@ -375,10 +377,10 @@ private fun ForgetMenu(onForget: () -> Unit) {
     }
 }
 
-/** A small pill tag, like the website's `.brand-eyebrow`. */
+/** A small tag on a card curve, like the website's `.brand-eyebrow`. */
 @Composable
 private fun Tag(text: String) {
-    Surface(shape = CircleShape, color = MaterialTheme.colorScheme.secondaryContainer) {
+    Surface(shape = FloatingControl.BadgeShape, color = MaterialTheme.colorScheme.secondaryContainer) {
         Text(
             text,
             Modifier.padding(horizontal = 8.dp, vertical = 2.dp),

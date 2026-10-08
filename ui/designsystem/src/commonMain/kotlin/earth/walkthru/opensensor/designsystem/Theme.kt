@@ -107,7 +107,7 @@ val BrandDarkScheme = brandColorScheme(BrandTokens.Dark, dark = true)
 
 /**
  * Large rounded corners like the website's cards (`.brand-panel` is 2rem, `.brand-icon` 1.15rem).
- * Pills use `CircleShape`.
+ * Buttons, chips and badges use the `FloatingControl` card curves, never a full pill or circle.
  */
 val BrandShapes = Shapes(
     extraSmall = RoundedCornerShape(8.dp),

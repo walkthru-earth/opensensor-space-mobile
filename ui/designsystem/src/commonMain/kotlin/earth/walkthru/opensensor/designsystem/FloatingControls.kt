@@ -1,11 +1,24 @@
 package earth.walkthru.opensensor.designsystem
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ButtonColors
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBarItemColors
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.SegmentedButtonColors
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SelectableChipColors
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,8 +71,49 @@ object FloatingControl {
     val Selected: Color = BrandTokens.Light.main
     val OnSelected: Color = BrandTokens.Light.ink
 
+    /** Badges and tags under 24dp tall (a transport tag, an eyebrow), still a card curve, not a pill. */
+    val BadgeShape: Shape = RoundedCornerShape(8.dp)
+
     /** The shape of something nested [inset] inside a control, so the two curves stay parallel. */
     fun concentric(inset: Dp = Inset): Shape = RoundedCornerShape((Radius - inset).coerceAtLeast(0.dp))
+
+    /**
+     * The shape of segment [index] of [count] in a segmented button row. The row's outer corners
+     * use [SmallShape]'s curve and the inner edges stay square, instead of Material's full pill ends.
+     */
+    @Composable
+    fun segmentShape(index: Int, count: Int): Shape =
+        SegmentedButtonDefaults.itemShape(index, count, baseShape = RoundedCornerShape(12.dp))
+
+    /** Filter chip colours, Signal blue with ink text when selected, neutral otherwise. */
+    @Composable
+    fun chipColors(): SelectableChipColors = FilterChipDefaults.filterChipColors(
+        selectedContainerColor = Selected,
+        selectedLabelColor = OnSelected,
+        selectedLeadingIconColor = OnSelected,
+        selectedTrailingIconColor = OnSelected,
+    )
+
+    /** Segmented button colours, Signal blue with ink text on the active segment. */
+    @Composable
+    fun segmentedColors(): SegmentedButtonColors = SegmentedButtonDefaults.colors(
+        activeContainerColor = Selected,
+        activeContentColor = OnSelected,
+    )
+
+    /** The primary action's colours, Signal blue with ink text in either theme. */
+    @Composable
+    fun primaryButtonColors(): ButtonColors = ButtonDefaults.buttonColors(
+        containerColor = Selected,
+        contentColor = OnSelected,
+    )
+
+    /** Bottom navigation colours, the selected tab's indicator in Signal blue with an ink icon. */
+    @Composable
+    fun navigationItemColors(): NavigationBarItemColors = NavigationBarItemDefaults.colors(
+        indicatorColor = Selected,
+        selectedIconColor = OnSelected,
+    )
 }
 
 /** The surface every floating control sits on. */
@@ -100,5 +154,37 @@ fun FloatingIconButton(
         border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
     ) {
         Box(contentAlignment = Alignment.Center) { content() }
+    }
+}
+
+/**
+ * A floating action with a label, such as Scan or Sync all over a list. [primary] uses the Signal
+ * blue tint, otherwise it sits on the neutral floating surface (a Stop while work runs).
+ */
+@Composable
+fun FloatingTextButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    primary: Boolean = true,
+    icon: (@Composable () -> Unit)? = null,
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier.heightIn(min = FloatingControl.Size),
+        shape = FloatingControl.Shape,
+        color = if (primary) FloatingControl.Selected else MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+        contentColor = if (primary) FloatingControl.OnSelected else MaterialTheme.colorScheme.onSurface,
+        shadowElevation = 3.dp,
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+    ) {
+        Row(
+            Modifier.padding(start = if (icon != null) 16.dp else 20.dp, end = 20.dp, top = 14.dp, bottom = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            icon?.invoke()
+            Text(text, style = MaterialTheme.typography.labelLarge)
+        }
     }
 }

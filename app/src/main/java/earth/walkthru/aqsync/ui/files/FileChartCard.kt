@@ -41,6 +41,7 @@ import earth.walkthru.aqsync.ui.components.InfoButton
 import earth.walkthru.aqsync.ui.components.InfoContent
 import earth.walkthru.aqsync.ui.components.LocalUnits
 import earth.walkthru.aqsync.ui.history.BandColumnChart
+import earth.walkthru.opensensor.designsystem.FloatingControl
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -82,7 +83,13 @@ fun FileChartCard(
             if (state == null) return@Column
             Row(Modifier.horizontalScroll(rememberScrollState()).padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Metrics.chartable.forEach { m ->
-                    FilterChip(selected = state.metric.id == m.id, onClick = { onMetric(m) }, label = { Text(m.label) })
+                    FilterChip(
+                        selected = state.metric.id == m.id,
+                        onClick = { onMetric(m) },
+                        label = { Text(m.label) },
+                        shape = FloatingControl.SmallShape,
+                        colors = FloatingControl.chipColors(),
+                    )
                 }
             }
             if (state.page.isEmpty()) {

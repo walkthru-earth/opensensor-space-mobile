@@ -57,6 +57,7 @@ import earth.walkthru.aqsync.ui.components.StatLine
 import earth.walkthru.aqsync.ui.components.StatusDot
 import earth.walkthru.aqsync.ui.components.WarningNote
 import earth.walkthru.aqsync.ui.device.DeviceUiState
+import earth.walkthru.opensensor.designsystem.FloatingControl
 
 /**
  * Wi-Fi on the device: state in words, scan, pick, passphrase, save and connect. The ViewModel
@@ -219,24 +220,25 @@ fun WifiCard(
 private fun AccessPointRow(ap: Frame.WifiAp, selected: Boolean, showDetails: Boolean, onClick: () -> Unit) {
     Surface(
         shape = MaterialTheme.shapes.medium,
-        color = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
+        color = if (selected) FloatingControl.Selected else MaterialTheme.colorScheme.surface,
+        contentColor = if (selected) FloatingControl.OnSelected else MaterialTheme.colorScheme.onSurface,
         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp).clickable(onClick = onClick),
     ) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(
                 if (ap.wifiAuth.secured) Icons.Rounded.Lock else Icons.Rounded.LockOpen,
                 contentDescription = stringResource(if (ap.wifiAuth.secured) R.string.wifi_secured else R.string.wifi_open),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = if (selected) FloatingControl.OnSelected else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(18.dp),
             )
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(ap.ssid.ifEmpty { stringResource(R.string.wifi_no_name) }, style = MaterialTheme.typography.bodyLarge)
                 if (showDetails) {
-                    Text(stringResource(R.string.wifi_ap_detail, ap.wifiAuth.label, ap.channel), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.wifi_ap_detail, ap.wifiAuth.label, ap.channel), style = MaterialTheme.typography.bodySmall, color = if (selected) FloatingControl.OnSelected else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            SignalBars(ap.rssi, showDbm = showDetails)
+            SignalBars(ap.rssi, showDbm = showDetails, onSelected = selected)
         }
     }
 }
