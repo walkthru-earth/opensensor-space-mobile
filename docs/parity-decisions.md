@@ -29,3 +29,4 @@ Each row says what was decided, why, and what reversing it would cost. Rows mark
 | P18 | Upload opt-in stays out of parity scope until its design is built | Not on Android either | none | inventory A10, F60 |
 | P19 | iOS Developer level exposes the same raw command screen with REBOOT and SET_CONFIG denied | Same tools on both apps, one shared denylist | Hide Debug on iOS | inventory A11, F61 |
 | P20 | Fake Bluetooth and Wi-Fi devices ship only in debug builds on both apps | Testing without hardware, never in release | none | inventory A12, F21 |
+| P21 | Shared navigation uses JetBrains Navigation 3 UI 1.1.2 with the existing nav3 runtime 1.1.7 in commonMain. A small own host stays as the iOS fallback | Paired with CMP 1.12.1, same Google binaries on Android, iOS edge swipe through Navigation Event | Medium, swap the iOS host only | `docs/adr/0001-shared-navigation.md`, #12 |
