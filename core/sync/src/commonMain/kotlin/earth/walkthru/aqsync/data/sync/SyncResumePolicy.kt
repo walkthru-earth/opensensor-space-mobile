@@ -25,8 +25,7 @@ enum class SyncEndCause {
  * the link is the same situation as a sync interrupted by the link — resume it. A user Stop or a
  * run that completed (even with device `ERROR`s) is left alone.
  *
- * Pure so it can be unit-tested; [DeviceConnectionRepository][earth.walkthru.aqsync.data.DeviceConnectionRepository]
- * feeds it the progress snapshot taken at the moment the link was lost.
+ * Pure so it can be unit-tested; `DeviceConnectionRepository` in `app/` feeds it the progress snapshot taken at the moment the link was lost.
  */
 object SyncResumePolicy {
     /**

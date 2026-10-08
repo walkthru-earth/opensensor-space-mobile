@@ -1,8 +1,8 @@
 package earth.walkthru.aqsync.data.sync
 
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /**
  * The reconnect-after-lost-link decision (see the OnePlus finding in [SyncResumePolicy]): a sync
@@ -13,13 +13,13 @@ class SyncResumePolicyTest {
     private val now = 1_758_000_000_000L
 
     @Test
-    fun `a running sync is always resumed`() {
+    fun aRunningSyncIsAlwaysResumed() {
         assertTrue(SyncResumePolicy.shouldResume(running = true, endCause = null, finishedAtEpochMs = null, nowEpochMs = now))
         assertTrue(SyncResumePolicy.shouldResume(running = true, endCause = SyncEndCause.STOPPED, finishedAtEpochMs = now - 1, nowEpochMs = now))
     }
 
     @Test
-    fun `a sync that just died of the transport is resumed`() {
+    fun aSyncThatJustDiedOfTheTransportIsResumed() {
         // "no response from device within 60 s", then the link is declared lost a moment later.
         assertTrue(SyncResumePolicy.shouldResume(false, SyncEndCause.TRANSPORT_FAILURE, now - 2_000, now))
         // TcpTransport declares the link dead after 180 s without a byte: still inside the window.
@@ -28,7 +28,7 @@ class SyncResumePolicyTest {
     }
 
     @Test
-    fun `an old transport failure is not tied to this link loss`() {
+    fun anOldTransportFailureIsNotTiedToThisLinkLoss() {
         assertFalse(SyncResumePolicy.shouldResume(false, SyncEndCause.TRANSPORT_FAILURE, now - SyncResumePolicy.RESUME_WINDOW_MS - 1, now))
         // A clock that moved backwards must not look like "just now".
         assertFalse(SyncResumePolicy.shouldResume(false, SyncEndCause.TRANSPORT_FAILURE, now + 10_000, now))
@@ -36,7 +36,7 @@ class SyncResumePolicyTest {
     }
 
     @Test
-    fun `user stop, completed runs and other failures are left alone`() {
+    fun userStopCompletedRunsAndOtherFailuresAreLeftAlone() {
         assertFalse(SyncResumePolicy.shouldResume(false, SyncEndCause.STOPPED, now - 1_000, now))
         // Completed includes runs whose files ended in a device ERROR or a mismatch: those are outcomes, not a broken pipe.
         assertFalse(SyncResumePolicy.shouldResume(false, SyncEndCause.COMPLETED, now - 1_000, now))

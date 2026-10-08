@@ -7,10 +7,10 @@ import earth.walkthru.aqsync.data.protocol.Frame
  *
  * A refresh never throws the previous listing away: [Loading] and [Error] carry the last
  * [Loaded] in [last], so the Files screen keeps showing the list (with an age and, on failure, a
- * one-line reason) and [DeviceConnectionRepository.plan] stays usable. Before this, a post-sync
+ * one-line reason) and `DeviceConnectionRepository.plan` stays usable. Before this, a post-sync
  * `LIST` that died with "link lost while waiting for a response" replaced the whole list with a red
  * banner right after a successful sync, and the plan went null. The list is dropped only on
- * [Idle] — a new session, [DeviceConnectionRepository.resetDerivedState].
+ * [Idle] — a new session, `DeviceConnectionRepository.resetDerivedState`.
  */
 sealed interface ManifestState {
     /** The most recent successful listing, or null if there has been none in this session. */

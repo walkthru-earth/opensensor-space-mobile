@@ -13,7 +13,7 @@ import earth.walkthru.aqsync.data.ble.AqTransport
  * bytes; Android silently discards oversize notifications (macOS accepts them), so every *full*
  * chunk was lost and only the short last one arrived. The firmware now caps BLE frames at 512.
  * Halving the window would have halved throughput for nothing, so both links keep the device's
- * `max_read` (16 KiB); the client-side window resume in [SyncEngine] stays as the contract's
+ * `max_read` (16 KiB); the client-side window resume in `SyncEngine` stays as the contract's
  * robustness rule.
  */
 object ReadWindow {

@@ -1,6 +1,7 @@
 package earth.walkthru.aqsync.data.lan
 
 import earth.walkthru.aqsync.data.ble.TransportKind
+import earth.walkthru.aqsync.sync.SyncLock
 
 /**
  * When to fetch (or re-fetch) the LAN bearer token, as pure decisions so they can be unit-tested.
@@ -15,16 +16,17 @@ import earth.walkthru.aqsync.data.ble.TransportKind
  */
 class LanTokenPolicy {
     private val staleAddresses = HashSet<String>()
+    private val lock = SyncLock()
 
     /** True when a LAN connect failure means the stored token must be dropped. */
     fun invalidatesToken(failure: LanFailure): Boolean = failure == LanFailure.AUTH_FAILED
 
     /** Record that [address]'s token was rejected; call after clearing it from storage. */
     fun markStale(address: String) {
-        synchronized(staleAddresses) { staleAddresses += address }
+        lock.withLock { staleAddresses += address }
     }
 
-    fun isStale(address: String): Boolean = synchronized(staleAddresses) { address in staleAddresses }
+    fun isStale(address: String): Boolean = lock.withLock { address in staleAddresses }
 
     /**
      * Whether a session that just reached Ready should issue `GET_TOKEN`: only over a pipe that
@@ -37,10 +39,10 @@ class LanTokenPolicy {
      * A token was fetched and stored for [address]. Returns true when this was a renewal after an
      * `AUTH_FAILED` (so the UI should announce it), and forgets the stale mark either way.
      */
-    fun onFetched(address: String): Boolean = synchronized(staleAddresses) { staleAddresses.remove(address) }
+    fun onFetched(address: String): Boolean = lock.withLock { staleAddresses.remove(address) }
 
     /** The user forgot the device (or rotated the token deliberately); nothing to announce later. */
     fun clear(address: String) {
-        synchronized(staleAddresses) { staleAddresses -= address }
+        lock.withLock { staleAddresses -= address }
     }
 }

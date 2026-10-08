@@ -5,12 +5,12 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.test.runTest
-import org.junit.Assert.assertEquals
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertEquals
 
 class ConnectionIntentTest {
     @Test
-    fun `queued connect cannot reopen after a later disconnect`() = runTest {
+    fun queuedConnectCannotReopenAfterALaterDisconnect() = runTest {
         val intent = ConnectionIntent()
         val mutex = Mutex(locked = true)
         val actions = mutableListOf<String>()
@@ -30,7 +30,7 @@ class ConnectionIntentTest {
     }
 
     @Test
-    fun `later explicit connect supersedes a queued disconnect`() = runTest {
+    fun laterExplicitConnectSupersedesAQueuedDisconnect() = runTest {
         val intent = ConnectionIntent()
         val mutex = Mutex(locked = true)
         val actions = mutableListOf<String>()

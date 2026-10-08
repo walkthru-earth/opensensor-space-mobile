@@ -3,73 +3,73 @@ package earth.walkthru.aqsync.data
 import earth.walkthru.aqsync.data.DeviceContinuityPolicy.Decision
 import earth.walkthru.aqsync.data.DeviceContinuityPolicy.Identity
 import earth.walkthru.aqsync.data.DeviceContinuityPolicy.Reason
-import org.junit.Assert.assertEquals
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertEquals
 
 class DeviceContinuityPolicyTest {
     private val known = Identity("AA:BB:CC:DD:EE:01", "441bf6e26b40", "station-old")
 
     @Test
-    fun `station rollover cannot escape its archive namespace`() {
+    fun stationRolloverCannotEscapeItsArchiveNamespace() {
         for (station in listOf(".", "..", "../outside", "station/child")) {
             assertEquals(Decision.Reject(Reason.STATION_MALFORMED), decide(known.copy(station = station), ble = true))
         }
     }
 
     @Test
-    fun `same enrolled device may reconnect over either transport`() {
+    fun sameEnrolledDeviceMayReconnectOverEitherTransport() {
         assertEquals(Decision.Accept(), decide(known, ble = true))
         assertEquals(Decision.Accept(), decide(known, ble = false))
     }
 
     @Test
-    fun `new station on the authenticated same hardware becomes an epoch and invalidates credentials`() {
+    fun newStationOnTheAuthenticatedSameHardwareBecomesAnEpochAndInvalidatesCredentials() {
         assertEquals(Decision.Accept(stationChanged = true, invalidateLanToken = true), decide(known.copy(station = "station-new"), ble = true))
     }
 
     @Test
-    fun `LAN cannot authorize a station generation change`() {
+    fun lanCannotAuthorizeAStationGenerationChange() {
         assertEquals(Decision.Reject(Reason.STATION_CHANGE_REQUIRES_BLE), decide(known.copy(station = "station-new"), ble = false))
     }
 
     @Test
-    fun `same station cannot disguise changed hardware on BLE or LAN`() {
+    fun sameStationCannotDisguiseChangedHardwareOnBleOrLan() {
         for (ble in listOf(true, false)) {
             assertEquals(Decision.Reject(Reason.HARDWARE_CHANGED), decide(known.copy(deviceId = "a4cb8fd77500"), ble))
         }
     }
 
     @Test
-    fun `a changed endpoint cannot be silently reassigned even with the same reported hardware`() {
+    fun aChangedEndpointCannotBeSilentlyReassignedEvenWithTheSameReportedHardware() {
         assertEquals(Decision.Reject(Reason.ENDPOINT_CHANGED), decide(known.copy(address = "AA:BB:CC:DD:EE:02"), ble = true))
     }
 
     @Test
-    fun `missing pinned hardware identity rejects a reconnect`() {
+    fun missingPinnedHardwareIdentityRejectsAReconnect() {
         assertEquals(Decision.Reject(Reason.HARDWARE_MISSING), decide(known.copy(deviceId = null), ble = true))
     }
 
     @Test
-    fun `malformed hardware identity rejects a reconnect`() {
+    fun malformedHardwareIdentityRejectsAReconnect() {
         for (id in listOf("", "6b40", "441bf6e26b4z", "441bf6e26b400")) {
             assertEquals(Decision.Reject(Reason.HARDWARE_MALFORMED), decide(known.copy(deviceId = id), ble = true))
         }
     }
 
     @Test
-    fun `missing station cannot be used to collect files`() {
+    fun missingStationCannotBeUsedToCollectFiles() {
         for (station in listOf(null, "", " ")) {
             assertEquals(Decision.Reject(Reason.STATION_MISSING), decide(known.copy(station = station), ble = true))
         }
     }
 
     @Test
-    fun `address and full hardware hex comparisons ignore case`() {
+    fun addressAndFullHardwareHexComparisonsIgnoreCase() {
         assertEquals(Decision.Accept(), decide(known.copy(address = known.address.lowercase(), deviceId = known.deviceId!!.uppercase()), ble = false))
     }
 
     @Test
-    fun `first enrollment requires owner approved BLE but optional dev remains compatible`() {
+    fun firstEnrollmentRequiresOwnerApprovedBleButOptionalDevRemainsCompatible() {
         for (deviceId in listOf(null, known.deviceId)) {
             val info = known.copy(deviceId = deviceId)
             assertEquals(Decision.Accept(), DeviceContinuityPolicy.evaluate(null, info, authenticatedBle = true))
@@ -78,14 +78,14 @@ class DeviceContinuityPolicyTest {
     }
 
     @Test
-    fun `an empty saved scan row is still a first enrollment`() {
+    fun anEmptySavedScanRowIsStillAFirstEnrollment() {
         val scanned = known.copy(deviceId = null, station = null)
         assertEquals(Decision.Accept(), DeviceContinuityPolicy.evaluate(scanned, known, authenticatedBle = true))
         assertEquals(Decision.Reject(Reason.ENROLLMENT_REQUIRES_BLE), DeviceContinuityPolicy.evaluate(scanned, known, authenticatedBle = false))
     }
 
     @Test
-    fun `legacy devices without dev may collect same station but cannot automatically link a new one`() {
+    fun legacyDevicesWithoutDevMayCollectSameStationButCannotAutomaticallyLinkANewOne() {
         val legacy = known.copy(deviceId = null)
         assertEquals(Decision.Accept(), DeviceContinuityPolicy.evaluate(legacy, legacy, authenticatedBle = false))
         assertEquals(Decision.Reject(Reason.STATION_CHANGE_REQUIRES_HARDWARE), DeviceContinuityPolicy.evaluate(legacy, legacy.copy(station = "station-new"), authenticatedBle = true))

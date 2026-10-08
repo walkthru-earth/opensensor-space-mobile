@@ -1,9 +1,9 @@
 package earth.walkthru.aqsync.data.lan
 
 import earth.walkthru.aqsync.data.ble.TransportKind
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /**
  * The decision path behind "LAN token renewed": seen on the real phone after another client rotated
@@ -14,27 +14,27 @@ class LanTokenPolicyTest {
     private val addr = "AA:BB:CC:DD:EE:01"
 
     @Test
-    fun `only AUTH_FAILED invalidates the stored token`() {
+    fun onlyAuthFailedInvalidatesTheStoredToken() {
         val p = LanTokenPolicy()
         assertTrue(p.invalidatesToken(LanFailure.AUTH_FAILED))
         for (f in LanFailure.entries.filter { it != LanFailure.AUTH_FAILED }) {
-            assertFalse("$f must not drop the token", p.invalidatesToken(f))
+            assertFalse(p.invalidatesToken(f), "$f must not drop the token")
         }
     }
 
     @Test
-    fun `first-time fetch happens over BLE for v2 when nothing is stored`() {
+    fun firstTimeFetchHappensOverBleForV2WhenNothingIsStored() {
         val p = LanTokenPolicy()
         assertTrue(p.shouldFetch(TransportKind.BLE, proto = 2, storedToken = null))
         assertTrue(p.shouldFetch(TransportKind.FAKE, proto = 2, storedToken = null))
-        assertFalse("never over LAN (ERROR 13 by contract)", p.shouldFetch(TransportKind.LAN, proto = 2, storedToken = null))
-        assertFalse("v1 devices have no GET_TOKEN", p.shouldFetch(TransportKind.BLE, proto = 1, storedToken = null))
-        assertFalse("absent proto means v1", p.shouldFetch(TransportKind.BLE, proto = null, storedToken = null))
-        assertFalse("a stored token is not re-fetched", p.shouldFetch(TransportKind.BLE, proto = 2, storedToken = "ab".repeat(32)))
+        assertFalse(p.shouldFetch(TransportKind.LAN, proto = 2, storedToken = null), "never over LAN (ERROR 13 by contract)")
+        assertFalse(p.shouldFetch(TransportKind.BLE, proto = 1, storedToken = null), "v1 devices have no GET_TOKEN")
+        assertFalse(p.shouldFetch(TransportKind.BLE, proto = null, storedToken = null), "absent proto means v1")
+        assertFalse(p.shouldFetch(TransportKind.BLE, proto = 2, storedToken = "ab".repeat(32)), "a stored token is not re-fetched")
     }
 
     @Test
-    fun `AUTH_FAILED then BLE Ready re-fetches and announces the renewal exactly once`() {
+    fun authFailedThenBleReadyReFetchesAndAnnouncesTheRenewalExactlyOnce() {
         val p = LanTokenPolicy()
         // LAN handshake rejected: repository clears the Room column and marks the address.
         assertTrue(p.invalidatesToken(LanFailure.AUTH_FAILED))
@@ -50,13 +50,13 @@ class LanTokenPolicyTest {
     }
 
     @Test
-    fun `a first-time fetch is silent`() {
+    fun aFirstTimeFetchIsSilent() {
         val p = LanTokenPolicy()
         assertFalse(p.onFetched(addr))
     }
 
     @Test
-    fun `deliberate rotation or forget clears the mark without an announcement`() {
+    fun deliberateRotationOrForgetClearsTheMarkWithoutAnAnnouncement() {
         val p = LanTokenPolicy()
         p.markStale(addr)
         p.clear(addr)
@@ -65,7 +65,7 @@ class LanTokenPolicyTest {
     }
 
     @Test
-    fun `marks are per device`() {
+    fun marksArePerDevice() {
         val p = LanTokenPolicy()
         p.markStale(addr)
         assertFalse(p.isStale("AA:BB:CC:DD:EE:02"))

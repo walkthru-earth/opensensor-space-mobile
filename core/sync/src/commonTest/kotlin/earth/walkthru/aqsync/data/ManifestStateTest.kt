@@ -1,12 +1,12 @@
 package earth.walkthru.aqsync.data
 
 import earth.walkthru.aqsync.data.protocol.Frame
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
-import org.junit.Assert.assertSame
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 /**
  * A refresh of the device listing must never blank what the user already has: seen on the phone as
@@ -21,7 +21,7 @@ class ManifestStateTest {
     private val loaded = ManifestState.Loaded(files, end, atEpochMs = 1_000L)
 
     @Test
-    fun `first refresh has nothing to keep`() {
+    fun firstRefreshHasNothingToKeep() {
         val loading = ManifestState.Idle.refreshing()
         assertTrue(loading.isLoading)
         assertNull(loading.last)
@@ -31,7 +31,7 @@ class ManifestStateTest {
     }
 
     @Test
-    fun `a refresh keeps the previous listing while in flight`() {
+    fun aRefreshKeepsThePreviousListingWhileInFlight() {
         val loading = loaded.refreshing()
         assertTrue(loading.isLoading)
         assertSame(loaded, loading.last)
@@ -39,7 +39,7 @@ class ManifestStateTest {
     }
 
     @Test
-    fun `a failed refresh keeps the previous listing and reports why`() {
+    fun aFailedRefreshKeepsThePreviousListingAndReportsWhy() {
         val failed = loaded.refreshing().failed("link lost while waiting for a response")
         assertFalse(failed.isLoading)
         assertSame(loaded, failed.last)
@@ -49,7 +49,7 @@ class ManifestStateTest {
     }
 
     @Test
-    fun `a successful refresh replaces the listing and clears the error`() {
+    fun aSuccessfulRefreshReplacesTheListingAndClearsTheError() {
         val newer = ManifestState.Loaded(files + Frame.File(8192, "archive/AQ-6b40/date=2026-09-16/part-0002.parquet"), end.copy(count = 2), 2_000L)
         val state = loaded.refreshing().failed("timeout").refreshing().loaded(newer.files, newer.end, newer.atEpochMs)
         assertEquals(newer, state)
@@ -59,7 +59,7 @@ class ManifestStateTest {
     }
 
     @Test
-    fun `idle drops everything`() {
+    fun idleDropsEverything() {
         assertNull(ManifestState.Idle.last)
         assertNull(ManifestState.Idle.error)
         assertFalse(ManifestState.Idle.isLoading)
