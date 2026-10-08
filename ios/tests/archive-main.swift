@@ -36,6 +36,12 @@ import Foundation
                 fatalError("unsafe path accepted")
             } catch SensorArchive.Failure.unsafePath {}
         }
+        // Exactly 399 UTF-8 bytes is the contract maximum and remains a valid archive path.
+        _ = try archive.target(
+            station: station, name: String(repeating: "a", count: SensorArchive.maxNameBytes - 8) + ".parquet")
+        // The root is excluded from backup when created, without a per-sync attribute write.
+        let rootValues = try archive.root.resourceValues(forKeys: [.isExcludedFromBackupKey])
+        precondition(rootValues.isExcludedFromBackup == true)
         let link = root.appendingPathComponent(station).appendingPathComponent("link")
         try FileManager.default.createSymbolicLink(atPath: link.path, withDestinationPath: root.path)
         do {
