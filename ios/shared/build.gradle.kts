@@ -22,6 +22,7 @@ kotlin {
             // viewModel { } holders for controllers kept per navigation entry.
             implementation(libs.jetbrains.lifecycle.viewmodel.compose)
             implementation(project(":ui:designsystem"))
+            implementation(project(":ui:permissions"))
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
             implementation(libs.compose.material3)

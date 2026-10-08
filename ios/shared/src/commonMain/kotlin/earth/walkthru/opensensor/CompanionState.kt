@@ -10,6 +10,8 @@ import earth.walkthru.aqsync.data.protocol.DeviceStatus
 import earth.walkthru.aqsync.data.protocol.LanProtocol
 import earth.walkthru.aqsync.data.protocol.LiveProfiles
 import earth.walkthru.aqsync.data.protocol.LiveSample
+import earth.walkthru.opensensor.permissions.AccessStatus
+import earth.walkthru.opensensor.permissions.IosAuthorization
 
 /** The one waiting line, the same words as Android `now_waiting`. */
 internal const val WAITING_FOR_READING = "Waiting for a reading…"
@@ -23,6 +25,10 @@ class CompanionState {
     internal var scanning by mutableStateOf(false)
         private set
     internal var bluetoothAvailable by mutableStateOf(false)
+        private set
+
+    /** Bluetooth authorization as the shared policy reads it. Not determined until the first tap. */
+    internal var bluetoothAccess by mutableStateOf(AccessStatus.NOT_DETERMINED)
         private set
     internal var message by mutableStateOf("")
         private set
@@ -49,6 +55,9 @@ class CompanionState {
     /** True only after iOS reports the Local Network policy denial (TN3179), never for plain waiting. */
     internal var lanAccessDenied by mutableStateOf(false)
         private set
+
+    /** Local network has no status API on iOS, so it stays unknown until the policy denial. */
+    internal val lanAccess: AccessStatus get() = IosAuthorization.localNetwork(policyDenied = lanAccessDenied)
 
     internal var wifiAccessAvailable by mutableStateOf(false)
         private set
@@ -148,6 +157,11 @@ class CompanionState {
         lanScanning = false
         lanDevices = emptyList()
         lanMessage = "Wi-Fi search is not available. Check Wi-Fi and Local Network in Settings."
+    }
+
+    /** The raw `CBManager.authorization` value, read when the central manager reports its state. */
+    fun bluetoothAuthorizationChanged(raw: Long) {
+        bluetoothAccess = IosAuthorization.bluetooth(raw)
     }
 
     fun bluetoothChanged(available: Boolean, explanation: String) {

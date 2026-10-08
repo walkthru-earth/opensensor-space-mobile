@@ -44,10 +44,9 @@ final class LanDiscovery {
                 switch update {
                 case .waiting(let error):
                     // TN3179: only kDNSServiceErr_PolicyDenied identifies a Local Network denial.
-                    if LanPolicy.isLocalNetworkDenied(error) {
-                        self.state.lanScanAccessDenied()
-                    } else {
-                        self.state.lanScanWaiting()
+                    switch LanPolicy.localNetworkAccess(error) {
+                    case .denied: self.state.lanScanAccessDenied()
+                    case .unknown: self.state.lanScanWaiting()
                     }
                 case .ready: self.state.lanScanReady()
                 case .failed:

@@ -1,6 +1,5 @@
 package earth.walkthru.opensensor.discover
 
-import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -11,8 +10,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import earth.walkthru.opensensor.designsystem.FloatingIconButton
+import earth.walkthru.opensensor.permissions.AccessDialogTexts
+import earth.walkthru.opensensor.permissions.AccessDialogs
+import earth.walkthru.opensensor.permissions.RuntimeAccess
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import org.maplibre.compose.camera.CameraUpdate
@@ -27,26 +28,19 @@ import kotlin.time.Duration.Companion.seconds
 
 /**
  * Approximate foreground location, asked only from the "Near me" tap (docs/devices-and-discovery.md,
- * "Centring the map and Near me"). Android asks for ACCESS_COARSE_LOCATION alone, iOS for When In
- * Use with reduced accuracy as the default (Info.plist).
+ * "Centring the map and Near me"), through the shared permission policy (`:ui:permissions`).
+ * Android asks for ACCESS_COARSE_LOCATION alone, iOS for When In Use with reduced accuracy as the
+ * default (Info.plist). After a denial the system no longer asks, so the tap offers settings.
  */
-internal interface ApproximateLocationPermission {
-    /** True once approximate (or better) foreground location is granted. */
-    val granted: Boolean
-
-    /** Shows the system prompt when the OS still allows one, then reports the outcome. */
-    fun request(onResult: (Boolean) -> Unit)
-}
-
 @Composable
-internal expect fun rememberApproximateLocationPermission(): ApproximateLocationPermission
+internal expect fun rememberApproximateLocationAccess(): RuntimeAccess
 
 /**
  * "Near me" for one map session. [location] stays null until the user taps and grants, so no
  * location provider exists before that. The fix only moves the camera and draws the puck. It is
  * never stored or sent.
  */
-internal class NearMe(val location: LocationState?, val recenter: Int, val onTap: () -> Unit)
+internal class NearMe(val location: LocationState?, val recenter: Int, val access: RuntimeAccess, val onTap: () -> Unit)
 
 // Low maps to Core Location's kilometre accuracy and Android's low-power fused request, which is
 // enough for a resolution 7 cell and works with a coarse grant.
@@ -54,21 +48,19 @@ private val NEAR_ME_REQUEST = LocationRequest(accuracy = LocationAccuracy.Low, m
 
 @Composable
 internal fun rememberNearMe(): NearMe {
-    val permission = rememberApproximateLocationPermission()
+    val access = rememberApproximateLocationAccess()
     var active by remember { mutableStateOf(false) }
     var recenter by remember { mutableIntStateOf(0) }
     val location = if (active) rememberLocationState(provider = rememberDefaultLocationProvider(), request = NEAR_ME_REQUEST) else null
-    return NearMe(location, recenter) {
-        if (active || permission.granted) {
-            active = true
+    return NearMe(location, recenter, access) {
+        if (active) {
             recenter++
         } else {
-            // A denial leaves the map as it is. The next tap asks again where the OS allows it.
-            permission.request { granted ->
-                if (granted) {
-                    active = true
-                    recenter++
-                }
+            // A fresh "no" leaves the map as it is. A later tap offers settings once the system
+            // stops asking (PermissionFlow).
+            access.run {
+                active = true
+                recenter++
             }
         }
     }
@@ -76,7 +68,8 @@ internal fun rememberNearMe(): NearMe {
 
 /** The map button. After each granted tap, the camera moves to the next fix at about cell scale. */
 @Composable
-internal fun NearMeButton(nearMe: NearMe, mapState: MapState, label: String, modifier: Modifier = Modifier) {
+internal fun NearMeButton(nearMe: NearMe, mapState: MapState, label: String, accessTexts: AccessDialogTexts, modifier: Modifier = Modifier) {
+    AccessDialogs(nearMe.access, accessTexts)
     val location = nearMe.location
     LaunchedEffect(nearMe.recenter, location) {
         if (nearMe.recenter == 0 || location == null) return@LaunchedEffect
