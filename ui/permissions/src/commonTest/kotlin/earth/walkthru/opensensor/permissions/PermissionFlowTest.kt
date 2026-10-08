@@ -24,7 +24,10 @@ class PermissionFlowTest {
         assertEquals(AccessStep.READY, PermissionFlow.onResult(granted = true, showRationale = false))
         assertEquals(AccessStep.TURN_ON, PermissionFlow.onResult(granted = true, showRationale = false, radioOn = false))
         assertEquals(AccessStep.DECLINED, PermissionFlow.onResult(granted = false, showRationale = true))
-        assertEquals(AccessStep.OPEN_SETTINGS, PermissionFlow.onResult(granted = false, showRationale = false))
+        // No rationale after a denial. Settings only once an earlier step proves Android stopped asking.
+        assertEquals(AccessStep.DECLINED, PermissionFlow.onResult(granted = false, showRationale = false))
+        assertEquals(AccessStep.OPEN_SETTINGS, PermissionFlow.onResult(granted = false, showRationale = false, rationaleBefore = true))
+        assertEquals(AccessStep.OPEN_SETTINGS, PermissionFlow.onResult(granted = false, showRationale = false, askedBefore = true))
     }
 
     // iOS, the reported status.
@@ -207,13 +210,35 @@ class PermissionFlowTest {
     @Test
     fun permanentDenialOffersSettings() {
         val f = Fake()
-        var declined = false
-        f.access.run(onDeclined = { declined = true }) { }
-        f.access.onPermissionResult() // denied, no rationale due
+        var declined = 0
+        // First denial. Android now says a rationale is due.
+        f.access.run(onDeclined = { declined++ }) { }
+        f.rationale = true
+        f.access.onPermissionResult()
+        assertEquals(1, declined)
+        assertNull(f.access.dialog)
+        // Explained, asked again, denied again. Android stops asking and the rationale clears.
+        f.access.run(onDeclined = { declined++ }) { }
+        assertEquals(AccessDialog.RATIONALE, f.access.dialog)
+        f.access.confirmRationale()
+        f.rationale = false
+        f.access.onPermissionResult()
         assertEquals(AccessDialog.SETTINGS, f.access.dialog)
         f.access.openSettings()
         assertEquals(1, f.settings)
+        assertEquals(2, declined)
+    }
+
+    @Test
+    fun dismissOnFirstRequestIsQuiet() {
+        val f = Fake()
+        var declined = false
+        f.access.run(onDeclined = { declined = true }) { }
+        // Back or a tap outside on the first-ever dialog. No rationale before or after.
+        f.access.onPermissionResult()
         assertTrue(declined)
+        assertNull(f.access.dialog, "a dismissed first prompt gets no settings dialog")
+        assertEquals(0, f.settings)
     }
 
     @Test

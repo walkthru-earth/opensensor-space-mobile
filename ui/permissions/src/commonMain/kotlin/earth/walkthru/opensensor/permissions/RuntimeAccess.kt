@@ -16,7 +16,10 @@ enum class AccessDialog { RATIONALE, SETTINGS }
 class AccessHooks(
     val granted: () -> Boolean,
     val onTap: () -> AccessStep,
-    val onResult: () -> AccessStep,
+    /** Decides after the prompt, from the rationale flag read before it and whether it was asked earlier. */
+    val onResult: (rationaleBefore: Boolean, askedBefore: Boolean) -> AccessStep,
+    /** Android's rationale flag, read just before the prompt launches. Always false on iOS. */
+    val rationaleDue: () -> Boolean = { false },
     val radioOn: () -> Boolean = { true },
     val requestPermission: () -> Unit,
     val requestTurnOn: () -> Unit = {},
@@ -24,7 +27,7 @@ class AccessHooks(
 ) {
     companion object {
         /** Nothing to ask. Every action runs at once. */
-        val None = AccessHooks(granted = { true }, onTap = { AccessStep.READY }, onResult = { AccessStep.READY }, requestPermission = {}, openSettings = {})
+        val None = AccessHooks(granted = { true }, onTap = { AccessStep.READY }, onResult = { _, _ -> AccessStep.READY }, requestPermission = {}, openSettings = {})
 
         /** Android. The OS reports the grant and whether a rationale is due. */
         fun rationaleBased(
@@ -37,7 +40,8 @@ class AccessHooks(
         ) = AccessHooks(
             granted = granted,
             onTap = { PermissionFlow.onTap(granted(), rationaleDue(), radioOn()) },
-            onResult = { PermissionFlow.onResult(granted(), rationaleDue(), radioOn()) },
+            onResult = { before, asked -> PermissionFlow.onResult(granted(), rationaleDue(), radioOn(), before, asked) },
+            rationaleDue = rationaleDue,
             radioOn = radioOn,
             requestPermission = requestPermission,
             requestTurnOn = requestTurnOn,
@@ -54,7 +58,7 @@ class AccessHooks(
         ) = AccessHooks(
             granted = { status() == AccessStatus.GRANTED },
             onTap = { PermissionFlow.onTap(status(), radioOn()) },
-            onResult = { PermissionFlow.onResult(status(), radioOn()) },
+            onResult = { _, _ -> PermissionFlow.onResult(status(), radioOn()) },
             radioOn = radioOn,
             requestPermission = requestPermission,
             requestTurnOn = requestTurnOn,
@@ -87,6 +91,12 @@ class RuntimeAccess(val kind: AccessKind) {
 
     private var bound = false
 
+    /** The rationale flag when the current prompt launched. */
+    private var rationaleBefore = false
+
+    /** True once this permission's prompt has answered in this process. Memory only, never stored. */
+    private var askedBefore = false
+
     /**
      * Connects the platform. Call again on every composition with fresh launchers. The first bind
      * reads the grant, so `ready` is right on the first frame. Reading never asks.
@@ -114,7 +124,9 @@ class RuntimeAccess(val kind: AccessKind) {
 
     fun onPermissionResult() {
         refresh()
-        handle(hooks.onResult())
+        val step = hooks.onResult(rationaleBefore, askedBefore)
+        askedBefore = true
+        handle(step)
     }
 
     fun onTurnOnResult() {
@@ -124,7 +136,7 @@ class RuntimeAccess(val kind: AccessKind) {
 
     fun confirmRationale() {
         dialog = null
-        hooks.requestPermission()
+        request()
     }
 
     fun openSettings() {
@@ -145,11 +157,17 @@ class RuntimeAccess(val kind: AccessKind) {
                 finish(onReady)
             }
             AccessStep.TURN_ON -> hooks.requestTurnOn()
-            AccessStep.ASK -> hooks.requestPermission()
+            AccessStep.ASK -> request()
             AccessStep.EXPLAIN_THEN_ASK -> dialog = AccessDialog.RATIONALE
             AccessStep.OPEN_SETTINGS -> dialog = AccessDialog.SETTINGS
             AccessStep.DECLINED -> finish(onDeclined)
         }
+    }
+
+    /** Launches the system prompt, noting first whether a rationale was due. */
+    private fun request() {
+        rationaleBefore = hooks.rationaleDue()
+        hooks.requestPermission()
     }
 
     private fun finish(callback: (() -> Unit)?) {

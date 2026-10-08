@@ -118,9 +118,12 @@ and `RuntimeAccess` runs it. `PermissionFlowTest` (commonTest, Android host and 
 covers the table, both decision paths and the iOS status mapping. The Android launchers stay in
 `app/.../ui/permissions/RuntimeAccess.kt`, the iOS ones in `ios/App` and the Near me actuals.
 
-An in-app rationale appears only when Android reports one is due. After a permanent denial the
-next tap offers the app's system settings page (`rememberOpenAppSettings`, the app details intent
-on Android, `UIApplication.openSettingsURLString` on iOS). iOS shows each prompt once and never
+An in-app rationale appears only when Android reports one is due. Android offers the app's
+system settings page after a denial with no rationale due, but only when a rationale was due
+before that prompt or the permission was already asked in this session. Closing a first-ever
+prompt with Back or a tap outside is quiet, since Android 11 and later do not count it. The page
+opens through `rememberOpenAppSettings` (the app details intent on Android,
+`UIApplication.openSettingsURLString` on iOS). iOS shows each prompt once and never
 explains first. A fresh "no" is quiet. The next tap, or the Bluetooth and Local Network messages
 on the iOS screen, offer Settings. Restricted access gets no link, since the user cannot change it.
 iOS has no Local Network status API (TN3179), so it stays unknown until the browser reports

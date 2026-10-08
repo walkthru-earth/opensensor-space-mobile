@@ -63,15 +63,28 @@ object PermissionFlow {
     }
 
     /**
-     * Android, after the system dialog answered. A denial with no rationale due means Android will
-     * not show its dialog again (denied twice, or "Don't allow" with the policy set), so only
-     * settings help.
+     * Android, after the system dialog answered. [rationaleBefore] is the rationale flag read just
+     * before the dialog launched, and [askedBefore] is true once this permission has had an answer
+     * earlier in this process.
+     *
+     * No rationale due after a denial has two meanings. Android stopped showing its dialog (denied
+     * twice, or "Don't allow" with the policy set), or the user closed a first-ever dialog with Back
+     * or a tap outside, which Android 11 and later do not count. Settings are offered only when an
+     * earlier step proves the first: a rationale was due before, or the user is past their first
+     * request. A first request with no rationale before or after stays quiet.
      */
-    fun onResult(granted: Boolean, showRationale: Boolean, radioOn: Boolean = true): AccessStep = when {
+    fun onResult(
+        granted: Boolean,
+        showRationale: Boolean,
+        radioOn: Boolean = true,
+        rationaleBefore: Boolean = false,
+        askedBefore: Boolean = false,
+    ): AccessStep = when {
         granted && radioOn -> AccessStep.READY
         granted -> AccessStep.TURN_ON
         showRationale -> AccessStep.DECLINED
-        else -> AccessStep.OPEN_SETTINGS
+        rationaleBefore || askedBefore -> AccessStep.OPEN_SETTINGS
+        else -> AccessStep.DECLINED
     }
 
     /**
