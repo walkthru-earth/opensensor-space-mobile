@@ -223,7 +223,8 @@ See [devices-and-discovery.md](devices-and-discovery.md).
   user-initiated data transfer jobs, notification IDs derived from work IDs.
 - Real public feed. The host publisher writes cell and device Parquet to S3 or source.coop. The
   phone reads it with the portable Parquet reader, caches with ETags, and has a Settings switch.
-- Opt-in publishing of an owned device to an owner-chosen H3 cell, with a random public ID.
+- Per-device opt-in publishing, switched on only in that device's settings and off by default,
+  to an owner-chosen H3 cell with a random public ID.
 - Feature modules (`:feature:today`, `:feature:history`, `:feature:files`, `:feature:device`)
   and baseline profiles once R8 is proven on a phone.
 

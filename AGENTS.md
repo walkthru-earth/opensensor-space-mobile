@@ -29,8 +29,9 @@ concern you are changing in `docs/README.md`.
   LAN connects only to devices found through `_aqsync._tcp` mDNS, using a token
   obtained over bonded BLE. The only other network use is anonymous, read-only
   GETs of the public discover feed and basemap, which a Settings switch turns off
-  (`docs/devices-and-discovery.md`). Uploading or sharing data needs a separate
-  explicit opt-in. No analytics, accounts or location permission. Public data
+  (`docs/devices-and-discovery.md`). Uploading a device's data is off by default
+  and is enabled only per device, from that device's settings, with
+  confirmation. No analytics, accounts or location permission. Public data
   carries H3 cells, never coordinates.
 - A downloaded file becomes synced only after size, CRC-32 and `PAR1` head/tail
   checks pass. Missing measurements stay null. Never ask firmware to delete,

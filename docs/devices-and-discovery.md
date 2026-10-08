@@ -89,7 +89,8 @@ flowchart LR
    category, a chart with a range (24 hours, 7 days, 30 days) and aggregation (avg, min, max)
    filter, metric chips, a comparison with the cell average, and an about section (family, data
    licence, source link). An owned device adds sync, files and settings, with technical detail
-   still gated by the detail level.
+   still gated by the detail level. Its settings hold the "Share this sensor publicly" switch,
+   off by default.
 5. **Navigation.** Three tabs, Discover, My devices and Settings. With no paired device,
    Discover is the start tab. With a paired device, My devices is the start tab.
 
@@ -111,8 +112,13 @@ enough to land "near you" for almost everyone without asking for location.
    sensors here to list them".
 4. **Public identity.** A public device has a random public ID and an owner-chosen name. The
    station UUID, MAC address, BLE name and LAN token never leave the phone through this feature.
-5. **Publishing is separate and opt-in.** Reading the public feed is anonymous and read-only.
-   Uploading your own data is a later feature behind its own explicit opt-in.
+5. **Publishing is per device and opt-in.** Reading the public feed is anonymous and read-only.
+   Uploading is off for every device by default. The owner turns it on in that device's own
+   settings (device page, Settings, "Share this sensor publicly"), never in a global switch, an
+   onboarding step or the pairing flow. Turning it on opens one confirmation that shows the map
+   to pick the cell, the public name, what is shared (readings and cell) and what never is
+   (exact location, station UUID, MAC address, Wi-Fi, PIN, token). Turning it off stops uploads
+   at once. Each device has its own switch, so sharing one sensor never shares another.
 
 ### Network boundary
 
