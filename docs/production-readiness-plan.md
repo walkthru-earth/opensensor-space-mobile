@@ -8,7 +8,8 @@ lasting rules this plan moves the code towards), [architecture.md](architecture.
 
 Written 2026-10-08 from five parallel reviews (Android data, Android UI, shared KMP core, iOS,
 build and release) plus a lead pass. Every P0 item below was re-checked against the code by the
-lead before it was listed. Baseline `./gradlew --no-daemon verify verifyIos` passed on `00c64f5`.
+lead before it was listed. Baseline `./gradlew --no-daemon verify verifyIos` passed on `00c64f5`. Since 2026-10-09 `verify`
+runs `verifyIos` on a Mac.
 
 ## Compatibility stance
 
@@ -21,7 +22,11 @@ devices in the field depend on it.
 
 ## Why this refactor
 
-The app works, but four structural problems block growth.
+The app worked, but four structural problems blocked growth when this plan was written
+(2026-10-08). Status on 2026-10-09. Problem 1 still holds (two engines), but the 512-byte name
+example is fixed. Problem 2 still holds and the file is now 1597 lines. Problem 3 is resolved by
+W8. Problem 4 is partly resolved by W1, W4, W13 and W14. The follow-up for parity between the two
+apps is [platform-parity-plan.md](platform-parity-plan.md).
 
 1. **Sync logic exists twice.** Android owns `data/sync/` in Kotlin. iOS re-implemented the
    same download, resume, CRC-32, `PAR1` and archive layout rules in Swift
@@ -42,16 +47,18 @@ The app works, but four structural problems block growth.
 
 ## P0 defects (fix first, all confirmed in code)
 
-| ID | Defect | Evidence |
-| --- | --- | --- |
-| P0-1 | iOS aborts on a short `READ_END` or an overlapping chunk instead of retrying the window | `ios/App/SensorTransfer.swift:90-103` versus contract `ble-sync-protocol.md` "a failed window is retried" |
-| P0-2 | Name limit 512 on Android, contract says at most 399 | `data/sync/SyncPlanner.kt:56` |
-| P0-3 | `CancellationException` swallowed by `runCatching` around suspend calls | `DeviceConnectionRepository.kt:561-565`, `SyncWorker.kt:121,125`, `TcpTransport.kt:256` |
-| P0-4 | Unguarded job handles and a non-atomic busy flag, so a Stop can be lost and overlapping commands clear busy early | `DeviceConnectionRepository.kt:801-810, 1181, 1208-1209, 1315, 1332` |
-| P0-5 | GATT callbacks resume whichever operation is pending, so a late write callback can complete the next read | `ble/BleTransport.kt:148-172` |
-| P0-6 | Broadcast receivers launch on an unscoped `CoroutineScope(Dispatchers.IO)` with no handler or timeout | `background/SyncTriggers.kt:139`, `background/AdvertFlagScan.kt:185` |
-| P0-7 | Docs say the database goes to cloud backup, the rules exclude it (the token lives there) | `docs/lessons-learned.md:49` versus `res/xml/data_extraction_rules.xml` |
-| P0-8 | `setup-signing.sh` would upload signing secrets to the old repository name | `tools/setup-signing.sh:16` |
+Line numbers are from 2026-10-08. Status checked 2026-10-09 where stated, otherwise not rechecked.
+
+| ID | Defect | Evidence | Status |
+| --- | --- | --- | --- |
+| P0-1 | iOS aborts on a short `READ_END` or an overlapping chunk instead of retrying the window | `ios/App/SensorTransfer.swift:90-103` versus contract `ble-sync-protocol.md` "a failed window is retried" | Fixed (W5, `TransferChecks`) |
+| P0-2 | Name limit 512 on Android, contract says at most 399 | `data/sync/SyncPlanner.kt:56` | Fixed, `SyncPlanner` calls `SafeName.isValid` |
+| P0-3 | `CancellationException` swallowed by `runCatching` around suspend calls | `DeviceConnectionRepository.kt:561-565`, `SyncWorker.kt:121,125`, `TcpTransport.kt:256` | Not rechecked |
+| P0-4 | Unguarded job handles and a non-atomic busy flag, so a Stop can be lost and overlapping commands clear busy early | `DeviceConnectionRepository.kt:801-810, 1181, 1208-1209, 1315, 1332` | Not rechecked |
+| P0-5 | GATT callbacks resume whichever operation is pending, so a late write callback can complete the next read | `ble/BleTransport.kt:148-172` | Not rechecked |
+| P0-6 | Broadcast receivers launch on an unscoped `CoroutineScope(Dispatchers.IO)` with no handler or timeout | `background/SyncTriggers.kt:139`, `background/AdvertFlagScan.kt:185` | Fixed, no unscoped scope left in `app/src/main` |
+| P0-7 | Docs say the database goes to cloud backup, the rules exclude it (the token lives there) | `docs/lessons-learned.md:49` versus `res/xml/data_extraction_rules.xml` | Not rechecked |
+| P0-8 | `setup-signing.sh` would upload signing secrets to the old repository name | `tools/setup-signing.sh:16` | Not rechecked |
 
 ## Target architecture
 
@@ -96,7 +103,8 @@ radios, sockets, files, permissions, background execution and OS integration. Se
 ## Workstreams
 
 Each workstream is one branch, built in its own git worktree, gated by
-`./gradlew --no-daemon verify verifyIos` (plus the unsigned simulator build for iOS work). Each
+`./gradlew --no-daemon verify` (which includes `verifyIos` on a Mac), plus the unsigned simulator
+build for iOS work. Each
 has an exclusive file set so branches merge without conflicts. Implementation agents do not edit
 `docs/status.md`. They report evidence, and the lead records it once after merging.
 
@@ -120,10 +128,14 @@ lint, packaging), `app/proguard-rules.pro` or `app/src/main/keepRules/`, `.githu
 **W2 Shared core foundation.** Owns `settings.gradle.kts`, root `build.gradle.kts`,
 `build-logic/` (new), `core/*/build.gradle.kts`, `ios/shared/build.gradle.kts`, source layout
 under `core/`.
+- Done (merge `d7b3eea`). Items below are kept as written.
 - Included build `build-logic/` with convention plugins (KMP library, JVM library, iOS framework)
-  that set targets, `jvmToolchain(17)`, test aliases and warnings policy. Why. Three modules copy
-  the same KMP block today and new modules must be one line.
-- Move `src/main/kotlin` to `src/jvmMain/kotlin` and `src/test/kotlin` to `src/jvmTest/kotlin`.
+  that set targets, bytecode 17, test aliases and warnings policy. Why. Three modules copy
+  the same KMP block today and new modules must be one line. Bytecode 17 is a compiler target,
+  not `jvmToolchain(17)`, so no JDK download is needed (`OpenSensorConventions.kt`). The
+  `opensensor.kmp.compose-feature` convention and convention-registered gates followed on
+  2026-10-09 ([platform-parity-plan.md](platform-parity-plan.md) wave 0).
+- Done. Move `src/main/kotlin` to `src/jvmMain/kotlin` and `src/test/kotlin` to `src/jvmTest/kotlin`.
   Share Parquet fixtures through a proper test-fixture path, not a cross-project file reach.
 - Pure Kotlin `Crc32` and `ParquetVerify` (size, CRC-32, `PAR1` head and tail) in `commonMain`.
   JVM keeps the intrinsic CRC behind `expect`/`actual`. Why. The rule that makes a file "synced"
@@ -174,7 +186,9 @@ tests, `docs/lessons-learned.md`, `docs/transports.md`, `docs/sync-engine.md`,
 
 ### Wave 2 (after Wave 1 merges)
 
-**W6 Shared sync engine `:core:sync`.** Port the engine, planner, resume, read window retry,
+**W6 Shared sync engine `:core:sync`.** Not started as of 2026-10-09 beyond an empty
+`:core:sync` skeleton. Continued in [platform-parity-plan.md](platform-parity-plan.md) waves 2
+and 3. Port the engine, planner, resume, read window retry,
 progress, rate meter, claims and liveness to `commonMain` behind three ports, `FrameLink`
 (send and receive frames), `ArchiveStore` (partial, append, persist, commit, completed) and
 `ArchiveIndex` (receipts). One canonical archive, partial and receipt layout, documented in
@@ -182,7 +196,7 @@ progress, rate meter, claims and liveness to `commonMain` behind three ports, `F
 `SyncEngine` becomes an adapter. Fakes in `commonTest` cover resume,
 window retry, corruption and cancellation on JVM and iOS.
 
-**W7 Android repository decomposition.** Split `DeviceConnectionRepository` into
+**W7 Android repository decomposition.** Not started as of 2026-10-09. Split `DeviceConnectionRepository` into
 `LinkController`, `TransportSelector`, `DeviceEnrollment`, `LanCredentialService`,
 `ReconnectSupervisor` and policy, `ManifestStore`, `TransferCoordinator`, `BackgroundCollector`,
 `DeviceCommandService`, `DeviceTelemetry` and a singleton `KnownDeviceRepository`. ViewModels
@@ -213,7 +227,8 @@ detail-level rules.
 semantics for charts and live regions, previews and host screenshot tests, a device shell for
 tab navigation, `SavedStateHandle` for selections.
 
-**W11 Device-agnostic domain.** Owns new `:core:model`, `Metrics.kt`, `AirMood.kt` and the
+**W11 Device-agnostic domain.** Not started as of 2026-10-09. `DeviceCapabilities.kt` in
+`:core:history` is the interim. Owns new `:core:model`, `Metrics.kt`, `AirMood.kt` and the
 capability mapping in `:core:history`. Adds `Device`, `DeviceFamily`, `Capability`,
 `ObservedProperty`, `Datastream` and `Scale`, following the firmware observation model. Air
 quality becomes one family and `AirMood` one scale. Screens ask for capabilities, never schema
@@ -266,6 +281,15 @@ Parquet reader. Design reassessed 2026-10-08 in
   to an owner-chosen H3 cell with a random public ID.
 - Feature modules (`:feature:today`, `:feature:history`, `:feature:files`, `:feature:device`)
   and baseline profiles once R8 is proven on a phone.
+
+### Later workstreams (merged, not planned above)
+
+- **W13 Clean screens, on-demand permissions and store compliance** (merges `d660a75`,
+  `6722a11`, `ae38cb7`). No permission wall, permissions asked on the tap that needs them, store
+  forms and a privacy policy draft. See [store-compliance.md](store-compliance.md).
+- **W14 String resources, typed device messages and copy rules** (merge `509d203`). Android
+  strings moved to `strings.xml`. A shared string catalogue for both apps is still planned in
+  [platform-parity-plan.md](platform-parity-plan.md).
 
 ## Docs that follow the new direction after Wave 1 merges
 

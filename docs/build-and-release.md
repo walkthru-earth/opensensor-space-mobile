@@ -10,7 +10,7 @@
 flowchart LR
   C[commit] --> H["pre-commit: whitespace/EOL · YAML/JSON/TOML · large files · private keys · gitleaks · ktlint (staged .kt)"]
   P[push] --> V["pre-push: ./gradlew verify"]
-  V --> T[":app lintDebug + assembleDebug + testDebugUnitTest<br/>+ every :core module's test"]
+  V --> T[":app lintDebug + assembleDebug + testDebugUnitTest<br/>+ every shared module's host tests<br/>+ verifyIos on a Mac"]
   GH[GitHub push / PR] --> W["verify.yml: pre-commit --all-files + ./gradlew verify → debug APK + reports"]
   GH --> I["verify.yml: macOS → Kotlin iOS tests + unsigned simulator Debug / device Release builds"]
   GH --> R["release.yml: apk job (read-only, R8 + signing) → publish job (contents: write) · main → rolling 'latest' · v* tag → permanent release"]
@@ -19,7 +19,7 @@ flowchart LR
 ```sh
 export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"   # JBR (JDK 25) or any JDK ≥ 17
 tools/setup-hooks.sh                 # once per clone
-./gradlew --no-daemon clean verify verifyIos   # the gate; verifyIos needs macOS with Xcode
+./gradlew --no-daemon clean verify   # the gate; on a Mac it includes verifyIos (needs Xcode)
 python3 tools/validate_station_epoch_migration.py        # stdlib SQLite, actual v8→v9 SQL vs Room exports
 python3 tools/validate_sensor_installation_migration.py  # v9→v10
 ./gradlew --no-daemon :app:assembleRelease -Paqsync.localRelease=true   # R8 check, debug key, never publish
@@ -37,14 +37,14 @@ and commit again. CI has **no phone or Android emulator**; the iOS job runs shar
 tests on a simulator. BLE, mDNS, permissions and background behavior require hardware
 checks, recorded separately in [status.md](status.md) and the firmware repo's `bench-verified.md`.
 
-## Stack (verified building 2026-10-08; kotlinx-datetime 0.8.0 added for W8)
+## Stack (verified building 2026-10-09; kotlinx-datetime 0.8.0 added for W8)
 
 | | |
 | --- | --- |
 | Language / UI | Kotlin 2.4.20, Jetpack Compose (BOM 2026.09.00, material3 1.4.0), Material 3 dynamic color, Navigation 3 (1.1.7) |
-| DI / data | Hilt 2.60.1, Room 2.8.5 (**schema v10**), DataStore Preferences 1.2.1, WorkManager 2.11.2 + `androidx.hilt:hilt-work` 1.4.0, kotlinx.serialization 1.11.0, kotlinx-datetime 0.8.0 (shared calendar math, added 2026-10-08), coroutines 1.11.0 |
-| Native | `zstd-jni` 1.5.7-17 (`@aar`). Discover (W12, 2026-10-08) adds `maplibre-compose` 0.19.0 with its OpenGL Android runtime (MapLibre Native through `maplibre-native-ffi`, armeabi-v7a, arm64-v8a, x86_64) and `com.uber:h3` 4.5.0 (JNI). `app/build.gradle.kts` (`ExtractH3Jni`) copies the h3 arm64 and arm libraries out of the jar into `jniLibs` and excludes the jar copies. The jar has no x86_64 build, so Discover shows its empty state there. iOS compiles the vendored H3 C 4.5.0 (`core/publicfeed/src/nativeInterop/h3c`) with `xcrun clang` and binds it through cinterop |
-| Build | AGP 9.4.0, Gradle 9.7.1 (configuration cache on), KSP 2.3.12, version catalog, R8 for release; protocol, Parquet, history and publicfeed target JVM (Java 17) and iOS. `:feature:discover` is Compose Multiplatform 1.12.1 for Android (`com.android.kotlin.multiplatform.library`) and iOS, not the JVM, because the maplibre-compose desktop variant needs Java 25 |
+| DI / data | Hilt 2.60.1, Room 2.8.5 (**schema v10**), DataStore Preferences 1.2.1, WorkManager 2.12.0 + `androidx.hilt:hilt-work` 1.4.0, kotlinx.serialization 1.11.0, kotlinx-datetime 0.8.0 (shared calendar math, added 2026-10-08), coroutines 1.11.0 |
+| Native | `zstd-jni` 1.5.7-20 (`@aar`). Discover (W12, 2026-10-08) adds `maplibre-compose` 0.19.0 with its OpenGL Android runtime (MapLibre Native through `maplibre-native-ffi`, armeabi-v7a, arm64-v8a, x86_64) and `com.uber:h3` 4.5.0 (JNI). `app/build.gradle.kts` (`ExtractH3Jni`) copies the h3 arm64 and arm libraries out of the jar into `jniLibs` and excludes the jar copies. The jar has no x86_64 build, so Discover shows its empty state there. iOS compiles the vendored H3 C 4.5.0 (`core/publicfeed/src/nativeInterop/h3c`) with `xcrun clang` and binds it through cinterop |
+| Build | AGP 9.4.1, Gradle 9.8.0 (configuration cache on), KSP 2.3.12, version catalog, R8 for release. Every `:core` module (protocol, parquet, history, publicfeed, units, airquality, and the empty sync, archive and settings) targets JVM (Java 17) and iOS. `:ui:designsystem` and `:feature:discover` use `opensensor.kmp.compose-feature`, Compose Multiplatform 1.12.1 for Android (`com.android.kotlin.multiplatform.library`) and iOS, not the JVM, because the maplibre-compose desktop variant needs Java 25. `:ios:shared` targets iOS only |
 | SDK | `compileSdk`/`targetSdk` **37**, `minSdk` **31** (modern Bluetooth permission model; no legacy branches) |
 | Style | ktlint `intellij_idea`, `max_line_length = off`, house rules off (`{ a; b }` one-liners, compact `when`, one-line enums, `_x` backing fields, `function-signature`) |
 
@@ -53,9 +53,11 @@ Bump `libs.versions.toml` only to versions you have verified build, and note the
 ## iOS build (migration started 2026-10-08)
 
 The iOS app lives in `ios/OpenSensor.xcodeproj`, with the Compose framework in
-`:ios:shared`. `verify` now includes its JVM presentation-state tests and shared
-core tests. `verifyIos` is a separate macOS gate for simulator tests/framework
-linking; Xcode compiles the Swift app. Signing teams stay in local Xcode settings
+`:ios:shared`, which targets iOS only. `verifyIos` runs the simulator tests of every shared module,
+including the `:ios:shared` presentation-state tests, and links the framework. Each convention
+plugin adds its module's tasks to `verify` and `verifyIos` (`build-logic/src/main/kotlin/Gates.kt`).
+On a Mac `verify` runs `verifyIos` too, so the pre-push hook covers iOS. Linux CI skips it, and
+`-Popensensor.skipIos=true` skips it locally. Xcode compiles the Swift app. Signing teams stay in local Xcode settings
 or command-line overrides. See [ios-migration.md](ios-migration.md) for commands,
 current feature scope and simulator versus phone qualification.
 
@@ -85,14 +87,14 @@ and the [Xcode 27 image inventory](https://github.com/actions/runner-images/blob
 | Separate `~/.konan` cache | Reuses the native compiler/dependencies, keyed by architecture, Xcode and dependency/build definitions. No DerivedData cache. |
 | Two Gradle workers | Limits simultaneous native compilation on the standard runner's 7 GB RAM. |
 | `ios/tests/verify-native.sh` | Compiles the production Swift archive/transfer engine into a host harness; checks resume, CRC/PAR1, immutable conflicts, peer handles, concurrent stations and keepalive policy. No radio or UI qualification. |
-| `verifyIos` | Runs protocol, history and presentation common tests on the iOS simulator and links the Debug framework. |
+| `verifyIos` | Runs the simulator tests of every shared module (each `:core` module, `:ui:designsystem`, `:feature:discover`, `:ios:shared`) and links the Debug framework. |
 | Xcode Debug simulator build | Compiles Swift adapters, app entry point and the Compose framework through the existing direct-integration build phase. |
 | Xcode Release device build, signing disabled | Checks optimized Kotlin and Swift for device ARM64. Catches failures hidden by Debug/simulator builds; produces no distributable IPA. |
 
-The shared Xcode scheme currently has no XCTest targets. Do not substitute
-`xcodebuild test` for the Kotlin simulator tests or claim native UI test coverage.
-When native tests are added, give their test action an explicit installed simulator
-destination and preserve its result bundle. No simulator result qualifies device
+The shared Xcode scheme has one hostless Swift Testing target, `OpenSensorTests`, which runs the
+`verify-native.sh` checks on a simulator. Do not substitute `xcodebuild test` for the Kotlin
+simulator tests or claim native UI test coverage. Give each test action an explicit installed
+simulator destination and preserve its result bundle. No simulator result qualifies device
 Bluetooth, Bonjour, permission prompts or background behavior.
 
 Successful validation uploads a zipped simulator `.app`; install it only on an
@@ -366,7 +368,7 @@ hand after generation; the raw output is the first commit so the fix is visible.
 | Edit… | Affects… |
 | --- | --- |
 | `libs.versions.toml` | all modules; note the verified date above |
-| `verify` task in root `build.gradle.kts` | pre-push hook and `verify.yml` (both call it) |
+| `verify` task in root `build.gradle.kts`, `build-logic/src/main/kotlin/Gates.kt` | pre-push hook and `verify.yml` (both call it) |
 | manifest permissions | AGENTS.md non-negotiables; `LanPermission`, `NotificationPermission`, `BluetoothGate` |
 | `FakeTransport` behaviour | `WindowRecoveryTest`, `AutoSyncRunnerTest`, `HistoryDeriverTest` and every debug demo |
 | `.editorconfig` ktlint rules | the pre-commit hook and CI's `pre-commit --all-files` |

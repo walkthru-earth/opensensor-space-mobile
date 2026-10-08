@@ -1,9 +1,9 @@
-# iOS migration — first live-reading app
+# iOS migration, first live-reading app
 
 **Scope:** Kotlin Multiplatform source sets, the Compose iOS shell, Core Bluetooth,
 macOS builds and remaining feature migration.
-**Code:** `core/{protocol,history}/src/commonMain`, `ios/shared`, `ios/App`,
-`ios/OpenSensor.xcodeproj`.
+**Code:** `core/*/src/commonMain`, `ui/designsystem`, `feature/discover`, `ios/shared`,
+`ios/App`, `ios/OpenSensor.xcodeproj`.
 **Related:** [architecture.md](architecture.md), [transports.md](transports.md),
 [build-and-release.md](build-and-release.md), [status.md](status.md).
 
@@ -18,18 +18,22 @@ advertisement decoder, LAN envelope/handshake constants, reviewed live profiles,
 metric registry, sensor validity/mood rules and monotonic-time estimates.
 The firmware protocol and all existing wire values are preserved.
 
-`core:protocol`, `core:parquet` and `core:history` retain a Java 17 JVM target for Android and host
-consumers, with `iosArm64` and `iosSimulatorArm64` added. Portable source lives
-in `commonMain`. The old `src/main/kotlin` and `src/test/kotlin` directories remain
-mapped to `jvmMain` and `jvmTest` for platform adapters and existing tests.
+Every `:core` module (`protocol`, `parquet`, `history`, `publicfeed`, `units`, `airquality`,
+and the empty `sync`, `archive` and `settings` skeletons) has a Java 17 JVM target for Android and
+host consumers, plus `iosArm64` and `iosSimulatorArm64`. Portable source lives in `commonMain`,
+platform adapters in `jvmMain` and `iosMain`. The W2 source move is complete. No module maps
+`src/main/kotlin` any more.
 `core:parquet` reads mapped `NSData` and inflates GZIP with the system zlib on iOS (W8,
-2026-10-08), and its oracle tests decode the real fixtures on the simulator. The iOS app does
-not call the reader yet. The `test` compatibility tasks still run `jvmTest`.
+2026-10-08), and its oracle tests decode the real fixtures on the simulator. Discover reads its
+bundled sample through this reader on iOS. The iOS archive does not use the reader or the index
+yet. The `test` compatibility tasks run `jvmTest`.
 
 The iOS app uses Compose Multiplatform 1.12.1 (Material 3 1.9.0), the existing
-Kotlin 2.4.20 and Xcode direct framework integration. `ios:shared` also has a JVM
-target for presentation-state tests; the Android app continues to use its
-existing screens. Shared Android/iOS UI extraction is a later stage.
+Kotlin 2.4.20 and Xcode direct framework integration. `ios:shared` targets iOS only. Its
+presentation-state tests run on the simulator in `verifyIos`, and its `commonMain` depends on
+`:feature:discover` and `:ui:designsystem`. The Android app continues to use its existing screens.
+Shared Android and iOS screens beyond Discover are planned in
+[platform-parity-plan.md](platform-parity-plan.md).
 
 The iOS live screen can discover AQ Sync service advertisements, connect one
 sensor, read INFO/STATUS/LIVE and subscribe to live/status updates. Missing,
@@ -158,10 +162,11 @@ xcodebuild -project ios/OpenSensor.xcodeproj -scheme OpenSensor \
 
 Pick any installed iPhone simulator for the `test` destination (`xcrun simctl list devices available`).
 
-`verify` includes Android lint/APK/unit tests, existing JVM core tests, shared core
-tests and the iOS presentation state's JVM tests. It works without Xcode on Linux.
-`verifyIos` runs common tests on the simulator and links the shared framework;
-it needs an installed simulator runtime. The Xcode build compiles the Swift BLE
+`verify` includes Android lint, the debug APK, `:app` unit tests, the JVM tests of every `:core`
+module and the Android host tests of `:ui:designsystem` and `:feature:discover`. It works without
+Xcode on Linux. On a Mac it also runs `verifyIos` (skip with `-Popensensor.skipIos=true`).
+`verifyIos` runs the iOS simulator tests of every shared module, including the `:ios:shared`
+presentation tests, and links the shared framework. It needs an installed simulator runtime. The Xcode build compiles the Swift BLE
 adapter and app too, with `SWIFT_STRICT_CONCURRENCY = complete` and no warnings. The native
 checks exercise the production archive and transfer engine with scripted replies: resume, CRC
 verification, immutable conflicts, the 399-byte name limit, path/symlink rejection, foreign
@@ -172,8 +177,9 @@ warnings as errors. The hostless `OpenSensorTests` Swift Testing target runs the
 iOS simulator through the shared scheme's test action, without signing or the Kotlin framework.
 Neither a simulator build nor these tests qualifies real radio behavior.
 
-GitHub Actions adds an Apple Silicon macOS job for `verifyIos`, an unsigned Debug
-simulator build, and an unsigned Release device build. Its Xcode pin, downloadable
+GitHub Actions adds an Apple Silicon macOS job that runs `verify-native.sh`, `verifyIos`, an
+unsigned Debug simulator build, the `OpenSensorTests` Swift Testing target on a simulator, and an
+unsigned Release device build. Its Xcode pin, downloadable
 simulator artifact, failure reports and later TestFlight signing plan are documented
 in [build-and-release.md](build-and-release.md#github-actions-ios-validation-researched-2026-10-08).
 Keep the existing Xcode build phase as the framework integration point; a separate
