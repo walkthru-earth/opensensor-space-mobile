@@ -11,6 +11,9 @@ import earth.walkthru.aqsync.data.protocol.LanProtocol
 import earth.walkthru.aqsync.data.protocol.LiveProfiles
 import earth.walkthru.aqsync.data.protocol.LiveSample
 
+/** The one waiting line, the same words as Android `now_waiting`. */
+internal const val WAITING_FOR_READING = "Waiting for a reading…"
+
 internal data class NearbyDevice(val id: String, val name: String, val rssi: Int)
 
 /** Main-thread callbacks from the native BLE adapter. Never contains pairing or Wi-Fi secrets. */
@@ -210,7 +213,7 @@ class CompanionState {
 
     fun readingExpired() {
         live = null
-        if (connected) message = "Waiting for a fresh reading…"
+        if (connected) message = WAITING_FOR_READING
     }
 
     fun connectionClosed(explanation: String) {

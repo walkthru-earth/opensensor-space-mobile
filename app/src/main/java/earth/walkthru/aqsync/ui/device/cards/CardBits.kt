@@ -20,6 +20,7 @@ import earth.walkthru.aqsync.ui.components.NO_VALUE
 import earth.walkthru.aqsync.ui.components.StatusDot
 import earth.walkthru.aqsync.ui.components.agoFormatter
 import earth.walkthru.aqsync.ui.components.rememberNowMillis
+import earth.walkthru.aqsync.units.formatPm
 import java.util.Locale
 
 /** A reading older than this is shown as stale (the device samples every 10 s). */
@@ -32,8 +33,8 @@ fun fmt(v: Double?): String = when {
     else -> String.format(Locale.US, "%.1f", v)
 }
 
-/** PM values: whole numbers from 100 up, otherwise one decimal without a trailing `.0`. */
-fun fmtPm(v: Double): String = if (v >= 100) v.toInt().toString() else "%.1f".format(Locale.ROOT, v).removeSuffix(".0")
+/** PM values, the shared rule both apps use ([formatPm] in `:core:units`). */
+fun fmtPm(v: Double): String = formatPm(v)
 
 /**
  * "Updated 5 s ago" with a dot that greys out when the reading is stale. A leaf: it owns the

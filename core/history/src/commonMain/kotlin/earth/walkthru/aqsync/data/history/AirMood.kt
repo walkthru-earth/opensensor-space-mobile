@@ -70,7 +70,7 @@ sealed interface NowReading {
 
         private fun hint(status: PmsStatus): String = when (status) {
             PmsStatus.ABSENT -> "No particle sensor is answering. Check its cable."
-            PmsStatus.WARMING -> "The sensor is warming up. It takes about a minute after power-on."
+            PmsStatus.WARMING -> "The sensor is warming up. It takes about a minute after power on."
             PmsStatus.STALE -> "The last sensor reading is old, so it is not trusted."
             PmsStatus.ERROR -> "The sensor reports an error, so its numbers are not shown."
             PmsStatus.VALID -> ""

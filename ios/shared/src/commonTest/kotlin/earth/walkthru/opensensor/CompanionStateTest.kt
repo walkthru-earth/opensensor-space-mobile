@@ -1,6 +1,7 @@
 package earth.walkthru.opensensor
 
 import earth.walkthru.aqsync.data.history.NowReading
+import earth.walkthru.aqsync.data.protocol.LiveSample
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -133,6 +134,14 @@ class CompanionStateTest {
         state.receiveLive("{\"pms\":4,\"pm25\":12.0}")
         state.readingExpired()
         assertEquals(NowReading.Waiting, state.reading)
+        assertEquals(WAITING_FOR_READING, state.message)
+    }
+
+    @Test fun waitingAndWarmingCopyMatchAndroid() {
+        // Same words as Android strings.xml now_waiting and pms_warming_hint.
+        assertEquals("Waiting for a reading…", WAITING_FOR_READING)
+        val warming = NowReading.of(LiveSample.parse("{\"pms\":1}"))
+        assertEquals("The sensor is warming up. It takes about a minute after power on.", (warming as NowReading.SensorNotReady).hint)
     }
 
     @Test fun disconnectAndRadioLossClearDeviceAndValues() {

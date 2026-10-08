@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -30,22 +31,35 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.unit.dp
 import earth.walkthru.aqsync.data.history.Metrics
 import earth.walkthru.aqsync.data.history.NowReading
+import earth.walkthru.aqsync.data.protocol.PmsStatus
 import earth.walkthru.aqsync.data.protocol.TemperatureSource
 import earth.walkthru.aqsync.units.UnitFormatter
 import earth.walkthru.aqsync.units.UnitSystem
-import kotlin.math.round
+import earth.walkthru.aqsync.units.formatFixed
+import earth.walkthru.aqsync.units.formatPm
+import kotlin.math.floor
 
 /*
  * The My devices tab. It renders inside the brand theme that AppRoot applies (OpenSensorTheme), so
  * it reads colours and shapes from MaterialTheme and never sets a theme of its own. This file is
  * commonMain, which also compiles for the JVM, so it cannot use :ui:designsystem directly. The
  * curves match the floating control rule through the brand shapes, small (12 dp) for buttons and
- * medium for cards. Cards sit on the brand surface with a hairline, buttons are curved cards, not
- * pills.
+ * [CardShape] for cards. Cards sit on the brand surface with a hairline, buttons are curved cards,
+ * not pills.
+ *
+ * Detail level. iOS shows the Simple level for now (docs/screens.md, Detail levels). Signal dBm,
+ * firmware, finalized file counts, byte counters and transfer rate stay behind [showTechnical]
+ * until the shared detail level setting lands.
  */
 
+/**
+ * The content card radius, the website's 2rem panel. Same value as the Android BrandCard
+ * (`shapes.extraLarge`, 32 dp). A literal until the shared design system components land.
+ */
+internal val CardShape = RoundedCornerShape(32.dp)
+
 @Composable
-internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (String) -> Unit, disconnect: () -> Unit, scanLan: () -> Unit, saveWifiAccess: () -> Unit, connectLan: (String) -> Unit, syncLan: (String) -> Unit, disconnectLan: (String) -> Unit, exportArchive: () -> Unit, units: UnitSystem = UnitSystem.METRIC) {
+internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (String) -> Unit, disconnect: () -> Unit, scanLan: () -> Unit, saveWifiAccess: () -> Unit, connectLan: (String) -> Unit, syncLan: (String) -> Unit, disconnectLan: (String) -> Unit, exportArchive: () -> Unit, units: UnitSystem = UnitSystem.METRIC, showTechnical: Boolean = false) {
     // Display units from Settings. Readings stay SI everywhere else.
     val formatter = UnitFormatter(units)
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
@@ -67,28 +81,37 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
                     BrandCard {
                         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             Text("Now", style = MaterialTheme.typography.titleLarge)
-                            when (val reading = state.reading) {
-                                is NowReading.Reading -> {
-                                    Text("${number(reading.pm25)} µg/m³", style = MaterialTheme.typography.displaySmall)
-                                    Text("PM2.5 · ${reading.mood.title}")
-                                }
-                                is NowReading.SensorNotReady -> Text(reading.hint)
-                                NowReading.Waiting -> Text("Waiting for a particle reading…")
-                            }
                             val sample = state.live
                             val profile = state.profile
-                            if (profile != null && sample?.pmValid == true) {
-                                sample.t?.takeIf { it.isFinite() }?.let { t ->
-                                    val metric = if (profile.temperature == TemperatureSource.AMBIENT) Metrics.AMBIENT_TEMP else Metrics.BOARD_TEMP
-                                    Text("${profile.temperature.label} ${number(formatter.value(t, metric.unit))} ${formatter.unit(metric.unit)}")
+                            // As on Android Today, a board without a particle sensor leads with its temperature.
+                            val particles = sample?.pms != null && sample.pms != PmsStatus.ABSENT.code
+                            if (particles || profile == null || sample == null) {
+                                when (val reading = state.reading) {
+                                    is NowReading.Reading -> {
+                                        Text("${formatPm(reading.pm25)} µg/m³", style = MaterialTheme.typography.displaySmall)
+                                        Text("PM2.5 · ${reading.mood.title}")
+                                    }
+                                    is NowReading.SensorNotReady -> Text(reading.hint)
+                                    NowReading.Waiting -> Text(WAITING_FOR_READING)
                                 }
-                                if (profile.humidity) sample.rh?.takeIf { it.isFinite() }?.let { Text("Humidity ${number(it)} %") }
+                            }
+                            if (profile != null && sample != null) {
+                                // Temperature shows whenever present, whatever the particle state. Board
+                                // temperature beside particles is a technical detail, as on Android.
+                                val ambient = profile.temperature == TemperatureSource.AMBIENT
+                                if (ambient || !particles || showTechnical) {
+                                    sample.t?.takeIf { it.isFinite() }?.let { t ->
+                                        val metric = if (ambient) Metrics.AMBIENT_TEMP else Metrics.BOARD_TEMP
+                                        Text("${metric.label} ${number(formatter.value(t, metric.unit))} ${formatter.unit(metric.unit)}")
+                                    }
+                                }
+                                if (profile.humidity) sample.rh?.takeIf { it.isFinite() }?.let { Text("${Metrics.HUMIDITY.label} ${number(it)} ${Metrics.HUMIDITY.unit}") }
                             }
                             state.status?.let { status ->
                                 if (status.storageFailed) Text("The sensor reports a storage error.", color = MaterialTheme.colorScheme.error)
-                                status.fin?.let { Text("$it files finalized on the sensor", color = muted) }
+                                if (showTechnical) status.fin?.let { Text("$it files finalized on the sensor", color = muted) }
                             }
-                            state.info?.fw?.let { Text("Firmware $it", style = MaterialTheme.typography.bodySmall, color = muted) }
+                            if (showTechnical) state.info?.fw?.let { Text("Firmware $it", style = MaterialTheme.typography.bodySmall, color = muted) }
                         }
                     }
                 }
@@ -119,7 +142,7 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
                         ) {
                             Column(Modifier.weight(1f)) {
                                 Text(device.name, style = MaterialTheme.typography.titleMedium)
-                                Text("${device.rssi} dBm", style = MaterialTheme.typography.bodySmall, color = muted)
+                                if (showTechnical) Text("${device.rssi} dBm", style = MaterialTheme.typography.bodySmall, color = muted)
                             }
                             Button(onClick = { connect(device.id) }, shape = MaterialTheme.shapes.small) { Text("Connect") }
                         }
@@ -171,17 +194,20 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
                         if (session?.connected == true) {
                             when (val reading = state.lanReadings[name] ?: NowReading.Waiting) {
                                 is NowReading.Reading -> {
-                                    Text("${number(reading.pm25)} µg/m³", style = MaterialTheme.typography.headlineMedium)
+                                    Text("${formatPm(reading.pm25)} µg/m³", style = MaterialTheme.typography.headlineMedium)
                                     Text("PM2.5 · ${reading.mood.title}")
                                 }
                                 is NowReading.SensorNotReady -> Text(reading.hint)
-                                NowReading.Waiting -> Text("Waiting for a fresh live reading…")
+                                NowReading.Waiting -> Text(WAITING_FOR_READING)
                             }
                         }
                         Text(session?.message ?: "Save Wi-Fi access over Bluetooth first.")
                         if (session != null && session.filesTotal > 0) {
-                            Text("${session.filesDone}/${session.filesTotal} files · ${session.bytesDone} bytes in current file", style = MaterialTheme.typography.bodySmall, color = muted)
-                            if (session.bytesPerSecond > 0.0) Text("${number(session.bytesPerSecond / 1024)} KiB/s average", style = MaterialTheme.typography.bodySmall, color = muted)
+                            Text("${session.filesDone} of ${session.filesTotal} files", style = MaterialTheme.typography.bodySmall, color = muted)
+                            if (showTechnical) {
+                                Text("${session.bytesDone} bytes in current file", style = MaterialTheme.typography.bodySmall, color = muted)
+                                if (session.bytesPerSecond > 0.0) Text("${number(session.bytesPerSecond / 1024)} KiB/s average", style = MaterialTheme.typography.bodySmall, color = muted)
+                            }
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             if (session?.connected == true) {
@@ -216,7 +242,7 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
 private fun BrandCard(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     Card(
         modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.medium,
+        shape = CardShape,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             contentColor = MaterialTheme.colorScheme.onSurface,
@@ -225,4 +251,6 @@ private fun BrandCard(modifier: Modifier = Modifier, content: @Composable () -> 
     ) { content() }
 }
 
-private fun number(value: Double): String = (round(value * 10) / 10).toString()
+/** Temperature, humidity and rates, as Android `fmt` prints them. PM values go through [formatPm]. */
+private fun number(value: Double): String =
+    if (value == floor(value) && value < 1000) formatFixed(value, 0) else formatFixed(value, 1)

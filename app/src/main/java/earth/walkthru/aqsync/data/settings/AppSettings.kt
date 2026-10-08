@@ -25,7 +25,7 @@ enum class DetailLevel {
     /** The current reading and today, in plain words. History and files stay one tap away. */
     SIMPLE,
 
-    /** Every measurement, storage counters, the file inspector and the History source card. */
+    /** Every measurement, storage counters, the Files chart and Metrics inspector. The History source card is Developer. */
     DETAILED,
 
     /** Detailed plus the Debug screen (raw status JSON, frames, serial log, raw commands). */

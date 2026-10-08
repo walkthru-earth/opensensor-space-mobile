@@ -1,5 +1,10 @@
 package earth.walkthru.aqsync.ui.components
 
+import earth.walkthru.aqsync.data.history.NowReading
+import earth.walkthru.aqsync.data.protocol.LiveSample
+import earth.walkthru.aqsync.data.protocol.PmsStatus
+import earth.walkthru.opensensor.discover.DiscoverStrings
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.w3c.dom.Element
@@ -40,5 +45,15 @@ class CopyRulesTest {
             '—' in sentence || '–' in sentence || ';' in sentence || ':' in sentence
         }
         assertTrue("Copy rule violations: $broken", broken.isEmpty())
+    }
+
+    /** Copies that iOS reads from shared Kotlin must say what Android says, word for word. */
+    @Test
+    fun `shared copies match the Android resources`() {
+        val s = strings()
+        val keys = listOf("who_step_guideline", "who_step_it4", "who_step_it3", "who_step_it2", "who_step_it1", "who_step_above_it1")
+        assertEquals(keys.map { s.getValue(it) }, DiscoverStrings.English.whoSteps)
+        val warming = NowReading.of(LiveSample(pms = PmsStatus.WARMING.code)) as NowReading.SensorNotReady
+        assertEquals(s.getValue("pms_warming_hint"), warming.hint)
     }
 }

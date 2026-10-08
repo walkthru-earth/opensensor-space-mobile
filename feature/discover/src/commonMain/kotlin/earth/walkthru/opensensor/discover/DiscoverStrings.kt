@@ -59,12 +59,12 @@ data class DiscoverStrings(
     val timeWindow: String = "Time window",
     /** Names of the six WHO steps, cleanest first, in [WhoStep] order. Shown beside values, so colour is never the only cue. */
     val whoSteps: List<String> = listOf(
-        "Meets WHO guideline",
-        "Interim target 4",
-        "Interim target 3",
-        "Interim target 2",
-        "Interim target 1",
-        "Above all targets",
+        "Within the WHO guideline",
+        "Within WHO interim target 4",
+        "Within WHO interim target 3",
+        "Within WHO interim target 2",
+        "Within WHO interim target 1",
+        "Above every WHO target",
     ),
     /** The short mark at the guideline on the legend and the charts. */
     val whoMark: String = "WHO",

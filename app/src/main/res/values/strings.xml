@@ -84,7 +84,7 @@
     </plurals>
     <string name="now_right_now">Right now</string>
     <string name="now_last_reading">Last reading</string>
-    <string name="now_waiting">Waiting for the first reading…</string>
+    <string name="now_waiting">Waiting for a reading…</string>
     <string name="now_no_reading">No reading yet</string>
     <string name="now_snapshot_note">A 10 second snapshot, not a daily average.</string>
     <string name="now_sample_number">sample %1$d</string>
@@ -111,19 +111,20 @@
     <string name="mood_thick_title">Thick smoke</string>
     <string name="mood_thick_advice">Stay inside with windows shut and run a filter.</string>
     <string name="mood_thick_like">Like a room where someone is smoking</string>
-    <!-- WHO 2021 steps, named in text so colour is never the only carrier. -->
-    <string name="who_step_guideline">within the WHO guideline</string>
-    <string name="who_step_it4">within WHO interim target 4</string>
-    <string name="who_step_it3">within WHO interim target 3</string>
-    <string name="who_step_it2">within WHO interim target 2</string>
-    <string name="who_step_it1">within WHO interim target 1</string>
-    <string name="who_step_above_it1">above every WHO target</string>
+    <!-- WHO 2021 steps, named in text so colour is never the only carrier. One set for every screen,
+         Discover included. Keep identical to DiscoverStrings.whoSteps in feature/discover. -->
+    <string name="who_step_guideline">Within the WHO guideline</string>
+    <string name="who_step_it4">Within WHO interim target 4</string>
+    <string name="who_step_it3">Within WHO interim target 3</string>
+    <string name="who_step_it2">Within WHO interim target 2</string>
+    <string name="who_step_it1">Within WHO interim target 1</string>
+    <string name="who_step_above_it1">Above every WHO target</string>
 
     <!-- Sensor states -->
     <string name="pms_absent_title">No particle sensor</string>
     <string name="pms_absent_hint">No particle sensor is answering. Check its cable.</string>
     <string name="pms_warming_title">Warming up</string>
-    <string name="pms_warming_hint">The sensor is warming up. This takes about a minute after power on.</string>
+    <string name="pms_warming_hint">The sensor is warming up. It takes about a minute after power on.</string>
     <string name="pms_stale_title">Reading is old</string>
     <string name="pms_stale_hint">The last sensor reading is old, so it is not trusted.</string>
     <string name="pms_error_title">Sensor error</string>
@@ -430,7 +431,7 @@
     <string name="info_connect_title">Connect a sensor</string>
     <string name="info_connect_body1">Turn on your sensor and keep this phone close. It appears here in a few seconds.</string>
     <string name="info_connect_body2">On the first connection Android asks for a 6 digit code. Read it on the sensor screen. A sensor without a screen uses the PIN its owner set over USB.</string>
-    <string name="info_privacy">Bluetooth and your local Wi-Fi reach only your own sensors. No account, no analytics, no location and no uploads. Your files stay on this phone unless you share them.</string>
+    <string name="info_privacy">Bluetooth and your local Wi-Fi reach only your own sensors. No account, no analytics and no uploads. Approximate location is used only when you tap Near me, to move the map. Your files stay on this phone unless you share them.</string>
     <string name="info_collect_body">Collects from your known sensors over Wi-Fi when this phone holds their token, otherwise over Bluetooth. Up to two run at once with a notification, so you can leave the app. Sensors with an open connection are skipped.</string>
     <string name="info_now_body">A 10 second snapshot from the sensor. It is not an AQI and not a 24 hour mean, so read it as a hint. The face, the word and the colour all show the same WHO step.</string>
     <string name="info_wifi_body">The sensor joins your Wi-Fi so this phone can sync without Bluetooth.</string>
@@ -925,12 +926,6 @@
     <string name="discover_higher_than">Higher than %1$d%% of areas in view</string>
     <string name="discover_range_summary">%1$s average %2$s, range %3$s to %4$s %5$s</string>
     <string name="discover_average_summary">%1$s average %2$s %3$s</string>
-    <string name="discover_who_step_guideline">Meets WHO guideline</string>
-    <string name="discover_who_step_it4">Interim target 4</string>
-    <string name="discover_who_step_it3">Interim target 3</string>
-    <string name="discover_who_step_it2">Interim target 2</string>
-    <string name="discover_who_step_it1">Interim target 1</string>
-    <string name="discover_who_step_above">Above all targets</string>
     <string name="discover_who_mark">WHO</string>
     <string name="discover_who_caption_day">WHO 24-hour guideline</string>
     <string name="discover_who_caption_compared">Compared with the WHO 24-hour guideline</string>

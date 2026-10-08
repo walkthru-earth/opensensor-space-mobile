@@ -68,8 +68,6 @@ data class FilesUiState(
     val backgroundSyncActive: Boolean = false,
     /** Active pipe, for the top-bar chip (same source as Today / Device). */
     val transport: TransportKind? = null,
-    /** Detailed level (or Developer) reveals the per-file "Metrics" inspector (the reader's on-phone proof). */
-    val advancedMode: Boolean = false,
     /** Simple shows times, sizes and states in words. Detailed adds the chart and inspector, Developer file names and transfer internals. */
     val detailLevel: DetailLevel = DetailLevel.SIMPLE,
     /** "Chart by file": one column per archived file of the connected station (null while off). */
@@ -196,7 +194,6 @@ class FilesViewModel @AssistedInject constructor(
             autoSync = (values[7] as KnownDevice?)?.autoSync,
             backgroundSyncActive = values[8] as Boolean,
             transport = values[9] as TransportKind?,
-            advancedMode = (values[10] as DetailLevel).detailed,
             detailLevel = values[10] as DetailLevel,
             fileChart = values[11] as FileChartState?,
         )
