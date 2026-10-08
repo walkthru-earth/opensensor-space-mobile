@@ -1,6 +1,7 @@
 # The gate from AGENTS.md, enforced: `./gradlew verify` = :app lintDebug + assembleDebug +
-# testDebugUnitTest + every :core module's tests, plus the same pre-commit hooks a developer runs.
-# iOS adds shared Kotlin simulator tests and unsigned simulator/device builds on Apple Silicon.
+# testDebugUnitTest + every shared module's host tests (each convention plugin adds its module),
+# plus the same pre-commit hooks a developer runs. On Linux `verify` skips iOS. The iOS job runs
+# `verifyIos` (every shared module's simulator tests) and unsigned simulator/device builds.
 # Real BLE, mDNS, permissions and background behavior still need dated phone evidence.
 # Actions are pinned to commit SHAs (version in the trailing comment). Dependabot updates them.
 name: verify
@@ -57,7 +58,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.konan
-          key: konan-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties', 'core/*/build.gradle.kts', 'ios/shared/build.gradle.kts') }}
+          key: konan-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties', 'build-logic/src/**', 'core/*/build.gradle.kts', 'feature/*/build.gradle.kts', 'ui/*/build.gradle.kts', 'ios/shared/build.gradle.kts') }}
       - name: Validate station epoch migration
         run: python3 tools/validate_station_epoch_migration.py
       - name: Validate sensor installation migration
@@ -79,7 +80,8 @@ jobs:
             app/build/reports/lint-results-debug.html
             app/build/reports/tests/
             core/*/build/reports/tests/
-            ios/shared/build/reports/tests/jvmTest/
+            feature/*/build/reports/tests/
+            ui/*/build/reports/tests/
           retention-days: 14
           if-no-files-found: ignore
 
@@ -110,7 +112,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.konan
-          key: konan-${{ runner.os }}-${{ runner.arch }}-xcode-${{ env.XCODE_VERSION }}-${{ hashFiles('gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties', 'core/*/build.gradle.kts', 'ios/shared/build.gradle.kts') }}
+          key: konan-${{ runner.os }}-${{ runner.arch }}-xcode-${{ env.XCODE_VERSION }}-${{ hashFiles('gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties', 'build-logic/src/**', 'core/*/build.gradle.kts', 'feature/*/build.gradle.kts', 'ui/*/build.gradle.kts', 'ios/shared/build.gradle.kts') }}
       - name: Check Apple toolchain
         run: |
           test "$(uname -m)" = arm64
@@ -177,12 +179,12 @@ jobs:
           path: |
             ios/build/ci/*.log
             ios/build/ci/*.xcresult.zip
-            core/protocol/build/reports/tests/iosSimulatorArm64Test/
-            core/protocol/build/test-results/iosSimulatorArm64Test/
-            core/history/build/reports/tests/iosSimulatorArm64Test/
-            core/history/build/test-results/iosSimulatorArm64Test/
-            core/parquet/build/reports/tests/iosSimulatorArm64Test/
-            core/parquet/build/test-results/iosSimulatorArm64Test/
+            core/*/build/reports/tests/iosSimulatorArm64Test/
+            core/*/build/test-results/iosSimulatorArm64Test/
+            feature/*/build/reports/tests/iosSimulatorArm64Test/
+            feature/*/build/test-results/iosSimulatorArm64Test/
+            ui/*/build/reports/tests/iosSimulatorArm64Test/
+            ui/*/build/test-results/iosSimulatorArm64Test/
             ios/shared/build/reports/tests/iosSimulatorArm64Test/
             ios/shared/build/test-results/iosSimulatorArm64Test/
           retention-days: 14
