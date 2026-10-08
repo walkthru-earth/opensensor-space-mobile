@@ -3,7 +3,6 @@ package earth.walkthru.aqsync.data.protocol
 import java.io.File
 import java.io.InputStream
 import java.io.RandomAccessFile
-import java.security.MessageDigest
 
 // JVM file and stream adapters for the shared completion rule in commonMain's ParquetVerify.
 // Callers outside this package import them by name, for example
@@ -42,17 +41,16 @@ fun ParquetVerify.verify(file: File, expectedSize: Long, expectedCrc32: Long): P
     )
 }
 
+/** SHA-256 of [file] as 64 lowercase hex characters, streamed in 64 KiB slices through [Sha256]. */
 fun ParquetVerify.sha256Hex(file: File): String {
-    val md = MessageDigest.getInstance("SHA-256")
+    val sha = Sha256()
     file.inputStream().buffered().use { input ->
         val buf = ByteArray(64 * 1024)
         while (true) {
             val n = input.read(buf)
             if (n < 0) break
-            md.update(buf, 0, n)
+            sha.update(buf, 0, n)
         }
     }
-    return md.digest().toHex()
+    return sha.digest().toHex()
 }
-
-fun ParquetVerify.sha256Hex(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes).toHex()
