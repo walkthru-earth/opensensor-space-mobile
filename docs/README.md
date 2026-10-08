@@ -28,6 +28,7 @@ that code until the plan's workstreams replace it.
 | Build or extend the iOS app and shared Kotlin core | [ios-migration.md](ios-migration.md), `../ios/AGENTS.md` | `core/*/src/commonMain/`, `ios/` |
 | Understand modules, layers, who depends on whom, "what a change touches" | [architecture.md](architecture.md) | `core/*/build.gradle.kts`, `app/build.gradle.kts` |
 | Change a screen, the nav graph, detail levels | [screens.md](screens.md) | `app/…/ui/`, `data/settings/AppSettings.kt` |
+| Permissions, privacy manifest, Play Data safety and App Store label | [store-compliance.md](store-compliance.md) | `app/src/main/AndroidManifest.xml`, `ui/permissions/`, `ios/App/` |
 | Look up an opcode, frame type, error code, UUID, LAN framing constant | [protocol-quickref.md](protocol-quickref.md) | `core/protocol/…/Frames.kt`, `AqUuids.kt`, `LanFraming.kt` |
 | Touch BLE / LAN pipes, pairing, the LAN token, mDNS, reconnect | [transports.md](transports.md) | `data/ble/`, `data/lan/`, `data/DeviceConnectionRepository.kt` |
 | Touch file download, verification, lost windows, resume, archive paths | [sync-engine.md](sync-engine.md) | `data/sync/`, `data/ble/DeviceSession.kt` |

@@ -14,7 +14,8 @@ State as of 2026-10-08. Re-check the linked store pages before each submission. 
 - Bluetooth LE and the local Wi-Fi (mDNS `_aqsync._tcp`) reach only the user's own sensors.
 - Readings and Parquet files stay on the phone. They leave only when the user shares or exports them
   through the system share sheet or document picker.
-- No account, no analytics, no crash reporting SDK, no ads, no location permission.
+- No account, no analytics, no crash reporting SDK, no ads. No location permission today. The
+  planned Discover "Near me" asks for approximate location only on tap (see below).
 - No server today. The planned Discover feed (anonymous read-only GETs) and per-device opt-in
   uploads change the answers below. See "Before Discover or uploads ship".
 
@@ -52,24 +53,34 @@ State as of 2026-10-08. Re-check the linked store pages before each submission. 
 
 ## Before Discover or uploads ship (owner decisions)
 
+Owner decisions of 2026-10-08 are recorded in
+[devices-and-discovery.md](devices-and-discovery.md#owner-decisions-and-open-questions).
+
 1. **Feed requests reveal an IP address.** Anonymous GETs to the public feed and basemap still send
-   the phone's IP address to the host. Decide whether the host logs it. If logs are kept, Play Data
+   the phone's IP address to the host. The host is source.coop. Confirm with Radiant Earth in
+   writing what source.coop and AWS log for public reads and that none of it reaches us. If logs are kept, Play Data
    safety and the Apple label likely need "approximate location" or "other identifiers" with
    purpose "App functionality", not linked to identity. If the host keeps no logs, record that.
    Add the feed and basemap domains to the privacy manifest only if they track, which they must not.
 2. **Upload cell resolution versus "approximate location".** Uploads carry an H3 cell. Play
    treats location finer than about 3 km² as precise (verify against the current Data safety
    help before relying on this figure). H3 resolution 8 is about 0.7 km², resolution 7 about
-   5 km². Publishing at resolution 8 likely means declaring precise location as collected and
-   shared. Capping the published cell at resolution 7 keeps it approximate on both stores.
+   5 km². Decided: published and stored cells are capped at resolution 7, so they stay
+   approximate on both stores.
 3. **Uploads make the app collect data.** With any upload on, Data safety needs collected and
    shared data types (sensor readings under "App activity" or "Other", plus location as above),
-   encryption in transit "Yes" (HTTPS), and a deletion path for a device's published data. The
+   encryption in transit "Yes" (HTTPS), and a clear statement that published data is CC BY 4.0
+   and permanent, that "Stop sharing" applies from the next UTC day, and a contact for legal
+   removal requests. There is no account, so account deletion does not apply. The
    Apple label changes from "Data Not Collected" to listed types, not linked to the user, no
    tracking.
 4. **Export compliance with HTTPS uploads.** Standard HTTPS through `URLSession` stays exempt, so
    `ITSAppUsesNonExemptEncryption` can stay false. Re-check if any custom crypto is added.
-5. **Privacy policy URL.** Both stores require one. Today it can state "no data collected". Update
+5. **"Near me".** Android declares only `ACCESS_COARSE_LOCATION`, asked on the tap. iOS sets
+   `NSLocationDefaultAccuracyReduced` with a When In Use purpose string. The fix only moves the
+   map and is not collected. Before building it, check the Android system location button rule
+   against the target SDK.
+6. **Privacy policy URL.** Both stores require one. Today it can state "no data collected". Update
    it in the same release that adds the feed or uploads.
 
 ## Gate before each submission

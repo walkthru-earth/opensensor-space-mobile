@@ -302,9 +302,10 @@ treat each public series as personal data until it is aggregated.
    the cell on the map when opting in, optionally starting from an approximate "Near me" fix.
    Coordinates never leave the phone. No jitter is added to
    cells, since snapping already coarsens the place and noise only helps for points.
-2. **Precision.** Resolution 7 (5.16 km², edge about 1.4 km) is the default published
-   resolution. Resolution 8 (0.74 km², edge about 0.5 km) is the finest, used only where a
-   resolution 8 cell itself meets the crowd rule. Coarser levels are derived from these.
+2. **Precision.** Resolution 7 (5.16 km², edge about 1.4 km) is the finest published and the
+   one stored for a shared device. Coarser levels are derived from it. Resolution 8 (0.74 km²)
+   is never published, because Play treats location finer than about 3 km² as precise, and
+   resolution 7 keeps both store labels at approximate location.
 3. **Crowd rule for every number.** A cell's aggregate and its device list are published only
    when it holds at least three publishing devices. With fewer, the devices count only toward
    the parent. A parent is published only when the devices it holds outside its published
@@ -378,7 +379,7 @@ opensensor/discover/v1/
 - **Discovery.** S3 `ListObjectsV2` on the bucket is the manifest, as on the website. The phone
   follows continuation tokens, picks the newest `date` and `hour` (compared as numbers), and
   caches the answer for 5 minutes. Downloads go through `data.source.coop`.
-- **Cells file.** One plain Parquet file per resolution, `h3_res` 2 to 8. Columns are
+- **Cells file.** One plain Parquet file per resolution, `h3_res` 2 to 7. Columns are
   `h3_index` (INT64, sorted), `devices` (INT32, always 3 or more), `updated` (TIMESTAMP UTC) and
   flat metric columns `<property>__n`, `__mean`, `__min`, `__max` (DOUBLE, null when the cell
   does not measure it). Property IDs, units and families come from the dictionary named in the
@@ -398,7 +399,7 @@ opensensor/discover/v1/
 Reading on the phone.
 
 1. The camera rests for 400 ms. Resolution is `round(zoom * 0.8)`, clamped to 2 to 7, as on the
-   website. Resolution 8 is drawn only from zoom 11 and only where published, over resolution 7.
+   website. Deeper zoom keeps showing resolution 7.
 2. The viewport is covered with H3 cells at that resolution, coarsening until the cover is at
    most 1,024 cells, then turned into merged INT64 descendant ranges (pure bit arithmetic on the
    index, in `commonMain`).
@@ -445,7 +446,7 @@ starts with the target layout from the producer guidance.
 - **Cells.** One GeoJSON source built from the loaded rows, with a data-driven fill expression
   on the chosen value. No composable per cell. Each update replaces the whole dataset, so build
   it off the main thread and only after the 400 ms rest. The cover budget keeps it near 1,024
-  polygons (a few thousand at most with resolution 8 on top). Hit testing uses the layer
+  polygons. Hit testing uses the layer
   `onClick`. Performance needs a phone measurement on both platforms.
 - **H3 on the phone.** Required, because the files carry no geometry. Behind one interface in
   `:core:publicfeed`, `com.uber:h3` 4.5.0 on Android and the H3 C library v4 through cinterop on
