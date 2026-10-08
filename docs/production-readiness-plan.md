@@ -192,6 +192,16 @@ receive narrow interfaces. Controllers are closed on forget, flows use `WhileSub
 mapped `NSData`), common LZ4 and Snappy, `expect` gzip, `ByteArray` codec SPI, kotlinx-datetime
 in place of `java.time`, typed non-boxing column accessors. kotlinx-io stays at the file edge
 only, because its API is still alpha and has no random access.
+- Done 2026-10-08 (branch work, simulator and host evidence only). `:core:parquet` and all of
+  `:core:history` are `commonMain`. `ByteReader` with `MappedFileReader` (JVM) and
+  `MappedDataReader` (iOS), `SuspendByteReader` with the footer-first `SuspendParquetFile` for
+  W12's range source, `longStatistics` and `rowGroupsOverlapping` for row group pruning,
+  `longValues` / `doubleValues`, gzip through `java.util.zip` and the system zlib. kotlinx-datetime
+  0.8.0 replaces `java.time` in `HistoryWindow` and `Columns`. kotlinx-io is not used at all.
+- Oracle fixture tests run on the JVM and the iOS simulator (ZSTD fixtures JVM only). Details and
+  the changed caller API are in [parquet.md](parquet.md#portability-and-storage-w8-2026-10-08).
+- Not done. Page and offset index pruning. History tests that need the fixtures still run on the
+  JVM only. The iOS app does not call the reader or the history index yet.
 
 **W9 Shared design system and iOS restyle.** Extract tokens, theme and shared components (mood
 face, now card, band chart drawn with `drawText` and `drawWithCache`) to a Compose Multiplatform

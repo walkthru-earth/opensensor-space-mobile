@@ -1,5 +1,7 @@
 package earth.walkthru.aqsync.data.history
 
+import kotlinx.datetime.toKotlinLocalDate
+import kotlinx.datetime.toKotlinTimeZone
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -10,16 +12,18 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 
 class ColumnsTest {
+    /** java.time builds the inputs and stays the oracle; the API under test is kotlinx-datetime. */
+    private fun endingOn(date: LocalDate, range: HistoryRange, zone: ZoneId) = HistoryWindow.endingOn(date.toKotlinLocalDate(), range, zone.toKotlinTimeZone())
 
     @Test
     fun `local day bins retain spring 23 hours and both fall 01 hours`() {
         val zone = ZoneId.of("America/New_York")
-        val spring = HistoryWindow.endingOn(LocalDate.of(2026, 3, 9), HistoryRange.DAY, zone)
+        val spring = endingOn(LocalDate.of(2026, 3, 9), HistoryRange.DAY, zone)
         val springSeries = series(emptyList(), spring.fromS, spring.toS)
         assertEquals(23, Columns.rebinHours(springSeries).size)
-        assertEquals(23 * 3_600L, Columns.rebinLocalDays(springSeries, zone).single().endS - spring.fromS)
+        assertEquals(23 * 3_600L, Columns.rebinLocalDays(springSeries, zone.toKotlinTimeZone()).single().endS - spring.fromS)
 
-        val fall = HistoryWindow.endingOn(LocalDate.of(2026, 11, 2), HistoryRange.DAY, zone)
+        val fall = endingOn(LocalDate.of(2026, 11, 2), HistoryRange.DAY, zone)
         val firstOne = LocalDateTime.of(2026, 11, 1, 1, 0).atOffset(ZoneOffset.ofHours(-4)).toEpochSecond()
         val secondOne = LocalDateTime.of(2026, 11, 1, 1, 0).atOffset(ZoneOffset.ofHours(-5)).toEpochSecond()
         val fallSeries = series(
@@ -31,10 +35,30 @@ class ColumnsTest {
         assertEquals(25, hours.size)
         assertEquals(10f, hours.single { it.startS == firstOne }.mean)
         assertEquals(20f, hours.single { it.startS == secondOne }.mean)
-        val day = Columns.rebinLocalDays(fallSeries, zone).single()
+        val day = Columns.rebinLocalDays(fallSeries, zone.toKotlinTimeZone()).single()
         assertEquals(25 * 3_600L, day.endS - day.startS)
         assertEquals(15f, day.mean)
         assertEquals(2f / 25f, day.coverage, 1e-6f)
+    }
+
+    @Test
+    fun `local week bins start on the Mondays java time picks for every weekday start`() {
+        val zone = ZoneId.of("Europe/Berlin")
+        for (offset in 0L until 14L) {
+            val start = LocalDate.of(2026, 3, 16).plusDays(offset) // crosses the 29 March DST change
+            val window = endingOn(start.plusDays(365), HistoryRange.YEAR, zone)
+            val year = series(emptyList(), start.atStartOfDay(zone).toEpochSecond(), window.toS)
+            val got = Columns.rebinLocalWeeks(year, zone.toKotlinTimeZone()).map { it.startS }
+            val want = buildList {
+                add(year.fromS)
+                var monday = start.with(java.time.temporal.TemporalAdjusters.next(java.time.DayOfWeek.MONDAY))
+                while (monday.atStartOfDay(zone).toEpochSecond() < year.toS) {
+                    add(monday.atStartOfDay(zone).toEpochSecond())
+                    monday = monday.plusWeeks(1)
+                }
+            }
+            assertEquals("start $start", want, got)
+        }
     }
 
     private fun series(points: List<HistoryPoint>, fromS: Long, toS: Long) =

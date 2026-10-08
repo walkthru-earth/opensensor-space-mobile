@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
+import kotlinx.datetime.toKotlinLocalDate
+import kotlinx.datetime.toKotlinTimeZone
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -25,12 +27,12 @@ class HistoryRepositoryTest {
     private fun bytes(path: String) = checkNotNull(javaClass.classLoader?.getResourceAsStream("parquet/$path")).readBytes()
     private val station = "53315f5f-cb85-4d8d-b623-d56266084189"
     private val dayStart = 1_789_603_200L // 2026-09-17T00:00Z
-    private fun window(range: HistoryRange, toS: Long) = HistoryWindow.endingAt(toS, range, ZoneId.of("UTC"))
+    private fun window(range: HistoryRange, toS: Long) = HistoryWindow.endingAt(toS, range, ZoneId.of("UTC").toKotlinTimeZone())
 
     @Test
     fun `hourly local day query includes both fall hours and uses elapsed coverage`() = runBlocking {
         val zone = ZoneId.of("America/New_York")
-        val fall = HistoryWindow.endingOn(LocalDate.of(2026, 11, 2), HistoryRange.DAY, zone)
+        val fall = HistoryWindow.endingOn(LocalDate.of(2026, 11, 2).toKotlinLocalDate(), HistoryRange.DAY, zone.toKotlinTimeZone())
         val firstOne = LocalDateTime.of(2026, 11, 1, 1, 0).atOffset(ZoneOffset.ofHours(-4)).toEpochSecond()
         val secondOne = LocalDateTime.of(2026, 11, 1, 1, 0).atOffset(ZoneOffset.ofHours(-5)).toEpochSecond()
         val buckets = Buckets().apply {
@@ -46,7 +48,7 @@ class HistoryRepositoryTest {
         assertEquals(2f / 25f, result.coverage, 1e-6f)
         assertEquals(setOf(firstOne, secondOne), result.points.map { it.startS }.toSet())
 
-        val spring = HistoryWindow.endingOn(LocalDate.of(2026, 3, 9), HistoryRange.DAY, zone)
+        val spring = HistoryWindow.endingOn(LocalDate.of(2026, 3, 9).toKotlinLocalDate(), HistoryRange.DAY, zone.toKotlinTimeZone())
         val springResult = repo.observeHourlyDay(station, Metrics.PM25, spring).first()
         assertEquals(23 * 360L, springResult.expectedRows)
     }
@@ -54,7 +56,7 @@ class HistoryRepositoryTest {
     @Test
     fun `half-hour local midnight reads raw edge instead of including the preceding UTC bucket`() = runBlocking {
         val zone = ZoneId.of("Asia/Kolkata")
-        val day = HistoryWindow.endingOn(LocalDate.of(2026, 9, 10), HistoryRange.DAY, zone)
+        val day = HistoryWindow.endingOn(LocalDate.of(2026, 9, 10).toKotlinLocalDate(), HistoryRange.DAY, zone.toKotlinTimeZone())
         val tmp = File.createTempFile("aq-hist-half-hour", "").apply { delete(); mkdirs(); deleteOnExit() }
         val archive = FileArchive(tmp)
         val files = Files()

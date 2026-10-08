@@ -37,6 +37,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.datetime.toKotlinTimeZone
 import java.time.ZoneId
 
 data class HistoryUiState(
@@ -68,7 +69,7 @@ data class HistoryUiState(
     val connection: ConnectionState = ConnectionState.Disconnected,
     val transport: TransportKind? = null,
 ) {
-    val window: HistoryWindow get() = HistoryWindow.endingAt(toS, range, zone)
+    val window: HistoryWindow get() = HistoryWindow.endingAt(toS, range, zone.toKotlinTimeZone())
     val canPageForward: Boolean get() = toS < nowRounded(range, zone)
 }
 
@@ -77,7 +78,7 @@ data class HistoryUiState(
  * local days — a Day is a calendar day (the ring's dial has midnight at the top), a Week seven of
  * them ending tonight, and so on. The buckets underneath stay UTC-aligned.
  */
-fun nowRounded(range: HistoryRange, zone: ZoneId = ZoneId.systemDefault()): Long = HistoryWindow.current(range, zone).toS
+fun nowRounded(range: HistoryRange, zone: ZoneId = ZoneId.systemDefault()): Long = HistoryWindow.current(range, zone.toKotlinTimeZone()).toS
 
 /**
  * History works from the archive alone — no session needed — but shows the link chip when one exists.
@@ -166,7 +167,7 @@ class HistoryViewModel @AssistedInject constructor(
         if (available.isNotEmpty() && metric.value !in available) metric.value = available.first()
     }.stateIn(viewModelScope, SharingStarted.Eagerly, ArchiveQueryResult<String?, List<MetricSpec>>(null, null))
 
-    private val series = combine(device, metric, range, toS) { d, m, r, t -> ArchiveSeriesQuery(d?.station, m, r, HistoryWindow.endingAt(t, r, zone)) }
+    private val series = combine(device, metric, range, toS) { d, m, r, t -> ArchiveSeriesQuery(d?.station, m, r, HistoryWindow.endingAt(t, r, zone.toKotlinTimeZone())) }
         .distinctUntilChanged()
         .archiveQueryResults { query ->
             val station = query.station
@@ -197,7 +198,7 @@ class HistoryViewModel @AssistedInject constructor(
         @Suppress("UNCHECKED_CAST")
         val countsResult = values[5] as ArchiveQueryResult<String?, HistoryFileCounts>
         val counts = countsResult.forQuery(d?.station) ?: HistoryFileCounts()
-        val query = ArchiveSeriesQuery(d?.station, values[1] as MetricSpec, values[2] as HistoryRange, HistoryWindow.endingAt(values[3] as Long, values[2] as HistoryRange, zone))
+        val query = ArchiveSeriesQuery(d?.station, values[1] as MetricSpec, values[2] as HistoryRange, HistoryWindow.endingAt(values[3] as Long, values[2] as HistoryRange, zone.toKotlinTimeZone()))
 
         @Suppress("UNCHECKED_CAST")
         val result = values[4] as ArchiveQueryResult<ArchiveSeriesQuery, HistorySeries>
@@ -251,7 +252,7 @@ class HistoryViewModel @AssistedInject constructor(
 
     fun page(direction: Int) {
         val r = range.value
-        val next = HistoryWindow.endingAt(toS.value, r, zone).page(r, direction).toS
+        val next = HistoryWindow.endingAt(toS.value, r, zone.toKotlinTimeZone()).page(r, direction).toS
         val now = nowRounded(r, zone)
         toS.value = minOf(next, now)
         followsNow.value = toS.value == now
@@ -261,7 +262,7 @@ class HistoryViewModel @AssistedInject constructor(
     fun openDay(dayStartS: Long) {
         range.value = HistoryRange.DAY
         val now = nowRounded(HistoryRange.DAY, zone)
-        toS.value = minOf(HistoryWindow.dayContaining(dayStartS, zone).toS, now)
+        toS.value = minOf(HistoryWindow.dayContaining(dayStartS, zone.toKotlinTimeZone()).toS, now)
         followsNow.value = toS.value == now
     }
 }

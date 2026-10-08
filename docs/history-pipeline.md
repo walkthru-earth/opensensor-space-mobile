@@ -1,7 +1,7 @@
 # History pipeline — index → tiers → derived day → charts
 
 **Scope:** everything between a verified file in the archive and a coloured column on screen: the file index, the metric registry, aggregation tiers, the derived daily Parquet, time estimation for unsynced boots, the friendly layer, chart binning.
-**Code (pure, `:core:history`):** `Metrics.kt`, `Aggregation.kt` (`Resolution`, `Aggregator`, `Bucket`), `TimeEstimate.kt`, `Columns.kt`, `AirMood.kt` (+ `NowReading`), `HistoryModel.kt` (`HistoryRange`, `HistorySeries`, `HistoryColumn`), `HistoryWindow.kt`, `FileSummary.kt`, `ParquetIndexer.kt`.
+**Code (pure, `:core:history` `commonMain`, JVM and iOS since W8):** `Metrics.kt`, `Aggregation.kt` (`Resolution`, `Aggregator`, `Bucket`), `TimeEstimate.kt`, `Columns.kt`, `AirMood.kt` (+ `NowReading`), `HistoryModel.kt` (`HistoryRange`, `HistorySeries`, `HistoryColumn`), `HistoryWindow.kt`, `FileSummary.kt`, `ParquetIndexer.kt`.
 **Code (`:app`):** `data/history/HistoryIndexer.kt`, `HistoryDeriver.kt`, `DailyDerived.kt` (`DailyDerivedBuilder`, `DerivedStore`), `HistoryRepository.kt`; `ui/history/*`, `ui/device/NowCard.kt`, `ui/files/FileChartCard.kt`.
 **Tests:** `AggregationTest`, `TimeEstimateTest`, `ColumnsTest`, `AirMoodTest`, `FileSummaryTest`, `ParquetIndexerTest`, `RealArchiveTest` (all 766 real files when the firmware repo is a sibling); `HistoryIndexerTest`, `HistoryDeriverTest`, `HistoryRepositoryTest`.
 **Related:** [parquet.md](parquet.md) (the reader/writer underneath), [data-model.md](data-model.md) (the tables), [screens.md](screens.md) (what is drawn). The long-form evaluation is [history-ux-and-data-layer.md](history-ux-and-data-layer.md).
@@ -134,7 +134,9 @@ show neutral metric cards unless their dictionary names a published scale. See
 | Year | `HOUR` tier | 7 local days | + local-day calendar heatmap |
 
 `HistoryWindow` defines the same half-open local-calendar bounds for labels, paging, repository
-queries and coverage. The ranges are rolling 1/7/30/365 local days; a day can last 23 or 25
+queries and coverage. Its zone is a kotlinx-datetime `TimeZone` (Android converts its `ZoneId` with
+`toKotlinTimeZone()`), and `Columns.rebinLocalDays` / `rebinLocalWeeks` take the same type. The JVM
+tests check both against `java.time`. The ranges are rolling 1/7/30/365 local days; a day can last 23 or 25
 hours. `Today so far` uses the same local-day bounds. Hourly UTC tier buckets wholly inside the
 window remain cheap; at a fractional-offset midnight, `HistoryRepository` reads just the two
 partial boundary intervals from verified rows so the adjacent UTC bucket cannot pollute the mean.

@@ -18,7 +18,7 @@ dependencyResolutionManagement {
 rootProject.name = "opensensor-space-mobile"
 
 include(":app")
-// Protocol and sensor-domain logic are shared with iOS; Parquet and file-backed history remain JVM.
+// Protocol, Parquet and history are Kotlin Multiplatform, shared with iOS.
 include(":core:protocol")
 include(":core:parquet")
 include(":core:history")
