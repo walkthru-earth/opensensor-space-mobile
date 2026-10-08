@@ -35,8 +35,9 @@ need the same behavior.
 - Use the tokens in `:ui:designsystem` (`BrandTokens`, `brandColorScheme`, `BrandShapes`, `rememberBrandTypography`)
   and the components in `components/Brand.kt`. No raw colours or font families in screens.
   Values come from the website's `lib/brand.ts` (`sensing`), pinned by `BrandTokensTest`.
-- Band colours are a scientific metric scale. Never restyle them. Put text on a band with
-  `onColor()` and band-coloured text with `textColorOnSurface()`.
+- Band colours are the WHO 2021 steps from `:core:airquality` (`WhoStep.color()` in `theme/Color.kt`,
+  the one mapping). Never restyle them. Put text on a band with `onColor()` and band-coloured text
+  with `textColorOnSurface()`.
 - Design Simple first. Gate technical facts with `level.detailed` or `level.developer` and list
   new ones in the audit table in `docs/screens.md`. Debug is reachable only at Developer.
 - Name components after what they show in general (`MetricHeroCard`, `SignalBars`,

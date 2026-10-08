@@ -42,15 +42,16 @@ Derived from the **file**, never its name: rows, row groups, `schema_version`, `
 ## Metric registry
 
 **A new sensor is a registry entry, not code.** (W11 generalizes this into device families in `:core:model`, see [devices-and-discovery.md](devices-and-discovery.md).) Every quantity is a `MetricSpec(id, column, label,
-unit, kind, gate, bands, chartable, envelope, axisFloor, settleSeconds)`. Tiers, daily files, the
+unit, kind, gate, healthScale, chartable, envelope, axisFloor, settleSeconds)`. Tiers, daily files, the
 History picker (`Metrics.chartable`) and the charts iterate the registry and never name a column.
 A spec whose column a file lacks yields **no values, never zeros**, so the registry may be ahead of
 the hardware.
 
-| id | column | gate | bands | chartable | axisFloor | settle |
+| id | column | gate | health scale | chartable | axisFloor | settle |
 | --- | --- | --- | --- | --- | --- | --- |
-| `pm25` | `pm25_atmospheric_ug_m3` | `pms_status == 4` | PM2.5 bands | ✓ envelope | 60 | 180 s |
-| `pm10` / `pm1` | `pm10_…` / `pm1_atmospheric_ug_m3` | `pms_status == 4` | – | ✓ envelope | 60 | 180 s |
+| `pm25` | `pm25_atmospheric_ug_m3` | `pms_status == 4` | `WhoGuidelines.PM25` | ✓ envelope | 37.5 | 180 s |
+| `pm10` | `pm10_atmospheric_ug_m3` | `pms_status == 4` | `WhoGuidelines.PM10` | ✓ envelope | 75 | 180 s |
+| `pm1` | `pm1_atmospheric_ug_m3` | `pms_status == 4` | – | ✓ envelope | 60 | 180 s |
 | `n03` / `n25` | `particles_gt03_per_01l` / `…gt25…` | `pms_status == 4` | – | ✗ | 10 | 180 s |
 | `board_c` | `imu_temperature_c` (**not** ambient) | – | – | ✓ | 10 | – |
 | `ambient_c` / `rh` | `ambient_temperature_c` / `relative_humidity_percent` | – | – | ✓ | 10 / 100 | – (SHT20 unresolved; yield nothing today) |
@@ -112,13 +113,21 @@ that never got the time stay off the timeline.
 
 ## Friendly layer (`AirMood`, `NowReading`)
 
-Five moods on the PM2.5 band edges **15 · 35 · 55 · 150 µg/m³** (WHO 2021 24-h guideline = 15):
-`FRESH` "Fresh air" · `FINE` · `HAZY` "Getting hazy" · `SMOKY` · then "Thick smoke". Each has a
+Six moods, one per step of the WHO 2021 Air Quality Guidelines PM2.5 scale (`:core:airquality`,
+`WhoGuidelines.PM25`, 24-hour means). Edges **15 · 25 · 37.5 · 50 · 75 µg/m³**, inclusive from below
+as WHO states them ("at or below 15 meets the guideline"): `FRESH` "Fresh air" (guideline) · `FAIR`
+(IT-4) · `HAZY` "Getting hazy" (IT-3) · `POOR` (IT-2) · `SMOKY` (IT-1) · `THICK` "Thick smoke" (above
+IT-1). The edges are never repeated in `:core:history` or the app. Each has a
 title, one line of advice and a comparison — colour is never the only carrier. `NowReading.of(live)`
 puts the sensor state first (`pms_status ≠ 4` → words, never a number). "Right now" is a 10-second
 snapshot; "Today so far" is the **local** day folded from the hourly tier with its coverage.
 **No "AQI" anywhere** (a named index needs validated averaging rules). The face is a Canvas
 placeholder (`MoodFace`) that mascot artwork from the website replaces one for one on both platforms.
+
+PM10 is banded on its own WHO scale (`WhoGuidelines.PM10`, 45 · 50 · 75 · 100 · 150 µg/m³) through
+`MetricSpec.healthScale`; `moodOf`/`stepOf` read the scale, so a PM10 value maps to the same six moods
+and colours. Colours are `WhoStep.color` (light to dark, colour-blind checked), mapped once in the
+app's `Color.kt`.
 
 `AirMood` is the air-quality family's scale, not the app's model of "good". Other families
 show neutral metric cards unless their dictionary names a published scale. See
@@ -144,10 +153,17 @@ The Month/Year calendar and columns split tier points at variable local-day/week
 the fall-back 01:00 hours remain separate and selected-hour labels include UTC offsets.
 
 `rebin` folds a series into fixed slots and `rebinHours/rebinLocalDays/rebinLocalWeeks` fold into
-the selected calendar window, with means weighted by covered seconds; `axisMax` = 95th
-percentile of column means × 1.2 with a floor (`axisFloor`, 60 for PM2.5) rounded to a nice step;
-columns above are capped and labelled (one label per run). Colour = the column's own band
-(`spec.moodOf`), opacity = coverage, dashed outline = estimated time, whisker = peak. Time labels
+the selected calendar window, with means weighted by covered seconds. The y axis starts at zero;
+its raw top is the 95th percentile of column means × 1.2 with a floor (`axisFloor`, 37.5 for PM2.5,
+75 for PM10). For a metric with a WHO scale `ChartAxes.of` snaps that top up to the next WHO edge
+(gridlines divide it, so 37.5 reads 0 · 7.5 · 15 …), which keeps the dashed, labelled WHO 24-hour
+guideline line (PM2.5 15, PM10 45) in view and lets two days compare on one scale; above IT-1 the
+top is a round number. Columns above are capped and labelled (one label per run). Following Mazama
+Science's qualitative display advice and the South Coast AQMD accessible scale: bars coloured by
+their own WHO step on a neutral background (no shaded bands), neutral ink for metrics without a
+scale, opacity = coverage, dashed outline = estimated time, whisker = peak. A caption states the
+averaging (hourly, daily or weekly means against a 24-hour guideline), and the touch readout names
+the mood and WHO step in words. Time labels
 in the phone's zone, buckets UTC-aligned. Day was 96 quarter-hours until 2026-09-18 (~3 dp bars
 were not tappable). The same spec is Swift Charts `BarMark`s + a `LazyVGrid` on iOS; the ring is
 the iOS widget shape. **Files › Chart by file** (`FileSummary`) is the same column style in file
@@ -158,7 +174,7 @@ order — the diagnostic a time axis cannot give.
 | Edit… | Affects… |
 | --- | --- |
 | `Metrics` (add/rename a spec) | `metric_bucket.metricId` strings, picker chips, `DailyDerivedBuilder` columns, Now card if PM2.5; bump `DERIVE_VERSION` |
-| `AirMood` edges | `Metrics.PM25_BANDS`, chart shading, Home/Today moods, calendar colours |
+| `WhoGuidelines` edges (`:core:airquality`) | `AirMood`, `MetricSpec.healthScale`, chart axis snap and colours, Home/Today moods, calendar colours, Discover |
 | `Aggregator` semantics | `DERIVE_VERSION`, `AggregationTest`, `HistoryDeriverTest` |
 | `TimeEstimate` | day signatures (anchor), dashed drawing, daily file's estimated column |
 | `Columns.slotSeconds` / `axisMax` | every chart; `ColumnsTest` |

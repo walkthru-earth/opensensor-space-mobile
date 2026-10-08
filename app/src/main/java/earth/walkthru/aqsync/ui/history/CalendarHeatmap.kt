@@ -18,10 +18,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import earth.walkthru.aqsync.data.history.AirMood
 import earth.walkthru.aqsync.data.history.HistoryColumn
 import earth.walkthru.aqsync.data.history.MetricSpec
-import earth.walkthru.aqsync.ui.theme.color
+import earth.walkthru.aqsync.ui.theme.valueColor
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.ZoneId
@@ -30,7 +29,8 @@ import java.time.temporal.ChronoUnit
 
 /**
  * A month or a year as a calendar of local days: one cell per day, weeks as columns, Monday at the
- * top, coloured by the day's band and faded by its coverage; empty days are hollow; estimated days
+ * top, coloured by the WHO step of the day's daily mean (neutral ink for a metric without a WHO
+ * scale) and faded by its coverage; empty days are hollow; estimated days
  * dashed. Tap a day to open it. Month labels along the top. The same picture the iOS app draws with
  * a `LazyVGrid`.
  */
@@ -45,7 +45,6 @@ fun CalendarHeatmap(
     zone: ZoneId = ZoneId.of("UTC"),
 ) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    val primary = MaterialTheme.colorScheme.primary
     val empty = MaterialTheme.colorScheme.surfaceContainerHighest
     val labelPx = with(LocalDensity.current) { 10.sp.toPx() }
     val labelPaint = remember(muted, labelPx) { textPaint(muted, labelPx) }
@@ -96,7 +95,7 @@ fun CalendarHeatmap(
                 if (m == null) {
                     drawRoundRect(empty, Offset(x0, y0), sz, radius)
                 } else {
-                    val color = if (metric.banded) (metric.moodOf(m.toDouble()) ?: AirMood.FRESH).color() else primary
+                    val color = metric.valueColor(m.toDouble(), muted)
                     val alpha = 0.5f + 0.5f * col.coverage
                     if (col.estimated) {
                         drawRoundRect(color.copy(alpha = alpha * 0.3f), Offset(x0, y0), sz, radius)

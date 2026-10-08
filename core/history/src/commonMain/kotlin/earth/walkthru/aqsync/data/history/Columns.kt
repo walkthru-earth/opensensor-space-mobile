@@ -175,11 +175,16 @@ object Columns {
      * at least [floor], rounded up to a nice step. Columns above it are clipped and get a peak cap.
      */
     fun axisMax(columns: List<HistoryColumn>, floor: Float): Float {
-        val means = columns.mapNotNull { it.mean }.sorted()
-        val p95 = if (means.isEmpty()) 0f else means[((means.size - 1) * 0.95).toInt()]
-        val raw = max(p95 * 1.2f, floor)
+        val raw = axisRaw(columns, floor)
         val step = niceStep(raw)
         return ceil(raw / step) * step
+    }
+
+    /** The unrounded top of a capped axis, the 95th percentile of the means plus a fifth, never below [floor]. */
+    fun axisRaw(columns: List<HistoryColumn>, floor: Float): Float {
+        val means = columns.mapNotNull { it.mean }.sorted()
+        val p95 = if (means.isEmpty()) 0f else means[((means.size - 1) * 0.95).toInt()]
+        return max(p95 * 1.2f, floor)
     }
 
     /** Grid step giving ~4 lines: 1 · 2 · 5 × 10ⁿ. */

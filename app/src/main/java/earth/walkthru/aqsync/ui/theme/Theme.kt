@@ -48,9 +48,9 @@ fun AqSyncTheme(
 }
 
 /**
- * PM2.5 display band colour (not an AQI, see Color.kt). Delegates to `AirMood.of` so the edges and
- * their boundary rule (exclusive upper bound) exist in exactly one place.
+ * PM2.5 WHO step colour (not an AQI, see Color.kt). Delegates to `AirMood.ofOrNull` so the edges
+ * and their boundary rule (inclusive upper edge) exist in exactly one place, `:core:airquality`.
  */
 @Composable
 fun pm25Band(value: Double?): Color =
-    value?.let { AirMood.of(it).color() } ?: MaterialTheme.colorScheme.onSurfaceVariant
+    value?.let { AirMood.ofOrNull(it)?.color() } ?: MaterialTheme.colorScheme.onSurfaceVariant

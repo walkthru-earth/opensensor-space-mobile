@@ -87,7 +87,7 @@ and `ui/` are in `:app`. The final cadence/settling generalization remains outst
 | Reconstructed known-device row omits `companionAssociationId` | `DeviceConnectionRepository.kt:487` | A reconnect clears app-side association memory |
 | LIVE `t` is always interpreted as board temperature; `rh` is absent | `core/protocol/.../JsonModels.kt:134`; `ui/device/TodayScreen.kt:395` | Waveshare ambient temperature is mislabeled and humidity omitted |
 | Global primary and defaults use PM2.5 | `core/history/.../Metrics.kt:82`; Scan/Today/History ViewModels | A sensor without PM gets an empty air-quality experience |
-| WHO reference line follows any banded metric; chart clamps negative values | `ui/history/BandColumnChart.kt:105` and `:117` | General metrics require signed axes and metric-specific references |
+| WHO reference line follows any banded metric; chart clamps negative values (resolved: the line comes from the metric's own `healthScale`, PM2.5 and PM10 only, and neutral metrics keep signed axes) | `ui/history/BandColumnChart.kt`, `ChartAxes.guidelineOf` | General metrics require signed axes and metric-specific references |
 | Coverage assumes 10-second sampling; settling value comes from CoreS3 measurements | `core/history/.../Aggregation.kt:14`; `data/history/HistoryRepository.kt`; `Metrics.kt` | Do not extrapolate coverage or settling claims to arbitrary devices |
 
 The existing history pipeline already supports ambient temperature/humidity registry entries and

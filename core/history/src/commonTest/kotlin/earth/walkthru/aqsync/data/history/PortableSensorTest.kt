@@ -16,8 +16,10 @@ class PortableSensorTest {
 
     @Test fun sharedBandsHaveIdenticalBoundaries() {
         assertEquals(AirMood.FRESH, (NowReading.of(LiveSample(pms = 4, pm25 = 14.9)) as NowReading.Reading).mood)
-        assertEquals(AirMood.FINE, Metrics.PM25.moodOf(15.0))
+        assertEquals(AirMood.FRESH, Metrics.PM25.moodOf(15.0))
+        assertEquals(AirMood.FAIR, (NowReading.of(LiveSample(pms = 4, pm25 = 15.5)) as NowReading.Reading).mood)
         assertEquals(AirMood.HAZY, Metrics.PM25.moodOf(35.0))
+        assertEquals(NowReading.Waiting, NowReading.of(LiveSample(pms = 4, pm25 = Double.NaN)))
     }
 
     @Test fun clockEstimateRetainsSignedOffsets() {

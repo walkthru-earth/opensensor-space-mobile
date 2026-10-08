@@ -302,8 +302,8 @@ private fun NearbyRow(device: ScannedDevice, known: KnownDevice?, summary: Logge
 private fun ArchiveLine(summary: LoggerSummary?, level: DetailLevel) {
     val mean = summary?.lastDayPm25Mean
     val dayStart = summary?.lastDayStartS
-    if (mean != null && dayStart != null) {
-        val mood = AirMood.of(mean.toDouble())
+    val mood = mean?.let { AirMood.ofOrNull(it.toDouble()) }
+    if (mean != null && mood != null && dayStart != null) {
         val metric = Metrics.primary
         val day = DateTimeFormatter.ofPattern("d MMM").withZone(ZoneOffset.UTC).format(Instant.ofEpochSecond(dayStart))
         val base = stringResource(

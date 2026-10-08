@@ -1,8 +1,11 @@
 package earth.walkthru.aqsync.data.history
 
+import earth.walkthru.aqsync.airquality.WhoGuidelines
+import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ChartAxisTest {
@@ -37,13 +40,43 @@ class ChartAxisTest {
     }
 
     @Test
-    fun `PM keeps its positive cap and only PM25 gets a health guideline`() {
+    fun `PM keeps its positive cap and snaps up to a WHO edge`() {
         val columns = List(99) { column(12f) } + column(379f)
         val axis = ChartAxes.of(columns, Metrics.PM25)
         assertEquals(0f, axis.min)
-        assertEquals(60f, axis.max)
-        assertTrue(ChartAxes.hasPm25Guideline(Metrics.PM25))
-        assertFalse(ChartAxes.hasPm25Guideline(Metrics.PM10))
-        assertFalse(ChartAxes.hasPm25Guideline(Metrics.AMBIENT_TEMP.copy(bands = Metrics.PM25_BANDS)))
+        // p95 is 12, so the floor rules and snaps to IT-3, with the guideline line in view.
+        assertEquals(37.5f, axis.max)
+        assertEquals(7.5f, axis.step)
+        assertEquals(15f, ChartAxes.guidelineOf(Metrics.PM25))
+        assertTrue(15f < axis.max)
+        // A hazy day snaps to the next edge, not to a round number.
+        assertEquals(50f, ChartAxes.of(List(20) { column(40f) }, Metrics.PM25).max)
+        assertEquals(75f, ChartAxes.of(List(20) { column(55f) }, Metrics.PM25).max)
+        // Above the loosest interim target the top is round again.
+        val smoky = ChartAxes.of(List(20) { column(90f) }, Metrics.PM25)
+        assertTrue(smoky.max >= 108f && smoky.max % smoky.step == 0f)
+    }
+
+    @Test
+    fun `PM10 gets its own WHO guideline and neutral metrics none`() {
+        val axis = ChartAxes.of(List(10) { column(20f) }, Metrics.PM10)
+        assertEquals(0f, axis.min)
+        assertEquals(75f, axis.max)
+        assertEquals(45f, ChartAxes.guidelineOf(Metrics.PM10))
+        assertTrue(45f < axis.max)
+        assertEquals(100f, ChartAxes.of(List(10) { column(70f) }, Metrics.PM10).max)
+        assertNull(ChartAxes.guidelineOf(Metrics.PM1))
+        assertNull(ChartAxes.guidelineOf(Metrics.AMBIENT_TEMP))
+        assertNull(ChartAxes.guidelineOf(Metrics.PM25_BATCH_ESTIMATE))
+    }
+
+    @Test
+    fun `every WHO edge axis has whole or half unit gridlines that land on the top`() {
+        for (edge in WhoGuidelines.all.flatMap { it.edges }) {
+            val top = edge.toFloat()
+            val step = ChartAxes.gridStep(top)
+            val lines = top / step
+            assertTrue(abs(lines - lines.roundToInt()) < 1e-4f && lines in 3f..6f, "$edge by $step")
+        }
     }
 }
