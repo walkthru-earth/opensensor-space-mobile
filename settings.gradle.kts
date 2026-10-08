@@ -26,6 +26,8 @@ include(":core:history")
 include(":core:publicfeed")
 // Display units, metric or imperial, for every screen on both platforms (docs/screens.md, Settings).
 include(":core:units")
+// WHO 2021 air quality guideline scales and their palette, for every chart and the map.
+include(":core:airquality")
 // The Discover map, shared Compose for Android and iOS.
 include(":ui:designsystem")
 include(":feature:discover")
