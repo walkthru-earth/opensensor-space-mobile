@@ -201,8 +201,8 @@ class ParquetWriter(
                         g.bbox()?.let { box -> geoBbox = geoBbox?.union(box) ?: box }
                     } else {
                         val v = col.bytes(i)!!
-                        if (minB == null || unsignedCompare(v, minB!!) < 0) minB = v
-                        if (maxB == null || unsignedCompare(v, maxB!!) > 0) maxB = v
+                        if (minB == null || unsignedCompare(v, minB) < 0) minB = v
+                        if (maxB == null || unsignedCompare(v, maxB) > 0) maxB = v
                     }
                 }
                 plain = b.toByteArray()

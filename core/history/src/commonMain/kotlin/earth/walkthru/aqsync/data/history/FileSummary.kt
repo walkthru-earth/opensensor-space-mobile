@@ -107,8 +107,8 @@ data class FileSummary(
                 rows = rows,
                 timedRows = timed,
                 estimatedRows = estimated,
-                firstS = spanFirst?.let { Math.floorDiv(it, 1_000_000_000L) },
-                lastS = spanLast?.let { Math.floorDiv(it, 1_000_000_000L) },
+                firstS = spanFirst?.let { it.floorDiv(1_000_000_000L) },
+                lastS = spanLast?.let { it.floorDiv(1_000_000_000L) },
                 metrics = per,
             )
         }

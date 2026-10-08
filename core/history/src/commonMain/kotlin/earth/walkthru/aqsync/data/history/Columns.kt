@@ -1,8 +1,10 @@
 package earth.walkthru.aqsync.data.history
 
-import java.time.Instant
-import java.time.ZoneId
-import java.time.temporal.TemporalAdjusters
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.DayOfWeek
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.isoDayNumber
+import kotlinx.datetime.plus
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.log10
@@ -42,26 +44,28 @@ object Columns {
     }
 
     /** One variable-length local day per cell, including 23/25-hour days. */
-    fun rebinLocalDays(series: HistorySeries, zone: ZoneId): List<HistoryColumn> {
+    fun rebinLocalDays(series: HistorySeries, zone: TimeZone): List<HistoryColumn> {
         val boundaries = ArrayList<Long>()
-        var day = Instant.ofEpochSecond(series.fromS).atZone(zone).toLocalDate()
-        val end = Instant.ofEpochSecond(series.toS).atZone(zone).toLocalDate()
-        while (!day.isAfter(end)) {
-            boundaries += day.atStartOfDay(zone).toEpochSecond()
-            day = day.plusDays(1)
+        var day = localDateOf(series.fromS, zone)
+        val end = localDateOf(series.toS, zone)
+        while (day <= end) {
+            boundaries += startOfDay(day, zone)
+            day = day.plus(1, DateTimeUnit.DAY)
         }
         return rebinBoundaries(series, boundaries)
     }
 
     /** Monday-aligned local weeks, clipped to the selected window at both ends. */
-    fun rebinLocalWeeks(series: HistorySeries, zone: ZoneId): List<HistoryColumn> {
+    fun rebinLocalWeeks(series: HistorySeries, zone: TimeZone): List<HistoryColumn> {
         val boundaries = arrayListOf(series.fromS)
-        var monday = Instant.ofEpochSecond(series.fromS).atZone(zone).toLocalDate()
-            .with(TemporalAdjusters.next(java.time.DayOfWeek.MONDAY))
-        while (monday.atStartOfDay(zone).toEpochSecond() < series.toS) {
-            val boundary = monday.atStartOfDay(zone).toEpochSecond()
+        val first = localDateOf(series.fromS, zone)
+        // The next Monday strictly after the first local day (a Monday start moves a whole week on).
+        val ahead = (DayOfWeek.MONDAY.isoDayNumber - first.dayOfWeek.isoDayNumber + 7) % 7
+        var monday = first.plus(if (ahead == 0) 7 else ahead, DateTimeUnit.DAY)
+        while (startOfDay(monday, zone) < series.toS) {
+            val boundary = startOfDay(monday, zone)
             if (boundary > series.fromS) boundaries += boundary
-            monday = monday.plusWeeks(1)
+            monday = monday.plus(1, DateTimeUnit.WEEK)
         }
         boundaries += series.toS
         return rebinBoundaries(series, boundaries)
@@ -163,7 +167,7 @@ object Columns {
         }
     }
 
-    private fun floorTo(t: Long, step: Long, align: Long): Long = Math.floorDiv(t - align, step) * step + align
+    private fun floorTo(t: Long, step: Long, align: Long): Long = (t - align).floorDiv(step) * step + align
 
     /**
      * The y-axis top: the value most columns live under, not the tallest spike. Takes the 95th

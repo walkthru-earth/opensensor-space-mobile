@@ -20,5 +20,5 @@ tasks.register("verify") {
 tasks.register("verifyIos") {
     group = "verification"
     description = "Shared core iOS simulator tests and the Compose iOS framework"
-    dependsOn(":core:protocol:iosSimulatorArm64Test", ":core:history:iosSimulatorArm64Test", ":ios:shared:iosSimulatorArm64Test", ":ios:shared:linkDebugFrameworkIosSimulatorArm64")
+    dependsOn(":core:protocol:iosSimulatorArm64Test", ":core:parquet:iosSimulatorArm64Test", ":core:history:iosSimulatorArm64Test", ":ios:shared:iosSimulatorArm64Test", ":ios:shared:linkDebugFrameworkIosSimulatorArm64")
 }

@@ -13,7 +13,7 @@ enum class Resolution(val seconds: Long) {
     /** Rows the logger produces in one bucket when nothing is missed (one every 10 s). */
     val expectedRows: Int get() = (seconds / 10).toInt()
 
-    fun bucketStart(epochSeconds: Long): Long = Math.floorDiv(epochSeconds, seconds) * seconds
+    fun bucketStart(epochSeconds: Long): Long = epochSeconds.floorDiv(seconds) * seconds
 }
 
 /**
@@ -95,7 +95,7 @@ class Aggregator(
                 val key = Triple(bootHi?.asLong(i) ?: 0L, bootLo?.asLong(i) ?: 0L, seq.asLong(i) ?: -1L)
                 if (key.third >= 0 && !seen.add(key)) continue
             }
-            val s = Math.floorDiv(ns, 1_000_000_000L)
+            val s = ns.floorDiv(1_000_000_000L)
             for (r in resolutions) {
                 val acc = accs.getOrPut(r to r.bucketStart(s)) { Acc(metrics.size) }
                 acc.rows++
