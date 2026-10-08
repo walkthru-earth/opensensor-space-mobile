@@ -1,0 +1,54 @@
+package earth.walkthru.aqsync.archive
+
+import kotlinx.coroutines.test.runTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+
+class ArchiveRecordTest {
+    private val station = "s"
+    private fun record(name: String, utcRows: Long? = null, first: Long? = null, last: Long? = null, estFirst: Long? = null, estLast: Long? = null, purpose: String? = "telemetry", error: String? = null) =
+        ArchiveRecord(station, name, 1, 1, "sha", 1, "d", indexedAtEpochMs = 1, indexError = error, purpose = purpose, utcRows = utcRows, firstUtcNs = first, lastUtcNs = last, estFirstUtcNs = estFirst, estLastUtcNs = estLast)
+
+    @Test
+    fun `the timeline uses real UTC when the file has it and the estimate otherwise`() {
+        val timed = record("t.parquet", utcRows = 3, first = 100, last = 200, estFirst = 900, estLast = 950)
+        assertTrue(timed.hasUtc)
+        assertFalse(timed.hasEstimatedUtc)
+        assertTrue(timed.onTimeline(150, 160))
+        assertTrue(timed.onTimeline(200, 300))
+        assertFalse(timed.onTimeline(201, 300))
+        assertFalse(timed.onTimeline(0, 100))
+        assertFalse(timed.onTimeline(900, 1000))
+        val estimated = record("e.parquet", utcRows = 0, estFirst = 900, estLast = 950)
+        assertTrue(estimated.hasEstimatedUtc)
+        assertEquals(900L, estimated.timelineFirstNs)
+        assertTrue(estimated.onTimeline(940, 1000))
+    }
+
+    @Test
+    fun `unplaced files and other purposes and failed indexing stay off the timeline`() {
+        assertFalse(record("u.parquet").onTimeline(Long.MIN_VALUE + 1, Long.MAX_VALUE))
+        assertFalse(record("b.parquet", 3, 100, 200, purpose = "codec-comparison-duplicate-rows").onTimeline(0, 1000))
+        assertFalse(record("x.parquet", 3, 100, 200, error = "bad").onTimeline(0, 1000))
+        assertTrue(record("n.parquet", 3, 100, 200, purpose = null).onTimeline(0, 1000))
+    }
+
+    @Test
+    fun `a record matches the listing only with the same size and CRC`() {
+        val r = record("t.parquet")
+        assertTrue(r.matches(1, 1))
+        assertFalse(r.matches(2, 1))
+        assertFalse(r.matches(1, 2))
+    }
+
+    @Test
+    fun `the index timeline is filtered and ordered by first time`() = runTest {
+        val index = InMemoryArchiveIndex()
+        index.put(record("late.parquet", 1, 500, 600))
+        index.put(record("early.parquet", 0, estFirst = 100, estLast = 150))
+        index.put(record("off.parquet", 1, 5_000, 6_000))
+        assertEquals(listOf("early.parquet", "late.parquet"), index.timeline(station, 0, 1_000).map { it.name })
+    }
+}
