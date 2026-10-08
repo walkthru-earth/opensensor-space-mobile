@@ -1,6 +1,7 @@
 package earth.walkthru.opensensor.discover
 
 import androidx.compose.runtime.Immutable
+import earth.walkthru.aqsync.airquality.WhoStep
 
 /**
  * Every word Discover shows. Android builds this from `res/values/strings.xml` (so `CopyRulesTest`
@@ -56,7 +57,41 @@ data class DiscoverStrings(
     val windowShortWeek: String = "7d",
     /** The time pill, spoken only. Its state is the full window name. */
     val timeWindow: String = "Time window",
+    /** Names of the six WHO steps, cleanest first, in [WhoStep] order. Shown beside values, so colour is never the only cue. */
+    val whoSteps: List<String> = listOf(
+        "Meets WHO guideline",
+        "Interim target 4",
+        "Interim target 3",
+        "Interim target 2",
+        "Interim target 1",
+        "Above all targets",
+    ),
+    /** The short mark at the guideline on the legend and the charts. */
+    val whoMark: String = "WHO",
+    /** Legend caption in the 24 hour window, where the means match the guideline's averaging. */
+    val whoCaptionDay: String = "WHO 24-hour guideline",
+    /** Legend caption in the last hour and 7 day windows. */
+    val whoCaptionCompared: String = "Compared with the WHO 24-hour guideline",
+    /** Legend caption for a property without a published health scale. */
+    val noHealthScale: String = "No health scale published",
+    /** The legend info sheet for PM2.5 and PM10. */
+    val whoInfo: InfoText = InfoText(
+        "WHO air quality guideline",
+        listOf(
+            "Colours are fixed steps from the WHO global air quality guidelines, 2021, so a colour means the same in every place and every view.",
+            "The lightest green meets the WHO guideline. Interim targets 4 to 1 are steps on the way to it, each less strict than the one before. The darkest colour is above all four targets.",
+            "The guideline and the targets are 24-hour means. In the last hour and 7 day views, those means are compared with the same values.",
+            "Each area shows hourly means from three or more sensors. A faded area has no new value for 3 hours. An outline only means the area does not measure this.",
+        ),
+    ),
+    /** Under a chart whose values run past its axis (highest value). */
+    val offScale: (String) -> String = { v -> "Some areas go past the chart, up to $v" },
+    /** Spoken legend step (step name, upper edge or null for the last step, unit). */
+    val whoStepSpoken: (String, String?, String) -> String = { name, upTo, unit -> if (upTo != null) "$name, up to $upTo $unit" else name },
 ) {
+    /** The name of [step], from [whoSteps]. */
+    fun stepName(step: WhoStep): String = whoSteps.getOrElse(step.ordinal) { step.name }
+
     companion object {
         /** English copy for iOS. Keep it in step with the Android `discover_*` strings. */
         val English = DiscoverStrings(
@@ -74,7 +109,7 @@ data class DiscoverStrings(
             scaleInfo = InfoText(
                 "Colour scale",
                 listOf(
-                    "Colours stretch from low to high across the areas in view, leaving out the lowest and highest 5 percent.",
+                    "No health scale is published for this measurement. Colours stretch from low to high across the areas in view, leaving out the lowest and highest 5 percent.",
                     "Each area shows hourly means from three or more sensors. A faded area has no new value for 3 hours. An outline only means the area does not measure this.",
                 ),
             ),

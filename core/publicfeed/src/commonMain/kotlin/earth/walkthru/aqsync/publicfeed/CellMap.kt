@@ -86,7 +86,8 @@ object CellFreshness {
 
 /**
  * Builds the one GeoJSON source of the map. Each cell is a polygon with properties `h3` (hex),
- * `color` (fill, absent when the cell does not measure the property), `measured` and `stale`.
+ * `color` (fill from [CellScale], a fixed WHO step colour or the percentile ramp, absent when the
+ * cell does not measure the property), `measured` and `stale`.
  * Built off the main thread after the camera rests.
  */
 object CellGeoJson {
@@ -94,7 +95,7 @@ object CellGeoJson {
         h3: H3Grid,
         rows: List<CellRow>,
         property: String?,
-        scale: PercentileScale?,
+        scale: CellScale?,
         staleAt: (CellRow) -> Boolean,
     ): String {
         val sb = StringBuilder(rows.size * 400 + 64)
@@ -109,7 +110,8 @@ object CellGeoJson {
             sb.append("{\"type\":\"Feature\",\"properties\":{\"h3\":\"").append(H3Index.toHex(row.h3)).append('"')
             sb.append(",\"measured\":").append(value != null)
             sb.append(",\"stale\":").append(staleAt(row))
-            if (value != null && scale != null) sb.append(",\"color\":\"").append(SequentialRamp.hex(scale.color(value))).append('"')
+            val color = value?.let { scale?.color(it) }
+            if (color != null) sb.append(",\"color\":\"").append(SequentialRamp.hex(color)).append('"')
             sb.append("},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[")
             for ((i, p) in (ring + ring.first()).withIndex()) {
                 if (i > 0) sb.append(',')

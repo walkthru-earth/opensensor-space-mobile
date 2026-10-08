@@ -3,13 +3,13 @@ package earth.walkthru.opensensor.discover
 import earth.walkthru.aqsync.publicfeed.CellFreshness
 import earth.walkthru.aqsync.publicfeed.CellGeoJson
 import earth.walkthru.aqsync.publicfeed.CellRow
+import earth.walkthru.aqsync.publicfeed.CellScale
 import earth.walkthru.aqsync.publicfeed.FeedPartition
 import earth.walkthru.aqsync.publicfeed.FeedProperty
 import earth.walkthru.aqsync.publicfeed.FeedWindow
 import earth.walkthru.aqsync.publicfeed.GeoBounds
 import earth.walkthru.aqsync.publicfeed.H3Grid
 import earth.walkthru.aqsync.publicfeed.H3Index
-import earth.walkthru.aqsync.publicfeed.PercentileScale
 import earth.walkthru.aqsync.publicfeed.PropertyRanking
 import earth.walkthru.aqsync.publicfeed.PublicFeed
 import earth.walkthru.aqsync.publicfeed.TimeZoneRegions
@@ -70,7 +70,8 @@ data class DiscoverUiState(
     val ranked: List<FeedProperty> = emptyList(),
     val chips: List<FeedProperty> = emptyList(),
     val property: FeedProperty? = null,
-    val scale: PercentileScale? = null,
+    /** WHO steps for PM2.5 and PM10, the percentile ramp for the rest. */
+    val scale: CellScale? = null,
     val rows: List<CellRow> = emptyList(),
     val geoJson: String = EMPTY_GEOJSON,
     val selected: CellRow? = null,
@@ -206,7 +207,7 @@ class DiscoverController(
             // Sample data is a snapshot, so freshness is read against its own newest hour.
             val nowMs = if (current.isSample) rows.maxOfOrNull { it.updatedEpochMs } ?: now() else now()
             val (scale, json) = withContext(io) {
-                val scale = property?.let { p -> PercentileScale.of(rows.mapNotNull { it.mean(p.id) }) }
+                val scale = property?.let { p -> CellScale.of(p.id, rows.mapNotNull { it.mean(p.id) }) }
                 val json = if (current.available) {
                     CellGeoJson.build(h3, rows, property?.id, scale) { CellFreshness.isStale(it, nowMs) }
                 } else {

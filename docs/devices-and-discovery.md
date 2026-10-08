@@ -42,8 +42,14 @@ Rules.
 2. **Unknown is fine.** A column that is not in the dictionary still shows with its raw name and
    no scale, at Detailed level. It is never hidden, coerced or given a default.
 3. **Scales are optional and scientific.** A `Scale` names its source (for example US EPA AQI or
-   WHO 2021). Properties without a published scale use a neutral sequential colour ramp.
-   Brand colours are never used to judge a value.
+   WHO 2021). PM2.5 and PM10 use the WHO 2021 Air Quality Guidelines (`:core:airquality`,
+   `WhoGuidelines`), six fixed steps from "meets the guideline" through interim targets 4 to 1
+   to "above all targets", 24-hour means, in one colour-blind checked palette. A fixed step
+   means a colour says the same thing in every place, viewport and window. Properties without
+   a published scale (CO₂, temperature, humidity) use a neutral sequential colour ramp stretched
+   over the cells in view, and say so. Colour never carries a step alone, its name is shown
+   beside the value. Brand colours are never used to judge a value, and WHO colours are used
+   only to judge values.
 4. **Capabilities, not schema strings.** A screen asks `device.can(Capability.LanSync)`. Only the
    family registry reads schema IDs or adverts.
 5. **One family entry per hardware line.** A `DeviceFamily` declares how to recognize the device
@@ -138,12 +144,20 @@ an info button.
   Tap a stop to pick it. It folds back about two seconds after the last touch. Screen readers get
   one control named Time window, its state is the full window name, and its actions pick the
   others. The chip row holds metrics only.
-- **Legend.** Bottom left, just above the sheet. A thin colour bar with the unit and the end
-  values. Tap to expand into the band names. Its info button names the scale source (for
-  example US EPA AQI). A property with a published `Scale` uses its fixed bands. A property
-  without one uses the neutral sequential ramp stretched from the 5th to the 95th percentile of
-  the cells in view, as the website does, and the legend shows those two values.
-- **Cell styles.** Filled with the scale colour. A stale cell (no hourly value for 3 hours) is
+- **Legend (WHO, 2026-10-09).** Bottom left, just above the sheet, a floating card with the
+  label and unit. PM2.5 and PM10 show six discrete, equal swatches (not a gradient) with the
+  WHO edges under the borders (PM2.5 15, 25, 37.5, 50, 75, PM10 45, 50, 75, 100, 150, µg/m³,
+  never converted), the guideline border marked "WHO" with an ink tick, and a caption naming
+  the averaging, "WHO 24-hour guideline" in the 24 hour window and "Compared with the WHO
+  24-hour guideline" in the 1 hour and 7 day windows (owner decision, WHO colours in every
+  window). Its info button explains the steps and cites "WHO global air quality guidelines,
+  2021". A property without a published scale keeps the neutral viridis ramp stretched from the
+  5th to the 95th percentile of the cells in view, as the website does, shows those two values
+  and says "No health scale published". Practice followed, Mazama Science "Qualitative display
+  of air quality data", the South Coast AQMD accessible AQI scale, and the EPA Fire and Smoke
+  map (`CellScale` in `:core:publicfeed`).
+- **Cell styles.** Filled with the scale colour, the fixed WHO step colour of the cell mean
+  (`HealthScale.colorOf`) for PM, the percentile ramp for the rest. A stale cell (no hourly value for 3 hours) is
   drawn at 40 percent opacity with a dashed outline. A cell that does not measure the chosen
   metric is outline only, no fill. Selected cell has a thick ink outline.
 - **Sample data.** A pill top right under the chips, "Sample data", in the `accent` tone. It also
@@ -204,14 +218,16 @@ the medium and large detents.
 | ----                                 |
 | Sample data                        i |
 | 14 µg/m³  PM2.5                      |
+| [#] Meets WHO guideline              |
 | 5 sensors  Updated 1 h ago           |
 |                                      |
 | PM2.5 µg/m³ avg 24 hours min 6 max 31|
-|   . : # : .   .   grey bars, ink bin |
-|       |             rule at the mean |
-| [viridis axis===(o)================] |
+|                   WHO 15             |
+|   . : # : .  ¦ .  step coloured bars |
+|       |      ¦      rule at the mean |
+| [neutral axis==(o)===¦=============] |
 |     (=====|======)  min to max band  |
-| 4                                 40 |
+| 0                                 25 |
 | Higher than 72% of areas in view     |
 |--------------------------------------|
 | Temp     °C  [--(==o==)------]  21.5 |
@@ -228,20 +244,33 @@ Sheet charts (2026-10-09). The feed carries one window of statistics per cell (n
 max), no hourly history, so the sheet draws no time series. Charts are Canvas in common Compose,
 identical on Android and iOS, and every one carries a spoken summary of its values.
 
-- **Spread chart.** A histogram of the chosen metric's cell means in view, thin grey bars on an
-  axis drawn as the map's own colour scale (viridis, clamped at the 5th and 95th percentile like
-  the cells). The axis runs from the lowest to the highest value in view, widened to hold the
-  selected cell's min and max, and its end values sit under it. With a cell selected its bin turns
-  ink, an ink rule and a ringed dot in the cell colour mark its mean, and a band below the axis
-  spans its min to max. "Higher than N% of areas in view" follows when three or more areas report
-  the metric. With nothing selected the same chart, unmarked, sits above the list of cells.
+- **Spread chart.** A histogram of the chosen metric's cell means in view. For PM2.5 and PM10
+  (WHO, 2026-10-09) the value axis starts at zero and ends on the smallest WHO edge at or above
+  the 95th percentile in view, at least the guideline (`HealthAxis.high`), so the guideline is
+  always in view and charts compare across cells. Bin borders fall on every WHO edge in view
+  (`HealthAxis.bins`), so each bar holds one step and takes its step colour with a faint ink
+  edge. The guideline is a dashed ink line labelled "WHO 15" (or 45). Past the last edge the
+  95th percentile is the top. Values past the top count in the end bar, an ink arrow marks the
+  axis end and "Some areas go past the chart, up to N" says how far. The axis track stays
+  neutral, no colour bands sit behind the data. Other metrics keep thin grey bars on an axis
+  drawn as the map's viridis scale, clamped at the 5th and 95th percentile like the cells. End
+  values sit under the axis. With a cell selected its bin turns ink (outlined in ink for WHO
+  bars), an ink rule and a ringed dot in the cell colour mark its mean, and a band below the
+  axis spans its min to max. "Higher than N% of areas in view" follows when three or more areas
+  report the metric. With nothing selected the same chart, unmarked, sits above the list of
+  cells.
+- **Step names.** Colour never carries a WHO step alone. The cell headline, each row of the
+  cell list and each PM range row name the step in text (Meets WHO guideline, Interim target 4
+  to 1, Above all targets).
 - **Range rows.** One row per other metric the cell reports, in dictionary order, grouped by
-  category past five rows. Label and unit, a track for that metric's extent in view, the cell's
-  min to max band, the mean as a ringed dot in the colour the map would give it, and the mean as
-  text. Tapping a row makes it the chosen metric (chips, map and hero follow) without closing the
+  category past five rows. Label and unit, a track for that metric's axis (zero to a WHO edge
+  with a dashed guideline tick for PM, the extent in view for the rest), the cell's min to max
+  band, the mean as a ringed dot in the colour the map would give it, and the mean as text.
+  Tapping a row makes it the chosen metric (chips, map and hero follow) without closing the
   sheet. A missing min or max leaves the band out, never draws zero.
 - Marks are ink and grey from the theme (onSurface), text is never in a data colour, and the only
-  hue is the scale, so light and dark both read. Marker moves animate for 350 ms.
+  hues are the scale (WHO steps or viridis), so light and dark both read. Marker moves animate
+  for 350 ms.
 
 **Cell tapped, fewer than 3 devices**
 
@@ -562,7 +591,7 @@ starts with the target layout from the producer guidance.
 | Module | Owns |
 | --- | --- |
 | `:core:model` | `Device`, `DeviceFamily`, `Capability`, `ObservedProperty`, `Scale`, registry |
-| `:core:publicfeed` | `PublicFeed` and `FeedReader` ports, `ParquetFeedReader` (common, over the W8 reader), `BundledSampleFeed`, the `H3Grid` interface (`com.uber:h3` 4.5.0 on Android and JVM, the vendored H3 C 4.5.0 through cinterop on iOS), `H3Index` bit arithmetic and descendant ranges, `ViewportCover`, `PercentileScale`, `PropertyRanking`, `CellGeoJson`, `TimeZoneRegions`. Built 2026-10-08. Planned here: S3 listing, Ktor range source, footer and range cache |
+| `:core:publicfeed` | `PublicFeed` and `FeedReader` ports, `ParquetFeedReader` (common, over the W8 reader), `BundledSampleFeed`, the `H3Grid` interface (`com.uber:h3` 4.5.0 on Android and JVM, the vendored H3 C 4.5.0 through cinterop on iOS), `H3Index` bit arithmetic and descendant ranges, `ViewportCover`, `CellScale` (WHO steps from `:core:airquality` for PM2.5 and PM10, else `PercentileScale`), `HealthAxis`, `PropertyRanking`, `CellGeoJson`, `TimeZoneRegions`. Built 2026-10-08. Planned here: S3 listing, Ktor range source, footer and range cache |
 | `:core:parquet` | The portable reader from W8, with `SuspendByteReader`, the footer-first `SuspendParquetFile` and row group pruning by INT64 statistics. Page indexes come later |
 | `:feature:discover` | CMP `commonMain` map screen (`DiscoverScreen`), `DiscoverController` state holder, `DiscoverStrings` (Android passes `strings.xml`, iOS English), the bundled sample and basemap styles as Compose resources. Targets Android (`com.android.kotlin.multiplatform.library`) and iOS, not the JVM, because the maplibre-compose desktop variant needs Java 25. Planned here: the public device page |
 | `tools/discover-fixture/` | `make_discover_sample.py` writes the sample feed in the live layout (Python `h3` 4.5.0, PyArrow 25.0.1, SNAPPY, 24-row groups, page indexes, about 300 KB for 18 files). `make_basemap_style.mjs` writes the light and dark styles from `@protomaps/basemaps` 5.7.2, each with a `-latin` variant for iOS. Output committed under `feature/discover/src/commonMain/composeResources/files/` |
@@ -576,7 +605,7 @@ phone run).** Discover opens on the last camera or the time zone region, reads t
 through the common Parquet reader with row group pruning, covers the viewport with at most 1,024
 cells at `round(zoom * 0.8)` clamped to 2..7, and redraws one GeoJSON source after 400 ms of camera
 rest. Chips rank properties by visible cells (three, then More), a vertical time slider on the left
-snaps between Last hour, 24 hours and 7 days, the legend shows the 5th to 95th percentile of the cells in view on a viridis
+snaps between Last hour, 24 hours and 7 days, the legend shows fixed WHO 2021 steps for PM2.5 and PM10 (added 2026-10-09, host tests and builds only) and the 5th to 95th percentile of the cells in view on a viridis
 ramp, and the sheet peeks with the first-run card or the area count and opens on a cell tap with
 a spread chart of the chosen property and a range row per other property. Search moves the map over a small built-in city list. The basemap is
 the Protomaps OpenStreetMap PMTiles build on source.coop (`pmtiles://` rendered on the Android

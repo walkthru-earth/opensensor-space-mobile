@@ -11,6 +11,8 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(project(":core:parquet"))
+            // WHO 2021 steps for PM2.5 and PM10 (CellScale, HealthAxis).
+            api(project(":core:airquality"))
             implementation(libs.kotlinx.serialization.json)
         }
         commonTest.dependencies {

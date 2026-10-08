@@ -89,7 +89,7 @@ class SampleFeedTest {
     fun `geojson carries colour only for measured cells`() = runTest {
         val partition = feed.latest()!!
         val rows = feed.cells(partition, FeedWindow.DAY, 5, ranges = null).rows
-        val scale = PercentileScale.of(rows.mapNotNull { it.mean("pm25") })
+        val scale = CellScale.of("pm25", rows.mapNotNull { it.mean("pm25") })
         val json = CellGeoJson.build(h3, rows, "pm25", scale) { false }
         assertTrue(json.startsWith("{\"type\":\"FeatureCollection\""))
         assertEquals(rows.size, Regex("\"type\":\"Feature\"").findAll(json).count())

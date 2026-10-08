@@ -1,9 +1,12 @@
 package earth.walkthru.opensensor.discover
 
+import earth.walkthru.aqsync.airquality.WhoGuidelines
+import earth.walkthru.aqsync.airquality.WhoStep
 import earth.walkthru.aqsync.publicfeed.CellRow
 import earth.walkthru.aqsync.publicfeed.CellStat
 import earth.walkthru.aqsync.publicfeed.FeedProperty
 import earth.walkthru.aqsync.publicfeed.PercentileScale
+import earth.walkthru.aqsync.publicfeed.SequentialRamp
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -60,13 +63,42 @@ class CellChartMathTest {
         val rows = listOf(here, cell(2, "pm25" to CellStat(3, 8.0, 5.0, 9.0)), cell(3, "pm25" to CellStat(3, 20.0, 18.0, 22.0)))
         val ranges = metricRanges(here, rows, listOf(temp, pm, noise))
         assertEquals(listOf("temp", "pm25"), ranges.map { it.property.id })
+        // PM2.5 reads on the WHO axis, zero to the edge above the visible max, in its step colour.
         val p = ranges[1]
-        assertEquals(ChartDomain(8.0, 20.0), p.domain)
-        assertEquals(0.5, p.colorFraction)
+        assertEquals(ChartDomain(0.0, 25.0), p.domain)
+        assertEquals(WhoStep.GUIDELINE.color, p.color)
+        assertEquals(WhoStep.GUIDELINE, p.step)
+        assertEquals(15.0, p.guideline)
         assertEquals(6.0, p.min)
+        // Temperature keeps the percentile ramp and has no step.
         val t = ranges[0]
         assertNull(t.min)
         assertNull(t.max)
+        assertNull(t.step)
         assertEquals(ChartDomain(21.5, 21.5), t.domain)
+        assertEquals(SequentialRamp.at(0.5), t.color)
+    }
+
+    @Test
+    fun whoAxisStartsAtZeroAndBinsFollowTheEdges() {
+        assertEquals(ChartDomain(0.0, 15.0), ChartDomain.forProperty("pm25", listOf(3.0, 9.0)))
+        assertEquals(ChartDomain(0.0, 37.5), ChartDomain.forProperty("pm25", listOf(10.0, 30.0)))
+        assertEquals(ChartDomain(0.0, 45.0), ChartDomain.forProperty("pm10", listOf(30.0)))
+        assertNull(ChartDomain.forProperty("pm25", emptyList()))
+        // Without a WHO scale the percentile span stays.
+        assertEquals(ChartDomain(10.0, 20.0), ChartDomain.forProperty("co2", listOf(10.0, 20.0)))
+
+        val d = ChartDomain(0.0, 25.0)
+        val bins = chartBins("pm25", d, 3)
+        assertEquals(10, bins)
+        // 15 is at or below the guideline, so it counts in the last guideline bar.
+        assertEquals(5, binOf(15.0, d, bins, upperInclusive = true))
+        assertEquals(6, binOf(15.1, d, bins, upperInclusive = true))
+        assertEquals(0, binOf(0.0, d, bins, upperInclusive = true))
+        assertEquals(WhoStep.GUIDELINE, WhoGuidelines.PM25.stepOf(binMid(5, d, bins)))
+        assertEquals(WhoStep.IT4, WhoGuidelines.PM25.stepOf(binMid(6, d, bins)))
+        assertEquals(binCount(40), chartBins("co2", ChartDomain(0.0, 25.0), 40))
+        assertEquals("37.5", formatEdge(37.5))
+        assertEquals("15", formatEdge(15.0))
     }
 }
