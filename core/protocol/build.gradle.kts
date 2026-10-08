@@ -1,5 +1,6 @@
 // The firmware contract mirror. `commonMain` compiles for Android's JVM and for iOS; `jvmMain` keeps
-// the java.io/java.security adapters (file verification, SHA-256, LAN framing over streams).
+// the java.io adapters (file verification and hashing, LAN framing over streams) and the
+// MessageDigest SHA-256. `iosMain` holds the CommonCrypto SHA-256.
 plugins {
     id("opensensor.kmp.library")
     alias(libs.plugins.kotlin.serialization)

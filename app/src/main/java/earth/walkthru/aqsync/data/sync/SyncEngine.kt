@@ -22,28 +22,6 @@ import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Progress of the file currently being pulled. */
-data class FileProgress(
-    val name: String,
-    val bytesDone: Long,
-    val bytesTotal: Long,
-    val resumedFrom: Long,
-    /** `READ` windows that arrived incomplete (dropped notifications) and were re-read successfully. */
-    val windowsRecovered: Int = 0,
-) {
-    val fraction: Float get() = if (bytesTotal == 0L) 0f else (bytesDone.toFloat() / bytesTotal).coerceIn(0f, 1f)
-}
-
-/** Outcome of one file download. */
-sealed interface FileOutcome {
-    val name: String
-
-    data class Synced(override val name: String, val bytes: Long, val sha256: String, val alreadyArchived: Boolean = false) : FileOutcome
-    data class Mismatch(override val name: String, val reason: String) : FileOutcome
-    data class DeviceError(override val name: String, val error: ProtocolError?, val message: String) : FileOutcome
-    data class Failed(override val name: String, val message: String) : FileOutcome
-}
-
 class SyncAbortedException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
 /**
@@ -195,14 +173,14 @@ class SyncEngine(
                                 // Bytes written before the gap are good (absolute offsets); the next READ starts
                                 // at our own `offset`, which is what is actually on disk (the contract says never
                                 // trust the device's count over ours; e.receivedUpTo is the session's view of it).
-                                if (attempt > WINDOW_RETRIES) {
+                                if (WindowRetryPolicy.givesUp(attempt)) {
                                     return FileOutcome.Failed(
                                         name,
                                         "window at $offset lost $attempt× in a row (last: ${e.message}); " +
                                             "notifications keep getting lost on this link, move closer and retry"
                                     )
                                 }
-                                delay(windowRetryBackoffMs * attempt)
+                                delay(WindowRetryPolicy.backoffMs(attempt, windowRetryBackoffMs))
                                 continue
                             }
                             if (!end.ok) {
@@ -267,11 +245,11 @@ class SyncEngine(
     }
 
     companion object {
-        /** Re-reads of one window before the file is given up; 6 attempts in total. */
-        const val WINDOW_RETRIES = 5
+        /** Re-reads of one window before the file is given up ([WindowRetryPolicy.RETRIES]). */
+        const val WINDOW_RETRIES = WindowRetryPolicy.RETRIES
 
-        /** Linear backoff: 300 ms, 600 ms, … lets a busy link catch up without stalling the sync. */
-        const val WINDOW_RETRY_BACKOFF_MS = 300L
+        /** Base of the linear backoff between re-reads ([WindowRetryPolicy.BACKOFF_MS]). */
+        const val WINDOW_RETRY_BACKOFF_MS = WindowRetryPolicy.BACKOFF_MS
 
         /** Best-effort `CLOSE` budget; the device closes implicitly on the next `OPEN` anyway. */
         const val CLOSE_TIMEOUT_MS = 3_000L

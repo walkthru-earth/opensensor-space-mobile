@@ -46,9 +46,9 @@ import earth.walkthru.aqsync.data.sync.ClockSyncAction
 import earth.walkthru.aqsync.data.sync.ClockSyncMode
 import earth.walkthru.aqsync.data.sync.FileArchive
 import earth.walkthru.aqsync.data.sync.FileOutcome
-import earth.walkthru.aqsync.data.sync.FileProgress
 import earth.walkthru.aqsync.data.sync.FileSyncState
 import earth.walkthru.aqsync.data.sync.ManifestEntry
+import earth.walkthru.aqsync.data.sync.RateMeter
 import earth.walkthru.aqsync.data.sync.ReadWindow
 import earth.walkthru.aqsync.data.sync.SmartSyncPolicy
 import earth.walkthru.aqsync.data.sync.SyncEndCause
@@ -94,26 +94,6 @@ import javax.inject.Inject
 data class TimedLive(val sample: LiveSample, val receivedAtEpochMs: Long)
 
 data class TimedStatus(val status: DeviceStatus, val receivedAtEpochMs: Long)
-
-data class SyncProgress(
-    val running: Boolean = false,
-    val current: FileProgress? = null,
-    val filesDone: Int = 0,
-    val filesTotal: Int = 0,
-    val bytesDone: Long = 0,
-    val bytesTotal: Long = 0,
-    val bytesPerSecond: Double = 0.0,
-    /** `READ` windows lost to dropped notifications and re-read successfully, over the whole run. */
-    val windowsRecovered: Int = 0,
-    val outcomes: List<FileOutcome> = emptyList(),
-    val startedAtEpochMs: Long? = null,
-    val finishedAtEpochMs: Long? = null,
-    /** Why the last run ended (null while running or before the first run); see [SyncResumePolicy]. */
-    val endCause: SyncEndCause? = null,
-) {
-    val fraction: Float get() = if (bytesTotal == 0L) 0f else (bytesDone.toFloat() / bytesTotal).coerceIn(0f, 1f)
-    val failures: List<FileOutcome> get() = outcomes.filter { it !is FileOutcome.Synced }
-}
 
 data class ArchiveTimeSummary(
     val files: Int = 0,
@@ -454,11 +434,9 @@ class DeviceConnectionRepository @Inject constructor(
      */
     private suspend fun tryLan(address: String, name: String?, known: KnownDevice?): AqTransport? {
         val station = known?.station ?: return null
-        if (!known.hasLanToken) return null
         val seen = lanDevices.value[station] ?: return null
-        if (known.deviceId != null && !known.deviceId.equals(seen.dev, ignoreCase = true)) return null
         val host = seen.host ?: return null
-        val port = seen.port.takeIf { it in 1..65535 } ?: known.lanPort ?: return null
+        val port = TransportSelector.lanPort(known.hasLanToken, known.deviceId, seen.dev, seen.port, known.lanPort) ?: return null
         val token = lanTokenBytes(address) ?: return null
         val transport = transportFactory.lan(address, name, host, port, token)
         // Put the LAN attempt in the session slot so the UI shows "Authenticating on the LAN…".
@@ -1551,29 +1529,6 @@ class DeviceConnectionRepository @Inject constructor(
             tokenPolicy.clear(address)
             knownDeviceDao.get(address)?.companionAssociationId?.let { companionPresence.disassociate(address, it) }
             knownDeviceDao.delete(address)
-        }
-    }
-
-    /** Rolling throughput over the last few seconds. */
-    internal class RateMeter(time: MonotonicTime) {
-        private val origin = time.markNow()
-        private val samples = ArrayDeque<Pair<Long, Long>>()
-
-        fun update(bytesDone: Long): Double {
-            val now = origin.elapsedNow().inWholeNanoseconds
-            // A corrupt partial can force a clean re-read, so the verified transfer progress
-            // legitimately moves back to zero. Start a new rate window instead of showing a
-            // negative throughput while that earlier attempt ages out of the sample window.
-            if (samples.isNotEmpty() && bytesDone < samples.last().second) samples.clear()
-            samples.addLast(now to bytesDone)
-            while (samples.size > 2 && now - samples.first().first > WINDOW_NS) samples.removeFirst()
-            val (t0, b0) = samples.first()
-            val dt = (now - t0) / 1e9
-            return if (dt <= 0.0) 0.0 else (bytesDone - b0) / dt
-        }
-
-        companion object {
-            const val WINDOW_NS = 3_000_000_000L
         }
     }
 
