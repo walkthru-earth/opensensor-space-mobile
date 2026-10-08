@@ -133,6 +133,15 @@ jobs:
             -derivedDataPath ios/build/DerivedData-simulator \
             -resultBundlePath ios/build/ci/simulator.xcresult \
             CODE_SIGNING_ALLOWED=NO build 2>&1 | tee ios/build/ci/simulator-build.log
+      - name: Run Swift Testing target on simulator
+        run: |
+          device="$(xcrun simctl list devices available -j \
+            | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next(x["udid"] for r,v in d.items() if "iOS" in r for x in v if x["name"].startswith("iPhone")))')"
+          xcodebuild -project ios/OpenSensor.xcodeproj -scheme OpenSensor \
+            -destination "platform=iOS Simulator,id=$device" \
+            -derivedDataPath ios/build/DerivedData-test \
+            -resultBundlePath ios/build/ci/swift-tests.xcresult \
+            CODE_SIGNING_ALLOWED=NO test 2>&1 | tee ios/build/ci/swift-tests.log
       - name: Build unsigned device Release app
         run: |
           xcodebuild -project ios/OpenSensor.xcodeproj -scheme OpenSensor \

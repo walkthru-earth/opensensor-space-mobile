@@ -1,12 +1,9 @@
 package earth.walkthru.aqsync.data.local.security
 
+import android.security.keystore.KeyPermanentlyInvalidatedException
 import earth.walkthru.aqsync.data.local.database.KnownDevice
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.transform
-import java.security.InvalidKeyException
-import java.security.KeyStoreException
-import java.security.UnrecoverableKeyException
 import javax.crypto.AEADBadTagException
 
 /** Startup task that must finish before services are allowed to consume stored LAN credentials. */
@@ -14,17 +11,34 @@ fun interface LanTokenMigration {
     suspend fun migratePlaintextTokens()
 }
 
-/** Keeps LAN bearer tokens encrypted at rest while preserving the DAO's plaintext API. */
+/**
+ * The only way to read a LAN bearer token in plaintext. Called by the data layer at the moment a
+ * LAN transport is built, never by a ViewModel.
+ */
+fun interface LanCredentialStore {
+    /**
+     * Plaintext token hex for [address], or null when none is stored or the stored ciphertext can
+     * never be decrypted again (it is then cleared). A transient Keystore failure is thrown and
+     * the stored credential is kept for the next attempt.
+     */
+    suspend fun lanToken(address: String): String?
+}
+
+/**
+ * Keeps LAN bearer tokens encrypted at rest. Row reads return the stored ciphertext in
+ * [KnownDevice.lanToken], so `hasLanToken` works for the UI while plaintext never reaches a
+ * ViewModel. Plaintext comes only from [LanCredentialStore.lanToken]. Writes accept plaintext
+ * (encrypted here) or ciphertext (stored as is), so a read row can be upserted back unchanged.
+ */
 class SecureKnownDeviceDao(
     private val delegate: KnownDeviceDao,
     private val cipher: LanTokenCipherContract,
 ) : KnownDeviceDao,
-    LanTokenMigration {
-    override fun observeAll(): Flow<List<KnownDevice>> = delegate.observeAll().transform { devices ->
-        emit(devices.map { decryptOrClear(it) })
-    }
+    LanTokenMigration,
+    LanCredentialStore {
+    override fun observeAll(): Flow<List<KnownDevice>> = delegate.observeAll()
 
-    override suspend fun get(address: String): KnownDevice? = delegate.get(address)?.let { decryptOrClear(it) }
+    override suspend fun get(address: String): KnownDevice? = delegate.get(address)
 
     override suspend fun upsert(device: KnownDevice) = delegate.upsert(encrypt(device))
 
@@ -35,13 +49,13 @@ class SecureKnownDeviceDao(
     override suspend fun setLanToken(address: String, tokenHex: String?, port: Int?) =
         delegate.setLanToken(address, tokenHex?.let(cipher::encrypt), port)
 
-    override suspend fun findByStation(station: String): KnownDevice? = delegate.findByStation(station)?.let { decryptOrClear(it) }
+    override suspend fun findByStation(station: String): KnownDevice? = delegate.findByStation(station)
 
     override suspend fun setAutoSync(address: String, enabled: Boolean) = delegate.setAutoSync(address, enabled)
 
-    override suspend fun autoSyncDevices(): List<KnownDevice> = delegate.autoSyncDevices().map { decryptOrClear(it) }
+    override suspend fun autoSyncDevices(): List<KnownDevice> = delegate.autoSyncDevices()
 
-    override suspend fun allByLastConnected(): List<KnownDevice> = delegate.allByLastConnected().map { decryptOrClear(it) }
+    override suspend fun allByLastConnected(): List<KnownDevice> = delegate.allByLastConnected()
 
     override fun observeAutoSyncCount(): Flow<Int> = delegate.observeAutoSyncCount()
 
@@ -52,14 +66,26 @@ class SecureKnownDeviceDao(
 
     override suspend fun delete(address: String) = delegate.delete(address)
 
+    override suspend fun lanToken(address: String): String? {
+        val device = delegate.get(address) ?: return null
+        val stored = device.lanToken ?: return null
+        return try {
+            cipher.decrypt(stored)
+        } catch (e: Exception) {
+            if (!isUnusableCiphertext(e)) throw e
+            // Only a ciphertext that can never decrypt again is deleted. Clear it only if the row
+            // still holds that same ciphertext, so a token fetched meanwhile survives.
+            if (delegate.get(address)?.lanToken == stored) delegate.setLanToken(address, null, null)
+            null
+        }
+    }
+
     override suspend fun migratePlaintextTokens() {
         if (!cipher.migrationRequired()) return
         delegate.allByLastConnected().forEach { device ->
             val token = device.lanToken ?: return@forEach
             if (!LanTokenCipher.isEncrypted(token)) {
                 delegate.setLanToken(device.address, cipher.encrypt(token), device.lanPort)
-            } else {
-                decryptOrClear(device)
             }
         }
         cipher.markMigrationComplete()
@@ -68,28 +94,15 @@ class SecureKnownDeviceDao(
     private fun encrypt(device: KnownDevice): KnownDevice =
         device.copy(lanToken = device.lanToken?.let(cipher::encrypt))
 
-    private suspend fun decryptOrClear(device: KnownDevice): KnownDevice {
-        val decrypted = decryptOrNull(device) ?: return device.copy(lanToken = null, lanPort = null).also {
-            delegate.setLanToken(device.address, null, null)
-        }
-        return device.copy(lanToken = decrypted)
-    }
-
-    private fun decryptOrNull(device: KnownDevice): String? {
-        val stored = device.lanToken ?: return null
-        return try {
-            cipher.decrypt(stored)
-        } catch (e: Exception) {
-            if (!isUnusableCiphertext(e)) throw e
-            null
-        }
-    }
-
+    /**
+     * True only for failures that prove the ciphertext is dead: an authentication tag mismatch
+     * (wrong or regenerated key, tampering), a key Android invalidated for good, or a malformed
+     * envelope. A `KeyStoreException`, an `UnrecoverableKeyException` or any other
+     * `InvalidKeyException` can be a transient Keystore problem and keeps the credential.
+     */
     private fun isUnusableCiphertext(error: Exception): Boolean =
         error is AEADBadTagException ||
-            error is InvalidKeyException ||
-            error is KeyStoreException ||
-            error is UnrecoverableKeyException ||
+            error is KeyPermanentlyInvalidatedException ||
             (error is IllegalArgumentException && error.message == MALFORMED_CIPHERTEXT)
 
     companion object {

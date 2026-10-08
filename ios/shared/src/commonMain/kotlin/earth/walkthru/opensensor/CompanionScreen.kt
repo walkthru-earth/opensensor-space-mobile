@@ -19,6 +19,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import earth.walkthru.aqsync.data.history.NowReading
 import kotlin.math.round
@@ -94,7 +95,10 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
                 }
                 item {
                     Text("On your Wi-Fi", style = MaterialTheme.typography.titleLarge)
-                    Text(state.lanMessage)
+                    Text(
+                        state.lanMessage,
+                        color = if (state.lanAccessDenied) MaterialTheme.colorScheme.error else Color.Unspecified,
+                    )
                     OutlinedButton(onClick = scanLan, enabled = !state.lanScanning) {
                         Text(if (state.lanScanning) "Looking on Wi-Fi…" else "Find Wi-Fi sensors")
                     }

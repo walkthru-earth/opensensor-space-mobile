@@ -35,7 +35,9 @@ invalid, disconnected and expired readings remain unavailable. Ambiguous
 board temperature and humidity are shown only for reviewed schema/dictionary
 profiles. Core Bluetooth owns pairing prompts. Operations are serialized and
 scan/connection timers bound attempts. The app sends no firmware-changing
-commands and has no accounts, analytics, cloud connection or location permission.
+commands and has no accounts, analytics, cloud connection or location permission. The planned
+discover map adds only anonymous, read-only feed and basemap GETs, and uploads stay a per-device
+opt-in ([devices-and-discovery.md](devices-and-discovery.md#network-boundary)).
 
 Wi-Fi discovery is also available through `NWBrowser`, restricted to
 `_aqsync._tcp` in `local.`. Tapping **Find Wi-Fi sensors** starts a bounded browse
@@ -52,20 +54,47 @@ service can then connect with the existing `AQS1` handshake. HELLO must match th
 station and full hardware identity; discovery alone cannot enroll a replacement.
 
 The Wi-Fi cards support independent connections, live particle readings and **Sync**. Two
-sensors can collect files concurrently on one phone. Each TCP socket has one reader, bounded
-reply buffering, push demultiplexing, a keepalive measured from outgoing phone traffic, and
-bounded request/idle waits. Cancellation closes the socket and resumes pending operations;
-old task callbacks cannot update a newer session. Alias services cannot open two controllers
-for the same hardware on this phone.
+sensors can collect files concurrently on one phone. Each `LanSession` is an actor whose
+executor is the session's own serial dispatch queue. Network callbacks, timers and framing run
+on that queue, so they enter actor state in delivery order without a task per callback. The
+session keeps one receive of up to 64 KiB outstanding and splits `len` u16 frames from an
+accumulating buffer, with bounded reply buffering (32 frames) and push demultiplexing. STATUS
+and LIVE pushes and the final close reason reach `LanDiscovery` through one ordered
+`AsyncStream` per session. A keepalive is measured from outgoing phone traffic, and request,
+connect and 180 s idle waits are bounded. LAN sockets prohibit cellular interfaces and use a
+10 s TCP connection timeout. Cancellation closes the socket and fails pending waits; old task
+callbacks cannot update a newer session. Alias services cannot open two controllers for the
+same hardware on this phone.
+
+Frames cross the Kotlin and Swift boundary as `NSData` (Swift `Data`). `iosMain/SyncWireData.kt`
+copies with `usePinned` and `memcpy`; no hex strings remain on the transfer path. The LAN
+handshake takes the token as `Data` and zeroes the Kotlin copies after building the frame.
 
 Collections mirror immutable files under Application Support as
 `SensorArchive/<station>/<relative path>`. Interrupted downloads retain partial bytes keyed
-by size/CRC and resume from the phone's own received offset. READ handles, offsets, window
-lengths and READ_END are checked. A final filename appears only after size, streamed IEEE
+by size/CRC and resume from the phone's own received offset. READ handles, offsets and window
+lengths are checked. As the contract requires, a window whose READ_END disagrees with the
+phone's own count, or that skipped a chunk, is retried with a new READ from the phone's offset.
+Chunks after a gap are drained until READ_END first. Overlapping or duplicate bytes already held
+are skipped, and `next_offset` never overrides the local count. Retries mirror Android's
+`SyncEngine` (5 retries, 0.3 s linear backoff). A consistent short READ_END continues from the
+reported end, a READ_END error status ends the run, and held bytes are kept for resume in
+every case. A final filename appears only after size, streamed IEEE
 CRC-32 and `PAR1` head/tail verification. Existing finalized files are verified and preserved;
 a conflicting file fails the collection rather than replacing data. Paths use the firmware's
-safe-name whitelist, reject traversal/symlinks, and keep station directories independent.
-File I/O and CRC verification run away from the UI actor. The archive is excluded from cloud backup.
+safe-name whitelist and 399-byte limit, reject traversal/symlinks, and keep station directories
+independent. Collection runs off the main actor. Archive writes hop to the `ArchiveIO` actor
+once per READ window (append plus fsync), and progress reaches the main actor at most four
+times per second. The archive root is created with
+`FileProtectionType.completeUntilFirstUserAuthentication`, matching the Keychain token's
+`AfterFirstUnlockThisDeviceOnly`, so collection can keep writing after the phone locks. Partials
+and receipts inherit or set the same class. Backup exclusion is set when the root is created
+(and repaired once for older installs) instead of on every sync.
+
+Bonjour discovery reports a Local Network denial only when `NWBrowser` waits with
+`kDNSServiceErr_PolicyDenied`, following [TN3179](https://developer.apple.com/documentation/technotes/tn3179-understanding-local-network-privacy).
+The screen then shows a Settings hint, and the browse continues so that allowing access resumes
+discovery. Other waiting reasons keep the neutral message.
 
 User-started LAN collection requests a UIKit background-task lease. Switching apps stops
 discovery and BLE/idle LAN connections, but active collections continue while iOS grants time.
@@ -108,15 +137,25 @@ xcodebuild -project ios/OpenSensor.xcodeproj -scheme OpenSensor \
   -derivedDataPath ios/build/DerivedData CODE_SIGNING_ALLOWED=NO build
 ./gradlew --no-daemon verifyIos
 ./ios/tests/verify-native.sh
+xcodebuild -project ios/OpenSensor.xcodeproj -scheme OpenSensor \
+  -configuration Debug -destination 'platform=iOS Simulator,name=iPhone 17' \
+  -derivedDataPath ios/build/DerivedData CODE_SIGNING_ALLOWED=NO test
 ```
+
+Pick any installed iPhone simulator for the `test` destination (`xcrun simctl list devices available`).
 
 `verify` includes Android lint/APK/unit tests, existing JVM core tests, shared core
 tests and the iOS presentation state's JVM tests. It works without Xcode on Linux.
 `verifyIos` runs common tests on the simulator and links the shared framework;
 it needs an installed simulator runtime. The Xcode build compiles the Swift BLE
-adapter and app too. The native Swift harness exercises the production archive and transfer engine with scripted
-replies: resume, CRC verification, immutable conflicts, path/symlink rejection, foreign handles,
-READ_END consistency, independent concurrent stations and outbound keepalive timing.
+adapter and app too, with `SWIFT_STRICT_CONCURRENCY = complete` and no warnings. The native
+checks exercise the production archive and transfer engine with scripted replies: resume, CRC
+verification, immutable conflicts, the 399-byte name limit, path/symlink rejection, foreign
+handles, window retry (short READ_END, gap, overlap, duplicate, exhaustion, error status), LAN
+framing, Local Network denial detection, independent concurrent stations and outbound keepalive
+timing. `verify-native.sh` compiles them on the Mac host with complete concurrency checking and
+warnings as errors. The hostless `OpenSensorTests` Swift Testing target runs the same checks on an
+iOS simulator through the shared scheme's test action, without signing or the Kotlin framework.
 Neither a simulator build nor these tests qualifies real radio behavior.
 
 GitHub Actions adds an Apple Silicon macOS job for `verifyIos`, an unsigned Debug
@@ -156,6 +195,9 @@ accuracy, stale/background handling or authenticated Wi-Fi connections. See
 4. Qualify BLE token acquisition, Keychain persistence, authenticated LAN transfer, multi-phone
    collection, concurrent sensors, cancellation/resume and Local Network permissions on iPhones.
 5. Qualify bounded iOS LAN background collection, automatic foreground resume and Files exports on iPhones.
+6. Measure LAN throughput with the off-main session on an iPhone, confirm the Local Network
+   denial hint after declining and revoking access, and confirm archive writes continue after
+   the phone locks during a background collection.
 
 LAN byte transfer and integrity verification use a native Swift platform engine with the shared
 Kotlin wire codec. Android's existing session/archive engine still depends on JVM file APIs,

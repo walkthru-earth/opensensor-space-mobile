@@ -18,16 +18,25 @@ import java.net.InetAddress
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** What the repository needs to build transports; [TransportFactory] in the app, a fake in tests. */
+interface TransportSource {
+    fun ble(address: String): AqTransport
+    fun bleUnattended(address: String, connectTimeoutMs: Long): AqTransport
+    fun lan(address: String, name: String?, host: InetAddress, port: Int, token: ByteArray): AqTransport
+    fun fake(address: String): AqTransport
+    fun isFake(transport: AqTransport): Boolean
+}
+
 /**
  * Creates [AqTransport]s. The repository decides *which* one (LAN when the device is discovered
  * on the network and a token is held, else BLE); this class only builds them. The fake is
  * debug-only.
  */
 @Singleton
-class TransportFactory @Inject constructor(@ApplicationContext private val context: Context) {
+class TransportFactory @Inject constructor(@ApplicationContext private val context: Context) : TransportSource {
 
     @SuppressLint("MissingPermission") // gated by the permission screen before any connect
-    fun ble(address: String): AqTransport {
+    override fun ble(address: String): AqTransport {
         val manager = context.getSystemService(BluetoothManager::class.java)
         val adapter = manager?.adapter ?: throw TransportException("this phone has no Bluetooth adapter")
         val device = adapter.getRemoteDevice(address)
@@ -40,7 +49,7 @@ class TransportFactory @Inject constructor(@ApplicationContext private val conte
      * logger costs seconds, not the 30 s the interactive path allows.
      */
     @SuppressLint("MissingPermission") // the worker checks hasConnectPermission() first
-    fun bleUnattended(address: String, connectTimeoutMs: Long): AqTransport {
+    override fun bleUnattended(address: String, connectTimeoutMs: Long): AqTransport {
         if (!hasConnectPermission()) throw TransportException("BLUETOOTH_CONNECT is not granted")
         val manager = context.getSystemService(BluetoothManager::class.java)
         val adapter = manager?.adapter ?: throw TransportException("this phone has no Bluetooth adapter")
@@ -65,18 +74,18 @@ class TransportFactory @Inject constructor(@ApplicationContext private val conte
      * session, the archive and the UI treat it as the same device. [host]/[port] come from mDNS
      * discovery of `_aqsync._tcp` — the only place the app ever gets an IP address from.
      */
-    fun lan(address: String, name: String?, host: InetAddress, port: Int, token: ByteArray): AqTransport =
+    override fun lan(address: String, name: String?, host: InetAddress, port: Int, token: ByteArray): AqTransport =
         TcpTransport(address = address, displayName = name, host = host, port = port, token = token)
 
     private val fakes = HashMap<String, FakeTransport>()
 
     /** One fake per address, kept for the process lifetime so its "NVS" survives disconnects and fake reboots. */
-    fun fake(address: String): AqTransport {
+    override fun fake(address: String): AqTransport {
         check(BuildConfig.DEBUG) { "fake device is debug-only" }
         return synchronized(fakes) {
             fakes.getOrPut(address) { FakeTransport(address = address, simulateLan = address == FakeTransport.FAKE_LAN_ADDRESS) }
         }
     }
 
-    fun isFake(transport: AqTransport): Boolean = transport is FakeTransport
+    override fun isFake(transport: AqTransport): Boolean = transport is FakeTransport
 }

@@ -49,7 +49,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         state.scanStarted()
         central.scanForPeripherals(withServices: [CBUUID(string: state.serviceUuid)])
         scanTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: false) { [weak self] _ in
-            Task { @MainActor in self?.stopScan() }
+            MainActor.assumeIsolated { self?.stopScan() }
         }
     }
 
@@ -67,7 +67,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         peripheral.delegate = self
         state.connectionStarted(id: id)
         connectionTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: false) { [weak self] _ in
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 self?.disconnect(message: "Connection timed out. Keep the sensor nearby and try again.")
             }
         }
@@ -195,9 +195,9 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         else { return }
         requestingToken = true
         state.wifiAccessChanged(available: true, busy: true, explanation: "Saving Wi-Fi access…")
-        operations = [.subscribe(response), .write(control, Data(wireHex: wire.tokenRequest())!)]
+        operations = [.subscribe(response), .write(control, wire.tokenRequest())]
         tokenTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: false) { [weak self] _ in
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 self?.disconnect(message: "Wi-Fi access timed out. Reconnect over Bluetooth and try again.")
             }
         }
@@ -252,14 +252,14 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         guard current === peripheral, foreground else { return }
         if characteristic.uuid == CBUUID(string: wire.responseUuid) {
             guard requestingToken, error == nil, let data = characteristic.value,
-                let reply = wire.decode(hex: data.wireHex)
+                let reply = wire.decode(data: data)
             else { return }
-            if reply.kind == "token", let identity, let token = Data(wireHex: reply.dataHex) {
+            if reply.kind == "token", let identity {
                 do {
                     try credentials.save(
                         LanCredential(
                             station: identity.station, device: identity.device,
-                            peripheral: peripheral.identifier.uuidString, token: token, port: Int(reply.port)))
+                            peripheral: peripheral.identifier.uuidString, token: reply.payload, port: Int(reply.port)))
                     finishTokenRequest("Wi-Fi access saved on this phone. Find this sensor on Wi-Fi to sync.")
                     onCredentialSaved?()
                 } catch { finishTokenRequest("Wi-Fi access could not be saved securely. Try again.") }
@@ -286,7 +286,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
             state.receiveLive(json: json)
             freshnessTimer?.invalidate()
             freshnessTimer = Timer.scheduledTimer(withTimeInterval: 35, repeats: false) { [weak self] _ in
-                Task { @MainActor in self?.state.readingExpired() }
+                MainActor.assumeIsolated { self?.state.readingExpired() }
             }
         case CBUUID(string: state.statusUuid): state.receiveStatus(json: json)
         default: return

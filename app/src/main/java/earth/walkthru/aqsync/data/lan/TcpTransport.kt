@@ -5,6 +5,7 @@ import earth.walkthru.aqsync.data.ble.AqTransport
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.TransportException
 import earth.walkthru.aqsync.data.ble.TransportKind
+import earth.walkthru.aqsync.data.coroutines.suspendRunCatching
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.protocol.FrameCodec
 import earth.walkthru.aqsync.data.protocol.FrameDecodeException
@@ -253,7 +254,7 @@ class TcpTransport(
                 return
             }
             if (now - lastTxAt.get() > LanFraming.KEEPALIVE_AFTER_IDLE_MS) {
-                runCatching { writeControl(byteArrayOf(Opcode.STATUS.toByte())) }
+                suspendRunCatching { writeControl(byteArrayOf(Opcode.STATUS.toByte())) }
                     .onFailure { Log.w(TAG, "keep-alive failed: ${it.message}") }
             }
         }

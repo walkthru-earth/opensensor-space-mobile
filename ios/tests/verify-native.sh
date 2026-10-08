@@ -3,10 +3,12 @@ set -eu
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 test_dir=$(mktemp -d "${TMPDIR:-/tmp}/opensensor-ios-tests.XXXXXX")
 trap 'rm -rf "$test_dir"' EXIT
-swiftc -module-cache-path "$test_dir/module-cache" \
+swiftc -module-cache-path "$test_dir/module-cache" -strict-concurrency=complete -warnings-as-errors \
   "$repo_root/ios/App/SensorArchive.swift" \
   "$repo_root/ios/App/SensorTransfer.swift" \
+  "$repo_root/ios/App/LanPolicy.swift" \
   "$repo_root/ios/tests/TransferChecks.swift" \
-  "$repo_root/ios/tests/archive-main.swift" \
+  "$repo_root/ios/tests/ArchiveChecks.swift" \
+  "$repo_root/ios/tests/native-main.swift" \
   -o "$test_dir/archive-checks"
 "$test_dir/archive-checks"

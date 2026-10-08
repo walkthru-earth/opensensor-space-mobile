@@ -18,6 +18,11 @@ import java.util.concurrent.Executor
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** Ends the "wake when nearby" association when a device is forgotten. */
+fun interface CompanionUnlinker {
+    fun disassociate(address: String, associationId: Int?)
+}
+
 /**
  * Companion Device Manager: the system-side "is my logger nearby?" watcher behind Auto-sync's
  * *wake when nearby* — the mechanism the firmware repo's `docs/background-sync-triggers.md` puts
@@ -41,7 +46,7 @@ import javax.inject.Singleton
  * through [ObservingDevicePresenceRequest] and deliver `DevicePresenceEvent`s.
  */
 @Singleton
-class CompanionPresence @Inject constructor(@ApplicationContext private val context: Context) {
+class CompanionPresence @Inject constructor(@ApplicationContext private val context: Context) : CompanionUnlinker {
     private val manager: CompanionDeviceManager? =
         if (context.packageManager.hasSystemFeature(PackageManager.FEATURE_COMPANION_DEVICE_SETUP)) {
             context.getSystemService(CompanionDeviceManager::class.java)
@@ -141,7 +146,7 @@ class CompanionPresence @Inject constructor(@ApplicationContext private val cont
     }
 
     /** Forget the association (and stop observing) — "wake when nearby" off, or the device forgotten. */
-    fun disassociate(address: String, associationId: Int?) {
+    override fun disassociate(address: String, associationId: Int?) {
         val cdm = manager ?: return
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA && associationId != null && associationId != KnownDevice.COMPANION_ASSOCIATED_LEGACY) {
