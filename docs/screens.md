@@ -95,7 +95,7 @@ pattern serves radio options: pairing modes show only their label, and their des
 paragraphs of the pairing info sheet. Confirmation dialogs stay (reboot, token rotation, forget
 paired phones, pairing mode none, set time, finalize) with one or two short sentences. Copy rules
 in `cross-platform-guide.md` apply, and missing values print `NO_VALUE` ("n/a"), never a dash.
-`CopyRulesTest` fails on a dash, semicolon or sentence colon in `strings.xml`. The data layer
+`CopyLintTest` in `:ui:strings` fails on a dash, semicolon or sentence colon in any `strings.xml`. The data layer
 never writes sentences. Its snackbars are `DeviceMessage` codes (`data/DeviceMessage.kt`) that
 `ui/components/DeviceMessages.kt` maps to resources, and exception detail stays in the log or a
 Developer-level line.
