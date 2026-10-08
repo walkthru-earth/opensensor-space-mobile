@@ -98,6 +98,16 @@ from newly written bytes, excluding resumed or reused bytes. Read-window fsync
 and final verification are retained. These changes remove overhead; a new board
 run is required to establish actual throughput improvement.
 
+The owner subsequently authorized the CoreS3 v6.7 deployment. Three host fetches
+of the same 87,654-byte file without a USB reader took 0.925–1.045 seconds;
+two simultaneous host collectors each reached about 57 KB/s. The old image's
+USB-drained/undrained comparison identified console backpressure as a material
+contributor: radio/archive diagnostics now stay in LOG_TAIL without console IO.
+Physical serial DATA/list/status/provisioning paths retain their behavior.
+See the [dated board result](../../aq-parquet/docs/boards/m5stack-cores3/bench-verified.md#2026-10-08--cores3-v67-lan-latency-and-usb-backpressure)
+for image/backup hashes, client-count differences and limits. These short host
+measurements do not establish Android/iPhone throughput after the upgrade.
+
 | | Bluetooth LE (`BleTransport`) | LAN (`TcpTransport`) |
 | --- | --- | --- |
 | Discovery | GATT scan for the service UUID (`BleScanner`) | mDNS `_aqsync._tcp` via `NsdManager` (`LanDiscovery`), TXT `station`/`dev`/`fw`/`proto`; browsed only while the app is started and the permission is held |

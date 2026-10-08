@@ -373,3 +373,29 @@ Waveshare schema gate fails at an existing firmware-identity assertion in unrela
 pending schema work. See its [performance guide](../../aq-parquet/docs/shared/lan-performance.md).
 Firmware has not been installed for this change; a sensor restart requires owner
 confirmation. Hardware throughput and sampling/coexistence results remain pending.
+
+## 2026-10-08 — authorized CoreS3 v6.7 deployment and measured host speed
+
+The owner approved installing the firmware and measuring Wi-Fi speed. After
+the required identity/security checks and verified private 16 MiB backup, the
+CoreS3 at AQ-6b40 was upgraded to v6.7; upload verified its hash and LAN INFO
+reported the new identity with preserved station/device and a working saved token.
+The deployed working-copy image includes the owner's pending configuration work.
+USB backpressure was removed from radio/archive diagnostics without changing
+physical serial commands; fixed firmware scheduling waits were also removed.
+
+The same **87,654-byte file** took **0.925–1.045 seconds** in three host runs
+without a USB reader (**84–95 KB/s**). Two simultaneous host collectors each
+reached approximately **57 KB/s**. All copies matched the original SHA-256 and
+passed CRC/PAR1 and PyArrow/DuckDB validation; a physical serial readback passed
+too. Short-run logger snapshots showed no new dropped rows, errors, missed
+deadlines or failed state. An old-image comparison with two connections took
+2.149 seconds with the USB console drained versus 16.459 seconds without;
+another initial undrained baseline took 33.672 seconds with client count unknown.
+Different loads/client counts prevent claiming a controlled phone speed multiplier.
+
+Exact application/ELF and backup hashes, timings and limits are in the
+[CoreS3 bench record](../../aq-parquet/docs/boards/m5stack-cores3/bench-verified.md#2026-10-08--cores3-v67-lan-latency-and-usb-backpressure).
+The enhanced iPhone app remains installed with average KiB/s feedback. Actual
+Android/iPhone throughput after the firmware upgrade still needs phone observations;
+these are real-board host measurements, not phone or sustained-radio qualification.

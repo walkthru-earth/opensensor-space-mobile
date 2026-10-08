@@ -72,8 +72,11 @@ can sync two sensors concurrently per phone. History/export UI and background co
 remain Android features while iOS migration continues. Build and qualification
 instructions are in [docs/ios-migration.md](docs/ios-migration.md); local iOS coding
 instructions are in [ios/AGENTS.md](ios/AGENTS.md). On 2026-10-08, the owner confirmed
-live readings on a connected iPhone and a Bonjour discovery result; pairing prompts,
-reading accuracy, stale/background behavior and authenticated Wi-Fi transfer remain unqualified.
+live readings, Bonjour discovery, saved Wi-Fi access and collection starting on a
+connected iPhone. Pairing prompts, reading accuracy, stale/background behavior and
+completed-file phone verification still need qualification. The iPhone card now shows
+average KiB/s; [dated transfer evidence](docs/transports.md#investigating-slow-wi-fi-collection-2026-10-08)
+separates measured CoreS3 host throughput from pending phone speed checks.
 
 ## Build
 

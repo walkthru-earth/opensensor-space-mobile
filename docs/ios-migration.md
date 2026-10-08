@@ -71,7 +71,9 @@ This remains foreground-only: entering the background stops discovery and closes
 connections. Resume collection explicitly after returning. The app has no background BLE
 capability, automatic collection, archive charts or export UI. Native BLE uses Core Bluetooth's
 peripheral identifier; the Keychain identity also pins station and full hardware ID. New
-LAN/archive behavior has host/simulator/build evidence only, pending an iPhone run.
+LAN/archive behavior has host/simulator/build evidence plus the owner's report of
+saved access and collection starting. Completed-file verification and throughput
+after the CoreS3 v6.7 upgrade still need iPhone observations; see [status.md](status.md).
 
 ## Build and run
 
