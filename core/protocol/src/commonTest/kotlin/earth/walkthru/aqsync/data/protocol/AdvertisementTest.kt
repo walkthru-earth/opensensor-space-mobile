@@ -1,12 +1,12 @@
 package earth.walkthru.aqsync.data.protocol
 
-import org.junit.Assert.assertArrayEquals
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotEquals
-import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /** Bytes as `ble::fill_advert_payload` in the firmware lays them out (protocol 2.1). */
 class AdvertisementTest {
@@ -18,7 +18,7 @@ class AdvertisementTest {
     )
 
     @Test
-    fun `decodes flags, counter and boot suffix little-endian`() {
+    fun `decodes flags counter and boot suffix little-endian`() {
         val adv = Advertisement.decode(payload(flags = 0x0e, fin = 0x01020304, boot16 = 0x6b40))!!
         assertEquals(1, adv.version)
         assertTrue(adv.newFiles)
@@ -41,7 +41,7 @@ class AdvertisementTest {
     }
 
     @Test
-    fun `unknown version, short payload and absence decode to null`() {
+    fun `unknown version short payload and absence decode to null`() {
         assertNull(Advertisement.decode(null))
         assertNull(Advertisement.decode(payload(0, 0, 0, version = 2)))
         assertNull(Advertisement.decode(byteArrayOf(1, 0, 0, 0)))
@@ -50,7 +50,7 @@ class AdvertisementTest {
     }
 
     @Test
-    fun `change key follows boot, counter and the two actionable flags only`() {
+    fun `change key follows boot and counter and the two actionable flags only`() {
         val a = Advertisement.decode(payload(flags = Advertisement.FLAG_NEW_FILES or Advertisement.FLAG_SD, fin = 5, boot16 = 1))!!
         val sameButLan = Advertisement.decode(payload(flags = Advertisement.FLAG_NEW_FILES or Advertisement.FLAG_SD or Advertisement.FLAG_LAN, fin = 5, boot16 = 1))!!
         val nextFile = Advertisement.decode(payload(flags = Advertisement.FLAG_NEW_FILES, fin = 6, boot16 = 1))!!
@@ -64,7 +64,7 @@ class AdvertisementTest {
     @Test
     fun `flag filter masks the version byte and selects one bit`() {
         val (data, mask) = Advertisement.flagFilter(Advertisement.FLAG_NEW_FILES)
-        assertArrayEquals(byteArrayOf(0, 2), data)
-        assertArrayEquals(byteArrayOf(0, 2), mask)
+        assertContentEquals(byteArrayOf(0, 2), data)
+        assertContentEquals(byteArrayOf(0, 2), mask)
     }
 }

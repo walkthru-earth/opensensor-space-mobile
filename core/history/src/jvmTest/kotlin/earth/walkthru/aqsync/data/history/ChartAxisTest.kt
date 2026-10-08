@@ -1,9 +1,9 @@
 package earth.walkthru.aqsync.data.history
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class ChartAxisTest {
     private fun column(mean: Float?, max: Float? = mean) = HistoryColumn(0, 3600, mean, max, 1f, 0f)

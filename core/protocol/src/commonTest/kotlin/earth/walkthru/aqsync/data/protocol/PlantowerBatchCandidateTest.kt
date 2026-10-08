@@ -1,8 +1,8 @@
 package earth.walkthru.aqsync.data.protocol
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class PlantowerBatchCandidateTest {
     @Test fun `count formula uses exact batch and valid frame`() {

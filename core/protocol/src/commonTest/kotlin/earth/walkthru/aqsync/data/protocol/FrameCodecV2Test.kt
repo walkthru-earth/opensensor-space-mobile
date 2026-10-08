@@ -1,12 +1,12 @@
 package earth.walkthru.aqsync.data.protocol
 
-import org.junit.Assert.assertArrayEquals
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
-import org.junit.Assert.fail
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlin.test.fail
 
 /**
  * Protocol v2 additions from docs/ble-sync-protocol.md (2026-09-17): opcodes 0x08–0x0D, frames
@@ -56,7 +56,7 @@ class FrameCodecV2Test {
     @Test
     fun `CONFIG decodes flags and json`() {
         val json = """{"ble":{"pair":"fixed","pin":123456,"pin_default":1,"bonds":1,"display":0}}"""
-        val frame = FrameCodec.decode(("40" + "01" + json.toByteArray().toHex()).hexToBytes()) as Frame.Config
+        val frame = FrameCodec.decode(("40" + "01" + json.encodeToByteArray().toHex()).hexToBytes()) as Frame.Config
         assertTrue(frame.rebootRequired)
         assertEquals(json, frame.json)
         val cfg = DeviceConfig.parse(frame.json)
@@ -105,7 +105,7 @@ class FrameCodecV2Test {
     @Test
     fun `LOG keeps raw bytes so a split UTF-8 sequence survives concatenation`() {
         val text = "PARQUET µg/m³ ok\n"
-        val bytes = text.toByteArray(Charsets.UTF_8)
+        val bytes = text.encodeToByteArray()
         val cut = bytes.indexOf(0xC2.toByte()) + 1 // split inside the 2-byte 'µ'
         val a = FrameCodec.decode(byteArrayOf(0x44) + bytes.copyOfRange(0, cut)) as Frame.Log
         val b = FrameCodec.decode(byteArrayOf(0x44) + bytes.copyOfRange(cut, bytes.size)) as Frame.Log
@@ -118,7 +118,7 @@ class FrameCodecV2Test {
         val raw = ("46" + "1eb9" + token.toHex()).hexToBytes() // 0xb91e = 47390
         val frame = FrameCodec.decode(raw) as Frame.Token
         assertEquals(47390, frame.port)
-        assertArrayEquals(token, frame.token)
+        assertContentEquals(token, frame.token)
         assertFalse(frame.toString().contains(token.toHex()))
         assertTrue(frame.toString().contains("redacted"))
 
@@ -132,20 +132,20 @@ class FrameCodecV2Test {
     @Test
     fun `HELLO STATUS LIVE decode`() {
         val info = """{"proto":2,"fw":"cores3-parquet-v5","station":"53315f5f-cb85-4d8d-b623-d56266084189","max_read":16384}"""
-        val hello = FrameCodec.decode(("47" + "02" + "0004" + info.toByteArray().toHex()).hexToBytes()) as Frame.Hello
+        val hello = FrameCodec.decode(("47" + "02" + "0004" + info.encodeToByteArray().toHex()).hexToBytes()) as Frame.Hello
         assertEquals(2, hello.proto)
         assertEquals(1024, hello.payloadMax)
         assertEquals(16384, DeviceInfo.parse(hello.infoJson).maxRead)
 
-        val status = FrameCodec.decode(("48" + """{"up_s":5,"utc":1}""".toByteArray().toHex()).hexToBytes()) as Frame.StatusPush
+        val status = FrameCodec.decode(("48" + """{"up_s":5,"utc":1}""".encodeToByteArray().toHex()).hexToBytes()) as Frame.StatusPush
         assertEquals(5L, DeviceStatus.parse(status.json).upSeconds)
-        val live = FrameCodec.decode(("49" + """{"seq":9,"pms":4,"pm25":7}""".toByteArray().toHex()).hexToBytes()) as Frame.LivePush
+        val live = FrameCodec.decode(("49" + """{"seq":9,"pms":4,"pm25":7}""".encodeToByteArray().toHex()).hexToBytes()) as Frame.LivePush
         assertEquals(7.0, LiveSample.parse(live.json).pm25)
     }
 
     @Test
     fun `v2 error codes are named`() {
-        val e12 = FrameCodec.decode(("7f" + "09" + "0c" + "wifi.ssid".toByteArray().toHex()).hexToBytes()) as Frame.Error
+        val e12 = FrameCodec.decode(("7f" + "09" + "0c" + "wifi.ssid".encodeToByteArray().toHex()).hexToBytes()) as Frame.Error
         assertEquals(ProtocolError.INVALID_CONFIG, e12.error)
         assertEquals("SET_CONFIG failed: invalid config (wifi.ssid)", e12.describe())
         assertEquals(ProtocolError.NOT_ALLOWED_ON_LINK, (FrameCodec.decode("7f 0d 0d".hexToBytes()) as Frame.Error).error)
@@ -167,13 +167,13 @@ class FrameCodecV2Test {
             Frame.LivePush("""{"seq":1}"""),
         )
         for (f in frames) {
-            assertEquals(f.toString(), f, FrameCodec.decode(FrameCodec.encode(f)))
+            assertEquals(f, FrameCodec.decode(FrameCodec.encode(f)), f.toString())
         }
-        val log = FrameCodec.decode(FrameCodec.encode(Frame.Log("abc".toByteArray()))) as Frame.Log
-        assertArrayEquals("abc".toByteArray(), log.bytes)
+        val log = FrameCodec.decode(FrameCodec.encode(Frame.Log("abc".encodeToByteArray()))) as Frame.Log
+        assertContentEquals("abc".encodeToByteArray(), log.bytes)
         val tok = FrameCodec.decode(FrameCodec.encode(Frame.Token(47390, token))) as Frame.Token
         assertEquals(47390, tok.port)
-        assertArrayEquals(token, tok.token)
+        assertContentEquals(token, tok.token)
     }
 
     @Test

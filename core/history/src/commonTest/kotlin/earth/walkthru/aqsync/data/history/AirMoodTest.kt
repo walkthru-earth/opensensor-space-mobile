@@ -2,9 +2,10 @@ package earth.walkthru.aqsync.data.history
 
 import earth.walkthru.aqsync.data.protocol.LiveSample
 import earth.walkthru.aqsync.data.protocol.PmsStatus
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import kotlin.math.nextDown
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class AirMoodTest {
     @Test
@@ -28,7 +29,7 @@ class AirMoodTest {
         val edges = AirMood.entries.dropLast(1).map { it.upTo.toDouble() }
         assertEquals(listOf(15.0, 35.0, 55.0, 150.0), edges)
         edges.forEachIndexed { i, edge ->
-            val below = Math.nextDown(edge)
+            val below = edge.nextDown()
             assertEquals(AirMood.entries[i], AirMood.of(below))
             assertEquals(AirMood.entries[i + 1], AirMood.of(edge))
             assertEquals(AirMood.of(edge), Metrics.PM25.moodOf(edge))

@@ -1,14 +1,14 @@
 package earth.walkthru.aqsync.data.protocol
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
-import org.junit.Assert.fail
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
+import kotlin.test.fail
 
 class ConfigChunkAccumulatorTest {
     @Test fun `reassembles utf8 split across BLE notifications`() {
         val json = """{"wifi":{"ssid":"Café"},"sensor":{"serial":"PMS5003T-202604081332"}}"""
-        val bytes = json.toByteArray(Charsets.UTF_8)
+        val bytes = json.encodeToByteArray()
         val cut = bytes.indexOf(0xC3.toByte()) + 1 // split inside é
         val first = FrameCodec.decode(FrameCodec.encode(Frame.ConfigChunk(1, bytes.size, 0, bytes.copyOfRange(0, cut)))) as Frame.ConfigChunk
         val second = FrameCodec.decode(FrameCodec.encode(Frame.ConfigChunk(1, bytes.size, cut, bytes.copyOfRange(cut, bytes.size)))) as Frame.ConfigChunk

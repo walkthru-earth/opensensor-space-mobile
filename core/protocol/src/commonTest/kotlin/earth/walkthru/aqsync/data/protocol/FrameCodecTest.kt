@@ -1,9 +1,10 @@
 package earth.walkthru.aqsync.data.protocol
 
-import org.junit.Assert.assertArrayEquals
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 
 /**
  * Frame layouts from docs/ble-sync-protocol.md v1. Hex fixtures are hand-assembled from the
@@ -18,7 +19,7 @@ class FrameCodecTest {
         assertEquals("06", Request.Flush.encode().toHex())
         assertEquals("07", Request.Status.encode().toHex())
         // OPEN: opcode + utf8 name
-        assertEquals("02" + "a.parquet".toByteArray().toHex(), Request.Open("a.parquet").encode().toHex())
+        assertEquals("02" + "a.parquet".encodeToByteArray().toHex(), Request.Open("a.parquet").encode().toHex())
         // READ handle=1 offset=0x4000 length=16384 -> 03 0100 00400000 00400000
         assertEquals("03" + "0100" + "00400000" + "00400000", Request.Read(1, 0x4000, 16384).encode().toHex())
         // CLOSE handle=0x0102 -> 04 0201
@@ -30,7 +31,7 @@ class FrameCodecTest {
     @Test
     fun `FILE frame decodes name and size`() {
         val name = "station=53315f5f/unsynced/boot=b41d/data_unsynced_b41d_0-26-0.parquet"
-        val raw = ("10" + "39490000" + name.toByteArray().toHex()).hexToBytes() // 0x4939 = 18745
+        val raw = ("10" + "39490000" + name.encodeToByteArray().toHex()).hexToBytes() // 0x4939 = 18745
         val frame = FrameCodec.decode(raw) as Frame.File
         assertEquals(18745L, frame.bytes)
         assertEquals(name, frame.name)
@@ -49,7 +50,7 @@ class FrameCodecTest {
     @Test
     fun `OPENED decodes handle size crc and echoed name`() {
         // handle=1 size=14080 (0x3700) crc32=0xd4c4189c
-        val raw = ("20" + "0100" + "00370000" + "9c18c4d4" + "x.parquet".toByteArray().toHex()).hexToBytes()
+        val raw = ("20" + "0100" + "00370000" + "9c18c4d4" + "x.parquet".encodeToByteArray().toHex()).hexToBytes()
         val frame = FrameCodec.decode(raw) as Frame.Opened
         assertEquals(1, frame.handle)
         assertEquals(14080L, frame.size)
@@ -63,7 +64,7 @@ class FrameCodecTest {
         val frame = FrameCodec.decode(raw) as Frame.Chunk
         assertEquals(1, frame.handle)
         assertEquals(505L, frame.offset)
-        assertArrayEquals("PAR1".toByteArray(), frame.payload)
+        assertContentEquals("PAR1".encodeToByteArray(), frame.payload)
     }
 
     @Test
@@ -89,7 +90,7 @@ class FrameCodecTest {
 
     @Test
     fun `ERROR decodes op code and detail`() {
-        val raw = ("7f" + "02" + "03" + "missing.parquet".toByteArray().toHex()).hexToBytes()
+        val raw = ("7f" + "02" + "03" + "missing.parquet".encodeToByteArray().toHex()).hexToBytes()
         val frame = FrameCodec.decode(raw) as Frame.Error
         assertEquals(Opcode.OPEN, frame.op)
         assertEquals(ProtocolError.NOT_FINALIZED_PARQUET, frame.error)
@@ -116,20 +117,20 @@ class FrameCodecTest {
                 val d = decoded as Frame.Chunk
                 assertEquals(frame.handle, d.handle)
                 assertEquals(frame.offset, d.offset)
-                assertArrayEquals(frame.payload, d.payload)
+                assertContentEquals(frame.payload, d.payload)
             } else {
                 assertEquals(frame, decoded)
             }
         }
     }
 
-    @Test(expected = FrameDecodeException::class)
+    @Test
     fun `truncated frame is rejected not guessed`() {
-        FrameCodec.decode("20 0100 0037".hexToBytes())
+        assertFailsWith<FrameDecodeException> { FrameCodec.decode("20 0100 0037".hexToBytes()) }
     }
 
-    @Test(expected = FrameDecodeException::class)
+    @Test
     fun `unknown frame type is rejected`() {
-        FrameCodec.decode("99 00".hexToBytes())
+        assertFailsWith<FrameDecodeException> { FrameCodec.decode("99 00".hexToBytes()) }
     }
 }
