@@ -91,6 +91,8 @@ as workflow artifacts; iOS signing and TestFlight setup are documented in
 Ready-made APKs: every push to `main` refreshes the rolling [`latest`](../../releases/tag/latest)
 pre-release; a `v*` tag publishes a permanent release. Details, signing and the debug fake device:
 [`docs/build-and-release.md`](docs/build-and-release.md).
+The release page distributes Android APKs and links to iOS simulator artifacts in
+Actions. Signed iPhone/TestFlight distribution is not available yet.
 
 ## Layout
 

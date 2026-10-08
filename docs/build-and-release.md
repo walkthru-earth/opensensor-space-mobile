@@ -108,14 +108,19 @@ compatibility during each toolchain update.
 The workflow follows JetBrains' [KMP CI guidance](https://kotlinlang.org/docs/multiplatform/github-actions-for-kmp.html)
 and [direct Xcode integration](https://kotlinlang.org/docs/multiplatform/multiplatform-direct-integration.html).
 Its cache choice follows the [Gradle action documentation](https://github.com/gradle/actions/blob/main/docs/setup-gradle.md).
-The first hosted run must still establish the pinned image/toolchain combination;
-local checks use the Xcode version actually installed on the developer's Mac.
+Local checks use the Xcode version actually installed on the developer's Mac;
+record hosted results separately against the run's exact commit.
 
 Local validation on 2026-10-08 used Xcode 27.0 (27A266a): all **17 common iOS tests**
 passed on the installed iOS 26.5 simulator; unsigned Debug simulator and optimized
 Release device builds passed with the iOS 27 SDK. Simulator app/result-bundle ZIP
 packaging and workflow linting also passed. This confirms local compilation with
 Xcode 27, not execution on an iOS 27 runtime or a hosted runner result.
+
+The first [hosted verification run for `27280bf`](https://github.com/walkthru-earth/opensensor-space-mobile/actions/runs/37741492239)
+completed successfully on 2026-10-08, including the Xcode 27 native validation job,
+Linux verification and hygiene hooks. This establishes the hosted build/test gate;
+it does not add iPhone radio or permission qualification.
 
 ### Later iOS release: start with TestFlight
 
@@ -215,6 +220,14 @@ succeeds, then remove only generated APK/mapping assets from previous builds.
 Do not delete the release or tag before a potentially failing update. The signed
 APK artifact is uploaded before publication, so publication failures still leave
 the verified build available. No `gh` CLI or additional credential is needed.
+
+The rolling release is titled **Latest Android build (rolling)** because its assets
+are Android APKs. Generated notes also describe iOS's current scope and link to the
+`verify` workflow's simulator app artifacts and the TestFlight setup plan. Match the
+successful validation run's SHA to the release commit before downloading its iOS
+artifact. A simulator ZIP is not a signed iPhone app, and an unsigned device compile
+check is not a TestFlight release. Do not claim an iOS validation run passed merely
+because Android publication succeeded.
 
 ### Rolling tag failure (2026-10-08)
 

@@ -153,6 +153,12 @@ jobs:
               echo "_Rolling build: this release is replaced on every push to \`main\`._"
               echo
             fi
+            echo "### iOS"
+            echo "The iOS app currently provides foreground Bluetooth live readings and Bonjour discovery."
+            echo "Xcode 27 validation builds an unsigned ARM64 simulator app and checks the device Release build."
+            echo "Download the simulator app ZIP from a successful [verify workflow run](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/workflows/verify.yml) for this commit. It runs in Xcode's iOS Simulator; it cannot be installed on an iPhone."
+            echo "Signed iPhone/TestFlight distribution is not available yet. See the [iOS build and release guide](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${GITHUB_SHA}/docs/build-and-release.md#later-ios-release-start-with-testflight)."
+            echo
             echo "### Changes"
             prev=$(git describe --tags --abbrev=0 --match 'v*' HEAD^ 2>/dev/null || true)
             if [ -n "$prev" ]; then git log --format='- %s (%h)' "$prev..HEAD" | head -50; else git log --format='- %s (%h)' -n 20; fi
@@ -204,7 +210,7 @@ jobs:
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
           target_commitish: ${{ github.sha }}
-          name: ${{ steps.meta.outputs.channel == 'rolling' && 'Latest build (rolling)' || format('opensensor.space {0}', steps.meta.outputs.version_name) }}
+          name: ${{ steps.meta.outputs.channel == 'rolling' && 'Latest Android build (rolling)' || format('opensensor.space Android {0}', steps.meta.outputs.version_name) }}
           prerelease: ${{ steps.meta.outputs.channel == 'rolling' }}
           make_latest: ${{ steps.meta.outputs.channel == 'tag' }}
           body_path: dist/NOTES.md
