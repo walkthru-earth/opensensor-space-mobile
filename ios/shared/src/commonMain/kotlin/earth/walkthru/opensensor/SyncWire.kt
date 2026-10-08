@@ -30,10 +30,24 @@ class SyncWire {
         val station = info.station ?: error("missing station")
         val device = info.dev ?: error("missing hardware identity")
         require(info.proto == 2 && Regex("[0-9a-fA-F]{12}").matches(device))
-        require(Regex("[A-Za-z0-9_-]+").matches(station))
-        require((info.maxRead ?: 16384) > 0)
-        SyncIdentity(station, device.lowercase(), (info.maxRead ?: 16384).coerceIn(1, 16384))
+        require(isStationId(station))
+        // Android ReadWindow.kt:21 uses 4096 when max_read is absent. Never above the advertised value.
+        val maxRead = info.maxRead ?: DEFAULT_MAX_READ
+        require(maxRead > 0)
+        SyncIdentity(station, device.lowercase(), maxRead.coerceIn(1, MAX_READ_CAP))
     }.getOrNull()
+
+    companion object {
+        const val DEFAULT_MAX_READ = 4096
+        private const val MAX_READ_CAP = 16384
+        private val STATION_ID = Regex("[0-9A-Za-z._-]+")
+
+        /**
+         * Same rule as Android (DeviceContinuityPolicy.kt:60, FileArchive.kt:131). The station is one
+         * archive directory, so a slash never passes and `.` or `..` alone is refused.
+         */
+        fun isStationId(station: String): Boolean = STATION_ID.matches(station) && station != "." && station != ".."
+    }
 
     /** Malformed frames return null; no secret bytes are included in errors or descriptions. */
     internal fun decodeFrame(bytes: ByteArray): SyncReply? = runCatching {
@@ -48,7 +62,7 @@ class SyncWire {
             is Frame.Hello -> SyncReply("hello", code = frame.proto, count = frame.payloadMax, json = frame.infoJson)
             is Frame.LivePush -> SyncReply("live", json = frame.json)
             is Frame.StatusPush -> SyncReply("status", json = frame.json)
-            is Frame.Error -> SyncReply("error", code = frame.code)
+            is Frame.Error -> SyncReply("error", code = frame.code, op = frame.op)
             else -> null
         }
     }.getOrNull()
@@ -65,6 +79,8 @@ class SyncReply(
     val code: Int = 0,
     val count: Int = 0,
     val port: Int = 0,
+    /** ERROR only: the opcode of the request it answers, 0 for session errors. */
+    val op: Int = 0,
     val json: String = "",
     internal val bytes: ByteArray = EMPTY,
 ) {
