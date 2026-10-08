@@ -22,7 +22,7 @@ that code until the plan's workstreams replace it.
 | --- | --- | --- |
 | Know what is verified on Android, iOS simulator, and real devices | [status.md](status.md) | `../aq-parquet/docs/boards/*/bench-verified.md` |
 | Keep design and sync behaviour the same on iOS and Android, add a sensor family or transport | [cross-platform-guide.md](cross-platform-guide.md) | `core/*/src/commonMain/`, `ios/App/`, `app/` |
-| Understand the product direction, device families, the public H3 discover map and sharing rules | [devices-and-discovery.md](devices-and-discovery.md) | `core/`, planned `feature/discover/` |
+| Understand the product direction, device families, the public H3 discover map and sharing rules | [devices-and-discovery.md](devices-and-discovery.md) | `core/publicfeed/`, `feature/discover/` |
 | See the production refactor plan and its workstreams | [production-readiness-plan.md](production-readiness-plan.md) | every module |
 | Understand the opensensor.space rebrand, concurrent multi-device collection and reset/reflash recovery | [opensensor-space.md](opensensor-space.md) (implementation and remaining qualification) | `data/DeviceConnectionRepository.kt`, `data/background/`, `data/sync/`, `ui/`; new firmware owner `../aq-parquet/docs/shared/` |
 | Build or extend the iOS app and shared Kotlin core | [ios-migration.md](ios-migration.md), `../ios/AGENTS.md` | `core/*/src/commonMain/`, `ios/` |
