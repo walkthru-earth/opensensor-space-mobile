@@ -23,7 +23,7 @@ kotlinxSerialization = "1.11.0"
 androidxDocumentfile = "1.1.0"
 androidxDatastore = "1.2.1"
 androidxWork = "2.11.2"
-zstdJni = "1.5.7-17"
+zstdJni = "1.5.7-20"
 googleCodeScanner = "16.1.0"
 
 [libraries]
