@@ -2,7 +2,6 @@ package earth.walkthru.aqsync.data.ble
 
 import earth.walkthru.aqsync.data.protocol.FrameType
 import earth.walkthru.aqsync.data.protocol.Opcode
-import earth.walkthru.aqsync.data.protocol.toHex
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -30,12 +29,24 @@ data class RawFrameRecord(
     }
 }
 
-/** Fixed-size ring of the most recent frames. Cheap enough to leave on; the UI only reads it in Advanced mode. */
-class FrameRecorder(private val capacity: Int = DEFAULT_CAPACITY) {
+/**
+ * Fixed-size ring of the most recent frames. Every frame is retained, but CHUNK bursts publish at
+ * most ten snapshots per second; control/terminal frames publish immediately, including READ_END.
+ */
+class FrameRecorder(
+    private val capacity: Int = DEFAULT_CAPACITY,
+    private val monotonicMs: () -> Long = { System.nanoTime() / 1_000_000 },
+) {
     private val ring = ArrayDeque<RawFrameRecord>(capacity)
     private val lock = Any()
     private val _records = MutableStateFlow<List<RawFrameRecord>>(emptyList())
     val records: StateFlow<List<RawFrameRecord>> = _records
+    private var lastPublishedAt: Long? = null
+    private var unpublished = false
+
+    init {
+        require(capacity > 0)
+    }
 
     fun tx(request: ByteArray) = record(FrameDirection.TX, request)
     fun rx(frame: ByteArray) = record(FrameDirection.RX, frame)
@@ -45,23 +56,52 @@ class FrameRecorder(private val capacity: Int = DEFAULT_CAPACITY) {
         val type = bytes[0].toInt() and 0xFF
         val secret = (direction == FrameDirection.RX && type == FrameType.TOKEN) ||
             (direction == FrameDirection.TX && type == Opcode.SET_CONFIG)
-        val preview = if (secret) bytes.copyOf(1).toHex() + "…" else bytes.copyOf(minOf(bytes.size, RawFrameRecord.PREVIEW_BYTES)).toHex()
+        val preview = previewHex(bytes, if (secret) 1 else minOf(bytes.size, RawFrameRecord.PREVIEW_BYTES)) + if (secret) "…" else ""
         val rec = RawFrameRecord(System.currentTimeMillis(), direction, type, bytes.size, preview, secret)
-        val snapshot: List<RawFrameRecord>
         synchronized(lock) {
             if (ring.size >= capacity) ring.removeFirst()
             ring.addLast(rec)
-            snapshot = ring.toList()
+            unpublished = true
+            val now = monotonicMs()
+            val last = lastPublishedAt
+            if (direction == FrameDirection.RX && type == FrameType.CHUNK && last != null && now - last < SNAPSHOT_INTERVAL_MS) return
+            // Publish under the same lock so concurrent TX/RX cannot overwrite a newer snapshot.
+            _records.value = ring.toList()
+            lastPublishedAt = now
+            unpublished = false
         }
-        _records.value = snapshot
+    }
+
+    /** A cancelled or failed request may finish before the next CHUNK snapshot or READ_END. */
+    fun flush() {
+        synchronized(lock) {
+            if (!unpublished) return
+            _records.value = ring.toList()
+            lastPublishedAt = monotonicMs()
+            unpublished = false
+        }
     }
 
     fun clear() {
-        synchronized(lock) { ring.clear() }
-        _records.value = emptyList()
+        synchronized(lock) {
+            ring.clear()
+            lastPublishedAt = null
+            unpublished = false
+            _records.value = emptyList()
+        }
     }
+
+    /** Avoid copying the prefix or constructing a String for each preview byte. */
+    private fun previewHex(bytes: ByteArray, count: Int): String = String(
+        CharArray(count * 2) { index ->
+            val byte = bytes[index / 2].toInt() and 0xFF
+            HEX[if (index % 2 == 0) byte ushr 4 else byte and 0x0F]
+        }
+    )
 
     companion object {
         const val DEFAULT_CAPACITY = 200
+        private const val SNAPSHOT_INTERVAL_MS = 100L
+        private const val HEX = "0123456789abcdef"
     }
 }

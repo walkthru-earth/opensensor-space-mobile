@@ -51,6 +51,53 @@ board qualification; host tests alone do not establish these results.
 
 ## Side by side
 
+### Investigating slow Wi-Fi collection (2026-10-08)
+
+The owner reported Wi-Fi file collection slower than BLE on both iPhone and
+Android after saving iPhone access. Both mobile engines already use the advertised
+`max_read` (normally 16 KiB); Android also enables `TCP_NODELAY`. Do not shrink
+LAN windows, remove integrity checks or assume an iOS UI change fixes both apps.
+
+The [CoreS3 v6.6 concurrency bench](../../aq-parquet/docs/boards/m5stack-cores3/bench-verified.md#board-1-concurrent-lan-collectors-firmware-v66)
+measured two host collectors downloading 87,654 bytes each in 49.801 seconds
+(about 1.8 KB/s each), with a third connection present. That host benchmark used
+4 KiB READ windows; it establishes a slow concurrent run, not the throughput of
+an isolated phone using 16 KiB windows. Older single-client LAN observations were
+faster, so this is not an established hardware speed ceiling.
+
+Firmware inspection found a 100 ms LAN request poll, up to a 50 ms sample-queue
+wait before storage command dispatch, whole-file CRC calculation on OPEN, and a
+single storage worker shared by all clients. Socket sends also share a mutex;
+one blocked peer can delay others within its one-second frame-send deadline.
+Wi-Fi modem sleep is intentional for BLE coexistence. These are candidates,
+not a measured attribution of the owner's slowdown.
+
+Compare the same immutable file with one active collector, then two. Time OPEN,
+each 16 KiB READ through READ_END, CLOSE, and local verification separately;
+report actual newly received bytes per second, excluding resumed bytes. Record
+firmware/app versions, file size, active collectors and radio conditions. Keep
+tokens and private credentials out of traces. Any firmware scheduling or radio
+change belongs in `../aq-parquet` and needs sampling/coexistence checks and a
+dated board run before claiming a throughput improvement.
+
+The subsequent implementation replaces the fixed LAN poll sleep with a bounded
+socket-readiness wait, and wakes the storage worker after successful queue
+enqueues. Sampling and commands retain one turn each per worker pass; queue
+contents survive coalesced wakeups. See the firmware owner's
+[LAN performance guide](../../aq-parquet/docs/shared/lan-performance.md) for
+regressions and qualification. CRC calculation, Wi-Fi sleep/coexistence, frame
+sizes and the wire contract remain unchanged.
+
+Android now limits intermediate file progress and debug CHUNK snapshot copies
+to ten updates per second, while keeping every ring entry and flushing trailing
+history at request completion/failure. Initial/final/recovery progress remains
+immediate. iOS limits chunk progress to four updates per second, removes the
+second archive-actor hop per chunk, cancels completed timeout timers, and enables
+TCP `noDelay` as Android already does. Its card reports end-to-end average KiB/s
+from newly written bytes, excluding resumed or reused bytes. Read-window fsync
+and final verification are retained. These changes remove overhead; a new board
+run is required to establish actual throughput improvement.
+
 | | Bluetooth LE (`BleTransport`) | LAN (`TcpTransport`) |
 | --- | --- | --- |
 | Discovery | GATT scan for the service UUID (`BleScanner`) | mDNS `_aqsync._tcp` via `NsdManager` (`LanDiscovery`), TXT `station`/`dev`/`fw`/`proto`; browsed only while the app is started and the permission is held |

@@ -25,9 +25,12 @@ struct ArchiveReply {
         var errorDescription: String? { "The sensor sent an unexpected file reply. Retry sync to resume." }
     }
     static func collect(
-        pipe: ArchivePipe, archive: ArchiveIO, station: String, maxRead: UInt64, progress: (Int, Int, Int64) -> Void
+        pipe: ArchivePipe, archive: ArchiveIO, station: String, maxRead: UInt64,
+        now: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
+        progress: (Int, Int, Int64, Double) -> Void
     ) async throws {
         guard (1...16384).contains(maxRead) else { throw Failure.invalidReply }
+        var updates = TransferProgress(startedAt: now())
         try await pipe.list()
         var files: [(String, UInt64)] = []
         var names = Set<String>()
@@ -70,12 +73,17 @@ struct ArchiveReply {
                             try await archive.persist()
                             break
                         }
-                        guard frame.kind == "chunk", let bytes = frame.data, frame.offset >= 0 else {
+                        guard frame.kind == "chunk", let bytes = frame.data, frame.offset >= 0,
+                            UInt64(frame.offset) == offset
+                        else {
                             throw SensorTransfer.Failure.invalidReply
                         }
                         try await archive.append(bytes, at: UInt64(frame.offset), end: end)
-                        offset = await archive.offset()
-                        progress(finished, files.count, Int64(offset))
+                        // ArchiveIO validated and wrote contiguous bytes. Avoid a second actor hop per chunk.
+                        offset += UInt64(bytes.count)
+                        if let rate = updates.record(bytes: bytes.count, now: now(), force: offset == size) {
+                            progress(finished, files.count, Int64(offset), rate)
+                        }
                     }
                 }
                 try await archive.commit()
@@ -86,8 +94,29 @@ struct ArchiveReply {
                 throw SensorTransfer.Failure.invalidReply
             }
             finished += 1
-            progress(finished, files.count, 0)
+            if let rate = updates.record(bytes: 0, now: now(), force: true) {
+                progress(finished, files.count, 0, rate)
+            }
         }
+    }
+}
+
+/// End-to-end collection rate counts only newly written bytes, never resumed or reused bytes.
+/// UI work is limited to four updates per second; final bytes and file completion are immediate.
+struct TransferProgress {
+    private let startedAt: TimeInterval
+    private var reportedAt: TimeInterval
+    private var transferredBytes: Int64 = 0
+    init(startedAt: TimeInterval) {
+        self.startedAt = startedAt
+        reportedAt = startedAt
+    }
+    mutating func record(bytes: Int, now: TimeInterval, force: Bool = false) -> Double? {
+        transferredBytes += Int64(bytes)
+        guard force || now - reportedAt >= 0.25 else { return nil }
+        reportedAt = now
+        let elapsed = now - startedAt
+        return elapsed > 0 ? Double(transferredBytes) / elapsed : 0
     }
 }
 

@@ -311,3 +311,65 @@ Keychain persistence, LAN live/collection, cancellation/background/resume and mu
 behavior need dated phone runs. Offline archive charts, export UI and automatic background
 collection remain unimplemented on iOS. The preceding first-stage iPhone observation applies
 only to the older BLE live-reading and Bonjour-discovery app.
+
+## 2026-10-08 — iPhone rebuild with Wi-Fi card feedback
+
+After `git pull --ff-only origin main` reported up to date, the local working copy
+with the in-progress LAN implementation was updated so tapping a discovered
+Wi-Fi card invokes Connect. Each card shows discovered, connecting or connected
+state, progress during connection/sync, fresh PM2.5 when available, and waiting or
+sensor-not-ready feedback otherwise. Disconnect clears the value and late live
+callbacks cannot restore it; a vanished discovery endpoint asks for another scan.
+
+The shared presentation/wire suite passed **11 tests on JVM and 11 on the iOS
+simulator**; `verifyIos` also passed the core simulator tests. Xcode 27's signed
+Debug device build succeeded. The app was installed in place on the connected
+iPhone 16 Pro and launched; CoreDevice confirmed its process remained running.
+App executable SHA-256: `274f9f0a811a0c3c3d3d87461d3c4766ee52cd9c425c4c7ecf15f0112dbed0dc`.
+This is build/installation evidence from a working copy, not a new authenticated
+Wi-Fi reading or transfer observation. The owner still needs to tap a Wi-Fi sensor
+and check the connection feedback and live value on the phone.
+
+## 2026-10-08 — owner-reported iPhone enrollment and slow LAN collection
+
+After the card showed that this phone needed Bluetooth enrollment, the owner
+confirmed **Save Wi-Fi access** succeeded and Wi-Fi file syncing started on the
+iPhone. The owner reported collection slower than BLE, also on Android. This
+confirms enrollment and collection start; it does not establish completed-file
+verification, measured throughput, Keychain persistence across launches or the
+number of simultaneously active collectors. The owner also reported the iOS 27
+runtime installed on the Mac; `xcodebuild -version` confirmed Xcode 27.0 (27A266a).
+
+Read-only Android/iOS/firmware inspection and existing board timings are recorded
+in [the LAN investigation](transports.md#investigating-slow-wi-fi-collection-2026-10-08).
+No transfer tuning, firmware flash or app reinstall was performed during this
+investigation. An isolated same-file timing is still needed to distinguish
+request/storage latency from contention or radio behavior.
+
+## 2026-10-08 — transfer overhead and firmware scheduling improvements
+
+Android now throttles intermediate progress and debug CHUNK snapshots to 100 ms,
+retaining final/recovery events, secret redaction and trailing frame history when
+requests end. iOS enables TCP noDelay, limits intermediate progress to 250 ms,
+removes a redundant per-chunk archive actor hop and cancels completed operation
+timers. Wi-Fi cards show average KiB/s calculated only from newly received bytes;
+resumed and already archived bytes do not inflate it. READ-window checkpoints,
+offset validation, size/CRC-32/PAR1 verification and immutable archives remain.
+
+`./gradlew --no-daemon verify verifyIos` passed: **286 JVM tests** plus the
+common iOS simulator tests, including **12 shared presentation/wire tests**.
+The native Swift harness passed rate/throttling, resume/reuse accounting and
+archive/transfer integrity checks. Xcode 27.0's signed Debug device build passed;
+the enhanced app was installed in place on the connected iPhone 16 Pro, launched,
+and confirmed running by CoreDevice. Executable SHA-256:
+`651022a29f1c1b497ef36b9389583b913c501f4beb17aff3fac8bab5d90c7a1c`.
+This confirms installation, not a measured phone speed improvement.
+
+The sibling firmware now wakes LAN work through bounded socket readiness and
+storage work through queue-first signaling, preserving sample/command fairness
+and radio/security settings. Sanitized scheduling, LAN, archive and control gates,
+format/lint, both board builds and the generic logger build passed. An additional
+Waveshare schema gate fails at an existing firmware-identity assertion in unrelated
+pending schema work. See its [performance guide](../../aq-parquet/docs/shared/lan-performance.md).
+Firmware has not been installed for this change; a sensor restart requires owner
+confirmation. Hardware throughput and sampling/coexistence results remain pending.

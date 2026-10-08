@@ -149,11 +149,11 @@ final class LanDiscovery {
                 var values = URLResourceValues()
                 values.isExcludedFromBackup = true
                 try root.setResourceValues(values)
-                try await session.collect(archive: archive) { done, total, bytes in
+                try await session.collect(archive: archive) { done, total, bytes, rate in
                     guard self.attempts[name] == attempt, self.sessions[name] === session else { return }
                     self.report(
                         name, connected: true, busy: true, message: "Syncing verified files", done: done, total: total,
-                        bytes: bytes)
+                        bytes: bytes, rate: rate)
                 }
                 guard self.attempts[name] == attempt, self.sessions[name] === session else { return }
                 self.report(name, connected: true, message: "Sync complete. Verified files saved on this phone.")
@@ -194,11 +194,11 @@ final class LanDiscovery {
     }
     private func report(
         _ name: String, connected: Bool = false, busy: Bool = false, message: String, done: Int = 0, total: Int = 0,
-        bytes: Int64 = 0
+        bytes: Int64 = 0, rate: Double = 0
     ) {
         state.lanSessionChanged(
             name: name, connected: connected, busy: busy, message: message, filesDone: Int32(done),
-            filesTotal: Int32(total), bytesDone: bytes)
+            filesTotal: Int32(total), bytesDone: bytes, bytesPerSecond: rate)
     }
     func stop() {
         timer?.invalidate()

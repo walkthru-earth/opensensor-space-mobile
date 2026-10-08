@@ -59,14 +59,17 @@ class CompanionState {
     }
 
     /** Native sessions are independent: a callback updates only its own sensor card. */
-    fun lanSessionChanged(name: String, connected: Boolean, busy: Boolean, message: String, filesDone: Int, filesTotal: Int, bytesDone: Long) {
-        lanSessions = lanSessions + (name to LanSessionState(connected, busy, message, filesDone, filesTotal, bytesDone))
+    fun lanSessionChanged(name: String, connected: Boolean, busy: Boolean, message: String, filesDone: Int, filesTotal: Int, bytesDone: Long, bytesPerSecond: Double = 0.0) {
+        val rate = bytesPerSecond.takeIf { connected && busy && it.isFinite() && it > 0.0 } ?: 0.0
+        lanSessions = lanSessions + (name to LanSessionState(connected, busy, message, filesDone, filesTotal, bytesDone, rate))
+        if (!connected) lanReadings = lanReadings - name
     }
 
     internal var lanReadings by mutableStateOf<Map<String, NowReading>>(emptyMap())
         private set
 
     fun lanReadingReceived(name: String, json: String) {
+        if (lanSessions[name]?.connected != true) return
         val sample = runCatching { LiveSample.parse(json) }.getOrNull()
         lanReadings = lanReadings + (name to NowReading.of(sample))
     }
@@ -190,4 +193,4 @@ class CompanionState {
     }
 }
 
-internal data class LanSessionState(val connected: Boolean, val busy: Boolean, val message: String, val filesDone: Int, val filesTotal: Int, val bytesDone: Long)
+internal data class LanSessionState(val connected: Boolean, val busy: Boolean, val message: String, val filesDone: Int, val filesTotal: Int, val bytesDone: Long, val bytesPerSecond: Double = 0.0)

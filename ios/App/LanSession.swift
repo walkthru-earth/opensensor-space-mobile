@@ -53,7 +53,11 @@ final class LanSession {
     var onClosed: ((Error) -> Void)?
     var onPush: ((String, String) -> Void)?
     private(set) var identity: SyncIdentity?
-    init(endpoint: NWEndpoint) { connection = NWConnection(to: endpoint, using: .tcp) }
+    init(endpoint: NWEndpoint) {
+        let tcp = NWProtocolTCP.Options()
+        tcp.noDelay = true
+        connection = NWConnection(to: endpoint, using: NWParameters(tls: nil, tcp: tcp))
+    }
 
     func connect(credential: LanCredential) async throws {
         try await operation { completion in
@@ -174,18 +178,23 @@ final class LanSession {
         } else {
             frame = try await withCheckedThrowingContinuation { continuation in
                 var completed = false
+                let deadline = DispatchSource.makeTimerSource(queue: .main)
                 let complete: (Result<SyncReply, Error>) -> Void = { result in
                     guard !completed else { return }
                     completed = true
+                    deadline.cancel()
+                    deadline.setEventHandler(handler: nil)
                     continuation.resume(with: result)
                 }
                 replyWaiter = complete
-                DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
+                deadline.schedule(deadline: .now() + 10)
+                deadline.setEventHandler { [weak self] in
                     guard !completed else { return }
                     self?.replyWaiter = nil
                     complete(.failure(LanFailure.timeout))
                     self?.close(reason: LanFailure.timeout)
                 }
+                deadline.resume()
             }
         }
         if frame.kind == "error" {
@@ -220,23 +229,28 @@ final class LanSession {
         return try await withCheckedThrowingContinuation { continuation in
             let operationID = UUID()
             var completed = false
+            let deadline = DispatchSource.makeTimerSource(queue: .main)
             let complete: (Result<T, Error>) -> Void = { result in
                 guard !completed else { return }
                 completed = true
+                deadline.cancel()
+                deadline.setEventHandler(handler: nil)
                 self.pendingOperations[operationID] = nil
                 continuation.resume(with: result)
             }
             pendingOperations[operationID] = { complete(.failure(LanFailure.disconnected)) }
-            DispatchQueue.main.asyncAfter(deadline: .now() + timeout) { [weak self] in
+            deadline.schedule(deadline: .now() + timeout)
+            deadline.setEventHandler { [weak self] in
                 guard !completed else { return }
                 complete(.failure(LanFailure.timeout))
                 self?.close(reason: LanFailure.timeout)
             }
+            deadline.resume()
             setup(complete)
         }
     }
 
-    func collect(archive: ArchiveIO, progress: (Int, Int, Int64) -> Void) async throws {
+    func collect(archive: ArchiveIO, progress: (Int, Int, Int64, Double) -> Void) async throws {
         guard let identity, !collecting else { throw LanFailure.disconnected }
         collecting = true
         defer { collecting = false }

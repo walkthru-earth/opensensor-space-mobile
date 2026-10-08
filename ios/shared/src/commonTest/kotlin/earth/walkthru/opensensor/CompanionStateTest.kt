@@ -9,6 +9,22 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class CompanionStateTest {
+    @Test fun lanTransferRatesAreIndependentAndClearWhenCollectionStops() {
+        val state = CompanionState()
+        state.lanSessionChanged("a", true, true, "syncing", 0, 4, 100, 2048.0)
+        state.lanSessionChanged("b", true, true, "syncing", 0, 2, 10, 1024.0)
+        assertEquals(2048.0, state.lanSessions.getValue("a").bytesPerSecond)
+        assertEquals(1024.0, state.lanSessions.getValue("b").bytesPerSecond)
+        state.lanSessionChanged("a", false, false, "disconnected", 0, 0, 0, 2048.0)
+        assertEquals(0.0, state.lanSessions.getValue("a").bytesPerSecond)
+        for (invalid in listOf(Double.NaN, Double.POSITIVE_INFINITY, -1.0)) {
+            state.lanSessionChanged("b", true, true, "syncing", 0, 2, 10, invalid)
+            assertEquals(0.0, state.lanSessions.getValue("b").bytesPerSecond)
+        }
+        state.lanSessionChanged("b", true, false, "complete", 2, 2, 0, 1024.0)
+        assertEquals(0.0, state.lanSessions.getValue("b").bytesPerSecond)
+    }
+
     @Test fun lanResultsOnlyApplyToActiveDiscoveryAndAreDeduplicated() {
         val state = CompanionState()
         state.lanScanStarted()
@@ -55,6 +71,19 @@ class CompanionStateTest {
     private fun connected(): CompanionState = CompanionState().also {
         it.connectionStarted("device")
         assertTrue(it.receiveInfo("{\"proto\":2,\"dev\":\"112233445566\"}"))
+    }
+
+    @Test fun disconnectedLanSensorCannotKeepOrRestoreAnOldReading() {
+        val state = CompanionState()
+        state.lanSessionChanged("a", true, false, "connected", 0, 0, 0)
+        state.lanReadingReceived("a", "{\"pms\":4,\"pm25\":12.0}")
+        assertIs<NowReading.Reading>(state.lanReadings["a"])
+        state.lanSessionChanged("a", false, false, "disconnected", 0, 0, 0)
+        assertFalse("a" in state.lanReadings)
+        state.lanReadingReceived("a", "{\"pms\":4,\"pm25\":99.0}")
+        assertFalse("a" in state.lanReadings)
+        state.lanSessionChanged("a", true, false, "reconnected", 0, 0, 0)
+        assertFalse("a" in state.lanReadings)
     }
 
     @Test fun malformedOrExpiredReadingClearsPreviousValue() {

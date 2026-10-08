@@ -1,5 +1,6 @@
 package earth.walkthru.opensensor
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -11,6 +12,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -98,23 +100,46 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
                     }
                 }
                 items((state.lanDevices + state.lanSessions.keys).distinct().sorted(), key = { it }) { name ->
-                    Card(Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(16.dp)) {
+                    val session = state.lanSessions[name]
+                    val canConnect = session?.connected != true && session?.busy != true && name in state.lanDevices
+                    Card(
+                        Modifier.fillMaxWidth().then(
+                            if (canConnect) Modifier.clickable(onClickLabel = "Connect to $name over Wi-Fi") { connectLan(name) } else Modifier,
+                        ),
+                    ) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(name, style = MaterialTheme.typography.titleMedium)
-                            (state.lanReadings[name] as? NowReading.Reading)?.let { reading ->
-                                Text("${number(reading.pm25)} µg/m³ · PM2.5 · ${reading.mood.title}")
+                            val connectionLabel = when {
+                                session?.connected == true -> "Wi-Fi · Connected"
+                                session?.busy == true -> "Wi-Fi · Connecting…"
+                                session == null -> "Wi-Fi · Discovered"
+                                else -> "Wi-Fi · Not connected"
                             }
-                            val session = state.lanSessions[name]
+                            Text(connectionLabel, style = MaterialTheme.typography.labelLarge)
+                            if (session?.busy == true) LinearProgressIndicator(Modifier.fillMaxWidth())
+                            if (session?.connected == true) {
+                                when (val reading = state.lanReadings[name] ?: NowReading.Waiting) {
+                                    is NowReading.Reading -> {
+                                        Text("${number(reading.pm25)} µg/m³", style = MaterialTheme.typography.headlineMedium)
+                                        Text("PM2.5 · ${reading.mood.title}")
+                                    }
+                                    is NowReading.SensorNotReady -> Text(reading.hint)
+                                    NowReading.Waiting -> Text("Waiting for a fresh live reading…")
+                                }
+                            }
                             Text(session?.message ?: "Found on your local network. Save Wi-Fi access over Bluetooth first.")
                             if (session?.busy == true && session.filesTotal > 0) {
                                 Text("${session.filesDone}/${session.filesTotal} files · ${session.bytesDone} bytes in current file")
+                                if (session.bytesPerSecond > 0.0) Text("${number(session.bytesPerSecond / 1024)} KiB/s average")
                             }
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 if (session?.connected == true) {
                                     Button(onClick = { syncLan(name) }, enabled = !session.busy) { Text("Sync") }
                                     OutlinedButton(onClick = { disconnectLan(name) }) { Text(if (session.busy) "Cancel" else "Disconnect") }
                                 } else {
-                                    Button(onClick = { connectLan(name) }, enabled = session?.busy != true && name in state.lanDevices) { Text("Connect") }
+                                    Button(onClick = { connectLan(name) }, enabled = canConnect) {
+                                        Text(if (session?.busy == true) "Connecting…" else "Connect")
+                                    }
                                     if (session?.busy == true) {
                                         OutlinedButton(onClick = { disconnectLan(name) }) { Text("Cancel") }
                                     }

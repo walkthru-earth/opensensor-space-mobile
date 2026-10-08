@@ -441,6 +441,8 @@ class DeviceSession(val transport: AqTransport) {
         } catch (e: Throwable) {
             pendingDrain = op
             throw e
+        } finally {
+            frames.flush()
         }
     }
 
