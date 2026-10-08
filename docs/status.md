@@ -63,7 +63,24 @@ partial runs). Auto-sync has **not** completed a period cycle on a phone yet. Of
 process started by the controller 19 s after the board closed a file, new file on the phone at 28 s);
 companion presence and the Wi-Fi-arrival run are not.
 
-## Current host gate (2026-09-30)
+## Current host gate (2026-10-09)
+
+`./gradlew --no-daemon verify` on an Apple Silicon Mac, branch `feat/platform-parity` wave 0.
+It now includes `verifyIos`, and every shared module joins both gates through its convention
+plugin. 353 tasks, **619 tests passed, 1 skipped, 0 failed**, zero lint errors, debug APK built.
+
+| Where | Tests |
+| --- | --- |
+| `:app` unit tests | 207 |
+| JVM, every `:core` module | 208 (protocol 80, history 44 plus 1 skipped, parquet 34, publicfeed 24, units 15, airquality 7, settings 2, sync 1, archive 1) |
+| iOS simulator, every `:core` module | 170 (protocol 72, parquet 33, publicfeed 24, history 15, units 15, airquality 7, settings 2, sync 1, archive 1) |
+| Android host, Compose modules | 17 (`:feature:discover` 13, `:ui:designsystem` 4) |
+| iOS simulator, `:ios:shared` | 17 (no longer run on the JVM) |
+
+`:core:airquality` tests ran for the first time in a gate. Host and simulator checks only. No
+phone run is claimed.
+
+## Host gate (2026-09-30)
 
 The pending PMS5003T identity/batch-candidate change has a separate host check:
 `./gradlew --no-daemon verify` passes with the new protocol, live estimate, History metric,
@@ -73,8 +90,8 @@ smaller negotiated MTUs and its missing-chunk failure path. This build has **not
 tested against flashed Waveshare v2 firmware. The optional Google Code Scanner depends on
 Google Play services and may download its module at first use; manual entry needs neither.
 
-`./gradlew --no-daemon clean verify`: **247 tests passed, zero skipped or failed** across
-`:app` and the three `:core` modules; zero lint errors. The debug APK builds.
+`./gradlew --no-daemon clean verify` (2026-09-30): **247 tests passed, zero skipped or failed** across
+`:app` and the three `:core` modules of that date; zero lint errors. The debug APK builds.
 The optional real-archive test now finds the sibling `aq-parquet` checkout and
 decoded all 767 local Parquet files (67,442 rows) instead of silently skipping
 that corpus. The stdlib SQLite migration validator passes against v8/v9 exports.
@@ -198,7 +215,7 @@ Screenshots are retained in the firmware trial's ignored `artifacts/` directory:
 `0e80bc7ea09de10c87b146bb45120290e74d5df10484a2c8fa60f89d7b105634`).
 The focused History presentation tests and `./gradlew --no-daemon verify` passed.
 
-## Verification ladder
+## Verification ladder (counts from 2026-09-18, see the current host gate above)
 
 ```mermaid
 flowchart LR

@@ -34,7 +34,14 @@ interfaces.
 
 ## Sync parity
 
-### Where the code lives
+### Where the code will live (target)
+
+This is the target shape from [platform-parity-plan.md](platform-parity-plan.md). It is not
+today's code. Today Android runs `app/.../data/sync/SyncEngine.kt` and iOS runs a second engine in
+`ios/App/SensorTransfer.swift` and `SensorArchive.swift`. The ports `FrameLink`, `ArchiveStore`,
+`ArchiveIndex` and `CredentialStore` do not exist yet. `:core:sync` and `:core:archive` exist only
+as empty skeletons. Shared today are the wire codec, `ParquetVerify`, `Crc32` and `SafeName` in
+`:core:protocol`, which the Swift engine does not call yet.
 
 ```mermaid
 flowchart LR
@@ -77,18 +84,21 @@ flowchart LR
 1. **The contract first.** A frame layout, opcode, error code, name rule or retry rule comes from
    `../aq-parquet/docs/shared/ble-sync-protocol.md`. Read it before changing either platform. If
    the code disagrees with it, the code is wrong.
-2. **One engine.** The download loop (list, open, read windows, retry a failed window from the
+2. **One engine (planned).** The download loop (list, open, read windows, retry a failed window from the
    phone's own offset, close, verify, commit) runs in shared Kotlin. Platform code never decides
-   whether a file is synced.
+   whether a file is synced. Until wave 3 of the parity plan, the two engines must match
+   behaviour by hand and a fix lands in both.
 3. **Ports are small and byte based.** `FrameLink` sends and receives `ByteArray`. No hex strings,
    no JSON for binary data, no per-byte callbacks across the Swift boundary. Convert `ByteArray`
    to `NSData` once in `iosMain` with pinned memory.
 4. **One archive layout.** Hive paths, partial names and receipt format are defined once in
    shared code and documented in [data-model.md](data-model.md). A layout change ships with a
    migration for both platforms in the same change.
-5. **Tests live in `commonTest`.** Resume, window retry, corruption, cancellation and name
-   validation run on the JVM and on the iOS simulator through `verify` and `verifyIos`. A
-   behaviour tested only in `jvmTest` or only in Swift is not shared behaviour.
+5. **Tests live in `commonTest`.** Shared tests run on the JVM or Android host in `verify` and on
+   the iOS simulator in `verifyIos`. Each convention plugin gates its module, so a new module
+   cannot be missed. A behaviour tested only in `jvmTest` or only in Swift is not shared
+   behaviour. Today corruption checks and name validation are in `commonTest`. Resume, window
+   retry and cancellation are still tested twice, in `app/src/test` and in Swift `TransferChecks`.
 6. **Adapters are thin and boring.** A Swift adapter maps OS callbacks to the port and nothing
    else. If an adapter grows a `retry`, `if size ==` or `crc`, that logic belongs in shared code.
 7. **Concurrency at the boundary.** Kotlin exposes `suspend` functions (bridged to Swift `async`)
@@ -101,7 +111,8 @@ flowchart LR
 ### Adding a transport (example, L2CAP or USB)
 
 1. Confirm the firmware contract supports it (`../aq-parquet/docs/shared/`).
-2. Implement `FrameLink` on each platform that needs it. Declare `payloadMax` and capabilities.
+2. Implement `FrameLink` (planned port, see above) on each platform that needs it. Declare
+   `payloadMax` and capabilities.
 3. Add the transport choice to the shared transport selection policy and its tests.
 4. No change to the engine, verify or archive code should be needed. If one is, the port is wrong.
 
@@ -109,9 +120,11 @@ flowchart LR
 
 Air quality is one family among many. Follow "Adding a device family" in
 [devices-and-discovery.md](devices-and-discovery.md). In short, the firmware contract names the
-properties, `:core:model` gets a dictionary and a `DeviceFamily` entry with `commonTest`
-coverage, and screens pick it up through capabilities and the generic `MetricCard`. Never a
-schema string check in a screen.
+properties, the metric registry gets a dictionary entry with `commonTest` coverage, and screens
+pick it up through capabilities. Never a schema string check in a screen. Today the registry is
+`Metrics` and `DeviceCapabilities` in `:core:history`. `:core:model`, `DeviceFamily` and a generic
+`MetricCard` are planned (W11 in [production-readiness-plan.md](production-readiness-plan.md)) and
+do not exist yet.
 
 ## Design parity
 
@@ -207,7 +220,10 @@ logs and diagnostics. A new field states its level in code, and screenshot tests
 
 ### Copy
 
-Write user-facing text in the shared string catalogue so both platforms say the same thing.
+Write user-facing text so both platforms say the same thing. A shared string catalogue does not
+exist yet. Android uses `res/values*/strings.xml`, Discover uses `DiscoverStrings.kt`, and the iOS
+screen keeps its strings in `:ios:shared` Kotlin. The plan moves them to Compose resources
+([platform-parity-plan.md](platform-parity-plan.md)).
 No em dashes, colons or semicolons in user-facing copy. Errors say what happened and what to do,
 in words a person without the firmware docs understands.
 
@@ -218,5 +234,6 @@ in words a person without the firmware docs understands.
 - [ ] Platform adapters only map OS behaviour to a port.
 - [ ] Design uses tokens, no raw colours or sizes in screens.
 - [ ] Simple level reviewed, technical detail gated behind Detailed or Developer.
-- [ ] `./gradlew --no-daemon verify verifyIos` and the unsigned simulator build pass.
+- [ ] `./gradlew --no-daemon verify` (includes `verifyIos` on a Mac) and the unsigned simulator
+      build pass.
 - [ ] Phone evidence recorded for radio, background, permission or release behaviour, per platform.

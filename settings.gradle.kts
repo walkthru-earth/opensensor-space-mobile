@@ -28,6 +28,10 @@ include(":core:publicfeed")
 include(":core:units")
 // WHO 2021 air quality guideline scales and their palette, for every chart and the map.
 include(":core:airquality")
+// Planned shared sync engine, phone archive and app settings (docs/platform-parity-plan.md).
+include(":core:sync")
+include(":core:archive")
+include(":core:settings")
 // The Discover map, shared Compose for Android and iOS.
 include(":ui:designsystem")
 include(":feature:discover")

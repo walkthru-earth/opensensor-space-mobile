@@ -9,7 +9,8 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
  * - Targets `jvm` (bytecode 17), `iosArm64` and `iosSimulatorArm64`.
  * - Default hierarchy template, so `commonMain`, `iosMain` and `jvmMain` exist without extra wiring.
  * - `kotlin-test` in `commonTest`. The JVM side resolves it to the JUnit 4 runner.
- * - A `test` task that runs `jvmTest`, so `verify`, hooks and CI keep one task name per module.
+ * - A `test` task that runs `jvmTest`, so hooks and CI keep one task name per module.
+ * - Gates. `jvmTest` joins `verify` and `iosSimulatorArm64Test` joins `verifyIos`.
  */
 class KmpLibraryConventionPlugin : Plugin<Project> {
     override fun apply(target: Project) = with(target) {
@@ -19,8 +20,7 @@ class KmpLibraryConventionPlugin : Plugin<Project> {
             jvm {
                 compilerOptions { jvmTarget.set(OpenSensorConventions.jvmTarget) }
             }
-            iosArm64()
-            iosSimulatorArm64()
+            openSensorIosTargets()
             compilerOptions { openSensorDefaults() }
 
             sourceSets.getByName("commonTest").dependencies {
@@ -28,12 +28,8 @@ class KmpLibraryConventionPlugin : Plugin<Project> {
             }
         }
 
-        if (tasks.findByName("test") == null) {
-            tasks.register("test") {
-                group = "verification"
-                description = "Runs the JVM tests (alias of jvmTest)."
-                dependsOn("jvmTest")
-            }
-        }
+        registerTestAlias("jvmTest")
+        addToGate(Gates.HOST, "jvmTest")
+        addToGate(Gates.IOS, "iosSimulatorArm64Test")
     }
 }

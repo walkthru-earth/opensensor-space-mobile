@@ -8,79 +8,95 @@
 
 ```mermaid
 flowchart TB
-  subgraph core["Kotlin core · no Android, Hilt, Room, Log"]
+  subgraph core["Kotlin core, JVM and iOS, no Android, Hilt, Room or Log"]
     PR[":core:protocol<br/>common wire rules + JVM adapters"]
     PQ[":core:parquet<br/>reader + writer, ByteReader, Thrift compact, LZ4/Snappy/GZIP, codec SPI, WKB"]
+    AQ[":core:airquality<br/>WHO 2021 scales and palette"]
     HI[":core:history<br/>sensor rules, file index, aggregation, calendar windows"]
+    PF[":core:publicfeed<br/>Discover feed port, H3, viewport cover, sample"]
+    UN[":core:units<br/>display units, axis ticks"]
+    SK[":core:sync, :core:archive, :core:settings<br/>empty skeletons, planned"]
   end
-  APP[":app (Android)<br/>Hilt · Room v10 · DataStore · WorkManager · Compose · zstd-jni"]
-  IOS["ios/App (Xcode + Swift)<br/>Core Bluetooth · Bonjour · app entry point"]
-  IS[":ios:shared<br/>Kotlin state + Compose Multiplatform screen"]
-  HI --> PQ
-  HI --> PR
-  APP --> HI
-  APP --> PQ
-  APP --> PR
-  IS --> HI
-  IS --> PR
+  subgraph ui["Compose Multiplatform, Android and iOS"]
+    DS[":ui:designsystem<br/>tokens, theme, fonts, floating controls"]
+    DI[":feature:discover<br/>map, cell sheet, chart"]
+  end
+  APP[":app (Android)<br/>Hilt, Room v10, DataStore, WorkManager, Compose, zstd-jni"]
+  IOS["ios/App (Xcode + Swift)<br/>Core Bluetooth, Bonjour, own sync engine and archive"]
+  IS[":ios:shared (iOS only)<br/>CompanionScreen, AppRoot, static OpenSensorShared framework"]
+  HI --> PQ & PR & AQ
+  PF --> PQ & AQ
+  DI --> PF & UN & DS
+  APP --> HI & PF & UN & DI & DS
+  IS --> HI & PR & UN & DI & DS
   IOS --> IS
 ```
 
-`:core:history` exposes `:core:parquet` and `:core:protocol` as `api`, so Android can see all three.
-The boundary is enforced by the build. A `:core` class cannot import `android.*`.
-`protocol`, `parquet` and `history` compile for JVM and iOS from `src/commonMain`. Their platform
-edges live in `src/jvmMain` (Java files, streams, `FileChannel` mapping, `java.util.zip`) and
-`src/iosMain` (`NSData` mapping, system zlib), and their tests in `src/commonTest` (JVM and iOS
-simulator) or `src/jvmTest` / `src/iosTest`. Calendar windows use kotlinx-datetime. Android passes
-its `ZoneId` through `toKotlinTimeZone()`. `:ios:shared` consumes common core
-rules and renders the current Compose iOS screen. `ios/App` supplies native app integration,
-Core Bluetooth and Bonjour discovery. The Android app remains a separate platform entry point.
-See [ios-migration.md](ios-migration.md) for current scope and build commands.
+`:core:history` exposes `:core:parquet`, `:core:protocol` and `:core:airquality` as `api`, and
+`:core:publicfeed` exposes `:core:parquet` and `:core:airquality`. A `:core` class cannot import
+`android.*`, and the build enforces it. Every `:core` module compiles for JVM and iOS from
+`src/commonMain`. Platform edges live in `src/jvmMain` (Java files, streams, `FileChannel` mapping,
+`java.util.zip`, `com.uber:h3`) and `src/iosMain` (`NSData` mapping, system zlib, H3 C cinterop).
+Tests live in `src/commonTest` (JVM and iOS simulator) or `src/jvmTest` / `src/iosTest`. Calendar
+windows use kotlinx-datetime. Android passes its `ZoneId` through `toKotlinTimeZone()`.
+
+`:ui:designsystem` and `:feature:discover` target Android (the AGP KMP library target, not `jvm`)
+and iOS. `:ios:shared` targets iOS only, so its `commonMain` consumes them directly. It renders the
+current Compose iOS screen. `ios/App` supplies native app integration, Core Bluetooth, Bonjour
+discovery, and today a second sync engine and archive in Swift. The Android app remains a separate
+platform entry point. See [ios-migration.md](ios-migration.md) for current scope and build commands.
 
 ### Target module graph
 
-The graph above is today's code. The production plan moves toward the graph below, where every
-rule that must give the same answer on both phones is shared and platform code only adapts OS
-services. Device families and metrics become data in `:core:model`, so air quality is one
-family among many. See [production-readiness-plan.md](production-readiness-plan.md) and
+The graph above is today's code. [platform-parity-plan.md](platform-parity-plan.md) moves toward
+the graph below, where every rule that must give the same answer on both phones is shared and
+platform code only adapts OS services. Nothing below `:core:sync`, `:core:archive` and
+`:core:settings` exists yet beyond their empty skeletons. `:core:model` (device families and metrics
+as data) is planned in [production-readiness-plan.md](production-readiness-plan.md) W11 and
 [devices-and-discovery.md](devices-and-discovery.md).
 
 ```mermaid
 flowchart TB
-  subgraph shared["Kotlin commonMain, JVM and iOS"]
-    MO[":core:model<br/>devices, families, capabilities, properties, scales"]
+  subgraph shared["Kotlin commonMain, Android and iOS"]
+    MO[":core:model (planned)<br/>devices, families, capabilities, properties, scales"]
     PR2[":core:protocol"]
-    SY[":core:sync<br/>engine behind FrameLink and ArchiveStore"]
+    SY[":core:sync (planned)<br/>engine behind FrameLink, ArchiveStore, ArchiveIndex, CredentialStore"]
+    AR[":core:archive (planned)<br/>layout, verifier, records, store ports"]
+    ST[":core:settings (planned)<br/>DataStore preferences"]
     PQ2[":core:parquet"]
     HI2[":core:history"]
-    PF[":core:publicfeed<br/>discover feed port and sample"]
+    PF[":core:publicfeed"]
     DS[":ui:designsystem<br/>tokens, theme, components"]
-    DI[":feature:discover<br/>map, cell sheet, device page"]
+    FE[":feature:* (planned)<br/>settings, devices, history, files, device, debug"]
+    DI[":feature:discover"]
   end
-  APP2[":app, Android adapters and screens"]
-  IOS2["ios/App, Swift adapters and :ios:shared"]
-  SY --> PR2 & PQ2 & MO
+  APP2[":app, Android adapters and Hilt edge"]
+  IOS2["ios/App, Swift OS adapters and :ios:shared"]
+  SY --> PR2 & AR & MO
+  AR --> PQ2
   HI2 --> PQ2 & MO
-  DI --> PF & DS & MO
-  APP2 --> SY & HI2 & DI & DS
-  IOS2 --> SY & HI2 & DI & DS
+  FE --> SY & ST & HI2 & DS
+  DI --> PF & DS
+  APP2 --> FE & DI
+  IOS2 --> FE & DI
 ```
 
 ## Build conventions (`build-logic/`)
 
 `settings.gradle.kts` includes `build-logic/` through `pluginManagement { includeBuild(...) }`.
-It holds three convention plugins, so a new shared module is one `plugins {}` line.
+It holds four convention plugins, so a new shared module is one `plugins {}` line.
 
 | Plugin | Applied by | Sets |
 | --- | --- | --- |
-| `opensensor.kmp.library` | `:core:protocol`, `:core:parquet`, `:core:history` | Kotlin Multiplatform with `jvm` (bytecode 17), `iosArm64`, `iosSimulatorArm64`, `kotlin-test` in `commonTest`, and a `test` task that runs `jvmTest` |
+| `opensensor.kmp.library` | every `:core` module | Kotlin Multiplatform with `jvm` (bytecode 17), `iosArm64`, `iosSimulatorArm64`, `kotlin-test` in `commonTest`, a `test` task that runs `jvmTest`. Adds `jvmTest` to `verify` and `iosSimulatorArm64Test` to `verifyIos` |
+| `opensensor.kmp.compose-feature` | `:ui:designsystem`, `:feature:discover` | the AGP KMP Android library target (namespace `earth.walkthru.opensensor.<module>`, SDK 37, min 31, Android resources, host tests), `iosArm64`, `iosSimulatorArm64`, Compose runtime, foundation, Material 3, UI and resources, internal resources class in `<namespace>.resources`, `kotlin-test` in `commonTest` (runs in the Android host test and on the simulator), a `test` task that runs `testAndroidHostTest`. Adds `testAndroidHostTest` to `verify` and `iosSimulatorArm64Test` to `verifyIos` |
+| `opensensor.kmp.ios-framework` | `:ios:shared` | iOS only Kotlin Multiplatform with the static `OpenSensorShared` framework for each iOS target. Adds `iosSimulatorArm64Test` and `linkDebugFrameworkIosSimulatorArm64` to `verifyIos` |
 | `opensensor.jvm.library` | none today (kept for a future JVM-only module) | Kotlin/JVM with Java and Kotlin bytecode 17 |
-| `opensensor.kmp.ios-framework` | `:ios:shared` | the KMP library conventions plus the static `OpenSensorShared` framework for each iOS target |
 
-The conventions compile against the Kotlin Gradle plugin as `compileOnly`. The root
-`build.gradle.kts` declares every plugin once with `apply false`, so all modules share one plugin
-classloader. Bytecode 17 is a compiler target, not `jvmToolchain(17)`, because the bundled Android
-Studio JBR and CI provide JDK 21 only and a toolchain would need a network download.
+The conventions compile against the Kotlin, Android and Compose Gradle plugins as `compileOnly`.
+The root `build.gradle.kts` declares every plugin once with `apply false`, so all modules share one
+plugin classloader. Bytecode 17 is a compiler target, not `jvmToolchain(17)`, because the bundled
+Android Studio JBR and CI provide JDK 21 only and a toolchain would need a network download.
 Warnings are not errors yet, since existing code still has a few.
 
 The real Parquet fixtures live once in `core/parquet/src/test/resources` and are published as
@@ -89,8 +105,14 @@ because a multiplatform module cannot apply that plugin). `:core:history` and `:
 declare `testFixtures(project(":core:parquet"))` instead of pointing at another module's
 directory. `:app` still adds that directory to its unit-test resources.
 
-The root `verify` and `verifyIos` tasks aggregate the module tasks. `verifyIos` includes
-`:core:parquet:iosSimulatorArm64Test`, which decodes the real fixtures on the simulator.
+### Gates
+
+The root build registers `verify` and `verifyIos` and lists only the `:app` tasks (`lintDebug`,
+`assembleDebug`, `testDebugUnitTest`). Each convention plugin adds its own module's test tasks
+(`build-logic/src/main/kotlin/Gates.kt`), so a new module is gated as soon as it applies a
+convention. On a Mac host `verify` also runs `verifyIos`. Set `-Popensensor.skipIos=true` to skip
+it. `verifyIos` includes `:core:parquet:iosSimulatorArm64Test`, which decodes the real fixtures on
+the simulator. `app/src/androidTest` is in neither gate.
 
 ## Layers inside `:app`
 
@@ -123,7 +145,7 @@ flowchart LR
 | `data/sync/` | `SyncPlanner`, `SyncEngine`, `FileArchive`, `ReadWindow`, `SyncResumePolicy` | files + Room |
 | `data/background/` | `SyncForegroundService`, `SyncNotifications`, `SyncWorker`, `AutoSyncScheduler`, `AutoSyncRunner` (pure), `AppAutoSyncGateway`; triggers `CompanionPresence` + `CompanionPresenceService`, `AdvertFlagScan` + `AdvertScanReceiver`, `SyncTriggers` + `WifiArrivalReceiver` + `BootReceiver` | yes (runner: no) |
 | `data/history/` | `HistoryIndexer`, `HistoryDeriver`, `DailyDerived*`, `HistoryRepository`, `parquet/AppParquetCodecs` (ZSTD) | Room + files |
-| `data/local/database/` | `AppDatabase` (v9), `KnownDevice`, `StationEpoch`, `ArchivedFile`, `History.kt` (`MetricBucket`, `DerivedDay`) | yes |
+| `data/local/database/` | `AppDatabase` (v10), `KnownDevice`, `StationEpoch`, `ArchivedFile`, `History.kt` (`MetricBucket`, `DerivedDay`) | yes |
 | `data/settings/AppSettings.kt` | DataStore: `DetailLevel` Simple · Detailed · Developer | yes |
 | `data/export/ExportManager.kt` | share / zip / SAF | yes |
 | `data/fake/FakeTransport.kt` | in-process protocol-v2 device with fault hooks | no (JVM) |
@@ -138,6 +160,10 @@ for iOS-specific guidance. SwiftUI review rules apply only if native SwiftUI vie
 | `protocol` → `data/protocol/` | `commonMain`: `AqGatt`, `Frames`, `WireBuffer`, `DeviceConfig`, `ConfigChunkAccumulator`, `JsonModels`, `LanProtocol`, `Advertisement`, `LiveProfile`, `PlantowerBatchCandidate`, `Crc32` (`expect`), `ParquetVerify`, `SafeName`. `jvmMain`: `AqUuids`, `LanFraming`, `Crc32` (`java.util.zip`), `ParquetVerifyJvm` (file, stream and SHA-256 extensions). `iosMain`: `Crc32` (portable table) |
 | `parquet` → `data/history/parquet/` | `commonMain`: `ParquetFile`, `SuspendParquetFile`, `ByteReader`, `SuspendByteReader`, `LocalFile` (`expect`), `ParquetFooterParser`, `ParquetMetadata`, `ColumnValues`, `ParquetWriter`, `ParquetSink`, `ThriftCompact(+Writer)`, `Lz4Block`, `ParquetCodecs`, `Geometry`, `GeoParquetMetadata`. `jvmMain`: `MappedFileReader`, gzip, `ParquetWriter(OutputStream, …)`, `OutputStreamSink`. `iosMain`: `MappedDataReader`, gzip (zlib) |
 | `history` → `data/history/` | `commonMain`: `Metrics`, `AirMood`, `TimeEstimate`, `Aggregation`, `ChartAxis`, `Columns`, `HistoryModel`, `HistoryWindow`, `FileSummary`, `ParquetIndexer` |
+| `publicfeed` → `publicfeed/` | `commonMain`: `Feed`, `ParquetFeedReader`, `H3`, `CellMap`, `CellScale`, `ViewportCover`, `TimeZoneRegions`. `jvmMain`: `UberH3Grid`. `iosMain`: `IosH3Grid` (vendored H3 C through cinterop) |
+| `units` → `units/` | `commonMain`: `Units`, `AxisTicks`. `jvmMain` and `iosMain`: `SystemUnits` (locale default) |
+| `airquality` → `airquality/` | `commonMain`: `HealthScale` (WHO 2021 guideline, interim targets, palette) |
+| `sync`, `archive`, `settings` | empty skeletons with one placeholder object each. Filled by [platform-parity-plan.md](platform-parity-plan.md) wave 2 |
 
 ### Shared sync rules in `:core:protocol`
 
@@ -151,17 +177,17 @@ for iOS-specific guidance. SwiftUI review rules apply only if native SwiftUI vie
   agree with the IEEE check value and with each other.
 - `SafeName.isValid` mirrors the firmware `safe_parquet_name()` rule. It allows only
   `[0-9a-z._=/-]`, rejects `..`, `//` and a leading `/`, needs a name before `.parquet`, and caps the
-  name at 399 bytes. Android `data/sync/SyncPlanner.kt` still has its own copy with a 512 limit
-  until the data layer switches to this one.
+  name at 399 bytes. Android `data/sync/SyncPlanner.kt` calls it. The Swift archive on iOS still
+  has its own copy.
 
 ## Rules that keep the modules honest
 
 - **Pure modules receive plain records, never entities.** `ArchivedFile.info()` → `IndexedFileInfo`; `HistoryIndexer` wraps `ParquetIndexer`. Room's KSP also refuses an entity implementing an interface from another module ([lessons](lessons-learned.md#build--tooling)).
-- **A new sensor is a registry entry** in `Metrics` (`:core:history`), not code — see [history-pipeline.md](history-pipeline.md#metric-registry).
+- **A new sensor is a registry entry** in `Metrics` (`:core:history`), not code. See [history-pipeline.md](history-pipeline.md#metric-registry).
 - **A new analysis is a pure object in `:core:history`** with a test over the real fixtures, fed by `:app` from Room/files. Never a query inside a composable.
 - **A new transport is an `AqTransport`** implementation behind `TransportFactory`; the session, engine and archive do not change ([transports.md](transports.md)).
 - **Transport work never lives in a composable or Activity**; manager-owned controllers keep session/sync state through rotation and navigation. Opening another device selects another controller without closing existing connections.
-- **The one native Android library** is `zstd-jni` (`@aar`), registered from `:app` into `:core:parquet`'s codec SPI (`AppParquetCodecs`). `:core:parquet` and file-backed history stay JVM-only; protocol and sensor-domain rules target JVM and iOS.
+- **The one native Android library** is `zstd-jni` (`@aar`), registered from `:app` into `:core:parquet`'s codec SPI (`AppParquetCodecs`). Every `:core` module targets JVM and iOS. iOS inflates GZIP with the system zlib and has no ZSTD codec yet.
 
 ## Concurrent collection and ownership
 
