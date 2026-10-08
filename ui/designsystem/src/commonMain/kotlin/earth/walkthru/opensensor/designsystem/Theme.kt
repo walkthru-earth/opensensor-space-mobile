@@ -118,14 +118,15 @@ val BrandShapes = Shapes(
 )
 
 /**
- * The opensensor.space theme for shared Compose code. The Android app wraps it with its bundled
- * fonts (`AqSyncTheme`). The iOS framework uses it directly, so neither platform falls back to the
- * Material baseline purple.
+ * The opensensor.space theme for shared Compose code: brand colours, shapes and the bundled brand
+ * type scale ([rememberBrandTypography], Cairo for Arabic-script locales). The Android app's
+ * `AqSyncTheme` uses the same typography. The iOS framework uses this theme directly, so neither
+ * platform falls back to the Material baseline purple or the system font.
  */
 @Composable
 fun OpenSensorTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    typography: Typography = MaterialTheme.typography,
+    typography: Typography = rememberBrandTypography(),
     content: @Composable () -> Unit,
 ) {
     MaterialTheme(
