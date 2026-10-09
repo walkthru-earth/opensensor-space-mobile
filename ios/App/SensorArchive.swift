@@ -69,11 +69,18 @@ final class SensorArchive {
         #endif
     }
 
+    private static let stationAllowed = CharacterSet(
+        charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-")
+
+    /// `[0-9A-Za-z._-]+`, as Android (FileArchive.kt:131) and SyncWire. The station is one directory
+    /// name, so no slash can pass, and `.` or `..` alone is refused.
+    static func isStationId(_ station: String) -> Bool {
+        !station.isEmpty && station != "." && station != ".."
+            && station.unicodeScalars.allSatisfy({ stationAllowed.contains($0) })
+    }
+
     func target(station: String, name: String) throws -> URL {
-        let stationAllowed = CharacterSet(
-            charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
-        guard !station.isEmpty, station.unicodeScalars.allSatisfy({ stationAllowed.contains($0) }),
-            !name.hasPrefix("/"), name.utf8.count <= Self.maxNameBytes, !name.contains(".."),
+        guard Self.isStationId(station), !name.hasPrefix("/"), name.utf8.count <= Self.maxNameBytes, !name.contains(".."),
             name.unicodeScalars.allSatisfy({
                 CharacterSet(charactersIn: "0123456789abcdefghijklmnopqrstuvwxyz._=/-").contains($0)
             }), name.hasSuffix(".parquet"), name.utf8.count > 8
@@ -128,31 +135,6 @@ final class SensorArchive {
         try JSONEncoder().encode(Receipt(size: size, crc: crc)).write(to: receipt, options: options)
     }
 
-    /// Export a snapshot containing finalized Parquet files only, with the Hive tree intact.
-    func export(to destination: URL) throws -> Int {
-        // Relative enumeration avoids Foundation's /var versus /private/var URL aliases.
-        guard let files = FileManager.default.enumerator(atPath: root.path)
-        else { throw Failure.invalidFile }
-        var count = 0
-        for case let relative as String in files {
-            try Task.checkCancellation()
-            let source = root.appendingPathComponent(relative)
-            let values = try source.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
-            guard values.isSymbolicLink != true else { throw Failure.unsafePath }
-            guard values.isRegularFile == true, source.pathExtension == "parquet" else { continue }
-            let components = relative.split(separator: "/", maxSplits: 1).map(String.init)
-            guard components.count == 2,
-                try target(station: components[0], name: components[1]).path == source.path
-            else { throw Failure.unsafePath }
-            let copy = destination.appendingPathComponent(relative)
-            try FileManager.default.createDirectory(
-                at: copy.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try FileManager.default.copyItem(at: source, to: copy)
-            count += 1
-        }
-        return count
-    }
-
     func prepare(station: String, name: String, size: UInt64, crc: UInt32) throws -> Download? {
         let final = try target(station: station, name: name)
         if FileManager.default.fileExists(atPath: final.path) {
@@ -163,6 +145,7 @@ final class SensorArchive {
         try FileManager.default.createDirectory(
             at: final.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: Self.protection)
         let partial = final.appendingPathExtension("\(size)-\(String(crc, radix: 16)).partial")
+        try removeStalePartials(of: final, keeping: partial)
         if FileManager.default.fileExists(atPath: partial.path) {
             let attrs = try FileManager.default.attributesOfItem(atPath: partial.path)
             guard attrs[.type] as? FileAttributeType == .typeRegular else { throw Failure.unsafePath }
@@ -173,6 +156,28 @@ final class SensorArchive {
             else { throw Failure.invalidFile }
         }
         return try Download(archive: self, final: final, partial: partial, size: size, crc: crc)
+    }
+
+    /// The partial name carries OPENED's size and CRC. When those change for the same name, older
+    /// partials can never complete, so they are removed (Android resets on meta mismatch,
+    /// FileArchive.kt:97-102).
+    private func removeStalePartials(of final: URL, keeping current: URL) throws {
+        let directory = final.deletingLastPathComponent()
+        let prefix = final.lastPathComponent + "."
+        let manager = FileManager.default
+        for entry in try manager.contentsOfDirectory(atPath: directory.path)
+        where entry.hasPrefix(prefix) && entry.hasSuffix(".partial") && entry != current.lastPathComponent {
+            // Only `<size>-<crc hex>.partial`, so a longer final name sharing the prefix is never touched.
+            let tag = entry.dropFirst(prefix.count).dropLast(".partial".count)
+            let parts = tag.split(separator: "-", omittingEmptySubsequences: false)
+            guard parts.count == 2, !parts[0].isEmpty, !parts[1].isEmpty,
+                parts[0].allSatisfy({ $0.isASCII && $0.isNumber }), parts[1].allSatisfy({ $0.isASCII && $0.isHexDigit })
+            else { continue }
+            let stale = directory.appendingPathComponent(entry)
+            guard (try? manager.attributesOfItem(atPath: stale.path))?[.type] as? FileAttributeType == .typeRegular
+            else { continue }
+            try manager.removeItem(at: stale)
+        }
     }
 
     func verified(_ url: URL, size: UInt64, crc: UInt32) throws -> Bool {
@@ -253,7 +258,6 @@ actor ArchiveIO {
     func completed(station: String, name: String, size: UInt64) throws -> Bool {
         try archive.completed(station: station, name: name, size: size)
     }
-    func export(to destination: URL) throws -> Int { try archive.export(to: destination) }
     func prepare(station: String, name: String, size: UInt64, crc: UInt32) throws -> Bool {
         download = try archive.prepare(station: station, name: name, size: size, crc: crc)
         return download != nil

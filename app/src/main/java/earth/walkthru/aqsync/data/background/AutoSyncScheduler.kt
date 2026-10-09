@@ -135,7 +135,7 @@ class AutoSyncScheduler @Inject constructor(
         const val TAG_AUTO_SYNC = "auto-sync"
 
         /** WorkManager refuses shorter periods (PeriodicWorkRequest.MIN_PERIODIC_INTERVAL_MILLIS). */
-        const val PERIOD_MINUTES = 15L
-        const val BACKOFF_MINUTES = 5L
+        const val PERIOD_MINUTES = BackgroundSyncPolicy.PERIOD_MS / 60_000L
+        const val BACKOFF_MINUTES = BackgroundSyncPolicy.BACKOFF_MS / 60_000L
     }
 }

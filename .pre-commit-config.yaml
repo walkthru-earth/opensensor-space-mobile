@@ -5,7 +5,8 @@
 # pre-commit stage (seconds): whitespace/EOL hygiene, YAML/JSON/TOML syntax, no large or secret files,
 #   secret scan (gitleaks — the LAN token and Wi-Fi PSK must never land in the repo), ktlint format+lint
 #   on the staged Kotlin files with the rules in .editorconfig.
-# pre-push stage (minutes): `./gradlew verify` = lintDebug + assembleDebug + every module's unit tests.
+# pre-push stage (minutes): `./gradlew verify` = lintDebug + assembleDebug + every module's host tests,
+#   and on a Mac also `verifyIos` (every shared module's iOS simulator tests and the framework link).
 minimum_pre_commit_version: "3.2.0"
 default_install_hook_types: [pre-commit, pre-push]
 default_stages: [pre-commit]
@@ -49,7 +50,7 @@ repos:
         require_serial: true
 
       - id: gradle-verify
-        name: ./gradlew verify (lint + build + all unit tests)
+        name: ./gradlew verify (lint + build + host tests, plus iOS tests on a Mac)
         entry: ./gradlew --no-daemon -q verify
         language: system
         pass_filenames: false

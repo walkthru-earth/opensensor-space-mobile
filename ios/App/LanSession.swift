@@ -2,21 +2,46 @@ import Foundation
 import Network
 import OpenSensorShared
 
-enum LanFailure: Error, LocalizedError {
-    case invalidReply, credentialsUnavailable, enrollmentRequired, identityChanged, authentication, busy, timeout,
-        disconnected
-    var errorDescription: String? {
+enum LanFailure: Error {
+    case invalidReply, credentialsUnavailable, enrollmentRequired, stationChanged, hardwareChanged, authentication,
+        busy, timeout, disconnected
+
+    /// The words for a session that failed or ended. The shared state shows Android's wording.
+    var notice: CompanionNotice {
         switch self {
-        case .invalidReply: return "The sensor sent an invalid sync reply."
-        case .credentialsUnavailable: return "Wi-Fi access could not be saved securely on this phone."
-        case .enrollmentRequired: return "Connect over Bluetooth and save Wi-Fi access on this phone first."
-        case .identityChanged: return "Sensor identity changed. Reconnect over Bluetooth to verify it."
-        case .authentication: return "Wi-Fi access expired. Connect over Bluetooth and save access again."
-        case .busy: return "The sensor is busy with other phones. Try again shortly."
-        case .timeout: return "The sensor did not respond in time. Retry to resume the download."
-        case .disconnected: return "Disconnected. Retry to resume the download."
+        case .invalidReply: return .verificationFailed
+        case .credentialsUnavailable: return .tokenFailed
+        case .enrollmentRequired: return .enrollOverBluetooth
+        case .stationChanged: return .stationChanged
+        case .hardwareChanged: return .hardwareChanged
+        case .authentication: return .tokenNeedsBluetooth
+        case .busy: return .busy
+        case .timeout, .disconnected: return .syncAborted
         }
     }
+
+    /// The words when the handshake itself failed. A dropped or silent socket then means the
+    /// sensor could not be verified, not that a sync stopped.
+    static func connectNotice(_ error: Error) -> CompanionNotice {
+        switch error as? LanFailure {
+        case .some(.timeout), .some(.disconnected), .none: return .verificationFailed
+        case .some(let failure): return failure.notice
+        }
+    }
+}
+
+/// Who a collection talks to, read from HELLO or INFO.
+struct CollectTarget: Sendable {
+    let station: String
+    let device: String
+    let maxRead: Int32
+    let mtu: Int32
+}
+
+/// Carries the shared engine's link into a transport queue. `SensorLink` accepts frames from any thread.
+final class FrameSink: @unchecked Sendable {
+    let link: SensorLink
+    init(_ link: SensorLink) { self.link = link }
 }
 
 /// One serialized consumer per socket. The actor's executor is the session's own serial queue,
@@ -24,7 +49,9 @@ enum LanFailure: Error, LocalizedError {
 /// through `assumeIsolated` without spawning a task each. Framing parses an accumulating buffer
 /// fed by receives of up to 64 KiB. Unsolicited STATUS and LIVE never enter file replies. They
 /// reach the owner through `events` in arrival order, followed by `closed` when the socket ends.
-actor LanSession: ArchivePipe {
+/// While a collection runs, file replies go to the shared engine through its `SensorLink`, and the
+/// engine owns the file protocol and its timeouts.
+actor LanSession {
     enum Event: Sendable {
         case push(kind: String, json: String)
         case closed(LanFailure)
@@ -40,8 +67,8 @@ actor LanSession: ArchivePipe {
     private var frames = LanFrameBuffer()
     private var receiving = false
     private var closed = false
-    private var replies: [ArchiveReply] = []
-    private var replyWaiter: Waiter<ArchiveReply>?
+    private var replies: [LanReply] = []
+    private var replyWaiter: Waiter<LanReply>?
     private var connectWaiter: Waiter<Void>?
     private var sendWaiters: [UUID: Waiter<Void>] = [:]
     private var heartbeat: DispatchSourceTimer?
@@ -49,6 +76,9 @@ actor LanSession: ArchivePipe {
     private var liveness = LanLiveness(lastSent: ProcessInfo.processInfo.systemUptime)
     private var collecting = false
     private var identity: SyncIdentity?
+    private var payloadMax = 0
+    /// While set, file replies go to the shared engine as raw frame bodies.
+    private var sink: FrameSink?
 
     private struct Waiter<T> {
         let continuation: CheckedContinuation<T, Error>
@@ -60,6 +90,7 @@ actor LanSession: ArchivePipe {
 
     private static let maxQueuedReplies = 32
     private static let receiveChunk = 64 * 1024
+    /// Connect, send and HELLO.
     private static let requestTimeout: TimeInterval = 10
     private static let idleTimeout: TimeInterval = 180
 
@@ -85,25 +116,45 @@ actor LanSession: ArchivePipe {
         }
         // The Kotlin side zeroes its token copies. Only the outgoing frame holds the token afterwards.
         try await sendRaw(wire.handshake(token: credential.token))
-        let hello = try await reply()
+        let hello = try await reply(timeout: Self.requestTimeout)
+        try Self.refuse(hello)
         guard hello.kind == "hello", hello.code == 2, (64...1024).contains(Int(hello.count)),
             let identity = wire.identity(json: hello.json)
         else { throw LanFailure.invalidReply }
-        guard identity.station == credential.station, identity.device == credential.device else {
-            throw LanFailure.identityChanged
-        }
+        guard identity.device == credential.device else { throw LanFailure.hardwareChanged }
+        guard identity.station == credential.station else { throw LanFailure.stationChanged }
         frames.cap = Int(hello.count)
+        payloadMax = Int(hello.count)
         self.identity = identity
         startHeartbeat()
     }
 
-    func collect(archive: ArchiveIO, progress: @escaping @Sendable (TransferUpdate) async -> Void) async throws {
-        guard let identity, !collecting else { throw LanFailure.disconnected }
+    /// Who is on the other end, as HELLO proved it. Nil before HELLO or after the socket closed.
+    func target() -> CollectTarget? {
+        guard let identity, !closed else { return nil }
+        return CollectTarget(
+            station: identity.station, device: identity.device, maxRead: identity.maxRead, mtu: Int32(payloadMax + 3))
+    }
+
+    /// Routes file replies to `sink` until `endCollect`. STATUS and LIVE still reach `events`.
+    /// False when the socket has closed or another collection holds the session.
+    func beginCollect(_ sink: FrameSink) -> Bool {
+        guard identity != nil, !closed, self.sink == nil else { return false }
+        self.sink = sink
         collecting = true
-        defer { collecting = false }
-        try await SensorTransfer.collect(
-            pipe: self, archive: archive, station: identity.station, maxRead: UInt64(identity.maxRead),
-            progress: progress)
+        replies.removeAll()
+        return true
+    }
+
+    func endCollect() {
+        sink = nil
+        collecting = false
+    }
+
+    /// Sends one request body from the shared engine. Safe from any thread. Bodies go out in call
+    /// order on the session queue. A failed send closes the session, which ends the engine's link.
+    nonisolated func enqueue(_ body: Data) {
+        queue.async { [self] in assumeIsolated { $0.write(body) } }
     }
 
     /// Safe from any thread. Closing is enqueued on the session queue; pending waits end as disconnected.
@@ -111,19 +162,26 @@ actor LanSession: ArchivePipe {
         queue.async { [self] in assumeIsolated { $0.shutdown(reason: nil) } }
     }
 
-    // MARK: ArchivePipe
-
-    func list() async throws { try await send(wire.listRequest()) }
-    func open(name: String) async throws { try await send(wire.openRequest(name: name)) }
-    func read(handle: Int32, offset: UInt64, length: UInt64) async throws {
-        try await send(wire.readRequest(handle: handle, offset: Int64(offset), length: Int64(length)))
+    /// Session ERROR frames (handshake, a full session pool, authentication) end the connection.
+    private static func refuse(_ frame: LanReply) throws {
+        guard frame.kind == "error" else { return }
+        if frame.code == 14 { throw LanFailure.authentication }
+        if frame.code == 7 { throw LanFailure.busy }
+        throw LanFailure.invalidReply
     }
-    func closeFile(handle: Int32) async throws { try await send(wire.closeRequest(handle: handle)) }
-    func receive() async throws -> ArchiveReply { try await reply() }
 
     // MARK: Requests and replies
 
-    private func send(_ body: Data) async throws { try await sendRaw(wire.envelope(body: body)) }
+    private func write(_ body: Data) {
+        guard !closed else { return }
+        liveness.sent(now: ProcessInfo.processInfo.systemUptime)
+        connection.send(
+            content: wire.envelope(body: body),
+            completion: .contentProcessed { [weak self] error in
+                guard error != nil else { return }
+                self?.assumeIsolated { $0.shutdown(reason: .disconnected) }
+            })
+    }
 
     private func sendRaw(_ data: Data) async throws {
         guard !closed else { throw LanFailure.disconnected }
@@ -139,9 +197,9 @@ actor LanSession: ArchivePipe {
         liveness.sent(now: ProcessInfo.processInfo.systemUptime)
     }
 
-    private func reply() async throws -> ArchiveReply {
+    private func reply(timeout: TimeInterval) async throws -> LanReply {
         try Task.checkCancellation()
-        let frame: ArchiveReply
+        let frame: LanReply
         if !replies.isEmpty {
             frame = replies.removeFirst()
             // Queued frames may be waiting behind the reply bound; parse them and keep reading.
@@ -150,13 +208,8 @@ actor LanSession: ArchivePipe {
             guard !closed else { throw LanFailure.disconnected }
             guard replyWaiter == nil else { throw LanFailure.invalidReply }
             frame = try await withCheckedThrowingContinuation { continuation in
-                replyWaiter = Waiter(continuation: continuation, deadline: deadline(after: Self.requestTimeout, .reply))
+                replyWaiter = Waiter(continuation: continuation, deadline: deadline(after: timeout, .reply))
             }
-        }
-        if frame.kind == "error" {
-            if frame.code == 14 { throw LanFailure.authentication }
-            if frame.code == 7 { throw LanFailure.busy }
-            throw LanFailure.invalidReply
         }
         return frame
     }
@@ -195,7 +248,11 @@ actor LanSession: ArchivePipe {
         do {
             while replies.count < Self.maxQueuedReplies, let body = try frames.next() {
                 guard let reply = decode(body) else { throw LanFailure.invalidReply }
-                route(reply)
+                if let sink, reply.kind != "status", reply.kind != "live" {
+                    sink.link.deliver(frame: body)
+                } else {
+                    route(reply)
+                }
             }
         } catch {
             shutdown(reason: .invalidReply)
@@ -218,15 +275,12 @@ actor LanSession: ArchivePipe {
         }
     }
 
-    private func decode(_ body: Data) -> ArchiveReply? {
+    private func decode(_ body: Data) -> LanReply? {
         guard let reply = wire.decode(data: body) else { return nil }
-        return ArchiveReply(
-            kind: reply.kind, name: reply.name, size: reply.size, crc: reply.crc, handle: reply.handle,
-            offset: reply.offset, code: reply.code, count: reply.count,
-            data: reply.kind == "chunk" ? reply.payload : nil, json: reply.json)
+        return LanReply(kind: reply.kind, code: reply.code, count: reply.count, json: reply.json)
     }
 
-    private func route(_ reply: ArchiveReply) {
+    private func route(_ reply: LanReply) {
         if reply.kind == "status" || reply.kind == "live" {
             eventSink.yield(.push(kind: reply.kind, json: reply.json))
             return
@@ -297,13 +351,7 @@ actor LanSession: ArchivePipe {
             return
         }
         guard liveness.needsKeepalive(now: now, collecting: collecting) else { return }
-        liveness.sent(now: now)
-        connection.send(
-            content: wire.envelope(body: wire.statusRequest()),
-            completion: .contentProcessed { [weak self] error in
-                guard error != nil else { return }
-                self?.assumeIsolated { $0.shutdown(reason: .disconnected) }
-            })
+        write(wire.statusRequest())
     }
 
     private func shutdown(reason: LanFailure?) {
@@ -327,6 +375,9 @@ actor LanSession: ArchivePipe {
         }
         connection.stateUpdateHandler = nil
         connection.cancel()
+        // The engine sees the link end at once instead of waiting out its frame timeout.
+        sink?.link.linkClosed()
+        sink = nil
         if let reason { eventSink.yield(.closed(reason)) }
         eventSink.finish()
     }

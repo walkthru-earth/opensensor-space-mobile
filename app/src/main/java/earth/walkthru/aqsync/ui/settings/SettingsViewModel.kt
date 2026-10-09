@@ -3,38 +3,12 @@ package earth.walkthru.aqsync.ui.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import earth.walkthru.aqsync.data.settings.AppSettings
-import earth.walkthru.aqsync.data.settings.DetailLevel
-import earth.walkthru.aqsync.data.sync.ClockSyncMode
-import earth.walkthru.aqsync.units.UnitSystem
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
+import earth.walkthru.aqsync.settings.SettingsRepository
+import earth.walkthru.opensensor.settings.SettingsController
 import javax.inject.Inject
 
+/** Holds the shared [SettingsController] (`:feature:settings`) for the Settings tab, so it survives rotation. */
 @HiltViewModel
-class SettingsViewModel @Inject constructor(private val settings: AppSettings) : ViewModel() {
-    val detailLevel: StateFlow<DetailLevel> = settings.detailLevel.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DetailLevel.SIMPLE)
-    val clockSyncMode: StateFlow<ClockSyncMode> = settings.clockSyncMode.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ClockSyncMode.ASK)
-
-    val showPublicSensors: StateFlow<Boolean> = settings.showPublicSensors.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
-
-    val unitSystem: StateFlow<UnitSystem> = settings.unitSystem.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UnitSystem.AUTO)
-
-    fun setUnitSystem(system: UnitSystem) {
-        viewModelScope.launch { settings.setUnitSystem(system) }
-    }
-
-    fun setShowPublicSensors(on: Boolean) {
-        viewModelScope.launch { settings.setShowPublicSensors(on) }
-    }
-
-    fun setDetailLevel(level: DetailLevel) {
-        viewModelScope.launch { settings.setDetailLevel(level) }
-    }
-
-    fun setClockSyncMode(mode: ClockSyncMode) {
-        viewModelScope.launch { settings.setClockSyncMode(mode) }
-    }
+class SettingsViewModel @Inject constructor(repository: SettingsRepository) : ViewModel() {
+    val controller = SettingsController(viewModelScope, repository)
 }

@@ -10,6 +10,13 @@ struct LanCredential: Codable {
     let port: Int
 }
 
+/// A saved credential without its token or port.
+struct LanCredentialEntry {
+    let peripheral: String
+    let station: String
+    let device: String
+}
+
 final class LanCredentials {
     private let service = "earth.walkthru.opensensor.lan"
     func save(_ value: LanCredential) throws {
@@ -39,11 +46,31 @@ final class LanCredentials {
             kSecMatchLimit as String: kSecMatchLimitOne,
         ]
         guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess, let data = item as? Data,
-            let value = try? JSONDecoder().decode(LanCredential.self, from: data), value.token.count == 32,
-            value.device.lowercased() == device.lowercased(), value.device.count == 12,
-            value.device.allSatisfy({ $0.isHexDigit }), UUID(uuidString: value.peripheral) != nil,
-            (1...65535).contains(value.port), !value.station.isEmpty,
-            value.station.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") })
+            let value = Self.decode(data), value.device.lowercased() == device.lowercased()
+        else { return nil }
+        return value
+    }
+
+    /// Which sensors hold Wi-Fi access, for My devices. Only ids leave this type, never a token.
+    func list() -> [LanCredentialEntry] {
+        var items: CFTypeRef?
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
+            kSecReturnData as String: true, kSecMatchLimit as String: kSecMatchLimitAll,
+        ]
+        guard SecItemCopyMatching(query as CFDictionary, &items) == errSecSuccess, let all = items as? [Data] else {
+            return []
+        }
+        return all.compactMap(Self.decode).map {
+            LanCredentialEntry(peripheral: $0.peripheral, station: $0.station, device: $0.device.lowercased())
+        }
+    }
+
+    private static func decode(_ data: Data) -> LanCredential? {
+        guard let value = try? JSONDecoder().decode(LanCredential.self, from: data), value.token.count == 32,
+            value.device.count == 12, value.device.allSatisfy({ $0.isHexDigit }),
+            UUID(uuidString: value.peripheral) != nil, (1...65535).contains(value.port),
+            SensorArchive.isStationId(value.station)
         else { return nil }
         return value
     }

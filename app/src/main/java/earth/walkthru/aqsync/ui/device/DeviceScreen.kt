@@ -11,11 +11,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.BugReport
-import androidx.compose.material.icons.rounded.LinkOff
-import androidx.compose.material.icons.rounded.Refresh
-import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -33,25 +28,22 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.ble.ConnectionState
-import earth.walkthru.aqsync.data.local.database.SensorInstallation
-import earth.walkthru.aqsync.data.protocol.PairMode
 import earth.walkthru.aqsync.ui.components.ConnectionBanner
 import earth.walkthru.aqsync.ui.components.DeviceSectionTabs
 import earth.walkthru.aqsync.ui.components.DeviceTab
-import earth.walkthru.aqsync.ui.components.PillButton
 import earth.walkthru.aqsync.ui.components.TransportChip
 import earth.walkthru.aqsync.ui.device.cards.AutoSyncCard
-import earth.walkthru.aqsync.ui.device.cards.BondsCard
 import earth.walkthru.aqsync.ui.device.cards.DeviceInfoCard
-import earth.walkthru.aqsync.ui.device.cards.LanAccess
-import earth.walkthru.aqsync.ui.device.cards.LanCard
-import earth.walkthru.aqsync.ui.device.cards.PairingCard
-import earth.walkthru.aqsync.ui.device.cards.ProtocolV1Card
-import earth.walkthru.aqsync.ui.device.cards.SensorIdentityCard
-import earth.walkthru.aqsync.ui.device.cards.StickerScan
-import earth.walkthru.aqsync.ui.device.cards.WifiCard
+import earth.walkthru.opensensor.designsystem.AppIcons
+import earth.walkthru.opensensor.designsystem.PillButton
+import earth.walkthru.opensensor.device.DeviceConfigAction
+import earth.walkthru.opensensor.device.DeviceConfigUiState
+import earth.walkthru.opensensor.device.LanAccess
+import earth.walkthru.opensensor.device.StickerScan
+import earth.walkthru.opensensor.device.deviceConfigItems
+import earth.walkthru.opensensor.device.sensorIdentityItem
 
-/** Everything the Device screen can ask for. Device-changing ones are confirmed by the route. */
+/** Everything the Device screen can ask for. Device-changing ones are confirmed by the shared controller. */
 sealed interface DeviceAction {
     data object OpenToday : DeviceAction
     data object OpenHistory : DeviceAction
@@ -64,26 +56,13 @@ sealed interface DeviceAction {
     data class SetAutoSync(val on: Boolean) : DeviceAction
     data object SetupCompanion : DeviceAction
     data object RemoveCompanion : DeviceAction
-    data object ScanSticker : DeviceAction
-    data class SaveSensor(val sticker: String, val batchEstimate: Boolean, val source: String) : DeviceAction
-    data class SavePairing(val mode: PairMode, val pin: String?) : DeviceAction
-    data object RequestReboot : DeviceAction
-    data class SetWifiOn(val on: Boolean) : DeviceAction
-    data object ScanWifi : DeviceAction
-    data object ClearWifiScan : DeviceAction
-    data class JoinWifi(val ssid: String, val psk: String, val open: Boolean) : DeviceAction
-    data object RequestLanAccess : DeviceAction
-    data class SetLanOn(val on: Boolean) : DeviceAction
-    data object FetchToken : DeviceAction
-    data object RequestRotateToken : DeviceAction
-    data object ReconnectOverBluetooth : DeviceAction
-    data object RequestForgetBonds : DeviceAction
+
+    /** Pairing, Wi-Fi, Sync over Wi-Fi, bonds and the sticker card, from the shared Device section. */
+    data class Config(val action: DeviceConfigAction) : DeviceAction
 }
 
-/** What the Device screen shows besides [DeviceUiState]: Room records and platform permission state. */
+/** What the Device screen shows besides [DeviceUiState]: the last sticker scan and platform permission state. */
 data class DeviceExtras(
-    val sensorInstallation: SensorInstallation? = null,
-    val sensorHistoryCount: Int = 0,
     val stickerScan: StickerScan? = null,
     val lanAccess: LanAccess = LanAccess(granted = true, requestable = false),
 )
@@ -98,6 +77,7 @@ data class DeviceExtras(
 @Composable
 fun DeviceScreen(
     state: DeviceUiState,
+    config: DeviceConfigUiState,
     extras: DeviceExtras,
     onAction: (DeviceAction) -> Unit,
     modifier: Modifier = Modifier,
@@ -122,13 +102,13 @@ fun DeviceScreen(
                     },
                     actions = {
                         IconButton(onClick = { onAction(DeviceAction.RefreshConfig) }, enabled = state.ready && state.isV2) {
-                            Icon(Icons.Rounded.Refresh, contentDescription = stringResource(R.string.device_refresh))
+                            Icon(AppIcons.Refresh, contentDescription = stringResource(R.string.device_refresh))
                         }
                         if (state.detailLevel.developer) {
-                            IconButton(onClick = { onAction(DeviceAction.OpenDebug) }) { Icon(Icons.Rounded.BugReport, contentDescription = stringResource(R.string.nav_debug)) }
+                            IconButton(onClick = { onAction(DeviceAction.OpenDebug) }) { Icon(AppIcons.BugReport, contentDescription = stringResource(R.string.nav_debug)) }
                         }
-                        IconButton(onClick = { onAction(DeviceAction.OpenSettings) }) { Icon(Icons.Rounded.Settings, contentDescription = stringResource(R.string.nav_settings)) }
-                        IconButton(onClick = { onAction(DeviceAction.Disconnect) }) { Icon(Icons.Rounded.LinkOff, contentDescription = stringResource(R.string.nav_disconnect)) }
+                        IconButton(onClick = { onAction(DeviceAction.OpenSettings) }) { Icon(AppIcons.Settings, contentDescription = stringResource(R.string.nav_settings)) }
+                        IconButton(onClick = { onAction(DeviceAction.Disconnect) }) { Icon(AppIcons.LinkOff, contentDescription = stringResource(R.string.nav_disconnect)) }
                     },
                 )
                 DeviceSectionTabs(DeviceTab.DEVICE) {
@@ -172,18 +152,7 @@ fun DeviceScreen(
                 }
                 // Device configuration beyond Auto-sync and Wi-Fi is Detailed. Simple still shows the
                 // pairing card when it needs attention (default PIN or a pending restart).
-                if (state.capabilities.sensorIdentity && state.detailLevel.detailed) {
-                    item(key = "sensor") {
-                        SensorIdentityCard(
-                            state = state,
-                            installation = extras.sensorInstallation,
-                            historyCount = extras.sensorHistoryCount,
-                            scan = extras.stickerScan,
-                            onScan = { onAction(DeviceAction.ScanSticker) },
-                            onSave = { sticker, batch, source -> onAction(DeviceAction.SaveSensor(sticker, batch, source)) },
-                        )
-                    }
-                }
+                sensorIdentityItem(config, extras.stickerScan, canScan = true) { onAction(DeviceAction.Config(it)) }
                 item(key = "autosync") {
                     AutoSyncCard(
                         state,
@@ -192,46 +161,7 @@ fun DeviceScreen(
                         onRemoveCompanion = { onAction(DeviceAction.RemoveCompanion) },
                     )
                 }
-                if (state.info != null && !state.isV2) {
-                    item(key = "v1") { ProtocolV1Card() }
-                }
-                val ble = state.config?.config?.ble
-                val pairingNeedsAttention = (ble?.isPinDefault == true && ble.pairMode == PairMode.FIXED) || state.config?.rebootRequired == true
-                if (state.isV2 && (state.detailLevel.detailed || pairingNeedsAttention)) {
-                    item(key = "pairing") {
-                        PairingCard(
-                            state,
-                            onSave = { mode, pin -> onAction(DeviceAction.SavePairing(mode, pin)) },
-                            onReboot = { onAction(DeviceAction.RequestReboot) },
-                        )
-                    }
-                }
-                if (state.isV2) {
-                    item(key = "wifi") {
-                        WifiCard(
-                            state = state,
-                            onToggleWifi = { onAction(DeviceAction.SetWifiOn(it)) },
-                            onScan = { onAction(DeviceAction.ScanWifi) },
-                            onClearScan = { onAction(DeviceAction.ClearWifiScan) },
-                            onJoin = { ssid, psk, open -> onAction(DeviceAction.JoinWifi(ssid, psk, open)) },
-                            onRefresh = { onAction(DeviceAction.RefreshConfig) },
-                        )
-                    }
-                    item(key = "lan") {
-                        LanCard(
-                            state = state,
-                            access = extras.lanAccess,
-                            onRequestAccess = { onAction(DeviceAction.RequestLanAccess) },
-                            onToggleLan = { onAction(DeviceAction.SetLanOn(it)) },
-                            onFetchToken = { onAction(DeviceAction.FetchToken) },
-                            onRotateToken = { onAction(DeviceAction.RequestRotateToken) },
-                            onReconnectBle = { onAction(DeviceAction.ReconnectOverBluetooth) },
-                        )
-                    }
-                    if (state.detailLevel.detailed) {
-                        item(key = "bonds") { BondsCard(state, onForgetAll = { onAction(DeviceAction.RequestForgetBonds) }) }
-                    }
-                }
+                deviceConfigItems(config, extras.lanAccess) { onAction(DeviceAction.Config(it)) }
             }
         }
     }

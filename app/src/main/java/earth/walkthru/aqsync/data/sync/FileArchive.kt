@@ -2,9 +2,6 @@ package earth.walkthru.aqsync.data.sync
 
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
-import earth.walkthru.aqsync.data.protocol.SafeName
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import java.io.File
 import java.io.IOException
 import java.io.RandomAccessFile
@@ -31,27 +28,6 @@ class FileArchive(baseDir: File) {
 
     val root: File = File(baseDir, "archive")
     val partialRoot: File = File(baseDir, "archive-partial")
-
-    private class WriterSlot(val mutex: Mutex = Mutex(), var users: Int = 0)
-    private val writers = HashMap<Pair<String, String>, WriterSlot>()
-
-    /** One writer per archive identity, including waiters; different files can transfer together. */
-    suspend fun <T> withWriterLease(station: String, name: String, block: suspend () -> T): T {
-        safeStation(station)
-        require(SafeName.isValid(name)) { "unsafe archive name" }
-        val key = station to name
-        val slot = synchronized(writers) {
-            writers.getOrPut(key) { WriterSlot() }.also { it.users++ }
-        }
-        try {
-            return slot.mutex.withLock { block() }
-        } finally {
-            synchronized(writers) {
-                slot.users--
-                if (slot.users == 0) writers.remove(key)
-            }
-        }
-    }
 
     fun fileFor(station: String, name: String): File = File(File(root, safeStation(station)), name)
 
@@ -123,8 +99,6 @@ class FileArchive(baseDir: File) {
         metaFor(station, name).delete()
         return dst
     }
-
-    fun delete(station: String, name: String): Boolean = fileFor(station, name).delete()
 
     /** Station UUIDs are `[0-9a-f-]`; anything else is refused rather than used as a path. */
     private fun safeStation(station: String): String {

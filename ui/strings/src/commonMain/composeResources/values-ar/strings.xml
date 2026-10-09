@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The shared Arabic copy, same keys as values/strings.xml. Machine drafted, needs a native speaker's
+  review before release (docs/parity-decisions.md). Copy rules (docs/screens.md, CopyLintTest).
+  No em or en dashes, no colons or semicolons, Arabic semicolon included. No backslash escapes.
+  A key that Android res/values-ar/strings.xml also has keeps its exact words (StringsMatchAndroidTest).
+-->
+<resources>
+    <!-- Same keys and words as Android. -->
+    <string name="app_name">opensensor.space</string>
+    <string name="now_waiting">في انتظار قراءة…</string>
+    <string name="nav_disconnect">قطع الاتصال</string>
+    <string name="nav_debug">تصحيح الأخطاء</string>
+    <string name="action_cancel">إلغاء</string>
+    <string name="conn_ready">متصل</string>
+    <string name="conn_connecting">جارٍ الاتصال…</string>
+    <string name="conn_disconnected">غير متصل</string>
+    <string name="batch_value">%1$s µg/m³</string>
+    <string name="action_not_now">ليس الآن</string>
+    <string name="action_back">رجوع</string>
+    <string name="perm_continue">متابعة</string>
+    <string name="perm_open_settings">فتح الإعدادات</string>
+    <string name="nav_settings">الإعدادات</string>
+
+    <!-- The bottom bar of the app shell (:feature:shell), both apps. -->
+    <string name="tab_discover">استكشاف</string>
+    <string name="tab_my_devices">أجهزتي</string>
+
+    <!-- My devices on iOS, Bluetooth. -->
+    <string name="companion_now">الآن</string>
+    <string name="companion_pm25_mood">PM2.5 · %1$s</string>
+    <string name="companion_storage_error">يبلّغ المستشعر عن خطأ في التخزين.</string>
+    <plurals name="companion_files_finalized">
+        <item quantity="zero">%1$s ملف مكتمل على المستشعر</item>
+        <item quantity="one">%1$s ملف مكتمل على المستشعر</item>
+        <item quantity="two">%1$s ملفان مكتملان على المستشعر</item>
+        <item quantity="few">%1$s ملفات مكتملة على المستشعر</item>
+        <item quantity="many">%1$s ملفًا مكتملًا على المستشعر</item>
+        <item quantity="other">%1$s ملف مكتمل على المستشعر</item>
+    </plurals>
+    <string name="companion_firmware">البرنامج الثابت %1$s</string>
+    <string name="companion_wifi_access_save">حفظ الوصول عبر Wi-Fi</string>
+    <string name="companion_wifi_access_saving">جارٍ حفظ الوصول…</string>
+    <string name="companion_connect">اتصال</string>
+    <string name="companion_connecting_pin">جارٍ الاتصال… إذا طُلب منك، أدخل رمز PIN للإقران الظاهر على مستشعرك.</string>
+    <string name="companion_info_invalid">معلومات هذا المستشعر غير صالحة أو غير مدعومة.</string>
+    <string name="companion_live">متصل · قراءات مباشرة</string>
+    <string name="companion_status_unreadable">أرسل المستشعر حالة تتعذر قراءتها.</string>
+    <string name="companion_live_unreadable">أرسل المستشعر قراءة تتعذر قراءتها.</string>
+
+    <!-- My devices on iOS, Wi-Fi. -->
+    <string name="companion_lan_title">على شبكة Wi-Fi لديك</string>
+    <string name="companion_lan_find">ابحث عن مستشعرات Wi-Fi</string>
+    <string name="companion_lan_finding">جارٍ البحث في Wi-Fi…</string>
+    <string name="companion_lan_looking">جارٍ البحث في شبكة Wi-Fi لديك…</string>
+    <string name="companion_lan_found">المستشعرات على شبكة Wi-Fi لديك</string>
+    <string name="companion_lan_none">لم يُعثر على مستشعرات Wi-Fi. تحقق من الشبكة المحلية في الإعدادات.</string>
+    <string name="companion_lan_waiting">في انتظار الوصول إلى Wi-Fi أو الشبكة المحلية.</string>
+    <string name="companion_lan_denied">فعّل الشبكة المحلية لتطبيق opensensor.space في الإعدادات.</string>
+    <string name="companion_lan_unavailable">البحث عبر Wi-Fi غير متاح. تحقق من Wi-Fi والشبكة المحلية في الإعدادات.</string>
+    <string name="companion_lan_connect_label">الاتصال بـ %1$s عبر Wi-Fi</string>
+    <string name="companion_lan_link">Wi-Fi · %1$s</string>
+    <string name="companion_lan_paused">المزامنة متوقفة مؤقتًا</string>
+    <string name="companion_lan_discovered">تم العثور عليه</string>
+    <string name="companion_lan_needs_access">احفظ الوصول عبر Wi-Fi من خلال Bluetooth أولًا.</string>
+    <plurals name="companion_lan_files">
+        <item quantity="zero">%1$d من %2$d ملف</item>
+        <item quantity="one">%1$d من %2$d ملف</item>
+        <item quantity="two">%1$d من %2$d ملف</item>
+        <item quantity="few">%1$d من %2$d ملفات</item>
+        <item quantity="many">%1$d من %2$d ملفًا</item>
+        <item quantity="other">%1$d من %2$d ملف</item>
+    </plurals>
+    <string name="companion_lan_bytes">%1$s بايت في الملف الحالي</string>
+    <string name="companion_lan_rate">%1$s KiB/s في المتوسط</string>
+    <string name="companion_sync">مزامنة</string>
+    <string name="companion_ble_timed_out">انتهت مهلة الاتصال. أبقِ المستشعر قريبًا وحاول مرة أخرى.</string>
+    <string name="companion_ble_disconnected">تم قطع الاتصال. يواصل مستشعرك التسجيل.</string>
+    <string name="companion_ble_resume_live">ابحث عن مستشعرك مرة أخرى لاستئناف القراءات المباشرة.</string>
+    <string name="companion_ble_off">شغّل Bluetooth للعثور على مستشعراتك.</string>
+    <string name="companion_ble_denied">اسمح باستخدام Bluetooth لتطبيق opensensor.space في الإعدادات.</string>
+    <string name="companion_ble_unsupported">Bluetooth غير متاح على هذا الجهاز.</string>
+    <string name="companion_ble_starting">جارٍ تجهيز Bluetooth…</string>
+    <string name="companion_ble_connect_failed">تعذّر الاتصال. تأكد من أن المستشعر قريب ومتاح للإقران.</string>
+    <string name="companion_ble_sensor_gone">انقطع اتصال المستشعر. ابحث عنه مرة أخرى لإعادة الاتصال.</string>
+    <string name="companion_ble_service_missing">تعذّر فتح خدمة AQ Sync.</string>
+    <string name="companion_ble_characteristics_missing">تنقص هذا المستشعر خصائص القراءة المباشرة المطلوبة.</string>
+    <string name="companion_ble_notify_failed">تعذّر تفعيل الإشعارات. تحقق من رمز PIN للإقران وحاول مرة أخرى.</string>
+    <string name="companion_ble_read_failed">تعذّرت القراءة من المستشعر. تحقق من رمز PIN للإقران وحاول مرة أخرى.</string>
+    <string name="companion_wifi_access_saving_message">جارٍ حفظ الوصول عبر Wi-Fi…</string>
+    <string name="companion_wifi_access_timed_out">انتهت مهلة الوصول عبر Wi-Fi. أعد الاتصال عبر Bluetooth وحاول مرة أخرى.</string>
+    <string name="companion_lan_gone">لم يعد مستشعر Wi-Fi هذا متاحًا. ابحث عن مستشعرات Wi-Fi مرة أخرى.</string>
+    <string name="companion_lan_connecting">جارٍ الاتصال عبر Wi-Fi…</string>
+    <string name="companion_lan_connected">متصل عبر Wi-Fi. جاهز للمزامنة.</string>
+    <string name="companion_lan_sync_queued">المزامنة في قائمة الانتظار. تُستأنف عندما ينتهي مستشعر آخر.</string>
+    <string name="companion_lan_listing">جارٍ سرد الملفات…</string>
+    <string name="companion_lan_syncing">جارٍ مزامنة الملفات المتحقق منها</string>
+    <string name="companion_lan_sync_paused">المزامنة متوقفة مؤقتًا. تبقى الملفات المحفوظة والبايتات الجزئية. تُستأنف عند عودتك.</string>
+    <string name="companion_lan_disconnected">تم قطع الاتصال. تبقى الملفات المجمّعة على هذا الهاتف.</string>
+
+    <!-- Export. -->
+
+    <!-- Sync outcomes and link notices, the Android keys and words. -->
+    <string name="msg_up_to_date">كل شيء موجود على هذا الهاتف بالفعل.</string>
+    <plurals name="msg_sync_finished">
+        <item quantity="zero">تمت مزامنة %1$d من %2$d ملف</item>
+        <item quantity="one">تمت مزامنة %1$d من %2$d ملف</item>
+        <item quantity="two">تمت مزامنة %1$d من %2$d ملف</item>
+        <item quantity="few">تمت مزامنة %1$d من %2$d ملفات</item>
+        <item quantity="many">تمت مزامنة %1$d من %2$d ملفًا</item>
+        <item quantity="other">تمت مزامنة %1$d من %2$d ملف</item>
+    </plurals>
+    <plurals name="sync_some_failed">
+        <item quantity="zero">لم تتم مزامنة %1$d ملف. حاول مرة أخرى.</item>
+        <item quantity="one">لم تتم مزامنة %1$d ملف. حاول مرة أخرى.</item>
+        <item quantity="two">لم تتم مزامنة %1$d ملفين. حاول مرة أخرى.</item>
+        <item quantity="few">لم تتم مزامنة %1$d ملفات. حاول مرة أخرى.</item>
+        <item quantity="many">لم تتم مزامنة %1$d ملفًا. حاول مرة أخرى.</item>
+        <item quantity="other">لم تتم مزامنة %1$d ملف. حاول مرة أخرى.</item>
+    </plurals>
+    <string name="msg_sync_stopped">توقفت المزامنة. تُستأنف الملفات الجزئية في المرة القادمة.</string>
+    <string name="msg_sync_aborted">توقفت المزامنة مبكرًا. تُستأنف في المزامنة التالية.</string>
+    <string name="msg_hardware_in_use">هذا المستشعر متصل بالفعل بطريقة أخرى.</string>
+    <string name="msg_busy">انتظر حتى تنتهي مهمة المستشعر الحالية.</string>
+    <string name="msg_token_needs_ble">يصل رمز الوصول عبر Bluetooth فقط. أعد الاتصال عبر Bluetooth أولًا.</string>
+    <string name="companion_sync_storage_failed">تعذّر حفظ بعض الملفات على هذا الهاتف. تحقق من المساحة الفارغة وحاول مرة أخرى.</string>
+    <string name="msg_busy_before_sync">انتظر حتى تنتهي مهمة المستشعر الحالية قبل المزامنة.</string>
+    <string name="msg_verification_failed">تعذّر التحقق من المستشعر. حاول مرة أخرى.</string>
+    <string name="msg_identity_enroll_ble">اتصل بهذا المستشعر عبر Bluetooth أولًا.</string>
+    <string name="msg_identity_station_ble">تغيّرت محطة المستشعر. أعد الاتصال عبر Bluetooth للتحقق منها.</string>
+    <string name="msg_identity_hardware_changed">هذا عتاد مختلف. أقرنه كمستشعر جديد.</string>
+    <string name="msg_lan_token_stored">حُفظ رمز الوصول عبر Wi-Fi على هذا الهاتف.</string>
+    <string name="msg_failed_get_token">تعذّر الحصول على رمز الوصول عبر Wi-Fi. حاول مرة أخرى.</string>
+    <string name="msg_rejected_get_token">رفض المستشعر مشاركة رمز الوصول عبر Wi-Fi.</string>
+    <string name="autosync_title">المزامنة التلقائية</string>
+    <string name="files_bg_sync">زامِن الآن في الخلفية</string>
+    <string name="files_bg_event">المزامنة في الخلفية في الانتظار. يمكنك مغادرة التطبيق.</string>
+    <string name="notif_device">مستشعر</string>
+    <plurals name="notif_synced">
+        <item quantity="zero">تمت مزامنة %1$d ملف جديد من %2$s · %3$s</item>
+        <item quantity="one">تمت مزامنة %1$d ملف جديد من %2$s · %3$s</item>
+        <item quantity="two">تمت مزامنة %1$d ملفين جديدين من %2$s · %3$s</item>
+        <item quantity="few">تمت مزامنة %1$d ملفات جديدة من %2$s · %3$s</item>
+        <item quantity="many">تمت مزامنة %1$d ملفًا جديدًا من %2$s · %3$s</item>
+        <item quantity="other">تمت مزامنة %1$d ملف جديد من %2$s · %3$s</item>
+    </plurals>
+    <string name="notif_problems">واجهت المزامنة من %1$s مشكلات</string>
+    <plurals name="notif_failures">
+        <item quantity="zero">تعذّر التحقق من %1$d ملف. ستُعاد المحاولة في المرة القادمة.</item>
+        <item quantity="one">تعذّر التحقق من %1$d ملف. ستُعاد المحاولة في المرة القادمة.</item>
+        <item quantity="two">تعذّر التحقق من %1$d ملفين. ستُعاد المحاولة في المرة القادمة.</item>
+        <item quantity="few">تعذّر التحقق من %1$d ملفات. ستُعاد المحاولة في المرة القادمة.</item>
+        <item quantity="many">تعذّر التحقق من %1$d ملفًا. ستُعاد المحاولة في المرة القادمة.</item>
+        <item quantity="other">تعذّر التحقق من %1$d ملف. ستُعاد المحاولة في المرة القادمة.</item>
+    </plurals>
+    <string name="notif_verified">تم التحقق منها وحفظها في الأرشيف على هذا الهاتف.</string>
+    <string name="autosync_ios_hint">يختار iOS وقت التشغيل.</string>
+    <string name="autosync_ios_keep_open">أبقِ التطبيق مفتوحًا حتى تنتهي.</string>
+    <string name="autosync_progress_title">جارٍ الجمع من المستشعرات</string>
+    <plurals name="autosync_sensors">
+        <item quantity="zero">%1$d مستشعر</item>
+        <item quantity="one">%1$d مستشعر</item>
+        <item quantity="two">%1$d مستشعران</item>
+        <item quantity="few">%1$d مستشعرات</item>
+        <item quantity="many">%1$d مستشعرًا</item>
+        <item quantity="other">%1$d مستشعر</item>
+    </plurals>
+
+    <!-- The sensor sticker scan. The first two keep Android's words, the rest are the iOS camera. -->
+    <string name="sensor_scan_unrecognized">هذا الرمز الشريطي ليس ملصق Plantower معروفًا. اكتبه يدويًا إن لزم.</string>
+    <string name="sensor_scan_unavailable">الماسح غير متاح. اكتب ما على الملصق أدناه.</string>
+    <string name="camera_scan_off">الوصول إلى الكاميرا متوقف. اكتب ما على الملصق أدناه.</string>
+    <string name="camera_scan_blocked">الكاميرا محظورة على هذا الـ iPhone. اكتب ما على الملصق أدناه.</string>
+    <string name="perm_camera_settings_title">الكاميرا متوقفة لهذا التطبيق</string>
+    <string name="perm_camera_settings_body">فعّل الكاميرا لتطبيق opensensor.space في الإعدادات لمسح الملصق. يمكنك أيضًا كتابته.</string>
+</resources>

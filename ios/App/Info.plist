@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <key>CFBundleDevelopmentRegion</key><string>en</string>
+    <key>CFBundleLocalizations</key><array><string>en</string><string>ar</string></array>
     <key>CFBundleDisplayName</key><string>opensensor.space</string>
     <key>CFBundleExecutable</key><string>$(EXECUTABLE_NAME)</string>
     <key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
@@ -15,11 +17,15 @@
     <key>NSBluetoothAlwaysUsageDescription</key><string>Finds and connects to your opensensor devices nearby to copy their readings.</string>
     <key>UIApplicationSceneManifest</key>
     <dict><key>UIApplicationSupportsMultipleScenes</key><false/></dict>
+    <key>NSCameraUsageDescription</key><string>Reads the barcode on your sensor sticker. No picture is kept.</string>
     <key>NSLocalNetworkUsageDescription</key><string>Finds your opensensor devices on your Wi-Fi to sync faster.</string>
     <key>NSLocationWhenInUseUsageDescription</key><string>Centres the public sensor map near you. Your location stays on this phone.</string>
     <key>NSLocationDefaultAccuracyReduced</key><true/>
     <key>NSBonjourServices</key><array><string>_aqsync._tcp</string></array>
     <key>UILaunchScreen</key><dict/>
+    <key>UIBackgroundModes</key><array><string>processing</string><string>bluetooth-central</string></array>
+    <key>BGTaskSchedulerPermittedIdentifiers</key>
+    <array><string>earth.walkthru.opensensor.autosync</string><string>earth.walkthru.opensensor.sync.*</string></array>
     <key>UISupportedInterfaceOrientations</key>
     <array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
     <key>UISupportedInterfaceOrientations~ipad</key>

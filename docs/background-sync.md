@@ -84,7 +84,7 @@ work in the scope.
 - **Hardware ownership**: after authenticated identity validation, a full `info.dev` claim prevents endpoint aliases from concurrently owning one physical board. BLE and LAN share the board's one open file. Transfer cancellation/join precedes session close; cancellation during initialization also closes the provisional transport. A worker's `finally` closes only its own session.
 - **Wi-Fi gate**: `AppAutoSyncGateway.browseLan` returns empty when no `TRANSPORT_WIFI` network is up (active network first, else a ≤ 1 s `NetworkRequest` probe; an offline LAN counts), so the 10 s browse never runs for nothing.
 - **Discovery**: `LanDiscoveryState` shares foreground browsing across controllers. Each worker browses once for its target set. On API 31–33 all browses share one `LegacyResolver` queue so only one `resolveService` call is active; API 34+ uses service-info callbacks.
-- **Archive ownership**: `FileArchive.withWriterLease` covers OPEN/read/verification/commit/index/CLOSE for `(station, name)`. Another caller waits, then verifies an existing copy against OPENED size/CRC/PAR1 and the recorded SHA before reuse. Conflicts preserve existing bytes; commit refuses replacement. `alreadyArchived` copies do not increase new-file summary counts. Original Hive paths stay verbatim.
+- **Archive ownership**: the shared `WriterLeases` in `SyncEngine` covers OPEN/read/verification/commit/index/CLOSE for `(station, name)`. Another caller waits, then verifies an existing copy against OPENED size/CRC/PAR1 and the recorded SHA before reuse. Conflicts preserve existing bytes; commit refuses replacement. `alreadyArchived` copies do not increase new-file summary counts. Original Hive paths stay verbatim.
 - **Never** pairs, scans, or takes over another owner's session. `deriveStale()` runs after a run that brought files; derivation remains serialized independently of transfer concurrency.
 
 ## Foreground work
@@ -127,6 +127,34 @@ The test phone is a **OnePlus 7 Pro**; OxygenOS/ColorOS are the worst on dontkil
 deep-optimization / sleep-standby lists; a swiped-away app may still be killed. WorkManager survives
 (re-scheduled), a bare thread would not. **Nothing measured yet** — see [status.md](status.md#next).
 
+## iOS Auto-sync
+
+Issue #23, inventory F48, F53, F54, F66 to F69, F74, F77. Decisions P10, P11, P16, P17 in
+[parity-decisions.md](parity-decisions.md). Host and simulator evidence only so far. No iPhone run.
+
+**Code:** `ios/App/BackgroundSync.swift` (`AutoSync`, the OS side), `AppDelegate.swift`
+(`AppServices` owns the adapters, so a launch without a screen works), the Auto-sync extensions in
+`BluetoothCompanion.swift` and `LanDiscovery.swift`, `ios/shared/.../AutoSync.kt`
+(`AutoSyncSettings`, `BackgroundSyncBridge`, `BackgroundSteps`), `AutoSyncSwitch.kt`, and the shared
+`BackgroundSyncRunner` and `BackgroundSyncPolicy` in `:core:sync`.
+**Tests:** `AutoSyncTest` (switch store, due rules, the bridge over fake Swift ports, step mapping),
+`BackgroundSyncRunnerTest` in `:core:sync`. The Swift scheduler, wakes and notifications are phone only.
+
+| Piece | iOS behaviour |
+| --- | --- |
+| Switch | Per known sensor on its device page, off by default. Turning it on asks for notifications only while iOS never asked. The switch stays on whatever the answer. Forget turns it off. Stored in UserDefaults `devices.autosync.v1`, peripheral ids and last run times only |
+| Scheduled run | One `BGProcessingTask` (`earth.walkthru.opensensor.autosync`), no network or power requirement, earliest begin one policy period ahead. Nothing is scheduled while every switch is off. The shared runner picks the due sensors and tries Wi-Fi first when the station was browsed with saved access, then the bonded peripheral |
+| Retry | Only a step that ran to the end with no error counts as a run. A lost or broken step stays due, so when the shared policy asks for a retry the next request after its backoff runs it again, up to the retry bound, then the normal period. A Wi-Fi connect or access failure is a skip, so the runner goes on to the paired Bluetooth link, as on Android |
+| Bluetooth wake | On leaving the screen, and after each run, sensors that are due and were not woken within the period get a pending connect with state restoration (`earth.walkthru.opensensor.central`). iOS completes it near the sensor, even after ending the app, and the run takes that sensor under a background time lease. Every wake is recorded before its run, whatever comes of it, and the woken sensor is never armed again inside its own run. So a sensor in range whose steps keep skipping wakes the app at most once a period (`AutoSyncSettings.armable`) |
+| Bluetooth rule | Only saved peripheral identifiers, never a scan. iOS shows no pairing prompt off screen, so a lost bond fails the step. A link the user holds is never taken. No firmware-changing request is sent |
+| Sync now in background | iOS 26 and later submit a `BGContinuedProcessingTaskRequest` with strategy `fail` under a unique `earth.walkthru.opensensor.sync.<uuid>` id. iOS shows its progress (files done of files listed) and Cancel, which ends the step and closes the link it opened. When iOS refuses, or on iOS 18, the run uses the background time lease. The screen shows the leave the app hint only when iOS took the continued task, otherwise the keep the app open hint. Each task ends once, whether its run or its expiry comes first, and an expiry cancels only its own run |
+| Summary | One notification, replaced by the next, only when there are new files or failures. Words come from the shared catalogue, so Arabic follows the app language. Tapping it opens My devices. No ids or tokens in it |
+| Logs | `Logger` category `autosync`, the runner's lines marked private |
+
+Phone checks still owed (record them in [status.md](status.md)): iPhone locked, in Low Power Mode,
+after iOS ends the app, restoration wake near the logger, the iOS 26 continued task with Cancel,
+and the iOS 18 fallback.
+
 ## Uses → affects
 
 | Edit… | Affects… |
@@ -135,7 +163,7 @@ deep-optimization / sleep-standby lists; a swiped-away app may still be killed. 
 | `AutoSyncGateway` interface | `AppAutoSyncGateway` (Android) and the test fake |
 | Controller ownership / `CollectionBudget` | interactive and worker transfers; `DeviceOwnershipTest`, `AutoSyncRunnerTest` |
 | Worker owner and notification IDs | run-scoped progress/cancel; overlapping workers and interactive service need a phone check |
-| `FileArchive.withWriterLease` / immutable commit | `SyncEngine`, partial resume and summaries; `ConcurrentArchiveTest`, `WindowRecoveryTest` |
+| `WriterLeases` / immutable commit | `SyncEngine`, partial resume and summaries; `ConcurrentArchiveTest`, `SyncEngineTest` |
 | `SyncNotifications.progress` text | both the service and the worker (same notification) |
 | `known_device.autoSync` column | scheduler's observed count; every `KnownDevice` upsert must carry `previous?.autoSync` ([lesson](lessons-learned.md#room--data)) |
 | `SyncForegroundService` start point | must remain a foreground-app moment (repository `startSync`), else API 31+ refuses |

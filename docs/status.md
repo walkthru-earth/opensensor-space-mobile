@@ -4,6 +4,19 @@
 **Code:** `./gradlew verify` (the gate), `.github/workflows/verify.yml`.
 **Related:** measured device behaviour is recorded in the board-specific `../aq-parquet/docs/boards/*/bench-verified.md`; anything not recorded there is unverified.
 
+## 2026-10-09. Wave 2 install check (OnePlus 7 Pro and iPad Air M2), install and launch only
+
+Debug build of `feat/platform-parity` at 14f0a61 (Wave 2: `:core:archive`, `:core:sync` pure moves,
+shared Settings, shared design system and bottom bar). Android was installed with `adb install -r`
+and launched. The process stayed alive with no crash in logcat. The screenshot came out black
+because the phone was dozing, and the screen was not checked. iPad Air M2 (iPadOS, Developer Mode
+on, signer trusted) was built for the device, installed with `devicectl` and launched.
+No sensor was connected and no sync, permission dialog or screen flow was tested on either device.
+
+Later merges the same night (#13 permissions at 00910a9, #14 strings at 5261a74, #12 shared shell
+at 69cc5c6) passed `verify`, `verify-native.sh` and the simulator build only. They were not
+installed on a phone. Owed phone checks are listed on PRs #27, #28, #29, #31 and #33.
+
 ## 2026-10-08 17:55 Cairo. On-demand permissions launch check (OnePlus 7 Pro, Android 16)
 
 Minified release build of `refactor/production-readiness` (W13 merged), installed over the
@@ -28,10 +41,11 @@ immediately and skip remote OPEN/READ while still validating local CRC/size/PAR1
 without receipts are checked once through the existing path. Force-quit/relaunch does not retain
 automatic resume intent, but downloaded bytes/receipts survive and manual sync reuses them.
 
-The new offline **Export Parquet files** action saves a copy through Apple's Files picker,
-preserving station/Hive folders and excluding partials/receipts. Exports retain the private archive.
-Android already offers ZIP and individual-Parquet exports from the sensor's Files menu;
-exact storage paths and access are in [data-model.md](data-model.md#finding-and-exporting-the-mobile-archive).
+Since #19 both apps run the shared Files screen and inspector (`:feature:files`). iOS opens it
+from a Files button on My devices and shares one file, all files or a zip, or saves the zip through
+Apple's Files picker, preserving station/Hive paths and excluding partials and receipts. This
+replaced the older Swift folder export. Simulator build only, the iOS share and save sheets and the
+Android chooser and SAF save still need a phone run. Exact storage paths and access are in [data-model.md](data-model.md#finding-and-exporting-the-mobile-archive).
 
 Local validation: `./gradlew --no-daemon verify verifyIos`, unsigned Xcode 27 Debug simulator
 build and `./ios/tests/verify-native.sh` passed. Native regressions fail an actual collection
@@ -63,7 +77,24 @@ partial runs). Auto-sync has **not** completed a period cycle on a phone yet. Of
 process started by the controller 19 s after the board closed a file, new file on the phone at 28 s);
 companion presence and the Wi-Fi-arrival run are not.
 
-## Current host gate (2026-09-30)
+## Current host gate (2026-10-09)
+
+`./gradlew --no-daemon verify` on an Apple Silicon Mac, branch `feat/platform-parity` wave 0.
+It now includes `verifyIos`, and every shared module joins both gates through its convention
+plugin. 353 tasks, **619 tests passed, 1 skipped, 0 failed**, zero lint errors, debug APK built.
+
+| Where | Tests |
+| --- | --- |
+| `:app` unit tests | 207 |
+| JVM, every `:core` module | 208 (protocol 80, history 44 plus 1 skipped, parquet 34, publicfeed 24, units 15, airquality 7, settings 2, sync 1, archive 1) |
+| iOS simulator, every `:core` module | 170 (protocol 72, parquet 33, publicfeed 24, history 15, units 15, airquality 7, settings 2, sync 1, archive 1) |
+| Android host, Compose modules | 17 (`:feature:discover` 13, `:ui:designsystem` 4) |
+| iOS simulator, `:ios:shared` | 17 (no longer run on the JVM) |
+
+`:core:airquality` tests ran for the first time in a gate. Host and simulator checks only. No
+phone run is claimed.
+
+## Host gate (2026-09-30)
 
 The pending PMS5003T identity/batch-candidate change has a separate host check:
 `./gradlew --no-daemon verify` passes with the new protocol, live estimate, History metric,
@@ -73,8 +104,8 @@ smaller negotiated MTUs and its missing-chunk failure path. This build has **not
 tested against flashed Waveshare v2 firmware. The optional Google Code Scanner depends on
 Google Play services and may download its module at first use; manual entry needs neither.
 
-`./gradlew --no-daemon clean verify`: **247 tests passed, zero skipped or failed** across
-`:app` and the three `:core` modules; zero lint errors. The debug APK builds.
+`./gradlew --no-daemon clean verify` (2026-09-30): **247 tests passed, zero skipped or failed** across
+`:app` and the three `:core` modules of that date; zero lint errors. The debug APK builds.
 The optional real-archive test now finds the sibling `aq-parquet` checkout and
 decoded all 767 local Parquet files (67,442 rows) instead of silently skipping
 that corpus. The stdlib SQLite migration validator passes against v8/v9 exports.
@@ -198,7 +229,7 @@ Screenshots are retained in the firmware trial's ignored `artifacts/` directory:
 `0e80bc7ea09de10c87b146bb45120290e74d5df10484a2c8fa60f89d7b105634`).
 The focused History presentation tests and `./gradlew --no-daemon verify` passed.
 
-## Verification ladder
+## Verification ladder (counts from 2026-09-18, see the current host gate above)
 
 ```mermaid
 flowchart LR
@@ -220,7 +251,7 @@ estimate, `RealArchiveTest`). Debug APK 68.4 MiB unminified.
 | v1 file sync (LIST/OPEN/READ/CLOSE, SET_TIME, FLUSH) | captured v1 payloads from `AQ-6b40` | macOS host client 2026-09-16 (766 files, 15–21 KB/s); phone partial runs 2026-09-17 | instrumented **full** 776-file sync over each link with the foreground-service build |
 | v2 config / Wi-Fi / reboot / log / token | hand-assembled fixtures from the contract | a v2 device was read from the phone; no capture taken | `ble.clear_bonds`, `lan.rotate_token` end to end, `fixed`/`none` pairing (needs display-less board) |
 | LAN transport | loopback `TcpTransportTest` | `LanDiscovery` found the board via `NsdManager`; app chose TCP on its own | `ACCESS_LOCAL_NETWORK` prompt (enforced only from API 37) |
-| Lost window / drain / resume | `WindowRecoveryTest`, `SyncResumePolicyTest` | 514-byte-frame drop reproduced 2026-09-17 and survived | — |
+| Lost window / drain / resume | `SyncEngineTest`, `SyncResumePolicyTest` | 514-byte-frame drop reproduced 2026-09-17 and survived | — |
 | Auto-sync worker | `AutoSyncRunnerTest` over the fake (incl. `lanOnly`) | — | a complete 15-min period cycle, `setForeground` refusal in background, OEM battery settings |
 | Auto-sync triggers | `AdvertisementTest` (2.1 bytes) | **advertising wake** 2026-09-18: `flag scan registered … 2 filters`, `Start proc … for broadcast {…AdvertScanReceiver}` +19 s after `PARQUET READY`, `trigger=ADVERTISEMENT`, LAN sync 1 file / 22,498 B, done +28 s, app process killed beforehand | association dialog finding the advertising logger, `EVENT_BLE_APPEARED`, companion exemptions vs the screen-off socket kill and the `setForeground` refusal (still refused, no association yet), Wi-Fi-arrival run end to end (fired at both process starts, second throttled) |
 | History pipeline | fixtures + `RealArchiveTest` (766 real files, 0.2 s) | derive fix observed 2026-09-18 02:35 ("derived 1 of 3 station-days") | chart update after a sync of a v3 file recorded in bench-verified |

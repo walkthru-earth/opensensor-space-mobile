@@ -1,7 +1,7 @@
 # Screens — what the user sees, and which data path feeds it
 
 **Scope:** navigation graph, every destination's behaviour, detail levels, the transport chip.
-**Code:** `ui/Navigation.kt`, `ui/TabNavigator.kt`, `ui/NavigationKeys.kt`, `ui/<screen>/*Screen.kt` + `*ViewModel.kt`, `data/settings/AppSettings.kt`.
+**Code:** `feature/shell` (`AppKey.kt`, `TabNavigator.kt`, `AppShell.kt`), `ui/Navigation.kt` (Android entries), `ios/shared/.../AppRoot.kt` (iOS entries), `ui/<screen>/*Screen.kt` + `*ViewModel.kt`, `data/settings/AppSettings.kt`.
 **Related:** [history-pipeline.md](history-pipeline.md) (what History/Today read), [transports.md](transports.md) (what the Device screen writes), [background-sync.md](background-sync.md) (Auto-sync card, Sync in background).
 
 ## Navigation (Navigation 3 keys)
@@ -18,22 +18,26 @@ flowchart LR
   Today <--> Files["FilesKey"]
   Today <--> Device["DeviceKey"]
   Today -. Developer .-> Debug["DebugKey"]
+  Device -. iOS, Bluetooth .-> DeviceSettings["DeviceSettingsKey (iOS)"]
   Files -. Detailed .-> Metrics["FileMetricsKey(station, name)"]
   Discover -. Add your sensor .-> Scan
 ```
 
-**One bottom bar (owner decision 2026-10-08).** The app root (`MainNavigation`) is one
-`Scaffold` whose bottom bar holds Discover, My devices and Settings, around one `NavDisplay`. No
-screen draws its own bottom bar. Discover is always the start tab, with or without a paired
+**One bottom bar (owner decision 2026-10-08).** Both apps host the shared `AppShell`
+(`:feature:shell`, [ADR 0001](adr/0001-shared-navigation.md)), one `Scaffold` whose bottom bar
+(`BrandBottomBar`) holds Discover, My devices and Settings, around one `NavDisplay`. Android passes
+its screens in from `MainNavigation`, iOS from `AppRoot`. No screen draws its own bottom bar. Discover is always the start tab, with or without a paired
 device, and nothing is asked at launch.
 
 - Each tab has its own Navigation 3 back stack, decorated separately, so an open device keeps its
-  ViewModels while another tab is shown. The rules live in `TabNavigator` (plain class, covered
-  by `TabNavigatorTest`).
+  ViewModels while another tab is shown. The rules live in `TabNavigator` (plain class in
+  `commonMain`, covered by `TabNavigatorTest` on the host and the iOS simulator). Every key is an
+  `AppKey` saved through `AppNavConfig`.
 - Reselecting the active tab pops it to its root.
-- System Back pops the active tab's stack. At the root of My devices or Settings it returns to
-  Discover. At the Discover root the app closes. On Discover an open cell sheet returns to peek
-  first.
+- Back (Android predictive back, the iOS start edge swipe) pops the active tab's stack. At the
+  root of My devices or Settings it returns to Discover. At the Discover root the Android app
+  closes. On Discover an open cell sheet returns to peek first, through a `NavigationBackHandler`
+  in the shared `DiscoverScreen` that wins over the shell's.
 - Inside a device, Today, History, Files and Device are a tab row under the top bar
   (`DeviceSectionTabs`), siblings that replace each other. The bottom bar stays visible with My
   devices selected.
@@ -63,7 +67,12 @@ or when the user requests it. Compose recomposition only renders the latest stat
 
 Only presentation changes. Every level reads the same data, and nothing the Simple experience
 needs may depend on Developer. A new field states its level in code (`level.detailed`,
-`level.developer`).
+`level.developer`). In ViewModel state, `advancedMode` always means Developer and `detailed`
+means Detailed or Developer. Files reads `detailLevel` directly.
+
+iOS has no level setting yet and shows Simple. The iOS device page (`CompanionScreen`, opened from My devices) keeps signal dBm, firmware,
+finalized file counts, byte counters and transfer rate behind `showTechnical` (off) until the
+shared setting lands (platform-parity-plan.md, Wave 2).
 
 ### What moved where (W4 audit, 2026-10-08)
 
@@ -83,14 +92,15 @@ needs may depend on Developer. A new field states its level in code (`level.deta
 Every card shows a title, its value or state in words, and one primary action. A card may add one
 short supporting line when the state needs it (a warning, "Restart the sensor to apply the
 change"). Anything longer lives behind a small outlined **i** next to the card title:
-`InfoButton(InfoContent(title, paragraphs…))` in `ui/components/InfoButton.kt`, placed through
+`InfoButton(InfoContent(title, paragraphs…))` in `:ui:designsystem` (`InfoButton.kt`), placed through
 `CardHeader(title, info = …, trailing = { Switch(…) })`. It opens `InfoSheet`, a bottom sheet with
 the heading and short paragraphs. Its content description is "More about <title>". The same
 pattern serves radio options: pairing modes show only their label, and their descriptions are
 paragraphs of the pairing info sheet. Confirmation dialogs stay (reboot, token rotation, forget
 paired phones, pairing mode none, set time, finalize) with one or two short sentences. Copy rules
 in `cross-platform-guide.md` apply, and missing values print `NO_VALUE` ("n/a"), never a dash.
-`CopyRulesTest` fails on a dash, semicolon or sentence colon in `strings.xml`. The data layer
+`CopyLintTest` in `:ui:strings` fails on a dash, semicolon (Arabic ؛ included) or sentence colon in any
+`strings.xml`, every language included. The data layer
 never writes sentences. Its snackbars are `DeviceMessage` codes (`data/DeviceMessage.kt`) that
 `ui/components/DeviceMessages.kt` maps to resources, and exception detail stays in the log or a
 Developer-level line.
@@ -104,20 +114,45 @@ Developer-level line.
 | History | Valid readings, coverage, estimated time, earlier stations |
 | Settings | What a detail level changes, Smart Sync never rewrites files |
 
+### Languages
+
+English and Arabic. Android lists both in the system per-app language picker
+(`res/xml/locales_config.xml`, Android 13 and later), iOS in the app's Language setting
+(`knownRegions`, `CFBundleLocalizations`). Arabic lays every screen out right to left. Rows, cards,
+the bottom bar and sheets mirror because layouts use start and end. Back and paging arrows mirror
+through `autoMirror`. Canvas charts keep time running left to right in both directions. Digits
+follow each platform's number formatting, so Arabic-Indic digits may appear in Android resource
+strings. Both points need a phone check. How to add a language is in
+[cross-platform-guide.md](cross-platform-guide.md#languages-and-right-to-left). The Arabic copy is
+machine drafted and waits for a native speaker's review (`parity-decisions.md` P22).
+
 ## Permission timing
 
 There is no permission wall. The app opens on Discover and asks only from the tap that needs a
-permission (`ui/permissions/RuntimeAccess.kt`, rules in `PermissionFlow`, tested by
-`PermissionFlowTest`). An in-app rationale appears only when Android reports one is due. After a
-permanent denial the next tap offers the app's system settings page. Store answers live in
-[store-compliance.md](store-compliance.md).
+permission. The shared `:ui:permissions` module holds the policy for both apps. `PermissionTriggers`
+is the one table from user action to permission, `PermissionFlow` decides ask, explain or settings,
+and `RuntimeAccess` runs it. `PermissionFlowTest` (commonTest, Android host and iOS simulator)
+covers the table, both decision paths and the iOS status mapping. The Android launchers stay in
+`app/.../ui/permissions/RuntimeAccess.kt`, the iOS ones in `ios/App` and the Near me actuals.
+
+An in-app rationale appears only when Android reports one is due. Android offers the app's
+system settings page after a denial with no rationale due, but only when a rationale was due
+before that prompt or the permission was already asked in this session. Closing a first-ever
+prompt with Back or a tap outside is quiet, since Android 11 and later do not count it. The page
+opens through `rememberOpenAppSettings` (the app details intent on Android,
+`UIApplication.openSettingsURLString` on iOS). iOS shows each prompt once and never
+explains first. A fresh "no" is quiet. The next tap, or the Bluetooth and Local Network messages
+on the iOS screen, offer Settings. Restricted access gets no link, since the user cannot change it.
+iOS has no Local Network status API (TN3179), so it stays unknown until the browser reports
+`PolicyDenied`. Store answers live in [store-compliance.md](store-compliance.md).
 
 | Permission | Android trigger | iOS trigger | Without it |
 | --- | --- | --- | --- |
 | Bluetooth (`BLUETOOTH_SCAN` neverForLocation, `BLUETOOTH_CONNECT`; iOS Core Bluetooth) | Scan, opening a sensor, Reconnect, Reconnect over Bluetooth. Turning the adapter on uses the system dialog from the same tap. Once held, Devices scans while visible | First Find sensors tap creates `CBCentralManager` | Archive views (History, Files) still open. A declined open shows the sensor without a link |
 | Local network (`ACCESS_LOCAL_NETWORK`, API 37+; iOS Local Network) | Sync over Wi-Fi switch on, Allow local network, Get Wi-Fi token. Discovery runs only once held | First Find Wi-Fi sensors tap starts `NWBrowser` | Bluetooth sync works. The token fetch still runs |
 | Notifications (`POST_NOTIFICATIONS`, API 33+) | Sync now, Sync all, file sync, Sync now in background, Collect from all, Auto-sync on, Set up wake when nearby. Asked once per screen | Not requested | The sync runs, its progress notification is hidden |
-| Location | Not declared today. Planned Discover Near me asks for coarse location on that tap only | Same, When In Use with reduced accuracy | The map opens on the last area or the time zone region |
+| Camera (iOS only, AVFoundation video) | Not requested. Google Code Scanner runs in Play services with no camera permission | Scan on the sensor sticker card in Device settings, straight to the system prompt with no rationale. A later tap after a denial offers Settings. Restricted gets a note only | Typing the sticker always works |
+| Location (`ACCESS_COARSE_LOCATION` only, never fine) | Discover **Near me** asks for approximate location on that tap only. It only moves the map and is never stored or sent. The Devices privacy note says so | Same tap, When In Use with reduced accuracy | The map opens on the last area or the time zone region |
 
 ## Design system
 
@@ -134,31 +169,37 @@ palette `sensing`. `BrandTokensTest` pins every value and checks text contrast o
   `AirMood.color()`), a scientific scale, never brand colours, and Signal blue never judges a
   value. Ink on a step uses `onColor()`, step-coloured text uses `textColorOnSurface()` and falls
   back to the text colour where a step cannot reach 3:1 (yellow on light paper, maroon on dark paper).
-- **Type.** Quicksand (OFL variable TTF from google/fonts) for text, Cairo (OFL, from the
-  website) for Arabic-script locales and for display numbers, because Quicksand has
+- **Type.** Quicksand (OFL variable TTF from google/fonts) for text, Cairo (OFL variable TTF
+  version 3.130 from google/fonts `ofl/cairo`, the same file as the website's) for Arabic-script
+  locales, right-to-left layouts and display numbers, because Quicksand has
   proportional digits and no `tnum` while Cairo's digits share one width. Both fonts and the
   type scale live in `:ui:designsystem` (`Typography.kt`, Compose resources under
-  `composeResources/font/`), so Android (`AqSyncTheme`) and iOS (`OpenSensorTheme`) render the
-  same faces. Each weight pins the variable `wght` axis through `FontVariation.Settings`, which
+  `composeResources/font/`), and both apps wrap content in the one `OpenSensorTheme`, so they
+  render the same faces. Each weight pins the variable `wght` axis through `FontVariation.Settings`, which
   Compose resources apply on Android and on iOS (Skia `makeClone`). The language comes from
   `Configuration.locales[0]` on Android and `NSLocale.preferredLanguages` on iOS.
-  `TypographyTest` checks the Arabic-script rule, the tabular display styles and that every
+  `TypographyTest` checks the Arabic-script and right-to-left rule, the tabular display styles and that every
   weight sits inside the bundled axis. License texts ship in `composeResources/files/licenses/`.
-- **Shape and components.** 32 dp card corners (`BrandCard`, tones Plain, Soft, Hero). Every
+- **Shape and components.** One content card radius, 32 dp (`CardShape`, used by `BrandCard`,
+  tones Plain, Soft, Hero). The components live in `:ui:designsystem` for both apps. Every
   control uses a curved card, never a circle or full pill. `PillButton` (Signal blue with ink
   text and a trailing arrow, the one primary action) and `OutlinePillButton` use
   `FloatingControl.Shape`. Chips, `MoodPill`, small buttons and segmented rows use
   `FloatingControl.SmallShape` (`FloatingControl.segmentShape`), tags and the transport chip use
   `FloatingControl.BadgeShape`. Selected chips, the active segment, the selected Wi-Fi network
   and the bottom bar indicator use `FloatingControl.chipColors`, `segmentedColors` and
-  `navigationItemColors`, Signal blue with ink text (6.5 to 1 contrast). Circles stay only for
+  `FloatingControl.Selected`, Signal blue with ink text (6.5 to 1 contrast). The bottom bar is
+  `BrandBottomBar`, one component for Android and iOS, its selected icon on a curved card, not a pill. Circles stay only for
   round things (status dots, the mascot, the mood face, ring charts, radio buttons and switches).
   `SignalBars` and `TiltedBadge` (the website's -5 degree icon tilt, hero only) complete the set.
+  Icons are `AppIcons`, the Material vectors the apps use, vendored node for node so neither app
+  ships `material-icons-extended`.
 - **Floating controls.** Anything over the map or a list uses `FloatingSurface`,
   `FloatingIconButton` or `FloatingTextButton` (the Scan and Sync all actions) and the
   `FloatingControl` shapes and tint (curved cards, Signal blue only for the selection).
   The rules are in `docs/cross-platform-guide.md`, "Floating controls".
-- **Mascot.** The peacock (`res/drawable-nodpi/peacock.webp`, from the website's
+- **Mascot.** The peacock (`ui/designsystem/src/commonMain/composeResources/drawable/peacock.webp`,
+  `Res.drawable.peacock`, from the website's
   `public/mascots/`) is a guide on the welcome and no-device states (Devices), the all-synced
   state (Files) and a clean Smart Sync run (Today). Never beside charts or numbers. It enters
   with a finite fade that the system animator setting can turn off.
@@ -179,22 +220,34 @@ flips once when a reading goes stale.
 
 | Screen | Behaviour | Data path |
 | --- | --- | --- |
-| **Devices** (Home) | Scans for service UUID `c0a5e9f0-0001-…`, lists `AQ-xxxx` with RSSI + bond state, remembers known devices. Active controller rows show per-device connection/progress and open that controller. Each known device's card shows what the **phone archive** holds (files, last sync, last UTC day with valid readings as mood + average + coverage) — no link needed. ≥ 2 known devices → **Collect from all N devices** (one worker pass, LAN if discovered + token else bond, up to two concurrent devices, missing files only; each already-owned device is skipped). | `BleScanner`, `KnownDeviceDao`, `metric_bucket` DAY tier, `AutoSyncScheduler.collectAll` |
-| **Today** | Reviewed schema/dictionary profiles interpret CoreS3 board temperature and Waveshare ambient temperature/humidity. Unknown profiles retain file collection with an explanatory live placeholder. **Hero card** (`MetricHeroCard`, the primary registry metric): five-mood face on a tilted badge, big number with label and unit from `Metrics.primary`, mood pill, advice and comparison, a 10 second snapshot explained in its info sheet, **Today so far** = the *local* day's weighted average + coverage from the hourly tier (re-evaluated every minute), or a nudge to set the time. Sensor state (warming up / stale / error) in words before any number. **Smart Sync** checks clock quality, applies the user's consent policy, downloads/verifies missing files and reports real/estimated/unplaceable readings plainly. **Devices** returns Home while retaining the connection; Disconnect closes only this device. Always: clock state and **Set time from phone**. Detailed adds **Finalize buffered rows**, every measurement card and the device card (`status.open`/`open_rg` only when present). | `live`/`status` pushes via repository, reviewed `LiveProfile` + `NowReading.of(live)`, `HistoryRepository` |
+| **Devices** (Home) | Scans for service UUID `c0a5e9f0-0001-…`, lists `AQ-xxxx` with RSSI + bond state, remembers known devices. Active controller rows show per-device connection/progress and open that controller. Each known device's card shows what the **phone archive** holds (files, last sync, last UTC day with valid readings as mood + average + coverage) — no link needed. ≥ 2 known devices → **Collect from all N devices** (one worker pass, LAN if discovered + token else bond, up to two concurrent devices, missing files only; each already-owned device is skipped). One shared screen for both apps (`:feature:devices`, `MyDevicesScreen` over `DevicesController`). It merges nearby, known and Wi-Fi sensors into one list, scans while visible once Bluetooth access is held (asked through `:ui:permissions`, never at launch), and Forget asks for confirmation. Android keeps the system bond on Forget and collects in its worker. iOS removes the app record and the Keychain Wi-Fi access, says the bond is removed in iOS Settings, and collects one sensor at a time while the app is open. iOS cards show files and the last sync, with no day mean yet. | Ports `KnownDeviceStore`, `DeviceRadio`, `CollectAllPort`. Android `ScanViewModel` over `BleScanner`, `KnownDeviceDao`, `metric_bucket` DAY tier, `AutoSyncScheduler.collectAll`. iOS `DevicesBridge` over `CompanionState`, saved known records, `LanCredentials.list` and the receipt index |
+| **Today** | Reviewed schema/dictionary profiles interpret CoreS3 board temperature and Waveshare ambient temperature/humidity. Unknown profiles retain file collection with an explanatory live placeholder. **Hero card** (`MetricHeroCard`, the primary registry metric): five-mood face on a tilted badge, big number with label and unit from `Metrics.primary`, mood pill, advice and comparison, a 10 second snapshot explained in its info sheet, **Today so far** = the *local* day's weighted average + coverage from the hourly tier (re-evaluated every minute), or a nudge to set the time. Sensor state (warming up / stale / error) in words before any number. **Smart Sync** checks clock quality, applies the user's consent policy, downloads/verifies missing files and reports real/estimated/unplaceable readings plainly. **Devices** returns Home while retaining the connection; Disconnect closes only this device. Always: clock state and **Set time from phone**. Detailed adds **Finalize buffered rows**, every measurement card and the device card (`status.open`/`open_rg` only when present). One shared screen and copy for both apps (`:feature:today`, `TodayScreen` over `TodayController`), which owns the Set time, Finalize and clock consent dialogs. Debug shows at Developer level only. On iOS a Bluetooth sensor opens here from My devices. Device opens the companion page, Set time and Finalize go over Bluetooth only, and the sync bar runs without a byte total. | Port `TodaySource`. Android `TodayViewModel` over the repository, `live`/`status` pushes, reviewed `LiveProfile` + `NowReading.of(live)`, `HistoryRepository`. iOS `CompanionTodaySource` over `CompanionState`, `IosArchive` and `BluetoothCompanion.command` |
 
 For the reviewed Waveshare v2 dictionary, Today shows a separate **unvalidated batch estimate**
 when the board has opted in, its sticker is in the known batch, and a fresh valid particle count
 arrived after that config acknowledgement. The main Now value stays atmospheric raw PM₂.₅.
 History exposes the archived candidate as a separate metric gated by candidate status 3; it has
 no mood or standards band.
-| **History** | Day · Week · Month · Year of one logger **from the archive** (no session), whole local days (1/7/30/365). Day = a local-day **ring** + one hourly column per elapsed hour (23 or 25 across daylight saving changes; repeated 01:00 hours show their UTC offsets). Week = hourly columns. Month/Year = **local-day calendar heatmap** + daily/weekly columns. Bars are hourly, daily or weekly means (a caption says which), coloured by their own WHO 2021 step on a neutral background (neutral ink for metrics without a WHO scale), faded by coverage, hollow-dashed on estimated time; y axis from zero, 95th percentile with a floor, snapped up to a WHO edge for PM2.5 and PM10, off-scale spikes capped and labelled; dashed, labelled WHO 24 h guideline line for PM2.5 (15) and PM10 (45). The touch readout names the mood and WHO step in words. Neutral signed metrics include negative values and a zero baseline. Touch/drag to read a column. Paging back uses local dates; an open span follows the clock across local midnight. Metric chips show only metrics with valid archived buckets; a first available metric replaces an absent PM default. Earlier authenticated station epochs can be selected separately. | `HistoryWindow` → `HistoryRepository.observe` → rows (Day) or tiers (Week/Month/Year); `Columns.rebinHours/rebinLocalDays/rebinLocalWeeks` |
+| **History** | Day · Week · Month · Year of one logger **from the archive** (no session), whole local days (1/7/30/365). Day = a local-day **ring** + one hourly column per elapsed hour (23 or 25 across daylight saving changes; repeated 01:00 hours show their UTC offsets). Week = hourly columns. Month/Year = **local-day calendar heatmap** + daily/weekly columns. Bars are hourly, daily or weekly means (a caption says which), coloured by their own WHO 2021 step on a neutral background (neutral ink for metrics without a WHO scale), faded by coverage, hollow-dashed on estimated time; y axis from zero, 95th percentile with a floor, snapped up to a WHO edge for PM2.5 and PM10, off-scale spikes capped and labelled; dashed, labelled WHO 24 h guideline line for PM2.5 (15) and PM10 (45). The touch readout names the mood and WHO step in words. Neutral signed metrics include negative values and a zero baseline. Touch/drag to read a column. Paging back uses local dates; an open span follows the clock across local midnight. Metric chips show only metrics with valid archived buckets; a first available metric replaces an absent PM default. Earlier authenticated station epochs can be selected separately. One shared screen for both apps (`:feature:history`). On iOS it reads the whole phone archive and opens from a History button on My devices and on the device page. | `HistoryController` → `HistoryWindow` → `HistorySeriesReader.observe` → rows (Day) or tiers (Week/Month/Year); `Columns.rebinHours/rebinLocalDays/rebinLocalWeeks`. See [history-pipeline.md](history-pipeline.md#shared-screen-featurehistory-18) |
 | **Files › Chart by file** | One column per synced file in **file order** (not time): a 3-row FLUSH file is as visible as a full window; estimated-time files hollow; unplaceable files say so; label jumps show where the logger was off. Metric chips, 96 files/page, tap → name · rows · valid rows · span · mean/min/max. Archive only. | `HistoryRepository.fileSummaries` → `FileSummary` |
-| **Files** | Device manifest grouped by **local calendar day** (dated files: the SD path `day=` and the name's `HHMM` are UTC, so `FileGrouping` converts the window start to the phone's zone; the header's subtitle names the UTC folder(s), each row shows its local start time) then unsynced-boot / benchmarks / legacy. **Sync all** downloads what the archive lacks with per-file + overall progress and "recovered N lost windows". Per-file state: not synced · partial · syncing · synced (verified) · mismatch · invalid name. A `LIST` refresh (manual, post-connect, post-sync) keeps the previous list on screen — "refreshing…" while in flight, "Refresh failed: … — showing the last listing." on failure (`ManifestState.last`); the red full-width "LIST failed" card appears only when no listing exists yet. Share/Inspect resolves the exact storage `(INFO/enrolled station, filename)`, including legacy/benchmark paths and retained producer-station paths; missing ownership refuses a cross-device fallback. Menu: **Sync now in background** (expedited worker), **Auto-sync** toggle, table icon → Metrics (Detailed). | `SyncPlanner`, repository `sync` state |
-| **Export** (from Files) | Share one file or a zip of the raw archive; *Save to…* via SAF; **Share daily files (derived)** zips `derived/v1/<station>/day=….parquet` + manifests. | `ExportManager` |
-| **Device** | **Auto-sync** card (any proto): per-device switch; **wake when nearby** line + *Set up wake when nearby* (one system dialog; a BLE session is dropped for it and restored) / *Turn off*. Waveshare: **air quality sensor** card selects the supported Plantower PMS5003T, scans its barcode with Google Code Scanner or accepts manual sticker entry, shows the batch, and offers an opt-in unvalidated batch estimate for the reviewed 2026-04-08 batch. Board acknowledgement precedes the phone's installation history entry. Barcode scanning may download a Google Play services module on first use; manual entry remains available. v2 (Detailed): Bluetooth pairing mode (Random code, Fixed PIN, No code, descriptions in the card's info sheet), **Restart device** (confirm). The default PIN warning and the pending restart notice also show at Simple. **Wi-Fi**: state/IP/RSSI, *Scan networks* → pick → hidden passphrase → *Save and connect*, polled while `connecting`, radio on/off. **LAN**: server on/off, token held?, *Get Wi-Fi token* (BLE only), *Replace token* (Detailed, confirm), *Allow local network* (API 37+, asked from the action). **Forget all paired phones** (Detailed, confirm). Every write is one validated `SET_CONFIG`. Worker-owned sessions mark controls busy; interactive sync/config/raw commands wait for that run to finish. Disruptive buttons are disabled while a sync runs (`canDisrupt = canEdit && !syncRunning`). | `DeviceSession.getConfig/setConfig/wifiScan/reboot/getToken` via repository |
-| **Settings** (tab) | **Detail level** plus Smart Sync clock consent: **Ask first** (default), **Automatic**, or **Never**, one short line each. **Show public sensors**, the one switch for Discover network use. **Units**, Automatic (default, the phone's measurement system, imperial for the US, Liberia and Myanmar), Metric or Imperial, applied live to every reading, chart label and spoken summary on Today, History, Files and Discover. Conversion lives once in `:core:units` (°C to °F, hPa to inHg, mm to in, m/s and km/h to mph, m to ft, km to mi and a few more). µg/m³, ppm, %, mV and unknown units pass through. Bands, moods, colours, chart geometry and stored data stay SI. Same row on iOS. Notes behind the info button. About shows the version and the one line privacy note. Device settings stay in the Device section. | `AppSettings.setDetailLevel`, `setClockSyncMode`, `setUnitSystem` |
-| **Metrics** (Detailed) | One archived file through the app's own reader: rows, row groups, schema/writer version, codec, footer size, UTC/uptime span, sequence range, PMS-valid rows, per-row-group spans from footer statistics, every column decoded (nulls/min/max/first/last/"footer agrees"), key/value metadata. The archive copy is never touched. | `ParquetFile` (`:core:parquet`) |
+| **Files** | Device manifest grouped by **local calendar day** (dated files: the SD path `day=` and the name's `HHMM` are UTC, so `FileGrouping` converts the window start to the phone's zone; the header's subtitle names the UTC folder(s), each row shows its local start time) then unsynced-boot / benchmarks / legacy. **Sync all** downloads what the archive lacks with per-file + overall progress and "recovered N lost windows". Per-file state: not synced · partial · syncing · synced (verified) · mismatch · invalid name. A `LIST` refresh (manual, post-connect, post-sync) keeps the previous list on screen — "refreshing…" while in flight, "Refresh failed: … — showing the last listing." on failure (`ManifestState.last`); the red full-width "LIST failed" card appears only when no listing exists yet. Share/Inspect resolves the exact storage `(INFO/enrolled station, filename)`, including legacy/benchmark paths and retained producer-station paths; missing ownership refuses a cross-device fallback. Menu: **Sync now in background** (expedited worker), **Auto-sync** toggle, table icon → Metrics (Detailed). One shared screen for both apps (`:feature:files`), the device listing, sync controls, link banner, section tabs and chart come in through slots on Android. Without a device listing it shows the phone archive grouped by local day. On iOS it lists the whole phone archive and opens from a Files button next to History on My devices. | `FilesController` (`:feature:files`), `SyncPlanner`, repository `sync` state |
+| **Export** (from Files) | Share one file, share all files loose, share or save a zip of the raw archive, and **Share daily files (derived)**, which zips `derived/v1/<station>/day=….parquet` and manifests (Android only, iOS has no derived files yet). Android shares through the chooser and saves through SAF. iOS shares through `UIActivityViewController` and saves through `UIDocumentPickerViewController(forExporting:asCopy:)`. Every export stages copies in its own run directory (Android `cacheDir/export`, iOS `tmp/opensensor-export`), removed once the sheet closes. Exports only read the archive. | `FilesController` over `ArchiveExport` (`:core:archive`), `ExportPresenter` per platform |
+| **Device** | **Auto-sync** card (any proto): per-device switch; **wake when nearby** line + *Set up wake when nearby* (one system dialog; a BLE session is dropped for it and restored) / *Turn off*. Waveshare: **air quality sensor** card selects the supported Plantower PMS5003T, scans its barcode with Google Code Scanner or accepts manual sticker entry, shows the batch, and offers an opt-in unvalidated batch estimate for the reviewed 2026-04-08 batch. Board acknowledgement precedes the phone's installation history entry. Barcode scanning may download a Google Play services module on first use; manual entry remains available. v2 (Detailed): Bluetooth pairing mode (Random code, Fixed PIN, No code, descriptions in the card's info sheet), **Restart device** (confirm). The default PIN warning and the pending restart notice also show at Simple. **Wi-Fi**: state/IP/RSSI, *Scan networks* → pick → hidden passphrase → *Save and connect*, polled while `connecting`, radio on/off. **LAN**: server on/off, token held?, *Get Wi-Fi token* (BLE only), *Replace token* (Detailed, confirm), *Allow local network* (API 37+, asked from the action). **Forget all paired phones** (Detailed, confirm). Every write is one validated `SET_CONFIG`. The cards, the four confirmations and their copy are one shared section (`:feature:device`, `DeviceConfigController`). Android draws them inside its Device screen. iOS shows them on their own page (`DeviceSettingsKey`) from a Sensor settings button on the companion page of a connected Bluetooth sensor, over Bluetooth only, with the VisionKit sticker scan (Scan shown only on A12 and later, camera asked on that tap) and manual entry, and no installation history, device header, Auto-sync card or endpoint line (parity P53 to P63). Worker-owned sessions mark controls busy; interactive sync/config/raw commands wait for that run to finish. Disruptive buttons are disabled while a sync runs (`canDisrupt = canEdit && !syncRunning`). | `DeviceSession.getConfig/setConfig/wifiScan/reboot/getToken` via repository |
+| **Settings** (tab) | **Detail level** plus Smart Sync clock consent: **Ask first** (default), **Automatic**, or **Never**, one short line each. **Show public sensors**, the one switch for Discover network use. **Units**, Automatic (default, the phone's measurement system, imperial for the US, Liberia and Myanmar), Metric or Imperial, applied live to every reading, chart label and spoken summary on Today, History, Files and Discover. Conversion lives once in `:core:units` (°C to °F, hPa to inHg, mm to in, m/s and km/h to mph, m to ft, km to mi and a few more). µg/m³, ppm, %, mV and unknown units pass through. Bands, moods, colours, chart geometry and stored data stay SI. One shared screen and copy for both apps (`:feature:settings`). iOS shows the clock consent since its Today has Smart Sync (#17). Notes behind the info button. About shows the version, the one line privacy note and the font licence. Device settings stay in the Device section. | `SettingsController` over `SettingsRepository` (`:core:settings`) |
+| **Metrics** (Detailed) | Shared on both apps (`:feature:files`). One archived file through the app's own reader: rows, row groups, schema/writer version, codec, footer size, UTC/uptime span, sequence range, PMS-valid rows, per-row-group spans from footer statistics, every column decoded (nulls/min/max/first/last/"footer agrees"), key/value metadata. The archive copy is never touched. | `FileInspector` over `ParquetFile` (`:core:parquet`) |
 | **Debug** (Developer) | Active transport + endpoint + `payload_max`; Smart Sync decision trace and archive time accounting (real / same-boot estimate / unplaceable); live `status` JSON; last 200 raw frames (dir, type, len, first 16 bytes; `TOKEN` and `SET_CONFIG` redacted); **Device log** (`LOG_TAIL 8192`); **Raw command** (hex → decoded frames; refuses `REBOOT` and `SET_CONFIG`, which need the Device screen's confirmation). | `FrameRecorder`, `DeviceSession.raw`, repository diagnostics |
+
+The Debug screen is one shared Compose screen in `:feature:debug` (`DebugScreen`, `DebugController`)
+for both apps. A platform lends it a `DebugSource`. Android adapts the connection repository and its
+long-lived session (`RepositoryDebugSource`). iOS borrows a short `SensorLink` from Swift for each
+request (`IosDebugSource`) and keeps one frame recorder per sensor (`FrameRecorderRegistry`), so the
+frame history covers Bluetooth and Wi-Fi syncs and debug requests alike. The denylist
+(`RawCommandPolicy`, `REBOOT` and `SET_CONFIG`) and the redaction (`FrameRedaction`) live in
+`:core:sync` and are checked twice, in `RawCommandSender` and again in `DeviceSession.rawCommand`.
+Status and config JSON pass through `FrameRedaction.scrubSecrets` before they are shown. The shell
+opens Debug only at the Developer level (`TabNavigator.openDebug`), and the screen pops itself when
+the level drops. On iOS the entry is a Debug button on the connected Bluetooth card of the device page, opened from My devices. iOS has no
+Smart Sync trace card yet, and reads the config on request.
 
 ## The transport chip
 
@@ -207,11 +260,11 @@ state change, de-duplicated). Never derive it per screen from the session object
 
 | Edit… | Affects… |
 | --- | --- |
-| `NavigationKeys.kt` | `Navigation.kt` entry providers, back-stack restore |
+| `feature/shell/.../AppKey.kt` | `AppNavConfig` saved state, Android and iOS entry providers, `AppNavConfigTest` |
 | `DetailLevel` / `AppSettings` | every `detailed`/`advancedMode` collector; Debug visibility; Files table icon |
-| `ui/device/cards/MetricHeroCard.kt`, `components/MoodFace.kt`, mood copy in `strings.xml` | Today, Home cards (same moods), iOS parity (iOS still reads the copy in `AirMood`) |
+| `ui/device/cards/MetricHeroCard.kt`, `components/MoodFace.kt`, mood copy in `strings.xml` | Today, Home cards (same moods), iOS parity (iOS still reads the copy in `AirMood`, meant to match `strings.xml` word for word, not yet checked by a test, tracked in #25) |
 | `ui/theme/BrandTokens.kt` | Every screen, `BrandTokensTest` (website values and contrast) |
 | `DeviceCapabilities` (`:core:history`) | Today hero and batch card, Device sensor card, `setSensorIdentity` guard |
 | `BandColumnChart.kt`, `DayRing.kt`, `CalendarHeatmap.kt` | History and Files › Chart by file (share `Columns` + `HistoryColumn`) |
-| `ui/files/FileGrouping.kt` | Files list headers and per-row local time (pure: `zone`/`locale` parameters, `FileGroupingTest`); the firmware's `day=`/`data_HHMM_` naming in `../aq-parquet/docs/shared/telemetry-pipeline.md` is what it parses |
+| `feature/files/.../FileGrouping.kt` | Files list headers on both apps and per-row local time (pure: `zone`/`locale` parameters, `FileGroupingTest`); the firmware's `day=`/`data_HHMM_` naming in `../aq-parquet/docs/shared/telemetry-pipeline.md` is what it parses |
 | `DeviceRoute` confirmation dialogs | the **only** call path to `rebootAndReconnect()`. Keep it that way ([sync-engine.md](sync-engine.md#state-changing-requests)) |

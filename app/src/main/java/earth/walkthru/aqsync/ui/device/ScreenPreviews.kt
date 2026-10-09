@@ -1,16 +1,9 @@
 package earth.walkthru.aqsync.ui.device
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.unit.dp
-import earth.walkthru.aqsync.data.ArchiveTimeSummary
 import earth.walkthru.aqsync.data.SyncProgress
-import earth.walkthru.aqsync.data.TimedLive
-import earth.walkthru.aqsync.data.TimedStatus
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.TransportKind
-import earth.walkthru.aqsync.data.history.DeviceCapabilities
 import earth.walkthru.aqsync.data.history.TodaySoFar
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.protocol.DeviceStatus
@@ -18,8 +11,13 @@ import earth.walkthru.aqsync.data.protocol.LiveProfiles
 import earth.walkthru.aqsync.data.protocol.LiveSample
 import earth.walkthru.aqsync.data.settings.DetailLevel
 import earth.walkthru.aqsync.ui.components.ThemePreviews
-import earth.walkthru.aqsync.ui.device.cards.MetricHeroCard
-import earth.walkthru.aqsync.ui.theme.AqSyncTheme
+import earth.walkthru.aqsync.units.UnitFormatter
+import earth.walkthru.opensensor.designsystem.OpenSensorTheme
+import earth.walkthru.opensensor.device.DeviceConfigUiState
+import earth.walkthru.opensensor.today.TodayArchive
+import earth.walkthru.opensensor.today.TodayContent
+import earth.walkthru.opensensor.today.TodaySnapshot
+import earth.walkthru.opensensor.today.TodayUiState
 
 /** Fake state for previews only. No transport, no Room, no ViewModel. */
 internal object PreviewFakes {
@@ -35,26 +33,25 @@ internal object PreviewFakes {
         maxRead = 16384,
     )
     private val now = System.currentTimeMillis()
-    val live = TimedLive(
-        LiveSample(seq = 1234, pms = 4, pm1 = 6.0, pm25 = 9.4, pm10 = 12.0, t = 24.6, rh = 41.0, n03 = 1800, n05 = 520, n1 = 90, n25 = 6, n5 = 1, n10 = 0, pct = 82, chg = 1, bat = 4012),
-        now - 4_000,
-    )
-    val status = TimedStatus(DeviceStatus(upSeconds = 86_400, intervalSeconds = 600, buf = 34, fin = 12), now - 6_000)
+    val live = LiveSample(seq = 1234, pms = 4, pm1 = 6.0, pm25 = 9.4, pm10 = 12.0, t = 24.6, rh = 41.0, n03 = 1800, n05 = 520, n1 = 90, n25 = 6, n5 = 1, n10 = 0, pct = 82, chg = 1, bat = 4012)
+    val status = DeviceStatus(upSeconds = 86_400, intervalSeconds = 600, buf = 34, fin = 12)
 
     fun today(level: DetailLevel) = TodayUiState(
-        address = "AA:BB:CC:DD:EE:FF",
-        name = "AQ-1A2B",
-        connection = ConnectionState.Ready(247),
-        info = info,
-        status = status,
-        live = live,
-        transport = TransportKind.BLE,
-        detailLevel = level,
-        advancedMode = level.developer,
-        archiveTime = ArchiveTimeSummary(files = 142, rows = 85_000, realTimeRows = 85_000),
-        sync = SyncProgress(finishedAtEpochMs = now - 60_000),
-        todaySoFar = TodaySoFar(pm25Mean = 11.2f, validRows = 3100, coverage = 0.62f),
-        capabilities = DeviceCapabilities.from(info),
+        snapshot = TodaySnapshot(
+            address = "AA:BB:CC:DD:EE:FF",
+            name = "AQ-1A2B",
+            connection = ConnectionState.Ready(247),
+            transport = TransportKind.BLE,
+            info = info,
+            status = status,
+            statusAtEpochMs = now - 6_000,
+            live = live,
+            liveAtEpochMs = now - 4_000,
+            archive = TodayArchive(files = 142),
+            sync = SyncProgress(finishedAtEpochMs = now - 60_000),
+            todaySoFar = TodaySoFar(pm25Mean = 11.2f, validRows = 3100, coverage = 0.62f),
+        ),
+        level = level,
     )
 
     fun device(level: DetailLevel) = DeviceUiState(
@@ -71,28 +68,26 @@ internal object PreviewFakes {
 
 @ThemePreviews
 @Composable
-private fun TodaySimplePreview() = AqSyncTheme { TodayScreen(PreviewFakes.today(DetailLevel.SIMPLE), onAction = {}) }
+private fun TodaySimplePreview() = OpenSensorTheme { TodayPreview(DetailLevel.SIMPLE) }
 
 @ThemePreviews
 @Composable
-private fun TodayDeveloperPreview() = AqSyncTheme { TodayScreen(PreviewFakes.today(DetailLevel.DEVELOPER), onAction = {}) }
+private fun TodayDeveloperPreview() = OpenSensorTheme { TodayPreview(DetailLevel.DEVELOPER) }
 
 @ThemePreviews
 @Composable
-private fun DeviceSimplePreview() = AqSyncTheme { DeviceScreen(PreviewFakes.device(DetailLevel.SIMPLE), DeviceExtras(), onAction = {}) }
+private fun DeviceSimplePreview() = OpenSensorTheme { DevicePreview(DetailLevel.SIMPLE) }
 
 @ThemePreviews
 @Composable
-private fun MetricHeroStatesPreview() = AqSyncTheme {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        val now = System.currentTimeMillis()
-        MetricHeroCard(LiveSample(pms = 4, pm25 = 9.4), now, DetailLevel.SIMPLE)
-        MetricHeroCard(LiveSample(pms = 4, pm25 = 172.0), now, DetailLevel.SIMPLE)
-        MetricHeroCard(LiveSample(pms = 1), now, DetailLevel.SIMPLE)
-        MetricHeroCard(null, null, DetailLevel.SIMPLE)
-    }
+private fun DeviceDeveloperPreview() = OpenSensorTheme { DevicePreview(DetailLevel.DEVELOPER) }
+
+@Composable
+private fun DevicePreview(level: DetailLevel) {
+    val state = PreviewFakes.device(level)
+    DeviceScreen(state, DeviceConfigUiState(state.toConfigSnapshot(null), level), DeviceExtras(), onAction = {})
 }
 
-@ThemePreviews
 @Composable
-private fun DeviceDeveloperPreview() = AqSyncTheme { DeviceScreen(PreviewFakes.device(DetailLevel.DEVELOPER), DeviceExtras(), onAction = {}) }
+private fun TodayPreview(level: DetailLevel) =
+    TodayContent(PreviewFakes.today(level), UnitFormatter.Metric, onAction = {}, onRequestSetTime = {}, onRequestFlush = {})

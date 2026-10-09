@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug copy for Android and iOS, one catalogue. Copy rules (docs/screens.md, CopyLintTest).
+  No em or en dashes, no colons or semicolons. Keys the Android app already had keep their name and words.
+  Compose resources keep a plain apostrophe, there is no backslash escape here.
+-->
+<resources>
+    <string name="nav_debug">Debug</string>
+    <string name="action_back">Back</string>
+    <string name="transport_ble">Bluetooth</string>
+    <string name="transport_lan">Wi-Fi LAN</string>
+    <string name="transport_fake">Fake device</string>
+    <string name="conn_disconnected">Not connected</string>
+    <string name="conn_connecting">Connecting…</string>
+    <string name="msg_background_owns_command">Background sync is using this sensor. Wait for it to finish.</string>
+    <string name="debug_link_busy">The link to this sensor is busy. Try again in a moment.</string>
+
+    <string name="ago_just_now">just now</string>
+    <string name="ago_seconds">%1$d s ago</string>
+    <string name="ago_minutes">%1$d min ago</string>
+    <string name="ago_hours">%1$d h ago</string>
+    <string name="ago_days">%1$d d ago</string>
+
+    <plurals name="scan_files">
+        <item quantity="one">%1$d file</item>
+        <item quantity="other">%1$d files</item>
+    </plurals>
+    <plurals name="fm_rows_count">
+        <item quantity="one">%1$d row</item>
+        <item quantity="other">%1$d rows</item>
+    </plurals>
+
+    <string name="debug_transport_title">Active transport</string>
+    <string name="debug_transport">transport</string>
+    <string name="debug_endpoint">endpoint</string>
+    <string name="debug_state">state</string>
+    <string name="debug_sync_title">Smart Sync diagnostics</string>
+    <string name="debug_archive">archive</string>
+    <string name="debug_real_utc">real UTC</string>
+    <string name="debug_estimate">same-boot estimate</string>
+    <string name="debug_unplaced">unplaced</string>
+    <plurals name="debug_boots">
+        <item quantity="one">%1$d boot</item>
+        <item quantity="other">%1$d boots</item>
+    </plurals>
+    <string name="debug_sync_none">No Smart Sync decisions recorded yet.</string>
+    <string name="debug_status_title">Status JSON, live</string>
+    <string name="debug_request_status">Request status</string>
+    <string name="debug_status_none">No status received yet.</string>
+    <string name="debug_config_title">Config JSON</string>
+    <string name="debug_config_read">Read config</string>
+    <string name="debug_config_none">No CONFIG received. A protocol v1 device, or not read yet.</string>
+    <plurals name="debug_frames_title">
+        <item quantity="one">Last raw frame</item>
+        <item quantity="other">Last %1$d raw frames, newest first</item>
+    </plurals>
+    <string name="debug_clear">Clear</string>
+    <string name="debug_frames_none">Nothing captured yet.</string>
+    <string name="debug_frames_note">TX are requests written to control. RX are frames from response. Pushed status and live JSON are not listed here. TOKEN bodies and SET_CONFIG requests are redacted.</string>
+    <string name="debug_log_title">Device log</string>
+    <string name="debug_log_fetch">Fetch</string>
+    <string name="debug_log_refresh">Refresh</string>
+    <string name="debug_log_idle">Fetches the newest 8 KiB of the device serial log. Text for humans, not an API.</string>
+    <string name="debug_log_loading">Fetching…</string>
+    <string name="debug_log_failed">Could not read the device log. %1$s</string>
+    <string name="debug_log_summary">%1$d B returned of %2$d B logged since boot</string>
+    <string name="debug_log_incomplete">Received %1$d B but LOG_END says %2$d B. A slice may be missing.</string>
+    <string name="debug_log_empty">Empty</string>
+    <string name="debug_raw_title">Raw command</string>
+    <string name="debug_raw_info1">Type the hex bytes of one control request. The first byte is the opcode.</string>
+    <string name="debug_raw_info2">Reply frames are collected until the device is quiet for 1.5 s. STATUS answers on the status channel only.</string>
+    <string name="debug_raw_info3">Only reads and the documented state changes are wise here. The device never deletes or rewrites anything on request, so the worst case is a rejected frame. REBOOT and SET_CONFIG stay on the Device screen.</string>
+    <string name="debug_raw_examples">01 LIST · 07 STATUS · 08 GET_CONFIG · 0c 0020 LOG_TAIL · 0d GET_TOKEN</string>
+    <string name="debug_raw_hex">hex</string>
+    <string name="debug_raw_send">Send</string>
+    <plurals name="debug_raw_frames">
+        <item quantity="one">%1$d frame</item>
+        <item quantity="other">%1$d frames</item>
+    </plurals>
+    <string name="debug_raw_invalid_hex">Not valid hex.</string>
+    <string name="debug_raw_bad_length">A request is 1 to 512 bytes.</string>
+    <string name="debug_raw_needs_confirmation">%1$s is not sent from here. Use the Device screen, which asks for confirmation.</string>
+    <!-- Debug frames list, screen reader words for the direction arrow. -->
+    <string name="debug_frame_sent">Sent</string>
+    <string name="debug_frame_received">Received</string>
+    <string name="debug_raw_no_response">No response frames within the quiet period.</string>
+</resources>

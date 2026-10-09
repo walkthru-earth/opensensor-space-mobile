@@ -1,64 +1,90 @@
 package earth.walkthru.opensensor
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
-import androidx.compose.material3.Text
+import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
+import earth.walkthru.aqsync.archive.IosExportSpace
 import earth.walkthru.aqsync.publicfeed.platformH3Grid
+import earth.walkthru.aqsync.settings.DetailLevel
+import earth.walkthru.aqsync.settings.SettingsRepository
+import earth.walkthru.aqsync.settings.iosSettingsRepository
+import earth.walkthru.aqsync.units.UnitFormatter
 import earth.walkthru.aqsync.units.UnitSystem
 import earth.walkthru.aqsync.units.systemUnitSystem
+import earth.walkthru.opensensor.debug.DebugController
+import earth.walkthru.opensensor.debug.DebugScreen
+import earth.walkthru.opensensor.designsystem.AppIcons
 import earth.walkthru.opensensor.designsystem.FloatingControl
+import earth.walkthru.opensensor.designsystem.FloatingIconButton
 import earth.walkthru.opensensor.designsystem.OpenSensorTheme
+import earth.walkthru.opensensor.device.DeviceConfigAction
+import earth.walkthru.opensensor.device.DeviceConfigController
+import earth.walkthru.opensensor.device.DeviceConfigScreen
+import earth.walkthru.opensensor.device.LanAccess
+import earth.walkthru.opensensor.devices.DevicesAction
+import earth.walkthru.opensensor.devices.DevicesPlatform
+import earth.walkthru.opensensor.devices.MyDevicesScreen
+import earth.walkthru.opensensor.devices.bluetoothAccessTexts
 import earth.walkthru.opensensor.discover.DiscoverController
-import earth.walkthru.opensensor.discover.DiscoverIcons
 import earth.walkthru.opensensor.discover.DiscoverScreen
-import earth.walkthru.opensensor.discover.DiscoverStrings
 import earth.walkthru.opensensor.discover.UserDefaultsDiscoverPrefs
 import earth.walkthru.opensensor.discover.bundledSampleFeed
+import earth.walkthru.opensensor.files.FileMetricsController
+import earth.walkthru.opensensor.files.FileMetricsScreen
+import earth.walkthru.opensensor.files.FilesController
+import earth.walkthru.opensensor.files.FilesScreen
+import earth.walkthru.opensensor.files.filesTitle
+import earth.walkthru.opensensor.history.HistoryController
+import earth.walkthru.opensensor.history.HistoryScreen
+import earth.walkthru.opensensor.history.HistoryTopBar
+import earth.walkthru.opensensor.history.archiveStations
+import earth.walkthru.opensensor.history.historyTitle
+import earth.walkthru.opensensor.permissions.AccessDialogs
+import earth.walkthru.opensensor.permissions.AccessHooks
+import earth.walkthru.opensensor.permissions.AccessKind
+import earth.walkthru.opensensor.permissions.AccessStatus
+import earth.walkthru.opensensor.permissions.RuntimeAccess
+import earth.walkthru.opensensor.permissions.openAppSettings
+import earth.walkthru.opensensor.permissions.rememberOpenAppSettings
+import earth.walkthru.opensensor.settings.SettingsController
+import earth.walkthru.opensensor.settings.SettingsScreen
+import earth.walkthru.opensensor.shell.AppShell
+import earth.walkthru.opensensor.shell.DebugKey
+import earth.walkthru.opensensor.shell.DeviceKey
+import earth.walkthru.opensensor.shell.DeviceSettingsKey
+import earth.walkthru.opensensor.shell.DiscoverKey
+import earth.walkthru.opensensor.shell.FileMetricsKey
+import earth.walkthru.opensensor.shell.FilesKey
+import earth.walkthru.opensensor.shell.HistoryKey
+import earth.walkthru.opensensor.shell.ScanKey
+import earth.walkthru.opensensor.shell.SettingsKey
+import earth.walkthru.opensensor.shell.ShellBottomBar
+import earth.walkthru.opensensor.shell.TabNavigator
+import earth.walkthru.opensensor.shell.TodayKey
+import earth.walkthru.opensensor.shell.TopTab
+import earth.walkthru.opensensor.today.TodayAction
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+import platform.Foundation.NSBundle
 import platform.Foundation.NSCurrentLocaleDidChangeNotification
 import platform.Foundation.NSDate
 import platform.Foundation.NSNotificationCenter
@@ -68,69 +94,415 @@ import platform.Foundation.NSUserDefaults
 import platform.Foundation.localTimeZone
 import platform.Foundation.timeIntervalSince1970
 
-private enum class Tab { DISCOVER, MY_DEVICES, SETTINGS }
-
-private const val SHOW_PUBLIC_KEY = "discover.showPublicSensors"
-
-/** Display units, the [UnitSystem] name. Missing means Automatic. */
-private const val UNIT_SYSTEM_KEY = "settings.unitSystem"
+/**
+ * The one settings store for the process. DataStore allows one instance per file, so it lives
+ * outside composition. The first read imports the two settings older builds kept in UserDefaults.
+ */
+private val settingsRepository: SettingsRepository by lazy { iosSettingsRepository() }
 
 /**
- * The iOS root: one bottom bar with three tabs, Discover, My devices and Settings, as on Android.
- * Discover is always the start tab (owner decision 2026-10-08). No other screen draws a bar.
- * [companion] receives the resolved display units (METRIC or IMPERIAL) from Settings.
+ * Holds the Discover controller for the Discover entry, so it survives tab switches and is cleared
+ * only when its entry leaves the back stack (the ViewModel entry decorator of the shell).
+ */
+private class DiscoverHolder : ViewModel() {
+    val controller = DiscoverController(
+        scope = viewModelScope,
+        feed = bundledSampleFeed(),
+        h3 = platformH3Grid(),
+        prefs = UserDefaultsDiscoverPrefs(NSUserDefaults.standardUserDefaults),
+        timeZoneId = NSTimeZone.localTimeZone.name,
+        now = { (NSDate().timeIntervalSince1970 * 1000.0).toLong() },
+    )
+}
+
+/** One page's hold on a Bluetooth sensor, released when its navigation entry is removed. */
+private class PageLease(private val leases: PeripheralLeases, private val id: String) : ViewModel() {
+    init {
+        leases.acquire(id)
+    }
+
+    override fun onCleared() = leases.release(id)
+}
+
+/** Holds this entry's lease on [id], so popping the last page for the sensor offers its link back. */
+@Composable
+private fun LeasePeripheral(leases: PeripheralLeases, id: String) {
+    viewModel(key = "page-lease-$id") { PageLease(leases, id) }
+}
+
+/** Holds the My devices controller for its entry, cleared when the entry leaves the back stack. */
+private class DevicesHolder(bridge: DevicesBridge) : ViewModel() {
+    val controller = bridge.controller(viewModelScope)
+}
+
+/** iOS collects while the app is open and cannot remove the system Bluetooth bond. */
+private val IosDevices = DevicesPlatform(collectInBackground = false, explainSystemBond = true)
+
+/** Holds the Debug controller for one Debug entry, cleared when the entry leaves the back stack. */
+private class DebugHolder(address: String, state: CompanionState, openLink: (String) -> SensorLink?) : ViewModel() {
+    val controller = DebugController(viewModelScope, IosDebugSource(address, state, openLink, viewModelScope))
+}
+
+/** Holds the Device settings controller of one sensor for its entry, cleared when the entry leaves the back stack. */
+private class DeviceSettingsHolder(address: String, devices: DevicesBridge, links: DeviceConfigLinks) : ViewModel() {
+    val controller = DeviceConfigController(
+        scope = viewModelScope,
+        source = IosDeviceConfigSource(address, devices.state, devices, links, viewModelScope),
+        detailLevel = settingsRepository.detailLevel,
+        // Nothing else reads the config on iOS, so the page reads it once the link is ready.
+        readOnReady = true,
+    )
+}
+
+/**
+ * The iOS root hosts the shared shell ([AppShell], `:feature:shell`), the same bottom bar, per-tab
+ * back stacks and Back rules as Android. The start edge swipe is Back. Discover is always the start
+ * tab (owner decision 2026-10-08). No other screen draws a bar. The My devices root is the shared
+ * [MyDevicesScreen] over [devices]. Opening a sensor calls [openSensor] (Bluetooth is allowed by
+ * then) and pushes its [devicePage], which receives the resolved display units (METRIC or IMPERIAL)
+ * and the detail level from the shared Settings (`:feature:settings`, `:core:settings`). At the
+ * Developer level the device page also gets an open Debug action, and the shared Debug screen
+ * (`:feature:debug`) borrows short links from Swift through [openDebugLink]. A Bluetooth sensor
+ * opens on the shared Today over [today], and its Device section is the [devicePage]. Today and
+ * Device each hold a lease on that sensor, and popping the last of them calls [closeIdle] once.
+ * The companion page of a Bluetooth sensor opens the shared Device settings (`:feature:device`),
+ * which borrow short links through [configLinks] and hold the same lease.
  */
 @Composable
-internal fun AppRoot(companion: @Composable (UnitSystem) -> Unit) {
-    val defaults = remember { NSUserDefaults.standardUserDefaults }
-    var tab by rememberSaveable { mutableStateOf(Tab.DISCOVER) }
-    var showPublic by remember { mutableStateOf(defaults.objectForKey(SHOW_PUBLIC_KEY) == null || defaults.boolForKey(SHOW_PUBLIC_KEY)) }
-    var unitChoice by remember { mutableStateOf(UnitSystem.parse(defaults.stringForKey(UNIT_SYSTEM_KEY))) }
+internal fun AppRoot(
+    devices: DevicesBridge,
+    today: CompanionToday,
+    requestBluetooth: () -> Unit,
+    openSensor: (String) -> Unit,
+    openDebugLink: (String) -> SensorLink?,
+    closeIdle: (String) -> Unit,
+    configLinks: DeviceConfigLinks,
+    devicePage: DevicePageContent,
+) {
+    val scope = rememberCoroutineScope()
+    val settings = remember { SettingsController(scope, settingsRepository) }
+    val prefs by settings.prefs.collectAsState()
+    // Off until the saved switch is read, so no request leaves the phone before then.
+    val showPublic = prefs?.showPublicSensors == true
     // Automatic follows the iOS measurement system (Language and Region), live.
     val systemUnits = rememberSystemUnits()
+    val unitChoice = prefs?.unitSystem ?: UnitSystem.AUTO
     val units = if (unitChoice == UnitSystem.AUTO) systemUnits else unitChoice
-    val scope = rememberCoroutineScope()
-    val controller = remember {
-        DiscoverController(
-            scope = scope,
-            feed = bundledSampleFeed(),
-            h3 = platformH3Grid(),
-            prefs = UserDefaultsDiscoverPrefs(defaults),
-            timeZoneId = NSTimeZone.localTimeZone.name,
-            now = { (NSDate().timeIntervalSince1970 * 1000.0).toLong() },
-        )
-    }
+    val level = prefs?.detailLevel ?: DetailLevel.SIMPLE
+    val version = remember { appVersion() }
+    val leases = remember { PeripheralLeases(closeIdle) }
     OpenSensorTheme {
-        Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-            Surface(Modifier.weight(1f), color = MaterialTheme.colorScheme.background) {
-                when (tab) {
-                    Tab.DISCOVER -> DiscoverScreen(
-                        controller = controller,
-                        strings = DiscoverStrings.English,
-                        networkAllowed = showPublic,
-                        onAddSensor = { tab = Tab.MY_DEVICES },
-                        units = units,
-                    )
-                    Tab.MY_DEVICES -> companion(units)
-                    Tab.SETTINGS -> IosSettings(
-                        showPublic = showPublic,
-                        onShowPublic = { on ->
-                            showPublic = on
-                            defaults.setBool(on, SHOW_PUBLIC_KEY)
-                        },
-                        unitChoice = unitChoice,
-                        resolvedUnits = units,
-                        onUnitChoice = { choice ->
-                            unitChoice = choice
-                            defaults.setObject(choice.name, UNIT_SYSTEM_KEY)
-                        },
+        AppShell(
+            entries = { nav ->
+                entry<DiscoverKey> {
+                    DiscoverEntry(networkAllowed = showPublic, units = units, onAddSensor = { nav.toMyDevicesRoot() })
+                }
+                entry<ScanKey> {
+                    MyDevicesEntry(
+                        bridge = devices,
+                        level = level,
+                        requestBluetooth = requestBluetooth,
+                        onFiles = { nav.push(FilesKey(PHONE_ARCHIVE)) },
+                        onHistory = { nav.push(HistoryKey(PHONE_ARCHIVE)) },
+                    ) { id, connect ->
+                        if (connect && IosKnown.isPeripheral(id)) openSensor(id)
+                        nav.push(TodayKey(id))
+                    }
+                }
+                // The shared Today (`:feature:today`) for a Bluetooth sensor. A Wi-Fi only sensor keeps the
+                // companion page, which holds its Wi-Fi session. Device opens that page for a Bluetooth sensor too.
+                entry<TodayKey> { key ->
+                    if (IosKnown.isPeripheral(key.address)) {
+                        LeasePeripheral(leases, key.address)
+                        TodayEntry(key.address, today, settingsRepository, units) { action ->
+                            when (action) {
+                                TodayAction.OpenHistory -> nav.push(HistoryKey(PHONE_ARCHIVE))
+                                TodayAction.OpenFiles -> nav.push(FilesKey(PHONE_ARCHIVE))
+                                TodayAction.OpenDevice -> nav.push(DeviceKey(key.address))
+                                // Debug talks to the hardware id, the same key the companion page passes. The
+                                // link may hold another sensor now, so only this sensor's id opens it.
+                                TodayAction.OpenDebug ->
+                                    today.state.info?.dev
+                                        ?.takeIf { today.state.selectedId == key.address }
+                                        ?.let { nav.openDebug(it, level.developer) }
+                                TodayAction.OpenSettings -> nav.select(TopTab.SETTINGS)
+                                TodayAction.OpenBluetoothSettings -> openAppSettings()
+                                else -> nav.popIfTop { it == key }
+                            }
+                        }
+                    } else {
+                        DevicePage(key.address, units, level, nav, devicePage)
+                    }
+                }
+                entry<DeviceKey> { key ->
+                    if (IosKnown.isPeripheral(key.address)) LeasePeripheral(leases, key.address)
+                    DevicePage(key.address, units, level, nav, devicePage)
+                }
+                entry<DeviceSettingsKey> { key ->
+                    LeasePeripheral(leases, key.address)
+                    DeviceSettingsEntry(key.address, devices, configLinks, onBack = { nav.popIfTop { it == key } })
+                }
+                entry<HistoryKey> {
+                    HistoryEntry(units = units, level = level, onBack = { nav.pop() })
+                }
+                entry<FilesKey> {
+                    FilesEntry(
+                        level = level,
+                        onBack = { nav.pop() },
+                        onOpenFileMetrics = { station, name -> nav.push(FileMetricsKey(station, name)) },
                     )
                 }
+                entry<FileMetricsKey> { key ->
+                    FileMetricsEntry(station = key.station, name = key.name, level = level, onBack = { nav.pop() })
+                }
+                entry<DebugKey> { key ->
+                    val controller = viewModel(key = "debug-${key.address}") { DebugHolder(key.address, devices.state, openDebugLink) }.controller
+                    DebugScreen(
+                        controller = controller,
+                        address = key.address,
+                        developer = prefs?.detailLevel?.developer,
+                        onBack = { nav.popIfTop { it is DebugKey } },
+                    )
+                }
+                // Smart Sync on Today asks before setting the clock, so the consent shows as on Android.
+                entry<SettingsKey> {
+                    SettingsScreen(
+                        controller = settings,
+                        appVersion = version,
+                        automaticUnits = systemUnits,
+                        showClockSync = true,
+                    )
+                }
+            },
+            modifier = Modifier.fillMaxSize(),
+            bottomBar = { nav ->
+                ShellBottomBar(nav)
+                // A tapped Auto-sync summary opens My devices (#23).
+                val openDevices by devices.openRequested.collectAsState()
+                LaunchedEffect(openDevices) {
+                    if (openDevices) {
+                        nav.toMyDevicesRoot()
+                        devices.openHandled()
+                    }
+                }
+            },
+        )
+    }
+}
+
+/**
+ * Device settings of one Bluetooth sensor. Local network is asked for from the Sync over Wi-Fi card
+ * by browsing for sensors, the iOS prompt. The sticker card scans with VisionKit where the hardware
+ * has it (#21), asking for the camera on the Scan tap, and the sticker can always be typed.
+ */
+@Composable
+private fun DeviceSettingsEntry(address: String, devices: DevicesBridge, links: DeviceConfigLinks, onBack: () -> Unit) {
+    val controller = viewModel(key = "device-settings-$address") { DeviceSettingsHolder(address, devices, links) }.controller
+    val sticker = rememberIosStickerScan(links.scanSticker)
+    DeviceConfigScreen(
+        controller = controller,
+        lanAccess = LanAccess(granted = !devices.state.lanAccessDenied, requestable = true),
+        onBack = onBack,
+        onPlatformAction = { action ->
+            when (action) {
+                DeviceConfigAction.RequestLanAccess -> links.scanLan()
+                DeviceConfigAction.ScanSticker -> sticker.start()
+                else -> Unit
             }
-            TabBar(selected = tab, onSelect = { tab = it })
+        },
+        scan = sticker.scan,
+        canScan = sticker.available,
+    )
+}
+
+/**
+ * My devices with its controller kept per entry. Bluetooth is asked for only from a tap, through the
+ * shared on-demand flow. Swift creates the central manager in [requestBluetooth], which shows the
+ * system prompt, and reports the answer through [CompanionState.bluetoothAuthorizationChanged].
+ */
+@Composable
+private fun MyDevicesEntry(
+    bridge: DevicesBridge,
+    level: DetailLevel,
+    requestBluetooth: () -> Unit,
+    onFiles: () -> Unit,
+    onHistory: () -> Unit,
+    onOpen: (id: String, connect: Boolean) -> Unit,
+) {
+    val controller = viewModel { DevicesHolder(bridge) }.controller
+    val state by controller.state.collectAsState()
+    val companion = bridge.state
+    val access = remember { RuntimeAccess(AccessKind.BLUETOOTH) }
+    var asking by remember { mutableStateOf(false) }
+    val openSettings = rememberOpenAppSettings()
+    access.bind(
+        AccessHooks.statusBased(
+            status = { companion.bluetoothAccess },
+            requestPermission = {
+                asking = true
+                requestBluetooth()
+            },
+            openSettings = openSettings,
+            radioOn = { !companion.bluetoothPoweredOff },
+            // iOS has no in-app switch for the radio. The list says it is off.
+            requestTurnOn = { access.onTurnOnResult() },
+        ),
+    )
+    LaunchedEffect(companion.bluetoothAccess, companion.bluetoothPoweredOff) {
+        access.refresh()
+        if (asking && companion.bluetoothAccess != AccessStatus.NOT_DETERMINED) {
+            asking = false
+            access.onPermissionResult()
+        }
+    }
+    AccessDialogs(access, bluetoothAccessTexts())
+    MyDevicesScreen(
+        state = state,
+        level = level,
+        bluetooth = access,
+        platform = IosDevices,
+        onAction = { action ->
+            when (action) {
+                is DevicesAction.Open -> onOpen(action.id, action.connect)
+                else -> controller.onAction(action)
+            }
+        },
+        topActions = {
+            IconButton(onClick = onFiles) { Icon(AppIcons.Storage, contentDescription = filesTitle()) }
+            IconButton(onClick = onHistory) { Icon(AppIcons.Schedule, contentDescription = historyTitle()) }
+        },
+    )
+}
+
+/** Discover with its controller kept per entry. The shared screen takes Back, or the edge swipe, while a sheet is open. */
+@Composable
+private fun DiscoverEntry(networkAllowed: Boolean, units: UnitSystem, onAddSensor: () -> Unit) {
+    val controller = viewModel { DiscoverHolder() }.controller
+    DiscoverScreen(
+        controller = controller,
+        networkAllowed = networkAllowed,
+        onAddSensor = onAddSensor,
+        units = units,
+    )
+}
+
+/**
+ * Holds the History controller for the History entry. iOS History reads the whole phone archive, the
+ * same index the sync runner writes ([IosArchive]). Its station chips are the archived stations,
+ * oldest latest reading first, and it opens on the one with the latest reading.
+ */
+private class HistoryHolder : ViewModel() {
+    private val stations = IosArchive.index.observeAll().map(::archiveStations)
+    val controller = HistoryController(
+        scope = viewModelScope,
+        reader = IosArchive.reader,
+        tiers = IosArchive.tiers,
+        index = IosArchive.index,
+        currentStation = stations.map { it.lastOrNull() },
+        stations = stations,
+    )
+}
+
+/** The History key of iOS. History reads the phone archive, not one device, so the address is a fixed name. */
+private const val PHONE_ARCHIVE = "archive"
+
+/** History of the phone archive, offline. Index repair runs from launch ([sharedSensorSync]) and is started here too. */
+@Composable
+private fun HistoryEntry(units: UnitSystem, level: DetailLevel, onBack: () -> Unit) {
+    remember { IosArchive.startIndexRepair() }
+    val controller = viewModel { HistoryHolder() }.controller
+    HistoryScreen(
+        controller = controller,
+        units = remember(units) { UnitFormatter(units) },
+        level = level,
+        topBar = { HistoryTopBar(onBack = onBack) },
+    )
+}
+
+/**
+ * Holds the Files controller for the Files entry. iOS Files lists the whole phone archive, with no
+ * owner, so per-file actions come from archive rows only. Exports stage into a fresh run under the
+ * temporary directory, removed once the sheet closes (B7). iOS derives no daily files yet.
+ */
+private class FilesHolder : ViewModel() {
+    val controller = FilesController(
+        scope = viewModelScope,
+        store = IosArchive.store,
+        index = IosArchive.index,
+        space = IosExportSpace.inTemporaryDirectory(),
+        owner = flowOf(null),
+        daily = null,
+    )
+}
+
+/** Holds the inspector of one archived file for its entry. */
+private class FileMetricsHolder : ViewModel() {
+    val controller = FileMetricsController(viewModelScope, IosArchive.store)
+}
+
+/** Files of the phone archive, offline: the list, the inspector and every export. */
+@Composable
+private fun FilesEntry(level: DetailLevel, onBack: () -> Unit, onOpenFileMetrics: (String, String) -> Unit) {
+    val controller = viewModel { FilesHolder() }.controller
+    FilesScreen(controller = controller, level = level, onOpenFileMetrics = onOpenFileMetrics, onBack = onBack)
+}
+
+/** The inspector of one archived file. It only reads the file. */
+@Composable
+private fun FileMetricsEntry(station: String, name: String, level: DetailLevel, onBack: () -> Unit) {
+    val controller = viewModel(key = "$station/$name") { FileMetricsHolder() }.controller
+    LaunchedEffect(station, name) { controller.load(station, name) }
+    val state by controller.state.collectAsState()
+    FileMetricsScreen(state = state, level = level, name = name, onBack = onBack)
+}
+
+/**
+ * The companion page of one sensor: the Wi-Fi session, Wi-Fi access and, at the Developer level,
+ * Debug. Files and History stay one tap away.
+ */
+@Composable
+private fun DevicePage(
+    address: String,
+    units: UnitSystem,
+    level: DetailLevel,
+    nav: TabNavigator,
+    devicePage: DevicePageContent,
+) {
+    Box(Modifier.fillMaxSize()) {
+        val openDebug: ((String) -> Unit)? = if (level.developer) { device -> nav.openDebug(device, level.developer) } else null
+        val openSettings: (() -> Unit)? = if (IosKnown.isPeripheral(address)) ({ nav.push(DeviceSettingsKey(address)) }) else null
+        devicePage(address, units, level, openDebug, openSettings) { nav.pop() }
+        ArchiveShortcuts(
+            onFiles = { nav.push(FilesKey(PHONE_ARCHIVE)) },
+            onHistory = { nav.push(HistoryKey(PHONE_ARCHIVE)) },
+            modifier = Modifier.align(Alignment.TopEnd),
+        )
+    }
+}
+
+/** The companion page body Swift's window supplies: the sensor id, display units, detail level, Debug, Device settings and Back. */
+internal typealias DevicePageContent =
+    @Composable (id: String, units: UnitSystem, level: DetailLevel, openDebug: ((String) -> Unit)?, openSettings: (() -> Unit)?, onBack: () -> Unit) -> Unit
+
+/** Compact Files and History buttons over the top end of the companion page, the iOS way into the phone archive. */
+@Composable
+private fun ArchiveShortcuts(onFiles: () -> Unit, onHistory: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier.statusBarsPadding().padding(FloatingControl.Margin),
+        horizontalArrangement = Arrangement.spacedBy(FloatingControl.Margin),
+    ) {
+        FloatingIconButton(onClick = onFiles, contentDescription = filesTitle()) {
+            Icon(AppIcons.Storage, contentDescription = null)
+        }
+        FloatingIconButton(onClick = onHistory, contentDescription = historyTitle()) {
+            Icon(AppIcons.Schedule, contentDescription = null)
         }
     }
 }
+
+/** The marketing version from Info.plist, as Android shows its version name. */
+private fun appVersion(): String =
+    NSBundle.mainBundle.objectForInfoDictionaryKey("CFBundleShortVersionString") as? String ?: ""
 
 /**
  * The phone's measurement system, recomputed when iOS posts [NSCurrentLocaleDidChangeNotification]
@@ -151,169 +523,4 @@ private fun rememberSystemUnits(): UnitSystem {
         onDispose { center.removeObserver(observer) }
     }
     return system
-}
-
-private class TabSpec(val tab: Tab, val label: String, val icon: ImageVector)
-
-private val Tabs = listOf(
-    TabSpec(Tab.DISCOVER, "Discover", DiscoverIcons.Map),
-    TabSpec(Tab.MY_DEVICES, "My devices", DiscoverIcons.Sensors),
-    TabSpec(Tab.SETTINGS, "Settings", DiscoverIcons.Settings),
-)
-
-/**
- * The bottom tab bar. A neutral brand surface with a hairline on top. Only the selected tab is
- * tinted, Signal blue behind its icon in a curved card (the floating control rule), never a pill.
- */
-@Composable
-private fun TabBar(selected: Tab, onSelect: (Tab) -> Unit) {
-    Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
-        Column {
-            HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .windowInsetsPadding(WindowInsets.navigationBars)
-                    .padding(horizontal = FloatingControl.Margin, vertical = 6.dp)
-                    .selectableGroup(),
-                horizontalArrangement = Arrangement.spacedBy(FloatingControl.Inset),
-            ) {
-                Tabs.forEach { spec ->
-                    TabItem(spec, selected = spec.tab == selected, onClick = { onSelect(spec.tab) }, modifier = Modifier.weight(1f))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun TabItem(spec: TabSpec, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val colors = MaterialTheme.colorScheme
-    Column(
-        modifier
-            .heightIn(min = FloatingControl.Size)
-            .clip(FloatingControl.Shape)
-            .selectable(selected = selected, onClick = onClick, role = Role.Tab)
-            .padding(vertical = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        Box(
-            Modifier
-                .size(width = 56.dp, height = 32.dp)
-                .clip(FloatingControl.SmallShape)
-                .background(if (selected) FloatingControl.Selected else Color.Transparent),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(spec.icon, contentDescription = null, tint = if (selected) FloatingControl.OnSelected else colors.onSurfaceVariant)
-        }
-        Text(
-            spec.label,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (selected) colors.onSurface else colors.onSurfaceVariant,
-        )
-    }
-}
-
-/** The iOS settings so far: the switch for Discover network use (AGENTS.md boundary) and the units. */
-@Composable
-private fun IosSettings(
-    showPublic: Boolean,
-    onShowPublic: (Boolean) -> Unit,
-    unitChoice: UnitSystem,
-    resolvedUnits: UnitSystem,
-    onUnitChoice: (UnitSystem) -> Unit,
-) {
-    val colors = MaterialTheme.colorScheme
-    Column(
-        Modifier
-            .fillMaxSize()
-            .statusBarsPadding()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp)
-            .padding(top = 16.dp, bottom = 32.dp),
-    ) {
-        Text("Settings", style = MaterialTheme.typography.headlineMedium)
-        Spacer(Modifier.height(24.dp))
-        SettingsCard {
-            Text("Units", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(8.dp))
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                UnitSystem.entries.forEachIndexed { i, system ->
-                    SegmentedButton(
-                        selected = unitChoice == system,
-                        onClick = { onUnitChoice(system) },
-                        shape = SegmentedButtonDefaults.itemShape(i, UnitSystem.entries.size, MaterialTheme.shapes.small),
-                        colors = SegmentedButtonDefaults.colors(
-                            activeContainerColor = FloatingControl.Selected,
-                            activeContentColor = FloatingControl.OnSelected,
-                            activeBorderColor = colors.outlineVariant,
-                            inactiveContainerColor = colors.surface,
-                            inactiveContentColor = colors.onSurface,
-                            inactiveBorderColor = colors.outlineVariant,
-                        ),
-                        label = { Text(unitLabel(system)) },
-                    )
-                }
-            }
-            if (unitChoice == UnitSystem.AUTO) {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "Follows your phone's region, now ${unitLabel(resolvedUnits)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.onSurfaceVariant,
-                )
-            }
-        }
-        Spacer(Modifier.height(16.dp))
-        // The one switch for Discover network use (feed and basemap), AGENTS.md boundary.
-        SettingsCard {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = FloatingControl.Size)
-                    .toggleable(value = showPublic, onValueChange = onShowPublic, role = Role.Switch),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("Show public sensors", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                Switch(
-                    checked = showPublic,
-                    onCheckedChange = null,
-                    colors = SwitchDefaults.colors(
-                        checkedTrackColor = FloatingControl.Selected,
-                        checkedThumbColor = FloatingControl.OnSelected,
-                        checkedBorderColor = FloatingControl.Selected,
-                        uncheckedTrackColor = colors.surface,
-                        uncheckedThumbColor = colors.outline,
-                        uncheckedBorderColor = colors.outline,
-                    ),
-                )
-            }
-            Text(
-                "When off, the map uses no internet and shows only sample data.",
-                style = MaterialTheme.typography.bodySmall,
-                color = colors.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-/** One group of settings on a brand surface card, curved like a floating control. */
-@Composable
-private fun SettingsCard(content: @Composable () -> Unit) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = FloatingControl.Shape,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
-    ) {
-        Column(Modifier.padding(16.dp)) { content() }
-    }
-}
-
-private fun unitLabel(system: UnitSystem): String = when (system) {
-    UnitSystem.AUTO -> "Automatic"
-    UnitSystem.METRIC -> "Metric"
-    UnitSystem.IMPERIAL -> "Imperial"
 }

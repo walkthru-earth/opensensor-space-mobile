@@ -2,16 +2,11 @@ package earth.walkthru.aqsync.data.sync
 
 import earth.walkthru.aqsync.data.ble.DeviceSession
 import earth.walkthru.aqsync.data.fake.FakeTransport
-import earth.walkthru.aqsync.data.history.HistoryIndexer
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
-import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.After
@@ -28,6 +23,10 @@ import java.nio.file.Files
 import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.CRC32
 
+/**
+ * The shared engine over Android's adapters (`FileArchive`, Room, the History indexer). The adapter-free
+ * cases live in `:core:sync` commonTest (`SyncEngineTest`).
+ */
 class ConcurrentArchiveTest {
     private lateinit var tmp: File
     private lateinit var archive: FileArchive
@@ -41,7 +40,7 @@ class ConcurrentArchiveTest {
     fun setUp() {
         tmp = Files.createTempDirectory("opensensor-concurrent-archive").toFile()
         archive = FileArchive(tmp)
-        engine = SyncEngine(archive, dao, HistoryIndexer(archive, dao))
+        engine = androidSyncEngine(archive, dao)
     }
 
     @After
@@ -187,20 +186,15 @@ class ConcurrentArchiveTest {
     }
 
     @Test
-    fun `cancelled waiter does not drop a writer lease or block later transfers`() = runBlocking {
-        withTimeout(10_000) {
-            val holding = CompletableDeferred<Unit>()
-            val release = CompletableDeferred<Unit>()
-            val owner = launch {
-                archive.withWriterLease("station-a", name) { holding.complete(Unit); release.await() }
-            }
-            holding.await()
-            val waiter = launch(start = CoroutineStart.UNDISPATCHED) { archive.withWriterLease("station-a", name) { error("cancelled waiter ran") } }
-            waiter.cancelAndJoin()
-            release.complete(Unit)
-            owner.join()
-            assertTrue(download(device(), "station-a") is FileOutcome.Synced)
-        }
+    fun aDirectoryAtTheFinalPathFailsOnlyThatFileAndKeepsTheVerifiedPartial() = runBlocking {
+        assertTrue(archive.fileFor("station-a", name).mkdirs())
+
+        val outcome = download(device(), "station-a")
+
+        assertTrue(outcome is FileOutcome.Failed && outcome.storage)
+        assertTrue(archive.fileFor("station-a", name).isDirectory)
+        assertTrue(archive.partialLengths("station-a").containsKey(name))
+        assertTrue(dao.rows.isEmpty())
     }
 
     private class InMemoryDao : ArchivedFileDao {

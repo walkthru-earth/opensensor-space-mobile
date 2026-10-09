@@ -14,9 +14,9 @@ Derived daily exports are separate from the original sensor files.
 
 iOS raw files live in the app's private
 `Library/Application Support/SensorArchive/<station>/<relative Hive path>`, excluded from
-cloud backup. **Export Parquet files** opens Apple's Files picker to save a copy of all
-finalized files, preserving station/Hive directories. Partial downloads and `.verified.json`
-size/CRC receipts are not exported. The original archive stays private and supports resume;
+cloud backup. **Files** (a button next to History on My devices) shares one file, all files,
+or a zip of the archive, and saves the zip through Apple's Files picker, preserving
+station/Hive paths. Partial downloads and `.verified.json` size/CRC receipts are not exported. The original archive stays private and supports resume;
 export is available without connecting a sensor. See [ios-migration.md](ios-migration.md)
 for lifecycle and validation limits.
 
@@ -191,13 +191,21 @@ Unrelated crypto, programming and database failures also propagate.
 - **`openSession` rewrites every `KnownDevice` column.** The post-`info` upsert carries `previous?.autoSync` and `previous?.companionAssociationId`; future columns must be preserved too. Identity checks run before the upsert, and a station change deliberately discards the old token and port.
 - `derived_day.dailyFile == null` means the daily Parquet failed → its signature is treated as stale next pass.
 
-## DataStore (`AppSettings`)
+## DataStore (`:core:settings`, `SettingsRepository`)
+
+One Preferences DataStore on both platforms, `datastore/settings.preferences_pb`. Android keeps it
+under `filesDir` (the file the old `preferencesDataStore("settings")` wrote, so an upgrade keeps every
+value). iOS keeps it under Application Support and imports its old `NSUserDefaults` keys
+`discover.showPublicSensors` and `settings.unitSystem` once, then removes them. Android reads it
+through `AppSettings`. `SettingsRepositoryTest` holds the golden key list.
 
 | Key | Type | Meaning |
 | --- | --- | --- |
-| `detail_level` | string (`SIMPLE` / `DETAILED` / `DEVELOPER`) | the one user setting |
-| `advanced_mode` | boolean (legacy) | unset `detail_level` + `advanced_mode = true` → `DEVELOPER` |
-| `unit_system` | string (`AUTO` / `METRIC` / `IMPERIAL`) | display units, missing = `AUTO`. Display only, Room, Parquet and exports stay SI. iOS keeps the same names in `NSUserDefaults` key `settings.unitSystem` |
+| `detail_level` | string (`SIMPLE` / `DETAILED` / `DEVELOPER`) | the detail level |
+| `advanced_mode` | boolean (legacy) | unset `detail_level` + `advanced_mode = true` → `DEVELOPER`. Still written with the level |
+| `clock_sync_mode` | string (`ASK` / `AUTOMATIC` / `NEVER`) | Smart Sync clock consent, missing = `ASK` |
+| `show_public_sensors` | boolean | Discover network switch, missing = on |
+| `unit_system` | string (`AUTO` / `METRIC` / `IMPERIAL`) | display units, missing = `AUTO`. Display only, Room, Parquet and exports stay SI |
 
 ## Files under `filesDir`
 
@@ -210,6 +218,13 @@ derived/v1/<station>/day=YYYY-MM-DD.manifest.json  sources (name, crc32, time_an
 
 Derived files are written atomically (temp + rename) and **never inside `archive/`**, so the raw
 zip stays the byte-exact mirror and the derived zip is the small analysis-ready export.
+
+These relative paths are defined once, in `ArchiveLayout` (`:core:archive`), for both phones. The
+root is Android `filesDir`. iOS still keeps its finals under `Application Support/SensorArchive/`
+with partials beside them and a `<name>.verified.json` receipt each. `ArchiveLayout` names those
+legacy forms so the wave 3 move onto this layout can recognise them. The "is synced" receipt is the
+`archived_file` record (`ArchiveRecord` behind the `ArchiveIndex` port), never a file. The archive
+ports have no delete. A verified copy is never removed by the app (audit C, B6).
 
 ## Backup
 

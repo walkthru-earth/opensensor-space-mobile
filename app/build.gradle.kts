@@ -86,6 +86,14 @@ android {
         }
     }
 
+    // Every language ships in the base APK. The per-app language picker and AppLanguage (which moves
+    // the resolved language to the front) then never meet a language whose resources Play left out.
+    bundle {
+        language {
+            enableSplit = false
+        }
+    }
+
     buildFeatures {
         compose = true
         aidl = false
@@ -204,11 +212,29 @@ dependencies {
     implementation(project(":core:protocol"))
     implementation(project(":core:parquet"))
     implementation(project(":core:history"))
+    // Request session, sync policies, planner and progress maths, shared with iOS.
+    implementation(project(":core:sync"))
     // The Discover map (shared Compose with iOS) and the public feed port behind it.
     implementation(project(":feature:discover"))
+    implementation(project(":feature:history"))
+    // The Today screen, shared Compose with iOS. The ViewModel adapts the repository to its port.
+    implementation(project(":feature:today"))
     implementation(project(":ui:designsystem"))
+    // The shared permission policy. The Android launchers stay in ui/permissions/RuntimeAccess.kt.
+    implementation(project(":ui:permissions"))
     implementation(project(":core:publicfeed"))
     implementation(project(":core:units"))
+    // App preferences on the shared DataStore, same file and keys as before (data/settings).
+    implementation(project(":core:settings"))
+    // The Settings screen, shared Compose with iOS.
+    implementation(project(":feature:settings"))
+    implementation(project(":feature:devices"))
+    // The Device section (pairing, Wi-Fi, Sync over Wi-Fi, bonds, sticker), shared Compose with iOS.
+    implementation(project(":feature:device"))
+    // The Files screen, the file inspector and the shared export (docs/screens.md, Files).
+    implementation(project(":feature:files"))
+    // The Debug screen, shared Compose with iOS.
+    implementation(project(":feature:debug"))
     h3Natives(libs.h3)
     // ZSTD pages of external GeoParquet (PyArrow/GDAL default in many pipelines): the one native library,
     // registered into :core:parquet's codec SPI by data/history/parquet/AppParquetCodecs. Prebuilt AAR;
@@ -264,17 +290,16 @@ dependencies {
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.espresso.core)
 
-    // Navigation
-    implementation(libs.androidx.navigation3.ui)
+    // Navigation. The shared shell brings Navigation 3 UI and the ViewModel entry decorator, which
+    // resolve on Android to the androidx artifacts (docs/adr/0001-shared-navigation.md).
+    implementation(project(":feature:shell"))
     implementation(libs.androidx.navigation3.runtime)
-    implementation(libs.androidx.lifecycle.viewmodel.navigation3)
 
     // Serialization (info/status/live JSON) and coroutines on Android
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
 
-    // Icons and SAF helpers
-    implementation(libs.androidx.compose.material.icons.extended)
+    // SAF helpers. Icons are vendored vectors in :ui:designsystem (AppIcons), not material-icons-extended.
     implementation(libs.androidx.documentfile)
     // System-hosted barcode UI; no app camera permission. Manual entry remains available offline.
     implementation(libs.google.code.scanner)

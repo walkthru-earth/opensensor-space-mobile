@@ -4,13 +4,7 @@ import android.app.Activity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.RestartAlt
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Icon
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -24,24 +18,27 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import earth.walkthru.aqsync.R
-import earth.walkthru.aqsync.data.SensorLabel
-import earth.walkthru.aqsync.data.protocol.PairMode
 import earth.walkthru.aqsync.ui.components.CollectEvents
 import earth.walkthru.aqsync.ui.components.showScreenMessage
-import earth.walkthru.aqsync.ui.device.cards.LanAccess
-import earth.walkthru.aqsync.ui.device.cards.StickerScan
 import earth.walkthru.aqsync.ui.permissions.AccessDialogs
 import earth.walkthru.aqsync.ui.permissions.LanPermission
 import earth.walkthru.aqsync.ui.permissions.rememberBluetoothAccess
 import earth.walkthru.aqsync.ui.permissions.rememberLocalNetworkAccess
 import earth.walkthru.aqsync.ui.permissions.rememberNotificationPermission
+import earth.walkthru.opensensor.device.DeviceConfigAction
+import earth.walkthru.opensensor.device.DeviceConfigEffects
+import earth.walkthru.opensensor.device.LanAccess
+import earth.walkthru.opensensor.device.StickerScan
+import earth.walkthru.opensensor.device.StickerScans
+import earth.walkthru.opensensor.device.onAction
 
 /**
  * Stateful entry for the Device screen: the ViewModel, one-off events, the companion-device and
- * barcode launchers, permissions and every confirmation dialog. [DeviceScreen] gets plain state.
+ * barcode launchers and permissions. [DeviceScreen] gets plain state.
  *
- * The reboot dialog here is the only call path to `rebootAndReconnect()`. Rotate token, forget
- * bonds and pairing mode `none` are confirmed here too.
+ * The four confirmations (restart, replace token, forget paired phones, pairing mode `none`) are
+ * the shared [DeviceConfigEffects] dialogs over the ViewModel's controller, the same ones iOS shows.
+ * Its reboot confirm is the only call path to `rebootAndReconnect()`.
  */
 @Composable
 fun DeviceRoute(
@@ -55,14 +52,10 @@ fun DeviceRoute(
     viewModel: DeviceViewModel = hiltViewModel<DeviceViewModel, DeviceViewModel.Factory>(key = address, creationCallback = { it.create(address) }),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    val sensorInstallation by viewModel.sensorInstallation.collectAsStateWithLifecycle()
-    val sensorHistory by viewModel.sensorHistory.collectAsStateWithLifecycle()
+    val controller = viewModel.controller
+    val config by controller.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
-    var confirmReboot by remember { mutableStateOf(false) }
-    var confirmRotate by remember { mutableStateOf(false) }
-    var confirmBonds by remember { mutableStateOf(false) }
-    var confirmNoPasskey by remember { mutableStateOf(false) }
     var stickerScan by remember { mutableStateOf<StickerScan?>(null) }
     val scanUnrecognized = stringResource(R.string.sensor_scan_unrecognized)
     val scanUnavailable = stringResource(R.string.sensor_scan_unavailable)
@@ -72,6 +65,8 @@ fun DeviceRoute(
     CollectEvents(viewModel.events) { ev ->
         snackbar.showScreenMessage(res, ev) { snackbar.showSnackbar(clockHint) }
     }
+    // Confirm dialogs and the controller's own notices (validation, sensor saved).
+    DeviceConfigEffects(controller, snackbar)
     // The companion-device association is a system dialog launched from an IntentSender.
     val companionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
         viewModel.onCompanionResult(result.resultCode == Activity.RESULT_OK)
@@ -92,9 +87,8 @@ fun DeviceRoute(
 
     DeviceScreen(
         state = state,
+        config = config,
         extras = DeviceExtras(
-            sensorInstallation = sensorInstallation,
-            sensorHistoryCount = sensorHistory.size,
             stickerScan = stickerScan,
             lanAccess = LanAccess(localNetwork.granted, requestable = LanPermission.name != null),
         ),
@@ -108,81 +102,24 @@ fun DeviceRoute(
                 DeviceAction.OpenSettings -> onOpenSettings()
                 DeviceAction.Disconnect -> { viewModel.disconnect(); onDisconnected() }
                 DeviceAction.Reconnect -> bluetooth.run { viewModel.reconnect() }
-                DeviceAction.RefreshConfig -> viewModel.refreshConfig()
+                DeviceAction.RefreshConfig -> controller.refresh()
                 is DeviceAction.SetAutoSync -> notificationPermission.ensureThen { viewModel.setAutoSync(action.on) }
                 DeviceAction.SetupCompanion -> notificationPermission.ensureThen { viewModel.setupCompanion() }
                 DeviceAction.RemoveCompanion -> viewModel.removeCompanion()
-                DeviceAction.ScanSticker -> GmsBarcodeScanning.getClient(context).startScan()
-                    .addOnSuccessListener { barcode ->
-                        val value = barcode.rawValue.orEmpty()
-                        stickerScan = if (SensorLabel.parse(value) == null) {
-                            StickerScan(null, scanUnrecognized, System.nanoTime())
-                        } else {
-                            StickerScan(value.trim(), null, System.nanoTime())
-                        }
-                    }
-                    .addOnFailureListener { stickerScan = StickerScan(null, scanUnavailable, System.nanoTime()) }
-                is DeviceAction.SaveSensor -> viewModel.setSensorIdentity(action.sticker, action.batchEstimate, action.source)
-                is DeviceAction.SavePairing ->
-                    if (action.mode == PairMode.NONE) confirmNoPasskey = true else viewModel.setPairing(action.mode, action.pin)
-                DeviceAction.RequestReboot -> confirmReboot = true
-                is DeviceAction.SetWifiOn -> viewModel.setWifiOn(action.on)
-                DeviceAction.ScanWifi -> viewModel.scanWifi()
-                DeviceAction.ClearWifiScan -> viewModel.clearScan()
-                is DeviceAction.JoinWifi -> viewModel.joinWifi(action.ssid, action.psk, action.open)
-                DeviceAction.RequestLanAccess -> localNetwork.run { }
-                is DeviceAction.SetLanOn -> if (action.on) localNetwork.run { viewModel.setLanOn(true) } else viewModel.setLanOn(false)
-                // The token is fetched over Bluetooth. Local network is asked for here because the
-                // token is only useful with it, but a refusal does not block the fetch.
-                DeviceAction.FetchToken -> localNetwork.run(onDeclined = { viewModel.fetchToken() }) { viewModel.fetchToken() }
-                DeviceAction.RequestRotateToken -> confirmRotate = true
-                DeviceAction.ReconnectOverBluetooth -> bluetooth.run { viewModel.reconnectOverBluetooth() }
-                DeviceAction.RequestForgetBonds -> confirmBonds = true
+                is DeviceAction.Config -> when (val a = action.action) {
+                    DeviceConfigAction.ScanSticker -> GmsBarcodeScanning.getClient(context).startScan()
+                        // The same reading as iOS (StickerScans). A cancel has no listener and leaves the card as it was.
+                        .addOnSuccessListener { barcode -> stickerScan = StickerScans.read(stickerScan, barcode.rawValue.orEmpty(), scanUnrecognized) }
+                        .addOnFailureListener { stickerScan = StickerScans.failed(stickerScan, scanUnavailable) }
+                    DeviceConfigAction.RequestLanAccess -> localNetwork.run { }
+                    is DeviceConfigAction.SetLanOn -> if (a.on) localNetwork.run { controller.setLanOn(true) } else controller.setLanOn(false)
+                    // The token is fetched over Bluetooth. Local network is asked for here because the
+                    // token is only useful with it, but a refusal does not block the fetch.
+                    DeviceConfigAction.FetchToken -> localNetwork.run(onDeclined = { controller.fetchToken() }) { controller.fetchToken() }
+                    DeviceConfigAction.ReconnectOverBluetooth -> bluetooth.run { controller.reconnectOverBluetooth() }
+                    else -> controller.onAction(a)
+                }
             }
         },
     )
-
-    if (confirmReboot) {
-        AlertDialog(
-            onDismissRequest = { confirmReboot = false },
-            icon = { Icon(Icons.Rounded.RestartAlt, contentDescription = null) },
-            title = { Text(stringResource(R.string.reboot_title)) },
-            text = { Text(stringResource(R.string.reboot_confirm)) },
-            // The only path to REBOOT in the app. Single-fire. The flag is cleared before the call,
-            // and the repository refuses a second call while the first is in flight or a sync runs.
-            confirmButton = {
-                TextButton(onClick = { if (confirmReboot) { confirmReboot = false; viewModel.reboot() } }) { Text(stringResource(R.string.reboot_button)) }
-            },
-            dismissButton = { TextButton(onClick = { confirmReboot = false }) { Text(stringResource(R.string.action_cancel)) } },
-        )
-    }
-    if (confirmRotate) {
-        AlertDialog(
-            onDismissRequest = { confirmRotate = false },
-            title = { Text(stringResource(R.string.rotate_title)) },
-            text = { Text(stringResource(R.string.rotate_confirm)) },
-            confirmButton = { TextButton(onClick = { confirmRotate = false; viewModel.rotateToken() }) { Text(stringResource(R.string.rotate_button)) } },
-            dismissButton = { TextButton(onClick = { confirmRotate = false }) { Text(stringResource(R.string.action_cancel)) } },
-        )
-    }
-    if (confirmBonds) {
-        AlertDialog(
-            onDismissRequest = { confirmBonds = false },
-            title = { Text(stringResource(R.string.bonds_forget)) },
-            text = { Text(stringResource(R.string.bonds_confirm)) },
-            confirmButton = { TextButton(onClick = { confirmBonds = false; viewModel.clearBonds() }) { Text(stringResource(R.string.bonds_forget_button)) } },
-            dismissButton = { TextButton(onClick = { confirmBonds = false }) { Text(stringResource(R.string.action_cancel)) } },
-        )
-    }
-    if (confirmNoPasskey) {
-        AlertDialog(
-            onDismissRequest = { confirmNoPasskey = false },
-            title = { Text(stringResource(R.string.pairing_none_title)) },
-            text = { Text(stringResource(R.string.pairing_none_confirm)) },
-            confirmButton = {
-                TextButton(onClick = { confirmNoPasskey = false; viewModel.setPairing(PairMode.NONE, null) }) { Text(stringResource(R.string.pairing_none_button)) }
-            },
-            dismissButton = { TextButton(onClick = { confirmNoPasskey = false }) { Text(stringResource(R.string.action_cancel)) } },
-        )
-    }
 }

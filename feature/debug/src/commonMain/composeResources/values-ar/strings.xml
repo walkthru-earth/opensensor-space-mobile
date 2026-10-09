@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="nav_debug">تصحيح الأخطاء</string>
+    <string name="action_back">رجوع</string>
+    <string name="transport_ble">Bluetooth</string>
+    <string name="transport_lan">Wi-Fi LAN</string>
+    <string name="transport_fake">جهاز وهمي</string>
+    <string name="conn_disconnected">غير متصل</string>
+    <string name="conn_connecting">جارٍ الاتصال…</string>
+    <string name="msg_background_owns_command">المزامنة في الخلفية تستخدم هذا المستشعر. انتظر حتى تنتهي.</string>
+    <string name="debug_link_busy">الاتصال بهذا المستشعر مشغول. حاول مرة أخرى بعد قليل.</string>
+
+    <string name="ago_just_now">الآن</string>
+    <string name="ago_seconds">قبل %1$d ث</string>
+    <string name="ago_minutes">قبل %1$d د</string>
+    <string name="ago_hours">قبل %1$d س</string>
+    <string name="ago_days">قبل %1$d يوم</string>
+
+    <plurals name="scan_files">
+        <item quantity="zero">%1$d ملف</item>
+        <item quantity="one">%1$d ملف</item>
+        <item quantity="two">%1$d ملفان</item>
+        <item quantity="few">%1$d ملفات</item>
+        <item quantity="many">%1$d ملفًا</item>
+        <item quantity="other">%1$d ملف</item>
+    </plurals>
+    <plurals name="fm_rows_count">
+        <item quantity="zero">%1$d صف</item>
+        <item quantity="one">%1$d صف</item>
+        <item quantity="two">%1$d صفان</item>
+        <item quantity="few">%1$d صفوف</item>
+        <item quantity="many">%1$d صفًا</item>
+        <item quantity="other">%1$d صف</item>
+    </plurals>
+
+    <string name="debug_transport_title">وسيلة النقل النشطة</string>
+    <string name="debug_transport">وسيلة النقل</string>
+    <string name="debug_endpoint">نقطة الاتصال</string>
+    <string name="debug_state">الحالة</string>
+    <string name="debug_sync_title">تشخيص المزامنة الذكية</string>
+    <string name="debug_archive">الأرشيف</string>
+    <string name="debug_real_utc">UTC حقيقي</string>
+    <string name="debug_estimate">تقدير من التشغيل نفسه</string>
+    <string name="debug_unplaced">بلا موضع</string>
+    <plurals name="debug_boots">
+        <item quantity="zero">%1$d تشغيل</item>
+        <item quantity="one">%1$d تشغيل</item>
+        <item quantity="two">%1$d تشغيلان</item>
+        <item quantity="few">%1$d تشغيلات</item>
+        <item quantity="many">%1$d تشغيلًا</item>
+        <item quantity="other">%1$d تشغيل</item>
+    </plurals>
+    <string name="debug_sync_none">لم تُسجَّل قرارات للمزامنة الذكية بعد.</string>
+    <string name="debug_status_title">JSON الحالة، مباشر</string>
+    <string name="debug_request_status">طلب الحالة</string>
+    <string name="debug_status_none">لم تصل أي حالة بعد.</string>
+    <string name="debug_config_title">JSON الإعدادات</string>
+    <string name="debug_config_read">قراءة الإعدادات</string>
+    <string name="debug_config_none">لم يصل CONFIG. جهاز بالبروتوكول v1، أو لم تُقرأ بعد.</string>
+    <plurals name="debug_frames_title">
+        <item quantity="zero">آخر %1$d إطار خام، الأحدث أولًا</item>
+        <item quantity="one">آخر إطار خام</item>
+        <item quantity="two">آخر %1$d إطارين خامين، الأحدث أولًا</item>
+        <item quantity="few">آخر %1$d إطارات خام، الأحدث أولًا</item>
+        <item quantity="many">آخر %1$d إطارًا خامًا، الأحدث أولًا</item>
+        <item quantity="other">آخر %1$d إطار خام، الأحدث أولًا</item>
+    </plurals>
+    <string name="debug_clear">مسح</string>
+    <string name="debug_frames_none">لم يُلتقط شيء بعد.</string>
+    <string name="debug_frames_note">TX طلبات مكتوبة إلى قناة التحكم. RX إطارات من قناة الاستجابة. الحالة المرسلة تلقائيًا وJSON المباشر غير مدرجة هنا. محتوى TOKEN وطلبات SET_CONFIG محجوبة.</string>
+    <string name="debug_log_title">سجل الجهاز</string>
+    <string name="debug_log_fetch">جلب</string>
+    <string name="debug_log_refresh">تحديث</string>
+    <string name="debug_log_idle">يجلب أحدث 8 KiB من السجل التسلسلي للجهاز. نص للبشر، وليس واجهة برمجية.</string>
+    <string name="debug_log_loading">جارٍ الجلب…</string>
+    <string name="debug_log_failed">تعذّرت قراءة سجل الجهاز. %1$s</string>
+    <string name="debug_log_summary">أُعيد %1$d B من أصل %2$d B سُجّلت منذ التشغيل</string>
+    <string name="debug_log_incomplete">وصل %1$d B لكن LOG_END يقول %2$d B. قد يكون جزء مفقودًا.</string>
+    <string name="debug_log_empty">فارغ</string>
+    <string name="debug_raw_title">أمر خام</string>
+    <string name="debug_raw_info1">اكتب بايتات hex لطلب تحكم واحد. البايت الأول هو رمز العملية.</string>
+    <string name="debug_raw_info2">تُجمع إطارات الرد حتى يهدأ الجهاز لمدة 1.5 ث. يجيب STATUS على قناة الحالة فقط.</string>
+    <string name="debug_raw_info3">القراءة وتغييرات الحالة الموثّقة فقط هي الخيار الحكيم هنا. لا يحذف الجهاز أو يعيد كتابة أي شيء عند الطلب، لذا أسوأ احتمال هو رفض الإطار. يبقى REBOOT وSET_CONFIG في شاشة الجهاز.</string>
+    <string name="debug_raw_examples">01 LIST · 07 STATUS · 08 GET_CONFIG · 0c 0020 LOG_TAIL · 0d GET_TOKEN</string>
+    <string name="debug_raw_hex">hex</string>
+    <string name="debug_raw_send">إرسال</string>
+    <plurals name="debug_raw_frames">
+        <item quantity="zero">%1$d إطار</item>
+        <item quantity="one">%1$d إطار</item>
+        <item quantity="two">%1$d إطاران</item>
+        <item quantity="few">%1$d إطارات</item>
+        <item quantity="many">%1$d إطارًا</item>
+        <item quantity="other">%1$d إطار</item>
+    </plurals>
+    <string name="debug_raw_invalid_hex">ليست قيمة hex صالحة.</string>
+    <string name="debug_raw_bad_length">الطلب من 1 إلى 512 بايت.</string>
+    <string name="debug_raw_needs_confirmation">لا يُرسل %1$s من هنا. استخدم شاشة الجهاز، فهي تطلب التأكيد.</string>
+    <!-- Debug frames list, screen reader words for the direction arrow. -->
+    <string name="debug_frame_sent">مُرسَل</string>
+    <string name="debug_frame_received">مُستقبَل</string>
+    <string name="debug_raw_no_response">لا إطارات رد خلال فترة الهدوء.</string>
+</resources>

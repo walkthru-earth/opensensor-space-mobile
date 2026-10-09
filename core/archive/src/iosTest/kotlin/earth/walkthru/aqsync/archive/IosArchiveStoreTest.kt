@@ -1,0 +1,109 @@
+@file:OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+
+package earth.walkthru.aqsync.archive
+
+import earth.walkthru.aqsync.data.protocol.ParquetVerify
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.test.runTest
+import platform.Foundation.NSFileManager
+import platform.Foundation.NSTemporaryDirectory
+import platform.Foundation.NSUUID
+import kotlin.test.AfterTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
+
+private fun tempRoot(): String = NSTemporaryDirectory().trimEnd('/') + "/archive-test-" + NSUUID().UUIDString()
+
+class IosArchiveStoreContractTest : ArchiveStoreContract() {
+    private val base = tempRoot()
+
+    override fun newStore(): ArchiveStore = IosArchiveStore("$base/SensorArchive", "$base/archive-partial", Dispatchers.Unconfined)
+    override fun newIndex(): ArchiveIndex = ReceiptArchiveIndex("$base/SensorArchive", Dispatchers.Unconfined).also {
+        IosFiles.prepareRoot("$base/SensorArchive")
+    }
+
+    @AfterTest
+    fun cleanUp() {
+        NSFileManager.defaultManager.removeItemAtPath(base, null)
+    }
+}
+
+/** What the iPhone archive written by earlier builds needs from the shared store and index. */
+class IosArchiveLegacyTest {
+    private val base = tempRoot()
+    private val finals = "$base/SensorArchive"
+    private val store = IosArchiveStore(finals, "$base/archive-partial", Dispatchers.Unconfined)
+    private val station = "53315f5f-cb85-4d8d-b623-d56266084189"
+    private val key = ArchiveKey(station, "station=$station/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet")
+    private val bytes = ParquetVerify.MAGIC + ByteArray(40) { it.toByte() } + ParquetVerify.MAGIC
+    private val meta = PartialMeta(bytes.size.toLong(), ParquetVerify.crc32(bytes))
+    private val dir get() = "$finals/$station/" + key.name.substringBeforeLast('/')
+    private val final get() = "$finals/$station/${key.name}"
+
+    @AfterTest
+    fun cleanUp() {
+        NSFileManager.defaultManager.removeItemAtPath(base, null)
+    }
+
+    private fun writeFile(path: String, content: ByteArray) {
+        IosFiles.mkdirs(path.substringBeforeLast('/'))
+        IosFiles.writeAtomically(path, content)
+    }
+
+    @Test
+    fun aLegacyPartialWithTheSameMetaIsAdoptedAndResumes() = runTest {
+        writeFile("$final.${meta.size}-${meta.crc32.toString(16)}.partial", bytes.copyOfRange(0, 10))
+        writeFile("$final.99-abc.partial", ByteArray(3))
+        assertEquals(mapOf(key.name to 10L), store.partialLengths(station))
+        store.openPartial(key, meta).use { w ->
+            assertEquals(10, w.resumeFrom)
+            w.writeAt(10, bytes.copyOfRange(10, bytes.size))
+        }
+        assertEquals(IosFiles.Kind.ABSENT, IosFiles.kind("$final.99-abc.partial"))
+        assertEquals(ParquetVerify.Result.Ok, ArchiveVerifier.verify(store.reader(key, partial = true), meta))
+        store.commit(key)
+        assertTrue(bytes.contentEquals(store.reader(key).read(0, bytes.size)))
+        assertEquals(listOf(key), store.listFinal())
+    }
+
+    @Test
+    fun aLegacyReceiptReadsAsARecordWithoutAFingerprint() = runTest {
+        writeFile(final, bytes)
+        writeFile("$final.verified.json", """{"size":${bytes.size},"crc":${meta.crc32}}""".encodeToByteArray())
+        val record = assertNotNull(ReceiptArchiveIndex(finals, Dispatchers.Unconfined).get(key))
+        assertEquals(bytes.size.toLong(), record.bytes)
+        assertEquals(meta.crc32, record.crc32)
+        assertEquals("", record.sha256)
+        assertEquals(listOf(key), store.listFinal(station))
+    }
+
+    @Test
+    fun aReceiptKeepsTheOlderKeysAndSurvivesAReload() = runTest {
+        writeFile(final, bytes)
+        val index = ReceiptArchiveIndex(finals, Dispatchers.Unconfined)
+        index.put(ArchiveRecord(station, key.name, bytes.size.toLong(), meta.crc32, "ab", 7, "dev", rows = 2, purpose = "telemetry"))
+        val text = assertNotNull(IosFiles.readSmall("$final.verified.json", 4096)).decodeToString()
+        assertTrue(text.contains("\"size\":${bytes.size}") && text.contains("\"crc\":${meta.crc32}"))
+        val again = assertNotNull(ReceiptArchiveIndex(finals, Dispatchers.Unconfined).get(key))
+        assertEquals(2L, again.rows)
+        assertEquals("ab", again.sha256)
+        assertEquals("telemetry", again.purpose)
+    }
+
+    @Test
+    fun aReceiptWithoutItsFileIsNotSynced() = runTest {
+        writeFile("$final.verified.json", """{"size":${bytes.size},"crc":${meta.crc32}}""".encodeToByteArray())
+        assertEquals(null, ReceiptArchiveIndex(finals, Dispatchers.Unconfined).get(key))
+    }
+
+    @Test
+    fun aSymlinkInTheArchiveIsRefused() = runTest {
+        IosFiles.mkdirs("$finals/$station")
+        IosFiles.mkdirs("$base/elsewhere")
+        NSFileManager.defaultManager.createSymbolicLinkAtPath("$finals/$station/station=$station", "$base/elsewhere", null)
+        assertFailsWith<IllegalStateException> { store.exists(key) }
+    }
+}

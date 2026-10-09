@@ -1,0 +1,373 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Arabic copy, machine drafted and awaiting a native speaker's review (docs/parity-decisions.md).
+  Same keys as values/strings.xml. Same copy rules (docs/cross-platform-guide.md, Copy). No em dashes,
+  no colons and no semicolons in sentences, the Arabic semicolon included. Units, model names and
+  protocol tokens stay in Latin. Every plural carries Arabic's six forms.
+-->
+<resources>
+    <string name="app_name">opensensor.space</string>
+    <!-- The language this folder holds, read by AppLanguage. Not copy, keep the tag. -->
+    <string name="locale_tag">ar</string>
+
+    <!-- Common -->
+    <string name="action_cancel">إلغاء</string>
+    <string name="action_not_now">ليس الآن</string>
+    <string name="action_reconnect">إعادة الاتصال</string>
+    <string name="nav_debug">تصحيح الأخطاء</string>
+    <string name="nav_settings">الإعدادات</string>
+    <string name="nav_disconnect">قطع الاتصال</string>
+    <string name="event_clock_on_today">افتح اليوم وشغّل المزامنة الذكية لتأكيد تحديث الساعة.</string>
+
+    <!-- Scan (Home) -->
+    <string name="scan_fake">جهاز وهمي للتصحيح</string>
+    <string name="scan_fake_lan">جهاز وهمي للتصحيح (عبر LAN)</string>
+    <string name="scan_more">المزيد</string>
+
+    <!-- Today -->
+    <string name="today_title">اليوم</string>
+
+    <!-- Moods, one per WHO 2021 step. The edges live in :core:airquality. Only the words are here. -->
+    <string name="mood_fresh_title">هواء نقي</string>
+    <string name="mood_fair_title">مقبول</string>
+    <string name="mood_hazy_title">يميل إلى الضبابية</string>
+    <string name="mood_poor_title">سيئ</string>
+    <string name="mood_smoky_title">دخاني</string>
+    <string name="mood_thick_title">دخان كثيف</string>
+    <!-- WHO 2021 steps, named in text so colour is never the only carrier. One set for every screen,
+         Discover included. Keep identical to feature/discover composeResources, CopyRulesTest checks. -->
+    <string name="who_step_guideline">ضمن إرشاد منظمة الصحة العالمية</string>
+    <string name="who_step_it4">ضمن الهدف المرحلي 4 لمنظمة الصحة العالمية</string>
+    <string name="who_step_it3">ضمن الهدف المرحلي 3 لمنظمة الصحة العالمية</string>
+    <string name="who_step_it2">ضمن الهدف المرحلي 2 لمنظمة الصحة العالمية</string>
+    <string name="who_step_it1">ضمن الهدف المرحلي 1 لمنظمة الصحة العالمية</string>
+    <string name="who_step_above_it1">فوق كل أهداف منظمة الصحة العالمية</string>
+
+    <!-- Sensor states -->
+    <string name="pms_absent_title">لا يوجد مستشعر جسيمات</string>
+    <string name="pms_warming_title">جارٍ الإحماء</string>
+    <string name="pms_stale_title">القراءة قديمة</string>
+    <string name="pms_error_title">خطأ في المستشعر</string>
+    <string name="pms_valid_title">قراءة</string>
+
+    <!-- Device -->
+    <string name="device_screen_title">الجهاز</string>
+    <string name="device_title">الجهاز</string>
+    <string name="device_unnamed">جهاز بلا اسم</string>
+    <string name="device_connected_over">متصل عبر %1$s</string>
+    <string name="device_refresh">تحديث الإعدادات</string>
+    <string name="device_firmware">البرنامج الثابت</string>
+    <string name="device_protocol">البروتوكول</string>
+    <string name="device_schema">المخطط</string>
+    <string name="device_station">المحطة</string>
+    <string name="device_id">معرّف الجهاز</string>
+    <string name="device_boot">التشغيل</string>
+    <string name="device_dictionary">القاموس</string>
+    <string name="device_max_read">max_read</string>
+    <string name="device_default">الافتراضي</string>
+    <string name="device_link">الاتصال</string>
+    <string name="device_config_read">قراءة الإعدادات</string>
+
+    <string name="autosync_title">المزامنة التلقائية</string>
+    <plurals name="autosync_on">
+        <item quantity="zero">مفعّلة. كل %1$d دقيقة، حتى والتطبيق مغلق.</item>
+        <item quantity="one">مفعّلة. كل %1$d دقيقة، حتى والتطبيق مغلق.</item>
+        <item quantity="two">مفعّلة. كل %1$d دقيقة، حتى والتطبيق مغلق.</item>
+        <item quantity="few">مفعّلة. كل %1$d دقائق، حتى والتطبيق مغلق.</item>
+        <item quantity="many">مفعّلة. كل %1$d دقيقة، حتى والتطبيق مغلق.</item>
+        <item quantity="other">مفعّلة. كل %1$d دقيقة، حتى والتطبيق مغلق.</item>
+    </plurals>
+    <plurals name="autosync_off">
+        <item quantity="zero">متوقفة</item>
+        <item quantity="one">متوقفة</item>
+        <item quantity="two">متوقفة</item>
+        <item quantity="few">متوقفة</item>
+        <item quantity="many">متوقفة</item>
+        <item quantity="other">متوقفة</item>
+    </plurals>
+    <string name="autosync_unreachable">اتصل مرة واحدة عبر Bluetooth أولًا.</string>
+    <string name="autosync_wifi">Wi-Fi</string>
+    <string name="autosync_wifi_token">رمز الوصول محفوظ، ويُجرَّب أولًا على هذه الشبكة</string>
+    <string name="autosync_wifi_no_token">لا يوجد رمز وصول بعد</string>
+    <string name="autosync_bluetooth">Bluetooth</string>
+    <string name="autosync_bonded">مقترن، يتصل مباشرة</string>
+    <string name="autosync_not_bonded">غير مقترن، اتصل مرة واحدة للإقران</string>
+    <string name="autosync_wake">التنبيه عند الاقتراب</string>
+    <string name="autosync_wake_unavailable">غير متاح على هذا الهاتف</string>
+    <string name="autosync_wake_on">مفعّل</string>
+    <string name="autosync_wake_off">متوقف</string>
+    <string name="autosync_wake_setup">إعداد التنبيه عند الاقتراب</string>
+    <string name="autosync_wake_waiting">بانتظار Android…</string>
+    <string name="autosync_wake_turn_off">إيقاف التنبيه عند الاقتراب</string>
+    <string name="autosync_wake_explain">نافذة نظام واحدة. بعدها يراقب Android هذا المستشعر بنفسه، وينبّه التطبيق حين يكون في النطاق، ويتيح له المزامنة في الخلفية ما دام قريبًا.</string>
+    <string name="autosync_wake_ble_drop">ينقطع اتصال Bluetooth أثناء النافذة ثم يعود بعدها.</string>
+    <string name="autosync_explain">مهمة في الخلفية تنسخ الملفات الجديدة مع إشعار بالتقدّم. يختار Android الوقت المناسب بالضبط ويتخطاها عند انخفاض البطارية. الانضمام إلى شبكة Wi-Fi يبدأ فحصًا أيضًا. تُفحص الملفات تمامًا كما في مزامنة الكل، ولا يُطلب من المستشعر حذف أي شيء أبدًا.</string>
+
+    <string name="sensor_scan_unrecognized">هذا الرمز الشريطي ليس ملصق Plantower معروفًا. اكتبه يدويًا إن لزم.</string>
+    <string name="sensor_scan_unavailable">الماسح غير متاح. اكتب ما على الملصق أدناه.</string>
+
+
+
+
+
+    <!-- Files -->
+    <string name="files_connect_to_list">اتصل لعرض الملفات على المستشعر.</string>
+
+    <!-- Settings and the bottom bar tabs. Their copy lives in feature/settings and ui/strings composeResources, shared with iOS. -->
+
+    <!-- On-demand permissions (permissions/RuntimeAccess.kt). Asked only from the action that needs them. -->
+    <string name="perm_bt_title">السماح بالأجهزة القريبة</string>
+    <string name="perm_bt_body">يعثر Bluetooth على مستشعراتك وينسخ قراءاتها. ولا يستخدم موقعك أبدًا.</string>
+    <string name="perm_bt_settings_title">إذن الأجهزة القريبة متوقف</string>
+    <string name="perm_bt_settings_body">فعّل الأجهزة القريبة لتطبيق opensensor.space في الإعدادات للاتصال بمستشعراتك.</string>
+    <string name="perm_lan_title">السماح بالشبكة المحلية</string>
+    <string name="perm_lan_body">يعثر على مستشعرك على شبكة Wi-Fi لديك لتكون المزامنة أسرع. يعمل Bluetooth من دونه.</string>
+    <string name="perm_lan_settings_title">الشبكة المحلية متوقفة</string>
+    <string name="perm_lan_settings_body">فعّل الوصول إلى الشبكة المحلية لتطبيق opensensor.space في الإعدادات. يظل Bluetooth يعمل.</string>
+    <string name="perm_continue">متابعة</string>
+    <string name="perm_open_settings">فتح الإعدادات</string>
+
+    <!-- Info sheets -->
+    <string name="info_file_chart_body">عمود لكل ملف تمت مزامنته بترتيب الملفات. الأعمدة الباهتة فيها قراءات صالحة قليلة، مثلًا أثناء الإحماء. الأعمدة المتقطعة وقتها مقدَّر. المس عمودًا لقراءة ملفه وصفوفه ومدته الزمنية ومتوسطه.</string>
+
+    <!-- Connection banner -->
+    <string name="conn_disconnected">غير متصل</string>
+    <string name="conn_connecting">جارٍ الاتصال…</string>
+    <string name="conn_discovering">جارٍ اكتشاف الخدمات…</string>
+    <string name="conn_pairing">جارٍ الإقران. أدخل الرمز الظاهر على المستشعر</string>
+    <string name="conn_mtu">جارٍ التفاوض على MTU…</string>
+    <string name="conn_notifications">جارٍ تفعيل الإشعارات…</string>
+    <string name="conn_setting_up">جارٍ إعداد الاتصال…</string>
+    <string name="conn_lan_auth">جارٍ التحقق على الشبكة المحلية…</string>
+    <string name="conn_lan_checking">جارٍ التحقق من هذا الهاتف على شبكة Wi-Fi لديك…</string>
+    <string name="conn_ready">متصل</string>
+    <string name="conn_ready_mtu">متصل، MTU %1$d</string>
+    <string name="conn_failed">تعذّر الاتصال. اقترب وحاول مرة أخرى</string>
+    <string name="conn_link_lost">انقطع الاتصال. جارٍ إعادة الاتصال تلقائيًا…</string>
+    <string name="conn_link_lost_detail">انقطع الاتصال (%1$s). جارٍ إعادة الاتصال، المحاولة %2$d من %3$d…</string>
+    <string name="conn_bluetooth_settings">إعدادات Bluetooth</string>
+
+    <!-- Bottom bar -->
+    <string name="tab_today">اليوم</string>
+    <string name="tab_history">السجل</string>
+    <string name="tab_files">الملفات</string>
+    <string name="tab_device">الجهاز</string>
+
+    <!-- Files -->
+    <string name="files_bg_queued">المزامنة في الخلفية في الانتظار…</string>
+    <string name="files_bg_sync">زامِن الآن في الخلفية</string>
+    <string name="files_autosync_on">المزامنة التلقائية كل %1$d دقيقة مفعّلة</string>
+    <string name="files_autosync_off">المزامنة التلقائية كل %1$d دقيقة متوقفة</string>
+    <string name="files_stop">إيقاف</string>
+    <string name="files_bytes_of">%1$s من %2$s</string>
+    <string name="files_autosync_event_on">المزامنة التلقائية مفعّلة، كل %1$d دقيقة تقريبًا.</string>
+    <string name="files_autosync_event_off">المزامنة التلقائية متوقفة لهذا المستشعر.</string>
+    <string name="files_bg_event">المزامنة في الخلفية في الانتظار. يمكنك مغادرة التطبيق.</string>
+    <string name="chart_by_file">رسم بياني حسب الملف</string>
+    <plurals name="chart_by_file_summary">
+        <item quantity="zero">%1$d ملف، %2$s</item>
+        <item quantity="one">ملف واحد (%1$d)، %2$s</item>
+        <item quantity="two">ملفان (%1$d)، %2$s</item>
+        <item quantity="few">%1$d ملفات، %2$s</item>
+        <item quantity="many">%1$d ملفًا، %2$s</item>
+        <item quantity="other">%1$d ملف، %2$s</item>
+    </plurals>
+    <string name="chart_reading_files">جارٍ قراءة الملفات…</string>
+    <string name="chart_no_files">لا توجد ملفات على هذا الهاتف بعد.</string>
+    <string name="chart_touch">المس عمودًا لقراءته</string>
+    <string name="chart_older">ملفات أقدم</string>
+    <string name="chart_newer">ملفات أحدث</string>
+    <string name="chart_page">الملفات من %1$d إلى %2$d من أصل %3$d</string>
+    <string name="chart_no_time">بلا وقت</string>
+
+    <!-- History -->
+    <!-- Device and Files messages (snackbars) -->
+    <string name="msg_sticker_invalid">أدخل الملصق بصيغة PMS5003T مع التاريخ وأرقام الوحدة.</string>
+    <string name="msg_wake_no_dialog">تعذّر فتح نافذة النظام.</string>
+    <string name="msg_wake_failed">لم يُضبط التنبيه عند الاقتراب. تعذّر على هذا الهاتف ربط المستشعر.</string>
+    <string name="msg_wake_cancelled">لم يُضبط التنبيه عند الاقتراب.</string>
+    <string name="msg_wake_no_link">لم يُضبط التنبيه عند الاقتراب. لم يسجّل Android أي ربط.</string>
+    <string name="msg_wake_on">التنبيه عند الاقتراب مفعّل. تبدأ المزامنة عندما يقترب هذا الهاتف من المستشعر.</string>
+    <string name="msg_wake_off">التنبيه عند الاقتراب متوقف.</string>
+    <string name="msg_pairing_saved">حُفظت إعدادات الإقران</string>
+    <string name="msg_pin_saved">حُفظ رمز PIN</string>
+    <string name="msg_wifi_sent">أُرسلت إعدادات Wi-Fi. المستشعر يتصل الآن.</string>
+    <string name="msg_wifi_on">Wi-Fi مفعّل</string>
+    <string name="msg_wifi_off">Wi-Fi متوقف</string>
+    <string name="msg_lan_on">المزامنة عبر Wi-Fi مفعّلة</string>
+    <string name="msg_lan_off">المزامنة عبر Wi-Fi متوقفة</string>
+    <string name="msg_settings_saved">حُفظت الإعدادات</string>
+    <string name="config_problem_pin">يتكوّن رمز PIN من 6 أرقام بالضبط.</string>
+    <string name="config_problem_ssid_empty">أدخل اسم الشبكة.</string>
+    <string name="config_problem_ssid_long">اسم الشبكة طويل جدًا. الحد الأقصى 32 بايت.</string>
+    <string name="config_problem_psk_long">كلمة المرور طويلة جدًا. الحد الأقصى 63 بايت.</string>
+    <string name="config_problem_line_break">لا يُسمح بفواصل الأسطر هنا.</string>
+    <string name="msg_bonds_cleared">نسي المستشعر كل الهواتف المقترنة. ستُقرن من جديد عند اتصال Bluetooth التالي.</string>
+    <string name="msg_saved_after_reboot">%1$s. تُطبّق تغييرات Bluetooth بعد إعادة التشغيل.</string>
+    <string name="msg_config_key_rejected">رفض المستشعر %1$s. لم يتغيّر شيء.</string>
+
+    <!-- Device messages from the data layer (data/DeviceMessage.kt, mapped in components/DeviceMessages.kt) -->
+    <string name="msg_background_owns_connect">المزامنة في الخلفية تستخدم هذا المستشعر. يبقى تقدّمها ظاهرًا. اتصل مرة أخرى عندما تنتهي.</string>
+    <string name="msg_background_owns_sync">المزامنة في الخلفية تستخدم هذا المستشعر. انتظر حتى تنتهي قبل المزامنة.</string>
+    <string name="msg_background_owns_command">المزامنة في الخلفية تستخدم هذا المستشعر. انتظر حتى تنتهي.</string>
+    <string name="msg_busy_before_sync">انتظر حتى تنتهي مهمة المستشعر الحالية قبل المزامنة.</string>
+    <string name="msg_busy">انتظر حتى تنتهي مهمة المستشعر الحالية.</string>
+    <string name="msg_lan_token_rejected">رُفض رمز الوصول عبر Wi-Fi. جارٍ استخدام Bluetooth وتجديد الرمز.</string>
+    <string name="msg_lan_unreachable">لا يمكن الوصول إلى المستشعر على شبكة Wi-Fi هذه. جارٍ استخدام Bluetooth.</string>
+    <string name="msg_lan_timeout">لم يردّ المستشعر عبر Wi-Fi في الوقت المحدد. جارٍ استخدام Bluetooth.</string>
+    <string name="msg_lan_busy">هاتف آخر متصل عبر Wi-Fi. جارٍ استخدام Bluetooth.</string>
+    <string name="msg_lan_failed">فشل الاتصال عبر Wi-Fi. جارٍ استخدام Bluetooth.</string>
+    <string name="msg_newer_protocol">بروتوكول المستشعر v%1$d، وبروتوكول التطبيق v%2$d. تُتجاهل الميزات الأحدث.</string>
+    <string name="msg_hardware_in_use">هذا المستشعر متصل بالفعل بطريقة أخرى.</string>
+    <string name="msg_verification_failed">تعذّر التحقق من المستشعر. حاول مرة أخرى.</string>
+    <string name="msg_station_changed">أُعيد ضبط المستشعر. يُحتفظ بالسجل السابق ويتجدد الوصول عبر Wi-Fi من خلال Bluetooth.</string>
+    <string name="msg_reconnecting">انقطع الاتصال. جارٍ إعادة الاتصال، المحاولة %1$d من %2$d…</string>
+    <plurals name="msg_reconnect_failed">
+        <item quantity="zero">تعذّرت إعادة الاتصال بعد %1$d محاولة. اضغط إعادة الاتصال عندما يعود المستشعر.</item>
+        <item quantity="one">تعذّرت إعادة الاتصال بعد محاولة واحدة (%1$d). اضغط إعادة الاتصال عندما يعود المستشعر.</item>
+        <item quantity="two">تعذّرت إعادة الاتصال بعد محاولتين (%1$d). اضغط إعادة الاتصال عندما يعود المستشعر.</item>
+        <item quantity="few">تعذّرت إعادة الاتصال بعد %1$d محاولات. اضغط إعادة الاتصال عندما يعود المستشعر.</item>
+        <item quantity="many">تعذّرت إعادة الاتصال بعد %1$d محاولة. اضغط إعادة الاتصال عندما يعود المستشعر.</item>
+        <item quantity="other">تعذّرت إعادة الاتصال بعد %1$d محاولة. اضغط إعادة الاتصال عندما يعود المستشعر.</item>
+    </plurals>
+    <string name="msg_lan_token_renewed">جُدّد رمز الوصول عبر Wi-Fi</string>
+    <string name="msg_lan_token_stored">حُفظ رمز الوصول عبر Wi-Fi على هذا الهاتف.</string>
+    <string name="msg_token_needs_ble">يصل رمز الوصول عبر Bluetooth فقط. أعد الاتصال عبر Bluetooth أولًا.</string>
+    <string name="msg_token_rotated_lan">تغيّر رمز الوصول. تنتهي جلسة Wi-Fi هذه. أعد الاتصال عبر Bluetooth للحصول على الرمز الجديد.</string>
+    <string name="msg_token_rotated_stored">تغيّر رمز الوصول وحُفظ الرمز الجديد على هذا الهاتف.</string>
+    <string name="msg_token_rotated_fetch">تغيّر رمز الوصول. استخدم جلب الرمز لحفظ الرمز الجديد.</string>
+    <string name="msg_file_list_not_ready">قائمة الملفات ليست جاهزة بعد. حاول مرة أخرى بعد لحظة.</string>
+    <string name="msg_no_station">لم يُبلغ المستشعر عن محطته. أعد الاتصال وحاول مرة أخرى.</string>
+    <string name="msg_up_to_date">كل شيء موجود على هذا الهاتف بالفعل.</string>
+    <string name="msg_file_check_failed">لم يجتز %1$s الفحوصات. يبقى على المستشعر.</string>
+    <string name="msg_file_refused">رفض المستشعر إرسال %1$s.</string>
+    <string name="msg_file_failed">تعذّر نسخ %1$s. ستُعاد المحاولة في المزامنة التالية.</string>
+    <plurals name="msg_sync_finished">
+        <item quantity="zero">تمت مزامنة %1$d من %2$d ملف</item>
+        <item quantity="one">تمت مزامنة %1$d من %2$d ملف</item>
+        <item quantity="two">تمت مزامنة %1$d من %2$d ملف</item>
+        <item quantity="few">تمت مزامنة %1$d من %2$d ملفات</item>
+        <item quantity="many">تمت مزامنة %1$d من %2$d ملفًا</item>
+        <item quantity="other">تمت مزامنة %1$d من %2$d ملف</item>
+    </plurals>
+    <string name="msg_sync_stopped">توقفت المزامنة. تُستأنف الملفات الجزئية في المرة القادمة.</string>
+    <string name="msg_sync_aborted">توقفت المزامنة مبكرًا. تُستأنف في المزامنة التالية.</string>
+    <plurals name="msg_unplaced">
+        <item quantity="zero">%1$d قراءة مؤرشفة لكن بلا وقت بعد، لذا لا تظهر في التقويم.</item>
+        <item quantity="one">قراءة واحدة (%1$d) مؤرشفة لكن بلا وقت بعد، لذا لا تظهر في التقويم.</item>
+        <item quantity="two">قراءتان (%1$d) مؤرشفتان لكن بلا وقت بعد، لذا لا تظهران في التقويم.</item>
+        <item quantity="few">%1$d قراءات مؤرشفة لكن بلا وقت بعد، لذا لا تظهر في التقويم.</item>
+        <item quantity="many">%1$d قراءة مؤرشفة لكن بلا وقت بعد، لذا لا تظهر في التقويم.</item>
+        <item quantity="other">%1$d قراءة مؤرشفة لكن بلا وقت بعد، لذا لا تظهر في التقويم.</item>
+    </plurals>
+    <string name="msg_clock_set">ضُبطت ساعة المستشعر. القراءات الجديدة تحمل الوقت.</string>
+    <plurals name="msg_finalized">
+        <item quantity="zero">اكتملت %1$d قراءة. %2$d ملفات على البطاقة.</item>
+        <item quantity="one">اكتملت قراءة واحدة (%1$d). %2$d ملفات على البطاقة.</item>
+        <item quantity="two">اكتملت قراءتان (%1$d). %2$d ملفات على البطاقة.</item>
+        <item quantity="few">اكتملت %1$d قراءات. %2$d ملفات على البطاقة.</item>
+        <item quantity="many">اكتملت %1$d قراءة. %2$d ملفات على البطاقة.</item>
+        <item quantity="other">اكتملت %1$d قراءة. %2$d ملفات على البطاقة.</item>
+    </plurals>
+    <string name="msg_no_reboot_syncing">لن يُعاد التشغيل أثناء المزامنة. أوقف المزامنة أولًا.</string>
+    <string name="msg_rebooting">يُعاد تشغيل المستشعر. جارٍ إعادة الاتصال…</string>
+    <string name="msg_rejected_get_token">رفض المستشعر مشاركة رمز الوصول عبر Wi-Fi.</string>
+    <string name="msg_rejected_set_time">رفض المستشعر الوقت.</string>
+    <string name="msg_rejected_flush">رفض المستشعر إكمال قراءاته.</string>
+    <string name="msg_rejected_get_config">رفض المستشعر مشاركة إعداداته.</string>
+    <string name="msg_rejected_set_config">رفض المستشعر الإعدادات. لم يتغيّر شيء.</string>
+    <string name="msg_rejected_reboot">رفض المستشعر إعادة التشغيل.</string>
+    <string name="msg_rejected_rotate_token">رفض المستشعر تغيير رمز الوصول.</string>
+    <string name="msg_failed_get_token">تعذّر الحصول على رمز الوصول عبر Wi-Fi. حاول مرة أخرى.</string>
+    <string name="msg_failed_set_time">تعذّر ضبط ساعة المستشعر. حاول مرة أخرى.</string>
+    <string name="msg_failed_flush">تعذّر إكمال القراءات. حاول مرة أخرى.</string>
+    <string name="msg_failed_get_config">تعذّرت قراءة إعدادات المستشعر. حاول مرة أخرى.</string>
+    <string name="msg_failed_set_config">تعذّر حفظ الإعدادات. حاول مرة أخرى.</string>
+    <string name="msg_failed_reboot">تعذّرت إعادة تشغيل المستشعر. حاول مرة أخرى.</string>
+    <string name="msg_failed_rotate_token">تعذّر تغيير رمز الوصول. حاول مرة أخرى.</string>
+    <string name="msg_identity_endpoint_changed">يرد هذا المستشعر من عنوان جديد. أقرنه من جديد كمستشعر جديد.</string>
+    <string name="msg_identity_hardware_changed">هذا عتاد مختلف. أقرنه كمستشعر جديد.</string>
+    <string name="msg_identity_hardware_missing">لم يعد المستشعر يُبلغ عن معرّف العتاد.</string>
+    <string name="msg_identity_hardware_malformed">يُبلغ المستشعر عن معرّف عتاد غير صالح.</string>
+    <string name="msg_identity_station_missing">لم يُبلغ المستشعر عن محطته.</string>
+    <string name="msg_identity_station_malformed">يُبلغ المستشعر عن محطة غير صالحة.</string>
+    <string name="msg_identity_enroll_ble">اتصل بهذا المستشعر عبر Bluetooth أولًا.</string>
+    <string name="msg_identity_station_ble">تغيّرت محطة المستشعر. أعد الاتصال عبر Bluetooth للتحقق منها.</string>
+    <string name="msg_identity_station_hardware">تغيّرت محطة المستشعر دون معرّف عتاد مطابق.</string>
+
+    <!-- Station label in the scan list. The Files screen strings live in :feature:files. -->
+
+    <!-- Scan archive line. Mood, metric, value, unit, day. -->
+    <!-- Relative time -->
+    <string name="ago_just_now">الآن</string>
+    <string name="ago_seconds">قبل %1$d ث</string>
+    <string name="ago_minutes">قبل %1$d د</string>
+    <string name="ago_hours">قبل %1$d س</string>
+    <string name="ago_days">قبل %1$d يوم</string>
+    <string name="transport_ble">Bluetooth</string>
+    <string name="transport_lan">Wi-Fi LAN</string>
+    <string name="transport_fake">جهاز وهمي</string>
+    <string name="mood_none">لا توجد قراءة</string>
+    <string name="file_chart_estimated">%1$s، تقديري</string>
+    <string name="file_chart_unplaced">لا مكان له على الخط الزمني بعد. لا يملك هذا التشغيل وقتًا من الساعة.</string>
+    <plurals name="file_chart_rows">
+        <item quantity="zero">%1$s · %2$d قراءة %3$s صالحة · %4$s</item>
+        <item quantity="one">%1$s · %2$d قراءة %3$s صالحة · %4$s</item>
+        <item quantity="two">%1$s · %2$d قراءتان %3$s صالحتان · %4$s</item>
+        <item quantity="few">%1$s · %2$d قراءات %3$s صالحة · %4$s</item>
+        <item quantity="many">%1$s · %2$d قراءة %3$s صالحة · %4$s</item>
+        <item quantity="other">%1$s · %2$d قراءة %3$s صالحة · %4$s</item>
+    </plurals>
+    <string name="file_chart_stats">المتوسط %1$s %2$s · الأدنى %3$s · الأعلى %4$s</string>
+    <string name="file_chart_no_valid">لا توجد قراءات %1$s صالحة في هذا الملف.</string>
+    <string name="device_schema_cols">%1$s، %2$s أعمدة</string>
+    <string name="device_payload">الحمولة %1$d B</string>
+    <string name="notif_channel_progress">تقدّم المزامنة</string>
+    <string name="notif_channel_progress_desc">يظهر أثناء نسخ الملفات من مستشعر. يُبقي النقل مستمرًا عند إطفاء الشاشة.</string>
+    <string name="notif_channel_summary">نتائج المزامنة</string>
+    <string name="notif_channel_summary_desc">إشعار واحد عندما تنسخ مزامنة تلقائية ملفات جديدة.</string>
+    <string name="notif_device">مستشعر</string>
+    <string name="notif_reconnecting">%1$s · جارٍ إعادة الاتصال، %2$d من %3$d…</string>
+    <plurals name="notif_progress">
+        <item quantity="zero">%1$s · %2$d/%3$d ملف · %4$s</item>
+        <item quantity="one">%1$s · %2$d/%3$d ملف · %4$s</item>
+        <item quantity="two">%1$s · %2$d/%3$d ملفان · %4$s</item>
+        <item quantity="few">%1$s · %2$d/%3$d ملفات · %4$s</item>
+        <item quantity="many">%1$s · %2$d/%3$d ملفًا · %4$s</item>
+        <item quantity="other">%1$s · %2$d/%3$d ملف · %4$s</item>
+    </plurals>
+    <string name="notif_preparing">%1$s · جارٍ التحضير للمزامنة…</string>
+    <string name="notif_link_lost">انقطع الاتصال. تُستأنف المزامنة عند عودة المستشعر.</string>
+    <string name="notif_listing">جارٍ عرض الملفات على المستشعر…</string>
+    <plurals name="notif_synced">
+        <item quantity="zero">تمت مزامنة %1$d ملف جديد من %2$s · %3$s</item>
+        <item quantity="one">تمت مزامنة %1$d ملف جديد من %2$s · %3$s</item>
+        <item quantity="two">تمت مزامنة %1$d ملفين جديدين من %2$s · %3$s</item>
+        <item quantity="few">تمت مزامنة %1$d ملفات جديدة من %2$s · %3$s</item>
+        <item quantity="many">تمت مزامنة %1$d ملفًا جديدًا من %2$s · %3$s</item>
+        <item quantity="other">تمت مزامنة %1$d ملف جديد من %2$s · %3$s</item>
+    </plurals>
+    <string name="notif_problems">واجهت المزامنة من %1$s مشكلات</string>
+    <plurals name="notif_failures">
+        <item quantity="zero">تعذّر التحقق من %1$d ملف. ستُعاد المحاولة في المرة القادمة.</item>
+        <item quantity="one">تعذّر التحقق من %1$d ملف. ستُعاد المحاولة في المرة القادمة.</item>
+        <item quantity="two">تعذّر التحقق من %1$d ملفين. ستُعاد المحاولة في المرة القادمة.</item>
+        <item quantity="few">تعذّر التحقق من %1$d ملفات. ستُعاد المحاولة في المرة القادمة.</item>
+        <item quantity="many">تعذّر التحقق من %1$d ملفًا. ستُعاد المحاولة في المرة القادمة.</item>
+        <item quantity="other">تعذّر التحقق من %1$d ملف. ستُعاد المحاولة في المرة القادمة.</item>
+    </plurals>
+    <string name="notif_verified">تم التحقق منها وحفظها في الأرشيف على هذا الهاتف.</string>
+
+    <!-- Row count for the chart by file and Debug. The inspector strings live in :feature:files. -->
+    <plurals name="fm_rows_count">
+        <item quantity="zero">%1$d صف</item>
+        <item quantity="one">%1$d صف</item>
+        <item quantity="two">%1$d صفان</item>
+        <item quantity="few">%1$d صفوف</item>
+        <item quantity="many">%1$d صفًا</item>
+        <item quantity="other">%1$d صف</item>
+    </plurals>
+
+    <!-- The Debug screen copy lives in feature/debug composeResources. -->
+    <string name="conn_pairing_repair">يحتاج إقران Bluetooth إلى إصلاح. إذا أُعيد ضبط هذا المستشعر أو أُعيد تثبيت برنامجه الثابت، فانسَه في إعدادات Bluetooth في Android ثم أقرنه مجددًا. ملفاتك المؤرشفة محفوظة.</string>
+</resources>

@@ -10,10 +10,32 @@ import earth.walkthru.aqsync.data.protocol.DeviceStatus
 import earth.walkthru.aqsync.data.protocol.LanProtocol
 import earth.walkthru.aqsync.data.protocol.LiveProfiles
 import earth.walkthru.aqsync.data.protocol.LiveSample
+import earth.walkthru.opensensor.permissions.AccessStatus
+import earth.walkthru.opensensor.permissions.IosAuthorization
+import earth.walkthru.opensensor.strings.UiText
+import earth.walkthru.opensensor.strings.resources.Res
+import earth.walkthru.opensensor.strings.resources.companion_connecting_pin
+import earth.walkthru.opensensor.strings.resources.companion_info_invalid
+import earth.walkthru.opensensor.strings.resources.companion_lan_denied
+import earth.walkthru.opensensor.strings.resources.companion_lan_found
+import earth.walkthru.opensensor.strings.resources.companion_lan_looking
+import earth.walkthru.opensensor.strings.resources.companion_lan_none
+import earth.walkthru.opensensor.strings.resources.companion_lan_unavailable
+import earth.walkthru.opensensor.strings.resources.companion_lan_waiting
+import earth.walkthru.opensensor.strings.resources.companion_live
+import earth.walkthru.opensensor.strings.resources.companion_live_unreadable
+import earth.walkthru.opensensor.strings.resources.companion_status_unreadable
+import earth.walkthru.opensensor.strings.resources.now_waiting
+import kotlin.time.Clock
 
 internal data class NearbyDevice(val id: String, val name: String, val rssi: Int)
 
-/** Main-thread callbacks from the native BLE adapter. Never contains pairing or Wi-Fi secrets. */
+/**
+ * Main-thread callbacks from the native BLE adapter. Never contains pairing or Wi-Fi secrets.
+ * Messages are [UiText]. The state picks a `:ui:strings` key and the screen resolves the words.
+ * Link, Bluetooth and Wi-Fi access events arrive as a [CompanionNotice] or a [SyncResult], so Swift
+ * never words what the user reads. The String overloads stay internal for the shared tests.
+ */
 class CompanionState {
     internal var devices by mutableStateOf<List<NearbyDevice>>(emptyList())
         private set
@@ -21,7 +43,15 @@ class CompanionState {
         private set
     internal var bluetoothAvailable by mutableStateOf(false)
         private set
-    internal var message by mutableStateOf("")
+
+    /** Bluetooth authorization as the shared policy reads it. Not determined until the first tap. */
+    internal var bluetoothAccess by mutableStateOf(AccessStatus.NOT_DETERMINED)
+        private set
+
+    /** True only while the central manager reports the radio powered off. */
+    internal var bluetoothPoweredOff by mutableStateOf(false)
+        private set
+    internal var message by mutableStateOf<UiText>(UiText.None)
         private set
     internal var selectedId by mutableStateOf<String?>(null)
         private set
@@ -31,6 +61,12 @@ class CompanionState {
         private set
     internal var status by mutableStateOf<DeviceStatus?>(null)
         private set
+
+    /** The last STATUS body as it arrived, for the Debug screen, and when it arrived. */
+    internal var statusRaw by mutableStateOf<String?>(null)
+        private set
+    internal var statusAtEpochMs by mutableStateOf<Long?>(null)
+        private set
     internal var live by mutableStateOf<LiveSample?>(null)
         private set
     internal val reading: NowReading get() = NowReading.of(live)
@@ -38,50 +74,130 @@ class CompanionState {
 
     internal var lanDevices by mutableStateOf<List<String>>(emptyList())
         private set
+
+    /** The station of each Wi-Fi service name, from its TXT record. */
+    internal var lanStations by mutableStateOf<Map<String, String>>(emptyMap())
+        private set
     internal var lanScanning by mutableStateOf(false)
         private set
-    internal var lanMessage by mutableStateOf("")
+    internal var lanMessage by mutableStateOf<UiText>(UiText.None)
         private set
 
     /** True only after iOS reports the Local Network policy denial (TN3179), never for plain waiting. */
     internal var lanAccessDenied by mutableStateOf(false)
         private set
 
+    /** Local network has no status API on iOS, so it stays unknown until the policy denial. */
+    internal val lanAccess: AccessStatus get() = IosAuthorization.localNetwork(policyDenied = lanAccessDenied)
+
     internal var wifiAccessAvailable by mutableStateOf(false)
         private set
     internal var wifiAccessBusy by mutableStateOf(false)
         private set
-    internal var wifiAccessMessage by mutableStateOf("")
+    internal var wifiAccessMessage by mutableStateOf<UiText>(UiText.None)
+        private set
+
+    /** How the last Wi-Fi access request ended, cleared when a new one starts. Device settings reads it. */
+    internal var wifiAccessNotice by mutableStateOf<CompanionNotice?>(null)
         private set
     internal var lanSessions by mutableStateOf<Map<String, LanSessionState>>(emptyMap())
         private set
     internal var lanPaused by mutableStateOf<Set<String>>(emptySet())
         private set
-    internal var exportBusy by mutableStateOf(false)
-        private set
-    internal var exportMessage by mutableStateOf("")
-        private set
-
-    fun exportChanged(busy: Boolean, explanation: String) {
-        exportBusy = busy
-        exportMessage = explanation
-    }
-
     fun lanCollectionPaused(name: String, paused: Boolean) {
         lanPaused = if (paused) lanPaused + name else lanPaused - name
     }
 
-    fun wifiAccessChanged(available: Boolean, busy: Boolean, explanation: String) {
+    internal fun wifiAccessChanged(available: Boolean, busy: Boolean, explanation: String) {
         wifiAccessAvailable = available
         wifiAccessBusy = busy
-        wifiAccessMessage = explanation
+        wifiAccessMessage = UiText.plain(explanation)
+        wifiAccessNotice = null
+    }
+
+    /** The Bluetooth connection is gone, so Wi-Fi access cannot be requested and shows nothing. */
+    fun wifiAccessReset() {
+        wifiAccessChanged(available = false, busy = false, explanation = "")
+    }
+
+    /** A Wi-Fi access request started. The last outcome clears until this one ends. */
+    fun wifiAccessSaving() {
+        wifiAccessAvailable = true
+        wifiAccessBusy = true
+        wifiAccessMessage = CompanionNotice.SAVING_WIFI_ACCESS.text
+        wifiAccessNotice = null
+    }
+
+    /** Wi-Fi access state with a typed [notice] in Android's words. */
+    fun wifiAccessNoticed(available: Boolean, busy: Boolean, notice: CompanionNotice) {
+        wifiAccessAvailable = available
+        wifiAccessBusy = busy
+        wifiAccessMessage = notice.text
+        wifiAccessNotice = notice
     }
 
     /** Native sessions are independent: a callback updates only its own sensor card. */
-    fun lanSessionChanged(name: String, connected: Boolean, busy: Boolean, message: String, filesDone: Int, filesTotal: Int, bytesDone: Long, bytesPerSecond: Double = 0.0) {
+    internal fun lanSessionChanged(name: String, connected: Boolean, busy: Boolean, message: String, filesDone: Int, filesTotal: Int, bytesDone: Long, bytesPerSecond: Double = 0.0) {
+        lanSession(name, connected, busy, UiText.plain(message), filesDone, filesTotal, bytesDone, bytesPerSecond)
+    }
+
+    /** Native sessions are independent: a callback updates only its own sensor card, worded by [notice]. */
+    fun lanSessionNoticed(name: String, connected: Boolean, busy: Boolean, notice: CompanionNotice, filesDone: Int, filesTotal: Int, bytesDone: Long, bytesPerSecond: Double) {
+        lanSession(name, connected, busy, notice.text, filesDone, filesTotal, bytesDone, bytesPerSecond)
+    }
+
+    /** A Wi-Fi sync ended. The card keeps its counts and shows the outcome. */
+    fun lanSyncFinished(name: String, connected: Boolean, result: SyncResult) {
+        val previous = lanSessions[name]
+        lanSession(name, connected, false, result.message, previous?.filesDone ?: 0, previous?.filesTotal ?: 0, previous?.bytesDone ?: 0, 0.0)
+    }
+
+    private fun lanSession(name: String, connected: Boolean, busy: Boolean, message: UiText, filesDone: Int, filesTotal: Int, bytesDone: Long, bytesPerSecond: Double) {
         val rate = bytesPerSecond.takeIf { connected && busy && it.isFinite() && it > 0.0 } ?: 0.0
         lanSessions = lanSessions + (name to LanSessionState(connected, busy, message, filesDone, filesTotal, bytesDone, rate))
         if (!connected) lanReadings = lanReadings - name
+    }
+
+    /** Bluetooth file sync for the connected sensor. Available once INFO names its station. */
+    internal var syncAvailable by mutableStateOf(false)
+        private set
+    internal var syncBusy by mutableStateOf(false)
+        private set
+    internal var syncProgress by mutableStateOf<SyncProgress?>(null)
+        private set
+    internal var syncMessage by mutableStateOf<UiText>(UiText.None)
+        private set
+
+    /** How the last Bluetooth sync of this connection ended, for the Smart Sync card of Today. */
+    internal var lastSyncResult by mutableStateOf<SyncResult?>(null)
+        private set
+
+    /** SET_TIME and FLUSH from Today, over the same Bluetooth connection. */
+    val today = TodayLink()
+
+    fun bluetoothSyncAvailable(available: Boolean) {
+        syncAvailable = available && connected
+    }
+
+    fun bluetoothSyncStarted() {
+        syncBusy = true
+        syncProgress = null
+        syncMessage = UiText.None
+    }
+
+    fun bluetoothSyncProgressed(progress: SyncProgress) {
+        if (syncBusy) syncProgress = progress
+    }
+
+    fun bluetoothSyncFinished(result: SyncResult) {
+        syncBusy = false
+        lastSyncResult = result
+        syncMessage = result.message
+    }
+
+    /** A Bluetooth sync ended with the link gone. The connection closes and shows the outcome. */
+    fun bluetoothSyncClosed(result: SyncResult) {
+        close(result.message)
     }
 
     internal var lanReadings by mutableStateOf<Map<String, NowReading>>(emptyMap())
@@ -107,64 +223,91 @@ class CompanionState {
     fun lanScanStarted() {
         lanAccessDenied = false
         lanDevices = emptyList()
+        lanStations = emptyMap()
         lanScanning = true
-        lanMessage = "Looking on your Wi-Fi…"
+        lanMessage = UiText.of(Res.string.companion_lan_looking)
+    }
+
+    /** Like [lanDevicesFound], with the TXT station of each name, in the same order. */
+    fun lanSensorsFound(names: List<String>, stations: List<String>) {
+        if (!lanScanning) return
+        lanStations = names.zip(stations).toMap()
+        lanDevicesFound(names)
     }
 
     fun lanDevicesFound(names: List<String>) {
         if (!lanScanning) return
         lanDevices = names.distinct().sorted()
-        lanMessage = if (lanDevices.isEmpty()) "Looking on your Wi-Fi…" else "Sensors on your Wi-Fi"
+        lanMessage = if (lanDevices.isEmpty()) UiText.of(Res.string.companion_lan_looking) else UiText.of(Res.string.companion_lan_found)
     }
 
     fun lanScanStopped() {
         if (!lanScanning) return
         lanScanning = false
-        if (lanDevices.isEmpty()) lanMessage = "No Wi-Fi sensors found. Check Local Network in Settings."
+        if (lanDevices.isEmpty()) lanMessage = UiText.of(Res.string.companion_lan_none)
     }
 
     fun lanScanWaiting() {
         if (!lanScanning) return
         lanAccessDenied = false
-        lanMessage = "Waiting for Wi-Fi or Local Network access."
+        lanMessage = UiText.of(Res.string.companion_lan_waiting)
     }
 
     /** The browse keeps running, so turning access on in Settings resumes discovery without a restart. */
     fun lanScanAccessDenied() {
         if (!lanScanning) return
         lanAccessDenied = true
-        lanMessage = "Turn on Local Network for opensensor.space in Settings."
+        lanMessage = UiText.of(Res.string.companion_lan_denied)
     }
 
     fun lanScanReady() {
         lanAccessDenied = false
-        if (lanScanning && lanDevices.isEmpty()) lanMessage = "Looking on your Wi-Fi…"
+        if (lanScanning && lanDevices.isEmpty()) lanMessage = UiText.of(Res.string.companion_lan_looking)
     }
 
     fun lanScanUnavailable() {
         lanScanning = false
         lanDevices = emptyList()
-        lanMessage = "Wi-Fi search is not available. Check Wi-Fi and Local Network in Settings."
+        lanStations = emptyMap()
+        lanMessage = UiText.of(Res.string.companion_lan_unavailable)
     }
 
-    fun bluetoothChanged(available: Boolean, explanation: String) {
+    /** The raw `CBManager.authorization` value, read when the central manager reports its state. */
+    fun bluetoothAuthorizationChanged(raw: Long) {
+        bluetoothAccess = IosAuthorization.bluetooth(raw)
+    }
+
+    /** The radio state from the central manager. Off means the user can turn it on in Control Center. */
+    fun bluetoothPowerChanged(poweredOff: Boolean) {
+        bluetoothPoweredOff = poweredOff
+    }
+
+    internal fun bluetoothChanged(available: Boolean, explanation: String) {
+        bluetooth(available, UiText.plain(explanation))
+    }
+
+    /** The central manager state. A null [notice] means nothing to say, as when the radio is on. */
+    fun bluetoothNoticed(available: Boolean, notice: CompanionNotice?) {
+        bluetooth(available, notice?.text ?: UiText.None)
+    }
+
+    private fun bluetooth(available: Boolean, explanation: UiText) {
         bluetoothAvailable = available
         message = explanation
         if (!available) {
             scanning = false
-            connectionClosed(explanation)
+            close(explanation)
         }
     }
 
+    /** My devices draws the scan itself, so a scan leaves the device page's message alone. */
     fun scanStarted() {
         devices = emptyList()
         scanning = true
-        message = "Looking for nearby sensors…"
     }
 
     fun scanStopped() {
         scanning = false
-        if (selectedId == null) message = if (devices.isEmpty()) "No sensors found. Keep your sensor nearby and try again." else "Choose a sensor to see its readings."
     }
 
     fun deviceFound(id: String, name: String, rssi: Int) {
@@ -179,48 +322,66 @@ class CompanionState {
         info = null
         status = null
         live = null
-        message = "Connecting… If asked, enter the pairing PIN shown by your sensor."
+        message = UiText.of(Res.string.companion_connecting_pin)
     }
 
     /** Returns false for malformed or unsupported INFO; the adapter must close that connection. */
     fun receiveInfo(json: String): Boolean {
         val decoded = runCatching { DeviceInfo.parse(json) }.getOrNull()
         if (decoded == null || decoded.proto !in 1..AqGatt.PROTOCOL_VERSION || decoded.dev.isNullOrBlank()) {
-            connectionClosed("This sensor has invalid or unsupported device information.")
+            close(UiText.of(Res.string.companion_info_invalid))
             return false
         }
         info = decoded
         connected = true
-        message = "Connected · live readings"
+        message = UiText.of(Res.string.companion_live)
         return true
     }
 
     fun receiveStatus(json: String) {
         if (!connected) return
+        statusRaw = json
+        statusAtEpochMs = Clock.System.now().toEpochMilliseconds()
         status = runCatching { DeviceStatus.parse(json) }.getOrNull()
-        if (status == null) message = "The sensor sent an unreadable status."
+        if (status == null) message = UiText.of(Res.string.companion_status_unreadable)
     }
 
     fun receiveLive(json: String) {
         if (!connected) return
         // A bad notification must not leave an earlier number looking current.
         live = runCatching { LiveSample.parse(json) }.getOrNull()
-        message = if (live == null) "The sensor sent an unreadable reading." else "Connected · live readings"
+        message = if (live == null) UiText.of(Res.string.companion_live_unreadable) else UiText.of(Res.string.companion_live)
     }
 
     fun readingExpired() {
         live = null
-        if (connected) message = "Waiting for a fresh reading…"
+        if (connected) message = UiText.of(Res.string.now_waiting)
     }
 
-    fun connectionClosed(explanation: String) {
+    internal fun connectionClosed(explanation: String) {
+        close(UiText.plain(explanation))
+    }
+
+    /** The Bluetooth connection ended for a typed [notice], shown in Android's words. */
+    fun connectionClosedNoticed(notice: CompanionNotice) {
+        close(notice.text)
+    }
+
+    private fun close(explanation: UiText) {
         selectedId = null
         connected = false
         info = null
         status = null
+        statusRaw = null
+        statusAtEpochMs = null
         live = null
+        syncAvailable = false
+        syncBusy = false
+        syncProgress = null
+        syncMessage = UiText.None
+        lastSyncResult = null
         message = explanation
     }
 }
 
-internal data class LanSessionState(val connected: Boolean, val busy: Boolean, val message: String, val filesDone: Int, val filesTotal: Int, val bytesDone: Long, val bytesPerSecond: Double = 0.0)
+internal data class LanSessionState(val connected: Boolean, val busy: Boolean, val message: UiText, val filesDone: Int, val filesTotal: Int, val bytesDone: Long, val bytesPerSecond: Double = 0.0)

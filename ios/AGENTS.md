@@ -58,9 +58,11 @@ The iOS app entry point is the Xcode project in this directory. Read the root
 - `LanSession` is an actor whose executor is its own serial queue. `NWConnection` callbacks and
   `DispatchSourceTimer` handlers run on that queue and enter with `assumeIsolated`. Owners learn
   about pushes and closure through the ordered `events` stream. `close()` is nonisolated.
-- `SensorTransfer` is nonisolated. `ArchiveIO` owns file I/O. Values that cross domains
-  (`ArchiveReply`, `TransferUpdate`, `LanFailure`, `LanCredential`) are Sendable Swift values.
-  Kotlin framework objects are not Sendable. Keep each one inside a single isolation domain.
+- File sync runs in the shared Kotlin engine (`SensorSync`). Swift only moves bytes through a
+  `SensorLink` and receives progress and the typed result on the main thread. Values that cross
+  domains (`LanReply`, `LanFailure`, `LanCredential`) are Sendable Swift values. Kotlin framework
+  objects are not Sendable. Keep each one inside a single isolation domain, and wrap one in an
+  `@unchecked Sendable` box only to hand it across a continuation.
 
 ### Remaining for the Swift 6 language mode
 
@@ -74,25 +76,23 @@ decide these explicitly.
 - `BluetoothCompanion` uses `@preconcurrency` delegate conformances. Swift 6 keeps them but
   checks isolation at run time. Inferred isolated conformances (SE-0470) could replace them.
 - Approachable Concurrency (`SWIFT_APPROACHABLE_CONCURRENCY`) enables
-  `NonisolatedNonsendingByDefault` (SE-0461). Nonisolated async functions such as
-  `SensorTransfer.collect` would then run on the caller's actor, which is the session queue for
-  LAN collection. That removes a hop per frame, but review the `@Sendable` closure parameters
-  before enabling it.
+  `NonisolatedNonsendingByDefault` (SE-0461). Nonisolated async functions would then run on the
+  caller's actor. Review the `@Sendable` closure parameters before enabling it.
 - Default MainActor isolation (`SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, SE-0466) would move
-  `SensorTransfer`, `SensorArchive`, `TransferProgress`, `LanFrameBuffer` and `LanPolicy` onto the
-  main actor. Do not adopt it without marking that engine code `nonisolated`, or the transfer
-  returns to the UI thread.
+  `SensorArchive`, `LanFrameBuffer` and `LanPolicy` onto the main actor. Do not adopt it without
+  marking that code `nonisolated`, or socket framing returns to the UI thread.
 - The Keychain record JSON-encodes `LanCredential`, which creates a base64 String copy of the
   token at save and load. Storing the token as a separate raw item needs a migration.
 
 ## Tests
 
 `OpenSensorTests` is a hostless Swift Testing bundle. It compiles `App/SensorArchive.swift`,
-`App/SensorTransfer.swift` and `App/LanPolicy.swift` with `tests/ArchiveChecks.swift` and
+`App/LanFraming.swift` and `App/LanPolicy.swift` with `tests/ArchiveChecks.swift` and
 `tests/TransferChecks.swift`, so it needs neither the app host nor the Kotlin framework. Run it
 with `xcodebuild ... -destination 'platform=iOS Simulator,name=<installed iPhone>'
 CODE_SIGNING_ALLOWED=NO test`. `tests/verify-native.sh` runs the same checks on the Mac host.
-Add new transfer or archive cases to the shared check files so both runners exercise them.
+Add new socket or archive cases to the shared check files so both runners exercise them. File
+sync cases belong in `shared/src/iosTest` (`SensorSyncTest`) and `core/sync` tests.
 Code that imports `OpenSensorShared` cannot join the hostless bundle and still needs
 simulator builds and iPhone runs.
 

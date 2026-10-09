@@ -28,8 +28,32 @@ include(":core:publicfeed")
 include(":core:units")
 // WHO 2021 air quality guideline scales and their palette, for every chart and the map.
 include(":core:airquality")
+// Planned shared sync engine, phone archive and app settings (docs/platform-parity-plan.md).
+include(":core:sync")
+include(":core:archive")
+include(":core:settings")
 // The Discover map, shared Compose for Android and iOS.
 include(":ui:designsystem")
+// The shared English copy and the repository copy lint (docs/screens.md, Copy).
+include(":ui:strings")
+// When each permission is asked and where its settings link goes, for both apps.
+include(":ui:permissions")
 include(":feature:discover")
+// The Settings screen, shared Compose for Android and iOS (docs/platform-parity-plan.md).
+include(":feature:settings")
+// My devices, one shared list of nearby, known and Wi-Fi sensors (docs/screens.md, My devices).
+include(":feature:devices")
+// The Files screen, its inspector and the export, shared Compose for Android and iOS (docs/screens.md).
+include(":feature:files")
+// The History screen and its charts, shared Compose for Android and iOS (docs/history-pipeline.md).
+include(":feature:history")
+// The Today screen of one device, shared Compose for Android and iOS (docs/screens.md).
+include(":feature:today")
+// The Device section of one sensor, its configuration cards and confirmations, shared Compose for Android and iOS.
+include(":feature:device")
+// The Debug screen, shared Compose for Android and iOS, Developer level only (docs/screens.md, Debug).
+include(":feature:debug")
+// The app shell: bottom bar, per-tab Navigation 3 back stacks, Back rules (docs/adr/0001-shared-navigation.md).
+include(":feature:shell")
 
 include(":ios:shared")

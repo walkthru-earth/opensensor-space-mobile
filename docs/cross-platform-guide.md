@@ -34,7 +34,18 @@ interfaces.
 
 ## Sync parity
 
-### Where the code lives
+### Where the code will live (target)
+
+This is the target shape from [platform-parity-plan.md](platform-parity-plan.md). The engine part
+is in place. Both phones run `SyncEngine` and `ArchiveCollector` from `:core:sync`, with the
+`ArchiveStore` and `ArchiveIndex` ports from `:core:archive`. Android adapts them in
+`app/.../data/archive/`. iOS uses `IosArchiveStore` and `ReceiptArchiveIndex` in `:core:archive`
+iosMain. The frame link exists on iOS as `SensorLink` in `ios/shared` iosMain, fed by Swift
+`LanSession` and `BluetoothCompanion`. It is not yet a common `FrameLink` port, and
+`CredentialStore` does not exist yet, so Keychain and Keystore stay platform code. The Swift
+transfer engine was removed. `SensorArchive.swift` remains only for Files export. See
+[sync-engine.md](sync-engine.md#where-ios-still-differs-from-android) for the behaviour that still
+differs.
 
 ```mermaid
 flowchart LR
@@ -78,17 +89,20 @@ flowchart LR
    `../aq-parquet/docs/shared/ble-sync-protocol.md`. Read it before changing either platform. If
    the code disagrees with it, the code is wrong.
 2. **One engine.** The download loop (list, open, read windows, retry a failed window from the
-   phone's own offset, close, verify, commit) runs in shared Kotlin. Platform code never decides
-   whether a file is synced.
+   phone's own offset, close, verify, commit) runs in shared Kotlin on both phones. Platform code
+   never decides whether a file is synced. A sync fix lands once, in `:core:sync`.
 3. **Ports are small and byte based.** `FrameLink` sends and receives `ByteArray`. No hex strings,
    no JSON for binary data, no per-byte callbacks across the Swift boundary. Convert `ByteArray`
    to `NSData` once in `iosMain` with pinned memory.
 4. **One archive layout.** Hive paths, partial names and receipt format are defined once in
    shared code and documented in [data-model.md](data-model.md). A layout change ships with a
    migration for both platforms in the same change.
-5. **Tests live in `commonTest`.** Resume, window retry, corruption, cancellation and name
-   validation run on the JVM and on the iOS simulator through `verify` and `verifyIos`. A
-   behaviour tested only in `jvmTest` or only in Swift is not shared behaviour.
+5. **Tests live in `commonTest`.** Shared tests run on the JVM or Android host in `verify` and on
+   the iOS simulator in `verifyIos`. Each convention plugin gates its module, so a new module
+   cannot be missed. A behaviour tested only in `jvmTest` or only in Swift is not shared
+   behaviour. Corruption checks, name validation, resume, window retry and cancellation are in
+   `:core:sync` and `:core:archive` `commonTest`, and the iOS runner in `ios/shared` `iosTest`
+   (`SensorSyncTest`). Swift `TransferChecks` keeps only LAN claims, keepalive, framing and policy.
 6. **Adapters are thin and boring.** A Swift adapter maps OS callbacks to the port and nothing
    else. If an adapter grows a `retry`, `if size ==` or `crc`, that logic belongs in shared code.
 7. **Concurrency at the boundary.** Kotlin exposes `suspend` functions (bridged to Swift `async`)
@@ -101,7 +115,8 @@ flowchart LR
 ### Adding a transport (example, L2CAP or USB)
 
 1. Confirm the firmware contract supports it (`../aq-parquet/docs/shared/`).
-2. Implement `FrameLink` on each platform that needs it. Declare `payloadMax` and capabilities.
+2. Implement `FrameLink` (planned port, see above) on each platform that needs it. Declare
+   `payloadMax` and capabilities.
 3. Add the transport choice to the shared transport selection policy and its tests.
 4. No change to the engine, verify or archive code should be needed. If one is, the port is wrong.
 
@@ -109,9 +124,11 @@ flowchart LR
 
 Air quality is one family among many. Follow "Adding a device family" in
 [devices-and-discovery.md](devices-and-discovery.md). In short, the firmware contract names the
-properties, `:core:model` gets a dictionary and a `DeviceFamily` entry with `commonTest`
-coverage, and screens pick it up through capabilities and the generic `MetricCard`. Never a
-schema string check in a screen.
+properties, the metric registry gets a dictionary entry with `commonTest` coverage, and screens
+pick it up through capabilities. Never a schema string check in a screen. Today the registry is
+`Metrics` and `DeviceCapabilities` in `:core:history`. `:core:model`, `DeviceFamily` and a generic
+`MetricCard` are planned (W11 in [production-readiness-plan.md](production-readiness-plan.md)) and
+do not exist yet.
 
 ## Design parity
 
@@ -158,8 +175,8 @@ because the shared screens are Compose.
   actions for its other options.
 
 Never use Material's baseline colours on either platform. Both entry points wrap content in the
-brand theme (`AqSyncTheme` on Android, `OpenSensorTheme` on iOS), so nothing renders in the
-default purple.
+brand theme (`OpenSensorTheme` from `:ui:designsystem`, the same on Android and iOS), so nothing
+renders in the default purple.
 
 ### Health scales and charts (the global data rule)
 
@@ -189,6 +206,82 @@ Sources: [WHO global air quality guidelines, 2021](https://www.who.int/publicati
 [Mazama Science, qualitative display of air quality data](https://working-with-data.mazamascience.com/2021/03/18/qualitative-display-of-air-quality-data/),
 [South Coast AQMD accessible AQI scale](https://www.aqmd.gov/home/research/pubs-docs-reports/newsletters/may-june-july-2022/accessible-aqi-scale).
 
+### Accessibility
+
+Every shared screen reads well on TalkBack and VoiceOver from the same Compose semantics. Compose
+Multiplatform 1.12 maps them to UIKit on iOS. `heading()` becomes the header trait (the VoiceOver
+rotor's Headings), `Role.Button`, `Role.Switch` and `Role.Tab` become the button, toggle and tab
+traits, `selected` becomes the selected trait, a progress value becomes adjustable, a live region
+posts an announcement, and `isTraversalGroup` with `traversalIndex` orders traversal. The tree syncs
+lazily while a screen reader runs, so neither app sets `AccessibilitySyncOptions`. Use only standard
+Compose semantics, never a platform accessibility API in a shared screen.
+
+The rules for a new screen or component.
+
+1. **Headings.** The page title, each card or section title and each sheet or dialog title carries
+   `Modifier.semantics { heading() }`. `SectionCard`, `CardHeader`, `MascotGuide` and `InfoSheet` do
+   this already. An eyebrow that titles something passes `Eyebrow(heading = true)`. A label inside a
+   row is not a heading.
+2. **Roles.** A Material `Button`, `IconButton`, `Switch`, `Checkbox`, `RadioButton` or `Tab` names its
+   role itself. A custom tap target passes `role =` to `clickable`, `selectable` or `toggleable`.
+   Exclusive choices sit in a `selectableGroup()` and use `selectable(role = Role.RadioButton)` or
+   `Role.Tab`. `SemanticsLintTest` in `:ui:strings` fails on a custom tap target without a role.
+3. **Names.** An icon-only button has a translated `contentDescription` that says what it does
+   ("Back", "More about Wi-Fi"). An icon or image beside text that says the same is decorative and
+   gets `contentDescription = null`. The peacock is decorative unless it says something the text
+   does not.
+4. **One element per thing.** A card or row that is one item (a reading with its unit and WHO step, a
+   device row, a stat line) merges with `semantics(mergeDescendants = true)`, and a clickable row
+   merges by itself. A settings row with a switch reads its label and its state together. The row is
+   `toggleable(role = Role.Switch)` and the `Switch` takes `onCheckedChange = null`, only when the
+   row and the switch do exactly the same thing.
+5. **Touch targets.** Every tap target is at least 48 dp. Material controls enforce it through
+   `minimumInteractiveComponentSize()`, a custom control adds that modifier or a 48 dp minimum.
+   Floating controls stay 44 dp to the eye (`FloatingControl.Size`, Apple's minimum), and Compose
+   widens the touch area of any smaller clickable to the 48 dp `ViewConfiguration` minimum on both
+   phones.
+6. **State in words.** Colour is never alone. Selected, on, off, progress and a WHO step reach the
+   screen reader as words, through the control's own state, `stateDescription` or the merged text.
+   The `Eyebrow` capitals are visual only, its semantics carry the text as written.
+7. **Charts and maps.** A chart is one element with a text summary in `contentDescription` (what it
+   shows, the span, the highest value and its WHO step). Touch to read a bar stays as it is. The map
+   container says what it shows, and the list beside it is the accessible way through the same cells.
+8. **Live regions, sparingly.** `liveRegion = LiveRegionMode.Polite` goes only on a line that changes
+   while the person waits, such as sync progress or a notice. Never on a value that ticks every
+   second.
+9. **Copy.** Descriptions follow the copy rules above, translated in `values-ar`, positional
+   arguments, and no em dashes, colons or semicolons.
+
+`SemanticsTest` in `:ui:designsystem` `iosTest` renders the shared components on the iOS simulator
+and checks headings, merged rows and tab roles (`verifyIos`). Host tests cannot render Compose
+without Robolectric, so the Android check is the phone walk below.
+
+#### Phone walk (TalkBack and VoiceOver)
+
+Run it on both phones after a screen changes, in English and in Arabic, and record it in
+[status.md](status.md). Turn on TalkBack (Settings, Accessibility, TalkBack) or VoiceOver (Settings,
+Accessibility, VoiceOver, or triple-click the side button).
+
+1. **Tabs.** Swipe through the bottom bar. Each tab says its name, "tab", its position and
+   "selected" for the open one. Double tap another tab and the screen title is the next heading.
+2. **Headings.** On each tab, use the TalkBack headings control or the VoiceOver rotor set to
+   Headings and swipe down. It stops on the page title and every card title, nothing else.
+3. **Today.** Each metric card reads as one element, name, value, unit and WHO step in words. The
+   "today so far" chart reads its summary. The info "i" says "More about" and the topic, and the
+   sheet opens on its heading.
+4. **My devices.** Each device row reads its name, how it connects and its sync state as one element.
+   Start Collect all and check that the progress line is announced without moving focus.
+5. **Device and Settings.** Each switch row reads its label and "on" or "off" and toggles with one
+   double tap. Each choice reads as a radio button with its selected state. Icon-only buttons say
+   what they do.
+6. **History and Files.** Range and metric choices read their selected state. Each chart reads its
+   summary. Each file row reads as one element, and the share and export buttons say what they do.
+7. **Discover.** The map says what it shows, the time and metric controls read their current value,
+   the cell sheet title is a heading, and the chart reads its summary.
+8. **Targets.** With touch exploration on, every control can be found by a finger without a near
+   miss. Double tap works on the first try for the small floating controls.
+9. **Arabic.** Repeat steps 1 and 3 in Arabic. Swipe order follows right to left.
+
 ### Platform conventions that stay native
 
 Shared screens still respect each OS where people notice:
@@ -207,9 +300,49 @@ logs and diagnostics. A new field states its level in code, and screenshot tests
 
 ### Copy
 
-Write user-facing text in the shared string catalogue so both platforms say the same thing.
-No em dashes, colons or semicolons in user-facing copy. Errors say what happened and what to do,
-in words a person without the firmware docs understands.
+Write user-facing text so both platforms say the same thing. Shared screens keep their copy in
+Compose resources, one catalogue for both apps (`feature/<name>/src/commonMain/composeResources/values/strings.xml`,
+today Discover and Settings). Copy for the iOS companion screen and shared screens without a module
+of their own lives in `:ui:strings`, and a key Android already has keeps its name and words. State
+code holds a `UiText` (a catalogue key with arguments) and the composable resolves it. Android-only
+screens still use `res/values*/strings.xml`. The `:ui:strings` host tests check every Android and
+Compose `strings.xml` in the repository (`CopyLintTest`) and fail on a new `Text("…")` or English
+sentence literal in the `:ios:shared`, `:ui:permissions` and `feature/*` common presentation sources
+(`PresentationLiteralsTest`).
+No em dashes, colons or semicolons in user-facing copy, and no Arabic semicolon (؛) in a translation.
+Errors say what happened and what to do, in words a person without the firmware docs understands.
+
+### Languages and right to left
+
+The apps ship English (default) and Arabic (`ar`). Every catalogue has a `values-ar/strings.xml` next
+to its `values/strings.xml`, the Android `app/src/main/res` one and each Compose resource module
+(`ui/*`, `feature/*`). Compose resources read only the first of the phone's languages, while
+Android `res/` and the iOS bundle take the first language the app ships. A phone set to French then
+Arabic would show Arabic platform text, English shared screens and a mixed direction. So each app
+first moves the language its platform resolved to the front of the list for that run, saving
+nothing (`AppLanguage.kt` reads the `locale_tag` string in `res/`, `AppLanguage` in
+`AppDelegate.swift` reads `Bundle.main.preferredLocalizations`). An explicit per-app language
+already leads the list and is left alone. `preferredLanguage()` reads `Locale.current`, the value
+Compose resources use, so the font follows the strings. Layouts mirror on their own because both apps
+use start and end, never left and right, and directional icons (`AppIcons.ArrowBack`,
+`ArrowForward`, `Send`, `ChevronLeft`, `ChevronRight`) set `autoMirror`. Cairo sets the text when
+the language is written in Arabic script or the layout runs right to left (`usesCairoText` in
+`Typography.kt`). Latin locales keep Quicksand.
+
+To add a language `xx`.
+
+1. Add `values-xx/strings.xml` beside every default catalogue, with every key and every plural
+   form the language needs (Arabic needs zero, one, two, few, many and other). Keep placeholders.
+2. Add `<string name="locale_tag">xx</string>` to `app/src/main/res/values-xx/strings.xml`. Add `xx`
+   to `languages` (and its plural forms) in `TranslationsTest`, to
+   `app/src/main/res/xml/locales_config.xml`, to `knownRegions` in the Xcode project, to
+   `CFBundleLocalizations` in `ios/App/Info.plist`, and give each entry of
+   `ios/App/InfoPlist.xcstrings` an `xx` value.
+3. Run `verify`. `TranslationsTest` fails on a missing or extra key, a placeholder that differs, a
+   language missing from the Android picker or the iOS purpose strings. `CopyLintTest` lints the new
+   files, and `StringsMatchAndroidTest` and `CopyRulesTest` compare the shared keys in each language.
+4. Have a native speaker review the copy and check the screens on a phone, then record it in
+   `status.md`.
 
 ## Checklist for a cross-platform change
 
@@ -218,5 +351,8 @@ in words a person without the firmware docs understands.
 - [ ] Platform adapters only map OS behaviour to a port.
 - [ ] Design uses tokens, no raw colours or sizes in screens.
 - [ ] Simple level reviewed, technical detail gated behind Detailed or Developer.
-- [ ] `./gradlew --no-daemon verify verifyIos` and the unsigned simulator build pass.
+- [ ] Headings, roles, names, merged rows, 48 dp targets and chart summaries follow
+      [Accessibility](#accessibility), and the phone walk is recorded for a changed screen.
+- [ ] `./gradlew --no-daemon verify` (includes `verifyIos` on a Mac) and the unsigned simulator
+      build pass.
 - [ ] Phone evidence recorded for radio, background, permission or release behaviour, per platform.

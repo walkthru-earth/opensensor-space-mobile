@@ -1,9 +1,9 @@
-# iOS migration — first live-reading app
+# iOS migration, first live-reading app
 
 **Scope:** Kotlin Multiplatform source sets, the Compose iOS shell, Core Bluetooth,
 macOS builds and remaining feature migration.
-**Code:** `core/{protocol,history}/src/commonMain`, `ios/shared`, `ios/App`,
-`ios/OpenSensor.xcodeproj`.
+**Code:** `core/*/src/commonMain`, `ui/designsystem`, `feature/discover`, `ios/shared`,
+`ios/App`, `ios/OpenSensor.xcodeproj`.
 **Related:** [architecture.md](architecture.md), [transports.md](transports.md),
 [build-and-release.md](build-and-release.md), [status.md](status.md).
 
@@ -18,18 +18,22 @@ advertisement decoder, LAN envelope/handshake constants, reviewed live profiles,
 metric registry, sensor validity/mood rules and monotonic-time estimates.
 The firmware protocol and all existing wire values are preserved.
 
-`core:protocol`, `core:parquet` and `core:history` retain a Java 17 JVM target for Android and host
-consumers, with `iosArm64` and `iosSimulatorArm64` added. Portable source lives
-in `commonMain`. The old `src/main/kotlin` and `src/test/kotlin` directories remain
-mapped to `jvmMain` and `jvmTest` for platform adapters and existing tests.
+Every `:core` module (`protocol`, `parquet`, `history`, `publicfeed`, `units`, `airquality`,
+`archive`, and the empty `sync` and `settings` skeletons) has a Java 17 JVM target for Android and
+host consumers, plus `iosArm64` and `iosSimulatorArm64`. Portable source lives in `commonMain`,
+platform adapters in `jvmMain` and `iosMain`. The W2 source move is complete. No module maps
+`src/main/kotlin` any more.
 `core:parquet` reads mapped `NSData` and inflates GZIP with the system zlib on iOS (W8,
-2026-10-08), and its oracle tests decode the real fixtures on the simulator. The iOS app does
-not call the reader yet. The `test` compatibility tasks still run `jvmTest`.
+2026-10-08), and its oracle tests decode the real fixtures on the simulator. Discover reads its
+bundled sample through this reader on iOS. The iOS archive does not use the reader or the index
+yet. The `test` compatibility tasks run `jvmTest`.
 
 The iOS app uses Compose Multiplatform 1.12.1 (Material 3 1.9.0), the existing
-Kotlin 2.4.20 and Xcode direct framework integration. `ios:shared` also has a JVM
-target for presentation-state tests; the Android app continues to use its
-existing screens. Shared Android/iOS UI extraction is a later stage.
+Kotlin 2.4.20 and Xcode direct framework integration. `ios:shared` targets iOS only. Its
+presentation-state tests run on the simulator in `verifyIos`, and its `commonMain` depends on
+`:feature:discover` and `:ui:designsystem`. The Android app continues to use its existing screens.
+Shared Android and iOS screens beyond Discover are planned in
+[platform-parity-plan.md](platform-parity-plan.md).
 
 The iOS live screen can discover AQ Sync service advertisements, connect one
 sensor, read INFO/STATUS/LIVE and subscribe to live/status updates. Missing,
@@ -52,6 +56,26 @@ the iPhone 18 Pro simulator (PMTiles basemap and sample cells drawn) and, on 202
 iPhone 16 Pro, which opened on Discover with no prompt. On that iPhone, Arabic place names drew
 unjoined, because the Apple maplibre-native-ffi build has no bidi or Arabic shaping. iOS now uses
 the English or Latin label styles (`devices-and-discovery.md`, "Right-to-left labels on iOS").
+
+Since #16 (2026-10-09) the My devices tab is the shared `:feature:devices` screen, the same as
+Android. `DevicesBridge` (`ios/shared`) feeds its three ports from `CompanionState`, the known
+records saved in UserDefaults (peripheral id, name, station, hardware id, last opened, never a
+credential), the Keychain credential list (`LanCredentials.list`, ids only, never the token) and
+the receipt index. Bluetooth access is asked from My devices through `:ui:permissions`. When it is
+already allowed, `BluetoothCompanion` creates the central manager at launch with no prompt, and
+the list scans while it is visible. Opening a sensor connects it through its saved identifier
+(`retrievePeripherals`) when it is not in the scan, closing any other open link, and pushes the
+device page (`CompanionScreen`, with Back, the live reading, Wi-Fi access and Bluetooth sync).
+Forget, after confirmation, drops the record and the Keychain Wi-Fi access and closes any open
+link. The system bond stays until the user removes it in iOS Settings, which the dialog says.
+A forgotten sensor comes back only when the user opens it again. Collect all runs one sensor at a
+time while the app is open, over Wi-Fi when the sensor was found there with access, else over
+Bluetooth, and stops when the app leaves the foreground. A step never takes over a link the user
+holds. It skips a sensor the user has open on Bluetooth or Wi-Fi (a Wi-Fi session maps to its
+known sensor through the TXT station), fails while another sensor holds the Bluetooth link, closes
+only what it opened, and fails when its sync has not started within a minute. Opening a sensor
+cancels Collect all first. The Wi-Fi browse still starts from Find
+on Wi-Fi on the device page, so the list shows Wi-Fi sensors after that browse.
 
 Wi-Fi discovery is also available through `NWBrowser`, restricted to
 `_aqsync._tcp` in `local.`. Tapping **Find Wi-Fi sensors** starts a bounded browse
@@ -84,22 +108,24 @@ Frames cross the Kotlin and Swift boundary as `NSData` (Swift `Data`). `iosMain/
 copies with `usePinned` and `memcpy`; no hex strings remain on the transfer path. The LAN
 handshake takes the token as `Data` and zeroes the Kotlin copies after building the frame.
 
+File sync on iOS runs the shared engine, the same `SyncEngine` and `ArchiveCollector` from
+`:core:sync` that Android runs. Swift lends each sync a `SensorLink` (`ios/shared` iosMain).
+`LanSession` passes LAN frame bodies through it, and `BluetoothCompanion` passes the `control`
+writes and `response` notifications. `SensorSync` owns the `IosArchiveStore` and
+`ReceiptArchiveIndex` from `:core:archive` iosMain, runs off the main thread, reports progress at
+most four times a second and finishes with one `SyncResult`. A station syncs over one link at a
+time. The Swift transfer engine was removed. Window retry, resume, verify and conflict rules are
+therefore Android's rules, described in [sync-engine.md](sync-engine.md), which also lists what
+still differs between the phones.
+
 Collections mirror immutable files under Application Support as
-`SensorArchive/<station>/<relative path>`. Interrupted downloads retain partial bytes keyed
-by size/CRC and resume from the phone's own received offset. READ handles, offsets and window
-lengths are checked. As the contract requires, a window whose READ_END disagrees with the
-phone's own count, or that skipped a chunk, is retried with a new READ from the phone's offset.
-Chunks after a gap are drained until READ_END first. Overlapping or duplicate bytes already held
-are skipped, and `next_offset` never overrides the local count. Retries mirror Android's
-`SyncEngine` (5 retries, 0.3 s linear backoff). A consistent short READ_END continues from the
-reported end, a READ_END error status ends the run, and held bytes are kept for resume in
-every case. A final filename appears only after size, streamed IEEE
-CRC-32 and `PAR1` head/tail verification. Existing finalized files are verified and preserved;
-a conflicting file fails the collection rather than replacing data. Paths use the firmware's
-safe-name whitelist and 399-byte limit, reject traversal/symlinks, and keep station directories
-independent. Collection runs off the main actor. Archive writes hop to the `ArchiveIO` actor
-once per READ window (append plus fsync), and progress reaches the main actor at most four
-times per second. The archive root is created with
+`SensorArchive/<station>/<relative path>`, the same place earlier builds used. Partials live
+under `Application Support/archive-partial/<station>/`, written with `pwrite` and `fsync`.
+Partials and receipts left by the old Swift engine are adopted when their size and CRC match.
+A final filename appears only after size, CRC-32, `PAR1` head/tail and SHA-256 pass in one pass.
+Existing finalized files are verified and preserved, and a conflicting file is reported rather
+than replaced. Names use the shared safe-name rule, which is stricter than the old Swift
+whitelist. The archive root is created with
 `FileProtectionType.completeUntilFirstUserAuthentication`, matching the Keychain token's
 `AfterFirstUnlockThisDeviceOnly`, so collection can keep writing after the phone locks. Partials
 and receipts inherit or set the same class. Backup exclusion is set when the root is created
@@ -115,19 +141,41 @@ discovery and BLE/idle LAN connections, but active collections continue while iO
 Expiration cancels the sockets and retains partial bytes/progress; returning reconnects the
 paused sensors and resumes collection after old task/archive ownership is released. Recoverable
 LAN failures while backgrounded also queue resume. Explicit Cancel removes that intent, and
-queued sensors wait for one of the two collection slots. This is bounded execution, not an
-indefinite background service or periodic automatic collection. Force-quitting/relaunching
+queued sensors wait for one of the two collection slots. This lease is bounded execution. Periodic
+Auto-sync is separate, see [background-sync.md](background-sync.md#ios-auto-sync). Force-quitting/relaunching
 requires reconnecting and starting sync again; downloaded bytes and verification receipts persist.
 See Apple's [background execution guidance](https://developer.apple.com/documentation/uikit/extending-your-app-s-background-execution-time).
 
-Finalized files receive an atomic size/CRC verification receipt. Later collections validate
-the local bytes against it, count completed files immediately and skip their remote OPEN/READ.
-Legacy files without receipts use OPEN/local verification once to create the receipt. Conflicts
-preserve existing files. Partial files still require matching fresh OPENED size/CRC before resume.
-The offline **Export Parquet files** button copies only finalized `.parquet` files into a temporary
-station/Hive snapshot and opens Apple's Files export picker. Partials and receipts remain private;
-the snapshot is removed after export/cancel. Files are retained in Application Support; exporting
-does not move the archive. The app has no background BLE capability or archive charts.
+Finalized files receive an atomic verification receipt with size, CRC and SHA-256. Later
+collections count completed files immediately and skip their remote OPEN/READ. An older receipt
+without a hash gets one on its next verify. Partial files still require matching fresh OPENED
+size/CRC before resume.
+
+Messages follow Android. A sync outcome carries a `:ui:strings` key, and link or Wi-Fi access
+events outside a collection reach `CompanionState` as a typed `CompanionNotice`, so iOS shows
+Android's words for busy, refused token, station or hardware change and the rest. The iOS LAN
+path has no Bluetooth fallback, so it uses `msg_busy` and `msg_token_needs_ble` where Android
+uses its `msg_lan_*` wording. A LAN `AUTH_FAILED` drops the saved token and asks the user to save
+Wi-Fi access over Bluetooth again. The BLE **Sync** button uses Wi-Fi when an idle LAN session
+for the same sensor is open, and progress then shows on its LAN card. A Bluetooth sync that loses
+its link closes the Bluetooth connection, and held bytes stay for the next sync. A file this
+phone cannot store fails alone, and the sync ends with `companion_sync_storage_failed` and keeps
+the link. A protocol fault ends it with `msg_sync_aborted` and also keeps the link. A token
+refused or a sensor busy in the middle of a sync ends it as `AUTH_FAILED` or `BUSY`. A Stop
+that lands before the work starts still finishes once and frees the station. `SensorSync` logs
+only the file name and the error class and message, through `NSLog` without format arguments. The Swift
+adapters report Bluetooth and Wi-Fi link states as a `CompanionNotice`, so `:ui:strings` words them in
+English and Arabic (#47).
+
+Files and the inspector are the shared `:feature:files` screens, opened offline from a Files
+button next to History on My devices (`FilesKey("archive")`). Files lists every verified file
+in the phone archive by local day. Share one file, share all, share zip and save zip stage
+copies through `:core:archive` into a fresh run under `tmp/opensensor-export`, then open
+`UIActivityViewController` or `UIDocumentPickerViewController(forExporting:asCopy:)` from
+`feature/files/src/iosMain`. The run is removed once the sheet closes. Only verified records
+are exported, so partials and receipts stay private, and the archive is never moved or changed.
+The daily zip is hidden because iOS has no derived files yet. The Swift folder export and its
+companion button are gone. Background Bluetooth is limited to Auto-sync (#23). The app has no archive charts.
 Native BLE uses Core Bluetooth's
 peripheral identifier; the Keychain identity also pins station and full hardware ID. New
 LAN/archive behavior has host/simulator/build evidence plus the owner's report of
@@ -158,22 +206,23 @@ xcodebuild -project ios/OpenSensor.xcodeproj -scheme OpenSensor \
 
 Pick any installed iPhone simulator for the `test` destination (`xcrun simctl list devices available`).
 
-`verify` includes Android lint/APK/unit tests, existing JVM core tests, shared core
-tests and the iOS presentation state's JVM tests. It works without Xcode on Linux.
-`verifyIos` runs common tests on the simulator and links the shared framework;
-it needs an installed simulator runtime. The Xcode build compiles the Swift BLE
+`verify` includes Android lint, the debug APK, `:app` unit tests, the JVM tests of every `:core`
+module and the Android host tests of `:ui:designsystem` and `:feature:discover`. It works without
+Xcode on Linux. On a Mac it also runs `verifyIos` (skip with `-Popensensor.skipIos=true`).
+`verifyIos` runs the iOS simulator tests of every shared module, including the `:ios:shared`
+presentation tests, and links the shared framework. It needs an installed simulator runtime. The Xcode build compiles the Swift BLE
 adapter and app too, with `SWIFT_STRICT_CONCURRENCY = complete` and no warnings. The native
-checks exercise the production archive and transfer engine with scripted replies: resume, CRC
-verification, immutable conflicts, the 399-byte name limit, path/symlink rejection, foreign
-handles, window retry (short READ_END, gap, overlap, duplicate, exhaustion, error status), LAN
-framing, Local Network denial detection, independent concurrent stations and outbound keepalive
-timing. `verify-native.sh` compiles them on the Mac host with complete concurrency checking and
+checks cover LAN claims, framing, Local Network denial detection, policy and outbound keepalive
+timing. Resume, verification, conflicts, names and window retry are tested once in `:core:sync`
+and `:core:archive` `commonTest`, and the iOS runner and notices in `ios/shared`
+(`SensorSyncTest`, `SyncOutcomeTest`, `CompanionNoticeTest`), all inside `verifyIos`. `verify-native.sh` compiles them on the Mac host with complete concurrency checking and
 warnings as errors. The hostless `OpenSensorTests` Swift Testing target runs the same checks on an
 iOS simulator through the shared scheme's test action, without signing or the Kotlin framework.
 Neither a simulator build nor these tests qualifies real radio behavior.
 
-GitHub Actions adds an Apple Silicon macOS job for `verifyIos`, an unsigned Debug
-simulator build, and an unsigned Release device build. Its Xcode pin, downloadable
+GitHub Actions adds an Apple Silicon macOS job that runs `verify-native.sh`, `verifyIos`, an
+unsigned Debug simulator build, the `OpenSensorTests` Swift Testing target on a simulator, and an
+unsigned Release device build. Its Xcode pin, downloadable
 simulator artifact, failure reports and later TestFlight signing plan are documented
 in [build-and-release.md](build-and-release.md#github-actions-ios-validation-researched-2026-10-08).
 Keep the existing Xcode build phase as the framework integration point; a separate
@@ -203,20 +252,93 @@ accuracy, stale/background handling or authenticated Wi-Fi connections. See
 
 ## Remaining migration
 
-1. Wire the shared Parquet reader, `ParquetIndexer` and `Aggregator` (common since W8) into the iOS
-   archive, with an iOS store for the index in place of Room.
-2. Port offline charts and retained station-generation UI.
-3. Share existing Android screens, resources and navigation incrementally.
+1. Done in code (#18, 2026-10-09), not yet seen on an iPhone. The shared reader, indexer and
+   aggregator run over the iOS archive through the receipt index (`IosArchive`), with index repair
+   at launch. A Room KMP store would replace the receipts and the in-memory tiers later.
+2. Done in code (#18), not yet seen on an iPhone. History is the shared `:feature:history`
+   screen, opened from History buttons on My devices and the device page, with Day, Week, Month and Year, the ring,
+   the calendar and station chips for every archived station. Check on an iPhone that a fresh sync
+   shows in History without a relaunch, that index repair fills an archive synced by an older build,
+   and how long Week, Month and Year take on a large archive (tiers are computed in memory).
+3. Share existing Android screens, resources and navigation incrementally. My devices is shared
+   in code (#16, 2026-10-09), not yet seen on an iPhone. Check on an iPhone that the list scans
+   only after access is allowed, that a known sensor opens from the list when it is not
+   advertising in the scan, that Forget then opening the sensor again pairs as expected (remove
+   the bond in iOS Settings first), and that Collect all copies two loggers one after the other.
 4. Qualify BLE token acquisition, Keychain persistence, authenticated LAN transfer, multi-phone
    collection, concurrent sensors, cancellation/resume and Local Network permissions on iPhones.
 5. Qualify bounded iOS LAN background collection, automatic foreground resume and Files exports on iPhones.
 6. Measure LAN throughput with the off-main session on an iPhone, confirm the Local Network
    denial hint after declining and revoking access, and confirm archive writes continue after
    the phone locks during a background collection.
+7. Qualify the shared engine on an iPhone. LAN sync, background resume and a second sync that
+   reads nothing. Bluetooth sync, and Bluetooth Sync while a LAN session is open. An upgrade from
+   a build that used the Swift engine, keeping its receipts and partials.
+8. Drop the unused write path in `SensorArchive.swift`, with its English error descriptions. The
+   link status lines moved into `:ui:strings` in #47.
+9. Give `ByteReader` (`core/parquet`) a `close`, so `ArchiveStore.reader` callers release
+   what they open. No descriptor leaks today. The JVM reader closes its file after mapping, and
+   the iOS reader is a mapped `NSData` freed with the object. A reader over a plain file handle
+   would need it.
+10. Debug (`:feature:debug`) runs on iOS over a lent Bluetooth link only. Raw commands, `LOG_TAIL`,
+    `GET_CONFIG` and `STATUS` need a Wi-Fi variant of `openDebugLink` in `LanDiscovery.swift`
+    (async `target()` and `beginCollect`), and iOS needs the Smart Sync trace card. Qualify on an
+    iPhone that a raw command, the log, the config read and Refresh status work over Bluetooth, that
+    `TOKEN` and secrets stay redacted, that a sync is refused while Debug holds the link and the
+    reverse, and that leaving Developer level closes the screen.
+11. Done in code (#17, 2026-10-09), not yet seen on an iPhone. Today is the shared `:feature:today`
+    screen. A Bluetooth sensor opened from My devices lands on it. `CompanionTodaySource` (`ios/shared`
+    commonMain) reads `CompanionState` as the Today port, and Today so far reads the hourly tier of
+    `IosArchive`. Set time and Finalize ask for confirmation, then `BluetoothCompanion.command` lends
+    a fresh `SensorLink` and `SensorSync.command` sends `SET_TIME` or `FLUSH` through the shared
+    `DeviceSession`, refused while a sync, Debug or a Wi-Fi access request holds the link. Smart Sync
+    follows the Clock sync setting, now shown on iOS, and a refused clock step stops the sync. The
+    Device action opens the companion page, which keeps Wi-Fi access, the Wi-Fi session and Debug.
+    A sensor known only over Wi-Fi still opens on the companion page. Commands have no Wi-Fi path yet,
+    the sync bar has no byte total, and a Wi-Fi sync does not show on Today. Qualify on an iPhone
+    that Set time anchors a logger that has no UTC, that Finalize writes a short file the next sync
+    downloads, that Smart Sync under Automatic sets the clock then syncs, that Ask shows the consent
+    dialog, and that opening another sensor leaves the first Today closed.
+12. Done in code (#20, 2026-10-09), not yet seen on an iPhone. Device settings are the shared
+    `:feature:device` cards and confirmations, opened from a Sensor settings button on the companion
+    page of a connected Bluetooth sensor (`DeviceSettingsKey`). `IosDeviceConfigSource` (`ios/shared`
+    iosMain) borrows one short link per request from `BluetoothCompanion.openConfigLink`, which uses
+    Today's command guards and settles the link when it is handed back, closing it then if its last
+    page left meanwhile or the app is off screen. The page reads the config when the link turns
+    ready. After a restart the reopen goes only to the same sensor, or to a free link with no
+    Collect all running. Frames go through the
+    redacting recorder Debug shows. Get Wi-Fi token and Replace token reuse Save Wi-Fi access, so the
+    token stays in Swift and the Keychain, and a rotation first drops the old entry through
+    `AppServices.forgetWifiAccess`. Differences from Android: Bluetooth only, no phone installation history, no device header or Auto-sync card on the page, and no
+    Wi-Fi endpoint line. Qualify on an iPhone that each of the four confirmations sends nothing on
+    Cancel, that a Wi-Fi join is polled until connected, that Replace token stores a new token and the
+    next Wi-Fi sync uses it, that Forget all paired phones asks for pairing on the next connection,
+    that Restart reconnects after about 6 s, and that a sync or Collect all waiting for the link starts
+    once a request ends.
+13. Done in code (#21, 2026-10-09), not yet seen on an iPhone. The sensor sticker card scans with
+    VisionKit `DataScannerViewController` (`ios/App/StickerScanner.swift`), which reads the first
+    barcode of any symbology, as Android's scanner does. Swift passes `scanSticker` to
+    `mainViewController` only where `DataScannerViewController.isSupported` is true (A12 and later),
+    so Scan is hidden elsewhere. The Scan tap runs `UserAction.SCAN_STICKER` through `:ui:permissions`,
+    which shows the system camera prompt with no rationale of its own, as for Bluetooth, Wi-Fi and
+    location (`StickerScan.kt`, AVFoundation status),
+    and only then presents the scanner, which checks `isAvailable` (false until the grant or under a
+    Screen Time restriction). Only the decoded string reaches Kotlin, through `StickerScans.read`, the
+    same `SensorLabel` parser and model check as typed text. Cancel leaves the card as it was. No frame
+    is stored, logged or uploaded. `NSCameraUsageDescription` is in `Info.plist` and
+    `InfoPlist.xcstrings`. The privacy manifest needs no change (store-compliance.md). Parity P58,
+    P61 to P63. Qualify on an iPhone that launch shows no camera prompt, that the first Scan tap shows
+    the system prompt directly, that a refusal leaves the note and manual entry, that a
+    later tap offers Settings, that a real PMS5003T sticker fills the field and saves, that Cancel keeps
+    the field, and that the scanner stops the camera when it closes.
 
-LAN byte transfer and integrity verification use a native Swift platform engine with the shared
-Kotlin wire codec. Android's existing session/archive engine still depends on JVM file APIs,
-Room and Android lifetime services; it is not imported into the iOS app.
+LAN and Bluetooth file sync use the shared Kotlin engine. Swift keeps the sockets, Core
+Bluetooth, LAN framing, the HELLO check, keepalive, the BLE token request and Keychain.
+The shared Debug screen borrows the same `SensorLink` from `BluetoothCompanion.openDebugLink`,
+one per request, and Device settings borrow theirs from `openConfigLink`. Closing the link
+(`SensorLink.whenClosed`) hands it back to Swift.
+`SensorArchive.swift` remains only for Files export. Android's Room index, WorkManager and
+foreground service stay Android code.
 
 Compilation, automated tests and device observations for this change are recorded
 in [status.md](status.md); features listed above are not implemented on iOS yet.

@@ -1,108 +1,57 @@
 package earth.walkthru.aqsync.data.settings
 
-import android.content.Context
-import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.booleanPreferencesKey
-import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
-import dagger.hilt.android.qualifiers.ApplicationContext
 import earth.walkthru.aqsync.data.sync.ClockSyncMode
+import earth.walkthru.aqsync.settings.SettingsRepository
 import earth.walkthru.aqsync.units.UnitSystem
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
+import earth.walkthru.aqsync.settings.ClockSyncMode as SharedClockSyncMode
 
-private val Context.settingsStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
-
-/**
- * How much the UI shows. Cosmetic only: every level reads the same data; higher levels *reveal*,
- * nothing the Simple experience needs depends on them (AGENTS.md).
- */
-enum class DetailLevel {
-    /** The current reading and today, in plain words. History and files stay one tap away. */
-    SIMPLE,
-
-    /** Every measurement, storage counters, the file inspector and the History source card. */
-    DETAILED,
-
-    /** Detailed plus the Debug screen (raw status JSON, frames, serial log, raw commands). */
-    DEVELOPER,
-    ;
-
-    val detailed: Boolean get() = this != SIMPLE
-    val developer: Boolean get() = this == DEVELOPER
-}
+/** The shared detail level (`:core:settings`), under its old Android name so screens keep their imports. */
+typealias DetailLevel = earth.walkthru.aqsync.settings.DetailLevel
 
 /**
- * App-level preferences (DataStore Preferences): the **detail level** (Simple · Detailed · Developer).
- * Nothing here is a device setting — those live on the device and are read/written with
- * `GET_CONFIG` / `SET_CONFIG`.
+ * Android's view of the shared app preferences ([SettingsRepository], `:core:settings`). The store,
+ * file, keys, defaults and the legacy `advanced_mode` rule live there, once for Android and iOS.
+ * This keeps the flows Android screens already collect.
  *
- * The level replaced a Boolean "Advanced mode" (2026-09-17): an existing `advanced_mode = true` is
- * read as DEVELOPER until the user picks a level, so nobody loses their Debug screen.
+ * [ClockSyncMode] is still the sync engine's own enum (`data/sync`) until the engine moves to
+ * `:core:sync`. The two have the same names and are mapped by name here.
  */
 @Singleton
-class AppSettings @Inject constructor(@ApplicationContext private val context: Context) {
+class AppSettings @Inject constructor(private val repository: SettingsRepository) {
 
-    val detailLevel: Flow<DetailLevel> = context.settingsStore.data.map { prefs ->
-        prefs[DETAIL_LEVEL]?.let { name -> DetailLevel.entries.firstOrNull { it.name == name } }
-            ?: if (prefs[ADVANCED_MODE] == true) DetailLevel.DEVELOPER else DetailLevel.SIMPLE
-    }
+    val detailLevel: Flow<DetailLevel> = repository.detailLevel
 
     /** Consent policy for SET_TIME during an explicit Smart Sync. Default asks first. */
-    val clockSyncMode: Flow<ClockSyncMode> = context.settingsStore.data.map { prefs ->
-        prefs[CLOCK_SYNC_MODE]?.let { name -> ClockSyncMode.entries.firstOrNull { it.name == name } } ?: ClockSyncMode.ASK
-    }
+    val clockSyncMode: Flow<ClockSyncMode> = repository.clockSyncMode.map { it.toEngine() }
 
-    /**
-     * "Show public sensors". On by default. Off, Discover makes no network request at all (no
-     * basemap, no public feed) and shows the bundled sample on a plain background
-     * (AGENTS.md network boundary).
-     */
-    val showPublicSensors: Flow<Boolean> = context.settingsStore.data.map { prefs -> prefs[SHOW_PUBLIC_SENSORS] ?: true }
+    /** "Show public sensors". Off, Discover makes no network request at all (AGENTS.md network boundary). */
+    val showPublicSensors: Flow<Boolean> = repository.showPublicSensors
 
-    suspend fun setShowPublicSensors(on: Boolean) {
-        context.settingsStore.edit { it[SHOW_PUBLIC_SENSORS] = on }
-    }
+    suspend fun setShowPublicSensors(on: Boolean) = repository.setShowPublicSensors(on)
 
-    /**
-     * Display units, Automatic (the phone's region) by default. Display only, the archive, exports
-     * and the Discover scale stay SI (`:core:units`).
-     */
-    val unitSystem: Flow<UnitSystem> = context.settingsStore.data.map { prefs -> UnitSystem.parse(prefs[UNIT_SYSTEM]) }
+    /** Display units, Automatic by default. Display only, the archive and exports stay SI. */
+    val unitSystem: Flow<UnitSystem> = repository.unitSystem
 
-    suspend fun setUnitSystem(system: UnitSystem) {
-        context.settingsStore.edit { it[UNIT_SYSTEM] = system.name }
-    }
+    suspend fun setUnitSystem(system: UnitSystem) = repository.setUnitSystem(system)
 
     /** Detailed or Developer. */
     val detailed: Flow<Boolean> = detailLevel.map { it.detailed }
 
-    /** Developer only — what the old Advanced switch meant: the Debug destination, raw views. */
+    /** Developer only, what the old Advanced switch meant. The Debug destination, raw views. */
     val advancedMode: Flow<Boolean> = detailLevel.map { it.developer }
 
-    suspend fun setDetailLevel(level: DetailLevel) {
-        context.settingsStore.edit {
-            it[DETAIL_LEVEL] = level.name
-            it[ADVANCED_MODE] = level.developer
-        }
-    }
+    suspend fun setDetailLevel(level: DetailLevel) = repository.setDetailLevel(level)
 
-    suspend fun setClockSyncMode(mode: ClockSyncMode) {
-        context.settingsStore.edit { it[CLOCK_SYNC_MODE] = mode.name }
-    }
+    suspend fun setClockSyncMode(mode: ClockSyncMode) = repository.setClockSyncMode(mode.toShared())
 
-    /** Kept for callers that only know the old switch: on → Developer, off → Simple. */
+    /** Kept for callers that only know the old switch. On is Developer, off is Simple. */
     suspend fun setAdvancedMode(on: Boolean) = setDetailLevel(if (on) DetailLevel.DEVELOPER else DetailLevel.SIMPLE)
-
-    private companion object {
-        val ADVANCED_MODE = booleanPreferencesKey("advanced_mode")
-        val DETAIL_LEVEL = stringPreferencesKey("detail_level")
-        val CLOCK_SYNC_MODE = stringPreferencesKey("clock_sync_mode")
-        val SHOW_PUBLIC_SENSORS = booleanPreferencesKey("show_public_sensors")
-        val UNIT_SYSTEM = stringPreferencesKey("unit_system")
-    }
 }
+
+internal fun SharedClockSyncMode.toEngine(): ClockSyncMode = ClockSyncMode.valueOf(name)
+
+internal fun ClockSyncMode.toShared(): SharedClockSyncMode = SharedClockSyncMode.valueOf(name)

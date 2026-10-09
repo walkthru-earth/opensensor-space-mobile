@@ -42,9 +42,13 @@ concern you are changing in `docs/README.md`.
   LAN tokens remain encrypted at rest. Device-changing actions are explicit UI
   actions; reboot, token rotation, forgetting bonds and pairing mode `none`
   require confirmation. Debug raw commands cannot invoke `REBOOT` or `SET_CONFIG`.
-- `:core:*` stays reusable without Android, Hilt or Room. `protocol` and the
-  sensor-domain part of `history` compile for JVM and iOS; platform file/stream
-  adapters stay in JVM source sets. Common code cannot import `java.*`; platform
+- `:core:*` stays reusable without Android, Hilt or Room. Every `:core` module
+  (`protocol`, `parquet`, `history`, `publicfeed`, `units`, `airquality`, `archive`, and the
+  empty `sync`, `settings`) compiles for JVM and iOS from `commonMain`.
+  Platform adapters stay in `jvmMain` and `iosMain` (streams, file mapping, zlib,
+  H3). `:ui:designsystem`, `:ui:permissions` and `:feature:discover` are Compose
+  for Android and iOS.
+  `:ios:shared` is iOS only. Common code cannot import `java.*`; platform
   source sets may depend on common code, never the reverse.
   Transport and storage work stays out of composables. Sensor semantics come
   from the metric registry, never fabricated defaults.
@@ -77,6 +81,9 @@ concern you are changing in `docs/README.md`.
 ## Gate
 
 Use the bundled toolchain and run `./gradlew --no-daemon verify` before a commit
-(lint, debug APK and all unit tests). The installed pre-commit hook checks hygiene,
+(lint, debug APK, `:app` unit tests and every shared module's host tests; on a Mac
+also `verifyIos`, the iOS simulator tests and framework link). Each convention
+plugin adds its module to the gates, so a new module needs no list edit.
+`app/src/androidTest` is not gated. The installed pre-commit hook checks hygiene,
 secrets and ktlint; the pre-push hook runs `verify`. For setup and CI details see
 `docs/build-and-release.md`. Phone behavior requires a phone run and dated evidence.

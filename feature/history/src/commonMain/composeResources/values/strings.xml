@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="history_title">History</string>
+    <string name="history_back">Back</string>
+    <string name="history_loading">Loading archive…</string>
+    <string name="history_from">History from</string>
+    <string name="history_current">Current</string>
+    <string name="history_earlier">Earlier</string>
+    <string name="history_station_chip">%1$s, station %2$s</string>
+    <string name="history_range_day">Day</string>
+    <string name="history_range_week">Week</string>
+    <string name="history_range_month">Month</string>
+    <string name="history_range_year">Year</string>
+    <string name="history_page_earlier">Earlier</string>
+    <string name="history_page_later">Later</string>
+    <string name="history_untimed">Readings have no time yet. See them in Files.</string>
+    <string name="history_nothing_indexed">No readings indexed yet.</string>
+    <string name="history_archive">On this phone</string>
+    <string name="history_days">days with readings</string>
+    <string name="history_none_yet">none yet</string>
+    <string name="history_span_utc">first and last UTC day</string>
+    <string name="history_files_time">files with time</string>
+    <string name="history_of">%1$d of %2$d</string>
+    <string name="history_waiting_index">waiting to index</string>
+    <string name="history_index_failed">could not index</string>
+    <string name="history_estimated">files with estimated time</string>
+    <plurals name="history_other_station">
+        <item quantity="one">%1$d copy belongs to another station</item>
+        <item quantity="other">%1$d copies belong to another station</item>
+    </plurals>
+    <plurals name="history_untimed_files">
+        <item quantity="one">%1$d file has no time</item>
+        <item quantity="other">%1$d files have no time</item>
+    </plurals>
+    <string name="history_never_connected">Connect this sensor once to see its history.</string>
+    <string name="history_loading_short">Loading…</string>
+    <string name="history_covered">%1$d % covered</string>
+    <string name="history_average">average</string>
+    <string name="history_peak">peak</string>
+    <string name="history_coverage">coverage</string>
+    <plurals name="history_readings">
+        <item quantity="one">%1$d reading</item>
+        <item quantity="other">%1$d readings</item>
+    </plurals>
+    <string name="history_low_coverage">Less than half of this window has readings.</string>
+    <string name="history_no_readings">No timed readings in this window.</string>
+    <string name="history_latest">Latest readings are from %1$s.</string>
+    <string name="history_tap_day">Tap a day to open it.</string>
+    <string name="history_week_of">week of %1$s</string>
+    <string name="history_no_readings_short">no readings</string>
+    <string name="history_no_value">n/a</string>
+    <string name="history_peak_value">peak %1$s</string>
+    <string name="history_estimated_time">estimated time</string>
+    <string name="history_day_coverage">%1$d % of the day</string>
+    <string name="history_dev_title">Developer</string>
+    <string name="history_dev_source">source</string>
+    <string name="history_dev_tier">aggregate tier %1$d min</string>
+    <string name="history_dev_binned">rows binned to 1 min</string>
+    <string name="history_dev_raw">raw 10 s rows</string>
+    <string name="history_dev_points">points</string>
+    <string name="history_dev_valid_rows">valid rows</string>
+    <string name="history_dev_station">station</string>
+    <string name="chart_touch">Touch a column to read it</string>
+    <string name="chart_who_24h">WHO 24 h guideline</string>
+    <string name="chart_mean_hourly">Bars are hourly means.</string>
+    <string name="chart_mean_daily">Bars are daily means.</string>
+    <string name="chart_mean_weekly">Bars are weekly means.</string>
+    <string name="chart_guideline_note">The dashed line is the WHO 24 hour guideline.</string>
+    <string name="mood_fresh_title">Fresh air</string>
+    <string name="mood_fair_title">Fair</string>
+    <string name="mood_hazy_title">Getting hazy</string>
+    <string name="mood_poor_title">Poor</string>
+    <string name="mood_smoky_title">Smoky</string>
+    <string name="mood_thick_title">Thick smoke</string>
+    <string name="mood_none">No reading</string>
+    <string name="who_step_guideline">Within the WHO guideline</string>
+    <string name="who_step_it4">Within WHO interim target 4</string>
+    <string name="who_step_it3">Within WHO interim target 3</string>
+    <string name="who_step_it2">Within WHO interim target 2</string>
+    <string name="who_step_it1">Within WHO interim target 1</string>
+    <string name="who_step_above_it1">Above every WHO target</string>
+    <string name="info_history_body1">Averages use only readings the sensor marked valid, warmed up, fresh and without error.</string>
+    <string name="info_history_body2">Coverage is the share of the window with such readings. Three readings in an hour is 1 percent, not an hourly average.</string>
+    <string name="info_history_body3">Dashed stretches were logged before the sensor had a clock. Their time is estimated from a later time set on the same power on.</string>
+    <string name="info_history_body4">Earlier station readings stay available after a device reset.</string>
+    <string name="info_history_body5">PM2.5 and PM10 colours follow the WHO 2021 air quality guidelines. The guideline and its four interim targets are 24 hour means.</string>
+    <!-- Screen reader summaries of the History charts (BandColumnChart, DayRing, CalendarHeatmap). -->
+    <string name="chart_bars_title">Bar chart of %1$s</string>
+    <string name="chart_ring_title">%1$s through the day</string>
+    <string name="chart_calendar_title">Calendar of daily %1$s</string>
+    <!-- Highest bar, value, unit and time, spoken in a chart summary. -->
+    <string name="chart_highest_at">highest %1$s %2$s at %3$s</string>
+    <!-- Highest bar without a time, for the chart by file. -->
+    <string name="chart_highest">highest %1$s %2$s</string>
+    <!-- Day ring summary, the day's mean value and unit. -->
+    <string name="chart_average_value">average %1$s %2$s</string>
+    <!-- Calendar summary, days with readings out of days shown. -->
+    <string name="chart_days_with_readings">%1$d of %2$d days with readings</string>
+</resources>

@@ -6,71 +6,83 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
-import earth.walkthru.aqsync.data.ArchiveTimeSummary
 import earth.walkthru.aqsync.data.DeviceConnectionManager
+import earth.walkthru.aqsync.data.DeviceConnectionRepository
 import earth.walkthru.aqsync.data.DeviceEvent
 import earth.walkthru.aqsync.data.LogTailState
-import earth.walkthru.aqsync.data.SyncDiagnostic
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.RawFrameRecord
-import earth.walkthru.aqsync.data.ble.TransportKind
-import earth.walkthru.aqsync.data.protocol.AqJson
 import earth.walkthru.aqsync.data.protocol.Frame
-import earth.walkthru.aqsync.data.protocol.FrameType
-import earth.walkthru.aqsync.data.protocol.Opcode
-import earth.walkthru.aqsync.data.protocol.hexToBytes
-import earth.walkthru.aqsync.data.protocol.toHex
 import earth.walkthru.aqsync.data.settings.AppSettings
+import earth.walkthru.opensensor.debug.DebugArchiveTime
+import earth.walkthru.opensensor.debug.DebugBlock
+import earth.walkthru.opensensor.debug.DebugBlockedException
+import earth.walkthru.opensensor.debug.DebugController
+import earth.walkthru.opensensor.debug.DebugJson
+import earth.walkthru.opensensor.debug.DebugLink
+import earth.walkthru.opensensor.debug.DebugLog
+import earth.walkthru.opensensor.debug.DebugSource
+import earth.walkthru.opensensor.debug.DebugSyncStep
+import earth.walkthru.opensensor.debug.DebugSyncTrace
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElement
 
-/** Why the raw command box refused or got nothing. The screen maps each to a string resource. */
-sealed interface RawError {
-    data object BackgroundOwns : RawError
-    data object InvalidHex : RawError
-    data object BadLength : RawError
+/**
+ * The repository as a [DebugSource] for the shared Debug screen. The long-lived session owns the
+ * frame recorder, raw commands run through its mutex, and background sync blocks the raw box.
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
+internal class RepositoryDebugSource(private val repository: DeviceConnectionRepository) : DebugSource {
+    override val link: Flow<DebugLink> = combine(repository.session, repository.connectionState, repository.activeTransport) { session, conn, kind ->
+        DebugLink(conn, kind, session?.transport?.endpoint, (conn as? ConnectionState.Ready)?.let { it.mtu - 3 })
+    }
+    override val status: Flow<DebugJson?> = combine(repository.statusRaw, repository.status) { raw, timed ->
+        raw?.let { DebugJson(it, timed?.receivedAtEpochMs) }
+    }
+    override val config: Flow<DebugJson?> = repository.config.map { it?.let { c -> DebugJson(c.rawJson, c.atEpochMs) } }
+    override val frames: Flow<List<RawFrameRecord>> = repository.session.flatMapLatest { it?.frames?.records ?: flowOf(emptyList()) }
+    override val log: Flow<DebugLog> = repository.logTail.map {
+        when (it) {
+            LogTailState.Idle -> DebugLog.Idle
+            LogTailState.Loading -> DebugLog.Loading
+            is LogTailState.Loaded -> DebugLog.Loaded(it.tail, it.atEpochMs)
+            is LogTailState.Failed -> DebugLog.Failed(it.message)
+        }
+    }
+    override val syncTrace: Flow<DebugSyncTrace?> = combine(repository.archiveTimeSummary, repository.syncDiagnostics) { a, steps ->
+        DebugSyncTrace(
+            DebugArchiveTime(a.files, a.rows, a.realTimeRows, a.estimatedFiles, a.estimatedRows, a.unplacedFiles, a.unplacedRows, a.unplacedBoots),
+            steps.map { DebugSyncStep(it.atEpochMs, it.step, it.detail) },
+        )
+    }
 
-    /** [opcode] needs the Device screen and its confirmation. */
-    data class NeedsConfirmation(val opcode: String) : RawError
-    data object NoResponse : RawError
+    /** The connection keeps the config current, the Device screen reads it. */
+    override val configOnRequest: Boolean = false
 
-    /** Transport or protocol detail, shown as is at Developer level. */
-    data class Failed(val detail: String) : RawError
+    override fun rawBlock(): DebugBlock? = if (repository.backgroundOwner.value != null) DebugBlock.BACKGROUND_SYNC else null
+
+    override suspend fun rawCommand(request: ByteArray): List<Pair<ByteArray, Frame?>> {
+        if (repository.backgroundOwner.value != null) throw DebugBlockedException(DebugBlock.BACKGROUND_SYNC)
+        val session = repository.session.value ?: throw DebugBlockedException(DebugBlock.LINK_BUSY)
+        return session.rawCommand(request)
+    }
+
+    override fun requestStatus() = repository.requestStatus()
+    override fun refreshLog() = repository.refreshLogTail()
+    override fun refreshConfig() = repository.refreshConfig()
+    override fun clearFrames() {
+        repository.session.value?.frames?.clear()
+    }
 }
 
-/** One line of the raw-command result. */
-data class RawResult(val hex: String, val decoded: String)
-
-data class DebugUiState(
-    val address: String? = null,
-    val connection: ConnectionState = ConnectionState.Disconnected,
-    val transport: TransportKind? = null,
-    val endpoint: String? = null,
-    val payloadMax: Int? = null,
-    val statusJsonPretty: String? = null,
-    val statusAtEpochMs: Long? = null,
-    val configJsonPretty: String? = null,
-    val frames: List<RawFrameRecord> = emptyList(),
-    val log: LogTailState = LogTailState.Idle,
-    val rawBusy: Boolean = false,
-    val rawResults: List<RawResult> = emptyList(),
-    val rawError: RawError? = null,
-    val archiveTime: ArchiveTimeSummary = ArchiveTimeSummary(),
-    val syncDiagnostics: List<SyncDiagnostic> = emptyList(),
-    val advancedMode: Boolean = false,
-)
-
-@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel(assistedFactory = DebugViewModel.Factory::class)
 class DebugViewModel @AssistedInject constructor(
     manager: DeviceConnectionManager,
@@ -84,126 +96,14 @@ class DebugViewModel @AssistedInject constructor(
         fun create(deviceAddress: String): DebugViewModel
     }
 
+    val controller = DebugController(viewModelScope, RepositoryDebugSource(repository))
     val events: SharedFlow<DeviceEvent> = repository.events
 
-    private val pretty = Json { prettyPrint = true; prettyPrintIndent = "  " }
-    private val rawBusy = MutableStateFlow(false)
-    private val rawResults = MutableStateFlow<List<RawResult>>(emptyList())
-    private val rawError = MutableStateFlow<RawError?>(null)
+    /** The sensor the session talks to, to leave when the link moves to another one. */
+    val sessionAddress: StateFlow<String?> = repository.session.map { it?.address }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    private val frames = repository.session.flatMapLatest { it?.frames?.records ?: flowOf(emptyList()) }
-
-    private val base = combine(
-        repository.session,
-        repository.connectionState,
-        repository.statusRaw,
-        repository.status,
-        repository.config,
-        frames,
-        repository.activeTransport,
-    ) { values ->
-        val session = values[0] as earth.walkthru.aqsync.data.ble.DeviceSession?
-        val conn = values[1] as ConnectionState
-        @Suppress("UNCHECKED_CAST")
-        DebugUiState(
-            address = session?.address,
-            connection = conn,
-            transport = values[6] as TransportKind?,
-            endpoint = session?.transport?.endpoint,
-            payloadMax = (conn as? ConnectionState.Ready)?.let { it.mtu - 3 },
-            statusJsonPretty = (values[2] as String?)?.let(::prettyPrint),
-            statusAtEpochMs = (values[3] as earth.walkthru.aqsync.data.TimedStatus?)?.receivedAtEpochMs,
-            configJsonPretty = (values[4] as earth.walkthru.aqsync.data.ble.ConfigSnapshot?)?.let { prettyPrint(it.rawJson) },
-            frames = (values[5] as List<RawFrameRecord>).asReversed(),
-        )
-    }
-
-    val uiState: StateFlow<DebugUiState> = combine(
-        base,
-        repository.logTail,
-        rawBusy,
-        rawResults,
-        rawError,
-        settings.advancedMode,
-        repository.archiveTimeSummary,
-        repository.syncDiagnostics,
-    ) { values ->
-        @Suppress("UNCHECKED_CAST")
-        (values[0] as DebugUiState).copy(
-            log = values[1] as LogTailState,
-            rawBusy = values[2] as Boolean,
-            rawResults = values[3] as List<RawResult>,
-            rawError = values[4] as RawError?,
-            advancedMode = values[5] as Boolean,
-            archiveTime = values[6] as ArchiveTimeSummary,
-            syncDiagnostics = values[7] as List<SyncDiagnostic>,
-        )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DebugUiState())
-
-    private fun prettyPrint(json: String): String =
-        runCatching { pretty.encodeToString(JsonElement.serializer(), AqJson.parseToJsonElement(json)) }.getOrDefault(json)
-
-    fun refreshLog() = repository.refreshLogTail()
-    fun requestStatus() = repository.requestStatus()
-    fun clearFrames() {
-        repository.session.value?.frames?.clear()
-    }
-
-    /** Hex in (whitespace allowed) → frames out. Runs through the same session mutex as everything else. */
-    fun sendRaw(hex: String) {
-        if (repository.backgroundOwner.value != null) {
-            rawError.value = RawError.BackgroundOwns
-            return
-        }
-        val session = repository.session.value ?: return
-        val bytes = try {
-            hex.hexToBytes()
-        } catch (e: IllegalArgumentException) {
-            rawError.value = RawError.InvalidHex
-            return
-        }
-        if (bytes.isEmpty() || bytes.size > 512) {
-            rawError.value = RawError.BadLength
-            return
-        }
-        // The destructive requests need their confirmation dialog (AGENTS.md): REBOOT restarts the
-        // logger, SET_CONFIG can rotate the token, forget bonds or disable the passkey. The raw
-        // box is for looking at frames, not for bypassing the Device screen.
-        val op = bytes[0].toInt() and 0xFF
-        if (op == Opcode.REBOOT || op == Opcode.SET_CONFIG) {
-            rawError.value = RawError.NeedsConfirmation(Opcode.name(op))
-            return
-        }
-        viewModelScope.launch {
-            rawBusy.value = true
-            rawError.value = null
-            try {
-                val got = session.rawCommand(bytes)
-                rawResults.value = got.map { (raw, frame) ->
-                    RawResult(
-                        // A TOKEN frame is a bearer secret: show the type byte only.
-                        hex = if (frame is Frame.Token) raw.copyOf(1).toHex() + " <redacted>" else raw.toHex(),
-                        decoded = frame?.let(::describe) ?: "? (${raw.size} B)",
-                    )
-                }
-                if (got.isEmpty()) rawError.value = RawError.NoResponse
-            } catch (e: Exception) {
-                rawError.value = RawError.Failed(e.message ?: e::class.simpleName.orEmpty())
-            } finally {
-                rawBusy.value = false
-            }
-        }
-    }
-
-    private fun describe(f: Frame): String = when (f) {
-        is Frame.Token -> "TOKEN port=${f.port} token=<redacted>"
-        is Frame.Chunk -> "CHUNK handle=${f.handle} offset=${f.offset} len=${f.payload.size}"
-        is Frame.Log -> "LOG ${f.bytes.size} bytes"
-        is Frame.Config -> "CONFIG flags=${f.flags} ${f.json}"
-        else -> f.toString()
-    }
-
-    companion object {
-        fun typeName(type: Int): String = FrameType.name(type)
-    }
+    /** Null until the stored level loads, so the screen does not pop on the initial value. */
+    val developer: StateFlow<Boolean?> = settings.advancedMode
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 }

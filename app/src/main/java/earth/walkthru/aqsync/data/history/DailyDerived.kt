@@ -2,6 +2,7 @@ package earth.walkthru.aqsync.data.history
 
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
+import earth.walkthru.aqsync.archive.ArchiveLayout
 import earth.walkthru.aqsync.data.history.parquet.ColumnValues
 import earth.walkthru.aqsync.data.history.parquet.ParquetCodec
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
@@ -15,28 +16,27 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.time.Instant
-import java.time.ZoneOffset
-import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Where the derived layer lives: `filesDir/derived/v1/<station>/day=YYYY-MM-DD.parquet` + `.manifest.json`. Never inside `archive/`. */
+/** Where the derived layer lives, `filesDir/derived/v1/<station>/day=YYYY-MM-DD.parquet` + `.manifest.json` ([ArchiveLayout]). Never inside `archive/`. */
 @Singleton
 class DerivedStore(baseDir: File) {
     @Inject
     constructor(@ApplicationContext context: Context) : this(context.filesDir)
 
-    val root: File = File(baseDir, "derived/v1")
+    private val base: File = baseDir
+    val root: File = File(baseDir, ArchiveLayout.DERIVED)
 
-    fun dayFile(station: String, epochDay: Long): File = File(File(root, station), "day=${dayLabel(epochDay)}.parquet")
-    fun manifestFile(station: String, epochDay: Long): File = File(File(root, station), "day=${dayLabel(epochDay)}.manifest.json")
+    fun dayFile(station: String, epochDay: Long): File = File(base, ArchiveLayout.derivedDayPath(station, epochDay))
+    fun manifestFile(station: String, epochDay: Long): File = File(base, ArchiveLayout.derivedManifestPath(station, epochDay))
 
     /** Every daily file on this phone, as (station, file). */
     fun listAll(): List<Pair<String, File>> =
         (root.listFiles { f -> f.isDirectory } ?: emptyArray()).flatMap { dir -> (dir.listFiles { f -> f.isFile && f.extension == "parquet" } ?: emptyArray()).map { dir.name to it } }
 
     companion object {
-        fun dayLabel(epochDay: Long): String = DateTimeFormatter.ISO_LOCAL_DATE.withZone(ZoneOffset.UTC).format(Instant.ofEpochSecond(epochDay * 86_400))
+        fun dayLabel(epochDay: Long): String = ArchiveLayout.dayLabel(epochDay)
     }
 }
 
@@ -72,7 +72,7 @@ data class DailyBuildResult(val file: File, val manifest: File, val rows: Int, v
  * Builds one derived daily Parquet file per UTC station-day from the verified device files:
  *
  * - every row whose `event_time_utc_ns` falls in the day, in time order, de-duplicated on
- *   `(boot_id_hi, boot_id_lo, sequence)`;
+ *   [RowKey], the same key the tiers and the day chart use;
  * - the union of the sources' columns in first-seen order (v1 files leave the four v2 columns null),
  *   plus `source_file_index` (INT32 into the manifest's `sources`) — flat numeric only, so the app's
  *   own reader reads the file back; the station is in the path and the metadata as on the SD card;
@@ -103,7 +103,7 @@ class DailyDerivedBuilder(private val store: DerivedStore, private val fileFor: 
         var anyEstimated = false
         val columnOrder = LinkedHashMap<String, ParquetType>()
         val timestampColumns = HashSet<String>()
-        val seenExact = HashSet<Triple<Long, Long, Long>>()
+        val seen = RowKeys()
         for (src in sources.sortedBy { it.firstUtcNs ?: Long.MAX_VALUE }) {
             val f = fileFor(src.station, src.name)
             if (!f.isFile) continue
@@ -120,8 +120,7 @@ class DailyDerivedBuilder(private val store: DerivedStore, private val fileFor: 
             for (i in 0 until utc.size) {
                 val ns = utc.asLong(i) ?: estimated?.get(i)?.takeIf { it != Long.MIN_VALUE } ?: continue
                 if (ns < dayStartNs || ns >= dayEndNs) continue
-                val key = Triple(bootHi?.asLong(i) ?: 0L, bootLo?.asLong(i) ?: 0L, seq?.asLong(i) ?: (ns))
-                if (!seenExact.add(key)) continue
+                if (!seen.firstSight(bootHi?.asLong(i), bootLo?.asLong(i), seq?.asLong(i), ns)) continue
                 keep += i
             }
             // A source whose rows are all duplicates (or outside the day) stays in the manifest with rows_used 0: provenance, not data.

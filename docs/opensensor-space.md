@@ -127,7 +127,7 @@ for one physical device. A shared semaphore bounds all interactive/worker transf
 It skips only the owned target, never pairs or scans, and retains per-device LAN-to-BLE fallback.
 Interactive sync/config/raw commands refuse worker-owned sessions while progress remains observable.
 
-`FileArchive.withWriterLease` guards the full file lifecycle per `(station, name)`. Existing verified
+The shared `WriterLeases` in `SyncEngine` guards the full file lifecycle per `(station, name)`. Existing verified
 bytes are rechecked against OPENED size/CRC plus local SHA/PAR1 and reused only when identical;
 conflicting or corrupt canonical bytes are preserved and the incoming run fails. No replacement,
 provenance overwrite or alternate conflict-copy UI is introduced. `LanWifiLock.acquireLease` holds

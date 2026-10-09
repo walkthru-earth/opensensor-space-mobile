@@ -13,14 +13,14 @@ import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.settings.DetailLevel
-import earth.walkthru.aqsync.ui.components.BrandCard
-import earth.walkthru.aqsync.ui.components.Eyebrow
 import earth.walkthru.aqsync.ui.components.NO_VALUE
-import earth.walkthru.aqsync.ui.components.StatLine
-import earth.walkthru.aqsync.ui.components.TickingText
 import earth.walkthru.aqsync.ui.components.agoFormatter
 import earth.walkthru.aqsync.ui.components.describe
 import earth.walkthru.aqsync.ui.components.labelText
+import earth.walkthru.opensensor.designsystem.BrandCard
+import earth.walkthru.opensensor.designsystem.Eyebrow
+import earth.walkthru.opensensor.designsystem.StatLine
+import earth.walkthru.opensensor.designsystem.TickingText
 
 /**
  * The device header card. Simple names the device and how it is connected, in words. Detailed adds

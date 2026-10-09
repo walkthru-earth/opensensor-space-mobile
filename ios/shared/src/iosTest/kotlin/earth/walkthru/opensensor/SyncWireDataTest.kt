@@ -16,7 +16,7 @@ class SyncWireDataTest {
     }
 
     @Test fun nsDataFacadeMatchesCanonicalFrames() {
-        assertContentEquals(byteArrayOf(0x01, 0x00, 0x01), wire.envelope(wire.listRequest()).toByteArray())
+        assertContentEquals(byteArrayOf(0x01, 0x00, 0x07), wire.envelope(wire.statusRequest()).toByteArray())
         val chunk = wire.decode(byteArrayOf(0x21, 0x34, 0x12, 4, 3, 2, 1, 1, 2, 3).toNSData())!!
         assertEquals("chunk", chunk.kind)
         assertContentEquals(byteArrayOf(1, 2, 3), chunk.payload.toByteArray())

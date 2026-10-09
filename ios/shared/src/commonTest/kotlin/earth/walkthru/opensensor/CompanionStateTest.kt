@@ -1,6 +1,17 @@
 package earth.walkthru.opensensor
 
 import earth.walkthru.aqsync.data.history.NowReading
+import earth.walkthru.aqsync.data.protocol.LiveSample
+import earth.walkthru.opensensor.permissions.AccessStatus
+import earth.walkthru.opensensor.permissions.PermissionFlow
+import earth.walkthru.opensensor.strings.UiText
+import earth.walkthru.opensensor.strings.resources.Res
+import earth.walkthru.opensensor.strings.resources.companion_info_invalid
+import earth.walkthru.opensensor.strings.resources.companion_lan_denied
+import earth.walkthru.opensensor.strings.resources.companion_lan_waiting
+import earth.walkthru.opensensor.strings.resources.companion_live
+import earth.walkthru.opensensor.strings.resources.companion_live_unreadable
+import earth.walkthru.opensensor.strings.resources.now_waiting
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -79,10 +90,11 @@ class CompanionStateTest {
         state.lanScanStarted()
         state.lanScanWaiting()
         assertFalse(state.lanAccessDenied)
+        assertEquals(UiText.of(Res.string.companion_lan_waiting), state.lanMessage)
         state.lanScanAccessDenied()
         assertTrue(state.lanAccessDenied)
         assertTrue(state.lanScanning)
-        assertTrue(state.lanMessage.contains("Settings"))
+        assertEquals(UiText.of(Res.string.companion_lan_denied), state.lanMessage)
         state.lanScanReady()
         assertFalse(state.lanAccessDenied)
         state.lanScanAccessDenied()
@@ -133,6 +145,25 @@ class CompanionStateTest {
         state.receiveLive("{\"pms\":4,\"pm25\":12.0}")
         state.readingExpired()
         assertEquals(NowReading.Waiting, state.reading)
+        assertEquals(UiText.of(Res.string.now_waiting), state.message)
+    }
+
+    @Test fun messagesAreCatalogueKeysAndAdapterWordsPassThrough() {
+        val state = connected()
+        assertEquals(UiText.of(Res.string.companion_live), state.message)
+        state.receiveLive("bad JSON")
+        assertEquals(UiText.of(Res.string.companion_live_unreadable), state.message)
+        state.bluetoothChanged(false, "Bluetooth is off")
+        assertEquals(UiText.Plain("Bluetooth is off"), state.message)
+        state.connectionStarted("device")
+        assertFalse(state.receiveInfo("{}"))
+        assertEquals(UiText.of(Res.string.companion_info_invalid), state.message)
+    }
+
+    @Test fun warmingCopyMatchesAndroid() {
+        // Same words as the shared Today pms_warming_hint.
+        val warming = NowReading.of(LiveSample.parse("{\"pms\":1}"))
+        assertEquals("The sensor is warming up. It takes about a minute after power on.", (warming as NowReading.SensorNotReady).hint)
     }
 
     @Test fun disconnectAndRadioLossClearDeviceAndValues() {
@@ -167,5 +198,29 @@ class CompanionStateTest {
         assertEquals(-60, state.devices.first().rssi)
         state.scanStarted()
         assertTrue(state.devices.isEmpty())
+    }
+
+    @Test fun settingsLinksFollowTheReportedDenials() {
+        val state = CompanionState()
+        // Nothing is known, and no link is offered, before the first tap.
+        assertEquals(AccessStatus.NOT_DETERMINED, state.bluetoothAccess)
+        assertEquals(AccessStatus.UNKNOWN, state.lanAccess)
+        assertFalse(PermissionFlow.offersSettings(state.bluetoothAccess))
+        assertFalse(PermissionFlow.offersSettings(state.lanAccess))
+
+        state.bluetoothAuthorizationChanged(2) // CBManagerAuthorization.denied
+        assertTrue(PermissionFlow.offersSettings(state.bluetoothAccess))
+        state.bluetoothAuthorizationChanged(1) // restricted, nothing the user can change
+        assertFalse(PermissionFlow.offersSettings(state.bluetoothAccess))
+        state.bluetoothAuthorizationChanged(3)
+        assertEquals(AccessStatus.GRANTED, state.bluetoothAccess)
+
+        state.lanScanStarted()
+        state.lanScanWaiting()
+        assertFalse(PermissionFlow.offersSettings(state.lanAccess))
+        state.lanScanAccessDenied()
+        assertTrue(PermissionFlow.offersSettings(state.lanAccess))
+        state.lanScanReady()
+        assertEquals(AccessStatus.UNKNOWN, state.lanAccess)
     }
 }

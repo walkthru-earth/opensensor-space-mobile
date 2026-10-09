@@ -115,7 +115,9 @@ this module's test fixtures. A multiplatform module cannot apply `java-test-fixt
 `core/parquet/build.gradle.kts` declares the same variant by hand (a resources jar with the
 `<group>:parquet-test-fixtures` capability). `:core:history` (indexing, aggregation) and
 `:core:protocol` (CRC-32 and `PAR1` equivalence on real device files) keep declaring
-`testFixtures(project(":core:parquet"))` in `jvmTest`. `:app` still adds the directory to its
+`testFixtures(project(":core:parquet"))` in `jvmTest`. `:core:history` runs its fixture tests from
+`commonTest` through its own `fixtureBytes`, which reads that classpath on the JVM and the checkout
+directory on the simulator (`SIMCTL_CHILD_PARQUET_FIXTURES`), like `:core:parquet`. `:app` still adds the directory to its
 unit-test resources. Never copy the files into another module.
 
 The oracle tests (`ParquetFileTest`, `GeoParquetFileTest`, `ParquetWriterTest`, `ByteReaderTest`,

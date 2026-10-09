@@ -10,16 +10,20 @@ plugins {
     alias(libs.plugins.compose.multiplatform) apply false
 }
 
-// The one gate: lint, build, and every unit test in every module (AGENTS.md).
-tasks.register("verify") {
+// The gates (AGENTS.md). Only the :app tasks are listed here. Every shared module joins the gates
+// through its convention plugin (build-logic/src/main/kotlin/Gates.kt), so no module can be missed.
+val verifyIos = tasks.register("verifyIos") {
     group = "verification"
-    description = "lintDebug + assembleDebug + unit tests of :app and every :core module"
-    dependsOn(":ios:shared:jvmTest", ":app:lintDebug", ":app:assembleDebug", ":app:testDebugUnitTest", ":core:protocol:test", ":core:parquet:test", ":core:history:test", ":core:publicfeed:test", ":core:units:test", ":feature:discover:testAndroidHostTest", ":ui:designsystem:testAndroidHostTest")
+    description = "iOS simulator tests of every shared module and the OpenSensorShared framework link"
 }
 
-// Native validation is explicit: the Android/Linux verification gate never requires Xcode.
-tasks.register("verifyIos") {
+// On a Mac, `verify` also runs `verifyIos`. Linux CI and `-Popensensor.skipIos=true` skip it.
+val runIos = org.jetbrains.kotlin.konan.target.HostManager.hostIsMac &&
+    providers.gradleProperty("opensensor.skipIos").orNull != "true"
+
+tasks.register("verify") {
     group = "verification"
-    description = "Shared core iOS simulator tests and the Compose iOS framework"
-    dependsOn(":core:protocol:iosSimulatorArm64Test", ":core:parquet:iosSimulatorArm64Test", ":core:history:iosSimulatorArm64Test", ":core:publicfeed:iosSimulatorArm64Test", ":core:units:iosSimulatorArm64Test", ":ios:shared:iosSimulatorArm64Test", ":ios:shared:linkDebugFrameworkIosSimulatorArm64")
+    description = "lintDebug, assembleDebug, :app unit tests, every shared module's host tests, and verifyIos on a Mac"
+    dependsOn(":app:lintDebug", ":app:assembleDebug", ":app:testDebugUnitTest")
+    if (runIos) dependsOn(verifyIos)
 }

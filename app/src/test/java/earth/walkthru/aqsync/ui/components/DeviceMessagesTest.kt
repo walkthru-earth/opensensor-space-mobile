@@ -7,9 +7,7 @@ import earth.walkthru.aqsync.data.DeviceMessage.Command
 import earth.walkthru.aqsync.data.DeviceMessage.ConfigChange
 import earth.walkthru.aqsync.data.lan.LanFailure
 import earth.walkthru.aqsync.data.protocol.ConfigProblem
-import earth.walkthru.aqsync.data.sync.ClockQuality
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
 /** Device codes from the data layer reach the screen as string resources with typed arguments. */
@@ -53,7 +51,6 @@ class DeviceMessagesTest {
         assertDistinct(ConfigChange.entries.map { it.toStringRes() })
         assertDistinct(ConfigProblem.entries.map { it.toStringRes() })
         assertDistinct(DeviceMessage.TokenRotation.entries.map { DeviceMessage.TokenRotated(it).toUiText() })
-        assertNotEquals(ClockQuality.MISSING.reasonRes(), ClockQuality.RTC_RESTORED.reasonRes())
     }
 
     private fun assertDistinct(items: List<Any>) = assertEquals(items.size, items.toSet().size)

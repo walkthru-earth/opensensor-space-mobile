@@ -10,11 +10,8 @@ class SyncWireTest {
 
     @Test fun requestsUseCanonicalLittleEndianCodec() {
         assertEquals("0d", wire.tokenFrame().hex())
-        assertEquals("01", wire.listFrame().hex())
         assertEquals("07", wire.statusFrame().hex())
-        assertEquals("0334120403020110000000", wire.readFrame(0x1234, 0x01020304, 16).hex())
-        assertEquals("043412", wire.closeFrame(0x1234).hex())
-        assertEquals("010001", wire.envelopeFrame(wire.listFrame()).hex())
+        assertEquals("010007", wire.envelopeFrame(wire.statusFrame()).hex())
     }
 
     @Test fun strictDecodeAndSecretRedaction() {
@@ -48,6 +45,29 @@ class SyncWireTest {
         assertNull(wire.identity(json.replace("abc-123", "../escape")))
         assertNull(wire.identity(json.replace("AABBCCDDEEFF", "invalid")))
         assertNull(wire.identity("{}"))
+    }
+
+    @Test fun stationIdAllowsDotButNoPathTraversal() {
+        val json = "{\"proto\":2,\"station\":\"STATION\",\"dev\":\"AABBCCDDEEFF\"}"
+        assertEquals("aq.lab_1-b", wire.identity(json.replace("STATION", "aq.lab_1-b"))!!.station)
+        for (unsafe in listOf(".", "..", "a/b", "../x", "a\\\\b", "", "a b")) {
+            assertNull(wire.identity(json.replace("STATION", unsafe)), unsafe)
+        }
+    }
+
+    @Test fun missingMaxReadUsesAndroidDefaultAndNeverExceedsAdvertised() {
+        val json = "{\"proto\":2,\"station\":\"s\",\"dev\":\"AABBCCDDEEFF\"}"
+        assertEquals(SyncWire.DEFAULT_MAX_READ, wire.identity(json)!!.maxRead)
+        assertEquals(4096, SyncWire.DEFAULT_MAX_READ)
+        assertEquals(2048, wire.identity(json.replace("}", ",\"max_read\":2048}"))!!.maxRead)
+        assertNull(wire.identity(json.replace("}", ",\"max_read\":0}")))
+    }
+
+    @Test fun errorFrameCarriesTheRequestOpcode() {
+        val error = wire.decodeHex("7f" + "02" + "04" + "6f70656e")!!
+        assertEquals("error", error.kind)
+        assertEquals(2, error.op)
+        assertEquals(4, error.code)
     }
 }
 

@@ -1,6 +1,7 @@
 package earth.walkthru.aqsync.data.history
 
 import android.util.Log
+import earth.walkthru.aqsync.data.archive.toRecord
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 import earth.walkthru.aqsync.data.history.parquet.ParquetFormatException
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
@@ -49,27 +50,15 @@ class HistoryDeriver @Inject constructor(
     /** Passes are triggered from several places (screens, post-sync, worker); run one at a time so they never duplicate work. */
     private val mutex = Mutex()
 
-    /** Which station-days a set of indexed files touches — by real UTC, or by the estimated span (§4.6). */
-    fun daysOf(files: List<ArchivedFile>): Map<String, Set<Long>> {
-        val out = HashMap<String, MutableSet<Long>>()
-        for (f in files) {
-            if (!f.indexed || !(f.purpose == null || f.purpose == "telemetry")) continue
-            val first = f.timelineFirstNs ?: continue
-            val last = f.timelineLastNs ?: continue
-            val days = out.getOrPut(f.station) { HashSet() }
-            var d = Math.floorDiv(first, DAY_NS)
-            val lastDay = Math.floorDiv(last, DAY_NS)
-            while (d <= lastDay) { days += d; d++ }
-        }
-        return out
-    }
+    /** Which station-days a set of indexed files touches, by real UTC or by the estimated span (§4.6). */
+    fun daysOf(files: List<ArchivedFile>): Map<String, Set<Long>> = StationDays.of(files.map { it.toRecord() })
 
     /** Deterministic identity of a day's source set: sorted `name:crc32[:est<anchor>]` lines, SHA-256 (a new anchor re-dates a file, so it is part of the identity). */
     fun signature(files: List<ArchivedFile>): String {
         val digest = MessageDigest.getInstance("SHA-256")
         digest.update("derive-v$DERIVE_VERSION\n".toByteArray())
         files.map { "${it.name}:${it.crc32}" + (if (it.hasEstimatedUtc) ":est${it.estAnchorFile}:${it.estFirstUtcNs}" else "") }.sorted().forEach { digest.update(it.toByteArray()); digest.update('\n'.code.toByte()) }
-        return digest.digest().joinToString("") { "%02x".format(it) }
+        return digest.digest().joinToString("") { "%02x".format(java.util.Locale.ROOT, it) }
     }
 
     /**
@@ -185,8 +174,8 @@ class HistoryDeriver @Inject constructor(
     companion object {
         private const val TAG = "HistoryDeriver"
 
-        /** Part of every day's signature: bump when the tiers' meaning changes so every day is rebuilt. 2 = per-metric rows. */
-        const val DERIVE_VERSION = 2
-        const val DAY_NS = 86_400L * 1_000_000_000L
+        /** Part of every day's signature: bump when the tiers' meaning changes so every day is rebuilt. 2 = per-metric rows, 3 = one shared RowKey (D12). */
+        const val DERIVE_VERSION = 3
+        const val DAY_NS = StationDays.DAY_NS
     }
 }

@@ -1,43 +1,24 @@
 // The opensensor.space design system, shared by the Android app, the iOS framework and every
 // Compose feature module. Brand palette, shapes, the bundled Quicksand and Cairo fonts with the type
-// scale, and the floating map control style live here once so both platforms look the same
-// (docs/screens.md, "Design system"). The fonts and their OFL texts are Compose resources.
+// scale, the floating control style, the shared components (cards, buttons, rows, info sheet,
+// signal bars, the bottom bar) and the vendored Material icons (AppIcons) live here once so both
+// platforms look the same (docs/screens.md, "Design system"). Fonts, their OFL texts, the peacock
+// and the component copy are Compose resources.
+// opensensor.kmp.compose-feature sets the Android and iOS targets, Compose and the resources package.
 plugins {
-    alias(libs.plugins.kotlin.multiplatform)
-    alias(libs.plugins.android.kotlin.multiplatform.library)
-    alias(libs.plugins.compose.multiplatform)
-    alias(libs.plugins.compose.compiler)
+    id("opensensor.kmp.compose-feature")
 }
 
 kotlin {
-    android {
-        namespace = "earth.walkthru.opensensor.designsystem"
-        compileSdk = 37
-        minSdk = 31
-        androidResources { enable = true }
-        withHostTest {}
-        compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) }
-    }
-    iosArm64()
-    iosSimulatorArm64()
-
     sourceSets {
         commonMain.dependencies {
-            implementation(libs.compose.runtime)
-            implementation(libs.compose.foundation)
+            // Feature modules style their screens with the Material 3 types this module themes.
             api(libs.compose.material3)
-            implementation(libs.compose.ui)
-            implementation(libs.compose.components.resources)
         }
-        getByName("androidHostTest").dependencies {
-            implementation(libs.junit)
-            implementation(libs.kotlin.test)
+        // Semantics tests render the shared components headless on the iOS simulator (verifyIos).
+        // The Android host has no window to render into without Robolectric, so they stay iOS only.
+        iosTest.dependencies {
+            implementation(libs.compose.ui.test)
         }
     }
-}
-
-compose.resources {
-    publicResClass = false
-    packageOfResClass = "earth.walkthru.opensensor.designsystem.resources"
-    generateResClass = always
 }

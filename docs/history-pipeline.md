@@ -76,8 +76,10 @@ bucket for a future "n settling" hint. No humidity correction, no "AQI".
 360 / 8 640). Identity `(station, metricId, resolution, startEpochS)`; per row: `rows`,
 `validRows` (passed the gate), `estimatedRows`, `mean`, `min`, `max`. `coverage = validRows /
 expected`. Rows without UTC are off the timeline unless dated by `TimeEstimate`. Built per UTC
-station-day, replaced atomically per day. **Duplicate rows** across files are skipped on
-`(boot_id_hi, boot_id_lo, sequence)` in both the tiers and the daily file so the two agree.
+station-day, replaced atomically per day. **Duplicate rows** across files are skipped on one
+shared key, `RowKey` in `:core:history`: `(boot_id_hi, boot_id_lo, sequence)`, or
+`(boot_id_hi, boot_id_lo, timeline ns)` when the sequence is absent or null, a missing boot half
+counting as 0. The tiers, the day chart and the daily file all use it, so their row counts agree.
 Means over a span are weighted by valid rows — never averages of averages.
 
 ## Derived daily Parquet (`DailyDerivedBuilder`)
@@ -165,9 +167,42 @@ scale, opacity = coverage, dashed outline = estimated time, whisker = peak. A ca
 averaging (hourly, daily or weekly means against a 24-hour guideline), and the touch readout names
 the mood and WHO step in words. Time labels
 in the phone's zone, buckets UTC-aligned. Day was 96 quarter-hours until 2026-09-18 (~3 dp bars
-were not tappable). The same spec is Swift Charts `BarMark`s + a `LazyVGrid` on iOS; the ring is
-the iOS widget shape. **Files › Chart by file** (`FileSummary`) is the same column style in file
-order — the diagnostic a time axis cannot give.
+were not tappable). **Files › Chart by file** (`FileSummary`) is the same column style in file
+order, the diagnostic a time axis cannot give.
+
+## Shared screen (`:feature:history`, #18)
+
+Android and iOS draw one History from `commonMain` (2026-10-09). The module holds the screen, the
+band column chart, the day ring, the calendar heatmap, the archive and Developer cards and its
+strings (Compose resources with Arabic). Chart text is drawn with the Compose text measurer, in
+a left to right direction, and numbers go through `formatFixed` from `:core:units`. Date labels
+use one `expect` seam (`formatEpoch`, `DateTimeFormatter` on Android, `NSDateFormatter` on iOS).
+
+`HistoryController` is a plain class (the SettingsController pattern) over four ports. The
+`HistorySeriesReader`, the `HistoryTiers` and the `ArchiveIndex` from `:core:history` and
+`:core:archive`, plus two flows, the station History opens on and the station generations its
+chips offer. It owns station, metric, range and paging, follows "now" across local midnight until
+the user pages back, and opens on the last local day with readings.
+
+| | Android | iOS |
+| --- | --- | --- |
+| Host | `HistoryViewModel` (Hilt, assisted by address) | `HistoryHolder` ViewModel in `AppRoot` |
+| Index | Room `archived_file` (`RoomArchiveIndex`) | `.verified.json` receipts (`ReceiptArchiveIndex`), one instance shared with the sync runner (`IosArchive`) |
+| Tiers | Room `metric_bucket` (`RoomHistoryTiers`) | computed in memory from the archive (`ArchiveHistoryTiers`) |
+| Current station | the known device's station | the archived station with the latest reading |
+| Chips | the device's authenticated station epochs | every archived station, oldest latest reading first |
+| Index repair | `HistoryIndexer.backfillAll` once per process from `AqSyncApplication`, and after each sync | `ArchiveIndexRepair.repairWhenWaiting` from `IosArchive.startIndexRepair`, at launch and whenever a receipt waits for its index. Changes during a pass are conflated, and passes repeat until no record is waiting |
+| Header | device section tabs and the link chip | a back arrow, opened from a History button on My devices or the device page |
+
+Repair writes only its own columns. It merges the index and estimate columns onto the latest
+record with `ArchiveIndex.update`, so a fingerprint the engine fills during a pass survives.
+`ReceiptArchiveIndex` reads and writes under its lock. Room uses the default read then write,
+which narrows the race but is not atomic (follow-up, a Room transaction). The engine's own
+fingerprint fill still writes back a whole record. When that snapshot lacks the index columns,
+the record waits again and the next pass repairs it.
+
+`commonTest` covers the presentation helpers, the y axis ticks (metric and imperial) and the
+controller over a fake archive. It runs as the Android host test and on the iOS simulator.
 
 ## Uses → affects
 
@@ -179,4 +214,5 @@ order — the diagnostic a time axis cannot give.
 | `TimeEstimate` | day signatures (anchor), dashed drawing, daily file's estimated column |
 | `Columns.slotSeconds` / `axisMax` | every chart; `ColumnsTest` |
 | `HistoryRepository.observe` | History and Today (local-day fold), `HistoryRepositoryTest` |
+| `:feature:history` (`HistoryController`, charts, strings) | History on both apps, the Files chart by file on Android, `feature/history/src/commonTest` |
 | `ParquetWriter` (in parquet.md) | daily file layout → re-run `tools/validate_parquet_samples.py` |

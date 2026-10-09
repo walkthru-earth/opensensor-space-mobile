@@ -3,6 +3,9 @@ package earth.walkthru.opensensor.discover
 import earth.walkthru.aqsync.publicfeed.FeedProperty
 import earth.walkthru.aqsync.units.UnitFormatter
 import earth.walkthru.aqsync.units.UnitSystem
+import org.w3c.dom.Element
+import java.io.File
+import javax.xml.parsers.DocumentBuilderFactory
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -41,16 +44,17 @@ class DiscoverFormatTest {
     }
 
     @Test
-    fun englishCopyFollowsTheCopyRules() {
-        val s = DiscoverStrings.English
-        val all = listOf(
-            s.searchPlaces, s.addSensor, s.more, s.windowLastHour, s.window24Hours, s.window7Days, s.sampleData,
-            s.osm, s.noAreas, s.notMeasured, s.stale, s.firstRunLine, s.explore, s.allMeasurements, s.unavailable,
-            s.loading, s.noPlaces, s.clearSearch, s.updatedRecently, s.areasInView(3), s.sensors(1), s.updatedHoursAgo(2),
-            s.higherThan(40), s.rangeSummary("PM2.5", "14", "6", "31", "µg/m³"), s.rangeSummary("PM2.5", "14", null, null, "µg/m³"),
-            s.spreadSummary("PM2.5", 12, "4", "40", "µg/m³"),
-        ) + listOf(s.sampleInfo, s.scaleInfo, s.mapInfo).flatMap { it.body + it.title }
-        val broken = all.filter { '—' in it || '–' in it || ';' in it || ':' in it }
+    fun copyFollowsTheCopyRules() {
+        val doc = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(File("src/commonMain/composeResources/values/strings.xml"))
+        val all = listOf("string", "item").flatMap { tag ->
+            val nodes = doc.getElementsByTagName(tag)
+            (0 until nodes.length).map { (nodes.item(it) as Element).textContent }
+        }
+        assertTrue(all.size > 50)
+        val broken = all.filter {
+            val sentence = it.replace(Regex("%\\d+\\$[a-z]"), "X")
+            '—' in sentence || '–' in sentence || ';' in sentence || ':' in sentence || "%%" in sentence || "\\'" in sentence
+        }
         assertTrue(broken.isEmpty(), "copy rule violations $broken")
     }
 }

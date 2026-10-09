@@ -12,8 +12,6 @@ import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBarItemColors
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.SegmentedButtonColors
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SelectableChipColors
@@ -106,13 +104,6 @@ object FloatingControl {
     fun primaryButtonColors(): ButtonColors = ButtonDefaults.buttonColors(
         containerColor = Selected,
         contentColor = OnSelected,
-    )
-
-    /** Bottom navigation colours, the selected tab's indicator in Signal blue with an ink icon. */
-    @Composable
-    fun navigationItemColors(): NavigationBarItemColors = NavigationBarItemDefaults.colors(
-        indicatorColor = Selected,
-        selectedIconColor = OnSelected,
     )
 }
 

@@ -6,6 +6,7 @@ import android.net.nsd.NsdServiceInfo
 import android.os.Build
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
+import earth.walkthru.aqsync.data.background.BackgroundLanTarget
 import earth.walkthru.aqsync.data.protocol.LanFraming
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -24,14 +25,14 @@ data class LanDevice(
     /** Parsed TXT records. */
     val txt: Map<String, String>,
     val lastSeenEpochMs: Long,
-) {
+) : BackgroundLanTarget {
     val station: String? get() = txt[LanFraming.TXT_STATION]
     val dev: String? get() = txt[LanFraming.TXT_DEV]
     val fw: String? get() = txt[LanFraming.TXT_FW]
     val proto: Int? get() = txt[LanFraming.TXT_PROTO]?.toIntOrNull()
 
     /** Usable as a connect target: resolved address, sane port, and a station to match a known device. */
-    val isConnectable: Boolean get() = host != null && port in 1..65535 && station != null
+    override val isConnectable: Boolean get() = host != null && port in 1..65535 && station != null
 }
 
 /**
