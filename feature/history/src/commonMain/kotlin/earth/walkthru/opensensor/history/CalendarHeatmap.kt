@@ -40,7 +40,6 @@ import earth.walkthru.opensensor.history.resources.Res
 import earth.walkthru.opensensor.history.resources.chart_calendar_title
 import earth.walkthru.opensensor.history.resources.chart_days_with_readings
 import earth.walkthru.opensensor.history.resources.history_estimated_time
-import earth.walkthru.opensensor.history.resources.history_no_readings_short
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
@@ -83,16 +82,16 @@ internal fun CalendarHeatmap(
     val lastDay = localDateOf(toS - 1, zone)
     val weeks = (gridStart.daysUntil(lastDay) / 7 + 1).coerceAtLeast(1)
     val byDay = remember(days) { days.associateBy { it.startS } }
+    val readable = remember(days, fromS, toS) { readableDays(days, fromS, toS) }
     val rows = 7
     val heightDp = if (weeks > 10) 120.dp else 150.dp
     val shownDays = firstDay.daysUntil(lastDay) + 1
-    val daysWithReadings = days.count { it.mean != null && it.startS >= fromS && it.startS < toS }
+    val daysWithReadings = readable.size
     val summary = listOfNotNull(
         stringResource(Res.string.chart_calendar_title, metric.label),
         stringResource(Res.string.chart_days_with_readings, daysWithReadings, shownDays),
         chartHighest(days.filter { it.startS >= fromS && it.startS < toS }, metric, units) { c -> formatEpoch(c.startS, zone, DAY_SPOKEN) },
     ).joinToString(", ")
-    val noReadings = stringResource(Res.string.history_no_readings_short)
     val estimated = stringResource(Res.string.history_estimated_time)
     val moodTitles = AirMood.entries.associateWith { it.titleText() }
     val stepLabels = WhoStep.entries.associateWith { it.labelText() }
@@ -168,14 +167,15 @@ internal fun CalendarHeatmap(
                     val date: LocalDate = gridStart.plus(week * 7 + dow, DateTimeUnit.DAY)
                     val startS = startOfDay(date, zone)
                     if (startS < fromS || startS >= toS) continue
-                    val col = byDay[startS] ?: continue
-                    val m = col.mean
-                    val mood = m?.let { metric.moodOf(it.toDouble()) }
+                    // Only days with a reading get a button (P68). Empty days stay out of the swipe order.
+                    val col = readable[startS] ?: continue
+                    val m = col.mean ?: continue
+                    val mood = metric.moodOf(m.toDouble())
                     val description = listOfNotNull(
                         formatEpoch(startS, zone, DAY_SPOKEN),
-                        if (m == null) noReadings else fmtValue(units.value(m, metric.unit)) + " " + units.unit(metric.unit),
+                        fmtValue(units.value(m, metric.unit)) + " " + units.unit(metric.unit),
                         mood?.let { moodTitles[it] },
-                        m?.let { metric.stepOf(it.toDouble()) }?.let { stepLabels[it] },
+                        metric.stepOf(m.toDouble())?.let { stepLabels[it] },
                         estimated.takeIf { col.estimated },
                     ).joinToString(", ")
                     val order = (week * 7 + dow).toFloat()
@@ -198,6 +198,13 @@ internal fun CalendarHeatmap(
         }
     }
 }
+
+/**
+ * The days a screen reader can open, keyed by their start. A day column with no mean is an empty
+ * day, so only days inside the shown range that have a reading are listed.
+ */
+internal fun readableDays(days: List<HistoryColumn>, fromS: Long, toS: Long): Map<Long, HistoryColumn> =
+    days.filter { it.mean != null && it.startS >= fromS && it.startS < toS }.associateBy { it.startS }
 
 /** A day spoken in full, so a screen reader says "Tuesday 3 March", not "3 Mar". */
 private const val DAY_SPOKEN = "EEEE d MMMM"
