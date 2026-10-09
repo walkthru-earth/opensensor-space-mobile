@@ -41,6 +41,8 @@ include(":ui:permissions")
 include(":feature:discover")
 // The Settings screen, shared Compose for Android and iOS (docs/platform-parity-plan.md).
 include(":feature:settings")
+// My devices, one shared list of nearby, known and Wi-Fi sensors (docs/screens.md, My devices).
+include(":feature:devices")
 // The app shell: bottom bar, per-tab Navigation 3 back stacks, Back rules (docs/adr/0001-shared-navigation.md).
 include(":feature:shell")
 

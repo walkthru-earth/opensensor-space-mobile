@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- My devices, shared by Android and iOS. Keys and words follow app/src/main/res/values-ar where they exist. -->
+<resources>
+    <string name="scan_known">مستشعرات معروفة</string>
+    <string name="scan_welcome_title">مرحبًا، أنا دليلك</string>
+    <string name="scan_welcome_body">شغّل المستشعر وأبقِ الهاتف قريبًا منه ثم اضغط ابحث.</string>
+    <string name="scan_none_nearby_title">لا شيء قريب بعد</string>
+    <string name="scan_none_nearby_body">اقترب أكثر للاتصال. يبقى السجل المحفوظ في الأسفل.</string>
+    <string name="scan_nearby">قريب</string>
+    <string name="scan_connections">متصل الآن</string>
+    <string name="scan_button_scan">ابحث</string>
+    <string name="scan_button_stop">إيقاف</string>
+    <string name="scan_options">خيارات الجهاز</string>
+    <string name="scan_forget">إزالة</string>
+    <string name="scan_forget_title">هل تريد نسيان %1$s؟</string>
+    <string name="scan_forget_body">يزيله من هذا الهاتف. تبقى الملفات التي جُمعت.</string>
+    <string name="scan_forget_button">إزالة الجهاز</string>
+    <string name="scan_unnamed">مستشعر بلا اسم</string>
+    <string name="scan_tag_paired">مقترن</string>
+    <string name="scan_tag_known">معروف</string>
+    <string name="scan_tag_on_lan">على Wi-Fi</string>
+    <string name="scan_tag_on_lan_no_token">على Wi-Fi، بلا رمز وصول</string>
+    <plurals name="scan_collecting">
+        <item quantity="zero">جارٍ جمع %1$d من %2$d ملف</item>
+        <item quantity="one">جارٍ جمع %1$d من %2$d ملف</item>
+        <item quantity="two">جارٍ جمع %1$d من %2$d ملف</item>
+        <item quantity="few">جارٍ جمع %1$d من %2$d ملفات</item>
+        <item quantity="many">جارٍ جمع %1$d من %2$d ملفًا</item>
+        <item quantity="other">جارٍ جمع %1$d من %2$d ملف</item>
+    </plurals>
+    <string name="scan_background">جارٍ الجمع في الخلفية</string>
+    <plurals name="scan_collect_all">
+        <item quantity="zero">اجمع من %1$d جهاز</item>
+        <item quantity="one">اجمع من %1$d جهاز</item>
+        <item quantity="two">اجمع من الجهازين (%1$d)</item>
+        <item quantity="few">اجمع من الأجهزة الـ%1$d كلها</item>
+        <item quantity="many">اجمع من الأجهزة الـ%1$d كلها</item>
+        <item quantity="other">اجمع من الأجهزة الـ%1$d كلها</item>
+    </plurals>
+    <string name="scan_collect_running">جارٍ الجمع…</string>
+    <plurals name="scan_no_clock">
+        <item quantity="zero">%1$d ملف محفوظ، لا ساعة بعد</item>
+        <item quantity="one">%1$d ملف محفوظ، لا ساعة بعد</item>
+        <item quantity="two">%1$d ملفان محفوظان، لا ساعة بعد</item>
+        <item quantity="few">%1$d ملفات محفوظة، لا ساعة بعد</item>
+        <item quantity="many">%1$d ملفًا محفوظًا، لا ساعة بعد</item>
+        <item quantity="other">%1$d ملف محفوظ، لا ساعة بعد</item>
+    </plurals>
+    <string name="scan_seen">شوهد %1$s</string>
+    <string name="scan_synced">تمت المزامنة %1$s</string>
+    <plurals name="scan_files">
+        <item quantity="zero">%1$d ملف</item>
+        <item quantity="one">%1$d ملف</item>
+        <item quantity="two">%1$d ملفان</item>
+        <item quantity="few">%1$d ملفات</item>
+        <item quantity="many">%1$d ملفًا</item>
+        <item quantity="other">%1$d ملف</item>
+    </plurals>
+    <string name="scan_failed">تعذّر البحث. حاول مرة أخرى.</string>
+    <string name="scan_bluetooth_off">Bluetooth متوقف. شغّله وابحث مرة أخرى.</string>
+    <string name="scan_archive_day">%1$s، %2$s %3$s %4$s في %5$s</string>
+    <string name="scan_archive_coverage">%1$s من اليوم</string>
+    <string name="devices_on_wifi">على شبكة Wi-Fi لديك</string>
+    <string name="devices_forget_bond_ios">يحتفظ iOS بإقران Bluetooth. أزله من الإعدادات ثم Bluetooth.</string>
+
+    <string name="conn_pairing">جارٍ الإقران. أدخل الرمز الظاهر على المستشعر</string>
+    <string name="conn_link_lost">انقطع الاتصال. جارٍ إعادة الاتصال تلقائيًا…</string>
+    <string name="conn_failed">تعذّر الاتصال. اقترب وحاول مرة أخرى</string>
+
+    <string name="ago_just_now">الآن</string>
+    <string name="ago_seconds">قبل %1$d ث</string>
+    <string name="ago_minutes">قبل %1$d د</string>
+    <string name="ago_hours">قبل %1$d س</string>
+    <string name="ago_days">قبل %1$d يوم</string>
+
+    <string name="mood_fresh_title">هواء نقي</string>
+    <string name="mood_fair_title">مقبول</string>
+    <string name="mood_hazy_title">يميل إلى الضبابية</string>
+    <string name="mood_poor_title">سيئ</string>
+    <string name="mood_smoky_title">دخاني</string>
+    <string name="mood_thick_title">دخان كثيف</string>
+
+    <string name="month_1">يناير</string>
+    <string name="month_2">فبراير</string>
+    <string name="month_3">مارس</string>
+    <string name="month_4">أبريل</string>
+    <string name="month_5">مايو</string>
+    <string name="month_6">يونيو</string>
+    <string name="month_7">يوليو</string>
+    <string name="month_8">أغسطس</string>
+    <string name="month_9">سبتمبر</string>
+    <string name="month_10">أكتوبر</string>
+    <string name="month_11">نوفمبر</string>
+    <string name="month_12">ديسمبر</string>
+
+    <string name="info_connect_title">توصيل مستشعر</string>
+    <string name="info_connect_body1">شغّل المستشعر وأبقِ هذا الهاتف قريبًا. سيظهر هنا خلال ثوانٍ.</string>
+    <string name="info_connect_body2">عند الاتصال الأول يطلب الهاتف رمزًا من 6 أرقام. اقرأه على شاشة المستشعر. المستشعر الذي بلا شاشة يستخدم رمز PIN الذي ضبطه مالكه عبر USB.</string>
+    <string name="info_privacy">لا يصل Bluetooth وشبكة Wi-Fi المحلية إلا إلى مستشعراتك. لا حساب ولا تحليلات ولا رفع. يُستخدم الموقع التقريبي فقط عند النقر على بالقرب مني، لتحريك الخريطة. تبقى ملفاتك على هذا الهاتف ما لم تشاركها.</string>
+    <string name="info_collect_body">يجمع من مستشعراتك المعروفة عبر Wi-Fi حين يملك هذا الهاتف رمز الوصول الخاص بها، وإلا فعبر Bluetooth. تُتخطى المستشعرات التي لها اتصال مفتوح.</string>
+    <string name="info_collect_background">يعمل اثنان كحد أقصى معًا مع إشعار، فيمكنك مغادرة التطبيق.</string>
+    <string name="info_collect_foreground">يعمل واحد في كل مرة والتطبيق مفتوح.</string>
+    <string name="info_wifi_only">رمز الوصول يأتي عبر Bluetooth فقط. صِله عبر Bluetooth مرة واحدة للمزامنة عبر Wi-Fi.</string>
+
+    <string name="perm_bt_title">السماح بـ Bluetooth</string>
+    <string name="perm_bt_body">يعثر Bluetooth على مستشعراتك وينسخ قراءاتها. ولا يستخدم موقعك أبدًا.</string>
+    <string name="perm_bt_settings_title">Bluetooth متوقف لهذا التطبيق</string>
+    <string name="perm_bt_settings_body">فعّل Bluetooth لتطبيق opensensor.space في الإعدادات للاتصال بمستشعراتك.</string>
+</resources>

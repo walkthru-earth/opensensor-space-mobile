@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- My devices, shared by Android and iOS. Keys and words follow app/src/main/res where they exist. -->
+<resources>
+    <string name="scan_known">Known sensors</string>
+    <string name="scan_welcome_title">Hello, I am your guide</string>
+    <string name="scan_welcome_body">Turn on your sensor, keep this phone close and tap Scan.</string>
+    <string name="scan_none_nearby_title">Nothing nearby yet</string>
+    <string name="scan_none_nearby_body">Move closer to connect. Saved history stays below.</string>
+    <string name="scan_nearby">Nearby</string>
+    <string name="scan_connections">Connected now</string>
+    <string name="scan_button_scan">Scan</string>
+    <string name="scan_button_stop">Stop</string>
+    <string name="scan_options">Device options</string>
+    <string name="scan_forget">Forget</string>
+    <string name="scan_forget_title">Forget %1$s?</string>
+    <string name="scan_forget_body">Removes it from this phone. Collected files stay.</string>
+    <string name="scan_forget_button">Forget device</string>
+    <string name="scan_unnamed">Unnamed sensor</string>
+    <string name="scan_tag_paired">paired</string>
+    <string name="scan_tag_known">known</string>
+    <string name="scan_tag_on_lan">on Wi-Fi</string>
+    <string name="scan_tag_on_lan_no_token">on Wi-Fi, no token</string>
+    <plurals name="scan_collecting">
+        <item quantity="one">Collecting %1$d of %2$d file</item>
+        <item quantity="other">Collecting %1$d of %2$d files</item>
+    </plurals>
+    <string name="scan_background">Collecting in the background</string>
+    <plurals name="scan_collect_all">
+        <item quantity="one">Collect from %1$d device</item>
+        <item quantity="other">Collect from all %1$d devices</item>
+    </plurals>
+    <string name="scan_collect_running">Collecting…</string>
+    <plurals name="scan_no_clock">
+        <item quantity="one">%1$d file saved, no clock yet</item>
+        <item quantity="other">%1$d files saved, no clock yet</item>
+    </plurals>
+    <string name="scan_seen">seen %1$s</string>
+    <string name="scan_synced">synced %1$s</string>
+    <plurals name="scan_files">
+        <item quantity="one">%1$d file</item>
+        <item quantity="other">%1$d files</item>
+    </plurals>
+    <string name="scan_failed">Could not scan. Try again.</string>
+    <string name="scan_bluetooth_off">Bluetooth is off. Turn it on and scan again.</string>
+    <string name="scan_archive_day">%1$s, %2$s %3$s %4$s on %5$s</string>
+    <string name="scan_archive_coverage">%1$s of the day</string>
+    <string name="devices_on_wifi">On your Wi-Fi</string>
+    <string name="devices_forget_bond_ios">iOS keeps the Bluetooth pairing. Remove it in Settings, Bluetooth.</string>
+
+    <string name="conn_pairing">Pairing. Enter the code shown on the sensor</string>
+    <string name="conn_link_lost">Link lost. Reconnecting by itself…</string>
+    <string name="conn_failed">Could not connect. Move closer and try again</string>
+
+    <string name="ago_just_now">just now</string>
+    <string name="ago_seconds">%1$d s ago</string>
+    <string name="ago_minutes">%1$d min ago</string>
+    <string name="ago_hours">%1$d h ago</string>
+    <string name="ago_days">%1$d d ago</string>
+
+    <string name="mood_fresh_title">Fresh air</string>
+    <string name="mood_fair_title">Fair</string>
+    <string name="mood_hazy_title">Getting hazy</string>
+    <string name="mood_poor_title">Poor</string>
+    <string name="mood_smoky_title">Smoky</string>
+    <string name="mood_thick_title">Thick smoke</string>
+
+    <string name="month_1">Jan</string>
+    <string name="month_2">Feb</string>
+    <string name="month_3">Mar</string>
+    <string name="month_4">Apr</string>
+    <string name="month_5">May</string>
+    <string name="month_6">Jun</string>
+    <string name="month_7">Jul</string>
+    <string name="month_8">Aug</string>
+    <string name="month_9">Sep</string>
+    <string name="month_10">Oct</string>
+    <string name="month_11">Nov</string>
+    <string name="month_12">Dec</string>
+
+    <string name="info_connect_title">Connect a sensor</string>
+    <string name="info_connect_body1">Turn on your sensor and keep this phone close. It appears here in a few seconds.</string>
+    <string name="info_connect_body2">On the first connection the phone asks for a 6 digit code. Read it on the sensor screen. A sensor without a screen uses the PIN its owner set over USB.</string>
+    <string name="info_privacy">Bluetooth and your local Wi-Fi reach only your own sensors. No account, no analytics and no uploads. Approximate location is used only when you tap Near me, to move the map. Your files stay on this phone unless you share them.</string>
+    <string name="info_collect_body">Collects from your known sensors over Wi-Fi when this phone holds their token, otherwise over Bluetooth. Sensors with an open connection are skipped.</string>
+    <string name="info_collect_background">Up to two run at once with a notification, so you can leave the app.</string>
+    <string name="info_collect_foreground">One runs at a time while the app is open.</string>
+    <string name="info_wifi_only">The token comes over Bluetooth only. Connect it over Bluetooth once to sync over Wi-Fi.</string>
+
+    <string name="perm_bt_title">Allow Bluetooth</string>
+    <string name="perm_bt_body">Bluetooth finds your sensors and copies their readings. It never uses your location.</string>
+    <string name="perm_bt_settings_title">Bluetooth is off for this app</string>
+    <string name="perm_bt_settings_body">Turn on Bluetooth for opensensor.space in Settings to connect to your sensors.</string>
+</resources>
