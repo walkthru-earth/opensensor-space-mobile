@@ -48,6 +48,9 @@ class FakeArchiveDevice(
     /** Leading CHUNKs of the k-th READ window to drop, as a lossy BLE link does. READ_END still says the true offset. */
     var dropLeadingChunks: (readIndex: Int) -> Int = { 0 }
 
+    /** Runs before an OPEN is answered, so a test can change the files between LIST and OPEN. */
+    var beforeOpen: (name: String) -> Unit = {}
+
     /** Delay before CLOSED, so a caller's timeout fires first. */
     var closedDelayMs: Long = 0
 
@@ -97,6 +100,7 @@ class FakeArchiveDevice(
             }
             Opcode.OPEN -> {
                 val name = req.copyOfRange(1, req.size).decodeToString()
+                beforeOpen(name)
                 val f = files.firstOrNull { it.name == name } ?: return send(Frame.Error(op, ProtocolError.INVALID_NAME.code, ""))
                 openHandle = nextHandle++
                 openFile = f
