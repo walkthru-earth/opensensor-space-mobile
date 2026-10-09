@@ -26,6 +26,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -65,6 +70,7 @@ import earth.walkthru.opensensor.devices.resources.scan_forget_body
 import earth.walkthru.opensensor.devices.resources.scan_forget_button
 import earth.walkthru.opensensor.devices.resources.scan_forget_title
 import earth.walkthru.opensensor.devices.resources.scan_known
+import earth.walkthru.opensensor.devices.resources.scan_local_network_denied
 import earth.walkthru.opensensor.devices.resources.scan_nearby
 import earth.walkthru.opensensor.devices.resources.scan_none_nearby_body
 import earth.walkthru.opensensor.devices.resources.scan_none_nearby_title
@@ -73,6 +79,7 @@ import earth.walkthru.opensensor.devices.resources.scan_welcome_body
 import earth.walkthru.opensensor.devices.resources.scan_welcome_title
 import earth.walkthru.opensensor.permissions.RuntimeAccess
 import earth.walkthru.opensensor.strings.resources.action_cancel
+import earth.walkthru.opensensor.strings.resources.perm_open_settings
 import earth.walkthru.opensensor.strings.resources.tab_my_devices
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
@@ -103,8 +110,13 @@ fun MyDevicesScreen(
     onAction: (DevicesAction) -> Unit,
     modifier: Modifier = Modifier,
     topActions: @Composable RowScope.() -> Unit = {},
+    onScanTap: (() -> Unit)? = null,
+    onOpenLocalNetworkSettings: (() -> Unit)? = null,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    var explicitScan by remember { mutableStateOf(false) }
+    LaunchedEffect(state.scanning) { if (!state.scanning) explicitScan = false }
+    val showStop = state.scanning && (onScanTap == null || explicitScan)
 
     LifecycleStartEffect(bluetooth.ready) {
         if (bluetooth.ready) onAction(DevicesAction.StartScan)
@@ -112,7 +124,11 @@ fun MyDevicesScreen(
     }
 
     // Without Bluetooth a sensor still opens on its archive, without a link.
-    fun open(id: String, name: String?) {
+    fun open(id: String, name: String?, wifiReady: Boolean = false) {
+        if (wifiReady) {
+            onAction(DevicesAction.Open(id, name, connect = bluetooth.ready))
+            return
+        }
         bluetooth.run(onDeclined = { onAction(DevicesAction.Open(id, name, connect = false)) }) {
             onAction(DevicesAction.Open(id, name, connect = true))
         }
@@ -140,12 +156,20 @@ fun MyDevicesScreen(
         },
         floatingActionButton = {
             FloatingTextButton(
-                text = stringResource(if (state.scanning) Res.string.scan_button_stop else Res.string.scan_button_scan),
+                text = stringResource(if (showStop) Res.string.scan_button_stop else Res.string.scan_button_scan),
                 onClick = {
-                    if (state.scanning) onAction(DevicesAction.StopScan) else bluetooth.run { onAction(DevicesAction.StartScan) }
+                    if (showStop) {
+                        explicitScan = false
+                        onAction(DevicesAction.StopScan)
+                    } else {
+                        explicitScan = true
+                        // A declined Bluetooth request still allows a local Wi-Fi browse.
+                        val start = { if (onScanTap == null) onAction(DevicesAction.StartScan) else onScanTap() }
+                        bluetooth.run(onDeclined = start, action = start)
+                    }
                 },
-                primary = !state.scanning,
-                icon = { Icon(if (state.scanning) AppIcons.Stop else AppIcons.Radar, contentDescription = null) },
+                primary = !showStop,
+                icon = { Icon(if (showStop) AppIcons.Stop else AppIcons.Radar, contentDescription = null) },
             )
         },
     ) { padding ->
@@ -163,7 +187,7 @@ fun MyDevicesScreen(
             if (list.active.isNotEmpty()) {
                 item(key = "active-header") { Eyebrow(stringResource(Res.string.scan_connections), heading = true) }
                 items(list.active, key = { "a:" + it.id }) { link ->
-                    ActiveRow(link, onClick = { open(link.id, link.name) })
+                    ActiveRow(link, onClick = { open(link.id, link.name, wifiReady = link.id.startsWith("wifi:")) })
                 }
             }
             item(key = "progress") {
@@ -177,11 +201,23 @@ fun MyDevicesScreen(
                         shape = MaterialTheme.shapes.large,
                         modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite },
                     ) {
-                        Text(
-                            stringResource(if (problem == ScanProblem.BLUETOOTH_OFF) Res.string.scan_bluetooth_off else Res.string.scan_failed),
-                            Modifier.padding(16.dp),
-                            color = MaterialTheme.colorScheme.onErrorContainer,
-                        )
+                        Column(Modifier.padding(16.dp)) {
+                            Text(
+                                stringResource(
+                                    when (problem) {
+                                        ScanProblem.BLUETOOTH_OFF -> Res.string.scan_bluetooth_off
+                                        ScanProblem.LOCAL_NETWORK_DENIED -> Res.string.scan_local_network_denied
+                                        ScanProblem.FAILED -> Res.string.scan_failed
+                                    },
+                                ),
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                            )
+                            if (problem == ScanProblem.LOCAL_NETWORK_DENIED && onOpenLocalNetworkSettings != null) {
+                                TextButton(onClick = onOpenLocalNetworkSettings) {
+                                    Text(stringResource(SharedRes.string.perm_open_settings))
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -202,7 +238,7 @@ fun MyDevicesScreen(
                 NearbyRow(
                     row = row,
                     level = level,
-                    onClick = { open(row.id, row.name) },
+                    onClick = { open(row.id, row.name, wifiReady = row.wifi == WifiTag.WITH_ACCESS) },
                     onForget = { onAction(DevicesAction.RequestForget(row.id, row.name)) },
                 )
             }
@@ -216,7 +252,7 @@ fun MyDevicesScreen(
                     KnownRow(
                         row = row,
                         level = level,
-                        onClick = { open(row.id, row.name) },
+                        onClick = { open(row.id, row.name, wifiReady = row.wifi == WifiTag.WITH_ACCESS) },
                         onForget = { onAction(DevicesAction.RequestForget(row.id, row.name)) },
                     )
                 }

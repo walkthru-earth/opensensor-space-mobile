@@ -120,7 +120,7 @@ sealed interface LogTailState {
 }
 
 /** How the repository should pick a transport for a connect. */
-enum class TransportPreference { AUTO, BLE_ONLY }
+enum class TransportPreference { AUTO, BLE_ONLY, LAN_ONLY }
 
 /** A link that was Ready dropped on its own; the repository is trying to get it back. */
 data class ReconnectState(val attempt: Int, val maxAttempts: Int, val reason: String)
@@ -321,7 +321,8 @@ class DeviceConnectionRepository @Inject constructor(
      * Transport choice (contract, "LAN transport"): prefer LAN when the device's station is currently
      * discovered on the network *and* a token is stored, else BLE; if the LAN connect fails for any
      * reason fall back to BLE and say so. [preference] = [TransportPreference.BLE_ONLY] skips LAN
-     * (needed for `GET_TOKEN`, which is BLE-only by contract).
+     * (needed for `GET_TOKEN`, which is BLE-only by contract). [TransportPreference.LAN_ONLY]
+     * never falls back to Bluetooth when that permission is unavailable.
      */
     fun connect(address: String, name: String?, fake: Boolean = false, preference: TransportPreference = TransportPreference.AUTO) {
         check(boundAddress == null || boundAddress == address) { "controller belongs to another device" }
@@ -362,7 +363,7 @@ class DeviceConnectionRepository @Inject constructor(
         if (existing != null && existing.address == address && existing.connectionState.value.isReady) {
             // A repeated Connect is a new explicit intent even when it can reuse the pipe. Give
             // the existing link watcher the new claim so future loss still reconnects it.
-            watchLink(existing, address, name, fake, claim)
+            watchLink(existing, address, name, fake, claim, preference)
             return true
         }
         closeSessionLocked()
@@ -376,14 +377,18 @@ class DeviceConnectionRepository @Inject constructor(
         var transport: AqTransport? = null
         if (fake) {
             transport = transportFactory.fake(address)
-        } else if (preference == TransportPreference.AUTO) {
-            transport = tryLan(address, name ?: known?.name, known)
+        } else if (preference != TransportPreference.BLE_ONLY) {
+            transport = tryLan(address, name ?: known?.name, known, fallbackToBle = preference == TransportPreference.AUTO)
         }
         if (transport == null) {
+            if (preference == TransportPreference.LAN_ONLY) {
+                connectionFailure.value = "Wi-Fi connection failed"
+                return false
+            }
             transport = transportFactory.ble(address)
         }
         val opened = try {
-            openSession(transport, address, name, fake, claim = claim)
+            openSession(transport, address, name, fake, claim = claim, preference = preference)
         } catch (e: CancellationException) {
             withContext(NonCancellable) { closeSessionLocked() }
             throw e
@@ -397,11 +402,11 @@ class DeviceConnectionRepository @Inject constructor(
     }
 
     /**
-     * Attempt a LAN session; null when not applicable or when it failed (the caller falls back to
-     * BLE). The probe session is removed from the slot and its transport closed on every failure
+     * Attempt a LAN session; null when not applicable or when it failed. The caller may fall back
+     * to BLE if its preference allows it. The probe session is removed and its transport closed on every failure
      * path, including an unexpected exception and cancellation.
      */
-    private suspend fun tryLan(address: String, name: String?, known: KnownDevice?): AqTransport? {
+    private suspend fun tryLan(address: String, name: String?, known: KnownDevice?, fallbackToBle: Boolean = true): AqTransport? {
         val station = known?.station ?: return null
         val seen = lanDevices.value[station] ?: return null
         val host = seen.host ?: return null
@@ -417,26 +422,26 @@ class DeviceConnectionRepository @Inject constructor(
             connected = true
             return transport
         } catch (e: LanConnectException) {
-            Log.w(TAG, "LAN connect failed (${e.failure}); falling back to Bluetooth")
+            Log.w(TAG, "LAN connect failed (${e.failure})")
             if (tokenPolicy.invalidatesToken(e.failure)) {
                 // The device rotated its token (ERROR 14 at the handshake). The stored copy is dead:
                 // drop it so the Bluetooth session we are about to open fetches a fresh one.
                 knownDeviceDao.setLanToken(address, null, null)
                 tokenPolicy.markStale(address)
-                _events.tryEmit(DeviceEvent.Info(DeviceMessage.LanFallback(e.failure)))
+                if (fallbackToBle) _events.tryEmit(DeviceEvent.Info(DeviceMessage.LanFallback(e.failure)))
             } else {
-                _events.tryEmit(DeviceEvent.Info(DeviceMessage.LanFallback(e.failure)))
+                if (fallbackToBle) _events.tryEmit(DeviceEvent.Info(DeviceMessage.LanFallback(e.failure)))
             }
             return null
         } catch (e: TransportException) {
-            Log.w(TAG, "LAN connect failed (${e.message}); falling back to Bluetooth")
-            _events.tryEmit(DeviceEvent.Info(DeviceMessage.LanFallback(null)))
+            Log.w(TAG, "LAN connect failed (${e.message})")
+            if (fallbackToBle) _events.tryEmit(DeviceEvent.Info(DeviceMessage.LanFallback(null)))
             return null
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.w(TAG, "LAN connect failed unexpectedly (${e::class.simpleName}); falling back to Bluetooth")
-            _events.tryEmit(DeviceEvent.Info(DeviceMessage.LanFallback(null)))
+            Log.w(TAG, "LAN connect failed unexpectedly (${e::class.simpleName})")
+            if (fallbackToBle) _events.tryEmit(DeviceEvent.Info(DeviceMessage.LanFallback(null)))
             return null
         } finally {
             if (!connected) {
@@ -488,7 +493,7 @@ class DeviceConnectionRepository @Inject constructor(
      * [watch] = false (background sync) skips the lost-link auto-reconnect: the worker has no user
      * to keep informed and simply tries again at its next period.
      */
-    private suspend fun openSession(transport: AqTransport, address: String, name: String?, fake: Boolean, watch: Boolean = true, claim: Long? = null): Boolean {
+    private suspend fun openSession(transport: AqTransport, address: String, name: String?, fake: Boolean, watch: Boolean = true, claim: Long? = null, preference: TransportPreference = TransportPreference.AUTO): Boolean {
         val session = (_session.value?.takeIf { it.transport === transport } ?: DeviceSession(transport))
             .also { it.staleFrameLogger = { m -> Log.w(TAG, m) } }
         _session.value = session
@@ -583,7 +588,7 @@ class DeviceConnectionRepository @Inject constructor(
         }
         // Verification and enrollment must finish before link loss can start an automatic
         // reconnect. A rejected or half-open session must never re-enroll itself later.
-        if (watch && claim != null && connectionIntent.owns(claim)) watchLink(session, address, name, fake, claim)
+        if (watch && claim != null && connectionIntent.owns(claim)) watchLink(session, address, name, fake, claim, preference)
         return true
     }
 
@@ -678,13 +683,12 @@ class DeviceConnectionRepository @Inject constructor(
      * Once [session] is Ready, wait for it to stop being Ready while it is still the current
      * session — that is a link lost on its own (LAN socket destroyed by the OS in the background,
      * GATT 133, device reboot), never a [disconnect] (which clears the slot first). Then retry
-     * [RECONNECT_ATTEMPTS] times, [RECONNECT_DELAY_MS] apart, with the normal transport rule: LAN
-     * if the device is still discovered, else Bluetooth — so a LAN link killed by the background
-     * restriction comes back over BLE within seconds. A sync that was running — or that had just
+     * [RECONNECT_ATTEMPTS] times, [RECONNECT_DELAY_MS] apart, with the initial transport preference.
+     * AUTO uses LAN when discovered and Bluetooth otherwise; LAN_ONLY cannot use Bluetooth. A sync that was running — or that had just
      * died of the pipe itself ("no response from device within 60 s", socket error), see
      * [SyncResumePolicy] — is resumed; a user Stop or a completed run is not.
      */
-    private fun watchLink(session: DeviceSession, address: String, name: String?, fake: Boolean, claim: Long) {
+    private fun watchLink(session: DeviceSession, address: String, name: String?, fake: Boolean, claim: Long, preference: TransportPreference = TransportPreference.AUTO) {
         val watch = scope.launch(start = CoroutineStart.LAZY) {
             val lost = session.connectionState.first { !it.isReady && it !is ConnectionState.Connecting && !it.isBusy }
             val generation = synchronized(this@DeviceConnectionRepository) { reconnectGeneration }
@@ -693,7 +697,7 @@ class DeviceConnectionRepository @Inject constructor(
             val sync = _sync.value
             val resume = SyncResumePolicy.shouldResume(sync.running, sync.endCause, sync.finishedAtEpochMs, clock.nowEpochMs())
             Log.w(TAG, "link lost ($reason); auto-reconnect starts, resumeSync=$resume (running=${sync.running}, lastEnd=${sync.endCause})")
-            val reconnect = scope.launch(start = CoroutineStart.LAZY) { reconnectLoop(address, name, fake, reason, resume, claim) }
+            val reconnect = scope.launch(start = CoroutineStart.LAZY) { reconnectLoop(address, name, fake, reason, resume, claim, preference) }
             val me = coroutineContext[Job]
             val start = synchronized(this@DeviceConnectionRepository) {
                 // A close replaced this watcher, or a Stop arrived after the loss was seen: no reconnect.
@@ -716,7 +720,7 @@ class DeviceConnectionRepository @Inject constructor(
         watch.start()
     }
 
-    private suspend fun reconnectLoop(address: String, name: String?, fake: Boolean, reason: String, resumeSync: Boolean, claim: Long) {
+    private suspend fun reconnectLoop(address: String, name: String?, fake: Boolean, reason: String, resumeSync: Boolean, claim: Long, preference: TransportPreference) {
         try {
             for (attempt in 1..RECONNECT_ATTEMPTS) {
                 if (!connectionIntent.owns(claim)) return
@@ -729,7 +733,7 @@ class DeviceConnectionRepository @Inject constructor(
                     val cur = _session.value
                     if (cur != null && cur.connectionState.value.isReady) return@withLock true
                     // No LIST here when a resume follows: the resume issues its own and waits for it.
-                    val opened = connectLocked(address, name, fake, TransportPreference.AUTO, claim, listAfter = !resumeSync)
+                    val opened = connectLocked(address, name, fake, preference, claim, listAfter = !resumeSync)
                     if (!connectionIntent.owns(claim)) {
                         closeSessionLocked()
                         null

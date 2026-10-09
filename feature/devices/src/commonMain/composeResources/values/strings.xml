@@ -42,6 +42,7 @@
     </plurals>
     <string name="scan_failed">Could not scan. Try again.</string>
     <string name="scan_bluetooth_off">Bluetooth is off. Turn it on and scan again.</string>
+    <string name="scan_local_network_denied">Local Network access is off. Allow it in Settings to find sensors on Wi-Fi.</string>
     <string name="scan_archive_day">%1$s, %2$s %3$s %4$s on %5$s</string>
     <string name="scan_archive_coverage">%1$s of the day</string>
     <string name="devices_on_wifi">On your Wi-Fi</string>

@@ -61,7 +61,7 @@ data class ArchiveGlance(
 )
 
 /** Why the last scan stopped early. */
-enum class ScanProblem { BLUETOOTH_OFF, FAILED }
+enum class ScanProblem { BLUETOOTH_OFF, LOCAL_NETWORK_DENIED, FAILED }
 
 /** The Wi-Fi tag on a known row. */
 enum class WifiTag { WITH_ACCESS, NO_ACCESS }

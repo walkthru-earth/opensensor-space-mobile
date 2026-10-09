@@ -19,7 +19,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
  *
  * On API 37+ every local-network operation (TCP, UDP, mDNS, [android.net.nsd.NsdManager]) is
  * blocked for apps targeting 37 until this runtime permission is granted. The app asks for it only
- * from a Wi-Fi action on the Device screen ([rememberLocalNetworkAccess]). Bluetooth keeps working
+ * from a Scan tap or Wi-Fi action on the Device screen ([rememberLocalNetworkAccess]). Bluetooth keeps working
  * without it. Below API 37 the permission does not exist and [isGranted] is true.
  */
 object LanPermission {

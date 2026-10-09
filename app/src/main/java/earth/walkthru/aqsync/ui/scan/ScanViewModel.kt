@@ -9,8 +9,10 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import earth.walkthru.aqsync.BuildConfig
 import earth.walkthru.aqsync.data.DeviceConnectionManager
 import earth.walkthru.aqsync.data.DeviceSnapshot
+import earth.walkthru.aqsync.data.TransportPreference
 import earth.walkthru.aqsync.data.background.AutoSyncScheduler
 import earth.walkthru.aqsync.data.ble.BleScanner
+import earth.walkthru.aqsync.data.ble.BluetoothStatus
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.ScannedDevice
 import earth.walkthru.aqsync.data.fake.FakeTransport
@@ -21,6 +23,8 @@ import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
 import earth.walkthru.aqsync.data.local.database.MetricBucketDao
 import earth.walkthru.aqsync.data.settings.AppSettings
 import earth.walkthru.aqsync.data.settings.DetailLevel
+import earth.walkthru.aqsync.ui.permissions.LanPermission
+import earth.walkthru.aqsync.ui.permissions.hasBluetoothPermissions
 import earth.walkthru.opensensor.devices.ActiveLink
 import earth.walkthru.opensensor.devices.ArchiveGlance
 import earth.walkthru.opensensor.devices.CollectAllPort
@@ -115,21 +119,33 @@ class ScanViewModel @Inject constructor(
     private val controller = DevicesController(viewModelScope, knownStore, radio, summaries, collect)
     val state: StateFlow<DevicesUiState> get() = controller.state
 
-    /** Shared actions go to the controller. Opening a sensor connects here when Bluetooth is allowed. */
+    /** Shared actions go to the controller. Opening a sensor connects over any permitted link. */
     fun onAction(action: DevicesAction) {
         if (action is DevicesAction.Open) {
-            if (action.connect) connect(action.id, action.name)
+            if (action.connect) connect(action.id, action.name) else connectLanIfAvailable(action.id, action.name)
             return
         }
         controller.onAction(action)
     }
 
     private var scanJob: Job? = null
+    private var lanScanJob: Job? = null
     private var pruneJob: Job? = null
     private var scanGeneration = 0
 
+    init {
+        viewModelScope.launch {
+            manager.lanDiscoveryError.collect { error ->
+                if (error != null && lanScanJob?.isActive == true) scanProblem.value = ScanProblem.FAILED
+            }
+        }
+    }
+
     fun startScan() {
         if (scanJob?.isActive == true) return
+        // The shared screen can start a Wi-Fi search even when Bluetooth was declined. Never
+        // collect the BLE scanner without both Android permissions and an enabled adapter.
+        if (!hasBluetoothPermissions(context) || !BluetoothStatus.isEnabled(context)) return
         val generation = ++scanGeneration
         scanProblem.value = null
         scanning.value = true
@@ -168,7 +184,7 @@ class ScanViewModel @Inject constructor(
                 // A stopped run can finish after a new run starts. Only its own generation may
                 // clear the current button state or cancel the current pruning loop.
                 if (scanGeneration == generation) {
-                    scanning.value = false
+                    scanning.value = lanScanJob?.isActive == true
                     pruneJob?.cancel()
                     pruneJob = null
                     scanJob = null
@@ -181,13 +197,47 @@ class ScanViewModel @Inject constructor(
         scanGeneration++
         scanJob?.cancel()
         scanJob = null
+        lanScanJob?.cancel()
+        lanScanJob = null
         pruneJob?.cancel()
         pruneJob = null
         scanning.value = false
     }
 
+    /** A Scan tap may grant Local Network without leaving the page or restarting the activity. */
+    fun startLanDiscoveryIfAllowed() {
+        if (LanPermission.isGranted(context)) {
+            if (scanProblem.value == ScanProblem.LOCAL_NETWORK_DENIED) scanProblem.value = null
+            manager.setLanDiscoveryActive(true)
+            // Discovery itself stays active in the foreground for AUTO connections. The
+            // explicit search has a bounded visible window when Bluetooth is unavailable.
+            lanScanJob?.cancel()
+            scanning.value = true
+            lanScanJob = viewModelScope.launch {
+                delay(LAN_SCAN_WINDOW_MS)
+                lanScanJob = null
+                if (scanJob?.isActive != true) scanning.value = false
+            }
+        }
+    }
+
+    fun onLocalNetworkDeclined() {
+        scanProblem.value = ScanProblem.LOCAL_NETWORK_DENIED
+    }
+
     fun connect(address: String, name: String?) {
         connectIfIdle(address, name, fake = false)
+    }
+
+    private fun connectLanIfAvailable(address: String, name: String?) {
+        stopScan()
+        if (!LanPermission.isGranted(context)) return
+        viewModelScope.launch {
+            val known = knownDeviceDao.get(address) ?: return@launch
+            val station = known.station ?: return@launch
+            if (!known.hasLanToken || station !in manager.lanDevices.value) return@launch
+            connectIfIdle(address, name, fake = false, preference = TransportPreference.LAN_ONLY)
+        }
     }
 
     fun connectFake() {
@@ -200,12 +250,12 @@ class ScanViewModel @Inject constructor(
     }
 
     /** Opening a device observes an existing owner; it never interrupts its connection or transfer. */
-    private fun connectIfIdle(address: String, name: String?, fake: Boolean) {
+    private fun connectIfIdle(address: String, name: String?, fake: Boolean, preference: TransportPreference = TransportPreference.AUTO) {
         stopScan()
         val controller = manager.controller(address)
         val connection = controller.connectionState.value
         if (connection.isReady || connection.isBusy || controller.reconnecting.value != null || controller.backgroundOwner.value != null) return
-        controller.connect(address, name, fake = fake)
+        controller.connect(address, name, fake = fake, preference = preference)
     }
 
     override fun onCleared() {
@@ -214,6 +264,7 @@ class ScanViewModel @Inject constructor(
 
     companion object {
         const val STALE_MS = 15_000L
+        const val LAN_SCAN_WINDOW_MS = 40_000L
     }
 }
 

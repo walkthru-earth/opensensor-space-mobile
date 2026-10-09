@@ -189,6 +189,34 @@ class DeviceConnectionRepositoryTest {
     }
 
     @Test
+    fun `LAN only with no discovered target never constructs Bluetooth`() = harnessTest { h ->
+        h.knownDao.upsert(h.enrolled(token = OLD_TOKEN))
+
+        h.repo.connect(ADDRESS, "AQ-6b40", preference = TransportPreference.LAN_ONLY)
+        runCurrent()
+
+        assertEquals(0, h.factory.fakeConnects)
+        assertTrue(h.factory.lanTransports.isEmpty())
+        assertFalse(h.repo.connectionState.value.isReady)
+    }
+
+    @Test
+    fun `LAN only failure closes probe without constructing Bluetooth`() = harnessTest { h ->
+        h.knownDao.upsert(h.enrolled(token = OLD_TOKEN))
+        h.lan.devices.value = mapOf(h.device.station to h.lanTarget())
+        h.factory.lanFailure = LanConnectException(LanFailure.UNREACHABLE)
+
+        h.repo.connect(ADDRESS, "AQ-6b40", preference = TransportPreference.LAN_ONLY)
+        runCurrent()
+
+        assertTrue(h.factory.lanTransports.single().closed)
+        assertEquals(0, h.factory.fakeConnects)
+        assertFalse(h.repo.connectionState.value.isReady)
+        assertEquals(OLD_TOKEN, h.knownDao.lanToken(ADDRESS))
+        assertFalse(h.events.any { it is DeviceEvent.Info && it.message is DeviceMessage.LanFallback })
+    }
+
+    @Test
     fun `overlapping config commands are refused instead of clearing each other's busy flag`() = harnessTest { h ->
         h.repo.connect(ADDRESS, "AQ-6b40", fake = true)
         h.until { h.repo.connectionState.value.isReady && h.repo.config.value != null }

@@ -17,6 +17,7 @@ import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.fake.FakeTransport
 import earth.walkthru.aqsync.ui.permissions.AccessDialogs
 import earth.walkthru.aqsync.ui.permissions.rememberBluetoothAccess
+import earth.walkthru.aqsync.ui.permissions.rememberLocalNetworkAccess
 import earth.walkthru.aqsync.ui.permissions.rememberNotificationPermission
 import earth.walkthru.opensensor.designsystem.AppIcons
 import earth.walkthru.opensensor.devices.DevicesAction
@@ -27,9 +28,9 @@ import earth.walkthru.opensensor.devices.MyDevicesScreen
 private val AndroidDevices = DevicesPlatform(collectInBackground = true, explainSystemBond = false)
 
 /**
- * The Android route for the shared My devices screen. It binds the Bluetooth permission, the
- * notification permission for the Collect all worker and the debug fake entries. The list, the
- * scan lifecycle and the Forget confirmation are shared in `:feature:devices`.
+ * The Android route for the shared My devices screen. It binds Bluetooth and Local Network
+ * permissions, notification permission for the Collect all worker and debug fake entries. The
+ * list, scan lifecycle and Forget confirmation are shared in `:feature:devices`.
  */
 @Composable
 fun ScanScreen(
@@ -40,6 +41,8 @@ fun ScanScreen(
     val level by viewModel.detailLevel.collectAsStateWithLifecycle()
     val bluetooth = rememberBluetoothAccess()
     AccessDialogs(bluetooth)
+    val localNetwork = rememberLocalNetworkAccess()
+    AccessDialogs(localNetwork)
     // The Collect all worker shows a dataSync notification (API 33+). A denial only hides it.
     val notificationPermission = rememberNotificationPermission()
 
@@ -48,6 +51,13 @@ fun ScanScreen(
         level = level,
         bluetooth = bluetooth,
         platform = AndroidDevices,
+        onScanTap = {
+            viewModel.onAction(DevicesAction.StartScan)
+            localNetwork.run(
+                onDeclined = viewModel::onLocalNetworkDeclined,
+                action = viewModel::startLanDiscoveryIfAllowed,
+            )
+        },
         onAction = { action ->
             when (action) {
                 // Detail owns the link and still opens on the archive without Bluetooth.
