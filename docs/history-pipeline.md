@@ -167,9 +167,35 @@ scale, opacity = coverage, dashed outline = estimated time, whisker = peak. A ca
 averaging (hourly, daily or weekly means against a 24-hour guideline), and the touch readout names
 the mood and WHO step in words. Time labels
 in the phone's zone, buckets UTC-aligned. Day was 96 quarter-hours until 2026-09-18 (~3 dp bars
-were not tappable). The same spec is Swift Charts `BarMark`s + a `LazyVGrid` on iOS; the ring is
-the iOS widget shape. **Files › Chart by file** (`FileSummary`) is the same column style in file
-order — the diagnostic a time axis cannot give.
+were not tappable). **Files › Chart by file** (`FileSummary`) is the same column style in file
+order, the diagnostic a time axis cannot give.
+
+## Shared screen (`:feature:history`, #18)
+
+Android and iOS draw one History from `commonMain` (2026-10-09). The module holds the screen, the
+band column chart, the day ring, the calendar heatmap, the archive and Developer cards and its
+strings (Compose resources with Arabic). Chart text is drawn with the Compose text measurer, in
+a left to right direction, and numbers go through `formatFixed` from `:core:units`. Date labels
+use one `expect` seam (`formatEpoch`, `DateTimeFormatter` on Android, `NSDateFormatter` on iOS).
+
+`HistoryController` is a plain class (the SettingsController pattern) over four ports. The
+`HistorySeriesReader`, the `HistoryTiers` and the `ArchiveIndex` from `:core:history` and
+`:core:archive`, plus two flows, the station History opens on and the station generations its
+chips offer. It owns station, metric, range and paging, follows "now" across local midnight until
+the user pages back, and opens on the last local day with readings.
+
+| | Android | iOS |
+| --- | --- | --- |
+| Host | `HistoryViewModel` (Hilt, assisted by address) | `HistoryHolder` ViewModel in `AppRoot` |
+| Index | Room `archived_file` (`RoomArchiveIndex`) | `.verified.json` receipts (`ReceiptArchiveIndex`), one instance shared with the sync runner (`IosArchive`) |
+| Tiers | Room `metric_bucket` (`RoomHistoryTiers`) | computed in memory from the archive (`ArchiveHistoryTiers`) |
+| Current station | the known device's station | the archived station with the latest reading |
+| Chips | the device's authenticated station epochs | every archived station, oldest latest reading first |
+| Index repair | `HistoryIndexer.backfillAll` once per process from `AqSyncApplication`, and after each sync | `IosArchive.startIndexRepair`, at launch and whenever a receipt waits for its index |
+| Header | device section tabs and the link chip | a back arrow, opened from a History button on My devices |
+
+`commonTest` covers the presentation helpers, the y axis ticks (metric and imperial) and the
+controller over a fake archive. It runs as the Android host test and on the iOS simulator.
 
 ## Uses → affects
 
@@ -181,4 +207,5 @@ order — the diagnostic a time axis cannot give.
 | `TimeEstimate` | day signatures (anchor), dashed drawing, daily file's estimated column |
 | `Columns.slotSeconds` / `axisMax` | every chart; `ColumnsTest` |
 | `HistoryRepository.observe` | History and Today (local-day fold), `HistoryRepositoryTest` |
+| `:feature:history` (`HistoryController`, charts, strings) | History on both apps, the Files chart by file on Android, `feature/history/src/commonTest` |
 | `ParquetWriter` (in parquet.md) | daily file layout → re-run `tools/validate_parquet_samples.py` |
