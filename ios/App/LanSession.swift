@@ -56,8 +56,8 @@ actor LanSession {
     private var frames = LanFrameBuffer()
     private var receiving = false
     private var closed = false
-    private var replies: [ArchiveReply] = []
-    private var replyWaiter: Waiter<ArchiveReply>?
+    private var replies: [LanReply] = []
+    private var replyWaiter: Waiter<LanReply>?
     private var connectWaiter: Waiter<Void>?
     private var sendWaiters: [UUID: Waiter<Void>] = [:]
     private var heartbeat: DispatchSourceTimer?
@@ -153,7 +153,7 @@ actor LanSession {
     }
 
     /// Session ERROR frames (handshake, a full session pool, authentication) end the connection.
-    private static func refuse(_ frame: ArchiveReply) throws {
+    private static func refuse(_ frame: LanReply) throws {
         guard frame.kind == "error" else { return }
         if frame.code == 14 { throw LanFailure.authentication }
         if frame.code == 7 { throw LanFailure.busy }
@@ -187,9 +187,9 @@ actor LanSession {
         liveness.sent(now: ProcessInfo.processInfo.systemUptime)
     }
 
-    private func reply(timeout: TimeInterval) async throws -> ArchiveReply {
+    private func reply(timeout: TimeInterval) async throws -> LanReply {
         try Task.checkCancellation()
-        let frame: ArchiveReply
+        let frame: LanReply
         if !replies.isEmpty {
             frame = replies.removeFirst()
             // Queued frames may be waiting behind the reply bound; parse them and keep reading.
@@ -265,15 +265,12 @@ actor LanSession {
         }
     }
 
-    private func decode(_ body: Data) -> ArchiveReply? {
+    private func decode(_ body: Data) -> LanReply? {
         guard let reply = wire.decode(data: body) else { return nil }
-        return ArchiveReply(
-            kind: reply.kind, name: reply.name, size: reply.size, crc: reply.crc, handle: reply.handle,
-            offset: reply.offset, code: reply.code, op: reply.op, count: reply.count,
-            data: reply.kind == "chunk" ? reply.payload : nil, json: reply.json)
+        return LanReply(kind: reply.kind, code: reply.code, count: reply.count, json: reply.json)
     }
 
-    private func route(_ reply: ArchiveReply) {
+    private func route(_ reply: LanReply) {
         if reply.kind == "status" || reply.kind == "live" {
             eventSink.yield(.push(kind: reply.kind, json: reply.json))
             return

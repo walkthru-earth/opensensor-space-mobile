@@ -10,7 +10,7 @@ struct OpenSensorTests {
         try ArchiveChecks.run()
     }
 
-    @Test("Transfer window retry, framing, LAN policy, resume, progress, stations and per-file failures")
+    @Test("LAN claims, keepalive, framing and policy")
     func transfer() async throws {
         try await TransferChecks.run()
     }

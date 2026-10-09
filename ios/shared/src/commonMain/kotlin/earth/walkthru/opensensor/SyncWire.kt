@@ -8,7 +8,10 @@ import earth.walkthru.aqsync.data.protocol.LanProtocol
 import earth.walkthru.aqsync.data.protocol.Request
 
 /**
- * Small Swift facade around the canonical shared codec. Frame bytes stay binary end to end.
+ * Small Swift facade around the canonical shared codec for the session itself: the token
+ * request, STATUS keepalive, LAN handshake and envelope, and reply decoding. File requests
+ * (LIST, OPEN, READ, CLOSE) are built only by the shared engine behind [SensorSync].
+ * Frame bytes stay binary end to end.
  * The byte-array members are internal. iOS callers use the `NSData` extensions in
  * `iosMain/SyncWireData.kt`, which copy once with `memcpy` instead of building hex strings.
  */
@@ -17,11 +20,6 @@ class SyncWire {
     val responseUuid: String get() = AqGatt.RESPONSE
     internal fun tokenFrame(): ByteArray = Request.GetToken.encode()
     internal fun statusFrame(): ByteArray = Request.Status.encode()
-    internal fun listFrame(): ByteArray = Request.List.encode()
-    internal fun openFrame(name: String): ByteArray = Request.Open(name).encode()
-    internal fun readFrame(handle: Int, offset: Long, length: Long): ByteArray =
-        Request.Read(handle, offset, length).encode()
-    internal fun closeFrame(handle: Int): ByteArray = Request.Close(handle).encode()
     internal fun handshakeFrame(token: ByteArray): ByteArray = LanProtocol.handshake(token)
     internal fun envelopeFrame(body: ByteArray): ByteArray = LanProtocol.encode(body)
 

@@ -10,11 +10,8 @@ class SyncWireTest {
 
     @Test fun requestsUseCanonicalLittleEndianCodec() {
         assertEquals("0d", wire.tokenFrame().hex())
-        assertEquals("01", wire.listFrame().hex())
         assertEquals("07", wire.statusFrame().hex())
-        assertEquals("0334120403020110000000", wire.readFrame(0x1234, 0x01020304, 16).hex())
-        assertEquals("043412", wire.closeFrame(0x1234).hex())
-        assertEquals("010001", wire.envelopeFrame(wire.listFrame()).hex())
+        assertEquals("010007", wire.envelopeFrame(wire.statusFrame()).hex())
     }
 
     @Test fun strictDecodeAndSecretRedaction() {

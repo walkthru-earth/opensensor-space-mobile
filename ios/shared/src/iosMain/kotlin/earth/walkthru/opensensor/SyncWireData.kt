@@ -25,10 +25,6 @@ internal fun NSData.toByteArray(): ByteArray {
 
 fun SyncWire.tokenRequest(): NSData = tokenFrame().toNSData()
 fun SyncWire.statusRequest(): NSData = statusFrame().toNSData()
-fun SyncWire.listRequest(): NSData = listFrame().toNSData()
-fun SyncWire.openRequest(name: String): NSData = openFrame(name).toNSData()
-fun SyncWire.readRequest(handle: Int, offset: Long, length: Long): NSData = readFrame(handle, offset, length).toNSData()
-fun SyncWire.closeRequest(handle: Int): NSData = closeFrame(handle).toNSData()
 
 /** LAN length envelope around one request body. */
 fun SyncWire.envelope(body: NSData): NSData = envelopeFrame(body.toByteArray()).toNSData()
