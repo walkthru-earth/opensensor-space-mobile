@@ -8,8 +8,8 @@ import kotlinx.coroutines.flow.Flow
  * every decision (what to resume, when a file is complete) is made by common callers. There is no
  * delete: a verified copy is immutable history, and the index record is its receipt (audit C, B6).
  *
- * Android adapts `FileArchive` (`filesDir`). The iOS adapter (Application Support, protection class,
- * backup exclusion, symlink checks) arrives with the shared engine (platform parity plan, wave 3).
+ * Android adapts `FileArchive` (`filesDir`). iOS uses `IosArchiveStore` (Application Support, protection
+ * class, backup exclusion, symlink checks), which keeps the finals of earlier iPhone builds in place.
  */
 interface ArchiveStore {
     /** Byte counts of the resumable partials of [station], keyed by Hive name, for the planner. */
@@ -55,7 +55,8 @@ interface PartialWriter : AutoCloseable {
 
 /**
  * The records of the archive, one per verified file, keyed by (station, name). Android adapts the Room
- * `archived_file` table (v10). iOS gets the same table through Room KMP in wave 3.
+ * `archived_file` table (v10). iOS keeps one `.verified.json` receipt per file (`ReceiptArchiveIndex`)
+ * until Room KMP gives it the same table.
  */
 interface ArchiveIndex {
     /** Every record, ordered by name. */

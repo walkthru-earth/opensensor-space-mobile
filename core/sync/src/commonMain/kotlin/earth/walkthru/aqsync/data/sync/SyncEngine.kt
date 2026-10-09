@@ -250,10 +250,14 @@ class SyncEngine(
         val (verdict, sha256) = verifyAndHash(reader, meta)
         if (!verdict.ok) return FileOutcome.Mismatch(name, "existing archive conflicts with device: ${verdict.describe()}")
         val row = index.get(key)
-        if (row != null && (row.bytes != meta.size || row.crc32 != meta.crc32 || row.sha256 != sha256)) {
+        // An older iOS receipt holds size and CRC only. Its empty fingerprint is filled, never compared.
+        val knownSha = row?.sha256?.takeIf { it.isNotEmpty() }
+        if (row != null && (row.bytes != meta.size || row.crc32 != meta.crc32 || (knownSha != null && knownSha != sha256))) {
             return FileOutcome.Mismatch(name, "existing archive conflicts with its recorded fingerprint")
         }
-        if (row == null) {
+        if (row != null && knownSha == null) {
+            index.put(row.copy(sha256 = sha256))
+        } else if (row == null) {
             index.put(
                 indexer.indexed(
                     ArchiveRecord(

@@ -247,6 +247,18 @@ class SyncEngineTest {
     }
 
     @Test
+    fun aRecordWithoutAFingerprintIsFilledNotRefused() = runTest {
+        val a = device(backgroundScope)
+        assertIs<FileOutcome.Synced>(engine.pull(a, 0))
+        val synced = index.records.single()
+        index.put(synced.copy(sha256 = ""))
+        val again = assertIs<FileOutcome.Synced>(engine.pull(device(backgroundScope, "fake-b"), 0))
+        assertTrue(again.alreadyArchived)
+        assertEquals(synced.sha256, index.records.single().sha256)
+        assertEquals("fake-0", index.records.single().sourceDevice)
+    }
+
+    @Test
     fun theIndexerFillsTheRecordInTheSameWrite() = runTest {
         val indexed = SyncEngine(store, index, indexer = { it.copy(rows = 90, indexedAtEpochMs = 2) }, windowRetryBackoffMs = 5)
         assertIs<FileOutcome.Synced>(indexed.pull(device(backgroundScope), 2))

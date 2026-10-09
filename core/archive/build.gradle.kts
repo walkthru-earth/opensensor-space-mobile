@@ -18,6 +18,10 @@ kotlin {
             // UTC day labels of the derived files.
             implementation(libs.kotlinx.datetime)
         }
+        iosMain.dependencies {
+            // The iOS receipt index reads and writes `<name>.verified.json` as plain JSON objects.
+            implementation(libs.kotlinx.serialization.json)
+        }
         commonTest.dependencies {
             implementation(libs.kotlinx.coroutines.test)
         }
