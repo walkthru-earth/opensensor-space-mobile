@@ -28,57 +28,9 @@
     <string name="event_clock_on_today">افتح اليوم وشغّل المزامنة الذكية لتأكيد تحديث الساعة.</string>
 
     <!-- Scan (Home) -->
-    <string name="scan_title">مستشعرات قريبة</string>
-    <string name="scan_known">مستشعرات معروفة</string>
     <string name="scan_fake">جهاز وهمي للتصحيح</string>
     <string name="scan_fake_lan">جهاز وهمي للتصحيح (عبر LAN)</string>
-    <string name="scan_welcome_title">مرحبًا، أنا دليلك</string>
-    <string name="scan_welcome_body">شغّل المستشعر وأبقِ الهاتف قريبًا منه ثم اضغط ابحث.</string>
-    <string name="scan_none_nearby_title">لا شيء قريب بعد</string>
-    <string name="scan_none_nearby_body">اقترب أكثر للاتصال. يبقى السجل المحفوظ في الأسفل.</string>
-    <string name="scan_nearby">قريب</string>
-    <string name="scan_connections">متصل الآن</string>
-    <string name="scan_button_scan">ابحث</string>
-    <string name="scan_button_stop">إيقاف</string>
     <string name="scan_more">المزيد</string>
-    <string name="scan_options">خيارات الجهاز</string>
-    <string name="scan_forget">إزالة</string>
-    <string name="scan_forget_title">هل تريد نسيان %1$s؟</string>
-    <string name="scan_forget_body">يزيله من هذا الهاتف. تبقى الملفات التي جُمعت.</string>
-    <string name="scan_forget_button">إزالة الجهاز</string>
-    <string name="scan_unnamed">مستشعر بلا اسم</string>
-    <string name="scan_tag_paired">مقترن</string>
-    <string name="scan_tag_known">معروف</string>
-    <string name="scan_tag_on_lan">على Wi-Fi</string>
-    <string name="scan_tag_on_lan_no_token">على Wi-Fi، بلا رمز وصول</string>
-    <plurals name="scan_collecting">
-        <item quantity="zero">جارٍ جمع %1$d من %2$d ملف</item>
-        <item quantity="one">جارٍ جمع %1$d من %2$d ملف</item>
-        <item quantity="two">جارٍ جمع %1$d من %2$d ملف</item>
-        <item quantity="few">جارٍ جمع %1$d من %2$d ملفات</item>
-        <item quantity="many">جارٍ جمع %1$d من %2$d ملفًا</item>
-        <item quantity="other">جارٍ جمع %1$d من %2$d ملف</item>
-    </plurals>
-    <string name="scan_background">جارٍ الجمع في الخلفية</string>
-    <plurals name="scan_collect_all">
-        <item quantity="zero">اجمع من %1$d جهاز</item>
-        <item quantity="one">اجمع من %1$d جهاز</item>
-        <item quantity="two">اجمع من الجهازين (%1$d)</item>
-        <item quantity="few">اجمع من الأجهزة الـ%1$d كلها</item>
-        <item quantity="many">اجمع من الأجهزة الـ%1$d كلها</item>
-        <item quantity="other">اجمع من الأجهزة الـ%1$d كلها</item>
-    </plurals>
-    <string name="scan_collect_running">جارٍ الجمع في الخلفية…</string>
-    <plurals name="scan_no_clock">
-        <item quantity="zero">%1$d ملف محفوظ، لا ساعة بعد</item>
-        <item quantity="one">%1$d ملف محفوظ، لا ساعة بعد</item>
-        <item quantity="two">%1$d ملفان محفوظان، لا ساعة بعد</item>
-        <item quantity="few">%1$d ملفات محفوظة، لا ساعة بعد</item>
-        <item quantity="many">%1$d ملفًا محفوظًا، لا ساعة بعد</item>
-        <item quantity="other">%1$d ملف محفوظ، لا ساعة بعد</item>
-    </plurals>
-    <string name="scan_seen">شوهد %1$s</string>
-    <string name="scan_synced">تمت المزامنة %1$s</string>
     <plurals name="scan_files">
         <item quantity="zero">%1$d ملف</item>
         <item quantity="one">%1$d ملف</item>
@@ -473,11 +425,6 @@
     <string name="perm_open_settings">فتح الإعدادات</string>
 
     <!-- Info sheets -->
-    <string name="info_connect_title">توصيل مستشعر</string>
-    <string name="info_connect_body1">شغّل المستشعر وأبقِ هذا الهاتف قريبًا. سيظهر هنا خلال ثوانٍ.</string>
-    <string name="info_connect_body2">عند الاتصال الأول يطلب Android رمزًا من 6 أرقام. اقرأه على شاشة المستشعر. المستشعر الذي بلا شاشة يستخدم رمز PIN الذي ضبطه مالكه عبر USB.</string>
-    <string name="info_privacy">لا يصل Bluetooth وشبكة Wi-Fi المحلية إلا إلى مستشعراتك. لا حساب ولا تحليلات ولا رفع. يُستخدم الموقع التقريبي فقط عند النقر على بالقرب مني، لتحريك الخريطة. تبقى ملفاتك على هذا الهاتف ما لم تشاركها.</string>
-    <string name="info_collect_body">يجمع من مستشعراتك المعروفة عبر Wi-Fi حين يملك هذا الهاتف رمز الوصول الخاص بها، وإلا فعبر Bluetooth. يعمل اثنان كحد أقصى معًا مع إشعار، فيمكنك مغادرة التطبيق. تُتخطى المستشعرات التي لها اتصال مفتوح.</string>
     <string name="info_now_body">لقطة مدتها 10 ثوانٍ من المستشعر. ليست مؤشر جودة الهواء ولا متوسط 24 ساعة، فاعتبرها إشارة تقريبية. الوجه والكلمة واللون كلها تُظهر درجة منظمة الصحة العالمية نفسها.</string>
     <string name="info_wifi_body">ينضم المستشعر إلى شبكة Wi-Fi لديك ليتمكن هذا الهاتف من المزامنة دون Bluetooth.</string>
     <string name="info_pairing_body">كيف يثبت الهاتف أنه مسموح له بالاتصال.</string>
@@ -504,8 +451,6 @@
     <string name="conn_link_lost">انقطع الاتصال. جارٍ إعادة الاتصال تلقائيًا…</string>
     <string name="conn_link_lost_detail">انقطع الاتصال (%1$s). جارٍ إعادة الاتصال، المحاولة %2$d من %3$d…</string>
     <string name="conn_bluetooth_settings">إعدادات Bluetooth</string>
-    <string name="scan_failed">تعذّر البحث. حاول مرة أخرى.</string>
-    <string name="scan_bluetooth_off">Bluetooth متوقف. شغّله وابحث مرة أخرى.</string>
 
     <!-- Bottom bar -->
     <string name="tab_today">اليوم</string>
@@ -803,7 +748,6 @@
     <string name="files_group_unrecognised">تنظيم غير معروف</string>
 
     <!-- Scan archive line. Mood, metric, value, unit, day. -->
-    <string name="scan_archive_day">%1$s، %2$s %3$s %4$s في %5$s</string>
     <string name="scan_archive_coverage">%1$d %% من اليوم</string>
     <!-- Relative time -->
     <string name="ago_just_now">الآن</string>

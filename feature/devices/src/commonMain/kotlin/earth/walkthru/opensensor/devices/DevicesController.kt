@@ -18,7 +18,8 @@ interface KnownDeviceStore {
 
     /**
      * Forgets [id] on this phone. Collected files stay. Called only after the user confirmed.
-     * Android also removes the system bond, iOS cannot and says so in the dialog.
+     * Both drop the saved LAN token and close a live link. Android also drops the companion
+     * association. iOS cannot remove the system bond and says so in the dialog.
      */
     suspend fun forget(id: String)
 }
