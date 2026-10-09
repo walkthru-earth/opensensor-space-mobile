@@ -13,7 +13,7 @@ enum class FrameDirection { TX, RX }
 
 /**
  * One raw frame as seen at the transport boundary, for the Advanced → Debug screen. Only the first
- * [RawFrameRecord.PREVIEW_BYTES] bytes are kept, and a `TOKEN` frame or `SET_CONFIG` request is
+ * [RawFrameRecord.PREVIEW_BYTES] bytes are kept, and a secret frame ([FrameRedaction.isSecret]) is
  * recorded with its body redacted: the LAN token and the Wi-Fi passphrase are secrets.
  */
 data class RawFrameRecord(
@@ -57,10 +57,8 @@ class FrameRecorder(
     private fun record(direction: FrameDirection, bytes: ByteArray) {
         if (bytes.isEmpty()) return
         val type = bytes[0].toInt() and 0xFF
-        val secret = (direction == FrameDirection.RX && type == FrameType.TOKEN) ||
-            (direction == FrameDirection.TX && type == Opcode.SET_CONFIG)
-        val preview = previewHex(bytes, if (secret) 1 else minOf(bytes.size, RawFrameRecord.PREVIEW_BYTES)) + if (secret) "…" else ""
-        val rec = RawFrameRecord(nowEpochMs(), direction, type, bytes.size, preview, secret)
+        val secret = FrameRedaction.isSecret(direction, bytes)
+        val rec = RawFrameRecord(nowEpochMs(), direction, type, bytes.size, FrameRedaction.preview(direction, bytes), secret)
         lock.withLock {
             if (ring.size >= capacity) ring.removeFirst()
             ring.addLast(rec)
@@ -94,15 +92,8 @@ class FrameRecorder(
         }
     }
 
-    /** Avoid copying the prefix or constructing a String for each preview byte. */
-    private fun previewHex(bytes: ByteArray, count: Int): String = CharArray(count * 2) { index ->
-        val byte = bytes[index / 2].toInt() and 0xFF
-        HEX[if (index % 2 == 0) byte ushr 4 else byte and 0x0F]
-    }.concatToString()
-
     companion object {
         const val DEFAULT_CAPACITY = 200
         private const val SNAPSHOT_INTERVAL_MS = 100L
-        private const val HEX = "0123456789abcdef"
     }
 }

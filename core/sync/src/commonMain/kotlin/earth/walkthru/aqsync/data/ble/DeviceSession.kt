@@ -95,12 +95,13 @@ class WindowLostException(val receivedUpTo: Long, reason: String) : Exception(re
  * The protocol has no request ids: "All `response` traffic for one request is emitted in order on
  * the single `response` characteristic". We therefore serialize requests with a [Mutex] and
  * consume frames from the transport's ordered channel until the request's terminal frame arrives.
+ *
+ * [frames] records raw frames in both directions for Advanced → Debug, with secrets redacted at
+ * record time. iOS passes a recorder that outlives one session so the Debug screen keeps the
+ * history across short-lived links.
  */
-class DeviceSession(val transport: AqTransport) {
+class DeviceSession(val transport: AqTransport, val frames: FrameRecorder = FrameRecorder()) {
     private val requestMutex = Mutex()
-
-    /** Raw frames in both directions, for Advanced → Debug. Secrets are redacted at record time. */
-    val frames = FrameRecorder()
 
     val address: String get() = transport.address
     val connectionState get() = transport.connectionState
@@ -366,11 +367,11 @@ class DeviceSession(val transport: AqTransport) {
      * sees exactly what arrived.
      */
     suspend fun rawCommand(request: ByteArray, quietMs: Long = 1_500L, maxTotalMs: Long = FRAME_TIMEOUT_MS): List<Pair<ByteArray, Frame?>> {
-        require(request.isNotEmpty() && request.size <= 512) { "request must be 1..512 bytes" }
+        require(request.isNotEmpty() && request.size <= RawCommandPolicy.MAX_BYTES) { "request must be 1..512 bytes" }
         // The data layer enforces the denylist itself, so a UI path that forgets its own guard
         // still cannot reboot the device or change its configuration without a confirmation.
         val op = request[0].toInt() and 0xFF
-        if (op in RAW_COMMAND_DENYLIST) throw RawCommandRefusedException(op)
+        if (RawCommandPolicy.isRefused(request)) throw RawCommandRefusedException(op)
         return request(NO_TERMINAL) {
             frames.tx(request)
             transport.writeControl(request)
@@ -564,7 +565,7 @@ class DeviceSession(val transport: AqTransport) {
          * can rotate the token, forget bonds or disable the passkey. Both need the Device screen's
          * confirmation (root `AGENTS.md`).
          */
-        val RAW_COMMAND_DENYLIST: Set<Int> = setOf(Opcode.REBOOT, Opcode.SET_CONFIG)
+        val RAW_COMMAND_DENYLIST: Set<Int> get() = RawCommandPolicy.DENYLIST
     }
 }
 
