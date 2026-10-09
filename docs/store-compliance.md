@@ -38,12 +38,15 @@ State as of 2026-10-08. Re-check the linked store pages before each submission. 
 | Companion device permissions | Normal permissions, effective only while an associated sensor is near, after the user approves the system dialog | Manifest comment |
 | `RECEIVE_BOOT_COMPLETED`, `WAKE_LOCK` | Re-arm the Wi-Fi trigger after boot. Wi-Fi lock only during a LAN transfer | Manifest comment |
 | Camera | Not declared. Barcode scan runs in Google Play services' own UI | Manifest `meta-data` |
+| Languages | Store listing in English and Arabic. The app offers both in the per-app language picker (`android:localeConfig`). Arabic store text needs the same native review as the app copy (`parity-decisions.md` P22) | `res/xml/locales_config.xml`, `res/values-ar/` |
 
 ## App Store
 
 | Item | Answer today | Evidence |
 | --- | --- | --- |
 | Purpose strings | `NSBluetoothAlwaysUsageDescription` "Finds and connects to your opensensor devices nearby to copy their readings." `NSLocalNetworkUsageDescription` "Finds your opensensor devices on your Wi-Fi to sync faster." `NSBonjourServices` `_aqsync._tcp` only. `NSLocationWhenInUseUsageDescription` "Centres the public sensor map near you. Your location stays on this phone." with `NSLocationDefaultAccuracyReduced` true, asked only from the Discover Near me tap | `ios/App/Info.plist` |
+| Purpose strings, Arabic | The same three purpose strings in Arabic, in the `InfoPlist.xcstrings` string catalog, which Xcode compiles to `ar.lproj/InfoPlist.strings`. English stays identical to `Info.plist` (`TranslationsTest`) | `ios/App/InfoPlist.xcstrings` |
+| Languages | App Store localizations English and Arabic. `CFBundleLocalizations` lists en and ar, `knownRegions` adds ar, so iOS offers Arabic in the app's Language setting | `ios/App/Info.plist`, `project.pbxproj` |
 | Prompt timing | `CBCentralManager` is created on the first Find sensors tap. `NWBrowser` starts on the first Find Wi-Fi sensors tap. Launch shows no prompt | `BluetoothCompanion.swift`, `LanDiscovery.swift` |
 | Privacy manifest | `PrivacyInfo.xcprivacy` in the app bundle. Tracking false, no tracking domains, no collected data types. Required reason APIs, file timestamp `C617.1` (`stat`, `fstat`, `attributesOfItem` on files in the app container) system boot time `35F9.1` (`ProcessInfo.systemUptime` for elapsed transfer timing) and UserDefaults `CA92.1` (`NSUserDefaults` holds the Discover map camera, chip choices and app settings, read only by this app). No disk space or keyboard APIs found in the binary | [Apple required reason APIs](https://developer.apple.com/documentation/bundleresources/describing-use-of-required-reason-api) |
 | Privacy nutrition label | "Data Not Collected" | [App privacy details](https://developer.apple.com/app-store/app-privacy-details/) |

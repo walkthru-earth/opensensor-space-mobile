@@ -229,8 +229,33 @@ screens still use `res/values*/strings.xml`. The `:ui:strings` host tests check 
 Compose `strings.xml` in the repository (`CopyLintTest`) and fail on a new `Text("…")` or English
 sentence literal in the `:ios:shared`, `:ui:permissions` and `feature/*` common presentation sources
 (`PresentationLiteralsTest`).
-No em dashes, colons or semicolons in user-facing copy. Errors say what happened and what to do,
-in words a person without the firmware docs understands.
+No em dashes, colons or semicolons in user-facing copy, and no Arabic semicolon (؛) in a translation.
+Errors say what happened and what to do, in words a person without the firmware docs understands.
+
+### Languages and right to left
+
+The apps ship English (default) and Arabic (`ar`). Every catalogue has a `values-ar/strings.xml` next
+to its `values/strings.xml`, the Android `app/src/main/res` one and each Compose resource module
+(`ui/*`, `feature/*`). Compose resources pick `values-ar` on Android and on iOS from the phone's
+language, so shared screens need no platform code. Layouts mirror on their own because both apps
+use start and end, never left and right, and directional icons (`AppIcons.ArrowBack`,
+`ArrowForward`, `Send`, `ChevronLeft`, `ChevronRight`) set `autoMirror`. Cairo sets the text when
+the language is written in Arabic script or the layout runs right to left (`usesCairoText` in
+`Typography.kt`). Latin locales keep Quicksand.
+
+To add a language `xx`.
+
+1. Add `values-xx/strings.xml` beside every default catalogue, with every key and every plural
+   form the language needs (Arabic needs zero, one, two, few, many and other). Keep placeholders.
+2. Add `xx` to `languages` (and its plural forms) in `TranslationsTest`, to
+   `app/src/main/res/xml/locales_config.xml`, to `knownRegions` in the Xcode project, to
+   `CFBundleLocalizations` in `ios/App/Info.plist`, and give each entry of
+   `ios/App/InfoPlist.xcstrings` an `xx` value.
+3. Run `verify`. `TranslationsTest` fails on a missing or extra key, a placeholder that differs, a
+   language missing from the Android picker or the iOS purpose strings. `CopyLintTest` lints the new
+   files, and `StringsMatchAndroidTest` and `CopyRulesTest` compare the shared keys in each language.
+4. Have a native speaker review the copy and check the screens on a phone, then record it in
+   `status.md`.
 
 ## Checklist for a cross-platform change
 
