@@ -86,6 +86,14 @@ android {
         }
     }
 
+    // Every language ships in the base APK. The per-app language picker and AppLanguage (which moves
+    // the resolved language to the front) then never meet a language whose resources Play left out.
+    bundle {
+        language {
+            enableSplit = false
+        }
+    }
+
     buildFeatures {
         compose = true
         aidl = false

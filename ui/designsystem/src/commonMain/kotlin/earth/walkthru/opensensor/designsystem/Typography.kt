@@ -3,11 +3,14 @@ package earth.walkthru.opensensor.designsystem
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.intl.Locale
 import androidx.compose.ui.text.style.LineHeightStyle
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.sp
 import earth.walkthru.opensensor.designsystem.resources.Res
 import earth.walkthru.opensensor.designsystem.resources.cairo
@@ -50,8 +53,9 @@ private fun variableFamily(resource: FontResource, weights: List<Int>): FontFami
 fun quicksandFontFamily(): FontFamily = variableFamily(Res.font.quicksand, QuicksandWeights)
 
 /**
- * Cairo, the website's Arabic face (`--font-cairo`), the variable TTF copied from the website's
- * `app/fonts/`. Used for the whole UI when the phone's language is written in Arabic script.
+ * Cairo, the website's Arabic face (`--font-cairo`), the OFL variable TTF `Cairo[slnt,wght].ttf`
+ * version 3.130 from google/fonts `ofl/cairo` (byte for byte the website's `app/fonts/` copy). Used
+ * for the whole UI when the language is written in Arabic script or the layout runs right to left.
  *
  * It also sets the big numbers. Quicksand has proportional digits and no `tnum` feature, so a
  * 10-second reading would shift sideways as it changes. Cairo's Latin digits all share one advance
@@ -73,11 +77,20 @@ fun usesArabicScript(language: String): Boolean =
     language.substringBefore('-').substringBefore('_').lowercase() in ArabicScriptLanguages
 
 /**
- * The language of the phone's first preferred locale (Android `Configuration.locales[0]`, iOS
- * `NSLocale.preferredLanguages`). Recomposes when Android changes its configuration.
+ * Cairo sets the text when the language is written in Arabic script or the layout runs right to
+ * left. Latin left-to-right languages keep Quicksand.
+ */
+fun usesCairoText(language: String, direction: LayoutDirection): Boolean =
+    usesArabicScript(language) || direction == LayoutDirection.Rtl
+
+/**
+ * The app's language, read where Compose resources read it (`Locale.current`), so the font always
+ * matches the strings on screen. Each platform first moves the language its own resources resolved
+ * to the front (Android `AppLanguage`, iOS `AppLanguage` in `AppDelegate.swift`), so a phone set to
+ * French then Arabic gets Arabic strings, Cairo and a right-to-left layout together.
  */
 @Composable
-expect fun preferredLanguage(): String
+fun preferredLanguage(): String = Locale.current.language
 
 /**
  * The type scale. Headings are bold and rounded like the website (`.brand-page h1..h4` are weight
@@ -116,11 +129,13 @@ fun brandTypography(text: FontFamily, numbers: FontFamily): Typography {
 }
 
 /**
- * The brand type scale for the current locale: Quicksand text, or Cairo for Arabic-script
- * languages, with Cairo display numbers either way.
+ * The brand type scale for the current locale. Quicksand text, or Cairo for Arabic-script languages
+ * and right-to-left layouts, with Cairo display numbers either way.
  */
 @Composable
-fun rememberBrandTypography(arabicScript: Boolean = usesArabicScript(preferredLanguage())): Typography {
+fun rememberBrandTypography(
+    arabicScript: Boolean = usesCairoText(preferredLanguage(), LocalLayoutDirection.current),
+): Typography {
     val quicksand = quicksandFontFamily()
     val cairo = cairoFontFamily()
     return remember(arabicScript, quicksand, cairo) {

@@ -98,7 +98,8 @@ pattern serves radio options: pairing modes show only their label, and their des
 paragraphs of the pairing info sheet. Confirmation dialogs stay (reboot, token rotation, forget
 paired phones, pairing mode none, set time, finalize) with one or two short sentences. Copy rules
 in `cross-platform-guide.md` apply, and missing values print `NO_VALUE` ("n/a"), never a dash.
-`CopyLintTest` in `:ui:strings` fails on a dash, semicolon or sentence colon in any `strings.xml`. The data layer
+`CopyLintTest` in `:ui:strings` fails on a dash, semicolon (Arabic ؛ included) or sentence colon in any
+`strings.xml`, every language included. The data layer
 never writes sentences. Its snackbars are `DeviceMessage` codes (`data/DeviceMessage.kt`) that
 `ui/components/DeviceMessages.kt` maps to resources, and exception detail stays in the log or a
 Developer-level line.
@@ -111,6 +112,18 @@ Developer-level line.
 | Files | Chart by file legend |
 | History | Valid readings, coverage, estimated time, earlier stations |
 | Settings | What a detail level changes, Smart Sync never rewrites files |
+
+### Languages
+
+English and Arabic. Android lists both in the system per-app language picker
+(`res/xml/locales_config.xml`, Android 13 and later), iOS in the app's Language setting
+(`knownRegions`, `CFBundleLocalizations`). Arabic lays every screen out right to left. Rows, cards,
+the bottom bar and sheets mirror because layouts use start and end. Back and paging arrows mirror
+through `autoMirror`. Canvas charts keep time running left to right in both directions. Digits
+follow each platform's number formatting, so Arabic-Indic digits may appear in Android resource
+strings. Both points need a phone check. How to add a language is in
+[cross-platform-guide.md](cross-platform-guide.md#languages-and-right-to-left). The Arabic copy is
+machine drafted and waits for a native speaker's review (`parity-decisions.md` P22).
 
 ## Permission timing
 
@@ -154,15 +167,16 @@ palette `sensing`. `BrandTokensTest` pins every value and checks text contrast o
   `AirMood.color()`), a scientific scale, never brand colours, and Signal blue never judges a
   value. Ink on a step uses `onColor()`, step-coloured text uses `textColorOnSurface()` and falls
   back to the text colour where a step cannot reach 3:1 (yellow on light paper, maroon on dark paper).
-- **Type.** Quicksand (OFL variable TTF from google/fonts) for text, Cairo (OFL, from the
-  website) for Arabic-script locales and for display numbers, because Quicksand has
+- **Type.** Quicksand (OFL variable TTF from google/fonts) for text, Cairo (OFL variable TTF
+  version 3.130 from google/fonts `ofl/cairo`, the same file as the website's) for Arabic-script
+  locales, right-to-left layouts and display numbers, because Quicksand has
   proportional digits and no `tnum` while Cairo's digits share one width. Both fonts and the
   type scale live in `:ui:designsystem` (`Typography.kt`, Compose resources under
   `composeResources/font/`), and both apps wrap content in the one `OpenSensorTheme`, so they
   render the same faces. Each weight pins the variable `wght` axis through `FontVariation.Settings`, which
   Compose resources apply on Android and on iOS (Skia `makeClone`). The language comes from
   `Configuration.locales[0]` on Android and `NSLocale.preferredLanguages` on iOS.
-  `TypographyTest` checks the Arabic-script rule, the tabular display styles and that every
+  `TypographyTest` checks the Arabic-script and right-to-left rule, the tabular display styles and that every
   weight sits inside the bundled axis. License texts ship in `composeResources/files/licenses/`.
 - **Shape and components.** One content card radius, 32 dp (`CardShape`, used by `BrandCard`,
   tones Plain, Soft, Hero). The components live in `:ui:designsystem` for both apps. Every

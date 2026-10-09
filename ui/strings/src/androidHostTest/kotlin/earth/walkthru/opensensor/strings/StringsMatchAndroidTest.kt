@@ -11,12 +11,18 @@ import kotlin.test.assertTrue
  */
 class StringsMatchAndroidTest {
     @Test
-    fun sharedKeysSayTheSameAsAndroid() {
-        val android = Catalogues.parse(File(Catalogues.root, "app/src/main/res/values/strings.xml"))
-        val shared = Catalogues.parse(File("src/commonMain/composeResources/values/strings.xml"))
+    fun sharedKeysSayTheSameAsAndroid() = compare("values")
+
+    /** The Arabic copies of the shared keys match too, so a translation never drifts between apps. */
+    @Test
+    fun sharedArabicKeysSayTheSameAsAndroid() = compare("values-ar")
+
+    private fun compare(folder: String) {
+        val android = Catalogues.parse(File(Catalogues.root, "app/src/main/res/$folder/strings.xml"))
+        val shared = Catalogues.parse(File("src/commonMain/composeResources/$folder/strings.xml"))
         val both = shared.keys.intersect(android.keys)
-        assertTrue(both.containsAll(listOf("app_name", "now_waiting", "nav_disconnect", "action_cancel")), "shared keys $both")
+        assertTrue(both.containsAll(listOf("app_name", "now_waiting", "nav_disconnect", "action_cancel")), "$folder shared keys $both")
         // Android escapes an apostrophe with a backslash, Compose resources do not. Compare the text shown.
-        both.forEach { key -> assertEquals(android.getValue(key).replace("\\'", "'"), shared.getValue(key), key) }
+        both.forEach { key -> assertEquals(android.getValue(key).replace("\\'", "'"), shared.getValue(key), "$folder $key") }
     }
 }

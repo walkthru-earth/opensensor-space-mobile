@@ -1,6 +1,7 @@
 package earth.walkthru.opensensor.designsystem
 
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.LayoutDirection
 import java.io.File
 import java.nio.ByteBuffer
 import kotlin.test.Test
@@ -17,6 +18,15 @@ class TypographyTest {
         for (tag in listOf("", "en", "en-US", "de", "he", "tr", "arn")) {
             assertFalse(usesArabicScript(tag), tag)
         }
+    }
+
+    @Test
+    fun cairoSetsTextForArabicOrRightToLeftOnly() {
+        assertTrue(usesCairoText("ar", LayoutDirection.Ltr))
+        assertTrue(usesCairoText("ar-EG", LayoutDirection.Rtl))
+        assertTrue(usesCairoText("en", LayoutDirection.Rtl))
+        assertFalse(usesCairoText("en", LayoutDirection.Ltr))
+        assertFalse(usesCairoText("de-DE", LayoutDirection.Ltr))
     }
 
     @Test

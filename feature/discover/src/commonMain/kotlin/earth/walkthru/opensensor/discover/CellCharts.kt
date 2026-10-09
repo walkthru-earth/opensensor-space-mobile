@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -41,11 +42,13 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import earth.walkthru.aqsync.airquality.HealthScale
 import earth.walkthru.aqsync.airquality.WhoStep
@@ -256,13 +259,17 @@ internal fun SpreadChart(
             marker(Offset(x, axisTop + axisH / 2), hereColor, ink, 7.dp.toPx())
         }
         Spacer(Modifier.height(2.dp))
-        Row(Modifier.fillMaxWidth()) {
-            Text(low, style = MaterialTheme.typography.labelSmall, color = muted)
-            Spacer(Modifier.weight(1f))
-            Text(high, style = MaterialTheme.typography.labelSmall, color = muted)
-        }
-        if (offScale != null) {
-            Text(offScale, style = MaterialTheme.typography.labelSmall, color = muted, textAlign = TextAlign.End, modifier = Modifier.fillMaxWidth())
+        // The bars and the axis run low to high left to right in every language, so the edge labels and
+        // the off-scale note under the end arrow stay left to right too. Their text still shapes as Arabic.
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            Row(Modifier.fillMaxWidth()) {
+                Text(low, style = MaterialTheme.typography.labelSmall, color = muted)
+                Spacer(Modifier.weight(1f))
+                Text(high, style = MaterialTheme.typography.labelSmall, color = muted)
+            }
+            if (offScale != null) {
+                Text(offScale, style = MaterialTheme.typography.labelSmall, color = muted, textAlign = TextAlign.Right, modifier = Modifier.fillMaxWidth())
+            }
         }
     }
 }
@@ -365,8 +372,9 @@ internal fun WhoStepBar(health: HealthScale, strings: DiscoverStrings, modifier:
 }
 
 /**
- * Texts placed along a width, each centred on its fraction (0 at the start, 1 at the end) and kept
- * inside the bounds. For edge values and the guideline mark.
+ * Texts placed along a width, each centred on its fraction (0 at the left, 1 at the right, as the
+ * Canvas axes run in every language) and kept inside the bounds. For edge values and the guideline
+ * mark. `place` does not mirror, so the labels stay over their marks in right-to-left layouts.
  */
 @Composable
 internal fun PositionedLabels(labels: List<Pair<Float, String>>, style: TextStyle, color: Color, modifier: Modifier = Modifier) {

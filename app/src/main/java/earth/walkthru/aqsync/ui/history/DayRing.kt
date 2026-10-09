@@ -100,7 +100,7 @@ fun DayRing(
                 val s = day.atTime(h, 0).atZone(zone).toEpochSecond()
                 val a = angle(s) * PI.toFloat() / 180f
                 val lr = outer + labelPx * 0.8f
-                val text = "%02d".format(h)
+                val text = "%02d".format(java.util.Locale.ROOT, h)
                 val w = labelPaint.measureText(text)
                 drawContext.canvas.nativeCanvas.drawText(text, c.x + cos(a) * lr - w / 2, c.y + sin(a) * lr + labelPx * 0.35f, labelPaint)
                 drawLine(muted.copy(alpha = 0.5f), Offset(c.x + cos(a) * (outer + 2f), c.y + sin(a) * (outer + 2f)), Offset(c.x + cos(a) * (outer + 8f), c.y + sin(a) * (outer + 8f)), 1.5f)

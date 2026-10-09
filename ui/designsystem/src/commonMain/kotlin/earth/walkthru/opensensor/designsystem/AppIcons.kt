@@ -38,11 +38,11 @@ object AppIcons {
     /** Material `Icons.Rounded.CheckCircle`. */
     val CheckCircle: ImageVector by lazy { icon("Rounded.CheckCircle", "M12,2C6.48,2,2,6.48,2,12s4.48,10,10,10s10,-4.48,10,-10S17.52,2,12,2ZM9.29,16.29L5.7,12.7c-0.39,-0.39,-0.39,-1.02,0,-1.41c0.39,-0.39,1.02,-0.39,1.41,0L10,14.17l6.88,-6.88c0.39,-0.39,1.02,-0.39,1.41,0c0.39,0.39,0.39,1.02,0,1.41l-7.59,7.59c-0.38,0.39,-1.02,0.39,-1.41,0Z") }
 
-    /** Material `Icons.Rounded.ChevronLeft`. */
-    val ChevronLeft: ImageVector by lazy { icon("Rounded.ChevronLeft", "M14.71,6.71c-0.39,-0.39,-1.02,-0.39,-1.41,0L8.71,11.3c-0.39,0.39,-0.39,1.02,0,1.41l4.59,4.59c0.39,0.39,1.02,0.39,1.41,0c0.39,-0.39,0.39,-1.02,0,-1.41L10.83,12l3.88,-3.88c0.39,-0.39,0.38,-1.03,0,-1.41Z") }
+    /** Material `Icons.Rounded.ChevronLeft`, mirrored in right-to-left because it pages through time. */
+    val ChevronLeft: ImageVector by lazy { mirroredIcon("Rounded.ChevronLeft", "M14.71,6.71c-0.39,-0.39,-1.02,-0.39,-1.41,0L8.71,11.3c-0.39,0.39,-0.39,1.02,0,1.41l4.59,4.59c0.39,0.39,1.02,0.39,1.41,0c0.39,-0.39,0.39,-1.02,0,-1.41L10.83,12l3.88,-3.88c0.39,-0.39,0.38,-1.03,0,-1.41Z") }
 
-    /** Material `Icons.Rounded.ChevronRight`. */
-    val ChevronRight: ImageVector by lazy { icon("Rounded.ChevronRight", "M9.29,6.71c-0.39,0.39,-0.39,1.02,0,1.41L13.17,12l-3.88,3.88c-0.39,0.39,-0.39,1.02,0,1.41c0.39,0.39,1.02,0.39,1.41,0l4.59,-4.59c0.39,-0.39,0.39,-1.02,0,-1.41L10.7,6.7c-0.38,-0.38,-1.02,-0.38,-1.41,0.01Z") }
+    /** Material `Icons.Rounded.ChevronRight`, mirrored in right-to-left because it pages through time. */
+    val ChevronRight: ImageVector by lazy { mirroredIcon("Rounded.ChevronRight", "M9.29,6.71c-0.39,0.39,-0.39,1.02,0,1.41L13.17,12l-3.88,3.88c-0.39,0.39,-0.39,1.02,0,1.41c0.39,0.39,1.02,0.39,1.41,0l4.59,-4.59c0.39,-0.39,0.39,-1.02,0,-1.41L10.7,6.7c-0.38,-0.38,-1.02,-0.38,-1.41,0.01Z") }
 
     /** Material `Icons.Rounded.CloudOff`. */
     val CloudOff: ImageVector by lazy { icon("Rounded.CloudOff", "M24,15c0,-2.64,-2.05,-4.78,-4.65,-4.96C18.67,6.59,15.64,4,12,4c-1.33,0,-2.57,0.36,-3.65,0.97l1.49,1.49C10.51,6.17,11.23,6,12,6c3.04,0,5.5,2.46,5.5,5.5v0.5H19c1.66,0,3,1.34,3,3c0,0.99,-0.48,1.85,-1.21,2.4l1.41,1.41c1.09,-0.92,1.8,-2.27,1.8,-3.81ZM3.71,4.56c-0.39,0.39,-0.39,1.02,0,1.41l2.06,2.06h-0.42c-3.28,0.35,-5.76,3.34,-5.29,6.79C0.46,17.84,3.19,20,6.22,20h11.51l1.29,1.29c0.39,0.39,1.02,0.39,1.41,0c0.39,-0.39,0.39,-1.02,0,-1.41L5.12,4.56c-0.39,-0.39,-1.02,-0.39,-1.41,0ZM6,18c-2.21,0,-4,-1.79,-4,-4s1.79,-4,4,-4h1.73l8,8H6Z") }

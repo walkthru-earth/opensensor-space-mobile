@@ -1,0 +1,60 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "NSBluetoothAlwaysUsageDescription" : {
+      "comment" : "Bluetooth purpose string, shown the first time the user taps Scan.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "يبحث عن أجهزة opensensor القريبة منك ويتصل بها لنسخ قراءاتها."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finds and connects to your opensensor devices nearby to copy their readings."
+          }
+        }
+      }
+    },
+    "NSLocalNetworkUsageDescription" : {
+      "comment" : "Local network purpose string, shown when the app first looks for sensors on Wi-Fi.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "يبحث عن أجهزة opensensor على شبكة Wi-Fi لديك لمزامنة أسرع."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finds your opensensor devices on your Wi-Fi to sync faster."
+          }
+        }
+      }
+    },
+    "NSLocationWhenInUseUsageDescription" : {
+      "comment" : "Approximate location purpose string, shown when the user taps Near me on the public map.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "يضع خريطة المستشعرات العامة بالقرب منك. يبقى موقعك على هذا الهاتف."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Centres the public sensor map near you. Your location stays on this phone."
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

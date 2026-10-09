@@ -58,7 +58,7 @@ class HistoryDeriver @Inject constructor(
         val digest = MessageDigest.getInstance("SHA-256")
         digest.update("derive-v$DERIVE_VERSION\n".toByteArray())
         files.map { "${it.name}:${it.crc32}" + (if (it.hasEstimatedUtc) ":est${it.estAnchorFile}:${it.estFirstUtcNs}" else "") }.sorted().forEach { digest.update(it.toByteArray()); digest.update('\n'.code.toByte()) }
-        return digest.digest().joinToString("") { "%02x".format(it) }
+        return digest.digest().joinToString("") { "%02x".format(java.util.Locale.ROOT, it) }
     }
 
     /**
