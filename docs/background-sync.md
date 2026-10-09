@@ -84,7 +84,7 @@ work in the scope.
 - **Hardware ownership**: after authenticated identity validation, a full `info.dev` claim prevents endpoint aliases from concurrently owning one physical board. BLE and LAN share the board's one open file. Transfer cancellation/join precedes session close; cancellation during initialization also closes the provisional transport. A worker's `finally` closes only its own session.
 - **Wi-Fi gate**: `AppAutoSyncGateway.browseLan` returns empty when no `TRANSPORT_WIFI` network is up (active network first, else a ≤ 1 s `NetworkRequest` probe; an offline LAN counts), so the 10 s browse never runs for nothing.
 - **Discovery**: `LanDiscoveryState` shares foreground browsing across controllers. Each worker browses once for its target set. On API 31–33 all browses share one `LegacyResolver` queue so only one `resolveService` call is active; API 34+ uses service-info callbacks.
-- **Archive ownership**: `FileArchive.withWriterLease` covers OPEN/read/verification/commit/index/CLOSE for `(station, name)`. Another caller waits, then verifies an existing copy against OPENED size/CRC/PAR1 and the recorded SHA before reuse. Conflicts preserve existing bytes; commit refuses replacement. `alreadyArchived` copies do not increase new-file summary counts. Original Hive paths stay verbatim.
+- **Archive ownership**: the shared `WriterLeases` in `SyncEngine` covers OPEN/read/verification/commit/index/CLOSE for `(station, name)`. Another caller waits, then verifies an existing copy against OPENED size/CRC/PAR1 and the recorded SHA before reuse. Conflicts preserve existing bytes; commit refuses replacement. `alreadyArchived` copies do not increase new-file summary counts. Original Hive paths stay verbatim.
 - **Never** pairs, scans, or takes over another owner's session. `deriveStale()` runs after a run that brought files; derivation remains serialized independently of transfer concurrency.
 
 ## Foreground work
@@ -135,7 +135,7 @@ deep-optimization / sleep-standby lists; a swiped-away app may still be killed. 
 | `AutoSyncGateway` interface | `AppAutoSyncGateway` (Android) and the test fake |
 | Controller ownership / `CollectionBudget` | interactive and worker transfers; `DeviceOwnershipTest`, `AutoSyncRunnerTest` |
 | Worker owner and notification IDs | run-scoped progress/cancel; overlapping workers and interactive service need a phone check |
-| `FileArchive.withWriterLease` / immutable commit | `SyncEngine`, partial resume and summaries; `ConcurrentArchiveTest`, `WindowRecoveryTest` |
+| `WriterLeases` / immutable commit | `SyncEngine`, partial resume and summaries; `ConcurrentArchiveTest`, `SyncEngineTest` |
 | `SyncNotifications.progress` text | both the service and the worker (same notification) |
 | `known_device.autoSync` column | scheduler's observed count; every `KnownDevice` upsert must carry `previous?.autoSync` ([lesson](lessons-learned.md#room--data)) |
 | `SyncForegroundService` start point | must remain a foreground-app moment (repository `startSync`), else API 31+ refuses |

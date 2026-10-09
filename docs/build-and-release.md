@@ -370,7 +370,7 @@ hand after generation; the raw output is the first commit so the fix is visible.
 | `libs.versions.toml` | all modules; note the verified date above |
 | `verify` task in root `build.gradle.kts`, `build-logic/src/main/kotlin/Gates.kt` | pre-push hook and `verify.yml` (both call it) |
 | manifest permissions | AGENTS.md non-negotiables; `LanPermission`, `NotificationPermission`, `BluetoothGate` |
-| `FakeTransport` behaviour | `WindowRecoveryTest`, `AutoSyncRunnerTest`, `HistoryDeriverTest` and every debug demo |
+| `FakeTransport` behaviour | `AutoSyncRunnerTest`, `HistoryDeriverTest` and every debug demo |
 | `.editorconfig` ktlint rules | the pre-commit hook and CI's `pre-commit --all-files` |
 | `app/src/main/keepRules/*.keep` or the release `optimization` block | the published APK; needs a host `-Paqsync.localRelease=true` build and a phone run |
 | `app/lint-baseline.xml` | `lintDebug` in `verify`; new warnings fail the gate |

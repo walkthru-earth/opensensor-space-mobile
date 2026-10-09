@@ -2,7 +2,7 @@
 
 **Scope:** the file transfer: planner → engine → archive; integrity; lost windows; stale-frame drain; resume; the state-changing requests.
 **Code:** Shared in `core/sync` commonMain: `data/sync/SyncEngine.kt`, `ArchiveCollector.kt`, `data/sync/SyncPlanner.kt`, `ReadWindow.kt`, `WindowRetryPolicy.kt`, `SyncResumePolicy.kt`, `FileProgress.kt`, `FileProgressReporter.kt`, `RateMeter.kt`, `data/ManifestState.kt`, `data/SyncProgress.kt`, `data/ble/DeviceSession.kt` (`read`, `drainStale`, `reboot`). `core/protocol/…/ParquetVerify.kt`, `Sha256.kt`. Android adapters `data/archive/FileArchiveStore.kt`, `SyncEngineModule.kt`, `data/sync/FileArchive.kt`. iOS adapters `core/archive` iosMain `IosArchiveStore.kt`, `ReceiptArchiveIndex.kt`, and `ios/shared` iosMain `SensorSync.kt`, `SensorLink.kt`.
-**Tests:** `:core:sync` commonTest `SyncEngineTest`, `ArchiveCollectorTest`, `SyncPlannerTest`, `DeviceSessionPollingTest`, `WindowRetryPolicyTest`, `RateMeterTest`, `SyncResumePolicyTest`. App `ConcurrentArchiveTest`, `WindowRecoveryTest` (fake with `dropLeadingChunks` / `closedDelayMs`). `:core:protocol` `ParquetVerifyTest`, `Sha256Test`.
+**Tests:** `:core:sync` commonTest `SyncEngineTest`, `ArchiveCollectorTest`, `SyncPlannerTest`, `DeviceSessionPollingTest`, `WindowRetryPolicyTest`, `RateMeterTest`, `SyncResumePolicyTest` (fake `FakeArchiveDevice` with `dropLeadingChunks` / `closedDelayMs`). App `ConcurrentArchiveTest` over the Android adapters. iOS simulator `SensorSyncTest`. `:core:protocol` `ParquetVerifyTest`, `Sha256Test`.
 **Related:** [transports.md](transports.md) (the pipe underneath), [data-model.md](data-model.md) (what is recorded), [history-pipeline.md](history-pipeline.md) (what runs after).
 
 ## One engine on both phones
@@ -93,7 +93,7 @@ Actual request cancellation still propagates and marks the response stream for n
 
 ## Concurrent archive safety (2026-09-29)
 
-`FileArchive.withWriterLease(station, name)` guards OPEN through CLOSE, including partial resume,
+The shared `WriterLeases` in `SyncEngine` (`core/sync`) guards OPEN through CLOSE, including partial resume,
 verification, immutable commit and Room indexing. Other devices with different file identities can
 transfer concurrently. A second writer for the same identity waits cancellably and then rechecks
 any committed destination against the current OPENED size/CRC/PAR1 and recorded SHA-256.
@@ -274,7 +274,7 @@ a sync; raw box accepting `0b`) were closed anyway.
 
 | Edit… | Affects… |
 | --- | --- |
-| `WINDOW_RETRIES` / backoff | `WindowRecoveryTest`, "recovered N" copy, worst-case file time |
+| `WINDOW_RETRIES` / backoff | `SyncEngineTest`, "recovered N" copy, worst-case file time |
 | `FileArchive` paths | Export zips (byte-exact mirror), `HistoryIndexer` file lookup, `data_extraction_rules.xml` (`archive/` in device transfer) |
 | `SyncEngine` post-verify upsert | `archived_file` row + index columns ([data-model.md](data-model.md)); `HistoryDeriver` signature (`name:crc32`) |
 | `DeviceSession` request/terminal mapping | `drainStale` `isTerminal`, `FakeTransport` |
