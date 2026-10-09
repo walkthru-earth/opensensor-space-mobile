@@ -22,6 +22,8 @@ import earth.walkthru.aqsync.settings.SettingsRepository
 import earth.walkthru.aqsync.settings.iosSettingsRepository
 import earth.walkthru.aqsync.units.UnitSystem
 import earth.walkthru.aqsync.units.systemUnitSystem
+import earth.walkthru.opensensor.debug.DebugController
+import earth.walkthru.opensensor.debug.DebugScreen
 import earth.walkthru.opensensor.designsystem.OpenSensorTheme
 import earth.walkthru.opensensor.discover.DiscoverController
 import earth.walkthru.opensensor.discover.DiscoverScreen
@@ -30,6 +32,7 @@ import earth.walkthru.opensensor.discover.bundledSampleFeed
 import earth.walkthru.opensensor.settings.SettingsController
 import earth.walkthru.opensensor.settings.SettingsScreen
 import earth.walkthru.opensensor.shell.AppShell
+import earth.walkthru.opensensor.shell.DebugKey
 import earth.walkthru.opensensor.shell.DiscoverKey
 import earth.walkthru.opensensor.shell.ScanKey
 import earth.walkthru.opensensor.shell.SettingsKey
@@ -64,15 +67,26 @@ private class DiscoverHolder : ViewModel() {
     )
 }
 
+/** Holds the Debug controller for one Debug entry, cleared when the entry leaves the back stack. */
+private class DebugHolder(address: String, state: CompanionState, openLink: (String) -> SensorLink?) : ViewModel() {
+    val controller = DebugController(viewModelScope, IosDebugSource(address, state, openLink, viewModelScope))
+}
+
 /**
  * The iOS root hosts the shared shell ([AppShell], `:feature:shell`), the same bottom bar, per-tab
  * back stacks and Back rules as Android. The start edge swipe is Back. Discover is always the start
  * tab (owner decision 2026-10-08). No other screen draws a bar. [companion] is the My devices root
  * and receives the resolved display units (METRIC or IMPERIAL) and the detail level from the shared
- * Settings (`:feature:settings`, `:core:settings`).
+ * Settings (`:feature:settings`, `:core:settings`). At the Developer level [companion] also gets an
+ * open Debug action, and the shared Debug screen (`:feature:debug`) borrows short links from Swift
+ * through [openDebugLink] for the sensor [state] is connected to.
  */
 @Composable
-internal fun AppRoot(companion: @Composable (UnitSystem, DetailLevel) -> Unit) {
+internal fun AppRoot(
+    state: CompanionState,
+    openDebugLink: (String) -> SensorLink?,
+    companion: @Composable (UnitSystem, DetailLevel, ((String) -> Unit)?) -> Unit,
+) {
     val scope = rememberCoroutineScope()
     val settings = remember { SettingsController(scope, settingsRepository) }
     val prefs by settings.prefs.collectAsState()
@@ -91,7 +105,17 @@ internal fun AppRoot(companion: @Composable (UnitSystem, DetailLevel) -> Unit) {
                     DiscoverEntry(networkAllowed = showPublic, units = units, onAddSensor = { nav.toMyDevicesRoot() })
                 }
                 entry<ScanKey> {
-                    companion(units, level)
+                    val openDebug: ((String) -> Unit)? = if (level.developer) { address -> nav.openDebug(address, level.developer) } else null
+                    companion(units, level, openDebug)
+                }
+                entry<DebugKey> { key ->
+                    val controller = viewModel(key = "debug-${key.address}") { DebugHolder(key.address, state, openDebugLink) }.controller
+                    DebugScreen(
+                        controller = controller,
+                        address = key.address,
+                        developer = prefs?.detailLevel?.developer,
+                        onBack = { nav.popIfTop { it is DebugKey } },
+                    )
                 }
                 // iOS has no Smart Sync clock step yet, so its consent stays hidden.
                 entry<SettingsKey> {

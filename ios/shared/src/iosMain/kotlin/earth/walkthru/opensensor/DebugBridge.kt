@@ -1,0 +1,118 @@
+package earth.walkthru.opensensor
+
+import androidx.compose.runtime.snapshotFlow
+import earth.walkthru.aqsync.data.ble.ConnectionState
+import earth.walkthru.aqsync.data.ble.DeviceSession
+import earth.walkthru.aqsync.data.ble.FrameRecorderRegistry
+import earth.walkthru.aqsync.data.ble.RawFrameRecord
+import earth.walkthru.aqsync.data.ble.TransportKind
+import earth.walkthru.aqsync.data.protocol.Frame
+import earth.walkthru.opensensor.debug.DebugBlock
+import earth.walkthru.opensensor.debug.DebugBlockedException
+import earth.walkthru.opensensor.debug.DebugJson
+import earth.walkthru.opensensor.debug.DebugLink
+import earth.walkthru.opensensor.debug.DebugLog
+import earth.walkthru.opensensor.debug.DebugSource
+import earth.walkthru.opensensor.debug.DebugSyncTrace
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import kotlin.time.Clock
+
+/**
+ * One redacting frame recorder per sensor for the whole process. Every sync and every debug
+ * request records into it, so the Debug screen shows the history across the short links iOS lends.
+ */
+internal val debugFrames = FrameRecorderRegistry()
+
+/**
+ * The iOS side of the shared Debug screen. Swift owns the socket and the peripheral, so each
+ * request borrows a fresh [SensorLink] through [openLink] (null while a sync holds the link) and
+ * closes it when done, which hands the link back to Swift. Status comes from the Bluetooth status
+ * notifications [CompanionState] already receives. The config and the log are read on request.
+ */
+internal class IosDebugSource(
+    private val address: String,
+    private val state: CompanionState,
+    private val openLink: (String) -> SensorLink?,
+    private val scope: CoroutineScope,
+) : DebugSource {
+    private val recorder = debugFrames.recorderFor(address)
+    private val lent = Mutex()
+    private val lastKind = MutableStateFlow<Pair<TransportKind, Int>?>(null)
+    private val configFlow = MutableStateFlow<DebugJson?>(null)
+    private val logFlow = MutableStateFlow<DebugLog>(DebugLog.Idle)
+
+    override val link: Flow<DebugLink> = combine(
+        snapshotFlow { state.connected && state.info?.dev == address },
+        lastKind,
+    ) { connected, kind ->
+        val mtu = kind?.second
+        DebugLink(
+            connection = if (connected) ConnectionState.Ready(mtu ?: 0) else ConnectionState.Disconnected,
+            transport = kind?.first ?: TransportKind.BLE,
+            endpoint = address,
+            payloadMax = mtu?.let { it - 3 },
+        )
+    }
+
+    override val status: Flow<DebugJson?> = snapshotFlow {
+        if (state.info?.dev == address) state.statusRaw?.let { DebugJson(it, state.statusAtEpochMs) } else null
+    }
+    override val config: Flow<DebugJson?> = configFlow
+    override val frames: Flow<List<RawFrameRecord>> = recorder.records
+    override val log: Flow<DebugLog> = logFlow
+    override val syncTrace: Flow<DebugSyncTrace?> = flowOf(null)
+    override val configOnRequest: Boolean = true
+
+    override fun rawBlock(): DebugBlock? = null
+
+    override suspend fun rawCommand(request: ByteArray): List<Pair<ByteArray, Frame?>> = borrow { it.rawCommand(request) }
+
+    override fun requestStatus() {
+        scope.launch { runCatching { borrow { it.requestStatus() } } }
+    }
+
+    override fun refreshLog() {
+        if (logFlow.value == DebugLog.Loading) return
+        logFlow.value = DebugLog.Loading
+        scope.launch {
+            logFlow.value = try {
+                DebugLog.Loaded(borrow { it.logTail() }, now())
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                DebugLog.Failed(e.message ?: e::class.simpleName.orEmpty())
+            }
+        }
+    }
+
+    override fun refreshConfig() {
+        scope.launch {
+            runCatching { borrow { it.getConfig() } }.onSuccess { configFlow.value = DebugJson(it.rawJson, it.atEpochMs) }
+        }
+    }
+
+    override fun clearFrames() = recorder.clear()
+
+    /** One request at a time over a lent link, closed afterwards so Swift gets it back. */
+    private suspend fun <T> borrow(block: suspend (DeviceSession) -> T): T = lent.withLock {
+        val link = withContext(Dispatchers.Main) { openLink(address) } ?: throw DebugBlockedException(DebugBlock.LINK_BUSY)
+        try {
+            lastKind.value = link.transport.kind to link.transport.mtu
+            block(DeviceSession(link.transport, recorder))
+        } finally {
+            link.linkClosed()
+        }
+    }
+
+    private fun now(): Long = Clock.System.now().toEpochMilliseconds()
+}

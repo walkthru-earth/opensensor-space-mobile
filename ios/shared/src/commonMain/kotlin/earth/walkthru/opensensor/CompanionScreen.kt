@@ -73,6 +73,7 @@ import earth.walkthru.opensensor.strings.resources.companion_wifi_access_saving
 import earth.walkthru.opensensor.strings.resources.conn_connecting
 import earth.walkthru.opensensor.strings.resources.conn_disconnected
 import earth.walkthru.opensensor.strings.resources.conn_ready
+import earth.walkthru.opensensor.strings.resources.nav_debug
 import earth.walkthru.opensensor.strings.resources.nav_disconnect
 import earth.walkthru.opensensor.strings.resources.now_waiting
 import earth.walkthru.opensensor.strings.resources.perm_open_settings
@@ -93,7 +94,7 @@ import kotlin.math.floor
  */
 
 @Composable
-internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (String) -> Unit, disconnect: () -> Unit, scanLan: () -> Unit, saveWifiAccess: () -> Unit, connectLan: (String) -> Unit, syncLan: (String) -> Unit, disconnectLan: (String) -> Unit, exportArchive: () -> Unit, syncBluetooth: () -> Unit, units: UnitSystem = UnitSystem.METRIC, showTechnical: Boolean = false) {
+internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (String) -> Unit, disconnect: () -> Unit, scanLan: () -> Unit, saveWifiAccess: () -> Unit, connectLan: (String) -> Unit, syncLan: (String) -> Unit, disconnectLan: (String) -> Unit, exportArchive: () -> Unit, syncBluetooth: () -> Unit, units: UnitSystem = UnitSystem.METRIC, showTechnical: Boolean = false, onOpenDebug: ((String) -> Unit)? = null) {
     // Display units from Settings. Readings stay SI everywhere else.
     val formatter = UnitFormatter(units)
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
@@ -183,6 +184,11 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
                     }
                 }
                 item { OutlinedButton(onClick = disconnect, shape = MaterialTheme.shapes.small) { Text(stringResource(if (state.syncBusy) Res.string.action_cancel else Res.string.nav_disconnect)) } }
+                // Developer level only. The caller passes onOpenDebug at that level and null below it.
+                val debugDevice = state.info?.dev
+                if (onOpenDebug != null && state.connected && debugDevice != null) {
+                    item { OutlinedButton(onClick = { onOpenDebug(debugDevice) }, shape = MaterialTheme.shapes.small) { Text(stringResource(Res.string.nav_debug)) } }
+                }
             } else {
                 item {
                     // Tapping creates the Bluetooth manager, so iOS asks for Bluetooth here and not at launch.
