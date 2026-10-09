@@ -144,12 +144,17 @@ the link. A protocol fault ends it with `msg_sync_aborted` and also keeps the li
 refused or a sensor busy in the middle of a sync ends it as `AUTH_FAILED` or `BUSY`. A Stop
 that lands before the work starts still finishes once and frees the station. `SensorSync` logs
 only the file name and the error class and message, through `NSLog` without format arguments. Some iOS-only
-status lines (connecting, listing, paused, export) are still plain English in Swift.
+status lines (connecting, listing, paused) are still plain English in Swift.
 
-The offline **Export Parquet files** button copies only finalized `.parquet` files into a temporary
-station/Hive snapshot and opens Apple's Files export picker. Partials and receipts remain private;
-the snapshot is removed after export/cancel. Files are retained in Application Support; exporting
-does not move the archive. The app has no background BLE capability or archive charts.
+Files and the inspector are the shared `:feature:files` screens, opened offline from a Files
+button next to History on My devices (`FilesKey("archive")`). Files lists every verified file
+in the phone archive by local day. Share one file, share all, share zip and save zip stage
+copies through `:core:archive` into a fresh run under `tmp/opensensor-export`, then open
+`UIActivityViewController` or `UIDocumentPickerViewController(forExporting:asCopy:)` from
+`feature/files/src/iosMain`. The run is removed once the sheet closes. Only verified records
+are exported, so partials and receipts stay private, and the archive is never moved or changed.
+The daily zip is hidden because iOS has no derived files yet. The Swift folder export and its
+companion button are gone. The app has no background BLE capability or archive charts.
 Native BLE uses Core Bluetooth's
 peripheral identifier; the Keychain identity also pins station and full hardware ID. New
 LAN/archive behavior has host/simulator/build evidence plus the owner's report of
