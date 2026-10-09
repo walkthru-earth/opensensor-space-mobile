@@ -591,3 +591,26 @@ Pro (`GM1911`, ADB `8ed37969`); its process was running after launch. APK SHA-25
 `cf71cd19b217b75274e1763bab5479c43a50a8ab303b7036f5b743b03865ad70`.
 Android combined discovery, LAN-only open, and sensor collection were not exercised
 on that phone in this run.
+
+## 2026-10-09 — sensor screen and sync resilience follow-up
+
+Code now routes Android Reconnect through an enrolled, resolved LAN target when
+Bluetooth is unavailable. iOS validates saved hardware identity before accepting BLE
+INFO, keeps earlier station IDs for History, scopes sensor Files and exports to that
+sensor, and exposes its live LIST and per-file retry. The iOS Smart Sync runner reports
+planned remaining bytes and per-file failures; the Debug screen receives a redacted
+clock/sync outcome trace. Foreground BLE and LAN sync retry transient link loss at most
+twice and retain verified partial files. Stop and disconnect cancel pending retries.
+
+`./gradlew --no-daemon verify` passed after the presentation-literal correction:
+Android lint, Debug APK, `:app` unit tests, shared host tests, iOS simulator tests
+and framework link. An unsigned iOS simulator app and a locally signed iPhone Debug
+app built successfully with Xcode. The new Android Debug APK installed and launched
+on the USB OnePlus 7 Pro (`GM1911`, ADB `8ed37969`), and `pidof` listed its process.
+APK SHA-256: `b2e3694179efe934dd0166b478f44586066b406ed64ca9b175dec3ce0709fd77`.
+The signed iPhone app installed on the paired iPhone 16 Pro; its Debug dylib SHA-256
+is `9b78df08c2130bf0c6abc9e7bb9af821db5472972fcfdd45702c93152e14effd`.
+CoreDevice initially refused the launch check because the iPhone was locked.
+Real-phone selected-file retry, deliberate radio interruption/recovery, two-sensor
+Collect all, and throughput remain to be observed on hardware. An install or launch
+check alone does not qualify these flows.

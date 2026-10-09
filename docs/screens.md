@@ -70,9 +70,8 @@ needs may depend on Developer. A new field states its level in code (`level.deta
 `level.developer`). In ViewModel state, `advancedMode` always means Developer and `detailed`
 means Detailed or Developer. Files reads `detailLevel` directly.
 
-iOS has no level setting yet and shows Simple. The iOS device page (`CompanionScreen`, opened from My devices) keeps signal dBm, firmware,
-finalized file counts, byte counters and transfer rate behind `showTechnical` (off) until the
-shared setting lands (platform-parity-plan.md, Wave 2).
+Both apps use the shared detail-level setting. The iOS device page (`CompanionScreen`, opened from My devices) keeps signal dBm, firmware,
+finalized file counts, byte counters and transfer rate behind `showTechnical` in Detailed and Developer.
 
 ### What moved where (W4 audit, 2026-10-08)
 
