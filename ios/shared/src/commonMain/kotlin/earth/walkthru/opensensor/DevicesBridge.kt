@@ -90,6 +90,25 @@ internal object IosKnown {
     }.distinctBy { it.peripheral.uppercase() }.toList()
 
     /**
+     * The known ids Collect all must skip because a link the user holds already reaches them. A
+     * Bluetooth link names its peripheral id. A Wi-Fi link names its service name, which maps to a
+     * known sensor through the TXT station in [lanStations]. Ids compare without case.
+     */
+    fun busyIds(active: List<ActiveLink>, lanStations: Map<String, String>, known: List<KnownSensor>): Set<String> {
+        val busy = HashSet<String>()
+        for (link in active) {
+            busy += link.id
+            if (link.id.startsWith(WIFI_PREFIX)) {
+                val station = lanStations[link.id.removePrefix(WIFI_PREFIX)] ?: continue
+                known.filter { it.station == station }.forEach { busy += it.id }
+            } else {
+                known.filter { it.id.equals(link.id, ignoreCase = true) }.forEach { busy += it.id }
+            }
+        }
+        return busy
+    }
+
+    /**
      * The open links. The one Bluetooth link by its peripheral id, then each Wi-Fi session that is
      * connecting or connected, by service name.
      */
@@ -206,7 +225,8 @@ class DevicesBridge internal constructor(
 
     internal fun startCollectAll() {
         if (queue?.active == true) return
-        val plan = CollectAllPlan.plan(knownNow(), wifiNow(), activeNow().map { it.id }.toSet())
+        val known = knownNow()
+        val plan = CollectAllPlan.plan(known, wifiNow(), IosKnown.busyIds(activeNow(), state.lanStations, known))
         if (plan.isEmpty()) return
         val q = CollectAllQueue(plan)
         queue = q

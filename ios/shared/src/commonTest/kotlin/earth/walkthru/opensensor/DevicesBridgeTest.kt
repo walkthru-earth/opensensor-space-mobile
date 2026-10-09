@@ -1,6 +1,8 @@
 package earth.walkthru.opensensor
 
 import earth.walkthru.aqsync.archive.ArchiveRecord
+import earth.walkthru.opensensor.devices.ActiveLink
+import earth.walkthru.opensensor.devices.KnownSensor
 import earth.walkthru.opensensor.devices.LinkPhase
 import earth.walkthru.opensensor.strings.UiText
 import kotlinx.coroutines.flow.emptyFlow
@@ -153,5 +155,37 @@ class DevicesBridgeTest {
         assertEquals(listOf<Pair<String, String?>>(b to null), calls.collected)
         assertEquals("A", bridge.nameFor(a))
         assertEquals("aq-b", bridge.nameFor("wifi:aq-b"))
+    }
+
+    @Test fun busyIdsMapAWifiSessionToItsKnownSensorThroughTheStation() {
+        val known = listOf(
+            KnownSensor(a, "A", "st-a", null, hasWifiAccess = false),
+            KnownSensor(b, "B", "st-b", null, hasWifiAccess = true),
+        )
+        val active = listOf(
+            ActiveLink(a.lowercase(), "A", LinkPhase.CONNECTED),
+            ActiveLink("wifi:aq-b", "aq-b", LinkPhase.CONNECTED),
+            ActiveLink("wifi:aq-gone", "aq-gone", LinkPhase.CONNECTING),
+        )
+        val busy = IosKnown.busyIds(active, mapOf("aq-b" to "st-b"), known)
+        assertTrue(a in busy, "a Bluetooth link matches its known id without case")
+        assertTrue(b in busy, "a Wi-Fi session matches the known sensor of its station")
+        assertTrue("wifi:aq-gone" in busy, "a session without a station still names itself")
+        assertTrue(IosKnown.busyIds(emptyList(), mapOf("aq-b" to "st-b"), known).isEmpty())
+    }
+
+    @Test fun collectAllSkipsASensorTheUserHoldsOnWifi() {
+        val state = CompanionState()
+        val calls = Calls()
+        val bridge = bridge(state = state, calls = calls)
+        bridge.sensorOpened(a, "A", "st-a", "aabbccddeeff")
+        bridge.sensorOpened(b, "B", "st-b", "112233445566")
+        bridge.credentialsChanged(listOf(b), listOf("st-b"), listOf("112233445566"))
+        state.lanScanStarted()
+        state.lanSensorsFound(listOf("aq-b"), listOf("st-b"))
+        state.lanSessionChanged("aq-b", connected = true, busy = false, message = "", filesDone = 0, filesTotal = 0, bytesDone = 0)
+
+        bridge.startCollectAll()
+        assertEquals(listOf<Pair<String, String?>>(a to null), calls.collected, "the open Wi-Fi session is not taken over")
     }
 }
