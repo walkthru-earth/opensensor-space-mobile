@@ -88,22 +88,24 @@ Frames cross the Kotlin and Swift boundary as `NSData` (Swift `Data`). `iosMain/
 copies with `usePinned` and `memcpy`; no hex strings remain on the transfer path. The LAN
 handshake takes the token as `Data` and zeroes the Kotlin copies after building the frame.
 
+File sync on iOS runs the shared engine, the same `SyncEngine` and `ArchiveCollector` from
+`:core:sync` that Android runs. Swift lends each sync a `SensorLink` (`ios/shared` iosMain).
+`LanSession` passes LAN frame bodies through it, and `BluetoothCompanion` passes the `control`
+writes and `response` notifications. `SensorSync` owns the `IosArchiveStore` and
+`ReceiptArchiveIndex` from `:core:archive` iosMain, runs off the main thread, reports progress at
+most four times a second and finishes with one `SyncResult`. A station syncs over one link at a
+time. The Swift transfer engine was removed. Window retry, resume, verify and conflict rules are
+therefore Android's rules, described in [sync-engine.md](sync-engine.md), which also lists what
+still differs between the phones.
+
 Collections mirror immutable files under Application Support as
-`SensorArchive/<station>/<relative path>`. Interrupted downloads retain partial bytes keyed
-by size/CRC and resume from the phone's own received offset. READ handles, offsets and window
-lengths are checked. As the contract requires, a window whose READ_END disagrees with the
-phone's own count, or that skipped a chunk, is retried with a new READ from the phone's offset.
-Chunks after a gap are drained until READ_END first. Overlapping or duplicate bytes already held
-are skipped, and `next_offset` never overrides the local count. Retries mirror Android's
-`SyncEngine` (5 retries, 0.3 s linear backoff). A consistent short READ_END continues from the
-reported end, a READ_END error status ends the run, and held bytes are kept for resume in
-every case. A final filename appears only after size, streamed IEEE
-CRC-32 and `PAR1` head/tail verification. Existing finalized files are verified and preserved;
-a conflicting file fails the collection rather than replacing data. Paths use the firmware's
-safe-name whitelist and 399-byte limit, reject traversal/symlinks, and keep station directories
-independent. Collection runs off the main actor. Archive writes hop to the `ArchiveIO` actor
-once per READ window (append plus fsync), and progress reaches the main actor at most four
-times per second. The archive root is created with
+`SensorArchive/<station>/<relative path>`, the same place earlier builds used. Partials live
+under `Application Support/archive-partial/<station>/`, written with `pwrite` and `fsync`.
+Partials and receipts left by the old Swift engine are adopted when their size and CRC match.
+A final filename appears only after size, CRC-32, `PAR1` head/tail and SHA-256 pass in one pass.
+Existing finalized files are verified and preserved, and a conflicting file is reported rather
+than replaced. Names use the shared safe-name rule, which is stricter than the old Swift
+whitelist. The archive root is created with
 `FileProtectionType.completeUntilFirstUserAuthentication`, matching the Keychain token's
 `AfterFirstUnlockThisDeviceOnly`, so collection can keep writing after the phone locks. Partials
 and receipts inherit or set the same class. Backup exclusion is set when the root is created
@@ -124,10 +126,21 @@ indefinite background service or periodic automatic collection. Force-quitting/r
 requires reconnecting and starting sync again; downloaded bytes and verification receipts persist.
 See Apple's [background execution guidance](https://developer.apple.com/documentation/uikit/extending-your-app-s-background-execution-time).
 
-Finalized files receive an atomic size/CRC verification receipt. Later collections validate
-the local bytes against it, count completed files immediately and skip their remote OPEN/READ.
-Legacy files without receipts use OPEN/local verification once to create the receipt. Conflicts
-preserve existing files. Partial files still require matching fresh OPENED size/CRC before resume.
+Finalized files receive an atomic verification receipt with size, CRC and SHA-256. Later
+collections count completed files immediately and skip their remote OPEN/READ. An older receipt
+without a hash gets one on its next verify. Partial files still require matching fresh OPENED
+size/CRC before resume.
+
+Messages follow Android. A sync outcome carries a `:ui:strings` key, and link or Wi-Fi access
+events outside a collection reach `CompanionState` as a typed `CompanionNotice`, so iOS shows
+Android's words for busy, refused token, station or hardware change and the rest. The iOS LAN
+path has no Bluetooth fallback, so it uses `msg_busy` and `msg_token_needs_ble` where Android
+uses its `msg_lan_*` wording. A LAN `AUTH_FAILED` drops the saved token and asks the user to save
+Wi-Fi access over Bluetooth again. The BLE **Sync** button uses Wi-Fi when an idle LAN session
+for the same sensor is open, and progress then shows on its LAN card. A Bluetooth sync that loses
+its link closes the Bluetooth connection, and held bytes stay for the next sync. Some iOS-only
+status lines (connecting, listing, paused, export) are still plain English in Swift.
+
 The offline **Export Parquet files** button copies only finalized `.parquet` files into a temporary
 station/Hive snapshot and opens Apple's Files export picker. Partials and receipts remain private;
 the snapshot is removed after export/cancel. Files are retained in Application Support; exporting
@@ -168,11 +181,10 @@ Xcode on Linux. On a Mac it also runs `verifyIos` (skip with `-Popensensor.skipI
 `verifyIos` runs the iOS simulator tests of every shared module, including the `:ios:shared`
 presentation tests, and links the shared framework. It needs an installed simulator runtime. The Xcode build compiles the Swift BLE
 adapter and app too, with `SWIFT_STRICT_CONCURRENCY = complete` and no warnings. The native
-checks exercise the production archive and transfer engine with scripted replies: resume, CRC
-verification, immutable conflicts, the 399-byte name limit, path/symlink rejection, foreign
-handles, window retry (short READ_END, gap, overlap, duplicate, exhaustion, error status), LAN
-framing, Local Network denial detection, independent concurrent stations and outbound keepalive
-timing. `verify-native.sh` compiles them on the Mac host with complete concurrency checking and
+checks cover LAN claims, framing, Local Network denial detection, policy and outbound keepalive
+timing. Resume, verification, conflicts, names and window retry are tested once in `:core:sync`
+and `:core:archive` `commonTest`, and the iOS runner and notices in `ios/shared`
+(`SensorSyncTest`, `SyncOutcomeTest`, `CompanionNoticeTest`), all inside `verifyIos`. `verify-native.sh` compiles them on the Mac host with complete concurrency checking and
 warnings as errors. The hostless `OpenSensorTests` Swift Testing target runs the same checks on an
 iOS simulator through the shared scheme's test action, without signing or the Kotlin framework.
 Neither a simulator build nor these tests qualifies real radio behavior.
@@ -219,10 +231,16 @@ accuracy, stale/background handling or authenticated Wi-Fi connections. See
 6. Measure LAN throughput with the off-main session on an iPhone, confirm the Local Network
    denial hint after declining and revoking access, and confirm archive writes continue after
    the phone locks during a background collection.
+7. Qualify the shared engine on an iPhone. LAN sync, background resume and a second sync that
+   reads nothing. Bluetooth sync, and Bluetooth Sync while a LAN session is open. An upgrade from
+   a build that used the Swift engine, keeping its receipts and partials.
+8. Move the remaining plain English Swift status lines into `:ui:strings`, and drop the unused
+   write path in `SensorArchive.swift`.
 
-LAN byte transfer and integrity verification use a native Swift platform engine with the shared
-Kotlin wire codec. Android's existing session/archive engine still depends on JVM file APIs,
-Room and Android lifetime services; it is not imported into the iOS app.
+LAN and Bluetooth file sync use the shared Kotlin engine. Swift keeps the sockets, Core
+Bluetooth, LAN framing, the HELLO check, keepalive, the BLE token request and Keychain.
+`SensorArchive.swift` remains only for Files export. Android's Room index, WorkManager and
+foreground service stay Android code.
 
 Compilation, automated tests and device observations for this change are recorded
 in [status.md](status.md); features listed above are not implemented on iOS yet.

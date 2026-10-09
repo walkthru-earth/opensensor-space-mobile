@@ -1,18 +1,46 @@
 # Sync engine — pull, verify, archive
 
 **Scope:** the file transfer: planner → engine → archive; integrity; lost windows; stale-frame drain; resume; the state-changing requests.
-**Code:** Android `data/sync/SyncEngine.kt`, `FileArchive.kt`. Shared in `core/sync` commonMain: `data/sync/SyncPlanner.kt`, `ReadWindow.kt`, `WindowRetryPolicy.kt`, `SyncResumePolicy.kt`, `FileProgress.kt`, `FileProgressReporter.kt`, `RateMeter.kt`, `data/ManifestState.kt`, `data/SyncProgress.kt`, `data/ble/DeviceSession.kt` (`read`, `drainStale`, `reboot`). `core/protocol/…/ParquetVerify.kt`, `Sha256.kt`.
-**Tests:** `:core:sync` commonTest `SyncPlannerTest`, `DeviceSessionPollingTest`, `WindowRetryPolicyTest`, `RateMeterTest`, `SyncResumePolicyTest`. App `ConcurrentArchiveTest`, `WindowRecoveryTest` (fake with `dropLeadingChunks` / `closedDelayMs`). `:core:protocol` `ParquetVerifyTest`, `Sha256Test`.
+**Code:** Shared in `core/sync` commonMain: `data/sync/SyncEngine.kt`, `ArchiveCollector.kt`, `data/sync/SyncPlanner.kt`, `ReadWindow.kt`, `WindowRetryPolicy.kt`, `SyncResumePolicy.kt`, `FileProgress.kt`, `FileProgressReporter.kt`, `RateMeter.kt`, `data/ManifestState.kt`, `data/SyncProgress.kt`, `data/ble/DeviceSession.kt` (`read`, `drainStale`, `reboot`). `core/protocol/…/ParquetVerify.kt`, `Sha256.kt`. Android adapters `data/archive/FileArchiveStore.kt`, `SyncEngineModule.kt`, `data/sync/FileArchive.kt`. iOS adapters `core/archive` iosMain `IosArchiveStore.kt`, `ReceiptArchiveIndex.kt`, and `ios/shared` iosMain `SensorSync.kt`, `SensorLink.kt`.
+**Tests:** `:core:sync` commonTest `SyncEngineTest`, `ArchiveCollectorTest`, `SyncPlannerTest`, `DeviceSessionPollingTest`, `WindowRetryPolicyTest`, `RateMeterTest`, `SyncResumePolicyTest`. App `ConcurrentArchiveTest`, `WindowRecoveryTest` (fake with `dropLeadingChunks` / `closedDelayMs`). `:core:protocol` `ParquetVerifyTest`, `Sha256Test`.
 **Related:** [transports.md](transports.md) (the pipe underneath), [data-model.md](data-model.md) (what is recorded), [history-pipeline.md](history-pipeline.md) (what runs after).
 
-The iOS native LAN engine follows the same immutable-file contract. `SensorArchive` writes
-atomic size/CRC receipts after finalization and verifies local bytes before skipping their
-remote OPEN/READ on later runs. Initial progress counts these completed files. Interrupted
-READ windows retain contiguous bytes; a new OPEN resumes from the partial's actual length
-only when size/CRC match. Legacy finalized files without receipts use OPEN and local
-verification to add one. UIKit background-time expiration pauses active collections, and
-foreground return reconnects/resumes after old task ownership ends. See
-[ios-migration.md](ios-migration.md) for bounded execution and phone qualification.
+## One engine on both phones
+
+Android and iOS run the same `SyncEngine` and `ArchiveCollector` from `:core:sync`. Each
+platform supplies only an `ArchiveStore`, an `ArchiveIndex` and a byte pipe. On iOS the pipe is
+`SensorLink`. Swift owns the `NWConnection` or the Core Bluetooth peripheral, sends each whole
+request frame and hands back each reply frame. `SensorSync` runs one collection per link off the
+main thread and reports progress (at most four times a second) and one `SyncResult` on the main
+thread. The engine only lists, opens, reads and closes files. It never asks the sensor to delete,
+rename or rewrite one. The Swift transfer engine (`SensorTransfer.swift`) is gone. Swift keeps
+LAN framing, the HELLO check, keepalive, STATUS and LIVE pushes, and the BLE token request.
+
+Outcomes cross to Swift as `SyncResult` with `keepsLink` and `resumable`, and the message is a
+`:ui:strings` key with the Android words. Link and Wi-Fi access events that happen outside a
+collection reach the shared state as a typed `CompanionNotice`, so iOS never builds its own
+sentence for them.
+
+### Where iOS still differs from Android
+
+| Area | Android | iOS |
+| --- | --- | --- |
+| Verify and SHA-256 | Shared engine | Shared engine, size, CRC-32, `PAR1` and SHA-256 in one pass over the finished partial |
+| Partials | App files | Application Support `archive-partial`. Partials left by the old Swift engine are adopted when size and CRC match |
+| Receipts | Room `ArchiveIndex` | `ReceiptArchiveIndex` beside each file, extended with SHA-256. An older receipt with no hash is filled on the next verify |
+| Safe names | Shared check | Shared check, stricter than the old Swift whitelist. A name the plan rejects is reported and never downloaded |
+| Byte counter | Card shows bytes received | `receivedBytes` counts only this run. The LAN card shows the file bytes so a resumed file does not jump backwards |
+| One link per station | Engine holds one writer | `SensorSync` refuses a second link for the same station with `msg_hardware_in_use` |
+| LAN `AUTH_FAILED` | Renews the token over BLE and falls back to Bluetooth | Drops the saved token and shows `msg_token_needs_ble`. No automatic renewal and no Bluetooth fallback |
+| LAN busy | `msg_lan_*` wording that names the Bluetooth fallback | `msg_busy`, because iOS has no fallback |
+| HELLO mismatch | `msg_identity_*` | Same keys. A different hardware ID and a different station now give different notices |
+| BLE Sync button | Syncs over the link the router picked | Routes to Wi-Fi when an idle LAN session for the same sensor is open, and progress then shows on the LAN card |
+| Lost BLE sync | Handled by the sync service and `SyncResumePolicy` | The BLE connection closes. Bytes already held are kept for the next sync |
+| BLE writes | With response | `control` with response, payload sized from the without-response length |
+| Background | `SyncWorker` on WorkManager | A UIKit background-task lease for LAN collections only. Expiry pauses, and foreground return resumes |
+
+The keepalive rules are unchanged on both phones. See [ios-migration.md](ios-migration.md) for
+bounded execution and phone qualification.
 
 ## One file
 

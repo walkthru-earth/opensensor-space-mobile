@@ -36,12 +36,16 @@ interfaces.
 
 ### Where the code will live (target)
 
-This is the target shape from [platform-parity-plan.md](platform-parity-plan.md). It is not
-today's code. Today Android runs `app/.../data/sync/SyncEngine.kt` and iOS runs a second engine in
-`ios/App/SensorTransfer.swift` and `SensorArchive.swift`. `:core:archive` holds the archive layout, verifier, records and the `ArchiveStore` and
-`ArchiveIndex` ports, which Android adapts in `app/.../data/archive/` and iOS adopts in wave 3. The
-ports `FrameLink` and `CredentialStore` do not exist yet. `:core:sync` is an empty skeleton. Shared today are the wire codec, `ParquetVerify`, `Crc32` and `SafeName` in
-`:core:protocol`, which the Swift engine does not call yet.
+This is the target shape from [platform-parity-plan.md](platform-parity-plan.md). The engine part
+is in place. Both phones run `SyncEngine` and `ArchiveCollector` from `:core:sync`, with the
+`ArchiveStore` and `ArchiveIndex` ports from `:core:archive`. Android adapts them in
+`app/.../data/archive/`. iOS uses `IosArchiveStore` and `ReceiptArchiveIndex` in `:core:archive`
+iosMain. The frame link exists on iOS as `SensorLink` in `ios/shared` iosMain, fed by Swift
+`LanSession` and `BluetoothCompanion`. It is not yet a common `FrameLink` port, and
+`CredentialStore` does not exist yet, so Keychain and Keystore stay platform code. The Swift
+transfer engine was removed. `SensorArchive.swift` remains only for Files export. See
+[sync-engine.md](sync-engine.md#where-ios-still-differs-from-android) for the behaviour that still
+differs.
 
 ```mermaid
 flowchart LR
@@ -84,10 +88,9 @@ flowchart LR
 1. **The contract first.** A frame layout, opcode, error code, name rule or retry rule comes from
    `../aq-parquet/docs/shared/ble-sync-protocol.md`. Read it before changing either platform. If
    the code disagrees with it, the code is wrong.
-2. **One engine (planned).** The download loop (list, open, read windows, retry a failed window from the
-   phone's own offset, close, verify, commit) runs in shared Kotlin. Platform code never decides
-   whether a file is synced. Until wave 3 of the parity plan, the two engines must match
-   behaviour by hand and a fix lands in both.
+2. **One engine.** The download loop (list, open, read windows, retry a failed window from the
+   phone's own offset, close, verify, commit) runs in shared Kotlin on both phones. Platform code
+   never decides whether a file is synced. A sync fix lands once, in `:core:sync`.
 3. **Ports are small and byte based.** `FrameLink` sends and receives `ByteArray`. No hex strings,
    no JSON for binary data, no per-byte callbacks across the Swift boundary. Convert `ByteArray`
    to `NSData` once in `iosMain` with pinned memory.
@@ -97,8 +100,9 @@ flowchart LR
 5. **Tests live in `commonTest`.** Shared tests run on the JVM or Android host in `verify` and on
    the iOS simulator in `verifyIos`. Each convention plugin gates its module, so a new module
    cannot be missed. A behaviour tested only in `jvmTest` or only in Swift is not shared
-   behaviour. Today corruption checks and name validation are in `commonTest`. Resume, window
-   retry and cancellation are still tested twice, in `app/src/test` and in Swift `TransferChecks`.
+   behaviour. Corruption checks, name validation, resume, window retry and cancellation are in
+   `:core:sync` and `:core:archive` `commonTest`, and the iOS runner in `ios/shared` `iosTest`
+   (`SensorSyncTest`). Swift `TransferChecks` keeps only LAN claims, keepalive, framing and policy.
 6. **Adapters are thin and boring.** A Swift adapter maps OS callbacks to the port and nothing
    else. If an adapter grows a `retry`, `if size ==` or `crc`, that logic belongs in shared code.
 7. **Concurrency at the boundary.** Kotlin exposes `suspend` functions (bridged to Swift `async`)
