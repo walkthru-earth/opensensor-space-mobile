@@ -150,13 +150,9 @@ fun DebugScreen(
     val listState = rememberLazyListState()
     val ago = agoFormatter()
 
-    var seenDeveloper by remember { mutableStateOf(false) }
+    // Null while the stored level loads. Any confirmed level below Developer leaves at once.
     LaunchedEffect(developer) {
-        if (developer == true) {
-            seenDeveloper = true
-        } else if (developer == false && seenDeveloper) {
-            onBack()
-        }
+        if (leavesDebug(developer)) onBack()
     }
 
     val ready = state.link.connection.isReady
@@ -459,6 +455,9 @@ internal fun formatAgo(ageMs: Long, now: String, s: String, m: String, h: String
         else -> d.replace(COUNT, (sec / 86_400).toString())
     }
 }
+
+/** True once the stored level is known and is below Developer. Null (still loading) stays. */
+internal fun leavesDebug(developer: Boolean?): Boolean = developer == false
 
 /** `HH:mm:ss.SSS TYPE          LEN B  PREVIEW`, the Android layout without `String.format`. */
 internal fun frameLine(f: RawFrameRecord): String {

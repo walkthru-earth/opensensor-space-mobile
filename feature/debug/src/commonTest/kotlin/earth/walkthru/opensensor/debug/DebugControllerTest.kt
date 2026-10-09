@@ -170,4 +170,11 @@ class DebugControllerTest {
         assertEquals("3h", formatAgo(3 * 3_600_000L, "now", "${m}s", "${m}m", "${m}h", "${m}d"))
         assertEquals("1d", formatAgo(86_400_000L, "now", "${m}s", "${m}m", "${m}h", "${m}d"))
     }
+
+    @Test
+    fun anyConfirmedLevelBelowDeveloperLeavesDebug() {
+        assertTrue(leavesDebug(false))
+        assertFalse(leavesDebug(null))
+        assertFalse(leavesDebug(true))
+    }
 }
