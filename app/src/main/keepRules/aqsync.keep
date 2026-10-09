@@ -48,9 +48,9 @@
     kotlinx.serialization.KSerializer serializer(...);
 }
 
-# Navigation 3 saves the back stack with each key's class name and restores it with
-# Class.forName plus the key's serializer. Stable names keep restore readable and
-# robust against class merging.
+# Navigation 3 saves the back stack through AppNavConfig (:feature:shell), a polymorphic
+# serializer keyed by serial names, so restore does not depend on class names. Keeping the
+# key names still keeps saved state readable and robust against class merging.
 -keepnames class * implements androidx.navigation3.runtime.NavKey
 
 # com.uber:h3 (Discover map). The JNI library binds com.uber.h3core.NativeMethods by

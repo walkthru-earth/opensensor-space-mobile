@@ -400,7 +400,7 @@
     <string name="files_listing">Reading the file list…</string>
     <string name="files_list_failed_simple">Could not read the file list. Try again.</string>
 
-    <!-- Settings and the bottom bar tabs. Their copy lives in feature/settings and feature/shell composeResources, shared with iOS. -->
+    <!-- Settings and the bottom bar tabs. Their copy lives in feature/settings and ui/strings composeResources, shared with iOS. -->
 
     <!-- On-demand permissions (permissions/RuntimeAccess.kt). Asked only from the action that needs them. -->
     <string name="perm_bt_title">Allow nearby devices</string>
