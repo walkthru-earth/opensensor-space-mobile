@@ -2,8 +2,31 @@ package earth.walkthru.opensensor
 
 import earth.walkthru.opensensor.strings.UiText
 import earth.walkthru.opensensor.strings.resources.Res
+import earth.walkthru.opensensor.strings.resources.companion_ble_characteristics_missing
+import earth.walkthru.opensensor.strings.resources.companion_ble_connect_failed
+import earth.walkthru.opensensor.strings.resources.companion_ble_denied
+import earth.walkthru.opensensor.strings.resources.companion_ble_disconnected
+import earth.walkthru.opensensor.strings.resources.companion_ble_notify_failed
+import earth.walkthru.opensensor.strings.resources.companion_ble_off
+import earth.walkthru.opensensor.strings.resources.companion_ble_read_failed
+import earth.walkthru.opensensor.strings.resources.companion_ble_resume_live
+import earth.walkthru.opensensor.strings.resources.companion_ble_sensor_gone
+import earth.walkthru.opensensor.strings.resources.companion_ble_service_missing
+import earth.walkthru.opensensor.strings.resources.companion_ble_starting
+import earth.walkthru.opensensor.strings.resources.companion_ble_timed_out
+import earth.walkthru.opensensor.strings.resources.companion_ble_unsupported
 import earth.walkthru.opensensor.strings.resources.companion_info_invalid
+import earth.walkthru.opensensor.strings.resources.companion_lan_connected
+import earth.walkthru.opensensor.strings.resources.companion_lan_connecting
+import earth.walkthru.opensensor.strings.resources.companion_lan_disconnected
+import earth.walkthru.opensensor.strings.resources.companion_lan_gone
+import earth.walkthru.opensensor.strings.resources.companion_lan_listing
 import earth.walkthru.opensensor.strings.resources.companion_lan_needs_access
+import earth.walkthru.opensensor.strings.resources.companion_lan_sync_paused
+import earth.walkthru.opensensor.strings.resources.companion_lan_sync_queued
+import earth.walkthru.opensensor.strings.resources.companion_lan_syncing
+import earth.walkthru.opensensor.strings.resources.companion_wifi_access_saving_message
+import earth.walkthru.opensensor.strings.resources.companion_wifi_access_timed_out
 import earth.walkthru.opensensor.strings.resources.msg_busy
 import earth.walkthru.opensensor.strings.resources.msg_busy_before_sync
 import earth.walkthru.opensensor.strings.resources.msg_failed_get_token
@@ -63,6 +86,75 @@ enum class CompanionNotice {
 
     /** INFO was unsupported or invalid. */
     INFO_INVALID,
+
+    /** The Bluetooth connection did not open in time. */
+    CONNECT_TIMED_OUT,
+
+    /** The user closed the Bluetooth connection. */
+    DISCONNECTED,
+
+    /** The app left the screen and the idle Bluetooth connection closed. */
+    RESUME_LIVE,
+
+    /** The Bluetooth radio is off. */
+    BLUETOOTH_OFF,
+
+    /** Bluetooth access is not allowed for this app. */
+    BLUETOOTH_DENIED,
+
+    /** This device has no Bluetooth LE. */
+    BLUETOOTH_UNSUPPORTED,
+
+    /** Bluetooth is resetting or not known yet. */
+    BLUETOOTH_STARTING,
+
+    /** The Bluetooth connection could not open. */
+    CONNECT_FAILED,
+
+    /** The sensor dropped the Bluetooth connection. */
+    SENSOR_DISCONNECTED,
+
+    /** The sensor has no AQ Sync service. */
+    SERVICE_MISSING,
+
+    /** The sensor lacks the live reading characteristics. */
+    CHARACTERISTICS_MISSING,
+
+    /** Notifications could not be turned on, usually a pairing problem. */
+    NOTIFY_FAILED,
+
+    /** A characteristic read failed, usually a pairing problem. */
+    READ_FAILED,
+
+    /** Wi-Fi access is being requested over Bluetooth. */
+    SAVING_WIFI_ACCESS,
+
+    /** The Wi-Fi access request did not answer in time. */
+    WIFI_ACCESS_TIMED_OUT,
+
+    /** The Wi-Fi sensor is no longer in the browse results. */
+    LAN_SENSOR_GONE,
+
+    /** A Wi-Fi session is opening. */
+    LAN_CONNECTING,
+
+    /** The Wi-Fi session is open and ready to sync. */
+    LAN_CONNECTED,
+
+    /** A resumed Wi-Fi sync waits for another sensor to finish. */
+    LAN_SYNC_QUEUED,
+
+    /** A Wi-Fi sync is listing files. */
+    LAN_LISTING,
+
+    /** A Wi-Fi sync is transferring verified files. */
+    LAN_SYNCING,
+
+    /** A Wi-Fi sync paused in the background and resumes on return. */
+    LAN_PAUSED,
+
+    /** The Wi-Fi session closed. */
+    LAN_DISCONNECTED,
     ;
 
     internal val text: UiText
@@ -82,6 +174,29 @@ enum class CompanionNotice {
                 TOKEN_FAILED -> Res.string.msg_failed_get_token
                 TOKEN_REFUSED -> Res.string.msg_rejected_get_token
                 INFO_INVALID -> Res.string.companion_info_invalid
+                CONNECT_TIMED_OUT -> Res.string.companion_ble_timed_out
+                DISCONNECTED -> Res.string.companion_ble_disconnected
+                RESUME_LIVE -> Res.string.companion_ble_resume_live
+                BLUETOOTH_OFF -> Res.string.companion_ble_off
+                BLUETOOTH_DENIED -> Res.string.companion_ble_denied
+                BLUETOOTH_UNSUPPORTED -> Res.string.companion_ble_unsupported
+                BLUETOOTH_STARTING -> Res.string.companion_ble_starting
+                CONNECT_FAILED -> Res.string.companion_ble_connect_failed
+                SENSOR_DISCONNECTED -> Res.string.companion_ble_sensor_gone
+                SERVICE_MISSING -> Res.string.companion_ble_service_missing
+                CHARACTERISTICS_MISSING -> Res.string.companion_ble_characteristics_missing
+                NOTIFY_FAILED -> Res.string.companion_ble_notify_failed
+                READ_FAILED -> Res.string.companion_ble_read_failed
+                SAVING_WIFI_ACCESS -> Res.string.companion_wifi_access_saving_message
+                WIFI_ACCESS_TIMED_OUT -> Res.string.companion_wifi_access_timed_out
+                LAN_SENSOR_GONE -> Res.string.companion_lan_gone
+                LAN_CONNECTING -> Res.string.companion_lan_connecting
+                LAN_CONNECTED -> Res.string.companion_lan_connected
+                LAN_SYNC_QUEUED -> Res.string.companion_lan_sync_queued
+                LAN_LISTING -> Res.string.companion_lan_listing
+                LAN_SYNCING -> Res.string.companion_lan_syncing
+                LAN_PAUSED -> Res.string.companion_lan_sync_paused
+                LAN_DISCONNECTED -> Res.string.companion_lan_disconnected
             },
         )
 }

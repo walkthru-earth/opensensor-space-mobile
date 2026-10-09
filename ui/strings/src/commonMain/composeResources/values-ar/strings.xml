@@ -74,6 +74,29 @@
     <string name="companion_lan_bytes">%1$s بايت في الملف الحالي</string>
     <string name="companion_lan_rate">%1$s KiB/s في المتوسط</string>
     <string name="companion_sync">مزامنة</string>
+    <string name="companion_ble_timed_out">انتهت مهلة الاتصال. أبقِ المستشعر قريبًا وحاول مرة أخرى.</string>
+    <string name="companion_ble_disconnected">تم قطع الاتصال. يواصل مستشعرك التسجيل.</string>
+    <string name="companion_ble_resume_live">ابحث عن مستشعرك مرة أخرى لاستئناف القراءات المباشرة.</string>
+    <string name="companion_ble_off">شغّل Bluetooth للعثور على مستشعراتك.</string>
+    <string name="companion_ble_denied">اسمح باستخدام Bluetooth لتطبيق opensensor.space في الإعدادات.</string>
+    <string name="companion_ble_unsupported">Bluetooth غير متاح على هذا الجهاز.</string>
+    <string name="companion_ble_starting">جارٍ تجهيز Bluetooth…</string>
+    <string name="companion_ble_connect_failed">تعذّر الاتصال. تأكد من أن المستشعر قريب ومتاح للإقران.</string>
+    <string name="companion_ble_sensor_gone">انقطع اتصال المستشعر. ابحث عنه مرة أخرى لإعادة الاتصال.</string>
+    <string name="companion_ble_service_missing">تعذّر فتح خدمة AQ Sync.</string>
+    <string name="companion_ble_characteristics_missing">تنقص هذا المستشعر خصائص القراءة المباشرة المطلوبة.</string>
+    <string name="companion_ble_notify_failed">تعذّر تفعيل الإشعارات. تحقق من رمز PIN للإقران وحاول مرة أخرى.</string>
+    <string name="companion_ble_read_failed">تعذّرت القراءة من المستشعر. تحقق من رمز PIN للإقران وحاول مرة أخرى.</string>
+    <string name="companion_wifi_access_saving_message">جارٍ حفظ الوصول عبر Wi-Fi…</string>
+    <string name="companion_wifi_access_timed_out">انتهت مهلة الوصول عبر Wi-Fi. أعد الاتصال عبر Bluetooth وحاول مرة أخرى.</string>
+    <string name="companion_lan_gone">لم يعد مستشعر Wi-Fi هذا متاحًا. ابحث عن مستشعرات Wi-Fi مرة أخرى.</string>
+    <string name="companion_lan_connecting">جارٍ الاتصال عبر Wi-Fi…</string>
+    <string name="companion_lan_connected">متصل عبر Wi-Fi. جاهز للمزامنة.</string>
+    <string name="companion_lan_sync_queued">المزامنة في قائمة الانتظار. تُستأنف عندما ينتهي مستشعر آخر.</string>
+    <string name="companion_lan_listing">جارٍ سرد الملفات…</string>
+    <string name="companion_lan_syncing">جارٍ مزامنة الملفات المتحقق منها</string>
+    <string name="companion_lan_sync_paused">المزامنة متوقفة مؤقتًا. تبقى الملفات المحفوظة والبايتات الجزئية. تُستأنف عند عودتك.</string>
+    <string name="companion_lan_disconnected">تم قطع الاتصال. تبقى الملفات المجمّعة على هذا الهاتف.</string>
 
     <!-- Export. -->
 

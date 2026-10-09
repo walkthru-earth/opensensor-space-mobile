@@ -2,7 +2,10 @@ package earth.walkthru.opensensor
 
 import earth.walkthru.opensensor.strings.UiText
 import earth.walkthru.opensensor.strings.resources.Res
+import earth.walkthru.opensensor.strings.resources.companion_ble_off
 import earth.walkthru.opensensor.strings.resources.companion_lan_needs_access
+import earth.walkthru.opensensor.strings.resources.companion_lan_syncing
+import earth.walkthru.opensensor.strings.resources.companion_wifi_access_saving_message
 import earth.walkthru.opensensor.strings.resources.msg_busy_before_sync
 import earth.walkthru.opensensor.strings.resources.msg_hardware_in_use
 import earth.walkthru.opensensor.strings.resources.msg_identity_enroll_ble
@@ -25,7 +28,7 @@ class CompanionNoticeTest {
     @Test fun lanNoticeKeepsTheCardCountsAndStopsTheRate() {
         val state = CompanionState()
         state.lanSessionChanged("a", true, true, "syncing", 2, 4, 4096, 1024.0)
-        state.lanSessionNoticed("a", false, false, CompanionNotice.HARDWARE_IN_USE, 2, 4, 4096)
+        state.lanSessionNoticed("a", false, false, CompanionNotice.HARDWARE_IN_USE, 2, 4, 4096, 1024.0)
         val session = state.lanSessions.getValue("a")
         assertEquals(2, session.filesDone)
         assertEquals(4096L, session.bytesDone)
@@ -52,5 +55,38 @@ class CompanionNoticeTest {
         state.connectionClosedNoticed(CompanionNotice.VERIFICATION_FAILED)
         assertFalse(state.connected)
         assertEquals(UiText.of(Res.string.msg_verification_failed), state.message)
+    }
+
+    @Test fun aSyncingNoticeKeepsTheRate() {
+        val state = CompanionState()
+        state.lanSessionNoticed("a", true, true, CompanionNotice.LAN_SYNCING, 1, 4, 512, 2048.0)
+        val session = state.lanSessions.getValue("a")
+        assertEquals(2048.0, session.bytesPerSecond)
+        assertEquals(UiText.of(Res.string.companion_lan_syncing), session.message)
+    }
+
+    @Test fun bluetoothNoticesCloseTheConnectionAndClearWhenOn() {
+        val state = CompanionState()
+        state.connectionStarted("device")
+        state.bluetoothNoticed(false, CompanionNotice.BLUETOOTH_OFF)
+        assertFalse(state.bluetoothAvailable)
+        assertEquals(null, state.selectedId)
+        assertEquals(UiText.of(Res.string.companion_ble_off), state.message)
+        state.bluetoothNoticed(true, null)
+        assertTrue(state.bluetoothAvailable)
+        assertEquals(UiText.None, state.message)
+    }
+
+    @Test fun savingWifiAccessClearsTheLastOutcome() {
+        val state = CompanionState()
+        state.wifiAccessNoticed(true, false, CompanionNotice.TOKEN_STORED)
+        state.wifiAccessSaving()
+        assertTrue(state.wifiAccessBusy)
+        assertEquals(null, state.wifiAccessNotice)
+        assertEquals(UiText.of(Res.string.companion_wifi_access_saving_message), state.wifiAccessMessage)
+        state.wifiAccessReset()
+        assertFalse(state.wifiAccessAvailable)
+        assertFalse(state.wifiAccessBusy)
+        assertEquals(UiText.None, state.wifiAccessMessage)
     }
 }

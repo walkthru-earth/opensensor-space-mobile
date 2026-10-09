@@ -120,7 +120,7 @@ final class LanDiscovery {
     func connect(name: String) {
         guard tasks[name] == nil, sessions[name] == nil else { return }
         guard let device = devices[name] else {
-            report(name, message: "This Wi-Fi sensor is no longer available. Find Wi-Fi sensors again.")
+            report(name, notice: .lanSensorGone)
             return
         }
         guard let credential = credentials.find(device: device.device), credential.station == device.station else {
@@ -149,7 +149,7 @@ final class LanDiscovery {
                 }
             }
         }
-        report(name, busy: true, message: "Connecting on Wi-Fi…")
+        report(name, busy: true, notice: .lanConnecting)
         taskIDs[name] = attempt
         tasks[name] = Task { [weak self] in
             guard let self else { return }
@@ -157,7 +157,7 @@ final class LanDiscovery {
             do {
                 try await session.connect(credential: credential)
                 guard self.attempts[name] == attempt, self.sessions[name] === session else { return }
-                self.report(name, connected: true, message: "Connected on Wi-Fi. Ready to sync.")
+                self.report(name, connected: true, notice: .lanConnected)
             } catch {
                 session.close()
                 guard self.attempts[name] == attempt else { return }
@@ -189,11 +189,11 @@ final class LanDiscovery {
             queueResume(name)
         }
         if pendingResume.contains(name) {
-            report(name, message: pauseMessage)
+            report(name, notice: .lanPaused)
         } else if collecting.contains(name) {
             report(name, notice: error.notice)
         } else {
-            report(name, message: closedMessage)
+            report(name, notice: .lanDisconnected)
         }
     }
 
@@ -201,7 +201,7 @@ final class LanDiscovery {
         guard tasks[name] == nil, let session = sessions[name] else { return }
         guard activeTransfers < 2 else {
             if pendingResume.contains(name) {
-                report(name, connected: true, message: "Sync queued. Resuming when another sensor finishes.")
+                report(name, connected: true, notice: .lanSyncQueued)
             } else {
                 report(name, connected: true, notice: .busyBeforeSync)
             }
@@ -215,7 +215,7 @@ final class LanDiscovery {
         activeTransfers += 1
         collecting.insert(name)
         beginBackgroundTime()
-        report(name, connected: true, busy: true, message: "Listing files…")
+        report(name, connected: true, busy: true, notice: .lanListing)
         taskIDs[name] = attempt
         tasks[name] = Task { [weak self] in
             guard let self else { return }
@@ -244,7 +244,7 @@ final class LanDiscovery {
             }
             if self.isBackground, result?.resumable ?? true { self.queueResume(name) }
             if self.pendingResume.contains(name) {
-                self.report(name, message: self.pauseMessage)
+                self.report(name, notice: .lanPaused)
             } else if let result {
                 self.state.lanSyncFinished(name: name, connected: false, result: result)
             } else {
@@ -273,7 +273,7 @@ final class LanDiscovery {
                             self.onBackgroundProgress?(Int(update.filesDone), Int(update.filesTotal))
                         }
                         self.report(
-                            name, connected: true, busy: true, message: "Syncing verified files", done: Int(update.filesDone),
+                            name, connected: true, busy: true, notice: .lanSyncing, done: Int(update.filesDone),
                             total: Int(update.filesTotal), bytes: update.fileBytes, rate: update.bytesPerSecond)
                     }
                 },
@@ -329,10 +329,10 @@ final class LanDiscovery {
     func disconnect(name: String) {
         cancelledCollections.insert(name)
         clearResume(name)
-        close(name: name, message: closedMessage)
+        close(name: name, notice: .lanDisconnected)
     }
 
-    private func close(name: String, message: String) {
+    private func close(name: String, notice: CompanionNotice) {
         attempts[name] = UUID()
         // Swift task cancellation does not reach Kotlin. The handle stops the engine's coroutine.
         handles[name]?.cancel()
@@ -341,7 +341,7 @@ final class LanDiscovery {
         freshness.removeValue(forKey: name)?.invalidate()
         sessions.removeValue(forKey: name)?.close()
         state.lanReadingExpired(name: name)
-        report(name, busy: tasks[name] != nil, message: message)
+        report(name, busy: tasks[name] != nil, notice: notice)
     }
 
     private func finishTask(_ name: String, id: UUID) {
@@ -350,9 +350,7 @@ final class LanDiscovery {
         tasks[name] = nil
         claims.finishTask(name: name)
         if attempts[name] != id && sessions[name] == nil {
-            report(name, message: pendingResume.contains(name)
-                ? pauseMessage
-                : closedMessage)
+            report(name, notice: pendingResume.contains(name) ? .lanPaused : .lanDisconnected)
         }
         resumePending(name)
         advanceCollect(name)
@@ -362,7 +360,7 @@ final class LanDiscovery {
         isBackground = true
         stop()
         for name in Array(sessions.keys) where !collecting.contains(name) && backgroundRuns[name] == nil {
-            if pendingResume.contains(name) { close(name: name, message: pauseMessage) }
+            if pendingResume.contains(name) { close(name: name, notice: .lanPaused) }
             else { disconnect(name: name) }
         }
         guard !collecting.isEmpty else { return }
@@ -408,14 +406,10 @@ final class LanDiscovery {
     private func pauseCollections() {
         for name in collecting where !cancelledCollections.contains(name) {
             queueResume(name)
-            close(name: name, message: pauseMessage)
+            close(name: name, notice: .lanPaused)
         }
     }
 
-    private var pauseMessage: String {
-        "Sync paused. Saved files and partial bytes are kept. It resumes when you return."
-    }
-    private var closedMessage: String { "Disconnected. Collected files stay on this phone." }
     private func queueResume(_ name: String) {
         guard !cancelledCollections.contains(name) else { return }
         pendingResume.insert(name)
@@ -438,23 +432,17 @@ final class LanDiscovery {
         for name in Array(sessions.keys) { disconnect(name: name) }
         endBackgroundTime()
     }
+    /// Reports a typed notice. The shared state picks the words and keeps the counts not given here.
     private func report(
-        _ name: String, connected: Bool = false, busy: Bool = false, message: String, done: Int? = nil, total: Int? = nil,
-        bytes: Int64? = nil, rate: Double = 0
+        _ name: String, connected: Bool = false, busy: Bool = false, notice: CompanionNotice, done: Int? = nil,
+        total: Int? = nil, bytes: Int64? = nil, rate: Double = 0
     ) {
         let previous = progressCounts[name] ?? (done: 0, total: 0, bytes: Int64(0))
         let progress = (done: done ?? previous.done, total: total ?? previous.total, bytes: bytes ?? previous.bytes)
         progressCounts[name] = progress
-        state.lanSessionChanged(
-            name: name, connected: connected, busy: busy, message: message, filesDone: Int32(progress.done),
-            filesTotal: Int32(progress.total), bytesDone: progress.bytes, bytesPerSecond: rate)
-    }
-    /// Reports a typed notice. The shared state shows it in Android's words and keeps the counts.
-    private func report(_ name: String, connected: Bool = false, busy: Bool = false, notice: CompanionNotice) {
-        let progress = progressCounts[name] ?? (done: 0, total: 0, bytes: Int64(0))
         state.lanSessionNoticed(
             name: name, connected: connected, busy: busy, notice: notice, filesDone: Int32(progress.done),
-            filesTotal: Int32(progress.total), bytesDone: progress.bytes)
+            filesTotal: Int32(progress.total), bytesDone: progress.bytes, bytesPerSecond: rate)
     }
     func stop() {
         timer?.invalidate()
@@ -606,7 +594,7 @@ extension LanDiscovery {
         for name in Array(backgroundRuns.keys) {
             backgroundRuns[name] = nil
             backgroundBytes[name] = nil
-            close(name: name, message: "Disconnected. Collected files stay on this phone.")
+            close(name: name, notice: .lanDisconnected)
         }
     }
 

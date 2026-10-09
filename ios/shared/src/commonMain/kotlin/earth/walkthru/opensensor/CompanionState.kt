@@ -33,9 +33,8 @@ internal data class NearbyDevice(val id: String, val name: String, val rssi: Int
 /**
  * Main-thread callbacks from the native BLE adapter. Never contains pairing or Wi-Fi secrets.
  * Messages are [UiText]. The state picks a `:ui:strings` key and the screen resolves the words.
- * Link and Wi-Fi access events arrive as a [CompanionNotice] or a [SyncResult]. Explanations that
- * the Swift adapters still word themselves (Bluetooth state, export, progress steps) arrive as
- * [UiText.Plain].
+ * Link, Bluetooth and Wi-Fi access events arrive as a [CompanionNotice] or a [SyncResult], so Swift
+ * never words what the user reads. The String overloads stay internal for the shared tests.
  */
 class CompanionState {
     internal var devices by mutableStateOf<List<NearbyDevice>>(emptyList())
@@ -109,10 +108,23 @@ class CompanionState {
         lanPaused = if (paused) lanPaused + name else lanPaused - name
     }
 
-    fun wifiAccessChanged(available: Boolean, busy: Boolean, explanation: String) {
+    internal fun wifiAccessChanged(available: Boolean, busy: Boolean, explanation: String) {
         wifiAccessAvailable = available
         wifiAccessBusy = busy
         wifiAccessMessage = UiText.plain(explanation)
+        wifiAccessNotice = null
+    }
+
+    /** The Bluetooth connection is gone, so Wi-Fi access cannot be requested and shows nothing. */
+    fun wifiAccessReset() {
+        wifiAccessChanged(available = false, busy = false, explanation = "")
+    }
+
+    /** A Wi-Fi access request started. The last outcome clears until this one ends. */
+    fun wifiAccessSaving() {
+        wifiAccessAvailable = true
+        wifiAccessBusy = true
+        wifiAccessMessage = CompanionNotice.SAVING_WIFI_ACCESS.text
         wifiAccessNotice = null
     }
 
@@ -125,13 +137,13 @@ class CompanionState {
     }
 
     /** Native sessions are independent: a callback updates only its own sensor card. */
-    fun lanSessionChanged(name: String, connected: Boolean, busy: Boolean, message: String, filesDone: Int, filesTotal: Int, bytesDone: Long, bytesPerSecond: Double = 0.0) {
+    internal fun lanSessionChanged(name: String, connected: Boolean, busy: Boolean, message: String, filesDone: Int, filesTotal: Int, bytesDone: Long, bytesPerSecond: Double = 0.0) {
         lanSession(name, connected, busy, UiText.plain(message), filesDone, filesTotal, bytesDone, bytesPerSecond)
     }
 
-    /** Same as [lanSessionChanged] with a typed [notice] in Android's words. */
-    fun lanSessionNoticed(name: String, connected: Boolean, busy: Boolean, notice: CompanionNotice, filesDone: Int, filesTotal: Int, bytesDone: Long) {
-        lanSession(name, connected, busy, notice.text, filesDone, filesTotal, bytesDone, 0.0)
+    /** Native sessions are independent: a callback updates only its own sensor card, worded by [notice]. */
+    fun lanSessionNoticed(name: String, connected: Boolean, busy: Boolean, notice: CompanionNotice, filesDone: Int, filesTotal: Int, bytesDone: Long, bytesPerSecond: Double) {
+        lanSession(name, connected, busy, notice.text, filesDone, filesTotal, bytesDone, bytesPerSecond)
     }
 
     /** A Wi-Fi sync ended. The card keeps its counts and shows the outcome. */
@@ -270,12 +282,21 @@ class CompanionState {
         bluetoothPoweredOff = poweredOff
     }
 
-    fun bluetoothChanged(available: Boolean, explanation: String) {
+    internal fun bluetoothChanged(available: Boolean, explanation: String) {
+        bluetooth(available, UiText.plain(explanation))
+    }
+
+    /** The central manager state. A null [notice] means nothing to say, as when the radio is on. */
+    fun bluetoothNoticed(available: Boolean, notice: CompanionNotice?) {
+        bluetooth(available, notice?.text ?: UiText.None)
+    }
+
+    private fun bluetooth(available: Boolean, explanation: UiText) {
         bluetoothAvailable = available
-        message = UiText.plain(explanation)
+        message = explanation
         if (!available) {
             scanning = false
-            connectionClosed(explanation)
+            close(explanation)
         }
     }
 
@@ -337,7 +358,7 @@ class CompanionState {
         if (connected) message = UiText.of(Res.string.now_waiting)
     }
 
-    fun connectionClosed(explanation: String) {
+    internal fun connectionClosed(explanation: String) {
         close(UiText.plain(explanation))
     }
 

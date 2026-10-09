@@ -68,6 +68,31 @@
     <string name="companion_lan_rate">%1$s KiB/s average</string>
     <string name="companion_sync">Sync</string>
 
+    <!-- Bluetooth and Wi-Fi link states the iOS adapters report as notices. -->
+    <string name="companion_ble_timed_out">Connection timed out. Keep the sensor nearby and try again.</string>
+    <string name="companion_ble_disconnected">Disconnected. Your sensor keeps recording.</string>
+    <string name="companion_ble_resume_live">Find your sensor again to resume live readings.</string>
+    <string name="companion_ble_off">Turn on Bluetooth to find your sensors.</string>
+    <string name="companion_ble_denied">Allow Bluetooth for opensensor.space in Settings.</string>
+    <string name="companion_ble_unsupported">Bluetooth is not available on this device.</string>
+    <string name="companion_ble_starting">Bluetooth is getting ready…</string>
+    <string name="companion_ble_connect_failed">Could not connect. Check that the sensor is nearby and available for pairing.</string>
+    <string name="companion_ble_sensor_gone">The sensor disconnected. Find it again to reconnect.</string>
+    <string name="companion_ble_service_missing">The AQ Sync service could not be opened.</string>
+    <string name="companion_ble_characteristics_missing">This sensor is missing the required live-reading characteristics.</string>
+    <string name="companion_ble_notify_failed">Notifications could not be enabled. Check the pairing PIN and try again.</string>
+    <string name="companion_ble_read_failed">The sensor could not be read. Check the pairing PIN and try again.</string>
+    <string name="companion_wifi_access_saving_message">Saving Wi-Fi access…</string>
+    <string name="companion_wifi_access_timed_out">Wi-Fi access timed out. Reconnect over Bluetooth and try again.</string>
+    <string name="companion_lan_gone">This Wi-Fi sensor is no longer available. Find Wi-Fi sensors again.</string>
+    <string name="companion_lan_connecting">Connecting on Wi-Fi…</string>
+    <string name="companion_lan_connected">Connected on Wi-Fi. Ready to sync.</string>
+    <string name="companion_lan_sync_queued">Sync queued. Resuming when another sensor finishes.</string>
+    <string name="companion_lan_listing">Listing files…</string>
+    <string name="companion_lan_syncing">Syncing verified files</string>
+    <string name="companion_lan_sync_paused">Sync paused. Saved files and partial bytes are kept. It resumes when you return.</string>
+    <string name="companion_lan_disconnected">Disconnected. Collected files stay on this phone.</string>
+
     <!-- Export. -->
 
     <!-- Sync outcomes, the Android keys and words. -->

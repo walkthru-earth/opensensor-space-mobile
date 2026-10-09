@@ -163,8 +163,9 @@ phone cannot store fails alone, and the sync ends with `companion_sync_storage_f
 the link. A protocol fault ends it with `msg_sync_aborted` and also keeps the link. A token
 refused or a sensor busy in the middle of a sync ends it as `AUTH_FAILED` or `BUSY`. A Stop
 that lands before the work starts still finishes once and frees the station. `SensorSync` logs
-only the file name and the error class and message, through `NSLog` without format arguments. Some iOS-only
-status lines (connecting, listing, paused) are still plain English in Swift.
+only the file name and the error class and message, through `NSLog` without format arguments. The Swift
+adapters report Bluetooth and Wi-Fi link states as a `CompanionNotice`, so `:ui:strings` words them in
+English and Arabic (#47).
 
 Files and the inspector are the shared `:feature:files` screens, opened offline from a Files
 button next to History on My devices (`FilesKey("archive")`). Files lists every verified file
@@ -273,8 +274,8 @@ accuracy, stale/background handling or authenticated Wi-Fi connections. See
 7. Qualify the shared engine on an iPhone. LAN sync, background resume and a second sync that
    reads nothing. Bluetooth sync, and Bluetooth Sync while a LAN session is open. An upgrade from
    a build that used the Swift engine, keeping its receipts and partials.
-8. Move the remaining plain English Swift status lines into `:ui:strings`, and drop the unused
-   write path in `SensorArchive.swift`.
+8. Drop the unused write path in `SensorArchive.swift`, with its English error descriptions. The
+   link status lines moved into `:ui:strings` in #47.
 9. Give `ByteReader` (`core/parquet`) a `close`, so `ArchiveStore.reader` callers release
    what they open. No descriptor leaks today. The JVM reader closes its file after mapping, and
    the iOS reader is a mapped `NSData` freed with the object. A reader over a plain file handle

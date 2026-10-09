@@ -225,19 +225,14 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         state.connectionStarted(id: id)
         connectionTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated {
-                self?.disconnect(message: "Connection timed out. Keep the sensor nearby and try again.")
+                self?.disconnect(notice: .connectTimedOut)
             }
         }
         central.connect(peripheral)
     }
 
-    func disconnect(message: String = "Disconnected. Your sensor keeps recording.") {
-        teardown()
-        state.connectionClosed(explanation: message)
-    }
-
-    /// Ends the connection for a typed reason, shown in Android's words.
-    func disconnect(notice: CompanionNotice) {
+    /// Ends the connection for a typed reason. The shared state picks the words.
+    func disconnect(notice: CompanionNotice = .disconnected) {
         teardown()
         state.connectionClosedNoticed(notice: notice)
     }
@@ -262,7 +257,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         identity = nil
         control = nil
         response = nil
-        state.wifiAccessChanged(available: false, busy: false, explanation: "")
+        state.wifiAccessReset()
         operations.removeAll()
         pending = nil
         // A command outcome held for its last write reaches Today now that the connection is gone.
@@ -427,7 +422,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         stopScan()
         openRequested = nil
         guard link == nil, backgroundId == nil else { return }
-        disconnect(message: "Find your sensor again to resume live readings.")
+        disconnect(notice: .resumeLive)
     }
 
     /// iOS launched the app without a screen, for a background task or a Bluetooth restoration.
@@ -467,13 +462,13 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     }
 
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
-        let message: String
+        let notice: CompanionNotice?
         switch central.state {
-        case .poweredOn: message = ""
-        case .poweredOff: message = "Turn on Bluetooth to find your sensors."
-        case .unauthorized: message = "Allow Bluetooth for opensensor.space in Settings."
-        case .unsupported: message = "Bluetooth is not available on this device."
-        default: message = "Bluetooth is getting ready…"
+        case .poweredOn: notice = nil
+        case .poweredOff: notice = .bluetoothOff
+        case .unauthorized: notice = .bluetoothDenied
+        case .unsupported: notice = .bluetoothUnsupported
+        default: notice = .bluetoothStarting
         }
         switch central.state {
         case .poweredOn, .unknown, .resetting: break
@@ -481,9 +476,9 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
             scanRequested = false
             openRequested = nil
         }
-        if central.state != .poweredOn {
+        if central.state != .poweredOn, let notice {
             stopScan()
-            disconnect(message: message)
+            disconnect(notice: notice)
         }
         switch central.state {
         case .poweredOn, .unknown, .resetting: break
@@ -491,7 +486,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         }
         // The shared policy maps this to its status and offers Settings only after a denial.
         state.bluetoothAuthorizationChanged(raw: Int64(CBManager.authorization.rawValue))
-        state.bluetoothChanged(available: central.state == .poweredOn, explanation: message)
+        state.bluetoothNoticed(available: central.state == .poweredOn, notice: notice)
         state.bluetoothPowerChanged(poweredOff: central.state == .poweredOff)
         if central.state == .poweredOn, let id = openRequested { open(id: id) }
         if central.state == .poweredOn, scanRequested { scan() }
@@ -547,13 +542,13 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
         if current !== peripheral { waiting[peripheral.identifier.uuidString] = nil }
         guard current === peripheral else { return }
-        disconnect(message: "Could not connect. Check that the sensor is nearby and available for pairing.")
+        disconnect(notice: .connectFailed)
     }
 
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         if current !== peripheral { waiting[peripheral.identifier.uuidString] = nil }
         guard current === peripheral else { return }
-        disconnect(message: "The sensor disconnected. Find it again to reconnect.")
+        disconnect(notice: .sensorDisconnected)
     }
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
@@ -561,7 +556,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         guard error == nil,
             let service = peripheral.services?.first(where: { $0.uuid == CBUUID(string: state.serviceUuid) })
         else {
-            disconnect(message: "The AQ Sync service could not be opened.")
+            disconnect(notice: .serviceMissing)
             return
         }
         peripheral.discoverCharacteristics(
@@ -581,7 +576,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
             info.properties.contains(.read), live.properties.contains([.read, .notify]),
             status.properties.contains([.read, .notify])
         else {
-            disconnect(message: "This sensor is missing the required live-reading characteristics.")
+            disconnect(notice: .characteristicsMissing)
             return
         }
         control = characteristics.first(where: {
@@ -601,11 +596,11 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
             peripheral.maximumWriteValueLength(for: .withResponse) >= 1
         else { return }
         requestingToken = true
-        state.wifiAccessChanged(available: true, busy: true, explanation: "Saving Wi-Fi access…")
+        state.wifiAccessSaving()
         operations = [.subscribe(response), .write(control, wire.tokenRequest())]
         tokenTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated {
-                self?.disconnect(message: "Wi-Fi access timed out. Reconnect over Bluetooth and try again.")
+                self?.disconnect(notice: .wifiAccessTimedOut)
             }
         }
         performNext()
@@ -654,7 +649,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     ) {
         guard current === peripheral else { return }
         guard error == nil, characteristic.isNotifying else {
-            disconnect(message: "Notifications could not be enabled. Check the pairing PIN and try again.")
+            disconnect(notice: .notifyFailed)
             return
         }
         if characteristic.uuid == CBUUID(string: wire.responseUuid) { responseSubscribed = true }
@@ -690,7 +685,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
             return
         }
         guard error == nil, let data = characteristic.value, let json = String(data: data, encoding: .utf8) else {
-            disconnect(message: "The sensor could not be read. Check the pairing PIN and try again.")
+            disconnect(notice: .readFailed)
             return
         }
         switch characteristic.uuid {
