@@ -4,8 +4,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.window.ComposeUIViewController
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewmodel.compose.viewModel
 import platform.UIKit.UIViewController
 
 /**
@@ -20,8 +18,8 @@ import platform.UIKit.UIViewController
  * Bluetooth connection.
  * [autoSync] holds the per device Auto-sync switches, and [syncInBackground] hands one sensor to
  * the background run, answering true only when iOS took it as a continued task. [closeIdle] runs
- * when a device page leaves the back stack. Swift closes that peripheral's link only when it is
- * idle, never during a sync or a Debug lend.
+ * when the last Today or Device page for a sensor leaves the back stack. Swift closes that
+ * peripheral's link only when it is idle, never during a sync, a command, Collect all or a Debug lend.
  */
 fun mainViewController(
     state: CompanionState,
@@ -48,12 +46,8 @@ fun mainViewController(
             openSensor(id)
         }
         val today = remember { CompanionToday(state, CompanionLinkActions(syncFiles = syncBluetooth, command = command, connect = userOpen, disconnect = disconnect)) }
-        AppRoot(devices, today, requestBluetooth, userOpen, openDebugLink) { id, units, level, openDebug, onBack ->
+        AppRoot(devices, today, requestBluetooth, userOpen, openDebugLink, closeIdle) { id, units, level, openDebug, onBack ->
             val peripheral = IosKnown.isPeripheral(id)
-            if (peripheral) {
-                // Cleared with this page's navigation entry, so popping the page offers its link back.
-                viewModel(key = "page-lease-$id") { PageLease { closeIdle(id) } }
-            }
             val records by devices.known.collectAsState()
             val known = peripheral && records.any { it.peripheral.equals(id, ignoreCase = true) }
             // Detailed and Developer reveal the technical lines (signal, firmware, byte counters), as on Android.
@@ -76,8 +70,3 @@ fun mainViewController(
             )
         }
     }
-
-/** Runs [cleared] once when the device page's navigation entry is removed. */
-private class PageLease(private val cleared: () -> Unit) : ViewModel() {
-    override fun onCleared() = cleared()
-}

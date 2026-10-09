@@ -16,6 +16,8 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     private var identity: SyncIdentity?
     private var tokenTimer: Timer?
     private var requestingToken = false
+    /// The sensor whose last page closed while a write or read was still queued. Settling closes it.
+    private var closeWhenIdle: String?
     var onCredentialSaved: (() -> Void)?
     /// INFO named the sensor the user opened: peripheral id, advertised name, station and hardware id.
     var onSensorOpened: ((String, String?, String, String) -> Void)?
@@ -140,6 +142,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     /// open is refused instead.
     func open(id: String) {
         guard foreground else { return }
+        closeWhenIdle = nil
         if let current, current.identifier.uuidString == id { return }
         if current != nil, link != nil, collectId == nil { return }
         guard let central, central.state == .poweredOn else {
@@ -238,6 +241,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
 
     private func teardown() {
         openRequested = nil
+        closeWhenIdle = nil
         // The engine sees the link end at once. Its result for this link is then ignored.
         syncHandle?.cancel()
         syncHandle = nil
@@ -373,6 +377,10 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         state.today.linkIdle()
         collectWhenReady()
         backgroundWhenReady()
+        if let id = closeWhenIdle {
+            closeWhenIdle = nil
+            closeIdle(id: id)
+        }
     }
 
     private func write(_ body: Data) {
@@ -431,12 +439,17 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         }
     }
 
-    /// Closes an idle link to this sensor once its page is gone (#16). A sync, a Debug request,
-    /// Wi-Fi access setup, Collect all or an Auto-sync step keeps it.
+    /// Closes an idle link to this sensor once its last Today or Device page is gone (#16). A sync, a
+    /// command, a Debug request, Wi-Fi access setup, Collect all or an Auto-sync step keeps it. A
+    /// command's last write still queued delays the close until the link settles.
     func closeIdle(id: String) {
         guard let current, current.identifier.uuidString.caseInsensitiveCompare(id) == .orderedSame, link == nil,
             collectId == nil, backgroundId == nil, !requestingToken
         else { return }
+        guard pending == nil, operations.isEmpty else {
+            closeWhenIdle = id
+            return
+        }
         disconnect()
     }
 
