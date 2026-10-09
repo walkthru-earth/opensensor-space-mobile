@@ -16,7 +16,14 @@
     <string name="conn_connecting">Connecting…</string>
     <string name="conn_disconnected">Not connected</string>
     <string name="batch_value">%1$s µg/m³</string>
+    <string name="action_not_now">Not now</string>
+    <string name="perm_continue">Continue</string>
     <string name="perm_open_settings">Open settings</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- The bottom bar of the app shell (:feature:shell), both apps. -->
+    <string name="tab_discover">Discover</string>
+    <string name="tab_my_devices">My devices</string>
 
     <!-- My devices on iOS, Bluetooth. -->
     <string name="companion_subtitle">Your sensors, nearby</string>

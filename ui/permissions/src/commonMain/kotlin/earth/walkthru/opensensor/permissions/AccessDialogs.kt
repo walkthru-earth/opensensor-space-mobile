@@ -8,10 +8,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import earth.walkthru.opensensor.strings.resources.Res
+import earth.walkthru.opensensor.strings.resources.action_cancel
+import earth.walkthru.opensensor.strings.resources.action_not_now
+import earth.walkthru.opensensor.strings.resources.perm_continue
+import earth.walkthru.opensensor.strings.resources.perm_open_settings
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * The words of one permission's two in-context dialogs. Short, one line each where possible
  * (minimal copy). No dashes, colons or semicolons. Android builds these from `strings.xml`.
+ * A button label left null reads the shared `:ui:strings` catalogue, same keys and words as Android.
  */
 @Immutable
 data class AccessDialogTexts(
@@ -19,10 +26,10 @@ data class AccessDialogTexts(
     val rationaleBody: String,
     val settingsTitle: String,
     val settingsBody: String,
-    val continueLabel: String = "Continue",
-    val notNow: String = "Not now",
-    val openSettings: String = "Open settings",
-    val cancel: String = "Cancel",
+    val continueLabel: String? = null,
+    val notNow: String? = null,
+    val openSettings: String? = null,
+    val cancel: String? = null,
     val icon: ImageVector? = null,
 )
 
@@ -36,16 +43,16 @@ fun AccessDialogs(access: RuntimeAccess, texts: AccessDialogTexts) {
             icon = icon,
             title = { Text(texts.rationaleTitle) },
             text = { Text(texts.rationaleBody) },
-            confirmButton = { TextButton(onClick = access::confirmRationale) { Text(texts.continueLabel) } },
-            dismissButton = { TextButton(onClick = access::dismiss) { Text(texts.notNow) } },
+            confirmButton = { TextButton(onClick = access::confirmRationale) { Text(texts.continueLabel ?: stringResource(Res.string.perm_continue)) } },
+            dismissButton = { TextButton(onClick = access::dismiss) { Text(texts.notNow ?: stringResource(Res.string.action_not_now)) } },
         )
         AccessDialog.SETTINGS -> AlertDialog(
             onDismissRequest = access::dismiss,
             icon = icon,
             title = { Text(texts.settingsTitle) },
             text = { Text(texts.settingsBody) },
-            confirmButton = { TextButton(onClick = access::openSettings) { Text(texts.openSettings) } },
-            dismissButton = { TextButton(onClick = access::dismiss) { Text(texts.cancel) } },
+            confirmButton = { TextButton(onClick = access::openSettings) { Text(texts.openSettings ?: stringResource(Res.string.perm_open_settings)) } },
+            dismissButton = { TextButton(onClick = access::dismiss) { Text(texts.cancel ?: stringResource(Res.string.action_cancel)) } },
         )
         null -> Unit
     }

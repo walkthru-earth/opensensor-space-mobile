@@ -7,3 +7,12 @@
 plugins {
     id("opensensor.kmp.compose-feature")
 }
+
+kotlin {
+    sourceSets {
+        commonMain.dependencies {
+            // The dialog button labels a caller leaves out come from the shared catalogue.
+            implementation(project(":ui:strings"))
+        }
+    }
+}

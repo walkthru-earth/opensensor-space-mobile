@@ -227,7 +227,8 @@ of their own lives in `:ui:strings`, and a key Android already has keeps its nam
 code holds a `UiText` (a catalogue key with arguments) and the composable resolves it. Android-only
 screens still use `res/values*/strings.xml`. The `:ui:strings` host tests check every Android and
 Compose `strings.xml` in the repository (`CopyLintTest`) and fail on a new `Text("…")` or English
-sentence literal in the `:ios:shared` presentation sources (`PresentationLiteralsTest`).
+sentence literal in the `:ios:shared`, `:ui:permissions` and `feature/*` common presentation sources
+(`PresentationLiteralsTest`).
 No em dashes, colons or semicolons in user-facing copy. Errors say what happened and what to do,
 in words a person without the firmware docs understands.
 

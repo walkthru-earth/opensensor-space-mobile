@@ -1,9 +1,9 @@
-package earth.walkthru.aqsync.ui
+package earth.walkthru.opensensor.shell
 
 import androidx.navigation3.runtime.NavKey
 
 /** The app's one bottom bar. Discover is always the start tab (owner decision 2026-10-08). */
-enum class TopTab(val root: NavKey) {
+enum class TopTab(val root: AppKey) {
     DISCOVER(DiscoverKey),
     MY_DEVICES(ScanKey),
     SETTINGS(SettingsKey),
@@ -17,7 +17,7 @@ enum class TopTab(val root: NavKey) {
  * system closes the app.
  *
  * [stacks] holds one list per tab, each starting with that tab's root (Navigation 3's
- * `NavBackStack` in the app, plain lists in tests). The selected tab lives outside so Compose can
+ * `NavBackStack` in the shell, plain lists in tests). The selected tab lives outside so Compose can
  * save it, reached through [readTab] and [writeTab].
  */
 class TabNavigator(
