@@ -37,6 +37,8 @@ import earth.walkthru.aqsync.units.UnitSystem
 import earth.walkthru.aqsync.units.formatFixed
 import earth.walkthru.aqsync.units.formatPm
 import earth.walkthru.opensensor.designsystem.CardShape
+import earth.walkthru.opensensor.permissions.PermissionFlow
+import earth.walkthru.opensensor.permissions.SettingsLink
 import earth.walkthru.opensensor.strings.resolve
 import earth.walkthru.opensensor.strings.resources.Res
 import earth.walkthru.opensensor.strings.resources.action_cancel
@@ -73,6 +75,7 @@ import earth.walkthru.opensensor.strings.resources.conn_disconnected
 import earth.walkthru.opensensor.strings.resources.conn_ready
 import earth.walkthru.opensensor.strings.resources.nav_disconnect
 import earth.walkthru.opensensor.strings.resources.now_waiting
+import earth.walkthru.opensensor.strings.resources.perm_open_settings
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.floor
@@ -107,6 +110,10 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
                 }
             }
             if (!state.message.isEmpty) item { Text(state.message.resolve(), style = MaterialTheme.typography.bodyLarge) }
+            // Shown only after iOS reports a Bluetooth denial, which first needs a Find sensors tap.
+            if (PermissionFlow.offersSettings(state.bluetoothAccess)) {
+                item { SettingsLink(stringResource(Res.string.perm_open_settings)) }
+            }
             if (state.selectedId != null) {
                 item {
                     BrandCard {
@@ -190,6 +197,7 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
                             color = if (state.lanAccessDenied) MaterialTheme.colorScheme.error else Color.Unspecified,
                         )
                     }
+                    if (PermissionFlow.offersSettings(state.lanAccess)) SettingsLink(stringResource(Res.string.perm_open_settings))
                     OutlinedButton(onClick = scanLan, enabled = !state.lanScanning, shape = MaterialTheme.shapes.small) {
                         Text(stringResource(if (state.lanScanning) Res.string.companion_lan_finding else Res.string.companion_lan_find))
                     }

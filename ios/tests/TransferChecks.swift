@@ -148,6 +148,9 @@ enum TransferChecks {
         precondition(LanPolicy.isLocalNetworkDenied(.dns(DNSServiceErrorType(kDNSServiceErr_PolicyDenied))))
         precondition(!LanPolicy.isLocalNetworkDenied(.dns(DNSServiceErrorType(kDNSServiceErr_NoSuchRecord))))
         precondition(!LanPolicy.isLocalNetworkDenied(.posix(.ENETDOWN)))
+        precondition(LanPolicy.localNetworkAccess(.dns(DNSServiceErrorType(kDNSServiceErr_PolicyDenied))) == .denied)
+        precondition(LanPolicy.localNetworkAccess(.dns(DNSServiceErrorType(kDNSServiceErr_NoSuchRecord))) == .unknown)
+        precondition(LanPolicy.localNetworkAccess(.posix(.ENETDOWN)) == .unknown)
         let parameters = LanPolicy.connectionParameters()
         precondition(parameters.prohibitedInterfaceTypes == [.cellular])
         let tcp = parameters.defaultProtocolStack.transportProtocol as? NWProtocolTCP.Options

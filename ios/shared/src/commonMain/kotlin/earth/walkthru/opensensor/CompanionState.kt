@@ -10,6 +10,8 @@ import earth.walkthru.aqsync.data.protocol.DeviceStatus
 import earth.walkthru.aqsync.data.protocol.LanProtocol
 import earth.walkthru.aqsync.data.protocol.LiveProfiles
 import earth.walkthru.aqsync.data.protocol.LiveSample
+import earth.walkthru.opensensor.permissions.AccessStatus
+import earth.walkthru.opensensor.permissions.IosAuthorization
 import earth.walkthru.opensensor.strings.UiText
 import earth.walkthru.opensensor.strings.resources.Res
 import earth.walkthru.opensensor.strings.resources.companion_connecting_pin
@@ -42,6 +44,10 @@ class CompanionState {
         private set
     internal var bluetoothAvailable by mutableStateOf(false)
         private set
+
+    /** Bluetooth authorization as the shared policy reads it. Not determined until the first tap. */
+    internal var bluetoothAccess by mutableStateOf(AccessStatus.NOT_DETERMINED)
+        private set
     internal var message by mutableStateOf<UiText>(UiText.None)
         private set
     internal var selectedId by mutableStateOf<String?>(null)
@@ -67,6 +73,9 @@ class CompanionState {
     /** True only after iOS reports the Local Network policy denial (TN3179), never for plain waiting. */
     internal var lanAccessDenied by mutableStateOf(false)
         private set
+
+    /** Local network has no status API on iOS, so it stays unknown until the policy denial. */
+    internal val lanAccess: AccessStatus get() = IosAuthorization.localNetwork(policyDenied = lanAccessDenied)
 
     internal var wifiAccessAvailable by mutableStateOf(false)
         private set
@@ -166,6 +175,11 @@ class CompanionState {
         lanScanning = false
         lanDevices = emptyList()
         lanMessage = UiText.of(Res.string.companion_lan_unavailable)
+    }
+
+    /** The raw `CBManager.authorization` value, read when the central manager reports its state. */
+    fun bluetoothAuthorizationChanged(raw: Long) {
+        bluetoothAccess = IosAuthorization.bluetooth(raw)
     }
 
     fun bluetoothChanged(available: Boolean, explanation: String) {

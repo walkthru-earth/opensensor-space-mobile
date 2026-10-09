@@ -134,6 +134,8 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
             stopScan()
             disconnect(message: message)
         }
+        // The shared policy maps this to its status and offers Settings only after a denial.
+        state.bluetoothAuthorizationChanged(raw: Int64(CBManager.authorization.rawValue))
         state.bluetoothChanged(available: central.state == .poweredOn, explanation: message)
         if central.state == .poweredOn, scanRequested { scan() }
     }

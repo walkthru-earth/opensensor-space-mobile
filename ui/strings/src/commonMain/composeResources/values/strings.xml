@@ -16,6 +16,7 @@
     <string name="conn_connecting">Connecting…</string>
     <string name="conn_disconnected">Not connected</string>
     <string name="batch_value">%1$s µg/m³</string>
+    <string name="perm_open_settings">Open settings</string>
 
     <!-- My devices on iOS, Bluetooth. -->
     <string name="companion_subtitle">Your sensors, nearby</string>

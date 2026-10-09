@@ -21,6 +21,7 @@ kotlin {
             // The companion copy, resolved from UiText at the composable edge.
             implementation(project(":ui:strings"))
             implementation(libs.compose.components.resources)
+            implementation(project(":ui:permissions"))
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
             implementation(libs.compose.material3)

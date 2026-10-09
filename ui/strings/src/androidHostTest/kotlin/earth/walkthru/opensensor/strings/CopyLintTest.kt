@@ -23,6 +23,10 @@ class CopyLintTest {
             "ui/strings/src/commonMain/composeResources/values/strings.xml",
         )
         assertTrue(found.containsAll(expected), "catalogues found $found")
+        // A catalogue that parses to nothing would pass the lint silently.
+        val sizes = Catalogues.all().associate { Catalogues.relative(it) to Catalogues.parse(it).size }
+        assertTrue(expected.all { (sizes[it] ?: 0) > 0 }, "empty catalogues in $sizes")
+        assertTrue(sizes.getValue("feature/settings/src/commonMain/composeResources/values/strings.xml") > 20)
     }
 
     @Test
