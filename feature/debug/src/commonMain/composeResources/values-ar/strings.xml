@@ -8,7 +8,7 @@
     <string name="conn_disconnected">غير متصل</string>
     <string name="conn_connecting">جارٍ الاتصال…</string>
     <string name="msg_background_owns_command">المزامنة في الخلفية تستخدم هذا المستشعر. انتظر حتى تنتهي.</string>
-    <string name="debug_link_busy">مزامنة تستخدم هذا المستشعر الآن. انتظر حتى تنتهي.</string>
+    <string name="debug_link_busy">الاتصال بهذا المستشعر مشغول. حاول مرة أخرى بعد قليل.</string>
 
     <string name="ago_just_now">الآن</string>
     <string name="ago_seconds">قبل %1$d ث</string>
