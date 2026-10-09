@@ -39,8 +39,12 @@ import kotlin.coroutines.resume
  * ids, names, stations and counts cross. Never a PIN or token. Call everything on the main thread.
  */
 
-/** One sensor with Auto-sync on, and when it last synced in the background. */
-internal data class AutoSyncEntry(val peripheral: String, val lastRunMs: Long?)
+/**
+ * One sensor with Auto-sync on. [lastRunMs] is the last background sync that finished cleanly, which
+ * decides when it is due. [lastWakeMs] is the last Bluetooth wake for it, whatever the outcome, which
+ * decides when it may get a pending connect again.
+ */
+internal data class AutoSyncEntry(val peripheral: String, val lastRunMs: Long?, val lastWakeMs: Long? = null)
 
 /** Where the switch states live. UserDefaults on the phone, memory in tests. */
 internal interface AutoSyncStorage {
@@ -50,14 +54,15 @@ internal interface AutoSyncStorage {
 
 /** The pure rules behind the switch store, so the tests read them without UserDefaults. */
 internal object IosAutoSync {
-    /** One sensor per line, peripheral id then the last background run, tab separated. */
-    fun encode(entries: List<AutoSyncEntry>): String = entries.joinToString("\n") { "${it.peripheral}\t${it.lastRunMs?.toString().orEmpty()}" }
+    /** One sensor per line, peripheral id, the last clean run and the last wake, tab separated. */
+    fun encode(entries: List<AutoSyncEntry>): String =
+        entries.joinToString("\n") { "${it.peripheral}\t${it.lastRunMs?.toString().orEmpty()}\t${it.lastWakeMs?.toString().orEmpty()}" }
 
-    /** Lines that do not parse are dropped. Ids compare without case. */
+    /** Lines that do not parse are dropped. Ids compare without case. A line without the wake field reads as never woken. */
     fun decode(text: String?): List<AutoSyncEntry> = text.orEmpty().lineSequence().mapNotNull { line ->
         val f = line.split('\t')
-        if (f.size != 2 || !IosKnown.isPeripheral(f[0])) return@mapNotNull null
-        AutoSyncEntry(f[0].uppercase(), f[1].toLongOrNull())
+        if (f.size !in 2..3 || !IosKnown.isPeripheral(f[0])) return@mapNotNull null
+        AutoSyncEntry(f[0].uppercase(), f[1].toLongOrNull(), f.getOrNull(2)?.toLongOrNull())
     }.distinctBy { it.peripheral }.toList()
 
     fun set(entries: List<AutoSyncEntry>, peripheral: String, on: Boolean): List<AutoSyncEntry> {
@@ -70,6 +75,26 @@ internal object IosAutoSync {
         val ids = peripherals.map { it.uppercase() }.toSet()
         return entries.map { if (it.peripheral in ids) it.copy(lastRunMs = nowMs) else it }
     }
+
+    fun markWake(entries: List<AutoSyncEntry>, peripheral: String, nowMs: Long): List<AutoSyncEntry> =
+        entries.map { if (it.peripheral.equals(peripheral, ignoreCase = true)) it.copy(lastWakeMs = nowMs) else it }
+
+    /**
+     * The sensors that get a pending Bluetooth connect. Due ones only, and none woken within the
+     * period, so a sensor in range whose steps keep skipping (busy, held, lost bond) wakes the app
+     * at most once a period. [except] is the sensor whose wake is finishing, never armed again inside it.
+     */
+    fun armable(entries: List<AutoSyncEntry>, nowMs: Long, except: String?): List<String> = entries.filter {
+        !it.peripheral.equals(except, ignoreCase = true) &&
+            BackgroundSyncPolicy.isDue(it.lastRunMs, nowMs) &&
+            BackgroundSyncPolicy.isDue(it.lastWakeMs, nowMs)
+    }.map { it.peripheral }
+
+    /** Only a step that ran to the end with no error counts as a run. A lost or broken one stays due for the retry. */
+    fun finished(report: BackgroundSyncReport<*>): Set<String> = report.devices.filter { d ->
+        val r = d.result
+        d.error == null && r != null && r.attempted && !r.incomplete
+    }.map { it.device.address }.toSet()
 
     /** Byte counts for the summary, binary units with a dot, as Files prints them. */
     fun bytes(bytes: Long): String = when {
@@ -108,6 +133,12 @@ class AutoSyncSettings internal constructor(
     fun isDue(peripheral: String): Boolean =
         BackgroundSyncPolicy.isDue(entries.value.firstOrNull { it.peripheral.equals(peripheral, ignoreCase = true) }?.lastRunMs, now())
 
+    /** Peripheral ids that may get a pending connect now. See [IosAutoSync.armable]. */
+    fun armable(except: String?): List<String> = IosAutoSync.armable(entries.value, now(), except)
+
+    /** Whether a Bluetooth wake for [peripheral] should run. The same rule as [armable], for a connect armed earlier. */
+    fun shouldWake(peripheral: String): Boolean = peripheral.uppercase() in armable(null)
+
     internal fun lastRuns(): Map<String, Long> = entries.value.mapNotNull { e -> e.lastRunMs?.let { e.peripheral to it } }.toMap()
 
     internal fun set(peripheral: String, on: Boolean) {
@@ -117,6 +148,10 @@ class AutoSyncSettings internal constructor(
 
     internal fun markRun(peripherals: Set<String>) {
         if (peripherals.isNotEmpty()) save(IosAutoSync.markRun(entries.value, peripherals, now()))
+    }
+
+    internal fun markWake(peripheral: String) {
+        if (isOn(peripheral)) save(IosAutoSync.markWake(entries.value, peripheral, now()))
     }
 
     /** A forgotten sensor loses its switch too. */
@@ -253,6 +288,15 @@ class BackgroundSyncBridge internal constructor(
         return start(chosen, done)
     }
 
+    /**
+     * A Bluetooth wake for [id]. The wake is recorded before the run, whatever comes of it, so the
+     * sensor is not armed again within the period ([AutoSyncSettings.armable]).
+     */
+    fun runWake(id: String, done: (BackgroundRunSummary) -> Unit): BackgroundRunHandle {
+        settings.markWake(id)
+        return runDue(listOf(id), done)
+    }
+
     /** "Sync now in background" for one sensor, switch on or off, due or not. */
     fun runOne(id: String, done: (BackgroundRunSummary) -> Unit): BackgroundRunHandle =
         start(listOfNotNull(all().firstOrNull { it.address.equals(id, ignoreCase = true) }), done)
@@ -266,7 +310,7 @@ class BackgroundSyncBridge internal constructor(
         val runner = BackgroundSyncRunner(gateway, log = log)
         val job = scope.launch {
             val report = runner.run(devices = chosen)
-            settings.markRun(report.devices.filter { it.result?.attempted == true }.map { it.device.address }.toSet())
+            settings.markRun(IosAutoSync.finished(report))
             done(summary(report))
         }
         running = job

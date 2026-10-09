@@ -17,7 +17,7 @@ import platform.UIKit.UIViewController
  * with this hardware id, or returns null while a sync or another request holds it. Closing the
  * link hands it back.
  * [autoSync] holds the per device Auto-sync switches, and [syncInBackground] hands one sensor to
- * the background run. [closeIdle] runs when a device page leaves the back stack. Swift closes that
+ * the background run, answering true only when iOS took it as a continued task. [closeIdle] runs when a device page leaves the back stack. Swift closes that
  * peripheral's link only when it is idle, never during a sync or a Debug lend.
  */
 fun mainViewController(
@@ -33,7 +33,7 @@ fun mainViewController(
     syncLan: (String) -> Unit,
     disconnectLan: (String) -> Unit,
     syncBluetooth: () -> Unit,
-    syncInBackground: (String) -> Unit,
+    syncInBackground: (String) -> Boolean,
     closeIdle: (String) -> Unit,
     openDebugLink: (String) -> SensorLink?,
 ): UIViewController =

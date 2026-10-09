@@ -39,10 +39,11 @@ import org.jetbrains.compose.resources.stringResource
  * page places where it likes. Notification permission is asked only from the tap that turns the
  * switch on, and only while iOS has never asked ([PermissionTriggers], AUTO_SYNC_ON makes it
  * optional). The switch turns on whatever the answer. A denial only hides the summary, so no
- * settings dialog follows. [syncInBackground] hands the sensor to the background run.
+ * settings dialog follows. [syncInBackground] hands the sensor to the background run and answers
+ * true only when iOS took it as a continued task, which keeps going after the user leaves the app.
  */
 @Composable
-fun AutoSyncSwitch(settings: AutoSyncSettings, id: String, syncInBackground: (String) -> Unit, modifier: Modifier = Modifier) {
+fun AutoSyncSwitch(settings: AutoSyncSettings, id: String, syncInBackground: (String) -> Boolean, modifier: Modifier = Modifier) {
     val entries by settings.state.collectAsState()
     val on = entries.any { it.peripheral.equals(id, ignoreCase = true) }
     val access = remember { RuntimeAccess(AccessKind.NOTIFICATIONS) }
@@ -53,7 +54,8 @@ fun AutoSyncSwitch(settings: AutoSyncSettings, id: String, syncInBackground: (St
             openSettings = {},
         ),
     )
-    var queued by remember(id) { mutableStateOf(false) }
+    // Null until the button is tapped, then whether iOS took it as a continued task.
+    var continued by remember(id) { mutableStateOf<Boolean?>(null) }
     val title = stringResource(Res.string.autosync_title)
     Column(modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -74,12 +76,9 @@ fun AutoSyncSwitch(settings: AutoSyncSettings, id: String, syncInBackground: (St
                 modifier = Modifier.semantics { contentDescription = title },
             )
         }
-        OutlinedButton(onClick = {
-            queued = true
-            syncInBackground(id)
-        }) { Text(stringResource(Res.string.files_bg_sync)) }
-        if (queued) {
-            val hint = if (settings.continuedTask) Res.string.files_bg_event else Res.string.autosync_ios_keep_open
+        OutlinedButton(onClick = { continued = syncInBackground(id) }) { Text(stringResource(Res.string.files_bg_sync)) }
+        continued?.let { taken ->
+            val hint = if (taken) Res.string.files_bg_event else Res.string.autosync_ios_keep_open
             Text(stringResource(hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }

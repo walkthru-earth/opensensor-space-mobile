@@ -154,7 +154,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             syncLan: { name in lan.sync(name: name) },
             disconnectLan: { name in lan.disconnect(name: name) },
             syncBluetooth: { [weak services] in services?.syncConnectedSensor() },
-            syncInBackground: { [weak services] id in services?.autoSync.syncInBackground(id) },
+            syncInBackground: { [weak services] id in KotlinBoolean(value: services?.autoSync.syncInBackground(id) ?? false) },
             closeIdle: { id in bluetooth.closeIdle(id: id) },
             openDebugLink: { device in bluetooth.openDebugLink(device: device) }
         )

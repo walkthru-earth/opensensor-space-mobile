@@ -566,8 +566,13 @@ extension LanDiscovery {
                     self.sessions[name] = nil
                     self.claims.closeSession(name: name)
                 }
-                if case LanFailure.authentication = error { self.credentials.remove(device: device.device) }
-                self.finishBackground(name, .lost())
+                // Nothing was sent, so the runner tries the paired Bluetooth link next, as Android does.
+                if case LanFailure.authentication = error {
+                    self.credentials.remove(device: device.device)
+                    self.finishBackground(name, .skipped("wifi access refused"))
+                } else {
+                    self.finishBackground(name, .skipped("connect failed"))
+                }
                 return
             }
             let result: SyncResult? =

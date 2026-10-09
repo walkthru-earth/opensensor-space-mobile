@@ -14,11 +14,36 @@ extension BackgroundStepResult {
     }
 }
 
+/// A slot filled after a closure that reads it is created, read on the main thread only.
+private final class Ref<Value: AnyObject> {
+    var value: Value?
+}
+
 /// Carries a value Apple hands over without a Sendable promise to the main actor. Used only to
 /// move a background task or a Kotlin callback from a system queue back to the main thread.
 private final class MainHop<Value>: @unchecked Sendable {
     let value: Value
     init(_ value: Value) { self.value = value }
+}
+
+/// Ends one background task exactly once. The expiration handler and the run's own completion
+/// can both reach it, and only the first ends the task. [handle] is the run this task started, so
+/// an expiry cancels that run and never a later one.
+@MainActor
+private final class TaskFinish {
+    private let task: BGTask
+    private var finished = false
+    var handle: BackgroundRunHandle?
+
+    init(_ task: BGTask) { self.task = task }
+
+    var isFinished: Bool { finished }
+
+    func complete(success: Bool) {
+        guard !finished else { return }
+        finished = true
+        task.setTaskCompleted(success: success)
+    }
 }
 
 /// iOS Auto-sync (#23). Swift owns the OS services: BGTaskScheduler, the background time lease,
@@ -138,20 +163,22 @@ final class AutoSync {
             return task.setTaskCompleted(success: true)
         }
         let attempt = Int(retryAttempt)
-        let box = MainHop(task)
+        let finish = TaskFinish(task)
         task.expirationHandler = {
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
-                    self.cancelRun()
+                    guard !finish.isFinished else { return }
+                    self.cancelRun(finish.handle)
                     self.schedule(after: AutoSyncSchedule.shared.periodSeconds)
-                    box.value.setTaskCompleted(success: false)
+                    finish.complete(success: false)
                 }
             }
         }
-        run = bridge.runDue(only: nil) { [weak self] summary in
+        let handle = bridge.runDue(only: nil) { [weak self] summary in
             MainActor.assumeIsolated {
-                guard let self else { return box.value.setTaskCompleted(success: false) }
-                self.run = nil
+                guard let self else { return finish.complete(success: false) }
+                guard !finish.isFinished else { return }
+                self.clearRun(finish.handle)
                 self.post(summary)
                 if summary.retry, attempt < Int(AutoSyncSchedule.shared.maxRetries) {
                     self.retryAttempt = attempt + 1
@@ -161,9 +188,11 @@ final class AutoSync {
                     self.schedule(after: AutoSyncSchedule.shared.periodSeconds)
                 }
                 self.armDue()
-                box.value.setTaskCompleted(success: true)
+                finish.complete(success: true)
             }
         }
+        finish.handle = handle
+        run = handle
     }
 
     /// Asks iOS for the next run. Nothing is scheduled while every switch is off.
@@ -191,49 +220,58 @@ final class AutoSync {
 
     // MARK: Bluetooth wake
 
-    /// Pending connects for the switched on sensors that are due. One that is not due waits for the
-    /// scheduled run, so a sensor in range does not wake the app again and again.
-    private func armDue() {
-        let due = settings.enabledPeripherals().filter { settings.isDue(peripheral: $0) }
-        bluetooth.armPendingConnects(ids: due)
+    /// Pending connects for the switched on sensors that are due and not woken within the period
+    /// (`AutoSyncSettings.armable`), so a sensor in range does not wake the app again and again.
+    /// [except] is the sensor whose wake is finishing.
+    private func armDue(except: String? = nil) {
+        bluetooth.armPendingConnects(ids: settings.armable(except: except))
     }
 
     /// A pending connect reached a sensor while the app was off screen. Its run gets a background
     /// time lease. A sensor that is not due, or a wake during another run, releases the link.
     private func wake(_ id: String) {
-        guard run == nil, settings.isDue(peripheral: id) else {
+        guard run == nil, settings.shouldWake(peripheral: id) else {
             bluetooth.releaseWaiting(id: id)
             return
         }
         beginLease()
-        run = bridge.runDue(only: [id]) { [weak self] summary in
+        let current = Ref<BackgroundRunHandle>()
+        let handle = bridge.runWake(id: id) { [weak self] summary in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                self.run = nil
+                self.clearRun(current.value)
                 self.bluetooth.releaseWaiting(id: id)
                 self.post(summary)
-                self.armDue()
+                self.armDue(except: id)
                 self.endLease()
             }
         }
+        current.value = handle
+        run = handle
     }
 
     // MARK: Sync now in background
 
     /// One sensor, switch on or off. iOS 26 and later show it as a continued task with a Cancel
-    /// button. Earlier releases run it under the background time lease the app gets on leaving.
-    func syncInBackground(_ id: String) {
-        guard run == nil else { return }
-        if #available(iOS 26, *), submitContinued(id) { return }
+    /// button. Earlier releases, or a refused submit, run it under the background time lease the
+    /// app gets on leaving. True only when iOS took the continued task, so the screen can say the
+    /// user may leave. A run already going answers false and starts nothing.
+    func syncInBackground(_ id: String) -> Bool {
+        guard run == nil else { return false }
+        if #available(iOS 26, *), submitContinued(id) { return true }
         beginLease()
-        run = bridge.runOne(id: id) { [weak self] summary in
+        let current = Ref<BackgroundRunHandle>()
+        let handle = bridge.runOne(id: id) { [weak self] summary in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                self.run = nil
+                self.clearRun(current.value)
                 self.post(summary)
                 self.endLease()
             }
         }
+        current.value = handle
+        run = handle
+        return false
     }
 
     /// Registers a handler for a fresh identifier, then submits it. Continued task registrations are
@@ -270,26 +308,30 @@ final class AutoSync {
         task.progress.totalUnitCount = 1
         task.progress.completedUnitCount = 0
         progress = task.progress
+        let finish = TaskFinish(task)
         let box = MainHop(task)
         // Cancel in the system UI, or expiry. The step ends and a link it opened closes.
         task.expirationHandler = {
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
-                    self.cancelRun()
-                    box.value.setTaskCompleted(success: false)
+                    guard !finish.isFinished else { return }
+                    self.cancelRun(finish.handle)
+                    finish.complete(success: false)
                 }
             }
         }
-        run = bridge.runOne(id: id) { [weak self] summary in
+        let handle = bridge.runOne(id: id) { [weak self] summary in
             MainActor.assumeIsolated {
-                guard let self else { return box.value.setTaskCompleted(success: false) }
-                self.run = nil
-                self.progress = nil
+                guard let self else { return finish.complete(success: false) }
+                guard !finish.isFinished else { return }
+                self.clearRun(finish.handle)
                 box.value.progress.completedUnitCount = box.value.progress.totalUnitCount
                 self.post(summary)
-                box.value.setTaskCompleted(success: summary.failures == 0)
+                finish.complete(success: summary.failures == 0)
             }
         }
+        finish.handle = handle
+        run = handle
     }
 
     private func progressed(done: Int, total: Int) {
@@ -306,13 +348,23 @@ final class AutoSync {
         return lan.holds(device: device)
     }
 
-    private func cancelRun() {
+    /// Cancels the run going now. With [handle], only when that run is still the current one, so
+    /// a late expiry never stops a run that started after it.
+    private func cancelRun(_ handle: BackgroundRunHandle? = nil) {
+        if let handle, run !== handle { return }
         run?.cancel()
         run = nil
         progress = nil
         bluetooth.cancelBackground()
         lan.cancelBackground()
         endLease()
+    }
+
+    /// A run reported. It stops being the current one only when it still is.
+    private func clearRun(_ handle: BackgroundRunHandle?) {
+        guard let handle, run === handle else { return }
+        run = nil
+        progress = nil
     }
 
     private func beginLease() {

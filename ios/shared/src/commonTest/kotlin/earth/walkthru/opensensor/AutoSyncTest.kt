@@ -1,7 +1,11 @@
 package earth.walkthru.opensensor
 
+import earth.walkthru.aqsync.data.BackgroundSyncResult
 import earth.walkthru.aqsync.data.background.BackgroundSyncPolicy
+import earth.walkthru.aqsync.data.background.BackgroundSyncReport
+import earth.walkthru.aqsync.data.background.DeviceRunReport
 import earth.walkthru.opensensor.permissions.AccessStatus
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -42,6 +46,8 @@ class AutoSyncTest {
         assertEquals(entries, IosAutoSync.decode(IosAutoSync.encode(entries)))
         assertEquals(listOf(AutoSyncEntry(a, 7)), IosAutoSync.decode("${a.lowercase()}\t7\nnot-an-id\t1\n$a\t9\nbroken"))
         assertTrue(IosAutoSync.decode(null).isEmpty())
+        val woken = listOf(AutoSyncEntry(a, 5, 9), AutoSyncEntry(b, null, null))
+        assertEquals(woken, IosAutoSync.decode(IosAutoSync.encode(woken)))
     }
 
     @Test
@@ -167,5 +173,100 @@ class AutoSyncTest {
         val d = devices()
         assertEquals("aabbccddeeff", d.deviceFor(a.lowercase()))
         assertNull(d.deviceFor("33333333-3333-3333-3333-333333333333"))
+    }
+
+    private fun bridge(s: AutoSyncSettings, scope: CoroutineScope, synced: MutableList<String>, step: (String) -> BackgroundStepResult) =
+        BackgroundSyncBridge(
+            devices = devices(),
+            settings = s,
+            scope = scope,
+            browse = { _, done -> done(emptyList(), emptyList()) },
+            sync = { id, _, done ->
+                synced += id
+                done(step(id))
+            },
+            isOwned = { false },
+            log = {},
+        )
+
+    @Test
+    fun aLostStepIsRetriedAfterTheBackoff() = runTest {
+        val s = settings()
+        s.set(a, true)
+        val synced = mutableListOf<String>()
+        var lose = true
+        val bridge = bridge(s, this, synced) { if (lose) BackgroundSteps.lost() else BackgroundStepResult(0, 0, 0, null, false) }
+        var summary: BackgroundRunSummary? = null
+        bridge.runDue(null) { summary = it }
+        testScheduler.advanceUntilIdle()
+        assertTrue(assertNotNull(summary).retry)
+        // A lost step is not a run, so the backed-off retry still finds the sensor due.
+        assertTrue(s.isDue(a))
+        clock += BackgroundSyncPolicy.backoffMs(0)
+        lose = false
+        summary = null
+        bridge.runDue(null) { summary = it }
+        testScheduler.advanceUntilIdle()
+        assertEquals(listOf(a, a), synced)
+        assertFalse(assertNotNull(summary).retry)
+        assertFalse(s.isDue(a))
+    }
+
+    @Test
+    fun skippedAndBrokenStepsStayDue() {
+        val s = settings()
+        s.set(a, true)
+        s.set(b, true)
+        val report = BackgroundSyncReport(
+            listOf(
+                DeviceRunReport(
+                    IosSyncDevice(a, null, null, false),
+                    emptyList(),
+                    BackgroundSyncResult(a, null, null, 1, 1, 0),
+                ),
+                DeviceRunReport(
+                    IosSyncDevice(b, null, null, false),
+                    emptyList(),
+                    BackgroundSyncResult(b, null, null, 1, 1, 0),
+                    error = IllegalStateException("reset"),
+                ),
+            ),
+        )
+        assertEquals(setOf(a), IosAutoSync.finished(report))
+    }
+
+    @Test
+    fun armFilterSkipsSensorsWokenThisPeriod() {
+        val s = settings()
+        s.set(a, true)
+        s.set(b, true)
+        assertEquals(listOf(a, b), s.armable(null))
+        // The sensor whose wake is finishing is never armed again inside it.
+        assertEquals(listOf(b), s.armable(a.lowercase()))
+        // A wake whose steps keep skipping still counts, so a sensor in range waits a period.
+        s.markWake(a)
+        assertEquals(listOf(b), s.armable(null))
+        assertFalse(s.shouldWake(a))
+        assertTrue(s.isDue(a))
+        // A sensor that ran this period is not due, so it is not armed either.
+        s.markRun(setOf(b))
+        assertTrue(s.armable(null).isEmpty())
+        clock += BackgroundSyncPolicy.PERIOD_MS
+        assertEquals(listOf(a, b), s.armable(null))
+        assertTrue(s.shouldWake(a))
+    }
+
+    @Test
+    fun aWakeIsRecordedWhateverItsOutcome() = runTest {
+        val s = settings()
+        s.set(a, true)
+        s.set(b, true)
+        val synced = mutableListOf<String>()
+        val bridge = bridge(s, this, synced) { BackgroundSteps.skipped("busy") }
+        bridge.runWake(a) {}
+        testScheduler.advanceUntilIdle()
+        assertEquals(listOf(a), synced)
+        assertTrue(s.isDue(a))
+        assertEquals(listOf(b), s.armable(null))
     }
 }
