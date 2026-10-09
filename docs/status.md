@@ -4,6 +4,39 @@
 **Code:** `./gradlew verify` (the gate), `.github/workflows/verify.yml`.
 **Related:** measured device behaviour is recorded in the board-specific `../aq-parquet/docs/boards/*/bench-verified.md`; anything not recorded there is unverified.
 
+## 2026-10-09 — OnePlus update after automatic UTC changes
+
+Mobile commit `5d5db51` was pushed to `main` after the full pre-push `verify` gate
+passed. Its debug APK was installed over the existing app with `adb install -r`
+on the connected OnePlus 7 Pro (GM1911, Android 16). Existing app data, the saved
+AQ-6b40 sensor/history, and Bluetooth/notification grants were preserved. The app
+launched into its shared UI and remained alive without an AndroidRuntime crash.
+The phone UTC agreed with the build host at 10:34 UTC.
+
+APK SHA-256: `a844088b545663947e1bdd3a112c18468ffd3ac4af8feea204e381dc08292e56`.
+
+Against M5Stack CoreS3 firmware `01e6468`, after the explicitly requested SD Parquet
+cleanup and production flash:
+
+- Tapping the paired AQ-6b40 sensor connected over Bluetooth and displayed live readings.
+  The Clock card changed to "Clock is set and checked by a phone" without a manual clock
+  action. Board serial independently recorded automatic host UTC over BLE and a successful
+  RTC write (epoch `1791542381`, monotonic `55205803` µs).
+- Smart Sync downloaded and checked the first fresh file; Today changed from no timed
+  readings to a current-day average. Disconnecting and reconnecting selected authenticated
+  Wi-Fi LAN automatically; the Clock card again reported the phone-set clock. Board serial
+  confirmed the LAN host anchor (epoch `1791542442`, monotonic `115493452` µs).
+- Collection over LAN and a final sync of the most recently finalized file completed the
+  six-file manifest. Files displayed "All synced", "Everything is on this phone and checked",
+  and `Fri 9 Oct 2026 · 6/6 · 65.1 KiB`. The phone retained its older local archive separately
+  from the cleaned SD; its final archive count was 1265 files.
+
+The board had a usable RTC at boot. This run qualifies Android BLE/LAN automatic clock sync
+and fresh-file collection, not no-RTC recovery, power-cut durability, or iOS radio behavior.
+Older phone readings with no retained boot anchor remain undated as designed. Private receipt
+inspection via `adb run-as` was unavailable because this phone ROM rejected its target-SDK-37
+SELinux context; the observations above use app UI and firmware serial evidence.
+
 ## 2026-10-09 — automatic UTC and derived partition recovery (host/simulator)
 
 The working tree now synchronizes device UTC automatically on Android/iOS connection,
