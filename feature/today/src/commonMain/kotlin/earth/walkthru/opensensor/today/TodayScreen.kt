@@ -79,6 +79,7 @@ import earth.walkthru.opensensor.today.resources.tab_files
 import earth.walkthru.opensensor.today.resources.tab_history
 import earth.walkthru.opensensor.today.resources.tab_today
 import earth.walkthru.opensensor.today.resources.today_station_short
+import earth.walkthru.opensensor.today.resources.today_title
 import kotlinx.datetime.TimeZone
 import org.jetbrains.compose.resources.getPluralString
 import org.jetbrains.compose.resources.getString
@@ -135,6 +136,10 @@ fun TodayScreen(
 
     dialog?.let { TodayDialogs(it, onConfirm = controller::confirm, onDismiss = controller::dismiss) }
 }
+
+/** The screen title, for a platform control that opens [TodayScreen]. */
+@Composable
+fun todayTitle(): String = stringResource(Res.string.today_title)
 
 /** A notice in words, or null for one that opens a dialog instead. */
 internal suspend fun noticeText(notice: TodayNotice): String? = when (notice) {

@@ -398,7 +398,12 @@ internal fun SmartSyncCard(sync: SyncProgress, archive: TodayArchive, enabled: B
         }
         if (mood == SyncMood.RUNNING) {
             Spacer(Modifier.height(10.dp))
-            LinearProgressIndicator(progress = { sync.fraction }, modifier = Modifier.fillMaxWidth())
+            // Without a byte total yet (the plan is still being read, or the platform counts files only) the bar runs.
+            if (sync.bytesTotal > 0) {
+                LinearProgressIndicator(progress = { sync.fraction }, modifier = Modifier.fillMaxWidth())
+            } else {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
         }
         if (archive.unplacedRows > 0) {
             Text(

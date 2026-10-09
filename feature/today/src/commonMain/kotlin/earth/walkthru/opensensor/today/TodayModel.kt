@@ -1,5 +1,6 @@
 package earth.walkthru.opensensor.today
 
+import earth.walkthru.aqsync.archive.ArchiveRecord
 import earth.walkthru.aqsync.data.SyncProgress
 import earth.walkthru.aqsync.data.ble.ConfigSnapshot
 import earth.walkthru.aqsync.data.ble.ConnectionState
@@ -21,7 +22,23 @@ data class TodayArchive(
     val files: Int = 0,
     val estimatedRows: Long = 0,
     val unplacedRows: Long = 0,
-)
+) {
+    companion object {
+        /**
+         * The summary of one station's archive records, the rule Android's repository applies to its
+         * Room rows: indexed telemetry files only, estimated when placed by an estimate alone,
+         * unplaced when neither real nor estimated UTC exists.
+         */
+        fun of(records: List<ArchiveRecord>): TodayArchive {
+            val files = records.filter { it.indexed && it.isTelemetry }
+            return TodayArchive(
+                files = files.size,
+                estimatedRows = files.filter { it.hasEstimatedUtc }.sumOf { it.rows ?: 0L },
+                unplacedRows = files.filter { !it.hasUtc && !it.hasEstimatedUtc }.sumOf { it.rows ?: 0L },
+            )
+        }
+    }
+}
 
 /** A link that was Ready dropped on its own and the platform is trying to get it back. */
 data class TodayReconnect(val attempt: Int, val maxAttempts: Int, val reason: String)
