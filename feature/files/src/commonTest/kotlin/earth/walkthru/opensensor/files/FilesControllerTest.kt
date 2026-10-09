@@ -15,6 +15,8 @@ import earth.walkthru.aqsync.data.history.parquet.ByteArrayReader
 import earth.walkthru.aqsync.data.history.parquet.ByteReader
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
@@ -93,16 +95,19 @@ class FilesControllerTest {
         }
     }
 
-    private class Presenter(val closesNow: Boolean = true, val fail: Boolean = false) : ExportPresenter {
+    private class Presenter(val closesNow: Boolean = true, val fail: Boolean = false, val waitForever: Boolean = false) : ExportPresenter {
         val shared = mutableListOf<Pair<List<StagedFile>, ShareKind>>()
         val saved = mutableListOf<StagedFile>()
         override suspend fun share(files: List<StagedFile>, kind: ShareKind): Boolean {
             if (fail) error("no sheet")
             shared += files to kind
+            if (waitForever) awaitCancellation()
             return closesNow
         }
         override suspend fun save(file: StagedFile): Boolean {
+            if (fail) error("no picker")
             saved += file
+            if (waitForever) awaitCancellation()
             return true
         }
     }
@@ -114,9 +119,12 @@ class FilesControllerTest {
         val space = Space()
         val owner = MutableStateFlow(owner)
 
+        /** The controller's scope, cancelled to stand for a screen that goes away mid export. */
+        val job = Job(scope.backgroundScope.coroutineContext[Job])
+
         // Background work alone never counts for advanceUntilIdle, so the controller runs unconfined.
         val controller = FilesController(
-            CoroutineScope(scope.backgroundScope.coroutineContext + UnconfinedTestDispatcher(scope.testScheduler)),
+            CoroutineScope(scope.backgroundScope.coroutineContext + job + UnconfinedTestDispatcher(scope.testScheduler)),
             store,
             index,
             space,
@@ -187,6 +195,33 @@ class FilesControllerTest {
         advanceUntilIdle()
         assertEquals(listOf(FilesMessage.EXPORT_FAILED), messages)
         assertFalse(f.controller.state.value.exporting)
+    }
+
+    @Test
+    fun aSheetThatThrowsStillRemovesTheStagedRun() = runTest {
+        val f = fixture()
+        advanceUntilIdle()
+        f.controller.shareZip(Presenter(fail = true))
+        advanceUntilIdle()
+        assertTrue(f.space.runs.single().deleted)
+        f.controller.saveZip(Presenter(fail = true))
+        advanceUntilIdle()
+        assertEquals(2, f.space.runs.size)
+        assertTrue(f.space.runs.all { it.deleted })
+        assertFalse(f.controller.state.value.exporting)
+    }
+
+    @Test
+    fun aCancelledWaitForTheSheetRemovesTheStagedRun() = runTest {
+        val f = fixture()
+        advanceUntilIdle()
+        f.controller.saveZip(Presenter(waitForever = true))
+        advanceUntilIdle()
+        assertTrue(f.controller.state.value.exporting)
+        assertFalse(f.space.runs.single().deleted)
+        f.job.cancel()
+        advanceUntilIdle()
+        assertTrue(f.space.runs.single().deleted)
     }
 
     @Test

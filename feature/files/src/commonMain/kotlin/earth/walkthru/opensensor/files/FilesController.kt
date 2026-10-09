@@ -5,6 +5,7 @@ import earth.walkthru.aqsync.archive.ArchiveIndex
 import earth.walkthru.aqsync.archive.ArchiveRecord
 import earth.walkthru.aqsync.archive.ArchiveStore
 import earth.walkthru.aqsync.archive.ExportEntry
+import earth.walkthru.aqsync.archive.ExportRun
 import earth.walkthru.aqsync.archive.ExportSpace
 import earth.walkthru.aqsync.archive.StagedFile
 import earth.walkthru.aqsync.data.sync.FileSyncState
@@ -14,6 +15,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -114,9 +116,7 @@ class FilesController(
 
     fun saveZip(presenter: ExportPresenter) = run(presenter) {
         val zip = archiveZip() ?: return@run null
-        val done = it.save(zip)
-        if (done) withContext(io) { zip.run.delete() }
-        done
+        removingRun(zip.run) { it.save(zip) }
     }
 
     fun shareDaily(presenter: ExportPresenter) = run(presenter) {
@@ -158,9 +158,22 @@ class FilesController(
     }
 
     /** Shows [files] and removes their run when the sheet says it is safe. */
-    private suspend fun present(presenter: ExportPresenter, files: List<StagedFile>, kind: ShareKind): Boolean {
-        val done = presenter.share(files, kind)
-        if (done) withContext(io) { files.firstOrNull()?.run?.delete() }
+    private suspend fun present(presenter: ExportPresenter, files: List<StagedFile>, kind: ShareKind): Boolean =
+        removingRun(files.firstOrNull()?.run) { presenter.share(files, kind) }
+
+    /**
+     * Runs [show] and removes [run] once it returns true. A sheet that fails, or a wait for it that is
+     * cancelled, removes the run too, since nothing still reads it and it can be as large as the
+     * archive. Only an explicit false (Android's chooser) leaves it for the next export.
+     */
+    private suspend fun removingRun(run: ExportRun?, show: suspend () -> Boolean): Boolean {
+        val done = try {
+            show()
+        } catch (e: Throwable) {
+            withContext(NonCancellable + io) { run?.delete() }
+            throw e
+        }
+        if (done) withContext(io) { run?.delete() }
         return done
     }
 
