@@ -21,7 +21,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
 final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UIDocumentPickerDelegate {
     var window: UIWindow?
     /// One shared engine, so LAN and Bluetooth save into the same archive and never sync a station twice at once.
-    private let engine = SensorSync()
+    private let engine = IosArchiveKt.sharedSensorSync()
     private lazy var bluetooth = BluetoothCompanion(engine: engine)
     private lazy var lan = LanDiscovery(state: bluetooth.state, engine: engine)
     private var exportFolder: URL?
