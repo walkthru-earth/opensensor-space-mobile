@@ -77,6 +77,7 @@ import earth.walkthru.opensensor.today.resources.clock_actions_explain
 import earth.walkthru.opensensor.today.resources.clock_generation
 import earth.walkthru.opensensor.today.resources.clock_host
 import earth.walkthru.opensensor.today.resources.clock_last_sample
+import earth.walkthru.opensensor.today.resources.clock_network
 import earth.walkthru.opensensor.today.resources.clock_none
 import earth.walkthru.opensensor.today.resources.clock_none_explain
 import earth.walkthru.opensensor.today.resources.clock_rtc
@@ -118,7 +119,6 @@ import earth.walkthru.opensensor.today.resources.readings_absent
 import earth.walkthru.opensensor.today.resources.readings_cf1
 import earth.walkthru.opensensor.today.resources.readings_title
 import earth.walkthru.opensensor.today.resources.row_groups
-import earth.walkthru.opensensor.today.resources.set_time
 import earth.walkthru.opensensor.today.resources.storage_buffered
 import earth.walkthru.opensensor.today.resources.storage_codec
 import earth.walkthru.opensensor.today.resources.storage_dropped
@@ -448,7 +448,7 @@ internal fun SmartSyncCard(sync: SyncProgress, archive: TodayArchive, enabled: B
 private fun Long.toPluralCount(): Int = coerceIn(0, Int.MAX_VALUE.toLong()).toInt()
 
 /**
- * The logger's clock in words, with **Set time from phone** at every level. **Finalize buffered
+ * The logger's automatically synchronized clock in words. **Finalize buffered
  * rows** is a power action and appears from Detailed. Developer adds the anchor generation and the
  * last sample's UTC instant.
  */
@@ -458,7 +458,6 @@ internal fun ClockCard(
     live: LiveSample?,
     enabled: Boolean,
     level: DetailLevel,
-    onSetTime: () -> Unit,
     onFlush: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -466,6 +465,7 @@ internal fun ClockCard(
     val label = when (status?.clockSource) {
         1 -> stringResource(Res.string.clock_host)
         2 -> stringResource(Res.string.clock_rtc)
+        3 -> stringResource(Res.string.clock_network)
         0 -> stringResource(Res.string.clock_none)
         else -> when (synced) {
             true -> stringResource(Res.string.clock_set)
@@ -508,7 +508,6 @@ internal fun ClockCard(
         }
         Spacer(Modifier.height(12.dp))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinePillButton(stringResource(Res.string.set_time), onClick = onSetTime, enabled = enabled)
             if (level.detailed) OutlinePillButton(stringResource(Res.string.flush), onClick = onFlush, enabled = enabled)
         }
     }

@@ -27,6 +27,7 @@ enum class SensorCommand {
 
 /** How one command ended, from `SensorSync.command`. Swift hands it back to [TodayLink.commandEnded] unread. */
 class CommandResult internal constructor(internal val notice: TodayNotice) {
+    val clockSynchronized: Boolean get() = notice == TodayNotice.ClockSet
     override fun toString(): String = "CommandResult($notice)"
 }
 

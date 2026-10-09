@@ -18,7 +18,7 @@
   also excluded from cloud backup because it is reproducible from the logger and commonly exceeds
   Auto Backup's 25 MB quota.
 
-  Device-to-device transfer (cable / local Wi-Fi, no server) carries the settings, the archive and
+  Device-to-device transfer (cable / local Wi-Fi, no server) carries the settings, the archive, its boot clock receipts and
   the database so a user-initiated local migration retains history. Keystore keys are device-bound,
   so LAN access may require fetching the token again over Bluetooth on the destination. Partial
   downloads in `archive-partial/` and encryption key material in `noBackupFilesDir` are never included.
@@ -32,6 +32,7 @@
         <include domain="file" path="datastore/settings.preferences_pb" />
         <include domain="file" path="datastore/discover.preferences_pb" />
         <include domain="file" path="archive/" />
+        <include domain="file" path="clock-anchors/" />
         <include domain="database" path="aq-sync.db" />
     </device-transfer>
 </data-extraction-rules>

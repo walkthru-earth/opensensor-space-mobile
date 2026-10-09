@@ -41,6 +41,23 @@ class SensorLink internal constructor(
     constructor(overWifi: Boolean, address: String, mtu: Int, send: (NSData) -> Unit) :
         this(overWifi, address, mtu, send, Dispatchers.Main)
 
+    internal var station: String? = null
+        private set
+    internal var boot: String? = null
+        private set
+
+    /** Bind the full boot identity from authenticated INFO or HELLO before anchoring time. */
+    fun identify(station: String, boot: String?) {
+        this.station = station
+        this.boot = boot
+    }
+
+    internal var clockSynchronized: Boolean = false
+        private set
+
+    /** Reuse the UTC handshake already completed on this same native connection. */
+    fun markClockSynchronized() { clockSynchronized = true }
+
     private val frames = Channel<ByteArray>(Channel.UNLIMITED)
     private val state = MutableStateFlow<ConnectionState>(ConnectionState.Ready(mtu))
 

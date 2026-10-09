@@ -256,3 +256,18 @@ API 34+: `registerServiceInfoCallback` (continuous, `getHostAddresses`). API 31â
 | `DeviceConnectionManager` | per-device ownership and snapshots; selection must not close another controller |
 | `LanDiscovery` TXT parsing | `AutoSyncPolicy.linksFor` (station match), Device screen LAN card |
 | `DeviceConnectionRepository.activeTransport` | the top-bar chip on four screens |
+
+## Automatic UTC on connection
+
+After verified INFO identity and before any archive LIST, Android automatically sends the
+phone's UTC through SET_TIME. iOS does the same when its Bluetooth connection becomes ready;
+LAN collection synchronizes before LIST. A successful Bluetooth handshake is reused by the
+immediately following collection on that connection. A failed handshake leaves UTC unconfirmed and permits collection of original unsynced files
+if the transport survives; later connections retry automatically. Manual clock buttons, consent settings and raw SET_TIME commands
+are unavailable on both platforms.
+
+The shared session sends epoch seconds plus microseconds and falls back to the legacy
+seconds-only request only on MALFORMED_REQUEST. Reconciliation records the acknowledged UTC
+and device monotonic pair, bound to the full station and boot identity from INFO or HELLO.
+A legacy reply contributes whole seconds only; request fractions are never invented in an
+acknowledgement. Hardware radio and power-loss qualification remains separate from host tests.

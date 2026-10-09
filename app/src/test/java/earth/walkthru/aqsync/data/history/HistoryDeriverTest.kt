@@ -114,6 +114,55 @@ class HistoryDeriverTest {
         assertFalse(store.dayFile(station, 20713).exists())
     }
 
+    @Test
+    fun `clock receipt partitions unknown UTC across midnight and survives a new indexer`() = runBlocking {
+        val tmp = java.nio.file.Files.createTempDirectory("aq-clock-derive").toFile()
+        try {
+            val archive = FileArchive(tmp)
+            val files = InMemoryFiles()
+            val buckets = InMemoryBuckets()
+            val days = InMemoryDays()
+            val indexer = HistoryIndexer(archive, files)
+            val store = DerivedStore(tmp)
+            val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer)
+            val name = "station=$station/unsynced/boot=e452563e96c72ca057a48924550779b6/raw.parquet"
+            val raw = archive.fileFor(station, name).apply {
+                parentFile!!.mkdirs()
+                writeBytes(bytes("device/v1-none-64rows-unsynced.parquet"))
+            }
+            val original = raw.readBytes()
+            files.rows += indexer.indexed(ArchivedFile(station = station, name = name, bytes = raw.length(), crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), raw)
+            val before = files.rows.single()
+            assertEquals(0, deriver.deriveStale().daysChecked)
+            val utcNs = 1_788_912_000_123_456_000L // midnight + submillisecond fraction
+            deriver.recordClockAnchor(station, before.bootId!!, utcNs, before.lastMonoUs!!)
+            assertEquals(2, days.rows.size)
+            assertEquals(64L, days.rows.sumOf { it.rows.toLong() })
+            assertTrue(raw.readBytes().contentEquals(original))
+            assertEquals(0L, files.rows.single().utcRows)
+            assertEquals(utcNs, files.rows.single().estLastUtcNs)
+            assertEquals(0, deriver.deriveStale().daysRebuilt)
+            val restarted = HistoryIndexer(archive, files)
+            assertEquals(0, restarted.estimateTimes())
+            assertEquals(utcNs, files.rows.single().estLastUtcNs)
+            for (day in days.rows) {
+                File("build/parquet-samples").apply { mkdirs() }.let { outputs ->
+                    store.dayFile(station, day.epochDay).copyTo(File(outputs, "derived-clock-day-${day.epochDay}.parquet"), overwrite = true)
+                    store.manifestFile(station, day.epochDay).copyTo(File(outputs, "derived-clock-day-${day.epochDay}.manifest.json"), overwrite = true)
+                }
+                val parquet = earth.walkthru.aqsync.data.history.parquet.ParquetFile.open(store.dayFile(station, day.epochDay))
+                val actual = parquet.readColumn("event_time_utc_ns")
+                val estimated = parquet.readColumn("event_time_utc_estimated_ns")
+                for (row in 0 until actual.size) {
+                    assertTrue(actual.isNull(row))
+                    assertEquals(day.epochDay, StationDays.dayOf(estimated.asLong(row)!!))
+                }
+            }
+        } finally {
+            tmp.deleteRecursively()
+        }
+    }
+
     private class InMemoryFiles : ArchivedFileDao {
         val rows = mutableListOf<ArchivedFile>()
         override fun observeAll(): Flow<List<ArchivedFile>> = flowOf(rows.toList())
@@ -132,7 +181,7 @@ class HistoryDeriverTest {
         override suspend fun unindexed(limit: Int) = rows.filter { it.indexedAtEpochMs == null || it.indexError != null }.take(limit)
         override fun observeUnindexedCount(): Flow<Int> = flowOf(0)
         override suspend fun withUtcBetween(station: String, fromNs: Long, toNs: Long) =
-            rows.filter { it.station == station && it.indexError == null && (it.utcRows ?: 0) > 0 && (it.purpose == null || it.purpose == "telemetry") && (it.lastUtcNs ?: Long.MIN_VALUE) >= fromNs && (it.firstUtcNs ?: Long.MAX_VALUE) < toNs }
+            rows.filter { it.station == station && it.indexError == null && (it.purpose == null || it.purpose == "telemetry") && (it.timelineLastNs ?: Long.MIN_VALUE) >= fromNs && (it.timelineFirstNs ?: Long.MAX_VALUE) < toNs }
                 .sortedBy { it.firstUtcNs }
         override suspend fun indexedForStation(station: String) = rows.filter { it.station == station && it.indexed }
         override suspend fun stations() = rows.map { it.station }.distinct()

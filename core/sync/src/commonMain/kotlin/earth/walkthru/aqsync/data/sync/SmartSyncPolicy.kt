@@ -32,7 +32,7 @@ object SmartSyncPolicy {
     fun decide(status: DeviceStatus?, mode: ClockSyncMode): ClockSyncDecision {
         val quality = quality(status)
         if (quality == ClockQuality.HOST_ANCHORED) {
-            return ClockSyncDecision(quality, ClockSyncAction.CONTINUE, "clock already anchored by a host")
+            return ClockSyncDecision(quality, ClockSyncAction.CONTINUE, "clock already anchored by a host or network")
         }
         if (quality == ClockQuality.UNKNOWN) {
             return ClockSyncDecision(quality, ClockSyncAction.CONTINUE, "firmware did not report enough clock state")
@@ -54,7 +54,7 @@ object SmartSyncPolicy {
 
     fun quality(status: DeviceStatus?): ClockQuality = when {
         status == null -> ClockQuality.UNKNOWN
-        status.clockSource == 1 -> ClockQuality.HOST_ANCHORED
+        status.clockSource == 1 || status.clockSource == 3 -> ClockQuality.HOST_ANCHORED
         status.clockSource == 2 -> ClockQuality.RTC_RESTORED
         status.clockSource == 0 || status.utc == 0 -> ClockQuality.MISSING
         status.clockSource == null && status.utc == 1 -> ClockQuality.HOST_ANCHORED

@@ -1,5 +1,6 @@
 package earth.walkthru.aqsync.data.history
 
+import earth.walkthru.aqsync.archive.ClockAnchor
 import kotlin.math.abs
 
 /*
@@ -13,8 +14,8 @@ import kotlin.math.abs
  *
  * Rules, all pure:
  * - only rows of the **same boot** (`boot_id`) as the anchor — a reboot resets the monotonic clock;
- * - the anchor is the **earliest fully-timed file** of the boot (closest to the unsynced rows, and
- *   before any later clock correction, which the firmware records as a new `clock_epoch` and a new file);
+ * - use the earliest boot-scoped receipt or fully-timed file, so a successful handshake can
+ *   immediately date older data without waiting for another file rotation;
  * - the estimate never overwrites `event_time_utc_ns`: it lives in its own column/fields and every
  *   UI that shows it says "estimated".
  */
@@ -37,18 +38,29 @@ data class IndexedFileInfo(
 
 object TimeEstimate {
 
-    /** Assumed worst-case crystal drift for the ± label; the CoreS3 is not calibrated. */
+    /** Drift assumption for display, not a measured accuracy bound or a transport-error bound. */
     const val DRIFT_PPM = 50.0
 
     data class Anchor(val boot: String, val utcNs: Long, val monoUs: Long, val sourceFile: String) {
-        fun estimateNs(monoUs: Long): Long = utcNs + (monoUs - this.monoUs) * 1_000L
+        fun estimateNs(monoUs: Long): Long = requireNotNull(estimateNsOrNull(monoUs)) { "invalid clock mapping" }
+
+        /** Bad source timestamps must never wrap into an apparently valid UTC partition. */
+        fun estimateNsOrNull(monoUs: Long): Long? {
+            if (monoUs < 0 || this.monoUs < 0) return null
+            val delta = monoUs - this.monoUs // subtraction of nonnegative signed values cannot overflow
+            if (delta < Long.MIN_VALUE / 1000L || delta > Long.MAX_VALUE / 1000L) return null
+            val nanos = delta * 1000L
+            if (nanos > 0 && utcNs > Long.MAX_VALUE - nanos) return null
+            if (nanos < 0 && utcNs < Long.MIN_VALUE - nanos) return null
+            return utcNs + nanos
+        }
 
         /** Uncertainty at [monoUs], in seconds, from the drift assumption alone. */
         fun uncertaintySeconds(monoUs: Long): Double = abs(monoUs - this.monoUs) / 1e6 * DRIFT_PPM / 1e6
     }
 
-    /** One anchor per boot from the indexed, fully-timed telemetry files (`utcRows == rows`). */
-    fun anchors(files: List<IndexedFileInfo>): Map<String, Anchor> {
+    /** One anchor per boot. Callers must scope both files and receipts to the same producer station. */
+    fun anchors(files: List<IndexedFileInfo>, receipts: List<ClockAnchor> = emptyList()): Map<String, Anchor> {
         val out = HashMap<String, Anchor>()
         for (f in files) {
             if (!f.indexed || !(f.purpose == null || f.purpose == "telemetry")) continue
@@ -61,6 +73,11 @@ object TimeEstimate {
             val current = out[boot]
             if (current == null || candidate.monoUs < current.monoUs) out[boot] = candidate
         }
+        for (receipt in receipts) {
+            val candidate = Anchor(receipt.boot, receipt.utcNs, receipt.monoUs, "clock:${receipt.boot}:${receipt.monoUs}:${receipt.utcNs}")
+            val current = out[candidate.boot]
+            if (current == null || candidate.monoUs <= current.monoUs) out[candidate.boot] = candidate
+        }
         return out
     }
 
@@ -71,7 +88,10 @@ object TimeEstimate {
         val a = anchors[boot] ?: return null
         val first = file.firstMonoUs ?: return null
         val last = file.lastMonoUs ?: return null
-        return a.estimateNs(first) to a.estimateNs(last)
+        if (first > last) return null
+        val start = a.estimateNsOrNull(first) ?: return null
+        val end = a.estimateNsOrNull(last) ?: return null
+        return start to end
     }
 
     /** Human label: "±3 s" / "±2 min". */

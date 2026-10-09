@@ -270,7 +270,6 @@ internal fun AppRoot(
                         controller = settings,
                         appVersion = version,
                         automaticUnits = systemUnits,
-                        showClockSync = true,
                     )
                 }
             },
@@ -422,7 +421,7 @@ private fun HistoryEntry(units: UnitSystem, level: DetailLevel, onBack: () -> Un
 /**
  * Holds the Files controller for the Files entry. iOS Files lists the whole phone archive, with no
  * owner, so per-file actions come from archive rows only. Exports stage into a fresh run under the
- * temporary directory, removed once the sheet closes (B7). iOS derives no daily files yet.
+ * temporary directory, removed once the sheet closes (B7). The derived cache is not exported here.
  */
 private class FilesHolder : ViewModel() {
     val controller = FilesController(

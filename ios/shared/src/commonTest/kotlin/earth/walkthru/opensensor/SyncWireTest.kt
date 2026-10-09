@@ -8,6 +8,11 @@ import kotlin.test.assertNull
 class SyncWireTest {
     private val wire = SyncWire()
 
+    @Test fun clockIdentityRetainsTheFullBootValue() {
+        val identity = wire.identity("""{"proto":2,"station":"abc-123","dev":"AABBCCDDEEFF","boot":"b41d37a48c04031e9397e28ce48c2f43"}""")!!
+        assertEquals("b41d37a48c04031e9397e28ce48c2f43", identity.boot)
+    }
+
     @Test fun requestsUseCanonicalLittleEndianCodec() {
         assertEquals("0d", wire.tokenFrame().hex())
         assertEquals("07", wire.statusFrame().hex())

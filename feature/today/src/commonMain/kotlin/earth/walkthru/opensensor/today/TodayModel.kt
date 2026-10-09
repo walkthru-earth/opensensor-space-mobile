@@ -96,12 +96,12 @@ interface TodaySource {
     val notices: Flow<TodayNotice>
 
     /**
-     * Smart Sync. [clockConfirmed] is true only after the user agreed to send this phone's time, or
-     * when the mode is AUTOMATIC. The platform sends `SET_TIME` first when [mode] and the clock say so.
+     * Smart Sync always uses automatic UTC. [mode] and [clockConfirmed] remain for adapter
+     * compatibility with older stored preferences and are not user-facing clock controls.
      */
     fun sync(mode: earth.walkthru.aqsync.data.sync.ClockSyncMode, clockConfirmed: Boolean)
 
-    /** `SET_TIME` with this phone's clock. Called only after the user confirmed it. */
+    /** Internal automatic `SET_TIME` with this phone UTC. No manual control exposes this action. */
     fun setTime()
 
     /** `FLUSH`, finalizing the buffered rows. Called only after the user confirmed it. */

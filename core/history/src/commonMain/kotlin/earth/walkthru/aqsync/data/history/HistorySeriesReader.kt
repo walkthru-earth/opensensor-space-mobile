@@ -3,6 +3,8 @@ package earth.walkthru.aqsync.data.history
 import earth.walkthru.aqsync.archive.ArchiveIndex
 import earth.walkthru.aqsync.archive.ArchiveRecord
 import earth.walkthru.aqsync.archive.ArchiveStore
+import earth.walkthru.aqsync.archive.ClockAnchorStore
+import earth.walkthru.aqsync.archive.EmptyClockAnchorStore
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -25,6 +27,7 @@ class HistorySeriesReader(
     private val index: ArchiveIndex,
     private val tiers: HistoryTiers,
     private val io: CoroutineDispatcher = Dispatchers.Default,
+    private val clockAnchors: ClockAnchorStore = EmptyClockAnchorStore,
 ) {
     @OptIn(ExperimentalCoroutinesApi::class)
     fun observe(station: String, metric: MetricSpec, range: HistoryRange, window: HistoryWindow): Flow<HistorySeries> {
@@ -97,7 +100,7 @@ class HistorySeriesReader(
 
     private suspend fun fromRows(station: String, metric: MetricSpec, range: HistoryRange, fromS: Long, toS: Long): HistorySeries {
         val files = index.timeline(station, fromS * NS, toS * NS)
-        val anchors = if (files.any { it.hasEstimatedUtc }) TimeEstimate.anchors(index.indexedForStation(station).map { it.info() }) else emptyMap()
+        val anchors = if (files.any { it.hasEstimatedUtc }) TimeEstimate.anchors(index.indexedForStation(station).map { it.info() }, clockAnchors.anchors(station)) else emptyMap()
         val times = ArrayList<Long>()
         val values = ArrayList<Float>() // NaN means invalid or null
         val estimatedFlags = ArrayList<Boolean>()
@@ -119,7 +122,7 @@ class HistorySeriesReader(
                 val ns = utc.asLong(i) ?: run {
                     val m = mono?.asLong(i) ?: return@run null
                     est = true
-                    anchor?.estimateNs(m)
+                    anchor?.estimateNsOrNull(m)
                 } ?: continue
                 val s = ns.floorDiv(NS)
                 if (s < fromS || s >= toS) continue

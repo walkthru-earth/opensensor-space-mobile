@@ -261,6 +261,7 @@ final class LanDiscovery {
         let link = SensorLink(overWifi: true, address: target.device, mtu: target.mtu) { body in
             session.enqueue(body)
         }
+        link.identify(station: target.station, boot: target.boot)
         guard await session.beginCollect(FrameSink(link)) else { return nil }
         let ended = await withCheckedContinuation { (continuation: CheckedContinuation<SyncEnded, Never>) in
             handles[name] = engine.start(

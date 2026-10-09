@@ -115,8 +115,8 @@
     <string name="clock_set">Clock is set</string>
     <string name="clock_unknown">Clock state unknown</string>
     <string name="clock_title">Clock</string>
-    <string name="clock_actions_explain">Set time gives a date to readings from now on. Finalize writes the readings waiting in memory to a short file so you can sync them now.</string>
-    <string name="clock_none_explain">New readings get no date until you set the time.</string>
+    <string name="clock_actions_explain">Time synchronizes automatically when connected. Finalize saves readings waiting in memory so you can sync them now.</string>
+    <string name="clock_none_explain">Readings keep their device time until UTC synchronizes automatically.</string>
     <string name="clock_generation">anchor generation %1$d</string>
     <string name="clock_last_sample">last sample at %1$s</string>
     <string name="sync_title">Smart Sync</string>
@@ -199,4 +199,5 @@
     <string name="device_link">link</string>
     <string name="device_payload">payload %1$d B</string>
     <string name="device_config_read">settings read</string>
+    <string name="clock_network">Time from network</string>
 </resources>

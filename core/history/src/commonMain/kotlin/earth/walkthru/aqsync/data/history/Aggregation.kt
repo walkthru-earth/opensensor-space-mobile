@@ -89,7 +89,7 @@ class Aggregator(
             val ns = utc.asLong(i) ?: run {
                 val m = mono?.asLong(i) ?: return@run null
                 estimated = true
-                applicable?.estimateNs(m)
+                applicable?.estimateNsOrNull(m)
             } ?: continue
             if (!seen.firstSight(bootHi?.asLong(i), bootLo?.asLong(i), seq?.asLong(i), ns)) continue
             val s = ns.floorDiv(1_000_000_000L)

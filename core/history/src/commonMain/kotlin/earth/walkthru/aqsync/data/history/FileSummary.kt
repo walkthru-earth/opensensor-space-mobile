@@ -70,7 +70,7 @@ data class FileSummary(
                     if (ns > last) last = ns
                 } else {
                     val m = mono?.asLong(i) ?: continue
-                    val e = applicable!!.estimateNs(m)
+                    val e = applicable!!.estimateNsOrNull(m) ?: continue
                     estimated++
                     if (e < estFirst) estFirst = e
                     if (e > estLast) estLast = e

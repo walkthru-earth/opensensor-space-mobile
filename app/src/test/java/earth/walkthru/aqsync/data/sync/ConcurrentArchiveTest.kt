@@ -76,8 +76,10 @@ class ConcurrentArchiveTest {
     @Test
     fun `different stations transfer the same relative filename at the same time`() = runBlocking {
         withTimeout(10_000) {
-            val a = device()
-            val b = device()
+            val aBytes = stationParquetFixture(bytes, "station-a")
+            val bBytes = stationParquetFixture(bytes, "station-b")
+            val a = device(aBytes)
+            val b = device(bBytes)
             val bothStarted = java.util.concurrent.CountDownLatch(2)
             fun started(progress: FileProgress) {
                 if (progress.bytesDone == 0L) {
@@ -90,8 +92,8 @@ class ConcurrentArchiveTest {
             val outcomes = listOf(first.await(), second.await())
             assertTrue(outcomes.all { it is FileOutcome.Synced })
             assertEquals(0, outcomes.filterIsInstance<FileOutcome.Synced>().count { it.alreadyArchived })
-            assertArrayEquals(bytes, archive.fileFor("station-a", name).readBytes())
-            assertArrayEquals(bytes, archive.fileFor("station-b", name).readBytes())
+            assertArrayEquals(aBytes, archive.fileFor("station-a", name).readBytes())
+            assertArrayEquals(bBytes, archive.fileFor("station-b", name).readBytes())
             assertEquals(2, dao.rows.size)
             assertTrue(dao.rows.values.all { it.indexed })
         }

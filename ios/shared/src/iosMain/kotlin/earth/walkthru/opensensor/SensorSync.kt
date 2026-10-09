@@ -45,8 +45,8 @@ class SyncHandle internal constructor(private val job: Job?) {
  *
  * Make one per app and call [start] on the main thread. Work runs off the main thread. Every
  * callback arrives on the main thread, `progress` at most four times a second and `finished`
- * exactly once, last. A station syncs over one link at a time. The runner only lists, opens, reads
- * and closes files. It never asks the sensor to delete, rename or rewrite one.
+ * exactly once, last. A station syncs over one link at a time. The runner synchronizes UTC,
+ * then lists, opens, reads and closes files. It never asks the sensor to delete, rename or rewrite one.
  */
 class SensorSync internal constructor(
     store: ArchiveStore,
@@ -55,6 +55,7 @@ class SensorSync internal constructor(
     private val work: CoroutineContext,
     private val callbacks: CoroutineContext,
     private val progressInterval: Long = PROGRESS_INTERVAL_MS,
+    private val recordClockAnchor: suspend (String, String, Long, Long) -> Unit = { _, _, _, _ -> },
 ) {
     constructor() : this(IosArchiveStore.inApplicationSupport(), Dispatchers.Default, Dispatchers.Main)
 
@@ -92,7 +93,19 @@ class SensorSync internal constructor(
             val result = try {
                 var last: TimeSource.Monotonic.ValueTimeMark? = null
                 var lastDone = -1
-                val summary = collector.collect(DeviceSession(link.transport, debugFrames.recorderFor(link.transport.address)), station, device, maxRead) { p: CollectionProgress ->
+                val session = DeviceSession(link.transport, debugFrames.recorderFor(link.transport.address))
+                if (!link.clockSynchronized) {
+                    try {
+                        synchronizeClock(session, link)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        // Preserve immutable unsynced files even when UTC could not be refreshed.
+                        // A broken pipe will still fail the normal LIST/transfer checks.
+                        syncLog("automatic UTC unavailable, ${e::class.simpleName}; collecting original files")
+                    }
+                }
+                val summary = collector.collect(session, station, device, maxRead) { p: CollectionProgress ->
                     listed = p.filesTotal
                     if (initial < 0) initial = p.filesDone
                     done = p.filesDone
@@ -127,8 +140,17 @@ class SensorSync internal constructor(
         return SyncHandle(job)
     }
 
+    private suspend fun synchronizeClock(session: DeviceSession, link: SensorLink) {
+        val station = link.station
+        val boot = link.boot
+        val anchor = session.synchronizeClock(::nowEpochMillis)
+        if (station != null && boot != null) {
+            recordClockAnchor(station, boot, anchor.epochNanos, anchor.monotonicMicros)
+        }
+    }
+
     /**
-     * Sends one confirmed [command] over [link] through the shared [DeviceSession]. `SET_TIME` carries
+     * Sends automatic UTC or a confirmed flush over [link] through [DeviceSession]. `SET_TIME` carries
      * this phone's clock and then asks for a fresh `status` push, so Today shows the anchored clock.
      * `FLUSH` finalizes the buffered rows. Neither touches the archive files. `finished` fires
      * exactly once on the main thread, also when the link closes or [SyncHandle.cancel] lands.
@@ -140,7 +162,7 @@ class SensorSync internal constructor(
             val notice = try {
                 when (command) {
                     SensorCommand.SET_TIME -> {
-                        session.setTime(nowEpochMillis() / 1000)
+                        synchronizeClock(session, link)
                         try {
                             session.requestStatus()
                         } catch (e: TransportException) {

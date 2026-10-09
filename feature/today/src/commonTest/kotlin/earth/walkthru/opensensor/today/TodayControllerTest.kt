@@ -60,18 +60,6 @@ class TodayControllerTest {
     }
 
     @Test
-    fun setTimeIsSentOnlyAfterConfirm() = runTest {
-        val source = FakeSource()
-        val c = controller(source)
-        c.requestSetTime()
-        assertEquals(TodayDialog.SetTime, c.dialog.value)
-        assertEquals(emptyList(), source.calls)
-        c.confirm()
-        assertNull(c.dialog.value)
-        assertEquals(listOf("setTime"), source.calls)
-    }
-
-    @Test
     fun flushIsSentOnlyAfterConfirm() = runTest {
         val source = FakeSource()
         val c = controller(source)
@@ -86,7 +74,6 @@ class TodayControllerTest {
     fun dismissSendsNothing() = runTest {
         val source = FakeSource()
         val c = controller(source)
-        c.requestSetTime()
         c.dismiss()
         c.requestFlush()
         c.dismiss()
@@ -99,7 +86,6 @@ class TodayControllerTest {
     fun commandsWaitForAReadyLink() = runTest {
         val source = FakeSource(connection = ConnectionState.Connecting)
         val c = controller(source)
-        c.requestSetTime()
         c.requestFlush()
         c.smartSync()
         assertNull(c.dialog.value)
@@ -107,23 +93,12 @@ class TodayControllerTest {
     }
 
     @Test
-    fun askWithAMissingClockOpensConsentFirst() = runTest {
+    fun legacyAskWithAMissingClockSynchronizesAutomatically() = runTest {
         val source = FakeSource(status = clockMissing)
         val c = controller(source, ClockSyncMode.ASK)
         c.smartSync()
-        assertEquals(TodayDialog.ClockConsent(ClockQuality.MISSING), c.dialog.value)
-        assertEquals(emptyList(), source.calls)
-        c.confirm()
-        assertEquals(listOf("sync ASK true"), source.calls)
-    }
-
-    @Test
-    fun declinedConsentSendsNothing() = runTest {
-        val source = FakeSource(status = clockMissing)
-        val c = controller(source, ClockSyncMode.ASK)
-        c.smartSync()
-        c.dismiss()
-        assertEquals(emptyList(), source.calls)
+        assertNull(c.dialog.value)
+        assertEquals(listOf("sync AUTOMATIC false"), source.calls)
     }
 
     @Test
@@ -132,7 +107,7 @@ class TodayControllerTest {
         val c = controller(source, ClockSyncMode.ASK)
         c.smartSync()
         assertNull(c.dialog.value)
-        assertEquals(listOf("sync ASK false"), source.calls)
+        assertEquals(listOf("sync AUTOMATIC false"), source.calls)
     }
 
     @Test
@@ -145,7 +120,7 @@ class TodayControllerTest {
         val c = controller(never, ClockSyncMode.NEVER)
         c.smartSync()
         assertNull(c.dialog.value)
-        assertEquals(listOf("sync NEVER false"), never.calls)
+        assertEquals(listOf("sync AUTOMATIC false"), never.calls)
     }
 
     @Test
@@ -157,7 +132,7 @@ class TodayControllerTest {
     }
 
     @Test
-    fun aClockQuestionFromThePlatformOpensTheDialogAndOtherNoticesPassThrough() = runTest {
+    fun aLegacyClockQuestionIsHandledAutomaticallyAndOtherNoticesPassThrough() = runTest {
         val source = FakeSource()
         val c = controller(source)
         val seen = mutableListOf<TodayNotice>()
@@ -165,11 +140,11 @@ class TodayControllerTest {
 
         source.notices.emit(TodayNotice.ClockConfirmationRequired(ClockQuality.RTC_RESTORED))
         source.notices.emit(TodayNotice.ClockSet)
-        assertEquals(TodayDialog.ClockConsent(ClockQuality.RTC_RESTORED), c.dialog.value)
+        assertNull(c.dialog.value)
         assertEquals(listOf<TodayNotice>(TodayNotice.ClockSet), seen)
 
         c.confirm()
-        assertEquals(listOf("sync ASK true"), source.calls)
+        assertEquals(listOf("sync AUTOMATIC true"), source.calls)
     }
 
     @Test

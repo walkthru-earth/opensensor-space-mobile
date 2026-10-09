@@ -3,6 +3,8 @@ package earth.walkthru.aqsync.data.history
 import earth.walkthru.aqsync.archive.ArchiveIndex
 import earth.walkthru.aqsync.archive.ArchiveRecord
 import earth.walkthru.aqsync.archive.ArchiveStore
+import earth.walkthru.aqsync.archive.ClockAnchorStore
+import earth.walkthru.aqsync.archive.EmptyClockAnchorStore
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -28,6 +30,7 @@ class ArchiveHistoryTiers(
     private val store: ArchiveStore,
     private val index: ArchiveIndex,
     private val io: CoroutineDispatcher = Dispatchers.Default,
+    private val clockAnchors: ClockAnchorStore = EmptyClockAnchorStore,
 ) : HistoryTiers {
     private class Day(val signature: String, val buckets: Map<Resolution, Map<String, List<TierBucket>>>)
 
@@ -62,13 +65,13 @@ class ArchiveHistoryTiers(
         .flowOn(io)
 
     /** UTC epoch day to its source files, and the boots' anchors, from the index alone. */
-    private fun sources(station: String, records: List<ArchiveRecord>): Sources {
+    private suspend fun sources(station: String, records: List<ArchiveRecord>): Sources {
         val own = records.filter { it.station == station }
         val days = StationDays.of(own)[station].orEmpty().associateWith { day ->
             val from = day * StationDays.DAY_NS
             own.filter { it.indexed && it.onTimeline(from, from + StationDays.DAY_NS) }.sortedWith(ArchiveRecord.TIMELINE_ORDER)
         }
-        return Sources(days, TimeEstimate.anchors(own.filter { it.indexed }.map { it.info() }))
+        return Sources(days, TimeEstimate.anchors(own.filter { it.indexed }.map { it.info() }, clockAnchors.anchors(station)))
     }
 
     private suspend fun build(station: String, sources: Sources): Map<Long, Day> = mutex.withLock {

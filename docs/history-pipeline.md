@@ -82,19 +82,25 @@ shared key, `RowKey` in `:core:history`: `(boot_id_hi, boot_id_lo, sequence)`, o
 counting as 0. The tiers, the day chart and the daily file all use it, so their row counts agree.
 Means over a span are weighted by valid rows — never averages of averages.
 
-## Derived daily Parquet (`DailyDerivedBuilder`)
+## Derived daily Parquet (`DailyParquetBuilder`)
 
-`derived/v1/<station>/day=YYYY-MM-DD.parquet` + `.manifest.json`, written by the app's own
+`derived/v1/<station>/day=YYYY-MM-DD.parquet` + `.manifest.json` on both platforms, written by the shared
 `ParquetWriter`. Rows: every UTC row of the day from the verified files, time-ordered,
 de-duplicated; **one row group per UTC hour**. Columns: union of sources (v1 files leave the four v2
 columns null) + `source_file_index` (INT32 into the manifest's `sources`) +
 `event_time_utc_estimated_ns` for estimated rows (with `event_time_utc_ns` null). **No `station_id`
 string column** (deviation from the evaluation) — stays flat numeric so our reader reads it back;
 station is in the path and metadata. Metadata: invariant device keys + `derived_by`
-(`AQ Sync Android derived-v1`), `derived_version`, `source_count`, `coverage_rows`, `complete`
+(`opensensor.space shared derived-v2`), `derived_version`, `source_count`, `coverage_rows`, `complete`
 (every known file in and the day ended > 30 min ago), `day`, `purpose = telemetry-derived-day`,
 `time_estimate` note. Measured 188 B/row vs 512 B/row for device files (5–9× smaller). Validated by
 PyArrow 25 + DuckDB 1.5.5 (`TIMESTAMPTZ`, range pruning, `time_bucket`).
+
+Android commits through `DailyDerivedBuilder`; iOS uses `IosDailyDerivedStore`. Both use the
+same row-selection, deduplication and UTC partition algorithm. Temporary output is flushed,
+the footer is read back, and the old cache manifest is invalidated before replacement. A
+missing manifest after interruption causes a rebuild from immutable raw files. iOS rebuilds
+at startup, after index changes and after new clock receipts, without a History screen visit.
 
 ### When a day is rebuilt
 
@@ -105,13 +111,20 @@ line after a sync: `HistoryDeriver: derived 0 of N station-days (nothing changed
 
 ## Time for rows logged before the clock (`TimeEstimate`, Room v6)
 
-The **earliest fully-timed file of a boot** (`utcRows == rows`) is its anchor; for that boot's
-unsynced files `utc ≈ anchor_utc + (monotonic_us − anchor_mono)` — never across a reboot, never
-overwriting `event_time_utc_ns`. Uncertainty grows with distance at `DRIFT_PPM` 50. Verified on
+A successful automatic clock handshake persists the acknowledged UTC/monotonic pair in
+app-private clock receipts, scoped to the original station and full 128-bit boot ID.
+History uses the earliest receipt or fully-timed file of that boot; it also imports
+`reconciliation_anchor_*` footer evidence when a verified firmware file arrives. It no longer
+needs to wait for a fully-timed file to finalize. For that boot's unsynced files,
+`estimated_utc_ns = anchor_utc_ns + (monotonic_us − anchor_mono_us) * 1000` — never across a
+reboot, never overwriting `event_time_utc_ns`. The 50 ppm drift assumption is not a measured
+accuracy bound and excludes phone clock error and transport latency. Verified on
 boot `e452563e…` (2026-09-08): reproduces the firmware's own stamp 43 min after the anchor
 **exactly**. Stored as `archived_file.estFirstUtcNs/estLastUtcNs/estAnchorFile` (index only, no
 decode). Tiers carry `estimatedRows`; charts draw estimated stretches **dashed** and say so. Boots
-that never got the time stay off the timeline.
+that never retained a time anchor stay off the timeline. Durable receipts survive app restarts;
+a new receipt or footer anchor rebuilds affected UTC days, including files whose estimated rows
+cross midnight. See [UTC reconciliation](time-reconciliation.md).
 
 ## Friendly layer (`AirMood`, `NowReading`)
 

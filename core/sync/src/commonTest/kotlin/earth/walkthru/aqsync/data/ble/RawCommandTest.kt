@@ -14,8 +14,8 @@ import kotlin.test.fail
 
 class RawCommandTest {
     @Test
-    fun denylistIsExactlyRebootAndSetConfig() {
-        assertEquals(setOf(Opcode.REBOOT, Opcode.SET_CONFIG), RawCommandPolicy.DENYLIST)
+    fun denylistIncludesAutomaticOnlyClock() {
+        assertEquals(setOf(Opcode.REBOOT, Opcode.SET_CONFIG, Opcode.SET_TIME), RawCommandPolicy.DENYLIST)
         assertEquals(RawCommandPolicy.DENYLIST, DeviceSession.RAW_COMMAND_DENYLIST)
     }
 
@@ -57,6 +57,7 @@ class RawCommandTest {
     @Test
     fun senderNeverCallsTheExchangeForARefusedOpcode() = runTest {
         val sender = RawCommandSender { fail("exchange must not run") }
+        assertEquals(RawCommandOutcome.Refused("SET_TIME"), sender.send("05"))
         assertEquals(RawCommandOutcome.Refused("REBOOT"), sender.send("0b"))
         assertEquals(RawCommandOutcome.Refused("SET_CONFIG"), sender.send("09"))
         assertEquals(RawCommandOutcome.InvalidHex, sender.send("0"))

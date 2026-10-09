@@ -29,6 +29,24 @@ class FrameCodecTest {
     }
 
     @Test
+    fun preciseClockFramesPreserveAcknowledgedMicroseconds() {
+        assertEquals("056bdaaa6a0000000040e20100", Request.SetTime(1_789_581_931L, 123_456).encode().toHex())
+        val frame = FrameCodec.decode("306bdaaa6a00000000e1ac03110000000040e20100".hexToBytes()) as Frame.TimeSet
+        assertEquals(123_456, frame.subsecondMicros)
+        assertEquals(1_789_581_931_123_456_000L, frame.epochNanos)
+        assertContentEquals("306bdaaa6a00000000e1ac03110000000040e20100".hexToBytes(), FrameCodec.encode(frame))
+        val legacy = FrameCodec.decode("306bdaaa6a00000000e1ac031100000000".hexToBytes()) as Frame.TimeSet
+        assertEquals(1_789_581_931_000_000_000L, legacy.epochNanos)
+    }
+
+    @Test
+    fun malformedClockFractionAndLengthAreRejected() {
+        assertFailsWith<IllegalArgumentException> { Request.SetTime(1, 1_000_000) }
+        assertFailsWith<FrameDecodeException> { FrameCodec.decode("306bdaaa6a00000000e1ac03110000000040420f00".hexToBytes()) }
+        assertFailsWith<FrameDecodeException> { FrameCodec.decode("306bdaaa6a00000000e1ac03110000000000".hexToBytes()) }
+    }
+
+    @Test
     fun `FILE frame decodes name and size`() {
         val name = "station=53315f5f/unsynced/boot=b41d/data_unsynced_b41d_0-26-0.parquet"
         val raw = ("10" + "39490000" + name.encodeToByteArray().toHex()).hexToBytes() // 0x4939 = 18745

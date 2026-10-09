@@ -49,10 +49,8 @@ import earth.walkthru.opensensor.designsystem.PillButton
 import earth.walkthru.opensensor.designsystem.SectionTabs
 import earth.walkthru.opensensor.designsystem.StatusDot
 import earth.walkthru.opensensor.designsystem.TagChip
-import earth.walkthru.opensensor.designsystem.nowEpochMillis
 import earth.walkthru.opensensor.today.resources.Res
 import earth.walkthru.opensensor.today.resources.action_cancel
-import earth.walkthru.opensensor.today.resources.action_not_now
 import earth.walkthru.opensensor.today.resources.action_reconnect
 import earth.walkthru.opensensor.today.resources.conn_bluetooth_settings
 import earth.walkthru.opensensor.today.resources.conn_link_lost
@@ -72,19 +70,12 @@ import earth.walkthru.opensensor.today.resources.nav_debug
 import earth.walkthru.opensensor.today.resources.nav_devices
 import earth.walkthru.opensensor.today.resources.nav_disconnect
 import earth.walkthru.opensensor.today.resources.nav_settings
-import earth.walkthru.opensensor.today.resources.set_time
-import earth.walkthru.opensensor.today.resources.set_time_button
-import earth.walkthru.opensensor.today.resources.set_time_confirm
-import earth.walkthru.opensensor.today.resources.sync_clock_button
-import earth.walkthru.opensensor.today.resources.sync_clock_confirm
-import earth.walkthru.opensensor.today.resources.sync_clock_title
 import earth.walkthru.opensensor.today.resources.tab_device
 import earth.walkthru.opensensor.today.resources.tab_files
 import earth.walkthru.opensensor.today.resources.tab_history
 import earth.walkthru.opensensor.today.resources.tab_today
 import earth.walkthru.opensensor.today.resources.today_station_short
 import earth.walkthru.opensensor.today.resources.today_title
-import kotlinx.datetime.TimeZone
 import org.jetbrains.compose.resources.getPluralString
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
@@ -110,8 +101,7 @@ sealed interface TodayAction {
 
 /**
  * Today on both platforms. Collects the [controller], shows its confirmation dialogs and its
- * notices, and draws [TodayContent]. Set time and Finalize go through the controller's dialogs, so
- * nothing reaches the device before the user confirmed it.
+ * notices, and draws [TodayContent]. Finalize requires confirmation; device UTC is automatic.
  */
 @Composable
 fun TodayScreen(
@@ -134,7 +124,6 @@ fun TodayScreen(
         snackbar = snackbar,
         modifier = modifier,
         onAction = onAction,
-        onRequestSetTime = controller::requestSetTime,
         onRequestFlush = controller::requestFlush,
     )
 
@@ -159,22 +148,6 @@ internal suspend fun noticeText(notice: TodayNotice): String? = when (notice) {
 @Composable
 internal fun TodayDialogs(dialog: TodayDialog, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     when (dialog) {
-        TodayDialog.SetTime -> AlertDialog(
-            onDismissRequest = onDismiss,
-            icon = { Icon(AppIcons.Schedule, contentDescription = null) },
-            title = { Text(stringResource(Res.string.set_time)) },
-            text = { Text(stringResource(Res.string.set_time_confirm, phoneClock())) },
-            confirmButton = { TextButton(onClick = onConfirm) { Text(stringResource(Res.string.set_time_button)) } },
-            dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.action_cancel)) } },
-        )
-        is TodayDialog.ClockConsent -> AlertDialog(
-            onDismissRequest = onDismiss,
-            icon = { Icon(AppIcons.Schedule, contentDescription = null) },
-            title = { Text(stringResource(Res.string.sync_clock_title)) },
-            text = { Text(stringResource(Res.string.sync_clock_confirm, stringResource(dialog.quality.reasonRes()))) },
-            confirmButton = { TextButton(onClick = onConfirm) { Text(stringResource(Res.string.sync_clock_button)) } },
-            dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.action_not_now)) } },
-        )
         TodayDialog.Flush -> AlertDialog(
             onDismissRequest = onDismiss,
             icon = { Icon(AppIcons.Storage, contentDescription = null) },
@@ -185,10 +158,6 @@ internal fun TodayDialogs(dialog: TodayDialog, onConfirm: () -> Unit, onDismiss:
         )
     }
 }
-
-/** This phone's clock as the dialog shows it, in the phone's zone. */
-private fun phoneClock(): String =
-    formatEpoch(nowEpochMillis() / 1000, TimeZone.currentSystemDefault(), "yyyy-MM-dd HH:mm:ss z")
 
 /**
  * Today, stateless. Simple shows the hero reading, today so far, the sync state in words with one
@@ -201,7 +170,6 @@ fun TodayContent(
     state: TodayUiState,
     units: UnitFormatter,
     onAction: (TodayAction) -> Unit,
-    onRequestSetTime: () -> Unit,
     onRequestFlush: () -> Unit,
     modifier: Modifier = Modifier,
     snackbar: SnackbarHostState = remember { SnackbarHostState() },
@@ -211,7 +179,7 @@ fun TodayContent(
     val profile = state.capabilities.liveProfile
     val live = snapshot.live
     val receivedAt = snapshot.liveAtEpochMs
-    // Hoisted so the scroll position belongs to the screen. A "Set time" tap must never reset it.
+    // Hoisted so the scroll position belongs to the screen. A clock refresh must never reset it.
     val listState = rememberLazyListState()
 
     CompositionLocalProvider(LocalTodayUnits provides units) {
@@ -309,7 +277,6 @@ fun TodayContent(
                                     live = live,
                                     enabled = snapshot.connection.isReady,
                                     level = level,
-                                    onSetTime = onRequestSetTime,
                                     onFlush = onRequestFlush,
                                 )
                                 TodayCard.BATCH_ESTIMATE -> BatchEstimateCard(live, receivedAt, snapshot.config)

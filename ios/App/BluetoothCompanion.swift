@@ -13,6 +13,8 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     private let credentials = LanCredentials()
     private var control: CBCharacteristic?
     private var response: CBCharacteristic?
+    private var clockAttempted = false
+    private var clockSynchronized = false
     private var identity: SyncIdentity?
     private var tokenTimer: Timer?
     private var requestingToken = false
@@ -255,6 +257,8 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         tokenTimer = nil
         requestingToken = false
         identity = nil
+        clockAttempted = false
+        clockSynchronized = false
         control = nil
         response = nil
         state.wifiAccessReset()
@@ -291,7 +295,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     }
 
     /// Copies every file this phone lacks from the connected sensor through the shared engine.
-    /// Requests are LIST, OPEN, READ and CLOSE only, written in order through the operation queue.
+    /// UTC is synchronized before LIST, OPEN, READ and CLOSE through the operation queue.
     func sync() {
         // Today's Smart Sync and the Sync button say the link is busy instead of doing nothing.
         if !startSync() { state.today.commandRefused() }
@@ -301,7 +305,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     /// idle waiters, so a refusal there stays quiet and the step waits for the next idle link.
     @discardableResult
     private func startSync() -> Bool {
-        guard active, let peripheral = current, control != nil, let response, let identity, link == nil,
+        guard active, clockAttempted, let peripheral = current, control != nil, let response, let identity, link == nil,
             pending == nil, operations.isEmpty, !requestingToken
         else { return false }
         let mtu = Int32(peripheral.maximumWriteValueLength(for: .withoutResponse) + 3)
@@ -309,6 +313,8 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
             // Kotlin sends on the main thread, in request order.
             MainActor.assumeIsolated { self?.write(body) }
         }
+        link.identify(station: identity.station, boot: identity.boot)
+        if clockSynchronized { link.markClockSynchronized() }
         self.link = link
         if !responseSubscribed { operations.append(.subscribe(response)) }
         // The engine ends a stalled sync itself, so the step timers are no longer needed.
@@ -336,10 +342,9 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         return true
     }
 
-    /// Sends one confirmed SET_TIME or FLUSH from Today through the shared session. Today asked
-    /// first. A busy link refuses it, and the outcome always reaches Today.
-    func command(_ command: SensorCommand) {
-        guard foreground, let peripheral = current, control != nil, let response, let identity, link == nil,
+    /// Sends automatic UTC synchronization or a confirmed flush through the shared session.
+    func command(_ command: SensorCommand, automatic: Bool = false) {
+        guard (foreground || automatic), let peripheral = current, control != nil, let response, let identity, link == nil,
             pending == nil, operations.isEmpty, !requestingToken
         else {
             state.today.commandRefused()
@@ -349,6 +354,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         let link = SensorLink(overWifi: false, address: identity.device, mtu: mtu) { [weak self] body in
             MainActor.assumeIsolated { self?.write(body) }
         }
+        link.identify(station: identity.station, boot: identity.boot)
         self.link = link
         if !responseSubscribed { operations.append(.subscribe(response)) }
         state.today.commandStarted()
@@ -359,6 +365,8 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     }
 
     private func commandEnded(_ result: CommandResult, link: SensorLink) {
+        guard self.link === link else { return }
+        if result.clockSynchronized { clockSynchronized = true }
         if self.link === link {
             self.link = nil
             syncHandle = nil
@@ -372,7 +380,12 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     /// Runs what waits for an idle link once no write or read is queued or in flight. First the
     /// outcome of a command for Today, then a Collect all step or an Auto-sync step waiting for the link.
     private func settle() {
-        guard link == nil, pending == nil, operations.isEmpty else { return }
+        guard link == nil, pending == nil, operations.isEmpty, !requestingToken else { return }
+        if identity != nil, control != nil, response != nil, !clockAttempted {
+            clockAttempted = true
+            command(.setTime, automatic: true)
+            return
+        }
         state.today.linkIdle()
         collectWhenReady()
         backgroundWhenReady()
@@ -611,6 +624,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         tokenTimer?.invalidate()
         tokenTimer = nil
         state.wifiAccessNoticed(available: true, busy: false, notice: notice)
+        settle()
     }
 
     func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {

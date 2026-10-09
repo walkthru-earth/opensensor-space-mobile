@@ -32,6 +32,7 @@ enum LanFailure: Error {
 
 /// Who a collection talks to, read from HELLO or INFO.
 struct CollectTarget: Sendable {
+    let boot: String?
     let station: String
     let device: String
     let maxRead: Int32
@@ -133,7 +134,7 @@ actor LanSession {
     func target() -> CollectTarget? {
         guard let identity, !closed else { return nil }
         return CollectTarget(
-            station: identity.station, device: identity.device, maxRead: identity.maxRead, mtu: Int32(payloadMax + 3))
+            boot: identity.boot, station: identity.station, device: identity.device, maxRead: identity.maxRead, mtu: Int32(payloadMax + 3))
     }
 
     /// Routes file replies to `sink` until `endCollect`. STATUS and LIVE still reach `events`.

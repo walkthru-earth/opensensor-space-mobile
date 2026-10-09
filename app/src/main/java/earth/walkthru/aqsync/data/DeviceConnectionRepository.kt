@@ -550,6 +550,8 @@ class DeviceConnectionRepository @Inject constructor(
                 )
             )
             _info.value = info
+            setTimeFromPhoneNow(session, quiet = true)
+            if (_session.value !== session) return false
             identityReady.value = true
             suspendRunCatching { transport.readStatus().decodeToString() }.onSuccess { raw ->
                 _statusRaw.value = raw
@@ -790,11 +792,11 @@ class DeviceConnectionRepository @Inject constructor(
      * second request would only queue behind the stale reply ([DeviceSession] drains it first).
      */
     private suspend fun refreshManifestNow(session: DeviceSession): Boolean {
-        if (_session.value !== session) return false
+        check(_session.value === session) { "clock session replaced" }
         _manifest.update { it.refreshing() }
         return try {
             val (files, end) = session.list()
-            if (_session.value !== session) return false
+            check(_session.value === session) { "clock session replaced" }
             _manifest.update { it.loaded(files, end, clock.nowEpochMs()) }
             true
         } catch (e: CancellationException) {
@@ -809,26 +811,17 @@ class DeviceConnectionRepository @Inject constructor(
     // --------------------------------------------------------------------- sync
 
     /**
-     * Explicit Smart Sync: inspect clock quality, apply the user's SET_TIME consent policy, then
+     * Explicit Smart Sync: automatically refresh UTC when needed, then
      * download every immutable missing file. FLUSH is not part of this operation.
      */
     fun smartSync(mode: ClockSyncMode, clockConfirmed: Boolean = false) {
         if (_sync.value.running) return
         val session = interactiveSession() ?: return
         scope.launch {
-            val decision = SmartSyncPolicy.decide(_status.value?.status, mode)
+            val decision = SmartSyncPolicy.decide(_status.value?.status, ClockSyncMode.AUTOMATIC)
             recordDiagnostic("clock", "${decision.quality}: ${decision.reason}; action=${decision.action}")
-            when (decision.action) {
-                ClockSyncAction.ASK_USER -> if (clockConfirmed) {
-                    if (!setTimeFromPhoneNow(session, quiet = false)) return@launch
-                } else {
-                    _events.emit(DeviceEvent.ClockConfirmationRequired(decision.quality))
-                    return@launch
-                }
-                ClockSyncAction.SET_TIME -> {
-                    if (!setTimeFromPhoneNow(session, quiet = false)) return@launch
-                }
-                ClockSyncAction.CONTINUE -> Unit
+            if (decision.action != ClockSyncAction.CONTINUE) {
+                setTimeFromPhoneNow(session, quiet = false)
             }
             val latest = plan.value ?: run {
                 _events.emit(DeviceEvent.Error(DeviceMessage.FileListNotReady))
@@ -1217,15 +1210,19 @@ class DeviceConnectionRepository @Inject constructor(
 
     // ----------------------------------------------------------------- controls
 
-    /** SET_TIME with the phone's clock. Only rows sampled afterwards get UTC (contract). */
+    /** Automatic SET_TIME with the phone UTC, also preserving the acknowledged reconciliation anchor. */
     fun setTimeFromPhone() {
         val session = interactiveSession() ?: return
         scope.launch { setTimeFromPhoneNow(session, quiet = false) }
     }
 
     private suspend fun setTimeFromPhoneNow(session: DeviceSession, quiet: Boolean): Boolean = try {
-        val epoch = clock.nowEpochMs() / 1000
-        val r = session.setTime(epoch)
+        val info = _info.value
+        val r = session.synchronizeClock(clock::nowEpochMs)
+        check(_session.value === session) { "clock session replaced" }
+        if (info?.station != null && info.boot != null) {
+            historyDeriver.recordClockAnchor(info.station!!, info.boot!!, r.epochNanos, r.monotonicMicros)
+        }
         recordDiagnostic("clock", "SET_TIME accepted at epoch ${r.epochSeconds}")
         if (!quiet) _events.emit(DeviceEvent.Info(DeviceMessage.ClockSet))
         suspendRunCatching { session.readStatus() }.onSuccess { _status.value = TimedStatus(it, clock.nowEpochMs()) }

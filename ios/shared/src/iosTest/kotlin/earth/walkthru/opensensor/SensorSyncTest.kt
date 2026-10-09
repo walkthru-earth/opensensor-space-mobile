@@ -76,6 +76,7 @@ class SensorSyncTest {
 
     private fun respond(link: SensorLink, req: ByteArray) {
         when (val op = req[0].toInt() and 0xFF) {
+            Opcode.SET_TIME -> link.reply(Frame.TimeSet(1_789_581_931L, 12_345_678L, 123_000))
             Opcode.LIST -> {
                 files.forEach { (name, bytes) -> link.reply(Frame.File(bytes.size.toLong(), name)) }
                 link.reply(Frame.ListEnd(files.size, 0, 0, 0))
@@ -115,6 +116,7 @@ class SensorSyncTest {
         val result = run(sensor(), progress)
 
         assertEquals(SyncEnd.COMPLETE, result.end)
+        assertEquals(Opcode.SET_TIME, requests.first())
         assertEquals(2, result.files)
         assertEquals(2, result.saved)
         assertTrue(result.keepsLink)
@@ -135,7 +137,45 @@ class SensorSyncTest {
 
         assertEquals(SyncEnd.COMPLETE, result.end)
         assertEquals(0, result.saved)
-        assertEquals(listOf(Opcode.LIST), requests)
+        assertEquals(listOf(Opcode.SET_TIME, Opcode.LIST), requests)
+    }
+
+    @Test
+    fun aConnectionAlreadySynchronizedDoesNotSetTimeAgain() {
+        val link = sensor().also { it.markClockSynchronized() }
+        assertEquals(SyncEnd.COMPLETE, run(link).end)
+        assertEquals(Opcode.LIST, requests.first())
+        assertFalse(Opcode.SET_TIME in requests)
+    }
+
+    @Test
+    fun theAcknowledgedAnchorKeepsTheFullStationAndBootIdentity() = runBlocking {
+        data class Anchor(val station: String, val boot: String, val utc: Long, val mono: Long)
+        val anchors = mutableListOf<Anchor>()
+        val runner = SensorSync(
+            store,
+            ReceiptArchiveIndex(finals, Dispatchers.Default),
+            Dispatchers.Default,
+            Dispatchers.Default,
+            recordClockAnchor = { st, boot, utc, mono -> anchors += Anchor(st, boot, utc, mono) }
+        )
+        val link = sensor().also { it.identify(station, "full-boot-identity") }
+        val done = CompletableDeferred<SyncResult>()
+        runner.start(link, station, "a1b2c3d4e5f6", 4096, {}) { done.complete(it) }
+        assertEquals(SyncEnd.COMPLETE, withTimeout(20_000) { done.await() }.end)
+        assertEquals(listOf(Anchor(station, "full-boot-identity", 1_789_581_931_123_000_000L, 12_345_678L)), anchors)
+    }
+
+    @Test
+    fun refusedUtcStillPreservesOriginalArchiveFiles() {
+        val link = sensor { link, req ->
+            (req[0].toInt() and 0xFF == Opcode.SET_TIME).also {
+                if (it) link.reply(Frame.Error(Opcode.SET_TIME, 9, "clock unavailable"))
+            }
+        }
+        assertEquals(SyncEnd.COMPLETE, run(link).end)
+        assertEquals(Opcode.SET_TIME, requests.first())
+        assertTrue(Opcode.LIST in requests)
     }
 
     @Test

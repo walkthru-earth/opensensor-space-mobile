@@ -1,6 +1,8 @@
 package earth.walkthru.aqsync.data.history
 
 import android.util.Log
+import earth.walkthru.aqsync.archive.ClockAnchor
+import earth.walkthru.aqsync.archive.FileClockAnchorStore
 import earth.walkthru.aqsync.data.archive.FileArchiveStore
 import earth.walkthru.aqsync.data.archive.RoomArchiveIndex
 import earth.walkthru.aqsync.data.archive.toEntity
@@ -25,10 +27,18 @@ class HistoryIndexer @Inject constructor(
     archive: FileArchive,
     archivedFileDao: ArchivedFileDao,
 ) {
+    val clockAnchors = FileClockAnchorStore(File(archive.root.parentFile, "clock-anchors"))
+
+    suspend fun recordClockAnchor(station: String, boot: String, utcNs: Long, monotonicUs: Long) {
+        clockAnchors.put(ClockAnchor(station, boot, utcNs, monotonicUs))
+        repair.estimateTimes()
+    }
+
     private val repair = ArchiveIndexRepair(
         store = FileArchiveStore(archive, Dispatchers.IO),
         index = RoomArchiveIndex(archivedFileDao),
         io = Dispatchers.IO,
+        clockAnchors = clockAnchors,
         log = { Log.i(TAG, it) },
     )
 

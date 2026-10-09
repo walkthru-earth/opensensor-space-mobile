@@ -66,7 +66,6 @@ import earth.walkthru.opensensor.settings.resources.level_developer
 import earth.walkthru.opensensor.settings.resources.level_simple
 import earth.walkthru.opensensor.settings.resources.settings_about
 import earth.walkthru.opensensor.settings.resources.settings_about_body
-import earth.walkthru.opensensor.settings.resources.settings_clock
 import earth.walkthru.opensensor.settings.resources.settings_detail_level
 import earth.walkthru.opensensor.settings.resources.settings_fonts
 import earth.walkthru.opensensor.settings.resources.settings_level_detailed
@@ -89,13 +88,13 @@ import org.jetbrains.compose.resources.stringResource
 fun settingsTitle(): String = stringResource(Res.string.settings_title)
 
 /**
- * The Settings screen for both apps. The detail level, the Smart Sync clock consent, the units, the
+ * The Settings screen for both apps. The detail level, the units, the
  * one switch for Discover network use (AGENTS.md boundary) and About. Everything else the user can
  * change lives on the device and is edited from the device's own screens.
  *
  * [appVersion] is the host's version name. [automaticUnits] is what Automatic resolves to on this
- * phone now (METRIC or IMPERIAL). [showClockSync] hides the clock consent where the host has no Smart
- * Sync yet (iOS today). [infoButton] lets the host reuse its own info affordance.
+ * phone now (METRIC or IMPERIAL). Device UTC is automatic on every connection.
+ * [infoButton] lets the host reuse its own info affordance.
  */
 @Composable
 fun SettingsScreen(
@@ -103,7 +102,6 @@ fun SettingsScreen(
     appVersion: String,
     automaticUnits: UnitSystem,
     modifier: Modifier = Modifier,
-    showClockSync: Boolean = true,
     infoButton: @Composable (title: String, body: List<String>, modifier: Modifier) -> Unit = { t, b, m -> SettingsInfoButton(t, b, m) },
 ) {
     val stored by controller.prefs.collectAsState()
@@ -111,7 +109,7 @@ fun SettingsScreen(
     val title = settingsTitle()
     val infoBody = listOfNotNull(
         stringResource(Res.string.info_settings_body1),
-        if (showClockSync) stringResource(Res.string.info_settings_body2) else null,
+        stringResource(Res.string.info_settings_body2),
     )
     Column(modifier.fillMaxSize().background(colors.background)) {
         TopAppBar(
@@ -138,18 +136,6 @@ fun SettingsScreen(
                     onSelect = controller::setDetailLevel,
                 )
                 Caption(stringResource(levelCaption(prefs.detailLevel)))
-            }
-            if (showClockSync) {
-                SettingsCard {
-                    Choice(
-                        label = stringResource(Res.string.settings_clock),
-                        options = ClockSyncMode.entries,
-                        selected = prefs.clockSyncMode,
-                        optionLabel = { stringResource(clockLabel(it)) },
-                        onSelect = controller::setClockSyncMode,
-                    )
-                    Caption(stringResource(clockCaption(prefs.clockSyncMode)))
-                }
             }
             SettingsCard {
                 Choice(

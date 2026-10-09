@@ -3,6 +3,8 @@ package earth.walkthru.aqsync.data.ble
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.protocol.FrameCodec
 import earth.walkthru.aqsync.data.protocol.Opcode
+import earth.walkthru.aqsync.data.protocol.ProtocolError
+import earth.walkthru.aqsync.data.protocol.Request
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
@@ -169,6 +171,41 @@ class DeviceSessionPollingTest {
         assertTrue(request.await().exceptionOrNull() is ProtocolViolationException)
     }
 
+    @Test
+    fun automaticClockUsesAcknowledgedPrecisionAndDoesNotInventLegacyFractions() = runTest {
+        val transport = ResponseTransport()
+        val request = async { DeviceSession(transport).synchronizeClock { 1_789_581_931_987L } }
+        runCurrent()
+        assertContentEquals(Request.SetTime(1_789_581_931L, 987_000).encode(), transport.writes.single())
+        transport.responseFrames.send(FrameCodec.encode(Frame.TimeSet(1_789_581_931L, 500)))
+        assertEquals(1_789_581_931_000_000_000L, request.await().epochNanos)
+    }
+
+    @Test
+    fun automaticClockRetriesOnlyMalformedExtensionWithFreshLegacySeconds() = runTest {
+        val transport = ResponseTransport()
+        var now = 1_789_581_931_987L
+        val request = async { DeviceSession(transport).synchronizeClock { now } }
+        runCurrent()
+        now += 1000
+        transport.responseFrames.send(FrameCodec.encode(Frame.Error(Opcode.SET_TIME, ProtocolError.MALFORMED_REQUEST.code, "legacy length")))
+        runCurrent()
+        assertContentEquals(Request.SetTime(1_789_581_932L).encode(), transport.writes.last())
+        transport.responseFrames.send(FrameCodec.encode(Frame.TimeSet(1_789_581_932L, 501)))
+        assertEquals(501L, request.await().monotonicMicros)
+        assertEquals(2, transport.writes.size)
+    }
+
+    @Test
+    fun aRefusedClockIsNotRetriedAsALegacyRequest() = runTest {
+        val transport = ResponseTransport()
+        val request = async { runCatching { DeviceSession(transport).synchronizeClock { 1_789_581_931_987L } } }
+        runCurrent()
+        transport.responseFrames.send(FrameCodec.encode(Frame.Error(Opcode.SET_TIME, 9, "refused")))
+        assertTrue(request.await().exceptionOrNull() is DeviceErrorException)
+        assertEquals(1, transport.writes.size)
+    }
+
     private class ResponseTransport : AqTransport {
         override val address = "test-poll-boundary"
         override val displayName = "Test device"
@@ -184,7 +221,8 @@ class DeviceSessionPollingTest {
         override suspend fun readInfo(): ByteArray = error("unused")
         override suspend fun readStatus(): ByteArray = error("unused")
         override suspend fun readLive(): ByteArray = error("unused")
-        override suspend fun writeControl(request: ByteArray) {}
+        val writes = mutableListOf<ByteArray>()
+        override suspend fun writeControl(request: ByteArray) { writes += request }
         override fun close() { responseFrames.close() }
     }
 }

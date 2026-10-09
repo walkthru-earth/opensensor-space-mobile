@@ -6,6 +6,13 @@ import kotlin.test.assertEquals
 
 class SmartSyncPolicyTest {
     @Test
+    fun networkAnchorDoesNotNeedAnotherPhoneUpdate() {
+        val decision = SmartSyncPolicy.decide(DeviceStatus(utc = 1, clockSource = 3), ClockSyncMode.AUTOMATIC)
+        assertEquals(ClockQuality.HOST_ANCHORED, decision.quality)
+        assertEquals(ClockSyncAction.CONTINUE, decision.action)
+    }
+
+    @Test
     fun `host anchored clock never changes`() {
         val decision = SmartSyncPolicy.decide(DeviceStatus(utc = 1, clockSource = 1), ClockSyncMode.AUTOMATIC)
         assertEquals(ClockQuality.HOST_ANCHORED, decision.quality)

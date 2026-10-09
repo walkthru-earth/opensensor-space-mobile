@@ -1,5 +1,6 @@
 package earth.walkthru.aqsync.data.history
 
+import earth.walkthru.aqsync.archive.ClockAnchor
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 import kotlin.test.Test
 
@@ -23,6 +24,30 @@ class TimeEstimateTest {
     private val unsynced64 = indexedRow("device/v1-none-64rows-unsynced.parquet", "station=$station/unsynced/boot=e452563e96c72ca057a48924550779b6/data_unsynced_e452563e96c72ca057a48924550779b6_0-63-6.parquet")
     private val unsynced1 = indexedRow("device/v1-lz4-1row-unsynced.parquet", "station=$station/unsynced/boot=e452563e96c72ca057a48924550779b6/data_unsynced_e452563e96c72ca057a48924550779b6_64-64-7.parquet")
     private val otherBoot = indexedRow("device/v2-none-90rows-unsynced.parquet", "station=$station/unsynced/boot=16201de72e4422d744b04fddf23eec41/data_unsynced_16201de72e4422d744b04fddf23eec41_0-89-0.parquet")
+
+    @Test
+    fun `invalid monotonic values and overflowing estimates never create dates`() {
+        val anchor = TimeEstimate.Anchor("boot", Long.MAX_VALUE - 1, 0, "receipt")
+        assertNull(anchor.estimateNsOrNull(-1))
+        assertNull(anchor.estimateNsOrNull(Long.MAX_VALUE))
+        assertNull(anchor.estimateNsOrNull(1))
+        val underflow = TimeEstimate.Anchor("boot", Long.MIN_VALUE + 1, 10, "receipt")
+        assertNull(underflow.estimateNsOrNull(0))
+        assertEquals(123_456_000L, TimeEstimate.Anchor("boot", 123_457_000L, 1, "receipt").estimateNsOrNull(0))
+    }
+
+    @Test
+    fun `receipt dates raw microseconds immediately without a timed file and never another boot`() {
+        val receipt = ClockAnchor(station, unsynced64.bootId!!, 1_788_912_000_123_456_000L, unsynced64.lastMonoUs!!)
+        val anchors = TimeEstimate.anchors(listOf(unsynced64, otherBoot), listOf(receipt))
+        val span = TimeEstimate.span(unsynced64, anchors)!!
+        assertEquals(receipt.utcNs, span.second)
+        assertEquals(receipt.utcNs - (receipt.monoUs - unsynced64.firstMonoUs!!) * 1000L, span.first)
+        assertTrue(StationDays.dayOf(span.first) < StationDays.dayOf(span.second))
+        assertNull(TimeEstimate.span(otherBoot, anchors))
+        assertEquals(0L, unsynced64.utcRows)
+        assertNull(unsynced64.firstUtcNs)
+    }
 
     @Test
     fun `the earliest fully-timed file of a boot is its anchor`() {

@@ -174,7 +174,8 @@ copies through `:core:archive` into a fresh run under `tmp/opensensor-export`, t
 `UIActivityViewController` or `UIDocumentPickerViewController(forExporting:asCopy:)` from
 `feature/files/src/iosMain`. The run is removed once the sheet closes. Only verified records
 are exported, so partials and receipts stay private, and the archive is never moved or changed.
-The daily zip is hidden because iOS has no derived files yet. The Swift folder export and its
+The daily zip action remains hidden; automatic UTC reconciliation now persists a derived daily
+Parquet cache, but that cache is not yet wired to the iOS export picker. The Swift folder export and its
 companion button are gone. Background Bluetooth is limited to Auto-sync (#23). The app has no archive charts.
 Native BLE uses Core Bluetooth's
 peripheral identifier; the Keychain identity also pins station and full hardware ID. New

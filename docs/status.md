@@ -4,6 +4,36 @@
 **Code:** `./gradlew verify` (the gate), `.github/workflows/verify.yml`.
 **Related:** measured device behaviour is recorded in the board-specific `../aq-parquet/docs/boards/*/bench-verified.md`; anything not recorded there is unverified.
 
+## 2026-10-09 — automatic UTC and derived partition recovery (host/simulator)
+
+The working tree now synchronizes device UTC automatically on Android/iOS connection,
+without a manual clock setting. A boot-scoped receipt preserves the acknowledged clock
+mapping before collection. Shared history imports firmware footer anchors and rebuilds
+unknown-UTC readings into derived UTC-day Parquet on both platforms, preserving original
+bytes and null UTC. See [decision, behavior and limits](time-reconciliation.md).
+
+Verified for this change:
+
+- `./gradlew --no-daemon verify`: passed, including Android debug APK, unit/host tests,
+  lint, shared iOS simulator tests and framework link (957 tasks; no new lint issues).
+- `ios/tests/verify-native.sh`: passed archive and LAN host checks.
+- Unsigned Debug simulator app: `xcodebuild -project ios/OpenSensor.xcodeproj -scheme
+  OpenSensor -configuration Debug -destination 'generic/platform=iOS Simulator'
+  -derivedDataPath ios/build/DerivedData CODE_SIGNING_ALLOWED=NO build`: passed,
+  without Swift concurrency warnings.
+- PyArrow 25.0.0 and DuckDB 1.5.5 read all four generated daily fixtures. The unknown-UTC
+  recovery fixture retains all 64 rows, partitions 63 before midnight and one after,
+  preserves the exact `123456` microsecond fraction and leaves raw UTC null.
+- Clock receipt restart, station/boot isolation, malformed evidence, arithmetic overflow,
+  independent footer recovery, stale-day replacement and deduplication have automated tests.
+- Changed Kotlin files pass the pinned ktlint hook; repository diff checks are clean.
+
+The sibling firmware passes both board builds and relevant sanitized writer, time-protocol,
+SNTP, telemetry and archive tests. No board was flashed and neither mobile app was installed
+or radio-tested in this change. Cold boot, Wi-Fi/Bluetooth reconnection, RTC retention and
+power-cut behavior still require dated hardware evidence. An unfinished RAM batch remains
+exposed to power loss; a boot with no retained anchor stays undated.
+
 ## 2026-10-09. Wave 2 install check (OnePlus 7 Pro and iPad Air M2), install and launch only
 
 Debug build of `feat/platform-parity` at 14f0a61 (Wave 2: `:core:archive`, `:core:sync` pure moves,

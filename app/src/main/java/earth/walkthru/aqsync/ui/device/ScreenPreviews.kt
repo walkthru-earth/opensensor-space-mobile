@@ -90,4 +90,4 @@ private fun DevicePreview(level: DetailLevel) {
 
 @Composable
 private fun TodayPreview(level: DetailLevel) =
-    TodayContent(PreviewFakes.today(level), UnitFormatter.Metric, onAction = {}, onRequestSetTime = {}, onRequestFlush = {})
+    TodayContent(PreviewFakes.today(level), UnitFormatter.Metric, onAction = {}, onRequestFlush = {})

@@ -35,7 +35,7 @@ import earth.walkthru.aqsync.data.SyncProgress as RunProgress
 class CompanionLinkActions(
     /** Sync the connected sensor. The app routes it to an open Wi-Fi session for the same sensor. */
     internal val syncFiles: () -> Unit,
-    /** `SET_TIME` or `FLUSH` over the Bluetooth connection, after the user confirmed it. */
+    /** Automatic `SET_TIME` or confirmed `FLUSH` over the Bluetooth connection. */
     internal val command: (SensorCommand) -> Unit,
     internal val connect: (String) -> Unit,
     internal val disconnect: () -> Unit,
@@ -45,7 +45,7 @@ class CompanionLinkActions(
  * The iOS side of the Today port: [CompanionState], which `BluetoothCompanion` fills, read as a
  * [TodaySnapshot], and the verbs sent back through [actions]. [address] is the peripheral id Today
  * was opened for. Readings stay null until the sensor sent them. Smart Sync sends `SET_TIME` before
- * the file sync when the shared policy and the user's consent say so, as Android's repository does.
+ * the file sync when the automatic policy requires it, as Android's repository does.
  */
 internal class CompanionTodaySource(
     scope: CoroutineScope,
@@ -141,11 +141,11 @@ internal class CompanionTodaySource(
     private var syncAfterClock = false
 
     override val notices: Flow<TodayNotice> = merge(
-        state.today.notices.onEach { notice ->
+        state.today.notices.onEach {
             if (syncAfterClock) {
                 syncAfterClock = false
-                // As on Android, a refused or failed clock step stops the sync.
-                if (notice == TodayNotice.ClockSet) actions.syncFiles()
+                // Preserve original files even when the automatic clock refresh failed.
+                if (linked) actions.syncFiles()
             }
         },
         local,
@@ -161,12 +161,10 @@ internal class CompanionTodaySource(
             local.tryEmit(TodayNotice.Busy)
             return
         }
-        val decision = SmartSyncPolicy.decide(state.status, mode)
+        val decision = SmartSyncPolicy.decide(state.status, ClockSyncMode.AUTOMATIC)
         when (decision.action) {
             ClockSyncAction.CONTINUE -> actions.syncFiles()
-            ClockSyncAction.SET_TIME -> clockThenSync()
-            ClockSyncAction.ASK_USER ->
-                if (clockConfirmed) clockThenSync() else local.tryEmit(TodayNotice.ClockConfirmationRequired(decision.quality))
+            ClockSyncAction.SET_TIME, ClockSyncAction.ASK_USER -> clockThenSync()
         }
     }
 

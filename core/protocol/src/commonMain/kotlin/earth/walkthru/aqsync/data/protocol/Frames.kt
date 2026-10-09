@@ -160,11 +160,13 @@ sealed interface Request {
             .put(opcode.toByte()).putShort(handle.toShort()).array()
     }
 
-    /** `epoch_s` i64. */
-    data class SetTime(val epochSeconds: Long) : Request {
+    /** `epoch_s` i64 with optional `subsecond_us` u32 for precision-aware firmware. */
+    data class SetTime(val epochSeconds: Long, val subsecondMicros: Int? = null) : Request {
+        init { require(subsecondMicros == null || subsecondMicros in 0..999_999) }
         override val opcode: Int = Opcode.SET_TIME
-        override fun encode(): ByteArray = WireBuffer.allocate(9)
-            .put(opcode.toByte()).putLong(epochSeconds).array()
+        override fun encode(): ByteArray = WireBuffer.allocate(if (subsecondMicros == null) 9 else 13)
+            .put(opcode.toByte()).putLong(epochSeconds)
+            .also { buffer -> subsecondMicros?.let { buffer.putInt(it) } }.array()
     }
 
     data object Flush : Request {
@@ -264,8 +266,10 @@ sealed interface Frame {
 
     data class Closed(val handle: Int) : Frame
 
-    /** `epoch_s` i64, `monotonic_us` i64. */
-    data class TimeSet(val epochSeconds: Long, val monotonicMicros: Long) : Frame
+    /** `epoch_s` i64, `monotonic_us` i64, optionally acknowledged `subsecond_us` u32. */
+    data class TimeSet(val epochSeconds: Long, val monotonicMicros: Long, val subsecondMicros: Int? = null) : Frame {
+        val epochNanos: Long get() = epochSeconds * 1_000_000_000L + (subsecondMicros ?: 0) * 1000L
+    }
 
     /** `rows` u16 written, `fin` u32 files finalized so far. */
     data class Flushed(val rows: Int, val filesFinalized: Long) : Frame
@@ -368,7 +372,14 @@ object FrameCodec {
                 }
                 FrameType.READ_END -> Frame.ReadEnd(handle = buf.u16(), nextOffset = buf.u32(), status = buf.u8())
                 FrameType.CLOSED -> Frame.Closed(handle = buf.u16())
-                FrameType.TIME_SET -> Frame.TimeSet(epochSeconds = buf.long, monotonicMicros = buf.long)
+                FrameType.TIME_SET -> {
+                    if (raw.size != 17 && raw.size != 21) throw FrameDecodeException("invalid TIME_SET length")
+                    val seconds = buf.long
+                    val mono = buf.long
+                    val micros = if (buf.remaining() == 4) buf.u32() else null
+                    if (micros != null && micros > 999_999) throw FrameDecodeException("invalid TIME_SET fraction")
+                    Frame.TimeSet(seconds, mono, micros?.toInt())
+                }
                 FrameType.FLUSHED -> Frame.Flushed(rows = buf.u16(), filesFinalized = buf.u32())
                 FrameType.CONFIG -> Frame.Config(flags = buf.u8(), json = buf.restUtf8())
                 FrameType.CONFIG_CHUNK -> Frame.ConfigChunk(
@@ -429,8 +440,9 @@ object FrameCodec {
             is Frame.ReadEnd -> le(8).put(FrameType.READ_END.toByte()).putShort(frame.handle.toShort())
                 .putInt(frame.nextOffset.toInt()).put(frame.status.toByte()).array()
             is Frame.Closed -> le(3).put(FrameType.CLOSED.toByte()).putShort(frame.handle.toShort()).array()
-            is Frame.TimeSet -> le(17).put(FrameType.TIME_SET.toByte())
-                .putLong(frame.epochSeconds).putLong(frame.monotonicMicros).array()
+            is Frame.TimeSet -> le(if (frame.subsecondMicros == null) 17 else 21).put(FrameType.TIME_SET.toByte())
+                .putLong(frame.epochSeconds).putLong(frame.monotonicMicros)
+                .also { buffer -> frame.subsecondMicros?.let { buffer.putInt(it) } }.array()
             is Frame.Flushed -> le(7).put(FrameType.FLUSHED.toByte())
                 .putShort(frame.rows.toShort()).putInt(frame.filesFinalized.toInt()).array()
             is Frame.Error -> {

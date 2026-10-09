@@ -23,6 +23,8 @@ import javax.inject.Singleton
 /** Brings derived history up to date after new files arrive; [HistoryDeriver] in the app. */
 fun interface HistoryRefresher {
     suspend fun deriveStale(): HistoryDeriver.Result
+
+    suspend fun recordClockAnchor(station: String, boot: String, utcNs: Long, monotonicUs: Long) {}
 }
 
 /**
@@ -65,6 +67,11 @@ class HistoryDeriver @Inject constructor(
      * Rebuilds every stale station-day. Cheap when nothing changed; a full first pass over a year of one
      * station is ~365 day rebuilds of ≤ 96 files each. Safe to call from any screen or worker; idempotent.
      */
+    override suspend fun recordClockAnchor(station: String, boot: String, utcNs: Long, monotonicUs: Long) {
+        indexer.recordClockAnchor(station, boot, utcNs, monotonicUs)
+        deriveStale(listOf(station))
+    }
+
     override suspend fun deriveStale(): Result = deriveStale(null)
 
     suspend fun deriveStale(stations: Collection<String>? = null): Result = mutex.withLock {
@@ -76,7 +83,7 @@ class HistoryDeriver @Inject constructor(
             indexer.estimateTimes()
             val all = archivedFileDao.observeAll().first()
             val wanted = daysOf(all)
-            val anchorsByStation = all.groupBy { it.station }.mapValues { (_, files) -> TimeEstimate.anchors(files.map { it.info() }) }
+            val anchorsByStation = all.groupBy { it.station }.mapValues { (_, files) -> TimeEstimate.anchors(files.map { it.info() }, indexer.clockAnchors.anchors(files.first().station)) }
             // Stations that only have derived days left (every dated file gone) must be visited too, to drop them.
             val allStations = (wanted.keys + dayDao.stations()).filter { stations == null || it in stations }
             for (station in allStations) {
@@ -175,7 +182,7 @@ class HistoryDeriver @Inject constructor(
         private const val TAG = "HistoryDeriver"
 
         /** Part of every day's signature: bump when the tiers' meaning changes so every day is rebuilt. 2 = per-metric rows, 3 = one shared RowKey (D12). */
-        const val DERIVE_VERSION = 3
+        const val DERIVE_VERSION = 4
         const val DAY_NS = StationDays.DAY_NS
     }
 }

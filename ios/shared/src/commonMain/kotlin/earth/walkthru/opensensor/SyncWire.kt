@@ -32,7 +32,7 @@ class SyncWire {
         // Android ReadWindow.kt:21 uses 4096 when max_read is absent. Never above the advertised value.
         val maxRead = info.maxRead ?: DEFAULT_MAX_READ
         require(maxRead > 0)
-        SyncIdentity(station, device.lowercase(), maxRead.coerceIn(1, MAX_READ_CAP))
+        SyncIdentity(station, device.lowercase(), maxRead.coerceIn(1, MAX_READ_CAP), info.boot)
     }.getOrNull()
 
     companion object {
@@ -90,4 +90,4 @@ class SyncReply(
 }
 
 /** Validated fields used by native storage and connection continuity. */
-class SyncIdentity(val station: String, val device: String, val maxRead: Int)
+class SyncIdentity(val station: String, val device: String, val maxRead: Int, val boot: String? = null)

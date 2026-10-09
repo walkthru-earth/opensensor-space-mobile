@@ -123,8 +123,8 @@
     <string name="clock_set">الساعة مضبوطة</string>
     <string name="clock_unknown">حالة الساعة غير معروفة</string>
     <string name="clock_title">الساعة</string>
-    <string name="clock_actions_explain">ضبط الوقت يعطي تاريخًا للقراءات من الآن فصاعدًا. الإنهاء يكتب القراءات المنتظرة في الذاكرة إلى ملف قصير لتتمكن من مزامنتها الآن.</string>
-    <string name="clock_none_explain">القراءات الجديدة لا تحصل على تاريخ حتى تضبط الوقت.</string>
+    <string name="clock_actions_explain">تتم مزامنة الوقت تلقائيًا عند الاتصال. يحفظ الإكمال القراءات الموجودة في الذاكرة لتتمكن من مزامنتها الآن.</string>
+    <string name="clock_none_explain">تحتفظ القراءات بوقت الجهاز حتى تتم مزامنة التوقيت العالمي تلقائيًا.</string>
     <string name="clock_generation">جيل المرجع %1$d</string>
     <string name="clock_last_sample">آخر عيّنة في %1$s</string>
     <string name="sync_title">المزامنة الذكية</string>
@@ -231,4 +231,5 @@
     <string name="device_link">الاتصال</string>
     <string name="device_payload">الحمولة %1$d B</string>
     <string name="device_config_read">قراءة الإعدادات</string>
+    <string name="clock_network">الوقت من الشبكة</string>
 </resources>

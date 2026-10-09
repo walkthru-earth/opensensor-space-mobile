@@ -1,5 +1,6 @@
 package earth.walkthru.aqsync.data.history
 
+import earth.walkthru.aqsync.archive.FileClockAnchorStore
 import earth.walkthru.aqsync.data.archive.FileArchiveStore
 import earth.walkthru.aqsync.data.archive.RoomArchiveIndex
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
@@ -11,6 +12,7 @@ import earth.walkthru.aqsync.data.sync.FileArchive
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -28,7 +30,8 @@ class HistoryRepository @Inject constructor(
     val index = RoomArchiveIndex(archivedFileDao)
     val store = FileArchiveStore(archive, Dispatchers.IO)
     val tiers: HistoryTiers = RoomHistoryTiers(bucketDao)
-    val reader = HistorySeriesReader(store, index, tiers, Dispatchers.IO)
+    private val clockAnchors = FileClockAnchorStore(File(archive.root.parentFile, "clock-anchors"))
+    val reader = HistorySeriesReader(store, index, tiers, Dispatchers.IO, clockAnchors)
 
     fun observe(station: String, metric: MetricSpec, range: HistoryRange, window: HistoryWindow): Flow<HistorySeries> =
         reader.observe(station, metric, range, window)
@@ -45,7 +48,7 @@ class HistoryRepository @Inject constructor(
      */
     suspend fun fileSummaries(station: String, files: List<ArchivedFile>): List<FileSummary> = withContext(Dispatchers.IO) {
         val telemetry = files.filter { it.indexed && (it.purpose == null || it.purpose == "telemetry") }
-        val anchors = if (telemetry.any { it.hasEstimatedUtc }) TimeEstimate.anchors(telemetry.map { it.info() }) else emptyMap()
+        val anchors = if (telemetry.any { it.hasEstimatedUtc }) TimeEstimate.anchors(telemetry.map { it.info() }, clockAnchors.anchors(station)) else emptyMap()
         val ordered = telemetry.sortedWith(compareBy<ArchivedFile> { it.timelineFirstNs == null }.thenBy { it.timelineFirstNs ?: 0L }.thenBy { it.name })
         ordered.mapNotNull { f ->
             val key = Triple(f.station, f.name, f.crc32) to f.estFirstUtcNs

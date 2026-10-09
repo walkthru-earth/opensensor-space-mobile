@@ -4,6 +4,7 @@ import android.content.ContextWrapper
 import earth.walkthru.aqsync.data.ble.AqTransport
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.DeviceSession
+import earth.walkthru.aqsync.data.ble.FrameDirection
 import earth.walkthru.aqsync.data.ble.RawCommandRefusedException
 import earth.walkthru.aqsync.data.ble.TransportException
 import earth.walkthru.aqsync.data.ble.TransportKind
@@ -78,6 +79,26 @@ class DeviceConnectionRepositoryTest {
     }
 
     // ------------------------------------------------------------------ tests
+
+    @Test
+    fun `connection synchronizes UTC before listing without a user action`() = harnessTest { h ->
+        h.clockEpochOffset = 1_789_581_931_987L
+        h.repo.connect(ADDRESS, "AQ-6b40", fake = true)
+        h.until { h.repo.plan.value != null }
+        val sent = h.repo.session.value!!.frames.records.value.filter { it.direction == FrameDirection.TX }.map { it.type }
+        assertTrue(sent.indexOf(Opcode.SET_TIME) in 0 until sent.indexOf(Opcode.LIST))
+        assertEquals(1, sent.count { it == Opcode.SET_TIME })
+        assertEquals(1, h.repo.status.value?.status?.utc)
+    }
+
+    @Test
+    fun `a refused automatic clock still lists original files`() = harnessTest { h ->
+        // Virtual epoch zero is deliberately refused by the firmware-compatible fake.
+        h.repo.connect(ADDRESS, "AQ-6b40", fake = true)
+        h.until { h.repo.plan.value != null }
+        assertTrue(h.repo.plan.value!!.toDownload.isNotEmpty())
+        assertEquals(0, h.repo.status.value?.status?.utc)
+    }
 
     @Test
     fun `lost link reconnects and resumes the interrupted sync`() = harnessTest(chunkDelayMs = 1) { h ->
@@ -265,6 +286,7 @@ class DeviceConnectionRepositoryTest {
         val events = CopyOnWriteArrayList<DeviceEvent>()
         val appScope = CoroutineScope(SupervisorJob() + dispatcher)
 
+        var clockEpochOffset = 0L
         val repo: DeviceConnectionRepository
 
         init {
@@ -286,7 +308,7 @@ class DeviceConnectionRepositoryTest {
                 stationEpochDao = InMemoryStationEpochDao(),
                 applicationScope = appScope,
                 io = dispatcher,
-                clock = { test.testScheduler.currentTime },
+                clock = { clockEpochOffset + test.testScheduler.currentTime },
                 monotonic = test.testScheduler.timeSource,
             )
             repo.bind(ADDRESS)

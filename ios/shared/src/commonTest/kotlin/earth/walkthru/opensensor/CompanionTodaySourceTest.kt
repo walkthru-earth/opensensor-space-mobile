@@ -4,7 +4,6 @@ import androidx.compose.runtime.snapshots.Snapshot
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.history.TodaySoFar
-import earth.walkthru.aqsync.data.sync.ClockQuality
 import earth.walkthru.aqsync.data.sync.ClockSyncMode
 import earth.walkthru.opensensor.today.TodayCommand
 import earth.walkthru.opensensor.today.TodayNotice
@@ -90,14 +89,12 @@ class CompanionTodaySourceTest {
         assertEquals(listOf("sync"), calls.list)
     }
 
-    @Test fun askModeWantsConsentBeforeTheClockStep() = runTest {
+    @Test fun legacyAskModeSynchronizesAutomatically() = runTest {
         val calls = Calls()
         val notices = mutableListOf<TodayNotice>()
         val source = source(connected("{\"utc\":0,\"clk\":0}"), calls, notices)
         source.sync(ClockSyncMode.ASK, clockConfirmed = false)
-        assertTrue(calls.list.isEmpty())
-        assertEquals(listOf<TodayNotice>(TodayNotice.ClockConfirmationRequired(ClockQuality.MISSING)), notices)
-        source.sync(ClockSyncMode.ASK, clockConfirmed = true)
+        assertTrue(notices.isEmpty())
         assertEquals(listOf("SET_TIME"), calls.list)
     }
 
@@ -140,7 +137,7 @@ class CompanionTodaySourceTest {
         assertEquals(listOf("SET_TIME", "sync"), calls.list)
     }
 
-    @Test fun aRefusedClockStepStopsTheSync() = runTest {
+    @Test fun aRefusedClockStepStillCollectsTheOriginalFiles() = runTest {
         val state = connected("{\"utc\":0,\"clk\":0}")
         val calls = Calls()
         val notices = mutableListOf<TodayNotice>()
@@ -149,12 +146,12 @@ class CompanionTodaySourceTest {
         state.today.commandStarted()
         state.today.commandFinished(CommandResult(TodayNotice.Rejected(TodayCommand.SET_TIME)))
         runCurrent()
-        assertEquals(listOf("SET_TIME"), calls.list)
-        // A later confirmed clock set from the card does not start a sync on its own.
+        assertEquals(listOf("SET_TIME", "sync"), calls.list)
+        // A later automatic clock retry does not start another sync on its own.
         source.setTime()
         state.today.commandFinished(CommandResult(TodayNotice.ClockSet))
         runCurrent()
-        assertEquals(listOf("SET_TIME", "SET_TIME"), calls.list)
+        assertEquals(listOf("SET_TIME", "sync", "SET_TIME"), calls.list)
     }
 
     @Test fun nothingIsSentWhileACommandOrSyncRuns() = runTest {

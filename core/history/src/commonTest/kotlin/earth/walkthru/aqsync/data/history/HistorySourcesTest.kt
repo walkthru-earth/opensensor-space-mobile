@@ -4,10 +4,15 @@ import earth.walkthru.aqsync.archive.ArchiveIndex
 import earth.walkthru.aqsync.archive.ArchiveKey
 import earth.walkthru.aqsync.archive.ArchiveRecord
 import earth.walkthru.aqsync.archive.ArchiveStore
+import earth.walkthru.aqsync.archive.ClockAnchor
+import earth.walkthru.aqsync.archive.ClockAnchorStore
 import earth.walkthru.aqsync.archive.PartialMeta
 import earth.walkthru.aqsync.archive.PartialWriter
 import earth.walkthru.aqsync.data.history.parquet.ByteArrayReader
 import earth.walkthru.aqsync.data.history.parquet.ByteReader
+import earth.walkthru.aqsync.data.history.parquet.ParquetFile
+import earth.walkthru.aqsync.data.history.parquet.ParquetSink
+import earth.walkthru.aqsync.data.history.parquet.ParquetWriter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -82,6 +87,55 @@ class HistorySourcesTest {
         val repair = ArchiveIndexRepair(store, index, nowEpochMs = { 42L })
         repair.backfillAll()
         return Triple(store, index, repair)
+    }
+
+    @Test
+    fun footerAnchorRecoversUnknownFilesAndBothHistoryReadersWithoutTimedRows() = runTest {
+        val boot = "e452563e96c72ca057a48924550779b6"
+        val raw = ParquetFile.wrap(fixtureBytes("parquet/device/v1-none-64rows-unsynced.parquet"))
+        val source = ParquetIndexer.index(raw)
+        val utc = 1_788_912_000_123_456_000L
+        val parts = ArrayList<ByteArray>()
+        val sink = object : ParquetSink { override fun write(bytes: ByteArray) { parts += bytes.copyOf() } }
+        val metadata = raw.metadata.keyValueMetadata + mapOf(
+            "reconciliation_anchor_mono_us" to source.lastMonoUs.toString(),
+            "reconciliation_anchor_utc_ns" to utc.toString(),
+            "reconciliation_anchor_source" to "3",
+        )
+        val writer = ParquetWriter(sink, raw.leaves.map { ParquetWriter.Column(it.name, it.type, it.isTimestampNanosUtc) }, keyValueMetadata = metadata)
+        writer.begin()
+        writer.rowGroup(raw.leaves.map { raw.readColumn(it) })
+        writer.finish()
+        val bytes = ByteArray(parts.sumOf { it.size })
+        var offset = 0
+        for (part in parts) { part.copyInto(bytes, offset); offset += part.size }
+        val store = Store()
+        val index = Index()
+        val record = record("station=$station/unsynced/boot=$boot/raw.parquet")
+        store.files[record.key] = bytes
+        index.put(record)
+        val saved = ArrayList<ClockAnchor>()
+        val receipts = object : ClockAnchorStore {
+            override suspend fun anchors(station: String) = saved.filter { it.station == station }
+            override suspend fun put(anchor: ClockAnchor) { if (anchor !in saved) saved += anchor }
+        }
+        val repair = ArchiveIndexRepair(store, index, clockAnchors = receipts)
+        repair.backfillAll()
+        val estimated = index.get(record.key)!!
+        assertEquals(0L, estimated.utcRows)
+        assertEquals(utc, estimated.estLastUtcNs)
+        assertEquals(1, saved.size)
+        assertEquals("3", saved.single().source)
+        assertEquals(2, StationDays.of(listOf(estimated))[station]!!.size)
+        val tiers = ArchiveHistoryTiers(store, index, clockAnchors = receipts)
+        val reader = HistorySeriesReader(store, index, tiers, clockAnchors = receipts)
+        val midnight = utc / 1_000_000_000L
+        val previousDay = reader.observe(station, Metrics.PM25, HistoryRange.DAY, window(HistoryRange.DAY, midnight)).first()
+        assertTrue(previousDay.estimatedRows > 0)
+        assertTrue(tiers.observeDays(station).first().count > 0)
+        // Idempotent repair keeps evidence even when no timed file exists.
+        assertEquals(0, ArchiveIndexRepair(store, index, clockAnchors = receipts).estimateTimes())
+        assertTrue(store.files[record.key]!!.contentEquals(bytes))
     }
 
     @Test

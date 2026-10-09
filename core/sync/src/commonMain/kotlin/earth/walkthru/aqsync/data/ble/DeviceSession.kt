@@ -230,12 +230,23 @@ class DeviceSession(val transport: AqTransport, val frames: FrameRecorder = Fram
         }
     }
 
-    /** `SET_TIME epoch_s` → `TIME_SET` or `ERROR` 9. Only rows sampled afterwards get UTC. */
-    suspend fun setTime(epochSeconds: Long): Frame.TimeSet = request(Opcode.SET_TIME) {
-        write(Request.SetTime(epochSeconds))
+    /** `SET_TIME` → `TIME_SET` or `ERROR` 9. The acknowledged anchor also reconciles earlier boot rows. */
+    suspend fun setTime(epochSeconds: Long, subsecondMicros: Int? = null): Frame.TimeSet = request(Opcode.SET_TIME) {
+        write(Request.SetTime(epochSeconds, subsecondMicros))
         when (val frame = nextFrame(Opcode.SET_TIME, FRAME_TIMEOUT_MS)) {
             is Frame.TimeSet -> frame
             else -> throw unexpected("SET_TIME", frame)
+        }
+    }
+
+    /** Automatic UTC anchor. Retry legacy seconds only when old firmware rejects the extension. */
+    suspend fun synchronizeClock(nowMillis: () -> Long = ::nowEpochMs): Frame.TimeSet {
+        val millis = nowMillis()
+        return try {
+            setTime(millis / 1000, ((millis % 1000) * 1000).toInt())
+        } catch (e: DeviceErrorException) {
+            if (e.protocolError != ProtocolError.MALFORMED_REQUEST) throw e
+            setTime(nowMillis() / 1000)
         }
     }
 

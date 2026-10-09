@@ -15,6 +15,7 @@ import earth.walkthru.aqsync.data.sync.FileOutcome
 import earth.walkthru.aqsync.data.sync.SyncEngine
 import earth.walkthru.aqsync.data.sync.SyncPlanner
 import earth.walkthru.aqsync.data.sync.androidSyncEngine
+import earth.walkthru.aqsync.data.sync.stationParquetFixture
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -358,7 +359,7 @@ class AutoSyncRunnerTest {
         gateway.peers[otherAddr] = second
         listOf(gateway.fake, second).forEach { fake ->
             fake.files.clear()
-            fake.files += FakeTransport.FakeFile("legacy-parquet/readings.parquet", payload)
+            fake.files += FakeTransport.FakeFile("legacy-parquet/readings.parquet", stationParquetFixture(payload, fake.station))
         }
         gateway.devices += device(token = null)
         gateway.devices += device(address = otherAddr, token = null, station = second.station)

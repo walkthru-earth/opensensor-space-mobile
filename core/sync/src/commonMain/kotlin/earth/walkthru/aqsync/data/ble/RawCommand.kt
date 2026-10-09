@@ -20,9 +20,10 @@ sealed interface RawCommandCheck {
  * The single denylist for the Debug raw command on Android and iOS. `REBOOT` restarts the logger
  * and `SET_CONFIG` can rotate the token, forget bonds or disable the passkey. Both need the Device
  * screen's confirmation (root `AGENTS.md`), so the raw box never sends them.
+ * `SET_TIME` is automatic on connection and is never exposed as a manual command.
  */
 object RawCommandPolicy {
-    val DENYLIST: Set<Int> = setOf(Opcode.REBOOT, Opcode.SET_CONFIG)
+    val DENYLIST: Set<Int> = setOf(Opcode.REBOOT, Opcode.SET_CONFIG, Opcode.SET_TIME)
     const val MAX_BYTES = 512
 
     fun isRefused(request: ByteArray): Boolean = request.isNotEmpty() && (request[0].toInt() and 0xFF) in DENYLIST
