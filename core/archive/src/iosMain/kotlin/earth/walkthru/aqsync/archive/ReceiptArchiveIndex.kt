@@ -65,17 +65,27 @@ class ReceiptArchiveIndex(
     override suspend fun get(key: ArchiveKey): ArchiveRecord? = loaded().firstOrNull { it.station == key.station && it.name == key.name }
 
     override suspend fun put(record: ArchiveRecord) {
+        mutex.withLock { putLocked(loadLocked(), record) }
+    }
+
+    /** Reads the latest record and writes its replacement under one lock, so no concurrent put is lost. */
+    override suspend fun update(key: ArchiveKey, transform: (ArchiveRecord) -> ArchiveRecord) {
         mutex.withLock {
             val current = loadLocked()
-            withContext(io) {
-                val path = receiptPath(record.key)
-                val kind = IosFiles.kind(path)
-                check(kind == Kind.ABSENT || kind == Kind.FILE) { "archive receipt is not a file" }
-                IosFiles.mkdirs(path.substringBeforeLast('/'))
-                IosFiles.writeAtomically(path, encode(record).encodeToByteArray())
-            }
-            rows.value = current.filterNot { it.station == record.station && it.name == record.name } + record
+            val latest = current.firstOrNull { it.station == key.station && it.name == key.name } ?: return@withLock
+            putLocked(current, transform(latest))
         }
+    }
+
+    private suspend fun putLocked(current: List<ArchiveRecord>, record: ArchiveRecord) {
+        withContext(io) {
+            val path = receiptPath(record.key)
+            val kind = IosFiles.kind(path)
+            check(kind == Kind.ABSENT || kind == Kind.FILE) { "archive receipt is not a file" }
+            IosFiles.mkdirs(path.substringBeforeLast('/'))
+            IosFiles.writeAtomically(path, encode(record).encodeToByteArray())
+        }
+        rows.value = current.filterNot { it.station == record.station && it.name == record.name } + record
     }
 
     /** Forgets the receipt only. The verified copy stays in the archive. */

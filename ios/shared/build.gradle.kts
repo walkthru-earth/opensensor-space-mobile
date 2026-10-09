@@ -18,6 +18,7 @@ kotlin {
             implementation(project(":core:sync"))
             implementation(project(":core:archive"))
             implementation(project(":feature:discover"))
+            implementation(project(":feature:history"))
             implementation(project(":feature:settings"))
             // My devices, the shared list of nearby, known and Wi-Fi sensors.
             implementation(project(":feature:devices"))

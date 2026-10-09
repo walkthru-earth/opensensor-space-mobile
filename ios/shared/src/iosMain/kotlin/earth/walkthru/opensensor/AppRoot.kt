@@ -1,6 +1,11 @@
 package earth.walkthru.opensensor
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -10,6 +15,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -21,8 +27,12 @@ import earth.walkthru.aqsync.publicfeed.platformH3Grid
 import earth.walkthru.aqsync.settings.DetailLevel
 import earth.walkthru.aqsync.settings.SettingsRepository
 import earth.walkthru.aqsync.settings.iosSettingsRepository
+import earth.walkthru.aqsync.units.UnitFormatter
 import earth.walkthru.aqsync.units.UnitSystem
 import earth.walkthru.aqsync.units.systemUnitSystem
+import earth.walkthru.opensensor.designsystem.AppIcons
+import earth.walkthru.opensensor.designsystem.FloatingControl
+import earth.walkthru.opensensor.designsystem.FloatingIconButton
 import earth.walkthru.opensensor.designsystem.OpenSensorTheme
 import earth.walkthru.opensensor.devices.DevicesAction
 import earth.walkthru.opensensor.devices.DevicesPlatform
@@ -32,6 +42,11 @@ import earth.walkthru.opensensor.discover.DiscoverController
 import earth.walkthru.opensensor.discover.DiscoverScreen
 import earth.walkthru.opensensor.discover.UserDefaultsDiscoverPrefs
 import earth.walkthru.opensensor.discover.bundledSampleFeed
+import earth.walkthru.opensensor.history.HistoryController
+import earth.walkthru.opensensor.history.HistoryScreen
+import earth.walkthru.opensensor.history.HistoryTopBar
+import earth.walkthru.opensensor.history.archiveStations
+import earth.walkthru.opensensor.history.historyTitle
 import earth.walkthru.opensensor.permissions.AccessDialogs
 import earth.walkthru.opensensor.permissions.AccessHooks
 import earth.walkthru.opensensor.permissions.AccessKind
@@ -42,9 +57,11 @@ import earth.walkthru.opensensor.settings.SettingsController
 import earth.walkthru.opensensor.settings.SettingsScreen
 import earth.walkthru.opensensor.shell.AppShell
 import earth.walkthru.opensensor.shell.DiscoverKey
+import earth.walkthru.opensensor.shell.HistoryKey
 import earth.walkthru.opensensor.shell.ScanKey
 import earth.walkthru.opensensor.shell.SettingsKey
 import earth.walkthru.opensensor.shell.TodayKey
+import kotlinx.coroutines.flow.map
 import platform.Foundation.NSBundle
 import platform.Foundation.NSCurrentLocaleDidChangeNotification
 import platform.Foundation.NSDate
@@ -117,13 +134,25 @@ internal fun AppRoot(
                     DiscoverEntry(networkAllowed = showPublic, units = units, onAddSensor = { nav.toMyDevicesRoot() })
                 }
                 entry<ScanKey> {
-                    MyDevicesEntry(devices, level, requestBluetooth) { id, connect ->
+                    MyDevicesEntry(
+                        bridge = devices,
+                        level = level,
+                        requestBluetooth = requestBluetooth,
+                        onHistory = { nav.push(HistoryKey(PHONE_ARCHIVE)) },
+                    ) { id, connect ->
                         if (connect && IosKnown.isPeripheral(id)) openSensor(id)
                         nav.push(TodayKey(id))
                     }
                 }
+                // The device page until Today (#17) brings the shared device sections. History stays one tap away.
                 entry<TodayKey> { key ->
-                    devicePage(key.address, units, level) { nav.pop() }
+                    Box(Modifier.fillMaxSize()) {
+                        devicePage(key.address, units, level) { nav.pop() }
+                        HistoryShortcut(onClick = { nav.push(HistoryKey(PHONE_ARCHIVE)) }, modifier = Modifier.align(Alignment.TopEnd))
+                    }
+                }
+                entry<HistoryKey> {
+                    HistoryEntry(units = units, level = level, onBack = { nav.pop() })
                 }
                 // iOS has no Smart Sync clock step yet, so its consent stays hidden.
                 entry<SettingsKey> {
@@ -146,7 +175,13 @@ internal fun AppRoot(
  * system prompt, and reports the answer through [CompanionState.bluetoothAuthorizationChanged].
  */
 @Composable
-private fun MyDevicesEntry(bridge: DevicesBridge, level: DetailLevel, requestBluetooth: () -> Unit, onOpen: (id: String, connect: Boolean) -> Unit) {
+private fun MyDevicesEntry(
+    bridge: DevicesBridge,
+    level: DetailLevel,
+    requestBluetooth: () -> Unit,
+    onHistory: () -> Unit,
+    onOpen: (id: String, connect: Boolean) -> Unit,
+) {
     val controller = viewModel { DevicesHolder(bridge) }.controller
     val state by controller.state.collectAsState()
     val companion = bridge.state
@@ -185,6 +220,9 @@ private fun MyDevicesEntry(bridge: DevicesBridge, level: DetailLevel, requestBlu
                 else -> controller.onAction(action)
             }
         },
+        topActions = {
+            IconButton(onClick = onHistory) { Icon(AppIcons.Schedule, contentDescription = historyTitle()) }
+        },
     )
 }
 
@@ -204,6 +242,52 @@ private fun DiscoverEntry(networkAllowed: Boolean, units: UnitSystem, onAddSenso
         onAddSensor = onAddSensor,
         units = units,
     )
+}
+
+/**
+ * Holds the History controller for the History entry. iOS History reads the whole phone archive, the
+ * same index the sync runner writes ([IosArchive]). Its station chips are the archived stations,
+ * oldest latest reading first, and it opens on the one with the latest reading.
+ */
+private class HistoryHolder : ViewModel() {
+    private val stations = IosArchive.index.observeAll().map(::archiveStations)
+    val controller = HistoryController(
+        scope = viewModelScope,
+        reader = IosArchive.reader,
+        tiers = IosArchive.tiers,
+        index = IosArchive.index,
+        currentStation = stations.map { it.lastOrNull() },
+        stations = stations,
+    )
+}
+
+/** The History key of iOS. History reads the phone archive, not one device, so the address is a fixed name. */
+private const val PHONE_ARCHIVE = "archive"
+
+/** History of the phone archive, offline. Index repair runs from launch ([sharedSensorSync]) and is started here too. */
+@Composable
+private fun HistoryEntry(units: UnitSystem, level: DetailLevel, onBack: () -> Unit) {
+    remember { IosArchive.startIndexRepair() }
+    val controller = viewModel { HistoryHolder() }.controller
+    HistoryScreen(
+        controller = controller,
+        units = remember(units) { UnitFormatter(units) },
+        level = level,
+        topBar = { HistoryTopBar(onBack = onBack) },
+    )
+}
+
+/** A compact History button over the top end of the device page, until Today (#17) brings the device sections. */
+@Composable
+private fun HistoryShortcut(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val title = historyTitle()
+    FloatingIconButton(
+        onClick = onClick,
+        contentDescription = title,
+        modifier = modifier.statusBarsPadding().padding(FloatingControl.Margin),
+    ) {
+        Icon(AppIcons.Schedule, contentDescription = null)
+    }
 }
 
 /** The marketing version from Info.plist, as Android shows its version name. */

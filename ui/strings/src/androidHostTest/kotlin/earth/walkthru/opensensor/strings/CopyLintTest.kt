@@ -19,6 +19,7 @@ class CopyLintTest {
         val expected = listOf(
             "app/src/main/res/values/strings.xml",
             "feature/discover/src/commonMain/composeResources/values/strings.xml",
+            "feature/history/src/commonMain/composeResources/values/strings.xml",
             "feature/settings/src/commonMain/composeResources/values/strings.xml",
             "ui/designsystem/src/commonMain/composeResources/values/strings.xml",
             "ui/strings/src/commonMain/composeResources/values/strings.xml",
@@ -37,6 +38,18 @@ class CopyLintTest {
             Catalogues.parse(file).filter { (_, text) -> violates(text, compose) }.map { (key, text) -> "${Catalogues.relative(file)} $key = $text" }
         }
         assertTrue(broken.isEmpty(), "copy rule violations\n${broken.joinToString("\n")}")
+    }
+
+    /**
+     * Compose resources never unescape `%%`. The runtime only substitutes `%1$d` and `%1$s`, so a
+     * doubled percent shows on screen as two. A literal percent is a single `%` there.
+     */
+    @Test
+    fun composeResourcesHaveNoDoubledPercent() {
+        val broken = Catalogues.all().filter(Catalogues::isCompose).flatMap { file ->
+            Catalogues.parse(file).filter { (_, text) -> "%%" in text }.map { (key, text) -> "${Catalogues.relative(file)} $key = $text" }
+        }
+        assertTrue(broken.isEmpty(), "doubled percent shows literally in Compose\n${broken.joinToString("\n")}")
     }
 
     @Test

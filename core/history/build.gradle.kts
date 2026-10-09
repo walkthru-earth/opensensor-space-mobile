@@ -14,6 +14,8 @@ kotlin {
             api(project(":core:parquet"))
             // History reads the archive through its records (ArchiveRecord) and, later, its ports.
             api(project(":core:archive"))
+            // The Hive partition parser names a file's producer station, which index repair checks.
+            implementation(project(":core:sync"))
             // WHO 2021 health scales (edges, steps, colours) are part of the MetricSpec and AirMood API.
             api(project(":core:airquality"))
             // TimeZone and LocalDate are part of the public HistoryWindow and Columns API.
