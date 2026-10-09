@@ -35,11 +35,12 @@ import earth.walkthru.aqsync.data.history.HistoryRange
 import earth.walkthru.aqsync.data.history.MetricSpec
 import earth.walkthru.aqsync.data.history.Metrics
 import earth.walkthru.aqsync.ui.components.LocalUnits
-import earth.walkthru.aqsync.ui.history.BandColumnChart
 import earth.walkthru.opensensor.designsystem.AppIcons
 import earth.walkthru.opensensor.designsystem.FloatingControl
 import earth.walkthru.opensensor.designsystem.InfoButton
 import earth.walkthru.opensensor.designsystem.InfoContent
+import earth.walkthru.opensensor.history.BandColumnChart
+import kotlinx.datetime.toKotlinTimeZone
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -119,7 +120,8 @@ fun FileChartCard(
                 selected = selected,
                 onSelect = { selected = it },
                 height = 170.dp,
-                zone = zone,
+                zone = zone.toKotlinTimeZone(),
+                units = LocalUnits.current,
                 xLabels = labels,
             )
             val sel = selected?.let { c -> state.page.getOrNull(c.startS.toInt()) }
