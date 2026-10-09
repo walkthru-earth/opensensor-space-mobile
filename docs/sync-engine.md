@@ -31,10 +31,10 @@ sentence for them.
 | Safe names | Shared check | Shared check, stricter than the old Swift whitelist. A name the plan rejects is reported and never downloaded |
 | Byte counter | Card shows bytes received | `receivedBytes` counts only this run. The LAN card shows the file bytes so a resumed file does not jump backwards |
 | One link per station | Engine holds one writer | `SensorSync` refuses a second link for the same station with `msg_hardware_in_use` |
-| LAN `AUTH_FAILED` | Renews the token over BLE and falls back to Bluetooth | Drops the saved token and shows `msg_token_needs_ble`. No automatic renewal and no Bluetooth fallback |
-| LAN busy | `msg_lan_*` wording that names the Bluetooth fallback | `msg_busy`, because iOS has no fallback |
+| LAN `AUTH_FAILED` | Renews the token over BLE and falls back to Bluetooth | Drops the saved token and shows `msg_token_needs_ble`. A sensor open can fall back to an already permitted Bluetooth link; token renewal still requires the explicit BLE action |
+| LAN busy | `msg_lan_*` wording that names the Bluetooth fallback | A sensor open can fall back to Bluetooth when permitted; an already running sync reports `msg_busy` without interrupting its link |
 | HELLO mismatch | `msg_identity_*` | Same keys. A different hardware ID and a different station now give different notices |
-| BLE Sync button | Syncs over the link the router picked | Routes to Wi-Fi when an idle LAN session for the same sensor is open, and progress then shows on the LAN card |
+| Today Smart Sync | Syncs over the link the router picked | Routes to Wi-Fi when an idle LAN session for the same sensor is open; the shared Today card shows its progress and result |
 | Phone storage fault | `msg_file_failed` for that file, the run goes on | The run goes on and ends with `companion_sync_storage_failed`. The link stays |
 | Lost BLE sync | Handled by the sync service and `SyncResumePolicy` | The BLE connection closes. Bytes already held are kept for the next sync |
 | BLE writes | With response | `control` with response, payload sized from the without-response length |
