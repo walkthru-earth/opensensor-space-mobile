@@ -19,6 +19,8 @@ kotlin {
             implementation(project(":core:archive"))
             implementation(project(":feature:discover"))
             implementation(project(":feature:history"))
+            // Files, the inspector and export over the phone archive (docs/screens.md, Files).
+            implementation(project(":feature:files"))
             implementation(project(":feature:settings"))
             // My devices, the shared list of nearby, known and Wi-Fi sensors.
             implementation(project(":feature:devices"))

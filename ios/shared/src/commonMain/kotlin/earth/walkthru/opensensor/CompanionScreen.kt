@@ -49,8 +49,6 @@ import earth.walkthru.opensensor.strings.resources.action_cancel
 import earth.walkthru.opensensor.strings.resources.app_name
 import earth.walkthru.opensensor.strings.resources.batch_value
 import earth.walkthru.opensensor.strings.resources.companion_connect
-import earth.walkthru.opensensor.strings.resources.companion_export
-import earth.walkthru.opensensor.strings.resources.companion_export_preparing
 import earth.walkthru.opensensor.strings.resources.companion_files_finalized
 import earth.walkthru.opensensor.strings.resources.companion_firmware
 import earth.walkthru.opensensor.strings.resources.companion_lan_bytes
@@ -95,7 +93,7 @@ import kotlin.math.floor
  */
 
 @Composable
-internal fun CompanionScreen(state: CompanionState, title: String?, onBack: () -> Unit, reconnect: (() -> Unit)?, disconnect: () -> Unit, scanLan: () -> Unit, saveWifiAccess: () -> Unit, connectLan: (String) -> Unit, syncLan: (String) -> Unit, disconnectLan: (String) -> Unit, exportArchive: () -> Unit, syncBluetooth: () -> Unit, units: UnitSystem = UnitSystem.METRIC, showTechnical: Boolean = false, onOpenDebug: ((String) -> Unit)? = null) {
+internal fun CompanionScreen(state: CompanionState, title: String?, onBack: () -> Unit, reconnect: (() -> Unit)?, disconnect: () -> Unit, scanLan: () -> Unit, saveWifiAccess: () -> Unit, connectLan: (String) -> Unit, syncLan: (String) -> Unit, disconnectLan: (String) -> Unit, syncBluetooth: () -> Unit, units: UnitSystem = UnitSystem.METRIC, showTechnical: Boolean = false, onOpenDebug: ((String) -> Unit)? = null) {
     // Display units from Settings. Readings stay SI everywhere else.
     val formatter = UnitFormatter(units)
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
@@ -270,14 +268,6 @@ internal fun CompanionScreen(state: CompanionState, title: String?, onBack: () -
                             }
                         }
                     }
-                }
-            }
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = exportArchive, enabled = !state.exportBusy, shape = MaterialTheme.shapes.small) {
-                        Text(stringResource(if (state.exportBusy) Res.string.companion_export_preparing else Res.string.companion_export))
-                    }
-                    if (!state.exportMessage.isEmpty) Text(state.exportMessage.resolve(), style = MaterialTheme.typography.bodySmall, color = muted)
                 }
             }
         }

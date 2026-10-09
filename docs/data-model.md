@@ -14,9 +14,9 @@ Derived daily exports are separate from the original sensor files.
 
 iOS raw files live in the app's private
 `Library/Application Support/SensorArchive/<station>/<relative Hive path>`, excluded from
-cloud backup. **Export Parquet files** opens Apple's Files picker to save a copy of all
-finalized files, preserving station/Hive directories. Partial downloads and `.verified.json`
-size/CRC receipts are not exported. The original archive stays private and supports resume;
+cloud backup. **Files** (a button next to History on My devices) shares one file, all files,
+or a zip of the archive, and saves the zip through Apple's Files picker, preserving
+station/Hive paths. Partial downloads and `.verified.json` size/CRC receipts are not exported. The original archive stays private and supports resume;
 export is available without connecting a sensor. See [ios-migration.md](ios-migration.md)
 for lifecycle and validation limits.
 

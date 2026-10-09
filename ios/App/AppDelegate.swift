@@ -18,7 +18,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 }
 
-final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UIDocumentPickerDelegate {
+final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
     /// One shared engine, so LAN and Bluetooth save into the same archive and never sync a station twice at once.
     private let engine = IosArchiveKt.sharedSensorSync()
@@ -33,9 +33,6 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UIDocumentPickerD
         forget: { [weak self] peripheral, device in self?.forget(peripheral: peripheral, device: device) },
         collect: { [weak self] id, wifiName in self?.collect(id: id, wifiName: wifiName) }
     )
-    private var exportFolder: URL?
-    private var exportTask: Task<Void, Never>?
-    private var preparedExport: (url: URL, count: Int)?
 
     func scene(
         _ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions
@@ -59,7 +56,6 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UIDocumentPickerD
             connectLan: { [weak self] name in self?.lan.connect(name: name) },
             syncLan: { [weak self] name in self?.lan.sync(name: name) },
             disconnectLan: { [weak self] name in self?.lan.disconnect(name: name) },
-            exportArchive: { [weak self] in self?.exportArchive() },
             syncBluetooth: { [weak self] in self?.syncConnectedSensor() },
             openDebugLink: { [weak self] device in self?.bluetooth.openDebugLink(device: device) }
         )
@@ -78,14 +74,11 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UIDocumentPickerD
     func sceneDidBecomeActive(_ scene: UIScene) {
         bluetooth.resume()
         lan.resume()
-        presentExportIfReady()
     }
     func sceneDidDisconnect(_ scene: UIScene) {
         devices.cancelCollectAll()
         bluetooth.suspend()
         lan.suspend()
-        exportTask?.cancel()
-        if exportTask == nil { finishExport("Export cancelled. Collected files remain saved on this phone.") }
     }
 
     /// Tells My devices which sensors hold Wi-Fi access. Ids only, the token stays in the Keychain.
@@ -122,60 +115,6 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UIDocumentPickerD
         } else {
             bluetooth.sync()
         }
-    }
-
-    private func exportArchive() {
-        guard exportTask == nil, exportFolder == nil else { return }
-        bluetooth.state.exportChanged(busy: true, explanation: "Preparing your collected Parquet files…")
-        exportTask = Task { [weak self] in
-            guard let self else { return }
-            defer { self.exportTask = nil }
-            let folder = FileManager.default.temporaryDirectory.appendingPathComponent("opensensor-export-\(UUID())")
-            self.exportFolder = folder
-            do {
-                let archive = try ArchiveIO(root: SensorArchive.defaultRoot())
-                let snapshot = folder.appendingPathComponent("SensorArchive", isDirectory: true)
-                let count = try await archive.export(to: snapshot)
-                try Task.checkCancellation()
-                guard count > 0 else {
-                    self.finishExport("No completed Parquet files yet. Sync a sensor first.")
-                    return
-                }
-                self.preparedExport = (snapshot, count)
-                self.presentExportIfReady()
-            } catch {
-                self.finishExport("Could not prepare the export. Collected files remain saved. Try again.")
-            }
-        }
-    }
-
-    private func presentExportIfReady() {
-        guard let snapshot = preparedExport else { return }
-        guard window?.windowScene?.activationState == .foregroundActive else { return }
-        guard let controller = window?.rootViewController, controller.presentedViewController == nil else {
-            finishExport("Try exporting again after the current screen closes.")
-            return
-        }
-        preparedExport = nil
-        let picker = UIDocumentPickerViewController(forExporting: [snapshot.url], asCopy: true)
-        picker.delegate = self
-        bluetooth.state.exportChanged(busy: true, explanation: "Choose where to save \(snapshot.count) Parquet files.")
-        controller.present(picker, animated: true)
-    }
-
-    func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-        finishExport("Parquet files exported to your selected folder.")
-    }
-
-    func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
-        finishExport("Export cancelled. Collected files remain saved on this phone.")
-    }
-
-    private func finishExport(_ message: String) {
-        if let folder = exportFolder { try? FileManager.default.removeItem(at: folder) }
-        exportFolder = nil
-        preparedExport = nil
-        bluetooth.state.exportChanged(busy: false, explanation: message)
     }
 }
 

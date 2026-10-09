@@ -43,6 +43,8 @@ include(":feature:discover")
 include(":feature:settings")
 // My devices, one shared list of nearby, known and Wi-Fi sensors (docs/screens.md, My devices).
 include(":feature:devices")
+// The Files screen, its inspector and the export, shared Compose for Android and iOS (docs/screens.md).
+include(":feature:files")
 // The History screen and its charts, shared Compose for Android and iOS (docs/history-pipeline.md).
 include(":feature:history")
 // The Debug screen, shared Compose for Android and iOS, Developer level only (docs/screens.md, Debug).

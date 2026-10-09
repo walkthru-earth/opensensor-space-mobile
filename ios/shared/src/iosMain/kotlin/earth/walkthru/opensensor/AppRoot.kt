@@ -1,6 +1,8 @@
 package earth.walkthru.opensensor
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -23,6 +25,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationBackHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
+import earth.walkthru.aqsync.archive.IosExportSpace
 import earth.walkthru.aqsync.publicfeed.platformH3Grid
 import earth.walkthru.aqsync.settings.DetailLevel
 import earth.walkthru.aqsync.settings.SettingsRepository
@@ -44,6 +47,11 @@ import earth.walkthru.opensensor.discover.DiscoverController
 import earth.walkthru.opensensor.discover.DiscoverScreen
 import earth.walkthru.opensensor.discover.UserDefaultsDiscoverPrefs
 import earth.walkthru.opensensor.discover.bundledSampleFeed
+import earth.walkthru.opensensor.files.FileMetricsController
+import earth.walkthru.opensensor.files.FileMetricsScreen
+import earth.walkthru.opensensor.files.FilesController
+import earth.walkthru.opensensor.files.FilesScreen
+import earth.walkthru.opensensor.files.filesTitle
 import earth.walkthru.opensensor.history.HistoryController
 import earth.walkthru.opensensor.history.HistoryScreen
 import earth.walkthru.opensensor.history.HistoryTopBar
@@ -60,10 +68,13 @@ import earth.walkthru.opensensor.settings.SettingsScreen
 import earth.walkthru.opensensor.shell.AppShell
 import earth.walkthru.opensensor.shell.DebugKey
 import earth.walkthru.opensensor.shell.DiscoverKey
+import earth.walkthru.opensensor.shell.FileMetricsKey
+import earth.walkthru.opensensor.shell.FilesKey
 import earth.walkthru.opensensor.shell.HistoryKey
 import earth.walkthru.opensensor.shell.ScanKey
 import earth.walkthru.opensensor.shell.SettingsKey
 import earth.walkthru.opensensor.shell.TodayKey
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import platform.Foundation.NSBundle
 import platform.Foundation.NSCurrentLocaleDidChangeNotification
@@ -149,22 +160,37 @@ internal fun AppRoot(
                         bridge = devices,
                         level = level,
                         requestBluetooth = requestBluetooth,
+                        onFiles = { nav.push(FilesKey(PHONE_ARCHIVE)) },
                         onHistory = { nav.push(HistoryKey(PHONE_ARCHIVE)) },
                     ) { id, connect ->
                         if (connect && IosKnown.isPeripheral(id)) openSensor(id)
                         nav.push(TodayKey(id))
                     }
                 }
-                // The device page until Today (#17) brings the shared device sections. History stays one tap away.
+                // The device page until Today (#17) brings the shared device sections. Files and History stay one tap away.
                 entry<TodayKey> { key ->
                     Box(Modifier.fillMaxSize()) {
                         val openDebug: ((String) -> Unit)? = if (level.developer) { address -> nav.openDebug(address, level.developer) } else null
                         devicePage(key.address, units, level, openDebug) { nav.pop() }
-                        HistoryShortcut(onClick = { nav.push(HistoryKey(PHONE_ARCHIVE)) }, modifier = Modifier.align(Alignment.TopEnd))
+                        ArchiveShortcuts(
+                            onFiles = { nav.push(FilesKey(PHONE_ARCHIVE)) },
+                            onHistory = { nav.push(HistoryKey(PHONE_ARCHIVE)) },
+                            modifier = Modifier.align(Alignment.TopEnd),
+                        )
                     }
                 }
                 entry<HistoryKey> {
                     HistoryEntry(units = units, level = level, onBack = { nav.pop() })
+                }
+                entry<FilesKey> {
+                    FilesEntry(
+                        level = level,
+                        onBack = { nav.pop() },
+                        onOpenFileMetrics = { station, name -> nav.push(FileMetricsKey(station, name)) },
+                    )
+                }
+                entry<FileMetricsKey> { key ->
+                    FileMetricsEntry(station = key.station, name = key.name, level = level, onBack = { nav.pop() })
                 }
                 entry<DebugKey> { key ->
                     val controller = viewModel(key = "debug-${key.address}") { DebugHolder(key.address, devices.state, openDebugLink) }.controller
@@ -200,6 +226,7 @@ private fun MyDevicesEntry(
     bridge: DevicesBridge,
     level: DetailLevel,
     requestBluetooth: () -> Unit,
+    onFiles: () -> Unit,
     onHistory: () -> Unit,
     onOpen: (id: String, connect: Boolean) -> Unit,
 ) {
@@ -242,6 +269,7 @@ private fun MyDevicesEntry(
             }
         },
         topActions = {
+            IconButton(onClick = onFiles) { Icon(AppIcons.Storage, contentDescription = filesTitle()) }
             IconButton(onClick = onHistory) { Icon(AppIcons.Schedule, contentDescription = historyTitle()) }
         },
     )
@@ -298,16 +326,59 @@ private fun HistoryEntry(units: UnitSystem, level: DetailLevel, onBack: () -> Un
     )
 }
 
-/** A compact History button over the top end of the device page, until Today (#17) brings the device sections. */
+/**
+ * Holds the Files controller for the Files entry. iOS Files lists the whole phone archive, with no
+ * owner, so per-file actions come from archive rows only. Exports stage into a fresh run under the
+ * temporary directory, removed once the sheet closes (B7). iOS derives no daily files yet.
+ */
+private class FilesHolder : ViewModel() {
+    val controller = FilesController(
+        scope = viewModelScope,
+        store = IosArchive.store,
+        index = IosArchive.index,
+        space = IosExportSpace.inTemporaryDirectory(),
+        owner = flowOf(null),
+        daily = null,
+    )
+}
+
+/** Holds the inspector of one archived file for its entry. */
+private class FileMetricsHolder : ViewModel() {
+    val controller = FileMetricsController(viewModelScope, IosArchive.store)
+}
+
+/** Files of the phone archive, offline: the list, the inspector and every export. */
 @Composable
-private fun HistoryShortcut(onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val title = historyTitle()
-    FloatingIconButton(
-        onClick = onClick,
-        contentDescription = title,
+private fun FilesEntry(level: DetailLevel, onBack: () -> Unit, onOpenFileMetrics: (String, String) -> Unit) {
+    val controller = viewModel { FilesHolder() }.controller
+    FilesScreen(controller = controller, level = level, onOpenFileMetrics = onOpenFileMetrics, onBack = onBack)
+}
+
+/** The inspector of one archived file. It only reads the file. */
+@Composable
+private fun FileMetricsEntry(station: String, name: String, level: DetailLevel, onBack: () -> Unit) {
+    val controller = viewModel(key = "$station/$name") { FileMetricsHolder() }.controller
+    LaunchedEffect(station, name) { controller.load(station, name) }
+    val state by controller.state.collectAsState()
+    FileMetricsScreen(state = state, level = level, name = name, onBack = onBack)
+}
+
+/**
+ * Compact Files and History buttons over the top end of the device page, the iOS way into the phone
+ * archive until device sections are shared.
+ */
+@Composable
+private fun ArchiveShortcuts(onFiles: () -> Unit, onHistory: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
         modifier = modifier.statusBarsPadding().padding(FloatingControl.Margin),
+        horizontalArrangement = Arrangement.spacedBy(FloatingControl.Margin),
     ) {
-        Icon(AppIcons.Schedule, contentDescription = null)
+        FloatingIconButton(onClick = onFiles, contentDescription = filesTitle()) {
+            Icon(AppIcons.Storage, contentDescription = null)
+        }
+        FloatingIconButton(onClick = onHistory, contentDescription = historyTitle()) {
+            Icon(AppIcons.Schedule, contentDescription = null)
+        }
     }
 }
 

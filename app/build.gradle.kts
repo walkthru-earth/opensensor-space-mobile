@@ -227,6 +227,8 @@ dependencies {
     // The Settings screen, shared Compose with iOS.
     implementation(project(":feature:settings"))
     implementation(project(":feature:devices"))
+    // The Files screen, the file inspector and the shared export (docs/screens.md, Files).
+    implementation(project(":feature:files"))
     // The Debug screen, shared Compose with iOS.
     implementation(project(":feature:debug"))
     h3Natives(libs.h3)

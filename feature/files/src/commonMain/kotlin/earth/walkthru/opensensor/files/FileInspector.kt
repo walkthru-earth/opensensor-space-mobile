@@ -1,8 +1,7 @@
-package earth.walkthru.aqsync.ui.history
+package earth.walkthru.opensensor.files
 
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
-import dagger.hilt.android.lifecycle.HiltViewModel
+import earth.walkthru.aqsync.archive.ArchiveKey
+import earth.walkthru.aqsync.archive.ArchiveStore
 import earth.walkthru.aqsync.data.history.ParquetIndex
 import earth.walkthru.aqsync.data.history.ParquetIndexer
 import earth.walkthru.aqsync.data.history.parquet.ColumnValues
@@ -10,19 +9,17 @@ import earth.walkthru.aqsync.data.history.parquet.ParquetCodec
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 import earth.walkthru.aqsync.data.history.parquet.ParquetFormatException
 import earth.walkthru.aqsync.data.history.parquet.ParquetType
-import earth.walkthru.aqsync.data.settings.AppSettings
-import earth.walkthru.aqsync.data.settings.DetailLevel
-import earth.walkthru.aqsync.data.sync.FileArchive
-import earth.walkthru.aqsync.ui.components.NO_VALUE
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import javax.inject.Inject
+import kotlin.coroutines.cancellation.CancellationException
+import kotlin.time.TimeSource
 
 /** One decoded column, summarised for the table. Values are formatted here once, not per frame. */
 data class ColumnSummary(
@@ -65,35 +62,19 @@ sealed interface FileMetricsState {
 }
 
 /**
- * Opens one archived file with the app's own Parquet reader and decodes *every* column, so the
- * Detailed/Developer "Metrics" screen doubles as the on-phone proof of the reader on real files.
- * Runs on IO; a file is at most a few hundred rows so this takes milliseconds.
+ * Opens one archived file with the app's own Parquet reader (`:core:parquet`, the same on Android and
+ * iOS) and decodes every column, so the Metrics screen doubles as the on-phone proof of the reader on
+ * real files. Read only, through [ArchiveStore.reader]. Nothing here changes the archive.
  */
-@HiltViewModel
-class FileMetricsViewModel @Inject constructor(
-    private val archive: FileArchive,
-    settings: AppSettings,
-) : ViewModel() {
-
-    /** Detailed shows rows, time span and columns. Developer adds footer, codec, schema, row groups and metadata. */
-    val detailLevel: StateFlow<DetailLevel> = settings.detailLevel.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DetailLevel.DETAILED)
-
-    private val _state = MutableStateFlow<FileMetricsState>(FileMetricsState.Loading)
-    val state: StateFlow<FileMetricsState> = _state.asStateFlow()
-
-    fun load(station: String, name: String) {
-        _state.value = FileMetricsState.Loading
-        viewModelScope.launch {
-            _state.value = withContext(Dispatchers.IO) { describe(station, name) }
-        }
-    }
-
-    private fun describe(station: String, name: String): FileMetricsState {
-        val file = archive.fileFor(station, name)
-        if (!file.isFile) return FileMetricsState.Failed(FailReason.NOT_IN_ARCHIVE, name)
+object FileInspector {
+    suspend fun describe(store: ArchiveStore, station: String, name: String): FileMetricsState {
+        val key = runCatching { ArchiveKey(station, name) }.getOrNull()
+            ?: return FileMetricsState.Failed(FailReason.NOT_IN_ARCHIVE, name)
         return try {
-            val t0 = System.nanoTime()
-            val pf = ParquetFile.open(file)
+            if (!store.exists(key)) return FileMetricsState.Failed(FailReason.NOT_IN_ARCHIVE, name)
+            val mark = TimeSource.Monotonic.markNow()
+            val reader = store.reader(key)
+            val pf = ParquetFile.open(reader, name)
             val index = ParquetIndexer.index(pf)
             val md = pf.metadata
             val utcLeaf = md.leaf(ParquetIndexer.UTC)
@@ -104,13 +85,20 @@ class FileMetricsViewModel @Inject constructor(
             val columns = pf.leaves.map { leaf ->
                 val col = pf.readColumn(leaf)
                 val stats = md.rowGroups.firstOrNull()?.columns?.get(leaf.index)?.statistics?.takeIf { md.rowGroups.size == 1 && it.hasMinMax }
-                summarize(leaf.name, leaf.type, leaf.isTimestampNanosUtc, col, stats?.let { s -> if (leaf.type == ParquetType.FLOAT) s.minFloat()?.toString() else s.minLong(leaf.type)?.toString() }, stats?.let { s -> if (leaf.type == ParquetType.FLOAT) s.maxFloat()?.toString() else s.maxLong(leaf.type)?.toString() })
+                val float = leaf.type == ParquetType.FLOAT
+                summarize(
+                    leaf.name,
+                    leaf.type,
+                    leaf.isTimestampNanosUtc,
+                    col,
+                    stats?.let { s -> if (float) s.minFloat()?.toString() else s.minLong(leaf.type)?.toString() },
+                    stats?.let { s -> if (float) s.maxFloat()?.toString() else s.maxLong(leaf.type)?.toString() },
+                )
             }
-            val decodeMs = (System.nanoTime() - t0) / 1_000_000
             FileMetricsState.Loaded(
                 station = station,
                 name = name,
-                sizeBytes = file.length(),
+                sizeBytes = reader.size,
                 index = index,
                 codec = md.rowGroups.firstOrNull()?.columns?.firstOrNull()?.codec,
                 footerBytes = md.footerLength,
@@ -118,11 +106,14 @@ class FileMetricsViewModel @Inject constructor(
                 rowGroups = groups,
                 columns = columns,
                 metadata = md.keyValueMetadata,
-                decodeMillis = decodeMs,
+                decodeMillis = mark.elapsedNow().inWholeMilliseconds,
             )
         } catch (e: ParquetFormatException) {
             FileMetricsState.Failed(FailReason.READER_REFUSED, e.message)
-        } catch (e: java.io.IOException) {
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // A missing final throws from the store, any other read error lands here too.
             FileMetricsState.Failed(FailReason.UNREADABLE, e.message)
         }
     }
@@ -149,7 +140,8 @@ class FileMetricsViewModel @Inject constructor(
                         if (v > maxD) maxD = v
                     }
                 }
-                is ColumnValues.Binary -> Unit // strings / WKB: no numeric range
+                // Strings and WKB have no numeric range.
+                is ColumnValues.Binary -> Unit
                 else -> {
                     val v = col.asLong(i)!!
                     if (v < minL) minL = v
@@ -159,7 +151,8 @@ class FileMetricsViewModel @Inject constructor(
         }
         val (minText, maxText) = when {
             !any -> NO_VALUE to NO_VALUE
-            col is ColumnValues.Float32 || col is ColumnValues.Float64 -> (if (minD.isFinite()) trim(minD) else NO_VALUE) to (if (maxD.isFinite()) trim(maxD) else NO_VALUE)
+            col is ColumnValues.Float32 || col is ColumnValues.Float64 ->
+                (if (minD.isFinite()) formatValue(minD) else NO_VALUE) to (if (maxD.isFinite()) formatValue(maxD) else NO_VALUE)
             col is ColumnValues.Binary -> NO_VALUE to NO_VALUE
             else -> minL.toString() to maxL.toString()
         }
@@ -167,12 +160,30 @@ class FileMetricsViewModel @Inject constructor(
     }
 
     private fun format(col: ColumnValues, i: Int): String = when (col) {
-        is ColumnValues.Float32 -> trim(col.values[i].toDouble())
-        is ColumnValues.Float64 -> trim(col.values[i])
+        is ColumnValues.Float32 -> formatValue(col.values[i].toDouble())
+        is ColumnValues.Float64 -> formatValue(col.values[i])
         is ColumnValues.Int32 -> col.values[i].toString()
         is ColumnValues.Int64 -> col.values[i].toString()
         is ColumnValues.Binary -> if (col.length(i) <= 64) col.string(i) ?: "" else "${col.length(i)} B"
     }
+}
 
-    private fun trim(v: Double): String = if (v == Math.rint(v) && kotlin.math.abs(v) < 1e15) v.toLong().toString() else "%.4g".format(java.util.Locale.ROOT, v)
+/** Loads one file's metrics off the main thread. Android wraps it in a ViewModel, iOS holds it in AppRoot. */
+class FileMetricsController(
+    private val scope: CoroutineScope,
+    private val store: ArchiveStore,
+    private val io: CoroutineDispatcher = Dispatchers.IO,
+) {
+    private val _state = MutableStateFlow<FileMetricsState>(FileMetricsState.Loading)
+    val state: StateFlow<FileMetricsState> = _state.asStateFlow()
+    private var loaded: Pair<String, String>? = null
+
+    fun load(station: String, name: String) {
+        if (loaded == station to name) return
+        loaded = station to name
+        _state.value = FileMetricsState.Loading
+        scope.launch {
+            _state.value = withContext(io) { FileInspector.describe(store, station, name) }
+        }
+    }
 }
