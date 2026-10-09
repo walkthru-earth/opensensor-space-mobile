@@ -211,6 +211,8 @@ class DevicesBridge internal constructor(
                 ?: records.value.firstOrNull { it.peripheral.equals(id, ignoreCase = true) }?.name
         }
 
+    internal fun nowMs(): Long = now()
+
     internal fun knownNow(): List<KnownSensor> = IosKnown.merge(records.value, credentials.value)
 
     internal fun wifiNow(): List<WifiSensor> = state.lanDevices.map { WifiSensor(it, state.lanStations[it]) }

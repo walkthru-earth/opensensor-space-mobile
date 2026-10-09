@@ -38,5 +38,9 @@ kotlin {
             implementation(libs.compose.foundation)
             implementation(libs.compose.material3)
         }
+        commonTest.dependencies {
+            // The background run bridge suspends on the Swift ports (AutoSyncTest).
+            implementation(libs.kotlinx.coroutines.test)
+        }
     }
 }

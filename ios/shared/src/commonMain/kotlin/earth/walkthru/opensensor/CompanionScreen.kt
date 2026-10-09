@@ -93,7 +93,7 @@ import kotlin.math.floor
  */
 
 @Composable
-internal fun CompanionScreen(state: CompanionState, title: String?, onBack: () -> Unit, reconnect: (() -> Unit)?, disconnect: () -> Unit, scanLan: () -> Unit, saveWifiAccess: () -> Unit, connectLan: (String) -> Unit, syncLan: (String) -> Unit, disconnectLan: (String) -> Unit, syncBluetooth: () -> Unit, units: UnitSystem = UnitSystem.METRIC, showTechnical: Boolean = false, onOpenDebug: ((String) -> Unit)? = null) {
+internal fun CompanionScreen(state: CompanionState, title: String?, onBack: () -> Unit, reconnect: (() -> Unit)?, disconnect: () -> Unit, scanLan: () -> Unit, saveWifiAccess: () -> Unit, connectLan: (String) -> Unit, syncLan: (String) -> Unit, disconnectLan: (String) -> Unit, syncBluetooth: () -> Unit, units: UnitSystem = UnitSystem.METRIC, showTechnical: Boolean = false, onOpenDebug: ((String) -> Unit)? = null, autoSync: (@Composable () -> Unit)? = null) {
     // Display units from Settings. Readings stay SI everywhere else.
     val formatter = UnitFormatter(units)
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
@@ -192,6 +192,8 @@ internal fun CompanionScreen(state: CompanionState, title: String?, onBack: () -
                 // The link is closed. Bluetooth is allowed here, since My devices asked before opening.
                 item { Button(onClick = reconnect, shape = MaterialTheme.shapes.small) { Text(stringResource(Res.string.companion_connect)) } }
             }
+            // Auto-sync for a known sensor (#23). The caller passes it only for a known peripheral.
+            if (autoSync != null) item { BrandCard { autoSync() } }
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Spacer(Modifier.height(8.dp))
