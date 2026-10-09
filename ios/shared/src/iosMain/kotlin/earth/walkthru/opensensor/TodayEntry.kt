@@ -22,9 +22,12 @@ internal class CompanionToday(val state: CompanionState, val actions: CompanionL
  * the entry leaves the back stack. Today so far reads the hourly tier of the phone archive, the
  * same reader History uses.
  */
-private class TodayHolder(today: CompanionToday, address: String, settings: SettingsRepository) : ViewModel() {
+private class TodayHolder(today: CompanionToday, devices: DevicesBridge, address: String, settings: SettingsRepository) : ViewModel() {
     // The one link may hold another sensor. Its station must not fill this sensor's Today so far.
-    private val station = snapshotFlow { today.state.info?.station?.takeIf { today.state.selectedId == address } }
+    private val station = snapshotFlow {
+        val lan = today.state.connectedLanForStation(devices.stationFor(address))
+        lan?.let(today.state.lanInfo::get)?.station ?: today.state.info?.station?.takeIf { today.state.selectedId == address }
+    }
     val controller = TodayController(
         scope = viewModelScope,
         source = CompanionTodaySource(
@@ -34,6 +37,8 @@ private class TodayHolder(today: CompanionToday, address: String, settings: Sett
             archive = IosArchive.index.observeAll(),
             todaySoFar = todaySoFar(station, IosArchive.reader::observeHourlyDay),
             actions = today.actions,
+            stationFor = devices::stationFor,
+            nameFor = devices::nameFor,
         ),
         detailLevel = settings.detailLevel,
         clockSyncMode = settings.clockSyncMode,
@@ -45,8 +50,8 @@ private class TodayHolder(today: CompanionToday, address: String, settings: Sett
  * and Disconnect run here. Every other action goes to [onNavigate].
  */
 @Composable
-internal fun TodayEntry(address: String, today: CompanionToday, settings: SettingsRepository, units: UnitSystem, onNavigate: (TodayAction) -> Unit) {
-    val controller = viewModel(key = "today-$address") { TodayHolder(today, address, settings) }.controller
+internal fun TodayEntry(address: String, today: CompanionToday, devices: DevicesBridge, settings: SettingsRepository, units: UnitSystem, onNavigate: (TodayAction) -> Unit) {
+    val controller = viewModel(key = "today-$address") { TodayHolder(today, devices, address, settings) }.controller
     TodayScreen(
         controller = controller,
         units = remember(units) { UnitFormatter(units) },

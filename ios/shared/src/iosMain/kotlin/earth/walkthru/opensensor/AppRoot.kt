@@ -174,6 +174,7 @@ internal fun AppRoot(
     today: CompanionToday,
     requestBluetooth: () -> Unit,
     openSensor: (String) -> Unit,
+    openLanOnly: (String) -> Unit,
     openDebugLink: (String) -> SensorLink?,
     closeIdle: (String) -> Unit,
     configLinks: DeviceConfigLinks,
@@ -205,26 +206,34 @@ internal fun AppRoot(
                         onFiles = { nav.push(FilesKey(PHONE_ARCHIVE)) },
                         onHistory = { nav.push(HistoryKey(PHONE_ARCHIVE)) },
                     ) { id, connect ->
-                        if (connect && IosKnown.isPeripheral(id)) openSensor(id)
-                        nav.push(TodayKey(id))
+                        val peripheral = when {
+                            IosKnown.isPeripheral(id) -> id
+                            id.startsWith(IosKnown.WIFI_PREFIX) -> devices.peripheralForLan(id.removePrefix(IosKnown.WIFI_PREFIX))
+                            else -> null
+                        }
+                        if (peripheral != null) {
+                            if (connect) openSensor(peripheral) else openLanOnly(peripheral)
+                            nav.push(TodayKey(peripheral))
+                        }
                     }
                 }
-                // The shared Today (`:feature:today`) for a Bluetooth sensor. A Wi-Fi only sensor keeps the
-                // companion page, which holds its Wi-Fi session. Device opens that page for a Bluetooth sensor too.
+                // An enrolled sensor opens the same Today screen over Bluetooth or authenticated Wi-Fi.
+                // A Wi-Fi-only discovery without Bluetooth enrollment cannot open a sensor page.
                 entry<TodayKey> { key ->
                     if (IosKnown.isPeripheral(key.address)) {
                         LeasePeripheral(leases, key.address)
-                        TodayEntry(key.address, today, settingsRepository, units) { action ->
+                        TodayEntry(key.address, today, devices, settingsRepository, units) { action ->
                             when (action) {
                                 TodayAction.OpenHistory -> nav.push(HistoryKey(PHONE_ARCHIVE))
                                 TodayAction.OpenFiles -> nav.push(FilesKey(PHONE_ARCHIVE))
                                 TodayAction.OpenDevice -> nav.push(DeviceKey(key.address))
-                                // Debug talks to the hardware id, the same key the companion page passes. The
-                                // link may hold another sensor now, so only this sensor's id opens it.
-                                TodayAction.OpenDebug ->
-                                    today.state.info?.dev
-                                        ?.takeIf { today.state.selectedId == key.address }
-                                        ?.let { nav.openDebug(it, level.developer) }
+                                // Debug borrows the authenticated link for this sensor, whether Wi-Fi or Bluetooth.
+                                TodayAction.OpenDebug -> {
+                                    val lan = today.state.connectedLanForStation(devices.stationFor(key.address))
+                                    val device = lan?.let(today.state.lanInfo::get)?.dev
+                                        ?: today.state.info?.dev?.takeIf { today.state.selectedId == key.address }
+                                    device?.let { nav.openDebug(it, level.developer) }
+                                }
                                 TodayAction.OpenSettings -> nav.select(TopTab.SETTINGS)
                                 TodayAction.OpenBluetoothSettings -> openAppSettings()
                                 else -> nav.popIfTop { it == key }
@@ -360,6 +369,7 @@ private fun MyDevicesEntry(
         level = level,
         bluetooth = access,
         platform = IosDevices,
+        onOpenLocalNetworkSettings = openSettings,
         onAction = { action ->
             when (action) {
                 is DevicesAction.Open -> onOpen(action.id, action.connect)

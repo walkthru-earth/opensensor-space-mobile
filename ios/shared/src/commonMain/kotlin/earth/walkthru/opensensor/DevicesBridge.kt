@@ -220,7 +220,23 @@ class DevicesBridge internal constructor(
     internal fun nowMs(): Long = now()
 
     /** The 12-hex hardware id INFO gave for this peripheral, so Swift can find its Wi-Fi session. */
-    fun deviceFor(peripheral: String): String? = records.value.firstOrNull { it.peripheral.equals(peripheral, ignoreCase = true) }?.device
+    fun deviceFor(peripheral: String): String? =
+        (credentials.value + records.value).firstOrNull { it.peripheral.equals(peripheral, ignoreCase = true) }?.device
+
+    /** The verified station for a previously opened peripheral. This is only a discovery hint. */
+    fun stationFor(peripheral: String): String? =
+        (credentials.value + records.value).firstOrNull { it.peripheral.equals(peripheral, ignoreCase = true) }?.station
+
+    /** Resolve an active Wi-Fi service back to its enrolled sensor's navigation id. */
+    fun peripheralForLan(name: String): String? {
+        state.lanInfo[name]?.dev?.let { verified ->
+            return (credentials.value + records.value).firstOrNull {
+                it.device.equals(verified, ignoreCase = true)
+            }?.peripheral
+        }
+        val station = state.lanInfo[name]?.station ?: state.lanStations[name] ?: return null
+        return (credentials.value + records.value).firstOrNull { it.station == station }?.peripheral
+    }
 
     private val openRequests = MutableStateFlow(false)
 
@@ -286,8 +302,14 @@ class DevicesBridge internal constructor(
 
     private val radio = object : DeviceRadio {
         override val nearby = snapshotFlow { state.devices.map { NearbySensor(it.id, it.name, it.rssi) } }
-        override val scanning = snapshotFlow { state.scanning }
-        override val scanProblem = snapshotFlow { if (state.bluetoothPoweredOff) ScanProblem.BLUETOOTH_OFF else null }
+        override val scanning = snapshotFlow { state.scanning || state.lanScanning }
+        override val scanProblem = snapshotFlow {
+            when {
+                state.lanAccessDenied -> ScanProblem.LOCAL_NETWORK_DENIED
+                state.bluetoothPoweredOff -> ScanProblem.BLUETOOTH_OFF
+                else -> null
+            }
+        }
         override val wifi = snapshotFlow { wifiNow() }
 
         // Reads the known records too, so a renamed link follows them.

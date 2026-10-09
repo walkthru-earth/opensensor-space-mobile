@@ -47,6 +47,8 @@ internal class DeviceConfigLinks(
     val forgetWifiAccess: (String) -> Unit,
     /** The user's open, which cancels Collect all first. For the Reconnect buttons only. */
     val connect: (String) -> Unit,
+    /** Explicit bonded Bluetooth recovery, even while this sensor has an authenticated LAN link. */
+    val connectBluetooth: (String) -> Unit,
     /** Opens the peripheral without touching Collect all. Swift refuses it while a request holds another link. */
     val reopen: (String) -> Unit,
     val disconnect: () -> Unit,
@@ -77,18 +79,24 @@ internal class IosDeviceConfigSource(
     private val working = MutableStateFlow(false)
     private val _notices = MutableSharedFlow<DeviceConfigNotice>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
-    /** This sensor's hardware id while the one Bluetooth link holds it. */
-    private fun device(): String? = state.info?.dev?.takeIf { state.connected && state.selectedId.equals(address, ignoreCase = true) }
+    /** This sensor's hardware id from the authenticated LAN session or the open Bluetooth link. */
+    private fun device(): String? =
+        state.info?.dev?.takeIf { state.connected && state.selectedId.equals(address, ignoreCase = true) }
+            ?: state.connectedLanForStation(devices.stationFor(address))?.let { state.lanInfo[it]?.dev }
 
     private val companion = snapshotFlow {
-        val ready = state.connected && state.selectedId.equals(address, ignoreCase = true)
-        val info = state.info.takeIf { ready }
+        val lan = state.connectedLanForStation(devices.stationFor(address))
+        val lanInfo = lan?.let(state.lanInfo::get)
+        val bleReady = state.connected && state.selectedId.equals(address, ignoreCase = true)
+        val ready = lanInfo != null || bleReady
+        val info = state.info.takeIf { bleReady } ?: lanInfo
         CompanionView(
             ready = ready,
             info = info,
-            lanSeen = info != null && info.station in state.lanStations.values,
-            busy = state.wifiAccessBusy || state.today.busy,
-            syncRunning = state.syncBusy,
+            transport = if (bleReady) TransportKind.BLE else TransportKind.LAN,
+            lanSeen = lan != null || (info != null && info.station in state.lanStations.values),
+            busy = state.wifiAccessBusy || state.today.busy || (lan?.let { state.lanSessions[it]?.busy } == true),
+            syncRunning = state.syncBusy || (lan?.let { state.lanSessions[it]?.busy } == true),
         )
     }
 
@@ -103,7 +111,7 @@ internal class IosDeviceConfigSource(
             address = address,
             name = devices.nameFor(address),
             connection = if (view.ready) ConnectionState.Ready(0) else ConnectionState.Disconnected,
-            transport = TransportKind.BLE,
+            transport = view.transport,
             info = view.info,
             config = cfg.takeIf { view.ready },
             wifiScan = scan,
@@ -204,6 +212,12 @@ internal class IosDeviceConfigSource(
     }
 
     override fun rotateToken() {
+        // GET_TOKEN is granted only through bonded Bluetooth. Without that live link, rotating
+        // here would invalidate this phone's only LAN credential before it could save a new one.
+        if (!state.connected || !state.selectedId.equals(address, ignoreCase = true)) {
+            _notices.tryEmit(DeviceConfigNotice.Busy)
+            return
+        }
         command(DeviceConfigCommand.ROTATE_TOKEN) { session ->
             config.value = session.setConfig(ConfigPatch.build { rotateToken() })
             // The old token is dead on the sensor. Drop it, then read the new one over Bluetooth.
@@ -222,7 +236,7 @@ internal class IosDeviceConfigSource(
 
     override fun reconnect() = links.connect(address)
 
-    override fun reconnectOverBluetooth() = links.connect(address)
+    override fun reconnectOverBluetooth() = links.connectBluetooth(address)
 
     /**
      * One device-changing request at a time over a lent link. A refused lend is [DeviceConfigNotice.Busy].
@@ -295,6 +309,7 @@ internal class IosDeviceConfigSource(
     private data class CompanionView(
         val ready: Boolean,
         val info: DeviceInfo?,
+        val transport: TransportKind,
         val lanSeen: Boolean,
         val busy: Boolean,
         val syncRunning: Boolean,

@@ -99,7 +99,7 @@ import kotlin.math.floor
  */
 
 @Composable
-internal fun CompanionScreen(state: CompanionState, title: String?, onBack: () -> Unit, reconnect: (() -> Unit)?, disconnect: () -> Unit, scanLan: () -> Unit, saveWifiAccess: () -> Unit, connectLan: (String) -> Unit, syncLan: (String) -> Unit, disconnectLan: (String) -> Unit, syncBluetooth: () -> Unit, units: UnitSystem = UnitSystem.METRIC, showTechnical: Boolean = false, onOpenDebug: ((String) -> Unit)? = null, onOpenSettings: (() -> Unit)? = null, autoSync: (@Composable () -> Unit)? = null) {
+internal fun CompanionScreen(state: CompanionState, title: String?, onBack: () -> Unit, reconnect: (() -> Unit)?, disconnect: () -> Unit, scanLan: () -> Unit, saveWifiAccess: () -> Unit, connectLan: (String) -> Unit, syncLan: (String) -> Unit, disconnectLan: (String) -> Unit, syncBluetooth: () -> Unit, selectedBluetooth: Boolean = false, selectedStation: String? = null, activeDevice: String? = null, units: UnitSystem = UnitSystem.METRIC, showTechnical: Boolean = false, onOpenDebug: ((String) -> Unit)? = null, onOpenSettings: (() -> Unit)? = null, autoSync: (@Composable () -> Unit)? = null) {
     // Display units from Settings. Readings stay SI everywhere else.
     val formatter = UnitFormatter(units)
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
@@ -116,12 +116,12 @@ internal fun CompanionScreen(state: CompanionState, title: String?, onBack: () -
                 }
             }
             // The link notice changes while the user waits, so VoiceOver announces it without moving focus.
-            if (!state.message.isEmpty) item { Text(state.message.resolve(), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
+            if (selectedBluetooth && !state.message.isEmpty) item { Text(state.message.resolve(), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
             // Shown only after iOS reports a Bluetooth denial, which first needs a Find sensors tap.
             if (PermissionFlow.offersSettings(state.bluetoothAccess)) {
                 item { SettingsLink(stringResource(Res.string.perm_open_settings)) }
             }
-            if (state.selectedId != null) {
+            if (selectedBluetooth) {
                 item {
                     BrandCard {
                         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -197,18 +197,17 @@ internal fun CompanionScreen(state: CompanionState, title: String?, onBack: () -
                     }
                 }
                 item { OutlinedButton(onClick = disconnect, shape = MaterialTheme.shapes.small) { Text(stringResource(if (state.syncBusy) Res.string.action_cancel else Res.string.nav_disconnect)) } }
-                // Device settings of a Bluetooth sensor (#20), once the link holds this sensor.
-                if (onOpenSettings != null && state.connected && state.info != null) {
-                    item { OutlinedButton(onClick = onOpenSettings, shape = MaterialTheme.shapes.small) { Text(deviceSettingsLabel()) } }
-                }
-                // Developer level only. The caller passes onOpenDebug at that level and null below it.
-                val debugDevice = state.info?.dev
-                if (onOpenDebug != null && state.connected && debugDevice != null) {
-                    item { OutlinedButton(onClick = { onOpenDebug(debugDevice) }, shape = MaterialTheme.shapes.small) { Text(stringResource(Res.string.nav_debug)) } }
-                }
-            } else if (reconnect != null) {
+            } else if (reconnect != null && activeDevice == null) {
                 // The link is closed. Bluetooth is allowed here, since My devices asked before opening.
                 item { Button(onClick = reconnect, shape = MaterialTheme.shapes.small) { Text(stringResource(Res.string.companion_connect)) } }
+            }
+            if (activeDevice != null) {
+                if (onOpenSettings != null) {
+                    item { OutlinedButton(onClick = onOpenSettings, shape = MaterialTheme.shapes.small) { Text(deviceSettingsLabel()) } }
+                }
+                if (onOpenDebug != null) {
+                    item { OutlinedButton(onClick = { onOpenDebug(activeDevice) }, shape = MaterialTheme.shapes.small) { Text(stringResource(Res.string.nav_debug)) } }
+                }
             }
             // Auto-sync for a known sensor (#23). The caller passes it only for a known peripheral.
             if (autoSync != null) item { BrandCard { autoSync() } }
@@ -228,7 +227,12 @@ internal fun CompanionScreen(state: CompanionState, title: String?, onBack: () -
                     }
                 }
             }
-            items((state.lanDevices + state.lanSessions.keys).distinct().sorted(), key = { it }) { name ->
+            items(
+                (state.lanDevices + state.lanSessions.keys).distinct().filter { name ->
+                    selectedStation != null && (state.lanInfo[name]?.station == selectedStation || state.lanStations[name] == selectedStation)
+                }.sorted(),
+                key = { it }
+            ) { name ->
                 val session = state.lanSessions[name]
                 val paused = name in state.lanPaused
                 val canConnect = session?.connected != true && session?.busy != true && name in state.lanDevices

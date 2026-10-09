@@ -54,6 +54,8 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, @preconcurrency UNU
 /// The app's adapters, made once per process. Only ids, names and stations cross into Kotlin.
 @MainActor
 final class AppServices {
+    private var openAttempt = UUID()
+    private var selectedOpenId: String?
     /// One shared engine, so LAN and Bluetooth save into the same archive and never sync a station twice at once.
     let engine = IosArchiveKt.sharedSensorSync()
     private(set) lazy var bluetooth = BluetoothCompanion(engine: engine)
@@ -62,8 +64,8 @@ final class AppServices {
     /// My devices over the adapters. Only ids, names and stations cross, never a token.
     private(set) lazy var devices: DevicesBridge = DevicesBridgeIosKt.devicesBridge(
         state: bluetooth.state, sync: engine,
-        startScan: { [weak self] in self?.bluetooth.scan() },
-        stopScan: { [weak self] in self?.bluetooth.stopScan() },
+        startScan: { [weak self] in self?.scanDevices() },
+        stopScan: { [weak self] in self?.stopDeviceScan() },
         forget: { [weak self] peripheral, device in self?.forget(peripheral: peripheral, device: device) },
         collect: { [weak self] id, wifiName in self?.collect(id: id, wifiName: wifiName) }
     )
@@ -78,6 +80,7 @@ final class AppServices {
         bluetooth.onCredentialSaved = { [weak self] in self?.credentialsChanged() }
         bluetooth.onCollectFinished = { [weak self] id, ok in self?.devices.collectFinished(id: id, ok: ok) }
         lan.onCollectFinished = { [weak self] id, ok in self?.devices.collectFinished(id: id, ok: ok) }
+        lan.onCredentialRemoved = { [weak self] in self?.credentialsChanged() }
         credentialsChanged()
         bluetooth.launchedOffScreen()
         autoSync.register()
@@ -93,10 +96,23 @@ final class AppServices {
             peripherals: entries.map(\.peripheral), stations: entries.map(\.station), devices: entries.map(\.device))
     }
 
+    /// My devices uses one scan action for both nearby Bluetooth and local Bonjour sensors.
+    /// The browse is the user-facing action that lets iOS request Local Network access.
+    private func scanDevices() {
+        bluetooth.scan()
+        lan.scan()
+    }
+
+    private func stopDeviceScan() {
+        bluetooth.stopScan()
+        lan.stop()
+    }
+
     /// The user confirmed Forget. The bridge already dropped its record. This closes any link to the
     /// sensor, turns its Auto-sync off and removes its Wi-Fi access. The system bond stays until
     /// removed in iOS Settings.
     private func forget(peripheral: String, device: String?) {
+        cancelPendingOpen(id: peripheral)
         bluetooth.close(id: peripheral)
         autoSync.forget(peripheral: peripheral)
         if let device {
@@ -123,13 +139,95 @@ final class AppServices {
         }
     }
 
-    /// Wi-Fi is faster, so an open, idle Wi-Fi session for the same sensor takes the sync.
-    func syncConnectedSensor() {
-        if let device = bluetooth.deviceId, let name = lan.connectedSession(device: device) {
-            lan.sync(name: name)
-        } else {
-            bluetooth.sync()
+    /// Prefer a discovered, enrolled LAN endpoint. Start Bluetooth only when there is no usable
+    /// local target or this open's authenticated handshake fails. A newer open invalidates the
+    /// earlier attempt, so an old failure cannot take over a different sensor's Bluetooth link.
+    func openSensor(id: String, allowBluetooth: Bool = true) {
+        openAttempt = UUID()
+        selectedOpenId = id
+        let attempt = openAttempt
+        if let station = devices.stationFor(peripheral: id), let device = devices.deviceFor(peripheral: id) {
+            let started = lan.connectKnown(station: station, device: device, onFailure: allowBluetooth ? { [weak self] in
+                guard let self, self.openAttempt == attempt,
+                    self.selectedOpenId?.caseInsensitiveCompare(id) == .orderedSame else { return }
+                self.bluetooth.open(id: id)
+            } : nil)
+            if started {
+                bluetooth.closeIdle(id: id)
+                return
+            }
         }
+        if allowBluetooth { bluetooth.open(id: id) }
+    }
+
+    /// Device settings explicitly needs bonded Bluetooth for GET_TOKEN and token rotation.
+    func openBluetoothSensor(id: String) {
+        cancelPendingOpen()
+        selectedOpenId = id
+        bluetooth.requestAccess()
+        bluetooth.open(id: id)
+    }
+
+    func disconnectSensor(id: String) {
+        cancelPendingOpen(id: id)
+        if let device = devices.deviceFor(peripheral: id) { lan.disconnect(device: device) }
+        bluetooth.close(id: id)
+    }
+
+    func closeIdle(id: String) {
+        cancelPendingOpen(id: id)
+        bluetooth.closeIdle(id: id)
+    }
+
+    func cancelPendingOpen(id: String? = nil) {
+        if let id, selectedOpenId?.caseInsensitiveCompare(id) != .orderedSame { return }
+        openAttempt = UUID()
+        selectedOpenId = nil
+    }
+
+    func commandSensor(id: String, command: SensorCommand) {
+        guard let device = devices.deviceFor(peripheral: id) else {
+            bluetooth.state.today.commandRefused()
+            return
+        }
+        if lan.command(device: device, command: command) { return }
+        if lan.holds(device: device) {
+            bluetooth.state.today.commandRefused()
+            return
+        }
+        if bluetooth.deviceId == device {
+            bluetooth.command(command)
+        } else {
+            bluetooth.state.today.commandRefused()
+        }
+    }
+
+    /// Wi-Fi is faster, so an open, idle Wi-Fi session for the same sensor takes the sync.
+    func syncSensor(id: String) {
+        guard let device = devices.deviceFor(peripheral: id) else {
+            bluetooth.state.today.commandRefused()
+            return
+        }
+        if let name = lan.connectedSession(device: device) {
+            lan.sync(name: name)
+        } else if lan.holds(device: device) {
+            bluetooth.state.today.commandRefused()
+        } else if bluetooth.deviceId == device {
+            bluetooth.sync()
+        } else {
+            bluetooth.state.today.commandRefused()
+        }
+    }
+
+    func openConfigLink(device: String) -> SensorLink? {
+        if bluetooth.deviceId == device, let link = bluetooth.openConfigLink(device: device) { return link }
+        if lan.holds(device: device) { return lan.openConfigLink(device: device) }
+        return bluetooth.openConfigLink(device: device)
+    }
+
+    func openDebugLink(device: String) -> SensorLink? {
+        if lan.holds(device: device) { return lan.openConfigLink(device: device) }
+        return bluetooth.openDebugLink(device: device)
     }
 }
 
@@ -155,19 +253,22 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             devices: services.devices,
             autoSync: services.autoSync.settings,
             requestBluetooth: { bluetooth.requestAccess() },
-            openSensor: { id in bluetooth.open(id: id) },
+            openSensor: { [weak services] id in services?.openSensor(id: id) },
+            openBluetoothSensor: { [weak services] id in services?.openBluetoothSensor(id: id) },
+            openLanOnly: { [weak services] id in services?.openSensor(id: id, allowBluetooth: false) },
+            disconnectSensor: { [weak services] id in services?.disconnectSensor(id: id) },
             disconnect: { bluetooth.disconnect() },
             scanLan: { lan.scan() },
             saveWifiAccess: { bluetooth.saveWifiAccess() },
             connectLan: { name in lan.connect(name: name) },
             syncLan: { name in lan.sync(name: name) },
             disconnectLan: { name in lan.disconnect(name: name) },
-            syncBluetooth: { [weak services] in services?.syncConnectedSensor() },
+            syncBluetooth: { [weak services] id in services?.syncSensor(id: id) },
             syncInBackground: { [weak services] id in KotlinBoolean(value: services?.autoSync.syncInBackground(id) ?? false) },
-            closeIdle: { id in bluetooth.closeIdle(id: id) },
-            openDebugLink: { device in bluetooth.openDebugLink(device: device) },
-            command: { command in bluetooth.command(command) },
-            openConfigLink: { device in bluetooth.openConfigLink(device: device) },
+            closeIdle: { [weak services] id in services?.closeIdle(id: id) },
+            openDebugLink: { [weak services] device in services?.openDebugLink(device: device) },
+            command: { [weak services] id, command in services?.commandSensor(id: id, command: command) },
+            openConfigLink: { [weak services] device in services?.openConfigLink(device: device) },
             forgetWifiAccess: { [weak services] device in services?.forgetWifiAccess(device: device) },
             // Nil on hardware without VisionKit data scanning, which hides Scan on the sticker card.
             scanSticker: StickerScanner.isSupported
@@ -190,6 +291,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
     func sceneDidEnterBackground(_ scene: UIScene) {
         guard let services else { return }
+        services.cancelPendingOpen()
         // Collect all is a foreground pass. The step in flight ends with the link below.
         services.devices.cancelCollectAll()
         services.bluetooth.suspend()
@@ -204,6 +306,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
     func sceneDidDisconnect(_ scene: UIScene) {
         guard let services else { return }
+        services.cancelPendingOpen()
         services.devices.cancelCollectAll()
         services.bluetooth.suspend()
         services.lan.suspend()

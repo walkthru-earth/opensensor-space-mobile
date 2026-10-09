@@ -563,3 +563,31 @@ Exact application/ELF and backup hashes, timings and limits are in the
 The enhanced iPhone app remains installed with average KiB/s feedback. Actual
 Android/iPhone throughput after the firmware upgrade still needs phone observations;
 these are real-board host measurements, not phone or sustained-radio qualification.
+
+## 2026-10-09 — combined device discovery and iPhone LAN Smart Sync follow-up
+
+The combined Bluetooth and `_aqsync._tcp` My devices list and shared Today/Device
+navigation were built with `./gradlew --no-daemon verify`, Xcode Debug, and installed
+on the paired iPhone 16 Pro. The owner saw **Wi-Fi LAN** and live Today data, but
+reported that Smart Sync immediately disconnected the sensor. A captured iPhone
+screen showed **Not connected** and an incorrect **All caught up** message after
+the disconnect. This is real-phone app evidence; no completed file or transfer rate
+was observed. The owner's earlier impression that Wi-Fi sync was slow has no
+measured KiB/s or file size yet.
+
+The app parser omitted valid `TIME_SET` replies from its LAN frame validation;
+every fresh LAN sync sends `SET_TIME`, so the reply closed the socket as an invalid
+frame. Valid canonical replies now reach the shared sync engine, and an interrupted
+LAN run no longer appears caught up. Host and iOS simulator tests passed for the
+decoder and failure state. The corrected signed Debug app was installed and launched
+on the iPhone 16 Pro; CoreDevice listed its process running. Debug dylib SHA-256:
+`1e5debb1f9c623f02826db8af1c115e949d2ba260b3a18265e51543ca7c8e601`.
+On retry with this corrected build, the owner reported that Wi-Fi Smart Sync now works.
+No file size, completion count or transfer rate was supplied, so throughput and
+large-file/resume behavior remain unmeasured on the phone.
+
+The updated Android Debug APK installed and launched on the connected OnePlus 7
+Pro (`GM1911`, ADB `8ed37969`); its process was running after launch. APK SHA-256:
+`cf71cd19b217b75274e1763bab5479c43a50a8ab303b7036f5b743b03865ad70`.
+Android combined discovery, LAN-only open, and sensor collection were not exercised
+on that phone in this run.

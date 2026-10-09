@@ -63,9 +63,12 @@ records saved in UserDefaults (peripheral id, name, station, hardware id, last o
 credential), the Keychain credential list (`LanCredentials.list`, ids only, never the token) and
 the receipt index. Bluetooth access is asked from My devices through `:ui:permissions`. When it is
 already allowed, `BluetoothCompanion` creates the central manager at launch with no prompt, and
-the list scans while it is visible. Opening a sensor connects it through its saved identifier
-(`retrievePeripherals`) when it is not in the scan, closing any other open link, and pushes the
-device page (`CompanionScreen`, with Back, the live reading, Wi-Fi access and Bluetooth sync).
+the list scans while it is visible. Its combined scan also starts a bounded Bonjour browse,
+which can trigger the Local Network prompt on tab entry when Bluetooth access was already held.
+Opening an enrolled sensor attempts authenticated Wi-Fi from a matching discovery result and
+saved Keychain access, then opens shared Today. Bluetooth can connect through its saved
+identifier (`retrievePeripherals`) even when it is absent from the scan. With Bluetooth denied,
+a known sensor can still open through an authenticated Wi-Fi session.
 Forget, after confirmation, drops the record and the Keychain Wi-Fi access and closes any open
 link. The system bond stays until the user removes it in iOS Settings, which the dialog says.
 A forgotten sensor comes back only when the user opens it again. Collect all runs one sensor at a
@@ -74,12 +77,13 @@ Bluetooth, and stops when the app leaves the foreground. A step never takes over
 holds. It skips a sensor the user has open on Bluetooth or Wi-Fi (a Wi-Fi session maps to its
 known sensor through the TXT station), fails while another sensor holds the Bluetooth link, closes
 only what it opened, and fails when its sync has not started within a minute. Opening a sensor
-cancels Collect all first. The Wi-Fi browse still starts from Find
-on Wi-Fi on the device page, so the list shows Wi-Fi sensors after that browse.
+cancels Collect all first. My devices **Scan** starts both the Bluetooth search and a bounded
+Wi-Fi browse, and the list merges their results. **Find Wi-Fi sensors** remains available on the
+device page.
 
 Wi-Fi discovery is also available through `NWBrowser`, restricted to
-`_aqsync._tcp` in `local.`. Tapping **Find Wi-Fi sensors** starts a bounded browse
-and lets iOS request Local Network access. `Info.plist` declares
+`_aqsync._tcp` in `local.`. Tapping **Scan** on My devices or **Find Wi-Fi sensors** on
+the device page starts a bounded browse and lets iOS request Local Network access. `Info.plist` declares
 `NSLocalNetworkUsageDescription` and `NSBonjourServices`. Adding the description
 alone does not request access; the real browse triggers the system decision.
 Browser waiting states retain the browse while the user answers; they can also
@@ -176,7 +180,7 @@ copies through `:core:archive` into a fresh run under `tmp/opensensor-export`, t
 are exported, so partials and receipts stay private, and the archive is never moved or changed.
 The daily zip action remains hidden; automatic UTC reconciliation now persists a derived daily
 Parquet cache, but that cache is not yet wired to the iOS export picker. The Swift folder export and its
-companion button are gone. Background Bluetooth is limited to Auto-sync (#23). The app has no archive charts.
+companion button are gone. Background Bluetooth is limited to Auto-sync (#23). The shared History screen draws archive charts.
 Native BLE uses Core Bluetooth's
 peripheral identifier; the Keychain identity also pins station and full hardware ID. New
 LAN/archive behavior has host/simulator/build evidence plus the owner's report of
@@ -238,11 +242,12 @@ The Gradle script locates Android Studio's JBR if `JAVA_HOME` is not already set
 Compose's startup sanity check on high-refresh-rate iPhones. Keep that setting.
 The deployment target matches the current native dependency minimum (iOS 18.5).
 
-For a phone check: allow Bluetooth, tap **Find sensors**, connect your nearby
+For a phone check: allow Bluetooth, tap **Scan** on My devices, connect your nearby
 sensor, complete the system PIN prompt if shown, compare readings with the
 sensor, then verify disconnect, radio-off and background/resume behavior.
-Tap **Find Wi-Fi sensors** separately to test the Local Network prompt and
-Bonjour discovery on the phone. Decline/allow/revoke checks remain phone
+Use **Scan** on My devices to test Bluetooth and Bonjour together, including the Local Network
+prompt on the phone. The device page also offers **Find Wi-Fi sensors**. Decline/allow/revoke
+checks remain phone
 qualification work. An iOS simulator cannot exercise the real BLE transport. Keep dated real-phone
 results separate from compilation and common-test evidence. On 2026-10-08 the
 owner confirmed Bluetooth connection and visible live readings on the connected
@@ -281,37 +286,38 @@ accuracy, stale/background handling or authenticated Wi-Fi connections. See
    what they open. No descriptor leaks today. The JVM reader closes its file after mapping, and
    the iOS reader is a mapped `NSData` freed with the object. A reader over a plain file handle
    would need it.
-10. Debug (`:feature:debug`) runs on iOS over a lent Bluetooth link only. Raw commands, `LOG_TAIL`,
-    `GET_CONFIG` and `STATUS` need a Wi-Fi variant of `openDebugLink` in `LanDiscovery.swift`
-    (async `target()` and `beginCollect`), and iOS needs the Smart Sync trace card. Qualify on an
-    iPhone that a raw command, the log, the config read and Refresh status work over Bluetooth, that
-    `TOKEN` and secrets stay redacted, that a sync is refused while Debug holds the link and the
-    reverse, and that leaving Developer level closes the screen.
+10. Debug (`:feature:debug`) can borrow a short authenticated LAN or Bluetooth link for raw
+    commands, `LOG_TAIL`, `GET_CONFIG` and `STATUS`. iOS still needs the Smart Sync trace card.
+    Qualify on an iPhone that a raw command, log, config read and Refresh status work over each
+    link, that `TOKEN` and secrets stay redacted, that a sync is refused while Debug holds the link
+    and the reverse, and that leaving Developer level closes the screen.
 11. Done in code (#17, 2026-10-09), not yet seen on an iPhone. Today is the shared `:feature:today`
-    screen. A Bluetooth sensor opened from My devices lands on it. `CompanionTodaySource` (`ios/shared`
-    commonMain) reads `CompanionState` as the Today port, and Today so far reads the hourly tier of
-    `IosArchive`. Set time and Finalize ask for confirmation, then `BluetoothCompanion.command` lends
-    a fresh `SensorLink` and `SensorSync.command` sends `SET_TIME` or `FLUSH` through the shared
-    `DeviceSession`, refused while a sync, Debug or a Wi-Fi access request holds the link. Smart Sync
-    follows the Clock sync setting, now shown on iOS, and a refused clock step stops the sync. The
-    Device action opens the companion page, which keeps Wi-Fi access, the Wi-Fi session and Debug.
-    A sensor known only over Wi-Fi still opens on the companion page. Commands have no Wi-Fi path yet,
-    the sync bar has no byte total, and a Wi-Fi sync does not show on Today. Qualify on an iPhone
+    screen. An enrolled Bluetooth or authenticated Wi-Fi sensor opened from My devices lands on it.
+    An available authenticated LAN session is opened first; Bluetooth is the fallback when it
+    cannot be reached and Bluetooth permission is already held.
+    `CompanionTodaySource` (`ios/shared` commonMain) reads the matching Bluetooth or LAN INFO,
+    STATUS and LIVE state from `CompanionState`; Today so far reads the hourly tier of `IosArchive`.
+    Smart Sync, Set time and Finalize use a ready LAN session for that sensor when available, then
+    Bluetooth if present. Commands are refused while another sync, Debug or Wi-Fi access request
+    holds the link. Smart Sync follows the Clock sync setting, now shown on iOS, and a refused
+    clock step stops the sync. The Device action opens the companion page, which keeps Wi-Fi
+    access, the Wi-Fi session and Debug. Shared Device settings use authenticated LAN when available;
+    the sync bar has no byte total. Qualify on an iPhone
     that Set time anchors a logger that has no UTC, that Finalize writes a short file the next sync
     downloads, that Smart Sync under Automatic sets the clock then syncs, that Ask shows the consent
     dialog, and that opening another sensor leaves the first Today closed.
 12. Done in code (#20, 2026-10-09), not yet seen on an iPhone. Device settings are the shared
     `:feature:device` cards and confirmations, opened from a Sensor settings button on the companion
-    page of a connected Bluetooth sensor (`DeviceSettingsKey`). `IosDeviceConfigSource` (`ios/shared`
-    iosMain) borrows one short link per request from `BluetoothCompanion.openConfigLink`, which uses
-    Today's command guards and settles the link when it is handed back, closing it then if its last
-    page left meanwhile or the app is off screen. The page reads the config when the link turns
-    ready. After a restart the reopen goes only to the same sensor, or to a free link with no
+    page of a connected enrolled sensor (`DeviceSettingsKey`). `IosDeviceConfigSource` (`ios/shared`
+    iosMain) borrows one short authenticated LAN or Bluetooth link per request, using the same
+    command guards and settling the link when it is handed back. The page reads the config when
+    its selected link turns ready. After a restart the reopen goes only to the same sensor, or to a free link with no
     Collect all running. Frames go through the
     redacting recorder Debug shows. Get Wi-Fi token and Replace token reuse Save Wi-Fi access, so the
-    token stays in Swift and the Keychain, and a rotation first drops the old entry through
-    `AppServices.forgetWifiAccess`. Differences from Android: Bluetooth only, no phone installation history, no device header or Auto-sync card on the page, and no
-    Wi-Fi endpoint line. Qualify on an iPhone that each of the four confirmations sends nothing on
+    token stays in Swift and the Keychain. `GET_TOKEN` and token rotation require a live bonded
+    Bluetooth link; rotation is gated until it can obtain and save the replacement token. Differences
+    from Android: no phone installation history, device header or Auto-sync card on the page, and
+    no Wi-Fi endpoint line. Qualify on an iPhone that each of the four confirmations sends nothing on
     Cancel, that a Wi-Fi join is polled until connected, that Replace token stores a new token and the
     next Wi-Fi sync uses it, that Forget all paired phones asks for pairing on the next connection,
     that Restart reconnects after about 6 s, and that a sync or Collect all waiting for the link starts
@@ -335,14 +341,14 @@ accuracy, stale/background handling or authenticated Wi-Fi connections. See
 
 LAN and Bluetooth file sync use the shared Kotlin engine. Swift keeps the sockets, Core
 Bluetooth, LAN framing, the HELLO check, keepalive, the BLE token request and Keychain.
-The shared Debug screen borrows the same `SensorLink` from `BluetoothCompanion.openDebugLink`,
-one per request, and Device settings borrow theirs from `openConfigLink`. Closing the link
-(`SensorLink.whenClosed`) hands it back to Swift.
+The shared Debug and Device settings screens borrow a short `SensorLink` over authenticated LAN
+when available or Bluetooth, one per request. Closing the link (`SensorLink.whenClosed`) hands it
+back to Swift. Token acquisition and replacement still need bonded Bluetooth.
 `SensorArchive.swift` remains only for Files export. Android's Room index, WorkManager and
 foreground service stay Android code.
 
 Compilation, automated tests and device observations for this change are recorded
-in [status.md](status.md); features listed above are not implemented on iOS yet.
+in [status.md](status.md). A simulator build does not establish real iPhone LAN or BLE behavior.
 
 ## KMP and Apple contributor guidance
 

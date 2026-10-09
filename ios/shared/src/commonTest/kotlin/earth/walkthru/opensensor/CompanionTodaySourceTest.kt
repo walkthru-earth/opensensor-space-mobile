@@ -29,7 +29,7 @@ class CompanionTodaySourceTest {
         val list = mutableListOf<String>()
         val actions = CompanionLinkActions(
             syncFiles = { list += "sync" },
-            command = { list += it.name },
+            command = { _, command -> list += command.name },
             connect = { list += "connect $it" },
             disconnect = { list += "disconnect" },
         )
@@ -40,9 +40,10 @@ class CompanionTodaySourceTest {
         calls: Calls,
         notices: MutableList<TodayNotice>,
         todaySoFar: Flow<TodaySoFar?> = flowOf(null),
+        stationFor: (String) -> String? = { null },
     ): CompanionTodaySource {
         val scope = CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler))
-        val source = CompanionTodaySource(scope, state, "device", MutableStateFlow(emptyList()), todaySoFar, calls.actions, now = { 1_000L })
+        val source = CompanionTodaySource(scope, state, "device", MutableStateFlow(emptyList()), todaySoFar, calls.actions, stationFor, now = { 1_000L })
         scope.launch { source.notices.collect { notices += it } }
         return source
     }
@@ -80,6 +81,68 @@ class CompanionTodaySourceTest {
         settle(this)
         assertEquals(ConnectionState.Disconnected, source.snapshot.value.connection)
         assertNull(source.snapshot.value.transport)
+    }
+
+    @Test fun knownSensorUsesAuthenticatedLanSnapshotWithoutBluetooth() = runTest {
+        val state = CompanionState()
+        val calls = Calls()
+        val source = source(state, calls, mutableListOf(), stationFor = { "st" })
+        state.lanSessionNoticed("AQ-kitchen", true, false, CompanionNotice.LAN_CONNECTED, 0, 0, 0, 0.0)
+        state.lanInfoReceived("AQ-kitchen", "{\"proto\":2,\"dev\":\"112233445566\",\"station\":\"st\"}")
+        state.lanStatusReceived("AQ-kitchen", "{\"utc\":1,\"clk\":1}")
+        state.lanReadingReceived("AQ-kitchen", "{\"pms\":4,\"pm25\":12.0}")
+        settle(this)
+
+        assertEquals(ConnectionState.Ready(0), source.snapshot.value.connection)
+        assertEquals(TransportKind.LAN, source.snapshot.value.transport)
+        assertEquals("st", source.snapshot.value.info?.station)
+        assertEquals(12.0, source.snapshot.value.live?.pm25)
+        source.sync(ClockSyncMode.AUTOMATIC, clockConfirmed = false)
+        assertEquals(listOf("sync"), calls.list)
+
+        state.lanSessionNoticed("AQ-kitchen", false, false, CompanionNotice.LAN_DISCONNECTED, 0, 0, 0, 0.0)
+        settle(this)
+        assertEquals(ConnectionState.Disconnected, source.snapshot.value.connection)
+    }
+
+    @Test fun lanHandshakeIsNotCollectionAndCompletionStaysOnToday() = runTest {
+        val state = CompanionState()
+        val source = source(state, Calls(), mutableListOf(), stationFor = { "st" })
+        state.lanSessionNoticed("AQ-kitchen", true, true, CompanionNotice.LAN_CONNECTING, 0, 0, 0, 0.0)
+        state.lanInfoReceived("AQ-kitchen", "{\"proto\":2,\"dev\":\"112233445566\",\"station\":\"st\"}")
+        settle(this)
+        assertFalse(source.snapshot.value.sync.running, "a busy handshake is not file collection")
+
+        state.lanSyncStarted("AQ-kitchen")
+        settle(this)
+        assertTrue(source.snapshot.value.sync.running)
+        assertTrue(source.snapshot.value.sync.startedAtEpochMs != null)
+
+        state.lanSyncFinished("AQ-kitchen", true, SyncResult(SyncEnd.COMPLETE, 1, 1, 0))
+        settle(this)
+        assertFalse(source.snapshot.value.sync.running)
+        assertTrue(source.snapshot.value.sync.finishedAtEpochMs != null)
+        state.lanSessionNoticed("AQ-kitchen", false, false, CompanionNotice.LAN_DISCONNECTED, 1, 1, 1024, 0.0)
+        settle(this)
+        assertTrue(source.snapshot.value.sync.finishedAtEpochMs != null, "completion remains visible after the socket closes")
+    }
+
+    @Test fun closedLanSyncNeverLooksCaughtUp() = runTest {
+        val state = CompanionState()
+        val source = source(state, Calls(), mutableListOf(), stationFor = { "st" })
+        state.lanSessionNoticed("AQ-kitchen", true, false, CompanionNotice.LAN_CONNECTED, 0, 0, 0, 0.0)
+        state.lanInfoReceived("AQ-kitchen", "{\"proto\":2,\"dev\":\"112233445566\",\"station\":\"st\"}")
+        state.lanSyncStarted("AQ-kitchen")
+        settle(this)
+        state.lanSyncStopped("AQ-kitchen")
+        state.lanSessionNoticed("AQ-kitchen", false, false, CompanionNotice.LAN_DISCONNECTED, 0, 0, 0, 0.0)
+        settle(this)
+        assertFalse(source.snapshot.value.sync.running)
+        assertTrue(source.snapshot.value.sync.failures.isNotEmpty(), "a closed socket cannot report All caught up")
+
+        state.lanSyncFinished("AQ-kitchen", false, SyncResult(SyncEnd.LINK_LOST, 0, 0, 0))
+        settle(this)
+        assertTrue(source.snapshot.value.sync.failures.isNotEmpty(), "the engine result remains after session cleanup")
     }
 
     @Test fun anAnchoredClockSyncsFilesOnly() = runTest {

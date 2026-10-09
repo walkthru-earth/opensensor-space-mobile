@@ -34,11 +34,11 @@ import earth.walkthru.aqsync.data.SyncProgress as RunProgress
 /** What Today may ask of the Swift adapters. Each one is a closure the app already passes, plus [command]. */
 class CompanionLinkActions(
     /** Sync the connected sensor. The app routes it to an open Wi-Fi session for the same sensor. */
-    internal val syncFiles: () -> Unit,
-    /** Automatic `SET_TIME` or confirmed `FLUSH` over the Bluetooth connection. */
-    internal val command: (SensorCommand) -> Unit,
+    internal val syncFiles: (String) -> Unit,
+    /** Automatic `SET_TIME` or confirmed `FLUSH` over this sensor's active connection. */
+    internal val command: (String, SensorCommand) -> Unit,
     internal val connect: (String) -> Unit,
-    internal val disconnect: () -> Unit,
+    internal val disconnect: (String) -> Unit,
 )
 
 /**
@@ -54,6 +54,8 @@ internal class CompanionTodaySource(
     archive: Flow<List<ArchiveRecord>>,
     todaySoFar: Flow<TodaySoFar?>,
     private val actions: CompanionLinkActions,
+    private val stationFor: (String) -> String? = { null },
+    private val nameFor: (String) -> String? = { null },
     private val now: () -> Long = { nowEpochMillis() },
 ) : TodaySource {
     /** One read of the companion state. Compose state, so [snapshotFlow] sees every change. */
@@ -67,6 +69,13 @@ internal class CompanionTodaySource(
         val syncBusy: Boolean,
         val progress: SyncProgress?,
         val result: SyncResult?,
+        val lanName: String?,
+        val lanInfo: DeviceInfo?,
+        val lanStatus: DeviceStatus?,
+        val lanLive: LiveSample?,
+        val lanStatusAt: Long?,
+        val lanSession: LanSessionState?,
+        val lanRun: LanRunState?,
     )
 
     /** [Seen] with the instants Today shows: when status and live arrived, when the sync ran. */
@@ -80,16 +89,29 @@ internal class CompanionTodaySource(
     )
 
     private val stamped: Flow<Stamped> = snapshotFlow {
+        val station = stationFor(address)
+        val lanName = state.connectedLanForStation(station)
+        val lanRun = lanName?.let(state.lanRuns::get)
+            ?: station?.let { wanted ->
+                state.lanRuns.values.filter { it.station == wanted }.maxByOrNull { it.startedAtEpochMs ?: Long.MIN_VALUE }
+            }
         Seen(
             selectedId = state.selectedId,
             connected = state.connected,
-            name = state.devices.firstOrNull { it.id == address }?.name,
+            name = state.devices.firstOrNull { it.id == address }?.name ?: nameFor(address),
             info = state.info,
             status = state.status,
             live = state.live,
             syncBusy = state.syncBusy,
             progress = state.syncProgress,
             result = state.lastSyncResult,
+            lanName = lanName,
+            lanInfo = lanName?.let(state.lanInfo::get),
+            lanStatus = lanName?.let(state.lanStatus::get),
+            lanLive = lanName?.let(state.lanLive::get),
+            lanStatusAt = lanName?.let(state.lanStatusAtEpochMs::get),
+            lanSession = lanName?.let(state.lanSessions::get),
+            lanRun = lanRun,
         )
     }.runningFold<Seen, Stamped?>(null) { previous, seen ->
         val at = now()
@@ -98,9 +120,11 @@ internal class CompanionTodaySource(
             seen = seen,
             // A new scan clears the nearby list, the name the user saw stays.
             name = seen.name ?: previous?.name,
-            statusAt = seen.status?.let { if (was?.status == it) previous.statusAt else at },
-            liveAt = seen.live?.let { if (was?.live == it) previous.liveAt else at },
-            startedAt = if (seen.syncBusy && was?.syncBusy != true) at else previous?.startedAt,
+            statusAt = if (seen.lanName != null) seen.lanStatusAt else seen.status?.let { if (was?.status == it) previous.statusAt else at },
+            liveAt = (if (seen.lanName != null) seen.lanLive else seen.live)?.let {
+                if (was?.lanName == seen.lanName && (if (seen.lanName != null) was?.lanLive else was?.live) == it) previous?.liveAt else at
+            },
+            startedAt = if ((seen.syncBusy || seen.lanSession?.busy == true) && was?.syncBusy != true && was?.lanSession?.busy != true) at else previous?.startedAt,
             finishedAt = when {
                 seen.syncBusy || seen.result == null -> null
                 was?.syncBusy == true || was?.result !== seen.result -> at
@@ -113,8 +137,9 @@ internal class CompanionTodaySource(
         val seen = s.seen
         // The one Bluetooth link may belong to another sensor now. This Today then shows its own as closed.
         val mine = seen.selectedId == address
-        val connected = mine && seen.connected
-        val station = seen.info?.station?.takeIf { mine }
+        val overLan = seen.lanName != null && seen.lanSession?.connected == true && seen.lanInfo != null
+        val connected = overLan || (mine && seen.connected)
+        val station = if (overLan) seen.lanInfo.station else seen.info?.station?.takeIf { mine } ?: stationFor(address)
         TodaySnapshot(
             address = address,
             name = s.name,
@@ -123,15 +148,23 @@ internal class CompanionTodaySource(
                 mine -> ConnectionState.Connecting
                 else -> ConnectionState.Disconnected
             },
-            transport = if (connected) TransportKind.BLE else null,
-            info = seen.info?.takeIf { mine },
-            status = seen.status?.takeIf { mine },
-            statusAtEpochMs = s.statusAt?.takeIf { mine },
-            live = seen.live?.takeIf { mine },
-            liveAtEpochMs = s.liveAt?.takeIf { mine },
-            sync = if (mine) runProgress(seen, s) else RunProgress(),
+            transport = when {
+                overLan -> TransportKind.LAN
+                connected -> TransportKind.BLE
+                else -> null
+            },
+            info = if (overLan) seen.lanInfo else seen.info?.takeIf { mine },
+            status = if (overLan) seen.lanStatus else seen.status?.takeIf { mine },
+            statusAtEpochMs = s.statusAt?.takeIf { connected },
+            live = if (overLan) seen.lanLive else seen.live?.takeIf { mine },
+            liveAtEpochMs = s.liveAt?.takeIf { connected },
+            sync = when {
+                overLan || (!mine && seen.lanRun != null) -> lanProgress(seen.lanSession, seen.lanRun)
+                mine -> runProgress(seen, s)
+                else -> RunProgress()
+            },
             archive = if (station == null) TodayArchive() else TodayArchive.of(records.filter { it.station == station }),
-            todaySoFar = today?.takeIf { mine },
+            todaySoFar = today?.takeIf { connected },
         )
     }.stateIn(scope, SharingStarted.Eagerly, TodaySnapshot(address = address))
 
@@ -145,32 +178,34 @@ internal class CompanionTodaySource(
             if (syncAfterClock) {
                 syncAfterClock = false
                 // Preserve original files even when the automatic clock refresh failed.
-                if (linked) actions.syncFiles()
+                if (linked) actions.syncFiles(address)
             }
         },
         local,
     )
 
     /** The one Bluetooth link is open to this sensor. Nothing is sent to another one. */
-    private val linked: Boolean get() = state.selectedId == address && state.connected
+    private val linked: Boolean get() = state.connectedLanForStation(stationFor(address)) != null || (state.selectedId == address && state.connected)
 
     override fun sync(mode: ClockSyncMode, clockConfirmed: Boolean) {
         // A closed link shows Reconnect, so a stale tap has nothing to send.
         if (!linked) return
-        if (state.today.busy || state.syncBusy) {
+        if (state.today.busy || state.syncBusy || lanBusy) {
             local.tryEmit(TodayNotice.Busy)
             return
         }
-        val decision = SmartSyncPolicy.decide(state.status, ClockSyncMode.AUTOMATIC)
+        val lan = state.connectedLanForStation(stationFor(address))
+        val status = if (lan != null) state.lanStatus[lan] else state.status.takeIf { state.selectedId == address }
+        val decision = SmartSyncPolicy.decide(status, ClockSyncMode.AUTOMATIC)
         when (decision.action) {
-            ClockSyncAction.CONTINUE -> actions.syncFiles()
+            ClockSyncAction.CONTINUE -> actions.syncFiles(address)
             ClockSyncAction.SET_TIME, ClockSyncAction.ASK_USER -> clockThenSync()
         }
     }
 
     private fun clockThenSync() {
         syncAfterClock = true
-        actions.command(SensorCommand.SET_TIME)
+        actions.command(address, SensorCommand.SET_TIME)
     }
 
     override fun setTime() = send(SensorCommand.SET_TIME)
@@ -179,17 +214,37 @@ internal class CompanionTodaySource(
 
     private fun send(command: SensorCommand) {
         if (!linked) return
-        if (state.today.busy || state.syncBusy) {
+        if (state.today.busy || state.syncBusy || lanBusy) {
             local.tryEmit(TodayNotice.Busy)
             return
         }
-        actions.command(command)
+        actions.command(address, command)
     }
 
     override fun reconnect() = actions.connect(address)
 
     override fun disconnect() {
-        if (state.selectedId == address) actions.disconnect()
+        if (linked) actions.disconnect(address)
+    }
+
+    private val lanBusy: Boolean get() = state.connectedLanForStation(stationFor(address))?.let { state.lanSessions[it]?.busy } == true
+
+    private fun lanProgress(session: LanSessionState?, run: LanRunState?): RunProgress = RunProgress(
+        running = run?.running == true,
+        filesDone = session?.filesDone ?: 0,
+        filesTotal = session?.filesTotal ?: 0,
+        bytesDone = session?.bytesDone ?: 0,
+        bytesTotal = 0,
+        bytesPerSecond = session?.bytesPerSecond ?: 0.0,
+        outcomes = List(lanFailureCount(run)) { FileOutcome.Failed(name = "", message = "") },
+        startedAtEpochMs = run?.startedAtEpochMs,
+        finishedAtEpochMs = run?.finishedAtEpochMs,
+    )
+
+    private fun lanFailureCount(run: LanRunState?): Int {
+        val result = run?.result ?: return if (run?.interrupted == true) 1 else 0
+        if (result.notSaved > 0) return result.notSaved
+        return if (result.end == SyncEnd.COMPLETE || result.end == SyncEnd.FILES_NOT_SAVED) 0 else 1
     }
 
     private fun runProgress(seen: Seen, s: Stamped): RunProgress {

@@ -101,6 +101,21 @@ class DevicesBridgeTest {
         assertFalse(IosKnown.isPeripheral("AA:BB:CC:DD:EE:FF"))
     }
 
+    @Test fun activeWifiServiceOpensItsEnrolledSensor() {
+        val state = CompanionState()
+        val bridge = bridge(state = state)
+        bridge.sensorOpened(a, "Kitchen", "st-a", "aabbccddeeff")
+        state.lanScanStarted()
+        state.lanSensorsFound(listOf("aq-kitchen", "aq-unknown"), listOf("st-a", "st-other"))
+        assertEquals(a, bridge.peripheralForLan("aq-kitchen"))
+        assertNull(bridge.peripheralForLan("aq-unknown"))
+        bridge.credentialsChanged(listOf(b), listOf("st-b"), listOf("112233445566"))
+        state.lanSensorsFound(listOf("aq-kitchen", "aq-unknown", "aq-b"), listOf("st-a", "st-other", "st-b"))
+        assertEquals(b, bridge.peripheralForLan("aq-b"), "a Keychain-only enrollment opens the shared Today screen")
+        assertEquals("st-b", bridge.stationFor(b))
+        assertEquals("112233445566", bridge.deviceFor(b))
+    }
+
     @Test fun openingASensorKeepsItAndForgettingRemovesItEverywhere() {
         val storage = MemoryStorage()
         val calls = Calls()

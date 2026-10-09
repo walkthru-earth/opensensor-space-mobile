@@ -35,6 +35,12 @@ class SyncWireTest {
         assertEquals("010203", chunk.bytes.hex())
     }
 
+    @Test fun validCommandRepliesReachTheLanEngine() {
+        // LanSession validates each body before routing the original bytes to SensorSync.
+        assertEquals("frame", wire.decodeHex("306bdaaa6a00000000e1ac03110000000040e20100")?.kind)
+        assertEquals("frame", wire.decodeHex("31020002000000")?.kind)
+    }
+
     @Test fun handshakeCarriesOnlyTheRawToken() {
         val token = ByteArray(32) { it.toByte() }
         val frame = wire.handshakeFrame(token)

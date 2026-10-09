@@ -136,6 +136,23 @@ class CompanionStateTest {
         assertFalse("a" in state.lanReadings)
     }
 
+    @Test fun lanTodaySnapshotBelongsOnlyToConnectedStationAndClearsOnClose() {
+        val state = CompanionState()
+        state.lanSessionChanged("kitchen", true, false, "connected", 0, 0, 0)
+        state.lanInfoReceived("kitchen", "{\"proto\":2,\"station\":\"station-a\",\"dev\":\"112233445566\"}")
+        state.lanStatusReceived("kitchen", "{\"utc\":1,\"clk\":1}")
+        state.lanReadingReceived("kitchen", "{\"pms\":4,\"pm25\":12.0}")
+        assertEquals("kitchen", state.connectedLanForStation("station-a"))
+        assertNull(state.connectedLanForStation("station-b"))
+        assertEquals("112233445566", state.lanInfo["kitchen"]?.dev)
+        assertEquals(12.0, state.lanLive["kitchen"]?.pm25)
+        state.lanSessionChanged("kitchen", false, false, "disconnected", 0, 0, 0)
+        assertNull(state.connectedLanForStation("station-a"))
+        assertFalse("kitchen" in state.lanInfo)
+        assertFalse("kitchen" in state.lanStatus)
+        assertFalse("kitchen" in state.lanLive)
+    }
+
     @Test fun malformedOrExpiredReadingClearsPreviousValue() {
         val state = connected()
         state.receiveLive("{\"pms\":4,\"pm25\":12.0}")

@@ -12,6 +12,7 @@ final class LanDiscovery {
     private let credentials = LanCredentials()
     private var devices: [String: Device] = [:]
     private var sessions: [String: LanSession] = [:]
+    private var sessionDevices: [String: String] = [:]
     private var claims = SensorClaims()
     private var taskIDs: [String: UUID] = [:]
     private var attempts: [String: UUID] = [:]
@@ -31,6 +32,12 @@ final class LanDiscovery {
     }
     private let engine: SensorSync
     private var handles: [String: SyncHandle] = [:]
+    private var commands: [String: (UUID, SensorCommand)] = [:]
+    /// The current foreground open may fall back to Bluetooth if this handshake fails.
+    private var connectFailures: [String: () -> Void] = [:]
+    private var configPreparing = Set<String>()
+    private var configLinks: [String: SensorLink] = [:]
+    private var configLeaseIds: [String: UUID] = [:]
     /// Collect all steps by service name: the sensor id to report, and the sync outcome once known.
     private var collectSteps: [String: String] = [:]
     private var collectOutcome: [String: Bool] = [:]
@@ -48,16 +55,90 @@ final class LanDiscovery {
     private var backgroundBytes: [String: Int64] = [:]
     /// An Auto-sync step's progress, files done and files listed.
     var onBackgroundProgress: ((Int, Int) -> Void)?
+    var onCredentialRemoved: (() -> Void)?
     init(state: CompanionState, engine: SensorSync) {
         self.state = state
         self.engine = engine
     }
 
+    private func removeCredential(device: String) {
+        credentials.remove(device: device)
+        onCredentialRemoved?()
+    }
+
     /// The connected Wi-Fi session for this hardware id, if any. Bluetooth sync prefers it.
     func connectedSession(device: String) -> String? {
         sessions.keys.first { name in
-            devices[name]?.device == device && tasks[name] == nil
+            sessionDevices[name] == device.lowercased() && tasks[name] == nil && !configPreparing.contains(name)
         }
+    }
+
+    /// Kotlin polls while suspending between tries. The first call prepares a one-request link
+    /// on the session actor; a later poll takes that link without blocking the main thread.
+    func openConfigLink(device: String) -> SensorLink? {
+        guard let name = sessions.keys.first(where: { sessionDevices[$0] == device.lowercased() }),
+            let session = sessions[name], tasks[name] == nil
+        else { return nil }
+        if let ready = configLinks.removeValue(forKey: name) { return ready }
+        guard !configPreparing.contains(name) else { return nil }
+        configPreparing.insert(name)
+        Task { [weak self] in
+            guard let self else { return }
+            guard let target = await session.target(), self.sessions[name] === session else {
+                self.configPreparing.remove(name)
+                return
+            }
+            let link = SensorLink(overWifi: true, address: target.device, mtu: target.mtu) { body in
+                session.enqueue(body)
+            }
+            link.identify(station: target.station, boot: target.boot)
+            let sink = FrameSink(link)
+            guard await session.beginCollect(sink) else {
+                self.configPreparing.remove(name)
+                return
+            }
+            guard self.sessions[name] === session else {
+                link.linkClosed()
+                await session.endCollect(sink)
+                self.configPreparing.remove(name)
+                return
+            }
+            let leaseId = UUID()
+            self.configLeaseIds[name] = leaseId
+            link.whenClosed { [weak self] in
+                let release = {
+                    guard let self else { return }
+                    if self.configLinks[name] === link { self.configLinks[name] = nil }
+                    if self.configLeaseIds[name] == leaseId {
+                        self.configLeaseIds[name] = nil
+                        self.configPreparing.remove(name)
+                    }
+                    Task { await session.endCollect(sink) }
+                }
+                if Thread.isMainThread { MainActor.assumeIsolated { release() } }
+                else { Task { @MainActor in release() } }
+            }
+            self.configLinks[name] = link
+            // A cancelled request can stop Kotlin's retry before it takes this prepared link.
+            Timer.scheduledTimer(withTimeInterval: 2, repeats: false) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self, self.configLeaseIds[name] == leaseId else { return }
+                    self.configLinks[name]?.linkClosed()
+                }
+            }
+        }
+        return nil
+    }
+
+    /// A known sensor may use Wi-Fi immediately after the combined scan. Match both the saved
+    /// identity and the Bonjour hints; connect() performs the Keychain and HELLO checks again.
+    @discardableResult
+    func connectKnown(station: String, device: String, onFailure: (() -> Void)? = nil) -> Bool {
+        guard credentials.find(device: device.lowercased())?.station == station else { return false }
+        guard let name = devices.first(where: { _, found in
+            found.station == station && found.device == device.lowercased()
+        })?.key else { return false }
+        return connect(name: name, onFailure: onFailure)
     }
 
     func scan() {
@@ -117,25 +198,36 @@ final class LanDiscovery {
         return devices
     }
 
-    func connect(name: String) {
-        guard tasks[name] == nil, sessions[name] == nil else { return }
+    @discardableResult
+    func connect(name: String, onFailure: (() -> Void)? = nil) -> Bool {
+        if sessions[name] != nil {
+            if state.isLanConnected(name: name) { return true }
+            if tasks[name] != nil {
+                if let onFailure { connectFailures[name] = onFailure }
+                return true
+            }
+            return false
+        }
+        guard tasks[name] == nil else { return false }
         guard let device = devices[name] else {
             report(name, notice: .lanSensorGone)
-            return
+            return false
         }
         guard let credential = credentials.find(device: device.device), credential.station == device.station else {
             clearResume(name)
             report(name, notice: LanFailure.enrollmentRequired.notice)
-            return
+            return false
         }
         guard claims.connect(name: name, device: device.device) else {
             report(name, notice: .hardwareInUse)
-            return
+            return false
         }
+        if let onFailure { connectFailures[name] = onFailure }
         let session = LanSession(endpoint: device.endpoint)
         let attempt = UUID()
         attempts[name] = attempt
         sessions[name] = session
+        sessionDevices[name] = device.device
         // One ordered consumer per session. The stream finishes when the socket closes.
         let events = session.events
         Task { [weak self, weak session] in
@@ -144,6 +236,7 @@ final class LanDiscovery {
                 switch event {
                 case .push(let kind, let json):
                     if kind == "live" { self.liveReceived(name: name, json: json, session: session) }
+                    if kind == "status" { self.state.lanStatusReceived(name: name, json: json) }
                 case .closed(let error):
                     self.sessionClosed(name: name, error: error)
                 }
@@ -156,18 +249,35 @@ final class LanDiscovery {
             defer { self.finishTask(name, id: attempt) }
             do {
                 try await session.connect(credential: credential)
-                guard self.attempts[name] == attempt, self.sessions[name] === session else { return }
+                guard self.attempts[name] == attempt else { return }
+                guard self.sessions[name] === session else {
+                    self.connectFailures.removeValue(forKey: name)?()
+                    return
+                }
                 self.report(name, connected: true, notice: .lanConnected)
+                guard let info = await session.infoJson() else { throw LanFailure.disconnected }
+                guard self.attempts[name] == attempt else { return }
+                guard self.sessions[name] === session else {
+                    self.connectFailures.removeValue(forKey: name)?()
+                    return
+                }
+                self.state.lanInfoReceived(name: name, json: info)
+                self.connectFailures[name] = nil
+                await session.requestStatus()
             } catch {
                 session.close()
                 guard self.attempts[name] == attempt else { return }
                 self.sessions[name] = nil
+                self.sessionDevices[name] = nil
                 self.claims.closeSession(name: name)
                 self.clearResume(name)
-                if case LanFailure.authentication = error { self.credentials.remove(device: device.device) }
+                if case LanFailure.authentication = error { self.removeCredential(device: device.device) }
                 self.report(name, notice: LanFailure.connectNotice(error))
+                let fallback = self.connectFailures.removeValue(forKey: name)
+                fallback?()
             }
         }
+        return true
     }
 
     private func liveReceived(name: String, json: String, session: LanSession) {
@@ -182,7 +292,15 @@ final class LanDiscovery {
     }
 
     private func sessionClosed(name: String, error: LanFailure) {
+        state.lanSyncStopped(name: name)
         sessions[name] = nil
+        sessionDevices[name] = nil
+        configLinks.removeValue(forKey: name)?.linkClosed()
+        configLeaseIds[name] = nil
+        configPreparing.remove(name)
+        if let (_, command) = commands.removeValue(forKey: name) {
+            state.today.commandInterrupted(command: command)
+        }
         claims.closeSession(name: name)
         state.lanReadingExpired(name: name)
         if isBackground, collecting.contains(name), canResume(error) {
@@ -198,7 +316,7 @@ final class LanDiscovery {
     }
 
     func sync(name: String) {
-        guard tasks[name] == nil, let session = sessions[name] else { return }
+        guard tasks[name] == nil, !configPreparing.contains(name), let session = sessions[name] else { return }
         guard activeTransfers < 2 else {
             if pendingResume.contains(name) {
                 report(name, connected: true, notice: .lanSyncQueued)
@@ -215,6 +333,7 @@ final class LanDiscovery {
         activeTransfers += 1
         collecting.insert(name)
         beginBackgroundTime()
+        state.lanSyncStarted(name: name)
         report(name, connected: true, busy: true, notice: .lanListing)
         taskIDs[name] = attempt
         tasks[name] = Task { [weak self] in
@@ -228,8 +347,15 @@ final class LanDiscovery {
                 for queued in Array(self.pendingResume) { self.resumePending(queued) }
             }
             let result = await self.collect(name: name, session: session, attempt: attempt)
+            if result == nil { self.state.lanSyncStopped(name: name) }
             if self.collectSteps[name] != nil { self.collectOutcome[name] = result?.end == .complete }
-            guard self.attempts[name] == attempt, self.sessions[name] === session else { return }
+            guard self.attempts[name] == attempt else { return }
+            guard self.sessions[name] === session else {
+                // The socket's closed event may have cleared its slot before the shared engine
+                // returns LINK_LOST. Keep that result so Today never calls the run caught up.
+                if let result { self.state.lanSyncFinished(name: name, connected: false, result: result) }
+                return
+            }
             if let result, result.keepsLink {
                 // Files that were not saved fail alone. The session stays open so a retry is one tap.
                 self.state.lanSyncFinished(name: name, connected: true, result: result)
@@ -237,10 +363,11 @@ final class LanDiscovery {
             }
             session.close()
             self.sessions[name] = nil
+            self.sessionDevices[name] = nil
             self.claims.closeSession(name: name)
             self.state.lanReadingExpired(name: name)
             if result?.end == .authFailed, let device = self.devices[name] {
-                self.credentials.remove(device: device.device)
+                self.removeCredential(device: device.device)
             }
             if self.isBackground, result?.resumable ?? true { self.queueResume(name) }
             if self.pendingResume.contains(name) {
@@ -251,6 +378,56 @@ final class LanDiscovery {
                 self.report(name, notice: LanFailure.disconnected.notice)
             }
         }
+    }
+
+    /// Sends a Today command over the authenticated, idle Wi-Fi session for this hardware id.
+    /// The same shared DeviceSession command path is used for Bluetooth. A temporary link borrows
+    /// the session's reply demultiplexer, so a simultaneous file sync cannot take its replies.
+    @discardableResult
+    func command(device: String, command: SensorCommand) -> Bool {
+        guard let name = connectedSession(device: device.lowercased()), tasks[name] == nil,
+            let session = sessions[name], !state.today.commandBusy
+        else { return false }
+        let attempt = UUID()
+        attempts[name] = attempt
+        taskIDs[name] = attempt
+        claims.startTask(name: name)
+        commands[name] = (attempt, command)
+        tasks[name] = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                if self.commands[name]?.0 == attempt { self.commands[name] = nil }
+                self.finishTask(name, id: attempt)
+            }
+            guard let target = await session.target() else {
+                if self.commands[name]?.0 == attempt { self.state.today.commandRefused() }
+                return
+            }
+            guard self.commands[name]?.0 == attempt, self.sessions[name] === session else { return }
+            let link = SensorLink(overWifi: true, address: target.device, mtu: target.mtu) { body in
+                session.enqueue(body)
+            }
+            link.identify(station: target.station, boot: target.boot)
+            guard await session.beginCollect(FrameSink(link)) else {
+                if self.commands[name]?.0 == attempt { self.state.today.commandRefused() }
+                return
+            }
+            guard self.commands[name]?.0 == attempt, self.sessions[name] === session else {
+                await session.endCollect()
+                return
+            }
+            self.state.today.commandStarted()
+            let ended = await withCheckedContinuation { (continuation: CheckedContinuation<CommandEnded, Never>) in
+                self.handles[name] = self.engine.command(link: link, command: command) { result in
+                    continuation.resume(returning: CommandEnded(result: result))
+                }
+            }
+            self.handles[name] = nil
+            await session.endCollect()
+            guard self.commands[name]?.0 == attempt else { return }
+            self.state.today.commandFinished(result: ended.result)
+        }
+        return true
     }
 
     /// Runs the shared engine over this session. The engine reads and writes the archive off the
@@ -324,7 +501,7 @@ final class LanDiscovery {
     /// Closes every session with this hardware id. Forget calls it.
     func disconnect(device: String) {
         let names = Set(sessions.keys).union(pendingResume)
-        for name in names where devices[name]?.device == device.lowercased() { disconnect(name: name) }
+        for name in names where (sessionDevices[name] ?? devices[name]?.device) == device.lowercased() { disconnect(name: name) }
     }
 
     func disconnect(name: String) {
@@ -334,13 +511,22 @@ final class LanDiscovery {
     }
 
     private func close(name: String, notice: CompanionNotice) {
+        state.lanSyncStopped(name: name)
         attempts[name] = UUID()
+        connectFailures[name] = nil
+        configLinks.removeValue(forKey: name)?.linkClosed()
+        configLeaseIds[name] = nil
+        configPreparing.remove(name)
+        if let (_, command) = commands.removeValue(forKey: name) {
+            state.today.commandInterrupted(command: command)
+        }
         // Swift task cancellation does not reach Kotlin. The handle stops the engine's coroutine.
         handles[name]?.cancel()
         tasks[name]?.cancel()
         claims.closeSession(name: name)
         freshness.removeValue(forKey: name)?.invalidate()
         sessions.removeValue(forKey: name)?.close()
+        sessionDevices[name] = nil
         state.lanReadingExpired(name: name)
         report(name, busy: tasks[name] != nil, notice: notice)
     }
@@ -557,7 +743,7 @@ extension LanDiscovery {
                 }
                 // Nothing was sent, so the runner tries the paired Bluetooth link next, as Android does.
                 if case LanFailure.authentication = error {
-                    self.credentials.remove(device: device.device)
+                    self.removeCredential(device: device.device)
                     self.finishBackground(name, .skipped("wifi access refused"))
                 } else {
                     self.finishBackground(name, .skipped("connect failed"))
@@ -574,7 +760,7 @@ extension LanDiscovery {
                 self.claims.closeSession(name: name)
                 self.state.lanReadingExpired(name: name)
             }
-            if result?.end == .authFailed { self.credentials.remove(device: device.device) }
+            if result?.end == .authFailed { self.removeCredential(device: device.device) }
             let bytes = self.backgroundBytes[name] ?? 0
             if let result {
                 self.state.lanSyncFinished(name: name, connected: false, result: result)
@@ -602,7 +788,7 @@ extension LanDiscovery {
     /// True while the user holds a Wi-Fi session or sync with this hardware id.
     func holds(device: String) -> Bool {
         let names = Set(sessions.keys).union(tasks.keys).union(pendingResume)
-        return names.contains { devices[$0]?.device == device.lowercased() && backgroundRuns[$0] == nil }
+        return names.contains { (sessionDevices[$0] ?? devices[$0]?.device) == device.lowercased() && backgroundRuns[$0] == nil }
     }
 }
 
@@ -610,4 +796,9 @@ extension LanDiscovery {
 private final class SyncEnded: @unchecked Sendable {
     let result: SyncResult
     init(result: SyncResult) { self.result = result }
+}
+
+private final class CommandEnded: @unchecked Sendable {
+    let result: CommandResult
+    init(result: CommandResult) { self.result = result }
 }

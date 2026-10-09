@@ -52,21 +52,32 @@ internal class IosDebugSource(
     private val configFlow = MutableStateFlow<DebugJson?>(null)
     private val logFlow = MutableStateFlow<DebugLog>(DebugLog.Idle)
 
+    private fun lanName(): String? = state.lanInfo.entries.firstOrNull { (name, info) ->
+        info.dev?.equals(address, ignoreCase = true) == true && state.lanSessions[name]?.connected == true
+    }?.key
+
     override val link: Flow<DebugLink> = combine(
-        snapshotFlow { state.connected && state.info?.dev == address },
+        snapshotFlow { (state.connected && state.info?.dev?.equals(address, ignoreCase = true) == true) to lanName() },
         lastKind,
-    ) { connected, kind ->
+    ) { (ble, lan), kind ->
         val mtu = kind?.second
         DebugLink(
-            connection = if (connected) ConnectionState.Ready(mtu ?: 0) else ConnectionState.Disconnected,
-            transport = kind?.first ?: TransportKind.BLE,
+            connection = if (ble || lan != null) ConnectionState.Ready(mtu ?: 0) else ConnectionState.Disconnected,
+            transport = if (lan != null) TransportKind.LAN else kind?.first ?: TransportKind.BLE,
             endpoint = address,
             payloadMax = mtu?.let { it - 3 },
         )
     }
 
     override val status: Flow<DebugJson?> = snapshotFlow {
-        if (state.info?.dev == address) state.statusRaw?.let { DebugJson(it, state.statusAtEpochMs) } else null
+        val lan = lanName()
+        if (lan != null) {
+            state.lanStatusRaw[lan]?.let { DebugJson(it, state.lanStatusAtEpochMs[lan]) }
+        } else if (state.info?.dev?.equals(address, ignoreCase = true) == true) {
+            state.statusRaw?.let { DebugJson(it, state.statusAtEpochMs) }
+        } else {
+            null
+        }
     }
     override val config: Flow<DebugJson?> = configFlow
     override val frames: Flow<List<RawFrameRecord>> = recorder.records

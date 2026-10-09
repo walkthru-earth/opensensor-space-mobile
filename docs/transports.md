@@ -19,6 +19,15 @@ flowchart TD
   T -- yes --> G[GET_TOKEN once → known_device.lanToken]
 ```
 
+On Android, My devices **Scan** searches Bluetooth and `_aqsync._tcp` mDNS from one action.
+Existing access permits discovery while the screen is visible; the tap requests any missing
+Bluetooth and Local Network permissions. Each radio can still show results if the other is
+unavailable. LAN-only results without an enrolled Bluetooth identity and saved token are
+informational. Opening an enrolled sensor uses the AUTO rule below. If Bluetooth permission is declined,
+a known sensor with a saved token, station and current mDNS discovery may open LAN only. That
+path has no BLE fallback or BLE auto-reconnect; if LAN cannot connect, its archive remains
+available offline.
+
 `TransportPreference.AUTO` is the rule above; `GET_TOKEN` and *Fetch token* force BLE. Any LAN
 connection failure falls back to BLE with a snackbar. After connection, INFO must pass
 `DeviceContinuityPolicy` before identity is persisted or files collected; a mismatch closes the

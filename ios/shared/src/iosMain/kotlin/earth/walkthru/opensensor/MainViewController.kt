@@ -33,44 +33,60 @@ fun mainViewController(
     autoSync: AutoSyncSettings,
     requestBluetooth: () -> Unit,
     openSensor: (String) -> Unit,
+    openBluetoothSensor: (String) -> Unit,
+    openLanOnly: (String) -> Unit,
+    disconnectSensor: (String) -> Unit,
     disconnect: () -> Unit,
     scanLan: () -> Unit,
     saveWifiAccess: () -> Unit,
     connectLan: (String) -> Unit,
     syncLan: (String) -> Unit,
     disconnectLan: (String) -> Unit,
-    syncBluetooth: () -> Unit,
+    syncBluetooth: (String) -> Unit,
     syncInBackground: (String) -> Boolean,
     closeIdle: (String) -> Unit,
     openDebugLink: (String) -> SensorLink?,
-    command: (SensorCommand) -> Unit,
+    command: (String, SensorCommand) -> Unit,
     openConfigLink: (String) -> SensorLink?,
     forgetWifiAccess: (String) -> Unit,
     scanSticker: ScanSticker?,
 ): UIViewController =
     ComposeUIViewController {
-        // A sensor the user opens takes the one Bluetooth link, so Collect all stops first.
+        // A sensor the user opens may take Wi-Fi or the one Bluetooth link, so Collect all stops first.
         val userOpen: (String) -> Unit = { id ->
             devices.cancelCollectAll()
             openSensor(id)
         }
-        val today = remember { CompanionToday(state, CompanionLinkActions(syncFiles = syncBluetooth, command = command, connect = userOpen, disconnect = disconnect)) }
+        val userOpenBluetooth: (String) -> Unit = { id ->
+            devices.cancelCollectAll()
+            openBluetoothSensor(id)
+        }
+        val today = remember { CompanionToday(state, CompanionLinkActions(syncFiles = syncBluetooth, command = command, connect = userOpen, disconnect = disconnectSensor)) }
         val configLinks = remember {
             DeviceConfigLinks(
                 openConfigLink = openConfigLink,
                 saveWifiAccess = saveWifiAccess,
                 forgetWifiAccess = forgetWifiAccess,
                 connect = userOpen,
+                connectBluetooth = userOpenBluetooth,
                 reopen = openSensor,
                 disconnect = disconnect,
                 scanLan = scanLan,
                 scanSticker = scanSticker,
             )
         }
-        AppRoot(devices, today, requestBluetooth, userOpen, openDebugLink, closeIdle, configLinks) { id, units, level, openDebug, openSettings, onBack ->
+        AppRoot(devices, today, requestBluetooth, userOpen, openLanOnly, openDebugLink, closeIdle, configLinks) { id, units, level, openDebug, openSettings, onBack ->
             val peripheral = IosKnown.isPeripheral(id)
             val records by devices.known.collectAsState()
             val known = peripheral && records.any { it.peripheral.equals(id, ignoreCase = true) }
+            val selectedBluetooth = state.selectedId?.equals(id, ignoreCase = true) == true
+            val lanName = state.connectedLanForStation(devices.stationFor(id))
+            val selectedStation = devices.stationFor(id)
+                ?: id.takeIf { it.startsWith(IosKnown.WIFI_PREFIX) }?.removePrefix(IosKnown.WIFI_PREFIX)
+                    ?.let { name -> state.lanInfo[name]?.station ?: state.lanStations[name] }
+                ?: state.info?.station?.takeIf { selectedBluetooth }
+            val activeDevice = lanName?.let { state.lanInfo[it]?.dev }
+                ?: state.info?.dev?.takeIf { selectedBluetooth && state.connected }
             // Detailed and Developer reveal the technical lines (signal, firmware, byte counters), as on Android.
             CompanionScreen(
                 state = state,
@@ -83,7 +99,10 @@ fun mainViewController(
                 connectLan = connectLan,
                 syncLan = syncLan,
                 disconnectLan = disconnectLan,
-                syncBluetooth = syncBluetooth,
+                syncBluetooth = { syncBluetooth(id) },
+                selectedBluetooth = selectedBluetooth,
+                selectedStation = selectedStation,
+                activeDevice = activeDevice,
                 units = units,
                 showTechnical = level.detailed,
                 onOpenDebug = openDebug,

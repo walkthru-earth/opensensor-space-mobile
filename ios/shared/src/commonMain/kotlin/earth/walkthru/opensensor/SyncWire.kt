@@ -61,7 +61,10 @@ class SyncWire {
             is Frame.LivePush -> SyncReply("live", json = frame.json)
             is Frame.StatusPush -> SyncReply("status", json = frame.json)
             is Frame.Error -> SyncReply("error", code = frame.code, op = frame.op)
-            else -> null
+            // The native socket validates every frame before lending its original bytes to
+            // SensorSync. TIME_SET, FLUSHED and config replies belong to that engine too.
+            // Reject malformed bytes in FrameCodec, never a valid frame we do not inspect here.
+            else -> SyncReply("frame")
         }
     }.getOrNull()
 }

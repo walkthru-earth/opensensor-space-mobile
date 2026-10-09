@@ -77,6 +77,7 @@ actor LanSession {
     private var liveness = LanLiveness(lastSent: ProcessInfo.processInfo.systemUptime)
     private var collecting = false
     private var identity: SyncIdentity?
+    private var verifiedInfo: String?
     private var payloadMax = 0
     /// While set, file replies go to the shared engine as raw frame bodies.
     private var sink: FrameSink?
@@ -127,7 +128,16 @@ actor LanSession {
         frames.cap = Int(hello.count)
         payloadMax = Int(hello.count)
         self.identity = identity
+        verifiedInfo = hello.json
         startHeartbeat()
+    }
+
+    /// HELLO payload after the token and saved station/hardware identity were verified.
+    func infoJson() -> String? { closed ? nil : verifiedInfo }
+
+    func requestStatus() {
+        guard identity != nil, !closed else { return }
+        write(wire.statusRequest())
     }
 
     /// Who is on the other end, as HELLO proved it. Nil before HELLO or after the socket closed.
@@ -150,6 +160,12 @@ actor LanSession {
     func endCollect() {
         sink = nil
         collecting = false
+    }
+
+    /// Releases a borrowed config/debug link only if it still owns the response sink.
+    func endCollect(_ expected: FrameSink) {
+        guard sink === expected else { return }
+        endCollect()
     }
 
     /// Sends one request body from the shared engine. Safe from any thread. Bodies go out in call

@@ -39,6 +39,9 @@ class TodayLink {
     internal var busy by mutableStateOf(false)
         private set
 
+    /** Native LAN adapter checks whether another Today command owns the shared action slot. */
+    val commandBusy: Boolean get() = busy
+
     private val _notices = MutableSharedFlow<TodayNotice>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     internal val notices: SharedFlow<TodayNotice> = _notices.asSharedFlow()
 
@@ -76,5 +79,12 @@ class TodayLink {
     fun commandFinished(result: CommandResult) {
         commandEnded(result)
         linkIdle()
+    }
+
+    /** A LAN socket closed while it owned a command; release the busy state immediately. */
+    fun commandInterrupted(command: SensorCommand) {
+        ended = null
+        busy = false
+        _notices.tryEmit(TodayNotice.Failed(command.today))
     }
 }

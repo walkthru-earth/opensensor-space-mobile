@@ -102,8 +102,37 @@ class CompanionState {
         private set
     internal var lanSessions by mutableStateOf<Map<String, LanSessionState>>(emptyMap())
         private set
+
+    /** Narrow Swift bridge for an already authenticated Wi-Fi session. */
+    fun isLanConnected(name: String): Boolean = lanSessions[name]?.connected == true
     internal var lanPaused by mutableStateOf<Set<String>>(emptySet())
         private set
+
+    /** File collection only, distinct from a busy LAN handshake or a short command. */
+    internal var lanRuns by mutableStateOf<Map<String, LanRunState>>(emptyMap())
+        private set
+
+    fun lanSyncStarted(name: String) {
+        lanRuns = lanRuns + (
+            name to LanRunState(
+                station = lanInfo[name]?.station,
+                running = true,
+                startedAtEpochMs = Clock.System.now().toEpochMilliseconds(),
+            )
+            )
+    }
+
+    fun lanSyncStopped(name: String) {
+        val run = lanRuns[name]?.takeIf { it.running } ?: return
+        lanRuns = lanRuns + (name to run.copy(running = false, interrupted = true, finishedAtEpochMs = Clock.System.now().toEpochMilliseconds()))
+    }
+
+    internal fun connectedLanForStation(station: String?): String? =
+        station?.let { wanted ->
+            lanInfo.entries.firstOrNull { (name, info) ->
+                info.station == wanted && lanSessions[name]?.connected == true
+            }?.key
+        }
     fun lanCollectionPaused(name: String, paused: Boolean) {
         lanPaused = if (paused) lanPaused + name else lanPaused - name
     }
@@ -148,6 +177,17 @@ class CompanionState {
 
     /** A Wi-Fi sync ended. The card keeps its counts and shows the outcome. */
     fun lanSyncFinished(name: String, connected: Boolean, result: SyncResult) {
+        val previousRun = lanRuns[name]
+        lanRuns = lanRuns + (
+            name to LanRunState(
+                station = previousRun?.station ?: lanInfo[name]?.station,
+                running = false,
+                startedAtEpochMs = previousRun?.startedAtEpochMs,
+                finishedAtEpochMs = Clock.System.now().toEpochMilliseconds(),
+                result = result,
+                interrupted = false,
+            )
+            )
         val previous = lanSessions[name]
         lanSession(name, connected, false, result.message, previous?.filesDone ?: 0, previous?.filesTotal ?: 0, previous?.bytesDone ?: 0, 0.0)
     }
@@ -155,7 +195,14 @@ class CompanionState {
     private fun lanSession(name: String, connected: Boolean, busy: Boolean, message: UiText, filesDone: Int, filesTotal: Int, bytesDone: Long, bytesPerSecond: Double) {
         val rate = bytesPerSecond.takeIf { connected && busy && it.isFinite() && it > 0.0 } ?: 0.0
         lanSessions = lanSessions + (name to LanSessionState(connected, busy, message, filesDone, filesTotal, bytesDone, rate))
-        if (!connected) lanReadings = lanReadings - name
+        if (!connected) {
+            lanReadings = lanReadings - name
+            lanInfo = lanInfo - name
+            lanStatus = lanStatus - name
+            lanStatusRaw = lanStatusRaw - name
+            lanStatusAtEpochMs = lanStatusAtEpochMs - name
+            lanLive = lanLive - name
+        }
     }
 
     /** Bluetooth file sync for the connected sensor. Available once INFO names its station. */
@@ -203,14 +250,47 @@ class CompanionState {
     internal var lanReadings by mutableStateOf<Map<String, NowReading>>(emptyMap())
         private set
 
+    /** Full verified HELLO and the latest pushes for each authenticated Wi-Fi session. */
+    internal var lanInfo by mutableStateOf<Map<String, DeviceInfo>>(emptyMap())
+        private set
+    internal var lanStatus by mutableStateOf<Map<String, DeviceStatus>>(emptyMap())
+        private set
+    internal var lanStatusRaw by mutableStateOf<Map<String, String>>(emptyMap())
+        private set
+    internal var lanStatusAtEpochMs by mutableStateOf<Map<String, Long>>(emptyMap())
+        private set
+    internal var lanLive by mutableStateOf<Map<String, LiveSample>>(emptyMap())
+        private set
+
+    fun lanInfoReceived(name: String, json: String) {
+        if (lanSessions[name]?.connected != true) return
+        val parsed = runCatching { DeviceInfo.parse(json) }.getOrNull() ?: return
+        if (parsed.proto != 2 || parsed.dev.isNullOrBlank() || parsed.station.isNullOrBlank()) return
+        lanInfo = lanInfo + (name to parsed)
+    }
+
+    fun lanStatusReceived(name: String, json: String) {
+        if (lanSessions[name]?.connected != true) return
+        val parsed = runCatching { DeviceStatus.parse(json) }.getOrNull()
+        lanStatus = if (parsed == null) lanStatus - name else lanStatus + (name to parsed)
+        lanStatusRaw = if (parsed == null) lanStatusRaw - name else lanStatusRaw + (name to json)
+        lanStatusAtEpochMs = if (parsed == null) {
+            lanStatusAtEpochMs - name
+        } else {
+            lanStatusAtEpochMs + (name to Clock.System.now().toEpochMilliseconds())
+        }
+    }
+
     fun lanReadingReceived(name: String, json: String) {
         if (lanSessions[name]?.connected != true) return
         val sample = runCatching { LiveSample.parse(json) }.getOrNull()
+        lanLive = if (sample == null) lanLive - name else lanLive + (name to sample)
         lanReadings = lanReadings + (name to NowReading.of(sample))
     }
 
     fun lanReadingExpired(name: String) {
         lanReadings = lanReadings - name
+        lanLive = lanLive - name
     }
 
     // Export strings through this facade; platform adapters do not duplicate the wire contract.
@@ -385,3 +465,12 @@ class CompanionState {
 }
 
 internal data class LanSessionState(val connected: Boolean, val busy: Boolean, val message: UiText, val filesDone: Int, val filesTotal: Int, val bytesDone: Long, val bytesPerSecond: Double = 0.0)
+
+internal data class LanRunState(
+    val station: String?,
+    val running: Boolean,
+    val startedAtEpochMs: Long?,
+    val finishedAtEpochMs: Long? = null,
+    val result: SyncResult? = null,
+    val interrupted: Boolean = false,
+)
