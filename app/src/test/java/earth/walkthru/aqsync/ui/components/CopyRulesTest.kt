@@ -20,15 +20,15 @@ class CopyRulesTest {
     /** The repository root, whether Gradle runs this from `app/` or from the root. */
     private val root: File = listOf(File(".."), File(".")).first { File(it, "settings.gradle.kts").isFile }
 
-    private fun strings(): Map<String, String> = parse(File(root, "app/src/main/res/values/strings.xml"))
+    private fun strings(folder: String = "values"): Map<String, String> = parse(File(root, "app/src/main/res/$folder/strings.xml"))
 
     /**
      * The Compose resource catalogues shared with iOS (`feature/<name>` and `ui/<name>`
      * `src/commonMain/composeResources`), by module name.
      */
-    private fun sharedStrings(): Map<String, Map<String, String>> =
+    private fun sharedStrings(folder: String = "values"): Map<String, Map<String, String>> =
         listOf("feature", "ui").flatMap { File(root, it).listFiles().orEmpty().toList() }.sortedBy { it.name }.mapNotNull { module ->
-            val file = File(module, "src/commonMain/composeResources/values/strings.xml")
+            val file = File(module, "src/commonMain/composeResources/$folder/strings.xml")
             if (file.isFile) module.name to parse(file) else null
         }.toMap()
 
@@ -61,16 +61,20 @@ class CopyRulesTest {
      */
     @Test
     fun `shared copies match the Android resources`() {
-        val s = strings()
-        val shared = sharedStrings()
-        assertTrue("Shared catalogues missing: ${shared.keys}", shared.keys.containsAll(listOf("discover", "settings", "designsystem", "strings")))
         val both = mapOf(
             "discover" to listOf("who_step_guideline", "who_step_it4", "who_step_it3", "who_step_it2", "who_step_it1", "who_step_above_it1"),
             "settings" to listOf("info_privacy"),
         )
-        both.forEach { (module, keys) ->
-            keys.forEach { key -> assertEquals("$module/$key", shown(s.getValue(key)), shared.getValue(module).getValue(key)) }
+        // The English default and every translation (values-ar) keep the shared copies identical.
+        for (folder in listOf("values", "values-ar")) {
+            val s = strings(folder)
+            val shared = sharedStrings(folder)
+            assertTrue("Shared catalogues missing in $folder: ${shared.keys}", shared.keys.containsAll(listOf("discover", "settings", "designsystem", "strings")))
+            both.forEach { (module, keys) ->
+                keys.forEach { key -> assertEquals("$folder $module/$key", shown(s.getValue(key)), shared.getValue(module).getValue(key)) }
+            }
         }
+        val s = strings()
         val warming = NowReading.of(LiveSample(pms = PmsStatus.WARMING.code)) as NowReading.SensorNotReady
         assertEquals(s.getValue("pms_warming_hint"), warming.hint)
     }

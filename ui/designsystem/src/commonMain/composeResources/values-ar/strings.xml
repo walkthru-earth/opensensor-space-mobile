@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Arabic copy owned by the shared components. Same keys as values/strings.xml. Plain words, no long dashes, colons or semicolons. -->
+<resources>
+    <!-- InfoButton content description, the argument is the topic. -->
+    <string name="info_more">المزيد عن %1$s</string>
+    <!-- SignalBars content description, the argument is 1 to 4. -->
+    <string name="signal_bars">الإشارة %1$d من 4</string>
+</resources>

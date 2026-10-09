@@ -13,3 +13,10 @@ plugins {
 compose.resources {
     publicResClass = true
 }
+
+// TranslationsTest reads the iOS purpose string catalogue (InfoPlist.xcstrings) as JSON.
+kotlin {
+    sourceSets.getByName("androidHostTest").dependencies {
+        implementation(libs.kotlinx.serialization.json)
+    }
+}

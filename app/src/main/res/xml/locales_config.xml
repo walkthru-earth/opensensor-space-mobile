@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Languages offered in the system per-app language picker (Android 13 and later). Each entry needs a
+  full res/values-<tag>/strings.xml and Compose resource values-<tag> catalogues. See docs/screens.md, Languages.
+-->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="en" />
+    <locale android:name="ar" />
+</locale-config>

@@ -41,7 +41,16 @@ class ComponentsTest {
     @Test
     fun onlyDirectionalIconsMirrorInRightToLeft() {
         val mirrored = (rounded + outlined).filter(ImageVector::autoMirror).map { it.name }.toSet()
-        assertEquals(setOf("AutoMirrored.Rounded.ArrowBack", "AutoMirrored.Rounded.ArrowForward", "AutoMirrored.Rounded.Send"), mirrored)
+        assertEquals(
+            setOf(
+                "AutoMirrored.Rounded.ArrowBack",
+                "AutoMirrored.Rounded.ArrowForward",
+                "AutoMirrored.Rounded.Send",
+                "Rounded.ChevronLeft",
+                "Rounded.ChevronRight",
+            ),
+            mirrored,
+        )
     }
 
     @Test
