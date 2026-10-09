@@ -24,6 +24,7 @@ flowchart TB
     PM[":ui:permissions<br/>trigger table, permission policy, settings link"]
     DI[":feature:discover<br/>map, cell sheet, chart"]
     FS[":feature:settings<br/>Settings screen and controller"]
+    SH[":feature:shell<br/>AppKey, TabNavigator, AppShell, bottom bar"]
   end
   APP[":app (Android)<br/>Hilt, Room v10, DataStore, WorkManager, Compose, zstd-jni"]
   IOS["ios/App (Xcode + Swift)<br/>Core Bluetooth, Bonjour, own sync engine and archive"]
@@ -33,8 +34,9 @@ flowchart TB
   DI --> PF & UN & DS & PM
   SE --> UN
   FS --> SE & DS
-  APP --> HI & PF & UN & DI & DS & SE & FS & PM
-  IS --> HI & PR & UN & DI & DS & SE & FS & PM
+  SH --> DS
+  APP --> HI & PF & UN & DI & DS & SE & FS & PM & SH
+  IS --> HI & PR & UN & DI & DS & SE & FS & PM & SH
   IOS --> IS
 ```
 
@@ -46,11 +48,20 @@ flowchart TB
 Tests live in `src/commonTest` (JVM and iOS simulator) or `src/jvmTest` / `src/iosTest`. Calendar
 windows use kotlinx-datetime. Android passes its `ZoneId` through `toKotlinTimeZone()`.
 
-`:ui:designsystem`, `:ui:permissions`, `:feature:discover` and `:feature:settings` target Android (the AGP KMP library target, not `jvm`)
+`:ui:designsystem`, `:ui:permissions`, `:feature:discover`, `:feature:settings` and `:feature:shell` target Android (the AGP KMP library target, not `jvm`)
 and iOS. `:ios:shared` targets iOS only, so its `commonMain` consumes them directly. It renders the
 current Compose iOS screen. `ios/App` supplies native app integration, Core Bluetooth, Bonjour
 discovery, and today a second sync engine and archive in Swift. The Android app remains a separate
 platform entry point. See [ios-migration.md](ios-migration.md) for current scope and build commands.
+
+Navigation is shared ([ADR 0001](adr/0001-shared-navigation.md)). `:feature:shell` holds the
+sealed `AppKey : NavKey` hierarchy, `AppNavConfig` (a `SavedStateConfiguration` built with
+`subclassesOfSealed`, so no reflection on iOS), the Compose free `TabNavigator` and `AppShell`, which
+draws the one bottom bar around one Navigation 3 `NavDisplay` with a back stack per tab. It uses the
+JetBrains `navigation3-ui` and `lifecycle-viewmodel-navigation3`, which resolve on Android to the
+same androidx binaries. Both apps host `AppShell` and pass their screens in as entries. Android
+entries keep `hiltViewModel()`, iOS entries hold plain controllers in a `viewModel { }` holder.
+Screens that take Back first use `NavigationBackHandler`, never `BackHandler`.
 
 ### Target module graph
 
@@ -95,7 +106,7 @@ It holds four convention plugins, so a new shared module is one `plugins {}` lin
 | Plugin | Applied by | Sets |
 | --- | --- | --- |
 | `opensensor.kmp.library` | every `:core` module | Kotlin Multiplatform with `jvm` (bytecode 17), `iosArm64`, `iosSimulatorArm64`, `kotlin-test` in `commonTest`, a `test` task that runs `jvmTest`. Adds `jvmTest` to `verify` and `iosSimulatorArm64Test` to `verifyIos` |
-| `opensensor.kmp.compose-feature` | `:ui:designsystem`, `:ui:strings`, `:ui:permissions`, `:feature:discover`, `:feature:settings` | the AGP KMP Android library target (namespace `earth.walkthru.opensensor.<module>`, SDK 37, min 31, Android resources, host tests), `iosArm64`, `iosSimulatorArm64`, Compose runtime, foundation, Material 3, UI and resources, internal resources class in `<namespace>.resources`, `kotlin-test` in `commonTest` (runs in the Android host test and on the simulator), a `test` task that runs `testAndroidHostTest`. Adds `testAndroidHostTest` to `verify` and `iosSimulatorArm64Test` to `verifyIos` |
+| `opensensor.kmp.compose-feature` | `:ui:designsystem`, `:ui:strings`, `:ui:permissions`, `:feature:discover`, `:feature:settings`, `:feature:shell` | the AGP KMP Android library target (namespace `earth.walkthru.opensensor.<module>`, SDK 37, min 31, Android resources, host tests), `iosArm64`, `iosSimulatorArm64`, Compose runtime, foundation, Material 3, UI and resources, internal resources class in `<namespace>.resources`, `kotlin-test` in `commonTest` (runs in the Android host test and on the simulator), a `test` task that runs `testAndroidHostTest`. Adds `testAndroidHostTest` to `verify` and `iosSimulatorArm64Test` to `verifyIos` |
 | `opensensor.kmp.ios-framework` | `:ios:shared` | iOS only Kotlin Multiplatform with the static `OpenSensorShared` framework for each iOS target. Adds `iosSimulatorArm64Test` and `linkDebugFrameworkIosSimulatorArm64` to `verifyIos` |
 | `opensensor.jvm.library` | none today (kept for a future JVM-only module) | Kotlin/JVM with Java and Kotlin bytecode 17 |
 
@@ -155,7 +166,7 @@ flowchart LR
 | `data/settings/AppSettings.kt` | Android view of `:core:settings` (`DetailLevel` Simple · Detailed · Developer, clock consent, units, public sensors) | yes |
 | `data/export/ExportManager.kt` | share / zip / SAF | yes |
 | `data/fake/FakeTransport.kt` | in-process protocol-v2 device with fault hooks | no (JVM) |
-| `ui/scan · device (Today, Device, NowCard) · history · files · debug · settings · permissions · theme` | Compose; `Navigation.kt`, `NavigationKeys.kt` | yes |
+| `ui/scan · device (Today, Device, NowCard) · history · files · debug · settings · permissions · theme` | Compose; `Navigation.kt` supplies the Android entries to the shared `AppShell` (`:feature:shell`) | yes |
 
 The iOS entry point is `ios/OpenSensor.xcodeproj`. Its Swift adapters own Apple services;
 the current screen and presentation state live in `ios/shared`. Follow [`../ios/AGENTS.md`](../ios/AGENTS.md)

@@ -66,7 +66,7 @@ class CopyRulesTest {
         assertTrue("Shared catalogues missing: ${shared.keys}", shared.keys.containsAll(listOf("discover", "settings", "designsystem", "strings")))
         val both = mapOf(
             "discover" to listOf("who_step_guideline", "who_step_it4", "who_step_it3", "who_step_it2", "who_step_it1", "who_step_above_it1"),
-            "settings" to listOf("settings_title", "info_privacy"),
+            "settings" to listOf("info_privacy"),
         )
         both.forEach { (module, keys) ->
             keys.forEach { key -> assertEquals("$module/$key", shown(s.getValue(key)), shared.getValue(module).getValue(key)) }

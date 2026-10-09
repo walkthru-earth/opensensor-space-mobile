@@ -272,10 +272,10 @@ dependencies {
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.espresso.core)
 
-    // Navigation
-    implementation(libs.androidx.navigation3.ui)
+    // Navigation. The shared shell brings Navigation 3 UI and the ViewModel entry decorator, which
+    // resolve on Android to the androidx artifacts (docs/adr/0001-shared-navigation.md).
+    implementation(project(":feature:shell"))
     implementation(libs.androidx.navigation3.runtime)
-    implementation(libs.androidx.lifecycle.viewmodel.navigation3)
 
     // Serialization (info/status/live JSON) and coroutines on Android
     implementation(libs.kotlinx.serialization.json)
