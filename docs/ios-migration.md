@@ -298,11 +298,26 @@ accuracy, stale/background handling or authenticated Wi-Fi connections. See
     that Set time anchors a logger that has no UTC, that Finalize writes a short file the next sync
     downloads, that Smart Sync under Automatic sets the clock then syncs, that Ask shows the consent
     dialog, and that opening another sensor leaves the first Today closed.
+12. Done in code (#20, 2026-10-09), not yet seen on an iPhone. Device settings are the shared
+    `:feature:device` cards and confirmations, opened from a Sensor settings button on the companion
+    page of a connected Bluetooth sensor (`DeviceSettingsKey`). `IosDeviceConfigSource` (`ios/shared`
+    iosMain) borrows one short link per request from `BluetoothCompanion.openConfigLink`, which uses
+    Today's command guards and settles the link when it is handed back. Frames go through the
+    redacting recorder Debug shows. Get Wi-Fi token and Replace token reuse Save Wi-Fi access, so the
+    token stays in Swift and the Keychain, and a rotation first drops the old entry through
+    `AppServices.forgetWifiAccess`. Differences from Android: Bluetooth only, sticker by manual entry
+    until #21, no phone installation history, no device header or Auto-sync card on the page, and no
+    Wi-Fi endpoint line. Qualify on an iPhone that each of the four confirmations sends nothing on
+    Cancel, that a Wi-Fi join is polled until connected, that Replace token stores a new token and the
+    next Wi-Fi sync uses it, that Forget all paired phones asks for pairing on the next connection,
+    that Restart reconnects after about 6 s, and that a sync or Collect all waiting for the link starts
+    once a request ends.
 
 LAN and Bluetooth file sync use the shared Kotlin engine. Swift keeps the sockets, Core
 Bluetooth, LAN framing, the HELLO check, keepalive, the BLE token request and Keychain.
 The shared Debug screen borrows the same `SensorLink` from `BluetoothCompanion.openDebugLink`,
-one per request. Closing the link (`SensorLink.whenClosed`) hands it back to Swift.
+one per request, and Device settings borrow theirs from `openConfigLink`. Closing the link
+(`SensorLink.whenClosed`) hands it back to Swift.
 `SensorArchive.swift` remains only for Files export. Android's Room index, WorkManager and
 foreground service stay Android code.
 

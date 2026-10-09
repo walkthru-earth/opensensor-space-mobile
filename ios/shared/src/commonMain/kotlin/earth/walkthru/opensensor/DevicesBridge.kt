@@ -176,6 +176,9 @@ class DevicesBridge internal constructor(
 
     internal val known: StateFlow<List<KnownRecord>> get() = records.asStateFlow()
 
+    /** The hardware ids, lowercase, that hold Wi-Fi access in the Keychain. Never the token. */
+    internal val wifiAccessDevices: Flow<Set<String>> get() = credentials.map { list -> list.mapTo(HashSet()) { it.device } }
+
     /** Bluetooth read INFO from a sensor the user opened. It is known from now on. */
     fun sensorOpened(peripheral: String, name: String?, station: String, device: String) {
         save(IosKnown.remember(records.value, KnownRecord(peripheral, name?.takeIf { it.isNotBlank() }, station, device.lowercase(), now())))

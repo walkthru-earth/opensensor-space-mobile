@@ -39,6 +39,10 @@ import earth.walkthru.opensensor.designsystem.AppIcons
 import earth.walkthru.opensensor.designsystem.FloatingControl
 import earth.walkthru.opensensor.designsystem.FloatingIconButton
 import earth.walkthru.opensensor.designsystem.OpenSensorTheme
+import earth.walkthru.opensensor.device.DeviceConfigAction
+import earth.walkthru.opensensor.device.DeviceConfigController
+import earth.walkthru.opensensor.device.DeviceConfigScreen
+import earth.walkthru.opensensor.device.LanAccess
 import earth.walkthru.opensensor.devices.DevicesAction
 import earth.walkthru.opensensor.devices.DevicesPlatform
 import earth.walkthru.opensensor.devices.MyDevicesScreen
@@ -69,6 +73,7 @@ import earth.walkthru.opensensor.settings.SettingsScreen
 import earth.walkthru.opensensor.shell.AppShell
 import earth.walkthru.opensensor.shell.DebugKey
 import earth.walkthru.opensensor.shell.DeviceKey
+import earth.walkthru.opensensor.shell.DeviceSettingsKey
 import earth.walkthru.opensensor.shell.DiscoverKey
 import earth.walkthru.opensensor.shell.FileMetricsKey
 import earth.walkthru.opensensor.shell.FilesKey
@@ -141,6 +146,15 @@ private class DebugHolder(address: String, state: CompanionState, openLink: (Str
     val controller = DebugController(viewModelScope, IosDebugSource(address, state, openLink, viewModelScope))
 }
 
+/** Holds the Device settings controller of one sensor for its entry, cleared when the entry leaves the back stack. */
+private class DeviceSettingsHolder(address: String, devices: DevicesBridge, links: DeviceConfigLinks) : ViewModel() {
+    val controller = DeviceConfigController(
+        scope = viewModelScope,
+        source = IosDeviceConfigSource(address, devices.state, devices, links, viewModelScope),
+        detailLevel = settingsRepository.detailLevel,
+    )
+}
+
 /**
  * The iOS root hosts the shared shell ([AppShell], `:feature:shell`), the same bottom bar, per-tab
  * back stacks and Back rules as Android. The start edge swipe is Back. Discover is always the start
@@ -152,6 +166,8 @@ private class DebugHolder(address: String, state: CompanionState, openLink: (Str
  * (`:feature:debug`) borrows short links from Swift through [openDebugLink]. A Bluetooth sensor
  * opens on the shared Today over [today], and its Device section is the [devicePage]. Today and
  * Device each hold a lease on that sensor, and popping the last of them calls [closeIdle] once.
+ * The companion page of a Bluetooth sensor opens the shared Device settings (`:feature:device`),
+ * which borrow short links through [configLinks] and hold the same lease.
  */
 @Composable
 internal fun AppRoot(
@@ -161,7 +177,8 @@ internal fun AppRoot(
     openSensor: (String) -> Unit,
     openDebugLink: (String) -> SensorLink?,
     closeIdle: (String) -> Unit,
-    devicePage: @Composable (id: String, units: UnitSystem, level: DetailLevel, openDebug: ((String) -> Unit)?, onBack: () -> Unit) -> Unit,
+    configLinks: DeviceConfigLinks,
+    devicePage: DevicePageContent,
 ) {
     val scope = rememberCoroutineScope()
     val settings = remember { SettingsController(scope, settingsRepository) }
@@ -222,6 +239,10 @@ internal fun AppRoot(
                     if (IosKnown.isPeripheral(key.address)) LeasePeripheral(leases, key.address)
                     DevicePage(key.address, units, level, nav, devicePage)
                 }
+                entry<DeviceSettingsKey> { key ->
+                    LeasePeripheral(leases, key.address)
+                    DeviceSettingsEntry(key.address, devices, configLinks, onBack = { nav.popIfTop { it == key } })
+                }
                 entry<HistoryKey> {
                     HistoryEntry(units = units, level = level, onBack = { nav.pop() })
                 }
@@ -268,6 +289,22 @@ internal fun AppRoot(
             },
         )
     }
+}
+
+/**
+ * Device settings of one Bluetooth sensor. Local network is asked for from the Sync over Wi-Fi card
+ * by browsing for sensors, the iOS prompt. iOS has no barcode scanner here yet (#21), so the sticker
+ * is typed.
+ */
+@Composable
+private fun DeviceSettingsEntry(address: String, devices: DevicesBridge, links: DeviceConfigLinks, onBack: () -> Unit) {
+    val controller = viewModel(key = "device-settings-$address") { DeviceSettingsHolder(address, devices, links) }.controller
+    DeviceConfigScreen(
+        controller = controller,
+        lanAccess = LanAccess(granted = !devices.state.lanAccessDenied, requestable = true),
+        onBack = onBack,
+        onPlatformAction = { action -> if (action == DeviceConfigAction.RequestLanAccess) links.scanLan() },
+    )
 }
 
 /**
@@ -427,11 +464,12 @@ private fun DevicePage(
     units: UnitSystem,
     level: DetailLevel,
     nav: TabNavigator,
-    devicePage: @Composable (id: String, units: UnitSystem, level: DetailLevel, openDebug: ((String) -> Unit)?, onBack: () -> Unit) -> Unit,
+    devicePage: DevicePageContent,
 ) {
     Box(Modifier.fillMaxSize()) {
         val openDebug: ((String) -> Unit)? = if (level.developer) { device -> nav.openDebug(device, level.developer) } else null
-        devicePage(address, units, level, openDebug) { nav.pop() }
+        val openSettings: (() -> Unit)? = if (IosKnown.isPeripheral(address)) ({ nav.push(DeviceSettingsKey(address)) }) else null
+        devicePage(address, units, level, openDebug, openSettings) { nav.pop() }
         ArchiveShortcuts(
             onFiles = { nav.push(FilesKey(PHONE_ARCHIVE)) },
             onHistory = { nav.push(HistoryKey(PHONE_ARCHIVE)) },
@@ -439,6 +477,10 @@ private fun DevicePage(
         )
     }
 }
+
+/** The companion page body Swift's window supplies: the sensor id, display units, detail level, Debug, Device settings and Back. */
+internal typealias DevicePageContent =
+    @Composable (id: String, units: UnitSystem, level: DetailLevel, openDebug: ((String) -> Unit)?, openSettings: (() -> Unit)?, onBack: () -> Unit) -> Unit
 
 /** Compact Files and History buttons over the top end of the companion page, the iOS way into the phone archive. */
 @Composable

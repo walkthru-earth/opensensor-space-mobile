@@ -756,6 +756,34 @@ extension BluetoothCompanion {
         }
         return link
     }
+
+    /// Lends the shared Device settings a link for one config request (SET_CONFIG, GET_CONFIG,
+    /// WIFI_SCAN or REBOOT), under the same guards as a Today command. Nil when another sensor is
+    /// connected or anything holds the link. Handing it back settles the link as a command's end does,
+    /// so a waiting Collect all or Auto-sync step, or an idle close, runs afterwards.
+    func openConfigLink(device: String) -> SensorLink? {
+        guard foreground, let peripheral = current, control != nil, let response, let identity,
+            identity.device == device, link == nil, pending == nil, operations.isEmpty, !requestingToken
+        else { return nil }
+        let mtu = Int32(peripheral.maximumWriteValueLength(for: .withoutResponse) + 3)
+        let link = SensorLink(overWifi: false, address: identity.device, mtu: mtu) { [weak self] body in
+            MainActor.assumeIsolated { self?.write(body) }
+        }
+        self.link = link
+        link.whenClosed { [weak self] in
+            let release = {
+                guard let self, self.link === link else { return }
+                self.link = nil
+                self.settle()
+            }
+            if Thread.isMainThread { MainActor.assumeIsolated { release() } } else { Task { @MainActor in release() } }
+        }
+        if !responseSubscribed {
+            operations.append(.subscribe(response))
+            performNext()
+        }
+        return link
+    }
 }
 
 /// Auto-sync over Bluetooth (#23). Only sensors this phone already read over an encrypted link are

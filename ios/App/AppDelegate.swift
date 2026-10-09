@@ -106,6 +106,14 @@ final class AppServices {
         credentialsChanged()
     }
 
+    /// The user rotated the sensor's token in Device settings. The stored one is dead, so its Wi-Fi
+    /// session closes and the Keychain entry goes before the new token is read over Bluetooth.
+    func forgetWifiAccess(device: String) {
+        lan.disconnect(device: device)
+        credentials.remove(device: device)
+        credentialsChanged()
+    }
+
     /// One Collect all step. Wi-Fi when the plan found the sensor there with access, else Bluetooth.
     private func collect(id: String, wifiName: String?) {
         if let wifiName {
@@ -157,7 +165,9 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             syncInBackground: { [weak services] id in KotlinBoolean(value: services?.autoSync.syncInBackground(id) ?? false) },
             closeIdle: { id in bluetooth.closeIdle(id: id) },
             openDebugLink: { device in bluetooth.openDebugLink(device: device) },
-            command: { command in bluetooth.command(command) }
+            command: { command in bluetooth.command(command) },
+            openConfigLink: { device in bluetooth.openConfigLink(device: device) },
+            forgetWifiAccess: { [weak services] device in services?.forgetWifiAccess(device: device) }
         )
         let window = UIWindow(windowScene: windowScene)
         window.rootViewController = controller

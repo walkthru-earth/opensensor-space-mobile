@@ -20,6 +20,9 @@ import platform.UIKit.UIViewController
  * the background run, answering true only when iOS took it as a continued task. [closeIdle] runs
  * when the last Today or Device page for a sensor leaves the back stack. Swift closes that
  * peripheral's link only when it is idle, never during a sync, a command, Collect all or a Debug lend.
+ * [openConfigLink] lends Device settings a link under the same guards as [command], and closing it
+ * settles the link as a command's end does. [forgetWifiAccess] drops the Keychain token and any
+ * Wi-Fi session of a hardware id after the user rotated the token.
  */
 fun mainViewController(
     state: CompanionState,
@@ -38,6 +41,8 @@ fun mainViewController(
     closeIdle: (String) -> Unit,
     openDebugLink: (String) -> SensorLink?,
     command: (SensorCommand) -> Unit,
+    openConfigLink: (String) -> SensorLink?,
+    forgetWifiAccess: (String) -> Unit,
 ): UIViewController =
     ComposeUIViewController {
         // A sensor the user opens takes the one Bluetooth link, so Collect all stops first.
@@ -46,7 +51,17 @@ fun mainViewController(
             openSensor(id)
         }
         val today = remember { CompanionToday(state, CompanionLinkActions(syncFiles = syncBluetooth, command = command, connect = userOpen, disconnect = disconnect)) }
-        AppRoot(devices, today, requestBluetooth, userOpen, openDebugLink, closeIdle) { id, units, level, openDebug, onBack ->
+        val configLinks = remember {
+            DeviceConfigLinks(
+                openConfigLink = openConfigLink,
+                saveWifiAccess = saveWifiAccess,
+                forgetWifiAccess = forgetWifiAccess,
+                connect = userOpen,
+                disconnect = disconnect,
+                scanLan = scanLan,
+            )
+        }
+        AppRoot(devices, today, requestBluetooth, userOpen, openDebugLink, closeIdle, configLinks) { id, units, level, openDebug, openSettings, onBack ->
             val peripheral = IosKnown.isPeripheral(id)
             val records by devices.known.collectAsState()
             val known = peripheral && records.any { it.peripheral.equals(id, ignoreCase = true) }
@@ -66,6 +81,7 @@ fun mainViewController(
                 units = units,
                 showTechnical = level.detailed,
                 onOpenDebug = openDebug,
+                onOpenSettings = openSettings,
                 autoSync = if (known) ({ AutoSyncSwitch(autoSync, id, syncInBackground) }) else null,
             )
         }

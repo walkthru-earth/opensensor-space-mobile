@@ -40,6 +40,7 @@ import earth.walkthru.aqsync.units.formatFixed
 import earth.walkthru.aqsync.units.formatPm
 import earth.walkthru.opensensor.designsystem.AppIcons
 import earth.walkthru.opensensor.designsystem.CardShape
+import earth.walkthru.opensensor.device.deviceSettingsLabel
 import earth.walkthru.opensensor.permissions.PermissionFlow
 import earth.walkthru.opensensor.permissions.SettingsLink
 import earth.walkthru.opensensor.strings.resolve
@@ -93,7 +94,7 @@ import kotlin.math.floor
  */
 
 @Composable
-internal fun CompanionScreen(state: CompanionState, title: String?, onBack: () -> Unit, reconnect: (() -> Unit)?, disconnect: () -> Unit, scanLan: () -> Unit, saveWifiAccess: () -> Unit, connectLan: (String) -> Unit, syncLan: (String) -> Unit, disconnectLan: (String) -> Unit, syncBluetooth: () -> Unit, units: UnitSystem = UnitSystem.METRIC, showTechnical: Boolean = false, onOpenDebug: ((String) -> Unit)? = null, autoSync: (@Composable () -> Unit)? = null) {
+internal fun CompanionScreen(state: CompanionState, title: String?, onBack: () -> Unit, reconnect: (() -> Unit)?, disconnect: () -> Unit, scanLan: () -> Unit, saveWifiAccess: () -> Unit, connectLan: (String) -> Unit, syncLan: (String) -> Unit, disconnectLan: (String) -> Unit, syncBluetooth: () -> Unit, units: UnitSystem = UnitSystem.METRIC, showTechnical: Boolean = false, onOpenDebug: ((String) -> Unit)? = null, onOpenSettings: (() -> Unit)? = null, autoSync: (@Composable () -> Unit)? = null) {
     // Display units from Settings. Readings stay SI everywhere else.
     val formatter = UnitFormatter(units)
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
@@ -183,6 +184,10 @@ internal fun CompanionScreen(state: CompanionState, title: String?, onBack: () -
                     }
                 }
                 item { OutlinedButton(onClick = disconnect, shape = MaterialTheme.shapes.small) { Text(stringResource(if (state.syncBusy) Res.string.action_cancel else Res.string.nav_disconnect)) } }
+                // Device settings of a Bluetooth sensor (#20), once the link holds this sensor.
+                if (onOpenSettings != null && state.connected && state.info != null) {
+                    item { OutlinedButton(onClick = onOpenSettings, shape = MaterialTheme.shapes.small) { Text(deviceSettingsLabel()) } }
+                }
                 // Developer level only. The caller passes onOpenDebug at that level and null below it.
                 val debugDevice = state.info?.dev
                 if (onOpenDebug != null && state.connected && debugDevice != null) {

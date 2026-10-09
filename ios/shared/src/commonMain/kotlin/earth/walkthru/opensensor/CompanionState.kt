@@ -97,6 +97,10 @@ class CompanionState {
         private set
     internal var wifiAccessMessage by mutableStateOf<UiText>(UiText.None)
         private set
+
+    /** How the last Wi-Fi access request ended, cleared when a new one starts. Device settings reads it. */
+    internal var wifiAccessNotice by mutableStateOf<CompanionNotice?>(null)
+        private set
     internal var lanSessions by mutableStateOf<Map<String, LanSessionState>>(emptyMap())
         private set
     internal var lanPaused by mutableStateOf<Set<String>>(emptySet())
@@ -109,6 +113,7 @@ class CompanionState {
         wifiAccessAvailable = available
         wifiAccessBusy = busy
         wifiAccessMessage = UiText.plain(explanation)
+        wifiAccessNotice = null
     }
 
     /** Wi-Fi access state with a typed [notice] in Android's words. */
@@ -116,6 +121,7 @@ class CompanionState {
         wifiAccessAvailable = available
         wifiAccessBusy = busy
         wifiAccessMessage = notice.text
+        wifiAccessNotice = notice
     }
 
     /** Native sessions are independent: a callback updates only its own sensor card. */
