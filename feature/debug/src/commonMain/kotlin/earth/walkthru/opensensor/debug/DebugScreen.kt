@@ -466,7 +466,7 @@ internal fun frameLine(f: RawFrameRecord): String {
         f.length > RawFrameRecord.PREVIEW_BYTES -> "…"
         else -> ""
     }
-    return "${timeOf(f.atEpochMs)} ${f.typeName.padEnd(13)} ${f.length.toString().padStart(5)} B  ${f.previewHex}$tail"
+    return "${timeOf(f.atEpochMs)} ${f.typeName.padEnd(13)} ${(if (f.redacted) "-" else f.length.toString()).padStart(5)} B  ${f.previewHex}$tail"
 }
 
 internal fun timeOf(epochMs: Long): String {

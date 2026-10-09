@@ -31,7 +31,19 @@ class FrameRedactionTest {
         val rec = recorder.records.value.single()
         assertTrue(rec.redacted)
         assertEquals("41…", rec.previewHex)
-        assertEquals(36, rec.length)
+        assertEquals(0, rec.length)
+    }
+
+    @Test
+    fun secretFramesDoNotRevealTheirLength() {
+        val recorder = FrameRecorder()
+        recorder.tx(byteArrayOf(Opcode.SET_CONFIG.toByte()) + """{"wifi":{"psk":"short"}}""".encodeToByteArray())
+        recorder.tx(byteArrayOf(Opcode.SET_CONFIG.toByte()) + """{"wifi":{"psk":"a much longer passphrase"}}""".encodeToByteArray())
+        recorder.rx(byteArrayOf(FrameType.TOKEN.toByte(), 0x51, 0x1F) + token)
+        val recs = recorder.records.value
+        assertEquals(listOf(0, 0, 0), recs.map { it.length })
+        assertEquals(recs[0].previewHex, recs[1].previewHex)
+        assertTrue(recs.all { it.redacted })
     }
 
     @Test

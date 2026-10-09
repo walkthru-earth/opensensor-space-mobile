@@ -14,7 +14,7 @@ enum class FrameDirection { TX, RX }
 /**
  * One raw frame as seen at the transport boundary, for the Advanced → Debug screen. Only the first
  * [RawFrameRecord.PREVIEW_BYTES] bytes are kept, and a secret frame ([FrameRedaction.isSecret]) is
- * recorded with its body redacted: the LAN token and the Wi-Fi passphrase are secrets.
+ * recorded with its body redacted and [length] 0: the LAN token and the Wi-Fi passphrase are secrets.
  */
 data class RawFrameRecord(
     val atEpochMs: Long,
@@ -58,7 +58,9 @@ class FrameRecorder(
         if (bytes.isEmpty()) return
         val type = bytes[0].toInt() and 0xFF
         val secret = FrameRedaction.isSecret(direction, bytes)
-        val rec = RawFrameRecord(nowEpochMs(), direction, type, bytes.size, FrameRedaction.preview(direction, bytes), secret)
+        // A secret frame records length 0, so the passphrase or PIN length cannot be read from it.
+        val length = if (secret) 0 else bytes.size
+        val rec = RawFrameRecord(nowEpochMs(), direction, type, length, FrameRedaction.preview(direction, bytes), secret)
         lock.withLock {
             if (ring.size >= capacity) ring.removeFirst()
             ring.addLast(rec)
