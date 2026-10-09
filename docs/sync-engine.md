@@ -35,6 +35,7 @@ sentence for them.
 | LAN busy | `msg_lan_*` wording that names the Bluetooth fallback | `msg_busy`, because iOS has no fallback |
 | HELLO mismatch | `msg_identity_*` | Same keys. A different hardware ID and a different station now give different notices |
 | BLE Sync button | Syncs over the link the router picked | Routes to Wi-Fi when an idle LAN session for the same sensor is open, and progress then shows on the LAN card |
+| Phone storage fault | `msg_file_failed` for that file, the run goes on | The run goes on and ends with `companion_sync_storage_failed`. The link stays |
 | Lost BLE sync | Handled by the sync service and `SyncResumePolicy` | The BLE connection closes. Bytes already held are kept for the next sync |
 | BLE writes | With response | `control` with response, payload sized from the without-response length |
 | Background | `SyncWorker` on WorkManager | A UIKit background-task lease for LAN collections only. Expiry pauses, and foreground return resumes |
