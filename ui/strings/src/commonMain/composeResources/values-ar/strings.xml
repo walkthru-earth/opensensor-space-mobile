@@ -83,4 +83,37 @@
     <!-- Export. -->
     <string name="companion_export">تصدير ملفات Parquet</string>
     <string name="companion_export_preparing">جارٍ تجهيز التصدير…</string>
+
+    <!-- Sync outcomes and link notices, the Android keys and words. -->
+    <string name="msg_up_to_date">كل شيء موجود على هذا الهاتف بالفعل.</string>
+    <plurals name="msg_sync_finished">
+        <item quantity="zero">تمت مزامنة %1$d من %2$d ملف</item>
+        <item quantity="one">تمت مزامنة %1$d من %2$d ملف</item>
+        <item quantity="two">تمت مزامنة %1$d من %2$d ملف</item>
+        <item quantity="few">تمت مزامنة %1$d من %2$d ملفات</item>
+        <item quantity="many">تمت مزامنة %1$d من %2$d ملفًا</item>
+        <item quantity="other">تمت مزامنة %1$d من %2$d ملف</item>
+    </plurals>
+    <plurals name="sync_some_failed">
+        <item quantity="zero">لم تتم مزامنة %1$d ملف. حاول مرة أخرى.</item>
+        <item quantity="one">لم تتم مزامنة %1$d ملف. حاول مرة أخرى.</item>
+        <item quantity="two">لم تتم مزامنة %1$d ملفين. حاول مرة أخرى.</item>
+        <item quantity="few">لم تتم مزامنة %1$d ملفات. حاول مرة أخرى.</item>
+        <item quantity="many">لم تتم مزامنة %1$d ملفًا. حاول مرة أخرى.</item>
+        <item quantity="other">لم تتم مزامنة %1$d ملف. حاول مرة أخرى.</item>
+    </plurals>
+    <string name="msg_sync_stopped">توقفت المزامنة. تُستأنف الملفات الجزئية في المرة القادمة.</string>
+    <string name="msg_sync_aborted">توقفت المزامنة مبكرًا. تُستأنف في المزامنة التالية.</string>
+    <string name="msg_hardware_in_use">هذا المستشعر متصل بالفعل بطريقة أخرى.</string>
+    <string name="msg_busy">انتظر حتى تنتهي مهمة المستشعر الحالية.</string>
+    <string name="msg_token_needs_ble">يصل رمز الوصول عبر Bluetooth فقط. أعد الاتصال عبر Bluetooth أولًا.</string>
+    <string name="companion_sync_storage_failed">تعذّر حفظ بعض الملفات على هذا الهاتف. تحقق من المساحة الفارغة وحاول مرة أخرى.</string>
+    <string name="msg_busy_before_sync">انتظر حتى تنتهي مهمة المستشعر الحالية قبل المزامنة.</string>
+    <string name="msg_verification_failed">تعذّر التحقق من المستشعر. حاول مرة أخرى.</string>
+    <string name="msg_identity_enroll_ble">اتصل بهذا المستشعر عبر Bluetooth أولًا.</string>
+    <string name="msg_identity_station_ble">تغيّرت محطة المستشعر. أعد الاتصال عبر Bluetooth للتحقق منها.</string>
+    <string name="msg_identity_hardware_changed">هذا عتاد مختلف. أقرنه كمستشعر جديد.</string>
+    <string name="msg_lan_token_stored">حُفظ رمز الوصول عبر Wi-Fi على هذا الهاتف.</string>
+    <string name="msg_failed_get_token">تعذّر الحصول على رمز الوصول عبر Wi-Fi. حاول مرة أخرى.</string>
+    <string name="msg_rejected_get_token">رفض المستشعر مشاركة رمز الوصول عبر Wi-Fi.</string>
 </resources>

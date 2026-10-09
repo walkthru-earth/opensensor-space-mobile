@@ -2,6 +2,7 @@ package earth.walkthru.opensensor
 
 import earth.walkthru.opensensor.strings.UiText
 import earth.walkthru.opensensor.strings.resources.Res
+import earth.walkthru.opensensor.strings.resources.companion_sync_storage_failed
 import earth.walkthru.opensensor.strings.resources.msg_busy
 import earth.walkthru.opensensor.strings.resources.msg_hardware_in_use
 import earth.walkthru.opensensor.strings.resources.msg_sync_aborted
@@ -27,12 +28,15 @@ class SyncOutcomeTest {
         assertEquals(UiText.of(Res.string.msg_hardware_in_use), SyncResult(SyncEnd.IN_USE, 0, 0, 0).message)
         assertEquals(UiText.of(Res.string.msg_sync_aborted), SyncResult(SyncEnd.LINK_LOST, 3, 0, 0).message)
         assertEquals(UiText.of(Res.string.msg_sync_aborted), SyncResult(SyncEnd.FAILED, 3, 0, 0).message)
+        assertEquals(UiText.of(Res.string.companion_sync_storage_failed), SyncResult(SyncEnd.STORAGE_FAILED, 3, 2, 1).message)
     }
 
     @Test fun onlyAUsableLinkStaysOpenAndOnlyALostLinkResumes() {
+        // A storage or protocol fault leaves the link usable. A lost link, a refused token or a busy sensor does not.
+        val dropsLink = setOf(SyncEnd.STOPPED, SyncEnd.LINK_LOST, SyncEnd.AUTH_FAILED, SyncEnd.BUSY)
         for (end in SyncEnd.entries) {
             val result = SyncResult(end, 0, 0, 0)
-            assertEquals(end == SyncEnd.COMPLETE || end == SyncEnd.FILES_NOT_SAVED || end == SyncEnd.IN_USE, result.keepsLink)
+            assertEquals(end !in dropsLink, result.keepsLink, end.name)
             assertEquals(end == SyncEnd.LINK_LOST, result.resumable)
         }
     }

@@ -51,6 +51,9 @@ class FakeArchiveDevice(
     /** Runs before an OPEN is answered, so a test can change the files between LIST and OPEN. */
     var beforeOpen: (name: String) -> Unit = {}
 
+    /** An `ERROR` to answer this OPEN with instead of OPENED, such as a refused token mid-sync. */
+    var refuseOpen: (name: String) -> Frame.Error? = { null }
+
     /** Delay before CLOSED, so a caller's timeout fires first. */
     var closedDelayMs: Long = 0
 
@@ -101,6 +104,7 @@ class FakeArchiveDevice(
             Opcode.OPEN -> {
                 val name = req.copyOfRange(1, req.size).decodeToString()
                 beforeOpen(name)
+                refuseOpen(name)?.let { return send(it) }
                 val f = files.firstOrNull { it.name == name } ?: return send(Frame.Error(op, ProtocolError.INVALID_NAME.code, ""))
                 openHandle = nextHandle++
                 openFile = f

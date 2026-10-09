@@ -10,13 +10,19 @@ import earth.walkthru.aqsync.data.protocol.Opcode
 import earth.walkthru.aqsync.data.protocol.ParquetVerify
 import earth.walkthru.aqsync.data.protocol.ProtocolError
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Runnable
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.yield
 import platform.Foundation.NSData
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSTemporaryDirectory
 import platform.Foundation.NSUUID
+import kotlin.concurrent.AtomicInt
+import kotlin.coroutines.CoroutineContext
 import kotlin.random.Random
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -151,6 +157,21 @@ class SensorSyncTest {
     }
 
     @Test
+    fun aTokenRefusedMidSyncEndsAsAuthFailed() {
+        var opens = 0
+        val result = run(
+            sensor { link, req ->
+                (req[0].toInt() and 0xFF == Opcode.OPEN && ++opens == 2).also {
+                    if (it) link.reply(Frame.Error(0, ProtocolError.AUTH_FAILED.code, ""))
+                }
+            },
+        )
+
+        assertEquals(SyncEnd.AUTH_FAILED, result.end)
+        assertEquals(2, opens)
+    }
+
+    @Test
     fun aStationSyncsOverOneLinkAtATime() = runBlocking {
         val first = CompletableDeferred<SyncResult>()
         val second = CompletableDeferred<SyncResult>()
@@ -161,5 +182,66 @@ class SensorSyncTest {
         assertEquals(SyncEnd.IN_USE, withTimeout(5_000) { second.await() }.end)
         handle.cancel()
         assertEquals(SyncEnd.STOPPED, withTimeout(5_000) { first.await() }.end)
+    }
+
+    @Test
+    fun aCancelBeforeTheWorkStartsStillFinishesOnceAndFreesTheStation() = runBlocking {
+        // Work waits in this queue until the test runs it, so cancel() lands before dispatch.
+        val queue = Channel<Runnable>(Channel.UNLIMITED)
+        val held = object : CoroutineDispatcher() {
+            override fun dispatch(context: CoroutineContext, block: Runnable) {
+                queue.trySend(block)
+            }
+        }
+        val gated = SensorSync(store, ReceiptArchiveIndex(finals, Dispatchers.Default), held, Dispatchers.Default, progressInterval = 0)
+        suspend fun pumpUntil(done: CompletableDeferred<*>) = withTimeout(20_000) {
+            while (!done.isCompleted) {
+                queue.tryReceive().getOrNull()?.run() ?: yield()
+            }
+        }
+
+        val calls = AtomicInt(0)
+        val first = CompletableDeferred<SyncResult>()
+        gated.start(sensor(), station, "a1b2c3d4e5f6", 4096, {}) {
+            calls.incrementAndGet()
+            first.complete(it)
+        }.cancel()
+        pumpUntil(first)
+        assertEquals(SyncEnd.STOPPED, first.await().end)
+
+        val second = CompletableDeferred<SyncResult>()
+        gated.start(sensor(), station, "a1b2c3d4e5f6", 4096, {}) { second.complete(it) }
+        pumpUntil(second)
+        assertEquals(SyncEnd.COMPLETE, second.await().end)
+        assertEquals(1, calls.value)
+    }
+
+    @Test
+    fun aFileThisPhoneCannotStoreFailsAloneAndKeepsTheLink() {
+        val (blocked, other) = files.keys.toList()
+        // A directory where the archived file belongs, so the move into the archive fails.
+        assertTrue(NSFileManager.defaultManager.createDirectoryAtPath("$finals/$station/$blocked", true, null, null))
+
+        val result = run(sensor())
+
+        assertEquals(SyncEnd.STORAGE_FAILED, result.end)
+        assertTrue(result.keepsLink)
+        assertEquals(1, result.saved)
+        assertEquals(1, result.notSaved)
+        assertContentEquals(files.getValue(other), NSFileManager.defaultManager.contentsAtPath("$finals/$station/$other")!!.toByteArray())
+    }
+
+    @Test
+    fun aProtocolFaultFailsTheSyncAndKeepsTheLink() {
+        val result = run(
+            sensor { link, req ->
+                (req[0].toInt() and 0xFF == Opcode.READ).also {
+                    if (it) link.reply(Frame.Chunk(9, 0, ByteArray(16)))
+                }
+            },
+        )
+
+        assertEquals(SyncEnd.FAILED, result.end)
+        assertTrue(result.keepsLink)
     }
 }

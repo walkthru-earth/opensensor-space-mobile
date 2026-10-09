@@ -7,6 +7,8 @@ import earth.walkthru.aqsync.archive.ArchiveRecord
 import earth.walkthru.aqsync.archive.ArchiveStore
 import earth.walkthru.aqsync.archive.ArchiveVerifier
 import earth.walkthru.aqsync.archive.PartialMeta
+import earth.walkthru.aqsync.data.ble.AuthFailedException
+import earth.walkthru.aqsync.data.ble.DeviceBusyException
 import earth.walkthru.aqsync.data.ble.DeviceErrorException
 import earth.walkthru.aqsync.data.ble.DeviceSession
 import earth.walkthru.aqsync.data.ble.WindowLostException
@@ -67,6 +69,8 @@ class SyncEngine(
     private val windowRetryBackoffMs: Long = WINDOW_RETRY_BACKOFF_MS,
     private val clock: () -> Long = ::nowEpochMs,
     private val leases: WriterLeases = WriterLeases(),
+    /** One line per file this phone failed to store, file name and error class and message only. */
+    private val log: (String) -> Unit = {},
 ) {
     suspend fun download(
         session: DeviceSession,
@@ -95,6 +99,7 @@ class SyncEngine(
         val opened = try {
             session.open(name)
         } catch (e: DeviceErrorException) {
+            if (e.endsSession) throw e
             return FileOutcome.DeviceError(name, e.protocolError, e.message ?: "OPEN failed")
         }
         val handle = opened.handle
@@ -112,12 +117,12 @@ class SyncEngine(
 
             // Another collector may have committed while this caller waited for its writer lease.
             // Verify again against OPENED, and never replace immutable history with different bytes.
-            if (store.exists(key)) return adoptExisting(key, meta, sourceDevice, onProgress)
+            if (storage { store.exists(key) }) return storage { adoptExisting(key, meta, sourceDevice, onProgress) }
 
             var windowsRecovered = 0
             var retriedWithoutPartial = false
             while (true) {
-                val writer = store.openPartial(key, meta)
+                val writer = storage { store.openPartial(key, meta) }
                 val resumeFrom = writer.resumeFrom
                 var offset = resumeFrom
                 val progress = FileProgressReporter(name, opened.size, resumeFrom, onProgress)
@@ -133,14 +138,14 @@ class SyncEngine(
                                 session.read(handle, offset, readLength) { chunk ->
                                     when {
                                         chunk.offset == offset -> {
-                                            w.writeAt(chunk.offset, chunk.payload)
+                                            storage { w.writeAt(chunk.offset, chunk.payload) }
                                             offset += chunk.payload.size
                                         }
                                         // Duplicate or overlapping chunk: the bytes are identical (immutable file), keep going.
                                         chunk.offset < offset -> {
                                             val overlap = (offset - chunk.offset).toInt()
                                             if (overlap < chunk.payload.size) {
-                                                w.writeAt(offset, chunk.payload.copyOfRange(overlap, chunk.payload.size))
+                                                storage { w.writeAt(offset, chunk.payload.copyOfRange(overlap, chunk.payload.size)) }
                                                 offset = chunk.offset + chunk.payload.size
                                             }
                                         }
@@ -180,16 +185,16 @@ class SyncEngine(
                                 progress.report(offset, windowsRecovered)
                             }
                         }
-                        w.sync()
+                        storage { w.sync() }
                     } finally {
                         // On cancellation or failure, expose the last bytes actually written.
                         progress.report(offset, windowsRecovered, force = true)
                     }
                 }
 
-                val (verdict, sha256) = verifyAndHash(store.reader(key, partial = true), meta)
+                val (verdict, sha256) = storage { verifyAndHash(store.reader(key, partial = true), meta) }
                 if (!verdict.ok) {
-                    store.discardPartial(key)
+                    storage { store.discardPartial(key) }
                     // The meta records only the device's size and CRC, not a checksum of the partial
                     // prefix. A corrupted prefix can therefore survive resume and fail the final check.
                     // Re-read once from zero while this handle is still open, rather than making the
@@ -200,7 +205,7 @@ class SyncEngine(
                     }
                     return FileOutcome.Mismatch(name, verdict.describe())
                 }
-                store.commit(key)
+                storage { store.commit(key) }
                 val record = ArchiveRecord(
                     station = key.station,
                     name = name,
@@ -212,10 +217,18 @@ class SyncEngine(
                 )
                 // Index the verified bytes now (rows, time span, …) so History never has to re-open the file.
                 // A file the reader refuses keeps its record with `indexError`. The archive copy is untouched.
-                index.put(indexer.indexed(record))
+                storage { index.put(indexer.indexed(record)) }
                 return FileOutcome.Synced(name, opened.size, sha256)
             }
+        } catch (e: StorageFault) {
+            // This phone's archive failed for this file. The link and the session are fine, so the
+            // next file runs. The class and message only, never bytes.
+            val cause = e.cause ?: e
+            val reason = "storage ${cause::class.simpleName}: ${cause.message}"
+            log("$name not saved, $reason")
+            return FileOutcome.Failed(name, reason, storage = true)
         } catch (e: DeviceErrorException) {
+            if (e.endsSession) throw e
             return FileOutcome.DeviceError(name, e.protocolError, e.message ?: "device error")
         } finally {
             // Best effort, even when we are being cancelled: the device closes implicitly on the
@@ -284,6 +297,27 @@ class SyncEngine(
         val hex = sha.digest().toHex()
         return verdict to hex
     }
+
+    /** Runs one [ArchiveStore] or [ArchiveIndex] call. Its failure becomes a [StorageFault] for this file. */
+    private inline fun <T> storage(block: () -> T): T = try {
+        block()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: StorageFault) {
+        throw e
+    } catch (e: Exception) {
+        throw StorageFault(e)
+    }
+
+    /** This phone's archive failed (disk full, a refused path, a failed move or receipt). */
+    private class StorageFault(cause: Exception) : Exception(cause.message, cause)
+
+    /**
+     * An error about the session, not the file: the LAN token was refused, the sensor is busy, or an
+     * `ERROR` for op 0. Every later file would fail the same way, so the run ends with it instead.
+     */
+    private val DeviceErrorException.endsSession: Boolean
+        get() = this is AuthFailedException || this is DeviceBusyException || frame.op == 0
 
     companion object {
         /** Re-reads of one window before the file is given up ([WindowRetryPolicy.RETRIES]). */

@@ -138,7 +138,12 @@ path has no Bluetooth fallback, so it uses `msg_busy` and `msg_token_needs_ble` 
 uses its `msg_lan_*` wording. A LAN `AUTH_FAILED` drops the saved token and asks the user to save
 Wi-Fi access over Bluetooth again. The BLE **Sync** button uses Wi-Fi when an idle LAN session
 for the same sensor is open, and progress then shows on its LAN card. A Bluetooth sync that loses
-its link closes the Bluetooth connection, and held bytes stay for the next sync. Some iOS-only
+its link closes the Bluetooth connection, and held bytes stay for the next sync. A file this
+phone cannot store fails alone, and the sync ends with `companion_sync_storage_failed` and keeps
+the link. A protocol fault ends it with `msg_sync_aborted` and also keeps the link. A token
+refused or a sensor busy in the middle of a sync ends it as `AUTH_FAILED` or `BUSY`. A Stop
+that lands before the work starts still finishes once and frees the station. `SensorSync` logs
+only the file name and the error class and message, through `NSLog` without format arguments. Some iOS-only
 status lines (connecting, listing, paused, export) are still plain English in Swift.
 
 The offline **Export Parquet files** button copies only finalized `.parquet` files into a temporary
@@ -241,6 +246,10 @@ accuracy, stale/background handling or authenticated Wi-Fi connections. See
    a build that used the Swift engine, keeping its receipts and partials.
 8. Move the remaining plain English Swift status lines into `:ui:strings`, and drop the unused
    write path in `SensorArchive.swift`.
+9. Give `ByteReader` (`core/parquet`) a `close`, so `ArchiveStore.reader` callers release
+   what they open. No descriptor leaks today. The JVM reader closes its file after mapping, and
+   the iOS reader is a mapped `NSData` freed with the object. A reader over a plain file handle
+   would need it.
 
 LAN and Bluetooth file sync use the shared Kotlin engine. Swift keeps the sockets, Core
 Bluetooth, LAN framing, the HELLO check, keepalive, the BLE token request and Keychain.

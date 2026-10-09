@@ -92,6 +92,8 @@
     <string name="msg_hardware_in_use">This sensor is already connected another way.</string>
     <string name="msg_busy">Wait for the current sensor task to finish.</string>
     <string name="msg_token_needs_ble">The token comes over Bluetooth only. Reconnect over Bluetooth first.</string>
+    <!-- iOS only, Android shows one notice per file instead. -->
+    <string name="companion_sync_storage_failed">Some files could not be saved on this phone. Check free space and try again.</string>
 
     <!-- Link and Wi-Fi access notices, the Android keys and words. -->
     <string name="msg_busy_before_sync">Wait for the current sensor task to finish before syncing.</string>

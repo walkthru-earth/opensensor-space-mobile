@@ -3,14 +3,21 @@ package earth.walkthru.aqsync.data.sync
 import earth.walkthru.aqsync.archive.ArchiveKey
 import earth.walkthru.aqsync.archive.ArchiveLayout
 import earth.walkthru.aqsync.archive.ArchiveRecord
+import earth.walkthru.aqsync.data.ble.AuthFailedException
+import earth.walkthru.aqsync.data.ble.DeviceBusyException
+import earth.walkthru.aqsync.data.ble.DeviceErrorException
 import earth.walkthru.aqsync.data.ble.DeviceSession
+import earth.walkthru.aqsync.data.protocol.Frame
+import earth.walkthru.aqsync.data.protocol.Opcode
 import earth.walkthru.aqsync.data.protocol.ParquetVerify
+import earth.walkthru.aqsync.data.protocol.ProtocolError
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.testTimeSource
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 /** The whole collection both phones run on top of the per-file engine, over in-memory ports. */
@@ -99,5 +106,43 @@ class ArchiveCollectorTest {
 
         assertEquals(listOf(FileNotSaved(fake.files[0].name, FileProblem.FAILED)), summary.notSaved)
         assertContentEquals(fake.files[1].bytes, finalBytes(fake.station, fake.files[1].name))
+    }
+
+    @Test
+    fun aTokenRefusedMidSyncEndsTheRunInsteadOfRefusingEveryFile() = runTest {
+        val fake = FakeArchiveDevice(backgroundScope)
+        var opens = 0
+        fake.refuseOpen = { if (++opens == 2) Frame.Error(0, ProtocolError.AUTH_FAILED.code, "") else null }
+
+        assertFailsWith<AuthFailedException> { collect(fake) }
+        assertEquals(2, opens, "no OPEN after the refusal")
+        assertEquals(1, store.files.keys.count { it.startsWith(ArchiveLayout.ARCHIVE + "/") })
+    }
+
+    @Test
+    fun aBusySensorOrASessionErrorEndsTheRun() = runTest {
+        val fake = FakeArchiveDevice(backgroundScope)
+        fake.refuseOpen = { Frame.Error(Opcode.OPEN, ProtocolError.BUSY.code, "") }
+        assertFailsWith<DeviceBusyException> { collect(fake) }
+
+        fake.refuseOpen = { Frame.Error(0, ProtocolError.MALFORMED_REQUEST.code, "") }
+        assertFailsWith<DeviceErrorException> { collect(fake) }
+        assertTrue(store.files.keys.none { it.startsWith(ArchiveLayout.ARCHIVE + "/") })
+    }
+
+    @Test
+    fun aStorageFaultFailsOnlyItsFileAndTheRunGoesOn() = runTest {
+        val fake = FakeArchiveDevice(backgroundScope)
+        val full = fake.files[0].name
+        val stuck = fake.files[1].name
+        store.failWrite = { key -> if (key.name == full) IllegalStateException("No space left on device") else null }
+        store.failCommit = { key -> if (key.name == stuck) IllegalStateException("destination is a directory") else null }
+
+        val summary = collect(fake)
+
+        assertEquals(listOf(FileNotSaved(full, FileProblem.STORAGE), FileNotSaved(stuck, FileProblem.STORAGE)), summary.notSaved)
+        assertContentEquals(fake.files[2].bytes, finalBytes(fake.station, fake.files[2].name))
+        assertEquals(1, index.records.size, "no receipt for a file that was not stored")
+        assertTrue(store.files.keys.any { it == ArchiveLayout.partialPath(ArchiveKey(fake.station, stuck)) }, "verified bytes stay for the next run")
     }
 }

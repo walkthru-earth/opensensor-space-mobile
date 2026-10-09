@@ -2,7 +2,7 @@
 
 **Scope:** the file transfer: planner → engine → archive; integrity; lost windows; stale-frame drain; resume; the state-changing requests.
 **Code:** Shared in `core/sync` commonMain: `data/sync/SyncEngine.kt`, `ArchiveCollector.kt`, `data/sync/SyncPlanner.kt`, `ReadWindow.kt`, `WindowRetryPolicy.kt`, `SyncResumePolicy.kt`, `FileProgress.kt`, `FileProgressReporter.kt`, `RateMeter.kt`, `data/ManifestState.kt`, `data/SyncProgress.kt`, `data/ble/DeviceSession.kt` (`read`, `drainStale`, `reboot`). `core/protocol/…/ParquetVerify.kt`, `Sha256.kt`. Android adapters `data/archive/FileArchiveStore.kt`, `SyncEngineModule.kt`, `data/sync/FileArchive.kt`. iOS adapters `core/archive` iosMain `IosArchiveStore.kt`, `ReceiptArchiveIndex.kt`, and `ios/shared` iosMain `SensorSync.kt`, `SensorLink.kt`.
-**Tests:** `:core:sync` commonTest `SyncEngineTest`, `ArchiveCollectorTest`, `SyncPlannerTest`, `DeviceSessionPollingTest`, `WindowRetryPolicyTest`, `RateMeterTest`, `SyncResumePolicyTest`. App `ConcurrentArchiveTest`, `WindowRecoveryTest` (fake with `dropLeadingChunks` / `closedDelayMs`). `:core:protocol` `ParquetVerifyTest`, `Sha256Test`.
+**Tests:** `:core:sync` commonTest `SyncEngineTest`, `ArchiveCollectorTest`, `SyncPlannerTest`, `DeviceSessionPollingTest`, `WindowRetryPolicyTest`, `RateMeterTest`, `SyncResumePolicyTest` (fake `FakeArchiveDevice` with `dropLeadingChunks` / `closedDelayMs`). App `ConcurrentArchiveTest` over the Android adapters. iOS simulator `SensorSyncTest`. `:core:protocol` `ParquetVerifyTest`, `Sha256Test`.
 **Related:** [transports.md](transports.md) (the pipe underneath), [data-model.md](data-model.md) (what is recorded), [history-pipeline.md](history-pipeline.md) (what runs after).
 
 ## One engine on both phones
@@ -35,6 +35,7 @@ sentence for them.
 | LAN busy | `msg_lan_*` wording that names the Bluetooth fallback | `msg_busy`, because iOS has no fallback |
 | HELLO mismatch | `msg_identity_*` | Same keys. A different hardware ID and a different station now give different notices |
 | BLE Sync button | Syncs over the link the router picked | Routes to Wi-Fi when an idle LAN session for the same sensor is open, and progress then shows on the LAN card |
+| Phone storage fault | `msg_file_failed` for that file, the run goes on | The run goes on and ends with `companion_sync_storage_failed`. The link stays |
 | Lost BLE sync | Handled by the sync service and `SyncResumePolicy` | The BLE connection closes. Bytes already held are kept for the next sync |
 | BLE writes | With response | `control` with response, payload sized from the without-response length |
 | Background | `SyncWorker` on WorkManager | A UIKit background-task lease for LAN collections only. Expiry pauses, and foreground return resumes |
@@ -93,7 +94,7 @@ Actual request cancellation still propagates and marks the response stream for n
 
 ## Concurrent archive safety (2026-09-29)
 
-`FileArchive.withWriterLease(station, name)` guards OPEN through CLOSE, including partial resume,
+The shared `WriterLeases` in `SyncEngine` (`core/sync`) guards OPEN through CLOSE, including partial resume,
 verification, immutable commit and Room indexing. Other devices with different file identities can
 transfer concurrently. A second writer for the same identity waits cancellably and then rechecks
 any committed destination against the current OPENED size/CRC/PAR1 and recorded SHA-256.
@@ -170,6 +171,27 @@ stateDiagram-v2
 `SyncProgress.endCause` (`SyncEndCause`) records how a run ended; the Files card, the notification
 and the resume policy read it. Per-file outcomes (`Synced` / `Mismatch` / `DeviceError` / `Failed`)
 are **outcomes**, not a broken pipe.
+
+**Session errors end the run (2026-10-09).** An `ERROR` about the session, not the file, is not a
+per-file `DeviceError`. `AUTH_FAILED`, `BUSY` and any `ERROR` with op 0 during `OPEN` or `READ`
+are rethrown by `SyncEngine`, so the run ends with that exception and no later file is tried.
+Before this, both phones turned a token revoked mid-sync, or a busy sensor, into "refused" for
+every remaining file, and LAN never dropped the stale token. iOS now ends with `AUTH_FAILED` or
+`BUSY`. Android ends the run as `FAILURE` with the "sync stopped early" message. Host test
+`ArchiveCollectorTest`, `SensorSyncTest` on the simulator.
+
+**This phone's storage fails one file (2026-10-09).** Every `ArchiveStore` and `ArchiveIndex`
+call in `SyncEngine` (exists, open, write, sync, verify read, discard, commit, receipt) turns a
+failure into `FileOutcome.Failed(storage = true)` for that file, `FileProblem.STORAGE` in the
+summary, and the next file runs. The engine logs the file name, the exception class and its
+message, never bytes or secrets. Verified bytes stay as a partial for the next run. iOS ends such a
+run with `SyncEnd.STORAGE_FAILED` (`companion_sync_storage_failed`) and keeps the link. A protocol
+fault still ends the run with `SyncEnd.FAILED` (`msg_sync_aborted`), logged by class and message,
+and also keeps the link, BLE included. Android changes. Before, a disk-full or move failure threw
+out of the collection and the run ended with `SyncAborted`. Now Android shows `msg_file_failed` for
+that file and goes on. A directory at a final path used to be a per-file `Mismatch` ("archive
+destination is not a file") and is now a per-file storage failure. Host test
+`ArchiveCollectorTest`, `SensorSyncTest` on the simulator.
 
 **The post-sync `LIST` runs inside the run.** A `FLUSH` or a rotation may have finalized a file
 while we were pulling, so a completed run re-lists — *before* `running` turns false, because the
@@ -253,7 +275,7 @@ a sync; raw box accepting `0b`) were closed anyway.
 
 | Edit… | Affects… |
 | --- | --- |
-| `WINDOW_RETRIES` / backoff | `WindowRecoveryTest`, "recovered N" copy, worst-case file time |
+| `WINDOW_RETRIES` / backoff | `SyncEngineTest`, "recovered N" copy, worst-case file time |
 | `FileArchive` paths | Export zips (byte-exact mirror), `HistoryIndexer` file lookup, `data_extraction_rules.xml` (`archive/` in device transfer) |
 | `SyncEngine` post-verify upsert | `archived_file` row + index columns ([data-model.md](data-model.md)); `HistoryDeriver` signature (`name:crc32`) |
 | `DeviceSession` request/terminal mapping | `drainStale` `isTerminal`, `FakeTransport` |

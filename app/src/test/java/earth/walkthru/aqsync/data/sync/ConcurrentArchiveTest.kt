@@ -185,6 +185,18 @@ class ConcurrentArchiveTest {
         }
     }
 
+    @Test
+    fun aDirectoryAtTheFinalPathFailsOnlyThatFileAndKeepsTheVerifiedPartial() = runBlocking {
+        assertTrue(archive.fileFor("station-a", name).mkdirs())
+
+        val outcome = download(device(), "station-a")
+
+        assertTrue(outcome is FileOutcome.Failed && outcome.storage)
+        assertTrue(archive.fileFor("station-a", name).isDirectory)
+        assertTrue(archive.partialLengths("station-a").containsKey(name))
+        assertTrue(dao.rows.isEmpty())
+    }
+
     private class InMemoryDao : ArchivedFileDao {
         val rows = ConcurrentHashMap<Pair<String, String>, ArchivedFile>()
         var upserts = 0

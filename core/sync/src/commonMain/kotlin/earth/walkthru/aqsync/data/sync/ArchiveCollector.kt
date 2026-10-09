@@ -22,6 +22,9 @@ enum class FileProblem {
 
     /** The bytes kept arriving incomplete or stopped short. Saved bytes resume next time. */
     FAILED,
+
+    /** This phone could not write, move or record the file. Bytes already held stay. */
+    STORAGE,
     ;
 
     companion object {
@@ -29,7 +32,7 @@ enum class FileProblem {
             is FileOutcome.Synced -> null
             is FileOutcome.Mismatch -> CHECK_FAILED
             is FileOutcome.DeviceError -> REFUSED
-            is FileOutcome.Failed -> FAILED
+            is FileOutcome.Failed -> if (outcome.storage) STORAGE else FAILED
         }
     }
 }
@@ -56,9 +59,10 @@ data class CollectionSummary(val files: Int, val notSaved: List<FileNotSaved>) {
 
 /**
  * One full collection over an open [DeviceSession]: `LIST`, plan against the archive, then every
- * missing file through the [SyncEngine], oldest dated partition first. A file that cannot be saved
- * fails alone and is reported in the summary. A link or protocol fault ends the run by throwing,
- * and the partials written so far resume on the next run.
+ * missing file through the [SyncEngine], oldest dated partition first. A file that cannot be saved,
+ * including one this phone's storage refused, fails alone and is reported in the summary. A link,
+ * protocol or session fault (a refused token, a busy sensor) ends the run by throwing, and the
+ * partials written so far resume on the next run.
  *
  * The collector never asks the device to delete, rename or rewrite a file.
  */
