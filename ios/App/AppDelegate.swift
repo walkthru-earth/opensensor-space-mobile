@@ -75,11 +75,28 @@ final class AppServices {
     /// restores Bluetooth or a switch is on and access was already given, so no prompt shows here.
     func launch(restoringBluetooth: Bool) {
         bluetooth.onSensorOpened = { [weak self] peripheral, name, station, device in
-            self?.devices.sensorOpened(peripheral: peripheral, name: name, station: station, device: device)
+            guard let self else { return SensorOpenResult(accepted: false, notice: .infoInvalid, credentialToRemove: nil) }
+            let result = self.devices.sensorOpened(peripheral: peripheral, name: name, station: station, device: device)
+            if let staleDevice = result.credentialToRemove {
+                self.lan.disconnect(device: staleDevice)
+                self.credentials.remove(device: staleDevice)
+                self.credentialsChanged()
+            }
+            return result
         }
         bluetooth.onCredentialSaved = { [weak self] in self?.credentialsChanged() }
         bluetooth.onCollectFinished = { [weak self] id, ok in self?.devices.collectFinished(id: id, ok: ok) }
-        lan.onCollectFinished = { [weak self] id, ok in self?.devices.collectFinished(id: id, ok: ok) }
+        lan.onCollectFinished = { [weak self] id, ok in
+            guard let self else { return }
+            if ok {
+                self.devices.collectFinished(id: id, ok: true)
+            } else {
+                // A partial LAN attempt can continue over the bonded BLE link. The shared
+                // collector will skip verified files and resume any retained partial bytes.
+                self.bluetooth.releaseIdleForCollect(next: id)
+                self.bluetooth.collect(id: id)
+            }
+        }
         lan.onCredentialRemoved = { [weak self] in self?.credentialsChanged() }
         credentialsChanged()
         bluetooth.launchedOffScreen()
@@ -135,6 +152,7 @@ final class AppServices {
         if let wifiName {
             lan.collect(name: wifiName, id: id)
         } else {
+            bluetooth.releaseIdleForCollect(next: id)
             bluetooth.collect(id: id)
         }
     }
@@ -219,6 +237,21 @@ final class AppServices {
         }
     }
 
+    func syncOneFile(id: String, name: String) {
+        guard let device = devices.deviceFor(peripheral: id) else { return }
+        if let session = lan.connectedSession(device: device) {
+            lan.sync(name: session, onlyName: name)
+        } else if !lan.holds(device: device), bluetooth.deviceId == device {
+            bluetooth.sync(fileName: name)
+        }
+    }
+
+    func cancelSync(id: String) {
+        guard let device = devices.deviceFor(peripheral: id) else { return }
+        lan.cancelInteractiveSync(device: device)
+        if bluetooth.deviceId == device { bluetooth.cancelInteractiveSync() }
+    }
+
     func openConfigLink(device: String) -> SensorLink? {
         if bluetooth.deviceId == device, let link = bluetooth.openConfigLink(device: device) { return link }
         if lan.holds(device: device) { return lan.openConfigLink(device: device) }
@@ -269,6 +302,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             openDebugLink: { [weak services] device in services?.openDebugLink(device: device) },
             command: { [weak services] id, command in services?.commandSensor(id: id, command: command) },
             openConfigLink: { [weak services] device in services?.openConfigLink(device: device) },
+            syncOneFile: { [weak services] id, name in services?.syncOneFile(id: id, name: name) },
+            cancelSync: { [weak services] id in services?.cancelSync(id: id) },
             forgetWifiAccess: { [weak services] device in services?.forgetWifiAccess(device: device) },
             // Nil on hardware without VisionKit data scanning, which hides Scan on the sticker card.
             scanSticker: StickerScanner.isSupported

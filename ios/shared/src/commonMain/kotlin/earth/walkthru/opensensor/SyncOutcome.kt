@@ -1,5 +1,6 @@
 package earth.walkthru.opensensor
 
+import earth.walkthru.aqsync.data.sync.FileNotSaved
 import earth.walkthru.opensensor.strings.UiText
 import earth.walkthru.opensensor.strings.resources.Res
 import earth.walkthru.opensensor.strings.resources.companion_sync_storage_failed
@@ -46,7 +47,14 @@ enum class SyncEnd {
  * The result of one sync. [files] is how many the sensor listed, [saved] how many this sync
  * copied, and [notSaved] how many failed alone.
  */
-class SyncResult internal constructor(val end: SyncEnd, val files: Int, val saved: Int, val notSaved: Int) {
+class SyncResult internal constructor(
+    val end: SyncEnd,
+    val files: Int,
+    val saved: Int,
+    val notSaved: Int,
+    /** Per-file failures for retry and diagnostics; never includes file contents. */
+    val failures: List<FileNotSaved> = emptyList(),
+) {
     /** The link is still usable afterwards, so the session can stay open. */
     val keepsLink: Boolean get() = when (end) {
         SyncEnd.COMPLETE, SyncEnd.FILES_NOT_SAVED, SyncEnd.STORAGE_FAILED, SyncEnd.IN_USE, SyncEnd.FAILED -> true
@@ -84,4 +92,5 @@ class SyncProgress internal constructor(
     /** Bytes this sync received, without resumed bytes. */
     val receivedBytes: Long,
     val bytesPerSecond: Double,
+    val bytesTotal: Long = 0,
 )

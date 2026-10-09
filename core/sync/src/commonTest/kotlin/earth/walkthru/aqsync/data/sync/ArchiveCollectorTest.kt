@@ -43,9 +43,10 @@ class ArchiveCollectorTest {
         assertEquals(CollectionSummary(3, emptyList()), summary)
         fake.files.forEach { assertContentEquals(it.bytes, finalBytes(fake.station, it.name)) }
         assertEquals(3, index.records.size)
-        assertEquals(CollectionProgress(0, 3, 0, 0, 0.0), progress.first())
+        assertEquals(CollectionProgress(0, 3, 0, 0, 0.0, fake.files.sumOf { it.bytes.size }.toLong()), progress.first())
         assertEquals(3, progress.last().filesDone)
         assertEquals(fake.files.sumOf { it.bytes.size }.toLong(), progress.last().receivedBytes)
+        assertEquals(progress.last().receivedBytes, progress.last().bytesTotal)
         assertTrue(progress.zipWithNext().all { (a, b) -> b.receivedBytes >= a.receivedBytes }, "received bytes never go back")
     }
 
@@ -61,6 +62,22 @@ class ArchiveCollectorTest {
         assertTrue(summary.complete)
         assertEquals(reads, fake.readCount)
         assertEquals(CollectionProgress(3, 3, 0, 0, 0.0), progress.single())
+    }
+
+    @Test
+    fun selectedFileSyncOnlyReadsThatFile() = runTest {
+        val fake = FakeArchiveDevice(backgroundScope)
+        val chosen = fake.files[1]
+        val progress = ArrayList<CollectionProgress>()
+
+        val summary = collector().collect(DeviceSession(fake), fake.station, fake.address, fake.maxRead, chosen.name) {
+            progress += it
+        }
+
+        assertEquals(CollectionSummary(1, emptyList()), summary)
+        assertContentEquals(chosen.bytes, finalBytes(fake.station, chosen.name))
+        assertEquals(1, index.records.size)
+        assertEquals(chosen.bytes.size.toLong(), progress.last().bytesTotal)
     }
 
     @Test

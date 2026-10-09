@@ -165,7 +165,7 @@ class FilesControllerTest {
         val p = Presenter(closesNow = false)
         f.controller.shareAll(p)
         advanceUntilIdle()
-        assertEquals(3, p.shared.single().first.size)
+        assertEquals(2, p.shared.single().first.size)
         assertFalse(f.space.runs.single().deleted)
         f.controller.shareAll(p)
         advanceUntilIdle()
@@ -251,6 +251,31 @@ class FilesControllerTest {
         assertNull(f.controller.archived(nameA))
         assertEquals(3, f.controller.state.value.shown.size)
         assertFalse(f.controller.state.value.dailyAvailable)
+    }
+
+    @Test
+    fun sensorExportsAndCountsStayWithinItsStationButPhoneArchiveIncludesAll() = runTest {
+        val f = fixture(owner = "t")
+        advanceUntilIdle()
+        assertEquals(1, f.controller.state.value.shown.size)
+        assertEquals(bytesB.size.toLong(), f.controller.state.value.archivedBytes)
+        val sensorPresenter = Presenter()
+        f.controller.shareAll(sensorPresenter)
+        advanceUntilIdle()
+        assertEquals(1, sensorPresenter.shared.single().first.size)
+        assertEquals(1, f.space.runs.last().files.size)
+        val zipPresenter = Presenter()
+        f.controller.shareZip(zipPresenter)
+        advanceUntilIdle()
+        assertEquals(1, zipPresenter.shared.single().first.size)
+        // A separate phone-archive entry has no owner and still exports every station.
+        f.owner.value = null
+        advanceUntilIdle()
+        assertEquals(3, f.controller.state.value.shown.size)
+        val phonePresenter = Presenter()
+        f.controller.shareAll(phonePresenter)
+        advanceUntilIdle()
+        assertEquals(3, phonePresenter.shared.single().first.size)
     }
 
     @Test

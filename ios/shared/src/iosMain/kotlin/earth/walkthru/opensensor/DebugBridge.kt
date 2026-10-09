@@ -21,7 +21,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -60,10 +59,15 @@ internal class IosDebugSource(
         snapshotFlow { (state.connected && state.info?.dev?.equals(address, ignoreCase = true) == true) to lanName() },
         lastKind,
     ) { (ble, lan), kind ->
-        val mtu = kind?.second
+        val transport = when {
+            lan != null -> TransportKind.LAN
+            ble -> TransportKind.BLE
+            else -> null
+        }
+        val mtu = kind?.takeIf { it.first == transport }?.second
         DebugLink(
-            connection = if (ble || lan != null) ConnectionState.Ready(mtu ?: 0) else ConnectionState.Disconnected,
-            transport = if (lan != null) TransportKind.LAN else kind?.first ?: TransportKind.BLE,
+            connection = if (transport != null) ConnectionState.Ready(mtu ?: 0) else ConnectionState.Disconnected,
+            transport = transport,
             endpoint = address,
             payloadMax = mtu?.let { it - 3 },
         )
@@ -82,7 +86,7 @@ internal class IosDebugSource(
     override val config: Flow<DebugJson?> = configFlow
     override val frames: Flow<List<RawFrameRecord>> = recorder.records
     override val log: Flow<DebugLog> = logFlow
-    override val syncTrace: Flow<DebugSyncTrace?> = flowOf(null)
+    override val syncTrace: Flow<DebugSyncTrace?> = IosSyncDiagnostics.forDevice(address)
     override val configOnRequest: Boolean = true
 
     override fun rawBlock(): DebugBlock? = null

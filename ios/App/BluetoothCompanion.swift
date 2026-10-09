@@ -25,7 +25,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     private var configLink: SensorLink?
     var onCredentialSaved: (() -> Void)?
     /// INFO named the sensor the user opened: peripheral id, advertised name, station and hardware id.
-    var onSensorOpened: ((String, String?, String, String) -> Void)?
+    var onSensorOpened: ((String, String?, String, String) -> SensorOpenResult)?
     /// A Collect all step ended: the sensor id and whether every listed file is on this phone.
     var onCollectFinished: ((String, Bool) -> Void)?
     /// Created when access is already allowed, or when the user asks for it from My devices.
@@ -54,6 +54,15 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     /// The shared engine's link while a Bluetooth sync runs. RESPONSE notifications go to it.
     private var link: SensorLink?
     private var syncHandle: SyncHandle?
+    private var interactiveFileName: String?
+    private var interactiveSyncId: String?
+    private var resumePeripheral: CBPeripheral?
+    private var resumeTimer: Timer?
+    private var resumeWaiting = false
+    private var resumeAttempts = 0
+    private var resumeStartedAt: Date?
+    private let maxForegroundResumeAttempts = 2
+    private let foregroundResumeWindow: TimeInterval = 75
     private var responseSubscribed = false
     /// The sensor an Auto-sync step is copying now (#23), and whether that step opened the link.
     private var backgroundId: String?
@@ -147,6 +156,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     /// open is refused instead.
     func open(id: String) {
         guard foreground else { return }
+        if resumeWaiting { clearInteractiveResume() }
         closeWhenIdle = nil
         if let current, current.identifier.uuidString == id { return }
         if current != nil, link != nil, collectId == nil { return }
@@ -167,7 +177,8 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     /// A link the user holds stays untouched. A link to another sensor, or a sync or Debug request
     /// on this one, fails the step. An idle link to this sensor is synced and left open.
     func collect(id: String) {
-        guard foreground, link == nil, collectId == nil, backgroundId == nil, let central, central.state == .poweredOn
+        guard foreground, !resumeWaiting, link == nil, collectId == nil, backgroundId == nil,
+            let central, central.state == .poweredOn
         else {
             onCollectFinished?(id, false)
             return
@@ -191,6 +202,16 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
             MainActor.assumeIsolated { self?.failCollect() }
         }
         collectWhenReady()
+    }
+
+    /// Give the next Collect all sensor the one BLE slot when the current link is idle.
+    /// An active sync, command, configuration request or token operation retains its owner.
+    func releaseIdleForCollect(next id: String) {
+        guard let current, current.identifier.uuidString.caseInsensitiveCompare(id) != .orderedSame,
+            !resumeWaiting, link == nil, collectId == nil, backgroundId == nil, pending == nil,
+            operations.isEmpty, !requestingToken
+        else { return }
+        disconnect()
     }
 
     private func collectWhenReady() {
@@ -227,7 +248,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         state.connectionStarted(id: id)
         connectionTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated {
-                self?.disconnect(notice: .connectTimedOut)
+                self?.unexpectedLoss(notice: .connectTimedOut)
             }
         }
         central.connect(peripheral)
@@ -235,8 +256,61 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
 
     /// Ends the connection for a typed reason. The shared state picks the words.
     func disconnect(notice: CompanionNotice = .disconnected) {
+        clearInteractiveResume()
         teardown()
         state.connectionClosedNoticed(notice: notice)
+    }
+
+    private func clearInteractiveResume() {
+        resumeTimer?.invalidate()
+        resumeTimer = nil
+        resumePeripheral = nil
+        resumeWaiting = false
+        resumeAttempts = 0
+        resumeStartedAt = nil
+        interactiveSyncId = nil
+        interactiveFileName = nil
+    }
+
+    /// Retry only a foreground, user-started transfer whose BLE pipe failed. The shared engine
+    /// re-lists files and resumes retained partials; no archive state is copied through Swift.
+    @discardableResult
+    private func scheduleInteractiveResume(notice: CompanionNotice, result: SyncResult? = nil) -> Bool {
+        guard foreground, collectId == nil, backgroundId == nil, let peripheral = current,
+            let id = interactiveSyncId, peripheral.identifier.uuidString.caseInsensitiveCompare(id) == .orderedSame,
+            let central, central.state == .poweredOn, resumeAttempts < maxForegroundResumeAttempts,
+            Date().timeIntervalSince(resumeStartedAt ?? Date()) < foregroundResumeWindow
+        else { return false }
+        if resumeStartedAt == nil { resumeStartedAt = Date() }
+        resumeAttempts += 1
+        resumeWaiting = true
+        resumePeripheral = peripheral
+        teardown()
+        if let result { state.bluetoothSyncClosed(result: result) }
+        else { state.connectionClosedNoticed(notice: notice) }
+        resumeTimer?.invalidate()
+        resumeTimer = Timer.scheduledTimer(withTimeInterval: TimeInterval(resumeAttempts), repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated { self?.reconnectInteractiveSync() }
+        }
+        return true
+    }
+
+    private func reconnectInteractiveSync() {
+        resumeTimer = nil
+        guard resumeWaiting, foreground, interactiveSyncId != nil,
+            let started = resumeStartedAt, Date().timeIntervalSince(started) < foregroundResumeWindow,
+            let peripheral = resumePeripheral, let central, central.state == .poweredOn,
+            collectId == nil, backgroundId == nil, current == nil
+        else {
+            clearInteractiveResume()
+            return
+        }
+        connect(peripheral)
+    }
+
+    private func unexpectedLoss(notice: CompanionNotice) {
+        if scheduleInteractiveResume(notice: notice) { return }
+        disconnect(notice: notice)
     }
 
     private func teardown() {
@@ -289,6 +363,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
 
     /// Closes the link to this sensor, if it is open. Forget calls it.
     func close(id: String) {
+        if interactiveSyncId?.caseInsensitiveCompare(id) == .orderedSame { clearInteractiveResume() }
         if openRequested == id { openRequested = nil }
         guard let current, current.identifier.uuidString.caseInsensitiveCompare(id) == .orderedSame else { return }
         disconnect()
@@ -296,15 +371,30 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
 
     /// Copies every file this phone lacks from the connected sensor through the shared engine.
     /// UTC is synchronized before LIST, OPEN, READ and CLOSE through the operation queue.
-    func sync() {
+    func sync(fileName: String? = nil) {
         // Today's Smart Sync and the Sync button say the link is busy instead of doing nothing.
-        if !startSync() { state.today.commandRefused() }
+        if startSync(onlyName: fileName) {
+            interactiveSyncId = current?.identifier.uuidString
+            interactiveFileName = fileName
+            resumeStartedAt = nil
+            resumeAttempts = 0
+        } else {
+            state.today.commandRefused()
+        }
+    }
+
+    func cancelInteractiveSync() {
+        guard collectId == nil, backgroundId == nil else { return }
+        let reconnecting = resumeWaiting
+        clearInteractiveResume()
+        syncHandle?.cancel()
+        if reconnecting, current != nil { disconnect() }
     }
 
     /// Starts the sync when the link is free. Collect all and Auto-sync steps call this from their
     /// idle waiters, so a refusal there stays quiet and the step waits for the next idle link.
     @discardableResult
-    private func startSync() -> Bool {
+    private func startSync(onlyName: String? = nil) -> Bool {
         guard active, clockAttempted, let peripheral = current, control != nil, let response, let identity, link == nil,
             pending == nil, operations.isEmpty, !requestingToken
         else { return false }
@@ -323,8 +413,9 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         backgroundTimer?.invalidate()
         backgroundTimer = nil
         state.bluetoothSyncStarted()
-        syncHandle = engine.start(
+        syncHandle = engine.startSelected(
             link: link, station: identity.station, device: identity.device, maxRead: identity.maxRead,
+            onlyName: onlyName,
             progress: { [weak self] update in
                 MainActor.assumeIsolated {
                     guard let self, self.link === link else { return }
@@ -386,6 +477,13 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
             command(.setTime, automatic: true)
             return
         }
+        if resumeWaiting, current?.identifier.uuidString.caseInsensitiveCompare(interactiveSyncId ?? "") == .orderedSame,
+            startSync(onlyName: interactiveFileName)
+        {
+            resumeWaiting = false
+            resumePeripheral = nil
+            return
+        }
         state.today.linkIdle()
         collectWhenReady()
         backgroundWhenReady()
@@ -403,6 +501,8 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
 
     private func syncEnded(_ result: SyncResult, link: SensorLink) {
         guard self.link === link else { return }
+        if result.resumable, scheduleInteractiveResume(notice: .syncAborted, result: result) { return }
+        clearInteractiveResume()
         self.link = nil
         syncHandle = nil
         let collected = collectId
@@ -431,6 +531,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     /// keeps its link and closes it when it ends.
     func suspend() {
         foreground = false
+        if resumeWaiting { clearInteractiveResume() }
         scanRequested = false
         stopScan()
         openRequested = nil
@@ -456,6 +557,11 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     /// keeps it. A command's last write still queued, or a Device settings request still out, delays
     /// the close until the link settles.
     func closeIdle(id: String) {
+        if resumeWaiting, interactiveSyncId?.caseInsensitiveCompare(id) == .orderedSame {
+            clearInteractiveResume()
+            if current != nil { disconnect() }
+            return
+        }
         guard let current, current.identifier.uuidString.caseInsensitiveCompare(id) == .orderedSame,
             link == nil || link === configLink, collectId == nil, backgroundId == nil, !requestingToken
         else { return }
@@ -468,6 +574,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
 
     /// True while the user's work holds the link to this sensor. An idle open link is not held.
     func isBusy(id: String) -> Bool {
+        if resumeWaiting, interactiveSyncId?.caseInsensitiveCompare(id) == .orderedSame { return true }
         guard let current, current.identifier.uuidString.caseInsensitiveCompare(id) == .orderedSame else {
             return false
         }
@@ -555,13 +662,13 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
         if current !== peripheral { waiting[peripheral.identifier.uuidString] = nil }
         guard current === peripheral else { return }
-        disconnect(notice: .connectFailed)
+        unexpectedLoss(notice: .connectFailed)
     }
 
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         if current !== peripheral { waiting[peripheral.identifier.uuidString] = nil }
         guard current === peripheral else { return }
-        disconnect(notice: .sensorDisconnected)
+        unexpectedLoss(notice: .sensorDisconnected)
     }
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
@@ -704,19 +811,28 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         }
         switch characteristic.uuid {
         case CBUUID(string: state.infoUuid):
+            guard let observed = wire.identity(json: json) else {
+                disconnect(notice: .infoInvalid)
+                return
+            }
+            let id = peripheral.identifier.uuidString
+            guard let result = onSensorOpened?(id, advertisedNames[id] ?? peripheral.name, observed.station, observed.device) else {
+                disconnect(notice: .infoInvalid)
+                return
+            }
+            guard result.accepted else {
+                disconnect(notice: result.notice ?? .infoInvalid)
+                return
+            }
             guard state.receiveInfo(json: json) else {
                 disconnect(notice: .infoInvalid)
                 return
             }
-            identity = wire.identity(json: json)
+            identity = observed
             state.wifiAccessNoticed(
                 available: identity != nil && control != nil && response != nil, busy: false,
                 notice: .saveWifiAccess)
             state.bluetoothSyncAvailable(available: identity != nil && control != nil && response != nil)
-            if let identity {
-                let id = peripheral.identifier.uuidString
-                onSensorOpened?(id, advertisedNames[id] ?? peripheral.name, identity.station, identity.device)
-            }
         case CBUUID(string: state.liveUuid):
             state.receiveLive(json: json)
             freshnessTimer?.invalidate()
@@ -813,7 +929,7 @@ extension BluetoothCompanion {
     /// One step of the shared background run. Adopts an idle link to this sensor, or a pending connect
     /// that completed, or opens the saved peripheral. Answers once, with no ids or secrets in the result.
     func backgroundSync(id: String, done: @escaping (BackgroundStepResult) -> Void) {
-        guard backgroundDone == nil, backgroundRequested == nil, collectId == nil else {
+        guard backgroundDone == nil, backgroundRequested == nil, collectId == nil, !resumeWaiting else {
             done(BackgroundStepResult.skipped("busy"))
             return
         }

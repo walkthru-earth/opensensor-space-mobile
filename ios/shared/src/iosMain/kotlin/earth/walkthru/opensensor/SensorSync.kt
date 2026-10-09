@@ -79,7 +79,20 @@ class SensorSync internal constructor(
         maxRead: Int,
         progress: (SyncProgress) -> Unit,
         finished: (SyncResult) -> Unit,
+    ): SyncHandle = startSelected(link, station, device, maxRead, null, progress, finished)
+
+    /** One exact listed file for Files retry, with the same verification and station writer lock. */
+    @OptIn(DelicateCoroutinesApi::class)
+    fun startSelected(
+        link: SensorLink,
+        station: String,
+        device: String,
+        maxRead: Int,
+        onlyName: String?,
+        progress: (SyncProgress) -> Unit,
+        finished: (SyncResult) -> Unit,
     ): SyncHandle {
+        IosSyncDiagnostics.record(device, "sync", "${link.transport.kind.name.lowercase()} ${if (onlyName == null) "all files" else "one file"}")
         if (!claim(station)) {
             scope.launch(callbacks) { finished(SyncResult(SyncEnd.IN_USE, 0, 0, 0)) }
             return SyncHandle(null)
@@ -105,7 +118,7 @@ class SensorSync internal constructor(
                         syncLog("automatic UTC unavailable, ${e::class.simpleName}; collecting original files")
                     }
                 }
-                val summary = collector.collect(session, station, device, maxRead) { p: CollectionProgress ->
+                val summary = collector.collect(session, station, device, maxRead, onlyName) { p: CollectionProgress ->
                     listed = p.filesTotal
                     if (initial < 0) initial = p.filesDone
                     done = p.filesDone
@@ -114,7 +127,7 @@ class SensorSync internal constructor(
                     if (due || p.filesDone != lastDone) {
                         last = now
                         lastDone = p.filesDone
-                        val update = SyncProgress(p.filesDone, p.filesTotal, p.fileBytes, p.receivedBytes, p.bytesPerSecond)
+                        val update = SyncProgress(p.filesDone, p.filesTotal, p.fileBytes, p.receivedBytes, p.bytesPerSecond, p.bytesTotal)
                         scope.launch(callbacks) { progress(update) }
                     }
                 }
@@ -134,6 +147,7 @@ class SensorSync internal constructor(
             }
             withContext(NonCancellable + callbacks) {
                 release(station)
+                IosSyncDiagnostics.record(device, "result", "${result.end.name.lowercase()} · ${result.saved}/${result.files} saved")
                 finished(result)
             }
         }
@@ -199,7 +213,7 @@ class SensorSync internal constructor(
         }
         // Files planned away (unsafe names, local conflicts) are counted as not saved and not attempted.
         val saved = (attempted - summary.notSaved.count { it.problem.attempted }).coerceAtLeast(0)
-        return SyncResult(end, summary.files, saved, failed)
+        return SyncResult(end, summary.files, saved, failed, summary.notSaved)
     }
 
     private fun claim(station: String): Boolean {

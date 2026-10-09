@@ -178,6 +178,7 @@ internal fun AppRoot(
     openDebugLink: (String) -> SensorLink?,
     closeIdle: (String) -> Unit,
     configLinks: DeviceConfigLinks,
+    filesActions: DeviceFilesActions,
     devicePage: DevicePageContent,
 ) {
     val scope = rememberCoroutineScope()
@@ -224,8 +225,8 @@ internal fun AppRoot(
                         LeasePeripheral(leases, key.address)
                         TodayEntry(key.address, today, devices, settingsRepository, units) { action ->
                             when (action) {
-                                TodayAction.OpenHistory -> nav.push(HistoryKey(PHONE_ARCHIVE))
-                                TodayAction.OpenFiles -> nav.push(FilesKey(PHONE_ARCHIVE))
+                                TodayAction.OpenHistory -> nav.openSection(HistoryKey(key.address))
+                                TodayAction.OpenFiles -> nav.openSection(FilesKey(key.address))
                                 TodayAction.OpenDevice -> nav.push(DeviceKey(key.address))
                                 // Debug borrows the authenticated link for this sensor, whether Wi-Fi or Bluetooth.
                                 TodayAction.OpenDebug -> {
@@ -251,11 +252,14 @@ internal fun AppRoot(
                     LeasePeripheral(leases, key.address)
                     DeviceSettingsEntry(key.address, devices, configLinks, onBack = { nav.popIfTop { it == key } })
                 }
-                entry<HistoryKey> {
-                    HistoryEntry(units = units, level = level, onBack = { nav.pop() })
+                entry<HistoryKey> { key ->
+                    HistoryEntry(address = key.address, devices = devices, units = units, level = level, onBack = { nav.pop() })
                 }
-                entry<FilesKey> {
+                entry<FilesKey> { key ->
                     FilesEntry(
+                        address = key.address,
+                        devices = devices,
+                        actions = filesActions,
                         level = level,
                         onBack = { nav.pop() },
                         onOpenFileMetrics = { station, name -> nav.push(FileMetricsKey(station, name)) },
@@ -396,30 +400,34 @@ private fun DiscoverEntry(networkAllowed: Boolean, units: UnitSystem, onAddSenso
 }
 
 /**
- * Holds the History controller for the History entry. iOS History reads the whole phone archive, the
- * same index the sync runner writes ([IosArchive]). Its station chips are the archived stations,
- * oldest latest reading first, and it opens on the one with the latest reading.
+ * History reads the same offline index the sync runner writes. A sensor entry offers only that
+ * sensor's station generations; the My devices shortcut offers the whole phone archive.
  */
-private class HistoryHolder : ViewModel() {
-    private val stations = IosArchive.index.observeAll().map(::archiveStations)
+private class HistoryHolder(address: String, devices: DevicesBridge) : ViewModel() {
+    private val wholePhone = address == PHONE_ARCHIVE
+    private val stations = if (wholePhone) {
+        IosArchive.index.observeAll().map(::archiveStations)
+    } else {
+        devices.known.map { devices.stationsFor(address).asReversed() }
+    }
     val controller = HistoryController(
         scope = viewModelScope,
         reader = IosArchive.reader,
         tiers = IosArchive.tiers,
         index = IosArchive.index,
-        currentStation = stations.map { it.lastOrNull() },
+        currentStation = if (wholePhone) stations.map { it.lastOrNull() } else devices.known.map { devices.stationFor(address) },
         stations = stations,
     )
 }
 
-/** The History key of iOS. History reads the phone archive, not one device, so the address is a fixed name. */
+/** A separate key for the whole phone archive, reached from My devices. */
 private const val PHONE_ARCHIVE = "archive"
 
-/** History of the phone archive, offline. Index repair runs from launch ([sharedSensorSync]) and is started here too. */
+/** Offline History. Index repair runs from launch ([sharedSensorSync]) and is started here too. */
 @Composable
-private fun HistoryEntry(units: UnitSystem, level: DetailLevel, onBack: () -> Unit) {
+private fun HistoryEntry(address: String, devices: DevicesBridge, units: UnitSystem, level: DetailLevel, onBack: () -> Unit) {
     remember { IosArchive.startIndexRepair() }
-    val controller = viewModel { HistoryHolder() }.controller
+    val controller = viewModel(key = "history-$address") { HistoryHolder(address, devices) }.controller
     HistoryScreen(
         controller = controller,
         units = remember(units) { UnitFormatter(units) },
@@ -429,19 +437,20 @@ private fun HistoryEntry(units: UnitSystem, level: DetailLevel, onBack: () -> Un
 }
 
 /**
- * Holds the Files controller for the Files entry. iOS Files lists the whole phone archive, with no
- * owner, so per-file actions come from archive rows only. Exports stage into a fresh run under the
- * temporary directory, removed once the sheet closes (B7). The derived cache is not exported here.
+ * Sensor Files has a station owner and device manifest; the My devices shortcut has no owner and
+ * shows the whole phone archive. Exports stage into a temporary run removed after the sheet closes.
  */
-private class FilesHolder : ViewModel() {
+private class FilesHolder(address: String, devices: DevicesBridge, actions: DeviceFilesActions) : ViewModel() {
     val controller = FilesController(
         scope = viewModelScope,
         store = IosArchive.store,
         index = IosArchive.index,
         space = IosExportSpace.inTemporaryDirectory(),
-        owner = flowOf(null),
+        // A forgotten sensor must never fall through to the whole-phone archive.
+        owner = if (address == PHONE_ARCHIVE) flowOf(null) else devices.known.map { devices.stationFor(address) ?: "" },
         daily = null,
     )
+    val sensor = if (address == PHONE_ARCHIVE) null else IosDeviceFiles(address, devices, actions, viewModelScope)
 }
 
 /** Holds the inspector of one archived file for its entry. */
@@ -449,11 +458,26 @@ private class FileMetricsHolder : ViewModel() {
     val controller = FileMetricsController(viewModelScope, IosArchive.store)
 }
 
-/** Files of the phone archive, offline: the list, the inspector and every export. */
+/** Files of one sensor or the whole phone archive, with the shared inspector and export actions. */
 @Composable
-private fun FilesEntry(level: DetailLevel, onBack: () -> Unit, onOpenFileMetrics: (String, String) -> Unit) {
-    val controller = viewModel { FilesHolder() }.controller
-    FilesScreen(controller = controller, level = level, onOpenFileMetrics = onOpenFileMetrics, onBack = onBack)
+private fun FilesEntry(
+    address: String,
+    devices: DevicesBridge,
+    actions: DeviceFilesActions,
+    level: DetailLevel,
+    onBack: () -> Unit,
+    onOpenFileMetrics: (String, String) -> Unit,
+) {
+    val holder = viewModel(key = "files-$address") { FilesHolder(address, devices, actions) }
+    val device by holder.sensor?.state?.collectAsState() ?: remember { mutableStateOf(null) }
+    FilesScreen(
+        controller = holder.controller,
+        level = level,
+        onOpenFileMetrics = onOpenFileMetrics,
+        onBack = onBack,
+        device = device,
+        onDeviceAction = { holder.sensor?.onAction(it) },
+    )
 }
 
 /** The inspector of one archived file. It only reads the file. */
@@ -482,8 +506,8 @@ private fun DevicePage(
         val openSettings: (() -> Unit)? = if (IosKnown.isPeripheral(address)) ({ nav.push(DeviceSettingsKey(address)) }) else null
         devicePage(address, units, level, openDebug, openSettings) { nav.pop() }
         ArchiveShortcuts(
-            onFiles = { nav.push(FilesKey(PHONE_ARCHIVE)) },
-            onHistory = { nav.push(HistoryKey(PHONE_ARCHIVE)) },
+            onFiles = { nav.openSection(FilesKey(address)) },
+            onHistory = { nav.openSection(HistoryKey(address)) },
             modifier = Modifier.align(Alignment.TopEnd),
         )
     }

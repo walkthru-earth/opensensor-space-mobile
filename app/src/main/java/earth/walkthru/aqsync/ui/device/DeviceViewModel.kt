@@ -137,6 +137,9 @@ class DeviceViewModel @AssistedInject constructor(
 ) : ViewModel() {
     private val repository = manager.controller(deviceAddress)
     private val enrolledDevice = knownDeviceDao.observeAll().map { devices -> devices.firstOrNull { it.address == deviceAddress } }
+    val lanReconnectAvailable: StateFlow<Boolean> = combine(enrolledDevice, repository.lanDevices) { known, discovered ->
+        hasLanReconnectTarget(known, discovered)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
     private val fakeEndpoint = deviceAddress == FakeTransport.FAKE_ADDRESS || deviceAddress == FakeTransport.FAKE_LAN_ADDRESS
 
     val sensorInstallation: StateFlow<SensorInstallation?> = sensorInstallationDao.observeCurrent(deviceAddress)
@@ -385,5 +388,10 @@ class DeviceViewModel @AssistedInject constructor(
     fun reconnect() {
         val s = uiState.value
         repository.connect(deviceAddress, s.name, fake = fakeEndpoint)
+    }
+
+    fun reconnectLanOnly() {
+        val s = uiState.value
+        repository.connect(deviceAddress, s.name, preference = TransportPreference.LAN_ONLY)
     }
 }

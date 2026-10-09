@@ -50,6 +50,8 @@ data class CollectionProgress(
     val fileBytes: Long,
     val receivedBytes: Long,
     val bytesPerSecond: Double,
+    /** Bytes still needed when LIST planned this run, after any reusable partials. */
+    val bytesTotal: Long = 0,
 )
 
 /** Every listed file was saved, already on this phone, or is in [notSaved]. */
@@ -77,11 +79,16 @@ class ArchiveCollector(
         station: String,
         sourceDevice: String,
         maxRead: Int,
+        onlyName: String? = null,
         onProgress: (CollectionProgress) -> Unit,
     ): CollectionSummary {
         val (files, _) = session.list()
+        val scopedFiles = if (onlyName == null) files else files.filter { it.name == onlyName }
+        if (onlyName != null && scopedFiles.isEmpty()) {
+            return CollectionSummary(1, listOf(FileNotSaved(onlyName, FileProblem.REFUSED)))
+        }
         val archived = index.observeStation(station).first().map { ArchivedIdentity(it.station, it.name, it.bytes, it.crc32) }
-        val plan = SyncPlanner.plan(station, files, archived, store.partialLengths(station))
+        val plan = SyncPlanner.plan(station, scopedFiles, archived, store.partialLengths(station))
         val notSaved = plan.entries.mapNotNullTo(ArrayList()) { entry ->
             when (entry.state) {
                 FileSyncState.INVALID_NAME -> FileNotSaved(entry.name, FileProblem.INVALID_ENTRY)
@@ -90,21 +97,22 @@ class ArchiveCollector(
             }
         }
         val total = plan.entries.size
+        val bytesTotal = plan.missingBytes
         var done = total - plan.toDownload.size
         var received = 0L
         var fileBytes = 0L
         val meter = RateMeter(time)
-        onProgress(CollectionProgress(done, total, 0, 0, 0.0))
+        onProgress(CollectionProgress(done, total, 0, 0, 0.0, bytesTotal))
         for (entry in plan.toDownload) {
             val before = received
             val outcome = engine.download(session, station, sourceDevice, entry.name, entry.bytes, maxRead) { p ->
                 received = before + (p.bytesDone - p.resumedFrom).coerceAtLeast(0)
                 fileBytes = p.bytesDone
-                onProgress(CollectionProgress(done, total, fileBytes, received, meter.update(received)))
+                onProgress(CollectionProgress(done, total, fileBytes, received, meter.update(received), bytesTotal))
             }
             FileProblem.of(outcome)?.let { notSaved += FileNotSaved(entry.name, it) }
             done++
-            onProgress(CollectionProgress(done, total, fileBytes, received, meter.update(received)))
+            onProgress(CollectionProgress(done, total, fileBytes, received, meter.update(received), bytesTotal))
         }
         return CollectionSummary(total, notSaved)
     }

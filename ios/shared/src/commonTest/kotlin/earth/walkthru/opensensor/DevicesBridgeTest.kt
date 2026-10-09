@@ -54,6 +54,10 @@ class DevicesBridgeTest {
         assertTrue(merged[1].hasWifiAccess)
         assertNull(merged[1].name)
         assertFalse(IosKnown.merge(records, emptyList()).single().hasWifiAccess)
+        assertFalse(
+            IosKnown.merge(records, listOf(KnownRecord(a, null, "older-station", "aabbccddeeff", null))).single().hasWifiAccess,
+            "a token for an earlier station cannot grant current Wi-Fi access",
+        )
     }
 
     @Test fun codecRoundTripsAndDropsDamagedLines() {
@@ -68,6 +72,47 @@ class DevicesBridgeTest {
         assertNull(back[1].name)
         assertNull(back[1].lastSeenMs)
         assertEquals(emptyList(), IosKnown.decode(null))
+        assertEquals(emptyList(), IosKnown.decode("$a\tKitchen\tst-a\taabbccddeeff\t10").single().olderStations, "old saved records still load")
+    }
+
+    @Test fun changedHardwareCannotReplaceSavedIdentityOrItsArchiveStation() {
+        val storage = MemoryStorage()
+        val bridge = bridge(storage = storage)
+        assertTrue(bridge.sensorOpened(a, "Kitchen", "st-a", "aabbccddeeff").accepted)
+        val saved = storage.text
+        val rejected = bridge.sensorOpened(a, "Other", "st-other", "112233445566")
+        assertFalse(rejected.accepted)
+        assertEquals(CompanionNotice.HARDWARE_CHANGED, rejected.notice)
+        assertNull(rejected.credentialToRemove)
+        assertEquals(saved, storage.text)
+        assertEquals(listOf("st-a"), bridge.stationsFor(a))
+        assertEquals("aabbccddeeff", bridge.deviceFor(a))
+    }
+
+    @Test fun sameHardwareNewStationPreservesOldEpochAndInvalidatesToken() {
+        val storage = MemoryStorage()
+        val bridge = bridge(storage = storage)
+        bridge.sensorOpened(a, "Kitchen", "st-a", "aabbccddeeff")
+        bridge.credentialsChanged(listOf(a), listOf("st-a"), listOf("aabbccddeeff"))
+        val changed = bridge.sensorOpened(a, "Kitchen", "st-b", "AABBCCDDEEFF")
+        assertTrue(changed.accepted)
+        assertEquals("aabbccddeeff", changed.credentialToRemove)
+        assertEquals(listOf("st-b", "st-a"), bridge.stationsFor(a))
+        assertEquals(listOf("st-b", "st-a"), bridge(storage = storage).stationsFor(a), "epochs survive app restart")
+        bridge.credentialsChanged(emptyList(), emptyList(), emptyList())
+        assertFalse(bridge.knownNow().single().hasWifiAccess)
+        bridge.sensorOpened(a, "Kitchen", "st-c", "aabbccddeeff")
+        assertEquals(listOf("st-c", "st-b", "st-a"), bridge.stationsFor(a))
+    }
+
+    @Test fun keychainOnlyEnrollmentAlsoPinsHardwareAndStation() {
+        val bridge = bridge()
+        bridge.credentialsChanged(listOf(a), listOf("st-a"), listOf("aabbccddeeff"))
+        assertFalse(bridge.sensorOpened(a, "Other", "st-b", "112233445566").accepted)
+        val accepted = bridge.sensorOpened(a, "Kitchen", "st-b", "aabbccddeeff")
+        assertTrue(accepted.accepted)
+        assertEquals("aabbccddeeff", accepted.credentialToRemove)
+        assertEquals(listOf("st-b", "st-a"), bridge.stationsFor(a))
     }
 
     @Test fun glanceCountsFilesPerStation() {

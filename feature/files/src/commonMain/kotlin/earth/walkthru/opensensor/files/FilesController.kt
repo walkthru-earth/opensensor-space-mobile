@@ -57,7 +57,7 @@ data class FilesState(
     /** Daily files can be exported on this platform (Android derives them, iOS not yet). */
     val dailyAvailable: Boolean = false,
 ) {
-    val archivedBytes: Long get() = records.sumOf { it.bytes }
+    val archivedBytes: Long get() = shown.sumOf { it.bytes }
 
     /** The records the list shows without a device listing, the owner's when known, else all. */
     val shown: List<ArchiveRecord> get() = owner?.let { o -> records.filter { it.station == o } } ?: records
@@ -104,7 +104,7 @@ class FilesController(
     }
 
     fun shareAll(presenter: ExportPresenter) = run(presenter) {
-        val records = state.value.records
+        val records = state.value.shown
         if (records.isEmpty()) return@run null
         present(it, stage { ArchiveExport.stageCopies(space, ArchiveExport.recordEntries(store, records)) }, ShareKind.FILES)
     }
@@ -133,7 +133,7 @@ class FilesController(
     private suspend fun <T> stage(block: suspend () -> T): T = withContext(io) { block() }
 
     private suspend fun archiveZip(): StagedFile? = withContext(io) {
-        val entries = ArchiveExport.archiveEntries(store, state.value.records, now())
+        val entries = ArchiveExport.archiveEntries(store, state.value.shown, now())
         if (entries.isEmpty()) null else ArchiveExport.stageZip(space, entries, ArchiveExport.archiveZipName(now()))
     }
 

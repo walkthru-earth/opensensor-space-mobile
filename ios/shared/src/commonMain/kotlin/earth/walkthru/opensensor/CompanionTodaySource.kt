@@ -197,6 +197,8 @@ internal class CompanionTodaySource(
         val lan = state.connectedLanForStation(stationFor(address))
         val status = if (lan != null) state.lanStatus[lan] else state.status.takeIf { state.selectedId == address }
         val decision = SmartSyncPolicy.decide(status, ClockSyncMode.AUTOMATIC)
+        val device = if (lan != null) state.lanInfo[lan]?.dev else state.info?.dev
+        IosSyncDiagnostics.record(device, "clock", "${decision.action.name.lowercase()} (${mode.name.lowercase()})")
         when (decision.action) {
             ClockSyncAction.CONTINUE -> actions.syncFiles(address)
             ClockSyncAction.SET_TIME, ClockSyncAction.ASK_USER -> clockThenSync()
@@ -234,9 +236,9 @@ internal class CompanionTodaySource(
         filesDone = session?.filesDone ?: 0,
         filesTotal = session?.filesTotal ?: 0,
         bytesDone = session?.bytesDone ?: 0,
-        bytesTotal = 0,
+        bytesTotal = session?.bytesTotal ?: 0,
         bytesPerSecond = session?.bytesPerSecond ?: 0.0,
-        outcomes = List(lanFailureCount(run)) { FileOutcome.Failed(name = "", message = "") },
+        outcomes = fileFailures(run?.result, lanFailureCount(run)),
         startedAtEpochMs = run?.startedAtEpochMs,
         finishedAtEpochMs = run?.finishedAtEpochMs,
     )
@@ -256,12 +258,16 @@ internal class CompanionTodaySource(
             filesDone = progress?.filesDone ?: 0,
             filesTotal = progress?.filesTotal ?: 0,
             bytesDone = progress?.receivedBytes ?: 0,
-            // The iOS runner does not report a byte total, so the card's bar runs without one.
-            bytesTotal = 0,
+            bytesTotal = progress?.bytesTotal ?: 0,
             bytesPerSecond = progress?.bytesPerSecond ?: 0.0,
-            outcomes = List(notSaved) { FileOutcome.Failed(name = "", message = "") },
+            outcomes = fileFailures(seen.result, notSaved),
             startedAtEpochMs = s.startedAt,
             finishedAtEpochMs = s.finishedAt,
         )
+    }
+
+    private fun fileFailures(result: SyncResult?, count: Int): List<FileOutcome> {
+        val known = result?.failures.orEmpty().map { FileOutcome.Failed(name = it.name, message = it.problem.name) }
+        return known + List((count - known.size).coerceAtLeast(0)) { FileOutcome.Failed(name = "", message = "") }
     }
 }

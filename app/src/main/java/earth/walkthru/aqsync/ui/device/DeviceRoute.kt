@@ -79,9 +79,10 @@ fun DeviceRoute(
     // The worker's progress and summary notifications need POST_NOTIFICATIONS on API 33+. Ask once
     // when Auto-sync is switched on (same helper as the first Sync tap). A denial still enables it.
     val notificationPermission = rememberNotificationPermission()
-    // Bluetooth for Reconnect, local network for the Wi-Fi sync actions. Asked only from those taps.
+    // Reconnect uses an enrolled LAN target if Bluetooth is unavailable; Wi-Fi actions ask for LAN access.
     val bluetooth = rememberBluetoothAccess()
     val localNetwork = rememberLocalNetworkAccess()
+    val lanReconnectAvailable by viewModel.lanReconnectAvailable.collectAsStateWithLifecycle()
     AccessDialogs(bluetooth)
     AccessDialogs(localNetwork)
 
@@ -101,7 +102,13 @@ fun DeviceRoute(
                 DeviceAction.OpenDebug -> onOpenDebug()
                 DeviceAction.OpenSettings -> onOpenSettings()
                 DeviceAction.Disconnect -> { viewModel.disconnect(); onDisconnected() }
-                DeviceAction.Reconnect -> bluetooth.run { viewModel.reconnect() }
+                DeviceAction.Reconnect -> {
+                    if (canReconnectLanOnly(bluetooth.ready, localNetwork.ready, lanReconnectAvailable)) {
+                        viewModel.reconnectLanOnly()
+                    } else {
+                        bluetooth.run { viewModel.reconnect() }
+                    }
+                }
                 DeviceAction.RefreshConfig -> controller.refresh()
                 is DeviceAction.SetAutoSync -> notificationPermission.ensureThen { viewModel.setAutoSync(action.on) }
                 DeviceAction.SetupCompanion -> notificationPermission.ensureThen { viewModel.setupCompanion() }

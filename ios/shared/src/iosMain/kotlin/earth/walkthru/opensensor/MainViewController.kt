@@ -48,6 +48,8 @@ fun mainViewController(
     openDebugLink: (String) -> SensorLink?,
     command: (String, SensorCommand) -> Unit,
     openConfigLink: (String) -> SensorLink?,
+    syncOneFile: (String, String) -> Unit,
+    cancelSync: (String) -> Unit,
     forgetWifiAccess: (String) -> Unit,
     scanSticker: ScanSticker?,
 ): UIViewController =
@@ -75,7 +77,10 @@ fun mainViewController(
                 scanSticker = scanSticker,
             )
         }
-        AppRoot(devices, today, requestBluetooth, userOpen, openLanOnly, openDebugLink, closeIdle, configLinks) { id, units, level, openDebug, openSettings, onBack ->
+        val filesActions = remember {
+            DeviceFilesActions(openConfigLink, syncBluetooth, syncOneFile, cancelSync)
+        }
+        AppRoot(devices, today, requestBluetooth, userOpen, openLanOnly, openDebugLink, closeIdle, configLinks, filesActions) { id, units, level, openDebug, openSettings, onBack ->
             val peripheral = IosKnown.isPeripheral(id)
             val records by devices.known.collectAsState()
             val known = peripheral && records.any { it.peripheral.equals(id, ignoreCase = true) }

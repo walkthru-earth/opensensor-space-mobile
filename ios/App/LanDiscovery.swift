@@ -22,9 +22,13 @@ final class LanDiscovery {
     private var collecting = Set<String>()
     private var pendingResume = Set<String>()
     private var cancelledCollections = Set<String>()
+    /// Foreground Smart Sync gets two new connections after a transient socket loss.
+    private var foregroundRetries: [String: Int] = [:]
+    private var selectedFiles: [String: String] = [:]
+    private var retryTimers: [String: Timer] = [:]
     private var isBackground = false
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
-    private var progressCounts: [String: (done: Int, total: Int, bytes: Int64)] = [:]
+    private var progressCounts: [String: (done: Int, total: Int, bytes: Int64, totalBytes: Int64)] = [:]
     private struct Device {
         let endpoint: NWEndpoint
         let station: String
@@ -270,7 +274,13 @@ final class LanDiscovery {
                 self.sessions[name] = nil
                 self.sessionDevices[name] = nil
                 self.claims.closeSession(name: name)
+                if self.pendingResume.contains(name), self.foregroundRetries[name] != nil,
+                    self.canResume(error), self.consumeForegroundRetry(name) {
+                    self.report(name, notice: .lanPaused)
+                    return
+                }
                 self.clearResume(name)
+                self.resetForegroundRetry(name)
                 if case LanFailure.authentication = error { self.removeCredential(device: device.device) }
                 self.report(name, notice: LanFailure.connectNotice(error))
                 let fallback = self.connectFailures.removeValue(forKey: name)
@@ -303,8 +313,9 @@ final class LanDiscovery {
         }
         claims.closeSession(name: name)
         state.lanReadingExpired(name: name)
-        if isBackground, collecting.contains(name), canResume(error) {
-            queueResume(name)
+        if collecting.contains(name), canResume(error) {
+            if isBackground { queueResume(name) }
+            else { queueForegroundResume(name) }
         }
         if pendingResume.contains(name) {
             report(name, notice: .lanPaused)
@@ -315,7 +326,7 @@ final class LanDiscovery {
         }
     }
 
-    func sync(name: String) {
+    func sync(name: String, onlyName: String? = nil) {
         guard tasks[name] == nil, !configPreparing.contains(name), let session = sessions[name] else { return }
         guard activeTransfers < 2 else {
             if pendingResume.contains(name) {
@@ -325,7 +336,12 @@ final class LanDiscovery {
             }
             return
         }
+        let resuming = pendingResume.contains(name)
         clearResume(name)
+        if !resuming, collectSteps[name] == nil, backgroundRuns[name] == nil {
+            foregroundRetries[name] = 2
+            selectedFiles[name] = onlyName
+        }
         cancelledCollections.remove(name)
         let attempt = UUID()
         attempts[name] = attempt
@@ -346,18 +362,22 @@ final class LanDiscovery {
                 if self.collecting.isEmpty { self.endBackgroundTime() }
                 for queued in Array(self.pendingResume) { self.resumePending(queued) }
             }
-            let result = await self.collect(name: name, session: session, attempt: attempt)
+            let result = await self.collect(name: name, session: session, attempt: attempt, onlyName: onlyName)
             if result == nil { self.state.lanSyncStopped(name: name) }
             if self.collectSteps[name] != nil { self.collectOutcome[name] = result?.end == .complete }
+            if result?.resumable == true, !self.isBackground { self.queueForegroundResume(name) }
             guard self.attempts[name] == attempt else { return }
             guard self.sessions[name] === session else {
                 // The socket's closed event may have cleared its slot before the shared engine
                 // returns LINK_LOST. Keep that result so Today never calls the run caught up.
-                if let result { self.state.lanSyncFinished(name: name, connected: false, result: result) }
+                if let result, !self.pendingResume.contains(name) {
+                    self.state.lanSyncFinished(name: name, connected: false, result: result)
+                }
                 return
             }
             if let result, result.keepsLink {
                 // Files that were not saved fail alone. The session stays open so a retry is one tap.
+                self.resetForegroundRetry(name)
                 self.state.lanSyncFinished(name: name, connected: true, result: result)
                 return
             }
@@ -373,8 +393,10 @@ final class LanDiscovery {
             if self.pendingResume.contains(name) {
                 self.report(name, notice: .lanPaused)
             } else if let result {
+                self.resetForegroundRetry(name)
                 self.state.lanSyncFinished(name: name, connected: false, result: result)
             } else {
+                self.resetForegroundRetry(name)
                 self.report(name, notice: LanFailure.disconnected.notice)
             }
         }
@@ -433,7 +455,7 @@ final class LanDiscovery {
     /// Runs the shared engine over this session. The engine reads and writes the archive off the
     /// main thread, and only throttled progress and the result reach the main actor.
     /// Nil when the session ended before the sync began.
-    private func collect(name: String, session: LanSession, attempt: UUID) async -> SyncResult? {
+    private func collect(name: String, session: LanSession, attempt: UUID, onlyName: String? = nil) async -> SyncResult? {
         guard let target = await session.target() else { return nil }
         let link = SensorLink(overWifi: true, address: target.device, mtu: target.mtu) { body in
             session.enqueue(body)
@@ -441,8 +463,9 @@ final class LanDiscovery {
         link.identify(station: target.station, boot: target.boot)
         guard await session.beginCollect(FrameSink(link)) else { return nil }
         let ended = await withCheckedContinuation { (continuation: CheckedContinuation<SyncEnded, Never>) in
-            handles[name] = engine.start(
+            handles[name] = engine.startSelected(
                 link: link, station: target.station, device: target.device, maxRead: target.maxRead,
+                onlyName: onlyName,
                 progress: { [weak self] update in
                     MainActor.assumeIsolated {
                         guard let self, self.attempts[name] == attempt, self.sessions[name] === session else { return }
@@ -452,7 +475,8 @@ final class LanDiscovery {
                         }
                         self.report(
                             name, connected: true, busy: true, notice: .lanSyncing, done: Int(update.filesDone),
-                            total: Int(update.filesTotal), bytes: update.fileBytes, rate: update.bytesPerSecond)
+                            total: Int(update.filesTotal), bytes: update.receivedBytes, rate: update.bytesPerSecond,
+                            bytesTotal: update.bytesTotal)
                     }
                 },
                 finished: { continuation.resume(returning: SyncEnded(result: $0)) })
@@ -507,7 +531,24 @@ final class LanDiscovery {
     func disconnect(name: String) {
         cancelledCollections.insert(name)
         clearResume(name)
+        resetForegroundRetry(name)
         close(name: name, notice: .lanDisconnected)
+    }
+
+    /// Stop only a user-started transfer. The result callback releases the engine's station claim.
+    func cancelInteractiveSync(device: String) {
+        let names = Set(collecting).union(pendingResume)
+        for name in names where (sessionDevices[name] ?? devices[name]?.device) == device.lowercased() &&
+            collectSteps[name] == nil && backgroundRuns[name] == nil {
+            cancelledCollections.insert(name)
+            clearResume(name)
+            resetForegroundRetry(name)
+            if collecting.contains(name), handles[name] != nil {
+                handles[name]?.cancel()
+            } else {
+                close(name: name, notice: .lanDisconnected)
+            }
+        }
     }
 
     private func close(name: String, notice: CompanionNotice) {
@@ -562,12 +603,15 @@ final class LanDiscovery {
     }
 
     private func resumePending(_ name: String) {
-        guard !isBackground, pendingResume.contains(name), tasks[name] == nil else { return }
+        guard !isBackground, pendingResume.contains(name), tasks[name] == nil, retryTimers[name] == nil else { return }
         if sessions[name] != nil {
-            sync(name: name)
+            sync(name: name, onlyName: selectedFiles[name])
         } else {
             // Bonjour service endpoints resolve again; credentials/HELLO still pin the hardware identity.
-            connect(name: name)
+            if !connect(name: name), foregroundRetries[name] != nil {
+                clearResume(name)
+                resetForegroundRetry(name)
+            }
         }
     }
 
@@ -606,6 +650,31 @@ final class LanDiscovery {
         pendingResume.remove(name)
         state.lanCollectionPaused(name: name, paused: false)
     }
+    private func resetForegroundRetry(_ name: String) {
+        foregroundRetries[name] = nil
+        selectedFiles[name] = nil
+        retryTimers.removeValue(forKey: name)?.invalidate()
+    }
+    private func queueForegroundResume(_ name: String) {
+        guard !cancelledCollections.contains(name), collectSteps[name] == nil, backgroundRuns[name] == nil else { return }
+        if pendingResume.contains(name) { return }
+        guard consumeForegroundRetry(name) else { return }
+        queueResume(name)
+    }
+    @discardableResult
+    private func consumeForegroundRetry(_ name: String) -> Bool {
+        guard !cancelledCollections.contains(name), let remaining = foregroundRetries[name], remaining > 0 else { return false }
+        foregroundRetries[name] = remaining - 1
+        retryTimers.removeValue(forKey: name)?.invalidate()
+        retryTimers[name] = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.retryTimers[name] = nil
+                self.resumePending(name)
+            }
+        }
+        return true
+    }
     private func canResume(_ error: Error) -> Bool {
         switch error {
         case LanFailure.disconnected, LanFailure.timeout: return true
@@ -622,14 +691,16 @@ final class LanDiscovery {
     /// Reports a typed notice. The shared state picks the words and keeps the counts not given here.
     private func report(
         _ name: String, connected: Bool = false, busy: Bool = false, notice: CompanionNotice, done: Int? = nil,
-        total: Int? = nil, bytes: Int64? = nil, rate: Double = 0
+        total: Int? = nil, bytes: Int64? = nil, rate: Double = 0, bytesTotal: Int64? = nil
     ) {
-        let previous = progressCounts[name] ?? (done: 0, total: 0, bytes: Int64(0))
-        let progress = (done: done ?? previous.done, total: total ?? previous.total, bytes: bytes ?? previous.bytes)
+        let previous = progressCounts[name] ?? (done: 0, total: 0, bytes: Int64(0), totalBytes: Int64(0))
+        let progress = (done: done ?? previous.done, total: total ?? previous.total, bytes: bytes ?? previous.bytes,
+                        totalBytes: bytesTotal ?? previous.totalBytes)
         progressCounts[name] = progress
         state.lanSessionNoticed(
             name: name, connected: connected, busy: busy, notice: notice, filesDone: Int32(progress.done),
-            filesTotal: Int32(progress.total), bytesDone: progress.bytes, bytesPerSecond: rate)
+            filesTotal: Int32(progress.total), bytesDone: progress.bytes, bytesPerSecond: rate,
+            bytesTotal: progress.totalBytes)
     }
     func stop() {
         timer?.invalidate()

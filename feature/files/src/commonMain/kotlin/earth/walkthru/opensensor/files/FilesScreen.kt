@@ -210,7 +210,7 @@ fun FilesScreen(
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 subtitleLead()
                                 Text(
-                                    stringResource(Res.string.files_in_archive, state.records.size, formatBytes(state.archivedBytes)),
+                                    stringResource(Res.string.files_in_archive, state.shown.size, formatBytes(state.archivedBytes)),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -231,7 +231,7 @@ fun FilesScreen(
                         IconButton(onClick = { menu = true }) { Icon(AppIcons.MoreVert, contentDescription = stringResource(Res.string.files_more)) }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                             val close = { menu = false }
-                            val hasFiles = state.records.isNotEmpty() && !state.exporting
+                            val hasFiles = state.shown.isNotEmpty() && !state.exporting
                             if (menuLead != null) {
                                 menuLead(close)
                                 HorizontalDivider()
@@ -249,7 +249,7 @@ fun FilesScreen(
                                 onClick = { close(); controller.saveZip(presenter) },
                             )
                             DropdownMenuItem(
-                                text = { Text(pluralStringResource(Res.plurals.files_share_all, state.records.size, state.records.size)) },
+                                text = { Text(pluralStringResource(Res.plurals.files_share_all, state.shown.size, state.shown.size)) },
                                 enabled = hasFiles,
                                 onClick = { close(); controller.shareAll(presenter) },
                             )

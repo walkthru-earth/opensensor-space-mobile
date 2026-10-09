@@ -14,6 +14,7 @@ import earth.walkthru.aqsync.data.ReconnectState
 import earth.walkthru.aqsync.data.SyncProgress
 import earth.walkthru.aqsync.data.TimedLive
 import earth.walkthru.aqsync.data.TimedStatus
+import earth.walkthru.aqsync.data.TransportPreference
 import earth.walkthru.aqsync.data.ble.BleConnectionFailure
 import earth.walkthru.aqsync.data.ble.ConfigSnapshot
 import earth.walkthru.aqsync.data.ble.ConnectionState
@@ -53,7 +54,7 @@ import kotlinx.coroutines.flow.stateIn
 @HiltViewModel(assistedFactory = TodayViewModel.Factory::class)
 class TodayViewModel @AssistedInject constructor(
     manager: DeviceConnectionManager,
-    @Assisted deviceAddress: String,
+    @Assisted private val deviceAddress: String,
     settings: AppSettings,
     history: HistoryRepository,
     knownDeviceDao: KnownDeviceDao,
@@ -68,11 +69,18 @@ class TodayViewModel @AssistedInject constructor(
     /** Info and errors stay Android's own snackbar lines. The clock question goes to the controller. */
     val events: SharedFlow<DeviceEvent> = repository.events
 
+    private val enrolled = knownDeviceDao.observeAll().map { devices -> devices.firstOrNull { it.address == deviceAddress } }
+
+    /** Only a saved token for this enrolled station and a current mDNS result permit LAN-only reconnect. */
+    val lanReconnectAvailable: StateFlow<Boolean> = combine(enrolled, repository.lanDevices) { known, discovered ->
+        hasLanReconnectTarget(known, discovered)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
     private val source = RepositoryTodaySource(
         scope = viewModelScope,
         repository = repository,
         address = deviceAddress,
-        enrolled = knownDeviceDao.observeAll().map { devices -> devices.firstOrNull { it.address == deviceAddress } },
+        enrolled = enrolled,
         todaySoFar = todaySoFar(repository.info.map { it?.station }, history::observeHourlyDay),
     )
 
@@ -82,6 +90,8 @@ class TodayViewModel @AssistedInject constructor(
         detailLevel = settings.detailLevel,
         clockSyncMode = settings.clockSyncMode.map { it.toShared() },
     )
+
+    fun reconnectLanOnly() = repository.connect(deviceAddress, controller.state.value.snapshot.name, preference = TransportPreference.LAN_ONLY)
 }
 
 /** [DeviceConnectionRepository] as the shared Today port. Every verb is a call the old screen made. */

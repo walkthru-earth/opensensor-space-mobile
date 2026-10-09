@@ -166,13 +166,13 @@ class CompanionState {
     }
 
     /** Native sessions are independent: a callback updates only its own sensor card. */
-    internal fun lanSessionChanged(name: String, connected: Boolean, busy: Boolean, message: String, filesDone: Int, filesTotal: Int, bytesDone: Long, bytesPerSecond: Double = 0.0) {
-        lanSession(name, connected, busy, UiText.plain(message), filesDone, filesTotal, bytesDone, bytesPerSecond)
+    internal fun lanSessionChanged(name: String, connected: Boolean, busy: Boolean, message: String, filesDone: Int, filesTotal: Int, bytesDone: Long, bytesPerSecond: Double = 0.0, bytesTotal: Long = 0) {
+        lanSession(name, connected, busy, UiText.plain(message), filesDone, filesTotal, bytesDone, bytesPerSecond, bytesTotal)
     }
 
     /** Native sessions are independent: a callback updates only its own sensor card, worded by [notice]. */
-    fun lanSessionNoticed(name: String, connected: Boolean, busy: Boolean, notice: CompanionNotice, filesDone: Int, filesTotal: Int, bytesDone: Long, bytesPerSecond: Double) {
-        lanSession(name, connected, busy, notice.text, filesDone, filesTotal, bytesDone, bytesPerSecond)
+    fun lanSessionNoticed(name: String, connected: Boolean, busy: Boolean, notice: CompanionNotice, filesDone: Int, filesTotal: Int, bytesDone: Long, bytesPerSecond: Double, bytesTotal: Long = 0) {
+        lanSession(name, connected, busy, notice.text, filesDone, filesTotal, bytesDone, bytesPerSecond, bytesTotal)
     }
 
     /** A Wi-Fi sync ended. The card keeps its counts and shows the outcome. */
@@ -189,12 +189,12 @@ class CompanionState {
             )
             )
         val previous = lanSessions[name]
-        lanSession(name, connected, false, result.message, previous?.filesDone ?: 0, previous?.filesTotal ?: 0, previous?.bytesDone ?: 0, 0.0)
+        lanSession(name, connected, false, result.message, previous?.filesDone ?: 0, previous?.filesTotal ?: 0, previous?.bytesDone ?: 0, 0.0, previous?.bytesTotal ?: 0)
     }
 
-    private fun lanSession(name: String, connected: Boolean, busy: Boolean, message: UiText, filesDone: Int, filesTotal: Int, bytesDone: Long, bytesPerSecond: Double) {
+    private fun lanSession(name: String, connected: Boolean, busy: Boolean, message: UiText, filesDone: Int, filesTotal: Int, bytesDone: Long, bytesPerSecond: Double, bytesTotal: Long) {
         val rate = bytesPerSecond.takeIf { connected && busy && it.isFinite() && it > 0.0 } ?: 0.0
-        lanSessions = lanSessions + (name to LanSessionState(connected, busy, message, filesDone, filesTotal, bytesDone, rate))
+        lanSessions = lanSessions + (name to LanSessionState(connected, busy, message, filesDone, filesTotal, bytesDone, rate, bytesTotal))
         if (!connected) {
             lanReadings = lanReadings - name
             lanInfo = lanInfo - name
@@ -464,7 +464,7 @@ class CompanionState {
     }
 }
 
-internal data class LanSessionState(val connected: Boolean, val busy: Boolean, val message: UiText, val filesDone: Int, val filesTotal: Int, val bytesDone: Long, val bytesPerSecond: Double = 0.0)
+internal data class LanSessionState(val connected: Boolean, val busy: Boolean, val message: UiText, val filesDone: Int, val filesTotal: Int, val bytesDone: Long, val bytesPerSecond: Double = 0.0, val bytesTotal: Long = 0)
 
 internal data class LanRunState(
     val station: String?,

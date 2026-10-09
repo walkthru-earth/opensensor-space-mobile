@@ -2,6 +2,7 @@ package earth.walkthru.opensensor
 
 import androidx.compose.runtime.snapshotFlow
 import earth.walkthru.aqsync.archive.ArchiveRecord
+import earth.walkthru.aqsync.data.DeviceContinuityPolicy
 import earth.walkthru.opensensor.devices.ActiveLink
 import earth.walkthru.opensensor.devices.ArchiveGlance
 import earth.walkthru.opensensor.devices.CollectAllPlan
@@ -33,7 +34,11 @@ internal data class KnownRecord(
     val station: String,
     val device: String,
     val lastSeenMs: Long?,
+    val olderStations: List<String> = emptyList(),
 )
+
+/** Narrow result for the native BLE adapter. No secret material crosses this boundary. */
+class SensorOpenResult(val accepted: Boolean, val notice: CompanionNotice?, val credentialToRemove: String?)
 
 /** Where the bridge keeps its known records. UserDefaults on the phone, memory in tests. */
 internal interface KnownRecordStorage {
@@ -52,11 +57,11 @@ internal object IosKnown {
      * a credential is held for its hardware id.
      */
     fun merge(records: List<KnownRecord>, credentials: List<KnownRecord>): List<KnownSensor> {
-        val access = credentials.map { it.device.lowercase() }.toSet()
+        val access = credentials.map { it.device.lowercase() to it.station }.toSet()
         val byPeripheral = LinkedHashMap<String, KnownRecord>()
         for (c in credentials) byPeripheral[c.peripheral.uppercase()] = c
         for (r in records) byPeripheral[r.peripheral.uppercase()] = r
-        return byPeripheral.map { (id, r) -> KnownSensor(id, r.name, r.station, r.lastSeenMs, r.device.lowercase() in access) }
+        return byPeripheral.map { (id, r) -> KnownSensor(id, r.name, r.station, r.lastSeenMs, (r.device.lowercase() to r.station) in access) }
     }
 
     /** Adds or refreshes [record], newest first. */
@@ -76,17 +81,18 @@ internal object IosKnown {
             )
         }
 
-    /** One record per line, tab separated. A name loses tabs and line breaks. */
+    /** One record per line, tab separated. The sixth field records older station epochs. */
     fun encode(records: List<KnownRecord>): String = records.joinToString("\n") { r ->
-        listOf(r.peripheral, r.name?.replace(Regex("[\\t\\r\\n]"), " ").orEmpty(), r.station, r.device, r.lastSeenMs?.toString().orEmpty())
+        listOf(r.peripheral, r.name?.replace(Regex("[\\t\\r\\n]"), " ").orEmpty(), r.station, r.device, r.lastSeenMs?.toString().orEmpty(), r.olderStations.joinToString(","))
             .joinToString("\t")
     }
 
     /** Lines that do not parse are dropped, so a damaged entry costs one sensor, not the list. */
     fun decode(text: String?): List<KnownRecord> = text.orEmpty().lineSequence().mapNotNull { line ->
         val f = line.split('\t')
-        if (f.size != 5 || f[0].isBlank() || f[2].isBlank() || f[3].isBlank()) return@mapNotNull null
-        KnownRecord(f[0], f[1].ifBlank { null }, f[2], f[3], f[4].toLongOrNull())
+        if (f.size !in 5..6 || f[0].isBlank() || !SyncWire.isStationId(f[2]) || !Regex("[0-9a-fA-F]{12}").matches(f[3])) return@mapNotNull null
+        val older = f.getOrNull(5).orEmpty().split(',').filter { SyncWire.isStationId(it) && it != f[2] }.distinct()
+        KnownRecord(f[0], f[1].ifBlank { null }, f[2], f[3], f[4].toLongOrNull(), older)
     }.distinctBy { it.peripheral.uppercase() }.toList()
 
     /**
@@ -182,9 +188,32 @@ class DevicesBridge internal constructor(
     /** The hardware ids, lowercase, that hold Wi-Fi access in the Keychain. Never the token. */
     internal val wifiAccessDevices: Flow<Set<String>> get() = credentials.map { list -> list.mapTo(HashSet()) { it.device } }
 
-    /** Bluetooth read INFO from a sensor the user opened. It is known from now on. */
-    fun sensorOpened(peripheral: String, name: String?, station: String, device: String) {
-        save(IosKnown.remember(records.value, KnownRecord(peripheral, name?.takeIf { it.isNotBlank() }, station, device.lowercase(), now())))
+    /**
+     * Validate BLE INFO before a link may expose readings, credentials or archive operations.
+     * A new station on the same hardware starts a new archive epoch; old files keep their station.
+     */
+    fun sensorOpened(peripheral: String, name: String?, station: String, device: String): SensorOpenResult {
+        val previous = records.value.firstOrNull { it.peripheral.equals(peripheral, ignoreCase = true) }
+        val credential = credentials.value.firstOrNull { it.peripheral.equals(peripheral, ignoreCase = true) }
+        val expected = previous ?: credential
+        val decision = DeviceContinuityPolicy.evaluate(
+            expected?.let { DeviceContinuityPolicy.Identity(it.peripheral, it.device, it.station) },
+            DeviceContinuityPolicy.Identity(peripheral, device, station),
+            authenticatedBle = true,
+        )
+        if (decision is DeviceContinuityPolicy.Decision.Reject) {
+            val notice = when (decision.reason) {
+                DeviceContinuityPolicy.Reason.HARDWARE_CHANGED, DeviceContinuityPolicy.Reason.HARDWARE_MISSING -> CompanionNotice.HARDWARE_CHANGED
+                else -> CompanionNotice.INFO_INVALID
+            }
+            return SensorOpenResult(false, notice, null)
+        }
+        decision as DeviceContinuityPolicy.Decision.Accept
+        val staleCredential = credential?.takeIf { it.device != device.lowercase() || it.station != station || decision.invalidateLanToken }
+        val older = (listOfNotNull(expected?.station?.takeIf { it != station }) + previous?.olderStations.orEmpty())
+            .filter { it != station }.distinct()
+        save(IosKnown.remember(records.value, KnownRecord(peripheral, name?.takeIf { it.isNotBlank() } ?: previous?.name, station, device.lowercase(), now(), older)))
+        return SensorOpenResult(true, null, staleCredential?.device)
     }
 
     /** The Keychain credentials, as three lists of the same length. Never the token. */
@@ -221,11 +250,17 @@ class DevicesBridge internal constructor(
 
     /** The 12-hex hardware id INFO gave for this peripheral, so Swift can find its Wi-Fi session. */
     fun deviceFor(peripheral: String): String? =
-        (credentials.value + records.value).firstOrNull { it.peripheral.equals(peripheral, ignoreCase = true) }?.device
+        (records.value + credentials.value).firstOrNull { it.peripheral.equals(peripheral, ignoreCase = true) }?.device
 
     /** The verified station for a previously opened peripheral. This is only a discovery hint. */
     fun stationFor(peripheral: String): String? =
-        (credentials.value + records.value).firstOrNull { it.peripheral.equals(peripheral, ignoreCase = true) }?.station
+        (records.value + credentials.value).firstOrNull { it.peripheral.equals(peripheral, ignoreCase = true) }?.station
+
+    /** Current and earlier authenticated BLE station epochs for this saved sensor's archive. */
+    fun stationsFor(peripheral: String): List<String> {
+        val record = records.value.firstOrNull { it.peripheral.equals(peripheral, ignoreCase = true) }
+        return if (record != null) listOf(record.station) + record.olderStations else listOfNotNull(stationFor(peripheral))
+    }
 
     /** Resolve an active Wi-Fi service back to its enrolled sensor's navigation id. */
     fun peripheralForLan(name: String): String? {
