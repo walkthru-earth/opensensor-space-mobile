@@ -6,6 +6,7 @@ import earth.walkthru.aqsync.archive.IosArchiveStore
 import earth.walkthru.aqsync.archive.ReceiptArchiveIndex
 import earth.walkthru.aqsync.data.ble.AuthFailedException
 import earth.walkthru.aqsync.data.ble.DeviceBusyException
+import earth.walkthru.aqsync.data.ble.DeviceErrorException
 import earth.walkthru.aqsync.data.ble.DeviceSession
 import earth.walkthru.aqsync.data.ble.TransportException
 import earth.walkthru.aqsync.data.sync.ArchiveCollector
@@ -13,6 +14,8 @@ import earth.walkthru.aqsync.data.sync.CollectionProgress
 import earth.walkthru.aqsync.data.sync.CollectionSummary
 import earth.walkthru.aqsync.data.sync.FileProblem
 import earth.walkthru.aqsync.data.sync.SyncEngine
+import earth.walkthru.opensensor.designsystem.nowEpochMillis
+import earth.walkthru.opensensor.today.TodayNotice
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -119,6 +122,47 @@ class SensorSync internal constructor(
                 release(station)
                 finished(result)
             }
+        }
+        return SyncHandle(job)
+    }
+
+    /**
+     * Sends one confirmed [command] over [link] through the shared [DeviceSession]. `SET_TIME` carries
+     * this phone's clock and then asks for a fresh `status` push, so Today shows the anchored clock.
+     * `FLUSH` finalizes the buffered rows. Neither touches the archive files. `finished` fires
+     * exactly once on the main thread, also when the link closes or [SyncHandle.cancel] lands.
+     */
+    @OptIn(DelicateCoroutinesApi::class)
+    fun command(link: SensorLink, command: SensorCommand, finished: (CommandResult) -> Unit): SyncHandle {
+        val job = scope.launch(work, CoroutineStart.ATOMIC) {
+            val session = DeviceSession(link.transport)
+            val notice = try {
+                when (command) {
+                    SensorCommand.SET_TIME -> {
+                        session.setTime(nowEpochMillis() / 1000)
+                        try {
+                            session.requestStatus()
+                        } catch (e: TransportException) {
+                            // The clock is set. The next status push shows it.
+                        }
+                        TodayNotice.ClockSet
+                    }
+                    SensorCommand.FLUSH -> {
+                        val flushed = session.flush()
+                        TodayNotice.Finalized(flushed.rows, flushed.filesFinalized.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+                    }
+                }
+            } catch (e: CancellationException) {
+                TodayNotice.Failed(command.today)
+            } catch (e: DeviceBusyException) {
+                TodayNotice.Busy
+            } catch (e: DeviceErrorException) {
+                TodayNotice.Rejected(command.today)
+            } catch (e: Exception) {
+                syncLog("${command.name} ended, ${e::class.simpleName}")
+                TodayNotice.Failed(command.today)
+            }
+            withContext(NonCancellable + callbacks) { finished(CommandResult(notice)) }
         }
         return SyncHandle(job)
     }

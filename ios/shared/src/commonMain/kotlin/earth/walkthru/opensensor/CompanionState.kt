@@ -148,6 +148,13 @@ class CompanionState {
     internal var syncMessage by mutableStateOf<UiText>(UiText.None)
         private set
 
+    /** How the last Bluetooth sync of this connection ended, for the Smart Sync card of Today. */
+    internal var lastSyncResult by mutableStateOf<SyncResult?>(null)
+        private set
+
+    /** SET_TIME and FLUSH from Today, over the same Bluetooth connection. */
+    val today = TodayLink()
+
     fun bluetoothSyncAvailable(available: Boolean) {
         syncAvailable = available && connected
     }
@@ -164,6 +171,7 @@ class CompanionState {
 
     fun bluetoothSyncFinished(result: SyncResult) {
         syncBusy = false
+        lastSyncResult = result
         syncMessage = result.message
     }
 
@@ -325,6 +333,7 @@ class CompanionState {
         syncBusy = false
         syncProgress = null
         syncMessage = UiText.None
+        lastSyncResult = null
         message = explanation
     }
 }

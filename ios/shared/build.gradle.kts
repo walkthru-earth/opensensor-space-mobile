@@ -20,6 +20,8 @@ kotlin {
             implementation(project(":feature:discover"))
             implementation(project(":feature:history"))
             implementation(project(":feature:settings"))
+            // Today of the connected sensor, the same screen and confirmations as Android.
+            implementation(project(":feature:today"))
             // The shared shell: bottom bar, per-tab stacks, Back and the iOS edge swipe.
             implementation(project(":feature:shell"))
             // viewModel { } holders for controllers kept per navigation entry.
@@ -32,6 +34,9 @@ kotlin {
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
             implementation(libs.compose.material3)
+        }
+        commonTest.dependencies {
+            implementation(libs.kotlinx.coroutines.test)
         }
     }
 }

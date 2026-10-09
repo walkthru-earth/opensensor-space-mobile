@@ -165,6 +165,36 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         performNext()
     }
 
+    /// Sends one confirmed SET_TIME or FLUSH from Today through the shared session. Today asked
+    /// first. A busy link refuses it, and the outcome always reaches Today.
+    func command(_ command: SensorCommand) {
+        guard foreground, let peripheral = current, control != nil, let response, let identity, link == nil,
+            pending == nil, operations.isEmpty, !requestingToken
+        else {
+            state.today.commandRefused()
+            return
+        }
+        let mtu = Int32(peripheral.maximumWriteValueLength(for: .withoutResponse) + 3)
+        let link = SensorLink(overWifi: false, address: identity.device, mtu: mtu) { [weak self] body in
+            MainActor.assumeIsolated { self?.write(body) }
+        }
+        self.link = link
+        if !responseSubscribed { operations.append(.subscribe(response)) }
+        state.today.commandStarted()
+        syncHandle = engine.command(link: link, command: command) { [weak self] result in
+            MainActor.assumeIsolated { self?.commandEnded(result, link: link) }
+        }
+        performNext()
+    }
+
+    private func commandEnded(_ result: CommandResult, link: SensorLink) {
+        if self.link === link {
+            self.link = nil
+            syncHandle = nil
+        }
+        state.today.commandFinished(result: result)
+    }
+
     private func write(_ body: Data) {
         guard let control, link != nil, current != nil else { return }
         operations.append(.write(control, body))

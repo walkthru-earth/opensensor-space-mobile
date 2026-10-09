@@ -1,6 +1,8 @@
 package earth.walkthru.opensensor
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -48,6 +50,7 @@ import earth.walkthru.opensensor.shell.DiscoverKey
 import earth.walkthru.opensensor.shell.HistoryKey
 import earth.walkthru.opensensor.shell.ScanKey
 import earth.walkthru.opensensor.shell.SettingsKey
+import earth.walkthru.opensensor.shell.TodayKey
 import kotlinx.coroutines.flow.map
 import platform.Foundation.NSBundle
 import platform.Foundation.NSCurrentLocaleDidChangeNotification
@@ -85,10 +88,11 @@ private class DiscoverHolder : ViewModel() {
  * back stacks and Back rules as Android. The start edge swipe is Back. Discover is always the start
  * tab (owner decision 2026-10-08). No other screen draws a bar. [companion] is the My devices root
  * and receives the resolved display units (METRIC or IMPERIAL) and the detail level from the shared
- * Settings (`:feature:settings`, `:core:settings`).
+ * Settings (`:feature:settings`, `:core:settings`). [today] feeds the shared Today of the connected
+ * sensor, opened when a sensor connects or from its shortcut.
  */
 @Composable
-internal fun AppRoot(companion: @Composable (UnitSystem, DetailLevel) -> Unit) {
+internal fun AppRoot(today: CompanionToday, companion: @Composable (UnitSystem, DetailLevel) -> Unit) {
     val scope = rememberCoroutineScope()
     val settings = remember { SettingsController(scope, settingsRepository) }
     val prefs by settings.prefs.collectAsState()
@@ -107,21 +111,28 @@ internal fun AppRoot(companion: @Composable (UnitSystem, DetailLevel) -> Unit) {
                     DiscoverEntry(networkAllowed = showPublic, units = units, onAddSensor = { nav.toMyDevicesRoot() })
                 }
                 entry<ScanKey> {
+                    OpenTodayOnConnect(today.state, nav)
                     Box(Modifier.fillMaxSize()) {
                         companion(units, level)
-                        HistoryShortcut(onClick = { nav.push(HistoryKey(PHONE_ARCHIVE)) }, modifier = Modifier.align(Alignment.TopEnd))
+                        Row(Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(FloatingControl.Margin), horizontalArrangement = Arrangement.spacedBy(FloatingControl.Margin)) {
+                            TodayShortcut(today.state, nav)
+                            HistoryShortcut(onClick = { nav.push(HistoryKey(PHONE_ARCHIVE)) })
+                        }
                     }
+                }
+                entry<TodayKey> { key ->
+                    TodayEntry(key.address, today, settingsRepository, units, nav, onOpenHistory = { nav.push(HistoryKey(PHONE_ARCHIVE)) })
                 }
                 entry<HistoryKey> {
                     HistoryEntry(units = units, level = level, onBack = { nav.pop() })
                 }
-                // iOS has no Smart Sync clock step yet, so its consent stays hidden.
+                // Smart Sync on Today asks before setting the clock, so the consent shows as on Android.
                 entry<SettingsKey> {
                     SettingsScreen(
                         controller = settings,
                         appVersion = version,
                         automaticUnits = systemUnits,
-                        showClockSync = false,
+                        showClockSync = true,
                     )
                 }
             },
@@ -188,7 +199,7 @@ private fun HistoryShortcut(onClick: () -> Unit, modifier: Modifier = Modifier) 
     FloatingIconButton(
         onClick = onClick,
         contentDescription = title,
-        modifier = modifier.statusBarsPadding().padding(FloatingControl.Margin),
+        modifier = modifier,
     ) {
         Icon(AppIcons.Schedule, contentDescription = null)
     }
