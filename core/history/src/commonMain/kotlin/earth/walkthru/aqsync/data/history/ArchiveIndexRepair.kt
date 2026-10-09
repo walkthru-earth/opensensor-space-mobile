@@ -7,8 +7,11 @@ import earth.walkthru.aqsync.data.history.parquet.ByteReader
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 import earth.walkthru.aqsync.data.history.parquet.ParquetFormatException
 import earth.walkthru.aqsync.data.sync.HivePartition
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -102,6 +105,41 @@ class ArchiveIndexRepair(
         }
         estimateTimes()
     }
+
+    /**
+     * Runs [backfillAll] until no record is left that was never indexed, at most [maxPasses] times. A
+     * record put while a pass runs is caught by the next pass. Records whose last try failed do not
+     * keep it going. A pass that throws ends it, the next trigger or start tries again.
+     */
+    suspend fun backfillUntilSettled(maxPasses: Int = 5) {
+        var passes = 0
+        do {
+            try {
+                backfillAll()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                log("index repair stopped: ${e.message}")
+                return
+            }
+            passes++
+        } while (passes < maxPasses && neverIndexedWaiting())
+    }
+
+    /**
+     * Repairs whenever [index] holds a record that was never indexed, until cancelled. iOS runs it for
+     * the life of the process, because its engine adds records without index columns. Changes that
+     * arrive during a pass are conflated into one more check after it, never dropped.
+     */
+    suspend fun repairWhenWaiting() {
+        index.observeAll()
+            .map { records -> records.any { it.indexedAtEpochMs == null } }
+            .conflate()
+            .collect { waiting -> if (waiting) backfillUntilSettled() }
+    }
+
+    /** [ArchiveIndex.unindexed] lists never indexed records first. */
+    private suspend fun neverIndexedWaiting(): Boolean = index.unindexed(1).any { it.indexedAtEpochMs == null }
 
     /**
      * §4.6, gives every unsynced file whose boot later received a clock an estimated UTC span, from

@@ -8,11 +8,15 @@ import earth.walkthru.aqsync.archive.PartialMeta
 import earth.walkthru.aqsync.archive.PartialWriter
 import earth.walkthru.aqsync.data.history.parquet.ByteArrayReader
 import earth.walkthru.aqsync.data.history.parquet.ByteReader
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.datetime.TimeZone
 import kotlin.test.Test
 
@@ -36,6 +40,9 @@ class HistorySourcesTest {
 
     private class Index : ArchiveIndex {
         val rows = MutableStateFlow<List<ArchiveRecord>>(emptyList())
+
+        /** Runs once, in the time-estimate step, after the pass found nothing left to index. */
+        var onEstimate: (() -> Unit)? = null
         override fun observeAll(): Flow<List<ArchiveRecord>> = rows
         override fun observeStation(station: String): Flow<List<ArchiveRecord>> = rows.map { list -> list.filter { it.station == station } }
         override suspend fun get(key: ArchiveKey): ArchiveRecord? = rows.value.firstOrNull { it.key == key }
@@ -48,7 +55,10 @@ class HistorySourcesTest {
         override suspend fun unindexed(limit: Int): List<ArchiveRecord> = rows.value.filter { it.indexedAtEpochMs == null || it.indexError != null }.take(limit)
         override suspend fun timeline(station: String, fromNs: Long, toNs: Long): List<ArchiveRecord> =
             rows.value.filter { it.station == station && it.onTimeline(fromNs, toNs) }.sortedWith(ArchiveRecord.TIMELINE_ORDER)
-        override suspend fun indexedForStation(station: String): List<ArchiveRecord> = rows.value.filter { it.station == station && it.indexed }
+        override suspend fun indexedForStation(station: String): List<ArchiveRecord> {
+            onEstimate?.also { onEstimate = null }?.invoke()
+            return rows.value.filter { it.station == station && it.indexed }
+        }
         override suspend fun stations(): List<String> = rows.value.map { it.station }.distinct()
     }
 
@@ -91,6 +101,47 @@ class HistorySourcesTest {
         assertEquals("file missing from archive", index.get(record(missing).key)!!.indexError)
         // A failed retry of an already failed record writes nothing, so the loop ends.
         assertEquals(0, repair.backfill())
+    }
+
+    /** A file the engine saves late in a pass, after its last batch, which only a later pass indexes. */
+    private fun putDuringRepair(store: Store, index: Index): ArchiveRecord {
+        val late = record("station=$station/year=2026/month=09/day=17/data_1000_a_107-211-3.parquet", crc = 9)
+        index.onEstimate = {
+            store.files[late.key] = board
+            index.rows.value = index.rows.value + late
+        }
+        return late
+    }
+
+    @Test
+    fun aPutDuringARepairPassIsIndexedBeforeItSettles() = runTest {
+        val store = Store()
+        val index = Index()
+        val first = record("station=$station/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet")
+        store.files[first.key] = board
+        index.put(first)
+        val late = putDuringRepair(store, index)
+        val repair = ArchiveIndexRepair(store, index, nowEpochMs = { 42L })
+        repair.backfillUntilSettled()
+        assertTrue(index.get(first.key)!!.indexed)
+        assertTrue(index.get(late.key)!!.indexed)
+    }
+
+    @Test
+    fun theWatcherIndexesAPutThatLandsDuringItsPass() = runTest {
+        val store = Store()
+        val index = Index()
+        val repair = ArchiveIndexRepair(store, index, nowEpochMs = { 42L })
+        backgroundScope.launch { repair.repairWhenWaiting() }
+        val late = putDuringRepair(store, index)
+        val first = record("station=$station/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet")
+        store.files[first.key] = board
+        index.put(first)
+        val all = withContext(Dispatchers.Default) {
+            withTimeout(10_000) { index.rows.first { rows -> rows.size == 2 && rows.all { it.indexedAtEpochMs != null } } }
+        }
+        assertTrue(all.all { it.indexed })
+        assertTrue(index.get(late.key)!!.indexed)
     }
 
     @Test

@@ -6,12 +6,9 @@ import earth.walkthru.aqsync.archive.ReceiptArchiveIndex
 import earth.walkthru.aqsync.data.history.ArchiveHistoryTiers
 import earth.walkthru.aqsync.data.history.ArchiveIndexRepair
 import earth.walkthru.aqsync.data.history.HistorySeriesReader
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
@@ -37,21 +34,7 @@ internal object IosArchive {
     fun startIndexRepair() {
         if (started) return
         started = true
-        scope.launch {
-            index.observeAll()
-                .map { records -> records.count { it.indexedAtEpochMs == null } }
-                .distinctUntilChanged()
-                .collect { waiting ->
-                    if (waiting == 0) return@collect
-                    try {
-                        repair.backfillAll()
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (_: Exception) {
-                        // A record that cannot be read keeps its receipt and is retried next start.
-                    }
-                }
-        }
+        scope.launch { repair.repairWhenWaiting() }
     }
 }
 
