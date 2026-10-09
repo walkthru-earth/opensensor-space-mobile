@@ -227,6 +227,8 @@ dependencies {
     // The Settings screen, shared Compose with iOS.
     implementation(project(":feature:settings"))
     implementation(project(":feature:devices"))
+    // The Debug screen, shared Compose with iOS.
+    implementation(project(":feature:debug"))
     h3Natives(libs.h3)
     // ZSTD pages of external GeoParquet (PyArrow/GDAL default in many pipelines): the one native library,
     // registered into :core:parquet's codec SPI by data/history/parquet/AppParquetCodecs. Prebuilt AAR;

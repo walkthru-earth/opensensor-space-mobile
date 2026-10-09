@@ -8,11 +8,13 @@ import platform.UIKit.UIViewController
  * [requestBluetooth] creates the central manager, which shows the system prompt the first time.
  * [openSensor] connects to a peripheral id, closing another open Bluetooth link first.
  * [syncBluetooth] syncs the connected Bluetooth sensor, and the app routes it to an open Wi-Fi
- * session for the same sensor.
+ * session for the same sensor. [openDebugLink] lends the Debug screen a fresh link to the sensor
+ * with this hardware id, or returns null while a sync or another request holds it. Closing the
+ * link hands it back.
  */
-fun mainViewController(state: CompanionState, devices: DevicesBridge, requestBluetooth: () -> Unit, openSensor: (String) -> Unit, disconnect: () -> Unit, scanLan: () -> Unit, saveWifiAccess: () -> Unit, connectLan: (String) -> Unit, syncLan: (String) -> Unit, disconnectLan: (String) -> Unit, exportArchive: () -> Unit, syncBluetooth: () -> Unit): UIViewController =
+fun mainViewController(state: CompanionState, devices: DevicesBridge, requestBluetooth: () -> Unit, openSensor: (String) -> Unit, disconnect: () -> Unit, scanLan: () -> Unit, saveWifiAccess: () -> Unit, connectLan: (String) -> Unit, syncLan: (String) -> Unit, disconnectLan: (String) -> Unit, exportArchive: () -> Unit, syncBluetooth: () -> Unit, openDebugLink: (String) -> SensorLink?): UIViewController =
     ComposeUIViewController {
-        AppRoot(devices, requestBluetooth, openSensor) { id, units, level, onBack ->
+        AppRoot(devices, requestBluetooth, openSensor, openDebugLink) { id, units, level, openDebug, onBack ->
             // Detailed and Developer reveal the technical lines (signal, firmware, byte counters), as on Android.
             CompanionScreen(
                 state = state,
@@ -29,6 +31,7 @@ fun mainViewController(state: CompanionState, devices: DevicesBridge, requestBlu
                 syncBluetooth = syncBluetooth,
                 units = units,
                 showTechnical = level.detailed,
+                onOpenDebug = openDebug,
             )
         }
     }

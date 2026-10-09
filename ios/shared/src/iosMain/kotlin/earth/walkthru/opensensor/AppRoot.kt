@@ -30,6 +30,8 @@ import earth.walkthru.aqsync.settings.iosSettingsRepository
 import earth.walkthru.aqsync.units.UnitFormatter
 import earth.walkthru.aqsync.units.UnitSystem
 import earth.walkthru.aqsync.units.systemUnitSystem
+import earth.walkthru.opensensor.debug.DebugController
+import earth.walkthru.opensensor.debug.DebugScreen
 import earth.walkthru.opensensor.designsystem.AppIcons
 import earth.walkthru.opensensor.designsystem.FloatingControl
 import earth.walkthru.opensensor.designsystem.FloatingIconButton
@@ -56,6 +58,7 @@ import earth.walkthru.opensensor.permissions.rememberOpenAppSettings
 import earth.walkthru.opensensor.settings.SettingsController
 import earth.walkthru.opensensor.settings.SettingsScreen
 import earth.walkthru.opensensor.shell.AppShell
+import earth.walkthru.opensensor.shell.DebugKey
 import earth.walkthru.opensensor.shell.DiscoverKey
 import earth.walkthru.opensensor.shell.HistoryKey
 import earth.walkthru.opensensor.shell.ScanKey
@@ -101,20 +104,28 @@ private class DevicesHolder(bridge: DevicesBridge) : ViewModel() {
 /** iOS collects while the app is open and cannot remove the system Bluetooth bond. */
 private val IosDevices = DevicesPlatform(collectInBackground = false, explainSystemBond = true)
 
+/** Holds the Debug controller for one Debug entry, cleared when the entry leaves the back stack. */
+private class DebugHolder(address: String, state: CompanionState, openLink: (String) -> SensorLink?) : ViewModel() {
+    val controller = DebugController(viewModelScope, IosDebugSource(address, state, openLink, viewModelScope))
+}
+
 /**
  * The iOS root hosts the shared shell ([AppShell], `:feature:shell`), the same bottom bar, per-tab
  * back stacks and Back rules as Android. The start edge swipe is Back. Discover is always the start
  * tab (owner decision 2026-10-08). No other screen draws a bar. The My devices root is the shared
  * [MyDevicesScreen] over [devices]. Opening a sensor calls [openSensor] (Bluetooth is allowed by
  * then) and pushes its [devicePage], which receives the resolved display units (METRIC or IMPERIAL)
- * and the detail level from the shared Settings (`:feature:settings`, `:core:settings`).
+ * and the detail level from the shared Settings (`:feature:settings`, `:core:settings`). At the
+ * Developer level the device page also gets an open Debug action, and the shared Debug screen
+ * (`:feature:debug`) borrows short links from Swift through [openDebugLink].
  */
 @Composable
 internal fun AppRoot(
     devices: DevicesBridge,
     requestBluetooth: () -> Unit,
     openSensor: (String) -> Unit,
-    devicePage: @Composable (id: String, units: UnitSystem, level: DetailLevel, onBack: () -> Unit) -> Unit,
+    openDebugLink: (String) -> SensorLink?,
+    devicePage: @Composable (id: String, units: UnitSystem, level: DetailLevel, openDebug: ((String) -> Unit)?, onBack: () -> Unit) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val settings = remember { SettingsController(scope, settingsRepository) }
@@ -147,12 +158,22 @@ internal fun AppRoot(
                 // The device page until Today (#17) brings the shared device sections. History stays one tap away.
                 entry<TodayKey> { key ->
                     Box(Modifier.fillMaxSize()) {
-                        devicePage(key.address, units, level) { nav.pop() }
+                        val openDebug: ((String) -> Unit)? = if (level.developer) { address -> nav.openDebug(address, level.developer) } else null
+                        devicePage(key.address, units, level, openDebug) { nav.pop() }
                         HistoryShortcut(onClick = { nav.push(HistoryKey(PHONE_ARCHIVE)) }, modifier = Modifier.align(Alignment.TopEnd))
                     }
                 }
                 entry<HistoryKey> {
                     HistoryEntry(units = units, level = level, onBack = { nav.pop() })
+                }
+                entry<DebugKey> { key ->
+                    val controller = viewModel(key = "debug-${key.address}") { DebugHolder(key.address, devices.state, openDebugLink) }.controller
+                    DebugScreen(
+                        controller = controller,
+                        address = key.address,
+                        developer = prefs?.detailLevel?.developer,
+                        onBack = { nav.popIfTop { it is DebugKey } },
+                    )
                 }
                 // iOS has no Smart Sync clock step yet, so its consent stays hidden.
                 entry<SettingsKey> {

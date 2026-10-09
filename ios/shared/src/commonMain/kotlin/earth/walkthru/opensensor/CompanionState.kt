@@ -26,6 +26,7 @@ import earth.walkthru.opensensor.strings.resources.companion_live
 import earth.walkthru.opensensor.strings.resources.companion_live_unreadable
 import earth.walkthru.opensensor.strings.resources.companion_status_unreadable
 import earth.walkthru.opensensor.strings.resources.now_waiting
+import kotlin.time.Clock
 
 internal data class NearbyDevice(val id: String, val name: String, val rssi: Int)
 
@@ -60,6 +61,12 @@ class CompanionState {
     internal var info by mutableStateOf<DeviceInfo?>(null)
         private set
     internal var status by mutableStateOf<DeviceStatus?>(null)
+        private set
+
+    /** The last STATUS body as it arrived, for the Debug screen, and when it arrived. */
+    internal var statusRaw by mutableStateOf<String?>(null)
+        private set
+    internal var statusAtEpochMs by mutableStateOf<Long?>(null)
         private set
     internal var live by mutableStateOf<LiveSample?>(null)
         private set
@@ -308,6 +315,8 @@ class CompanionState {
 
     fun receiveStatus(json: String) {
         if (!connected) return
+        statusRaw = json
+        statusAtEpochMs = Clock.System.now().toEpochMilliseconds()
         status = runCatching { DeviceStatus.parse(json) }.getOrNull()
         if (status == null) message = UiText.of(Res.string.companion_status_unreadable)
     }
@@ -338,6 +347,8 @@ class CompanionState {
         connected = false
         info = null
         status = null
+        statusRaw = null
+        statusAtEpochMs = null
         live = null
         syncAvailable = false
         syncBusy = false

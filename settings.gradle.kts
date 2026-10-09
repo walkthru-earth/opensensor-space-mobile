@@ -45,6 +45,8 @@ include(":feature:settings")
 include(":feature:devices")
 // The History screen and its charts, shared Compose for Android and iOS (docs/history-pipeline.md).
 include(":feature:history")
+// The Debug screen, shared Compose for Android and iOS, Developer level only (docs/screens.md, Debug).
+include(":feature:debug")
 // The app shell: bottom bar, per-tab Navigation 3 back stacks, Back rules (docs/adr/0001-shared-navigation.md).
 include(":feature:shell")
 

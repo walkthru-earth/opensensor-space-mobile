@@ -105,6 +105,17 @@ class TabNavigatorTest {
     }
 
     @Test
+    fun `debug opens only at the developer level and never twice`() {
+        nav.select(TopTab.MY_DEVICES)
+        nav.push(TodayKey("A"))
+        nav.openDebug("A", developer = false)
+        assertEquals(listOf(ScanKey, TodayKey("A")), stack(TopTab.MY_DEVICES))
+        nav.openDebug("A", developer = true)
+        nav.openDebug("A", developer = true)
+        assertEquals(listOf(ScanKey, TodayKey("A"), DebugKey("A")), stack(TopTab.MY_DEVICES))
+    }
+
+    @Test
     fun `a screen's back arrow pops only while it is on top`() {
         nav.select(TopTab.MY_DEVICES)
         nav.push(TodayKey("A"))

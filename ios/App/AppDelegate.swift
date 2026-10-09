@@ -60,7 +60,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UIDocumentPickerD
             syncLan: { [weak self] name in self?.lan.sync(name: name) },
             disconnectLan: { [weak self] name in self?.lan.disconnect(name: name) },
             exportArchive: { [weak self] in self?.exportArchive() },
-            syncBluetooth: { [weak self] in self?.syncConnectedSensor() }
+            syncBluetooth: { [weak self] in self?.syncConnectedSensor() },
+            openDebugLink: { [weak self] device in self?.bluetooth.openDebugLink(device: device) }
         )
         let window = UIWindow(windowScene: windowScene)
         window.rootViewController = controller

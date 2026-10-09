@@ -497,3 +497,34 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         }
     }
 }
+
+extension BluetoothCompanion {
+    /// Lends the shared Debug screen a link to the connected sensor for one request, under the same
+    /// rules as a sync. Nil when another sensor is connected, or a sync, a request or Wi-Fi access
+    /// setup holds the link. The link is handed back when Kotlin closes it, or ends with the connection.
+    func openDebugLink(device: String) -> SensorLink? {
+        guard foreground, let peripheral = current, control != nil, let response, let identity,
+            identity.device == device, link == nil, pending == nil, operations.isEmpty, !requestingToken
+        else { return nil }
+        let mtu = Int32(peripheral.maximumWriteValueLength(for: .withoutResponse) + 3)
+        let link = SensorLink(overWifi: false, address: identity.device, mtu: mtu) { [weak self] body in
+            // Kotlin sends on the main thread, in request order.
+            MainActor.assumeIsolated { self?.write(body) }
+        }
+        self.link = link
+        link.whenClosed { [weak self] in
+            // A Collect all step waiting for the link starts once Debug hands it back.
+            let release = {
+                guard self?.link === link else { return }
+                self?.link = nil
+                self?.collectWhenReady()
+            }
+            if Thread.isMainThread { MainActor.assumeIsolated { release() } } else { Task { @MainActor in release() } }
+        }
+        if !responseSubscribed {
+            operations.append(.subscribe(response))
+            performNext()
+        }
+        return link
+    }
+}
