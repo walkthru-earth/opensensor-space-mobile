@@ -34,6 +34,8 @@ include(":core:archive")
 include(":core:settings")
 // The Discover map, shared Compose for Android and iOS.
 include(":ui:designsystem")
+// The shared English copy and the repository copy lint (docs/screens.md, Copy).
+include(":ui:strings")
 // When each permission is asked and where its settings link goes, for both apps.
 include(":ui:permissions")
 include(":feature:discover")

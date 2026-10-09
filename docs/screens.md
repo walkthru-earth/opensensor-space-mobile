@@ -95,7 +95,7 @@ pattern serves radio options: pairing modes show only their label, and their des
 paragraphs of the pairing info sheet. Confirmation dialogs stay (reboot, token rotation, forget
 paired phones, pairing mode none, set time, finalize) with one or two short sentences. Copy rules
 in `cross-platform-guide.md` apply, and missing values print `NO_VALUE` ("n/a"), never a dash.
-`CopyRulesTest` fails on a dash, semicolon or sentence colon in `strings.xml`. The data layer
+`CopyLintTest` in `:ui:strings` fails on a dash, semicolon or sentence colon in any `strings.xml`. The data layer
 never writes sentences. Its snackbars are `DeviceMessage` codes (`data/DeviceMessage.kt`) that
 `ui/components/DeviceMessages.kt` maps to resources, and exception detail stays in the log or a
 Developer-level line.
@@ -231,7 +231,7 @@ state change, de-duplicated). Never derive it per screen from the session object
 | --- | --- |
 | `NavigationKeys.kt` | `Navigation.kt` entry providers, back-stack restore |
 | `DetailLevel` / `AppSettings` | every `detailed`/`advancedMode` collector; Debug visibility; Files table icon |
-| `ui/device/cards/MetricHeroCard.kt`, `components/MoodFace.kt`, mood copy in `strings.xml` | Today, Home cards (same moods), iOS parity (iOS still reads the copy in `AirMood`, kept word for word equal to `strings.xml` by `CopyRulesTest`) |
+| `ui/device/cards/MetricHeroCard.kt`, `components/MoodFace.kt`, mood copy in `strings.xml` | Today, Home cards (same moods), iOS parity (iOS still reads the copy in `AirMood`, meant to match `strings.xml` word for word, not yet checked by a test, tracked in #25) |
 | `ui/theme/BrandTokens.kt` | Every screen, `BrandTokensTest` (website values and contrast) |
 | `DeviceCapabilities` (`:core:history`) | Today hero and batch card, Device sensor card, `setSensorIdentity` guard |
 | `BandColumnChart.kt`, `DayRing.kt`, `CalendarHeatmap.kt` | History and Files › Chart by file (share `Columns` + `HistoryColumn`) |
