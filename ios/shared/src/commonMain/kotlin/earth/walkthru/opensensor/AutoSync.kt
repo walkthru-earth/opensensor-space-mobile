@@ -134,6 +134,21 @@ class AutoSyncSettings internal constructor(
     }
 }
 
+/**
+ * The schedule numbers the Swift scheduler uses, in seconds, from [BackgroundSyncPolicy], so both
+ * platforms wait the same period and back off the same way.
+ */
+object AutoSyncSchedule {
+    val periodSeconds: Double get() = BackgroundSyncPolicy.PERIOD_MS / 1000.0
+    val maxRetries: Int get() = BackgroundSyncPolicy.MAX_RETRIES
+
+    /** The delay before retry number [attempt], 0 based. */
+    fun retrySeconds(attempt: Int): Double = BackgroundSyncPolicy.backoffMs(attempt) / 1000.0
+
+    /** The browse window for Wi-Fi sensors, which the runner passes to Swift. */
+    val browseSeconds: Double get() = BackgroundSyncPolicy.LAN_BROWSE_MS / 1000.0
+}
+
 /** One known sensor as the shared runner sees it. [address] is the peripheral id. */
 internal data class IosSyncDevice(
     override val address: String,
@@ -155,6 +170,31 @@ class BackgroundStepResult(
     val skipped: String?,
     val incomplete: Boolean,
 )
+
+/**
+ * The step results Swift reports, built here so the mapping from a sync end is shared and tested.
+ * A step that sent nothing is skipped, so the runner tries the next link and the sensor stays due.
+ */
+object BackgroundSteps {
+    fun skipped(reason: String): BackgroundStepResult = BackgroundStepResult(0, 0, 0, reason, false)
+
+    /** The link ended before the engine reported. Verified files stay, a backed-off retry follows. */
+    fun lost(): BackgroundStepResult = BackgroundStepResult(0, 0, 0, null, true)
+
+    /** The engine's result. [bytes] is what this sync received, without resumed bytes. */
+    fun ended(result: SyncResult, bytes: Long): BackgroundStepResult = when (result.end) {
+        SyncEnd.IN_USE -> skipped("in use")
+        SyncEnd.BUSY -> skipped("busy")
+        SyncEnd.AUTH_FAILED -> skipped("wifi access refused")
+        else -> {
+            // A fault outside one file counts once, so the summary reports it.
+            val fault = result.end == SyncEnd.FAILED || result.end == SyncEnd.STORAGE_FAILED
+            val failures = if (fault) maxOf(result.notSaved, 1) else result.notSaved
+            val incomplete = result.end == SyncEnd.LINK_LOST || result.end == SyncEnd.STOPPED
+            BackgroundStepResult(result.saved, bytes, failures, null, incomplete)
+        }
+    }
+}
 
 /**
  * What Swift posts after a run. [notify] is false when nothing new and nothing failed, so no
@@ -196,6 +236,9 @@ class BackgroundSyncBridge internal constructor(
 
     /** True while a run is going. A second request waits for the next schedule. */
     val busy: Boolean get() = running?.isActive == true
+
+    /** The sensor's name for the continued processing task's subtitle, or empty when it has none. */
+    fun sensorName(id: String): String = devices.nameFor(id).orEmpty()
 
     /** The title the continued processing task shows, in the app language. A callback, so Swift needs no suspend call. */
     fun progressTitle(done: (String) -> Unit) {

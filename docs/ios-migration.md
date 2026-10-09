@@ -141,8 +141,8 @@ discovery and BLE/idle LAN connections, but active collections continue while iO
 Expiration cancels the sockets and retains partial bytes/progress; returning reconnects the
 paused sensors and resumes collection after old task/archive ownership is released. Recoverable
 LAN failures while backgrounded also queue resume. Explicit Cancel removes that intent, and
-queued sensors wait for one of the two collection slots. This is bounded execution, not an
-indefinite background service or periodic automatic collection. Force-quitting/relaunching
+queued sensors wait for one of the two collection slots. This lease is bounded execution. Periodic
+Auto-sync is separate, see [background-sync.md](background-sync.md#ios-auto-sync). Force-quitting/relaunching
 requires reconnecting and starting sync again; downloaded bytes and verification receipts persist.
 See Apple's [background execution guidance](https://developer.apple.com/documentation/uikit/extending-your-app-s-background-execution-time).
 
@@ -174,7 +174,7 @@ copies through `:core:archive` into a fresh run under `tmp/opensensor-export`, t
 `feature/files/src/iosMain`. The run is removed once the sheet closes. Only verified records
 are exported, so partials and receipts stay private, and the archive is never moved or changed.
 The daily zip is hidden because iOS has no derived files yet. The Swift folder export and its
-companion button are gone. The app has no background BLE capability or archive charts.
+companion button are gone. Background Bluetooth is limited to Auto-sync (#23). The app has no archive charts.
 Native BLE uses Core Bluetooth's
 peripheral identifier; the Keychain identity also pins station and full hardware ID. New
 LAN/archive behavior has host/simulator/build evidence plus the owner's report of

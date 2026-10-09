@@ -73,6 +73,7 @@ import earth.walkthru.opensensor.shell.FilesKey
 import earth.walkthru.opensensor.shell.HistoryKey
 import earth.walkthru.opensensor.shell.ScanKey
 import earth.walkthru.opensensor.shell.SettingsKey
+import earth.walkthru.opensensor.shell.ShellBottomBar
 import earth.walkthru.opensensor.shell.TodayKey
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -212,6 +213,17 @@ internal fun AppRoot(
                 }
             },
             modifier = Modifier.fillMaxSize(),
+            bottomBar = { nav ->
+                ShellBottomBar(nav)
+                // A tapped Auto-sync summary opens My devices (#23).
+                val openDevices by devices.openRequested.collectAsState()
+                LaunchedEffect(openDevices) {
+                    if (openDevices) {
+                        nav.toMyDevicesRoot()
+                        devices.openHandled()
+                    }
+                }
+            },
         )
     }
 }

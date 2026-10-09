@@ -141,4 +141,31 @@ class AutoSyncTest {
         testScheduler.advanceUntilIdle()
         assertNull(summary)
     }
+
+    @Test
+    fun stepResultsFollowTheSyncEnd() {
+        val done = BackgroundSteps.ended(SyncResult(SyncEnd.COMPLETE, 4, 3, 0), 2048)
+        assertEquals(3, done.newFiles)
+        assertEquals(2048, done.newBytes)
+        assertNull(done.skipped)
+        assertFalse(done.incomplete)
+        // Lost links keep what they saved and ask for a retry.
+        val lost = BackgroundSteps.ended(SyncResult(SyncEnd.LINK_LOST, 4, 1, 0), 10)
+        assertEquals(1, lost.newFiles)
+        assertTrue(lost.incomplete)
+        assertTrue(BackgroundSteps.lost().incomplete)
+        // Nothing was sent, so the next link is tried and the sensor stays due.
+        assertEquals("in use", BackgroundSteps.ended(SyncResult(SyncEnd.IN_USE, 0, 0, 0), 0).skipped)
+        assertNotNull(BackgroundSteps.ended(SyncResult(SyncEnd.AUTH_FAILED, 0, 0, 0), 0).skipped)
+        // A fault outside one file still shows in the summary.
+        assertEquals(1, BackgroundSteps.ended(SyncResult(SyncEnd.FAILED, 2, 0, 0), 0).failures)
+        assertEquals(2, BackgroundSteps.ended(SyncResult(SyncEnd.FILES_NOT_SAVED, 5, 3, 2), 0).failures)
+    }
+
+    @Test
+    fun deviceForFindsTheHardwareId() {
+        val d = devices()
+        assertEquals("aabbccddeeff", d.deviceFor(a.lowercase()))
+        assertNull(d.deviceFor("33333333-3333-3333-3333-333333333333"))
+    }
 }

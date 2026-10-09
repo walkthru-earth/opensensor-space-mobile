@@ -2,7 +2,9 @@ import CoreBluetooth
 import Foundation
 import OpenSensorShared
 
-/// Foreground-only BLE reader. Core Bluetooth owns pairing; no firmware-changing requests are sent.
+/// BLE reader. Core Bluetooth owns pairing; no firmware-changing requests are sent. User actions run
+/// in the foreground. Off screen only a sync or Debug request already running, and an Auto-sync step
+/// for a known sensor (#23), keep a link.
 @MainActor
 final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelegate, @preconcurrency CBPeripheralDelegate
 {
@@ -46,6 +48,26 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     private var link: SensorLink?
     private var syncHandle: SyncHandle?
     private var responseSubscribed = false
+    /// The sensor an Auto-sync step is copying now (#23), and whether that step opened the link.
+    private var backgroundId: String?
+    private var backgroundOpened = false
+    private var backgroundDone: ((BackgroundStepResult) -> Void)?
+    private var backgroundBytes: Int64 = 0
+    private var backgroundTimer: Timer?
+    /// A step asked for before the central manager reported its first state, as after a background launch.
+    private var backgroundRequested: (id: String, done: (BackgroundStepResult) -> Void)?
+    /// Pending connects to Auto-sync sensors, armed while the app is off screen. iOS completes one
+    /// when the sensor comes into range, even with the app suspended or relaunched.
+    private var waiting: [String: CBPeripheral] = [:]
+    /// An armed pending connect completed. The shared run decides whether that sensor is due.
+    var onWake: ((String) -> Void)?
+    /// An Auto-sync step's progress, files done and files listed.
+    var onBackgroundProgress: ((Int, Int) -> Void)?
+    /// Core Bluetooth state restoration, so pending connects survive the app being ended by iOS.
+    static let restoreId = "earth.walkthru.opensensor.central"
+
+    /// Links keep working off screen only for work already under way.
+    private var active: Bool { foreground || link != nil || backgroundId != nil }
 
     init(engine: SensorSync) {
         self.engine = engine
@@ -60,7 +82,11 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     func requestAccess() {
         guard central == nil else { return }
         central = CBCentralManager(
-            delegate: self, queue: .main, options: [CBCentralManagerOptionShowPowerAlertKey: false])
+            delegate: self, queue: .main,
+            options: [
+                CBCentralManagerOptionShowPowerAlertKey: false,
+                CBCentralManagerOptionRestoreIdentifierKey: Self.restoreId,
+            ])
     }
 
     /// The connected sensor's hardware id once INFO named it.
@@ -133,7 +159,8 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     /// A link the user holds stays untouched. A link to another sensor, or a sync or Debug request
     /// on this one, fails the step. An idle link to this sensor is synced and left open.
     func collect(id: String) {
-        guard foreground, link == nil, collectId == nil, let central, central.state == .poweredOn else {
+        guard foreground, link == nil, collectId == nil, backgroundId == nil, let central, central.state == .poweredOn
+        else {
             onCollectFinished?(id, false)
             return
         }
@@ -243,6 +270,12 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
             collectId = nil
             onCollectFinished?(id, false)
         }
+        if let done = backgroundDone {
+            // The link ended before the step finished. Verified files stay, and the run moves on.
+            let started = backgroundBytes > 0
+            clearBackground()
+            done(started ? BackgroundStepResult.lost() : BackgroundStepResult.skipped("connect failed"))
+        }
     }
 
     /// Closes the link to this sensor, if it is open. Forget calls it.
@@ -255,7 +288,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     /// Copies every file this phone lacks from the connected sensor through the shared engine.
     /// Requests are LIST, OPEN, READ and CLOSE only, written in order through the operation queue.
     func sync() {
-        guard foreground, let peripheral = current, control != nil, let response, let identity, link == nil,
+        guard active, let peripheral = current, control != nil, let response, let identity, link == nil,
             pending == nil, operations.isEmpty, !requestingToken
         else { return }
         let mtu = Int32(peripheral.maximumWriteValueLength(for: .withoutResponse) + 3)
@@ -265,9 +298,11 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         }
         self.link = link
         if !responseSubscribed { operations.append(.subscribe(response)) }
-        // The engine ends a stalled sync itself, so the step timer is no longer needed.
+        // The engine ends a stalled sync itself, so the step timers are no longer needed.
         collectTimer?.invalidate()
         collectTimer = nil
+        backgroundTimer?.invalidate()
+        backgroundTimer = nil
         state.bluetoothSyncStarted()
         syncHandle = engine.start(
             link: link, station: identity.station, device: identity.device, maxRead: identity.maxRead,
@@ -275,6 +310,10 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
                 MainActor.assumeIsolated {
                     guard let self, self.link === link else { return }
                     self.state.bluetoothSyncProgressed(progress: update)
+                    if self.backgroundId != nil {
+                        self.backgroundBytes = update.receivedBytes
+                        self.onBackgroundProgress?(Int(update.filesDone), Int(update.filesTotal))
+                    }
                 }
             },
             finished: { [weak self] result in
@@ -297,26 +336,64 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         let opened = collectOpened
         collectId = nil
         collectOpened = false
+        let background = backgroundDone
+        let backgroundOwned = backgroundOpened
+        let bytes = backgroundBytes
+        clearBackground()
         if result.keepsLink {
             state.bluetoothSyncFinished(result: result)
-            // Collect all closes what it opened, so the next sensor can take the one link.
-            if collected != nil, opened { disconnect() }
+            // Collect all and Auto-sync close what they opened, so the next sensor can take the one
+            // link. Off screen nothing stays open once its work ended.
+            if (collected != nil && opened) || (background != nil && backgroundOwned) || !foreground { disconnect() }
         } else {
             // A stalled or failed link may still hold a write in flight. Start the next sync on a fresh connection.
             teardown()
             state.bluetoothSyncClosed(result: result)
         }
         if let collected { onCollectFinished?(collected, result.end == .complete) }
+        background?(BackgroundStepResult.ended(result, bytes: bytes))
     }
 
+    /// The app left the screen. An idle link closes. A sync, a Debug request or an Auto-sync step
+    /// keeps its link and closes it when it ends.
     func suspend() {
         foreground = false
         scanRequested = false
         stopScan()
+        openRequested = nil
+        guard link == nil, backgroundId == nil else { return }
         disconnect(message: "Find your sensor again to resume live readings.")
     }
 
-    func resume() { foreground = true }
+    /// iOS launched the app without a screen, for a background task or a Bluetooth restoration.
+    /// Nothing is open yet, so only the flag changes. The scene's resume sets it back.
+    func launchedOffScreen() { foreground = false }
+
+    /// Back on screen. Pending connects end, because the user drives the link again.
+    func resume() {
+        foreground = true
+        for (id, peripheral) in waiting where peripheral !== current {
+            waiting[id] = nil
+            central?.cancelPeripheralConnection(peripheral)
+        }
+    }
+
+    /// Closes an idle link to this sensor once its page is gone (#16). A sync, a Debug request,
+    /// Wi-Fi access setup, Collect all or an Auto-sync step keeps it.
+    func closeIdle(id: String) {
+        guard let current, current.identifier.uuidString.caseInsensitiveCompare(id) == .orderedSame, link == nil,
+            collectId == nil, backgroundId == nil, !requestingToken
+        else { return }
+        disconnect()
+    }
+
+    /// True while the user's work holds the link to this sensor. An idle open link is not held.
+    func isBusy(id: String) -> Bool {
+        guard let current, current.identifier.uuidString.caseInsensitiveCompare(id) == .orderedSame else {
+            return false
+        }
+        return link != nil || requestingToken || collectId != nil
+    }
 
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
         let message: String
@@ -337,12 +414,32 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
             stopScan()
             disconnect(message: message)
         }
+        switch central.state {
+        case .poweredOn, .unknown, .resetting: break
+        default: waiting.removeAll()
+        }
         // The shared policy maps this to its status and offers Settings only after a denial.
         state.bluetoothAuthorizationChanged(raw: Int64(CBManager.authorization.rawValue))
         state.bluetoothChanged(available: central.state == .poweredOn, explanation: message)
         state.bluetoothPowerChanged(poweredOff: central.state == .poweredOff)
         if central.state == .poweredOn, let id = openRequested { open(id: id) }
         if central.state == .poweredOn, scanRequested { scan() }
+        if central.state == .poweredOn {
+            // A restored pending connect that completed while the app was not running.
+            for (id, peripheral) in waiting where peripheral.state == .connected && peripheral !== current {
+                onWake?(id)
+            }
+        }
+        if let request = backgroundRequested, central.state != .unknown, central.state != .resetting {
+            backgroundRequested = nil
+            backgroundSync(id: request.id, done: request.done)
+        }
+    }
+
+    func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {
+        // iOS relaunched the app for a pending connect. Keep the peripherals so the run can use them.
+        let peripherals = dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral] ?? []
+        for peripheral in peripherals { waiting[peripheral.identifier.uuidString] = peripheral }
     }
 
     func centralManager(
@@ -358,7 +455,18 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     }
 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
-        guard current === peripheral, foreground else {
+        let id = peripheral.identifier.uuidString
+        if current !== peripheral, waiting[id] != nil {
+            // An armed pending connect completed. On screen the user drives the link, so it ends.
+            // Off screen it stays until the run takes it or releases it.
+            if foreground {
+                releaseWaiting(id: id)
+            } else {
+                onWake?(id)
+            }
+            return
+        }
+        guard current === peripheral, active else {
             central.cancelPeripheralConnection(peripheral)
             return
         }
@@ -366,11 +474,13 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     }
 
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
+        if current !== peripheral { waiting[peripheral.identifier.uuidString] = nil }
         guard current === peripheral else { return }
         disconnect(message: "Could not connect. Check that the sensor is nearby and available for pairing.")
     }
 
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+        if current !== peripheral { waiting[peripheral.identifier.uuidString] = nil }
         guard current === peripheral else { return }
         disconnect(message: "The sensor disconnected. Find it again to reconnect.")
     }
@@ -483,7 +593,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     }
 
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
-        guard current === peripheral, foreground else { return }
+        guard current === peripheral, active else { return }
         if characteristic.uuid == CBUUID(string: wire.responseUuid) {
             if let link {
                 if error == nil, let data = characteristic.value { link.deliver(frame: data) }
@@ -542,6 +652,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
             }
             performNext()
             collectWhenReady()
+            backgroundWhenReady()
         }
     }
 }
@@ -563,9 +674,12 @@ extension BluetoothCompanion {
         link.whenClosed { [weak self] in
             // A Collect all step waiting for the link starts once Debug hands it back.
             let release = {
-                guard self?.link === link else { return }
-                self?.link = nil
-                self?.collectWhenReady()
+                guard let self, self.link === link else { return }
+                self.link = nil
+                self.collectWhenReady()
+                self.backgroundWhenReady()
+                // Off screen the lent link closes once Debug hands it back.
+                if !self.foreground, self.backgroundId == nil, self.collectId == nil { self.disconnect() }
             }
             if Thread.isMainThread { MainActor.assumeIsolated { release() } } else { Task { @MainActor in release() } }
         }
@@ -574,5 +688,128 @@ extension BluetoothCompanion {
             performNext()
         }
         return link
+    }
+}
+
+/// Auto-sync over Bluetooth (#23). Only sensors this phone already read over an encrypted link are
+/// opened, by their saved peripheral identifier. iOS shows no pairing prompt off screen, so a sensor
+/// whose bond is gone fails the step instead of asking.
+extension BluetoothCompanion {
+    /// One step of the shared background run. Adopts an idle link to this sensor, or a pending connect
+    /// that completed, or opens the saved peripheral. Answers once, with no ids or secrets in the result.
+    func backgroundSync(id: String, done: @escaping (BackgroundStepResult) -> Void) {
+        guard backgroundDone == nil, backgroundRequested == nil, collectId == nil else {
+            done(BackgroundStepResult.skipped("busy"))
+            return
+        }
+        guard let central else {
+            done(BackgroundStepResult.skipped("bluetooth not allowed"))
+            return
+        }
+        if central.state == .unknown || central.state == .resetting {
+            backgroundRequested = (id, done)
+            return
+        }
+        guard central.state == .poweredOn else {
+            done(BackgroundStepResult.skipped("bluetooth off"))
+            return
+        }
+        if let current {
+            // The one link is in use for another sensor, or for work the user started.
+            guard current.identifier.uuidString.caseInsensitiveCompare(id) == .orderedSame, link == nil,
+                !requestingToken
+            else {
+                done(BackgroundStepResult.skipped("in use"))
+                return
+            }
+            backgroundOpened = false
+        } else {
+            let peripheral =
+                waiting.removeValue(forKey: id)
+                ?? UUID(uuidString: id).flatMap { central.retrievePeripherals(withIdentifiers: [$0]).first }
+            guard let peripheral else {
+                done(BackgroundStepResult.skipped("unknown sensor"))
+                return
+            }
+            backgroundOpened = true
+            if peripheral.state == .connected {
+                adopt(peripheral)
+            } else {
+                connect(peripheral)
+            }
+        }
+        backgroundId = id
+        backgroundDone = done
+        backgroundBytes = 0
+        backgroundTimer = Timer.scheduledTimer(withTimeInterval: 90, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated { self?.failBackground() }
+        }
+        backgroundWhenReady()
+    }
+
+    /// A pending connect already reached the sensor. Discovery starts as after a fresh connect.
+    private func adopt(_ peripheral: CBPeripheral) {
+        current = peripheral
+        peripheral.delegate = self
+        state.connectionStarted(id: peripheral.identifier.uuidString)
+        connectionTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated { self?.disconnect() }
+        }
+        peripheral.discoverServices([CBUUID(string: state.serviceUuid)])
+    }
+
+    fileprivate func backgroundWhenReady() {
+        guard backgroundId != nil, link == nil, pending == nil, operations.isEmpty, !requestingToken else { return }
+        if identity == nil || control == nil || response == nil {
+            if connectionTimer == nil, current != nil { failBackground() }
+            return
+        }
+        sync()
+    }
+
+    /// Ends a step that never started its sync. A link the step opened closes, which reports it.
+    private func failBackground() {
+        guard let done = backgroundDone, syncHandle == nil else { return }
+        if backgroundOpened {
+            disconnect()
+        } else {
+            clearBackground()
+            done(BackgroundStepResult.skipped("not ready"))
+        }
+    }
+
+    fileprivate func clearBackground() {
+        backgroundTimer?.invalidate()
+        backgroundTimer = nil
+        backgroundId = nil
+        backgroundDone = nil
+        backgroundOpened = false
+    }
+
+    /// The task expired or the run was cancelled. The step ends at once and a link it opened closes.
+    func cancelBackground() {
+        backgroundRequested = nil
+        guard backgroundDone != nil else { return }
+        clearBackground()
+        disconnect()
+    }
+
+    /// Arms pending connects to these sensors while the app is off screen. They never time out. iOS
+    /// completes one when the sensor is in range, then [onWake] runs.
+    func armPendingConnects(ids: [String]) {
+        guard !foreground, let central, central.state == .poweredOn else { return }
+        let uuids = ids.compactMap { UUID(uuidString: $0) }
+        for peripheral in central.retrievePeripherals(withIdentifiers: uuids) {
+            let id = peripheral.identifier.uuidString
+            guard peripheral !== current, waiting[id] == nil else { continue }
+            waiting[id] = peripheral
+            central.connect(peripheral)
+        }
+    }
+
+    /// The run did not take this pending connect, so it ends and the sensor is free again.
+    func releaseWaiting(id: String) {
+        guard let peripheral = waiting.removeValue(forKey: id), peripheral !== current else { return }
+        central?.cancelPeripheralConnection(peripheral)
     }
 }
