@@ -4,6 +4,19 @@
 **Code:** `./gradlew verify` (the gate), `.github/workflows/verify.yml`.
 **Related:** measured device behaviour is recorded in the board-specific `../aq-parquet/docs/boards/*/bench-verified.md`; anything not recorded there is unverified.
 
+## 2026-10-09. Wave 2 install check (OnePlus 7 Pro and iPad Air M2), install and launch only
+
+Debug build of `feat/platform-parity` at 14f0a61 (Wave 2: `:core:archive`, `:core:sync` pure moves,
+shared Settings, shared design system and bottom bar). Android was installed with `adb install -r`
+and launched. The process stayed alive with no crash in logcat. The screenshot came out black
+because the phone was dozing, and the screen was not checked. iPad Air M2 (iPadOS, Developer Mode
+on, signer trusted) was built for the device, installed with `devicectl` and launched.
+No sensor was connected and no sync, permission dialog or screen flow was tested on either device.
+
+Later merges the same night (#13 permissions at 00910a9, #14 strings at 5261a74, #12 shared shell
+at 69cc5c6) passed `verify`, `verify-native.sh` and the simulator build only. They were not
+installed on a phone. Owed phone checks are listed on PRs #27, #28, #29, #31 and #33.
+
 ## 2026-10-08 17:55 Cairo. On-demand permissions launch check (OnePlus 7 Pro, Android 16)
 
 Minified release build of `refactor/production-readiness` (W13 merged), installed over the
