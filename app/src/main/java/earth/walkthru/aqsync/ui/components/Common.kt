@@ -78,17 +78,6 @@ fun agoFormatter(): (Long) -> String {
     return remember(res) { { ageMs -> formatAgo(ageMs, res) } }
 }
 
-fun formatUptime(seconds: Long): String {
-    val d = seconds / 86_400
-    val h = (seconds % 86_400) / 3600
-    val m = (seconds % 3600) / 60
-    return when {
-        d > 0 -> "${d}d ${h}h"
-        h > 0 -> "${h}h ${m}m"
-        else -> "${m}m ${seconds % 60}s"
-    }
-}
-
 /**
  * Collect one-off UI events only while the screen is at least STARTED: a snackbar or a system dialog
  * is never fired at a stopped activity. Events are buffered by the producer's `extraBufferCapacity`.

@@ -15,7 +15,6 @@
     <string name="action_hide">إخفاء</string>
     <string name="action_not_now">ليس الآن</string>
     <string name="action_reconnect">إعادة الاتصال</string>
-    <string name="nav_devices">الأجهزة</string>
     <string name="nav_debug">تصحيح الأخطاء</string>
     <string name="nav_settings">الإعدادات</string>
     <string name="nav_disconnect">قطع الاتصال</string>
@@ -34,49 +33,14 @@
 
     <!-- Today -->
     <string name="today_title">اليوم</string>
-    <string name="today_so_far">اليوم حتى الآن</string>
-    <string name="today_average">المتوسط %1$s µg/m³</string>
-    <string name="today_of_the_day">من اليوم مغطّى</string>
-    <string name="today_none">لا قراءات مؤرخة اليوم بعد.</string>
-    <string name="today_none_clock">لا قراءات مؤرخة بعد. اضبط وقت المستشعر ثم زامِن.</string>
-    <string name="today_station_short">المعرّف %1$s…</string>
-    <plurals name="today_readings_since_midnight">
-        <item quantity="zero">%1$d قراءة منذ منتصف الليل</item>
-        <item quantity="one">%1$d قراءة منذ منتصف الليل</item>
-        <item quantity="two">%1$d قراءتان منذ منتصف الليل</item>
-        <item quantity="few">%1$d قراءات منذ منتصف الليل</item>
-        <item quantity="many">%1$d قراءة منذ منتصف الليل</item>
-        <item quantity="other">%1$d قراءة منذ منتصف الليل</item>
-    </plurals>
-    <string name="now_right_now">الآن</string>
-    <string name="now_last_reading">آخر قراءة</string>
-    <string name="now_waiting">في انتظار قراءة…</string>
-    <string name="now_no_reading">لا قراءة بعد</string>
-    <string name="now_snapshot_note">لقطة لمدة 10 ثوانٍ، وليست متوسطًا يوميًا.</string>
-    <string name="now_sample_number">العيّنة %1$d</string>
-    <string name="fresh_none">لا عيّنة بعد</string>
-    <string name="fresh_updated">حُدّث %1$s</string>
-    <string name="fresh_stale">قديم، حُدّث %1$s</string>
 
     <!-- Moods, one per WHO 2021 step. The edges live in :core:airquality. Only the words are here. -->
     <string name="mood_fresh_title">هواء نقي</string>
-    <string name="mood_fresh_advice">ضمن إرشاد منظمة الصحة العالمية. استمتع به.</string>
-    <string name="mood_fresh_like">مثل يوم صافٍ في الريف</string>
     <string name="mood_fair_title">مقبول</string>
-    <string name="mood_fair_advice">أعلى قليلًا من إرشاد منظمة الصحة العالمية. مناسب لمعظم الناس.</string>
-    <string name="mood_fair_like">مثل شارع هادئ في بلدة</string>
     <string name="mood_hazy_title">يميل إلى الضبابية</string>
-    <string name="mood_hazy_advice">قد يلاحظه الأشخاص الحساسون. افتح النوافذ عندما ينخفض.</string>
-    <string name="mood_hazy_like">مثل طريق مزدحم في ساعة الذروة</string>
     <string name="mood_poor_title">سيئ</string>
-    <string name="mood_poor_advice">أبقِ النوافذ مغلقة وخفّف المجهود الطويل في الخارج.</string>
-    <string name="mood_poor_like">مثل مدينة في يوم مليء بالضباب الدخاني</string>
     <string name="mood_smoky_title">دخاني</string>
-    <string name="mood_smoky_advice">ابقَ في الداخل إن استطعت. جهاز تنقية الهواء يساعد.</string>
-    <string name="mood_smoky_like">مثل الوقوف في اتجاه دخان الشواء</string>
     <string name="mood_thick_title">دخان كثيف</string>
-    <string name="mood_thick_advice">ابقَ في الداخل والنوافذ مغلقة وشغّل جهاز تنقية الهواء.</string>
-    <string name="mood_thick_like">مثل غرفة يدخّن فيها أحدهم</string>
     <!-- WHO 2021 steps, named in text so colour is never the only carrier. One set for every screen,
          Discover included. Keep identical to feature/discover composeResources, CopyRulesTest checks. -->
     <string name="who_step_guideline">ضمن إرشاد منظمة الصحة العالمية</string>
@@ -88,135 +52,11 @@
 
     <!-- Sensor states -->
     <string name="pms_absent_title">لا يوجد مستشعر جسيمات</string>
-    <string name="pms_absent_hint">لا يستجيب أي مستشعر جسيمات. تحقّق من الكابل.</string>
     <string name="pms_warming_title">جارٍ الإحماء</string>
-    <string name="pms_warming_hint">المستشعر في مرحلة الإحماء. يستغرق ذلك نحو دقيقة بعد التشغيل.</string>
     <string name="pms_stale_title">القراءة قديمة</string>
-    <string name="pms_stale_hint">آخر قراءة من المستشعر قديمة، لذا لا يُعتمد عليها.</string>
     <string name="pms_error_title">خطأ في المستشعر</string>
-    <string name="pms_error_hint">يبلّغ المستشعر عن خطأ، لذا لا تُعرض أرقامه.</string>
     <string name="pms_valid_title">قراءة</string>
 
-    <!-- Measurement cards -->
-    <string name="env_title">درجة الحرارة والرطوبة</string>
-    <string name="env_unsupported">القراءات المباشرة تحتاج برنامجًا ثابتًا أحدث. الملفات المتزامنة لا تزال تعمل.</string>
-    <string name="readings_title">أحجام جسيمات أخرى</string>
-    <string name="readings_absent">قيم الجسيمات مفقودة (تظهر فارغة، وليست صفرًا)</string>
-    <string name="readings_cf1">CF=1 خام %1$s، %2$s، %3$s µg/m³ (PM1، PM2.5، PM10)</string>
-    <string name="particles_title">الجسيمات في كل 0.1 لتر حسب الحجم (µm)</string>
-    <string name="board_temp">درجة حرارة اللوحة، وليست حرارة المحيط</string>
-    <string name="board_ambient_note">درجة حرارة المحيط من المستشعر</string>
-    <string name="board_temp_unsupported">درجة الحرارة المباشرة غير مدعومة في هذا البرنامج الثابت بعد</string>
-    <string name="board_charging">يشحن</string>
-    <string name="board_millivolts">%1$d mV</string>
-    <string name="board_usb_millivolts">USB %1$d mV</string>
-    <string name="batch_title">تقدير الدفعة، غير متحقَّق منه</string>
-    <string name="batch_value">%1$s µg/m³</string>
-    <string name="batch_waiting">بانتظار عدّ صالح جديد…</string>
-    <string name="batch_explain">%1$s ضرب الجسيمات الأكبر من 0.3 µm في كل 0.1 لتر. تبقى القراءة الخام هي القيمة الأساسية. لا يزال يحتاج مقارنة بجهاز مرجعي.</string>
-
-    <!-- Storage -->
-    <string name="storage_title">التخزين</string>
-    <string name="storage_status_age">الحالة %1$s</string>
-    <string name="storage_none">لا حالة بعد</string>
-    <string name="storage_files_this_boot">ملفات منذ آخر تشغيل</string>
-    <string name="storage_buffered">صفوف بالانتظار</string>
-    <string name="storage_open">على البطاقة، مفتوح</string>
-    <string name="storage_dropped">مُسقَط</string>
-    <string name="storage_errors">أخطاء</string>
-    <string name="storage_missed">فائت</string>
-    <string name="storage_microsd">microSD</string>
-    <string name="storage_not_mounted">غير مركّبة</string>
-    <string name="storage_used_of">مُستخدم %1$s من %2$s</string>
-    <string name="storage_rotation">ملف جديد كل</string>
-    <string name="storage_minutes">%1$d دقيقة</string>
-    <string name="storage_open_row_groups">الملف المفتوح</string>
-    <string name="storage_codec">الترميز</string>
-    <string name="storage_partial">ملف ‎.partial محتفَظ به</string>
-    <string name="storage_uptime">مدة التشغيل</string>
-    <string name="storage_heap">الذاكرة الحرة</string>
-    <string name="storage_failed">توقف التخزين عن الكتابة بعد خطأ. الصفوف الجديدة لا تُحفظ.</string>
-    <plurals name="row_groups">
-        <item quantity="zero">%1$d مجموعة صفوف</item>
-        <item quantity="one">%1$d مجموعة صفوف</item>
-        <item quantity="two">%1$d مجموعتا صفوف</item>
-        <item quantity="few">%1$d مجموعات صفوف</item>
-        <item quantity="many">%1$d مجموعة صفوف</item>
-        <item quantity="other">%1$d مجموعة صفوف</item>
-    </plurals>
-
-    <!-- Smart Sync -->
-    <string name="sync_title">المزامنة الذكية</string>
-    <plurals name="sync_running">
-        <item quantity="zero">جارٍ مزامنة %1$d من %2$d ملف…</item>
-        <item quantity="one">جارٍ مزامنة %1$d من %2$d ملف…</item>
-        <item quantity="two">جارٍ مزامنة %1$d من %2$d ملف…</item>
-        <item quantity="few">جارٍ مزامنة %1$d من %2$d ملفات…</item>
-        <item quantity="many">جارٍ مزامنة %1$d من %2$d ملفًا…</item>
-        <item quantity="other">جارٍ مزامنة %1$d من %2$d ملف…</item>
-    </plurals>
-    <string name="sync_caught_up">كل شيء محدَّث. كل البيانات آمنة على هذا الهاتف.</string>
-    <string name="sync_empty">انسخ ملفات المستشعر إلى هذا الهاتف وتحقّق منها.</string>
-    <string name="sync_unplaced_simple">بعض القراءات بلا وقت بعد. تُحفظ كما هي.</string>
-    <string name="sync_explain">تتحقق المزامنة الذكية من ساعة المستشعر، وتنسخ الملفات الناقصة على هذا الهاتف، وتتحقق من كل ملف، وتحدّث الرسوم البيانية.</string>
-    <string name="sync_button">زامِن الآن</string>
-    <string name="sync_button_running">جارٍ المزامنة…</string>
-    <string name="sync_clock_title">المزامنة الذكية تحتاج الوقت</string>
-    <string name="sync_clock_confirm">%1$s هل تُرسل وقت هذا الهاتف أولًا؟ الملفات الخام لا تُغيَّر أبدًا.</string>
-    <string name="clock_reason_missing">لا يعرف المستشعر الوقت، لذا لا يمكن تأريخ القراءات الجديدة.</string>
-    <string name="clock_reason_rtc">استعاد المستشعر ساعته بعد إعادة التشغيل ولم يتحقق منها هذا الهاتف.</string>
-    <string name="clock_reason_unknown">ساعة المستشعر تحتاج إلى تحقّق.</string>
-    <string name="sync_clock_button">اضبط الوقت وزامِن</string>
-    <plurals name="sync_ready">
-        <item quantity="zero">%1$d ملف متحقَّق منه على هذا الهاتف</item>
-        <item quantity="one">%1$d ملف متحقَّق منه على هذا الهاتف</item>
-        <item quantity="two">%1$d ملفان متحقَّق منهما على هذا الهاتف</item>
-        <item quantity="few">%1$d ملفات متحقَّق منها على هذا الهاتف</item>
-        <item quantity="many">%1$d ملفًا متحقَّقًا منه على هذا الهاتف</item>
-        <item quantity="other">%1$d ملف متحقَّق منه على هذا الهاتف</item>
-    </plurals>
-    <plurals name="sync_some_failed">
-        <item quantity="zero">لم تتم مزامنة %1$d ملف. حاول مرة أخرى.</item>
-        <item quantity="one">لم تتم مزامنة %1$d ملف. حاول مرة أخرى.</item>
-        <item quantity="two">لم تتم مزامنة %1$d ملفين. حاول مرة أخرى.</item>
-        <item quantity="few">لم تتم مزامنة %1$d ملفات. حاول مرة أخرى.</item>
-        <item quantity="many">لم تتم مزامنة %1$d ملفًا. حاول مرة أخرى.</item>
-        <item quantity="other">لم تتم مزامنة %1$d ملف. حاول مرة أخرى.</item>
-    </plurals>
-    <plurals name="sync_unplaced_detail">
-        <item quantity="zero">%1$d قراءة بلا وقت موثوق. تُحفظ ويمكن تصديرها.</item>
-        <item quantity="one">%1$d قراءة بلا وقت موثوق. تُحفظ ويمكن تصديرها.</item>
-        <item quantity="two">%1$d قراءتان بلا وقت موثوق. تُحفظان ويمكن تصديرهما.</item>
-        <item quantity="few">%1$d قراءات بلا وقت موثوق. تُحفظ ويمكن تصديرها.</item>
-        <item quantity="many">%1$d قراءة بلا وقت موثوق. تُحفظ ويمكن تصديرها.</item>
-        <item quantity="other">%1$d قراءة بلا وقت موثوق. تُحفظ ويمكن تصديرها.</item>
-    </plurals>
-    <plurals name="sync_estimated_detail">
-        <item quantity="zero">%1$d قراءة سابقة أخذت وقتها من ضبط لاحق للساعة.</item>
-        <item quantity="one">%1$d قراءة سابقة أخذت وقتها من ضبط لاحق للساعة.</item>
-        <item quantity="two">%1$d قراءتان سابقتان أخذتا وقتهما من ضبط لاحق للساعة.</item>
-        <item quantity="few">%1$d قراءات سابقة أخذت وقتها من ضبط لاحق للساعة.</item>
-        <item quantity="many">%1$d قراءة سابقة أخذت وقتها من ضبط لاحق للساعة.</item>
-        <item quantity="other">%1$d قراءة سابقة أخذت وقتها من ضبط لاحق للساعة.</item>
-    </plurals>
-
-    <!-- Clock -->
-    <string name="clock_title">الساعة</string>
-    <string name="clock_host">الساعة مضبوطة ومتحقَّق منها بواسطة هاتف</string>
-    <string name="clock_rtc">استُعيدت الساعة من بطارية الجهاز</string>
-    <string name="clock_none">المستشعر لا يعرف الوقت</string>
-    <string name="clock_set">الساعة مضبوطة</string>
-    <string name="clock_unknown">حالة الساعة غير معروفة</string>
-    <string name="clock_none_explain">القراءات الجديدة لا تحصل على تاريخ حتى تضبط الوقت.</string>
-    <string name="clock_generation">جيل المرجع %1$d</string>
-    <string name="clock_last_sample">آخر عيّنة في %1$s</string>
-    <string name="clock_actions_explain">ضبط الوقت يعطي تاريخًا للقراءات من الآن فصاعدًا. الإنهاء يكتب القراءات المنتظرة في الذاكرة إلى ملف قصير لتتمكن من مزامنتها الآن.</string>
-    <string name="set_time">اضبط الوقت من الهاتف</string>
-    <string name="set_time_button">اضبط الوقت</string>
-    <string name="set_time_confirm">يرسل وقت هذا الهاتف (%1$s). القراءات الجديدة فقط تحصل على تاريخ. القراءات السابقة تبقى كما هي.</string>
-    <string name="flush">إنهاء الصفوف المخزّنة مؤقتًا</string>
-    <string name="flush_button">إنهاء</string>
-    <string name="flush_confirm">يكتب القراءات المنتظرة في الذاكرة إلى ملف قصير الآن، لتتمكن من مزامنتها.</string>
     <!-- Device -->
     <string name="device_screen_title">الجهاز</string>
     <string name="device_title">الجهاز</string>
@@ -410,7 +250,6 @@
     <string name="perm_open_settings">فتح الإعدادات</string>
 
     <!-- Info sheets -->
-    <string name="info_now_body">لقطة مدتها 10 ثوانٍ من المستشعر. ليست مؤشر جودة الهواء ولا متوسط 24 ساعة، فاعتبرها إشارة تقريبية. الوجه والكلمة واللون كلها تُظهر درجة منظمة الصحة العالمية نفسها.</string>
     <string name="info_wifi_body">ينضم المستشعر إلى شبكة Wi-Fi لديك ليتمكن هذا الهاتف من المزامنة دون Bluetooth.</string>
     <string name="info_pairing_body">كيف يثبت الهاتف أنه مسموح له بالاتصال.</string>
     <string name="info_file_chart_body">عمود لكل ملف تمت مزامنته بترتيب الملفات. الأعمدة الباهتة فيها قراءات صالحة قليلة، مثلًا أثناء الإحماء. الأعمدة المتقطعة وقتها مقدَّر. المس عمودًا لقراءة ملفه وصفوفه ومدته الزمنية ومتوسطه.</string>

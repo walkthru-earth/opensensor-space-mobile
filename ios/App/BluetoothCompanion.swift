@@ -193,7 +193,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
             if connectionTimer == nil, current != nil { failCollect() }
             return
         }
-        sync()
+        startSync()
     }
 
     /// Ends the Collect all step that has not started its sync. A link the step opened closes, which
@@ -257,6 +257,8 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         state.wifiAccessChanged(available: false, busy: false, explanation: "")
         operations.removeAll()
         pending = nil
+        // A command outcome held for its last write reaches Today now that the connection is gone.
+        state.today.linkIdle()
         if let peripheral = current {
             current = nil
             peripheral.delegate = nil
@@ -288,9 +290,17 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     /// Copies every file this phone lacks from the connected sensor through the shared engine.
     /// Requests are LIST, OPEN, READ and CLOSE only, written in order through the operation queue.
     func sync() {
+        // Today's Smart Sync and the Sync button say the link is busy instead of doing nothing.
+        if !startSync() { state.today.commandRefused() }
+    }
+
+    /// Starts the sync when the link is free. Collect all and Auto-sync steps call this from their
+    /// idle waiters, so a refusal there stays quiet and the step waits for the next idle link.
+    @discardableResult
+    private func startSync() -> Bool {
         guard active, let peripheral = current, control != nil, let response, let identity, link == nil,
             pending == nil, operations.isEmpty, !requestingToken
-        else { return }
+        else { return false }
         let mtu = Int32(peripheral.maximumWriteValueLength(for: .withoutResponse) + 3)
         let link = SensorLink(overWifi: false, address: identity.device, mtu: mtu) { [weak self] body in
             // Kotlin sends on the main thread, in request order.
@@ -320,6 +330,49 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
                 MainActor.assumeIsolated { self?.syncEnded(result, link: link) }
             })
         performNext()
+        return true
+    }
+
+    /// Sends one confirmed SET_TIME or FLUSH from Today through the shared session. Today asked
+    /// first. A busy link refuses it, and the outcome always reaches Today.
+    func command(_ command: SensorCommand) {
+        guard foreground, let peripheral = current, control != nil, let response, let identity, link == nil,
+            pending == nil, operations.isEmpty, !requestingToken
+        else {
+            state.today.commandRefused()
+            return
+        }
+        let mtu = Int32(peripheral.maximumWriteValueLength(for: .withoutResponse) + 3)
+        let link = SensorLink(overWifi: false, address: identity.device, mtu: mtu) { [weak self] body in
+            MainActor.assumeIsolated { self?.write(body) }
+        }
+        self.link = link
+        if !responseSubscribed { operations.append(.subscribe(response)) }
+        state.today.commandStarted()
+        syncHandle = engine.command(link: link, command: command) { [weak self] result in
+            MainActor.assumeIsolated { self?.commandEnded(result, link: link) }
+        }
+        performNext()
+    }
+
+    private func commandEnded(_ result: CommandResult, link: SensorLink) {
+        if self.link === link {
+            self.link = nil
+            syncHandle = nil
+        }
+        // The command may have queued a last write, the status request after SET_TIME. Today hears the
+        // outcome, and Smart Sync starts its file sync, once that write completes.
+        state.today.commandEnded(result: result)
+        settle()
+    }
+
+    /// Runs what waits for an idle link once no write or read is queued or in flight. First the
+    /// outcome of a command for Today, then a Collect all step or an Auto-sync step waiting for the link.
+    private func settle() {
+        guard link == nil, pending == nil, operations.isEmpty else { return }
+        state.today.linkIdle()
+        collectWhenReady()
+        backgroundWhenReady()
     }
 
     private func write(_ body: Data) {
@@ -564,6 +617,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         }
         pending = nil
         performNext()
+        settle()
     }
 
     private func performNext() {
@@ -589,6 +643,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         if case .subscribe(let expected) = pending, expected === characteristic {
             pending = nil
             performNext()
+            settle()
         }
     }
 
@@ -651,8 +706,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
                 connectionTimer = nil
             }
             performNext()
-            collectWhenReady()
-            backgroundWhenReady()
+            settle()
         }
     }
 }
@@ -764,7 +818,7 @@ extension BluetoothCompanion {
             if connectionTimer == nil, current != nil { failBackground() }
             return
         }
-        sync()
+        startSync()
     }
 
     /// Ends a step that never started its sync. A link the step opened closes, which reports it.

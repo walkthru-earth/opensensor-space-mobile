@@ -156,7 +156,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             syncBluetooth: { [weak services] in services?.syncConnectedSensor() },
             syncInBackground: { [weak services] id in KotlinBoolean(value: services?.autoSync.syncInBackground(id) ?? false) },
             closeIdle: { id in bluetooth.closeIdle(id: id) },
-            openDebugLink: { device in bluetooth.openDebugLink(device: device) }
+            openDebugLink: { device in bluetooth.openDebugLink(device: device) },
+            command: { command in bluetooth.command(command) }
         )
         let window = UIWindow(windowScene: windowScene)
         window.rootViewController = controller

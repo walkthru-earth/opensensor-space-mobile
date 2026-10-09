@@ -217,6 +217,8 @@ dependencies {
     // The Discover map (shared Compose with iOS) and the public feed port behind it.
     implementation(project(":feature:discover"))
     implementation(project(":feature:history"))
+    // The Today screen, shared Compose with iOS. The ViewModel adapts the repository to its port.
+    implementation(project(":feature:today"))
     implementation(project(":ui:designsystem"))
     // The shared permission policy. The Android launchers stay in ui/permissions/RuntimeAccess.kt.
     implementation(project(":ui:permissions"))

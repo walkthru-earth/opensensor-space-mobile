@@ -145,14 +145,6 @@ private fun Command.failedRes(): Int = when (this) {
     Command.ROTATE_TOKEN -> R.string.msg_failed_rotate_token
 }
 
-/** Why Smart Sync wants to send the phone's time, for the confirmation dialog. */
-@StringRes
-fun ClockQuality.reasonRes(): Int = when (this) {
-    ClockQuality.MISSING -> R.string.clock_reason_missing
-    ClockQuality.RTC_RESTORED -> R.string.clock_reason_rtc
-    ClockQuality.HOST_ANCHORED, ClockQuality.UNKNOWN -> R.string.clock_reason_unknown
-}
-
 fun DeviceMessage.text(res: Resources): String = toUiText().resolve(res)
 
 /** The usual snackbar handling of a [DeviceEvent]. [onClock] handles the Smart Sync clock question. */

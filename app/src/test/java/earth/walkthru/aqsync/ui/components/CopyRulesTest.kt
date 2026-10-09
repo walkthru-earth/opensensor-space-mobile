@@ -73,8 +73,8 @@ class CopyRulesTest {
                 keys.forEach { key -> assertEquals("$folder $module/$key", shown(s.getValue(key)), shared.getValue(module).getValue(key)) }
             }
         }
-        val s = strings()
+        // Today (`:feature:today`) owns the warming hint on both apps.
         val warming = NowReading.of(LiveSample(pms = PmsStatus.WARMING.code)) as NowReading.SensorNotReady
-        assertEquals(s.getValue("pms_warming_hint"), warming.hint)
+        assertEquals(sharedStrings().getValue("today").getValue("pms_warming_hint"), warming.hint)
     }
 }

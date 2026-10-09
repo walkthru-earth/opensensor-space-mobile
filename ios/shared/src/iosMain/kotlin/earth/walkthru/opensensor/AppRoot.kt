@@ -62,11 +62,13 @@ import earth.walkthru.opensensor.permissions.AccessHooks
 import earth.walkthru.opensensor.permissions.AccessKind
 import earth.walkthru.opensensor.permissions.AccessStatus
 import earth.walkthru.opensensor.permissions.RuntimeAccess
+import earth.walkthru.opensensor.permissions.openAppSettings
 import earth.walkthru.opensensor.permissions.rememberOpenAppSettings
 import earth.walkthru.opensensor.settings.SettingsController
 import earth.walkthru.opensensor.settings.SettingsScreen
 import earth.walkthru.opensensor.shell.AppShell
 import earth.walkthru.opensensor.shell.DebugKey
+import earth.walkthru.opensensor.shell.DeviceKey
 import earth.walkthru.opensensor.shell.DiscoverKey
 import earth.walkthru.opensensor.shell.FileMetricsKey
 import earth.walkthru.opensensor.shell.FilesKey
@@ -74,7 +76,10 @@ import earth.walkthru.opensensor.shell.HistoryKey
 import earth.walkthru.opensensor.shell.ScanKey
 import earth.walkthru.opensensor.shell.SettingsKey
 import earth.walkthru.opensensor.shell.ShellBottomBar
+import earth.walkthru.opensensor.shell.TabNavigator
 import earth.walkthru.opensensor.shell.TodayKey
+import earth.walkthru.opensensor.shell.TopTab
+import earth.walkthru.opensensor.today.TodayAction
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import platform.Foundation.NSBundle
@@ -129,11 +134,13 @@ private class DebugHolder(address: String, state: CompanionState, openLink: (Str
  * then) and pushes its [devicePage], which receives the resolved display units (METRIC or IMPERIAL)
  * and the detail level from the shared Settings (`:feature:settings`, `:core:settings`). At the
  * Developer level the device page also gets an open Debug action, and the shared Debug screen
- * (`:feature:debug`) borrows short links from Swift through [openDebugLink].
+ * (`:feature:debug`) borrows short links from Swift through [openDebugLink]. A Bluetooth sensor
+ * opens on the shared Today over [today], and its Device section is the [devicePage].
  */
 @Composable
 internal fun AppRoot(
     devices: DevicesBridge,
+    today: CompanionToday,
     requestBluetooth: () -> Unit,
     openSensor: (String) -> Unit,
     openDebugLink: (String) -> SensorLink?,
@@ -168,17 +175,32 @@ internal fun AppRoot(
                         nav.push(TodayKey(id))
                     }
                 }
-                // The device page until Today (#17) brings the shared device sections. Files and History stay one tap away.
+                // The shared Today (`:feature:today`) for a Bluetooth sensor. A Wi-Fi only sensor keeps the
+                // companion page, which holds its Wi-Fi session. Device opens that page for a Bluetooth sensor too.
                 entry<TodayKey> { key ->
-                    Box(Modifier.fillMaxSize()) {
-                        val openDebug: ((String) -> Unit)? = if (level.developer) { address -> nav.openDebug(address, level.developer) } else null
-                        devicePage(key.address, units, level, openDebug) { nav.pop() }
-                        ArchiveShortcuts(
-                            onFiles = { nav.push(FilesKey(PHONE_ARCHIVE)) },
-                            onHistory = { nav.push(HistoryKey(PHONE_ARCHIVE)) },
-                            modifier = Modifier.align(Alignment.TopEnd),
-                        )
+                    if (IosKnown.isPeripheral(key.address)) {
+                        TodayEntry(key.address, today, settingsRepository, units) { action ->
+                            when (action) {
+                                TodayAction.OpenHistory -> nav.push(HistoryKey(PHONE_ARCHIVE))
+                                TodayAction.OpenFiles -> nav.push(FilesKey(PHONE_ARCHIVE))
+                                TodayAction.OpenDevice -> nav.push(DeviceKey(key.address))
+                                // Debug talks to the hardware id, the same key the companion page passes. The
+                                // link may hold another sensor now, so only this sensor's id opens it.
+                                TodayAction.OpenDebug ->
+                                    today.state.info?.dev
+                                        ?.takeIf { today.state.selectedId == key.address }
+                                        ?.let { nav.openDebug(it, level.developer) }
+                                TodayAction.OpenSettings -> nav.select(TopTab.SETTINGS)
+                                TodayAction.OpenBluetoothSettings -> openAppSettings()
+                                else -> nav.popIfTop { it == key }
+                            }
+                        }
+                    } else {
+                        DevicePage(key.address, units, level, nav, devicePage)
                     }
+                }
+                entry<DeviceKey> { key ->
+                    DevicePage(key.address, units, level, nav, devicePage)
                 }
                 entry<HistoryKey> {
                     HistoryEntry(units = units, level = level, onBack = { nav.pop() })
@@ -202,13 +224,13 @@ internal fun AppRoot(
                         onBack = { nav.popIfTop { it is DebugKey } },
                     )
                 }
-                // iOS has no Smart Sync clock step yet, so its consent stays hidden.
+                // Smart Sync on Today asks before setting the clock, so the consent shows as on Android.
                 entry<SettingsKey> {
                     SettingsScreen(
                         controller = settings,
                         appVersion = version,
                         automaticUnits = systemUnits,
-                        showClockSync = false,
+                        showClockSync = true,
                     )
                 }
             },
@@ -376,9 +398,29 @@ private fun FileMetricsEntry(station: String, name: String, level: DetailLevel, 
 }
 
 /**
- * Compact Files and History buttons over the top end of the device page, the iOS way into the phone
- * archive until device sections are shared.
+ * The companion page of one sensor: the Wi-Fi session, Wi-Fi access and, at the Developer level,
+ * Debug. Files and History stay one tap away.
  */
+@Composable
+private fun DevicePage(
+    address: String,
+    units: UnitSystem,
+    level: DetailLevel,
+    nav: TabNavigator,
+    devicePage: @Composable (id: String, units: UnitSystem, level: DetailLevel, openDebug: ((String) -> Unit)?, onBack: () -> Unit) -> Unit,
+) {
+    Box(Modifier.fillMaxSize()) {
+        val openDebug: ((String) -> Unit)? = if (level.developer) { device -> nav.openDebug(device, level.developer) } else null
+        devicePage(address, units, level, openDebug) { nav.pop() }
+        ArchiveShortcuts(
+            onFiles = { nav.push(FilesKey(PHONE_ARCHIVE)) },
+            onHistory = { nav.push(HistoryKey(PHONE_ARCHIVE)) },
+            modifier = Modifier.align(Alignment.TopEnd),
+        )
+    }
+}
+
+/** Compact Files and History buttons over the top end of the companion page, the iOS way into the phone archive. */
 @Composable
 private fun ArchiveShortcuts(onFiles: () -> Unit, onHistory: () -> Unit, modifier: Modifier = Modifier) {
     Row(

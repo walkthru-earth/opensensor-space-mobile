@@ -22,6 +22,8 @@ kotlin {
             // Files, the inspector and export over the phone archive (docs/screens.md, Files).
             implementation(project(":feature:files"))
             implementation(project(":feature:settings"))
+            // Today of the connected sensor, the same screen and confirmations as Android.
+            implementation(project(":feature:today"))
             // My devices, the shared list of nearby, known and Wi-Fi sensors.
             implementation(project(":feature:devices"))
             implementation(project(":feature:debug"))
