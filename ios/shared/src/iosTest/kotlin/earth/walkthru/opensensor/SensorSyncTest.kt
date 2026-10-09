@@ -157,6 +157,21 @@ class SensorSyncTest {
     }
 
     @Test
+    fun aTokenRefusedMidSyncEndsAsAuthFailed() {
+        var opens = 0
+        val result = run(
+            sensor { link, req ->
+                (req[0].toInt() and 0xFF == Opcode.OPEN && ++opens == 2).also {
+                    if (it) link.reply(Frame.Error(0, ProtocolError.AUTH_FAILED.code, ""))
+                }
+            },
+        )
+
+        assertEquals(SyncEnd.AUTH_FAILED, result.end)
+        assertEquals(2, opens)
+    }
+
+    @Test
     fun aStationSyncsOverOneLinkAtATime() = runBlocking {
         val first = CompletableDeferred<SyncResult>()
         val second = CompletableDeferred<SyncResult>()

@@ -171,6 +171,14 @@ stateDiagram-v2
 and the resume policy read it. Per-file outcomes (`Synced` / `Mismatch` / `DeviceError` / `Failed`)
 are **outcomes**, not a broken pipe.
 
+**Session errors end the run (2026-10-09).** An `ERROR` about the session, not the file, is not a
+per-file `DeviceError`. `AUTH_FAILED`, `BUSY` and any `ERROR` with op 0 during `OPEN` or `READ`
+are rethrown by `SyncEngine`, so the run ends with that exception and no later file is tried.
+Before this, both phones turned a token revoked mid-sync, or a busy sensor, into "refused" for
+every remaining file, and LAN never dropped the stale token. iOS now ends with `AUTH_FAILED` or
+`BUSY`. Android ends the run as `FAILURE` with the "sync stopped early" message. Host test
+`ArchiveCollectorTest`, `SensorSyncTest` on the simulator.
+
 **The post-sync `LIST` runs inside the run.** A `FLUSH` or a rotation may have finalized a file
 while we were pulling, so a completed run re-lists — *before* `running` turns false, because the
 foreground service stops 1.5 s after that and a phone that spent the whole transfer in the

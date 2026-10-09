@@ -7,6 +7,8 @@ import earth.walkthru.aqsync.archive.ArchiveRecord
 import earth.walkthru.aqsync.archive.ArchiveStore
 import earth.walkthru.aqsync.archive.ArchiveVerifier
 import earth.walkthru.aqsync.archive.PartialMeta
+import earth.walkthru.aqsync.data.ble.AuthFailedException
+import earth.walkthru.aqsync.data.ble.DeviceBusyException
 import earth.walkthru.aqsync.data.ble.DeviceErrorException
 import earth.walkthru.aqsync.data.ble.DeviceSession
 import earth.walkthru.aqsync.data.ble.WindowLostException
@@ -95,6 +97,7 @@ class SyncEngine(
         val opened = try {
             session.open(name)
         } catch (e: DeviceErrorException) {
+            if (e.endsSession) throw e
             return FileOutcome.DeviceError(name, e.protocolError, e.message ?: "OPEN failed")
         }
         val handle = opened.handle
@@ -216,6 +219,7 @@ class SyncEngine(
                 return FileOutcome.Synced(name, opened.size, sha256)
             }
         } catch (e: DeviceErrorException) {
+            if (e.endsSession) throw e
             return FileOutcome.DeviceError(name, e.protocolError, e.message ?: "device error")
         } finally {
             // Best effort, even when we are being cancelled: the device closes implicitly on the
@@ -284,6 +288,13 @@ class SyncEngine(
         val hex = sha.digest().toHex()
         return verdict to hex
     }
+
+    /**
+     * An error about the session, not the file: the LAN token was refused, the sensor is busy, or an
+     * `ERROR` for op 0. Every later file would fail the same way, so the run ends with it instead.
+     */
+    private val DeviceErrorException.endsSession: Boolean
+        get() = this is AuthFailedException || this is DeviceBusyException || frame.op == 0
 
     companion object {
         /** Re-reads of one window before the file is given up ([WindowRetryPolicy.RETRIES]). */

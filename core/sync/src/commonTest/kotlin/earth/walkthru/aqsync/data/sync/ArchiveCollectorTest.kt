@@ -3,14 +3,21 @@ package earth.walkthru.aqsync.data.sync
 import earth.walkthru.aqsync.archive.ArchiveKey
 import earth.walkthru.aqsync.archive.ArchiveLayout
 import earth.walkthru.aqsync.archive.ArchiveRecord
+import earth.walkthru.aqsync.data.ble.AuthFailedException
+import earth.walkthru.aqsync.data.ble.DeviceBusyException
+import earth.walkthru.aqsync.data.ble.DeviceErrorException
 import earth.walkthru.aqsync.data.ble.DeviceSession
+import earth.walkthru.aqsync.data.protocol.Frame
+import earth.walkthru.aqsync.data.protocol.Opcode
 import earth.walkthru.aqsync.data.protocol.ParquetVerify
+import earth.walkthru.aqsync.data.protocol.ProtocolError
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.testTimeSource
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 /** The whole collection both phones run on top of the per-file engine, over in-memory ports. */
@@ -99,5 +106,27 @@ class ArchiveCollectorTest {
 
         assertEquals(listOf(FileNotSaved(fake.files[0].name, FileProblem.FAILED)), summary.notSaved)
         assertContentEquals(fake.files[1].bytes, finalBytes(fake.station, fake.files[1].name))
+    }
+
+    @Test
+    fun aTokenRefusedMidSyncEndsTheRunInsteadOfRefusingEveryFile() = runTest {
+        val fake = FakeArchiveDevice(backgroundScope)
+        var opens = 0
+        fake.refuseOpen = { if (++opens == 2) Frame.Error(0, ProtocolError.AUTH_FAILED.code, "") else null }
+
+        assertFailsWith<AuthFailedException> { collect(fake) }
+        assertEquals(2, opens, "no OPEN after the refusal")
+        assertEquals(1, store.files.keys.count { it.startsWith(ArchiveLayout.ARCHIVE + "/") })
+    }
+
+    @Test
+    fun aBusySensorOrASessionErrorEndsTheRun() = runTest {
+        val fake = FakeArchiveDevice(backgroundScope)
+        fake.refuseOpen = { Frame.Error(Opcode.OPEN, ProtocolError.BUSY.code, "") }
+        assertFailsWith<DeviceBusyException> { collect(fake) }
+
+        fake.refuseOpen = { Frame.Error(0, ProtocolError.MALFORMED_REQUEST.code, "") }
+        assertFailsWith<DeviceErrorException> { collect(fake) }
+        assertTrue(store.files.keys.none { it.startsWith(ArchiveLayout.ARCHIVE + "/") })
     }
 }
