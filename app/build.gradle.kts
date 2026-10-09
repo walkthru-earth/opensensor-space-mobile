@@ -229,6 +229,8 @@ dependencies {
     // The Settings screen, shared Compose with iOS.
     implementation(project(":feature:settings"))
     implementation(project(":feature:devices"))
+    // The Device section (pairing, Wi-Fi, Sync over Wi-Fi, bonds, sticker), shared Compose with iOS.
+    implementation(project(":feature:device"))
     // The Files screen, the file inspector and the shared export (docs/screens.md, Files).
     implementation(project(":feature:files"))
     // The Debug screen, shared Compose with iOS.

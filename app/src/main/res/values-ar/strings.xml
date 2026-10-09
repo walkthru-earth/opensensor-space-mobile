@@ -12,18 +12,11 @@
 
     <!-- Common -->
     <string name="action_cancel">إلغاء</string>
-    <string name="action_hide">إخفاء</string>
     <string name="action_not_now">ليس الآن</string>
     <string name="action_reconnect">إعادة الاتصال</string>
     <string name="nav_debug">تصحيح الأخطاء</string>
     <string name="nav_settings">الإعدادات</string>
     <string name="nav_disconnect">قطع الاتصال</string>
-    <string name="value_yes">نعم</string>
-    <string name="value_no">لا</string>
-    <string name="value_off">متوقف</string>
-    <string name="value_not_set">غير مضبوط</string>
-    <string name="value_unknown">غير معروف</string>
-    <string name="config_not_read">لم تُقرأ الإعدادات بعد</string>
     <string name="event_clock_on_today">افتح اليوم وشغّل المزامنة الذكية لتأكيد تحديث الساعة.</string>
 
     <!-- Scan (Home) -->
@@ -110,127 +103,12 @@
     <string name="autosync_wake_ble_drop">ينقطع اتصال Bluetooth أثناء النافذة ثم يعود بعدها.</string>
     <string name="autosync_explain">مهمة في الخلفية تنسخ الملفات الجديدة مع إشعار بالتقدّم. يختار Android الوقت المناسب بالضبط ويتخطاها عند انخفاض البطارية. الانضمام إلى شبكة Wi-Fi يبدأ فحصًا أيضًا. تُفحص الملفات تمامًا كما في مزامنة الكل، ولا يُطلب من المستشعر حذف أي شيء أبدًا.</string>
 
-    <string name="sensor_title">مستشعر الجسيمات</string>
-    <string name="sensor_installed">وحدة الجسيمات المركّبة</string>
-    <string name="sensor_vendor">الشركة المصنّعة</string>
-    <string name="sensor_model">الطراز</string>
-    <string name="sensor_model_supported">%1$s، مدعوم</string>
-    <string name="sensor_model_unsupported">%1$s، يحتاج إلى دعم في البرنامج الثابت</string>
-    <string name="sensor_check_model">يقرأ هذا البرنامج الثابت مستشعرات Plantower PMS5003T. تحقّق من الطراز المطبوع على الوحدة المركّبة قبل الحفظ.</string>
-    <string name="sensor_scan">مسح الرمز الشريطي</string>
-    <string name="sensor_or_enter">أو اكتب ما على الملصق</string>
     <string name="sensor_scan_unrecognized">هذا الرمز الشريطي ليس ملصق Plantower معروفًا. اكتبه يدويًا إن لزم.</string>
     <string name="sensor_scan_unavailable">الماسح غير متاح. اكتب ما على الملصق أدناه.</string>
-    <string name="sensor_sticker">ملصق المستشعر</string>
-    <string name="sensor_sticker_invalid">المتوقع PMS5003T وتاريخ (YYYYMMDD) ومن 1 إلى 9 أرقام للوحدة.</string>
-    <string name="sensor_batch">دفعة معروفة</string>
-    <string name="sensor_store_estimate">حفظ تقدير الدفعة الاختياري</string>
-    <string name="sensor_estimate_explain">لهذه الدفعة فقط، التقدير هو %1$s ضعف عدد الجسيمات الأكبر من 0.3 µm في كل 0.1 L. إنه تقدير غير مُتحقَّق منه من الشركة المصنّعة للدفعة، وليس معايرة مرجعية. تبقى القراءة الخام متاحة.</string>
-    <string name="sensor_estimate_none">لا يوجد معامل دفعة مُراجَع لهذا الملصق.</string>
-    <string name="sensor_save">حفظ على الجهاز</string>
-    <string name="sensor_device_sticker">ملصق الجهاز</string>
-    <string name="sensor_estimate_state">تقدير الدفعة</string>
-    <string name="sensor_estimate_on">مفعّل، غير مُتحقَّق منه</string>
-    <string name="sensor_phone_record">سجل التركيب على الهاتف</string>
-    <string name="sensor_records">السجلات على الهاتف</string>
-    <string name="sensor_mismatch">الملصق على المستشعر يختلف عن سجل هذا الهاتف. احفظه مرة أخرى.</string>
 
-    <string name="pairing_title">الإقران عبر Bluetooth</string>
-    <string name="pairing_mode">الوضع %1$s</string>
-    <string name="pairing_unknown">الوضع غير معروف</string>
-    <string name="pairing_display">شاشة اكتُشفت عند أول تشغيل</string>
-    <string name="pairing_default_pin">رمز PIN ما زال الافتراضي %1$s. غيّره.</string>
-    <string name="pairing_reboot_pending">أعد تشغيل المستشعر لتطبيق التغيير.</string>
-    <string name="pairing_label_random">رمز عشوائي</string>
-    <string name="pairing_label_fixed">رمز PIN ثابت</string>
-    <string name="pairing_label_none">بلا رمز</string>
-    <string name="pairing_random">رمز عشوائي. رمز جديد من 6 أرقام على شاشة المستشعر في كل مرة. يثبت أنك بجانبه.</string>
-    <string name="pairing_fixed">رمز PIN ثابت. رمز واحد من 6 أرقام تختاره أنت. للمستشعرات التي بلا شاشة.</string>
-    <string name="pairing_none">بلا رمز. يبقى الاتصال مشفّرًا، لكن أي هاتف قريب يمكنه الإقران دون سؤال. لمناضد المختبر فقط.</string>
-    <string name="pairing_pin">رمز PIN (6 أرقام)</string>
-    <string name="pairing_new_pin">رمز PIN جديد (6 أرقام، اتركه فارغًا للإبقاء عليه)</string>
-    <string name="pairing_six_digits">ستة أرقام بالضبط</string>
-    <string name="pairing_next_boot">تُطبَّق تغييرات الإقران عند إعادة التشغيل التالية، لأن أمان Bluetooth يُضبط عند بدء تشغيل المستشعر.</string>
-    <string name="pairing_save">حفظ الإقران</string>
-    <string name="pairing_none_title">إيقاف رمز الإقران؟</string>
-    <string name="pairing_none_confirm">يمكن لأي هاتف قريب الإقران دون رمز. استخدم هذا على منضدة المختبر فقط.</string>
-    <string name="pairing_none_button">إيقاف الرمز</string>
-    <string name="reboot_title">إعادة تشغيل الجهاز</string>
-    <string name="reboot_confirm">يحفظ المستشعر قراءاته ثم يعيد التشغيل ويعاود الاتصال. تُطبَّق تغييرات الإقران المعلّقة.</string>
-    <string name="reboot_button">إعادة التشغيل</string>
 
-    <string name="wifi_title">Wi-Fi</string>
-    <string name="wifi_connected">متصل بـ %1$s</string>
-    <string name="wifi_connecting">جارٍ الاتصال بـ %1$s…</string>
-    <string name="wifi_failed">تعذّر الانضمام إلى %1$s. تحقّق من كلمة المرور.</string>
-    <string name="wifi_on_idle">Wi-Fi مفعّل، غير متصل</string>
-    <string name="wifi_off">Wi-Fi متوقف</string>
-    <string name="wifi_unknown">حالة Wi-Fi غير معروفة</string>
-    <string name="wifi_network">الشبكة</string>
-    <string name="wifi_passphrase">كلمة المرور</string>
-    <string name="wifi_psk_stored">محفوظة على الجهاز، ولا تُعرض أبدًا</string>
-    <string name="wifi_psk_open">لا يوجد، شبكة مفتوحة</string>
-    <string name="wifi_ip">عنوان IP</string>
-    <string name="wifi_rssi">الإشارة</string>
-    <string name="wifi_mac">MAC</string>
-    <string name="wifi_scan">البحث عن الشبكات</string>
-    <string name="wifi_refresh">تحقّق مرة أخرى</string>
-    <string name="wifi_over_lan">قد يؤدي تغيير Wi-Fi إلى قطع اتصال Wi-Fi هذا.</string>
-    <string name="wifi_scanning">جارٍ البحث عن الشبكات…</string>
-    <string name="wifi_none_found">لم يُعثر على شبكات.</string>
-    <string name="wifi_join">الانضمام إلى %1$s</string>
-    <string name="wifi_open_network">شبكة مفتوحة، بلا كلمة مرور.</string>
-    <string name="wifi_passphrase_label">كلمة المرور (حتى 63 حرفًا)</string>
-    <string name="wifi_show_passphrase">إظهار كلمة المرور</string>
-    <string name="wifi_hide_passphrase">إخفاء كلمة المرور</string>
-    <string name="wifi_psk_storage">تنتقل كلمة المرور عبر اتصال Bluetooth المشفّر. يحفظها المستشعر دون تشفير ولا يعرضها مرة أخرى أبدًا. الشبكات المخفية لا تظهر في القائمة.</string>
-    <string name="wifi_save_connect">حفظ واتصال</string>
-    <string name="wifi_secured">محمية</string>
-    <string name="wifi_open">مفتوحة</string>
-    <string name="wifi_no_name">(بلا اسم)</string>
-    <string name="wifi_ap_detail">%1$s، القناة %2$d</string>
-    <plurals name="wifi_networks_found">
-        <item quantity="zero">%1$d شبكة، الأقوى أولًا</item>
-        <item quantity="one">%1$d شبكة، الأقوى أولًا</item>
-        <item quantity="two">%1$d شبكتان، الأقوى أولًا</item>
-        <item quantity="few">%1$d شبكات، الأقوى أولًا</item>
-        <item quantity="many">%1$d شبكة، الأقوى أولًا</item>
-        <item quantity="other">%1$d شبكة، الأقوى أولًا</item>
-    </plurals>
 
-    <string name="lan_title">المزامنة عبر Wi-Fi</string>
-    <string name="lan_explain">المزامنة نفسها عبر شبكة Wi-Fi الخاصة بك، تُكتشف تلقائيًا وأسرع من Bluetooth. بث Wi-Fi غير مشفّر، لذا لا ينقل إلا ما يعرضه المستشعر على شاشته.</string>
-    <string name="lan_server">الخادم</string>
-    <string name="lan_server_on">يعمل ما دام Wi-Fi متصلًا</string>
-    <string name="lan_host">مضيف mDNS</string>
-    <string name="lan_port">المنفذ</string>
-    <string name="lan_clients">العملاء الآن</string>
-    <string name="lan_no_access">الشبكة المحلية غير مسموح بها</string>
-    <string name="lan_seen">موجود على هذه الشبكة</string>
-    <string name="lan_seen_at">موجود على هذه الشبكة عند %1$s</string>
-    <string name="lan_discovery_error">تعذّر البحث في هذه الشبكة. %1$s</string>
-    <string name="lan_not_seen">ليس على هذه الشبكة الآن</string>
-    <string name="lan_allow">السماح بالشبكة المحلية</string>
-    <string name="lan_token_held">يمكن لهذا الهاتف المزامنة عبر Wi-Fi</string>
-    <string name="lan_token_missing">ليس لدى هذا الهاتف رمز وصول Wi-Fi بعد</string>
-    <string name="lan_token_explain">يتيح رمز وصول Wi-Fi لهذا الهاتف المزامنة عبر Wi-Fi. يُجلب عبر Bluetooth فقط، ويُحفظ مشفّرًا على هذا الهاتف، ولا يُعرض أبدًا.</string>
-    <string name="lan_fetch">جلب رمز وصول Wi-Fi</string>
-    <string name="lan_fetch_again">جلب الرمز مرة أخرى</string>
-    <string name="lan_reconnect_ble">إعادة الاتصال عبر Bluetooth</string>
-    <string name="lan_rotate">استبدال الرمز</string>
-    <string name="lan_fetch_ble_only">اجلب الرمز عبر Bluetooth.</string>
-    <string name="rotate_title">استبدال رمز وصول Wi-Fi</string>
-    <string name="rotate_confirm">يجب على كل هاتف جلب الرمز الجديد عبر Bluetooth. استخدم هذا إذا فُقد هاتف.</string>
-    <string name="rotate_button">استبدال</string>
 
-    <string name="bonds_title">الهواتف المقترنة</string>
-    <string name="bonds_count">الهواتف المقترنة بالجهاز</string>
-    <string name="bonds_explain">يتذكر المستشعر حتى 3 هواتف وينسى الأقدم. نسيان الكل ينسى هذا الهاتف أيضًا، لذا سيطلب اتصال Bluetooth التالي الرمز مرة أخرى.</string>
-    <string name="bonds_forget">انسَ كل الهواتف المقترنة</string>
-    <string name="bonds_forget_button">انسَ</string>
-    <string name="bonds_confirm">سينسى المستشعر كل الهواتف، ومنها هذا الهاتف. ستُدخل الرمز مرة أخرى.</string>
-    <string name="v1_title">الإعدادات</string>
-    <string name="v1_body">تحتاج الإعدادات إلى برنامج ثابت أحدث. المزامنة ما زالت تعمل.</string>
 
     <!-- Files -->
     <string name="files_connect_to_list">اتصل لعرض الملفات على المستشعر.</string>
@@ -250,8 +128,6 @@
     <string name="perm_open_settings">فتح الإعدادات</string>
 
     <!-- Info sheets -->
-    <string name="info_wifi_body">ينضم المستشعر إلى شبكة Wi-Fi لديك ليتمكن هذا الهاتف من المزامنة دون Bluetooth.</string>
-    <string name="info_pairing_body">كيف يثبت الهاتف أنه مسموح له بالاتصال.</string>
     <string name="info_file_chart_body">عمود لكل ملف تمت مزامنته بترتيب الملفات. الأعمدة الباهتة فيها قراءات صالحة قليلة، مثلًا أثناء الإحماء. الأعمدة المتقطعة وقتها مقدَّر. المس عمودًا لقراءة ملفه وصفوفه ومدته الزمنية ومتوسطه.</string>
 
     <!-- Connection banner -->
@@ -307,11 +183,6 @@
     <!-- History -->
     <!-- Device and Files messages (snackbars) -->
     <string name="msg_sticker_invalid">أدخل الملصق بصيغة PMS5003T مع التاريخ وأرقام الوحدة.</string>
-    <string name="msg_sensor_busy">اتصل بالمستشعر وانتظر حتى تنتهي مهامه.</string>
-    <string name="msg_sensor_not_confirmed">لم يؤكد المستشعر الملصق.</string>
-    <string name="msg_sensor_saved_on">حُفظ الملصق. تقدير الدفعة مفعّل.</string>
-    <string name="msg_sensor_saved_off">حُفظ الملصق. تقدير الدفعة متوقف.</string>
-    <string name="msg_sensor_failed">لم يُحفظ الملصق. تحقق من الاتصال وحاول مرة أخرى.</string>
     <string name="msg_wake_no_dialog">تعذّر فتح نافذة النظام.</string>
     <string name="msg_wake_failed">لم يُضبط التنبيه عند الاقتراب. تعذّر على هذا الهاتف ربط المستشعر.</string>
     <string name="msg_wake_cancelled">لم يُضبط التنبيه عند الاقتراب.</string>
@@ -451,8 +322,6 @@
     <string name="file_chart_no_valid">لا توجد قراءات %1$s صالحة في هذا الملف.</string>
     <string name="device_schema_cols">%1$s، %2$s أعمدة</string>
     <string name="device_payload">الحمولة %1$d B</string>
-    <string name="wifi_scan_unavailable">لا يستطيع Wi-Fi في المستشعر البحث الآن.</string>
-    <string name="wifi_scan_failed">لم يكتمل البحث. حاول مرة أخرى.</string>
     <string name="notif_channel_progress">تقدّم المزامنة</string>
     <string name="notif_channel_progress_desc">يظهر أثناء نسخ الملفات من مستشعر. يُبقي النقل مستمرًا عند إطفاء الشاشة.</string>
     <string name="notif_channel_summary">نتائج المزامنة</string>

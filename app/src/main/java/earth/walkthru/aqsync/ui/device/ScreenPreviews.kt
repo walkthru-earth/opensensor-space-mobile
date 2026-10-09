@@ -13,6 +13,7 @@ import earth.walkthru.aqsync.data.settings.DetailLevel
 import earth.walkthru.aqsync.ui.components.ThemePreviews
 import earth.walkthru.aqsync.units.UnitFormatter
 import earth.walkthru.opensensor.designsystem.OpenSensorTheme
+import earth.walkthru.opensensor.device.DeviceConfigUiState
 import earth.walkthru.opensensor.today.TodayArchive
 import earth.walkthru.opensensor.today.TodayContent
 import earth.walkthru.opensensor.today.TodaySnapshot
@@ -75,11 +76,17 @@ private fun TodayDeveloperPreview() = OpenSensorTheme { TodayPreview(DetailLevel
 
 @ThemePreviews
 @Composable
-private fun DeviceSimplePreview() = OpenSensorTheme { DeviceScreen(PreviewFakes.device(DetailLevel.SIMPLE), DeviceExtras(), onAction = {}) }
+private fun DeviceSimplePreview() = OpenSensorTheme { DevicePreview(DetailLevel.SIMPLE) }
 
 @ThemePreviews
 @Composable
-private fun DeviceDeveloperPreview() = OpenSensorTheme { DeviceScreen(PreviewFakes.device(DetailLevel.DEVELOPER), DeviceExtras(), onAction = {}) }
+private fun DeviceDeveloperPreview() = OpenSensorTheme { DevicePreview(DetailLevel.DEVELOPER) }
+
+@Composable
+private fun DevicePreview(level: DetailLevel) {
+    val state = PreviewFakes.device(level)
+    DeviceScreen(state, DeviceConfigUiState(state.toConfigSnapshot(null), level), DeviceExtras(), onAction = {})
+}
 
 @Composable
 private fun TodayPreview(level: DetailLevel) =

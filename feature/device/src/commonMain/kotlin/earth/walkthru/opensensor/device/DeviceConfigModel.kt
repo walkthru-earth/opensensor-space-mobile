@@ -67,7 +67,7 @@ data class DeviceConfigUiState(
 }
 
 /** Which settings a `SET_CONFIG` changed, for the confirmation line. */
-enum class DeviceConfigChange { PAIRING, WIFI_SENT, WIFI_ON, WIFI_OFF, LAN_ON, LAN_OFF }
+enum class DeviceConfigChange { PAIRING, WIFI_SENT, WIFI_ON, WIFI_OFF, LAN_ON, LAN_OFF, BONDS_CLEARED }
 
 /** Device requests a notice can name. */
 enum class DeviceConfigCommand { GET_CONFIG, SET_CONFIG, REBOOT, GET_TOKEN, ROTATE_TOKEN }

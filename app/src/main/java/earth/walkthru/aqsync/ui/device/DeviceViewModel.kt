@@ -13,7 +13,6 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.DeviceConnectionManager
 import earth.walkthru.aqsync.data.DeviceMessage
-import earth.walkthru.aqsync.data.SensorLabel
 import earth.walkthru.aqsync.data.TimedStatus
 import earth.walkthru.aqsync.data.TransportFactory
 import earth.walkthru.aqsync.data.TransportPreference
@@ -31,18 +30,18 @@ import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
 import earth.walkthru.aqsync.data.local.database.SensorInstallation
 import earth.walkthru.aqsync.data.local.database.SensorInstallationDao
 import earth.walkthru.aqsync.data.protocol.ConfigPatch
-import earth.walkthru.aqsync.data.protocol.ConfigValidationException
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
-import earth.walkthru.aqsync.data.protocol.PairMode
-import earth.walkthru.aqsync.data.protocol.WifiState
 import earth.walkthru.aqsync.data.settings.AppSettings
 import earth.walkthru.aqsync.data.settings.DetailLevel
 import earth.walkthru.aqsync.ui.components.ScreenMessage
-import earth.walkthru.aqsync.ui.components.toStringRes
-import kotlinx.coroutines.CancellationException
+import earth.walkthru.opensensor.device.DeviceConfigChange
+import earth.walkthru.opensensor.device.DeviceConfigController
+import earth.walkthru.opensensor.device.DeviceConfigNotice
+import earth.walkthru.opensensor.device.DeviceConfigSnapshot
+import earth.walkthru.opensensor.device.DeviceConfigSource
+import earth.walkthru.opensensor.device.SensorRecord
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asExecutor
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -50,9 +49,8 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.stateIn
@@ -106,6 +104,24 @@ data class DeviceUiState(
      */
     val canDisrupt: Boolean get() = canEdit && !syncRunning
     val overBle: Boolean get() = transport == TransportKind.BLE || transport == TransportKind.FAKE
+
+    /** What the shared Device section reads. The LAN token itself never leaves the repository. */
+    fun toConfigSnapshot(sensorRecord: SensorRecord?) = DeviceConfigSnapshot(
+        address = address,
+        name = name,
+        connection = connection,
+        transport = transport,
+        info = info,
+        config = config,
+        wifiScan = wifiScan,
+        lanSeen = onLan != null,
+        lanEndpoint = onLan?.let { "${it.host?.hostAddress}:${it.port}" },
+        lanDiscoveryError = lanDiscoveryError,
+        hasLanToken = known?.hasLanToken == true,
+        busy = busy,
+        syncRunning = syncRunning,
+        sensorRecord = sensorRecord,
+    )
 }
 
 @HiltViewModel(assistedFactory = DeviceViewModel.Factory::class)
@@ -132,11 +148,6 @@ class DeviceViewModel @AssistedInject constructor(
     @AssistedFactory
     interface Factory {
         fun create(deviceAddress: String): DeviceViewModel
-    }
-
-    companion object {
-        const val WIFI_POLL_MS = 3_000L
-        const val WIFI_POLL_ATTEMPTS = 20
     }
 
     private val localEvents = MutableSharedFlow<ScreenMessage>(extraBufferCapacity = 4)
@@ -204,72 +215,71 @@ class DeviceViewModel @AssistedInject constructor(
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DeviceUiState())
 
-    init {
-        // While the device reports Wi-Fi `connecting` on a ready link, re-read the config every 3 s
-        // (up to a minute) so the card shows the join progress. This used to be a LaunchedEffect in
-        // the composable. It now lives with the screen's ViewModel and stops when the entry is popped.
-        viewModelScope.launch {
-            combine(repository.config, repository.connectionState) { config, conn ->
-                config?.config?.wifi?.wifiState == WifiState.CONNECTING && conn.isReady
-            }.distinctUntilChanged().collectLatest { polling ->
-                if (polling) {
-                    repeat(WIFI_POLL_ATTEMPTS) {
-                        delay(WIFI_POLL_MS)
-                        repository.refreshConfig()
-                    }
-                }
-            }
-        }
+    /** This phone's record of the fitted module, for the sticker card. */
+    private val sensorRecord = combine(sensorInstallation, sensorHistory) { current, history ->
+        current?.let { SensorRecord(it.serial, history.size) }
     }
 
-    fun refreshConfig() = repository.refreshConfig()
+    /**
+     * The shared Device section over this repository (docs/parity-decisions.md P53). Pairing, Wi-Fi,
+     * Sync over Wi-Fi, paired phones and the sticker card run through it, with its four
+     * confirmations and its Wi-Fi join poll. Repository outcomes still arrive through [events].
+     */
+    private val configSource = RepositoryDeviceConfigSource(
+        snapshot = combine(uiState, sensorRecord) { s, record -> s.toConfigSnapshot(record) }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, DeviceConfigSnapshot(address = deviceAddress)),
+    )
+    val controller = DeviceConfigController(viewModelScope, configSource, settings.detailLevel)
+
     fun disconnect() = repository.disconnect()
 
-    /** Save the physical module label only after the board echoes its full identity. */
-    fun setSensorIdentity(sticker: String, batchCandidate: Boolean, source: String) {
-        val state = uiState.value
-        val label = SensorLabel.parse(sticker)
-        if (label == null || label.model != "PMS5003T") {
-            localEvents.tryEmit(ScreenMessage.Text(context.getString(R.string.msg_sticker_invalid), isError = true))
-            return
+    private inner class RepositoryDeviceConfigSource(override val snapshot: StateFlow<DeviceConfigSnapshot>) : DeviceConfigSource {
+        override val notices: Flow<DeviceConfigNotice> = emptyFlow()
+
+        override fun refreshConfig() = repository.refreshConfig()
+
+        override fun applyConfig(patch: ConfigPatch, change: DeviceConfigChange) = repository.applyConfig(
+            patch,
+            when (change) {
+                DeviceConfigChange.PAIRING -> DeviceMessage.ConfigChange.PAIRING
+                DeviceConfigChange.WIFI_SENT -> DeviceMessage.ConfigChange.WIFI_SENT
+                DeviceConfigChange.WIFI_ON -> DeviceMessage.ConfigChange.WIFI_ON
+                DeviceConfigChange.WIFI_OFF -> DeviceMessage.ConfigChange.WIFI_OFF
+                DeviceConfigChange.LAN_ON -> DeviceMessage.ConfigChange.LAN_ON
+                DeviceConfigChange.LAN_OFF -> DeviceMessage.ConfigChange.LAN_OFF
+                DeviceConfigChange.BONDS_CLEARED -> DeviceMessage.ConfigChange.BONDS_CLEARED
+            },
+        )
+
+        override fun reboot() = repository.rebootAndReconnect()
+        override fun scanWifi() = repository.startWifiScan()
+        override fun clearWifiScan() = repository.clearWifiScan()
+        override fun fetchToken() = repository.fetchToken()
+        override fun rotateToken() = repository.rotateToken()
+        override fun clearBonds() = repository.clearBonds()
+        override suspend fun applySensorConfig(patch: ConfigPatch): ConfigSnapshot = repository.applySensorConfig(patch)
+
+        /** Room keeps the installation with the station and device id from `INFO`. */
+        override suspend fun recordSensor(serial: String, vendor: String, model: String, batch: String, source: String) {
+            val info = uiState.value.info
+            val station = checkNotNull(info?.station) { "no station in INFO" }
+            sensorInstallationDao.record(
+                SensorInstallation(
+                    address = deviceAddress,
+                    station = station,
+                    deviceId = info.dev,
+                    vendor = vendor,
+                    model = model,
+                    serial = serial,
+                    batch = batch,
+                    startedAtEpochMs = System.currentTimeMillis(),
+                    source = source,
+                ),
+            )
         }
-        if (!state.canEdit || state.syncRunning || !state.capabilities.sensorIdentity) {
-            localEvents.tryEmit(ScreenMessage.Text(context.getString(R.string.msg_sensor_busy), isError = true))
-            return
-        }
-        val info = state.info ?: return
-        val station = info.station ?: return
-        val patch = ConfigPatch.build { sensorIdentity(label.serial, batchCandidate) }
-        viewModelScope.launch {
-            try {
-                val acknowledged = repository.applySensorConfig(patch).config.sensor
-                if (acknowledged?.serial != label.serial || acknowledged?.model != label.model ||
-                    acknowledged?.vendor != label.vendor || acknowledged?.batchCandidate != (if (batchCandidate) 1 else 0)
-                ) {
-                    localEvents.tryEmit(ScreenMessage.Text(context.getString(R.string.msg_sensor_not_confirmed), isError = true))
-                    return@launch
-                }
-                sensorInstallationDao.record(
-                    SensorInstallation(
-                        address = deviceAddress,
-                        station = station,
-                        deviceId = info.dev,
-                        vendor = label.vendor,
-                        model = label.model,
-                        serial = label.serial,
-                        batch = label.batch,
-                        startedAtEpochMs = System.currentTimeMillis(),
-                        source = source,
-                    )
-                )
-                localEvents.tryEmit(ScreenMessage.Text(context.getString(if (batchCandidate) R.string.msg_sensor_saved_on else R.string.msg_sensor_saved_off)))
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.w("DeviceViewModel", "sensor identity not saved (${e::class.simpleName}: ${e.message})")
-                localEvents.tryEmit(ScreenMessage.Text(context.getString(R.string.msg_sensor_failed), isError = true))
-            }
-        }
+
+        override fun reconnect() = this@DeviceViewModel.reconnect()
+        override fun reconnectOverBluetooth() = this@DeviceViewModel.reconnectOverBluetooth()
     }
 
     // ------------------------------------------------------------ auto-sync
@@ -363,62 +373,9 @@ class DeviceViewModel @AssistedInject constructor(
         }
     }
 
-    // ------------------------------------------------------------- pairing
+    // -------------------------------------------------------------- links
 
-    fun setPairing(mode: PairMode, pin: String?) {
-        val patch = try {
-            ConfigPatch.build {
-                blePair(mode)
-                if (mode == PairMode.FIXED && !pin.isNullOrEmpty()) blePin(pin)
-            }
-        } catch (e: ConfigValidationException) {
-            localEvents.tryEmit(ScreenMessage.Text(context.getString(e.problem.toStringRes()), isError = true))
-            return
-        }
-        repository.applyConfig(patch, DeviceMessage.ConfigChange.PAIRING)
-    }
-
-    fun setPin(pin: String) {
-        val patch = try {
-            ConfigPatch.build { blePin(pin) }
-        } catch (e: ConfigValidationException) {
-            localEvents.tryEmit(ScreenMessage.Text(context.getString(e.problem.toStringRes()), isError = true))
-            return
-        }
-        repository.applyConfig(patch, DeviceMessage.ConfigChange.PIN)
-    }
-
-    fun reboot() = repository.rebootAndReconnect()
-    fun clearBonds() = repository.clearBonds()
-
-    // ---------------------------------------------------------------- Wi-Fi
-
-    fun scanWifi() = repository.startWifiScan()
-    fun clearScan() = repository.clearWifiScan()
-
-    fun joinWifi(ssid: String, psk: String, open: Boolean) {
-        val patch = try {
-            ConfigPatch.build {
-                wifiSsid(ssid)
-                wifiPsk(if (open) "" else psk)
-                wifiOn(true)
-            }
-        } catch (e: ConfigValidationException) {
-            localEvents.tryEmit(ScreenMessage.Text(context.getString(e.problem.toStringRes()), isError = true))
-            return
-        }
-        repository.applyConfig(patch, DeviceMessage.ConfigChange.WIFI_SENT)
-    }
-
-    fun setWifiOn(on: Boolean) = repository.applyConfig(ConfigPatch.build { wifiOn(on) }, if (on) DeviceMessage.ConfigChange.WIFI_ON else DeviceMessage.ConfigChange.WIFI_OFF)
-    fun setLanOn(on: Boolean) = repository.applyConfig(ConfigPatch.build { lanOn(on) }, if (on) DeviceMessage.ConfigChange.LAN_ON else DeviceMessage.ConfigChange.LAN_OFF)
-
-    // ------------------------------------------------------------------ LAN
-
-    fun fetchToken() = repository.fetchToken()
-    fun rotateToken() = repository.rotateToken()
-
-    fun reconnectOverBluetooth() {
+    private fun reconnectOverBluetooth() {
         val s = uiState.value
         val addr = s.address ?: return
         repository.disconnect()
