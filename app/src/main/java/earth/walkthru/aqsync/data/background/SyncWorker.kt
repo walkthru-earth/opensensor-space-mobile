@@ -150,7 +150,7 @@ class SyncWorker @AssistedInject constructor(
         private const val NOTIFY_INTERVAL_MS = 500L
 
         /** Retries (with the request's exponential backoff) within one period before waiting for the next. */
-        const val MAX_RETRIES = 2
+        const val MAX_RETRIES = BackgroundSyncPolicy.MAX_RETRIES
 
         /** Input data: restrict a manual run to this Bluetooth address (switch on or off). Absent for periodic runs. */
         const val KEY_ADDRESS = "address"

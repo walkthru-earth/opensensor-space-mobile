@@ -86,16 +86,16 @@ class AutoSyncRunnerTest {
     fun `policy - LAN first when the station is discovered and a token is stored, then Bluetooth when bonded`() {
         val links = AutoSyncPolicy.linksFor(device(), onLan(), bonded = true)
         assertEquals(2, links.size)
-        assertTrue(links[0] is AutoSyncLink.Lan)
-        assertEquals(AutoSyncLink.Ble, links[1])
+        assertTrue(links[0] is BackgroundSyncLink.Lan)
+        assertEquals(BackgroundSyncLink.Ble, links[1])
     }
 
     @Test
     fun `policy - no token means no LAN even when discovered, no bond means no Bluetooth`() {
-        assertEquals(listOf<AutoSyncLink>(AutoSyncLink.Ble), AutoSyncPolicy.linksFor(device(token = null), onLan(), bonded = true))
+        assertEquals(listOf<AutoSyncLink>(BackgroundSyncLink.Ble), AutoSyncPolicy.linksFor(device(token = null), onLan(), bonded = true))
         assertTrue(AutoSyncPolicy.linksFor(device(token = null), onLan(), bonded = false).isEmpty())
         // Discovered under another station: not this device.
-        assertEquals(listOf<AutoSyncLink>(AutoSyncLink.Ble), AutoSyncPolicy.linksFor(device(), onLan("other-station"), bonded = true))
+        assertEquals(listOf<AutoSyncLink>(BackgroundSyncLink.Ble), AutoSyncPolicy.linksFor(device(), onLan("other-station"), bonded = true))
         // Unresolved address: not connectable.
         val unresolved = mapOf(gateway.fake.station to LanDevice("AQ-6b40", null, 47390, mapOf(LanFraming.TXT_STATION to gateway.fake.station), 0L))
         assertTrue(AutoSyncPolicy.linksFor(device(), unresolved, bonded = false).isEmpty())
@@ -105,7 +105,7 @@ class AutoSyncRunnerTest {
     fun `policy - lanOnly (Wi-Fi trigger) never offers Bluetooth, even when bonded`() {
         val links = AutoSyncPolicy.linksFor(device(), onLan(), bonded = true, lanOnly = true)
         assertEquals(1, links.size)
-        assertTrue(links[0] is AutoSyncLink.Lan)
+        assertTrue(links[0] is BackgroundSyncLink.Lan)
         assertTrue(AutoSyncPolicy.linksFor(device(), emptyMap(), bonded = true, lanOnly = true).isEmpty())
     }
 
@@ -425,8 +425,8 @@ class AutoSyncRunnerTest {
         override fun isBonded(address: String) = address in bonded
 
         override suspend fun sync(device: KnownDevice, link: AutoSyncLink): BackgroundSyncResult {
-            val label = if (link is AutoSyncLink.Lan) "LAN" else "Bluetooth"
-            val kind = if (link is AutoSyncLink.Lan) TransportKind.LAN else TransportKind.BLE
+            val label = if (link is BackgroundSyncLink.Lan) "LAN" else "Bluetooth"
+            val kind = if (link is BackgroundSyncLink.Lan) TransportKind.LAN else TransportKind.BLE
             calls += device.address to label
             if (label in unreachable) return BackgroundSyncResult(device.address, device.name, kind, 0, 0, 0, skipped = "connect failed")
             if (label in throwing) throw IOException("socket reset by peer")
