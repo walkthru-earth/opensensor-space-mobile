@@ -35,13 +35,15 @@ import earth.walkthru.opensensor.shell.TopTab
  * screens as entries, each with its Hilt ViewModels, until a screen moves to common.
  */
 @Composable
-fun MainNavigation(modifier: Modifier = Modifier) {
+fun MainNavigation(modifier: Modifier = Modifier, level: ShellLevelViewModel = hiltViewModel()) {
     LanDiscoveryEffect()
-    AppShell(entries = { nav -> androidEntries(nav) }, modifier = modifier)
+    // Read at tap time, so a level changed in Settings applies without recomposing the entries.
+    val developer = { level.developer.value == true }
+    AppShell(entries = { nav -> androidEntries(nav, developer) }, modifier = modifier)
 }
 
 /** Every Android destination. Hilt stays at this edge, the shell never sees it. */
-private fun EntryProviderScope<NavKey>.androidEntries(nav: TabNavigator) {
+private fun EntryProviderScope<NavKey>.androidEntries(nav: TabNavigator, developer: () -> Boolean) {
     entry<DiscoverKey> {
         DiscoverRoute(onAddSensor = { nav.toMyDevicesRoot() })
     }
@@ -57,7 +59,8 @@ private fun EntryProviderScope<NavKey>.androidEntries(nav: TabNavigator) {
             onOpenHistory = { nav.openSection(HistoryKey(key.address)) },
             onOpenFiles = { nav.openSection(FilesKey(key.address)) },
             onOpenDevice = { nav.openSection(DeviceKey(key.address)) },
-            onOpenDebug = { nav.push(DebugKey(key.address)) },
+            // The shell checks the stored level itself, and the Debug screen pops when the level drops.
+            onOpenDebug = { nav.openDebug(key.address, developer = developer()) },
             onOpenSettings = { nav.select(TopTab.SETTINGS) },
             onDisconnected = { nav.toMyDevicesRoot() },
         )
@@ -93,7 +96,8 @@ private fun EntryProviderScope<NavKey>.androidEntries(nav: TabNavigator) {
             onOpenToday = { nav.openSection(TodayKey(key.address)) },
             onOpenHistory = { nav.openSection(HistoryKey(key.address)) },
             onOpenFiles = { nav.openSection(FilesKey(key.address)) },
-            onOpenDebug = { nav.push(DebugKey(key.address)) },
+            // The shell checks the stored level itself, and the Debug screen pops when the level drops.
+            onOpenDebug = { nav.openDebug(key.address, developer = developer()) },
             onOpenSettings = { nav.select(TopTab.SETTINGS) },
             onDisconnected = { nav.toMyDevicesRoot() },
         )

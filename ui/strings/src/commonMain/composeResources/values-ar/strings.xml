@@ -10,6 +10,7 @@
     <string name="app_name">opensensor.space</string>
     <string name="now_waiting">في انتظار قراءة…</string>
     <string name="nav_disconnect">قطع الاتصال</string>
+    <string name="nav_debug">تصحيح الأخطاء</string>
     <string name="action_cancel">إلغاء</string>
     <string name="conn_ready">متصل</string>
     <string name="conn_connecting">جارٍ الاتصال…</string>

@@ -11,6 +11,7 @@
     <string name="app_name">opensensor.space</string>
     <string name="now_waiting">Waiting for a reading…</string>
     <string name="nav_disconnect">Disconnect</string>
+    <string name="nav_debug">Debug</string>
     <string name="action_cancel">Cancel</string>
     <string name="conn_ready">Connected</string>
     <string name="conn_connecting">Connecting…</string>

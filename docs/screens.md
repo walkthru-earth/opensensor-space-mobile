@@ -235,6 +235,18 @@ no mood or standards band.
 | **Metrics** (Detailed) | Shared on both apps (`:feature:files`). One archived file through the app's own reader: rows, row groups, schema/writer version, codec, footer size, UTC/uptime span, sequence range, PMS-valid rows, per-row-group spans from footer statistics, every column decoded (nulls/min/max/first/last/"footer agrees"), key/value metadata. The archive copy is never touched. | `FileInspector` over `ParquetFile` (`:core:parquet`) |
 | **Debug** (Developer) | Active transport + endpoint + `payload_max`; Smart Sync decision trace and archive time accounting (real / same-boot estimate / unplaceable); live `status` JSON; last 200 raw frames (dir, type, len, first 16 bytes; `TOKEN` and `SET_CONFIG` redacted); **Device log** (`LOG_TAIL 8192`); **Raw command** (hex → decoded frames; refuses `REBOOT` and `SET_CONFIG`, which need the Device screen's confirmation). | `FrameRecorder`, `DeviceSession.raw`, repository diagnostics |
 
+The Debug screen is one shared Compose screen in `:feature:debug` (`DebugScreen`, `DebugController`)
+for both apps. A platform lends it a `DebugSource`. Android adapts the connection repository and its
+long-lived session (`RepositoryDebugSource`). iOS borrows a short `SensorLink` from Swift for each
+request (`IosDebugSource`) and keeps one frame recorder per sensor (`FrameRecorderRegistry`), so the
+frame history covers Bluetooth and Wi-Fi syncs and debug requests alike. The denylist
+(`RawCommandPolicy`, `REBOOT` and `SET_CONFIG`) and the redaction (`FrameRedaction`) live in
+`:core:sync` and are checked twice, in `RawCommandSender` and again in `DeviceSession.rawCommand`.
+Status and config JSON pass through `FrameRedaction.scrubSecrets` before they are shown. The shell
+opens Debug only at the Developer level (`TabNavigator.openDebug`), and the screen pops itself when
+the level drops. On iOS the entry is a Debug button on the connected Bluetooth card. iOS has no
+Smart Sync trace card yet, and reads the config on request.
+
 ## The transport chip
 
 Top bar of Today, Files, Device and Debug shows **Bluetooth** or **Wi-Fi LAN**. Single source:

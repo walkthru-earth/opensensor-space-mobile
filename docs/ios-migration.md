@@ -255,9 +255,17 @@ accuracy, stale/background handling or authenticated Wi-Fi connections. See
    what they open. No descriptor leaks today. The JVM reader closes its file after mapping, and
    the iOS reader is a mapped `NSData` freed with the object. A reader over a plain file handle
    would need it.
+10. Debug (`:feature:debug`) runs on iOS over a lent Bluetooth link only. Raw commands, `LOG_TAIL`,
+    `GET_CONFIG` and `STATUS` need a Wi-Fi variant of `openDebugLink` in `LanDiscovery.swift`
+    (async `target()` and `beginCollect`), and iOS needs the Smart Sync trace card. Qualify on an
+    iPhone that a raw command, the log, the config read and Refresh status work over Bluetooth, that
+    `TOKEN` and secrets stay redacted, that a sync is refused while Debug holds the link and the
+    reverse, and that leaving Developer level closes the screen.
 
 LAN and Bluetooth file sync use the shared Kotlin engine. Swift keeps the sockets, Core
 Bluetooth, LAN framing, the HELLO check, keepalive, the BLE token request and Keychain.
+The shared Debug screen borrows the same `SensorLink` from `BluetoothCompanion.openDebugLink`,
+one per request. Closing the link (`SensorLink.whenClosed`) hands it back to Swift.
 `SensorArchive.swift` remains only for Files export. Android's Room index, WorkManager and
 foreground service stay Android code.
 

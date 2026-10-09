@@ -39,7 +39,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             connectLan: { [weak self] name in self?.lan.connect(name: name) },
             syncLan: { [weak self] name in self?.lan.sync(name: name) },
             disconnectLan: { [weak self] name in self?.lan.disconnect(name: name) },
-            syncBluetooth: { [weak self] in self?.syncConnectedSensor() }
+            syncBluetooth: { [weak self] in self?.syncConnectedSensor() },
+            openDebugLink: { [weak self] device in self?.bluetooth.openDebugLink(device: device) }
         )
         let window = UIWindow(windowScene: windowScene)
         window.rootViewController = controller

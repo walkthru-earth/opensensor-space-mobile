@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.withContext
 import platform.Foundation.NSData
+import platform.Foundation.NSLock
 import kotlin.coroutines.CoroutineContext
 
 /**
@@ -48,10 +49,32 @@ class SensorLink internal constructor(
         frames.trySend(frame.toByteArray())
     }
 
+    private val closeLock = NSLock()
+    private var closed = false
+    private val onClose = mutableListOf<() -> Unit>()
+
     /** The pipe is gone. Safe from any thread and more than once. */
     fun linkClosed() {
         state.value = ConnectionState.Disconnected
         frames.close()
+        closeLock.lock()
+        val callbacks = if (closed) emptyList() else onClose.toList()
+        closed = true
+        onClose.clear()
+        closeLock.unlock()
+        callbacks.forEach { it() }
+    }
+
+    /**
+     * Runs [callback] once when the link closes, on the closing thread, or at once if it already
+     * closed. A debug link lent to the Debug screen tells its Swift owner it is free again this way.
+     */
+    fun whenClosed(callback: () -> Unit) {
+        closeLock.lock()
+        val now = closed
+        if (!now) onClose += callback
+        closeLock.unlock()
+        if (now) callback()
     }
 
     internal val transport: AqTransport = object : AqTransport {

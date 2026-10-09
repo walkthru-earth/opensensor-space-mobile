@@ -54,6 +54,15 @@ class TabNavigator(
         stack(tab).add(key)
     }
 
+    /**
+     * The Debug inspector, reachable only at the Developer detail level on both platforms. A tap below
+     * that level, or a second tap while it is already on top, does nothing.
+     */
+    fun openDebug(address: String, developer: Boolean) {
+        if (!developer || top == DebugKey(address)) return
+        push(DebugKey(address))
+    }
+
     /** Today, History, Files and Device are siblings. Replace the open one rather than stack them. */
     fun openSection(key: NavKey) {
         val stack = stack(tab)
