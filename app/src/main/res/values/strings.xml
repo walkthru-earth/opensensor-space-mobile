@@ -469,7 +469,6 @@
     <string name="chart_no_time">no time</string>
 
     <!-- History -->
-    <string name="history_of">%1$d of %2$d</string>
     <!-- Device and Files messages (snackbars) -->
     <string name="msg_sticker_invalid">Enter the sticker as PMS5003T, its date and unit digits.</string>
     <string name="msg_sensor_busy">Connect to the sensor and wait for its tasks to finish.</string>
@@ -586,7 +585,6 @@
     <string name="ago_minutes">%1$d min ago</string>
     <string name="ago_hours">%1$d h ago</string>
     <string name="ago_days">%1$d d ago</string>
-    <string name="action_back">Back</string>
     <string name="transport_ble">Bluetooth</string>
     <string name="transport_lan">Wi-Fi LAN</string>
     <string name="transport_fake">Fake device</string>

@@ -529,7 +529,6 @@
     <string name="chart_no_time">بلا وقت</string>
 
     <!-- History -->
-    <string name="history_of">%1$d من %2$d</string>
     <!-- Device and Files messages (snackbars) -->
     <string name="msg_sticker_invalid">أدخل الملصق بصيغة PMS5003T مع التاريخ وأرقام الوحدة.</string>
     <string name="msg_sensor_busy">اتصل بالمستشعر وانتظر حتى تنتهي مهامه.</string>
@@ -661,7 +660,6 @@
     <string name="ago_minutes">قبل %1$d د</string>
     <string name="ago_hours">قبل %1$d س</string>
     <string name="ago_days">قبل %1$d يوم</string>
-    <string name="action_back">رجوع</string>
     <string name="transport_ble">Bluetooth</string>
     <string name="transport_lan">Wi-Fi LAN</string>
     <string name="transport_fake">جهاز وهمي</string>
