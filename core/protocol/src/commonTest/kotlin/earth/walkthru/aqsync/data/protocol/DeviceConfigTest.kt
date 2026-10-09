@@ -136,4 +136,21 @@ class DeviceConfigTest {
         assertEquals("PMS5003T-202604081332", config.sensor?.serial)
         assertEquals(1, config.sensor?.batchCandidate)
     }
+
+    @Test
+    fun locationPageAndPatchCarryOnlyCellAndDeclaredCountry() {
+        val text = """{"location":{"cell":"85283083fffffff","resolution":5,"cell_resolution":5,"lat":37.79,"lon":-122.35,"country":"US"}}"""
+        val location = DeviceConfig.parse(text).location!!
+        assertEquals("85283083fffffff", location.cell)
+        assertEquals(5, location.cellResolution)
+        assertEquals(37.79, location.lat)
+        assertEquals("US", location.country)
+        assertEquals(listOf(Opcode.GET_CONFIG.toByte()), Request.GetConfig.encode().toList())
+        assertEquals(listOf(Opcode.GET_CONFIG.toByte(), 1.toByte()), Request.GetLocation.encode().toList())
+        val patch = ConfigPatch.build { location("85283083fffffff", 5, "US") }
+        assertEquals("location.cell=85283083fffffff\nlocation.resolution=5\nlocation.country=US\n", patch.encode())
+        assertFalse("37.79" in patch.encode())
+        assertNull(DeviceConfig.parse("{}").location)
+        assertEquals("location.cell=\nlocation.resolution=5\nlocation.country=\n", ConfigPatch.build { location("", 5, "") }.encode())
+    }
 }

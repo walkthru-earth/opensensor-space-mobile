@@ -7,7 +7,7 @@ Discover and uploads before the first store submission.
 `ios/App/PrivacyInfo.xcprivacy`. **Related:** [screens.md](screens.md) (permission timing table),
 [devices-and-discovery.md](devices-and-discovery.md) (network boundary, public feed, uploads).
 
-State as of 2026-10-08. Re-check the linked store pages before each submission. They change yearly.
+State as of 2026-10-09. Re-check the linked store pages before each submission. They change yearly.
 
 ## Current data posture
 
@@ -15,8 +15,11 @@ State as of 2026-10-08. Re-check the linked store pages before each submission. 
 - Readings and Parquet files stay on the phone. They leave only when the user shares or exports them
   through the system share sheet or document picker.
 - No account, no analytics, no crash reporting SDK, no ads. The only location permission is
-  approximate, asked by the Discover "Near me" button on that tap. The fix moves the map and draws
-  a puck on the phone, and is never stored or sent (AGENTS.md).
+  approximate, asked from Discover Near me or Device settings Use phone location.
+  Near me only moves the map. Private device setup converts a temporary fix into
+  the chosen H3 cell, then sends that cell to the owner's sensor only after Save.
+  The original fix is never stored or sent. No background location is requested.
+  See [device-location.md](device-location.md).
 - No server today. The planned Discover feed (anonymous read-only GETs) and per-device opt-in
   uploads change the answers below. See "Before Discover or uploads ship".
 
@@ -26,7 +29,7 @@ State as of 2026-10-08. Re-check the linked store pages before each submission. 
 | --- | --- | --- |
 | Target API | Targets 37. Play requires API 36 for new apps and updates from 2026-08-31 ([target SDK](https://developer.android.com/google/play/requirements/target-sdk)) | `app/build.gradle.kts` |
 | Runtime permissions | Asked in context from the action that needs them, never at launch (`PermissionTriggers`). In-app rationale only when `shouldShowRequestPermissionRationale` is true. Settings link on Android after a denial that an earlier rationale or request proves permanent (a dismissed first prompt stays quiet) and after a reported denial on iOS, for Bluetooth, Local Network, Near me location and the iOS sticker camera | `:ui:permissions` (`PermissionFlow`, `PermissionTriggers`, `PermissionFlowTest`), `app/.../ui/permissions/RuntimeAccess.kt`, `ios/App/BluetoothCompanion.swift`, `ios/App/LanPolicy.swift` |
-| Location | Only `ACCESS_COARSE_LOCATION`, asked on the Near me tap, foreground only. `BLUETOOTH_SCAN` carries `neverForLocation`. No fine or background location, so no Play location declaration. Data safety stays "not collected" because the fix never leaves the phone | `ManifestPermissionsTest`, `feature/discover/.../NearMe*.kt` |
+| Location | Only `ACCESS_COARSE_LOCATION`, asked on the Near me or Use phone location tap, foreground only. `BLUETOOTH_SCAN` carries `neverForLocation`. No fine or background location, so no Play location declaration. The original fix never leaves the phone. A chosen H3 cell is deliberately sent to the owner's local sensor; review store form answers for this device-to-device flow and the selected precision before submission | `ManifestPermissionsTest`, `feature/discover/.../NearMe*.kt` |
 | Prominent disclosure | Not required. It applies when an app collects personal or sensitive data in a way users would not expect. Nothing leaves the phone without a user share | Play [User Data policy](https://support.google.com/googleplay/android-developer/answer/10144311) |
 | Data safety form | "No data collected" and "No data shared". Data processed only on the device, and data the user sends with the share sheet, are not collection | Play [Data safety help](https://support.google.com/googleplay/android-developer/answer/10787469) |
 | Encryption in transit | Answer "No" for data in transit, since no user data is sent to a developer server. BLE links are encrypted by pairing. The LAN stream is not encrypted and stays on the local network | `docs/transports.md` |
@@ -44,7 +47,7 @@ State as of 2026-10-08. Re-check the linked store pages before each submission. 
 
 | Item | Answer today | Evidence |
 | --- | --- | --- |
-| Purpose strings | `NSBluetoothAlwaysUsageDescription` "Finds and connects to your opensensor devices nearby to copy their readings." `NSLocalNetworkUsageDescription` "Finds your opensensor devices on your Wi-Fi to sync faster." `NSBonjourServices` `_aqsync._tcp` only. `NSLocationWhenInUseUsageDescription` "Centres the public sensor map near you. Your location stays on this phone." with `NSLocationDefaultAccuracyReduced` true, asked only from the Discover Near me tap. `NSCameraUsageDescription` "Reads the barcode on your sensor sticker. No picture is kept.", asked only from the Scan tap on the sensor sticker card | `ios/App/Info.plist` |
+| Purpose strings | `NSBluetoothAlwaysUsageDescription` "Finds and connects to your opensensor devices nearby to copy their readings." `NSLocalNetworkUsageDescription` "Finds your opensensor devices on your Wi-Fi to sync faster." `NSBonjourServices` `_aqsync._tcp` only. `NSLocationWhenInUseUsageDescription` "Centres the public map or sets an approximate sensor area when you ask. Only the selected area is sent to your sensor." with `NSLocationDefaultAccuracyReduced` true, asked only from the Discover Near me or Device settings Use phone location tap. `NSCameraUsageDescription` "Reads the barcode on your sensor sticker. No picture is kept.", asked only from the Scan tap on the sensor sticker card | `ios/App/Info.plist` |
 | Purpose strings, Arabic | The same purpose strings in Arabic, in the `InfoPlist.xcstrings` string catalog, which Xcode compiles to `ar.lproj/InfoPlist.strings`. English stays identical to `Info.plist` (`TranslationsTest`) | `ios/App/InfoPlist.xcstrings` |
 | Languages | App Store localizations English and Arabic. `CFBundleLocalizations` lists en and ar, `knownRegions` adds ar, so iOS offers Arabic in the app's Language setting | `ios/App/Info.plist`, `project.pbxproj` |
 | Prompt timing | `CBCentralManager` is created on the first My devices Scan tap. At launch it is created only when iOS restores Bluetooth state, or when an Auto-sync switch is on and Bluetooth is already allowed, so no prompt shows. `NWBrowser` starts from My devices Scan, from an automatic My devices scan when Bluetooth access was already held, or from Find Wi-Fi sensors on a device page; the first real browse can trigger the Local Network prompt. Notifications are asked only from the tap that turns an Auto-sync switch on, and only while iOS has never asked. A denial keeps the switch on and only hides the summary. The camera is asked only from the Scan tap on the sensor sticker card in Device settings (`UserAction.SCAN_STICKER`, `AccessKind.CAMERA`), straight to the system prompt with no in-app rationale, as for Bluetooth, Local Network and location. A refusal leaves a note on the card, a later tap offers Settings, a restricted camera gets the note only, and typing the sticker always works (`parity-decisions.md` P62). Launch shows no prompt | `BluetoothCompanion.swift`, `LanDiscovery.swift`, `AutoSyncSwitch.kt`, `StickerScan.kt`, `StickerScanner.swift`, `AppDelegate.swift` |
@@ -122,3 +125,16 @@ Have counsel read the privacy policy before the first public release.
 - [ ] Data safety form and App privacy answers match this page.
 - [ ] At publish time, the privacy policy URL is live and matches what the release does.
 - [ ] At publish time, the Play foreground service declaration has its video.
+
+## Private station provisioning (2026-10-09)
+
+This is a local sensor configuration action, not a developer-server upload. The
+owner selects the resolution and taps Save before the cell leaves the phone.
+Resolution 5 is the default; finer cells can identify a particular location even
+with an approximate OS fix. The location purpose string and trigger table include
+both map centering and device setup. No phone coordinates, background tracking or
+remote reverse geocoding is introduced. The earlier map-only statement that no
+location-derived value ever leaves the phone is superseded by this explicit
+cell-only device action. Recheck store disclosures before submission rather than
+assuming every permitted H3 resolution counts as approximate. Public upload policy
+remains a separate flow with its own precision cap and consent.

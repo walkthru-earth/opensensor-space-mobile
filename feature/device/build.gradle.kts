@@ -16,10 +16,15 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(project(":core:sync"))
+            implementation(project(":core:publicfeed"))
+            implementation(project(":ui:permissions"))
             api(project(":core:history"))
             api(project(":core:settings"))
             api(project(":ui:designsystem"))
             implementation(libs.kotlinx.coroutines.core)
+        }
+        androidMain.dependencies {
+            implementation(libs.androidx.activity.compose)
         }
         commonTest.dependencies {
             implementation(libs.kotlinx.coroutines.test)

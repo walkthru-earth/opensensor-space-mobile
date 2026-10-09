@@ -240,6 +240,8 @@ class DeviceViewModel @AssistedInject constructor(
         override val notices: Flow<DeviceConfigNotice> = emptyFlow()
 
         override fun refreshConfig() = repository.refreshConfig()
+        override suspend fun readLocation() = repository.readLocation()
+        override suspend fun writeLocation(patch: ConfigPatch) = repository.writeLocation(patch)
 
         override fun applyConfig(patch: ConfigPatch, change: DeviceConfigChange) = repository.applyConfig(
             patch,

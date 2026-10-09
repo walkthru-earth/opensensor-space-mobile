@@ -99,6 +99,11 @@ import org.jetbrains.compose.resources.stringResource
  * the controller, nothing reaches the device from here directly.
  */
 sealed interface DeviceConfigAction {
+    data class LocationResolution(val resolution: Int) : DeviceConfigAction
+    data class LocationCountry(val country: String) : DeviceConfigAction
+    data class LocationCell(val cell: String, val resolution: Int) : DeviceConfigAction
+    data object SaveLocation : DeviceConfigAction
+    data object ClearLocation : DeviceConfigAction
     data object Refresh : DeviceConfigAction
     data class SavePairing(val choice: PairingChoice) : DeviceConfigAction
     data object RequestReboot : DeviceConfigAction
@@ -124,6 +129,11 @@ sealed interface DeviceConfigAction {
  */
 fun DeviceConfigController.onAction(action: DeviceConfigAction): Boolean {
     when (action) {
+        is DeviceConfigAction.LocationResolution -> selectLocationResolution(action.resolution)
+        is DeviceConfigAction.LocationCountry -> selectLocationCountry(action.country)
+        is DeviceConfigAction.LocationCell -> acceptLocationCell(action.cell, action.resolution)
+        DeviceConfigAction.SaveLocation -> saveLocation()
+        DeviceConfigAction.ClearLocation -> clearLocation()
         DeviceConfigAction.Refresh -> refresh()
         is DeviceConfigAction.SavePairing -> savePairing(action.choice)
         DeviceConfigAction.RequestReboot -> requestReboot()
@@ -183,6 +193,7 @@ fun LazyListScope.deviceConfigItems(state: DeviceConfigUiState, lanAccess: LanAc
             )
         }
     }
+    item(key = "location") { DeviceLocationCard(state, onAction) }
     item(key = "wifi") {
         WifiCard(
             state = state,

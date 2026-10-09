@@ -23,7 +23,11 @@ connects only to devices found through `_aqsync._tcp` mDNS, with a token obtaine
 BLE. The only other network use is anonymous, read-only downloads of the public map feed and
 basemap, which a Settings switch turns off. Sharing a device's own data is off by default and
 is turned on per device, in that device's settings, with confirmation. No accounts, no
-analytics, no location permission. Public data carries H3 cells, never coordinates.
+analytics. Approximate foreground location is asked only on the Near me or Use phone
+location tap. Device settings can save a privacy-limited H3 area to your sensor,
+starting at resolution 5, with an optional declared country. Exact phone fixes
+are never saved or sent. See [device location](docs/device-location.md). Public
+data carries H3 cells, never coordinates.
 
 **One product on two phones.** Rules that must give the same answer on Android and iOS live in
 shared Kotlin, and screens share one design system based on the opensensor.space website. See

@@ -272,6 +272,16 @@ class DeviceSession(val transport: AqTransport, val frames: FrameRecorder = Fram
         configFrom("GET_CONFIG", Opcode.GET_CONFIG, nextFrame(Opcode.GET_CONFIG, FRAME_TIMEOUT_MS))
     }
 
+    /** Null on firmware which ignores the page selector; malformed-request also means unsupported. */
+    suspend fun getLocation(): earth.walkthru.aqsync.data.protocol.LocationConfig? = try {
+        request(Opcode.GET_CONFIG) {
+            write(Request.GetLocation)
+            configFrom("GET_CONFIG location", Opcode.GET_CONFIG, nextFrame(Opcode.GET_CONFIG, FRAME_TIMEOUT_MS)).config.location
+        }
+    } catch (e: DeviceErrorException) {
+        if (e.protocolError == ProtocolError.MALFORMED_REQUEST || e.protocolError == ProtocolError.UNKNOWN_OPCODE) null else throw e
+    }
+
     /**
      * `SET_CONFIG key=value…` → `CONFIG` (the new state) or `ERROR` 12 ([InvalidConfigException]
      * with the offending key; nothing changed). Values are validated by [ConfigPatch] before send.

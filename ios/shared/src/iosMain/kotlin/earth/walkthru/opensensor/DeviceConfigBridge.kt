@@ -226,6 +226,24 @@ internal class IosDeviceConfigSource(
         }
     }
 
+    override suspend fun readLocation(): earth.walkthru.aqsync.data.protocol.LocationConfig? {
+        if (state.syncBusy) throw IllegalStateException("a sync holds the link")
+        val result = borrow { it.getLocation() ?: LOCATION_UNSUPPORTED } ?: throw IllegalStateException("link busy")
+        return result.takeUnless { it === LOCATION_UNSUPPORTED }
+    }
+
+    override suspend fun writeLocation(patch: ConfigPatch): earth.walkthru.aqsync.data.protocol.LocationConfig? {
+        if (state.syncBusy || working.value) throw IllegalStateException("link busy")
+        working.value = true
+        try {
+            val result = borrow {
+                config.value = it.setConfig(patch)
+                it.getLocation() ?: LOCATION_UNSUPPORTED
+            } ?: throw IllegalStateException("link busy")
+            return result.takeUnless { it === LOCATION_UNSUPPORTED }
+        } finally { working.value = false }
+    }
+
     override suspend fun applySensorConfig(patch: ConfigPatch): ConfigSnapshot {
         if (state.syncBusy) throw IllegalStateException("a sync holds the link")
         return borrow { it.setConfig(patch) }?.also { config.value = it } ?: throw IllegalStateException("link busy")
@@ -336,3 +354,5 @@ internal class IosDeviceConfigSource(
  */
 internal fun shouldReopenAfterRestart(address: String, selectedId: String?, collectAllRunning: Boolean): Boolean =
     selectedId.equals(address, ignoreCase = true) || (selectedId == null && !collectAllRunning)
+
+private val LOCATION_UNSUPPORTED = earth.walkthru.aqsync.data.protocol.LocationConfig()

@@ -104,3 +104,19 @@ Complete ⇔ byte count == `OPENED.size` **and** CRC-32 (IEEE, `java.util.zip.CR
 `info`, `status`, `live`, `CONFIG` payloads. **Absent keys are `null`, never `0`.** `bat`/`pct` in
 `live` are shown raw with a "board report, unqualified" label (16,372 → 23 mV seen with no battery).
 Feature gates use `info.proto` / `info.fw`, never guesses.
+
+## Private device location
+
+`GET_CONFIG` keeps its legacy empty body. Page byte `1` requests the `location`
+object with cell, maximum `resolution`, actual `cell_resolution`, derived
+center `lat`/`lon` and declared `country`. It uses the same CONFIG/CONFIG_CHUNK
+framing and 480-byte JSON limit. `Request.GetLocation` and `DeviceSession.getLocation`
+return unsupported when older firmware returns the legacy object or rejects
+that selector. A missing location object is not an unset supported location.
+
+`ConfigPatch.location` sends only `location.cell`, `location.resolution` and
+`location.country`. SET_CONFIG acknowledges the legacy page; the app then reads
+page 1 and checks its saved values. No raw GPS coordinates cross this API.
+Pages 2–4 are firmware time policy/status and server configuration; this app
+currently exposes location provisioning. See [device-location.md](device-location.md)
+and the firmware-owned [wire contract](../../aq-parquet/docs/shared/ble-sync-protocol.md).

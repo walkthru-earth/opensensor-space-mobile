@@ -166,4 +166,27 @@
     <string name="device_back">Back</string>
     <string name="device_settings_open">Sensor settings</string>
     <string name="device_not_ready">Connect to the sensor to read and change its settings.</string>
+    <string name="location_title">Device location</string>
+    <string name="location_info">Stand beside the sensor before using phone location. The phone converts the approximate fix to the chosen H3 cell. Only that cell is saved on the device. This does not enable uploads.</string>
+    <string name="location_set">Area set</string>
+    <string name="location_unset">Not set</string>
+    <string name="location_unsupported">This firmware does not support location setup</string>
+    <string name="location_configure">Configure location</string>
+    <string name="location_saved">Location confirmed on device</string>
+    <string name="location_failed">Location setup failed. Reconnect and refresh to retry.</string>
+    <string name="location_not_confirmed">Device location was not confirmed. Refresh before retrying.</string>
+    <string name="location_permission">Use approximate phone location to choose a cell for this sensor</string>
+    <string name="location_permission_settings">Allow approximate location in Settings to choose a sensor cell</string>
+    <string name="location_placement">Use phone location while standing beside the sensor</string>
+    <string name="location_precision">H3 resolution %1$d</string>
+    <string name="location_precision_info">Lower resolution covers a larger area. Resolution 5 covers about 253 km² on average. Phone location is approximate.</string>
+    <string name="location_fine_warning">Fine cells can reveal a specific place. A small cell does not make the phone fix more accurate. Public sharing has a separate resolution limit.</string>
+    <string name="location_country">Country code</string>
+    <string name="location_country_info">Optional ISO country code declared by you, such as EG. It does not guarantee NTP server residency.</string>
+    <string name="location_fresh_required">Use phone location again before saving a finer cell</string>
+    <string name="location_fix_failed">No fresh location available. Check location access and try again.</string>
+    <string name="location_locating">Getting location</string>
+    <string name="location_use_phone">Use phone location</string>
+    <string name="location_clear">Clear location</string>
+    <string name="location_save">Save on device</string>
 </resources>

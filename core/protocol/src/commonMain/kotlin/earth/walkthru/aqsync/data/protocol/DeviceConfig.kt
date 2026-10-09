@@ -21,11 +21,23 @@ data class DeviceConfig(
     val wifi: WifiConfig? = null,
     val lan: LanConfig? = null,
     val sensor: SensorConfig? = null,
+    val location: LocationConfig? = null,
 ) {
     companion object {
         fun parse(text: String): DeviceConfig = AqJson.decodeFromString(serializer(), text)
     }
 }
+
+/** GET_CONFIG page 1. Coordinates are the H3 cell centre, never the phone fix. */
+@Serializable
+data class LocationConfig(
+    val cell: String? = null,
+    val resolution: Int? = null,
+    @SerialName("cell_resolution") val cellResolution: Int? = null,
+    val lat: Double? = null,
+    val lon: Double? = null,
+    val country: String? = null,
+)
 
 /** Board-provisioned identity of the replaceable PM module. Not a calibration certificate. */
 @Serializable
@@ -149,6 +161,16 @@ class ConfigPatch private constructor(private val lines: List<Pair<String, Strin
                 throw ConfigValidationException(ConfigProblem.PIN_FORMAT, "PIN must be exactly 6 digits")
             }
             return add(KEY_BLE_PIN, pin)
+        }
+
+        /** Device location is already coarsened on the phone. No coordinates cross this API. */
+        fun location(cell: String, resolution: Int, country: String): Builder {
+            require(resolution in 0..15) { "H3 resolution must be 0 to 15" }
+            require(cell.isEmpty() || Regex("[0-9a-f]{15}").matches(cell)) { "invalid H3 cell text" }
+            require(country.isEmpty() || Regex("[A-Z]{2}").matches(country)) { "country must be an uppercase ISO alpha2 code" }
+            add("location.cell", cell)
+            add("location.resolution", resolution.toString())
+            return add("location.country", country)
         }
 
         fun clearBonds(): Builder = add("ble.clear_bonds", "1")

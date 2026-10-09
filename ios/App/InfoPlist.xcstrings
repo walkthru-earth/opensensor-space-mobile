@@ -56,19 +56,19 @@
       }
     },
     "NSLocationWhenInUseUsageDescription" : {
-      "comment" : "Approximate location purpose string, shown when the user taps Near me on the public map.",
+      "comment" : "Foreground approximate location, requested only by Near me or Use phone location for a sensor.",
       "extractionState" : "manual",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "يضع خريطة المستشعرات العامة بالقرب منك. يبقى موقعك على هذا الهاتف."
+            "value" : "يضع الخريطة بالقرب منك أو يحدد منطقة تقريبية للمستشعر عند طلبك. تُرسل المنطقة التي تختارها فقط إلى مستشعرك."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Centres the public sensor map near you. Your location stays on this phone."
+            "value" : "Centres the public map or sets an approximate sensor area when you ask. Only the selected area is sent to your sensor."
           }
         }
       }

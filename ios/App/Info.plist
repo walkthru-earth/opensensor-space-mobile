@@ -19,7 +19,7 @@
     <dict><key>UIApplicationSupportsMultipleScenes</key><false/></dict>
     <key>NSCameraUsageDescription</key><string>Reads the barcode on your sensor sticker. No picture is kept.</string>
     <key>NSLocalNetworkUsageDescription</key><string>Finds your opensensor devices on your Wi-Fi to sync faster.</string>
-    <key>NSLocationWhenInUseUsageDescription</key><string>Centres the public sensor map near you. Your location stays on this phone.</string>
+    <key>NSLocationWhenInUseUsageDescription</key><string>Centres the public map or sets an approximate sensor area when you ask. Only the selected area is sent to your sensor.</string>
     <key>NSLocationDefaultAccuracyReduced</key><true/>
     <key>NSBonjourServices</key><array><string>_aqsync._tcp</string></array>
     <key>UILaunchScreen</key><dict/>

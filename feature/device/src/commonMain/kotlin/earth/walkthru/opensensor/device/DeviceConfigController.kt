@@ -58,8 +58,10 @@ class DeviceConfigController(
     detailLevel: Flow<DetailLevel>,
     readOnReady: Boolean = false,
 ) {
-    val state: StateFlow<DeviceConfigUiState> = combine(source.snapshot, detailLevel) { snapshot, level ->
-        DeviceConfigUiState(snapshot, level)
+    private val location = MutableStateFlow(DeviceLocationState())
+
+    val state: StateFlow<DeviceConfigUiState> = combine(source.snapshot, detailLevel, location) { snapshot, level, loc ->
+        DeviceConfigUiState(snapshot, level, loc)
     }.stateIn(scope, SharingStarted.Eagerly, DeviceConfigUiState(source.snapshot.value))
 
     private val _dialog = MutableStateFlow<DeviceConfigDialog?>(null)
@@ -74,6 +76,13 @@ class DeviceConfigController(
 
     init {
         scope.launch { source.notices.collect { _notices.tryEmit(it) } }
+        scope.launch {
+            source.snapshot.map { DeviceConfigUiState(it).let { s -> s.ready && s.isV2 } }
+                .distinctUntilChanged().collectLatest { ready ->
+                    location.value = DeviceLocationState()
+                    if (ready) refreshLocation()
+                }
+        }
         if (readOnReady) {
             scope.launch {
                 source.snapshot.map { DeviceConfigUiState(it).let { s -> s.ready && s.isV2 && it.config == null } }
@@ -100,7 +109,66 @@ class DeviceConfigController(
     private val now: DeviceConfigUiState get() = DeviceConfigUiState(source.snapshot.value, state.value.level)
 
     fun refresh() {
-        if (now.ready && now.isV2) source.refreshConfig()
+        if (now.ready && now.isV2) {
+            source.refreshConfig()
+            scope.launch { refreshLocation() }
+        }
+    }
+
+    private suspend fun refreshLocation() {
+        if (location.value.working) return
+        location.value = location.value.copy(working = true, result = null)
+        try {
+            val config = source.readLocation()
+            location.value = if (config == null) {
+                DeviceLocationState(supported = false)
+            } else {
+                DeviceLocationState(supported = true, draft = DeviceLocationDraft.from(config))
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            location.value = location.value.copy(working = false, result = DeviceLocationResult.FAILED)
+        }
+    }
+
+    fun selectLocationResolution(value: Int) {
+        if (location.value.working) return
+        location.value = location.value.copy(draft = location.value.draft.atResolution(value), result = null)
+    }
+
+    fun selectLocationCountry(value: String) {
+        if (location.value.working) return
+        location.value = location.value.copy(draft = location.value.draft.copy(country = value.trim().uppercase()), result = null)
+    }
+
+    fun acceptLocationCell(cell: String, resolution: Int) {
+        if (!now.canEdit || location.value.working) return
+        location.value = location.value.copy(draft = location.value.draft.withFix(cell, resolution), result = null)
+    }
+
+    fun clearLocation() {
+        if (location.value.working) return
+        location.value = location.value.copy(draft = location.value.draft.copy(cell = "", needsFix = false), result = null)
+    }
+
+    fun saveLocation() {
+        val loc = location.value
+        if (!now.canEdit || now.snapshot.syncRunning || loc.supported != true || loc.working || loc.draft.needsFix) return
+        val draft = loc.draft
+        val patch = try { ConfigPatch.build { location(draft.cell, draft.resolution, draft.country) } } catch (_: IllegalArgumentException) {
+            location.value = loc.copy(result = DeviceLocationResult.FAILED)
+            return
+        }
+        location.value = loc.copy(working = true, result = null)
+        scope.launch {
+            try {
+                val confirmed = source.writeLocation(patch)
+                val matches = confirmed != null && confirmed.cell.orEmpty() == draft.cell &&
+                    confirmed.resolution == draft.resolution && confirmed.country.orEmpty() == draft.country
+                location.value = loc.copy(working = false, result = if (matches) DeviceLocationResult.SAVED else DeviceLocationResult.NOT_CONFIRMED)
+            } catch (e: CancellationException) { throw e } catch (_: Exception) { location.value = loc.copy(working = false, result = DeviceLocationResult.FAILED) }
+        }
     }
 
     /** Mode `none` opens its confirmation first. The other modes are sent as they are. */

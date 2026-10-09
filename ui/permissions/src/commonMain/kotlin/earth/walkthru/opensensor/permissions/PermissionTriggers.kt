@@ -47,6 +47,9 @@ enum class UserAction {
     /** Near me on the Discover map. */
     NEAR_ME,
 
+    /** Use phone location on one device configuration card. */
+    CONFIGURE_LOCATION,
+
     /** Turning the Auto-sync switch on, and Wake when nearby. Enabled whatever the answer. */
     AUTO_SYNC_ON,
 
@@ -78,6 +81,7 @@ object PermissionTriggers {
         UserAction.WIFI_ACTION to Trigger(required = setOf(AccessKind.LOCAL_NETWORK)),
         UserAction.SAVE_WIFI_ACCESS to Trigger(optional = setOf(AccessKind.LOCAL_NETWORK)),
         UserAction.NEAR_ME to Trigger(required = setOf(AccessKind.APPROX_LOCATION)),
+        UserAction.CONFIGURE_LOCATION to Trigger(required = setOf(AccessKind.APPROX_LOCATION)),
         UserAction.AUTO_SYNC_ON to Trigger(optional = setOf(AccessKind.NOTIFICATIONS)),
         UserAction.SCAN_STICKER to Trigger(required = setOf(AccessKind.CAMERA)),
     )

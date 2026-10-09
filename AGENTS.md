@@ -32,9 +32,12 @@ concern you are changing in `docs/README.md`.
   GETs of the public discover feed and basemap, which a Settings switch turns off
   (`docs/devices-and-discovery.md`). Uploading a device's data is off by default
   and is enabled only per device, from that device's settings, with
-  confirmation, under CC BY 4.0. No analytics or accounts. Location is
-  approximate only, asked when the user taps "Near me", and only moves the map.
-  Public data carries H3 cells, never coordinates.
+  confirmation, under CC BY 4.0. No analytics or accounts. Location permission is foreground and approximate only, asked from "Near me" or
+  Device settings "Use phone location". Near me only moves the map. Device setup
+  converts the fix to the selected H3 cell before UI state or wire use, then sends
+  only that cell on explicit Save. Never persist, log or send the original fix.
+  Default device resolution is 5; increasing precision requires a fresh fix.
+  Public data carries H3 cells, never coordinates. See `docs/device-location.md`.
 - A downloaded file becomes synced only after size, CRC-32 and `PAR1` head/tail
   checks pass. Missing measurements stay null. Never ask firmware to delete,
   rename or rewrite archive files.

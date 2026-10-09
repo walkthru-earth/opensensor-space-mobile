@@ -10,6 +10,7 @@ import earth.walkthru.aqsync.data.protocol.ConfigProblem
 import earth.walkthru.aqsync.data.protocol.DeviceConfig
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.protocol.LanConfig
+import earth.walkthru.aqsync.data.protocol.LocationConfig
 import earth.walkthru.aqsync.data.protocol.PairMode
 import earth.walkthru.aqsync.data.protocol.SensorConfig
 import earth.walkthru.aqsync.data.protocol.WifiConfig
@@ -65,6 +66,12 @@ private class FakeSource(
     val calls = mutableListOf<String>()
     val wire = mutableListOf<String>()
     var sensorAnswer: ConfigSnapshot? = null
+    var locationAnswer: LocationConfig? = null
+    override suspend fun readLocation(): LocationConfig? = locationAnswer
+    override suspend fun writeLocation(patch: ConfigPatch): LocationConfig? {
+        wire += patch.encode()
+        return locationAnswer
+    }
     val recorded = mutableListOf<String>()
 
     override fun refreshConfig() {
@@ -461,5 +468,39 @@ class DeviceConfigControllerTest {
         assertFalse(PairingChoice(PairMode.FIXED, SECRET_PIN) == PairingChoice(PairMode.FIXED, "000000"))
         assertEquals(WifiJoin("home", SECRET_PSK, false), WifiJoin("home", SECRET_PSK, false))
         assertFalse(WifiJoin("home", SECRET_PSK, false) == WifiJoin("home", "other passphrase", false))
+    }
+
+    @Test
+    fun locationWritesRequireSupportAndMatchingReadback() = runTest {
+        val source = FakeSource()
+        source.locationAnswer = LocationConfig(cell = "", resolution = 5, country = "")
+        val c = controller(source)
+        c.acceptLocationCell("85283083fffffff", 5)
+        c.selectLocationCountry("us")
+        source.locationAnswer = LocationConfig(cell = "85283083fffffff", resolution = 5, country = "US")
+        c.saveLocation()
+        assertEquals(listOf("location.cell=85283083fffffff\nlocation.resolution=5\nlocation.country=US\n"), source.wire)
+        assertEquals(DeviceLocationResult.SAVED, c.state.value.location.result)
+        c.selectLocationCountry("CA")
+        c.saveLocation()
+        assertEquals(DeviceLocationResult.NOT_CONFIRMED, c.state.value.location.result)
+    }
+
+    @Test
+    fun unsupportedBusyOrFinerWithoutFreshFixCannotWriteLocation() = runTest {
+        val old = FakeSource()
+        val unsupported = controller(old)
+        unsupported.saveLocation()
+        assertEquals(emptyList(), old.wire)
+        val source = FakeSource()
+        source.locationAnswer = LocationConfig(cell = "85283083fffffff", resolution = 5, country = "US")
+        val c = controller(source)
+        c.selectLocationResolution(9)
+        c.saveLocation()
+        assertEquals(emptyList(), source.wire)
+        c.acceptLocationCell("8928308280fffff", 9)
+        source.snapshot.value = source.snapshot.value.copy(syncRunning = true)
+        c.saveLocation()
+        assertEquals(emptyList(), source.wire)
     }
 }

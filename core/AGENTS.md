@@ -23,8 +23,10 @@ root for the relevant concern. No Android, Hilt, Room, `Context` or
   there. Read `docs/devices-and-discovery.md` first. New shared types use generic
   names (for example `Reading`, or a future `MetricCard`), never `Air*`.
 - Public discover data carries H3 cells, never coordinates. The publisher owns aggregation and
-  the privacy rules. The phone uses H3 (`publicfeed`, `H3Grid`) only for geometry, the viewport
-  cover and descendant ranges, never to place or publish a location.
+  the privacy rules. The phone uses H3 (`publicfeed`, `H3Grid`) for geometry, viewport cover, descendant
+  ranges and explicit private device provisioning. Provisioning converts a
+  one-shot foreground fix to a cell before passing it to UI/protocol state;
+  neither exact coordinates nor uploading belong to that flow.
 - Keep protocol and sensor-domain analysis pure and reusable by Android, iOS and
   host tools. Android files/DAO integration belongs in `:app` adapters; Apple OS
   integration belongs in `ios/` adapters.

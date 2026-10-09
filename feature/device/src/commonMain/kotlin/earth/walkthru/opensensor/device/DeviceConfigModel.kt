@@ -45,6 +45,7 @@ data class DeviceConfigSnapshot(
 data class DeviceConfigUiState(
     val snapshot: DeviceConfigSnapshot = DeviceConfigSnapshot(),
     val level: DetailLevel = DetailLevel.SIMPLE,
+    val location: DeviceLocationState = DeviceLocationState(),
 ) {
     /** What this device can do, from `INFO` (shared mapping, no schema strings in the UI). */
     val capabilities: DeviceCapabilities get() = DeviceCapabilities.from(snapshot.info)
@@ -129,6 +130,12 @@ interface DeviceConfigSource {
 
     /** Outcomes the platform reports itself. Android reports through its own repository events. */
     val notices: Flow<DeviceConfigNotice>
+
+    /** Page 1, or null on firmware without location provisioning. */
+    suspend fun readLocation(): earth.walkthru.aqsync.data.protocol.LocationConfig? = null
+
+    /** Save and read back page 1 under the platform command guard. */
+    suspend fun writeLocation(patch: ConfigPatch): earth.walkthru.aqsync.data.protocol.LocationConfig? = null
 
     /** `GET_CONFIG`. */
     fun refreshConfig()

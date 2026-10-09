@@ -255,7 +255,10 @@ History charts, background sync, error messages and back stack restore after pro
 | `REQUEST_COMPANION_RUN_IN_BACKGROUND`, `REQUEST_COMPANION_USE_DATA_IN_BACKGROUND`, `REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND`, `REQUEST_OBSERVE_COMPANION_DEVICE_PRESENCE` | "wake when nearby": the system's presence exemptions apply only while an associated logger is in range ([background-sync.md](background-sync.md#triggers--starting-a-run-before-the-period-is-up)) | – (normal); the association itself is one system dialog |
 | `RECEIVE_BOOT_COMPLETED` | restart the process after boot so the Wi-Fi-arrival and advertising-flag registrations are re-armed; schedules nothing itself | – |
 
-No location permission yet. "Near me" is not built. When it is, only approximate location (`ACCESS_COARSE_LOCATION`), requested when "Near me" is tapped and never precise or in the background. No analytics/crash SDKs, no accounts. `allowBackup` with
+Only approximate location (`ACCESS_COARSE_LOCATION`), requested when **Near me**
+or Device settings **Use phone location** is tapped. No fine or background
+permission. Device provisioning sends only the selected H3 cell after explicit
+Save, never the phone fix. See [device-location.md](device-location.md). No analytics/crash SDKs, no accounts. `allowBackup` with
 `dataExtractionRules` ([data-model.md](data-model.md#backup)).
 
 CI verification and release builds also run the station-epoch migration validator. It checks

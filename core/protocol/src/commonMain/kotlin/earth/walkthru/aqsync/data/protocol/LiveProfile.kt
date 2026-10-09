@@ -18,6 +18,9 @@ object LiveProfiles {
     const val WAVESHARE_DICTIONARY = "e840c946c10378d28831b38f71daf66981d2ea99cf47ccba80fcd2e64f920ffd"
     const val WAVESHARE_V2_DICTIONARY = "715685cf83ac8d6975fde845ce58fd15fa6eaaf3df32644ec15dfc89875d2e9e"
 
+    const val CORES3_V4_DICTIONARY = "f35d73981ca65d9de587a4ec7988ccea19e71dce988c69eb4bb99713f2352bb3"
+    const val WAVESHARE_V3_DICTIONARY = "7cd1c69da4ecd728dde2736e4c55063d9707ef53cdba1745b8896efcfd60f5da"
+
     fun resolve(info: DeviceInfo?): LiveProfile? = when (info?.schema) {
         "cores3-telemetry-v2", "cores3-telemetry-v3" ->
             if (info.dict == CORES3_DICTIONARY) LiveProfile(TemperatureSource.BOARD, humidity = false) else null
@@ -25,6 +28,10 @@ object LiveProfiles {
             if (info.dict == WAVESHARE_DICTIONARY) LiveProfile(TemperatureSource.AMBIENT, humidity = true) else null
         "waveshare-sim7670g-telemetry-v2" ->
             if (info.dict == WAVESHARE_V2_DICTIONARY) LiveProfile(TemperatureSource.AMBIENT, humidity = true) else null
+        "cores3-telemetry-v4" ->
+            if (info.dict == CORES3_V4_DICTIONARY) LiveProfile(TemperatureSource.BOARD, humidity = false) else null
+        "waveshare-sim7670g-telemetry-v3" ->
+            if (info.dict == WAVESHARE_V3_DICTIONARY) LiveProfile(TemperatureSource.AMBIENT, humidity = true) else null
         else -> null
     }
 }

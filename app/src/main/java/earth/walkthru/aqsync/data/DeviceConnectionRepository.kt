@@ -1324,6 +1324,21 @@ class DeviceConnectionRepository @Inject constructor(
         }
     }
 
+    suspend fun readLocation(): earth.walkthru.aqsync.data.protocol.LocationConfig? {
+        val session = interactiveSession() ?: throw IllegalStateException("Connect to the device first")
+        if (!tryBeginCommand(refuseWhileSyncing = true)) throw IllegalStateException("link busy")
+        try { return session.getLocation() } finally { endCommand() }
+    }
+
+    suspend fun writeLocation(patch: ConfigPatch): earth.walkthru.aqsync.data.protocol.LocationConfig? {
+        val session = interactiveSession() ?: throw IllegalStateException("Connect to the device first")
+        if (!tryBeginCommand(refuseWhileSyncing = true)) throw IllegalStateException("link busy")
+        try {
+            _config.value = session.setConfig(patch)
+            return session.getLocation()
+        } finally { endCommand() }
+    }
+
     fun startWifiScan() {
         val session = interactiveSession() ?: return
         if (_wifiScan.value is WifiScanState.Scanning) return

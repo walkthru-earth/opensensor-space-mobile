@@ -63,4 +63,15 @@ class DeviceCapabilitiesTest {
         assertTrue(caps.showsParticles(LiveSample(pms = 1)))
         assertTrue(caps.showsParticles(LiveSample(pms = 4, pm25 = 12.0)))
     }
+
+    @Test fun locationSchemasPreserveReviewedLiveMeanings() {
+        val wave = DeviceInfo(proto = 2, schema = "waveshare-sim7670g-telemetry-v3", dict = LiveProfiles.WAVESHARE_V3_DICTIONARY)
+        val core = DeviceInfo(proto = 2, schema = "cores3-telemetry-v4", dict = LiveProfiles.CORES3_V4_DICTIONARY)
+        assertEquals(TemperatureSource.AMBIENT, DeviceCapabilities.from(wave).liveProfile?.temperature)
+        assertTrue(DeviceCapabilities.from(wave).batchEstimate)
+        assertEquals(TemperatureSource.BOARD, DeviceCapabilities.from(core).liveProfile?.temperature)
+        assertFalse(DeviceCapabilities.from(core).batchEstimate)
+        assertNull(DeviceCapabilities.from(wave.copy(dict = "0".repeat(64))).liveProfile)
+        assertFalse(DeviceCapabilities.from(wave.copy(dict = "0".repeat(64))).batchEstimate)
+    }
 }

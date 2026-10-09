@@ -186,6 +186,12 @@ sealed interface Request {
         override fun encode(): ByteArray = byteArrayOf(opcode.toByte())
     }
 
+    /** Location configuration page. Legacy GET_CONFIG remains its one-byte request. */
+    data object GetLocation : Request {
+        override val opcode: Int = Opcode.GET_CONFIG
+        override fun encode(): ByteArray = byteArrayOf(opcode.toByte(), 1)
+    }
+
     /** `key=value` lines, utf8, `\n`-separated. Build the text with [ConfigPatch]. */
     data class SetConfig(val patch: ConfigPatch) : Request {
         override val opcode: Int = Opcode.SET_CONFIG

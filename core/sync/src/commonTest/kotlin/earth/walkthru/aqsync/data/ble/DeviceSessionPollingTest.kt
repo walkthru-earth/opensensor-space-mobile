@@ -225,4 +225,24 @@ class DeviceSessionPollingTest {
         override suspend fun writeControl(request: ByteArray) { writes += request }
         override fun close() { responseFrames.close() }
     }
+
+    @Test
+    fun locationUsesTheExistingConfigChunkEnvelopeAndLegacyIsUnsupported() = runTest {
+        val transport = ResponseTransport()
+        val session = DeviceSession(transport)
+        val json = """{"location":{"cell":"85283083fffffff","resolution":5,"country":"US"}}"""
+        val bytes = json.encodeToByteArray()
+        val request = async { session.getLocation() }
+        runCurrent()
+        assertContentEquals(Request.GetLocation.encode(), transport.writes.single())
+        transport.responseFrames.send(FrameCodec.encode(Frame.ConfigChunk(0, bytes.size, 0, bytes.copyOfRange(0, 40))))
+        transport.responseFrames.send(FrameCodec.encode(Frame.ConfigChunk(0, bytes.size, 40, bytes.copyOfRange(40, bytes.size))))
+        runCurrent()
+        assertEquals("85283083fffffff", request.await()?.cell)
+        val legacy = async { session.getLocation() }
+        runCurrent()
+        transport.responseFrames.send(FrameCodec.encode(Frame.Config(0, "{}")))
+        runCurrent()
+        assertEquals(null, legacy.await())
+    }
 }

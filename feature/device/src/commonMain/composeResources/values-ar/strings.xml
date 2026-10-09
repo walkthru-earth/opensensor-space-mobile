@@ -170,4 +170,27 @@
     <string name="device_back">رجوع</string>
     <string name="device_settings_open">إعدادات المستشعر</string>
     <string name="device_not_ready">اتصل بالمستشعر لقراءة إعداداته وتغييرها.</string>
+    <string name="location_title">موقع الجهاز</string>
+    <string name="location_info">قف بجانب المستشعر قبل استخدام موقع الهاتف. يحوّل الهاتف الموقع التقريبي إلى خلية H3 المختارة. تُحفظ الخلية فقط على الجهاز ولا يؤدي ذلك إلى تفعيل الرفع.</string>
+    <string name="location_set">تم تحديد المنطقة</string>
+    <string name="location_unset">غير محدد</string>
+    <string name="location_unsupported">هذا البرنامج الثابت لا يدعم إعداد الموقع</string>
+    <string name="location_configure">إعداد الموقع</string>
+    <string name="location_saved">تم تأكيد الموقع على الجهاز</string>
+    <string name="location_failed">تعذّر إعداد الموقع. أعد الاتصال والتحديث للمحاولة مجددًا.</string>
+    <string name="location_not_confirmed">لم يتم تأكيد موقع الجهاز. حدّث قبل المحاولة مجددًا.</string>
+    <string name="location_permission">استخدم موقع الهاتف التقريبي لاختيار خلية لهذا المستشعر</string>
+    <string name="location_permission_settings">اسمح بالموقع التقريبي في الإعدادات لاختيار خلية للمستشعر</string>
+    <string name="location_placement">استخدم موقع الهاتف وأنت بجانب المستشعر</string>
+    <string name="location_precision">دقة H3 %1$d</string>
+    <string name="location_precision_info">الدقة الأقل تغطي مساحة أكبر. تغطي الدقة 5 حوالي 253 كم² في المتوسط. موقع الهاتف تقريبي.</string>
+    <string name="location_fine_warning">قد تكشف الخلايا الدقيقة عن مكان محدد. الخلية الأصغر لا تجعل موقع الهاتف أدق. للمشاركة العامة حد دقة منفصل.</string>
+    <string name="location_country">رمز البلد</string>
+    <string name="location_country_info">رمز بلد ISO اختياري تحدده أنت، مثل EG. لا يضمن وجود خادم الوقت داخل البلد.</string>
+    <string name="location_fresh_required">استخدم موقع الهاتف مجددًا قبل حفظ خلية أدق</string>
+    <string name="location_fix_failed">لا يتوفر موقع حديث. تحقق من إذن الموقع وحاول مجددًا.</string>
+    <string name="location_locating">جارٍ الحصول على الموقع</string>
+    <string name="location_use_phone">استخدام موقع الهاتف</string>
+    <string name="location_clear">مسح الموقع</string>
+    <string name="location_save">الحفظ على الجهاز</string>
 </resources>
