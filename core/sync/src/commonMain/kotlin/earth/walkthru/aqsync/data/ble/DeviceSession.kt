@@ -59,7 +59,11 @@ class WifiUnavailableException(frame: Frame.Error) : DeviceErrorException(frame)
 class DeviceBusyException(frame: Frame.Error) : DeviceErrorException(frame)
 
 /** `GET_CONFIG` / `SET_CONFIG` answer: the parsed document plus the raw JSON for the debug view. */
-data class ConfigSnapshot(val config: DeviceConfig, val rebootRequired: Boolean, val rawJson: String, val atEpochMs: Long)
+data class ConfigSnapshot(val config: DeviceConfig, val rebootRequired: Boolean, val rawJson: String, val atEpochMs: Long) {
+    /** Leaves out [rawJson], which can hold the passkey. [config] redacts its own secrets. */
+    override fun toString(): String =
+        "ConfigSnapshot(config=$config, rebootRequired=$rebootRequired, rawJson=<${rawJson.length} chars>, atEpochMs=$atEpochMs)"
+}
 
 /** `WIFI_SCAN` answer. */
 data class WifiScanResult(val accessPoints: List<Frame.WifiAp>, val end: Frame.WifiScanEnd)

@@ -37,7 +37,6 @@ import earth.walkthru.aqsync.data.protocol.AqUuids
 import earth.walkthru.aqsync.data.protocol.ConfigPatch
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.protocol.DeviceStatus
-import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.protocol.LiveSample
 import earth.walkthru.aqsync.data.protocol.hexToBytes
 import earth.walkthru.aqsync.data.protocol.toHex
@@ -111,16 +110,6 @@ data class SyncDiagnostic(
     val step: String,
     val detail: String,
 )
-
-/** Result of the last `WIFI_SCAN`, for the Device screen. */
-sealed interface WifiScanState {
-    data object Idle : WifiScanState
-    data object Scanning : WifiScanState
-    data class Done(val accessPoints: List<Frame.WifiAp>, val atEpochMs: Long) : WifiScanState
-
-    /** [message] is technical detail for logs. The UI shows copy chosen by [unavailable]. */
-    data class Failed(val message: String, val unavailable: Boolean) : WifiScanState
-}
 
 /** Result of the last `LOG_TAIL`, for Advanced → Debug. */
 sealed interface LogTailState {

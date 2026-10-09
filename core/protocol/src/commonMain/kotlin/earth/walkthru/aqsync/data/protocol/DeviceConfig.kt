@@ -65,6 +65,10 @@ data class BleConfig(
 
     /** Six-digit rendering of [pin], restoring leading zeros lost on the wire. */
     val pinText: String? get() = pin?.let { it.toString().padStart(6, '0') }
+
+    /** Never prints the passkey, so a config dump or log line cannot leak it. */
+    override fun toString(): String =
+        "BleConfig(pair=$pair, pin=${if (pin == null) "null" else "<redacted>"}, pinDefault=$pinDefault, bonds=$bonds, display=$display)"
 }
 
 /** `wifi.state` values. */
