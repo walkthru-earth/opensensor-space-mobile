@@ -10,12 +10,14 @@
     <string name="app_name">opensensor.space</string>
     <string name="now_waiting">في انتظار قراءة…</string>
     <string name="nav_disconnect">قطع الاتصال</string>
+    <string name="nav_debug">تصحيح الأخطاء</string>
     <string name="action_cancel">إلغاء</string>
     <string name="conn_ready">متصل</string>
     <string name="conn_connecting">جارٍ الاتصال…</string>
     <string name="conn_disconnected">غير متصل</string>
     <string name="batch_value">%1$s µg/m³</string>
     <string name="action_not_now">ليس الآن</string>
+    <string name="action_back">رجوع</string>
     <string name="perm_continue">متابعة</string>
     <string name="perm_open_settings">فتح الإعدادات</string>
     <string name="nav_settings">الإعدادات</string>
@@ -25,7 +27,6 @@
     <string name="tab_my_devices">أجهزتي</string>
 
     <!-- My devices on iOS, Bluetooth. -->
-    <string name="companion_subtitle">مستشعراتك القريبة</string>
     <string name="companion_now">الآن</string>
     <string name="companion_pm25_mood">PM2.5 · %1$s</string>
     <string name="companion_storage_error">يبلّغ المستشعر عن خطأ في التخزين.</string>
@@ -40,13 +41,7 @@
     <string name="companion_firmware">البرنامج الثابت %1$s</string>
     <string name="companion_wifi_access_save">حفظ الوصول عبر Wi-Fi</string>
     <string name="companion_wifi_access_saving">جارٍ حفظ الوصول…</string>
-    <string name="companion_find_sensors">ابحث عن المستشعرات</string>
-    <string name="companion_scanning">جارٍ البحث…</string>
-    <string name="companion_signal_dbm">%1$d dBm</string>
     <string name="companion_connect">اتصال</string>
-    <string name="companion_scan_looking">جارٍ البحث عن المستشعرات القريبة…</string>
-    <string name="companion_scan_none">لم يُعثر على مستشعرات. أبقِ مستشعرك قريبًا وحاول مرة أخرى.</string>
-    <string name="companion_scan_choose">اختر مستشعرًا لترى قراءاته.</string>
     <string name="companion_connecting_pin">جارٍ الاتصال… إذا طُلب منك، أدخل رمز PIN للإقران الظاهر على مستشعرك.</string>
     <string name="companion_info_invalid">معلومات هذا المستشعر غير صالحة أو غير مدعومة.</string>
     <string name="companion_live">متصل · قراءات مباشرة</string>
@@ -81,8 +76,6 @@
     <string name="companion_sync">مزامنة</string>
 
     <!-- Export. -->
-    <string name="companion_export">تصدير ملفات Parquet</string>
-    <string name="companion_export_preparing">جارٍ تجهيز التصدير…</string>
 
     <!-- Sync outcomes and link notices, the Android keys and words. -->
     <string name="msg_up_to_date">كل شيء موجود على هذا الهاتف بالفعل.</string>

@@ -26,49 +26,9 @@
     <string name="event_clock_on_today">Open Today and run Smart Sync to confirm the clock update.</string>
 
     <!-- Scan (Home) -->
-    <string name="scan_title">Sensors nearby</string>
-    <string name="scan_known">Known sensors</string>
     <string name="scan_fake">Debug fake device</string>
     <string name="scan_fake_lan">Debug fake device (as LAN)</string>
-    <string name="scan_welcome_title">Hello, I am your guide</string>
-    <string name="scan_welcome_body">Turn on your sensor, keep this phone close and tap Scan.</string>
-    <string name="scan_none_nearby_title">Nothing nearby yet</string>
-    <string name="scan_none_nearby_body">Move closer to connect. Saved history stays below.</string>
-    <string name="scan_nearby">Nearby</string>
-    <string name="scan_connections">Connected now</string>
-    <string name="scan_button_scan">Scan</string>
-    <string name="scan_button_stop">Stop</string>
     <string name="scan_more">More</string>
-    <string name="scan_options">Device options</string>
-    <string name="scan_forget">Forget</string>
-    <string name="scan_forget_title">Forget %1$s?</string>
-    <string name="scan_forget_body">Removes it from this phone. Collected files stay.</string>
-    <string name="scan_forget_button">Forget device</string>
-    <string name="scan_unnamed">Unnamed sensor</string>
-    <string name="scan_tag_paired">paired</string>
-    <string name="scan_tag_known">known</string>
-    <string name="scan_tag_on_lan">on Wi-Fi</string>
-    <string name="scan_tag_on_lan_no_token">on Wi-Fi, no token</string>
-    <plurals name="scan_collecting">
-        <item quantity="one">Collecting %1$d of %2$d file</item>
-        <item quantity="other">Collecting %1$d of %2$d files</item>
-    </plurals>
-    <string name="scan_background">Collecting in the background</string>
-    <plurals name="scan_collect_all">
-        <item quantity="one">Collect from %1$d device</item>
-        <item quantity="other">Collect from all %1$d devices</item>
-    </plurals>
-    <string name="scan_collect_running">Collecting in the background…</string>
-    <plurals name="scan_no_clock">
-        <item quantity="one">%1$d file saved, no clock yet</item>
-        <item quantity="other">%1$d files saved, no clock yet</item>
-    </plurals>
-    <string name="scan_seen">seen %1$s</string>
-    <string name="scan_synced">synced %1$s</string>
-    <plurals name="scan_files">
-        <item quantity="one">%1$d file</item>
-        <item quantity="other">%1$d files</item>
-    </plurals>
 
     <!-- Today -->
     <string name="today_title">Today</string>
@@ -272,14 +232,7 @@
     <string name="v1_body">Settings need newer firmware. Sync still works.</string>
 
     <!-- Files -->
-    <string name="files_title">Files</string>
-    <string name="files_all_synced_title">All synced</string>
-    <string name="files_all_synced_body">Everything is on this phone and checked.</string>
-    <string name="files_none_simple">No files yet. The sensor saves one every few minutes.</string>
-    <string name="files_none_detailed">No finished files yet. Use Finalize on Today to make one.</string>
     <string name="files_connect_to_list">Connect to list the files on the sensor.</string>
-    <string name="files_listing">Reading the file list…</string>
-    <string name="files_list_failed_simple">Could not read the file list. Try again.</string>
 
     <!-- Settings and the bottom bar tabs. Their copy lives in feature/settings and ui/strings composeResources, shared with iOS. -->
 
@@ -296,11 +249,6 @@
     <string name="perm_open_settings">Open settings</string>
 
     <!-- Info sheets -->
-    <string name="info_connect_title">Connect a sensor</string>
-    <string name="info_connect_body1">Turn on your sensor and keep this phone close. It appears here in a few seconds.</string>
-    <string name="info_connect_body2">On the first connection Android asks for a 6 digit code. Read it on the sensor screen. A sensor without a screen uses the PIN its owner set over USB.</string>
-    <string name="info_privacy">Bluetooth and your local Wi-Fi reach only your own sensors. No account, no analytics and no uploads. Approximate location is used only when you tap Near me, to move the map. Your files stay on this phone unless you share them.</string>
-    <string name="info_collect_body">Collects from your known sensors over Wi-Fi when this phone holds their token, otherwise over Bluetooth. Up to two run at once with a notification, so you can leave the app. Sensors with an open connection are skipped.</string>
     <string name="info_wifi_body">The sensor joins your Wi-Fi so this phone can sync without Bluetooth.</string>
     <string name="info_pairing_body">How a phone proves it is allowed to connect.</string>
     <string name="info_file_chart_body">One column per synced file in file order. Faint columns have few valid readings, for example during warm up. Dashed columns have an estimated time. Touch a column to read its file, rows, time span and mean.</string>
@@ -321,8 +269,6 @@
     <string name="conn_link_lost">Link lost. Reconnecting by itself…</string>
     <string name="conn_link_lost_detail">Link lost (%1$s). Reconnecting, attempt %2$d of %3$d…</string>
     <string name="conn_bluetooth_settings">Bluetooth settings</string>
-    <string name="scan_failed">Could not scan. Try again.</string>
-    <string name="scan_bluetooth_off">Bluetooth is off. Turn it on and scan again.</string>
 
     <!-- Bottom bar -->
     <string name="tab_today">Today</string>
@@ -331,61 +277,15 @@
     <string name="tab_device">Device</string>
 
     <!-- Files -->
-    <string name="files_in_archive">%1$d in archive, %2$s</string>
-    <string name="files_refresh">Refresh list</string>
-    <string name="files_more">More</string>
     <string name="files_bg_queued">Background sync queued…</string>
     <string name="files_bg_sync">Sync now in background</string>
     <string name="files_autosync_on">Auto-sync every %1$d min is on</string>
     <string name="files_autosync_off">Auto-sync every %1$d min is off</string>
-    <string name="files_share_zip">Share archive as zip</string>
-    <string name="files_save_zip">Save zip to…</string>
-    <plurals name="files_share_all">
-        <item quantity="one">Share %1$d Parquet file</item>
-        <item quantity="other">Share %1$d Parquet files</item>
-    </plurals>
-    <string name="files_share_daily">Share daily files</string>
     <string name="files_stop">Stop</string>
-    <plurals name="files_sync_all">
-        <item quantity="one">Sync %1$d file, %2$s</item>
-        <item quantity="other">Sync all, %1$d files, %2$s</item>
-    </plurals>
-    <string name="files_list_failed_detail">Could not read the file list. %1$s</string>
-    <plurals name="files_dev_summary">
-        <item quantity="one">%1$d finalized file, %2$d partial, %3$s of %4$s</item>
-        <item quantity="other">%1$d finalized files, %2$d partial, %3$s of %4$s</item>
-    </plurals>
-    <string name="files_refreshing">refreshing…</string>
-    <string name="files_listed">listed %1$s</string>
-    <string name="files_refresh_failed">Refresh failed. Showing the last list. %1$s</string>
-    <plurals name="files_frame_mismatch">
-        <item quantity="one">Device announced %1$d file but sent %2$d FILE frames.</item>
-        <item quantity="other">Device announced %1$d files but sent %2$d FILE frames.</item>
-    </plurals>
-    <string name="files_syncing">syncing</string>
-    <string name="files_last_sync">last sync</string>
-    <plurals name="files_of_total">
-        <item quantity="one">of %1$d file</item>
-        <item quantity="other">of %1$d files</item>
-    </plurals>
     <string name="files_bytes_of">%1$s of %2$s</string>
-    <plurals name="files_recovered">
-        <item quantity="one">recovered %1$d lost window</item>
-        <item quantity="other">recovered %1$d lost windows</item>
-    </plurals>
-    <string name="files_resumed">resumed from %1$s</string>
-    <string name="file_synced">synced and checked</string>
-    <string name="file_syncing">syncing %1$s of %2$s</string>
-    <string name="file_partial">partial %1$s, resumable</string>
-    <string name="file_not_synced">not synced</string>
-    <string name="file_mismatch">mismatch</string>
-    <string name="file_invalid">invalid name</string>
-    <string name="file_metrics">Metrics</string>
-    <string name="file_share">Share</string>
     <string name="files_autosync_event_on">Auto-sync is on, about every %1$d min.</string>
     <string name="files_autosync_event_off">Auto-sync is off for this sensor.</string>
     <string name="files_bg_event">Background sync queued. You can leave the app.</string>
-    <string name="files_no_daily">No daily files yet. They need synced files with a time.</string>
     <string name="chart_by_file">Chart by file</string>
     <plurals name="chart_by_file_summary">
         <item quantity="one">%1$d file, %2$s</item>
@@ -400,7 +300,6 @@
     <string name="chart_no_time">no time</string>
 
     <!-- History -->
-    <string name="history_of">%1$d of %2$d</string>
     <!-- Device and Files messages (snackbars) -->
     <string name="msg_sticker_invalid">Enter the sticker as PMS5003T, its date and unit digits.</string>
     <string name="msg_sensor_busy">Connect to the sensor and wait for its tasks to finish.</string>
@@ -504,24 +403,9 @@
     <string name="msg_identity_station_ble">The sensor station changed. Reconnect over Bluetooth to check it.</string>
     <string name="msg_identity_station_hardware">The sensor station changed without a matching hardware ID.</string>
 
-    <!-- Files group headers (files/FileGrouping.kt returns typed titles) -->
-    <string name="files_group_count">%1$d/%2$d · %3$s</string>
-    <string name="files_group_utc_day">%1$s, UTC day</string>
-    <string name="files_group_unsynced">Unsynced, no UTC</string>
-    <string name="files_group_benchmarks">Benchmarks</string>
-    <string name="files_group_legacy">Legacy Parquet</string>
-    <string name="files_group_root">Archive root</string>
-    <string name="files_group_station">station %1$s</string>
-    <string name="files_group_boot">boot %1$s</string>
-    <plurals name="files_group_utc_folders">
-        <item quantity="one">UTC folder %1$s</item>
-        <item quantity="other">UTC folders %1$s</item>
-    </plurals>
-    <string name="files_group_unrecognised">unrecognised layout</string>
+    <!-- Station label in the scan list. The Files screen strings live in :feature:files. -->
 
     <!-- Scan archive line. Mood, metric, value, unit, day. -->
-    <string name="scan_archive_day">%1$s, %2$s %3$s %4$s on %5$s</string>
-    <string name="scan_archive_coverage">%1$d %% of the day</string>
 
     <!-- Relative time -->
     <string name="ago_just_now">just now</string>
@@ -529,7 +413,6 @@
     <string name="ago_minutes">%1$d min ago</string>
     <string name="ago_hours">%1$d h ago</string>
     <string name="ago_days">%1$d d ago</string>
-    <string name="action_back">Back</string>
     <string name="transport_ble">Bluetooth</string>
     <string name="transport_lan">Wi-Fi LAN</string>
     <string name="transport_fake">Fake device</string>
@@ -546,12 +429,6 @@
     <string name="device_payload">payload %1$d B</string>
     <string name="wifi_scan_unavailable">The sensor Wi-Fi radio cannot scan right now.</string>
     <string name="wifi_scan_failed">The scan did not finish. Try again.</string>
-    <string name="share_file">Share Parquet file</string>
-    <plurals name="share_files">
-        <item quantity="one">Share %1$d Parquet file</item>
-        <item quantity="other">Share %1$d Parquet files</item>
-    </plurals>
-    <string name="share_archive">Share archive</string>
     <string name="notif_channel_progress">Sync progress</string>
     <string name="notif_channel_progress_desc">Shown while files are copied from a sensor. Keeps the transfer alive when the screen is off.</string>
     <string name="notif_channel_summary">Sync results</string>
@@ -575,107 +452,13 @@
         <item quantity="other">%1$d files could not be verified. They are retried next time.</item>
     </plurals>
     <string name="notif_verified">Verified and stored in the archive on this phone.</string>
-    <string name="files_refresh_failed_simple">Refresh failed. Showing the last list.</string>
 
-    <!-- File inspector (history/FileMetricsScreen.kt). Detailed and Developer only. -->
-    <string name="fm_failed_missing">This file is not in the archive on this phone.</string>
-    <string name="fm_failed_refused">The app reader cannot decode this file.</string>
-    <string name="fm_failed_unreadable">Could not read this file from the phone storage.</string>
-    <string name="fm_failed_archive_safe">The archive copy is untouched. It passed the size, CRC-32 and PAR1 checks when it was synced. Only the app reader could not decode it.</string>
-    <string name="fm_file">File</string>
-    <string name="fm_size">size</string>
-    <string name="fm_size_footer">%1$s · footer %2$s</string>
-    <string name="fm_rows">rows</string>
-    <string name="fm_columns">columns</string>
-    <string name="fm_columns_codec">%1$d · codec %2$s</string>
-    <string name="fm_schema">schema</string>
-    <string name="fm_writer">writer</string>
-    <string name="fm_statistics">statistics</string>
-    <string name="fm_statistics_minmax">min and max per column (v6)</string>
-    <string name="fm_statistics_nulls">null counts only (v1 and v2)</string>
-    <string name="fm_index_source">index source</string>
-    <string name="fm_index_footer">footer statistics</string>
-    <string name="fm_index_rows">decoded rows</string>
-    <string name="fm_decode_time">decode time</string>
-    <string name="fm_decode_ms">%1$d ms for every column</string>
-    <string name="fm_benchmark">A benchmark copy of duplicated rows, purpose %1$s. Excluded from History.</string>
-    <string name="fm_time">Time</string>
-    <string name="fm_utc_rows">UTC rows</string>
-    <string name="fm_first">first</string>
-    <string name="fm_last">last</string>
-    <string name="fm_utc">UTC</string>
-    <string name="fm_utc_none">none, the sensor had no clock</string>
-    <string name="fm_valid_pm_rows">valid particle rows</string>
-    <string name="fm_uptime_span">uptime span</string>
-    <string name="fm_sequence">sequence</string>
-    <string name="fm_boot">boot</string>
-    <string name="fm_row_groups">Row groups</string>
+    <!-- Row count for the chart by file and Debug. The inspector strings live in :feature:files. -->
     <plurals name="fm_rows_count">
         <item quantity="one">%1$d row</item>
         <item quantity="other">%1$d rows</item>
     </plurals>
-    <string name="fm_row_groups_note">Spans come from the footer statistics without decoding rows.</string>
-    <string name="fm_columns_decoded">Columns · decoded</string>
-    <string name="fm_col_name">name</string>
-    <string name="fm_col_nulls">nulls</string>
-    <string name="fm_col_min">min</string>
-    <string name="fm_col_max">max</string>
-    <string name="fm_col_timestamp">timestamp ns UTC</string>
-    <string name="fm_col_first_last">first %1$s · last %2$s</string>
-    <string name="fm_col_footer_agrees">footer agrees</string>
-    <string name="fm_col_footer_says">footer says %1$s to %2$s</string>
-    <string name="fm_metadata">File metadata</string>
 
-    <!-- Debug (debug/DebugScreen.kt). Developer level only. Protocol tokens are data. -->
-    <string name="debug_transport_title">Active transport</string>
-    <string name="debug_transport">transport</string>
-    <string name="debug_endpoint">endpoint</string>
-    <string name="debug_state">state</string>
-    <string name="debug_sync_title">Smart Sync diagnostics</string>
-    <string name="debug_archive">archive</string>
-    <string name="debug_real_utc">real UTC</string>
-    <string name="debug_estimate">same-boot estimate</string>
-    <string name="debug_unplaced">unplaced</string>
-    <plurals name="debug_boots">
-        <item quantity="one">%1$d boot</item>
-        <item quantity="other">%1$d boots</item>
-    </plurals>
-    <string name="debug_sync_none">No Smart Sync decisions recorded yet.</string>
-    <string name="debug_status_title">Status JSON, live</string>
-    <string name="debug_request_status">Request status</string>
-    <string name="debug_status_none">No status received yet.</string>
-    <string name="debug_config_title">Config JSON</string>
-    <string name="debug_config_none">No CONFIG received. A protocol v1 device, or not read yet.</string>
-    <plurals name="debug_frames_title">
-        <item quantity="one">Last raw frame</item>
-        <item quantity="other">Last %1$d raw frames, newest first</item>
-    </plurals>
-    <string name="debug_clear">Clear</string>
-    <string name="debug_frames_none">Nothing captured yet.</string>
-    <string name="debug_frames_note">TX are requests written to control. RX are frames from response. Pushed status and live JSON are not listed here. TOKEN bodies and SET_CONFIG requests are redacted.</string>
-    <string name="debug_log_title">Device log</string>
-    <string name="debug_log_fetch">Fetch</string>
-    <string name="debug_log_refresh">Refresh</string>
-    <string name="debug_log_idle">Fetches the newest 8 KiB of the device serial log. Text for humans, not an API.</string>
-    <string name="debug_log_loading">Fetching…</string>
-    <string name="debug_log_failed">Could not read the device log. %1$s</string>
-    <string name="debug_log_summary">%1$d B returned of %2$d B logged since boot</string>
-    <string name="debug_log_incomplete">Received %1$d B but LOG_END says %2$d B. A slice may be missing.</string>
-    <string name="debug_log_empty">Empty</string>
-    <string name="debug_raw_title">Raw command</string>
-    <string name="debug_raw_info1">Type the hex bytes of one control request. The first byte is the opcode.</string>
-    <string name="debug_raw_info2">Reply frames are collected until the device is quiet for 1.5 s. STATUS answers on the status channel only.</string>
-    <string name="debug_raw_info3">Only reads and the documented state changes are wise here. The device never deletes or rewrites anything on request, so the worst case is a rejected frame. REBOOT and SET_CONFIG stay on the Device screen.</string>
-    <string name="debug_raw_examples">01 LIST · 07 STATUS · 08 GET_CONFIG · 0c 0020 LOG_TAIL · 0d GET_TOKEN</string>
-    <string name="debug_raw_hex">hex</string>
-    <string name="debug_raw_send">Send</string>
-    <plurals name="debug_raw_frames">
-        <item quantity="one">%1$d frame</item>
-        <item quantity="other">%1$d frames</item>
-    </plurals>
-    <string name="debug_raw_invalid_hex">Not valid hex.</string>
-    <string name="debug_raw_bad_length">A request is 1 to 512 bytes.</string>
-    <string name="debug_raw_needs_confirmation">%1$s is not sent from here. Use the Device screen, which asks for confirmation.</string>
-    <string name="debug_raw_no_response">No response frames within the quiet period.</string>
+    <!-- The Debug screen copy lives in feature/debug composeResources. -->
     <string name="conn_pairing_repair">Bluetooth pairing needs repair. If this sensor was reset or reflashed, forget it in Android Bluetooth settings and pair again. Your archived files are kept.</string>
 </resources>

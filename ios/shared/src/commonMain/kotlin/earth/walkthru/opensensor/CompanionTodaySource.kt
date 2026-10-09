@@ -111,22 +111,25 @@ internal class CompanionTodaySource(
 
     override val snapshot: StateFlow<TodaySnapshot> = combine(stamped, archive, todaySoFar) { s, records, today ->
         val seen = s.seen
-        val station = seen.info?.station
+        // The one Bluetooth link may belong to another sensor now. This Today then shows its own as closed.
+        val mine = seen.selectedId == address
+        val connected = mine && seen.connected
+        val station = seen.info?.station?.takeIf { mine }
         TodaySnapshot(
-            address = seen.selectedId ?: address,
+            address = address,
             name = s.name,
             connection = when {
-                seen.connected -> ConnectionState.Ready(0)
-                seen.selectedId != null -> ConnectionState.Connecting
+                connected -> ConnectionState.Ready(0)
+                mine -> ConnectionState.Connecting
                 else -> ConnectionState.Disconnected
             },
-            transport = if (seen.connected) TransportKind.BLE else null,
-            info = seen.info,
-            status = seen.status,
-            statusAtEpochMs = s.statusAt,
-            live = seen.live,
-            liveAtEpochMs = s.liveAt,
-            sync = runProgress(seen, s),
+            transport = if (connected) TransportKind.BLE else null,
+            info = seen.info?.takeIf { mine },
+            status = seen.status?.takeIf { mine },
+            statusAtEpochMs = s.statusAt?.takeIf { mine },
+            live = seen.live?.takeIf { mine },
+            liveAtEpochMs = s.liveAt?.takeIf { mine },
+            sync = if (mine) runProgress(seen, s) else RunProgress(),
             archive = if (station == null) TodayArchive() else TodayArchive.of(records.filter { it.station == station }),
             todaySoFar = today,
         )
@@ -148,7 +151,12 @@ internal class CompanionTodaySource(
         local,
     )
 
+    /** The one Bluetooth link is open to this sensor. Nothing is sent to another one. */
+    private val linked: Boolean get() = state.selectedId == address && state.connected
+
     override fun sync(mode: ClockSyncMode, clockConfirmed: Boolean) {
+        // A closed link shows Reconnect, so a stale tap has nothing to send.
+        if (!linked) return
         if (state.today.busy || state.syncBusy) {
             local.tryEmit(TodayNotice.Busy)
             return
@@ -172,6 +180,7 @@ internal class CompanionTodaySource(
     override fun flush() = send(SensorCommand.FLUSH)
 
     private fun send(command: SensorCommand) {
+        if (!linked) return
         if (state.today.busy || state.syncBusy) {
             local.tryEmit(TodayNotice.Busy)
             return
@@ -181,7 +190,9 @@ internal class CompanionTodaySource(
 
     override fun reconnect() = actions.connect(address)
 
-    override fun disconnect() = actions.disconnect()
+    override fun disconnect() {
+        if (state.selectedId == address) actions.disconnect()
+    }
 
     private fun runProgress(seen: Seen, s: Stamped): RunProgress {
         val progress = seen.progress

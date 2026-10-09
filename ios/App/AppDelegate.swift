@@ -18,32 +18,46 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 }
 
-final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UIDocumentPickerDelegate {
+final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
     /// One shared engine, so LAN and Bluetooth save into the same archive and never sync a station twice at once.
     private let engine = IosArchiveKt.sharedSensorSync()
     private lazy var bluetooth = BluetoothCompanion(engine: engine)
     private lazy var lan = LanDiscovery(state: bluetooth.state, engine: engine)
-    private var exportFolder: URL?
-    private var exportTask: Task<Void, Never>?
-    private var preparedExport: (url: URL, count: Int)?
+    private let credentials = LanCredentials()
+    /// My devices over the adapters. Only ids, names and stations cross, never a token.
+    private lazy var devices: DevicesBridge = DevicesBridgeIosKt.devicesBridge(
+        state: bluetooth.state, sync: engine,
+        startScan: { [weak self] in self?.bluetooth.scan() },
+        stopScan: { [weak self] in self?.bluetooth.stopScan() },
+        forget: { [weak self] peripheral, device in self?.forget(peripheral: peripheral, device: device) },
+        collect: { [weak self] id, wifiName in self?.collect(id: id, wifiName: wifiName) }
+    )
 
     func scene(
         _ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions
     ) {
         guard let windowScene = scene as? UIWindowScene else { return }
+        bluetooth.onSensorOpened = { [weak self] peripheral, name, station, device in
+            self?.devices.sensorOpened(peripheral: peripheral, name: name, station: station, device: device)
+        }
+        bluetooth.onCredentialSaved = { [weak self] in self?.credentialsChanged() }
+        bluetooth.onCollectFinished = { [weak self] id, ok in self?.devices.collectFinished(id: id, ok: ok) }
+        lan.onCollectFinished = { [weak self] id, ok in self?.devices.collectFinished(id: id, ok: ok) }
+        credentialsChanged()
         let controller = MainViewControllerKt.mainViewController(
             state: bluetooth.state,
-            scan: { [weak self] in self?.bluetooth.scan() },
-            connect: { [weak self] id in self?.bluetooth.connect(id: id) },
+            devices: devices,
+            requestBluetooth: { [weak self] in self?.bluetooth.requestAccess() },
+            openSensor: { [weak self] id in self?.bluetooth.open(id: id) },
             disconnect: { [weak self] in self?.bluetooth.disconnect() },
             scanLan: { [weak self] in self?.lan.scan() },
             saveWifiAccess: { [weak self] in self?.bluetooth.saveWifiAccess() },
             connectLan: { [weak self] name in self?.lan.connect(name: name) },
             syncLan: { [weak self] name in self?.lan.sync(name: name) },
             disconnectLan: { [weak self] name in self?.lan.disconnect(name: name) },
-            exportArchive: { [weak self] in self?.exportArchive() },
             syncBluetooth: { [weak self] in self?.syncConnectedSensor() },
+            openDebugLink: { [weak self] device in self?.bluetooth.openDebugLink(device: device) },
             command: { [weak self] command in self?.bluetooth.command(command) }
         )
         let window = UIWindow(windowScene: windowScene)
@@ -53,19 +67,46 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UIDocumentPickerD
     }
 
     func sceneDidEnterBackground(_ scene: UIScene) {
+        // Collect all is a foreground pass. The step in flight ends with the link below.
+        devices.cancelCollectAll()
         bluetooth.suspend()
         lan.enterBackground()
     }
     func sceneDidBecomeActive(_ scene: UIScene) {
         bluetooth.resume()
         lan.resume()
-        presentExportIfReady()
     }
     func sceneDidDisconnect(_ scene: UIScene) {
+        devices.cancelCollectAll()
         bluetooth.suspend()
         lan.suspend()
-        exportTask?.cancel()
-        if exportTask == nil { finishExport("Export cancelled. Collected files remain saved on this phone.") }
+    }
+
+    /// Tells My devices which sensors hold Wi-Fi access. Ids only, the token stays in the Keychain.
+    private func credentialsChanged() {
+        let entries = credentials.list()
+        devices.credentialsChanged(
+            peripherals: entries.map(\.peripheral), stations: entries.map(\.station), devices: entries.map(\.device))
+    }
+
+    /// The user confirmed Forget. The bridge already dropped its record. This closes any link to the
+    /// sensor and removes its Wi-Fi access. The system bond stays until removed in iOS Settings.
+    private func forget(peripheral: String, device: String?) {
+        bluetooth.close(id: peripheral)
+        if let device {
+            lan.disconnect(device: device)
+            credentials.remove(device: device)
+        }
+        credentialsChanged()
+    }
+
+    /// One Collect all step. Wi-Fi when the plan found the sensor there with access, else Bluetooth.
+    private func collect(id: String, wifiName: String?) {
+        if let wifiName {
+            lan.collect(name: wifiName, id: id)
+        } else {
+            bluetooth.collect(id: id)
+        }
     }
 
     /// Wi-Fi is faster, so an open, idle Wi-Fi session for the same sensor takes the sync.
@@ -75,60 +116,6 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UIDocumentPickerD
         } else {
             bluetooth.sync()
         }
-    }
-
-    private func exportArchive() {
-        guard exportTask == nil, exportFolder == nil else { return }
-        bluetooth.state.exportChanged(busy: true, explanation: "Preparing your collected Parquet files…")
-        exportTask = Task { [weak self] in
-            guard let self else { return }
-            defer { self.exportTask = nil }
-            let folder = FileManager.default.temporaryDirectory.appendingPathComponent("opensensor-export-\(UUID())")
-            self.exportFolder = folder
-            do {
-                let archive = try ArchiveIO(root: SensorArchive.defaultRoot())
-                let snapshot = folder.appendingPathComponent("SensorArchive", isDirectory: true)
-                let count = try await archive.export(to: snapshot)
-                try Task.checkCancellation()
-                guard count > 0 else {
-                    self.finishExport("No completed Parquet files yet. Sync a sensor first.")
-                    return
-                }
-                self.preparedExport = (snapshot, count)
-                self.presentExportIfReady()
-            } catch {
-                self.finishExport("Could not prepare the export. Collected files remain saved. Try again.")
-            }
-        }
-    }
-
-    private func presentExportIfReady() {
-        guard let snapshot = preparedExport else { return }
-        guard window?.windowScene?.activationState == .foregroundActive else { return }
-        guard let controller = window?.rootViewController, controller.presentedViewController == nil else {
-            finishExport("Try exporting again after the current screen closes.")
-            return
-        }
-        preparedExport = nil
-        let picker = UIDocumentPickerViewController(forExporting: [snapshot.url], asCopy: true)
-        picker.delegate = self
-        bluetooth.state.exportChanged(busy: true, explanation: "Choose where to save \(snapshot.count) Parquet files.")
-        controller.present(picker, animated: true)
-    }
-
-    func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-        finishExport("Parquet files exported to your selected folder.")
-    }
-
-    func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
-        finishExport("Export cancelled. Collected files remain saved on this phone.")
-    }
-
-    private func finishExport(_ message: String) {
-        if let folder = exportFolder { try? FileManager.default.removeItem(at: folder) }
-        exportFolder = nil
-        preparedExport = nil
-        bluetooth.state.exportChanged(busy: false, explanation: message)
     }
 }
 

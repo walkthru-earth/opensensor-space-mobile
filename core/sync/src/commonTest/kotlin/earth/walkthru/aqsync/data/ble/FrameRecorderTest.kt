@@ -29,7 +29,7 @@ class FrameRecorderTest {
     }
 
     @Test
-    fun secretsStayRedactedAndPreviewsKeepExactByteValuesAndLengths() {
+    fun secretsStayRedactedWithoutLengthAndPreviewsKeepExactByteValuesAndLengths() {
         val recorder = FrameRecorder()
         recorder.rx(byteArrayOf(FrameType.TOKEN.toByte(), 0x12, 0x34))
         recorder.tx(byteArrayOf(Opcode.SET_CONFIG.toByte(), 0x56, 0x78))
@@ -40,7 +40,8 @@ class FrameRecorderTest {
         assertEquals("09…", records[1].previewHex)
         assertTrue(records[0].redacted)
         assertTrue(records[1].redacted)
-        assertEquals(3, records[0].length)
+        assertEquals(0, records[0].length)
+        assertEquals(0, records[1].length)
         assertEquals("21f1f2f3f4f5f6f7f8f9fafbfcfdfeff", records[2].previewHex)
         assertEquals(32, records[2].length)
         assertFalse(records[2].redacted)

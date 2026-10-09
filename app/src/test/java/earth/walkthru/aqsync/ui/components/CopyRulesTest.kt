@@ -63,7 +63,6 @@ class CopyRulesTest {
     fun `shared copies match the Android resources`() {
         val both = mapOf(
             "discover" to listOf("who_step_guideline", "who_step_it4", "who_step_it3", "who_step_it2", "who_step_it1", "who_step_above_it1"),
-            "settings" to listOf("info_privacy"),
         )
         // The English default and every translation (values-ar) keep the shared copies identical.
         for (folder in listOf("values", "values-ar")) {

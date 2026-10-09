@@ -41,10 +41,16 @@ include(":ui:permissions")
 include(":feature:discover")
 // The Settings screen, shared Compose for Android and iOS (docs/platform-parity-plan.md).
 include(":feature:settings")
+// My devices, one shared list of nearby, known and Wi-Fi sensors (docs/screens.md, My devices).
+include(":feature:devices")
+// The Files screen, its inspector and the export, shared Compose for Android and iOS (docs/screens.md).
+include(":feature:files")
 // The History screen and its charts, shared Compose for Android and iOS (docs/history-pipeline.md).
 include(":feature:history")
 // The Today screen of one device, shared Compose for Android and iOS (docs/screens.md).
 include(":feature:today")
+// The Debug screen, shared Compose for Android and iOS, Developer level only (docs/screens.md, Debug).
+include(":feature:debug")
 // The app shell: bottom bar, per-tab Navigation 3 back stacks, Back rules (docs/adr/0001-shared-navigation.md).
 include(":feature:shell")
 

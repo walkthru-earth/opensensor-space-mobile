@@ -57,6 +57,26 @@ iPhone 16 Pro, which opened on Discover with no prompt. On that iPhone, Arabic p
 unjoined, because the Apple maplibre-native-ffi build has no bidi or Arabic shaping. iOS now uses
 the English or Latin label styles (`devices-and-discovery.md`, "Right-to-left labels on iOS").
 
+Since #16 (2026-10-09) the My devices tab is the shared `:feature:devices` screen, the same as
+Android. `DevicesBridge` (`ios/shared`) feeds its three ports from `CompanionState`, the known
+records saved in UserDefaults (peripheral id, name, station, hardware id, last opened, never a
+credential), the Keychain credential list (`LanCredentials.list`, ids only, never the token) and
+the receipt index. Bluetooth access is asked from My devices through `:ui:permissions`. When it is
+already allowed, `BluetoothCompanion` creates the central manager at launch with no prompt, and
+the list scans while it is visible. Opening a sensor connects it through its saved identifier
+(`retrievePeripherals`) when it is not in the scan, closing any other open link, and pushes the
+device page (`CompanionScreen`, with Back, the live reading, Wi-Fi access and Bluetooth sync).
+Forget, after confirmation, drops the record and the Keychain Wi-Fi access and closes any open
+link. The system bond stays until the user removes it in iOS Settings, which the dialog says.
+A forgotten sensor comes back only when the user opens it again. Collect all runs one sensor at a
+time while the app is open, over Wi-Fi when the sensor was found there with access, else over
+Bluetooth, and stops when the app leaves the foreground. A step never takes over a link the user
+holds. It skips a sensor the user has open on Bluetooth or Wi-Fi (a Wi-Fi session maps to its
+known sensor through the TXT station), fails while another sensor holds the Bluetooth link, closes
+only what it opened, and fails when its sync has not started within a minute. Opening a sensor
+cancels Collect all first. The Wi-Fi browse still starts from Find
+on Wi-Fi on the device page, so the list shows Wi-Fi sensors after that browse.
+
 Wi-Fi discovery is also available through `NWBrowser`, restricted to
 `_aqsync._tcp` in `local.`. Tapping **Find Wi-Fi sensors** starts a bounded browse
 and lets iOS request Local Network access. `Info.plist` declares
@@ -144,12 +164,17 @@ the link. A protocol fault ends it with `msg_sync_aborted` and also keeps the li
 refused or a sensor busy in the middle of a sync ends it as `AUTH_FAILED` or `BUSY`. A Stop
 that lands before the work starts still finishes once and frees the station. `SensorSync` logs
 only the file name and the error class and message, through `NSLog` without format arguments. Some iOS-only
-status lines (connecting, listing, paused, export) are still plain English in Swift.
+status lines (connecting, listing, paused) are still plain English in Swift.
 
-The offline **Export Parquet files** button copies only finalized `.parquet` files into a temporary
-station/Hive snapshot and opens Apple's Files export picker. Partials and receipts remain private;
-the snapshot is removed after export/cancel. Files are retained in Application Support; exporting
-does not move the archive. The app has no background BLE capability or archive charts.
+Files and the inspector are the shared `:feature:files` screens, opened offline from a Files
+button next to History on My devices (`FilesKey("archive")`). Files lists every verified file
+in the phone archive by local day. Share one file, share all, share zip and save zip stage
+copies through `:core:archive` into a fresh run under `tmp/opensensor-export`, then open
+`UIActivityViewController` or `UIDocumentPickerViewController(forExporting:asCopy:)` from
+`feature/files/src/iosMain`. The run is removed once the sheet closes. Only verified records
+are exported, so partials and receipts stay private, and the archive is never moved or changed.
+The daily zip is hidden because iOS has no derived files yet. The Swift folder export and its
+companion button are gone. The app has no background BLE capability or archive charts.
 Native BLE uses Core Bluetooth's
 peripheral identifier; the Keychain identity also pins station and full hardware ID. New
 LAN/archive behavior has host/simulator/build evidence plus the owner's report of
@@ -230,11 +255,15 @@ accuracy, stale/background handling or authenticated Wi-Fi connections. See
    aggregator run over the iOS archive through the receipt index (`IosArchive`), with index repair
    at launch. A Room KMP store would replace the receipts and the in-memory tiers later.
 2. Done in code (#18), not yet seen on an iPhone. History is the shared `:feature:history`
-   screen, opened from a History button on My devices, with Day, Week, Month and Year, the ring,
+   screen, opened from History buttons on My devices and the device page, with Day, Week, Month and Year, the ring,
    the calendar and station chips for every archived station. Check on an iPhone that a fresh sync
    shows in History without a relaunch, that index repair fills an archive synced by an older build,
    and how long Week, Month and Year take on a large archive (tiers are computed in memory).
-3. Share existing Android screens, resources and navigation incrementally.
+3. Share existing Android screens, resources and navigation incrementally. My devices is shared
+   in code (#16, 2026-10-09), not yet seen on an iPhone. Check on an iPhone that the list scans
+   only after access is allowed, that a known sensor opens from the list when it is not
+   advertising in the scan, that Forget then opening the sensor again pairs as expected (remove
+   the bond in iOS Settings first), and that Collect all copies two loggers one after the other.
 4. Qualify BLE token acquisition, Keychain persistence, authenticated LAN transfer, multi-phone
    collection, concurrent sensors, cancellation/resume and Local Network permissions on iPhones.
 5. Qualify bounded iOS LAN background collection, automatic foreground resume and Files exports on iPhones.
@@ -250,9 +279,17 @@ accuracy, stale/background handling or authenticated Wi-Fi connections. See
    what they open. No descriptor leaks today. The JVM reader closes its file after mapping, and
    the iOS reader is a mapped `NSData` freed with the object. A reader over a plain file handle
    would need it.
+10. Debug (`:feature:debug`) runs on iOS over a lent Bluetooth link only. Raw commands, `LOG_TAIL`,
+    `GET_CONFIG` and `STATUS` need a Wi-Fi variant of `openDebugLink` in `LanDiscovery.swift`
+    (async `target()` and `beginCollect`), and iOS needs the Smart Sync trace card. Qualify on an
+    iPhone that a raw command, the log, the config read and Refresh status work over Bluetooth, that
+    `TOKEN` and secrets stay redacted, that a sync is refused while Debug holds the link and the
+    reverse, and that leaving Developer level closes the screen.
 
 LAN and Bluetooth file sync use the shared Kotlin engine. Swift keeps the sockets, Core
 Bluetooth, LAN framing, the HELLO check, keepalive, the BLE token request and Keychain.
+The shared Debug screen borrows the same `SensorLink` from `BluetoothCompanion.openDebugLink`,
+one per request. Closing the link (`SensorLink.whenClosed`) hands it back to Swift.
 `SensorArchive.swift` remains only for Files export. Android's Room index, WorkManager and
 foreground service stay Android code.
 

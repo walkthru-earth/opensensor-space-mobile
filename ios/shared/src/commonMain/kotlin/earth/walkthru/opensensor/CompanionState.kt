@@ -24,11 +24,9 @@ import earth.walkthru.opensensor.strings.resources.companion_lan_unavailable
 import earth.walkthru.opensensor.strings.resources.companion_lan_waiting
 import earth.walkthru.opensensor.strings.resources.companion_live
 import earth.walkthru.opensensor.strings.resources.companion_live_unreadable
-import earth.walkthru.opensensor.strings.resources.companion_scan_choose
-import earth.walkthru.opensensor.strings.resources.companion_scan_looking
-import earth.walkthru.opensensor.strings.resources.companion_scan_none
 import earth.walkthru.opensensor.strings.resources.companion_status_unreadable
 import earth.walkthru.opensensor.strings.resources.now_waiting
+import kotlin.time.Clock
 
 internal data class NearbyDevice(val id: String, val name: String, val rssi: Int)
 
@@ -50,6 +48,10 @@ class CompanionState {
     /** Bluetooth authorization as the shared policy reads it. Not determined until the first tap. */
     internal var bluetoothAccess by mutableStateOf(AccessStatus.NOT_DETERMINED)
         private set
+
+    /** True only while the central manager reports the radio powered off. */
+    internal var bluetoothPoweredOff by mutableStateOf(false)
+        private set
     internal var message by mutableStateOf<UiText>(UiText.None)
         private set
     internal var selectedId by mutableStateOf<String?>(null)
@@ -60,12 +62,22 @@ class CompanionState {
         private set
     internal var status by mutableStateOf<DeviceStatus?>(null)
         private set
+
+    /** The last STATUS body as it arrived, for the Debug screen, and when it arrived. */
+    internal var statusRaw by mutableStateOf<String?>(null)
+        private set
+    internal var statusAtEpochMs by mutableStateOf<Long?>(null)
+        private set
     internal var live by mutableStateOf<LiveSample?>(null)
         private set
     internal val reading: NowReading get() = NowReading.of(live)
     internal val profile get() = LiveProfiles.resolve(info)
 
     internal var lanDevices by mutableStateOf<List<String>>(emptyList())
+        private set
+
+    /** The station of each Wi-Fi service name, from its TXT record. */
+    internal var lanStations by mutableStateOf<Map<String, String>>(emptyMap())
         private set
     internal var lanScanning by mutableStateOf(false)
         private set
@@ -89,16 +101,6 @@ class CompanionState {
         private set
     internal var lanPaused by mutableStateOf<Set<String>>(emptySet())
         private set
-    internal var exportBusy by mutableStateOf(false)
-        private set
-    internal var exportMessage by mutableStateOf<UiText>(UiText.None)
-        private set
-
-    fun exportChanged(busy: Boolean, explanation: String) {
-        exportBusy = busy
-        exportMessage = UiText.plain(explanation)
-    }
-
     fun lanCollectionPaused(name: String, paused: Boolean) {
         lanPaused = if (paused) lanPaused + name else lanPaused - name
     }
@@ -203,8 +205,16 @@ class CompanionState {
     fun lanScanStarted() {
         lanAccessDenied = false
         lanDevices = emptyList()
+        lanStations = emptyMap()
         lanScanning = true
         lanMessage = UiText.of(Res.string.companion_lan_looking)
+    }
+
+    /** Like [lanDevicesFound], with the TXT station of each name, in the same order. */
+    fun lanSensorsFound(names: List<String>, stations: List<String>) {
+        if (!lanScanning) return
+        lanStations = names.zip(stations).toMap()
+        lanDevicesFound(names)
     }
 
     fun lanDevicesFound(names: List<String>) {
@@ -240,12 +250,18 @@ class CompanionState {
     fun lanScanUnavailable() {
         lanScanning = false
         lanDevices = emptyList()
+        lanStations = emptyMap()
         lanMessage = UiText.of(Res.string.companion_lan_unavailable)
     }
 
     /** The raw `CBManager.authorization` value, read when the central manager reports its state. */
     fun bluetoothAuthorizationChanged(raw: Long) {
         bluetoothAccess = IosAuthorization.bluetooth(raw)
+    }
+
+    /** The radio state from the central manager. Off means the user can turn it on in Control Center. */
+    fun bluetoothPowerChanged(poweredOff: Boolean) {
+        bluetoothPoweredOff = poweredOff
     }
 
     fun bluetoothChanged(available: Boolean, explanation: String) {
@@ -257,15 +273,14 @@ class CompanionState {
         }
     }
 
+    /** My devices draws the scan itself, so a scan leaves the device page's message alone. */
     fun scanStarted() {
         devices = emptyList()
         scanning = true
-        message = UiText.of(Res.string.companion_scan_looking)
     }
 
     fun scanStopped() {
         scanning = false
-        if (selectedId == null) message = if (devices.isEmpty()) UiText.of(Res.string.companion_scan_none) else UiText.of(Res.string.companion_scan_choose)
     }
 
     fun deviceFound(id: String, name: String, rssi: Int) {
@@ -298,6 +313,8 @@ class CompanionState {
 
     fun receiveStatus(json: String) {
         if (!connected) return
+        statusRaw = json
+        statusAtEpochMs = Clock.System.now().toEpochMilliseconds()
         status = runCatching { DeviceStatus.parse(json) }.getOrNull()
         if (status == null) message = UiText.of(Res.string.companion_status_unreadable)
     }
@@ -328,6 +345,8 @@ class CompanionState {
         connected = false
         info = null
         status = null
+        statusRaw = null
+        statusAtEpochMs = null
         live = null
         syncAvailable = false
         syncBusy = false

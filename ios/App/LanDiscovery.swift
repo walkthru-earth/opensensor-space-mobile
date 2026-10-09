@@ -31,6 +31,13 @@ final class LanDiscovery {
     }
     private let engine: SensorSync
     private var handles: [String: SyncHandle] = [:]
+    /// Collect all steps by service name: the sensor id to report, and the sync outcome once known.
+    private var collectSteps: [String: String] = [:]
+    private var collectOutcome: [String: Bool] = [:]
+    /// Sessions a Collect all step opened. A step closes only these, never a session the user opened.
+    private var collectOpened = Set<String>()
+    /// A Collect all step ended: the sensor id and whether every listed file is on this phone.
+    var onCollectFinished: ((String, Bool) -> Void)?
     init(state: CompanionState, engine: SensorSync) {
         self.state = state
         self.engine = engine
@@ -83,7 +90,8 @@ final class LanDiscovery {
                     devices[name] = Device(endpoint: result.endpoint, station: station, device: device.lowercased())
                 }
                 self.devices = devices
-                self.state.lanDevicesFound(names: Array(devices.keys))
+                let names = Array(devices.keys)
+                self.state.lanSensorsFound(names: names, stations: names.map { devices[$0]?.station ?? "" })
                 for name in Array(self.pendingResume) where devices[name] != nil { self.resumePending(name) }
             }
         }
@@ -204,6 +212,7 @@ final class LanDiscovery {
                 for queued in Array(self.pendingResume) { self.resumePending(queued) }
             }
             let result = await self.collect(name: name, session: session, attempt: attempt)
+            if self.collectSteps[name] != nil { self.collectOutcome[name] = result?.end == .complete }
             guard self.attempts[name] == attempt, self.sessions[name] === session else { return }
             if let result, result.keepsLink {
                 // Files that were not saved fail alone. The session stays open so a retry is one tap.
@@ -255,6 +264,48 @@ final class LanDiscovery {
         return ended.result
     }
 
+    /// One Collect all step over Wi-Fi. Opens its own session, syncs, then closes it and reports [id].
+    /// A session the user opened is left alone, so the step fails at once instead, as does a step
+    /// that cannot start.
+    func collect(name: String, id: String) {
+        guard !isBackground, collectSteps[name] == nil, tasks[name] == nil, sessions[name] == nil else {
+            onCollectFinished?(id, false)
+            return
+        }
+        collectSteps[name] = id
+        collectOutcome[name] = nil
+        collectOpened.insert(name)
+        connect(name: name)
+        if tasks[name] == nil { advanceCollect(name) }
+    }
+
+    /// Moves a Collect all step on once its connect or sync task ended.
+    private func advanceCollect(_ name: String) {
+        guard let id = collectSteps[name], tasks[name] == nil else { return }
+        let opened = collectOpened.contains(name)
+        if let ok = collectOutcome.removeValue(forKey: name) {
+            collectSteps[name] = nil
+            collectOpened.remove(name)
+            if opened, sessions[name] != nil { disconnect(name: name) }
+            onCollectFinished?(id, ok)
+            return
+        }
+        if sessions[name] != nil, !isBackground {
+            sync(name: name)
+            if tasks[name] != nil { return }
+            if opened { disconnect(name: name) }
+        }
+        collectSteps[name] = nil
+        collectOpened.remove(name)
+        onCollectFinished?(id, false)
+    }
+
+    /// Closes every session with this hardware id. Forget calls it.
+    func disconnect(device: String) {
+        let names = Set(sessions.keys).union(pendingResume)
+        for name in names where devices[name]?.device == device.lowercased() { disconnect(name: name) }
+    }
+
     func disconnect(name: String) {
         cancelledCollections.insert(name)
         clearResume(name)
@@ -284,6 +335,7 @@ final class LanDiscovery {
                 : closedMessage)
         }
         resumePending(name)
+        advanceCollect(name)
     }
 
     func enterBackground() {

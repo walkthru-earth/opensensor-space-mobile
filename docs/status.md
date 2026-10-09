@@ -41,10 +41,11 @@ immediately and skip remote OPEN/READ while still validating local CRC/size/PAR1
 without receipts are checked once through the existing path. Force-quit/relaunch does not retain
 automatic resume intent, but downloaded bytes/receipts survive and manual sync reuses them.
 
-The new offline **Export Parquet files** action saves a copy through Apple's Files picker,
-preserving station/Hive folders and excluding partials/receipts. Exports retain the private archive.
-Android already offers ZIP and individual-Parquet exports from the sensor's Files menu;
-exact storage paths and access are in [data-model.md](data-model.md#finding-and-exporting-the-mobile-archive).
+Since #19 both apps run the shared Files screen and inspector (`:feature:files`). iOS opens it
+from a Files button on My devices and shares one file, all files or a zip, or saves the zip through
+Apple's Files picker, preserving station/Hive paths and excluding partials and receipts. This
+replaced the older Swift folder export. Simulator build only, the iOS share and save sheets and the
+Android chooser and SAF save still need a phone run. Exact storage paths and access are in [data-model.md](data-model.md#finding-and-exporting-the-mobile-archive).
 
 Local validation: `./gradlew --no-daemon verify verifyIos`, unsigned Xcode 27 Debug simulator
 build and `./ios/tests/verify-native.sh` passed. Native regressions fail an actual collection

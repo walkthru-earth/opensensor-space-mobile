@@ -158,7 +158,28 @@ class CompanionTodaySourceTest {
         val calls = Calls()
         val source = source(CompanionState(), calls, mutableListOf())
         source.reconnect()
+        // No link to close.
         source.disconnect()
-        assertEquals(listOf("connect device", "disconnect"), calls.list)
+        assertEquals(listOf("connect device"), calls.list)
+    }
+
+    @Test fun anotherSensorOnTheLinkLeavesThisTodayClosedAndSilent() = runTest {
+        val state = connected("{\"utc\":0,\"clk\":0}")
+        state.receiveLive("{\"pms\":4,\"pm25\":12.0}")
+        val calls = Calls()
+        val source = source(state, calls, mutableListOf())
+        state.connectionStarted("other")
+        assertTrue(state.receiveInfo("{\"proto\":2,\"dev\":\"665544332211\",\"station\":\"st2\"}"))
+        state.receiveLive("{\"pms\":4,\"pm25\":30.0}")
+        settle(this)
+        val snapshot = source.snapshot.value
+        assertEquals("device", snapshot.address)
+        assertEquals(ConnectionState.Disconnected, snapshot.connection)
+        assertNull(snapshot.info)
+        assertNull(snapshot.live)
+        source.sync(ClockSyncMode.AUTOMATIC, clockConfirmed = true)
+        source.flush()
+        source.disconnect()
+        assertTrue(calls.list.isEmpty())
     }
 }

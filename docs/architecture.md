@@ -28,7 +28,7 @@ flowchart TB
   end
   APP[":app (Android)<br/>Hilt, Room v10, DataStore, WorkManager, Compose, zstd-jni"]
   IOS["ios/App (Xcode + Swift)<br/>Core Bluetooth, Bonjour, own sync engine and archive"]
-  IS[":ios:shared (iOS only)<br/>CompanionScreen, AppRoot, static OpenSensorShared framework"]
+  IS[":ios:shared (iOS only)<br/>AppRoot, DevicesBridge, the device page, static OpenSensorShared framework"]
   HI --> PQ & PR & AQ
   PF --> PQ & AQ
   DI --> PF & UN & DS & PM
@@ -164,9 +164,8 @@ flowchart LR
 | `data/history/` | `HistoryIndexer`, `HistoryDeriver`, `DailyDerived*`, `HistoryRepository`, `parquet/AppParquetCodecs` (ZSTD) | Room + files |
 | `data/local/database/` | `AppDatabase` (v10), `KnownDevice`, `StationEpoch`, `ArchivedFile`, `History.kt` (`MetricBucket`, `DerivedDay`) | yes |
 | `data/settings/AppSettings.kt` | Android view of `:core:settings` (`DetailLevel` Simple · Detailed · Developer, clock consent, units, public sensors) | yes |
-| `data/export/ExportManager.kt` | share / zip / SAF | yes |
 | `data/fake/FakeTransport.kt` | in-process protocol-v2 device with fault hooks | no (JVM) |
-| `ui/scan · device (Today, Device, NowCard) · history · files · debug · settings · permissions · theme` | Compose; `Navigation.kt` supplies the Android entries to the shared `AppShell` (`:feature:shell`) | yes |
+| `ui/scan · device (Today, Device, NowCard) · history · files · debug · settings · permissions · theme` | Compose. `ui/files` hosts the shared Files and inspector screens (`:feature:files`) with the Android slots and the chart by file. `Navigation.kt` supplies the Android entries to the shared `AppShell` (`:feature:shell`) | yes |
 
 The iOS entry point is `ios/OpenSensor.xcodeproj`. Its Swift adapters own Apple services;
 the current screen and presentation state live in `ios/shared`. Follow [`../ios/AGENTS.md`](../ios/AGENTS.md)

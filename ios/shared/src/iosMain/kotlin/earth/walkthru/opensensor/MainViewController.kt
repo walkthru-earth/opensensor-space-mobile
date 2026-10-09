@@ -5,15 +5,41 @@ import androidx.compose.ui.window.ComposeUIViewController
 import platform.UIKit.UIViewController
 
 /**
- * The one screen the Swift app shows. It opens on the Discover map. [syncBluetooth] syncs the
- * connected Bluetooth sensor, and the app routes it to an open Wi-Fi session for the same sensor.
- * [command] sends a confirmed `SET_TIME` or `FLUSH` from Today over the Bluetooth connection.
+ * The one screen the Swift app shows. It opens on the Discover map. My devices reads [devices].
+ * [requestBluetooth] creates the central manager, which shows the system prompt the first time.
+ * [openSensor] connects to a peripheral id, closing another open Bluetooth link first. A user open
+ * cancels Collect all before it.
+ * [syncBluetooth] syncs the connected Bluetooth sensor, and the app routes it to an open Wi-Fi
+ * session for the same sensor. [openDebugLink] lends the Debug screen a fresh link to the sensor
+ * with this hardware id, or returns null while a sync or another request holds it. Closing the
+ * link hands it back. [command] sends a confirmed `SET_TIME` or `FLUSH` from Today over the
+ * Bluetooth connection.
  */
-fun mainViewController(state: CompanionState, scan: () -> Unit, connect: (String) -> Unit, disconnect: () -> Unit, scanLan: () -> Unit, saveWifiAccess: () -> Unit, connectLan: (String) -> Unit, syncLan: (String) -> Unit, disconnectLan: (String) -> Unit, exportArchive: () -> Unit, syncBluetooth: () -> Unit, command: (SensorCommand) -> Unit): UIViewController =
+fun mainViewController(state: CompanionState, devices: DevicesBridge, requestBluetooth: () -> Unit, openSensor: (String) -> Unit, disconnect: () -> Unit, scanLan: () -> Unit, saveWifiAccess: () -> Unit, connectLan: (String) -> Unit, syncLan: (String) -> Unit, disconnectLan: (String) -> Unit, syncBluetooth: () -> Unit, openDebugLink: (String) -> SensorLink?, command: (SensorCommand) -> Unit): UIViewController =
     ComposeUIViewController {
-        val today = remember { CompanionToday(state, CompanionLinkActions(syncFiles = syncBluetooth, command = command, connect = connect, disconnect = disconnect)) }
-        // Detailed and Developer reveal the technical lines (signal, firmware, byte counters), as on Android.
-        AppRoot(today) { units, level ->
-            CompanionScreen(state, scan, connect, disconnect, scanLan, saveWifiAccess, connectLan, syncLan, disconnectLan, exportArchive, syncBluetooth, units, showTechnical = level.detailed)
+        // A sensor the user opens takes the one Bluetooth link, so Collect all stops first.
+        val userOpen: (String) -> Unit = { id ->
+            devices.cancelCollectAll()
+            openSensor(id)
+        }
+        val today = remember { CompanionToday(state, CompanionLinkActions(syncFiles = syncBluetooth, command = command, connect = userOpen, disconnect = disconnect)) }
+        AppRoot(devices, today, requestBluetooth, userOpen, openDebugLink) { id, units, level, openDebug, onBack ->
+            // Detailed and Developer reveal the technical lines (signal, firmware, byte counters), as on Android.
+            CompanionScreen(
+                state = state,
+                title = devices.nameFor(id),
+                onBack = onBack,
+                reconnect = if (IosKnown.isPeripheral(id)) ({ userOpen(id) }) else null,
+                disconnect = disconnect,
+                scanLan = scanLan,
+                saveWifiAccess = saveWifiAccess,
+                connectLan = connectLan,
+                syncLan = syncLan,
+                disconnectLan = disconnectLan,
+                syncBluetooth = syncBluetooth,
+                units = units,
+                showTechnical = level.detailed,
+                onOpenDebug = openDebug,
+            )
         }
     }

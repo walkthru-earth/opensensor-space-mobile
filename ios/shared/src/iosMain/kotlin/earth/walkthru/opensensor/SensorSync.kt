@@ -50,7 +50,8 @@ class SyncHandle internal constructor(private val job: Job?) {
  */
 class SensorSync internal constructor(
     store: ArchiveStore,
-    index: ArchiveIndex,
+    /** The receipt index, read by My devices for its archive line. */
+    internal val index: ArchiveIndex,
     private val work: CoroutineContext,
     private val callbacks: CoroutineContext,
     private val progressInterval: Long = PROGRESS_INTERVAL_MS,
@@ -91,7 +92,7 @@ class SensorSync internal constructor(
             val result = try {
                 var last: TimeSource.Monotonic.ValueTimeMark? = null
                 var lastDone = -1
-                val summary = collector.collect(DeviceSession(link.transport), station, device, maxRead) { p: CollectionProgress ->
+                val summary = collector.collect(DeviceSession(link.transport, debugFrames.recorderFor(link.transport.address)), station, device, maxRead) { p: CollectionProgress ->
                     listed = p.filesTotal
                     if (initial < 0) initial = p.filesDone
                     done = p.filesDone

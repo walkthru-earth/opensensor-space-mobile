@@ -7,7 +7,6 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import earth.walkthru.aqsync.BuildConfig
-import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.DeviceConnectionManager
 import earth.walkthru.aqsync.data.DeviceSnapshot
 import earth.walkthru.aqsync.data.background.AutoSyncScheduler
@@ -18,11 +17,23 @@ import earth.walkthru.aqsync.data.fake.FakeTransport
 import earth.walkthru.aqsync.data.history.Metrics
 import earth.walkthru.aqsync.data.history.Resolution
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
-import earth.walkthru.aqsync.data.local.database.KnownDevice
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
 import earth.walkthru.aqsync.data.local.database.MetricBucketDao
 import earth.walkthru.aqsync.data.settings.AppSettings
 import earth.walkthru.aqsync.data.settings.DetailLevel
+import earth.walkthru.opensensor.devices.ActiveLink
+import earth.walkthru.opensensor.devices.ArchiveGlance
+import earth.walkthru.opensensor.devices.CollectAllPort
+import earth.walkthru.opensensor.devices.DeviceRadio
+import earth.walkthru.opensensor.devices.DevicesAction
+import earth.walkthru.opensensor.devices.DevicesController
+import earth.walkthru.opensensor.devices.DevicesUiState
+import earth.walkthru.opensensor.devices.KnownDeviceStore
+import earth.walkthru.opensensor.devices.KnownSensor
+import earth.walkthru.opensensor.devices.LinkPhase
+import earth.walkthru.opensensor.devices.NearbySensor
+import earth.walkthru.opensensor.devices.ScanProblem
+import earth.walkthru.opensensor.devices.WifiSensor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -32,42 +43,13 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
-
-/** What Home knows about a logger from the phone archive alone, no link needed. */
-data class LoggerSummary(
-    val files: Int,
-    val lastSyncedEpochMs: Long?,
-    /** Latest timed row on this phone (UTC ns), if any file has a clock. */
-    val lastDataUtcNs: Long?,
-    /** The most recent UTC day with valid readings: its start and PM2.5 average. */
-    val lastDayStartS: Long?,
-    val lastDayPm25Mean: Float?,
-    val lastDayCoverage: Float?,
-)
-
-data class ScanUiState(
-    val scanning: Boolean = false,
-    val activeDevices: List<DeviceSnapshot> = emptyList(),
-    val scanError: String? = null,
-    /** Advertisers seen in the last ~15 s, strongest first. */
-    val nearby: List<ScannedDevice> = emptyList(),
-    val known: List<KnownDevice> = emptyList(),
-    val showFakeEntry: Boolean = BuildConfig.DEBUG,
-    /** Stations currently advertised on the LAN, for the "on LAN" tag. */
-    val lanStations: Set<String> = emptySet(),
-    /** Keyed by station. */
-    val summaries: Map<String, LoggerSummary> = emptyMap(),
-    /** A manual or periodic background run is queued or running. */
-    val backgroundSyncActive: Boolean = false,
-    /** Simple hides addresses, signal numbers and station IDs; Developer shows them. */
-    val detailLevel: DetailLevel = DetailLevel.SIMPLE,
-)
 
 @HiltViewModel
 class ScanViewModel @Inject constructor(
@@ -80,14 +62,14 @@ class ScanViewModel @Inject constructor(
     settings: AppSettings,
 ) : ViewModel() {
 
-    private val summaries: Flow<Map<String, LoggerSummary>> = combine(archivedFileDao.observeAll(), bucketDao.observeAllDays(Metrics.primary.id)) { files, days ->
+    private val summaries: Flow<Map<String, ArchiveGlance>> = combine(archivedFileDao.observeAll(), bucketDao.observeAllDays(Metrics.primary.id)) { files, days ->
         val latestDay = HashMap<String, earth.walkthru.aqsync.data.local.database.MetricBucket>()
         for (b in days) if (!latestDay.containsKey(b.station)) latestDay[b.station] = b // newest first
         files.groupBy { it.station }.mapValues { (station, list) ->
             val day = latestDay[station]
-            LoggerSummary(
+            ArchiveGlance(
                 files = list.size,
-                lastSyncedEpochMs = list.maxOfOrNull { it.syncedAtEpochMs },
+                lastSyncedMs = list.maxOfOrNull { it.syncedAtEpochMs },
                 lastDataUtcNs = list.mapNotNull { it.lastUtcNs }.maxOrNull(),
                 lastDayStartS = day?.startEpochS,
                 lastDayPm25Mean = day?.mean,
@@ -97,38 +79,50 @@ class ScanViewModel @Inject constructor(
     }
 
     private val scanning = MutableStateFlow(false)
-    private val scanError = MutableStateFlow<String?>(null)
+    private val scanProblem = MutableStateFlow<ScanProblem?>(null)
     private val seen = MutableStateFlow<Map<String, ScannedDevice>>(emptyMap())
-    val uiState: StateFlow<ScanUiState> = combine(
-        scanning,
-        scanError,
-        seen,
-        knownDeviceDao.observeAll(),
-        manager.lanDevices,
-        summaries,
-        autoSyncScheduler.observeActive(),
-        manager.snapshots,
-        settings.detailLevel,
-    ) { values ->
-        @Suppress("UNCHECKED_CAST")
-        val nearby = (values[2] as Map<String, ScannedDevice>).values
-            .sortedByDescending { it.rssi }
-        @Suppress("UNCHECKED_CAST")
-        ScanUiState(
-            scanning = values[0] as Boolean,
-            activeDevices = (values[7] as List<*>).filterIsInstance<DeviceSnapshot>().filter { it.connection != ConnectionState.Disconnected || it.backgroundOwner != null || it.reconnect != null },
-            scanError = values[1] as String?,
-            nearby = nearby,
-            known = values[3] as List<KnownDevice>,
-            lanStations = (values[4] as Map<String, *>).keys,
-            summaries = values[5] as Map<String, LoggerSummary>,
-            backgroundSyncActive = values[6] as Boolean,
-            detailLevel = values[8] as DetailLevel,
-        )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ScanUiState())
 
-    /** One background pass over known devices, sharing the app's two-transfer budget. */
-    fun collectAll() = autoSyncScheduler.collectAll()
+    val detailLevel: StateFlow<DetailLevel> = settings.detailLevel.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DetailLevel.SIMPLE)
+
+    /** The debug fake entries, never in a release build. */
+    val showFakeEntry: Boolean = BuildConfig.DEBUG
+
+    /** Room behind the shared known-device port. The token ciphertext never leaves this class. */
+    private val knownStore = object : KnownDeviceStore {
+        override val devices: Flow<List<KnownSensor>> = knownDeviceDao.observeAll().map { rows ->
+            rows.map { KnownSensor(it.address, it.name, it.station, it.lastSeenEpochMs, hasWifiAccess = it.hasLanToken) }
+        }
+
+        override suspend fun forget(id: String) = manager.controller(id).forget(id)
+    }
+
+    private val radio = object : DeviceRadio {
+        override val nearby: Flow<List<NearbySensor>> = seen.map { m -> m.values.map { NearbySensor(it.address, it.name, it.rssi, it.bonded) } }
+        override val scanning: Flow<Boolean> = this@ScanViewModel.scanning
+        override val scanProblem: Flow<ScanProblem?> = this@ScanViewModel.scanProblem
+        override val wifi: Flow<List<WifiSensor>> = manager.lanDevices.map { m -> m.values.map { WifiSensor(it.serviceName, it.station) } }
+        override val active: Flow<List<ActiveLink>> = manager.snapshots.map { list -> list.filter { it.isActive() }.map { it.toActiveLink() } }
+        override fun startScan() = this@ScanViewModel.startScan()
+        override fun stopScan() = this@ScanViewModel.stopScan()
+    }
+
+    /** Android runs Collect all as one bounded background pass, sharing the two-transfer budget. */
+    private val collect = object : CollectAllPort {
+        override val running: Flow<Boolean> = autoSyncScheduler.observeActive()
+        override fun collectAll() = autoSyncScheduler.collectAll()
+    }
+
+    private val controller = DevicesController(viewModelScope, knownStore, radio, summaries, collect)
+    val state: StateFlow<DevicesUiState> get() = controller.state
+
+    /** Shared actions go to the controller. Opening a sensor connects here when Bluetooth is allowed. */
+    fun onAction(action: DevicesAction) {
+        if (action is DevicesAction.Open) {
+            if (action.connect) connect(action.id, action.name)
+            return
+        }
+        controller.onAction(action)
+    }
 
     private var scanJob: Job? = null
     private var pruneJob: Job? = null
@@ -137,7 +131,7 @@ class ScanViewModel @Inject constructor(
     fun startScan() {
         if (scanJob?.isActive == true) return
         val generation = ++scanGeneration
-        scanError.value = null
+        scanProblem.value = null
         scanning.value = true
         pruneJob?.cancel()
         pruneJob = viewModelScope.launch {
@@ -160,7 +154,7 @@ class ScanViewModel @Inject constructor(
                         }
                         is BleScanner.Event.Failed -> {
                             Log.w("ScanViewModel", "scan failed (${ev.errorCode}: ${ev.message})")
-                            scanError.value = context.getString(if (ev.errorCode == BleScanner.BLUETOOTH_OFF) R.string.scan_bluetooth_off else R.string.scan_failed)
+                            scanProblem.value = if (ev.errorCode == BleScanner.BLUETOOTH_OFF) ScanProblem.BLUETOOTH_OFF else ScanProblem.FAILED
                             false
                         }
                     }
@@ -169,7 +163,7 @@ class ScanViewModel @Inject constructor(
                 throw e
             } catch (e: Exception) {
                 Log.w("ScanViewModel", "scan failed (${e::class.simpleName}: ${e.message})")
-                scanError.value = context.getString(R.string.scan_failed)
+                scanProblem.value = ScanProblem.FAILED
             } finally {
                 // A stopped run can finish after a new run starts. Only its own generation may
                 // clear the current button state or cancel the current pruning loop.
@@ -214,10 +208,6 @@ class ScanViewModel @Inject constructor(
         controller.connect(address, name, fake = fake)
     }
 
-    fun forget(address: String) {
-        viewModelScope.launch { manager.controller(address).forget(address) }
-    }
-
     override fun onCleared() {
         stopScan()
     }
@@ -226,3 +216,22 @@ class ScanViewModel @Inject constructor(
         const val STALE_MS = 15_000L
     }
 }
+
+private fun DeviceSnapshot.isActive(): Boolean = connection != ConnectionState.Disconnected || backgroundOwner != null || reconnect != null
+
+/** A live link as the shared list shows it. A failure reason stays here, the screen shows a phase. */
+private fun DeviceSnapshot.toActiveLink(): ActiveLink = ActiveLink(
+    id = address,
+    name = name,
+    phase = when {
+        reconnect != null -> LinkPhase.RECONNECTING
+        connection is ConnectionState.Ready -> LinkPhase.CONNECTED
+        connection is ConnectionState.Bonding -> LinkPhase.PAIRING
+        connection is ConnectionState.Failed -> LinkPhase.FAILED
+        else -> LinkPhase.CONNECTING
+    },
+    collecting = progress.running,
+    filesDone = progress.filesDone,
+    filesTotal = progress.filesTotal,
+    background = backgroundOwner != null,
+)

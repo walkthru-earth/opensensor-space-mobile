@@ -155,8 +155,6 @@ class CompanionStateTest {
         assertEquals(UiText.of(Res.string.companion_live_unreadable), state.message)
         state.bluetoothChanged(false, "Bluetooth is off")
         assertEquals(UiText.Plain("Bluetooth is off"), state.message)
-        state.exportChanged(false, "")
-        assertTrue(state.exportMessage.isEmpty)
         state.connectionStarted("device")
         assertFalse(state.receiveInfo("{}"))
         assertEquals(UiText.of(Res.string.companion_info_invalid), state.message)
