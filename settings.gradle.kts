@@ -41,6 +41,8 @@ include(":ui:permissions")
 include(":feature:discover")
 // The Settings screen, shared Compose for Android and iOS (docs/platform-parity-plan.md).
 include(":feature:settings")
+// The Debug screen, shared Compose for Android and iOS, Developer level only (docs/screens.md, Debug).
+include(":feature:debug")
 // The app shell: bottom bar, per-tab Navigation 3 back stacks, Back rules (docs/adr/0001-shared-navigation.md).
 include(":feature:shell")
 
