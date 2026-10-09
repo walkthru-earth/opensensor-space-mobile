@@ -230,6 +230,8 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         state.wifiAccessChanged(available: false, busy: false, explanation: "")
         operations.removeAll()
         pending = nil
+        // A command outcome held for its last write reaches Today now that the connection is gone.
+        state.today.linkIdle()
         if let peripheral = current {
             current = nil
             peripheral.delegate = nil
@@ -257,7 +259,11 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     func sync() {
         guard foreground, let peripheral = current, control != nil, let response, let identity, link == nil,
             pending == nil, operations.isEmpty, !requestingToken
-        else { return }
+        else {
+            // Today's Smart Sync and the Sync button say the link is busy instead of doing nothing.
+            state.today.commandRefused()
+            return
+        }
         let mtu = Int32(peripheral.maximumWriteValueLength(for: .withoutResponse) + 3)
         let link = SensorLink(overWifi: false, address: identity.device, mtu: mtu) { [weak self] body in
             // Kotlin sends on the main thread, in request order.
@@ -306,14 +312,22 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     }
 
     private func commandEnded(_ result: CommandResult, link: SensorLink) {
-        let released = self.link === link
-        if released {
+        if self.link === link {
             self.link = nil
             syncHandle = nil
         }
-        state.today.commandFinished(result: result)
-        // A Collect all step waiting for the link starts once the command hands it back.
-        if released { collectWhenReady() }
+        // The command may have queued a last write, the status request after SET_TIME. Today hears the
+        // outcome, and Smart Sync starts its file sync, once that write completes.
+        state.today.commandEnded(result: result)
+        settle()
+    }
+
+    /// Runs what waits for an idle link once no write or read is queued or in flight. First the
+    /// outcome of a command for Today, then a Collect all step waiting for the link.
+    private func settle() {
+        guard link == nil, pending == nil, operations.isEmpty else { return }
+        state.today.linkIdle()
+        collectWhenReady()
     }
 
     private func write(_ body: Data) {
@@ -487,6 +501,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         }
         pending = nil
         performNext()
+        settle()
     }
 
     private func performNext() {
@@ -512,6 +527,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         if case .subscribe(let expected) = pending, expected === characteristic {
             pending = nil
             performNext()
+            settle()
         }
     }
 
@@ -574,7 +590,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
                 connectionTimer = nil
             }
             performNext()
-            collectWhenReady()
+            settle()
         }
     }
 }

@@ -3,12 +3,14 @@ package earth.walkthru.opensensor
 import androidx.compose.runtime.snapshots.Snapshot
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.TransportKind
+import earth.walkthru.aqsync.data.history.TodaySoFar
 import earth.walkthru.aqsync.data.sync.ClockQuality
 import earth.walkthru.aqsync.data.sync.ClockSyncMode
 import earth.walkthru.opensensor.today.TodayCommand
 import earth.walkthru.opensensor.today.TodayNotice
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -34,9 +36,14 @@ class CompanionTodaySourceTest {
         )
     }
 
-    private fun TestScope.source(state: CompanionState, calls: Calls, notices: MutableList<TodayNotice>): CompanionTodaySource {
+    private fun TestScope.source(
+        state: CompanionState,
+        calls: Calls,
+        notices: MutableList<TodayNotice>,
+        todaySoFar: Flow<TodaySoFar?> = flowOf(null),
+    ): CompanionTodaySource {
         val scope = CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler))
-        val source = CompanionTodaySource(scope, state, "device", MutableStateFlow(emptyList()), flowOf(null), calls.actions, now = { 1_000L })
+        val source = CompanionTodaySource(scope, state, "device", MutableStateFlow(emptyList()), todaySoFar, calls.actions, now = { 1_000L })
         scope.launch { source.notices.collect { notices += it } }
         return source
     }
@@ -109,6 +116,30 @@ class CompanionTodaySourceTest {
         assertFalse(state.today.busy)
     }
 
+    @Test fun theFileSyncWaitsForTheLastWriteOfTheClockStep() = runTest {
+        val state = connected("{\"utc\":0,\"clk\":0}")
+        val calls = Calls()
+        val notices = mutableListOf<TodayNotice>()
+        val source = source(state, calls, notices)
+        source.sync(ClockSyncMode.AUTOMATIC, clockConfirmed = false)
+        state.today.commandStarted()
+        // SET_TIME is confirmed, but the status request it queued is still being written.
+        state.today.commandEnded(CommandResult(TodayNotice.ClockSet))
+        runCurrent()
+        assertEquals(listOf("SET_TIME"), calls.list)
+        assertTrue(notices.isEmpty())
+        assertTrue(state.today.busy)
+        state.today.linkIdle()
+        runCurrent()
+        assertEquals(listOf("SET_TIME", "sync"), calls.list)
+        assertEquals(listOf<TodayNotice>(TodayNotice.ClockSet), notices)
+        assertFalse(state.today.busy)
+        // A second idle link reports nothing more.
+        state.today.linkIdle()
+        runCurrent()
+        assertEquals(listOf("SET_TIME", "sync"), calls.list)
+    }
+
     @Test fun aRefusedClockStepStopsTheSync() = runTest {
         val state = connected("{\"utc\":0,\"clk\":0}")
         val calls = Calls()
@@ -167,7 +198,8 @@ class CompanionTodaySourceTest {
         val state = connected("{\"utc\":0,\"clk\":0}")
         state.receiveLive("{\"pms\":4,\"pm25\":12.0}")
         val calls = Calls()
-        val source = source(state, calls, mutableListOf())
+        // The other sensor's day, as a station flow that is not guarded would read it.
+        val source = source(state, calls, mutableListOf(), flowOf(TodaySoFar(30f, 12, 0.5f)))
         state.connectionStarted("other")
         assertTrue(state.receiveInfo("{\"proto\":2,\"dev\":\"665544332211\",\"station\":\"st2\"}"))
         state.receiveLive("{\"pms\":4,\"pm25\":30.0}")
@@ -177,6 +209,7 @@ class CompanionTodaySourceTest {
         assertEquals(ConnectionState.Disconnected, snapshot.connection)
         assertNull(snapshot.info)
         assertNull(snapshot.live)
+        assertNull(snapshot.todaySoFar)
         source.sync(ClockSyncMode.AUTOMATIC, clockConfirmed = true)
         source.flush()
         source.disconnect()

@@ -183,8 +183,12 @@ internal fun AppRoot(
                                 TodayAction.OpenHistory -> nav.push(HistoryKey(PHONE_ARCHIVE))
                                 TodayAction.OpenFiles -> nav.push(FilesKey(PHONE_ARCHIVE))
                                 TodayAction.OpenDevice -> nav.push(DeviceKey(key.address))
-                                // Debug talks to the hardware id, the same key the companion page passes.
-                                TodayAction.OpenDebug -> today.state.info?.dev?.let { nav.openDebug(it, level.developer) }
+                                // Debug talks to the hardware id, the same key the companion page passes. The
+                                // link may hold another sensor now, so only this sensor's id opens it.
+                                TodayAction.OpenDebug ->
+                                    today.state.info?.dev
+                                        ?.takeIf { today.state.selectedId == key.address }
+                                        ?.let { nav.openDebug(it, level.developer) }
                                 TodayAction.OpenSettings -> nav.select(TopTab.SETTINGS)
                                 TodayAction.OpenBluetoothSettings -> openAppSettings()
                                 else -> nav.popIfTop { it == key }

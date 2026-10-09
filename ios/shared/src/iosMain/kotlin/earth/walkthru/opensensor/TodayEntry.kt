@@ -23,7 +23,8 @@ internal class CompanionToday(val state: CompanionState, val actions: CompanionL
  * same reader History uses.
  */
 private class TodayHolder(today: CompanionToday, address: String, settings: SettingsRepository) : ViewModel() {
-    private val station = snapshotFlow { today.state.info?.station }
+    // The one link may hold another sensor. Its station must not fill this sensor's Today so far.
+    private val station = snapshotFlow { today.state.info?.station?.takeIf { today.state.selectedId == address } }
     val controller = TodayController(
         scope = viewModelScope,
         source = CompanionTodaySource(

@@ -131,7 +131,7 @@ internal class CompanionTodaySource(
             liveAtEpochMs = s.liveAt?.takeIf { mine },
             sync = if (mine) runProgress(seen, s) else RunProgress(),
             archive = if (station == null) TodayArchive() else TodayArchive.of(records.filter { it.station == station }),
-            todaySoFar = today,
+            todaySoFar = today?.takeIf { mine },
         )
     }.stateIn(scope, SharingStarted.Eagerly, TodaySnapshot(address = address))
 

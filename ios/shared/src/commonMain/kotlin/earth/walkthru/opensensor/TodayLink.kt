@@ -25,7 +25,7 @@ enum class SensorCommand {
     }
 }
 
-/** How one command ended, from `SensorSync.command`. Swift hands it back to [TodayLink.commandFinished] unread. */
+/** How one command ended, from `SensorSync.command`. Swift hands it back to [TodayLink.commandEnded] unread. */
 class CommandResult internal constructor(internal val notice: TodayNotice) {
     override fun toString(): String = "CommandResult($notice)"
 }
@@ -46,14 +46,34 @@ class TodayLink {
         busy = true
     }
 
-    /** Nothing was sent: not connected, or the link is syncing or asking for Wi-Fi access. */
+    /** Nothing was sent: not connected, or the link is syncing or asking for Wi-Fi access. A refused sync reports it too. */
     fun commandRefused() {
         _notices.tryEmit(TodayNotice.Busy)
     }
 
-    /** The command ended, also when the connection closed under it. */
-    fun commandFinished(result: CommandResult) {
+    /** How the command ended, kept until [linkIdle]. Today stays busy until then. */
+    private var ended: TodayNotice? = null
+
+    /**
+     * The command ended and handed its link back. A write it queued last, such as the status
+     * request after `SET_TIME`, may still be in flight, so the outcome waits for [linkIdle]. Smart
+     * Sync starts its file sync on that outcome, and a sync started earlier would be refused.
+     */
+    fun commandEnded(result: CommandResult) {
+        ended = result.notice
+    }
+
+    /** No write or read is queued or in flight. Also called when the connection closes. */
+    fun linkIdle() {
+        val notice = ended ?: return
+        ended = null
         busy = false
-        _notices.tryEmit(result.notice)
+        _notices.tryEmit(notice)
+    }
+
+    /** The command ended on an idle link. */
+    fun commandFinished(result: CommandResult) {
+        commandEnded(result)
+        linkIdle()
     }
 }
