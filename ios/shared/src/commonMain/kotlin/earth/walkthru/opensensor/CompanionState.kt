@@ -109,9 +109,53 @@ class CompanionState {
 
     /** Native sessions are independent: a callback updates only its own sensor card. */
     fun lanSessionChanged(name: String, connected: Boolean, busy: Boolean, message: String, filesDone: Int, filesTotal: Int, bytesDone: Long, bytesPerSecond: Double = 0.0) {
+        lanSession(name, connected, busy, UiText.plain(message), filesDone, filesTotal, bytesDone, bytesPerSecond)
+    }
+
+    /** A Wi-Fi sync ended. The card keeps its counts and shows the outcome. */
+    fun lanSyncFinished(name: String, connected: Boolean, result: SyncResult) {
+        val previous = lanSessions[name]
+        lanSession(name, connected, false, result.message, previous?.filesDone ?: 0, previous?.filesTotal ?: 0, previous?.bytesDone ?: 0, 0.0)
+    }
+
+    private fun lanSession(name: String, connected: Boolean, busy: Boolean, message: UiText, filesDone: Int, filesTotal: Int, bytesDone: Long, bytesPerSecond: Double) {
         val rate = bytesPerSecond.takeIf { connected && busy && it.isFinite() && it > 0.0 } ?: 0.0
         lanSessions = lanSessions + (name to LanSessionState(connected, busy, message, filesDone, filesTotal, bytesDone, rate))
         if (!connected) lanReadings = lanReadings - name
+    }
+
+    /** Bluetooth file sync for the connected sensor. Available once INFO names its station. */
+    internal var syncAvailable by mutableStateOf(false)
+        private set
+    internal var syncBusy by mutableStateOf(false)
+        private set
+    internal var syncProgress by mutableStateOf<SyncProgress?>(null)
+        private set
+    internal var syncMessage by mutableStateOf<UiText>(UiText.None)
+        private set
+
+    fun bluetoothSyncAvailable(available: Boolean) {
+        syncAvailable = available && connected
+    }
+
+    fun bluetoothSyncStarted() {
+        syncBusy = true
+        syncProgress = null
+        syncMessage = UiText.None
+    }
+
+    fun bluetoothSyncProgressed(progress: SyncProgress) {
+        if (syncBusy) syncProgress = progress
+    }
+
+    fun bluetoothSyncFinished(result: SyncResult) {
+        syncBusy = false
+        syncMessage = result.message
+    }
+
+    /** A Bluetooth sync ended with the link gone. The connection closes and shows the outcome. */
+    fun bluetoothSyncClosed(result: SyncResult) {
+        close(result.message)
     }
 
     internal var lanReadings by mutableStateOf<Map<String, NowReading>>(emptyMap())
@@ -258,8 +302,12 @@ class CompanionState {
         info = null
         status = null
         live = null
+        syncAvailable = false
+        syncBusy = false
+        syncProgress = null
+        syncMessage = UiText.None
         message = explanation
     }
 }
 
-internal data class LanSessionState(val connected: Boolean, val busy: Boolean, val message: String, val filesDone: Int, val filesTotal: Int, val bytesDone: Long, val bytesPerSecond: Double = 0.0)
+internal data class LanSessionState(val connected: Boolean, val busy: Boolean, val message: UiText, val filesDone: Int, val filesTotal: Int, val bytesDone: Long, val bytesPerSecond: Double = 0.0)

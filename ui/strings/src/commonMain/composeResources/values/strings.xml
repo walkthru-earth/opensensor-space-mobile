@@ -76,4 +76,20 @@
     <!-- Export. -->
     <string name="companion_export">Export Parquet files</string>
     <string name="companion_export_preparing">Preparing export…</string>
+
+    <!-- Sync outcomes, the Android keys and words. -->
+    <string name="msg_up_to_date">Everything is already on this phone.</string>
+    <plurals name="msg_sync_finished">
+        <item quantity="one">Synced %1$d of %2$d file</item>
+        <item quantity="other">Synced %1$d of %2$d files</item>
+    </plurals>
+    <plurals name="sync_some_failed">
+        <item quantity="one">%1$d file did not sync. Try again.</item>
+        <item quantity="other">%1$d files did not sync. Try again.</item>
+    </plurals>
+    <string name="msg_sync_stopped">Sync stopped. Partial files resume next time.</string>
+    <string name="msg_sync_aborted">Sync stopped early. It resumes on the next sync.</string>
+    <string name="msg_hardware_in_use">This sensor is already connected another way.</string>
+    <string name="msg_busy">Wait for the current sensor task to finish.</string>
+    <string name="msg_token_needs_ble">The token comes over Bluetooth only. Reconnect over Bluetooth first.</string>
 </resources>

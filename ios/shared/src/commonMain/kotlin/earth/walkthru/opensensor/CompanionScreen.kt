@@ -93,7 +93,7 @@ import kotlin.math.floor
  */
 
 @Composable
-internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (String) -> Unit, disconnect: () -> Unit, scanLan: () -> Unit, saveWifiAccess: () -> Unit, connectLan: (String) -> Unit, syncLan: (String) -> Unit, disconnectLan: (String) -> Unit, exportArchive: () -> Unit, units: UnitSystem = UnitSystem.METRIC, showTechnical: Boolean = false) {
+internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (String) -> Unit, disconnect: () -> Unit, scanLan: () -> Unit, saveWifiAccess: () -> Unit, connectLan: (String) -> Unit, syncLan: (String) -> Unit, disconnectLan: (String) -> Unit, exportArchive: () -> Unit, syncBluetooth: () -> Unit, units: UnitSystem = UnitSystem.METRIC, showTechnical: Boolean = false) {
     // Display units from Settings. Readings stay SI everywhere else.
     val formatter = UnitFormatter(units)
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
@@ -155,6 +155,25 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
                 }
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (state.syncAvailable) {
+                            // Uses the Wi-Fi session instead when this sensor has one open, as Android prefers LAN.
+                            Button(onClick = syncBluetooth, enabled = !state.syncBusy, shape = MaterialTheme.shapes.small) {
+                                Text(stringResource(Res.string.companion_sync))
+                            }
+                            if (state.syncBusy) {
+                                LinearProgressIndicator(
+                                    Modifier.fillMaxWidth(),
+                                    color = MaterialTheme.colorScheme.primary,
+                                    trackColor = MaterialTheme.colorScheme.outlineVariant,
+                                    strokeCap = StrokeCap.Round,
+                                )
+                            }
+                            state.syncProgress?.takeIf { it.filesTotal > 0 }?.let { p ->
+                                Text(pluralStringResource(Res.plurals.companion_lan_files, p.filesTotal, p.filesDone, p.filesTotal), style = MaterialTheme.typography.bodySmall, color = muted)
+                                if (showTechnical && p.bytesPerSecond > 0.0) Text(stringResource(Res.string.companion_lan_rate, number(p.bytesPerSecond / 1024)), style = MaterialTheme.typography.bodySmall, color = muted)
+                            }
+                            if (!state.syncMessage.isEmpty) Text(state.syncMessage.resolve(), style = MaterialTheme.typography.bodySmall)
+                        }
                         if (state.wifiAccessAvailable) {
                             OutlinedButton(onClick = saveWifiAccess, enabled = !state.wifiAccessBusy, shape = MaterialTheme.shapes.small) {
                                 Text(stringResource(if (state.wifiAccessBusy) Res.string.companion_wifi_access_saving else Res.string.companion_wifi_access_save))
@@ -163,7 +182,7 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
                         }
                     }
                 }
-                item { OutlinedButton(onClick = disconnect, shape = MaterialTheme.shapes.small) { Text(stringResource(Res.string.nav_disconnect)) } }
+                item { OutlinedButton(onClick = disconnect, shape = MaterialTheme.shapes.small) { Text(stringResource(if (state.syncBusy) Res.string.action_cancel else Res.string.nav_disconnect)) } }
             } else {
                 item {
                     // Tapping creates the Bluetooth manager, so iOS asks for Bluetooth here and not at launch.
@@ -241,7 +260,7 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
                                 NowReading.Waiting -> Text(stringResource(Res.string.now_waiting))
                             }
                         }
-                        Text(session?.message ?: stringResource(Res.string.companion_lan_needs_access))
+                        Text(session?.message?.resolve() ?: stringResource(Res.string.companion_lan_needs_access))
                         if (session != null && session.filesTotal > 0) {
                             Text(pluralStringResource(Res.plurals.companion_lan_files, session.filesTotal, session.filesDone, session.filesTotal), style = MaterialTheme.typography.bodySmall, color = muted)
                             if (showTechnical) {

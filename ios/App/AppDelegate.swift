@@ -15,8 +15,10 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
 
 final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UIDocumentPickerDelegate {
     var window: UIWindow?
-    private let bluetooth = BluetoothCompanion()
-    private lazy var lan = LanDiscovery(state: bluetooth.state)
+    /// One shared engine, so LAN and Bluetooth save into the same archive and never sync a station twice at once.
+    private let engine = SensorSync()
+    private lazy var bluetooth = BluetoothCompanion(engine: engine)
+    private lazy var lan = LanDiscovery(state: bluetooth.state, engine: engine)
     private var exportFolder: URL?
     private var exportTask: Task<Void, Never>?
     private var preparedExport: (url: URL, count: Int)?
@@ -35,7 +37,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UIDocumentPickerD
             connectLan: { [weak self] name in self?.lan.connect(name: name) },
             syncLan: { [weak self] name in self?.lan.sync(name: name) },
             disconnectLan: { [weak self] name in self?.lan.disconnect(name: name) },
-            exportArchive: { [weak self] in self?.exportArchive() }
+            exportArchive: { [weak self] in self?.exportArchive() },
+            syncBluetooth: { [weak self] in self?.syncConnectedSensor() }
         )
         let window = UIWindow(windowScene: windowScene)
         window.rootViewController = controller
@@ -57,6 +60,15 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UIDocumentPickerD
         lan.suspend()
         exportTask?.cancel()
         if exportTask == nil { finishExport("Export cancelled. Collected files remain saved on this phone.") }
+    }
+
+    /// Wi-Fi is faster, so an open, idle Wi-Fi session for the same sensor takes the sync.
+    private func syncConnectedSensor() {
+        if let device = bluetooth.deviceId, let name = lan.connectedSession(device: device) {
+            lan.sync(name: name)
+        } else {
+            bluetooth.sync()
+        }
     }
 
     private func exportArchive() {

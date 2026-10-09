@@ -29,7 +29,19 @@ final class LanDiscovery {
         let station: String
         let device: String
     }
-    init(state: CompanionState) { self.state = state }
+    private let engine: SensorSync
+    private var handles: [String: SyncHandle] = [:]
+    init(state: CompanionState, engine: SensorSync) {
+        self.state = state
+        self.engine = engine
+    }
+
+    /// The connected Wi-Fi session for this hardware id, if any. Bluetooth sync prefers it.
+    func connectedSession(device: String) -> String? {
+        sessions.keys.first { name in
+            devices[name]?.device == device && tasks[name] == nil
+        }
+    }
 
     func scan() {
         stop()
@@ -183,33 +195,56 @@ final class LanDiscovery {
                 if self.collecting.isEmpty { self.endBackgroundTime() }
                 for queued in Array(self.pendingResume) { self.resumePending(queued) }
             }
-            do {
-                // The archive applies its protection class and backup exclusion when it creates the root.
-                let archive = try ArchiveIO(root: SensorArchive.defaultRoot())
-                // Transfer and framing run on the session queue. Only throttled progress reaches the main actor.
-                let summary = try await session.collect(archive: archive) { @MainActor [weak self] update in
-                    guard let self, self.attempts[name] == attempt, self.sessions[name] === session else { return }
-                    self.report(
-                        name, connected: true, busy: true, message: "Syncing verified files", done: update.filesDone,
-                        total: update.filesTotal, bytes: update.bytes, rate: update.rate)
-                }
-                guard self.attempts[name] == attempt, self.sessions[name] === session else { return }
+            let result = await self.collect(name: name, session: session, attempt: attempt)
+            guard self.attempts[name] == attempt, self.sessions[name] === session else { return }
+            if let result, result.keepsLink {
                 // Files that were not saved fail alone. The session stays open so a retry is one tap.
-                let message = summary.failures.isEmpty
-                    ? "Sync complete. Verified files saved on this phone."
-                    : SensorTransfer.Failure.filesFailed(failed: summary.failures.count, total: summary.files)
-                        .localizedDescription
-                self.report(name, connected: true, message: message)
-            } catch {
-                session.close()
-                guard self.attempts[name] == attempt else { return }
-                self.sessions[name] = nil
-                self.claims.closeSession(name: name)
-                self.state.lanReadingExpired(name: name)
-                if self.isBackground, self.canResume(error) { self.queueResume(name) }
-                self.report(name, message: self.pendingResume.contains(name) ? self.pauseMessage : error.localizedDescription)
+                self.state.lanSyncFinished(name: name, connected: true, result: result)
+                return
+            }
+            session.close()
+            self.sessions[name] = nil
+            self.claims.closeSession(name: name)
+            self.state.lanReadingExpired(name: name)
+            if result?.end == .authFailed, let device = self.devices[name] {
+                self.credentials.remove(device: device.device)
+            }
+            if self.isBackground, result?.resumable ?? true { self.queueResume(name) }
+            if self.pendingResume.contains(name) {
+                self.report(name, message: self.pauseMessage)
+            } else if let result {
+                self.state.lanSyncFinished(name: name, connected: false, result: result)
+            } else {
+                self.report(name, message: LanFailure.disconnected.localizedDescription)
             }
         }
+    }
+
+    /// Runs the shared engine over this session. The engine reads and writes the archive off the
+    /// main thread, and only throttled progress and the result reach the main actor.
+    /// Nil when the session ended before the sync began.
+    private func collect(name: String, session: LanSession, attempt: UUID) async -> SyncResult? {
+        guard let target = await session.target() else { return nil }
+        let link = SensorLink(overWifi: true, address: target.device, mtu: target.mtu) { body in
+            session.enqueue(body)
+        }
+        guard await session.beginCollect(FrameSink(link)) else { return nil }
+        let ended = await withCheckedContinuation { (continuation: CheckedContinuation<SyncEnded, Never>) in
+            handles[name] = engine.start(
+                link: link, station: target.station, device: target.device, maxRead: target.maxRead,
+                progress: { [weak self] update in
+                    MainActor.assumeIsolated {
+                        guard let self, self.attempts[name] == attempt, self.sessions[name] === session else { return }
+                        self.report(
+                            name, connected: true, busy: true, message: "Syncing verified files", done: Int(update.filesDone),
+                            total: Int(update.filesTotal), bytes: update.fileBytes, rate: update.bytesPerSecond)
+                    }
+                },
+                finished: { continuation.resume(returning: SyncEnded(result: $0)) })
+        }
+        handles[name] = nil
+        await session.endCollect()
+        return ended.result
     }
 
     func disconnect(name: String) {
@@ -220,6 +255,8 @@ final class LanDiscovery {
 
     private func close(name: String, message: String) {
         attempts[name] = UUID()
+        // Swift task cancellation does not reach Kotlin. The handle stops the engine's coroutine.
+        handles[name]?.cancel()
         tasks[name]?.cancel()
         claims.closeSession(name: name)
         freshness.removeValue(forKey: name)?.invalidate()
@@ -341,4 +378,10 @@ final class LanDiscovery {
         old?.cancel()
         state.lanScanStopped()
     }
+}
+
+/// Carries the engine's result out of its main-thread callback. The result is immutable.
+private final class SyncEnded: @unchecked Sendable {
+    let result: SyncResult
+    init(result: SyncResult) { self.result = result }
 }

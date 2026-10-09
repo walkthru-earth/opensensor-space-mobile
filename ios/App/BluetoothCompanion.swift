@@ -27,6 +27,19 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     private var operations: [Operation] = []
     private var pending: Operation?
     private var foreground = true
+    private let engine: SensorSync
+    /// The shared engine's link while a Bluetooth sync runs. RESPONSE notifications go to it.
+    private var link: SensorLink?
+    private var syncHandle: SyncHandle?
+    private var responseSubscribed = false
+
+    init(engine: SensorSync) {
+        self.engine = engine
+        super.init()
+    }
+
+    /// The connected sensor's hardware id once INFO named it.
+    var deviceId: String? { identity?.device }
 
     private enum Operation {
         case read(CBCharacteristic)
@@ -87,6 +100,17 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     }
 
     func disconnect(message: String = "Disconnected. Your sensor keeps recording.") {
+        teardown()
+        state.connectionClosed(explanation: message)
+    }
+
+    private func teardown() {
+        // The engine sees the link end at once. Its result for this link is then ignored.
+        syncHandle?.cancel()
+        syncHandle = nil
+        link?.linkClosed()
+        link = nil
+        responseSubscribed = false
         connectionTimer?.invalidate()
         freshnessTimer?.invalidate()
         connectionTimer = nil
@@ -105,7 +129,53 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
             peripheral.delegate = nil
             if let central, central.state == .poweredOn { central.cancelPeripheralConnection(peripheral) }
         }
-        state.connectionClosed(explanation: message)
+    }
+
+    /// Copies every file this phone lacks from the connected sensor through the shared engine.
+    /// Requests are LIST, OPEN, READ and CLOSE only, written in order through the operation queue.
+    func sync() {
+        guard foreground, let peripheral = current, control != nil, let response, let identity, link == nil,
+            pending == nil, operations.isEmpty, !requestingToken
+        else { return }
+        let mtu = Int32(peripheral.maximumWriteValueLength(for: .withoutResponse) + 3)
+        let link = SensorLink(overWifi: false, address: identity.device, mtu: mtu) { [weak self] body in
+            // Kotlin sends on the main thread, in request order.
+            MainActor.assumeIsolated { self?.write(body) }
+        }
+        self.link = link
+        if !responseSubscribed { operations.append(.subscribe(response)) }
+        state.bluetoothSyncStarted()
+        syncHandle = engine.start(
+            link: link, station: identity.station, device: identity.device, maxRead: identity.maxRead,
+            progress: { [weak self] update in
+                MainActor.assumeIsolated {
+                    guard let self, self.link === link else { return }
+                    self.state.bluetoothSyncProgressed(progress: update)
+                }
+            },
+            finished: { [weak self] result in
+                MainActor.assumeIsolated { self?.syncEnded(result, link: link) }
+            })
+        performNext()
+    }
+
+    private func write(_ body: Data) {
+        guard let control, link != nil, current != nil else { return }
+        operations.append(.write(control, body))
+        performNext()
+    }
+
+    private func syncEnded(_ result: SyncResult, link: SensorLink) {
+        guard self.link === link else { return }
+        self.link = nil
+        syncHandle = nil
+        if result.keepsLink {
+            state.bluetoothSyncFinished(result: result)
+            return
+        }
+        // A stalled or failed link may still hold a write in flight. Start the next sync on a fresh connection.
+        teardown()
+        state.bluetoothSyncClosed(result: result)
     }
 
     func suspend() {
@@ -209,7 +279,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     }
 
     func saveWifiAccess() {
-        guard foreground, let peripheral = current, let control, let response, identity != nil,
+        guard foreground, let peripheral = current, let control, let response, identity != nil, link == nil,
             pending == nil, operations.isEmpty, !requestingToken,
             peripheral.maximumWriteValueLength(for: .withResponse) >= 1
         else { return }
@@ -233,6 +303,13 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
 
     func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
         guard current === peripheral, case .write(let expected, _) = pending, expected === characteristic else {
+            return
+        }
+        if error != nil, let link {
+            // The engine ends this sync as a lost link, then the connection closes.
+            operations.removeAll()
+            pending = nil
+            link.linkClosed()
             return
         }
         if error != nil {
@@ -262,6 +339,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
             disconnect(message: "Notifications could not be enabled. Check the pairing PIN and try again.")
             return
         }
+        if characteristic.uuid == CBUUID(string: wire.responseUuid) { responseSubscribed = true }
         if case .subscribe(let expected) = pending, expected === characteristic {
             pending = nil
             performNext()
@@ -271,6 +349,10 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
         guard current === peripheral, foreground else { return }
         if characteristic.uuid == CBUUID(string: wire.responseUuid) {
+            if let link {
+                if error == nil, let data = characteristic.value { link.deliver(frame: data) }
+                return
+            }
             guard requestingToken, error == nil, let data = characteristic.value,
                 let reply = wire.decode(data: data)
             else { return }
@@ -302,6 +384,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
             state.wifiAccessChanged(
                 available: identity != nil && control != nil && response != nil, busy: false,
                 explanation: "Save access once over Bluetooth before using Wi-Fi on this phone.")
+            state.bluetoothSyncAvailable(available: identity != nil && control != nil && response != nil)
         case CBUUID(string: state.liveUuid):
             state.receiveLive(json: json)
             freshnessTimer?.invalidate()

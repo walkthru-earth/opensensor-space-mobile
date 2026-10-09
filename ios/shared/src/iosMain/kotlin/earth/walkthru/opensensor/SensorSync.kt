@@ -1,0 +1,151 @@
+package earth.walkthru.opensensor
+
+import earth.walkthru.aqsync.archive.ArchiveIndex
+import earth.walkthru.aqsync.archive.ArchiveStore
+import earth.walkthru.aqsync.archive.IosArchiveStore
+import earth.walkthru.aqsync.archive.ReceiptArchiveIndex
+import earth.walkthru.aqsync.data.ble.AuthFailedException
+import earth.walkthru.aqsync.data.ble.DeviceBusyException
+import earth.walkthru.aqsync.data.ble.DeviceSession
+import earth.walkthru.aqsync.data.ble.TransportException
+import earth.walkthru.aqsync.data.sync.ArchiveCollector
+import earth.walkthru.aqsync.data.sync.CollectionProgress
+import earth.walkthru.aqsync.data.sync.CollectionSummary
+import earth.walkthru.aqsync.data.sync.FileProblem
+import earth.walkthru.aqsync.data.sync.SyncEngine
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import platform.Foundation.NSLock
+import kotlin.coroutines.CoroutineContext
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.TimeSource
+
+/** Stops one sync. Safe from any thread and more than once. */
+class SyncHandle internal constructor(private val job: Job?) {
+    fun cancel() {
+        job?.cancel()
+    }
+}
+
+/**
+ * The Swift-facing runner for the shared engine. It owns the archive store, the receipt index and
+ * the [ArchiveCollector], so LAN and Bluetooth save into the same archive under the same rules.
+ *
+ * Make one per app and call [start] on the main thread. Work runs off the main thread. Every
+ * callback arrives on the main thread, `progress` at most four times a second and `finished`
+ * exactly once, last. A station syncs over one link at a time. The runner only lists, opens, reads
+ * and closes files. It never asks the sensor to delete, rename or rewrite one.
+ */
+class SensorSync internal constructor(
+    store: ArchiveStore,
+    index: ArchiveIndex,
+    private val work: CoroutineContext,
+    private val callbacks: CoroutineContext,
+    private val progressInterval: Long = PROGRESS_INTERVAL_MS,
+) {
+    constructor() : this(IosArchiveStore.inApplicationSupport(), Dispatchers.Default, Dispatchers.Main)
+
+    private constructor(store: IosArchiveStore, work: CoroutineContext, callbacks: CoroutineContext) :
+        this(store, ReceiptArchiveIndex(store.finalRoot), work, callbacks)
+
+    private val collector = ArchiveCollector(store, index, SyncEngine(store, index))
+    private val scope = CoroutineScope(SupervisorJob())
+    private val lock = NSLock()
+    private val active = HashSet<String>()
+
+    /**
+     * Collects every file of [station] that this phone lacks over [link]. [device] is the hardware
+     * id recorded with each file. [maxRead] is the sensor's advertised read window.
+     */
+    fun start(
+        link: SensorLink,
+        station: String,
+        device: String,
+        maxRead: Int,
+        progress: (SyncProgress) -> Unit,
+        finished: (SyncResult) -> Unit,
+    ): SyncHandle {
+        if (!claim(station)) {
+            scope.launch(callbacks) { finished(SyncResult(SyncEnd.IN_USE, 0, 0, 0)) }
+            return SyncHandle(null)
+        }
+        val job = scope.launch(work) {
+            var listed = 0
+            var initial = -1
+            var done = 0
+            val result = try {
+                var last: TimeSource.Monotonic.ValueTimeMark? = null
+                var lastDone = -1
+                val summary = collector.collect(DeviceSession(link.transport), station, device, maxRead) { p: CollectionProgress ->
+                    listed = p.filesTotal
+                    if (initial < 0) initial = p.filesDone
+                    done = p.filesDone
+                    val now = TimeSource.Monotonic.markNow()
+                    val due = last?.let { (now - it) >= progressInterval.milliseconds } ?: true
+                    if (due || p.filesDone != lastDone) {
+                        last = now
+                        lastDone = p.filesDone
+                        val update = SyncProgress(p.filesDone, p.filesTotal, p.fileBytes, p.receivedBytes, p.bytesPerSecond)
+                        scope.launch(callbacks) { progress(update) }
+                    }
+                }
+                resultOf(summary, (done - initial.coerceAtLeast(0)))
+            } catch (e: CancellationException) {
+                SyncResult(SyncEnd.STOPPED, listed, 0, 0)
+            } catch (e: AuthFailedException) {
+                SyncResult(SyncEnd.AUTH_FAILED, listed, 0, 0)
+            } catch (e: DeviceBusyException) {
+                SyncResult(SyncEnd.BUSY, listed, 0, 0)
+            } catch (e: TransportException) {
+                SyncResult(SyncEnd.LINK_LOST, listed, 0, 0)
+            } catch (e: Exception) {
+                SyncResult(SyncEnd.FAILED, listed, 0, 0)
+            }
+            withContext(NonCancellable + callbacks) {
+                release(station)
+                finished(result)
+            }
+        }
+        return SyncHandle(job)
+    }
+
+    private fun resultOf(summary: CollectionSummary, attempted: Int): SyncResult {
+        val failed = summary.notSaved.size
+        val end = if (summary.complete) SyncEnd.COMPLETE else SyncEnd.FILES_NOT_SAVED
+        // Files planned away (unsafe names, local conflicts) are counted as not saved and not attempted.
+        val saved = (attempted - summary.notSaved.count { it.problem.attempted }).coerceAtLeast(0)
+        return SyncResult(end, summary.files, saved, failed)
+    }
+
+    private fun claim(station: String): Boolean {
+        lock.lock()
+        try {
+            return active.add(station)
+        } finally {
+            lock.unlock()
+        }
+    }
+
+    private fun release(station: String) {
+        lock.lock()
+        try {
+            active.remove(station)
+        } finally {
+            lock.unlock()
+        }
+    }
+
+    internal companion object {
+        const val PROGRESS_INTERVAL_MS = 250L
+    }
+}
+
+/** Unsafe names and local conflicts are decided by the plan and never downloaded. */
+private val FileProblem.attempted: Boolean
+    get() = this != FileProblem.INVALID_ENTRY && this != FileProblem.LOCAL_CONFLICT
