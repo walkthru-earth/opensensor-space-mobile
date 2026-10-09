@@ -5,13 +5,19 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * English stays in Compose resources. The Kotlin presentation sources of the iOS framework
- * (`ios/shared/src/commonMain` and `iosMain`) must not pass a string literal to `Text`, and must not
- * hold an English sentence in a string literal. A new literal fails the build, an exception goes in
- * [allowed] with its reason.
+ * English stays in Compose resources. The shared presentation sources must not pass a word literal
+ * to `Text`, and must not hold an English sentence in a string literal. They are the iOS framework
+ * (`ios/shared/src/commonMain` and `iosMain`), the permission dialogs (`ui/permissions`) and the
+ * `commonMain` of every feature module. A template of values only, such as `"${value} $unit"`, is not
+ * copy. A new literal fails the build, an exception goes in [allowed] with its reason.
  */
 class PresentationLiteralsTest {
-    private val sources = listOf("ios/shared/src/commonMain/kotlin", "ios/shared/src/iosMain/kotlin")
+    private val sources: List<String> = listOf(
+        "ios/shared/src/commonMain/kotlin",
+        "ios/shared/src/iosMain/kotlin",
+        "ui/permissions/src/commonMain/kotlin",
+    ) + File(Catalogues.root, "feature").listFiles().orEmpty().filter { it.isDirectory }.sorted()
+        .map { "feature/${it.name}/src/commonMain/kotlin" }
 
     /** `file name` to the literal text allowed there. Keep this short and say why. */
     private val allowed: Set<Pair<String, String>> = setOf(
@@ -21,6 +27,11 @@ class PresentationLiteralsTest {
 
     /** `Text("...")`, `Text(text = "...")` or `Text(if (x) "..." else ...)`. */
     private val textLiteral = Regex("""\bText\(\s*(text\s*=\s*)?(if\s*\(.*?\)\s*)?"([^"]*)"""")
+
+    /** A template's interpolations, `${expr}` or `$name`. What is left is the literal copy. */
+    private val template = Regex("""\$\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*""")
+
+    private fun hasWords(literal: String): Boolean = template.replace(literal, "").any { it.isLetter() }
 
     /** A string literal that reads as English words, such as `"Looking for sensors"`. */
     private val sentence = Regex(""""([A-Z][a-z]+(?: [^"]*)? [a-z][^"]*)"""")
@@ -38,14 +49,15 @@ class PresentationLiteralsTest {
     @Test
     fun scansThePresentationSources() {
         val names = presentationFiles().map { it.name }
-        assertTrue(names.containsAll(listOf("CompanionScreen.kt", "CompanionState.kt")), "files $names")
+        val expected = listOf("CompanionScreen.kt", "CompanionState.kt", "AccessDialogs.kt", "DiscoverScreen.kt")
+        assertTrue(names.containsAll(expected), "files $names")
     }
 
     @Test
     fun noTextLiterals() {
         val found = presentationFiles().flatMap { file ->
             codeLines(file).flatMap { (n, line) ->
-                textLiteral.findAll(line).map { it.groupValues[3] }
+                textLiteral.findAll(line).map { it.groupValues[3] }.filter(::hasWords)
                     .filterNot { (file.name to it) in allowed }
                     .map { "${Catalogues.relative(file)}:$n Text(\"$it\")" }
             }
@@ -71,6 +83,8 @@ class PresentationLiteralsTest {
         assertTrue(textLiteral.containsMatchIn("""Text(if (busy) "Saving…" else "Save")"""))
         assertTrue(textLiteral.containsMatchIn("""Text(text = "Connect")"""))
         assertTrue(!textLiteral.containsMatchIn("""Text(stringResource(Res.string.companion_now))"""))
+        assertTrue(!hasWords("${'$'}{property.label}  ${'$'}unit"))
+        assertTrue(hasWords("${'$'}count sensors"))
         assertTrue(sentence.containsMatchIn("""message = "Looking for nearby sensors…""""))
         assertTrue(!sentence.containsMatchIn("""error("missing station")"""))
     }
