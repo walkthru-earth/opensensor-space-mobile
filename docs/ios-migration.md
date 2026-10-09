@@ -70,7 +70,11 @@ Forget, after confirmation, drops the record and the Keychain Wi-Fi access and c
 link. The system bond stays until the user removes it in iOS Settings, which the dialog says.
 A forgotten sensor comes back only when the user opens it again. Collect all runs one sensor at a
 time while the app is open, over Wi-Fi when the sensor was found there with access, else over
-Bluetooth, and stops when the app leaves the foreground. The Wi-Fi browse still starts from Find
+Bluetooth, and stops when the app leaves the foreground. A step never takes over a link the user
+holds. It skips a sensor the user has open on Bluetooth or Wi-Fi (a Wi-Fi session maps to its
+known sensor through the TXT station), fails while another sensor holds the Bluetooth link, closes
+only what it opened, and fails when its sync has not started within a minute. Opening a sensor
+cancels Collect all first. The Wi-Fi browse still starts from Find
 on Wi-Fi on the device page, so the list shows Wi-Fi sensors after that browse.
 
 Wi-Fi discovery is also available through `NWBrowser`, restricted to

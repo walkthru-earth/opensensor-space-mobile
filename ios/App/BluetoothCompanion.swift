@@ -28,6 +28,10 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     private var openRequested: String?
     /// The sensor Collect all is copying now. It is closed again when the sync ends.
     private var collectId: String?
+    /// Whether this Collect all step opened the link, so it closes only what it opened.
+    private var collectOpened = false
+    /// Ends a Collect all step that never started its sync, for example a Debug link never handed back.
+    private var collectTimer: Timer?
     private var discovered: [String: CBPeripheral] = [:]
     private var advertisedNames: [String: String] = [:]
     private var current: CBPeripheral?
@@ -105,10 +109,13 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     }
 
     /// Opens a sensor from My devices, nearby or known. Another open link closes first, because this
-    /// app holds one Bluetooth link. Known sensors open through their saved identifier.
+    /// app holds one Bluetooth link. Known sensors open through their saved identifier. The caller
+    /// cancels Collect all first. A sync or Debug request the user started keeps its link, and the
+    /// open is refused instead.
     func open(id: String) {
         guard foreground else { return }
         if let current, current.identifier.uuidString == id { return }
+        if current != nil, link != nil, collectId == nil { return }
         guard let central, central.state == .poweredOn else {
             openRequested = id
             return
@@ -123,24 +130,57 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     }
 
     /// One Collect all step over Bluetooth. Opens the sensor, syncs once it is ready, then closes it.
-    /// A sync the user started stays untouched, so this step fails instead.
+    /// A link the user holds stays untouched. A link to another sensor, or a sync or Debug request
+    /// on this one, fails the step. An idle link to this sensor is synced and left open.
     func collect(id: String) {
         guard foreground, link == nil, collectId == nil, let central, central.state == .poweredOn else {
             onCollectFinished?(id, false)
             return
         }
-        open(id: id)
-        guard current?.identifier.uuidString == id else {
-            onCollectFinished?(id, false)
-            return
+        if let current {
+            guard current.identifier.uuidString.caseInsensitiveCompare(id) == .orderedSame else {
+                onCollectFinished?(id, false)
+                return
+            }
+            collectOpened = false
+        } else {
+            open(id: id)
+            guard current?.identifier.uuidString == id else {
+                onCollectFinished?(id, false)
+                return
+            }
+            collectOpened = true
         }
         collectId = id
+        collectTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated { self?.failCollect() }
+        }
         collectWhenReady()
     }
 
     private func collectWhenReady() {
-        guard collectId != nil, link == nil, identity != nil, pending == nil, operations.isEmpty else { return }
+        guard collectId != nil, link == nil, pending == nil, operations.isEmpty, !requestingToken else { return }
+        // Discovery has settled once the connect timer is gone. A sensor without the sync characteristics
+        // or a readable identity cannot be collected, so the step ends instead of waiting.
+        if identity == nil || control == nil || response == nil {
+            if connectionTimer == nil, current != nil { failCollect() }
+            return
+        }
         sync()
+    }
+
+    /// Ends the Collect all step that has not started its sync. A link the step opened closes, which
+    /// reports the failure. A link the user held stays open.
+    private func failCollect() {
+        guard let id = collectId, syncHandle == nil else { return }
+        collectTimer?.invalidate()
+        collectTimer = nil
+        if collectOpened {
+            disconnect()
+        } else {
+            collectId = nil
+            onCollectFinished?(id, false)
+        }
     }
 
     private func connect(_ peripheral: CBPeripheral) {
@@ -195,6 +235,9 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
             peripheral.delegate = nil
             if let central, central.state == .poweredOn { central.cancelPeripheralConnection(peripheral) }
         }
+        collectTimer?.invalidate()
+        collectTimer = nil
+        collectOpened = false
         if let id = collectId {
             // Timed out, refused or lost before the sync ended. Collect all moves on.
             collectId = nil
@@ -222,6 +265,9 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         }
         self.link = link
         if !responseSubscribed { operations.append(.subscribe(response)) }
+        // The engine ends a stalled sync itself, so the step timer is no longer needed.
+        collectTimer?.invalidate()
+        collectTimer = nil
         state.bluetoothSyncStarted()
         syncHandle = engine.start(
             link: link, station: identity.station, device: identity.device, maxRead: identity.maxRead,
@@ -248,11 +294,13 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         self.link = nil
         syncHandle = nil
         let collected = collectId
+        let opened = collectOpened
         collectId = nil
+        collectOpened = false
         if result.keepsLink {
             state.bluetoothSyncFinished(result: result)
             // Collect all closes what it opened, so the next sensor can take the one link.
-            if collected != nil { disconnect() }
+            if collected != nil, opened { disconnect() }
         } else {
             // A stalled or failed link may still hold a write in flight. Start the next sync on a fresh connection.
             teardown()

@@ -34,6 +34,8 @@ final class LanDiscovery {
     /// Collect all steps by service name: the sensor id to report, and the sync outcome once known.
     private var collectSteps: [String: String] = [:]
     private var collectOutcome: [String: Bool] = [:]
+    /// Sessions a Collect all step opened. A step closes only these, never a session the user opened.
+    private var collectOpened = Set<String>()
     /// A Collect all step ended: the sensor id and whether every listed file is on this phone.
     var onCollectFinished: ((String, Bool) -> Void)?
     init(state: CompanionState, engine: SensorSync) {
@@ -262,34 +264,39 @@ final class LanDiscovery {
         return ended.result
     }
 
-    /// One Collect all step over Wi-Fi. Connects when needed, syncs, then closes the session and
-    /// reports [id]. A step that cannot start reports at once.
+    /// One Collect all step over Wi-Fi. Opens its own session, syncs, then closes it and reports [id].
+    /// A session the user opened is left alone, so the step fails at once instead, as does a step
+    /// that cannot start.
     func collect(name: String, id: String) {
-        guard !isBackground, collectSteps[name] == nil, tasks[name] == nil else {
+        guard !isBackground, collectSteps[name] == nil, tasks[name] == nil, sessions[name] == nil else {
             onCollectFinished?(id, false)
             return
         }
         collectSteps[name] = id
         collectOutcome[name] = nil
-        if sessions[name] == nil { connect(name: name) }
+        collectOpened.insert(name)
+        connect(name: name)
         if tasks[name] == nil { advanceCollect(name) }
     }
 
     /// Moves a Collect all step on once its connect or sync task ended.
     private func advanceCollect(_ name: String) {
         guard let id = collectSteps[name], tasks[name] == nil else { return }
+        let opened = collectOpened.contains(name)
         if let ok = collectOutcome.removeValue(forKey: name) {
             collectSteps[name] = nil
-            if sessions[name] != nil { disconnect(name: name) }
+            collectOpened.remove(name)
+            if opened, sessions[name] != nil { disconnect(name: name) }
             onCollectFinished?(id, ok)
             return
         }
         if sessions[name] != nil, !isBackground {
             sync(name: name)
             if tasks[name] != nil { return }
-            disconnect(name: name)
+            if opened { disconnect(name: name) }
         }
         collectSteps[name] = nil
+        collectOpened.remove(name)
         onCollectFinished?(id, false)
     }
 
