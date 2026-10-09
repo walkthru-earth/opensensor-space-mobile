@@ -691,7 +691,6 @@
     <string name="files_group_unrecognised">تنظيم غير معروف</string>
 
     <!-- Scan archive line. Mood, metric, value, unit, day. -->
-    <string name="scan_archive_coverage">%1$d %% من اليوم</string>
     <!-- Relative time -->
     <string name="ago_just_now">الآن</string>
     <string name="ago_seconds">قبل %1$d ث</string>
