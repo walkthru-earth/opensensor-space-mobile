@@ -1,12 +1,14 @@
-package earth.walkthru.aqsync.ui.history
+package earth.walkthru.opensensor.history
 
-import earth.walkthru.aqsync.data.local.database.ArchivedFile
-import org.junit.Assert.assertEquals
-import org.junit.Test
-import java.time.ZoneId
+import earth.walkthru.aqsync.archive.ArchiveRecord
+import earth.walkthru.aqsync.data.history.startOfDay
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlin.test.Test
+import kotlin.test.assertEquals
 
 class HistoryPresentationTest {
-    private fun file(station: String, producer: String, dated: Boolean, indexed: Boolean = true): ArchivedFile = ArchivedFile(
+    private fun file(station: String, producer: String, dated: Boolean, indexed: Boolean = true, lastUtcNs: Long = 1_800_000_000_000_000_000): ArchiveRecord = ArchiveRecord(
         station = station,
         name = if (dated) "station=$producer/year=2026/month=09/day=29/sample.parquet" else "station=$producer/unsynced/boot=one/sample.parquet",
         bytes = 10,
@@ -17,11 +19,11 @@ class HistoryPresentationTest {
         indexedAtEpochMs = if (indexed) 1 else null,
         indexError = if (producer != station) "File belongs to station $producer" else null,
         utcRows = if (dated && producer == station) 1 else 0,
-        lastUtcNs = if (dated && producer == station) 1_800_000_000_000_000_000 else null,
+        lastUtcNs = if (dated && producer == station) lastUtcNs else null,
     )
 
     @Test
-    fun `earlier timed station opens by default but an explicit current selection stays`() {
+    fun earlierTimedStationOpensByDefaultButAnExplicitCurrentSelectionStays() {
         val earlier = file("earlier", "earlier", dated = true)
         val current = file("current", "current", dated = false)
         assertEquals("earlier", preferredHistoryStation("current", listOf("earlier", "current"), listOf(earlier, current), null))
@@ -29,7 +31,7 @@ class HistoryPresentationTest {
     }
 
     @Test
-    fun `retained producer copies are separate from untimed and pending files`() {
+    fun retainedProducerCopiesAreSeparateFromUntimedAndPendingFiles() {
         val own = file("current", "current", dated = false)
         val retained = file("current", "earlier", dated = true)
         val pending = file("current", "current", dated = false, indexed = false).copy(name = "station=current/unsynced/boot=one/pending.parquet")
@@ -42,10 +44,18 @@ class HistoryPresentationTest {
     }
 
     @Test
-    fun `latest day follows the phone calendar for an earlier station`() {
-        val zone = ZoneId.of("Africa/Cairo")
-        val utc = java.time.Instant.parse("2026-09-29T13:00:00Z").epochSecond * 1_000_000_000L
-        val earlier = file("earlier", "earlier", dated = true).copy(lastUtcNs = utc)
-        assertEquals(java.time.LocalDate.of(2026, 9, 30).atStartOfDay(zone).toEpochSecond(), latestHistoryDayEnd(listOf(earlier), zone))
+    fun latestDayFollowsThePhoneCalendarForAnEarlierStation() {
+        val zone = TimeZone.of("Africa/Cairo")
+        // 2026-09-29T13:00Z is the afternoon of 29 September in Cairo, so the day ends at local midnight of the 30th.
+        val earlier = file("earlier", "earlier", dated = true, lastUtcNs = 1_790_686_800L * 1_000_000_000L)
+        assertEquals(startOfDay(LocalDate(2026, 9, 30), zone), latestHistoryDayEnd(listOf(earlier), zone))
+    }
+
+    @Test
+    fun archiveStationsListTheMostRecentLast() {
+        val old = file("old", "old", dated = true, lastUtcNs = 1_000)
+        val recent = file("recent", "recent", dated = true, lastUtcNs = 2_000)
+        val untimed = file("untimed", "untimed", dated = false)
+        assertEquals(listOf("untimed", "old", "recent"), archiveStations(listOf(recent, untimed, old)))
     }
 }

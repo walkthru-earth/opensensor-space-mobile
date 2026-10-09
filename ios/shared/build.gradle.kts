@@ -18,6 +18,7 @@ kotlin {
             implementation(project(":core:sync"))
             implementation(project(":core:archive"))
             implementation(project(":feature:discover"))
+            implementation(project(":feature:history"))
             implementation(project(":feature:settings"))
             implementation(project(":feature:debug"))
             // The shared shell: bottom bar, per-tab stacks, Back and the iOS edge swipe.

@@ -216,6 +216,7 @@ dependencies {
     implementation(project(":core:sync"))
     // The Discover map (shared Compose with iOS) and the public feed port behind it.
     implementation(project(":feature:discover"))
+    implementation(project(":feature:history"))
     implementation(project(":ui:designsystem"))
     // The shared permission policy. The Android launchers stay in ui/permissions/RuntimeAccess.kt.
     implementation(project(":ui:permissions"))

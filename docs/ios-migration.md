@@ -226,9 +226,14 @@ accuracy, stale/background handling or authenticated Wi-Fi connections. See
 
 ## Remaining migration
 
-1. Wire the shared Parquet reader, `ParquetIndexer` and `Aggregator` (common since W8) into the iOS
-   archive, with an iOS store for the index in place of Room.
-2. Port offline charts and retained station-generation UI.
+1. Done in code (#18, 2026-10-09), not yet seen on an iPhone. The shared reader, indexer and
+   aggregator run over the iOS archive through the receipt index (`IosArchive`), with index repair
+   at launch. A Room KMP store would replace the receipts and the in-memory tiers later.
+2. Done in code (#18), not yet seen on an iPhone. History is the shared `:feature:history`
+   screen, opened from a History button on My devices, with Day, Week, Month and Year, the ring,
+   the calendar and station chips for every archived station. Check on an iPhone that a fresh sync
+   shows in History without a relaunch, that index repair fills an archive synced by an older build,
+   and how long Week, Month and Year take on a large archive (tiers are computed in memory).
 3. Share existing Android screens, resources and navigation incrementally.
 4. Qualify BLE token acquisition, Keychain persistence, authenticated LAN transfer, multi-phone
    collection, concurrent sensors, cancellation/resume and Local Network permissions on iPhones.

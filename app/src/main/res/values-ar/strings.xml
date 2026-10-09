@@ -481,11 +481,6 @@
     <string name="info_now_body">لقطة مدتها 10 ثوانٍ من المستشعر. ليست مؤشر جودة الهواء ولا متوسط 24 ساعة، فاعتبرها إشارة تقريبية. الوجه والكلمة واللون كلها تُظهر درجة منظمة الصحة العالمية نفسها.</string>
     <string name="info_wifi_body">ينضم المستشعر إلى شبكة Wi-Fi لديك ليتمكن هذا الهاتف من المزامنة دون Bluetooth.</string>
     <string name="info_pairing_body">كيف يثبت الهاتف أنه مسموح له بالاتصال.</string>
-    <string name="info_history_body1">تستخدم المتوسطات فقط القراءات التي وسمها المستشعر بأنها صالحة، بعد الإحماء، وحديثة، وبلا خطأ.</string>
-    <string name="info_history_body2">التغطية هي نسبة الفترة التي فيها مثل هذه القراءات. ثلاث قراءات في ساعة تعني 1 بالمئة، وليست متوسطًا للساعة.</string>
-    <string name="info_history_body3">المقاطع المتقطعة سُجّلت قبل أن تكون للمستشعر ساعة. وقتها مقدَّر من وقت ضُبط لاحقًا خلال فترة التشغيل نفسها.</string>
-    <string name="info_history_body4">تبقى قراءات المحطة السابقة متاحة بعد إعادة ضبط الجهاز.</string>
-    <string name="info_history_body5">تتبع ألوان PM2.5 وPM10 إرشادات منظمة الصحة العالمية لجودة الهواء لعام 2021. الإرشاد وأهدافه المرحلية الأربعة متوسطات على مدى 24 ساعة.</string>
     <string name="info_file_chart_body">عمود لكل ملف تمت مزامنته بترتيب الملفات. الأعمدة الباهتة فيها قراءات صالحة قليلة، مثلًا أثناء الإحماء. الأعمدة المتقطعة وقتها مقدَّر. المس عمودًا لقراءة ملفه وصفوفه ومدته الزمنية ومتوسطه.</string>
 
     <!-- Connection banner -->
@@ -611,59 +606,7 @@
     <string name="chart_no_time">بلا وقت</string>
 
     <!-- History -->
-    <string name="history_title">السجل</string>
-    <string name="history_loading">جارٍ تحميل الأرشيف…</string>
-    <string name="history_from">السجل من</string>
-    <string name="history_current">الحالي</string>
-    <string name="history_earlier">سابق</string>
-    <string name="history_station_chip">%1$s، المحطة %2$s</string>
-    <string name="history_page_earlier">الأقدم</string>
-    <string name="history_page_later">الأحدث</string>
-    <string name="history_untimed">القراءات بلا وقت بعد. اعرضها في الملفات.</string>
-    <string name="history_nothing_indexed">لم تُفهرس أي قراءات بعد.</string>
-    <string name="history_archive">على هذا الهاتف</string>
-    <string name="history_days">أيام فيها قراءات</string>
-    <string name="history_none_yet">لا شيء بعد</string>
-    <string name="history_span_utc">أول وآخر يوم بتوقيت UTC</string>
-    <string name="history_files_time">ملفات فيها وقت</string>
     <string name="history_of">%1$d من %2$d</string>
-    <string name="history_waiting_index">في انتظار الفهرسة</string>
-    <string name="history_index_failed">تعذّرت الفهرسة</string>
-    <string name="history_estimated">ملفات بوقت تقديري</string>
-    <plurals name="history_other_station">
-        <item quantity="zero">%1$d نسخة تتبع محطة أخرى</item>
-        <item quantity="one">نسخة واحدة (%1$d) تتبع محطة أخرى</item>
-        <item quantity="two">نسختان (%1$d) تتبعان محطة أخرى</item>
-        <item quantity="few">%1$d نسخ تتبع محطة أخرى</item>
-        <item quantity="many">%1$d نسخة تتبع محطة أخرى</item>
-        <item quantity="other">%1$d نسخة تتبع محطة أخرى</item>
-    </plurals>
-    <plurals name="history_untimed_files">
-        <item quantity="zero">%1$d ملف بلا وقت</item>
-        <item quantity="one">ملف واحد (%1$d) بلا وقت</item>
-        <item quantity="two">ملفان (%1$d) بلا وقت</item>
-        <item quantity="few">%1$d ملفات بلا وقت</item>
-        <item quantity="many">%1$d ملفًا بلا وقت</item>
-        <item quantity="other">%1$d ملف بلا وقت</item>
-    </plurals>
-    <string name="history_never_connected">اتصل بهذا المستشعر مرة واحدة لترى سجله.</string>
-    <string name="history_loading_short">جارٍ التحميل…</string>
-    <string name="history_covered">%1$d %% مغطّى</string>
-    <string name="history_average">المتوسط</string>
-    <string name="history_peak">الذروة</string>
-    <string name="history_coverage">التغطية</string>
-    <plurals name="history_readings">
-        <item quantity="zero">%1$d قراءة</item>
-        <item quantity="one">قراءة واحدة (%1$d)</item>
-        <item quantity="two">قراءتان (%1$d)</item>
-        <item quantity="few">%1$d قراءات</item>
-        <item quantity="many">%1$d قراءة</item>
-        <item quantity="other">%1$d قراءة</item>
-    </plurals>
-    <string name="history_low_coverage">أقل من نصف هذه الفترة فيها قراءات.</string>
-    <string name="history_no_readings">لا توجد قراءات بوقت في هذه الفترة.</string>
-    <string name="history_latest">أحدث القراءات من %1$s.</string>
-    <string name="history_tap_day">اضغط على يوم لفتحه.</string>
     <!-- Device and Files messages (snackbars) -->
     <string name="msg_sticker_invalid">أدخل الملصق بصيغة PMS5003T مع التاريخ وأرقام الوحدة.</string>
     <string name="msg_sensor_busy">اتصل بالمستشعر وانتظر حتى تنتهي مهامه.</string>
@@ -816,23 +759,6 @@
     <string name="transport_lan">Wi-Fi LAN</string>
     <string name="transport_fake">جهاز وهمي</string>
     <string name="mood_none">لا توجد قراءة</string>
-    <string name="chart_who_24h">إرشاد منظمة الصحة العالمية لمدة 24 ساعة</string>
-    <string name="chart_mean_hourly">الأعمدة متوسطات كل ساعة.</string>
-    <string name="chart_mean_daily">الأعمدة متوسطات يومية.</string>
-    <string name="chart_mean_weekly">الأعمدة متوسطات أسبوعية.</string>
-    <string name="chart_guideline_note">الخط المتقطع هو إرشاد منظمة الصحة العالمية لمدة 24 ساعة.</string>
-    <string name="history_week_of">أسبوع %1$s</string>
-    <string name="history_no_readings_short">لا قراءات</string>
-    <string name="history_peak_value">الذروة %1$s</string>
-    <string name="history_estimated_time">وقت تقديري</string>
-    <string name="history_dev_title">للمطوّرين</string>
-    <string name="history_dev_source">المصدر</string>
-    <string name="history_dev_tier">مستوى التجميع %1$d د</string>
-    <string name="history_dev_binned">صفوف مجمّعة كل دقيقة واحدة</string>
-    <string name="history_dev_raw">صفوف خام كل 10 ث</string>
-    <string name="history_dev_points">النقاط</string>
-    <string name="history_dev_valid_rows">الصفوف الصالحة</string>
-    <string name="history_dev_station">المحطة</string>
     <string name="file_chart_estimated">%1$s، تقديري</string>
     <string name="file_chart_unplaced">لا مكان له على الخط الزمني بعد. لا يملك هذا التشغيل وقتًا من الساعة.</string>
     <plurals name="file_chart_rows">
