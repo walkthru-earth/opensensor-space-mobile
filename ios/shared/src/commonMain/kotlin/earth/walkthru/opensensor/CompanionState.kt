@@ -89,16 +89,6 @@ class CompanionState {
         private set
     internal var lanPaused by mutableStateOf<Set<String>>(emptySet())
         private set
-    internal var exportBusy by mutableStateOf(false)
-        private set
-    internal var exportMessage by mutableStateOf<UiText>(UiText.None)
-        private set
-
-    fun exportChanged(busy: Boolean, explanation: String) {
-        exportBusy = busy
-        exportMessage = UiText.plain(explanation)
-    }
-
     fun lanCollectionPaused(name: String, paused: Boolean) {
         lanPaused = if (paused) lanPaused + name else lanPaused - name
     }

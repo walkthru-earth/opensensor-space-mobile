@@ -383,6 +383,10 @@ fun FilesScreen(
     }
 }
 
+/** The screen title, for a platform control that opens [FilesScreen]. */
+@Composable
+fun filesTitle(): String = stringResource(Res.string.files_title)
+
 @Composable
 private fun Hint(text: String) {
     Text(text, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 8.dp))

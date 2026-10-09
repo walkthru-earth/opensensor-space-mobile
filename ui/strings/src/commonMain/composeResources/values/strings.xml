@@ -74,8 +74,6 @@
     <string name="companion_sync">Sync</string>
 
     <!-- Export. -->
-    <string name="companion_export">Export Parquet files</string>
-    <string name="companion_export_preparing">Preparing export…</string>
 
     <!-- Sync outcomes, the Android keys and words. -->
     <string name="msg_up_to_date">Everything is already on this phone.</string>

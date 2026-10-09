@@ -45,8 +45,6 @@ import earth.walkthru.opensensor.strings.resources.action_cancel
 import earth.walkthru.opensensor.strings.resources.app_name
 import earth.walkthru.opensensor.strings.resources.batch_value
 import earth.walkthru.opensensor.strings.resources.companion_connect
-import earth.walkthru.opensensor.strings.resources.companion_export
-import earth.walkthru.opensensor.strings.resources.companion_export_preparing
 import earth.walkthru.opensensor.strings.resources.companion_files_finalized
 import earth.walkthru.opensensor.strings.resources.companion_find_sensors
 import earth.walkthru.opensensor.strings.resources.companion_firmware
@@ -93,7 +91,7 @@ import kotlin.math.floor
  */
 
 @Composable
-internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (String) -> Unit, disconnect: () -> Unit, scanLan: () -> Unit, saveWifiAccess: () -> Unit, connectLan: (String) -> Unit, syncLan: (String) -> Unit, disconnectLan: (String) -> Unit, exportArchive: () -> Unit, syncBluetooth: () -> Unit, units: UnitSystem = UnitSystem.METRIC, showTechnical: Boolean = false) {
+internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (String) -> Unit, disconnect: () -> Unit, scanLan: () -> Unit, saveWifiAccess: () -> Unit, connectLan: (String) -> Unit, syncLan: (String) -> Unit, disconnectLan: (String) -> Unit, syncBluetooth: () -> Unit, units: UnitSystem = UnitSystem.METRIC, showTechnical: Boolean = false) {
     // Display units from Settings. Readings stay SI everywhere else.
     val formatter = UnitFormatter(units)
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
@@ -282,14 +280,6 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
                             }
                         }
                     }
-                }
-            }
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = exportArchive, enabled = !state.exportBusy, shape = MaterialTheme.shapes.small) {
-                        Text(stringResource(if (state.exportBusy) Res.string.companion_export_preparing else Res.string.companion_export))
-                    }
-                    if (!state.exportMessage.isEmpty) Text(state.exportMessage.resolve(), style = MaterialTheme.typography.bodySmall, color = muted)
                 }
             }
         }
