@@ -16,6 +16,8 @@ kotlin {
             api(libs.jetbrains.lifecycle.viewmodel.navigation3)
             implementation(libs.jetbrains.lifecycle.viewmodel.compose)
             api(project(":ui:designsystem"))
+            // The tab labels, from the shared catalogue.
+            implementation(project(":ui:strings"))
             api(libs.kotlinx.serialization.core)
         }
         commonTest.dependencies {

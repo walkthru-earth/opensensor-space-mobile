@@ -14,10 +14,7 @@ class PresentationLiteralsTest {
     private val sources = listOf("ios/shared/src/commonMain/kotlin", "ios/shared/src/iosMain/kotlin")
 
     /** `file name` to the literal text allowed there. Keep this short and say why. */
-    private val allowed: Set<Pair<String, String>> = setOf(
-        // The bottom bar tab labels belong to the app shell, which moves them to resources with the shell.
-        "AppRoot.kt" to "My devices",
-    )
+    private val allowed: Set<Pair<String, String>> = emptySet()
 
     /** `Text("...")`, `Text(text = "...")` or `Text(if (x) "..." else ...)`. */
     private val textLiteral = Regex("""\bText\(\s*(text\s*=\s*)?(if\s*\(.*?\)\s*)?"([^"]*)"""")

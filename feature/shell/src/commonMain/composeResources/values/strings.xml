@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- The bottom bar, the same three tabs on Android and iOS. -->
-    <string name="tab_discover">Discover</string>
-    <string name="tab_my_devices">My devices</string>
-    <string name="tab_settings">Settings</string>
-</resources>

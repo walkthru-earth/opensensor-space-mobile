@@ -24,10 +24,10 @@ import androidx.navigation3.ui.NavDisplay
 import earth.walkthru.opensensor.designsystem.AppIcons
 import earth.walkthru.opensensor.designsystem.BottomBarTab
 import earth.walkthru.opensensor.designsystem.BrandBottomBar
-import earth.walkthru.opensensor.shell.resources.Res
-import earth.walkthru.opensensor.shell.resources.tab_discover
-import earth.walkthru.opensensor.shell.resources.tab_my_devices
-import earth.walkthru.opensensor.shell.resources.tab_settings
+import earth.walkthru.opensensor.strings.resources.Res
+import earth.walkthru.opensensor.strings.resources.nav_settings
+import earth.walkthru.opensensor.strings.resources.tab_discover
+import earth.walkthru.opensensor.strings.resources.tab_my_devices
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -99,7 +99,7 @@ fun ShellBottomBar(nav: TabNavigator, modifier: Modifier = Modifier) {
         tabs = listOf(
             BottomBarTab(TopTab.DISCOVER, stringResource(Res.string.tab_discover), AppIcons.Outlined.Map),
             BottomBarTab(TopTab.MY_DEVICES, stringResource(Res.string.tab_my_devices), AppIcons.Outlined.Sensors),
-            BottomBarTab(TopTab.SETTINGS, stringResource(Res.string.tab_settings), AppIcons.Outlined.Settings),
+            BottomBarTab(TopTab.SETTINGS, stringResource(Res.string.nav_settings), AppIcons.Outlined.Settings),
         ),
         selected = nav.tab,
         onSelect = nav::select,
