@@ -168,7 +168,7 @@ internal fun SpreadChart(
         // reads the bar under the finger.
         val labelStyle = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold)
         when {
-            readout != null && active != null -> PositionedLabels(listOf((active + 0.5f) / bins to readout), labelStyle, ink)
+            readout != null -> PositionedLabels(listOf((active + 0.5f) / bins to readout), labelStyle, ink)
             health != null -> PositionedLabels(listOf(domain.fraction(health.guideline) to "${strings.whoMark} ${formatEdge(health.guideline)}"), labelStyle, ink)
             else -> PositionedLabels(listOf(0f to " "), labelStyle, ink)
         }
