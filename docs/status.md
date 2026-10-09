@@ -4,6 +4,38 @@
 **Code:** `./gradlew verify` (the gate), `.github/workflows/verify.yml`.
 **Related:** measured device behaviour is recorded in the board-specific `../aq-parquet/docs/boards/*/bench-verified.md`; anything not recorded there is unverified.
 
+## 2026-10-09 — peacock expressions and Today layout (OnePlus and host/simulator)
+
+Eight transparent expression portraits now share the original peacock's identity,
+with wings, masks and feather gestures for air quality, missing data and work states.
+Today shows one large portrait above a smaller white backplate; both rotate together
+and the visible body meets the backplate's bottom edge. Average and sync cards no
+longer repeat the character. Shared empty states and Android notifications use the
+same expression set. Artwork and prompts are in [the asset record](design/peacock/README.md).
+
+The final debug APK was installed over the existing app on the connected OnePlus
+7 Pro (GM1911, Android 16) and launched successfully. The saved AQ-6b40 sensor and
+archive remained available. Phone inspection during the layout work showed live
+fair-air readings over Wi-Fi LAN, a single Today portrait, and readable history-ring
+values. The owner approved the final appearance before commit. This is a UI/install
+check; every air-quality expression and notification state was not exercised on
+the phone, and no iPhone radio behavior was tested.
+
+APK SHA-256: `558f15e5d85c2dffac22d124e41261917249c3eed3ec019b5f63fbafd68d050f`.
+
+Verification passed with the bundled JBR: `./gradlew --no-daemon verify
+:app:assembleRelease -Paqsync.localRelease=true` (1045 tasks), including Android lint,
+host tests, shared iOS simulator tests and framework link, plus a locally signed
+minified release APK. The unsigned Debug iOS simulator app also built successfully.
+All nine peacock resources match their source hashes in the debug APK and iOS app;
+the iOS semantics tests load each resource and check accessible state descriptions.
+
+The linked [release job](https://github.com/walkthru-earth/opensensor-space-mobile/actions/runs/37919254818/job/113783676017)
+failed its English-literal audit on an iOS retry diagnostic. The diagnostic was
+corrected, and the audit now declares the external source and catalogue files it
+reads as Gradle inputs. All 19 copy-audit tests passed; a temporary source violation
+also proved that a normal incremental run invalidates the prior passing result.
+
 ## 2026-10-09 — OnePlus update after automatic UTC changes
 
 Mobile commit `5d5db51` was pushed to `main` after the full pre-push `verify` gate

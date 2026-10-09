@@ -74,7 +74,7 @@ internal object IosArchive {
                     throw e
                 } catch (e: Exception) {
                     // Originals and receipts survive; the next archive change or process start retries.
-                    println("Derived history retry needed: ${e::class.simpleName}")
+                    println("derived history retry needed: ${e::class.simpleName}")
                 }
             }
         }

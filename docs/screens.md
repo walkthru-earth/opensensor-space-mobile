@@ -80,7 +80,7 @@ shared setting lands (platform-parity-plan.md, Wave 2).
 | --- | --- | --- | --- |
 | Devices (Scan) | Name, paired and known tags, signal bars, archive line (mood, primary metric, day, synced ago), peacock guide when nothing is nearby, connect and privacy notes behind the top bar info button | Coverage percent and file count on the archive line | MAC address, RSSI dBm, station prefix |
 | Connection banner | Connected, Connecting, Setting up the link, pairing repair message | Failure reason | Service discovery, MTU, LAN authentication steps, reconnect reason and attempt count |
-| Today | Hero (face, number, mood pill, advice, snapshot note in its info sheet), today so far, temperature and humidity on ambient boards, Smart Sync, automatic clock state | Readings since midnight, placed and unplaced counts, Finalize, batch estimate, PM10 and PM1, particles, board and battery, storage (problem counters only when not zero), device card | Station in the top bar, sample number, CF=1 raw, mV and USB mV, codec, partials, uptime, heap, dropped, errors and missed always, anchor generation, last sample instant, schema, IDs, dictionary, max_read, payload |
+| Today | Hero (peacock expression, number, mood pill, advice, snapshot note in its info sheet), today so far, temperature and humidity on ambient boards, Smart Sync, automatic clock state | Readings since midnight, placed and unplaced counts, Finalize, batch estimate, PM10 and PM1, particles, board and battery, storage (problem counters only when not zero), device card | Station in the top bar, sample number, CF=1 raw, mV and USB mV, codec, partials, uptime, heap, dropped, errors and missed always, anchor generation, last sample instant, schema, IDs, dictionary, max_read, payload |
 | Device | Device name and link in words, Auto-sync one line, wake when nearby, Wi-Fi state, scan and join, Sync over Wi-Fi switch and Get token. The pairing card only when it needs attention (default PIN, pending restart) | Firmware and protocol, sensor sticker card, pairing mode and Restart, paired phones and Forget all, Replace token, server line, Wi-Fi and Bluetooth reachability lines, network name, passphrase state, IP address, discovery errors, phone installation record | Display flag, RSSI, MAC, access point security and channel, mDNS host, port, clients, discovered address, IDs, endpoint, settings read age |
 | Files | Local time per file, friendly size, state, Sync all, peacock when all synced, file count | Chart by file, Metrics inspector, transfer rate, current file progress, LIST failure text | File names, UTC folder subtitles, partial and microSD counts, FILE frame mismatch, resumed offsets, recovered windows |
 | Metrics (Detailed only) | n/a | Size, rows, columns, UTC first and last, valid particle rows, column min and max | Footer, codec, schema, writer, statistics, index source, decode time, uptime span, sequence, boot, row groups, column types and footer agreement, key value metadata |
@@ -190,7 +190,7 @@ palette `sensing`. `BrandTokensTest` pins every value and checks text contrast o
   and the bottom bar indicator use `FloatingControl.chipColors`, `segmentedColors` and
   `FloatingControl.Selected`, Signal blue with ink text (6.5 to 1 contrast). The bottom bar is
   `BrandBottomBar`, one component for Android and iOS, its selected icon on a curved card, not a pill. Circles stay only for
-  round things (status dots, the mascot, the mood face, ring charts, radio buttons and switches).
+  round things (status dots, the mascot, ring charts, radio buttons and switches).
   `SignalBars` and `TiltedBadge` (the website's -5 degree icon tilt, hero only) complete the set.
   Icons are `AppIcons`, the Material vectors the apps use, vendored node for node so neither app
   ships `material-icons-extended`.
@@ -198,11 +198,37 @@ palette `sensing`. `BrandTokensTest` pins every value and checks text contrast o
   `FloatingIconButton` or `FloatingTextButton` (the Scan and Sync all actions) and the
   `FloatingControl` shapes and tint (curved cards, Signal blue only for the selection).
   The rules are in `docs/cross-platform-guide.md`, "Floating controls".
-- **Mascot.** The peacock (`ui/designsystem/src/commonMain/composeResources/drawable/peacock.webp`,
-  `Res.drawable.peacock`, from the website's
-  `public/mascots/`) is a guide on the welcome and no-device states (Devices), the all-synced
-  state (Files) and a clean Smart Sync run (Today). Never beside charts or numbers. It enters
-  with a finite fade that the system animator setting can turn off.
+- **Mascot.** One peacock represents air moods and app states on Android and iOS. The original
+  website reference (`ui/designsystem/src/commonMain/composeResources/drawable/peacock.webp`,
+  from `public/mascots/`) stays the full welcome artwork. Compact, static portraits derived from
+  that reference live beside it and are selected through `PeacockExpression`, `PeacockIcon` and
+  `AirQualityPeacock` in `:ui:designsystem`. In-app portraits are at least 48 dp and keep the
+  character's face, crest and feather gestures readable. They accompany live readings, archive
+  summaries and History's ring, and replace generic faces or emoji in guide, empty, progress and
+  success states. All art ships with the app and works offline, with no Internet asset fetch.
+  The expression supplements the translated state or mood label, advice, value and unit.
+  WHO thresholds, step colours and chart scales retain their scientific meaning. An image beside
+  a label that already explains its state is decorative (`contentDescription = null`).
+  Today uses one prominent portrait, 176 dp or 136 dp on narrow screens. Its head, crest and
+  wing gesture extend above a smaller white backplate. The daily average and Smart Sync cards
+  add their own values or state without repeating the character or the live mood label.
+
+| Situation | Peacock expression |
+| --- | --- |
+| Fresh air / Fair | Happy / Calm |
+| Getting hazy | Concerned |
+| Poor / Smoky | Masked, with a serious expression |
+| Thick smoke | Feather shield across the beak |
+| Missing readings or an empty result | Confused, with the translated explanation beside it |
+| Sensor warming up, stale or unavailable | Working, Sleeping or Concerned, with the sensor state in words |
+| Collection in progress / verified success, in Files and notifications | Working / Happy |
+| Android reconnect or sync failures | Concerned |
+
+Android notifications use the same compact portraits as coloured large icons. Their small status
+icon is a white-and-transparent peacock silhouette because Android tints notification icons.
+Portraits preload off the main thread and are cached; the silhouette is also the immediate fallback.
+The system controls notification icon sizing. This does not add an air-quality alert or an iOS
+notification permission request.
 
 ## Route and screen split
 
@@ -221,7 +247,7 @@ flips once when a reading goes stale.
 | Screen | Behaviour | Data path |
 | --- | --- | --- |
 | **Devices** (Home) | Scans for service UUID `c0a5e9f0-0001-…`, lists `AQ-xxxx` with RSSI + bond state, remembers known devices. Active controller rows show per-device connection/progress and open that controller. Each known device's card shows what the **phone archive** holds (files, last sync, last UTC day with valid readings as mood + average + coverage) — no link needed. ≥ 2 known devices → **Collect from all N devices** (one worker pass, LAN if discovered + token else bond, up to two concurrent devices, missing files only; each already-owned device is skipped). One shared screen for both apps (`:feature:devices`, `MyDevicesScreen` over `DevicesController`). It merges nearby, known and Wi-Fi sensors into one list, scans while visible once Bluetooth access is held (asked through `:ui:permissions`, never at launch), and Forget asks for confirmation. Android keeps the system bond on Forget and collects in its worker. iOS removes the app record and the Keychain Wi-Fi access, says the bond is removed in iOS Settings, and collects one sensor at a time while the app is open. iOS cards show files and the last sync, with no day mean yet. | Ports `KnownDeviceStore`, `DeviceRadio`, `CollectAllPort`. Android `ScanViewModel` over `BleScanner`, `KnownDeviceDao`, `metric_bucket` DAY tier, `AutoSyncScheduler.collectAll`. iOS `DevicesBridge` over `CompanionState`, saved known records, `LanCredentials.list` and the receipt index |
-| **Today** | Reviewed schema/dictionary profiles interpret CoreS3 board temperature and Waveshare ambient temperature/humidity. Unknown profiles retain file collection with an explanatory live placeholder. **Hero card** (`MetricHeroCard`, the primary registry metric): five-mood face on a tilted badge, big number with label and unit from `Metrics.primary`, mood pill, advice and comparison, a 10 second snapshot explained in its info sheet, **Today so far** = the *local* day's weighted average + coverage from the hourly tier (re-evaluated every minute), or an indication that time synchronization is pending. Sensor state (warming up / stale / error) in words before any number. **Smart Sync** checks clock quality, synchronizes UTC automatically, downloads/verifies missing files and reports real/estimated/unplaceable readings plainly. **Devices** returns Home while retaining the connection; Disconnect closes only this device. Always: automatic clock state. Detailed adds **Finalize buffered rows**, every measurement card and the device card (`status.open`/`open_rg` only when present). One shared screen and copy for both apps (`:feature:today`, `TodayScreen` over `TodayController`), which owns the Finalize confirmation dialog. Debug shows at Developer level only. On iOS a Bluetooth sensor opens here from My devices. Device opens the companion page, UTC synchronization and Finalize go over Bluetooth, and the sync bar runs without a byte total. | Port `TodaySource`. Android `TodayViewModel` over the repository, `live`/`status` pushes, reviewed `LiveProfile` + `NowReading.of(live)`, `HistoryRepository`. iOS `CompanionTodaySource` over `CompanionState`, `IosArchive` and `BluetoothCompanion.command` |
+| **Today** | Reviewed schema/dictionary profiles interpret CoreS3 board temperature and Waveshare ambient temperature/humidity. Unknown profiles retain file collection with an explanatory live placeholder. **Hero card** (`MetricHeroCard`, the primary registry metric): one large six-mood peacock portrait rising above a small tilted backplate, big number with label and unit from `Metrics.primary`, mood pill, advice and comparison, a 10 second snapshot explained in its info sheet, **Today so far** = the *local* day's weighted average + coverage from the hourly tier (re-evaluated every minute), or an indication that time synchronization is pending. Sensor state (warming up / stale / error) in words before any number. **Smart Sync** checks clock quality, synchronizes UTC automatically, downloads/verifies missing files and reports real/estimated/unplaceable readings plainly. **Devices** returns Home while retaining the connection; Disconnect closes only this device. Always: automatic clock state. Detailed adds **Finalize buffered rows**, every measurement card and the device card (`status.open`/`open_rg` only when present). One shared screen and copy for both apps (`:feature:today`, `TodayScreen` over `TodayController`), which owns the Finalize confirmation dialog. Debug shows at Developer level only. On iOS a Bluetooth sensor opens here from My devices. Device opens the companion page, UTC synchronization and Finalize go over Bluetooth, and the sync bar runs without a byte total. | Port `TodaySource`. Android `TodayViewModel` over the repository, `live`/`status` pushes, reviewed `LiveProfile` + `NowReading.of(live)`, `HistoryRepository`. iOS `CompanionTodaySource` over `CompanionState`, `IosArchive` and `BluetoothCompanion.command` |
 
 For the reviewed Waveshare v2 dictionary, Today shows a separate **unvalidated batch estimate**
 when the board has opted in, its sticker is in the known batch, and a fresh valid particle count
@@ -262,7 +288,7 @@ state change, de-duplicated). Never derive it per screen from the session object
 | --- | --- |
 | `feature/shell/.../AppKey.kt` | `AppNavConfig` saved state, Android and iOS entry providers, `AppNavConfigTest` |
 | `DetailLevel` / `AppSettings` | every `detailed`/`advancedMode` collector; Debug visibility; Files table icon |
-| `ui/device/cards/MetricHeroCard.kt`, `components/MoodFace.kt`, mood copy in `strings.xml` | Today, Home cards (same moods), iOS parity (iOS still reads the copy in `AirMood`, meant to match `strings.xml` word for word, not yet checked by a test, tracked in #25) |
+| `ui/designsystem/.../PeacockExpressions.kt`, mood copy in shared `strings.xml` | Live and archived air moods, empty and guide states on both apps, Android notification portraits; the metric registry still owns labels, units and scales |
 | `ui/theme/BrandTokens.kt` | Every screen, `BrandTokensTest` (website values and contrast) |
 | `DeviceCapabilities` (`:core:history`) | Today hero and batch card, Device sensor card, `setSensorIdentity` guard |
 | `BandColumnChart.kt`, `DayRing.kt`, `CalendarHeatmap.kt` | History and Files › Chart by file (share `Columns` + `HistoryColumn`) |

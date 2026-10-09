@@ -279,7 +279,6 @@
     <string name="transport_ble">Bluetooth</string>
     <string name="transport_lan">Wi-Fi LAN</string>
     <string name="transport_fake">Fake device</string>
-    <string name="mood_none">No reading</string>
     <string name="file_chart_estimated">%1$s, estimated</string>
     <string name="file_chart_unplaced">No place on the timeline yet. This boot has no clock time.</string>
     <plurals name="file_chart_rows">

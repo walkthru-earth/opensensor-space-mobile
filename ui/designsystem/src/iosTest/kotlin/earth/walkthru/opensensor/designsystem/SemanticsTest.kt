@@ -1,7 +1,11 @@
 package earth.walkthru.opensensor.designsystem
 
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
@@ -11,8 +15,11 @@ import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.v2.runComposeUiTest
+import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 
 /**
@@ -25,6 +32,22 @@ class SemanticsTest {
     private val isHeading = SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading)
 
     private fun hasRole(role: Role) = SemanticsMatcher.expectValue(SemanticsProperties.Role, role)
+
+    @Test
+    fun bundledPeacockPortraitsLoadAndKeepTheirSpokenState() = runComposeUiTest {
+        setContent {
+            Column {
+                PeacockExpression.entries.forEach { expression ->
+                    PeacockIcon(expression, Modifier.size(48.dp), contentDescription = expression.name)
+                }
+                PeacockIcon(PeacockExpression.CONFUSED, Modifier.size(48.dp).testTag("decorative"))
+            }
+        }
+        PeacockExpression.entries.forEach { expression ->
+            onNodeWithContentDescription(expression.name).assertExists()
+        }
+        onNodeWithTag("decorative").assert(!SemanticsMatcher.keyIsDefined(SemanticsProperties.ContentDescription))
+    }
 
     @Test
     fun aSectionCardTitleIsAHeadingReadAsWritten() = runComposeUiTest {

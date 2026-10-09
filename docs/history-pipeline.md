@@ -136,8 +136,14 @@ IT-1). The edges are never repeated in `:core:history` or the app. Each has a
 title, one line of advice and a comparison — colour is never the only carrier. `NowReading.of(live)`
 puts the sensor state first (`pms_status ≠ 4` → words, never a number). "Right now" is a 10-second
 snapshot; "Today so far" is the **local** day folded from the hourly tier with its coverage.
-**No "AQI" anywhere** (a named index needs validated averaging rules). The face is a Canvas
-placeholder (`MoodFace`) that mascot artwork from the website replaces one for one on both platforms.
+**No "AQI" anywhere** (a named index needs validated averaging rules). Live and archived mood
+indicators use the shared static `AirQualityPeacock` portraits from `:ui:designsystem`, derived
+from the original reference character. Fresh air is Happy, Fair is Calm, Getting hazy is
+Concerned, Poor and Smoky are Masked, and Thick smoke uses a Feather shield over the beak.
+Missing measurements use Confused alongside the translated explanation. In-app portraits are
+at least 48 dp, decorative beside the translated mood or state label, and bundled for offline
+rendering. The original full character stays the welcome artwork. These cues replace generic
+faces and emoji without changing measurement validity, labels, advice, WHO colours or scales.
 
 PM10 is banded on its own WHO scale (`WhoGuidelines.PM10`, 45 · 50 · 75 · 100 · 150 µg/m³) through
 `MetricSpec.healthScale`; `moodOf`/`stepOf` read the scale, so a PM10 value maps to the same six moods

@@ -7,15 +7,28 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.ImageDecoder
 import android.os.Build
+import androidx.compose.ui.graphics.toArgb
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.toBitmap
 import dagger.hilt.android.qualifiers.ApplicationContext
 import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.ReconnectState
 import earth.walkthru.aqsync.data.SyncProgress
+import earth.walkthru.aqsync.data.coroutines.ApplicationScope
+import earth.walkthru.aqsync.data.coroutines.IoDispatcher
+import earth.walkthru.aqsync.data.coroutines.suspendRunCatching
 import earth.walkthru.aqsync.ui.MainActivity
 import earth.walkthru.aqsync.ui.components.formatBytes
+import earth.walkthru.opensensor.designsystem.BrandTokens
+import earth.walkthru.opensensor.designsystem.PeacockExpression
+import earth.walkthru.opensensor.designsystem.peacockResourceUri
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -33,9 +46,14 @@ import javax.inject.Singleton
  * the summary is skipped.
  */
 @Singleton
-class SyncNotifications @Inject constructor(@ApplicationContext private val context: Context) {
+class SyncNotifications @Inject constructor(
+    @ApplicationContext private val context: Context,
+    @ApplicationScope applicationScope: CoroutineScope,
+    @IoDispatcher ioDispatcher: CoroutineDispatcher,
+) {
 
     private val manager: NotificationManager get() = context.getSystemService(NotificationManager::class.java)
+    private val peacockIcons = PeacockNotificationIcons(context, applicationScope, ioDispatcher)
 
     fun ensureChannels() {
         manager.createNotificationChannel(
@@ -76,7 +94,8 @@ class SyncNotifications @Inject constructor(@ApplicationContext private val cont
             else -> context.getString(R.string.notif_listing)
         }
         val builder = NotificationCompat.Builder(context, CHANNEL_PROGRESS)
-            .setSmallIcon(R.drawable.ic_stat_sync)
+            .setSmallIcon(R.drawable.ic_stat_peacock)
+            .setLargeIcon(peacockIcons.icon(if (reconnecting != null) PeacockExpression.CONCERNED else PeacockExpression.WORKING))
             .setContentTitle(title)
             .setContentText(text)
             .setOngoing(true)
@@ -107,7 +126,8 @@ class SyncNotifications @Inject constructor(@ApplicationContext private val cont
         val title = if (newFiles > 0) res.getQuantityString(R.plurals.notif_synced, newFiles, newFiles, name, formatBytes(newBytes)) else context.getString(R.string.notif_problems, name)
         val text = if (failures > 0) res.getQuantityString(R.plurals.notif_failures, failures, failures) else context.getString(R.string.notif_verified)
         val n = NotificationCompat.Builder(context, CHANNEL_SUMMARY)
-            .setSmallIcon(R.drawable.ic_stat_sync)
+            .setSmallIcon(R.drawable.ic_stat_peacock)
+            .setLargeIcon(peacockIcons.icon(if (failures > 0) PeacockExpression.CONCERNED else PeacockExpression.HAPPY))
             .setContentTitle(title)
             .setContentText(text)
             .setAutoCancel(true)
@@ -142,5 +162,58 @@ class SyncNotifications @Inject constructor(@ApplicationContext private val cont
         const val SUMMARY_ID = 1003
         private const val REQ_OPEN = 10
         private const val PROGRESS_MAX = 1000
+    }
+}
+
+/**
+ * Decode bundled character art once on the I/O dispatcher, never for each progress update or
+ * while a service is starting. The immediate fallback is the same peacock's monochrome icon.
+ * Only three bounded thumbnails are retained, and an unavailable optional image cannot stop sync.
+ */
+private class PeacockNotificationIcons(
+    private val context: Context,
+    applicationScope: CoroutineScope,
+    ioDispatcher: CoroutineDispatcher,
+) {
+    private val targetPixels = (LARGE_ICON_DP * context.resources.displayMetrics.density).toInt().coerceIn(LARGE_ICON_DP, MAX_ICON_PIXELS)
+
+    @Volatile
+    private var images: Map<PeacockExpression, Bitmap> = emptyMap()
+
+    private val fallback: Bitmap by lazy {
+        checkNotNull(ContextCompat.getDrawable(context, R.drawable.ic_stat_peacock)).mutate().apply {
+            setTint(BrandTokens.Light.deep.toArgb())
+        }.toBitmap(targetPixels, targetPixels)
+    }
+
+    init {
+        applicationScope.launch(ioDispatcher) {
+            images = listOf(PeacockExpression.WORKING, PeacockExpression.CONCERNED, PeacockExpression.HAPPY)
+                .mapNotNull { expression -> suspendRunCatching { decode(expression) }.getOrNull()?.let { expression to it } }
+                .toMap()
+        }
+    }
+
+    fun icon(expression: PeacockExpression): Bitmap = images[expression] ?: fallback
+
+    private fun decode(expression: PeacockExpression): Bitmap? {
+        val uri = peacockResourceUri(expression)
+        // Compose packages its resources as Android assets. Keep this adapter local-only.
+        if (!uri.startsWith(ASSET_PREFIX)) return null
+        val source = ImageDecoder.createSource(context.assets, uri.removePrefix(ASSET_PREFIX))
+        return ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+            val scale = targetPixels.toFloat() / maxOf(info.size.width, info.size.height)
+            decoder.setTargetSize(
+                (info.size.width * scale).toInt().coerceAtLeast(1),
+                (info.size.height * scale).toInt().coerceAtLeast(1),
+            )
+            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+        }
+    }
+
+    companion object {
+        private const val ASSET_PREFIX = "file:///android_asset/"
+        private const val LARGE_ICON_DP = 64
+        private const val MAX_ICON_PIXELS = 256
     }
 }

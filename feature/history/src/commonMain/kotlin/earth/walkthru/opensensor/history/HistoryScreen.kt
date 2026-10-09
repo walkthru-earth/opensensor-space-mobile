@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
@@ -54,6 +55,8 @@ import earth.walkthru.opensensor.designsystem.FloatingControl
 import earth.walkthru.opensensor.designsystem.InfoButton
 import earth.walkthru.opensensor.designsystem.InfoContent
 import earth.walkthru.opensensor.designsystem.InfoNote
+import earth.walkthru.opensensor.designsystem.PeacockExpression
+import earth.walkthru.opensensor.designsystem.PeacockIcon
 import earth.walkthru.opensensor.designsystem.SectionCard
 import earth.walkthru.opensensor.designsystem.StatLine
 import earth.walkthru.opensensor.history.resources.Res
@@ -139,7 +142,7 @@ fun HistoryScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             if (state.initializing) {
-                item(key = "loading") { InfoNote(stringResource(Res.string.history_loading)) }
+                item(key = "loading") { HistoryStateMessage(stringResource(Res.string.history_loading), PeacockExpression.WORKING) }
                 return@LazyColumn
             }
             if (state.stations.size > 1) {
@@ -167,7 +170,7 @@ fun HistoryScreen(
             }
             item(key = "chart") {
                 if (state.availableMetrics.isEmpty()) {
-                    InfoNote(stringResource(if (state.files.untimed > 0) Res.string.history_untimed else Res.string.history_nothing_indexed))
+                    HistoryStateMessage(stringResource(if (state.files.untimed > 0) Res.string.history_untimed else Res.string.history_nothing_indexed))
                 } else {
                     ChartCard(state, units, controller.nowS(), onOpenDay = controller::openDay)
                 }
@@ -309,8 +312,8 @@ private fun ChartCard(state: HistoryUiState, units: UnitFormatter, nowS: Long, o
             }
             Spacer(Modifier.height(8.dp))
             when {
-                state.station == null -> Text(stringResource(Res.string.history_never_connected), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                s == null -> Text(stringResource(Res.string.history_loading_short), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                state.station == null -> HistoryStateMessage(stringResource(Res.string.history_never_connected))
+                s == null -> HistoryStateMessage(stringResource(Res.string.history_loading_short), PeacockExpression.WORKING)
                 s.isEmpty -> EmptySpan(state)
                 else -> {
                     val columns = remember(s, zone) {
@@ -450,17 +453,28 @@ private fun Summary(s: HistorySeries, units: UnitFormatter) {
 
 @Composable
 private fun EmptySpan(state: HistoryUiState) {
-    Column {
-        Text(stringResource(Res.string.history_no_readings), color = MaterialTheme.colorScheme.onSurfaceVariant)
-        val lastDay = state.days.lastDayS
-        if (lastDay != null && localDateOf(lastDay, state.zone) < localDateOf(state.window.fromS, state.zone)) {
-            Spacer(Modifier.height(4.dp))
-            Text(
-                stringResource(Res.string.history_latest, formatEpoch(lastDay, TimeZone.UTC, UTC_DAY)),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        PeacockIcon(PeacockExpression.CONFUSED, Modifier.size(48.dp))
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(Res.string.history_no_readings), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            val lastDay = state.days.lastDayS
+            if (lastDay != null && localDateOf(lastDay, state.zone) < localDateOf(state.window.fromS, state.zone)) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    stringResource(Res.string.history_latest, formatEpoch(lastDay, TimeZone.UTC, UTC_DAY)),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun HistoryStateMessage(text: String, expression: PeacockExpression = PeacockExpression.CONFUSED) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        PeacockIcon(expression, Modifier.size(48.dp))
+        Text(text, Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

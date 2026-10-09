@@ -144,7 +144,7 @@ signal blue and teal) and `app/globals.css` (type and shape). The apps follow it
 | Material 3 theme | `:ui:designsystem` maps tokens to a `ColorScheme`, `Typography` and `Shapes` | Android and iOS render the same theme through Compose |
 | Fonts | Quicksand (Latin) and Cairo (Arabic), both OFL variable TTFs, Compose resources in `:ui:designsystem` with their licence texts | No runtime font download, the app works offline. Same faces and weights on Android and iOS |
 | Floating controls | `:ui:designsystem` `FloatingControls.kt` | One style for every control over content, see below |
-| Characters | The peacock mascot from `public/mascots/peacock.webp` | A friendly guide on empty, welcome and success states, never on data |
+| Characters | Reference peacock from `public/mascots/peacock.webp`, with bundled variations in `:ui:designsystem` | Static compact portraits for live and archived air moods, guide, empty, progress and success states; original full artwork retained for welcome |
 
 The [W3C Design Tokens format](https://www.designtokens.org/) (DTCG JSON) is the common way teams
 keep web, Android and iOS tokens in one file and generate code per platform. When a third
@@ -181,7 +181,7 @@ renders in the default purple.
 ### Health scales and charts (the global data rule)
 
 Every value that has a published health scale is judged against it, the same way on the map,
-in charts, on cards and in the mood face. The scale lives once in `:core:airquality`.
+in charts, on cards and in the peacock expression. The scale lives once in `:core:airquality`.
 
 - **WHO 2021, cited.** PM2.5 and PM10 use the WHO global air quality guidelines (2021), the
   24-hour guideline and its four interim targets (PM2.5 15, 25, 37.5, 50, 75 µg/m³. PM10 45,
@@ -201,6 +201,20 @@ in charts, on cards and in the mood face. The scale lives once in `:core:airqual
   (`WhoPaletteTest`).
 - **Not an AQI.** A WHO step is not an index. The live number is a short snapshot and is never
   presented as a 24-hour mean.
+
+The shared `AirQualityPeacock` maps Fresh air to Happy, Fair to Calm, Getting hazy to Concerned,
+Poor and Smoky to Masked, and Thick smoke to Feather shield. Missing measurements use Confused.
+This changes the visual cue only. Labels, advice, units, WHO step colours and chart scales keep
+their meaning. Metrics without a published scale keep neutral metric cards.
+
+Use the same reference character and bundled static portraits for empty results and app states,
+through `PeacockIcon` and `MascotGuide`, instead of generic smiley emoji. Working, Sleeping and
+Concerned distinguish progress, unavailable or stale readings, and problems. In-app portraits
+are at least 48 dp and keep the face and feather gestures visible. Keep the translated explanation
+beside the character, and mark the image decorative when the label already carries its meaning.
+Both apps load this art from Compose resources and never fetch character images over the Internet.
+Android uses coloured portraits in notification large icons and a monochrome peacock small icon,
+which the platform tints; notification sizes remain under system control.
 
 Sources: [WHO global air quality guidelines, 2021](https://www.who.int/publications/i/item/9789240034228),
 [Mazama Science, qualitative display of air quality data](https://working-with-data.mazamascience.com/2021/03/18/qualitative-display-of-air-quality-data/),

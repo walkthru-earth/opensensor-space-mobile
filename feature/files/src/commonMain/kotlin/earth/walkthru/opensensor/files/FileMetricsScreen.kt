@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -34,6 +35,8 @@ import earth.walkthru.aqsync.settings.DetailLevel
 import earth.walkthru.opensensor.designsystem.AppIcons
 import earth.walkthru.opensensor.designsystem.Eyebrow
 import earth.walkthru.opensensor.designsystem.InfoNote
+import earth.walkthru.opensensor.designsystem.PeacockExpression
+import earth.walkthru.opensensor.designsystem.PeacockIcon
 import earth.walkthru.opensensor.designsystem.SectionCard
 import earth.walkthru.opensensor.designsystem.StatLine
 import earth.walkthru.opensensor.designsystem.WarningNote
@@ -107,9 +110,16 @@ fun FileMetricsScreen(state: FileMetricsState, level: DetailLevel, name: String,
         when (state) {
             FileMetricsState.Loading -> Column(Modifier.fillMaxSize().padding(padding), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                 val loading = stringResource(Res.string.fm_loading)
+                PeacockIcon(PeacockExpression.WORKING, Modifier.size(72.dp))
+                Spacer(Modifier.height(16.dp))
                 CircularProgressIndicator(Modifier.semantics { contentDescription = loading })
             }
             is FileMetricsState.Failed -> Column(Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
+                PeacockIcon(
+                    if (state.reason == FailReason.NOT_IN_ARCHIVE) PeacockExpression.CONFUSED else PeacockExpression.CONCERNED,
+                    Modifier.size(72.dp).align(Alignment.CenterHorizontally),
+                )
+                Spacer(Modifier.height(12.dp))
                 WarningNote(
                     stringResource(
                         when (state.reason) {

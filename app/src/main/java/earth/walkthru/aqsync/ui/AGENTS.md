@@ -53,8 +53,17 @@ app types or `R.string`.
   previews at Simple and Developer.
 - Read `rememberNowMillis()` only in leaf texts (`TickingText`). Capability checks come from
   `DeviceCapabilities`, never schema strings.
-- The peacock is for welcome, empty and success states only. Fonts are OFL (Quicksand, Cairo).
-  Keep `ui/designsystem/src/commonMain/composeResources/files/licenses/` with them.
+- Use the reference peacock for live and archived air moods and for welcome, guide, empty,
+  progress, unavailable and success states, through `PeacockIcon`, `AirQualityPeacock` and
+  `MascotGuide` in `:ui:designsystem`. Keep the original full artwork for welcome and use static
+  compact portraits elsewhere, at least 48 dp in the app. Poor air uses a serious masked peacock,
+  and the most severe mood shields its beak with feathers. Missing values use Confused and keep
+  their translated explanation. Preserve registry labels, units, WHO colours and scales.
+  Images beside translated labels are decorative (`contentDescription = null`). All character
+  art ships in Compose resources, with no Internet asset fetch. Android notifications use
+  coloured large portraits and a monochrome peacock small icon for system tinting.
+- Fonts are OFL (Quicksand, Cairo). Keep
+  `ui/designsystem/src/commonMain/composeResources/files/licenses/` with them.
 - User-facing copy lives in `res/values/strings.xml`, with plurals for counts. No em dashes,
   colons or semicolons (`CopyLintTest` in `:ui:strings` checks). Data-layer snackbars arrive as
   `DeviceMessage` codes and are mapped in `components/DeviceMessages.kt`. Typed UI values

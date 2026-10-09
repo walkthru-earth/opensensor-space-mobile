@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,6 +31,7 @@ import earth.walkthru.aqsync.data.history.HistoryRange
 import earth.walkthru.aqsync.data.history.MetricSpec
 import earth.walkthru.aqsync.data.history.localDateOf
 import earth.walkthru.aqsync.units.UnitFormatter
+import earth.walkthru.opensensor.designsystem.AirQualityPeacock
 import earth.walkthru.opensensor.history.resources.Res
 import earth.walkthru.opensensor.history.resources.chart_average_value
 import earth.walkthru.opensensor.history.resources.chart_ring_title
@@ -125,8 +127,8 @@ internal fun DayRing(
                 drawLine(onSurface, Offset(c.x + cos(a) * (r - thickness * 0.8f), c.y + sin(a) * (r - thickness * 0.8f)), Offset(c.x + cos(a) * (r + thickness * 0.8f), c.y + sin(a) * (r + thickness * 0.8f)), 2.5f, cap = StrokeCap.Round)
             }
         }
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.size(size * 0.5f), verticalArrangement = Arrangement.Center) {
-            if (mood != null) MoodFace(mood, mood.color(), Modifier.size(size * 0.16f))
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(size * 0.5f), verticalArrangement = Arrangement.Center) {
+            if (mood != null) AirQualityPeacock(mood, Modifier.size((size * 0.16f).coerceAtLeast(48.dp)), contentDescription = mood.titleText())
             Text(
                 units.value(mean, metric.unit)?.let(::fmtValue) ?: stringResource(Res.string.history_no_value),
                 style = MaterialTheme.typography.headlineMedium,

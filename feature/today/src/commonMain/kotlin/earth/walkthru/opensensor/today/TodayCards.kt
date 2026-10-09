@@ -1,6 +1,7 @@
 package earth.walkthru.opensensor.today
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -53,14 +54,15 @@ import earth.walkthru.opensensor.designsystem.CardTone
 import earth.walkthru.opensensor.designsystem.Eyebrow
 import earth.walkthru.opensensor.designsystem.InfoContent
 import earth.walkthru.opensensor.designsystem.OutlinePillButton
-import earth.walkthru.opensensor.designsystem.Peacock
+import earth.walkthru.opensensor.designsystem.PeacockExpression
+import earth.walkthru.opensensor.designsystem.PeacockPortrait
 import earth.walkthru.opensensor.designsystem.PillButton
 import earth.walkthru.opensensor.designsystem.StatLine
 import earth.walkthru.opensensor.designsystem.StatusDot
 import earth.walkthru.opensensor.designsystem.TickingText
-import earth.walkthru.opensensor.designsystem.TiltedBadge
 import earth.walkthru.opensensor.designsystem.WarningNote
 import earth.walkthru.opensensor.designsystem.nowEpochMillis
+import earth.walkthru.opensensor.designsystem.peacockExpressionFor
 import earth.walkthru.opensensor.designsystem.rememberNowMillis
 import earth.walkthru.opensensor.today.resources.Res
 import earth.walkthru.opensensor.today.resources.batch_explain
@@ -109,7 +111,6 @@ import earth.walkthru.opensensor.today.resources.fresh_updated
 import earth.walkthru.opensensor.today.resources.info_now_body
 import earth.walkthru.opensensor.today.resources.mood_none
 import earth.walkthru.opensensor.today.resources.now_last_reading
-import earth.walkthru.opensensor.today.resources.now_no_reading
 import earth.walkthru.opensensor.today.resources.now_right_now
 import earth.walkthru.opensensor.today.resources.now_sample_number
 import earth.walkthru.opensensor.today.resources.now_snapshot_note
@@ -218,9 +219,9 @@ internal fun FreshnessLabel(receivedAtEpochMs: Long?, color: Color = MaterialThe
 }
 
 /**
- * The hero of Today: the primary metric right now as a mood face, a big number, the mood in words and
+ * The hero of Today: the primary metric right now as a peacock, a big number, the mood in words and
  * one line of advice. The sensor's own state comes before any number. Colour is never the only
- * carrier, the mood is also a word and a face.
+ * carrier, the mood is also a word and a character expression.
  */
 @Composable
 internal fun MetricHeroCard(
@@ -236,72 +237,76 @@ internal fun MetricHeroCard(
     val onCard = MaterialTheme.colorScheme.onPrimaryContainer
     val quiet = onCard.copy(alpha = 0.85f)
 
-    BrandCard(modifier = modifier, tone = CardTone.HERO) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            val title = stringResource(if (fresh) Res.string.now_right_now else Res.string.now_last_reading)
-            CardHeader(
-                title,
-                modifier = Modifier.weight(1f),
-                info = InfoContent(title, stringResource(Res.string.now_snapshot_note), stringResource(Res.string.info_now_body)),
-                color = quiet,
-            )
-            FreshnessLabel(receivedAtEpochMs, color = quiet)
-        }
-        Spacer(Modifier.height(4.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TiltedBadge(color = MaterialTheme.colorScheme.surfaceContainerLowest, size = 92.dp) {
-                MoodFace(
-                    mood,
-                    mood?.color() ?: MaterialTheme.colorScheme.outlineVariant,
-                    Modifier.size(66.dp),
-                    description = mood?.titleText() ?: stringResource(Res.string.now_no_reading),
+    BoxWithConstraints(modifier.fillMaxWidth()) {
+        val portraitSize = if (maxWidth < 340.dp) 136.dp else 176.dp
+        BrandCard(tone = CardTone.HERO) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                val title = stringResource(if (fresh) Res.string.now_right_now else Res.string.now_last_reading)
+                CardHeader(
+                    title,
+                    modifier = Modifier.weight(1f),
+                    info = InfoContent(title, stringResource(Res.string.now_snapshot_note), stringResource(Res.string.info_now_body)),
+                    color = quiet,
                 )
+                FreshnessLabel(receivedAtEpochMs, color = quiet)
             }
-            Spacer(Modifier.width(20.dp))
-            when (reading) {
-                // Value, unit and metric name read as one element ("12, µg/m³, PM2.5").
-                is NowReading.Reading -> Column(Modifier.weight(1f).semantics(mergeDescendants = true) {}) {
-                    Row {
+            Spacer(Modifier.height(4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                PeacockPortrait(
+                    expression = when (reading) {
+                        is NowReading.Reading -> if (fresh) peacockExpressionFor(mood) else PeacockExpression.SLEEPING
+                        NowReading.Waiting -> PeacockExpression.CONFUSED
+                        is NowReading.SensorNotReady -> when (reading.status) {
+                            PmsStatus.WARMING -> PeacockExpression.WORKING
+                            PmsStatus.STALE -> PeacockExpression.SLEEPING
+                            PmsStatus.ABSENT, PmsStatus.ERROR -> PeacockExpression.CONCERNED
+                            PmsStatus.VALID -> PeacockExpression.CONFUSED
+                        }
+                    },
+                    size = portraitSize,
+                )
+                Spacer(Modifier.width(14.dp))
+                when (reading) {
+                    // Value, unit and metric name read as one element ("12, µg/m³, PM2.5").
+                    is NowReading.Reading -> Column(Modifier.weight(1f).semantics(mergeDescendants = true) {}) {
+                        val value = fmtPm(reading.pm25)
                         Text(
-                            fmtPm(reading.pm25),
-                            style = MaterialTheme.typography.displayLarge,
+                            value,
+                            style = if (value.length > 2 || portraitSize < 176.dp) MaterialTheme.typography.displayMedium else MaterialTheme.typography.displayLarge,
                             color = if (fresh) onCard else quiet,
                             maxLines = 1,
-                            modifier = Modifier.alignByBaseline(),
                         )
-                        Spacer(Modifier.width(6.dp))
-                        Text(metric.unit, style = MaterialTheme.typography.titleMedium, color = quiet, modifier = Modifier.alignByBaseline())
+                        Text("${metric.label}  ${metric.unit}", style = MaterialTheme.typography.titleMedium, color = quiet)
                     }
-                    Text(metric.label, style = MaterialTheme.typography.labelLarge, color = quiet)
-                }
-                NowReading.Waiting -> Text(
-                    stringResource(Res.string.now_waiting),
-                    style = MaterialTheme.typography.headlineSmall,
-                    modifier = Modifier.weight(1f).semantics { heading() },
-                )
-                is NowReading.SensorNotReady -> Column(Modifier.weight(1f)) {
-                    Text(reading.status.titleText(), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
-                    Text(reading.status.hintText(), style = MaterialTheme.typography.bodyMedium, color = quiet)
+                    NowReading.Waiting -> Text(
+                        stringResource(Res.string.now_waiting),
+                        style = MaterialTheme.typography.headlineSmall,
+                        modifier = Modifier.weight(1f).semantics { heading() },
+                    )
+                    is NowReading.SensorNotReady -> Column(Modifier.weight(1f)) {
+                        Text(reading.status.titleText(), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
+                        Text(reading.status.hintText(), style = MaterialTheme.typography.bodyMedium, color = quiet)
+                    }
                 }
             }
-        }
-        if (reading is NowReading.Reading) {
-            Spacer(Modifier.height(16.dp))
-            // The mood and its comparison read as one element.
-            Row(
-                Modifier.semantics(mergeDescendants = true) {},
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                MoodPill(reading.mood)
-                Text(reading.mood.comparisonText(), style = MaterialTheme.typography.bodySmall, color = quiet, modifier = Modifier.weight(1f))
+            if (reading is NowReading.Reading) {
+                Spacer(Modifier.height(16.dp))
+                // The mood and its comparison read as one element.
+                Row(
+                    Modifier.semantics(mergeDescendants = true) {},
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    MoodPill(reading.mood)
+                    Text(reading.mood.comparisonText(), style = MaterialTheme.typography.bodySmall, color = quiet, modifier = Modifier.weight(1f))
+                }
+                Spacer(Modifier.height(12.dp))
+                Text(reading.mood.adviceText(), style = MaterialTheme.typography.bodyLarge)
             }
-            Spacer(Modifier.height(12.dp))
-            Text(reading.mood.adviceText(), style = MaterialTheme.typography.bodyLarge)
-        }
-        if (level.developer) {
-            live?.seq?.let {
-                Text(stringResource(Res.string.now_sample_number, it), style = MaterialTheme.typography.labelSmall, color = quiet, modifier = Modifier.padding(top = 6.dp))
+            if (level.developer) {
+                live?.seq?.let {
+                    Text(stringResource(Res.string.now_sample_number, it), style = MaterialTheme.typography.labelSmall, color = quiet, modifier = Modifier.padding(top = 6.dp))
+                }
             }
         }
     }
@@ -354,13 +359,10 @@ internal fun TodaySoFarCard(today: TodaySoFar?, clockMissing: Boolean, level: De
             )
             return@BrandCard
         }
-        // The mood, the average and the share of the day read as one element. The face is decorative here, the mood is also a word.
+        // The current reading owns the page's character. This summary adds the average and coverage.
         Row(Modifier.semantics(mergeDescendants = true) {}, verticalAlignment = Alignment.CenterVertically) {
-            MoodFace(today.mood, today.mood.color(), Modifier.size(40.dp), description = null)
-            Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Text(today.mood.titleText(), style = MaterialTheme.typography.titleLarge)
-                Text(stringResource(Res.string.today_average, fmtPm(today.pm25Mean.toDouble())), style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(Res.string.today_average, fmtPm(today.pm25Mean.toDouble())), style = MaterialTheme.typography.titleLarge)
             }
             Column(horizontalAlignment = Alignment.End) {
                 Text("${(today.coverage * 100).toInt()} %", style = MaterialTheme.typography.displaySmall)
@@ -379,8 +381,8 @@ internal fun TodaySoFarCard(today: TodaySoFar?, clockMissing: Boolean, level: De
 }
 
 /**
- * Smart Sync: the sync state in words and the one primary action of Today. After a clean run the
- * peacock says so. Detailed adds how earlier readings were placed in time.
+ * Smart Sync: the sync state in words and the one primary action of Today. The hero owns the page's
+ * character, so this card adds no repeated portrait. Detailed adds how earlier readings were placed.
  */
 @Composable
 internal fun SmartSyncCard(sync: SyncProgress, archive: TodayArchive, enabled: Boolean, level: DetailLevel, onSync: () -> Unit, modifier: Modifier = Modifier) {
@@ -401,10 +403,6 @@ internal fun SmartSyncCard(sync: SyncProgress, archive: TodayArchive, enabled: B
                     // The sync state in words changes while the user waits, so screen readers hear it.
                     modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                 )
-            }
-            if (mood == SyncMood.CAUGHT_UP) {
-                Spacer(Modifier.width(8.dp))
-                Peacock(size = 72.dp)
             }
         }
         if (mood == SyncMood.RUNNING) {

@@ -307,7 +307,6 @@
     <string name="transport_ble">Bluetooth</string>
     <string name="transport_lan">Wi-Fi LAN</string>
     <string name="transport_fake">جهاز وهمي</string>
-    <string name="mood_none">لا توجد قراءة</string>
     <string name="file_chart_estimated">%1$s، تقديري</string>
     <string name="file_chart_unplaced">لا مكان له على الخط الزمني بعد. لا يملك هذا التشغيل وقتًا من الساعة.</string>
     <plurals name="file_chart_rows">

@@ -6,7 +6,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -35,9 +34,6 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import earth.walkthru.opensensor.designsystem.resources.Res
-import earth.walkthru.opensensor.designsystem.resources.peacock
-import org.jetbrains.compose.resources.painterResource
 
 /** How loud a card is. Hero is the one card per screen that carries the answer. */
 enum class CardTone { PLAIN, SOFT, HERO }
@@ -93,12 +89,21 @@ fun SectionCard(
 }
 
 /**
- * The OpenSensor peacock, the website's mascot (`public/mascots/peacock.webp`). An illustrated
- * guide for welcome, empty and success states. Never next to a chart or a number: it is not data.
+ * The OpenSensor peacock, with reference-matched expressions for readings and app states.
  * Pass a [contentDescription] only when the character says something the text beside it does not.
  */
 @Composable
-fun Peacock(modifier: Modifier = Modifier, size: Dp = 120.dp, contentDescription: String? = null) {
+fun Peacock(
+    modifier: Modifier = Modifier,
+    size: Dp = 120.dp,
+    contentDescription: String? = null,
+    expression: PeacockExpression = PeacockExpression.WELCOME,
+    animate: Boolean = true,
+) {
+    if (!animate) {
+        PeacockIcon(expression, modifier.size(size), contentDescription)
+        return
+    }
     // A finite, gentle entrance. Compose scales animation by the system animator setting, so
     // "Remove animations" shows the bird immediately.
     val visible = remember { MutableTransitionState(false).apply { targetState = true } }
@@ -107,11 +112,7 @@ fun Peacock(modifier: Modifier = Modifier, size: Dp = 120.dp, contentDescription
         enter = fadeIn(tween(420)) + scaleIn(tween(420), initialScale = 0.92f),
         modifier = modifier,
     ) {
-        Image(
-            painter = painterResource(Res.drawable.peacock),
-            contentDescription = contentDescription,
-            modifier = Modifier.size(size),
-        )
+        PeacockIcon(expression, Modifier.size(size), contentDescription)
     }
 }
 
@@ -124,11 +125,12 @@ fun MascotGuide(
     title: String,
     body: String,
     modifier: Modifier = Modifier,
+    expression: PeacockExpression = PeacockExpression.CONFUSED,
     action: (@Composable () -> Unit)? = null,
 ) {
     BrandCard(modifier = modifier, tone = CardTone.SOFT, contentPadding = PaddingValues(22.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Peacock(size = 96.dp)
+            Peacock(size = 96.dp, expression = expression)
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })

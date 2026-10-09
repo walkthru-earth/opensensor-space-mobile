@@ -63,6 +63,8 @@ import earth.walkthru.opensensor.designsystem.FloatingControl
 import earth.walkthru.opensensor.designsystem.InfoContent
 import earth.walkthru.opensensor.designsystem.InfoNote
 import earth.walkthru.opensensor.designsystem.OutlinePillButton
+import earth.walkthru.opensensor.designsystem.PeacockExpression
+import earth.walkthru.opensensor.designsystem.PeacockIcon
 import earth.walkthru.opensensor.designsystem.PillButton
 import earth.walkthru.opensensor.designsystem.SignalBars
 import earth.walkthru.opensensor.designsystem.StatLine
@@ -550,7 +552,12 @@ fun WifiCard(
                         picked = null
                     }) { Text(stringResource(Res.string.action_hide)) }
                 }
-                if (scan.accessPoints.isEmpty()) Text(stringResource(Res.string.wifi_none_found), style = MaterialTheme.typography.bodySmall)
+                if (scan.accessPoints.isEmpty()) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        PeacockIcon(PeacockExpression.CONFUSED, Modifier.size(48.dp))
+                        Text(stringResource(Res.string.wifi_none_found), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                    }
+                }
                 // One network at a time, a group of radio buttons for screen readers.
                 Column(Modifier.selectableGroup()) {
                     scan.accessPoints.forEach { ap ->

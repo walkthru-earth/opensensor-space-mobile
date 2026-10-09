@@ -84,6 +84,9 @@ import earth.walkthru.aqsync.units.UnitFormatter
 import earth.walkthru.aqsync.units.UnitSystem
 import earth.walkthru.opensensor.designsystem.FloatingControl
 import earth.walkthru.opensensor.designsystem.FloatingSurface
+import earth.walkthru.opensensor.designsystem.Peacock
+import earth.walkthru.opensensor.designsystem.PeacockExpression
+import earth.walkthru.opensensor.designsystem.PeacockIcon
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.maplibre.compose.camera.CameraPosition
@@ -160,6 +163,7 @@ private fun DiscoverContent(
             SheetContent(
                 state = state,
                 strings = strings,
+                networkAllowed = networkAllowed,
                 showAll = showAll,
                 infoButton = infoButton,
                 onAddSensor = { controller.dismissFirstRun(); onAddSensor() },
@@ -308,7 +312,7 @@ private fun TopControls(
             FloatingSurface(Modifier.padding(horizontal = 12.dp, vertical = 4.dp).fillMaxWidth()) {
                 Column(Modifier.padding(vertical = 4.dp)) {
                     if (results.isEmpty()) {
-                        Text(strings.noPlaces, Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        DiscoverStateMessage(strings.noPlaces, PeacockExpression.CONFUSED, Modifier.padding(16.dp))
                     }
                     results.forEach { place ->
                         Column(
@@ -453,6 +457,7 @@ private fun Attribution(strings: DiscoverStrings, open: Boolean, infoButton: @Co
 private fun SheetContent(
     state: DiscoverUiState,
     strings: DiscoverStrings,
+    networkAllowed: Boolean,
     showAll: Boolean,
     infoButton: @Composable (InfoText, Modifier) -> Unit,
     onAddSensor: () -> Unit,
@@ -469,18 +474,21 @@ private fun SheetContent(
     val reference = if (state.isSample) (state.newestUpdateEpochMs ?: now) else now
     Column(Modifier.fillMaxWidth().heightIn(min = PEEK_HEIGHT - 24.dp).padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
         when {
-            !state.available -> Text(strings.unavailable, style = MaterialTheme.typography.bodyLarge)
+            !state.available -> DiscoverStateMessage(strings.unavailable, PeacockExpression.CONCERNED)
             showAll -> AllProperties(state, strings, onPickProperty)
             state.selected != null -> CellDetail(state.selected, state, strings, infoButton, reference, clearSignal, onHighlight, onShowProperty)
             state.firstRun -> FirstRunCard(strings, onAddSensor, onExplore)
-            else -> InView(state, strings, reference, highlight, clearSignal, onHighlight, onPickCell)
+            else -> InView(state, strings, networkAllowed, reference, highlight, clearSignal, onHighlight, onPickCell)
         }
     }
 }
 
 @Composable
 private fun FirstRunCard(strings: DiscoverStrings, onAddSensor: () -> Unit, onExplore: () -> Unit) {
-    Text(strings.firstRunLine, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Peacock(size = 80.dp, expression = PeacockExpression.WELCOME)
+        Text(strings.firstRunLine, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f).semantics { heading() })
+    }
     Spacer(Modifier.height(12.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Button(onClick = onAddSensor) { Text(strings.addSensor) }
@@ -499,6 +507,7 @@ private fun freshness(strings: DiscoverStrings, updated: Long?, reference: Long)
 private fun InView(
     state: DiscoverUiState,
     strings: DiscoverStrings,
+    networkAllowed: Boolean,
     reference: Long,
     highlight: ValueBand?,
     clearSignal: Int,
@@ -507,11 +516,15 @@ private fun InView(
 ) {
     if (state.loading && state.rows.isEmpty()) {
         // Read out when the areas arrive or fail to, while the user waits.
-        Text(strings.loading, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+        DiscoverStateMessage(strings.loading, PeacockExpression.WORKING, Modifier.semantics { liveRegion = LiveRegionMode.Polite })
         return
     }
     if (state.rows.isEmpty()) {
-        Text(strings.noAreas, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+        DiscoverStateMessage(
+            strings.noAreas,
+            if (networkAllowed) PeacockExpression.CONFUSED else PeacockExpression.SLEEPING,
+            Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+        )
         return
     }
     // The chart comes first, so the peeking sheet shows it while the map is explored. Text follows.
@@ -552,6 +565,14 @@ private fun InView(
                 Text(strings.sensors(row.devices), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
+    }
+}
+
+@Composable
+private fun DiscoverStateMessage(text: String, expression: PeacockExpression, modifier: Modifier = Modifier) {
+    Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        PeacockIcon(expression, Modifier.size(48.dp))
+        Text(text, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

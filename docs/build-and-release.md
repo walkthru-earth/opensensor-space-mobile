@@ -44,6 +44,13 @@ Changes to `docs/` or Markdown alone skip the gate. A branch without a PR runs i
 CI runs ktlint on every file, while the local hook checks only staged files, so run
 `pre-commit run --all-files` before a merge that touches many Kotlin files.
 
+The `:ui:strings` host audits read source files across the repository. Their Gradle inputs include
+the scanned presentation Kotlin, Android and Compose string catalogues, and platform language
+and permission declarations (`ui/strings/build.gradle.kts`). A change to those files must rerun
+the audits even when `:ui:strings` compiled classes have not changed, so a previous passing result
+cannot hide new untranslated copy or missing semantics. The release workflow runs the same host
+audits through `verify`; release-only APK optimization and signer checks remain additional steps.
+
 ## Stack (verified building 2026-10-09; kotlinx-datetime 0.8.0 added for W8)
 
 | | |

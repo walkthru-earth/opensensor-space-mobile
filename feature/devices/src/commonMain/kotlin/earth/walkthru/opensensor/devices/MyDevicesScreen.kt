@@ -43,6 +43,7 @@ import earth.walkthru.opensensor.designsystem.FloatingTextButton
 import earth.walkthru.opensensor.designsystem.InfoButton
 import earth.walkthru.opensensor.designsystem.InfoContent
 import earth.walkthru.opensensor.designsystem.MascotGuide
+import earth.walkthru.opensensor.designsystem.PeacockExpression
 import earth.walkthru.opensensor.devices.resources.Res
 import earth.walkthru.opensensor.devices.resources.devices_forget_bond_ios
 import earth.walkthru.opensensor.devices.resources.devices_on_wifi
@@ -189,9 +190,9 @@ fun MyDevicesScreen(
                 // The peacock guides the empty moments, a first run or nothing nearby.
                 item(key = "guide") {
                     if (list.knownCount == 0) {
-                        MascotGuide(stringResource(Res.string.scan_welcome_title), stringResource(Res.string.scan_welcome_body))
+                        MascotGuide(stringResource(Res.string.scan_welcome_title), stringResource(Res.string.scan_welcome_body), expression = PeacockExpression.WELCOME)
                     } else {
-                        MascotGuide(stringResource(Res.string.scan_none_nearby_title), stringResource(Res.string.scan_none_nearby_body))
+                        MascotGuide(stringResource(Res.string.scan_none_nearby_title), stringResource(Res.string.scan_none_nearby_body), expression = PeacockExpression.CONFUSED)
                     }
                 }
             } else {

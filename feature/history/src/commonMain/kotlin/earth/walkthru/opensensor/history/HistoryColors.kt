@@ -1,17 +1,8 @@
 package earth.walkthru.opensensor.history
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import earth.walkthru.aqsync.airquality.WhoStep
 import earth.walkthru.aqsync.data.history.AirMood
 import earth.walkthru.aqsync.data.history.MetricSpec
@@ -19,7 +10,6 @@ import earth.walkthru.opensensor.history.resources.Res
 import earth.walkthru.opensensor.history.resources.mood_fair_title
 import earth.walkthru.opensensor.history.resources.mood_fresh_title
 import earth.walkthru.opensensor.history.resources.mood_hazy_title
-import earth.walkthru.opensensor.history.resources.mood_none
 import earth.walkthru.opensensor.history.resources.mood_poor_title
 import earth.walkthru.opensensor.history.resources.mood_smoky_title
 import earth.walkthru.opensensor.history.resources.mood_thick_title
@@ -99,49 +89,3 @@ internal fun WhoStep.labelText(): String = stringResource(
         WhoStep.ABOVE_IT1 -> Res.string.who_step_above_it1
     },
 )
-
-/**
- * The mood face of the app (app ui/components/MoodFace.kt): eyes narrowing, mouth from smile to
- * frown, a mask on the two worst steps. Colour is never the only carrier, the shape changes too.
- */
-@Composable
-internal fun MoodFace(mood: AirMood?, color: Color, modifier: Modifier = Modifier) {
-    val description = mood?.titleText() ?: stringResource(Res.string.mood_none)
-    val ink = onBand(color).copy(alpha = 0.78f)
-    Canvas(modifier.semantics { contentDescription = description }) {
-        val r = size.minDimension / 2
-        val c = Offset(size.width / 2, size.height / 2)
-        drawCircle(color, r, c)
-        drawCircle(Color.Black.copy(alpha = 0.08f), r, c, style = Stroke(r * 0.06f))
-        val eyeY = c.y - r * 0.18f
-        val eyeDx = r * 0.36f
-        val eyeH = when (mood) {
-            null, AirMood.FRESH, AirMood.FAIR -> r * 0.13f
-            AirMood.HAZY, AirMood.POOR -> r * 0.09f
-            AirMood.SMOKY, AirMood.THICK -> r * 0.05f
-        }
-        for (dx in listOf(-eyeDx, eyeDx)) {
-            drawOval(ink, Offset(c.x + dx - r * 0.12f, eyeY - eyeH), Size(r * 0.24f, eyeH * 2))
-        }
-        val curve = when (mood) {
-            AirMood.FRESH -> 1f
-            AirMood.FAIR -> 0.6f
-            AirMood.HAZY -> 0.2f
-            AirMood.POOR -> -0.2f
-            AirMood.SMOKY -> -0.6f
-            AirMood.THICK -> -1f
-            null -> 0f
-        }
-        val mouthY = c.y + r * 0.35f
-        val half = r * 0.38f
-        val path = Path().apply {
-            moveTo(c.x - half, mouthY - curve * r * 0.12f)
-            quadraticTo(c.x, mouthY + curve * r * 0.34f, c.x + half, mouthY - curve * r * 0.12f)
-        }
-        drawPath(path, ink, style = Stroke(width = r * 0.11f, cap = StrokeCap.Round))
-        if (mood == AirMood.SMOKY || mood == AirMood.THICK) {
-            drawRect(Color.White.copy(alpha = 0.85f), Offset(c.x - half * 1.1f, mouthY - r * 0.2f), Size(half * 2.2f, r * 0.42f))
-            drawRect(Color.Black.copy(alpha = 0.25f), Offset(c.x - half * 1.1f, mouthY - r * 0.2f), Size(half * 2.2f, r * 0.42f), style = Stroke(r * 0.03f))
-        }
-    }
-}

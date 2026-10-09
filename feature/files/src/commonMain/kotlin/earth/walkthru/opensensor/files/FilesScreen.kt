@@ -2,6 +2,7 @@ package earth.walkthru.opensensor.files
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -56,6 +57,9 @@ import earth.walkthru.opensensor.designsystem.AppIcons
 import earth.walkthru.opensensor.designsystem.Eyebrow
 import earth.walkthru.opensensor.designsystem.FloatingTextButton
 import earth.walkthru.opensensor.designsystem.MascotGuide
+import earth.walkthru.opensensor.designsystem.Peacock
+import earth.walkthru.opensensor.designsystem.PeacockExpression
+import earth.walkthru.opensensor.designsystem.PeacockIcon
 import earth.walkthru.opensensor.designsystem.rememberNowMillis
 import earth.walkthru.opensensor.files.resources.Res
 import earth.walkthru.opensensor.files.resources.action_back
@@ -308,11 +312,22 @@ fun FilesScreen(
                 }
                 manifest is ManifestState.Error && listing == null -> item(key = "list-failed") {
                     Surface(color = MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth()) {
-                        Text(
-                            if (level.developer) stringResource(Res.string.files_list_failed_detail, manifest.message) else stringResource(Res.string.files_list_failed_simple),
-                            Modifier.padding(16.dp),
-                            color = MaterialTheme.colorScheme.onErrorContainer,
-                        )
+                        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            PeacockIcon(PeacockExpression.CONCERNED, Modifier.size(48.dp))
+                            Text(
+                                if (level.developer) stringResource(Res.string.files_list_failed_detail, manifest.message) else stringResource(Res.string.files_list_failed_simple),
+                                Modifier.weight(1f),
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                            )
+                        }
+                    }
+                }
+            }
+            if (listing == null && groups.isEmpty() && idleHint == null && manifest is ManifestState.Idle) {
+                item(key = "archive-empty") {
+                    // The archive count in the header names the empty state, the bird reinforces it.
+                    Box(Modifier.fillMaxWidth().padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
+                        Peacock(size = 96.dp, expression = PeacockExpression.CONFUSED)
                     }
                 }
             }
@@ -368,7 +383,7 @@ fun FilesScreen(
                 }
                 if (plan != null && plan.entries.isNotEmpty() && plan.missingCount == 0) {
                     item(key = "all-synced") {
-                        MascotGuide(title = stringResource(Res.string.files_all_synced_title), body = stringResource(Res.string.files_all_synced_body))
+                        MascotGuide(title = stringResource(Res.string.files_all_synced_title), body = stringResource(Res.string.files_all_synced_body), expression = PeacockExpression.HAPPY)
                     }
                 }
                 if (listing.files.isEmpty()) item(key = "none") { Hint(stringResource(if (level.detailed) Res.string.files_none_detailed else Res.string.files_none_simple)) }
@@ -404,7 +419,10 @@ fun filesTitle(): String = stringResource(Res.string.files_title)
 
 @Composable
 private fun Hint(text: String) {
-    Text(text, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 8.dp))
+    Row(Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        PeacockIcon(PeacockExpression.CONFUSED, Modifier.size(48.dp))
+        Text(text, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+    }
 }
 
 /** How long ago [epochMs] was, refreshed every second. */
@@ -447,8 +465,17 @@ private fun SyncProgressCard(sync: SyncProgress, level: DetailLevel) {
         Column(Modifier.padding(20.dp)) {
             val on = MaterialTheme.colorScheme.onPrimaryContainer
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Eyebrow(stringResource(if (sync.running) Res.string.files_syncing else Res.string.files_last_sync), color = on, heading = true)
-                Spacer(Modifier.weight(1f))
+                PeacockIcon(
+                    when {
+                        sync.running -> PeacockExpression.WORKING
+                        sync.failures.isNotEmpty() -> PeacockExpression.CONCERNED
+                        else -> PeacockExpression.HAPPY
+                    },
+                    Modifier.size(48.dp),
+                )
+                Spacer(Modifier.width(12.dp))
+                Eyebrow(stringResource(if (sync.running) Res.string.files_syncing else Res.string.files_last_sync), modifier = Modifier.weight(1f), color = on, heading = true)
+                Spacer(Modifier.width(8.dp))
                 if (sync.running) {
                     if (level.detailed) Text(formatRate(sync.bytesPerSecond), style = MaterialTheme.typography.labelMedium, color = on)
                 } else {
