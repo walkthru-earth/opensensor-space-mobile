@@ -52,6 +52,8 @@ internal class DeviceConfigLinks(
     val disconnect: () -> Unit,
     /** Browses for sensors on Wi-Fi, which shows the local network prompt the first time. */
     val scanLan: () -> Unit,
+    /** The VisionKit sticker scanner, or null where the hardware has none. See [ScanSticker]. */
+    val scanSticker: ScanSticker?,
 )
 
 /**

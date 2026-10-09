@@ -142,4 +142,12 @@
         <item quantity="many">%1$d مستشعرًا</item>
         <item quantity="other">%1$d مستشعر</item>
     </plurals>
+
+    <!-- The sensor sticker scan. The first two keep Android's words, the rest are the iOS camera. -->
+    <string name="sensor_scan_unrecognized">هذا الرمز الشريطي ليس ملصق Plantower معروفًا. اكتبه يدويًا إن لزم.</string>
+    <string name="sensor_scan_unavailable">الماسح غير متاح. اكتب ما على الملصق أدناه.</string>
+    <string name="camera_scan_off">الوصول إلى الكاميرا متوقف. اكتب ما على الملصق أدناه.</string>
+    <string name="camera_scan_blocked">الكاميرا محظورة على هذا الـ iPhone. اكتب ما على الملصق أدناه.</string>
+    <string name="perm_camera_settings_title">الكاميرا متوقفة لهذا التطبيق</string>
+    <string name="perm_camera_settings_body">فعّل الكاميرا لتطبيق opensensor.space في الإعدادات لمسح الملصق. يمكنك أيضًا كتابته.</string>
 </resources>

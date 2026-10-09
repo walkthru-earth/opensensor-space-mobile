@@ -308,13 +308,28 @@ accuracy, stale/background handling or authenticated Wi-Fi connections. See
     Collect all running. Frames go through the
     redacting recorder Debug shows. Get Wi-Fi token and Replace token reuse Save Wi-Fi access, so the
     token stays in Swift and the Keychain, and a rotation first drops the old entry through
-    `AppServices.forgetWifiAccess`. Differences from Android: Bluetooth only, sticker by manual entry
-    until #21, no phone installation history, no device header or Auto-sync card on the page, and no
+    `AppServices.forgetWifiAccess`. Differences from Android: Bluetooth only, no phone installation history, no device header or Auto-sync card on the page, and no
     Wi-Fi endpoint line. Qualify on an iPhone that each of the four confirmations sends nothing on
     Cancel, that a Wi-Fi join is polled until connected, that Replace token stores a new token and the
     next Wi-Fi sync uses it, that Forget all paired phones asks for pairing on the next connection,
     that Restart reconnects after about 6 s, and that a sync or Collect all waiting for the link starts
     once a request ends.
+13. Done in code (#21, 2026-10-09), not yet seen on an iPhone. The sensor sticker card scans with
+    VisionKit `DataScannerViewController` (`ios/App/StickerScanner.swift`), which reads the first
+    barcode of any symbology, as Android's scanner does. Swift passes `scanSticker` to
+    `mainViewController` only where `DataScannerViewController.isSupported` is true (A12 and later),
+    so Scan is hidden elsewhere. The Scan tap runs `UserAction.SCAN_STICKER` through `:ui:permissions`,
+    which shows the system camera prompt with no rationale of its own, as for Bluetooth, Wi-Fi and
+    location (`StickerScan.kt`, AVFoundation status),
+    and only then presents the scanner, which checks `isAvailable` (false until the grant or under a
+    Screen Time restriction). Only the decoded string reaches Kotlin, through `StickerScans.read`, the
+    same `SensorLabel` parser and model check as typed text. Cancel leaves the card as it was. No frame
+    is stored, logged or uploaded. `NSCameraUsageDescription` is in `Info.plist` and
+    `InfoPlist.xcstrings`. The privacy manifest needs no change (store-compliance.md). Parity P58,
+    P61 to P63. Qualify on an iPhone that launch shows no camera prompt, that the first Scan tap shows
+    the system prompt directly, that a refusal leaves the note and manual entry, that a
+    later tap offers Settings, that a real PMS5003T sticker fills the field and saves, that Cancel keeps
+    the field, and that the scanner stops the camera when it closes.
 
 LAN and Bluetooth file sync use the shared Kotlin engine. Swift keeps the sockets, Core
 Bluetooth, LAN framing, the HELLO check, keepalive, the BLE token request and Keychain.

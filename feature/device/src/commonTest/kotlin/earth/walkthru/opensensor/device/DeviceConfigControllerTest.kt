@@ -377,6 +377,23 @@ class DeviceConfigControllerTest {
     }
 
     @Test
+    fun scannedStickerGoesThroughTheSameParserAndModelCheck() = runTest {
+        val source = FakeSource()
+        val c = controller(source)
+        val notices = collectNotices(c)
+        val sticker = "PMS5003T-202604081332"
+        source.sensorAnswer = config(sensor = SensorConfig("Plantower", "PMS5003T", sticker, 0))
+        val scanned = StickerScans.read(null, " $sticker ", "unrecognized")?.value ?: error("not parsed")
+        c.saveSensor(scanned, batchEstimate = false, stickerSource = STICKER_SOURCE_BARCODE)
+        assertEquals(listOf("Plantower PMS5003T $sticker PMS5003T-20260408 barcode"), source.recorded)
+        // A scanned sticker of another model parses, and the model check still refuses it.
+        val other = StickerScans.read(null, "PMS5003-202604081332", "unrecognized")?.value ?: error("not parsed")
+        c.saveSensor(other, batchEstimate = false, stickerSource = STICKER_SOURCE_BARCODE)
+        assertEquals(1, source.recorded.size)
+        assertEquals(listOf(DeviceConfigNotice.SensorSaved(false), DeviceConfigNotice.StickerInvalid), notices)
+    }
+
+    @Test
     fun stickerSaveFailureIsReported() = runTest {
         val source = FakeSource()
         val c = controller(source)

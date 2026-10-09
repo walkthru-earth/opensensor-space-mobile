@@ -135,6 +135,7 @@ final class AppServices {
 
 final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
+    private let stickerScanner = StickerScanner()
     private var services: AppServices? { (UIApplication.shared.delegate as? AppDelegate)?.services }
 
     func scene(
@@ -167,12 +168,24 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             openDebugLink: { device in bluetooth.openDebugLink(device: device) },
             command: { command in bluetooth.command(command) },
             openConfigLink: { device in bluetooth.openConfigLink(device: device) },
-            forgetWifiAccess: { [weak services] device in services?.forgetWifiAccess(device: device) }
+            forgetWifiAccess: { [weak services] device in services?.forgetWifiAccess(device: device) },
+            // Nil on hardware without VisionKit data scanning, which hides Scan on the sticker card.
+            scanSticker: StickerScanner.isSupported
+                ? { [weak self] onResult in
+                    // Kotlin exports the nested callback as returning KotlinUnit.
+                    KotlinBoolean(value: self?.scanSticker { value in _ = onResult(value) } ?? false)
+                }
+                : nil
         )
         let window = UIWindow(windowScene: windowScene)
         window.rootViewController = controller
         window.makeKeyAndVisible()
         self.window = window
+    }
+
+    /// Presents the sticker scanner over this scene's screen. Only the decoded string reaches Kotlin.
+    private func scanSticker(onResult: @escaping (String?) -> Void) -> Bool {
+        stickerScanner.scan(from: window?.rootViewController, onResult: onResult)
     }
 
     func sceneDidEnterBackground(_ scene: UIScene) {

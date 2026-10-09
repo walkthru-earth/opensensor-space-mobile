@@ -96,7 +96,7 @@ class TranslationsTest {
         val plist = File(Catalogues.root, "ios/App/Info.plist").readText()
         val purposes = Regex("""<key>(NS\w+UsageDescription)</key><string>([^<]*)</string>""").findAll(plist)
             .associate { it.groupValues[1] to it.groupValues[2] }
-        assertEquals(setOf("NSBluetoothAlwaysUsageDescription", "NSLocalNetworkUsageDescription", "NSLocationWhenInUseUsageDescription"), purposes.keys)
+        assertEquals(setOf("NSBluetoothAlwaysUsageDescription", "NSCameraUsageDescription", "NSLocalNetworkUsageDescription", "NSLocationWhenInUseUsageDescription"), purposes.keys)
         val catalog = File(Catalogues.root, "ios/App/InfoPlist.xcstrings").readText()
         val project = File(Catalogues.root, "ios/OpenSensor.xcodeproj/project.pbxproj").readText()
         assertTrue("path = InfoPlist.xcstrings;" in project, "InfoPlist.xcstrings is not in the Xcode project")

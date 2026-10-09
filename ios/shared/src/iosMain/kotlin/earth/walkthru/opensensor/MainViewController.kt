@@ -23,6 +23,9 @@ import platform.UIKit.UIViewController
  * [openConfigLink] lends Device settings a link under the same guards as [command], and closing it
  * settles the link as a command's end does. [forgetWifiAccess] drops the Keychain token and any
  * Wi-Fi session of a hardware id after the user rotated the token.
+ * [scanSticker] presents the VisionKit sticker scanner and answers the decoded string, or null on a
+ * cancel ([ScanSticker]). Swift passes null where `DataScannerViewController.isSupported` is false,
+ * which hides Scan on the sticker card. Camera access is asked in Kotlin from the Scan tap first.
  */
 fun mainViewController(
     state: CompanionState,
@@ -43,6 +46,7 @@ fun mainViewController(
     command: (SensorCommand) -> Unit,
     openConfigLink: (String) -> SensorLink?,
     forgetWifiAccess: (String) -> Unit,
+    scanSticker: ScanSticker?,
 ): UIViewController =
     ComposeUIViewController {
         // A sensor the user opens takes the one Bluetooth link, so Collect all stops first.
@@ -60,6 +64,7 @@ fun mainViewController(
                 reopen = openSensor,
                 disconnect = disconnect,
                 scanLan = scanLan,
+                scanSticker = scanSticker,
             )
         }
         AppRoot(devices, today, requestBluetooth, userOpen, openDebugLink, closeIdle, configLinks) { id, units, level, openDebug, openSettings, onBack ->

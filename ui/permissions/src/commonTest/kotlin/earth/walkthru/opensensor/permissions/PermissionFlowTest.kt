@@ -118,6 +118,20 @@ class PermissionFlowTest {
         assertEquals(setOf(UserAction.WIFI_ACTION, UserAction.SAVE_WIFI_ACCESS), PermissionTriggers.actionsAsking(AccessKind.LOCAL_NETWORK))
         assertEquals(setOf(UserAction.NEAR_ME), PermissionTriggers.actionsAsking(AccessKind.APPROX_LOCATION))
         assertEquals(setOf(UserAction.SYNC, UserAction.AUTO_SYNC_ON), PermissionTriggers.actionsAsking(AccessKind.NOTIFICATIONS))
+        assertEquals(setOf(UserAction.SCAN_STICKER), PermissionTriggers.actionsAsking(AccessKind.CAMERA))
+    }
+
+    @Test
+    fun cameraIsAskedOnlyFromScanAndManualEntryStays() {
+        assertEquals(setOf(AccessKind.CAMERA), PermissionTriggers.of(UserAction.SCAN_STICKER).required)
+        // A first tap shows the prompt, a fresh refusal is respected, a later tap offers Settings.
+        assertEquals(AccessStep.ASK, PermissionFlow.onTap(IosAuthorization.camera(IosAuthorization.NOT_DETERMINED)))
+        assertEquals(AccessStep.DECLINED, PermissionFlow.onResult(IosAuthorization.camera(IosAuthorization.DENIED)))
+        assertEquals(AccessStep.OPEN_SETTINGS, PermissionFlow.onTap(IosAuthorization.camera(IosAuthorization.DENIED)))
+        // Restricted by device management or Screen Time, Settings cannot help.
+        assertEquals(AccessStep.DECLINED, PermissionFlow.onTap(IosAuthorization.camera(IosAuthorization.RESTRICTED)))
+        assertEquals(AccessStep.READY, PermissionFlow.onTap(IosAuthorization.camera(IosAuthorization.CAMERA_AUTHORIZED)))
+        assertEquals(AccessStatus.UNKNOWN, IosAuthorization.camera(9))
     }
 
     @Test

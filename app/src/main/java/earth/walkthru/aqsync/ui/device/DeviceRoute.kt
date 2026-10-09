@@ -18,7 +18,6 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import earth.walkthru.aqsync.R
-import earth.walkthru.aqsync.data.SensorLabel
 import earth.walkthru.aqsync.ui.components.CollectEvents
 import earth.walkthru.aqsync.ui.components.showScreenMessage
 import earth.walkthru.aqsync.ui.permissions.AccessDialogs
@@ -30,6 +29,7 @@ import earth.walkthru.opensensor.device.DeviceConfigAction
 import earth.walkthru.opensensor.device.DeviceConfigEffects
 import earth.walkthru.opensensor.device.LanAccess
 import earth.walkthru.opensensor.device.StickerScan
+import earth.walkthru.opensensor.device.StickerScans
 import earth.walkthru.opensensor.device.onAction
 
 /**
@@ -108,15 +108,9 @@ fun DeviceRoute(
                 DeviceAction.RemoveCompanion -> viewModel.removeCompanion()
                 is DeviceAction.Config -> when (val a = action.action) {
                     DeviceConfigAction.ScanSticker -> GmsBarcodeScanning.getClient(context).startScan()
-                        .addOnSuccessListener { barcode ->
-                            val value = barcode.rawValue.orEmpty()
-                            stickerScan = if (SensorLabel.parse(value) == null) {
-                                StickerScan(null, scanUnrecognized, System.nanoTime())
-                            } else {
-                                StickerScan(value.trim(), null, System.nanoTime())
-                            }
-                        }
-                        .addOnFailureListener { stickerScan = StickerScan(null, scanUnavailable, System.nanoTime()) }
+                        // The same reading as iOS (StickerScans). A cancel has no listener and leaves the card as it was.
+                        .addOnSuccessListener { barcode -> stickerScan = StickerScans.read(stickerScan, barcode.rawValue.orEmpty(), scanUnrecognized) }
+                        .addOnFailureListener { stickerScan = StickerScans.failed(stickerScan, scanUnavailable) }
                     DeviceConfigAction.RequestLanAccess -> localNetwork.run { }
                     is DeviceConfigAction.SetLanOn -> if (a.on) localNetwork.run { controller.setLanOn(true) } else controller.setLanOn(false)
                     // The token is fetched over Bluetooth. Local network is asked for here because the

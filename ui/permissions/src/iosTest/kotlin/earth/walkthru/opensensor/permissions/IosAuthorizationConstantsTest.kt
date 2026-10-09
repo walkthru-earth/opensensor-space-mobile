@@ -1,5 +1,9 @@
 package earth.walkthru.opensensor.permissions
 
+import platform.AVFoundation.AVAuthorizationStatusAuthorized
+import platform.AVFoundation.AVAuthorizationStatusDenied
+import platform.AVFoundation.AVAuthorizationStatusNotDetermined
+import platform.AVFoundation.AVAuthorizationStatusRestricted
 import platform.CoreBluetooth.CBManagerAuthorizationAllowedAlways
 import platform.CoreBluetooth.CBManagerAuthorizationDenied
 import platform.CoreBluetooth.CBManagerAuthorizationNotDetermined
@@ -43,5 +47,13 @@ class IosAuthorizationConstantsTest {
         assertEquals(AccessStatus.GRANTED, IosAuthorization.notifications(UNAuthorizationStatusAuthorized))
         assertEquals(AccessStatus.GRANTED, IosAuthorization.notifications(UNAuthorizationStatusProvisional))
         assertEquals(AccessStatus.GRANTED, IosAuthorization.notifications(UNAuthorizationStatusEphemeral))
+    }
+
+    @Test
+    fun cameraConstants() {
+        assertEquals(AccessStatus.NOT_DETERMINED, IosAuthorization.camera(AVAuthorizationStatusNotDetermined))
+        assertEquals(AccessStatus.RESTRICTED, IosAuthorization.camera(AVAuthorizationStatusRestricted))
+        assertEquals(AccessStatus.DENIED, IosAuthorization.camera(AVAuthorizationStatusDenied))
+        assertEquals(AccessStatus.GRANTED, IosAuthorization.camera(AVAuthorizationStatusAuthorized))
     }
 }
