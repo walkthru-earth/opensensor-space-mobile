@@ -10,8 +10,8 @@ import earth.walkthru.aqsync.ui.debug.DebugScreen
 import earth.walkthru.aqsync.ui.device.DeviceRoute
 import earth.walkthru.aqsync.ui.device.TodayRoute
 import earth.walkthru.aqsync.ui.discover.DiscoverRoute
-import earth.walkthru.aqsync.ui.files.FilesScreen
-import earth.walkthru.aqsync.ui.history.FileMetricsScreen
+import earth.walkthru.aqsync.ui.files.FileMetricsRoute
+import earth.walkthru.aqsync.ui.files.FilesRoute
 import earth.walkthru.aqsync.ui.history.HistoryScreen
 import earth.walkthru.aqsync.ui.permissions.rememberLanGranted
 import earth.walkthru.aqsync.ui.scan.ScanScreen
@@ -71,7 +71,7 @@ private fun EntryProviderScope<NavKey>.androidEntries(nav: TabNavigator) {
         )
     }
     entry<FilesKey> { key ->
-        FilesScreen(
+        FilesRoute(
             address = key.address,
             onOpenToday = { nav.openSection(TodayKey(key.address)) },
             onOpenHistory = { nav.openSection(HistoryKey(key.address)) },
@@ -81,7 +81,7 @@ private fun EntryProviderScope<NavKey>.androidEntries(nav: TabNavigator) {
         )
     }
     entry<FileMetricsKey> { key ->
-        FileMetricsScreen(
+        FileMetricsRoute(
             station = key.station,
             name = key.name,
             onBack = { nav.popIfTop { it is FileMetricsKey } },

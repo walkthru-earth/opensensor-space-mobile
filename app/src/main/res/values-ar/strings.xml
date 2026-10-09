@@ -449,14 +449,7 @@
     <string name="v1_body">تحتاج الإعدادات إلى برنامج ثابت أحدث. المزامنة ما زالت تعمل.</string>
 
     <!-- Files -->
-    <string name="files_title">الملفات</string>
-    <string name="files_all_synced_title">تمت مزامنة الكل</string>
-    <string name="files_all_synced_body">كل شيء على هذا الهاتف وتم فحصه.</string>
-    <string name="files_none_simple">لا ملفات بعد. يحفظ المستشعر ملفًا كل بضع دقائق.</string>
-    <string name="files_none_detailed">لا ملفات مكتملة بعد. استخدم الإنهاء في شاشة اليوم لإنشاء ملف.</string>
     <string name="files_connect_to_list">اتصل لعرض الملفات على المستشعر.</string>
-    <string name="files_listing">جارٍ قراءة قائمة الملفات…</string>
-    <string name="files_list_failed_simple">تعذّرت قراءة قائمة الملفات. حاول مرة أخرى.</string>
 
     <!-- Settings and the bottom bar tabs. Their copy lives in feature/settings and ui/strings composeResources, shared with iOS. -->
 
@@ -509,85 +502,15 @@
     <string name="tab_device">الجهاز</string>
 
     <!-- Files -->
-    <string name="files_in_archive">%1$d في الأرشيف، %2$s</string>
-    <string name="files_refresh">تحديث القائمة</string>
-    <string name="files_more">المزيد</string>
     <string name="files_bg_queued">المزامنة في الخلفية في الانتظار…</string>
     <string name="files_bg_sync">زامِن الآن في الخلفية</string>
     <string name="files_autosync_on">المزامنة التلقائية كل %1$d دقيقة مفعّلة</string>
     <string name="files_autosync_off">المزامنة التلقائية كل %1$d دقيقة متوقفة</string>
-    <string name="files_share_zip">مشاركة الأرشيف كملف zip</string>
-    <string name="files_save_zip">حفظ ملف zip في…</string>
-    <plurals name="files_share_all">
-        <item quantity="zero">مشاركة %1$d ملف Parquet</item>
-        <item quantity="one">مشاركة ملف Parquet واحد (%1$d)</item>
-        <item quantity="two">مشاركة ملفَي Parquet (%1$d)</item>
-        <item quantity="few">مشاركة %1$d ملفات Parquet</item>
-        <item quantity="many">مشاركة %1$d ملفًا بصيغة Parquet</item>
-        <item quantity="other">مشاركة %1$d ملف Parquet</item>
-    </plurals>
-    <string name="files_share_daily">مشاركة الملفات اليومية</string>
     <string name="files_stop">إيقاف</string>
-    <plurals name="files_sync_all">
-        <item quantity="zero">زامِن الكل، %1$d ملف، %2$s</item>
-        <item quantity="one">زامِن ملفًا واحدًا (%1$d)، %2$s</item>
-        <item quantity="two">زامِن ملفين (%1$d)، %2$s</item>
-        <item quantity="few">زامِن الكل، %1$d ملفات، %2$s</item>
-        <item quantity="many">زامِن الكل، %1$d ملفًا، %2$s</item>
-        <item quantity="other">زامِن الكل، %1$d ملف، %2$s</item>
-    </plurals>
-    <string name="files_list_failed_detail">تعذّرت قراءة قائمة الملفات. %1$s</string>
-    <plurals name="files_dev_summary">
-        <item quantity="zero">%1$d ملف مكتمل، %2$d جزئي، %3$s من %4$s</item>
-        <item quantity="one">ملف مكتمل واحد (%1$d)، %2$d جزئي، %3$s من %4$s</item>
-        <item quantity="two">ملفان مكتملان (%1$d)، %2$d جزئي، %3$s من %4$s</item>
-        <item quantity="few">%1$d ملفات مكتملة، %2$d جزئي، %3$s من %4$s</item>
-        <item quantity="many">%1$d ملفًا مكتملًا، %2$d جزئي، %3$s من %4$s</item>
-        <item quantity="other">%1$d ملف مكتمل، %2$d جزئي، %3$s من %4$s</item>
-    </plurals>
-    <string name="files_refreshing">جارٍ التحديث…</string>
-    <string name="files_listed">القائمة من %1$s</string>
-    <string name="files_refresh_failed">فشل التحديث. تظهر آخر قائمة. %1$s</string>
-    <plurals name="files_frame_mismatch">
-        <item quantity="zero">أعلن الجهاز عن %1$d ملف لكنه أرسل %2$d من إطارات FILE.</item>
-        <item quantity="one">أعلن الجهاز عن ملف واحد (%1$d) لكنه أرسل %2$d من إطارات FILE.</item>
-        <item quantity="two">أعلن الجهاز عن ملفين (%1$d) لكنه أرسل %2$d من إطارات FILE.</item>
-        <item quantity="few">أعلن الجهاز عن %1$d ملفات لكنه أرسل %2$d من إطارات FILE.</item>
-        <item quantity="many">أعلن الجهاز عن %1$d ملفًا لكنه أرسل %2$d من إطارات FILE.</item>
-        <item quantity="other">أعلن الجهاز عن %1$d ملف لكنه أرسل %2$d من إطارات FILE.</item>
-    </plurals>
-    <string name="files_syncing">جارٍ المزامنة</string>
-    <string name="files_last_sync">آخر مزامنة</string>
-    <plurals name="files_of_total">
-        <item quantity="zero">من %1$d ملف</item>
-        <item quantity="one">من ملف واحد (%1$d)</item>
-        <item quantity="two">من ملفين (%1$d)</item>
-        <item quantity="few">من %1$d ملفات</item>
-        <item quantity="many">من %1$d ملفًا</item>
-        <item quantity="other">من %1$d ملف</item>
-    </plurals>
     <string name="files_bytes_of">%1$s من %2$s</string>
-    <plurals name="files_recovered">
-        <item quantity="zero">استُعيدت %1$d نافذة مفقودة</item>
-        <item quantity="one">استُعيدت نافذة مفقودة واحدة (%1$d)</item>
-        <item quantity="two">استُعيدت نافذتان مفقودتان (%1$d)</item>
-        <item quantity="few">استُعيدت %1$d نوافذ مفقودة</item>
-        <item quantity="many">استُعيدت %1$d نافذة مفقودة</item>
-        <item quantity="other">استُعيدت %1$d نافذة مفقودة</item>
-    </plurals>
-    <string name="files_resumed">استُؤنفت من %1$s</string>
-    <string name="file_synced">تمت المزامنة والتحقق</string>
-    <string name="file_syncing">جارٍ مزامنة %1$s من %2$s</string>
-    <string name="file_partial">جزئي %1$s، يمكن استئنافه</string>
-    <string name="file_not_synced">لم تتم المزامنة</string>
-    <string name="file_mismatch">غير مطابق</string>
-    <string name="file_invalid">اسم غير صالح</string>
-    <string name="file_metrics">المقاييس</string>
-    <string name="file_share">مشاركة</string>
     <string name="files_autosync_event_on">المزامنة التلقائية مفعّلة، كل %1$d دقيقة تقريبًا.</string>
     <string name="files_autosync_event_off">المزامنة التلقائية متوقفة لهذا المستشعر.</string>
     <string name="files_bg_event">المزامنة في الخلفية في الانتظار. يمكنك مغادرة التطبيق.</string>
-    <string name="files_no_daily">لا توجد ملفات يومية بعد. تحتاج إلى ملفات متزامنة فيها وقت.</string>
     <string name="chart_by_file">رسم بياني حسب الملف</string>
     <plurals name="chart_by_file_summary">
         <item quantity="zero">%1$d ملف، %2$s</item>
@@ -726,24 +649,8 @@
     <string name="msg_identity_station_ble">تغيّرت محطة المستشعر. أعد الاتصال عبر Bluetooth للتحقق منها.</string>
     <string name="msg_identity_station_hardware">تغيّرت محطة المستشعر دون معرّف عتاد مطابق.</string>
 
-    <!-- Files group headers (files/FileGrouping.kt returns typed titles) -->
-    <string name="files_group_count">%1$d/%2$d · %3$s</string>
-    <string name="files_group_utc_day">%1$s، يوم بتوقيت UTC</string>
-    <string name="files_group_unsynced">غير متزامنة، بلا UTC</string>
-    <string name="files_group_benchmarks">اختبارات الأداء</string>
-    <string name="files_group_legacy">Parquet قديمة</string>
-    <string name="files_group_root">جذر الأرشيف</string>
+    <!-- Station label in the scan list. The Files screen strings live in :feature:files. -->
     <string name="files_group_station">المحطة %1$s</string>
-    <string name="files_group_boot">الإقلاع %1$s</string>
-    <plurals name="files_group_utc_folders">
-        <item quantity="zero">مجلدات UTC %1$s</item>
-        <item quantity="one">مجلد UTC %1$s</item>
-        <item quantity="two">مجلدا UTC %1$s</item>
-        <item quantity="few">مجلدات UTC %1$s</item>
-        <item quantity="many">مجلدات UTC %1$s</item>
-        <item quantity="other">مجلدات UTC %1$s</item>
-    </plurals>
-    <string name="files_group_unrecognised">تنظيم غير معروف</string>
 
     <!-- Scan archive line. Mood, metric, value, unit, day. -->
     <string name="scan_archive_day">%1$s، %2$s %3$s %4$s في %5$s</string>
@@ -775,16 +682,6 @@
     <string name="device_payload">الحمولة %1$d B</string>
     <string name="wifi_scan_unavailable">لا يستطيع Wi-Fi في المستشعر البحث الآن.</string>
     <string name="wifi_scan_failed">لم يكتمل البحث. حاول مرة أخرى.</string>
-    <string name="share_file">مشاركة ملف Parquet</string>
-    <plurals name="share_files">
-        <item quantity="zero">مشاركة %1$d ملف Parquet</item>
-        <item quantity="one">مشاركة %1$d ملف Parquet</item>
-        <item quantity="two">مشاركة %1$d ملفَي Parquet</item>
-        <item quantity="few">مشاركة %1$d ملفات Parquet</item>
-        <item quantity="many">مشاركة %1$d ملفًا Parquet</item>
-        <item quantity="other">مشاركة %1$d ملف Parquet</item>
-    </plurals>
-    <string name="share_archive">مشاركة الأرشيف</string>
     <string name="notif_channel_progress">تقدّم المزامنة</string>
     <string name="notif_channel_progress_desc">يظهر أثناء نسخ الملفات من مستشعر. يُبقي النقل مستمرًا عند إطفاء الشاشة.</string>
     <string name="notif_channel_summary">نتائج المزامنة</string>
@@ -820,41 +717,8 @@
         <item quantity="other">تعذّر التحقق من %1$d ملف. ستُعاد المحاولة في المرة القادمة.</item>
     </plurals>
     <string name="notif_verified">تم التحقق منها وحفظها في الأرشيف على هذا الهاتف.</string>
-    <string name="files_refresh_failed_simple">فشل التحديث. نعرض آخر قائمة.</string>
 
-    <!-- File inspector (history/FileMetricsScreen.kt). Detailed and Developer only. -->
-    <string name="fm_failed_missing">هذا الملف غير موجود في الأرشيف على هذا الهاتف.</string>
-    <string name="fm_failed_refused">لا يستطيع قارئ التطبيق فك ترميز هذا الملف.</string>
-    <string name="fm_failed_unreadable">تعذّرت قراءة هذا الملف من تخزين الهاتف.</string>
-    <string name="fm_failed_archive_safe">نسخة الأرشيف لم تُمس. اجتازت فحوص الحجم وCRC-32 وPAR1 عند مزامنتها. قارئ التطبيق وحده لم يستطع فك ترميزها.</string>
-    <string name="fm_file">الملف</string>
-    <string name="fm_size">الحجم</string>
-    <string name="fm_size_footer">%1$s · التذييل %2$s</string>
-    <string name="fm_rows">الصفوف</string>
-    <string name="fm_columns">الأعمدة</string>
-    <string name="fm_columns_codec">%1$d · الترميز %2$s</string>
-    <string name="fm_schema">المخطط</string>
-    <string name="fm_writer">الكاتب</string>
-    <string name="fm_statistics">الإحصاءات</string>
-    <string name="fm_statistics_minmax">الأدنى والأعلى لكل عمود (v6)</string>
-    <string name="fm_statistics_nulls">أعداد القيم الفارغة فقط (v1 وv2)</string>
-    <string name="fm_index_source">مصدر الفهرس</string>
-    <string name="fm_index_footer">إحصاءات التذييل</string>
-    <string name="fm_index_rows">الصفوف المفكوكة</string>
-    <string name="fm_decode_time">وقت فك الترميز</string>
-    <string name="fm_decode_ms">%1$d ms لكل الأعمدة</string>
-    <string name="fm_benchmark">نسخة قياس أداء من صفوف مكررة، الغرض %1$s. مستبعدة من السجل.</string>
-    <string name="fm_time">الوقت</string>
-    <string name="fm_utc_rows">صفوف UTC</string>
-    <string name="fm_first">الأول</string>
-    <string name="fm_last">الأخير</string>
-    <string name="fm_utc">UTC</string>
-    <string name="fm_utc_none">لا شيء، لم تكن للمستشعر ساعة</string>
-    <string name="fm_valid_pm_rows">صفوف الجسيمات الصالحة</string>
-    <string name="fm_uptime_span">مدة التشغيل</string>
-    <string name="fm_sequence">التسلسل</string>
-    <string name="fm_boot">التشغيل</string>
-    <string name="fm_row_groups">مجموعات الصفوف</string>
+    <!-- Row count for the chart by file and Debug. The inspector strings live in :feature:files. -->
     <plurals name="fm_rows_count">
         <item quantity="zero">%1$d صف</item>
         <item quantity="one">%1$d صف</item>
@@ -863,17 +727,6 @@
         <item quantity="many">%1$d صفًا</item>
         <item quantity="other">%1$d صف</item>
     </plurals>
-    <string name="fm_row_groups_note">تأتي المدد من إحصاءات التذييل دون فك ترميز الصفوف.</string>
-    <string name="fm_columns_decoded">الأعمدة · مفكوكة</string>
-    <string name="fm_col_name">الاسم</string>
-    <string name="fm_col_nulls">الفارغة</string>
-    <string name="fm_col_min">الأدنى</string>
-    <string name="fm_col_max">الأعلى</string>
-    <string name="fm_col_timestamp">الطابع الزمني ns UTC</string>
-    <string name="fm_col_first_last">الأول %1$s · الأخير %2$s</string>
-    <string name="fm_col_footer_agrees">التذييل مطابق</string>
-    <string name="fm_col_footer_says">التذييل يقول من %1$s إلى %2$s</string>
-    <string name="fm_metadata">بيانات الملف الوصفية</string>
 
     <!-- Debug (debug/DebugScreen.kt). Developer level only. Protocol tokens are data. -->
     <string name="debug_transport_title">وسيلة النقل النشطة</string>
