@@ -31,14 +31,6 @@
     <string name="scan_fake">جهاز وهمي للتصحيح</string>
     <string name="scan_fake_lan">جهاز وهمي للتصحيح (عبر LAN)</string>
     <string name="scan_more">المزيد</string>
-    <plurals name="scan_files">
-        <item quantity="zero">%1$d ملف</item>
-        <item quantity="one">%1$d ملف</item>
-        <item quantity="two">%1$d ملفان</item>
-        <item quantity="few">%1$d ملفات</item>
-        <item quantity="many">%1$d ملفًا</item>
-        <item quantity="other">%1$d ملف</item>
-    </plurals>
 
     <!-- Today -->
     <string name="today_title">اليوم</string>
@@ -594,7 +586,6 @@
     <string name="msg_identity_station_hardware">تغيّرت محطة المستشعر دون معرّف عتاد مطابق.</string>
 
     <!-- Station label in the scan list. The Files screen strings live in :feature:files. -->
-    <string name="files_group_station">المحطة %1$s</string>
 
     <!-- Scan archive line. Mood, metric, value, unit, day. -->
     <!-- Relative time -->

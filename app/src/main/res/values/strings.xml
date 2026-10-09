@@ -30,10 +30,6 @@
     <string name="scan_fake">Debug fake device</string>
     <string name="scan_fake_lan">Debug fake device (as LAN)</string>
     <string name="scan_more">More</string>
-    <plurals name="scan_files">
-        <item quantity="one">%1$d file</item>
-        <item quantity="other">%1$d files</item>
-    </plurals>
 
     <!-- Today -->
     <string name="today_title">Today</string>
@@ -530,7 +526,6 @@
     <string name="msg_identity_station_hardware">The sensor station changed without a matching hardware ID.</string>
 
     <!-- Station label in the scan list. The Files screen strings live in :feature:files. -->
-    <string name="files_group_station">station %1$s</string>
 
     <!-- Scan archive line. Mood, metric, value, unit, day. -->
 

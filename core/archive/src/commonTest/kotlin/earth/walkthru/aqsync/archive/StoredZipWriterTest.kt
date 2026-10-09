@@ -165,7 +165,7 @@ class StoredZipWriterTest {
     fun unsafeOrRepeatedNamesAreRefused() {
         val w = StoredZipWriter(MemorySink())
         val r = ByteArrayReader(byteArrayOf(1))
-        for (bad in listOf("", "/abs", "a/../b", "a//b", "a/")) {
+        for (bad in listOf("", "/abs", "a/../b", "a//b", "a/", "./a", "a\\..\\b", "C:/x", "a\u0000b", "a\nb")) {
             assertFailsWith<IllegalArgumentException>(bad) { w.add(bad, r, 0) }
         }
         w.add("a", r, 0)

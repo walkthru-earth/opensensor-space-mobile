@@ -43,7 +43,7 @@ class StoredZipWriter(
     /** Adds one STORED entry named [path] with the bytes of [reader]. */
     fun add(path: String, reader: ByteReader, modifiedEpochMs: Long) {
         check(!finished) { "zip already finished" }
-        require(path.isNotEmpty() && !path.startsWith("/") && path.split('/').none { it == ".." || it.isEmpty() }) { "unsafe zip entry name" }
+        require(isSafeEntryName(path)) { "unsafe zip entry name" }
         require(names.add(path)) { "duplicate zip entry $path" }
         val size = reader.size
         val crc = checksum(reader)
@@ -208,3 +208,14 @@ class StoredZipWriter(
         }
     }
 }
+
+/**
+ * A relative, forward slash entry name that cannot leave the folder it is unzipped into on any
+ * system. No empty, `.` or `..` segment, no backslash, no control character and no drive letter.
+ */
+internal fun isSafeEntryName(path: String): Boolean =
+    path.isNotEmpty() &&
+        !path.startsWith("/") &&
+        path.none { it == '\\' || it.code < 0x20 || it.code == 0x7F } &&
+        !(path.length >= 2 && path[1] == ':') &&
+        path.split('/').none { it.isEmpty() || it == "." || it == ".." }
