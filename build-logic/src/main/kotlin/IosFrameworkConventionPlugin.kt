@@ -27,6 +27,8 @@ class IosFrameworkConventionPlugin : Plugin<Project> {
                 binaries.framework {
                     baseName = OpenSensorConventions.IOS_FRAMEWORK_NAME
                     isStatic = true
+                    // Same as -Xbinary=bundleId=, so the link does not guess one from the base name.
+                    binaryOption("bundleId", "earth.walkthru.opensensor.shared")
                 }
             }
         }
