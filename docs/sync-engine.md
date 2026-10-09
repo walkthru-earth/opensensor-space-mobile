@@ -179,6 +179,19 @@ every remaining file, and LAN never dropped the stale token. iOS now ends with `
 `BUSY`. Android ends the run as `FAILURE` with the "sync stopped early" message. Host test
 `ArchiveCollectorTest`, `SensorSyncTest` on the simulator.
 
+**This phone's storage fails one file (2026-10-09).** Every `ArchiveStore` and `ArchiveIndex`
+call in `SyncEngine` (exists, open, write, sync, verify read, discard, commit, receipt) turns a
+failure into `FileOutcome.Failed(storage = true)` for that file, `FileProblem.STORAGE` in the
+summary, and the next file runs. The engine logs the file name, the exception class and its
+message, never bytes or secrets. Verified bytes stay as a partial for the next run. iOS ends such a
+run with `SyncEnd.STORAGE_FAILED` (`companion_sync_storage_failed`) and keeps the link. A protocol
+fault still ends the run with `SyncEnd.FAILED` (`msg_sync_aborted`), logged by class and message,
+and also keeps the link, BLE included. Android changes. Before, a disk-full or move failure threw
+out of the collection and the run ended with `SyncAborted`. Now Android shows `msg_file_failed` for
+that file and goes on. A directory at a final path used to be a per-file `Mismatch` ("archive
+destination is not a file") and is now a per-file storage failure. Host test
+`ArchiveCollectorTest`, `SensorSyncTest` on the simulator.
+
 **The post-sync `LIST` runs inside the run.** A `FLUSH` or a rotation may have finalized a file
 while we were pulling, so a completed run re-lists — *before* `running` turns false, because the
 foreground service stops 1.5 s after that and a phone that spent the whole transfer in the

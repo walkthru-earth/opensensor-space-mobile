@@ -129,4 +129,20 @@ class ArchiveCollectorTest {
         assertFailsWith<DeviceErrorException> { collect(fake) }
         assertTrue(store.files.keys.none { it.startsWith(ArchiveLayout.ARCHIVE + "/") })
     }
+
+    @Test
+    fun aStorageFaultFailsOnlyItsFileAndTheRunGoesOn() = runTest {
+        val fake = FakeArchiveDevice(backgroundScope)
+        val full = fake.files[0].name
+        val stuck = fake.files[1].name
+        store.failWrite = { key -> if (key.name == full) IllegalStateException("No space left on device") else null }
+        store.failCommit = { key -> if (key.name == stuck) IllegalStateException("destination is a directory") else null }
+
+        val summary = collect(fake)
+
+        assertEquals(listOf(FileNotSaved(full, FileProblem.STORAGE), FileNotSaved(stuck, FileProblem.STORAGE)), summary.notSaved)
+        assertContentEquals(fake.files[2].bytes, finalBytes(fake.station, fake.files[2].name))
+        assertEquals(1, index.records.size, "no receipt for a file that was not stored")
+        assertTrue(store.files.keys.any { it == ArchiveLayout.partialPath(ArchiveKey(fake.station, stuck)) }, "verified bytes stay for the next run")
+    }
 }

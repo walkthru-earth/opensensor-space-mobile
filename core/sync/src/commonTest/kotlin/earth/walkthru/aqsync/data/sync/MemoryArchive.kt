@@ -18,6 +18,12 @@ class MemoryArchiveStore : ArchiveStore {
     /** Path relative to the root (as [ArchiveLayout] builds it) to bytes. */
     val files = LinkedHashMap<String, ByteArray>()
 
+    /** A storage fault to raise on a write to that file, as a full disk would. */
+    var failWrite: (ArchiveKey) -> Exception? = { null }
+
+    /** A storage fault to raise when that file is moved into the archive. */
+    var failCommit: (ArchiveKey) -> Exception? = { null }
+
     override suspend fun partialLengths(station: String): Map<String, Long> {
         val dir = ArchiveLayout.partialStationDir(station) + "/"
         return files.filterKeys { it.startsWith(dir) }.mapNotNull { (path, bytes) ->
@@ -36,6 +42,7 @@ class MemoryArchiveStore : ArchiveStore {
         return object : PartialWriter {
             override val resumeFrom: Long = resumeFrom
             override fun writeAt(offset: Long, payload: ByteArray) {
+                failWrite(key)?.let { throw it }
                 val old = files.getValue(path)
                 val end = maxOf(old.size, offset.toInt() + payload.size)
                 val grown = old.copyOf(end)
@@ -61,6 +68,7 @@ class MemoryArchiveStore : ArchiveStore {
     }
 
     override suspend fun commit(key: ArchiveKey) {
+        failCommit(key)?.let { throw it }
         val final = ArchiveLayout.finalPath(key)
         check(final !in files) { "refusing to replace archived file" }
         files[final] = files.remove(ArchiveLayout.partialPath(key)) ?: error("no partial to commit")

@@ -21,5 +21,10 @@ sealed interface FileOutcome {
     data class Synced(override val name: String, val bytes: Long, val sha256: String, val alreadyArchived: Boolean = false) : FileOutcome
     data class Mismatch(override val name: String, val reason: String) : FileOutcome
     data class DeviceError(override val name: String, val error: ProtocolError?, val message: String) : FileOutcome
-    data class Failed(override val name: String, val message: String) : FileOutcome
+
+    /**
+     * The transfer did not finish. With [storage], this phone could not write, move or record the
+     * file (disk full, a refused path, a failed commit or receipt). The next file still runs.
+     */
+    data class Failed(override val name: String, val message: String, val storage: Boolean = false) : FileOutcome
 }

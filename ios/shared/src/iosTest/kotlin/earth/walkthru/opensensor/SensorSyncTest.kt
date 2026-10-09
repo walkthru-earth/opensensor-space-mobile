@@ -215,4 +215,33 @@ class SensorSyncTest {
         assertEquals(SyncEnd.COMPLETE, second.await().end)
         assertEquals(1, calls.value)
     }
+
+    @Test
+    fun aFileThisPhoneCannotStoreFailsAloneAndKeepsTheLink() {
+        val (blocked, other) = files.keys.toList()
+        // A directory where the archived file belongs, so the move into the archive fails.
+        assertTrue(NSFileManager.defaultManager.createDirectoryAtPath("$finals/$station/$blocked", true, null, null))
+
+        val result = run(sensor())
+
+        assertEquals(SyncEnd.STORAGE_FAILED, result.end)
+        assertTrue(result.keepsLink)
+        assertEquals(1, result.saved)
+        assertEquals(1, result.notSaved)
+        assertContentEquals(files.getValue(other), NSFileManager.defaultManager.contentsAtPath("$finals/$station/$other")!!.toByteArray())
+    }
+
+    @Test
+    fun aProtocolFaultFailsTheSyncAndKeepsTheLink() {
+        val result = run(
+            sensor { link, req ->
+                (req[0].toInt() and 0xFF == Opcode.READ).also {
+                    if (it) link.reply(Frame.Chunk(9, 0, ByteArray(16)))
+                }
+            },
+        )
+
+        assertEquals(SyncEnd.FAILED, result.end)
+        assertTrue(result.keepsLink)
+    }
 }

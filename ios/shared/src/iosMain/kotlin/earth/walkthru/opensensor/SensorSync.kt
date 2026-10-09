@@ -24,6 +24,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import platform.Foundation.NSLock
+import platform.Foundation.NSLog
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.TimeSource
@@ -56,7 +57,7 @@ class SensorSync internal constructor(
     private constructor(store: IosArchiveStore, work: CoroutineContext, callbacks: CoroutineContext) :
         this(store, ReceiptArchiveIndex(store.finalRoot), work, callbacks)
 
-    private val collector = ArchiveCollector(store, index, SyncEngine(store, index))
+    private val collector = ArchiveCollector(store, index, SyncEngine(store, index, log = ::syncLog))
     private val scope = CoroutineScope(SupervisorJob())
     private val lock = NSLock()
     private val active = HashSet<String>()
@@ -110,6 +111,8 @@ class SensorSync internal constructor(
             } catch (e: TransportException) {
                 SyncResult(SyncEnd.LINK_LOST, listed, 0, 0)
             } catch (e: Exception) {
+                // A protocol fault, or the archive failing outside one file. The class and message only.
+                syncLog("sync ended, ${e::class.simpleName}: ${e.message}")
                 SyncResult(SyncEnd.FAILED, listed, 0, 0)
             }
             withContext(NonCancellable + callbacks) {
@@ -122,7 +125,11 @@ class SensorSync internal constructor(
 
     private fun resultOf(summary: CollectionSummary, attempted: Int): SyncResult {
         val failed = summary.notSaved.size
-        val end = if (summary.complete) SyncEnd.COMPLETE else SyncEnd.FILES_NOT_SAVED
+        val end = when {
+            summary.complete -> SyncEnd.COMPLETE
+            summary.notSaved.any { it.problem == FileProblem.STORAGE } -> SyncEnd.STORAGE_FAILED
+            else -> SyncEnd.FILES_NOT_SAVED
+        }
         // Files planned away (unsafe names, local conflicts) are counted as not saved and not attempted.
         val saved = (attempted - summary.notSaved.count { it.problem.attempted }).coerceAtLeast(0)
         return SyncResult(end, summary.files, saved, failed)
@@ -149,6 +156,12 @@ class SensorSync internal constructor(
     internal companion object {
         const val PROGRESS_INTERVAL_MS = 250L
     }
+}
+
+/** One line to the device log. Callers pass file names and error classes, never bytes or secrets. */
+private fun syncLog(line: String) {
+    // No format arguments, a variadic call from Kotlin is not safe here. Escape the format marker instead.
+    NSLog("SensorSync $line".replace("%", "%%"))
 }
 
 /** Unsafe names and local conflicts are decided by the plan and never downloaded. */
