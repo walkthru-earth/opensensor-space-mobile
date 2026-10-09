@@ -10,11 +10,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.EntryProviderScope
+import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberDecoratedNavEntries
@@ -63,7 +65,18 @@ fun AppShell(
         )
     }
 
-    val provider = entryProvider<NavKey> { entries(nav) }
+    // Navigation 3 keeps each decorated entry while its key stays on the stack, so the content built
+    // on first composition would hold the values [entries] captured then (settings still unread, say).
+    // Each entry's content therefore looks itself up again in the latest [entries] when it composes.
+    val latestEntries by rememberUpdatedState(entries)
+    val provider: (NavKey) -> NavEntry<NavKey> = remember(nav) {
+        { key ->
+            val built = entryProvider<NavKey> { latestEntries(nav) }(key)
+            NavEntry(key, contentKey = built.contentKey, metadata = built.metadata) { current ->
+                entryProvider<NavKey> { latestEntries(nav) }(current).Content()
+            }
+        }
+    }
 
     // One decorated list per tab. Switching tabs only changes what is drawn.
     val entriesByTab = TopTab.entries.associateWith { t ->
