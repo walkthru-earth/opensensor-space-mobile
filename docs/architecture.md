@@ -28,7 +28,7 @@ flowchart TB
   end
   APP[":app (Android)<br/>Hilt, Room v10, DataStore, WorkManager, Compose, zstd-jni"]
   IOS["ios/App (Xcode + Swift)<br/>Core Bluetooth, Bonjour, own sync engine and archive"]
-  IS[":ios:shared (iOS only)<br/>CompanionScreen, AppRoot, static OpenSensorShared framework"]
+  IS[":ios:shared (iOS only)<br/>AppRoot, DevicesBridge, the device page, static OpenSensorShared framework"]
   HI --> PQ & PR & AQ
   PF --> PQ & AQ
   DI --> PF & UN & DS & PM
