@@ -1,5 +1,8 @@
 package earth.walkthru.opensensor.strings
 
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -99,15 +102,35 @@ class TranslationsTest {
         assertTrue("path = InfoPlist.xcstrings;" in project, "InfoPlist.xcstrings is not in the Xcode project")
         purposes.forEach { (key, english) ->
             for (language in listOf("en") + languages) {
-                val value = Regex(
-                    """"$key"\s*:\s*\{.*?"$language"\s*:\s*\{\s*"stringUnit"\s*:\s*\{\s*"state"\s*:\s*"translated",\s*"value"\s*:\s*"([^"]*)"""",
-                    RegexOption.DOT_MATCHES_ALL,
-                ).find(catalog)?.groupValues?.get(1)
+                val value = translated(catalog, key, language)
                 assertTrue(value != null && value.isNotBlank(), "$key has no $language text")
                 if (language == "en") assertEquals(english, value, key)
                 assertTrue(value.none { it in "—–;؛:" }, "$key $language breaks the copy rules")
             }
         }
         languages.forEach { assertTrue(Regex("""knownRegions = \([^)]*\b$it\b""").containsMatchIn(project), "knownRegions lacks $it") }
+    }
+
+    @Test
+    fun aPurposeStringWithoutTheLanguageReadsAsMissing() {
+        val catalog = """
+            {"sourceLanguage":"en","version":"1.0","strings":{
+              "A":{"localizations":{"en":{"stringUnit":{"state":"translated","value":"a"}}}},
+              "B":{"localizations":{"ar":{"stringUnit":{"state":"translated","value":"ب"}},"en":{"stringUnit":{"state":"translated","value":"b"}}}},
+              "C":{"localizations":{"ar":{"stringUnit":{"state":"needs_review","value":"ج"}}}}
+            }}
+        """.trimIndent()
+        assertEquals(null, translated(catalog, "A", "ar"), "A must not borrow B's Arabic")
+        assertEquals("ب", translated(catalog, "B", "ar"))
+        assertEquals(null, translated(catalog, "C", "ar"), "only translated units count")
+        assertEquals(null, translated(catalog, "D", "en"))
+    }
+
+    /** The `translated` value of [key] in [language] in an Xcode string catalog, or null. */
+    private fun translated(catalog: String, key: String, language: String): String? {
+        val unit = Json.parseToJsonElement(catalog).jsonObject["strings"]?.jsonObject?.get(key)?.jsonObject
+            ?.get("localizations")?.jsonObject?.get(language)?.jsonObject?.get("stringUnit")?.jsonObject ?: return null
+        if (unit["state"]?.jsonPrimitive?.content != "translated") return null
+        return unit["value"]?.jsonPrimitive?.content
     }
 }
