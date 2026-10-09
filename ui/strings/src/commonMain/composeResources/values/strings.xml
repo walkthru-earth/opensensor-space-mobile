@@ -127,8 +127,6 @@
     <string name="sensor_scan_unavailable">The scanner is not available. Type the sticker below.</string>
     <string name="camera_scan_off">Camera access is off. Type the sticker below.</string>
     <string name="camera_scan_blocked">The camera is blocked on this iPhone. Type the sticker below.</string>
-    <string name="perm_camera_title">Allow the camera</string>
-    <string name="perm_camera_body">The camera reads the sticker on the sensor. No picture is kept.</string>
     <string name="perm_camera_settings_title">Camera is off for this app</string>
     <string name="perm_camera_settings_body">Turn on the camera for opensensor.space in Settings to scan the sticker. You can also type it.</string>
 </resources>

@@ -15,12 +15,16 @@ final class StickerScanner: NSObject, DataScannerViewControllerDelegate {
 
     private var onResult: ((String?) -> Void)?
     private weak var scanner: DataScannerViewController?
+    private weak var navigation: UINavigationController?
 
     /// Presents the scanner full screen over the top of `host` and calls `onResult` once, with the
     /// first barcode string read or nil on Cancel or when scanning stops. Returns false, calling
     /// nothing, when the scanner cannot open now. `isAvailable` is false while camera access is not
     /// granted, or with a Screen Time camera restriction.
     func scan(from host: UIViewController?, onResult: @escaping (String?) -> Void) -> Bool {
+        // UIKit drops a presentation that starts mid-transition without calling its completion.
+        // A scan whose scanner never reached the screen answers as a cancel, so Scan keeps working.
+        if self.onResult != nil, navigation?.presentingViewController == nil { finish(nil) }
         guard self.onResult == nil, var top = host,
             DataScannerViewController.isSupported, DataScannerViewController.isAvailable
         else { return false }
@@ -43,6 +47,7 @@ final class StickerScanner: NSObject, DataScannerViewControllerDelegate {
         navigation.modalPresentationStyle = .fullScreen
         self.onResult = onResult
         self.scanner = scanner
+        self.navigation = navigation
         top.present(navigation, animated: true) { [weak self, weak scanner] in
             guard let self, let scanner, self.scanner === scanner else { return }
             do {
@@ -82,6 +87,7 @@ final class StickerScanner: NSObject, DataScannerViewControllerDelegate {
             scanner.dismiss(animated: true)
         }
         scanner = nil
+        navigation = nil
         onResult(value)
     }
 }

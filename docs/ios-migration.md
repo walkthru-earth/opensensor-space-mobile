@@ -319,14 +319,15 @@ accuracy, stale/background handling or authenticated Wi-Fi connections. See
     barcode of any symbology, as Android's scanner does. Swift passes `scanSticker` to
     `mainViewController` only where `DataScannerViewController.isSupported` is true (A12 and later),
     so Scan is hidden elsewhere. The Scan tap runs `UserAction.SCAN_STICKER` through `:ui:permissions`,
-    which asks for the camera with a short rationale first (`StickerScan.kt`, AVFoundation status),
+    which shows the system camera prompt with no rationale of its own, as for Bluetooth, Wi-Fi and
+    location (`StickerScan.kt`, AVFoundation status),
     and only then presents the scanner, which checks `isAvailable` (false until the grant or under a
     Screen Time restriction). Only the decoded string reaches Kotlin, through `StickerScans.read`, the
     same `SensorLabel` parser and model check as typed text. Cancel leaves the card as it was. No frame
     is stored, logged or uploaded. `NSCameraUsageDescription` is in `Info.plist` and
     `InfoPlist.xcstrings`. The privacy manifest needs no change (store-compliance.md). Parity P58,
     P61 to P63. Qualify on an iPhone that launch shows no camera prompt, that the first Scan tap shows
-    the rationale and then the system prompt, that a refusal leaves the note and manual entry, that a
+    the system prompt directly, that a refusal leaves the note and manual entry, that a
     later tap offers Settings, that a real PMS5003T sticker fills the field and saves, that Cancel keeps
     the field, and that the scanner stops the camera when it closes.
 

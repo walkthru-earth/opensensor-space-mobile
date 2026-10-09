@@ -19,10 +19,8 @@ import earth.walkthru.opensensor.permissions.openAppSettings
 import earth.walkthru.opensensor.strings.resources.Res
 import earth.walkthru.opensensor.strings.resources.camera_scan_blocked
 import earth.walkthru.opensensor.strings.resources.camera_scan_off
-import earth.walkthru.opensensor.strings.resources.perm_camera_body
 import earth.walkthru.opensensor.strings.resources.perm_camera_settings_body
 import earth.walkthru.opensensor.strings.resources.perm_camera_settings_title
-import earth.walkthru.opensensor.strings.resources.perm_camera_title
 import earth.walkthru.opensensor.strings.resources.sensor_scan_unavailable
 import earth.walkthru.opensensor.strings.resources.sensor_scan_unrecognized
 import org.jetbrains.compose.resources.stringResource
@@ -75,7 +73,8 @@ internal class IosStickerScan(private val scanner: ScanSticker?, private val acc
 
 /**
  * The Scan button of the sticker card on iOS. Camera access is asked only from that tap
- * ([earth.walkthru.opensensor.permissions.UserAction.SCAN_STICKER]), never at launch. A first refusal
+ * ([earth.walkthru.opensensor.permissions.UserAction.SCAN_STICKER]), never at launch, with the system
+ * prompt and no rationale of our own. A first refusal
  * is respected with a short note on the card, a later tap after a denial offers the app's page in
  * Settings, and a restricted camera only gets the note because Settings cannot change it. Manual entry
  * stays usable in every case. Only the decoded string reaches Kotlin, and only the parsed value
@@ -97,13 +96,17 @@ internal fun rememberIosStickerScan(scanSticker: ScanSticker?): IosStickerScan {
     return holder
 }
 
+/**
+ * Only the Settings dialog can show. The iOS status flow never asks for a rationale, so the first tap
+ * goes straight to the system prompt with `NSCameraUsageDescription`, as for Bluetooth, Wi-Fi and
+ * location. [AccessDialogTexts] still needs rationale fields, which reuse the Settings words.
+ */
 @Composable
-private fun cameraAccessTexts(): AccessDialogTexts = AccessDialogTexts(
-    rationaleTitle = stringResource(Res.string.perm_camera_title),
-    rationaleBody = stringResource(Res.string.perm_camera_body),
-    settingsTitle = stringResource(Res.string.perm_camera_settings_title),
-    settingsBody = stringResource(Res.string.perm_camera_settings_body),
-)
+private fun cameraAccessTexts(): AccessDialogTexts {
+    val title = stringResource(Res.string.perm_camera_settings_title)
+    val body = stringResource(Res.string.perm_camera_settings_body)
+    return AccessDialogTexts(rationaleTitle = title, rationaleBody = body, settingsTitle = title, settingsBody = body)
+}
 
 /** AVFoundation's video authorization. Reading the status never shows the prompt. */
 internal class CameraAccess(private val onAnswer: () -> Unit) {
