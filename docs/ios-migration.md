@@ -285,6 +285,19 @@ accuracy, stale/background handling or authenticated Wi-Fi connections. See
     iPhone that a raw command, the log, the config read and Refresh status work over Bluetooth, that
     `TOKEN` and secrets stay redacted, that a sync is refused while Debug holds the link and the
     reverse, and that leaving Developer level closes the screen.
+11. Done in code (#17, 2026-10-09), not yet seen on an iPhone. Today is the shared `:feature:today`
+    screen. A Bluetooth sensor opened from My devices lands on it. `CompanionTodaySource` (`ios/shared`
+    commonMain) reads `CompanionState` as the Today port, and Today so far reads the hourly tier of
+    `IosArchive`. Set time and Finalize ask for confirmation, then `BluetoothCompanion.command` lends
+    a fresh `SensorLink` and `SensorSync.command` sends `SET_TIME` or `FLUSH` through the shared
+    `DeviceSession`, refused while a sync, Debug or a Wi-Fi access request holds the link. Smart Sync
+    follows the Clock sync setting, now shown on iOS, and a refused clock step stops the sync. The
+    Device action opens the companion page, which keeps Wi-Fi access, the Wi-Fi session and Debug.
+    A sensor known only over Wi-Fi still opens on the companion page. Commands have no Wi-Fi path yet,
+    the sync bar has no byte total, and a Wi-Fi sync does not show on Today. Qualify on an iPhone
+    that Set time anchors a logger that has no UTC, that Finalize writes a short file the next sync
+    downloads, that Smart Sync under Automatic sets the clock then syncs, that Ask shows the consent
+    dialog, and that opening another sensor leaves the first Today closed.
 
 LAN and Bluetooth file sync use the shared Kotlin engine. Swift keeps the sockets, Core
 Bluetooth, LAN framing, the HELLO check, keepalive, the BLE token request and Keychain.
