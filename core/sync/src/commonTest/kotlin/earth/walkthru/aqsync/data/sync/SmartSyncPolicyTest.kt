@@ -1,8 +1,8 @@
 package earth.walkthru.aqsync.data.sync
 
 import earth.walkthru.aqsync.data.protocol.DeviceStatus
-import kotlin.test.assertEquals
 import kotlin.test.Test
+import kotlin.test.assertEquals
 
 class SmartSyncPolicyTest {
     @Test
