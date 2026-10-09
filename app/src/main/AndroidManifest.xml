@@ -89,7 +89,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.AqSync"
-        tools:targetApi="31">
+        tools:targetApi="33">
         <!-- Play services hosts the optional barcode UI; no camera permission is requested. -->
         <meta-data android:name="com.google.mlkit.vision.DEPENDENCIES" android:value="barcode_ui" />
         <activity
