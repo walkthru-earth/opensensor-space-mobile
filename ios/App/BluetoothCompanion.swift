@@ -15,11 +15,21 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     private var tokenTimer: Timer?
     private var requestingToken = false
     var onCredentialSaved: (() -> Void)?
-    /// Created on the first user scan. Creating a central manager shows the Bluetooth permission prompt.
+    /// INFO named the sensor the user opened: peripheral id, advertised name, station and hardware id.
+    var onSensorOpened: ((String, String?, String, String) -> Void)?
+    /// A Collect all step ended: the sensor id and whether every listed file is on this phone.
+    var onCollectFinished: ((String, Bool) -> Void)?
+    /// Created when access is already allowed, or when the user asks for it from My devices.
+    /// Creating a central manager before that shows the Bluetooth permission prompt.
     private var central: CBCentralManager?
     /// A scan the user asked for before the central manager reported its first state.
     private var scanRequested = false
+    /// A sensor the user opened before the central manager reported its first state.
+    private var openRequested: String?
+    /// The sensor Collect all is copying now. It is closed again when the sync ends.
+    private var collectId: String?
     private var discovered: [String: CBPeripheral] = [:]
+    private var advertisedNames: [String: String] = [:]
     private var current: CBPeripheral?
     private var scanTimer: Timer?
     private var connectionTimer: Timer?
@@ -36,6 +46,17 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     init(engine: SensorSync) {
         self.engine = engine
         super.init()
+        let authorization = CBManager.authorization
+        state.bluetoothAuthorizationChanged(raw: Int64(authorization.rawValue))
+        // Already allowed, so creating the manager shows no prompt and My devices can scan at once.
+        if authorization == .allowedAlways { requestAccess() }
+    }
+
+    /// Creates the central manager. The first time, iOS asks for Bluetooth access.
+    func requestAccess() {
+        guard central == nil else { return }
+        central = CBCentralManager(
+            delegate: self, queue: .main, options: [CBCentralManagerOptionShowPowerAlertKey: false])
     }
 
     /// The connected sensor's hardware id once INFO named it.
@@ -54,15 +75,14 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     }
 
     func scan() {
-        guard foreground, current == nil else { return }
+        guard foreground else { return }
         guard let central, central.state == .poweredOn else {
-            // The first tap creates the manager. Scanning waits for poweredOn.
+            // My devices scans only once access is allowed. Scanning waits for poweredOn.
             scanRequested = true
             if let existing = self.central {
                 centralManagerDidUpdateState(existing)
             } else {
-                state.bluetoothChanged(available: false, explanation: "Bluetooth is getting ready…")
-                self.central = CBCentralManager(delegate: self, queue: .main)
+                requestAccess()
             }
             return
         }
@@ -76,18 +96,57 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         }
     }
 
-    private func stopScan() {
+    func stopScan() {
+        scanRequested = false
         scanTimer?.invalidate()
         scanTimer = nil
         if let central, central.state == .poweredOn { central.stopScan() }
         state.scanStopped()
     }
 
-    func connect(id: String) {
-        guard foreground, let central, central.state == .poweredOn, current == nil, let peripheral = discovered[id] else {
+    /// Opens a sensor from My devices, nearby or known. Another open link closes first, because this
+    /// app holds one Bluetooth link. Known sensors open through their saved identifier.
+    func open(id: String) {
+        guard foreground else { return }
+        if let current, current.identifier.uuidString == id { return }
+        guard let central, central.state == .poweredOn else {
+            openRequested = id
             return
         }
+        openRequested = nil
+        let peripheral =
+            discovered[id]
+            ?? UUID(uuidString: id).flatMap { central.retrievePeripherals(withIdentifiers: [$0]).first }
+        guard let peripheral else { return }
+        if current != nil { disconnect() }
+        connect(peripheral)
+    }
+
+    /// One Collect all step over Bluetooth. Opens the sensor, syncs once it is ready, then closes it.
+    /// A sync the user started stays untouched, so this step fails instead.
+    func collect(id: String) {
+        guard foreground, link == nil, collectId == nil, let central, central.state == .poweredOn else {
+            onCollectFinished?(id, false)
+            return
+        }
+        open(id: id)
+        guard current?.identifier.uuidString == id else {
+            onCollectFinished?(id, false)
+            return
+        }
+        collectId = id
+        collectWhenReady()
+    }
+
+    private func collectWhenReady() {
+        guard collectId != nil, link == nil, identity != nil, pending == nil, operations.isEmpty else { return }
+        sync()
+    }
+
+    private func connect(_ peripheral: CBPeripheral) {
+        guard let central else { return }
         stopScan()
+        let id = peripheral.identifier.uuidString
         current = peripheral
         peripheral.delegate = self
         state.connectionStarted(id: id)
@@ -111,6 +170,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     }
 
     private func teardown() {
+        openRequested = nil
         // The engine sees the link end at once. Its result for this link is then ignored.
         syncHandle?.cancel()
         syncHandle = nil
@@ -135,6 +195,18 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
             peripheral.delegate = nil
             if let central, central.state == .poweredOn { central.cancelPeripheralConnection(peripheral) }
         }
+        if let id = collectId {
+            // Timed out, refused or lost before the sync ended. Collect all moves on.
+            collectId = nil
+            onCollectFinished?(id, false)
+        }
+    }
+
+    /// Closes the link to this sensor, if it is open. Forget calls it.
+    func close(id: String) {
+        if openRequested == id { openRequested = nil }
+        guard let current, current.identifier.uuidString.caseInsensitiveCompare(id) == .orderedSame else { return }
+        disconnect()
     }
 
     /// Copies every file this phone lacks from the connected sensor through the shared engine.
@@ -175,13 +247,18 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         guard self.link === link else { return }
         self.link = nil
         syncHandle = nil
+        let collected = collectId
+        collectId = nil
         if result.keepsLink {
             state.bluetoothSyncFinished(result: result)
-            return
+            // Collect all closes what it opened, so the next sensor can take the one link.
+            if collected != nil { disconnect() }
+        } else {
+            // A stalled or failed link may still hold a write in flight. Start the next sync on a fresh connection.
+            teardown()
+            state.bluetoothSyncClosed(result: result)
         }
-        // A stalled or failed link may still hold a write in flight. Start the next sync on a fresh connection.
-        teardown()
-        state.bluetoothSyncClosed(result: result)
+        if let collected { onCollectFinished?(collected, result.end == .complete) }
     }
 
     func suspend() {
@@ -204,7 +281,9 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         }
         switch central.state {
         case .poweredOn, .unknown, .resetting: break
-        default: scanRequested = false
+        default:
+            scanRequested = false
+            openRequested = nil
         }
         if central.state != .poweredOn {
             stopScan()
@@ -213,6 +292,8 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         // The shared policy maps this to its status and offers Settings only after a denial.
         state.bluetoothAuthorizationChanged(raw: Int64(CBManager.authorization.rawValue))
         state.bluetoothChanged(available: central.state == .poweredOn, explanation: message)
+        state.bluetoothPowerChanged(poweredOff: central.state == .poweredOff)
+        if central.state == .poweredOn, let id = openRequested { open(id: id) }
         if central.state == .poweredOn, scanRequested { scan() }
     }
 
@@ -220,10 +301,11 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         _ central: CBCentralManager, didDiscover peripheral: CBPeripheral,
         advertisementData: [String: Any], rssi RSSI: NSNumber
     ) {
-        guard foreground, current == nil else { return }
+        guard foreground else { return }
         let id = peripheral.identifier.uuidString
         discovered[id] = peripheral
         let name = advertisementData[CBAdvertisementDataLocalNameKey] as? String ?? peripheral.name ?? "AQ sensor"
+        advertisedNames[id] = name
         state.deviceFound(id: id, name: name, rssi: RSSI.int32Value)
     }
 
@@ -391,6 +473,10 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
                 available: identity != nil && control != nil && response != nil, busy: false,
                 notice: .saveWifiAccess)
             state.bluetoothSyncAvailable(available: identity != nil && control != nil && response != nil)
+            if let identity {
+                let id = peripheral.identifier.uuidString
+                onSensorOpened?(id, advertisedNames[id] ?? peripheral.name, identity.station, identity.device)
+            }
         case CBUUID(string: state.liveUuid):
             state.receiveLive(json: json)
             freshnessTimer?.invalidate()
@@ -407,6 +493,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
                 connectionTimer = nil
             }
             performNext()
+            collectWhenReady()
         }
     }
 }

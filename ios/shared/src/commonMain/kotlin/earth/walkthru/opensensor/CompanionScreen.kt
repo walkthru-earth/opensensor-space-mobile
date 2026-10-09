@@ -17,6 +17,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -36,11 +38,13 @@ import earth.walkthru.aqsync.units.UnitFormatter
 import earth.walkthru.aqsync.units.UnitSystem
 import earth.walkthru.aqsync.units.formatFixed
 import earth.walkthru.aqsync.units.formatPm
+import earth.walkthru.opensensor.designsystem.AppIcons
 import earth.walkthru.opensensor.designsystem.CardShape
 import earth.walkthru.opensensor.permissions.PermissionFlow
 import earth.walkthru.opensensor.permissions.SettingsLink
 import earth.walkthru.opensensor.strings.resolve
 import earth.walkthru.opensensor.strings.resources.Res
+import earth.walkthru.opensensor.strings.resources.action_back
 import earth.walkthru.opensensor.strings.resources.action_cancel
 import earth.walkthru.opensensor.strings.resources.app_name
 import earth.walkthru.opensensor.strings.resources.batch_value
@@ -48,7 +52,6 @@ import earth.walkthru.opensensor.strings.resources.companion_connect
 import earth.walkthru.opensensor.strings.resources.companion_export
 import earth.walkthru.opensensor.strings.resources.companion_export_preparing
 import earth.walkthru.opensensor.strings.resources.companion_files_finalized
-import earth.walkthru.opensensor.strings.resources.companion_find_sensors
 import earth.walkthru.opensensor.strings.resources.companion_firmware
 import earth.walkthru.opensensor.strings.resources.companion_lan_bytes
 import earth.walkthru.opensensor.strings.resources.companion_lan_connect_label
@@ -63,10 +66,7 @@ import earth.walkthru.opensensor.strings.resources.companion_lan_rate
 import earth.walkthru.opensensor.strings.resources.companion_lan_title
 import earth.walkthru.opensensor.strings.resources.companion_now
 import earth.walkthru.opensensor.strings.resources.companion_pm25_mood
-import earth.walkthru.opensensor.strings.resources.companion_scanning
-import earth.walkthru.opensensor.strings.resources.companion_signal_dbm
 import earth.walkthru.opensensor.strings.resources.companion_storage_error
-import earth.walkthru.opensensor.strings.resources.companion_subtitle
 import earth.walkthru.opensensor.strings.resources.companion_sync
 import earth.walkthru.opensensor.strings.resources.companion_wifi_access_save
 import earth.walkthru.opensensor.strings.resources.companion_wifi_access_saving
@@ -81,8 +81,9 @@ import org.jetbrains.compose.resources.stringResource
 import kotlin.math.floor
 
 /*
- * The My devices tab. It renders inside the brand theme that AppRoot applies (OpenSensorTheme), so
- * it reads colours and shapes from MaterialTheme and never sets a theme of its own. The curves
+ * The device page, opened from My devices (`:feature:devices`) as the Today entry. It shows the
+ * open Bluetooth link (Now card, sync, Wi-Fi access, disconnect), the Wi-Fi sessions and export.
+ * It renders inside the brand theme that AppRoot applies (OpenSensorTheme), so it reads colours and shapes from MaterialTheme and never sets a theme of its own. The curves
  * match the floating control rule through the brand shapes, small (12 dp) for buttons and the
  * design system's [CardShape] (32 dp, the same as the Android BrandCard) for cards. Cards sit on
  * the brand surface with a hairline, buttons are curved cards, not pills.
@@ -93,7 +94,7 @@ import kotlin.math.floor
  */
 
 @Composable
-internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (String) -> Unit, disconnect: () -> Unit, scanLan: () -> Unit, saveWifiAccess: () -> Unit, connectLan: (String) -> Unit, syncLan: (String) -> Unit, disconnectLan: (String) -> Unit, exportArchive: () -> Unit, syncBluetooth: () -> Unit, units: UnitSystem = UnitSystem.METRIC, showTechnical: Boolean = false) {
+internal fun CompanionScreen(state: CompanionState, title: String?, onBack: () -> Unit, reconnect: (() -> Unit)?, disconnect: () -> Unit, scanLan: () -> Unit, saveWifiAccess: () -> Unit, connectLan: (String) -> Unit, syncLan: (String) -> Unit, disconnectLan: (String) -> Unit, exportArchive: () -> Unit, syncBluetooth: () -> Unit, units: UnitSystem = UnitSystem.METRIC, showTechnical: Boolean = false) {
     // Display units from Settings. Readings stay SI everywhere else.
     val formatter = UnitFormatter(units)
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
@@ -104,9 +105,9 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             item {
-                Column {
-                    Text(stringResource(Res.string.app_name), style = MaterialTheme.typography.headlineMedium)
-                    Text(stringResource(Res.string.companion_subtitle), style = MaterialTheme.typography.titleMedium, color = muted)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onBack) { Icon(AppIcons.ArrowBack, contentDescription = stringResource(Res.string.action_back)) }
+                    Text(title ?: stringResource(Res.string.app_name), style = MaterialTheme.typography.headlineMedium)
                 }
             }
             if (!state.message.isEmpty) item { Text(state.message.resolve(), style = MaterialTheme.typography.bodyLarge) }
@@ -183,28 +184,9 @@ internal fun CompanionScreen(state: CompanionState, scan: () -> Unit, connect: (
                     }
                 }
                 item { OutlinedButton(onClick = disconnect, shape = MaterialTheme.shapes.small) { Text(stringResource(if (state.syncBusy) Res.string.action_cancel else Res.string.nav_disconnect)) } }
-            } else {
-                item {
-                    // Tapping creates the Bluetooth manager, so iOS asks for Bluetooth here and not at launch.
-                    Button(onClick = scan, enabled = !state.scanning, shape = MaterialTheme.shapes.small) {
-                        Text(stringResource(if (state.scanning) Res.string.companion_scanning else Res.string.companion_find_sensors))
-                    }
-                }
-                items(state.devices, key = { it.id }) { device ->
-                    BrandCard {
-                        Row(
-                            Modifier.fillMaxWidth().padding(16.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                Text(device.name, style = MaterialTheme.typography.titleMedium)
-                                if (showTechnical) Text(stringResource(Res.string.companion_signal_dbm, device.rssi), style = MaterialTheme.typography.bodySmall, color = muted)
-                            }
-                            Button(onClick = { connect(device.id) }, shape = MaterialTheme.shapes.small) { Text(stringResource(Res.string.companion_connect)) }
-                        }
-                    }
-                }
+            } else if (reconnect != null) {
+                // The link is closed. Bluetooth is allowed here, since My devices asked before opening.
+                item { Button(onClick = reconnect, shape = MaterialTheme.shapes.small) { Text(stringResource(Res.string.companion_connect)) } }
             }
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

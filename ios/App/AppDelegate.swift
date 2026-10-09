@@ -24,6 +24,15 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UIDocumentPickerD
     private let engine = SensorSync()
     private lazy var bluetooth = BluetoothCompanion(engine: engine)
     private lazy var lan = LanDiscovery(state: bluetooth.state, engine: engine)
+    private let credentials = LanCredentials()
+    /// My devices over the adapters. Only ids, names and stations cross, never a token.
+    private lazy var devices: DevicesBridge = DevicesBridgeIosKt.devicesBridge(
+        state: bluetooth.state, sync: engine,
+        startScan: { [weak self] in self?.bluetooth.scan() },
+        stopScan: { [weak self] in self?.bluetooth.stopScan() },
+        forget: { [weak self] peripheral, device in self?.forget(peripheral: peripheral, device: device) },
+        collect: { [weak self] id, wifiName in self?.collect(id: id, wifiName: wifiName) }
+    )
     private var exportFolder: URL?
     private var exportTask: Task<Void, Never>?
     private var preparedExport: (url: URL, count: Int)?
@@ -32,10 +41,18 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UIDocumentPickerD
         _ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions
     ) {
         guard let windowScene = scene as? UIWindowScene else { return }
+        bluetooth.onSensorOpened = { [weak self] peripheral, name, station, device in
+            self?.devices.sensorOpened(peripheral: peripheral, name: name, station: station, device: device)
+        }
+        bluetooth.onCredentialSaved = { [weak self] in self?.credentialsChanged() }
+        bluetooth.onCollectFinished = { [weak self] id, ok in self?.devices.collectFinished(id: id, ok: ok) }
+        lan.onCollectFinished = { [weak self] id, ok in self?.devices.collectFinished(id: id, ok: ok) }
+        credentialsChanged()
         let controller = MainViewControllerKt.mainViewController(
             state: bluetooth.state,
-            scan: { [weak self] in self?.bluetooth.scan() },
-            connect: { [weak self] id in self?.bluetooth.connect(id: id) },
+            devices: devices,
+            requestBluetooth: { [weak self] in self?.bluetooth.requestAccess() },
+            openSensor: { [weak self] id in self?.bluetooth.open(id: id) },
             disconnect: { [weak self] in self?.bluetooth.disconnect() },
             scanLan: { [weak self] in self?.lan.scan() },
             saveWifiAccess: { [weak self] in self?.bluetooth.saveWifiAccess() },
@@ -52,6 +69,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UIDocumentPickerD
     }
 
     func sceneDidEnterBackground(_ scene: UIScene) {
+        // Collect all is a foreground pass. The step in flight ends with the link below.
+        devices.cancelCollectAll()
         bluetooth.suspend()
         lan.enterBackground()
     }
@@ -61,10 +80,38 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UIDocumentPickerD
         presentExportIfReady()
     }
     func sceneDidDisconnect(_ scene: UIScene) {
+        devices.cancelCollectAll()
         bluetooth.suspend()
         lan.suspend()
         exportTask?.cancel()
         if exportTask == nil { finishExport("Export cancelled. Collected files remain saved on this phone.") }
+    }
+
+    /// Tells My devices which sensors hold Wi-Fi access. Ids only, the token stays in the Keychain.
+    private func credentialsChanged() {
+        let entries = credentials.list()
+        devices.credentialsChanged(
+            peripherals: entries.map(\.peripheral), stations: entries.map(\.station), devices: entries.map(\.device))
+    }
+
+    /// The user confirmed Forget. The bridge already dropped its record. This closes any link to the
+    /// sensor and removes its Wi-Fi access. The system bond stays until removed in iOS Settings.
+    private func forget(peripheral: String, device: String?) {
+        bluetooth.close(id: peripheral)
+        if let device {
+            lan.disconnect(device: device)
+            credentials.remove(device: device)
+        }
+        credentialsChanged()
+    }
+
+    /// One Collect all step. Wi-Fi when the plan found the sensor there with access, else Bluetooth.
+    private func collect(id: String, wifiName: String?) {
+        if let wifiName {
+            lan.collect(name: wifiName, id: id)
+        } else {
+            bluetooth.collect(id: id)
+        }
     }
 
     /// Wi-Fi is faster, so an open, idle Wi-Fi session for the same sensor takes the sync.

@@ -19,6 +19,8 @@ kotlin {
             implementation(project(":core:archive"))
             implementation(project(":feature:discover"))
             implementation(project(":feature:settings"))
+            // My devices, the shared list of nearby, known and Wi-Fi sensors.
+            implementation(project(":feature:devices"))
             // The shared shell: bottom bar, per-tab stacks, Back and the iOS edge swipe.
             implementation(project(":feature:shell"))
             // viewModel { } holders for controllers kept per navigation entry.

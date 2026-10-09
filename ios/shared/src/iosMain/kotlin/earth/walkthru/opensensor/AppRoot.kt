@@ -3,6 +3,7 @@ package earth.walkthru.opensensor
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -23,16 +24,27 @@ import earth.walkthru.aqsync.settings.iosSettingsRepository
 import earth.walkthru.aqsync.units.UnitSystem
 import earth.walkthru.aqsync.units.systemUnitSystem
 import earth.walkthru.opensensor.designsystem.OpenSensorTheme
+import earth.walkthru.opensensor.devices.DevicesAction
+import earth.walkthru.opensensor.devices.DevicesPlatform
+import earth.walkthru.opensensor.devices.MyDevicesScreen
+import earth.walkthru.opensensor.devices.bluetoothAccessTexts
 import earth.walkthru.opensensor.discover.DiscoverController
 import earth.walkthru.opensensor.discover.DiscoverScreen
 import earth.walkthru.opensensor.discover.UserDefaultsDiscoverPrefs
 import earth.walkthru.opensensor.discover.bundledSampleFeed
+import earth.walkthru.opensensor.permissions.AccessDialogs
+import earth.walkthru.opensensor.permissions.AccessHooks
+import earth.walkthru.opensensor.permissions.AccessKind
+import earth.walkthru.opensensor.permissions.AccessStatus
+import earth.walkthru.opensensor.permissions.RuntimeAccess
+import earth.walkthru.opensensor.permissions.rememberOpenAppSettings
 import earth.walkthru.opensensor.settings.SettingsController
 import earth.walkthru.opensensor.settings.SettingsScreen
 import earth.walkthru.opensensor.shell.AppShell
 import earth.walkthru.opensensor.shell.DiscoverKey
 import earth.walkthru.opensensor.shell.ScanKey
 import earth.walkthru.opensensor.shell.SettingsKey
+import earth.walkthru.opensensor.shell.TodayKey
 import platform.Foundation.NSBundle
 import platform.Foundation.NSCurrentLocaleDidChangeNotification
 import platform.Foundation.NSDate
@@ -64,15 +76,29 @@ private class DiscoverHolder : ViewModel() {
     )
 }
 
+/** Holds the My devices controller for its entry, cleared when the entry leaves the back stack. */
+private class DevicesHolder(bridge: DevicesBridge) : ViewModel() {
+    val controller = bridge.controller(viewModelScope)
+}
+
+/** iOS collects while the app is open and cannot remove the system Bluetooth bond. */
+private val IosDevices = DevicesPlatform(collectInBackground = false, explainSystemBond = true)
+
 /**
  * The iOS root hosts the shared shell ([AppShell], `:feature:shell`), the same bottom bar, per-tab
  * back stacks and Back rules as Android. The start edge swipe is Back. Discover is always the start
- * tab (owner decision 2026-10-08). No other screen draws a bar. [companion] is the My devices root
- * and receives the resolved display units (METRIC or IMPERIAL) and the detail level from the shared
- * Settings (`:feature:settings`, `:core:settings`).
+ * tab (owner decision 2026-10-08). No other screen draws a bar. The My devices root is the shared
+ * [MyDevicesScreen] over [devices]. Opening a sensor calls [openSensor] (Bluetooth is allowed by
+ * then) and pushes its [devicePage], which receives the resolved display units (METRIC or IMPERIAL)
+ * and the detail level from the shared Settings (`:feature:settings`, `:core:settings`).
  */
 @Composable
-internal fun AppRoot(companion: @Composable (UnitSystem, DetailLevel) -> Unit) {
+internal fun AppRoot(
+    devices: DevicesBridge,
+    requestBluetooth: () -> Unit,
+    openSensor: (String) -> Unit,
+    devicePage: @Composable (id: String, units: UnitSystem, level: DetailLevel, onBack: () -> Unit) -> Unit,
+) {
     val scope = rememberCoroutineScope()
     val settings = remember { SettingsController(scope, settingsRepository) }
     val prefs by settings.prefs.collectAsState()
@@ -91,7 +117,13 @@ internal fun AppRoot(companion: @Composable (UnitSystem, DetailLevel) -> Unit) {
                     DiscoverEntry(networkAllowed = showPublic, units = units, onAddSensor = { nav.toMyDevicesRoot() })
                 }
                 entry<ScanKey> {
-                    companion(units, level)
+                    MyDevicesEntry(devices, level, requestBluetooth) { id, connect ->
+                        if (connect && IosKnown.isPeripheral(id)) openSensor(id)
+                        nav.push(TodayKey(id))
+                    }
+                }
+                entry<TodayKey> { key ->
+                    devicePage(key.address, units, level) { nav.pop() }
                 }
                 // iOS has no Smart Sync clock step yet, so its consent stays hidden.
                 entry<SettingsKey> {
@@ -106,6 +138,54 @@ internal fun AppRoot(companion: @Composable (UnitSystem, DetailLevel) -> Unit) {
             modifier = Modifier.fillMaxSize(),
         )
     }
+}
+
+/**
+ * My devices with its controller kept per entry. Bluetooth is asked for only from a tap, through the
+ * shared on-demand flow. Swift creates the central manager in [requestBluetooth], which shows the
+ * system prompt, and reports the answer through [CompanionState.bluetoothAuthorizationChanged].
+ */
+@Composable
+private fun MyDevicesEntry(bridge: DevicesBridge, level: DetailLevel, requestBluetooth: () -> Unit, onOpen: (id: String, connect: Boolean) -> Unit) {
+    val controller = viewModel { DevicesHolder(bridge) }.controller
+    val state by controller.state.collectAsState()
+    val companion = bridge.state
+    val access = remember { RuntimeAccess(AccessKind.BLUETOOTH) }
+    var asking by remember { mutableStateOf(false) }
+    val openSettings = rememberOpenAppSettings()
+    access.bind(
+        AccessHooks.statusBased(
+            status = { companion.bluetoothAccess },
+            requestPermission = {
+                asking = true
+                requestBluetooth()
+            },
+            openSettings = openSettings,
+            radioOn = { !companion.bluetoothPoweredOff },
+            // iOS has no in-app switch for the radio. The list says it is off.
+            requestTurnOn = { access.onTurnOnResult() },
+        ),
+    )
+    LaunchedEffect(companion.bluetoothAccess, companion.bluetoothPoweredOff) {
+        access.refresh()
+        if (asking && companion.bluetoothAccess != AccessStatus.NOT_DETERMINED) {
+            asking = false
+            access.onPermissionResult()
+        }
+    }
+    AccessDialogs(access, bluetoothAccessTexts())
+    MyDevicesScreen(
+        state = state,
+        level = level,
+        bluetooth = access,
+        platform = IosDevices,
+        onAction = { action ->
+            when (action) {
+                is DevicesAction.Open -> onOpen(action.id, action.connect)
+                else -> controller.onAction(action)
+            }
+        },
+    )
 }
 
 /** Discover with its controller kept per entry. Back, or the edge swipe, first returns an open sheet to peek. */

@@ -47,7 +47,8 @@ class SyncHandle internal constructor(private val job: Job?) {
  */
 class SensorSync internal constructor(
     store: ArchiveStore,
-    index: ArchiveIndex,
+    /** The receipt index, read by My devices for its archive line. */
+    internal val index: ArchiveIndex,
     private val work: CoroutineContext,
     private val callbacks: CoroutineContext,
     private val progressInterval: Long = PROGRESS_INTERVAL_MS,
