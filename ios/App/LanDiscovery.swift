@@ -101,11 +101,11 @@ final class LanDiscovery {
         }
         guard let credential = credentials.find(device: device.device), credential.station == device.station else {
             clearResume(name)
-            report(name, message: LanFailure.enrollmentRequired.localizedDescription)
+            report(name, notice: LanFailure.enrollmentRequired.notice)
             return
         }
         guard claims.connect(name: name, device: device.device) else {
-            report(name, message: "This sensor already has a Wi-Fi connection on this phone.")
+            report(name, notice: .hardwareInUse)
             return
         }
         let session = LanSession(endpoint: device.endpoint)
@@ -141,7 +141,7 @@ final class LanDiscovery {
                 self.claims.closeSession(name: name)
                 self.clearResume(name)
                 if case LanFailure.authentication = error { self.credentials.remove(device: device.device) }
-                self.report(name, message: error.localizedDescription)
+                self.report(name, notice: LanFailure.connectNotice(error))
             }
         }
     }
@@ -164,15 +164,23 @@ final class LanDiscovery {
         if isBackground, collecting.contains(name), canResume(error) {
             queueResume(name)
         }
-        report(name, message: pendingResume.contains(name) ? pauseMessage : error.localizedDescription)
+        if pendingResume.contains(name) {
+            report(name, message: pauseMessage)
+        } else if collecting.contains(name) {
+            report(name, notice: error.notice)
+        } else {
+            report(name, message: closedMessage)
+        }
     }
 
     func sync(name: String) {
         guard tasks[name] == nil, let session = sessions[name] else { return }
         guard activeTransfers < 2 else {
-            report(name, connected: true, message: pendingResume.contains(name)
-                ? "Sync queued. Resuming when another sensor finishes."
-                : "Two sensors are syncing. Try again when one finishes.")
+            if pendingResume.contains(name) {
+                report(name, connected: true, message: "Sync queued. Resuming when another sensor finishes.")
+            } else {
+                report(name, connected: true, notice: .busyBeforeSync)
+            }
             return
         }
         clearResume(name)
@@ -215,7 +223,7 @@ final class LanDiscovery {
             } else if let result {
                 self.state.lanSyncFinished(name: name, connected: false, result: result)
             } else {
-                self.report(name, message: LanFailure.disconnected.localizedDescription)
+                self.report(name, notice: LanFailure.disconnected.notice)
             }
         }
     }
@@ -250,7 +258,7 @@ final class LanDiscovery {
     func disconnect(name: String) {
         cancelledCollections.insert(name)
         clearResume(name)
-        close(name: name, message: "Disconnected. Collected files stay on this phone.")
+        close(name: name, message: closedMessage)
     }
 
     private func close(name: String, message: String) {
@@ -273,7 +281,7 @@ final class LanDiscovery {
         if attempts[name] != id && sessions[name] == nil {
             report(name, message: pendingResume.contains(name)
                 ? pauseMessage
-                : "Disconnected. Collected files stay on this phone.")
+                : closedMessage)
         }
         resumePending(name)
     }
@@ -335,6 +343,7 @@ final class LanDiscovery {
     private var pauseMessage: String {
         "Sync paused. Saved files and partial bytes are kept. It resumes when you return."
     }
+    private var closedMessage: String { "Disconnected. Collected files stay on this phone." }
     private func queueResume(_ name: String) {
         guard !cancelledCollections.contains(name) else { return }
         pendingResume.insert(name)
@@ -367,6 +376,13 @@ final class LanDiscovery {
         state.lanSessionChanged(
             name: name, connected: connected, busy: busy, message: message, filesDone: Int32(progress.done),
             filesTotal: Int32(progress.total), bytesDone: progress.bytes, bytesPerSecond: rate)
+    }
+    /// Reports a typed notice. The shared state shows it in Android's words and keeps the counts.
+    private func report(_ name: String, connected: Bool = false, busy: Bool = false, notice: CompanionNotice) {
+        let progress = progressCounts[name] ?? (done: 0, total: 0, bytes: Int64(0))
+        state.lanSessionNoticed(
+            name: name, connected: connected, busy: busy, notice: notice, filesDone: Int32(progress.done),
+            filesTotal: Int32(progress.total), bytesDone: progress.bytes)
     }
     func stop() {
         timer?.invalidate()

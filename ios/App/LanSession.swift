@@ -2,19 +2,30 @@ import Foundation
 import Network
 import OpenSensorShared
 
-enum LanFailure: Error, LocalizedError {
-    case invalidReply, credentialsUnavailable, enrollmentRequired, identityChanged, authentication, busy, timeout,
-        disconnected
-    var errorDescription: String? {
+enum LanFailure: Error {
+    case invalidReply, credentialsUnavailable, enrollmentRequired, stationChanged, hardwareChanged, authentication,
+        busy, timeout, disconnected
+
+    /// The words for a session that failed or ended. The shared state shows Android's wording.
+    var notice: CompanionNotice {
         switch self {
-        case .invalidReply: return "The sensor sent an invalid sync reply."
-        case .credentialsUnavailable: return "Wi-Fi access could not be saved securely on this phone."
-        case .enrollmentRequired: return "Connect over Bluetooth and save Wi-Fi access on this phone first."
-        case .identityChanged: return "Sensor identity changed. Reconnect over Bluetooth to verify it."
-        case .authentication: return "Wi-Fi access expired. Connect over Bluetooth and save access again."
-        case .busy: return "The sensor is busy with other phones. Try again shortly."
-        case .timeout: return "The sensor did not respond in time. Retry to resume the download."
-        case .disconnected: return "Disconnected. Retry to resume the download."
+        case .invalidReply: return .verificationFailed
+        case .credentialsUnavailable: return .tokenFailed
+        case .enrollmentRequired: return .enrollOverBluetooth
+        case .stationChanged: return .stationChanged
+        case .hardwareChanged: return .hardwareChanged
+        case .authentication: return .tokenNeedsBluetooth
+        case .busy: return .busy
+        case .timeout, .disconnected: return .syncAborted
+        }
+    }
+
+    /// The words when the handshake itself failed. A dropped or silent socket then means the
+    /// sensor could not be verified, not that a sync stopped.
+    static func connectNotice(_ error: Error) -> CompanionNotice {
+        switch error as? LanFailure {
+        case .some(.timeout), .some(.disconnected), .none: return .verificationFailed
+        case .some(let failure): return failure.notice
         }
     }
 }
@@ -110,9 +121,8 @@ actor LanSession {
         guard hello.kind == "hello", hello.code == 2, (64...1024).contains(Int(hello.count)),
             let identity = wire.identity(json: hello.json)
         else { throw LanFailure.invalidReply }
-        guard identity.station == credential.station, identity.device == credential.device else {
-            throw LanFailure.identityChanged
-        }
+        guard identity.device == credential.device else { throw LanFailure.hardwareChanged }
+        guard identity.station == credential.station else { throw LanFailure.stationChanged }
         frames.cap = Int(hello.count)
         payloadMax = Int(hello.count)
         self.identity = identity

@@ -92,4 +92,14 @@
     <string name="msg_hardware_in_use">This sensor is already connected another way.</string>
     <string name="msg_busy">Wait for the current sensor task to finish.</string>
     <string name="msg_token_needs_ble">The token comes over Bluetooth only. Reconnect over Bluetooth first.</string>
+
+    <!-- Link and Wi-Fi access notices, the Android keys and words. -->
+    <string name="msg_busy_before_sync">Wait for the current sensor task to finish before syncing.</string>
+    <string name="msg_verification_failed">Could not verify the sensor. Try again.</string>
+    <string name="msg_identity_enroll_ble">Connect this sensor over Bluetooth first.</string>
+    <string name="msg_identity_station_ble">The sensor station changed. Reconnect over Bluetooth to check it.</string>
+    <string name="msg_identity_hardware_changed">This is different hardware. Pair it as a new sensor.</string>
+    <string name="msg_lan_token_stored">Wi-Fi token stored on this phone.</string>
+    <string name="msg_failed_get_token">Could not get the Wi-Fi token. Try again.</string>
+    <string name="msg_rejected_get_token">The sensor refused to share its Wi-Fi token.</string>
 </resources>

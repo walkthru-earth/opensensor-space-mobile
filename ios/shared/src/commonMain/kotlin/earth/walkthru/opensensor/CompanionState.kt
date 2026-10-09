@@ -35,7 +35,9 @@ internal data class NearbyDevice(val id: String, val name: String, val rssi: Int
 /**
  * Main-thread callbacks from the native BLE adapter. Never contains pairing or Wi-Fi secrets.
  * Messages are [UiText]. The state picks a `:ui:strings` key and the screen resolves the words.
- * Explanations that the Swift adapters still word themselves arrive as [UiText.Plain].
+ * Link and Wi-Fi access events arrive as a [CompanionNotice] or a [SyncResult]. Explanations that
+ * the Swift adapters still word themselves (Bluetooth state, export, progress steps) arrive as
+ * [UiText.Plain].
  */
 class CompanionState {
     internal var devices by mutableStateOf<List<NearbyDevice>>(emptyList())
@@ -107,9 +109,21 @@ class CompanionState {
         wifiAccessMessage = UiText.plain(explanation)
     }
 
+    /** Wi-Fi access state with a typed [notice] in Android's words. */
+    fun wifiAccessNoticed(available: Boolean, busy: Boolean, notice: CompanionNotice) {
+        wifiAccessAvailable = available
+        wifiAccessBusy = busy
+        wifiAccessMessage = notice.text
+    }
+
     /** Native sessions are independent: a callback updates only its own sensor card. */
     fun lanSessionChanged(name: String, connected: Boolean, busy: Boolean, message: String, filesDone: Int, filesTotal: Int, bytesDone: Long, bytesPerSecond: Double = 0.0) {
         lanSession(name, connected, busy, UiText.plain(message), filesDone, filesTotal, bytesDone, bytesPerSecond)
+    }
+
+    /** Same as [lanSessionChanged] with a typed [notice] in Android's words. */
+    fun lanSessionNoticed(name: String, connected: Boolean, busy: Boolean, notice: CompanionNotice, filesDone: Int, filesTotal: Int, bytesDone: Long) {
+        lanSession(name, connected, busy, notice.text, filesDone, filesTotal, bytesDone, 0.0)
     }
 
     /** A Wi-Fi sync ended. The card keeps its counts and shows the outcome. */
@@ -294,6 +308,11 @@ class CompanionState {
 
     fun connectionClosed(explanation: String) {
         close(UiText.plain(explanation))
+    }
+
+    /** The Bluetooth connection ended for a typed [notice], shown in Android's words. */
+    fun connectionClosedNoticed(notice: CompanionNotice) {
+        close(notice.text)
     }
 
     private fun close(explanation: UiText) {

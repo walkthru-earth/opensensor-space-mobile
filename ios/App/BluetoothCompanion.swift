@@ -104,6 +104,12 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         state.connectionClosed(explanation: message)
     }
 
+    /// Ends the connection for a typed reason, shown in Android's words.
+    func disconnect(notice: CompanionNotice) {
+        teardown()
+        state.connectionClosedNoticed(notice: notice)
+    }
+
     private func teardown() {
         // The engine sees the link end at once. Its result for this link is then ignored.
         syncHandle?.cancel()
@@ -294,11 +300,11 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         performNext()
     }
 
-    private func finishTokenRequest(_ explanation: String) {
+    private func finishTokenRequest(_ notice: CompanionNotice) {
         requestingToken = false
         tokenTimer?.invalidate()
         tokenTimer = nil
-        state.wifiAccessChanged(available: true, busy: false, explanation: explanation)
+        state.wifiAccessNoticed(available: true, busy: false, notice: notice)
     }
 
     func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
@@ -313,7 +319,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
             return
         }
         if error != nil {
-            disconnect(message: "Wi-Fi access could not be requested. Check pairing and try again.")
+            disconnect(notice: .tokenFailed)
             return
         }
         pending = nil
@@ -362,11 +368,11 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
                         LanCredential(
                             station: identity.station, device: identity.device,
                             peripheral: peripheral.identifier.uuidString, token: reply.payload, port: Int(reply.port)))
-                    finishTokenRequest("Wi-Fi access saved on this phone. Find this sensor on Wi-Fi to sync.")
+                    finishTokenRequest(.tokenStored)
                     onCredentialSaved?()
-                } catch { finishTokenRequest("Wi-Fi access could not be saved securely. Try again.") }
+                } catch { finishTokenRequest(LanFailure.credentialsUnavailable.notice) }
             } else {
-                finishTokenRequest("The sensor rejected Wi-Fi access. Check pairing and try again.")
+                finishTokenRequest(.tokenRefused)
             }
             return
         }
@@ -377,13 +383,13 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         switch characteristic.uuid {
         case CBUUID(string: state.infoUuid):
             guard state.receiveInfo(json: json) else {
-                disconnect(message: "Unsupported or invalid sensor information.")
+                disconnect(notice: .infoInvalid)
                 return
             }
             identity = wire.identity(json: json)
-            state.wifiAccessChanged(
+            state.wifiAccessNoticed(
                 available: identity != nil && control != nil && response != nil, busy: false,
-                explanation: "Save access once over Bluetooth before using Wi-Fi on this phone.")
+                notice: .saveWifiAccess)
             state.bluetoothSyncAvailable(available: identity != nil && control != nil && response != nil)
         case CBUUID(string: state.liveUuid):
             state.receiveLive(json: json)
