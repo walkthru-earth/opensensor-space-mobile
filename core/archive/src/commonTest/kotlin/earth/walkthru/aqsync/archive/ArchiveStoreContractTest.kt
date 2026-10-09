@@ -86,6 +86,20 @@ abstract class ArchiveStoreContract {
         index.remove(a.key)
         assertNull(index.get(a.key))
     }
+
+    @Test
+    fun `update transforms the latest record and skips a missing one`() = runTest {
+        val index = newIndex()
+        val a = ArchiveRecord(station, "a.parquet", 1, 1, "", 1, "d")
+        index.put(a)
+        index.put(a.copy(sha256 = "filled"))
+        index.update(a.key) { it.copy(indexedAtEpochMs = 9, rows = 3) }
+        val after = index.get(a.key)
+        assertEquals("filled", after?.sha256)
+        assertEquals(3L, after?.rows)
+        index.update(ArchiveKey(station, "missing.parquet")) { error("no record to transform") }
+        assertNull(index.get(ArchiveKey(station, "missing.parquet")))
+    }
 }
 
 class InMemoryArchiveStoreTest : ArchiveStoreContract() {

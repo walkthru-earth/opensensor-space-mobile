@@ -1,14 +1,14 @@
-package earth.walkthru.aqsync.ui.history
+package earth.walkthru.opensensor.history
 
 import earth.walkthru.aqsync.data.history.ChartAxis
 import earth.walkthru.aqsync.units.UnitSystem
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class YAxisTicksTest {
     @Test
-    fun `metric keeps the SI min to max by step ticks`() {
+    fun metricKeepsTheSiMinToMaxByStepTicks() {
         val axis = ChartAxis(0f, 60f, 20f)
         val ticks = yAxisTicks(axis, "µg/m³", UnitSystem.METRIC)
         assertEquals(listOf(0f to "0", 20f to "20", 40f to "40", 60f to "60"), ticks)
@@ -19,7 +19,7 @@ class YAxisTicksTest {
     }
 
     @Test
-    fun `imperial temperature labels are round Fahrenheit placed on the Celsius scale`() {
+    fun imperialTemperatureLabelsAreRoundFahrenheitPlacedOnTheCelsiusScale() {
         val ticks = yAxisTicks(ChartAxis(0f, 40f, 10f), "°C", UnitSystem.IMPERIAL)
         assertEquals(listOf("40", "60", "80", "100"), ticks.map { it.second })
         val expected = listOf(40.0, 60.0, 80.0, 100.0).map { ((it - 32.0) * 5.0 / 9.0).toFloat() }
@@ -28,10 +28,18 @@ class YAxisTicksTest {
     }
 
     @Test
-    fun `imperial pressure labels carry the decimals of the step`() {
+    fun imperialPressureLabelsCarryTheDecimalsOfTheStep() {
         val ticks = yAxisTicks(ChartAxis(990f, 1030f, 10f), "hPa", UnitSystem.IMPERIAL)
         ticks.forEach { assertTrue(it.first in 990f..1030f) }
         // 29.23 to 30.42 inHg at about five ticks steps by 0.25.
         assertEquals(listOf("29.25", "29.50", "29.75", "30.00", "30.25"), ticks.map { it.second })
+    }
+
+    @Test
+    fun valuesAndAxisLabelsNeedNoPlatformFormatter() {
+        assertEquals("12", fmtAxis(12f))
+        assertEquals("12.5", fmtAxis(12.5f))
+        assertEquals("172", fmtValue(172.4f))
+        assertEquals("9.0", fmtValue(9f))
     }
 }

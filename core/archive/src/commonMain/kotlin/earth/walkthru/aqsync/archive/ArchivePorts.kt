@@ -70,6 +70,16 @@ interface ArchiveIndex {
     /** Inserts or replaces the record of (station, name). */
     suspend fun put(record: ArchiveRecord)
 
+    /**
+     * Replaces the record of [key] with [transform] of its latest value, when there is one. A writer
+     * that owns only some columns (index repair) uses it so it never writes back a stale snapshot over
+     * another writer's change. The default reads then writes. An adapter with a lock overrides it to do
+     * both under that lock.
+     */
+    suspend fun update(key: ArchiveKey, transform: (ArchiveRecord) -> ArchiveRecord) {
+        get(key)?.let { put(transform(it)) }
+    }
+
     suspend fun remove(key: ArchiveKey)
 
     /** Records never indexed, then those whose last attempt failed, by name. */

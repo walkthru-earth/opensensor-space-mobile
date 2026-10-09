@@ -1,6 +1,7 @@
-package earth.walkthru.aqsync.ui.history
+package earth.walkthru.opensensor.history
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,36 +17,35 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.history.HistoryColumn
 import earth.walkthru.aqsync.data.history.MetricSpec
-import earth.walkthru.aqsync.ui.components.LocalUnits
-import earth.walkthru.aqsync.ui.components.MoodFace
-import earth.walkthru.aqsync.ui.components.NO_VALUE
-import earth.walkthru.aqsync.ui.theme.color
-import earth.walkthru.aqsync.ui.theme.textColorOnSurface
-import earth.walkthru.aqsync.ui.theme.valueColor
-import java.time.Instant
-import java.time.ZoneId
+import earth.walkthru.aqsync.data.history.localDateOf
+import earth.walkthru.aqsync.units.UnitFormatter
+import earth.walkthru.opensensor.history.resources.Res
+import earth.walkthru.opensensor.history.resources.history_day_coverage
+import earth.walkthru.opensensor.history.resources.history_no_readings_short
+import earth.walkthru.opensensor.history.resources.history_no_value
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toInstant
+import org.jetbrains.compose.resources.stringResource
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * The day as a clock: one segment per elapsed hour (23 or 25 across DST), midnight at the top, each coloured by
- * its WHO step (neutral ink without a scale), faded by its coverage, dashed when on estimated time, dark where nothing was recorded;
- * a tick for "now" when the day is today; the day's average and its mood in the middle. Reads like
- * a watch face — you see at once *when* the air was bad — and it is the shape the iOS widget can take.
+ * The day as a clock: one segment per elapsed hour (23 or 25 across DST), midnight at the top, each
+ * coloured by its WHO step (neutral ink without a scale), faded by coverage, dashed on estimated
+ * time, a tick for "now" when the day is today, and the day's average with its mood in the middle.
  */
 @Composable
-fun DayRing(
+internal fun DayRing(
     columns: List<HistoryColumn>,
     metric: MetricSpec,
     dayStartS: Long,
@@ -54,17 +54,18 @@ fun DayRing(
     coverage: Float,
     nowS: Long?,
     selected: HistoryColumn?,
+    zone: TimeZone,
+    units: UnitFormatter,
     modifier: Modifier = Modifier,
     size: Dp = 220.dp,
-    zone: ZoneId = ZoneId.systemDefault(),
 ) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val onSurface = MaterialTheme.colorScheme.onSurface
     val empty = MaterialTheme.colorScheme.surfaceContainerHighest
     val labelPx = with(LocalDensity.current) { 11.sp.toPx() }
-    val labelPaint = remember(muted, labelPx) { textPaint(muted, labelPx) }
+    val measurer = rememberTextMeasurer()
+    val labelStyle = remember(muted) { chartTextStyle(muted, 11) }
     val mood = mean?.let { metric.moodOf(it.toDouble()) }
-    val units = LocalUnits.current
 
     Box(modifier.size(size), contentAlignment = Alignment.Center) {
         Canvas(Modifier.fillMaxSize()) {
@@ -74,13 +75,11 @@ fun DayRing(
             val r = outer - thickness / 2
             val daySeconds = (dayEndS - dayStartS).toFloat()
             fun angle(s: Long): Float = ((s - dayStartS) / daySeconds) * 360f - 90f // midnight at the top
-            // Base track.
             drawCircle(empty, r, c, style = Stroke(thickness))
             for (col in columns) {
+                val m = col.mean ?: continue
                 val start = angle(col.startS)
                 val sweep = ((col.endS - col.startS) / daySeconds) * 360f
-                val m = col.mean
-                if (m == null) continue
                 val color = metric.valueColor(m.toDouble(), muted)
                 val alpha = 0.3f + 0.7f * col.coverage
                 val isSel = selected != null && selected.startS == col.startS
@@ -94,33 +93,32 @@ fun DayRing(
                     style = Stroke(if (isSel) thickness * 1.25f else thickness, pathEffect = if (col.estimated) PathEffect.dashPathEffect(floatArrayOf(4f, 3f)) else null),
                 )
             }
-            // Hour marks: 00 · 06 · 12 · 18 in the local zone.
-            val day = Instant.ofEpochSecond(dayStartS).atZone(zone).toLocalDate()
+            // Hour marks 00, 06, 12 and 18 in the local zone.
+            val day = localDateOf(dayStartS, zone)
             for (h in listOf(0, 6, 12, 18)) {
-                val s = day.atTime(h, 0).atZone(zone).toEpochSecond()
+                val s = LocalDateTime(day.year, day.month, day.day, h, 0).toInstant(zone).epochSeconds
                 val a = angle(s) * PI.toFloat() / 180f
                 val lr = outer + labelPx * 0.8f
-                val text = "%02d".format(java.util.Locale.ROOT, h)
-                val w = labelPaint.measureText(text)
-                drawContext.canvas.nativeCanvas.drawText(text, c.x + cos(a) * lr - w / 2, c.y + sin(a) * lr + labelPx * 0.35f, labelPaint)
+                val layout = measurer.measure(h.toString().padStart(2, '0'), labelStyle)
+                val w = layout.size.width
+                drawLabel(layout, c.x + cos(a) * lr - w / 2, c.y + sin(a) * lr + labelPx * 0.35f)
                 drawLine(muted.copy(alpha = 0.5f), Offset(c.x + cos(a) * (outer + 2f), c.y + sin(a) * (outer + 2f)), Offset(c.x + cos(a) * (outer + 8f), c.y + sin(a) * (outer + 8f)), 1.5f)
             }
-            // Now marker.
             if (nowS != null && nowS >= dayStartS && nowS < dayEndS) {
                 val a = angle(nowS) * PI.toFloat() / 180f
                 drawLine(onSurface, Offset(c.x + cos(a) * (r - thickness * 0.8f), c.y + sin(a) * (r - thickness * 0.8f)), Offset(c.x + cos(a) * (r + thickness * 0.8f), c.y + sin(a) * (r + thickness * 0.8f)), 2.5f, cap = StrokeCap.Round)
             }
         }
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.size(size * 0.5f), verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.size(size * 0.5f), verticalArrangement = Arrangement.Center) {
             if (mood != null) MoodFace(mood, mood.color(), Modifier.size(size * 0.16f))
             Text(
-                units.value(mean, metric.unit)?.let { if (it >= 100) it.toInt().toString() else "%.1f".format(java.util.Locale.ROOT, it) } ?: NO_VALUE,
+                units.value(mean, metric.unit)?.let(::fmtValue) ?: stringResource(Res.string.history_no_value),
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = mood?.textColorOnSurface() ?: onSurface,
             )
-            Text(if (mean == null) stringResource(R.string.history_no_readings_short) else units.unit(metric.unit), style = MaterialTheme.typography.labelSmall, color = muted)
-            if (mean != null) Text(stringResource(R.string.scan_archive_coverage, (coverage * 100).toInt()), style = MaterialTheme.typography.labelSmall, color = muted)
+            Text(if (mean == null) stringResource(Res.string.history_no_readings_short) else units.unit(metric.unit), style = MaterialTheme.typography.labelSmall, color = muted)
+            if (mean != null) Text(stringResource(Res.string.history_day_coverage, (coverage * 100).toInt()), style = MaterialTheme.typography.labelSmall, color = muted)
         }
     }
 }
