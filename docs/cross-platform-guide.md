@@ -236,8 +236,14 @@ Errors say what happened and what to do, in words a person without the firmware 
 
 The apps ship English (default) and Arabic (`ar`). Every catalogue has a `values-ar/strings.xml` next
 to its `values/strings.xml`, the Android `app/src/main/res` one and each Compose resource module
-(`ui/*`, `feature/*`). Compose resources pick `values-ar` on Android and on iOS from the phone's
-language, so shared screens need no platform code. Layouts mirror on their own because both apps
+(`ui/*`, `feature/*`). Compose resources read only the first of the phone's languages, while
+Android `res/` and the iOS bundle take the first language the app ships. A phone set to French then
+Arabic would show Arabic platform text, English shared screens and a mixed direction. So each app
+first moves the language its platform resolved to the front of the list for that run, saving
+nothing (`AppLanguage.kt` reads the `locale_tag` string in `res/`, `AppLanguage` in
+`AppDelegate.swift` reads `Bundle.main.preferredLocalizations`). An explicit per-app language
+already leads the list and is left alone. `preferredLanguage()` reads `Locale.current`, the value
+Compose resources use, so the font follows the strings. Layouts mirror on their own because both apps
 use start and end, never left and right, and directional icons (`AppIcons.ArrowBack`,
 `ArrowForward`, `Send`, `ChevronLeft`, `ChevronRight`) set `autoMirror`. Cairo sets the text when
 the language is written in Arabic script or the layout runs right to left (`usesCairoText` in
@@ -247,7 +253,8 @@ To add a language `xx`.
 
 1. Add `values-xx/strings.xml` beside every default catalogue, with every key and every plural
    form the language needs (Arabic needs zero, one, two, few, many and other). Keep placeholders.
-2. Add `xx` to `languages` (and its plural forms) in `TranslationsTest`, to
+2. Add `<string name="locale_tag">xx</string>` to `app/src/main/res/values-xx/strings.xml`. Add `xx`
+   to `languages` (and its plural forms) in `TranslationsTest`, to
    `app/src/main/res/xml/locales_config.xml`, to `knownRegions` in the Xcode project, to
    `CFBundleLocalizations` in `ios/App/Info.plist`, and give each entry of
    `ios/App/InfoPlist.xcstrings` an `xx` value.
