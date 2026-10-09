@@ -4,6 +4,24 @@
 **Code:** `./gradlew verify` (the gate), `.github/workflows/verify.yml`.
 **Related:** measured device behaviour is recorded in the board-specific `../aq-parquet/docs/boards/*/bench-verified.md`; anything not recorded there is unverified.
 
+## 2026-10-10 — pushed interval fix and fresh iPhone installation
+
+Firmware `4d20dad` and mobile `655d865` were pushed to their GitHub `main`
+branches. The mobile pre-push `verify` gate passed. Xcode 27.0 built the signed
+Debug device app from mobile `655d865`, and strict/deep signature verification
+passed with access to the local trust store. Its provisioning profile includes
+the connected iPhone 16 Pro and expires on 2026-10-16. Debug dylib SHA-256:
+`10ee1af01d3f126095235d84366d22b61bdc8e608f4cac80bfd6e00bd98fd5a5`.
+
+The iPhone (iOS 26.6.2, Developer Mode enabled) had no installed opensensor app
+before this run. `devicectl` successfully installed `earth.walkthru.opensensor`.
+The initial launch was denied by iOS with its signature/entitlements/developer
+trust security message. The bundle signature, application identity and matching
+unexpired device profile were checked; owner completion of developer trust and
+a successful launch remain pending. No iPhone BLE, LAN or file transfer behavior
+is established by this installation. Build/install/launch evidence is retained
+under ignored `ios/build/DeviceInstall/evidence-20261010/`.
+
 ## 2026-10-10 — interval fragmentation fix, clean Android install and shared iOS checks
 
 Android and iOS now use the shared clock policy to request fresh device status
