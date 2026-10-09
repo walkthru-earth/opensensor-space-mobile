@@ -11,9 +11,10 @@ import java.io.File
 import javax.xml.parsers.DocumentBuilderFactory
 
 /**
- * Copy rules for every user-facing string (docs/screens.md, Copy and the info affordance). No em
- * or en dashes, no semicolons and no colons in sentences. Format placeholders (`%1$s`) and
- * clock-like numbers are not sentence colons.
+ * Android and shared catalogues say the same words where they share a key (docs/screens.md, Copy
+ * and the info affordance). The copy rules themselves (no dashes, semicolons or sentence colons)
+ * are checked for every catalogue in the repository by `:ui:strings` CopyLintTest, which runs
+ * without this module.
  */
 class CopyRulesTest {
     /** The repository root, whether Gradle runs this from `app/` or from the root. */
@@ -54,18 +55,6 @@ class CopyRulesTest {
         return out
     }
 
-    @Test
-    fun `no dashes semicolons or sentence colons`() {
-        val shared = sharedStrings()
-        assertTrue("Shared catalogues missing: ${shared.keys}", shared.keys.containsAll(listOf("discover", "settings", "designsystem", "shell")))
-        val all = strings() + shared.flatMap { (module, values) -> values.map { (k, v) -> "$module/$k" to v } }
-        val broken = all.filter { (_, text) ->
-            val sentence = text.replace(Regex("%\\d+\\$[a-z]"), "X").replace(Regex("\\d:\\d"), "0")
-            '—' in sentence || '–' in sentence || ';' in sentence || ':' in sentence
-        }
-        assertTrue("Copy rule violations: $broken", broken.isEmpty())
-    }
-
     /**
      * A few strings live in both catalogues while Android screens outside the shared modules still
      * read them. They must say the same, word for word.
@@ -74,6 +63,7 @@ class CopyRulesTest {
     fun `shared copies match the Android resources`() {
         val s = strings()
         val shared = sharedStrings()
+        assertTrue("Shared catalogues missing: ${shared.keys}", shared.keys.containsAll(listOf("discover", "settings", "designsystem", "strings")))
         val both = mapOf(
             "discover" to listOf("who_step_guideline", "who_step_it4", "who_step_it3", "who_step_it2", "who_step_it1", "who_step_above_it1"),
             "settings" to listOf("info_privacy"),

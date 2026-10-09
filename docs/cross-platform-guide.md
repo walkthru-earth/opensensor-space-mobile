@@ -222,9 +222,12 @@ logs and diagnostics. A new field states its level in code, and screenshot tests
 
 Write user-facing text so both platforms say the same thing. Shared screens keep their copy in
 Compose resources, one catalogue for both apps (`feature/<name>/src/commonMain/composeResources/values/strings.xml`,
-today Discover and Settings). Android-only screens still use `res/values*/strings.xml`, and the iOS
-companion screen keeps its strings in `:ios:shared` Kotlin until it moves
-([platform-parity-plan.md](platform-parity-plan.md)). `CopyRulesTest` checks every catalogue.
+today Discover and Settings). Copy for the iOS companion screen and shared screens without a module
+of their own lives in `:ui:strings`, and a key Android already has keeps its name and words. State
+code holds a `UiText` (a catalogue key with arguments) and the composable resolves it. Android-only
+screens still use `res/values*/strings.xml`. The `:ui:strings` host tests check every Android and
+Compose `strings.xml` in the repository (`CopyLintTest`) and fail on a new `Text("…")` or English
+sentence literal in the `:ios:shared` presentation sources (`PresentationLiteralsTest`).
 No em dashes, colons or semicolons in user-facing copy. Errors say what happened and what to do,
 in words a person without the firmware docs understands.
 

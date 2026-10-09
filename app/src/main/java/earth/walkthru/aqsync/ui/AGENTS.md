@@ -56,6 +56,6 @@ app types or `R.string`.
 - The peacock is for welcome, empty and success states only. Fonts are OFL (Quicksand, Cairo).
   Keep `ui/designsystem/src/commonMain/composeResources/files/licenses/` with them.
 - User-facing copy lives in `res/values/strings.xml`, with plurals for counts. No em dashes,
-  colons or semicolons (`CopyRulesTest` checks). Data-layer snackbars arrive as
+  colons or semicolons (`CopyLintTest` in `:ui:strings` checks). Data-layer snackbars arrive as
   `DeviceMessage` codes and are mapped in `components/DeviceMessages.kt`. Typed UI values
   (`GroupTitle`, `RawError`, `FailReason`) are mapped in the screen, never rendered as English.
