@@ -29,6 +29,8 @@ kotlin {
         androidMain.dependencies {
             // The save picker (CreateDocument) and the share chooser.
             implementation(libs.androidx.activity.compose)
+            // Keeps an open save picker's request across activity recreation (PendingSave).
+            implementation(libs.androidx.lifecycle.viewmodel.compose)
             // FileProvider.
             implementation(libs.androidx.core.ktx)
         }

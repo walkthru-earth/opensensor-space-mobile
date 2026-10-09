@@ -4,12 +4,15 @@ import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.provider.DocumentsContract
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.FileProvider
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 import earth.walkthru.aqsync.archive.ArchiveExport
 import earth.walkthru.aqsync.archive.StagedFile
 import earth.walkthru.opensensor.files.resources.Res
@@ -28,6 +31,22 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
+ * The save picker's open request. It lives in a ViewModel, so a rotation or a theme change while the
+ * picker is open hands the picked document to the same waiting save, whose coroutine outlives the
+ * activity. Leaving the screen for good answers it with null, so the export never hangs.
+ */
+internal class PendingSave : ViewModel() {
+    var result: CompletableDeferred<Uri?>? = null
+
+    fun answer(uri: Uri?) {
+        result?.complete(uri)
+        result = null
+    }
+
+    override fun onCleared() = answer(null)
+}
+
+/**
  * Shares through a chooser over the app's `FileProvider` (`<applicationId>.files`, which serves only
  * `cacheDir/export`, the [earth.walkthru.aqsync.archive.FileExportSpace] root) and saves through the
  * Storage Access Framework. The chooser gives no close signal, so [ExportPresenter.share] returns false
@@ -35,13 +54,14 @@ import java.util.Locale
  */
 @Composable
 actual fun rememberExportPresenter(): ExportPresenter {
+    // The application context, since a save can finish after the activity that opened it is gone.
     val context = LocalContext.current
-    val pending = remember { arrayOfNulls<CompletableDeferred<Uri?>>(1) }
+    val app = context.applicationContext
+    val pending = viewModel { PendingSave() }
     val createDocument = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(ArchiveExport.ZIP_MIME)) { uri ->
-        pending[0]?.complete(uri)
-        pending[0] = null
+        pending.answer(uri)
     }
-    return remember(context) {
+    return remember(context, pending) {
         object : ExportPresenter {
             override suspend fun share(files: List<StagedFile>, kind: ShareKind): Boolean {
                 val uris = files.map { uriFor(context, it) }
@@ -70,13 +90,20 @@ actual fun rememberExportPresenter(): ExportPresenter {
 
             override suspend fun save(file: StagedFile): Boolean {
                 val result = CompletableDeferred<Uri?>()
-                pending[0]?.cancel()
-                pending[0] = result
+                pending.answer(null)
+                pending.result = result
                 createDocument.launch(file.name)
                 val uri = result.await() ?: return true
+                val resolver = app.contentResolver
                 withContext(Dispatchers.IO) {
-                    val out = context.contentResolver.openOutputStream(uri, "wt") ?: error("no output stream")
-                    out.use { o -> File(file.path).inputStream().use { it.copyTo(o) } }
+                    try {
+                        val out = resolver.openOutputStream(uri, "wt") ?: error("no output stream")
+                        out.use { o -> File(file.path).inputStream().use { it.copyTo(o) } }
+                    } catch (e: Throwable) {
+                        // The picker made an empty document. Remove it so no half zip is left behind.
+                        runCatching { DocumentsContract.deleteDocument(resolver, uri) }
+                        throw e
+                    }
                 }
                 return true
             }
