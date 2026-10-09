@@ -57,7 +57,8 @@ private fun EntryProviderScope<NavKey>.androidEntries(nav: TabNavigator) {
             onOpenHistory = { nav.openSection(HistoryKey(key.address)) },
             onOpenFiles = { nav.openSection(FilesKey(key.address)) },
             onOpenDevice = { nav.openSection(DeviceKey(key.address)) },
-            onOpenDebug = { nav.push(DebugKey(key.address)) },
+            // The button shows only at the Developer level, the Debug screen pops when the level drops.
+            onOpenDebug = { nav.openDebug(key.address, developer = true) },
             onOpenSettings = { nav.select(TopTab.SETTINGS) },
             onDisconnected = { nav.toMyDevicesRoot() },
         )
@@ -93,7 +94,8 @@ private fun EntryProviderScope<NavKey>.androidEntries(nav: TabNavigator) {
             onOpenToday = { nav.openSection(TodayKey(key.address)) },
             onOpenHistory = { nav.openSection(HistoryKey(key.address)) },
             onOpenFiles = { nav.openSection(FilesKey(key.address)) },
-            onOpenDebug = { nav.push(DebugKey(key.address)) },
+            // The button shows only at the Developer level, the Debug screen pops when the level drops.
+            onOpenDebug = { nav.openDebug(key.address, developer = true) },
             onOpenSettings = { nav.select(TopTab.SETTINGS) },
             onDisconnected = { nav.toMyDevicesRoot() },
         )
