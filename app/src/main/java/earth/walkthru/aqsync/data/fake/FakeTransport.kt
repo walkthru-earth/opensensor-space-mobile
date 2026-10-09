@@ -113,7 +113,7 @@ class FakeTransport(
     private var logTotal = 0L
 
     private fun logLine(line: String) {
-        val stamped = "[%8d] %s\n".format((System.currentTimeMillis() - bootTimeMs) / 1000 + upSeconds, line)
+        val stamped = "[%8d] %s\n".format(java.util.Locale.ROOT, (System.currentTimeMillis() - bootTimeMs) / 1000 + upSeconds, line)
         log.append(stamped)
         logTotal += stamped.length
         while (log.length > LOG_RING) log.delete(0, log.length - LOG_RING)
@@ -515,7 +515,7 @@ class FakeTransport(
         return """{"seq":$seq,"mono":${upSeconds * 1_000_000},$utc"pms":4,""" +
             """"pm1":$pm1,"pm25":${pm25.toInt()},"pm10":$pm10,"c1":$pm1,"c25":${pm25.toInt()},"c10":$pm10,""" +
             """"n03":${(pm25 * 130).toInt()},"n05":${(pm25 * 36).toInt()},"n1":${(pm25 * 4).toInt()},"n25":2,"n5":0,"n10":0,""" +
-            """"t":${"%.1f".format(26.0 + rnd.nextDouble(-0.3, 0.3))},"bat":4100,"pct":80,"chg":0,"vbus":5000,"als":120}"""
+            """"t":${"%.1f".format(java.util.Locale.ROOT, 26.0 + rnd.nextDouble(-0.3, 0.3))},"bat":4100,"pct":80,"chg":0,"vbus":5000,"als":120}"""
     }
 
     private fun sdUsedKib(): Long = 34_176 + files.sumOf { it.bytes.size.toLong() } / 1024

@@ -16,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import android.content.res.Configuration as ResConfiguration
 
 /**
  * WorkManager is configured here (default initializer disabled in the manifest) so [SyncWorker]
@@ -53,6 +54,8 @@ class AqSyncApplication :
 
     override fun onCreate() {
         super.onCreate()
+        // Shared Compose screens read the first default locale. Make it the language `res/` chose.
+        AppLanguage.alignDefault(this)
         appScope.launch {
             runCatching { lanTokenMigration.migratePlaintextTokens() }
             autoSyncScheduler.start(appScope)
@@ -70,6 +73,11 @@ class AqSyncApplication :
                 Log.w(TAG, "history derive repair failed", it)
             }
         }
+    }
+
+    override fun onConfigurationChanged(newConfig: ResConfiguration) {
+        super.onConfigurationChanged(newConfig)
+        AppLanguage.alignDefault(this)
     }
 
     private companion object {

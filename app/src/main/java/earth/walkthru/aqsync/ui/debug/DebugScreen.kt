@@ -202,6 +202,7 @@ fun DebugScreen(
                                         )
                                         Text(
                                             "%s %-13s %5d B  %s%s".format(
+                                                java.util.Locale.ROOT,
                                                 timeOf(f.atEpochMs),
                                                 f.typeName,
                                                 f.length,
