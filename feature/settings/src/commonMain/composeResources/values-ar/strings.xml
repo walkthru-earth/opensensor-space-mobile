@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Arabic Settings copy for Android and iOS, same keys as values/strings.xml. Machine drafted, needs a
+  native speaker's review before release. Copy rules (docs/screens.md, CopyLintTest). No em or en
+  dashes, no colons or semicolons, Arabic semicolon included. No backslash escapes.
+-->
+<resources>
+    <string name="settings_title">الإعدادات</string>
+    <string name="info_settings_body1">مستوى التفاصيل يغيّر ما تراه فقط. كل المستويات تقرأ البيانات نفسها، ولا يُخفى شيء من الأرشيف أو التصدير.</string>
+    <string name="info_settings_body2">المزامنة الذكية لا تعيد كتابة الملفات الأصلية أبدًا. إكمال الصفوف المؤقتة يبقى إجراءً منفصلًا يحتاج إلى تأكيد.</string>
+
+    <string name="settings_detail_level">مستوى التفاصيل</string>
+    <string name="level_simple">بسيط</string>
+    <string name="level_detailed">مفصّل</string>
+    <string name="level_developer">للمطوّرين</string>
+    <string name="settings_level_simple">القراءة واليوم والمزامنة.</string>
+    <string name="settings_level_detailed">يضيف كل القياسات وتفاصيل الملفات.</string>
+    <string name="settings_level_developer">يضيف المعرّفات وشاشة تصحيح الأخطاء.</string>
+
+    <string name="settings_clock">ساعة المزامنة الذكية</string>
+    <string name="clock_mode_ask_title">اسأل أولًا</string>
+    <string name="clock_mode_automatic_title">تلقائي</string>
+    <string name="clock_mode_never_title">أبدًا</string>
+    <string name="clock_mode_ask">اسأل قبل إرسال وقت هذا الهاتف.</string>
+    <string name="clock_mode_automatic">أرسل وقت هذا الهاتف عندما تكون ساعة المستشعر غير مضبوطة.</string>
+    <string name="clock_mode_never">انسخ الملفات فقط. سترى تنبيهًا للقراءات غير المؤرخة.</string>
+
+    <string name="settings_units">الوحدات</string>
+    <string name="units_auto">تلقائي</string>
+    <string name="units_metric">مترية</string>
+    <string name="units_imperial">إمبراطورية</string>
+    <string name="settings_units_auto">يتبع منطقة هاتفك، حاليًا %1$s</string>
+
+    <string name="settings_public_sensors">عرض المستشعرات العامة</string>
+    <string name="settings_public_sensors_body">عند الإيقاف، لا تستخدم الخريطة الإنترنت وتعرض بيانات تجريبية فقط.</string>
+
+    <string name="settings_about">حول التطبيق</string>
+    <string name="settings_about_body">opensensor.space %1$s</string>
+    <string name="info_privacy">لا يصل Bluetooth وشبكة Wi-Fi المحلية إلا إلى مستشعراتك. لا حساب ولا تحليلات ولا رفع. يُستخدم الموقع التقريبي فقط عند النقر على بالقرب مني، لتحريك الخريطة. تبقى ملفاتك على هذا الهاتف ما لم تشاركها.</string>
+    <string name="settings_fonts">خطا Quicksand وCairo بموجب رخصة SIL Open Font License 1.1. شعار الطاووس من opensensor.space.</string>
+    <string name="settings_more_about">المزيد عن %1$s</string>
+</resources>

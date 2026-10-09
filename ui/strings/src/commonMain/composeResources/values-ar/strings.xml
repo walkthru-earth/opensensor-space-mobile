@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The shared Arabic copy, same keys as values/strings.xml. Machine drafted, needs a native speaker's
+  review before release (docs/parity-decisions.md). Copy rules (docs/screens.md, CopyLintTest).
+  No em or en dashes, no colons or semicolons, Arabic semicolon included. No backslash escapes.
+  A key that Android res/values-ar/strings.xml also has keeps its exact words (StringsMatchAndroidTest).
+-->
+<resources>
+    <!-- Same keys and words as Android. -->
+    <string name="app_name">opensensor.space</string>
+    <string name="now_waiting">في انتظار قراءة…</string>
+    <string name="nav_disconnect">قطع الاتصال</string>
+    <string name="action_cancel">إلغاء</string>
+    <string name="conn_ready">متصل</string>
+    <string name="conn_connecting">جارٍ الاتصال…</string>
+    <string name="conn_disconnected">غير متصل</string>
+    <string name="batch_value">%1$s µg/m³</string>
+    <string name="action_not_now">ليس الآن</string>
+    <string name="perm_continue">متابعة</string>
+    <string name="perm_open_settings">فتح الإعدادات</string>
+    <string name="nav_settings">الإعدادات</string>
+
+    <!-- The bottom bar of the app shell (:feature:shell), both apps. -->
+    <string name="tab_discover">استكشاف</string>
+    <string name="tab_my_devices">أجهزتي</string>
+
+    <!-- My devices on iOS, Bluetooth. -->
+    <string name="companion_subtitle">مستشعراتك القريبة</string>
+    <string name="companion_now">الآن</string>
+    <string name="companion_pm25_mood">PM2.5 · %1$s</string>
+    <string name="companion_storage_error">يبلّغ المستشعر عن خطأ في التخزين.</string>
+    <plurals name="companion_files_finalized">
+        <item quantity="zero">%1$s ملف مكتمل على المستشعر</item>
+        <item quantity="one">%1$s ملف مكتمل على المستشعر</item>
+        <item quantity="two">%1$s ملفان مكتملان على المستشعر</item>
+        <item quantity="few">%1$s ملفات مكتملة على المستشعر</item>
+        <item quantity="many">%1$s ملفًا مكتملًا على المستشعر</item>
+        <item quantity="other">%1$s ملف مكتمل على المستشعر</item>
+    </plurals>
+    <string name="companion_firmware">البرنامج الثابت %1$s</string>
+    <string name="companion_wifi_access_save">حفظ الوصول عبر Wi-Fi</string>
+    <string name="companion_wifi_access_saving">جارٍ حفظ الوصول…</string>
+    <string name="companion_find_sensors">ابحث عن المستشعرات</string>
+    <string name="companion_scanning">جارٍ البحث…</string>
+    <string name="companion_signal_dbm">%1$d dBm</string>
+    <string name="companion_connect">اتصال</string>
+    <string name="companion_scan_looking">جارٍ البحث عن المستشعرات القريبة…</string>
+    <string name="companion_scan_none">لم يُعثر على مستشعرات. أبقِ مستشعرك قريبًا وحاول مرة أخرى.</string>
+    <string name="companion_scan_choose">اختر مستشعرًا لترى قراءاته.</string>
+    <string name="companion_connecting_pin">جارٍ الاتصال… إذا طُلب منك، أدخل رمز PIN للإقران الظاهر على مستشعرك.</string>
+    <string name="companion_info_invalid">معلومات هذا المستشعر غير صالحة أو غير مدعومة.</string>
+    <string name="companion_live">متصل · قراءات مباشرة</string>
+    <string name="companion_status_unreadable">أرسل المستشعر حالة تتعذر قراءتها.</string>
+    <string name="companion_live_unreadable">أرسل المستشعر قراءة تتعذر قراءتها.</string>
+
+    <!-- My devices on iOS, Wi-Fi. -->
+    <string name="companion_lan_title">على شبكة Wi-Fi لديك</string>
+    <string name="companion_lan_find">ابحث عن مستشعرات Wi-Fi</string>
+    <string name="companion_lan_finding">جارٍ البحث في Wi-Fi…</string>
+    <string name="companion_lan_looking">جارٍ البحث في شبكة Wi-Fi لديك…</string>
+    <string name="companion_lan_found">المستشعرات على شبكة Wi-Fi لديك</string>
+    <string name="companion_lan_none">لم يُعثر على مستشعرات Wi-Fi. تحقق من الشبكة المحلية في الإعدادات.</string>
+    <string name="companion_lan_waiting">في انتظار الوصول إلى Wi-Fi أو الشبكة المحلية.</string>
+    <string name="companion_lan_denied">فعّل الشبكة المحلية لتطبيق opensensor.space في الإعدادات.</string>
+    <string name="companion_lan_unavailable">البحث عبر Wi-Fi غير متاح. تحقق من Wi-Fi والشبكة المحلية في الإعدادات.</string>
+    <string name="companion_lan_connect_label">الاتصال بـ %1$s عبر Wi-Fi</string>
+    <string name="companion_lan_link">Wi-Fi · %1$s</string>
+    <string name="companion_lan_paused">المزامنة متوقفة مؤقتًا</string>
+    <string name="companion_lan_discovered">تم العثور عليه</string>
+    <string name="companion_lan_needs_access">احفظ الوصول عبر Wi-Fi من خلال Bluetooth أولًا.</string>
+    <plurals name="companion_lan_files">
+        <item quantity="zero">%1$d من %2$d ملف</item>
+        <item quantity="one">%1$d من %2$d ملف</item>
+        <item quantity="two">%1$d من %2$d ملف</item>
+        <item quantity="few">%1$d من %2$d ملفات</item>
+        <item quantity="many">%1$d من %2$d ملفًا</item>
+        <item quantity="other">%1$d من %2$d ملف</item>
+    </plurals>
+    <string name="companion_lan_bytes">%1$s بايت في الملف الحالي</string>
+    <string name="companion_lan_rate">%1$s KiB/s في المتوسط</string>
+    <string name="companion_sync">مزامنة</string>
+
+    <!-- Export. -->
+    <string name="companion_export">تصدير ملفات Parquet</string>
+    <string name="companion_export_preparing">جارٍ تجهيز التصدير…</string>
+</resources>
