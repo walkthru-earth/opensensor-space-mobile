@@ -23,6 +23,8 @@ nav3Core = "1.1.7"
 jetbrainsNavigation3 = "1.1.2"
 # Multiplatform lifecycle, paired with CMP 1.12.1. Android resolves to androidx.lifecycle 2.11.0.
 jetbrainsLifecycle = "2.11.0"
+# Multiplatform Navigation Event, the version navigation3-ui 1.1.2 names. Android resolves to androidx.navigationevent.
+jetbrainsNavigationEvent = "1.1.0"
 kotlinxSerialization = "1.11.0"
 # Calendar math in shared code (time zones, local dates). 0.8.0 uses kotlin.time.Instant and Clock.
 kotlinxDatetime = "0.8.0"
@@ -75,6 +77,7 @@ androidx-navigation3-runtime = { module = "androidx.navigation3:navigation3-runt
 # The shared shell (:feature:shell). Android resolves these to the same androidx binaries.
 jetbrains-navigation3-ui = { module = "org.jetbrains.androidx.navigation3:navigation3-ui", version.ref = "jetbrainsNavigation3" }
 jetbrains-lifecycle-viewmodel-navigation3 = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-navigation3", version.ref = "jetbrainsLifecycle" }
+jetbrains-navigationevent-compose = { module = "org.jetbrains.androidx.navigationevent:navigationevent-compose", version.ref = "jetbrainsNavigationEvent" }
 jetbrains-lifecycle-viewmodel-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "jetbrainsLifecycle" }
 jetbrains-lifecycle-runtime-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose", version.ref = "jetbrainsLifecycle" }
 

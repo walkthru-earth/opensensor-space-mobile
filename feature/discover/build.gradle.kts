@@ -22,6 +22,8 @@ kotlin {
             api(project(":ui:permissions"))
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.maplibre.compose)
+            // Back first returns an open sheet to peek, on both apps (NavigationBackHandler).
+            implementation(libs.jetbrains.navigationevent.compose)
         }
         androidMain.dependencies {
             // One render backend for Android. OpenGL first, Vulkan after a phone check.

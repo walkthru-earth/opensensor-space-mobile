@@ -22,9 +22,6 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigationevent.NavigationEventInfo
-import androidx.navigationevent.compose.NavigationBackHandler
-import androidx.navigationevent.compose.rememberNavigationEventState
 import earth.walkthru.aqsync.archive.IosExportSpace
 import earth.walkthru.aqsync.publicfeed.platformH3Grid
 import earth.walkthru.aqsync.settings.DetailLevel
@@ -377,16 +374,10 @@ private fun MyDevicesEntry(
     )
 }
 
-/** Discover with its controller kept per entry. Back, or the edge swipe, first returns an open sheet to peek. */
+/** Discover with its controller kept per entry. The shared screen takes Back, or the edge swipe, while a sheet is open. */
 @Composable
 private fun DiscoverEntry(networkAllowed: Boolean, units: UnitSystem, onAddSensor: () -> Unit) {
     val controller = viewModel { DiscoverHolder() }.controller
-    val state by controller.state.collectAsState()
-    NavigationBackHandler(
-        state = rememberNavigationEventState(NavigationEventInfo.None),
-        isBackEnabled = state.selected != null,
-        onBackCompleted = { controller.selectCell(null) },
-    )
     DiscoverScreen(
         controller = controller,
         networkAllowed = networkAllowed,

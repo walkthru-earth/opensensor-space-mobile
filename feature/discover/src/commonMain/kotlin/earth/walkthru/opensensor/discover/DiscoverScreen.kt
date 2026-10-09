@@ -70,6 +70,9 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.navigationevent.NavigationEventInfo
+import androidx.navigationevent.compose.NavigationBackHandler
+import androidx.navigationevent.compose.rememberNavigationEventState
 import earth.walkthru.aqsync.airquality.WhoStep
 import earth.walkthru.aqsync.publicfeed.CellRow
 import earth.walkthru.aqsync.publicfeed.CellScale
@@ -126,6 +129,13 @@ private fun DiscoverContent(
     infoButton: @Composable (InfoText, Modifier) -> Unit,
 ) {
     val state by controller.state.collectAsState()
+    // Back, the Android predictive back or the iOS edge swipe, first returns an open sheet to peek.
+    // Navigation Event runs the newest handler first, so this wins over the shell's NavDisplay.
+    NavigationBackHandler(
+        state = rememberNavigationEventState(NavigationEventInfo.None),
+        isBackEnabled = state.selected != null,
+        onBackCompleted = { controller.selectCell(null) },
+    )
     val dark = isSystemInDarkTheme()
     val paper = MaterialTheme.colorScheme.surfaceContainerLow
     val ink = MaterialTheme.colorScheme.onSurface

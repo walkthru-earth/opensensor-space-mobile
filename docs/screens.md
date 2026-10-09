@@ -37,7 +37,7 @@ device, and nothing is asked at launch.
 - Back (Android predictive back, the iOS start edge swipe) pops the active tab's stack. At the
   root of My devices or Settings it returns to Discover. At the Discover root the Android app
   closes. On Discover an open cell sheet returns to peek first, through a `NavigationBackHandler`
-  that wins over the shell's.
+  in the shared `DiscoverScreen` that wins over the shell's.
 - Inside a device, Today, History, Files and Device are a tab row under the top bar
   (`DeviceSectionTabs`), siblings that replace each other. The bottom bar stays visible with My
   devices selected.

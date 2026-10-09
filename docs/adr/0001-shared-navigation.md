@@ -191,9 +191,8 @@ Fallback. If the iPhone run shows `NavDisplay` broken on iOS, switch only the iO
    become entries. `DiscoverController` and later device controllers move into `viewModel { }`
    holders so they survive tab switches and clear on pop.
 8. F12. Replace `BackHandler` with `NavigationBackHandler` so the sheet collapses on Back and on
-   the iOS swipe. Done in #12 at the platform edge (`DiscoverRoute.kt` on Android, `DiscoverEntry`
-   in iOS `AppRoot.kt`). Moving the one handler into `:feature:discover` commonMain is still the
-   target, so the two copies cannot drift.
+   the iOS swipe. Done in #12 at the platform edge, then moved into `DiscoverScreen` in
+   `:feature:discover` commonMain (#47), so both apps run the one handler.
 9. F03, F05, F34. One bottom bar in the shell from `:ui:designsystem` (curved card indicator,
    brand blue only for selection), then `DeviceSectionTabs` and the device top bar.
 10. Gate. `./gradlew --no-daemon verify`, the iOS simulator build, then phone runs. iPhone start
