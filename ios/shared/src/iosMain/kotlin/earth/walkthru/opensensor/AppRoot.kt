@@ -295,17 +295,26 @@ internal fun AppRoot(
 
 /**
  * Device settings of one Bluetooth sensor. Local network is asked for from the Sync over Wi-Fi card
- * by browsing for sensors, the iOS prompt. iOS has no barcode scanner here yet (#21), so the sticker
- * is typed.
+ * by browsing for sensors, the iOS prompt. The sticker card scans with VisionKit where the hardware
+ * has it (#21), asking for the camera on the Scan tap, and the sticker can always be typed.
  */
 @Composable
 private fun DeviceSettingsEntry(address: String, devices: DevicesBridge, links: DeviceConfigLinks, onBack: () -> Unit) {
     val controller = viewModel(key = "device-settings-$address") { DeviceSettingsHolder(address, devices, links) }.controller
+    val sticker = rememberIosStickerScan(links.scanSticker)
     DeviceConfigScreen(
         controller = controller,
         lanAccess = LanAccess(granted = !devices.state.lanAccessDenied, requestable = true),
         onBack = onBack,
-        onPlatformAction = { action -> if (action == DeviceConfigAction.RequestLanAccess) links.scanLan() },
+        onPlatformAction = { action ->
+            when (action) {
+                DeviceConfigAction.RequestLanAccess -> links.scanLan()
+                DeviceConfigAction.ScanSticker -> sticker.start()
+                else -> Unit
+            }
+        },
+        scan = sticker.scan,
+        canScan = sticker.available,
     )
 }
 

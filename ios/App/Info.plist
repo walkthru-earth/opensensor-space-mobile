@@ -17,6 +17,7 @@
     <key>NSBluetoothAlwaysUsageDescription</key><string>Finds and connects to your opensensor devices nearby to copy their readings.</string>
     <key>UIApplicationSceneManifest</key>
     <dict><key>UIApplicationSupportsMultipleScenes</key><false/></dict>
+    <key>NSCameraUsageDescription</key><string>Reads the barcode on your sensor sticker. No picture is kept.</string>
     <key>NSLocalNetworkUsageDescription</key><string>Finds your opensensor devices on your Wi-Fi to sync faster.</string>
     <key>NSLocationWhenInUseUsageDescription</key><string>Centres the public sensor map near you. Your location stays on this phone.</string>
     <key>NSLocationDefaultAccuracyReduced</key><true/>

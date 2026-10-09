@@ -13,6 +13,12 @@ enum class AccessKind {
 
     /** Android ACCESS_COARSE_LOCATION, iOS When In Use with reduced accuracy. */
     APPROX_LOCATION,
+
+    /**
+     * iOS camera, for the VisionKit sticker scanner. Android's Google code scanner reads the barcode
+     * in Play services and needs no camera permission, so Android never asks for this one.
+     */
+    CAMERA,
 }
 
 /** The taps that may lead to a permission prompt, plus [APP_LAUNCH], which never does. */
@@ -43,6 +49,9 @@ enum class UserAction {
 
     /** Turning the Auto-sync switch on, and Wake when nearby. Enabled whatever the answer. */
     AUTO_SYNC_ON,
+
+    /** Scan on the sensor sticker card. A refusal leaves manual entry in place. */
+    SCAN_STICKER,
 }
 
 /**
@@ -70,6 +79,7 @@ object PermissionTriggers {
         UserAction.SAVE_WIFI_ACCESS to Trigger(optional = setOf(AccessKind.LOCAL_NETWORK)),
         UserAction.NEAR_ME to Trigger(required = setOf(AccessKind.APPROX_LOCATION)),
         UserAction.AUTO_SYNC_ON to Trigger(optional = setOf(AccessKind.NOTIFICATIONS)),
+        UserAction.SCAN_STICKER to Trigger(required = setOf(AccessKind.CAMERA)),
     )
 
     /** What [action] asks for. */

@@ -19,6 +19,24 @@
         }
       }
     },
+    "NSCameraUsageDescription" : {
+      "comment" : "Camera purpose string, shown the first time the user taps Scan on the sensor sticker card.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "يقرأ الرمز الشريطي على ملصق المستشعر. لا تُحفظ أي صورة."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reads the barcode on your sensor sticker. No picture is kept."
+          }
+        }
+      }
+    },
     "NSLocalNetworkUsageDescription" : {
       "comment" : "Local network purpose string, shown when the app first looks for sensors on Wi-Fi.",
       "extractionState" : "manual",
