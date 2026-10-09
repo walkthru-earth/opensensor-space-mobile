@@ -80,5 +80,8 @@
     <string name="debug_raw_invalid_hex">Not valid hex.</string>
     <string name="debug_raw_bad_length">A request is 1 to 512 bytes.</string>
     <string name="debug_raw_needs_confirmation">%1$s is not sent from here. Use the Device screen, which asks for confirmation.</string>
+    <!-- Debug frames list, screen reader words for the direction arrow. -->
+    <string name="debug_frame_sent">Sent</string>
+    <string name="debug_frame_received">Received</string>
     <string name="debug_raw_no_response">No response frames within the quiet period.</string>
 </resources>

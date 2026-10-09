@@ -21,6 +21,7 @@ import earth.walkthru.opensensor.discover.resources.discover_higher_than
 import earth.walkthru.opensensor.discover.resources.discover_loading
 import earth.walkthru.opensensor.discover.resources.discover_map_info1
 import earth.walkthru.opensensor.discover.resources.discover_map_info2
+import earth.walkthru.opensensor.discover.resources.discover_map_label
 import earth.walkthru.opensensor.discover.resources.discover_map_title
 import earth.walkthru.opensensor.discover.resources.discover_max
 import earth.walkthru.opensensor.discover.resources.discover_min
@@ -45,6 +46,7 @@ import earth.walkthru.opensensor.discover.resources.discover_scale_info2
 import earth.walkthru.opensensor.discover.resources.discover_scale_title
 import earth.walkthru.opensensor.discover.resources.discover_search_places
 import earth.walkthru.opensensor.discover.resources.discover_sensors
+import earth.walkthru.opensensor.discover.resources.discover_spread_peak
 import earth.walkthru.opensensor.discover.resources.discover_spread_summary
 import earth.walkthru.opensensor.discover.resources.discover_stale
 import earth.walkthru.opensensor.discover.resources.discover_time_window
@@ -136,6 +138,8 @@ class DiscoverStrings internal constructor(
     val whoInfo: InfoText,
     /** Joins two ends of a range, as in "15 to 25". */
     val to: String,
+    /** The map's spoken name, followed by the chosen measurement. */
+    val mapLabel: String,
 ) {
     /** The name of [step], from [whoSteps]. */
     fun stepName(step: WhoStep): String = whoSteps.getOrElse(step.ordinal) { step.name }
@@ -166,6 +170,10 @@ class DiscoverStrings internal constructor(
     @Composable
     fun spreadSummary(label: String, areas: Int, low: String, high: String, unit: String): String =
         pluralStringResource(Res.plurals.discover_spread_summary, areas, label, areas, low, high, unit)
+
+    /** Spoken with a distribution chart, the range of the bar that holds the most areas. */
+    @Composable
+    fun spreadPeak(from: String, to: String, unit: String): String = stringResource(Res.string.discover_spread_peak, from, to, unit)
 
     /** Under a chart whose values run past its axis (highest value). */
     @Composable
@@ -253,6 +261,7 @@ fun discoverStrings(): DiscoverStrings = DiscoverStrings(
         ),
     ),
     to = stringResource(Res.string.discover_range_to),
+    mapLabel = stringResource(Res.string.discover_map_label),
 )
 
 /** A title and short paragraphs for an info sheet. */

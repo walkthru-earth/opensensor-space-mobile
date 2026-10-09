@@ -18,16 +18,21 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import earth.walkthru.aqsync.data.history.HistoryColumn
+import earth.walkthru.aqsync.data.history.HistoryRange
 import earth.walkthru.aqsync.data.history.MetricSpec
 import earth.walkthru.aqsync.data.history.localDateOf
 import earth.walkthru.aqsync.units.UnitFormatter
 import earth.walkthru.opensensor.history.resources.Res
+import earth.walkthru.opensensor.history.resources.chart_average_value
+import earth.walkthru.opensensor.history.resources.chart_ring_title
 import earth.walkthru.opensensor.history.resources.history_day_coverage
 import earth.walkthru.opensensor.history.resources.history_no_readings_short
 import earth.walkthru.opensensor.history.resources.history_no_value
@@ -66,8 +71,19 @@ internal fun DayRing(
     val measurer = rememberTextMeasurer()
     val labelStyle = remember(muted) { chartTextStyle(muted, 11) }
     val mood = mean?.let { metric.moodOf(it.toDouble()) }
+    // One spoken element for the ring and its centre: the day's average with its mood and WHO step,
+    // the coverage, then the highest hour. The hour colours alone would say nothing to a screen reader.
+    val average = units.value(mean, metric.unit)?.let { stringResource(Res.string.chart_average_value, fmtValue(it), units.unit(metric.unit)) }
+    val description = listOfNotNull(
+        stringResource(Res.string.chart_ring_title, metric.label),
+        average ?: stringResource(Res.string.history_no_readings_short),
+        mood?.titleText(),
+        mood?.step?.labelText(),
+        if (mean != null) stringResource(Res.string.history_day_coverage, (coverage * 100).toInt()) else null,
+        chartHighest(columns, metric, units) { c -> slotLabel(c, HistoryRange.DAY, zone) },
+    ).joinToString(", ")
 
-    Box(modifier.size(size), contentAlignment = Alignment.Center) {
+    Box(modifier.size(size).clearAndSetSemantics { contentDescription = description }, contentAlignment = Alignment.Center) {
         Canvas(Modifier.fillMaxSize()) {
             val c = Offset(this.size.width / 2, this.size.height / 2)
             val outer = this.size.minDimension / 2 - labelPx * 1.4f

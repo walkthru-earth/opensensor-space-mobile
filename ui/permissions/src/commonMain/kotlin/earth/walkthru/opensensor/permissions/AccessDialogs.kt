@@ -8,6 +8,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import earth.walkthru.opensensor.strings.resources.Res
 import earth.walkthru.opensensor.strings.resources.action_cancel
 import earth.walkthru.opensensor.strings.resources.action_not_now
@@ -41,7 +43,7 @@ fun AccessDialogs(access: RuntimeAccess, texts: AccessDialogTexts) {
         AccessDialog.RATIONALE -> AlertDialog(
             onDismissRequest = access::dismiss,
             icon = icon,
-            title = { Text(texts.rationaleTitle) },
+            title = { Text(texts.rationaleTitle, Modifier.semantics { heading() }) },
             text = { Text(texts.rationaleBody) },
             confirmButton = { TextButton(onClick = access::confirmRationale) { Text(texts.continueLabel ?: stringResource(Res.string.perm_continue)) } },
             dismissButton = { TextButton(onClick = access::dismiss) { Text(texts.notNow ?: stringResource(Res.string.action_not_now)) } },
@@ -49,7 +51,7 @@ fun AccessDialogs(access: RuntimeAccess, texts: AccessDialogTexts) {
         AccessDialog.SETTINGS -> AlertDialog(
             onDismissRequest = access::dismiss,
             icon = icon,
-            title = { Text(texts.settingsTitle) },
+            title = { Text(texts.settingsTitle, Modifier.semantics { heading() }) },
             text = { Text(texts.settingsBody) },
             confirmButton = { TextButton(onClick = access::openSettings) { Text(texts.openSettings ?: stringResource(Res.string.perm_open_settings)) } },
             dismissButton = { TextButton(onClick = access::dismiss) { Text(texts.cancel ?: stringResource(Res.string.action_cancel)) } },

@@ -43,8 +43,10 @@ import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -134,8 +136,14 @@ internal fun SpreadChart(
     val low = if (health != null) formatEdge(domain.low) else formatValue(domain.low, property, units)
     val high = if (health != null) formatEdge(domain.high) else formatValue(domain.high, property, units)
     val offScale = offScaleMax?.let { strings.offScale("${formatValue(it, property, units)} $unit") }
+    fun binFrom(i: Int) = domain.low + (domain.high - domain.low) * i / bins
+    fun binTo(i: Int) = domain.low + (domain.high - domain.low) * (i + 1) / bins
+    // The fullest bar, so the spoken summary says where most areas sit, not only the axis ends.
+    val peakBin = counts.indices.maxByOrNull { counts[it] }?.takeIf { counts[it] > 0 }
+    val peak = peakBin?.let { i -> strings.spreadPeak(formatValue(binFrom(i), property, units), formatValue(binTo(i), property, units), unit) }
     val spoken = buildString {
         append(strings.spreadSummary(property.label, values.size, low, high, unit))
+        if (peak != null) append(". ").append(peak)
         if (here != null) {
             append(". ")
             append(strings.rangeSummary(property.label, formatValue(here, property, units), hereMin?.let { formatValue(it, property, units) }, hereMax?.let { formatValue(it, property, units) }, unit))
@@ -144,13 +152,18 @@ internal fun SpreadChart(
         if (offScale != null) append(". ").append(offScale)
     }
     val readout = active?.let { i ->
-        val from = domain.low + (domain.high - domain.low) * i / bins
-        val to = domain.low + (domain.high - domain.low) * (i + 1) / bins
-        val range = "${formatValue(from, property, units)} ${strings.to} ${formatValue(to, property, units)} $unit"
+        val range = "${formatValue(binFrom(i), property, units)} ${strings.to} ${formatValue(binTo(i), property, units)} $unit"
         val step = health?.stepOf(binMid(i, domain, bins))?.let { strings.stepName(it) }
         listOfNotNull(range, strings.areaCount(counts[i]), step).joinToString(", ")
     }
-    Column(modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = spoken }) {
+    // The summary is the chart's name. A touched or pinned bar, which also filters the map and the
+    // list, is read as its state.
+    Column(
+        modifier.fillMaxWidth().clearAndSetSemantics {
+            contentDescription = spoken
+            if (readout != null) stateDescription = readout
+        },
+    ) {
         // One label row that never changes height. At rest it names the guideline, while touched it
         // reads the bar under the finger.
         val labelStyle = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold)
@@ -299,7 +312,7 @@ internal fun RangeRow(range: MetricRange, strings: DiscoverStrings, onClick: () 
     val summary = strings.rangeSummary(p.label, formatValue(range.mean, p, units), range.min?.let { formatValue(it, p, units) }, range.max?.let { formatValue(it, p, units) }, unit)
     val spoken = if (stepName != null) "$summary. $stepName" else summary
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(onClick = onClick).padding(vertical = 6.dp)
+        Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(role = Role.Button, onClick = onClick).padding(vertical = 6.dp)
             .clearAndSetSemantics { contentDescription = spoken },
         verticalAlignment = Alignment.CenterVertically,
     ) {

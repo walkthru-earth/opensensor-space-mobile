@@ -84,4 +84,16 @@
     <string name="info_history_body3">Dashed stretches were logged before the sensor had a clock. Their time is estimated from a later time set on the same power on.</string>
     <string name="info_history_body4">Earlier station readings stay available after a device reset.</string>
     <string name="info_history_body5">PM2.5 and PM10 colours follow the WHO 2021 air quality guidelines. The guideline and its four interim targets are 24 hour means.</string>
+    <!-- Screen reader summaries of the History charts (BandColumnChart, DayRing, CalendarHeatmap). -->
+    <string name="chart_bars_title">Bar chart of %1$s</string>
+    <string name="chart_ring_title">%1$s through the day</string>
+    <string name="chart_calendar_title">Calendar of daily %1$s</string>
+    <!-- Highest bar, value, unit and time, spoken in a chart summary. -->
+    <string name="chart_highest_at">highest %1$s %2$s at %3$s</string>
+    <!-- Highest bar without a time, for the chart by file. -->
+    <string name="chart_highest">highest %1$s %2$s</string>
+    <!-- Day ring summary, the day's mean value and unit. -->
+    <string name="chart_average_value">average %1$s %2$s</string>
+    <!-- Calendar summary, days with readings out of days shown. -->
+    <string name="chart_days_with_readings">%1$d of %2$d days with readings</string>
 </resources>

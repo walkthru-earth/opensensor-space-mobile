@@ -91,4 +91,8 @@
         <item quantity="one">Updated %1$d h ago</item>
         <item quantity="other">Updated %1$d h ago</item>
     </plurals>
+    <!-- The map's spoken name, followed by the chosen measurement (DiscoverScreen). -->
+    <string name="discover_map_label">Map of public sensor areas</string>
+    <!-- Spread chart's spoken summary, the bar that holds the most areas (CellCharts). -->
+    <string name="discover_spread_peak">Most areas from %1$s to %2$s %3$s</string>
 </resources>

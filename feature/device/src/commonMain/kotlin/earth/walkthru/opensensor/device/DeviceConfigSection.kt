@@ -27,6 +27,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import earth.walkthru.aqsync.data.protocol.ConfigProblem
 import earth.walkthru.opensensor.designsystem.AppIcons
@@ -229,7 +231,7 @@ fun DeviceConfigDialogs(dialog: DeviceConfigDialog, onConfirm: () -> Unit, onDis
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = if (dialog == DeviceConfigDialog.Reboot) ({ Icon(AppIcons.RestartAlt, contentDescription = null) }) else null,
-        title = { Text(stringResource(title)) },
+        title = { Text(stringResource(title), Modifier.semantics { heading() }) },
         text = { Text(stringResource(body)) },
         confirmButton = { TextButton(onClick = onConfirm) { Text(stringResource(button)) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.action_cancel)) } },
@@ -323,7 +325,7 @@ fun DeviceConfigScreen(
                 },
                 title = {
                     Column {
-                        Text(stringResource(Res.string.device_screen_title), style = MaterialTheme.typography.titleLarge)
+                        Text(stringResource(Res.string.device_screen_title), style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
                         state.snapshot.name?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
                 },

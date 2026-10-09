@@ -61,8 +61,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import earth.walkthru.aqsync.airquality.WhoStep
@@ -177,7 +182,11 @@ private fun DiscoverContent(
                     attributionOpen = false
                 }
                 val shownAt = remember { nowEpochMillis() }
+                // Screen readers name the map and the measurement it colours. Its gestures stay as
+                // they are, the sheet's list reads each area.
+                val mapLabel = listOfNotNull(strings.mapLabel, state.property?.label).joinToString(", ")
                 DiscoverMap(
+                    modifier = Modifier.semantics { contentDescription = mapLabel },
                     state = mapState,
                     start = start,
                     viewportInsets = PaddingValues(top = 120.dp, bottom = PEEK_HEIGHT),
@@ -293,7 +302,7 @@ private fun TopControls(
                     }
                     results.forEach { place ->
                         Column(
-                            Modifier.fillMaxWidth().clickable { query = ""; focus.clearFocus(); onPlace(place) }.padding(horizontal = 16.dp, vertical = 10.dp),
+                            Modifier.fillMaxWidth().clickable(role = Role.Button) { query = ""; focus.clearFocus(); onPlace(place) }.padding(horizontal = 16.dp, vertical = 10.dp),
                         ) {
                             Text(place.name, style = MaterialTheme.typography.bodyLarge)
                             Text(place.country, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -384,7 +393,8 @@ private fun Legend(
                 is CellScale.Relative -> {
                     val low = scale.percentile.low
                     val high = scale.percentile.high
-                    Column(Modifier.widthIn(min = 140.dp, max = 180.dp).padding(vertical = 8.dp)) {
+                    // Read as one item, label and unit, low, high and the note. The gradient is decorative.
+                    Column(Modifier.widthIn(min = 140.dp, max = 180.dp).padding(vertical = 8.dp).semantics(mergeDescendants = true) {}) {
                         Text("${property.label}  $unit", style = MaterialTheme.typography.labelMedium)
                         Spacer(Modifier.height(4.dp))
                         Box(
@@ -460,7 +470,7 @@ private fun SheetContent(
 
 @Composable
 private fun FirstRunCard(strings: DiscoverStrings, onAddSensor: () -> Unit, onExplore: () -> Unit) {
-    Text(strings.firstRunLine, style = MaterialTheme.typography.titleMedium)
+    Text(strings.firstRunLine, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
     Spacer(Modifier.height(12.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Button(onClick = onAddSensor) { Text(strings.addSensor) }
@@ -486,11 +496,12 @@ private fun InView(
     onPickCell: (String) -> Unit,
 ) {
     if (state.loading && state.rows.isEmpty()) {
-        Text(strings.loading, style = MaterialTheme.typography.titleMedium)
+        // Read out when the areas arrive or fail to, while the user waits.
+        Text(strings.loading, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
         return
     }
     if (state.rows.isEmpty()) {
-        Text(strings.noAreas, style = MaterialTheme.typography.titleMedium)
+        Text(strings.noAreas, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
         return
     }
     // The chart comes first, so the peeking sheet shows it while the map is explored. Text follows.
@@ -503,7 +514,7 @@ private fun InView(
         SpreadChart(values, property, state.scale, strings, clearSignal = clearSignal, onHighlight = onHighlight)
         Spacer(Modifier.height(12.dp))
     }
-    Text(strings.areasInView(state.rows.size), style = MaterialTheme.typography.titleMedium)
+    Text(strings.areasInView(state.rows.size), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
     freshness(strings, state.newestUpdateEpochMs, reference)?.let {
         Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
@@ -517,7 +528,7 @@ private fun InView(
     LazyColumn(Modifier.heightIn(max = 360.dp)) {
         items(sorted, key = { it.h3 }) { row ->
             Row(
-                Modifier.fillMaxWidth().clickable { onPickCell(H3Index.toHex(row.h3)) }.padding(vertical = 10.dp),
+                Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(role = Role.Button) { onPickCell(H3Index.toHex(row.h3)) }.padding(vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 val value = row.mean(property.id)!!
@@ -537,7 +548,8 @@ private fun InView(
 /** Label, unit and window over a chart, with an optional [trailing] note at the end. */
 @Composable
 private fun ChartTitle(property: FeedProperty, strings: DiscoverStrings, state: DiscoverUiState, trailing: String? = null) {
-    Row(verticalAlignment = Alignment.Bottom) {
+    // One heading for the chart below, read as label, unit, window and the trailing note.
+    Row(Modifier.semantics(mergeDescendants = true) { heading() }, verticalAlignment = Alignment.Bottom) {
         Text("${property.label}  ${unitLabel(property, LocalDiscoverUnits.current)}", style = MaterialTheme.typography.titleSmall)
         Spacer(Modifier.width(8.dp))
         Text(
@@ -596,7 +608,12 @@ private fun CellDetail(
         }
         if (property != null && headline != null) {
             val unit = unitLabel(property, units)
-            Row(Modifier.clearAndSetSemantics { contentDescription = "${property.label} ${formatValue(headline, property, units)} $unit" }) {
+            Row(
+                Modifier.clearAndSetSemantics {
+                    contentDescription = "${property.label} ${formatValue(headline, property, units)} $unit"
+                    heading()
+                },
+            ) {
                 Text(formatValue(headline, property, units), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.alignByBaseline())
                 Spacer(Modifier.width(6.dp))
                 Text(unit, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.alignByBaseline())
@@ -625,7 +642,7 @@ private fun CellDetail(
             val groups = if (others.size > 5) others.groupBy { it.property.category } else mapOf("" to others)
             groups.forEach { (category, ranges) ->
                 if (category.isNotEmpty()) {
-                    Text(category, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 12.dp, bottom = 2.dp))
+                    Text(category, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 12.dp, bottom = 2.dp).semantics { heading() })
                 }
                 ranges.forEach { r -> RangeRow(r, strings) { onShowProperty(r.property.id) } }
             }
@@ -635,15 +652,15 @@ private fun CellDetail(
 
 @Composable
 private fun AllProperties(state: DiscoverUiState, strings: DiscoverStrings, onPick: (String) -> Unit) {
-    Text(strings.allMeasurements, style = MaterialTheme.typography.titleMedium)
+    Text(strings.allMeasurements, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
     Spacer(Modifier.height(8.dp))
     // Grouped by the category the dictionary gives each property (Air, Weather, and so on).
     state.dictionary.groupBy { it.category }.forEach { (category, properties) ->
-        Text(category, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
+        Text(category, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 12.dp, bottom = 4.dp).semantics { heading() })
         properties.forEach { p ->
             val count = state.rows.count { it.mean(p.id) != null }
             Row(
-                Modifier.fillMaxWidth().clickable { onPick(p.id) }.padding(vertical = 10.dp),
+                Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(role = Role.Button) { onPick(p.id) }.padding(vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(p.label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), color = if (count == 0) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)

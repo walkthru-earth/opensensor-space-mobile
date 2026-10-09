@@ -206,6 +206,82 @@ Sources: [WHO global air quality guidelines, 2021](https://www.who.int/publicati
 [Mazama Science, qualitative display of air quality data](https://working-with-data.mazamascience.com/2021/03/18/qualitative-display-of-air-quality-data/),
 [South Coast AQMD accessible AQI scale](https://www.aqmd.gov/home/research/pubs-docs-reports/newsletters/may-june-july-2022/accessible-aqi-scale).
 
+### Accessibility
+
+Every shared screen reads well on TalkBack and VoiceOver from the same Compose semantics. Compose
+Multiplatform 1.12 maps them to UIKit on iOS. `heading()` becomes the header trait (the VoiceOver
+rotor's Headings), `Role.Button`, `Role.Switch` and `Role.Tab` become the button, toggle and tab
+traits, `selected` becomes the selected trait, a progress value becomes adjustable, a live region
+posts an announcement, and `isTraversalGroup` with `traversalIndex` orders traversal. The tree syncs
+lazily while a screen reader runs, so neither app sets `AccessibilitySyncOptions`. Use only standard
+Compose semantics, never a platform accessibility API in a shared screen.
+
+The rules for a new screen or component.
+
+1. **Headings.** The page title, each card or section title and each sheet or dialog title carries
+   `Modifier.semantics { heading() }`. `SectionCard`, `CardHeader`, `MascotGuide` and `InfoSheet` do
+   this already. An eyebrow that titles something passes `Eyebrow(heading = true)`. A label inside a
+   row is not a heading.
+2. **Roles.** A Material `Button`, `IconButton`, `Switch`, `Checkbox`, `RadioButton` or `Tab` names its
+   role itself. A custom tap target passes `role =` to `clickable`, `selectable` or `toggleable`.
+   Exclusive choices sit in a `selectableGroup()` and use `selectable(role = Role.RadioButton)` or
+   `Role.Tab`. `SemanticsLintTest` in `:ui:strings` fails on a custom tap target without a role.
+3. **Names.** An icon-only button has a translated `contentDescription` that says what it does
+   ("Back", "More about Wi-Fi"). An icon or image beside text that says the same is decorative and
+   gets `contentDescription = null`. The peacock is decorative unless it says something the text
+   does not.
+4. **One element per thing.** A card or row that is one item (a reading with its unit and WHO step, a
+   device row, a stat line) merges with `semantics(mergeDescendants = true)`, and a clickable row
+   merges by itself. A settings row with a switch reads its label and its state together. The row is
+   `toggleable(role = Role.Switch)` and the `Switch` takes `onCheckedChange = null`, only when the
+   row and the switch do exactly the same thing.
+5. **Touch targets.** Every tap target is at least 48 dp. Material controls enforce it through
+   `minimumInteractiveComponentSize()`, a custom control adds that modifier or a 48 dp minimum.
+   Floating controls stay 44 dp to the eye (`FloatingControl.Size`, Apple's minimum), and Compose
+   widens the touch area of any smaller clickable to the 48 dp `ViewConfiguration` minimum on both
+   phones.
+6. **State in words.** Colour is never alone. Selected, on, off, progress and a WHO step reach the
+   screen reader as words, through the control's own state, `stateDescription` or the merged text.
+   The `Eyebrow` capitals are visual only, its semantics carry the text as written.
+7. **Charts and maps.** A chart is one element with a text summary in `contentDescription` (what it
+   shows, the span, the highest value and its WHO step). Touch to read a bar stays as it is. The map
+   container says what it shows, and the list beside it is the accessible way through the same cells.
+8. **Live regions, sparingly.** `liveRegion = LiveRegionMode.Polite` goes only on a line that changes
+   while the person waits, such as sync progress or a notice. Never on a value that ticks every
+   second.
+9. **Copy.** Descriptions follow the copy rules above, translated in `values-ar`, positional
+   arguments, and no em dashes, colons or semicolons.
+
+`SemanticsTest` in `:ui:designsystem` `iosTest` renders the shared components on the iOS simulator
+and checks headings, merged rows and tab roles (`verifyIos`). Host tests cannot render Compose
+without Robolectric, so the Android check is the phone walk below.
+
+#### Phone walk (TalkBack and VoiceOver)
+
+Run it on both phones after a screen changes, in English and in Arabic, and record it in
+[status.md](status.md). Turn on TalkBack (Settings, Accessibility, TalkBack) or VoiceOver (Settings,
+Accessibility, VoiceOver, or triple-click the side button).
+
+1. **Tabs.** Swipe through the bottom bar. Each tab says its name, "tab", its position and
+   "selected" for the open one. Double tap another tab and the screen title is the next heading.
+2. **Headings.** On each tab, use the TalkBack headings control or the VoiceOver rotor set to
+   Headings and swipe down. It stops on the page title and every card title, nothing else.
+3. **Today.** Each metric card reads as one element, name, value, unit and WHO step in words. The
+   "today so far" chart reads its summary. The info "i" says "More about" and the topic, and the
+   sheet opens on its heading.
+4. **My devices.** Each device row reads its name, how it connects and its sync state as one element.
+   Start Collect all and check that the progress line is announced without moving focus.
+5. **Device and Settings.** Each switch row reads its label and "on" or "off" and toggles with one
+   double tap. Each choice reads as a radio button with its selected state. Icon-only buttons say
+   what they do.
+6. **History and Files.** Range and metric choices read their selected state. Each chart reads its
+   summary. Each file row reads as one element, and the share and export buttons say what they do.
+7. **Discover.** The map says what it shows, the time and metric controls read their current value,
+   the cell sheet title is a heading, and the chart reads its summary.
+8. **Targets.** With touch exploration on, every control can be found by a finger without a near
+   miss. Double tap works on the first try for the small floating controls.
+9. **Arabic.** Repeat steps 1 and 3 in Arabic. Swipe order follows right to left.
+
 ### Platform conventions that stay native
 
 Shared screens still respect each OS where people notice:
@@ -275,6 +351,8 @@ To add a language `xx`.
 - [ ] Platform adapters only map OS behaviour to a port.
 - [ ] Design uses tokens, no raw colours or sizes in screens.
 - [ ] Simple level reviewed, technical detail gated behind Detailed or Developer.
+- [ ] Headings, roles, names, merged rows, 48 dp targets and chart summaries follow
+      [Accessibility](#accessibility), and the phone walk is recorded for a changed screen.
 - [ ] `./gradlew --no-daemon verify` (includes `verifyIos` on a Mac) and the unsigned simulator
       build pass.
 - [ ] Phone evidence recorded for radio, background, permission or release behaviour, per platform.

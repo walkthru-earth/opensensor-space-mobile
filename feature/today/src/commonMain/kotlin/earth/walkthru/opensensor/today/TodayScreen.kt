@@ -35,6 +35,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import earth.walkthru.aqsync.data.ble.ConnectionState
@@ -220,7 +224,12 @@ fun TodayContent(
                         colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                         title = {
                             Column {
-                                Text(snapshot.name ?: stringResource(Res.string.device_unnamed), style = MaterialTheme.typography.titleLarge)
+                                // The device name titles the page (TalkBack headings list, VoiceOver rotor).
+                                Text(
+                                    snapshot.name ?: stringResource(Res.string.device_unnamed),
+                                    style = MaterialTheme.typography.titleLarge,
+                                    modifier = Modifier.semantics { heading() },
+                                )
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     TransportChip(snapshot.transport)
                                     if (level.developer) {
@@ -356,7 +365,12 @@ internal fun ConnectionBanner(
             }
             Spacer(Modifier.width(12.dp))
             Column {
-                Text(state.describe(technical, pairingRepair), style = MaterialTheme.typography.bodyMedium)
+                // The link state changes while the user waits, so screen readers hear it without moving focus.
+                Text(
+                    state.describe(technical, pairingRepair),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                )
                 if (reconnecting != null) {
                     Text(
                         if (technical) {

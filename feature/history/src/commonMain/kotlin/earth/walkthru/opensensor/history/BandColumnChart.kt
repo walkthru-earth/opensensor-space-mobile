@@ -20,6 +20,8 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
@@ -44,11 +46,16 @@ import earth.walkthru.aqsync.units.displayAxisTicks
 import earth.walkthru.aqsync.units.formatFixed
 import earth.walkthru.aqsync.units.tickDecimals
 import earth.walkthru.opensensor.history.resources.Res
+import earth.walkthru.opensensor.history.resources.chart_bars_title
 import earth.walkthru.opensensor.history.resources.chart_guideline_note
+import earth.walkthru.opensensor.history.resources.chart_highest
+import earth.walkthru.opensensor.history.resources.chart_highest_at
 import earth.walkthru.opensensor.history.resources.chart_mean_daily
 import earth.walkthru.opensensor.history.resources.chart_mean_hourly
 import earth.walkthru.opensensor.history.resources.chart_mean_weekly
 import earth.walkthru.opensensor.history.resources.chart_who_24h
+import earth.walkthru.opensensor.history.resources.history_no_readings_short
+import earth.walkthru.opensensor.history.resources.history_week_of
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
@@ -103,11 +110,20 @@ fun BandColumnChart(
     // Geometry, data and bands stay on the SI values. Ticks are chosen round in the unit shown.
     val yTicks = remember(axis, metric.unit, units.system) { yAxisTicks(axis, metric.unit, units.system) }
     val xTicks = remember(xLabels, range, fromS, toS, zone) { xLabels ?: timeTicks(range, fromS, toS, zone) }
+    // The spoken chart: what it shows and its highest bar with the WHO step, built from the same data.
+    // A file strip (xLabels) has file indices, not times, so its highest bar names no slot.
+    val slot: (@Composable (HistoryColumn) -> String)? = if (xLabels == null) {
+        { c -> slotLabel(c, range, zone) }
+    } else {
+        null
+    }
+    val summary = chartSummary(stringResource(Res.string.chart_bars_title, metric.label), columns, metric, units, slot)
 
     Canvas(
         modifier
             .fillMaxWidth()
             .height(height)
+            .semantics { contentDescription = summary }
             .pointerInput(columns, fromS, toS) {
                 awaitEachGesture {
                     val down = awaitFirstDown()
@@ -252,6 +268,45 @@ fun averagingNote(range: HistoryRange, metric: MetricSpec): String {
         },
     )
     return if (ChartAxes.guidelineOf(metric) != null) mean + " " + stringResource(Res.string.chart_guideline_note) else mean
+}
+
+/**
+ * A screen reader summary of a chart: [title], then [chartHighest], or "no readings". Built from the
+ * drawn columns, so it never says more than the picture.
+ */
+@Composable
+internal fun chartSummary(
+    title: String,
+    columns: List<HistoryColumn>,
+    metric: MetricSpec,
+    units: UnitFormatter,
+    slot: (@Composable (HistoryColumn) -> String)?,
+): String = title + ", " + (chartHighest(columns, metric, units, slot) ?: stringResource(Res.string.history_no_readings_short))
+
+/** The highest mean of [columns] with the time [slot] names (when given) and its WHO step, null without readings. */
+@Composable
+internal fun chartHighest(
+    columns: List<HistoryColumn>,
+    metric: MetricSpec,
+    units: UnitFormatter,
+    slot: (@Composable (HistoryColumn) -> String)?,
+): String? {
+    val top = columns.filter { it.mean?.isFinite() == true }.maxByOrNull { it.mean ?: Float.NEGATIVE_INFINITY }
+    val mean = top?.mean ?: return null
+    val value = fmtValue(units.value(mean, metric.unit))
+    val unit = units.unit(metric.unit)
+    val highest = if (slot != null) stringResource(Res.string.chart_highest_at, value, unit, slot(top)) else stringResource(Res.string.chart_highest, value, unit)
+    val step = metric.stepOf(mean.toDouble())?.labelText()
+    return listOfNotNull(highest, step).joinToString(", ")
+}
+
+/** A column's time in words for a screen reader: the hour for a day, weekday and hour for a week, the date for a month, the week for a year. */
+@Composable
+internal fun slotLabel(c: HistoryColumn, range: HistoryRange, zone: TimeZone): String = when (range) {
+    HistoryRange.DAY -> formatEpoch(c.startS, zone, "HH:mm")
+    HistoryRange.WEEK -> formatEpoch(c.startS, zone, "EEEE HH:mm")
+    HistoryRange.MONTH -> formatEpoch(c.startS, zone, "EEEE d MMMM")
+    HistoryRange.YEAR -> stringResource(Res.string.history_week_of, formatEpoch(c.startS, zone, "d MMMM"))
 }
 
 /** Chart labels: a fixed size and left-to-right digits, so axes read the same in Arabic. */

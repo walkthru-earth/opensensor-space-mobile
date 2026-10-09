@@ -27,6 +27,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -37,6 +40,10 @@ import kotlin.time.Clock
  * Small caps label used above readings and in stat rows. Pass [uppercase] = false when the text
  * carries a unit: `"µm".uppercase()` is `"ΜM"` (Greek capital mu), which is how "(MM)" once
  * appeared on the particles card.
+ *
+ * Screen readers get the text as written, not the capitals, so VoiceOver and TalkBack do not spell
+ * a short capitalised word letter by letter. Pass [heading] = true when the eyebrow titles a card or
+ * a section, so it joins the headings list (TalkBack) and the rotor (VoiceOver).
  */
 @Composable
 fun Eyebrow(
@@ -44,12 +51,16 @@ fun Eyebrow(
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.onSurfaceVariant,
     uppercase: Boolean = true,
+    heading: Boolean = false,
 ) {
     Text(
         if (uppercase) text.uppercase() else text,
         style = MaterialTheme.typography.labelSmall,
         color = color,
-        modifier = modifier,
+        modifier = modifier.semantics {
+            if (uppercase) contentDescription = text
+            if (heading) heading()
+        },
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
     )
@@ -66,19 +77,19 @@ fun StatusDot(color: Color, modifier: Modifier = Modifier, size: Int = 10) {
     )
 }
 
-/** Two-column key/value line for compact stat rows. */
+/** Two-column key/value line for compact stat rows, read as one element ("Battery, 80 %"). */
 @Composable
 fun StatLine(label: String, value: String, modifier: Modifier = Modifier, valueColor: Color = MaterialTheme.colorScheme.onSurface) {
-    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+    Row(modifier.fillMaxWidth().semantics(mergeDescendants = true) {}, horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
         Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(value, style = MaterialTheme.typography.bodyMedium, color = valueColor)
     }
 }
 
-/** A labelled number with its unit, for the secondary measurements on a metric card. */
+/** A labelled number with its unit, for the secondary measurements on a metric card, read as one element. */
 @Composable
 fun BigValue(label: String, value: String, unit: String, modifier: Modifier = Modifier) {
-    Column(modifier) {
+    Column(modifier.semantics(mergeDescendants = true) {}) {
         Eyebrow(label, uppercase = false)
         Row {
             Text(value, style = MaterialTheme.typography.displaySmall, modifier = Modifier.alignByBaseline())

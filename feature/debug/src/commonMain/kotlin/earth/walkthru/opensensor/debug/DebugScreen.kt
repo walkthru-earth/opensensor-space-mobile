@@ -42,6 +42,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -67,6 +70,8 @@ import earth.walkthru.opensensor.debug.resources.debug_config_read
 import earth.walkthru.opensensor.debug.resources.debug_config_title
 import earth.walkthru.opensensor.debug.resources.debug_endpoint
 import earth.walkthru.opensensor.debug.resources.debug_estimate
+import earth.walkthru.opensensor.debug.resources.debug_frame_received
+import earth.walkthru.opensensor.debug.resources.debug_frame_sent
 import earth.walkthru.opensensor.debug.resources.debug_frames_none
 import earth.walkthru.opensensor.debug.resources.debug_frames_note
 import earth.walkthru.opensensor.debug.resources.debug_frames_title
@@ -163,7 +168,7 @@ fun DebugScreen(
                 navigationIcon = { IconButton(onClick = onBack) { Icon(AppIcons.ArrowBack, contentDescription = stringResource(Res.string.action_back)) } },
                 title = {
                     Column {
-                        Text(stringResource(Res.string.nav_debug), style = MaterialTheme.typography.titleLarge)
+                        Text(stringResource(Res.string.nav_debug), style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             state.link.transport?.let {
                                 Text(transportLabel(it), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
@@ -276,11 +281,13 @@ private fun FramesCard(frames: List<RawFrameRecord>, onClear: () -> Unit) {
                 frames.forEach { f ->
                     Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                         val tx = f.direction == FrameDirection.TX
+                        // The arrow is read as a word, not as "right arrow".
+                        val direction = stringResource(if (tx) Res.string.debug_frame_sent else Res.string.debug_frame_received)
                         Text(
                             if (tx) "→" else "←",
                             style = MaterialTheme.typography.bodyMedium,
                             color = if (tx) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.width(18.dp),
+                            modifier = Modifier.width(18.dp).semantics { contentDescription = direction },
                         )
                         Text(
                             frameLine(f),

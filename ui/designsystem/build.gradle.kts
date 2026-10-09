@@ -15,5 +15,10 @@ kotlin {
             // Feature modules style their screens with the Material 3 types this module themes.
             api(libs.compose.material3)
         }
+        // Semantics tests render the shared components headless on the iOS simulator (verifyIos).
+        // The Android host has no window to render into without Robolectric, so they stay iOS only.
+        iosTest.dependencies {
+            implementation(libs.compose.ui.test)
+        }
     }
 }

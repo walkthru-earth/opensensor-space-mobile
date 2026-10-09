@@ -111,4 +111,8 @@
         <item quantity="many">حُدّثت قبل %1$d ساعة</item>
         <item quantity="other">حُدّثت قبل %1$d ساعة</item>
     </plurals>
+    <!-- The map's spoken name, followed by the chosen measurement (DiscoverScreen). -->
+    <string name="discover_map_label">خريطة مناطق المستشعرات العامة</string>
+    <!-- Spread chart's spoken summary, the bar that holds the most areas (CellCharts). -->
+    <string name="discover_spread_peak">أغلب المناطق من %1$s إلى %2$s %3$s</string>
 </resources>

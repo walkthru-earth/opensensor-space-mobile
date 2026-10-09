@@ -23,6 +23,10 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -60,6 +64,7 @@ import earth.walkthru.opensensor.files.resources.fm_index_footer
 import earth.walkthru.opensensor.files.resources.fm_index_rows
 import earth.walkthru.opensensor.files.resources.fm_index_source
 import earth.walkthru.opensensor.files.resources.fm_last
+import earth.walkthru.opensensor.files.resources.fm_loading
 import earth.walkthru.opensensor.files.resources.fm_metadata
 import earth.walkthru.opensensor.files.resources.fm_row_groups
 import earth.walkthru.opensensor.files.resources.fm_row_groups_note
@@ -94,14 +99,15 @@ fun FileMetricsScreen(state: FileMetricsState, level: DetailLevel, name: String,
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(name.substringAfterLast('/'), maxLines = 1, overflow = TextOverflow.Ellipsis, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.titleMedium) },
+                title = { Text(name.substringAfterLast('/'), maxLines = 1, overflow = TextOverflow.Ellipsis, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() }) },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(AppIcons.ArrowBack, contentDescription = stringResource(Res.string.action_back)) } },
             )
         },
     ) { padding ->
         when (state) {
             FileMetricsState.Loading -> Column(Modifier.fillMaxSize().padding(padding), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                CircularProgressIndicator()
+                val loading = stringResource(Res.string.fm_loading)
+                CircularProgressIndicator(Modifier.semantics { contentDescription = loading })
             }
             is FileMetricsState.Failed -> Column(Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
                 WarningNote(
@@ -192,8 +198,9 @@ private fun Loaded(s: FileMetricsState.Loaded, padding: PaddingValues, developer
         }
         item(key = "columns-header") {
             Column(Modifier.padding(top = 4.dp)) {
-                Eyebrow(stringResource(Res.string.fm_columns_decoded))
-                Row(Modifier.fillMaxWidth().padding(top = 6.dp)) {
+                Eyebrow(stringResource(Res.string.fm_columns_decoded), heading = true)
+                // The header cells are read inside each column row, so a screen reader skips them here.
+                Row(Modifier.fillMaxWidth().padding(top = 6.dp).clearAndSetSemantics {}) {
                     Cell(stringResource(Res.string.fm_col_name), 3f)
                     Cell(stringResource(Res.string.fm_col_nulls), 1f)
                     Cell(stringResource(Res.string.fm_col_min), 1.4f)
@@ -202,8 +209,15 @@ private fun Loaded(s: FileMetricsState.Loaded, padding: PaddingValues, developer
             }
         }
         items(s.columns, key = { it.name }) { c ->
-            Column {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            // One spoken line per column, each value after its header, "pm2_5, nulls 0, min 1.2, max 40".
+            val spoken = listOf(
+                c.name,
+                stringResource(Res.string.fm_col_nulls) + " " + c.nulls,
+                stringResource(Res.string.fm_col_min) + " " + c.min,
+                stringResource(Res.string.fm_col_max) + " " + c.max,
+            ).joinToString(", ")
+            Column(Modifier.semantics(mergeDescendants = true) {}) {
+                Row(Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = spoken }, verticalAlignment = Alignment.CenterVertically) {
                     Cell(c.name, 3f, mono = true)
                     Cell(if (c.nulls == 0) "·" else c.nulls.toString(), 1f)
                     Cell(c.min, 1.4f)
@@ -230,8 +244,11 @@ private fun Loaded(s: FileMetricsState.Loaded, padding: PaddingValues, developer
             item(key = "metadata") {
                 SectionCard(stringResource(Res.string.fm_metadata), modifier = Modifier.padding(top = 8.dp)) {
                     s.metadata.entries.sortedBy { it.key }.forEach { (k, v) ->
-                        Text(k, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(v, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                        // Key and value read as one element.
+                        Column(Modifier.semantics(mergeDescendants = true) {}) {
+                            Text(k, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(v, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                        }
                         Spacer(Modifier.height(4.dp))
                     }
                 }

@@ -1,6 +1,5 @@
 package earth.walkthru.opensensor.device
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -11,6 +10,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -26,6 +27,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -35,6 +37,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -247,13 +255,24 @@ fun PairingCard(state: DeviceConfigUiState, onSave: (PairingChoice) -> Unit, onR
             WarningNote(stringResource(Res.string.pairing_reboot_pending))
         }
         Spacer(Modifier.height(10.dp))
-        PairMode.entries.forEach { mode ->
-            Row(
-                Modifier.fillMaxWidth().clickable(enabled = state.canEdit) { selected = mode }.padding(vertical = 2.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                RadioButton(selected = selected == mode, onClick = { selected = mode }, enabled = state.canEdit)
-                Text(pairModeLabel(mode), style = MaterialTheme.typography.bodyMedium)
+        // One exclusive choice. The whole row is the radio button, the dot keeps its 48 dp slot.
+        Column(Modifier.selectableGroup()) {
+            PairMode.entries.forEach { mode ->
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .selectable(selected = selected == mode, enabled = state.canEdit, role = Role.RadioButton) { selected = mode }
+                        .padding(vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RadioButton(
+                        selected = selected == mode,
+                        onClick = null,
+                        enabled = state.canEdit,
+                        modifier = Modifier.minimumInteractiveComponentSize(),
+                    )
+                    Text(pairModeLabel(mode), style = MaterialTheme.typography.bodyMedium)
+                }
             }
         }
         if (selected == PairMode.FIXED) {
@@ -315,7 +334,7 @@ fun BondsCard(state: DeviceConfigUiState, onForgetAll: () -> Unit, modifier: Mod
 @Composable
 fun ProtocolV1Card(modifier: Modifier = Modifier) {
     BrandCard(modifier = modifier) {
-        Eyebrow(stringResource(Res.string.v1_title))
+        Eyebrow(stringResource(Res.string.v1_title), heading = true)
         Spacer(Modifier.height(6.dp))
         Text(stringResource(Res.string.v1_body), style = MaterialTheme.typography.bodyMedium)
     }
@@ -348,7 +367,13 @@ fun LanCard(
             title,
             info = InfoContent(title, stringResource(Res.string.lan_explain), stringResource(Res.string.lan_token_explain), stringResource(Res.string.perm_lan_body)),
         ) {
-            Switch(checked = lan?.isOn == true, onCheckedChange = onToggleLan, enabled = state.canEdit && lan != null)
+            // The card title names the switch for screen readers.
+            Switch(
+                checked = lan?.isOn == true,
+                onCheckedChange = onToggleLan,
+                enabled = state.canEdit && lan != null,
+                modifier = Modifier.semantics { contentDescription = title },
+            )
         }
         if (level.detailed) {
             StatLine(
@@ -439,7 +464,13 @@ fun WifiCard(
     BrandCard(modifier = modifier) {
         val title = stringResource(Res.string.wifi_title)
         CardHeader(title, info = InfoContent(title, stringResource(Res.string.info_wifi_body), stringResource(Res.string.wifi_psk_storage))) {
-            Switch(checked = wifi?.isOn == true, onCheckedChange = onToggleWifi, enabled = state.canEdit && wifi != null)
+            // The card title names the switch for screen readers.
+            Switch(
+                checked = wifi?.isOn == true,
+                onCheckedChange = onToggleWifi,
+                enabled = state.canEdit && wifi != null,
+                modifier = Modifier.semantics { contentDescription = title },
+            )
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             StatusDot(
@@ -459,6 +490,8 @@ fun WifiCard(
                     null -> stringResource(if (wifi == null) Res.string.config_not_read else Res.string.wifi_unknown)
                 },
                 style = MaterialTheme.typography.bodyLarge,
+                // Changes from connecting to connected or failed while the user waits after a join.
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
             )
         }
         if (ws == WifiState.CONNECTING) {
@@ -494,7 +527,7 @@ fun WifiCard(
             WifiScanState.Idle -> Unit
             WifiScanState.Scanning -> {
                 Spacer(Modifier.height(10.dp))
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(Modifier.semantics(mergeDescendants = true) {}, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                     Text(stringResource(Res.string.wifi_scanning), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -518,11 +551,14 @@ fun WifiCard(
                     }) { Text(stringResource(Res.string.action_hide)) }
                 }
                 if (scan.accessPoints.isEmpty()) Text(stringResource(Res.string.wifi_none_found), style = MaterialTheme.typography.bodySmall)
-                scan.accessPoints.forEach { ap ->
-                    AccessPointRow(ap, selected = picked == ap.ssid, showDetails = level.developer) {
-                        picked = ap.ssid
-                        pickedOpen = !ap.wifiAuth.secured
-                        psk = ""
+                // One network at a time, a group of radio buttons for screen readers.
+                Column(Modifier.selectableGroup()) {
+                    scan.accessPoints.forEach { ap ->
+                        AccessPointRow(ap, selected = picked == ap.ssid, showDetails = level.developer) {
+                            picked = ap.ssid
+                            pickedOpen = !ap.wifiAuth.secured
+                            psk = ""
+                        }
                     }
                 }
             }
@@ -532,7 +568,7 @@ fun WifiCard(
             Spacer(Modifier.height(12.dp))
             Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
                 Column(Modifier.padding(16.dp)) {
-                    Text(stringResource(Res.string.wifi_join, network), style = MaterialTheme.typography.titleSmall)
+                    Text(stringResource(Res.string.wifi_join, network), style = MaterialTheme.typography.titleSmall, modifier = Modifier.semantics { heading() })
                     if (pickedOpen) {
                         Text(stringResource(Res.string.wifi_open_network), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } else {
@@ -584,7 +620,7 @@ private fun AccessPointRow(ap: Frame.WifiAp, selected: Boolean, showDetails: Boo
         shape = MaterialTheme.shapes.medium,
         color = if (selected) FloatingControl.Selected else MaterialTheme.colorScheme.surface,
         contentColor = if (selected) FloatingControl.OnSelected else MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp).clickable(onClick = onClick),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp).selectable(selected = selected, role = Role.RadioButton, onClick = onClick),
     ) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(

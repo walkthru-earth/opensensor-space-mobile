@@ -29,6 +29,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleStartEffect
 import earth.walkthru.aqsync.settings.DetailLevel
@@ -118,7 +122,7 @@ fun MyDevicesScreen(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             LargeTopAppBar(
-                title = { Text(stringResource(SharedRes.string.tab_my_devices)) },
+                title = { Text(stringResource(SharedRes.string.tab_my_devices), Modifier.semantics { heading() }) },
                 scrollBehavior = scrollBehavior,
                 actions = {
                     InfoButton(
@@ -156,7 +160,7 @@ fun MyDevicesScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             if (list.active.isNotEmpty()) {
-                item(key = "active-header") { Eyebrow(stringResource(Res.string.scan_connections)) }
+                item(key = "active-header") { Eyebrow(stringResource(Res.string.scan_connections), heading = true) }
                 items(list.active, key = { "a:" + it.id }) { link ->
                     ActiveRow(link, onClick = { open(link.id, link.name) })
                 }
@@ -166,7 +170,12 @@ fun MyDevicesScreen(
             }
             state.scanProblem?.let { problem ->
                 item(key = "problem") {
-                    Surface(color = MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth()) {
+                    // Appears while the user waits on a scan, so screen readers hear it without moving focus.
+                    Surface(
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        shape = MaterialTheme.shapes.large,
+                        modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite },
+                    ) {
                         Text(
                             stringResource(if (problem == ScanProblem.BLUETOOTH_OFF) Res.string.scan_bluetooth_off else Res.string.scan_failed),
                             Modifier.padding(16.dp),
@@ -186,7 +195,7 @@ fun MyDevicesScreen(
                     }
                 }
             } else {
-                item(key = "nearby-header") { Eyebrow(stringResource(Res.string.scan_nearby)) }
+                item(key = "nearby-header") { Eyebrow(stringResource(Res.string.scan_nearby), heading = true) }
             }
             items(list.nearby, key = { "n:" + it.id }) { row ->
                 NearbyRow(
@@ -200,7 +209,7 @@ fun MyDevicesScreen(
             if (list.known.isNotEmpty()) {
                 item(key = "known-header") {
                     Spacer(Modifier.height(8.dp))
-                    Eyebrow(stringResource(Res.string.scan_known))
+                    Eyebrow(stringResource(Res.string.scan_known), heading = true)
                 }
                 items(list.known, key = { "k:" + it.id }) { row ->
                     KnownRow(
@@ -215,7 +224,7 @@ fun MyDevicesScreen(
             if (list.wifiOnly.isNotEmpty()) {
                 item(key = "wifi-header") {
                     Spacer(Modifier.height(8.dp))
-                    Eyebrow(stringResource(Res.string.devices_on_wifi))
+                    Eyebrow(stringResource(Res.string.devices_on_wifi), heading = true)
                 }
                 items(list.wifiOnly, key = { "w:" + it.name }) { sensor -> WifiOnlyRow(sensor, level) }
             }
@@ -252,7 +261,11 @@ private fun CollectAllRow(count: Int, running: Boolean, inBackground: Boolean, o
         ) {
             Icon(AppIcons.CloudSync, contentDescription = null)
             Spacer(Modifier.width(8.dp))
-            Text(if (running) stringResource(Res.string.scan_collect_running) else title)
+            // Polite, so the switch to "Collecting" is read out after the tap.
+            Text(
+                if (running) stringResource(Res.string.scan_collect_running) else title,
+                Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            )
         }
         InfoButton(
             InfoContent(
@@ -269,7 +282,7 @@ private fun ForgetDialog(target: ForgetTarget, explainSystemBond: Boolean, onAct
     val name = target.name ?: stringResource(Res.string.scan_unnamed)
     AlertDialog(
         onDismissRequest = { onAction(DevicesAction.CancelForget) },
-        title = { Text(stringResource(Res.string.scan_forget_title, name)) },
+        title = { Text(stringResource(Res.string.scan_forget_title, name), Modifier.semantics { heading() }) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(stringResource(Res.string.scan_forget_body))

@@ -38,6 +38,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -65,6 +70,7 @@ import earth.walkthru.opensensor.files.resources.file_mismatch
 import earth.walkthru.opensensor.files.resources.file_not_synced
 import earth.walkthru.opensensor.files.resources.file_partial
 import earth.walkthru.opensensor.files.resources.file_share
+import earth.walkthru.opensensor.files.resources.file_sync_one
 import earth.walkthru.opensensor.files.resources.file_synced
 import earth.walkthru.opensensor.files.resources.file_syncing
 import earth.walkthru.opensensor.files.resources.files_all_synced_body
@@ -196,7 +202,7 @@ fun FilesScreen(
                 TopAppBar(
                     title = {
                         Column {
-                            Text(stringResource(Res.string.files_title))
+                            Text(stringResource(Res.string.files_title), modifier = Modifier.semantics { heading() })
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 subtitleLead()
                                 Text(
@@ -290,7 +296,12 @@ fun FilesScreen(
             when {
                 manifest is ManifestState.Idle -> idleHint?.let { item(key = "hint") { Hint(it) } }
                 manifest.isLoading && listing == null -> item(key = "listing") {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    // Read as one polite announcement while the sensor lists its files.
+                    Row(
+                        Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
                         CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                         Text(stringResource(Res.string.files_listing), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -321,7 +332,11 @@ fun FilesScreen(
                         )
                         Spacer(Modifier.width(12.dp))
                         if (manifest.isLoading) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(
+                                Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
                                 CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 1.5.dp)
                                 Text(stringResource(Res.string.files_refreshing), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                             }
@@ -410,7 +425,7 @@ private fun ago(epochMs: Long): String {
 private fun GroupHeader(group: PartitionGroup, level: DetailLevel) {
     Column(Modifier.padding(top = 8.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(groupTitle(group.title), style = MaterialTheme.typography.titleMedium)
+            Text(groupTitle(group.title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
             Spacer(Modifier.weight(1f))
             Text(
                 stringResource(Res.string.files_group_count, group.synced, group.entries.size, formatBytes(group.bytes)),
@@ -432,7 +447,7 @@ private fun SyncProgressCard(sync: SyncProgress, level: DetailLevel) {
         Column(Modifier.padding(20.dp)) {
             val on = MaterialTheme.colorScheme.onPrimaryContainer
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Eyebrow(stringResource(if (sync.running) Res.string.files_syncing else Res.string.files_last_sync), color = on)
+                Eyebrow(stringResource(if (sync.running) Res.string.files_syncing else Res.string.files_last_sync), color = on, heading = true)
                 Spacer(Modifier.weight(1f))
                 if (sync.running) {
                     if (level.detailed) Text(formatRate(sync.bytesPerSecond), style = MaterialTheme.typography.labelMedium, color = on)
@@ -441,7 +456,11 @@ private fun SyncProgressCard(sync: SyncProgress, level: DetailLevel) {
                 }
             }
             Spacer(Modifier.height(6.dp))
-            Row(verticalAlignment = Alignment.Bottom) {
+            // "3 of 12 files" as one element, announced politely while the sync runs.
+            Row(
+                Modifier.semantics(mergeDescendants = true) { if (sync.running) liveRegion = LiveRegionMode.Polite },
+                verticalAlignment = Alignment.Bottom,
+            ) {
                 Text("${sync.filesDone}", style = MaterialTheme.typography.displayMedium, color = on)
                 Text(" " + pluralStringResource(Res.plurals.files_of_total, sync.filesTotal, sync.filesTotal), style = MaterialTheme.typography.titleMedium, color = on, modifier = Modifier.padding(bottom = 8.dp))
             }
@@ -486,14 +505,19 @@ private fun FileRow(entry: ManifestEntry, localTime: String?, showName: Boolean,
         color = if (entry.state == FileSyncState.SYNCING) scheme.surfaceContainerHigh else scheme.surfaceContainerLow,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = clickable) { if (entry.state == FileSyncState.SYNCED) onShare() else onSync() },
+            .clickable(
+                enabled = clickable,
+                role = Role.Button,
+                onClickLabel = stringResource(if (entry.state == FileSyncState.SYNCED) Res.string.file_share else Res.string.file_sync_one),
+            ) { if (entry.state == FileSyncState.SYNCED) onShare() else onSync() },
     ) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (icon == null) {
                     CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                 } else {
-                    Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(20.dp))
+                    // The state is spoken from the text line below, the icon only repeats it.
+                    Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
@@ -518,7 +542,8 @@ private fun FileRow(entry: ManifestEntry, localTime: String?, showName: Boolean,
                         }
                         Spacer(Modifier.width(4.dp))
                     }
-                    Icon(AppIcons.IosShare, contentDescription = stringResource(Res.string.file_share), tint = scheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                    // A hint of the row's action, which the row already names through its click label.
+                    Icon(AppIcons.IosShare, contentDescription = null, tint = scheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                 }
             }
             if (entry.state == FileSyncState.SYNCING) {

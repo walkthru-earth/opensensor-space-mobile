@@ -21,7 +21,9 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
@@ -257,7 +259,8 @@ internal fun MetricHeroCard(
             }
             Spacer(Modifier.width(20.dp))
             when (reading) {
-                is NowReading.Reading -> Column(Modifier.weight(1f)) {
+                // Value, unit and metric name read as one element ("12, µg/m³, PM2.5").
+                is NowReading.Reading -> Column(Modifier.weight(1f).semantics(mergeDescendants = true) {}) {
                     Row {
                         Text(
                             fmtPm(reading.pm25),
@@ -284,7 +287,12 @@ internal fun MetricHeroCard(
         }
         if (reading is NowReading.Reading) {
             Spacer(Modifier.height(16.dp))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            // The mood and its comparison read as one element.
+            Row(
+                Modifier.semantics(mergeDescendants = true) {},
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
                 MoodPill(reading.mood)
                 Text(reading.mood.comparisonText(), style = MaterialTheme.typography.bodySmall, color = quiet, modifier = Modifier.weight(1f))
             }
@@ -308,7 +316,7 @@ internal fun MetricHeroCard(
 internal fun EnvironmentCard(profile: LiveProfile?, live: LiveSample?, receivedAtEpochMs: Long?, hero: Boolean, modifier: Modifier = Modifier) {
     BrandCard(modifier = modifier, tone = if (hero) CardTone.SOFT else CardTone.PLAIN) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Eyebrow(stringResource(Res.string.env_title), modifier = Modifier.weight(1f))
+            Eyebrow(stringResource(Res.string.env_title), modifier = Modifier.weight(1f), heading = true)
             FreshnessLabel(receivedAtEpochMs)
         }
         Spacer(Modifier.height(12.dp))
@@ -336,7 +344,7 @@ internal fun EnvironmentCard(profile: LiveProfile?, live: LiveSample?, receivedA
 @Composable
 internal fun TodaySoFarCard(today: TodaySoFar?, clockMissing: Boolean, level: DetailLevel, modifier: Modifier = Modifier) {
     BrandCard(modifier = modifier, tone = CardTone.SOFT) {
-        Eyebrow(stringResource(Res.string.today_so_far))
+        Eyebrow(stringResource(Res.string.today_so_far), heading = true)
         Spacer(Modifier.height(8.dp))
         if (today == null) {
             Text(
@@ -346,7 +354,8 @@ internal fun TodaySoFarCard(today: TodaySoFar?, clockMissing: Boolean, level: De
             )
             return@BrandCard
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        // The mood, the average and the share of the day read as one element. The face is decorative here, the mood is also a word.
+        Row(Modifier.semantics(mergeDescendants = true) {}, verticalAlignment = Alignment.CenterVertically) {
             MoodFace(today.mood, today.mood.color(), Modifier.size(40.dp), description = null)
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
@@ -389,6 +398,8 @@ internal fun SmartSyncCard(sync: SyncProgress, archive: TodayArchive, enabled: B
                         SyncMood.EMPTY -> stringResource(Res.string.sync_empty)
                     },
                     style = MaterialTheme.typography.titleLarge,
+                    // The sync state in words changes while the user waits, so screen readers hear it.
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                 )
             }
             if (mood == SyncMood.CAUGHT_UP) {
@@ -538,7 +549,7 @@ internal fun ReadingsCard(live: LiveSample?, receivedAtEpochMs: Long?, level: De
     val showPm = live?.pmValid == true
     BrandCard(modifier = modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Eyebrow(stringResource(Res.string.readings_title), modifier = Modifier.weight(1f))
+            Eyebrow(stringResource(Res.string.readings_title), modifier = Modifier.weight(1f), heading = true)
             FreshnessLabel(receivedAtEpochMs)
         }
         Spacer(Modifier.height(10.dp))
@@ -582,11 +593,12 @@ internal fun ParticlesCard(live: LiveSample?, modifier: Modifier = Modifier) {
     )
     BrandCard(modifier = modifier) {
         // Not uppercased. "µ".uppercase() is the Greek capital mu, which once rendered as "(MM)".
-        Eyebrow(stringResource(Res.string.particles_title), uppercase = false)
+        Eyebrow(stringResource(Res.string.particles_title), uppercase = false, heading = true)
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             counts.forEach { (label, n) ->
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                // The count and its size bin read as one element.
+                Column(Modifier.semantics(mergeDescendants = true) {}, horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(n?.toString() ?: NO_VALUE, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
                     Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -616,7 +628,8 @@ internal fun BoardCard(live: LiveSample?, profile: LiveProfile?, level: DetailLe
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Column(Modifier.weight(1f)) {
+            // Battery label, percent and charging state read as one element.
+            Column(Modifier.weight(1f).semantics(mergeDescendants = true) {}) {
                 Eyebrow(Metrics.BATTERY.label, uppercase = false)
                 Row(verticalAlignment = Alignment.Bottom) {
                     Icon(
@@ -656,7 +669,7 @@ internal fun BoardCard(live: LiveSample?, profile: LiveProfile?, level: DetailLe
 internal fun StorageCard(status: DeviceStatus?, receivedAtEpochMs: Long?, level: DetailLevel, modifier: Modifier = Modifier) {
     BrandCard(modifier = modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Eyebrow(stringResource(Res.string.storage_title), modifier = Modifier.weight(1f))
+            Eyebrow(stringResource(Res.string.storage_title), modifier = Modifier.weight(1f), heading = true)
             if (receivedAtEpochMs != null) {
                 val template = stringResource(Res.string.storage_status_age)
                 val ago = agoFormatter()
@@ -713,7 +726,8 @@ internal fun StorageCard(status: DeviceStatus?, receivedAtEpochMs: Long?, level:
 
 @Composable
 private fun Counter(label: String, value: Long?, color: Color? = null) {
-    Column {
+    // The number and its label read as one element.
+    Column(Modifier.semantics(mergeDescendants = true) {}) {
         Text(value?.toString() ?: NO_VALUE, style = MaterialTheme.typography.titleLarge, color = color ?: MaterialTheme.colorScheme.onSurface)
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
@@ -735,7 +749,7 @@ internal fun DeviceInfoCard(
     configReadAtEpochMs: Long? = null,
 ) {
     BrandCard(modifier = modifier) {
-        Eyebrow(stringResource(Res.string.device_title))
+        Eyebrow(stringResource(Res.string.device_title), heading = true)
         Spacer(Modifier.height(6.dp))
         Text(name ?: stringResource(Res.string.device_unnamed), style = MaterialTheme.typography.titleLarge)
         Text(

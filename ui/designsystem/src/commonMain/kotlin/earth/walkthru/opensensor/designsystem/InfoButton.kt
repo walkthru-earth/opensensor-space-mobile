@@ -100,7 +100,7 @@ fun CardHeader(
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         // The title and its "i" stay together on the left. The trailing control sits at the end.
         Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-            Eyebrow(title, color = color, modifier = Modifier.weight(1f, fill = false))
+            Eyebrow(title, color = color, heading = true, modifier = Modifier.weight(1f, fill = false))
             if (info != null) InfoButton(info, tint = color)
         }
         trailing?.invoke(this)

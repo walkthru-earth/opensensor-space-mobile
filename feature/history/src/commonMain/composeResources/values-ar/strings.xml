@@ -96,4 +96,16 @@
     <string name="info_history_body3">المقاطع المتقطعة سُجّلت قبل أن تكون للمستشعر ساعة. وقتها مقدَّر من وقت ضُبط لاحقًا خلال فترة التشغيل نفسها.</string>
     <string name="info_history_body4">تبقى قراءات المحطة السابقة متاحة بعد إعادة ضبط الجهاز.</string>
     <string name="info_history_body5">تتبع ألوان PM2.5 وPM10 إرشادات منظمة الصحة العالمية لجودة الهواء لعام 2021. الإرشاد وأهدافه المرحلية الأربعة متوسطات على مدى 24 ساعة.</string>
+    <!-- Screen reader summaries of the History charts (BandColumnChart, DayRing, CalendarHeatmap). -->
+    <string name="chart_bars_title">مخطط أعمدة لـ %1$s</string>
+    <string name="chart_ring_title">%1$s على مدار اليوم</string>
+    <string name="chart_calendar_title">تقويم %1$s اليومي</string>
+    <!-- Highest bar, value, unit and time, spoken in a chart summary. -->
+    <string name="chart_highest_at">الأعلى %1$s %2$s في %3$s</string>
+    <!-- Highest bar without a time, for the chart by file. -->
+    <string name="chart_highest">الأعلى %1$s %2$s</string>
+    <!-- Day ring summary, the day's mean value and unit. -->
+    <string name="chart_average_value">المتوسط %1$s %2$s</string>
+    <!-- Calendar summary, days with readings out of days shown. -->
+    <string name="chart_days_with_readings">%1$d من %2$d يومًا فيها قراءات</string>
 </resources>

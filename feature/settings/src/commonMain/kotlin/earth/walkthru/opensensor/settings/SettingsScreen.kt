@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
@@ -115,7 +116,7 @@ fun SettingsScreen(
     Column(modifier.fillMaxSize().background(colors.background)) {
         TopAppBar(
             colors = TopAppBarDefaults.topAppBarColors(containerColor = colors.background),
-            title = { Text(title) },
+            title = { Text(title, Modifier.semantics { heading() }) },
             actions = { infoButton(title, infoBody, Modifier) },
         )
         // Nothing until the store is read once, so no control shows a default it might not hold.
@@ -219,12 +220,17 @@ private fun PublicSensorsRow(on: Boolean, onChange: (Boolean) -> Unit) {
 @Composable
 private fun About(appVersion: String) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val about = stringResource(Res.string.settings_about)
     Column(Modifier.padding(horizontal = 4.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
-            stringResource(Res.string.settings_about).uppercase(),
+            about.uppercase(),
             style = MaterialTheme.typography.labelSmall,
             color = muted,
-            modifier = Modifier.semantics { heading() },
+            // Read as written, not as capitals a screen reader might spell out.
+            modifier = Modifier.semantics {
+                contentDescription = about
+                heading()
+            },
         )
         Text(stringResource(Res.string.settings_about_body, appVersion), style = MaterialTheme.typography.bodySmall, color = muted)
         Text(stringResource(Res.string.info_privacy), style = MaterialTheme.typography.bodySmall, color = muted)

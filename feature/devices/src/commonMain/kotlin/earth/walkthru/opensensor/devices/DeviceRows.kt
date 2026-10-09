@@ -25,6 +25,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import earth.walkthru.aqsync.data.history.AirMood
@@ -95,7 +99,7 @@ internal fun ActiveRow(link: ActiveLink, onClick: () -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clickable(role = Role.Button, onClick = onClick)
             .padding(vertical = 8.dp),
     ) {
         Text(link.name ?: stringResource(Res.string.scan_unnamed), style = MaterialTheme.typography.titleMedium)
@@ -115,6 +119,8 @@ internal fun ActiveRow(link: ActiveLink, onClick: () -> Unit) {
             Text(
                 pluralStringResource(Res.plurals.scan_collecting, link.filesTotal, link.filesDone, link.filesTotal),
                 style = MaterialTheme.typography.bodySmall,
+                // The sync progress line, read out politely as files arrive.
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
             )
         } else if (link.background) {
             Text(stringResource(Res.string.scan_background), style = MaterialTheme.typography.bodySmall)
@@ -129,7 +135,7 @@ internal fun NearbyRow(row: DeviceRow, level: DetailLevel, onClick: () -> Unit, 
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .clickable(role = Role.Button, onClick = onClick),
     ) {
         Row(Modifier.padding(start = 20.dp, end = 8.dp, top = 16.dp, bottom = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -158,7 +164,7 @@ internal fun KnownRow(row: DeviceRow, level: DetailLevel, onClick: () -> Unit, o
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .clickable(role = Role.Button, onClick = onClick),
     ) {
         Row(Modifier.padding(start = 20.dp, end = 8.dp, top = 12.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -190,7 +196,8 @@ internal fun WifiOnlyRow(sensor: WifiSensor, level: DetailLevel) {
         shape = MaterialTheme.shapes.extraLarge,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        modifier = Modifier.fillMaxWidth(),
+        // Not clickable, so merge it by hand to read as one sensor. The info button stays its own stop.
+        modifier = Modifier.fillMaxWidth().semantics(mergeDescendants = true) {},
     ) {
         Row(Modifier.padding(start = 20.dp, end = 8.dp, top = 12.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(AppIcons.Wifi, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)

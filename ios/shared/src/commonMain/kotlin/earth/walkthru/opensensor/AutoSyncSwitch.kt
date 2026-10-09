@@ -5,10 +5,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -17,7 +19,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import earth.walkthru.opensensor.permissions.AccessHooks
@@ -56,30 +60,33 @@ fun AutoSyncSwitch(settings: AutoSyncSettings, id: String, syncInBackground: (St
     )
     // Null until the button is tapped, then whether iOS took it as a continued task.
     var continued by remember(id) { mutableStateOf<Boolean?>(null) }
-    val title = stringResource(Res.string.autosync_title)
+    // One handler for the row and the switch, so a tap anywhere asks for notifications exactly as the switch did.
+    val onToggle: (Boolean) -> Unit = { checked ->
+        if (!checked) {
+            settings.set(id, false)
+        } else {
+            val turnOn = { settings.set(id, true) }
+            if (AutoSyncAsk.shouldAsk(settings.notificationAccess())) access.run(onDeclined = turnOn, action = turnOn) else turnOn()
+        }
+    }
     Column(modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        // The row is the switch, so VoiceOver and TalkBack read the label, the hint and on or off as one element.
+        // The minimum size keeps the 48 dp height the switch gave the row when it owned the tap.
+        Row(
+            Modifier.minimumInteractiveComponentSize().toggleable(value = on, role = Role.Switch, onValueChange = onToggle),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(Res.string.autosync_title), style = MaterialTheme.typography.titleMedium)
                 Text(stringResource(Res.string.autosync_ios_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Switch(
-                checked = on,
-                onCheckedChange = { checked ->
-                    if (!checked) {
-                        settings.set(id, false)
-                    } else {
-                        val turnOn = { settings.set(id, true) }
-                        if (AutoSyncAsk.shouldAsk(settings.notificationAccess())) access.run(onDeclined = turnOn, action = turnOn) else turnOn()
-                    }
-                },
-                modifier = Modifier.semantics { contentDescription = title },
-            )
+            Switch(checked = on, onCheckedChange = null)
         }
         OutlinedButton(onClick = { continued = syncInBackground(id) }) { Text(stringResource(Res.string.files_bg_sync)) }
         continued?.let { taken ->
             val hint = if (taken) Res.string.files_bg_event else Res.string.autosync_ios_keep_open
-            Text(stringResource(hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // Appears after the tap, so screen readers hear the outcome.
+            Text(stringResource(hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
         }
     }
 }

@@ -29,6 +29,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import earth.walkthru.aqsync.data.history.Metrics
 import earth.walkthru.aqsync.data.history.NowReading
@@ -107,10 +112,11 @@ internal fun CompanionScreen(state: CompanionState, title: String?, onBack: () -
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onBack) { Icon(AppIcons.ArrowBack, contentDescription = stringResource(Res.string.action_back)) }
-                    Text(title ?: stringResource(Res.string.app_name), style = MaterialTheme.typography.headlineMedium)
+                    Text(title ?: stringResource(Res.string.app_name), style = MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() })
                 }
             }
-            if (!state.message.isEmpty) item { Text(state.message.resolve(), style = MaterialTheme.typography.bodyLarge) }
+            // The link notice changes while the user waits, so VoiceOver announces it without moving focus.
+            if (!state.message.isEmpty) item { Text(state.message.resolve(), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
             // Shown only after iOS reports a Bluetooth denial, which first needs a Find sensors tap.
             if (PermissionFlow.offersSettings(state.bluetoothAccess)) {
                 item { SettingsLink(stringResource(Res.string.perm_open_settings)) }
@@ -119,14 +125,15 @@ internal fun CompanionScreen(state: CompanionState, title: String?, onBack: () -
                 item {
                     BrandCard {
                         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Text(stringResource(Res.string.companion_now), style = MaterialTheme.typography.titleLarge)
+                            Text(stringResource(Res.string.companion_now), style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
                             val sample = state.live
                             val profile = state.profile
                             // As on Android Today, a board without a particle sensor leads with its temperature.
                             val particles = sample?.pms != null && sample.pms != PmsStatus.ABSENT.code
                             if (particles || profile == null || sample == null) {
                                 when (val reading = state.reading) {
-                                    is NowReading.Reading -> {
+                                    // The value and its mood read as one element, with the card's 12 dp gap kept.
+                                    is NowReading.Reading -> Column(Modifier.semantics(mergeDescendants = true) {}, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                         Text(stringResource(Res.string.batch_value, formatPm(reading.pm25)), style = MaterialTheme.typography.displaySmall)
                                         Text(stringResource(Res.string.companion_pm25_mood, reading.mood.title))
                                     }
@@ -170,10 +177,16 @@ internal fun CompanionScreen(state: CompanionState, title: String?, onBack: () -
                                 )
                             }
                             state.syncProgress?.takeIf { it.filesTotal > 0 }?.let { p ->
-                                Text(pluralStringResource(Res.plurals.companion_lan_files, p.filesTotal, p.filesDone, p.filesTotal), style = MaterialTheme.typography.bodySmall, color = muted)
+                                // Sync progress in words, announced as files complete.
+                                Text(
+                                    pluralStringResource(Res.plurals.companion_lan_files, p.filesTotal, p.filesDone, p.filesTotal),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = muted,
+                                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                                )
                                 if (showTechnical && p.bytesPerSecond > 0.0) Text(stringResource(Res.string.companion_lan_rate, number(p.bytesPerSecond / 1024)), style = MaterialTheme.typography.bodySmall, color = muted)
                             }
-                            if (!state.syncMessage.isEmpty) Text(state.syncMessage.resolve(), style = MaterialTheme.typography.bodySmall)
+                            if (!state.syncMessage.isEmpty) Text(state.syncMessage.resolve(), style = MaterialTheme.typography.bodySmall, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
                         }
                         if (state.wifiAccessAvailable) {
                             OutlinedButton(onClick = saveWifiAccess, enabled = !state.wifiAccessBusy, shape = MaterialTheme.shapes.small) {
@@ -202,7 +215,7 @@ internal fun CompanionScreen(state: CompanionState, title: String?, onBack: () -
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Spacer(Modifier.height(8.dp))
-                    Text(stringResource(Res.string.companion_lan_title), style = MaterialTheme.typography.titleLarge)
+                    Text(stringResource(Res.string.companion_lan_title), style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
                     if (!state.lanMessage.isEmpty) {
                         Text(
                             state.lanMessage.resolve(),
@@ -222,7 +235,7 @@ internal fun CompanionScreen(state: CompanionState, title: String?, onBack: () -
                 val connectLabel = stringResource(Res.string.companion_lan_connect_label, name)
                 BrandCard(
                     Modifier.then(
-                        if (canConnect) Modifier.clickable(onClickLabel = connectLabel) { connectLan(name) } else Modifier,
+                        if (canConnect) Modifier.clickable(onClickLabel = connectLabel, role = Role.Button) { connectLan(name) } else Modifier,
                     ),
                 ) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

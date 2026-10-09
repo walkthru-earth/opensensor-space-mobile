@@ -95,5 +95,8 @@
     <string name="debug_raw_invalid_hex">ليست قيمة hex صالحة.</string>
     <string name="debug_raw_bad_length">الطلب من 1 إلى 512 بايت.</string>
     <string name="debug_raw_needs_confirmation">لا يُرسل %1$s من هنا. استخدم شاشة الجهاز، فهي تطلب التأكيد.</string>
+    <!-- Debug frames list, screen reader words for the direction arrow. -->
+    <string name="debug_frame_sent">مُرسَل</string>
+    <string name="debug_frame_received">مُستقبَل</string>
     <string name="debug_raw_no_response">لا إطارات رد خلال فترة الهدوء.</string>
 </resources>

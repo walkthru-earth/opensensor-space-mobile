@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -33,7 +34,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -158,7 +161,7 @@ fun HistoryScreen(
             item(key = "span") {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { controller.page(-1) }) { Icon(AppIcons.ChevronLeft, contentDescription = stringResource(Res.string.history_page_earlier)) }
-                    Text(spanLabel(state.range, state.window), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+                    Text(spanLabel(state.range, state.window), Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
                     IconButton(onClick = { controller.page(1) }, enabled = state.canPageForward) { Icon(AppIcons.ChevronRight, contentDescription = stringResource(Res.string.history_page_later)) }
                 }
             }
@@ -170,7 +173,8 @@ fun HistoryScreen(
                 }
             }
             item(key = "metric") {
-                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // One choice of many, so screen readers hear the chips as a group.
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     state.availableMetrics.forEach { m ->
                         FilterChip(
                             selected = state.metric.id == m.id,
@@ -211,7 +215,7 @@ fun HistoryScreen(
 @Composable
 fun HistoryTopBar(onBack: (() -> Unit)?) {
     TopAppBar(
-        title = { Text(stringResource(Res.string.history_title)) },
+        title = { Text(stringResource(Res.string.history_title), Modifier.semantics { heading() }) },
         navigationIcon = {
             if (onBack != null) {
                 IconButton(onClick = onBack) { Icon(AppIcons.ArrowBack, contentDescription = stringResource(Res.string.history_back)) }
@@ -231,8 +235,8 @@ fun historyTitle(): String = stringResource(Res.string.history_title)
 @Composable
 private fun StationChips(state: HistoryUiState, level: DetailLevel, onSelect: (String) -> Unit) {
     Column {
-        Text(stringResource(Res.string.history_from), style = MaterialTheme.typography.titleSmall)
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(stringResource(Res.string.history_from), style = MaterialTheme.typography.titleSmall, modifier = Modifier.semantics { heading() })
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             state.stations.forEach { station ->
                 val current = station == state.stations.last()
                 val base = stringResource(if (current) Res.string.history_current else Res.string.history_earlier)
@@ -297,7 +301,7 @@ private fun ChartCard(state: HistoryUiState, units: UnitFormatter, nowS: Long, o
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Eyebrow(state.metric.label)
+                Eyebrow(state.metric.label, heading = true)
                 Spacer(Modifier.width(6.dp))
                 Eyebrow(units.unit(state.metric.unit), uppercase = false)
                 Spacer(Modifier.weight(1f))
@@ -336,7 +340,7 @@ private fun ChartCard(state: HistoryUiState, units: UnitFormatter, nowS: Long, o
                         }
                         HistoryRange.MONTH, HistoryRange.YEAR -> {
                             val days = remember(s, zone) { Columns.rebinLocalDays(s, zone) }
-                            CalendarHeatmap(days, state.metric, s.fromS, s.toS, onPickDay = { onOpenDay(it.startS) }, zone = zone)
+                            CalendarHeatmap(days, state.metric, s.fromS, s.toS, onPickDay = { onOpenDay(it.startS) }, zone = zone, units = units)
                             InfoNote(stringResource(Res.string.history_tap_day))
                             Spacer(Modifier.height(8.dp))
                         }
@@ -412,25 +416,30 @@ private fun Summary(s: HistorySeries, units: UnitFormatter) {
     // Moods and colours read the SI value. Only the printed number converts.
     val unit = s.metric.unit
     val noValue = stringResource(Res.string.history_no_value)
+    // The value colours carry the mood, so each figure also states it in words.
+    val meanMood = s.mean?.let { s.metric.moodOf(it.toDouble()) }
+    val peakMood = s.max?.let { s.metric.moodOf(it.toDouble()) }
+    val meanState = meanMood?.let { it.titleText() + ", " + it.step.labelText() }
+    val peakState = peakMood?.let { it.titleText() + ", " + it.step.labelText() }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Column {
+        Column(Modifier.semantics(mergeDescendants = true) { meanState?.let { stateDescription = it } }) {
             Eyebrow(stringResource(Res.string.history_average))
             Text(
                 s.mean?.let { fmtValue(units.value(it, unit)) } ?: noValue,
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.SemiBold,
-                color = s.mean?.let { s.metric.moodOf(it.toDouble())?.textColorOnSurface() } ?: MaterialTheme.colorScheme.onSurface,
+                color = meanMood?.textColorOnSurface() ?: MaterialTheme.colorScheme.onSurface,
             )
         }
-        Column {
+        Column(Modifier.semantics(mergeDescendants = true) { peakState?.let { stateDescription = it } }) {
             Eyebrow(stringResource(Res.string.history_peak))
             Text(
                 s.max?.let { fmtValue(units.value(it, unit)) } ?: noValue,
                 style = MaterialTheme.typography.headlineSmall,
-                color = s.max?.let { s.metric.moodOf(it.toDouble())?.textColorOnSurface() } ?: MaterialTheme.colorScheme.onSurface,
+                color = peakMood?.textColorOnSurface() ?: MaterialTheme.colorScheme.onSurface,
             )
         }
-        Column(horizontalAlignment = Alignment.End) {
+        Column(Modifier.semantics(mergeDescendants = true) {}, horizontalAlignment = Alignment.End) {
             Eyebrow(stringResource(Res.string.history_coverage))
             Text("${(s.coverage * 100).toInt()} %", style = MaterialTheme.typography.headlineSmall)
             Text(pluralStringResource(Res.plurals.history_readings, s.validRows.toInt(), s.validRows), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
