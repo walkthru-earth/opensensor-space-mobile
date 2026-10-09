@@ -41,6 +41,8 @@ include(":ui:permissions")
 include(":feature:discover")
 // The Settings screen, shared Compose for Android and iOS (docs/platform-parity-plan.md).
 include(":feature:settings")
+// The History screen and its charts, shared Compose for Android and iOS (docs/history-pipeline.md).
+include(":feature:history")
 // The app shell: bottom bar, per-tab Navigation 3 back stacks, Back rules (docs/adr/0001-shared-navigation.md).
 include(":feature:shell")
 
