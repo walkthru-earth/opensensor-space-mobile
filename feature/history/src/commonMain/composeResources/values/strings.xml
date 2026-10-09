@@ -34,7 +34,7 @@
     </plurals>
     <string name="history_never_connected">Connect this sensor once to see its history.</string>
     <string name="history_loading_short">Loading…</string>
-    <string name="history_covered">%1$d %% covered</string>
+    <string name="history_covered">%1$d % covered</string>
     <string name="history_average">average</string>
     <string name="history_peak">peak</string>
     <string name="history_coverage">coverage</string>
@@ -51,7 +51,7 @@
     <string name="history_no_value">n/a</string>
     <string name="history_peak_value">peak %1$s</string>
     <string name="history_estimated_time">estimated time</string>
-    <string name="history_day_coverage">%1$d %% of the day</string>
+    <string name="history_day_coverage">%1$d % of the day</string>
     <string name="history_dev_title">Developer</string>
     <string name="history_dev_source">source</string>
     <string name="history_dev_tier">aggregate tier %1$d min</string>

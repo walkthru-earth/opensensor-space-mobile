@@ -42,7 +42,7 @@
     </plurals>
     <string name="history_never_connected">اتصل بهذا المستشعر مرة واحدة لترى سجله.</string>
     <string name="history_loading_short">جارٍ التحميل…</string>
-    <string name="history_covered">%1$d %% مغطّى</string>
+    <string name="history_covered">%1$d % مغطّى</string>
     <string name="history_average">المتوسط</string>
     <string name="history_peak">الذروة</string>
     <string name="history_coverage">التغطية</string>
@@ -63,7 +63,7 @@
     <string name="history_no_value">غير متاح</string>
     <string name="history_peak_value">الذروة %1$s</string>
     <string name="history_estimated_time">وقت تقديري</string>
-    <string name="history_day_coverage">%1$d %% من اليوم</string>
+    <string name="history_day_coverage">%1$d % من اليوم</string>
     <string name="history_dev_title">للمطوّرين</string>
     <string name="history_dev_source">المصدر</string>
     <string name="history_dev_tier">مستوى التجميع %1$d د</string>
