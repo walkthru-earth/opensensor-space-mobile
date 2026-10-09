@@ -16,8 +16,11 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     private var identity: SyncIdentity?
     private var tokenTimer: Timer?
     private var requestingToken = false
-    /// The sensor whose last page closed while a write or read was still queued. Settling closes it.
+    /// The sensor whose last page closed while a write or read was still queued, or while Device
+    /// settings held its link for one request. Settling closes it.
     private var closeWhenIdle: String?
+    /// The link lent to Device settings for one request, while it is out.
+    private var configLink: SensorLink?
     var onCredentialSaved: (() -> Void)?
     /// INFO named the sensor the user opened: peripheral id, advertised name, station and hardware id.
     var onSensorOpened: ((String, String?, String, String) -> Void)?
@@ -242,6 +245,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     private func teardown() {
         openRequested = nil
         closeWhenIdle = nil
+        configLink = nil
         // The engine sees the link end at once. Its result for this link is then ignored.
         syncHandle?.cancel()
         syncHandle = nil
@@ -439,14 +443,15 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         }
     }
 
-    /// Closes an idle link to this sensor once its last Today or Device page is gone (#16). A sync, a
-    /// command, a Debug request, Wi-Fi access setup, Collect all or an Auto-sync step keeps it. A
-    /// command's last write still queued delays the close until the link settles.
+    /// Closes an idle link to this sensor once its last Today, Device or Device settings page is gone
+    /// (#16). A sync, a command, a Debug request, Wi-Fi access setup, Collect all or an Auto-sync step
+    /// keeps it. A command's last write still queued, or a Device settings request still out, delays
+    /// the close until the link settles.
     func closeIdle(id: String) {
-        guard let current, current.identifier.uuidString.caseInsensitiveCompare(id) == .orderedSame, link == nil,
-            collectId == nil, backgroundId == nil, !requestingToken
+        guard let current, current.identifier.uuidString.caseInsensitiveCompare(id) == .orderedSame,
+            link == nil || link === configLink, collectId == nil, backgroundId == nil, !requestingToken
         else { return }
-        guard pending == nil, operations.isEmpty else {
+        guard link == nil, pending == nil, operations.isEmpty else {
             closeWhenIdle = id
             return
         }
@@ -760,7 +765,8 @@ extension BluetoothCompanion {
     /// Lends the shared Device settings a link for one config request (SET_CONFIG, GET_CONFIG,
     /// WIFI_SCAN or REBOOT), under the same guards as a Today command. Nil when another sensor is
     /// connected or anything holds the link. Handing it back settles the link as a command's end does,
-    /// so a waiting Collect all or Auto-sync step, or an idle close, runs afterwards.
+    /// so Today's queued outcome, a waiting Collect all or Auto-sync step, or an idle close that
+    /// waited for the request runs afterwards. Off screen the link then closes, as after Debug.
     func openConfigLink(device: String) -> SensorLink? {
         guard foreground, let peripheral = current, control != nil, let response, let identity,
             identity.device == device, link == nil, pending == nil, operations.isEmpty, !requestingToken
@@ -770,11 +776,16 @@ extension BluetoothCompanion {
             MainActor.assumeIsolated { self?.write(body) }
         }
         self.link = link
+        configLink = link
         link.whenClosed { [weak self] in
             let release = {
                 guard let self, self.link === link else { return }
                 self.link = nil
+                self.configLink = nil
                 self.settle()
+                if !self.foreground, self.current != nil, self.backgroundId == nil, self.collectId == nil {
+                    self.disconnect()
+                }
             }
             if Thread.isMainThread { MainActor.assumeIsolated { release() } } else { Task { @MainActor in release() } }
         }

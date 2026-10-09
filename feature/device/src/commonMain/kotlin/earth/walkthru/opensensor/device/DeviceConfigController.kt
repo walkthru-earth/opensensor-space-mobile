@@ -47,11 +47,16 @@ sealed interface DeviceConfigDialog {
  * [ConfigPatch], and polls the config while the sensor joins a Wi-Fi network. Nothing that reboots,
  * rotates the token, forgets bonds or turns the passkey off reaches the [source] before the user
  * confirmed it. Android hosts it in a ViewModel, iOS in AppRoot.
+ *
+ * With [readOnReady] the controller reads the config each time the link turns ready with no config
+ * yet. iOS needs it, because nothing else reads the config there. Android's repository reads it on
+ * connect, so Android leaves it off.
  */
 class DeviceConfigController(
     private val scope: CoroutineScope,
     private val source: DeviceConfigSource,
     detailLevel: Flow<DetailLevel>,
+    readOnReady: Boolean = false,
 ) {
     val state: StateFlow<DeviceConfigUiState> = combine(source.snapshot, detailLevel) { snapshot, level ->
         DeviceConfigUiState(snapshot, level)
@@ -69,6 +74,13 @@ class DeviceConfigController(
 
     init {
         scope.launch { source.notices.collect { _notices.tryEmit(it) } }
+        if (readOnReady) {
+            scope.launch {
+                source.snapshot.map { DeviceConfigUiState(it).let { s -> s.ready && s.isV2 && it.config == null } }
+                    .distinctUntilChanged()
+                    .collect { unread -> if (unread) source.refreshConfig() }
+            }
+        }
         // While the sensor reports Wi-Fi `connecting` on a ready link, read the config every 3 s for
         // up to a minute, so the card shows the join as it happens. Stops when the screen goes.
         scope.launch {

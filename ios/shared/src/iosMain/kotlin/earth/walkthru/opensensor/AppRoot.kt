@@ -152,6 +152,8 @@ private class DeviceSettingsHolder(address: String, devices: DevicesBridge, link
         scope = viewModelScope,
         source = IosDeviceConfigSource(address, devices.state, devices, links, viewModelScope),
         detailLevel = settingsRepository.detailLevel,
+        // Nothing else reads the config on iOS, so the page reads it once the link is ready.
+        readOnReady = true,
     )
 }
 

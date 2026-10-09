@@ -176,6 +176,9 @@ class DevicesBridge internal constructor(
 
     internal val known: StateFlow<List<KnownRecord>> get() = records.asStateFlow()
 
+    /** True while a Collect all pass owns the Bluetooth link between its steps. */
+    internal val collectAllRunning: Boolean get() = collecting.value
+
     /** The hardware ids, lowercase, that hold Wi-Fi access in the Keychain. Never the token. */
     internal val wifiAccessDevices: Flow<Set<String>> get() = credentials.map { list -> list.mapTo(HashSet()) { it.device } }
 

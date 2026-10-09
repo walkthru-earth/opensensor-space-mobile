@@ -45,7 +45,10 @@ internal class DeviceConfigLinks(
     val saveWifiAccess: () -> Unit,
     /** Drops the Keychain token and any Wi-Fi session of this hardware id, after a rotation. */
     val forgetWifiAccess: (String) -> Unit,
+    /** The user's open, which cancels Collect all first. For the Reconnect buttons only. */
     val connect: (String) -> Unit,
+    /** Opens the peripheral without touching Collect all. Swift refuses it while a request holds another link. */
+    val reopen: (String) -> Unit,
     val disconnect: () -> Unit,
     /** Browses for sensors on Wi-Fi, which shows the local network prompt the first time. */
     val scanLan: () -> Unit,
@@ -152,7 +155,9 @@ internal class IosDeviceConfigSource(
                 // Only this sensor's link. The user may have opened another one meanwhile.
                 withContext(Dispatchers.Main) { if (state.selectedId.equals(address, ignoreCase = true)) links.disconnect() }
                 delay(REBOOT_RECONNECT_DELAY_MS)
-                withContext(Dispatchers.Main) { links.connect(address) }
+                withContext(Dispatchers.Main) {
+                    if (shouldReopenAfterRestart(address, state.selectedId, devices.collectAllRunning)) links.reopen(address)
+                }
             }
         }
     }
@@ -306,3 +311,11 @@ internal class IosDeviceConfigSource(
         const val TOKEN_TIMEOUT_MS = 20_000L
     }
 }
+
+/**
+ * Whether the restart's reconnect may open [address] again. Only when the link still points at it,
+ * or nothing holds the one Bluetooth link and Collect all is not running. An Auto-sync step holds a
+ * selected link, so it counts as held. Another sensor the user opened meanwhile keeps its link.
+ */
+internal fun shouldReopenAfterRestart(address: String, selectedId: String?, collectAllRunning: Boolean): Boolean =
+    selectedId.equals(address, ignoreCase = true) || (selectedId == null && !collectAllRunning)

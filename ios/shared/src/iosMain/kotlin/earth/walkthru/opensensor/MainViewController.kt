@@ -57,6 +57,7 @@ fun mainViewController(
                 saveWifiAccess = saveWifiAccess,
                 forgetWifiAccess = forgetWifiAccess,
                 connect = userOpen,
+                reopen = openSensor,
                 disconnect = disconnect,
                 scanLan = scanLan,
             )

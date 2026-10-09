@@ -302,7 +302,10 @@ accuracy, stale/background handling or authenticated Wi-Fi connections. See
     `:feature:device` cards and confirmations, opened from a Sensor settings button on the companion
     page of a connected Bluetooth sensor (`DeviceSettingsKey`). `IosDeviceConfigSource` (`ios/shared`
     iosMain) borrows one short link per request from `BluetoothCompanion.openConfigLink`, which uses
-    Today's command guards and settles the link when it is handed back. Frames go through the
+    Today's command guards and settles the link when it is handed back, closing it then if its last
+    page left meanwhile or the app is off screen. The page reads the config when the link turns
+    ready. After a restart the reopen goes only to the same sensor, or to a free link with no
+    Collect all running. Frames go through the
     redacting recorder Debug shows. Get Wi-Fi token and Replace token reuse Save Wi-Fi access, so the
     token stays in Swift and the Keychain, and a rotation first drops the old entry through
     `AppServices.forgetWifiAccess`. Differences from Android: Bluetooth only, sticker by manual entry

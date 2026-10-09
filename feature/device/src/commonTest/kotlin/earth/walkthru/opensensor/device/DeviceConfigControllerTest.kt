@@ -125,6 +125,30 @@ class DeviceConfigControllerTest {
         return DeviceConfigController(scope, source, MutableStateFlow(level))
     }
 
+    @Test
+    fun readOnReadyReadsOnceEachTimeTheLinkTurnsReadyWithoutAConfig() = runTest {
+        val source = FakeSource(connection = ConnectionState.Disconnected)
+        source.snapshot.value = source.snapshot.value.copy(config = null)
+        val scope = CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler))
+        DeviceConfigController(scope, source, MutableStateFlow(DetailLevel.DETAILED), readOnReady = true)
+        assertEquals(emptyList(), source.calls)
+        source.snapshot.value = source.snapshot.value.copy(connection = ConnectionState.Ready(0))
+        assertEquals(listOf("refresh"), source.calls)
+        source.snapshot.value = source.snapshot.value.copy(config = config())
+        source.snapshot.value = source.snapshot.value.copy(connection = ConnectionState.Disconnected, config = null)
+        source.snapshot.value = source.snapshot.value.copy(connection = ConnectionState.Ready(0))
+        assertEquals(listOf("refresh", "refresh"), source.calls)
+    }
+
+    @Test
+    fun withoutReadOnReadyTheControllerNeverReadsByItself() = runTest {
+        val source = FakeSource(connection = ConnectionState.Disconnected)
+        source.snapshot.value = source.snapshot.value.copy(config = null)
+        controller(source)
+        source.snapshot.value = source.snapshot.value.copy(connection = ConnectionState.Ready(0))
+        assertEquals(emptyList(), source.calls)
+    }
+
     private fun TestScope.collectNotices(c: DeviceConfigController): MutableList<DeviceConfigNotice> {
         val out = mutableListOf<DeviceConfigNotice>()
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { c.notices.collect { out += it } }

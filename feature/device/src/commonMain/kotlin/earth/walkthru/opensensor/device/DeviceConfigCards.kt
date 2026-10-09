@@ -201,7 +201,8 @@ fun PairingCard(state: DeviceConfigUiState, onSave: (PairingChoice) -> Unit, onR
     val ble = snapshot.config?.config?.ble
     val current = ble?.pairMode
     var selected by rememberSaveable(current) { mutableStateOf(current ?: PairMode.RANDOM) }
-    var pin by rememberSaveable { mutableStateOf("") }
+    // A secret, so it stays out of the saved instance state, like the Wi-Fi passphrase.
+    var pin by remember { mutableStateOf("") }
 
     BrandCard(modifier = modifier) {
         val title = stringResource(Res.string.pairing_title)
