@@ -15,6 +15,8 @@ import earth.walkthru.aqsync.data.sync.FileProblem
 import earth.walkthru.aqsync.data.sync.SyncEngine
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -63,6 +65,7 @@ class SensorSync internal constructor(
      * Collects every file of [station] that this phone lacks over [link]. [device] is the hardware
      * id recorded with each file. [maxRead] is the sensor's advertised read window.
      */
+    @OptIn(DelicateCoroutinesApi::class)
     fun start(
         link: SensorLink,
         station: String,
@@ -75,7 +78,9 @@ class SensorSync internal constructor(
             scope.launch(callbacks) { finished(SyncResult(SyncEnd.IN_USE, 0, 0, 0)) }
             return SyncHandle(null)
         }
-        val job = scope.launch(work) {
+        // ATOMIC runs the body even when cancel() lands before dispatch, so the station is released
+        // and `finished` fires on every path.
+        val job = scope.launch(work, CoroutineStart.ATOMIC) {
             var listed = 0
             var initial = -1
             var done = 0
