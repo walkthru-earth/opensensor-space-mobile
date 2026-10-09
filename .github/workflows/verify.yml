@@ -6,11 +6,15 @@
 # Actions are pinned to commit SHAs (version in the trailing comment). Dependabot updates them.
 name: verify
 
+# Pull requests run on `pull_request` only. Pushing a PR branch used to start a second, identical
+# run, and the macOS job is the costly one. Branches without a PR can run it by hand.
+# Changes that only touch docs or Markdown skip the gate.
 on:
   push:
-    branches: ["**"]
-    tags-ignore: ["**"]
+    branches: [main]
+    paths-ignore: ["docs/**", "**/*.md"]
   pull_request:
+    paths-ignore: ["docs/**", "**/*.md"]
   workflow_dispatch:
 
 permissions:
@@ -128,23 +132,27 @@ jobs:
         run: ios/tests/verify-native.sh 2>&1 | tee ios/build/ci/native-tests.log
       - name: Run shared Kotlin tests on iOS simulator
         run: ./gradlew --no-daemon --stacktrace verifyIos 2>&1 | tee ios/build/ci/kotlin-tests.log
-      - name: Build unsigned simulator app
+      # One Debug simulator build serves both the packaged app and the Swift tests, so the
+      # shared Kotlin framework and the app compile once instead of twice.
+      - name: Build unsigned simulator app and tests
         run: |
           xcodebuild -project ios/OpenSensor.xcodeproj -scheme OpenSensor \
             -configuration Debug -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath ios/build/DerivedData-simulator \
             -resultBundlePath ios/build/ci/simulator.xcresult \
-            CODE_SIGNING_ALLOWED=NO build 2>&1 | tee ios/build/ci/simulator-build.log
+            CODE_SIGNING_ALLOWED=NO build-for-testing 2>&1 | tee ios/build/ci/simulator-build.log
       - name: Run Swift Testing target on simulator
         run: |
           device="$(xcrun simctl list devices available -j \
             | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next(x["udid"] for r,v in d.items() if "iOS" in r for x in v if x["name"].startswith("iPhone")))')"
           xcodebuild -project ios/OpenSensor.xcodeproj -scheme OpenSensor \
-            -destination "platform=iOS Simulator,id=$device" \
-            -derivedDataPath ios/build/DerivedData-test \
+            -configuration Debug -destination "platform=iOS Simulator,id=$device" \
+            -derivedDataPath ios/build/DerivedData-simulator \
             -resultBundlePath ios/build/ci/swift-tests.xcresult \
-            CODE_SIGNING_ALLOWED=NO test 2>&1 | tee ios/build/ci/swift-tests.log
+            CODE_SIGNING_ALLOWED=NO test-without-building 2>&1 | tee ios/build/ci/swift-tests.log
+      # The device Release build only guards distribution, so it runs on main and by hand.
       - name: Build unsigned device Release app
+        if: github.event_name != 'pull_request'
         run: |
           xcodebuild -project ios/OpenSensor.xcodeproj -scheme OpenSensor \
             -configuration Release -destination 'generic/platform=iOS' \

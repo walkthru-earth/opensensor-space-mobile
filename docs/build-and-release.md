@@ -11,8 +11,8 @@ flowchart LR
   C[commit] --> H["pre-commit: whitespace/EOL · YAML/JSON/TOML · large files · private keys · gitleaks · ktlint (staged .kt)"]
   P[push] --> V["pre-push: ./gradlew verify"]
   V --> T[":app lintDebug + assembleDebug + testDebugUnitTest<br/>+ every shared module's host tests<br/>+ verifyIos on a Mac"]
-  GH[GitHub push / PR] --> W["verify.yml: pre-commit --all-files + ./gradlew verify → debug APK + reports"]
-  GH --> I["verify.yml: macOS → Kotlin iOS tests + unsigned simulator Debug / device Release builds"]
+  GH[GitHub PR or push to main] --> W["verify.yml: pre-commit --all-files + ./gradlew verify → debug APK + reports"]
+  GH --> I["verify.yml: macOS → Kotlin iOS tests + one simulator Debug build for app and Swift tests · device Release build on main only"]
   GH --> R["release.yml: apk job (read-only, R8 + signing) → publish job (contents: write) · main → rolling 'latest' · v* tag → permanent release"]
 ```
 
@@ -36,6 +36,13 @@ under JVM test does not throw. A ktlint hook that reformats a file fails the com
 and commit again. CI has **no phone or Android emulator**; the iOS job runs shared Kotlin
 tests on a simulator. BLE, mDNS, permissions and background behavior require hardware
 checks, recorded separately in [status.md](status.md) and the firmware repo's `bench-verified.md`.
+
+CI minutes cost money and macOS minutes cost the most, so `verify.yml` runs once per change.
+Pull requests run on `pull_request` only, not again on the branch push. `main` runs on push.
+Changes to `docs/` or Markdown alone skip the gate. A branch without a PR runs it with
+`workflow_dispatch`. The device Release build runs on `main` and by hand, not on pull requests.
+CI runs ktlint on every file, while the local hook checks only staged files, so run
+`pre-commit run --all-files` before a merge that touches many Kotlin files.
 
 ## Stack (verified building 2026-10-09; kotlinx-datetime 0.8.0 added for W8)
 
