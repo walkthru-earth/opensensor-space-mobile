@@ -23,7 +23,8 @@ object FrameRedaction {
     private const val ELLIPSIS = "…"
     private const val HEX = "0123456789abcdef"
     private val LAN_HELLO_MAGIC = byteArrayOf(0x41, 0x51, 0x53, 0x31) // "AQS1"
-    private val SECRET_JSON_VALUE = Regex("(\"(?:psk|pin|token)\"\\s*:\\s*)(\"(?:[^\"\\\\]|\\\\.)*\"|-?[0-9][0-9.eE+-]*)")
+    private val JSON_STRING_OR_NUMBER_MEMBER = Regex("(\"((?:[^\"\\\\]|\\\\.)*)\"\\s*:\\s*)(\"(?:[^\"\\\\]|\\\\.)*\"|-?[0-9][0-9.eE+-]*)")
+    private val SECRET_KEY_PARTS = listOf("psk", "pin", "token", "pass", "secret")
 
     fun isSecret(direction: FrameDirection, bytes: ByteArray): Boolean {
         if (bytes.isEmpty()) return false
@@ -61,8 +62,22 @@ object FrameRedaction {
         else -> frame.toString()
     }
 
-    /** Replace the value of any `psk`, `pin` or `token` key. `psk_set` and `pin_set` stay as they are. */
-    fun scrubSecrets(json: String): String = SECRET_JSON_VALUE.replace(json) { m -> m.groupValues[1] + "\"" + REDACTED + "\"" }
+    /**
+     * Replace the string or number value of any key whose name contains `psk`, `pin`, `token`,
+     * `pass` (and so `password`) or `secret`, in any case and at any depth, dotted names such as
+     * `wifi.psk` included. Keys ending in `_set` (`psk_set`, `pin_set`) only say whether a secret
+     * exists and stay as they are. Masking a harmless key by mistake is the safe side.
+     */
+    fun scrubSecrets(json: String): String = JSON_STRING_OR_NUMBER_MEMBER.replace(json) { m ->
+        if (isSecretKey(m.groupValues[2])) m.groupValues[1] + "\"" + REDACTED + "\"" else m.value
+    }
+
+    /** True for a JSON key [scrubSecrets] masks. */
+    fun isSecretKey(key: String): Boolean {
+        val k = key.lowercase()
+        if (k.endsWith("_set")) return false
+        return SECRET_KEY_PARTS.any { it in k }
+    }
 
     private fun ByteArray.startsWith(prefix: ByteArray): Boolean {
         if (size < prefix.size) return false

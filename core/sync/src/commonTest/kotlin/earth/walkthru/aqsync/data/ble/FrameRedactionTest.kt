@@ -76,6 +76,31 @@ class FrameRedactionTest {
     }
 
     @Test
+    fun scrubMasksEverySecretLookingKeyInAnyCaseAndDepth() {
+        val json = """{"wifi.psk":"a","lan_token":"b","Password":"c","ap":{"PASS":"d","client_secret":42},"BLE_PIN":1234,""" +
+            """"psk_set":true,"PIN_SET":false,"token_set":true,"ssid":"home","has_token":true,"name":"pinewood"}"""
+        val out = FrameRedaction.scrubSecrets(json)
+        for (secret in listOf("\"a\"", "\"b\"", "\"c\"", "\"d\"", "42", "1234")) assertFalse(out.contains(":$secret"), out)
+        assertTrue(out.contains("\"wifi.psk\":\"<redacted>\""), out)
+        assertTrue(out.contains("\"BLE_PIN\":\"<redacted>\""), out)
+        assertTrue(out.contains("\"psk_set\":true"), out)
+        assertTrue(out.contains("\"PIN_SET\":false"), out)
+        assertTrue(out.contains("\"token_set\":true"), out)
+        assertTrue(out.contains("\"ssid\":\"home\""), out)
+        // Booleans only say whether something exists, and values are never matched as keys.
+        assertTrue(out.contains("\"has_token\":true"), out)
+        assertTrue(out.contains("\"name\":\"pinewood\""), out)
+    }
+
+    @Test
+    fun secretKeyNamesFollowTheRule() {
+        for (k in listOf("psk", "wifi.psk", "lan_token", "TOKEN", "pin", "ble.Pin", "pass", "password", "admin_password", "secret", "ClientSecret")) {
+            assertTrue(FrameRedaction.isSecretKey(k), k)
+        }
+        for (k in listOf("psk_set", "pin_set", "PASSWORD_SET", "ssid", "rssi", "ip")) assertFalse(FrameRedaction.isSecretKey(k), k)
+    }
+
+    @Test
     fun ringKeepsOnlyTheLastCapacityFrames() {
         val recorder = FrameRecorder(capacity = 3, monotonicMs = { 0 })
         for (i in 1..10) recorder.tx(byteArrayOf(Opcode.STATUS.toByte(), i.toByte()))
