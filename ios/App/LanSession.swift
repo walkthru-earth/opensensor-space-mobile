@@ -265,6 +265,7 @@ actor LanSession {
         do {
             while replies.count < Self.maxQueuedReplies, let body = try frames.next() {
                 guard let reply = decode(body) else { throw LanFailure.invalidReply }
+                if reply.kind == "status" { sink?.link.deliverStatus(json: reply.json) }
                 if let sink, reply.kind != "status", reply.kind != "live" {
                     sink.link.deliver(frame: body)
                 } else {

@@ -76,6 +76,7 @@ class SensorSyncTest {
 
     private fun respond(link: SensorLink, req: ByteArray) {
         when (val op = req[0].toInt() and 0xFF) {
+            Opcode.STATUS -> link.deliverStatus("{\"utc\":0,\"clk\":0}")
             Opcode.SET_TIME -> link.reply(Frame.TimeSet(1_789_581_931L, 12_345_678L, 123_000))
             Opcode.LIST -> {
                 files.forEach { (name, bytes) -> link.reply(Frame.File(bytes.size.toLong(), name)) }
@@ -116,7 +117,7 @@ class SensorSyncTest {
         val result = run(sensor(), progress)
 
         assertEquals(SyncEnd.COMPLETE, result.end)
-        assertEquals(Opcode.SET_TIME, requests.first())
+        assertEquals(listOf(Opcode.STATUS, Opcode.SET_TIME), requests.take(2))
         assertEquals(2, result.files)
         assertEquals(2, result.saved)
         assertTrue(result.keepsLink)
@@ -137,14 +138,53 @@ class SensorSyncTest {
 
         assertEquals(SyncEnd.COMPLETE, result.end)
         assertEquals(0, result.saved)
-        assertEquals(listOf(Opcode.SET_TIME, Opcode.LIST), requests)
+        assertEquals(listOf(Opcode.STATUS, Opcode.SET_TIME, Opcode.LIST), requests)
     }
 
     @Test
     fun aConnectionAlreadySynchronizedDoesNotSetTimeAgain() {
-        val link = sensor().also { it.markClockSynchronized() }
+        val link = sensor { link, req ->
+            (req[0].toInt() and 0xFF == Opcode.STATUS).also {
+                if (it) link.deliverStatus("{\"utc\":1,\"clk\":1,\"clk_age_s\":60}")
+            }
+        }
         assertEquals(SyncEnd.COMPLETE, run(link).end)
-        assertEquals(Opcode.LIST, requests.first())
+        assertEquals(listOf(Opcode.STATUS, Opcode.LIST), requests.take(2))
+        assertFalse(Opcode.SET_TIME in requests)
+    }
+
+    @Test
+    fun networkClockSurvivesANewNativeLinkAndRepeatedSync() {
+        fun healthy() = sensor { link, req ->
+            (req[0].toInt() and 0xFF == Opcode.STATUS).also {
+                if (it) link.deliverStatus("{\"utc\":1,\"clk\":3,\"clk_age_s\":60}")
+            }
+        }
+        assertEquals(SyncEnd.COMPLETE, run(healthy()).end)
+        requests.clear()
+        assertEquals(SyncEnd.COMPLETE, run(healthy()).end)
+        assertEquals(listOf(Opcode.STATUS, Opcode.LIST), requests)
+    }
+
+    @Test
+    fun automaticClockCheckDoesNotCreateAnAcknowledgementReceiptForASkippedUpdate() = runBlocking {
+        var anchorCount = 0
+        val runner = SensorSync(
+            store,
+            ReceiptArchiveIndex(finals, Dispatchers.Default),
+            Dispatchers.Default,
+            Dispatchers.Default,
+            recordClockAnchor = { _, _, _, _ -> anchorCount++ }
+        )
+        val link = sensor { link, req ->
+            (req[0].toInt() and 0xFF == Opcode.STATUS).also {
+                if (it) link.deliverStatus("{\"utc\":1,\"clk\":1,\"clk_age_s\":60}")
+            }
+        }.also { it.identify(station, "same-boot") }
+        val done = CompletableDeferred<SyncResult>()
+        runner.start(link, station, "a1b2c3d4e5f6", 4096, {}) { done.complete(it) }
+        assertEquals(SyncEnd.COMPLETE, withTimeout(20_000) { done.await() }.end)
+        assertEquals(0, anchorCount)
         assertFalse(Opcode.SET_TIME in requests)
     }
 
@@ -174,7 +214,7 @@ class SensorSyncTest {
             }
         }
         assertEquals(SyncEnd.COMPLETE, run(link).end)
-        assertEquals(Opcode.SET_TIME, requests.first())
+        assertEquals(listOf(Opcode.STATUS, Opcode.SET_TIME), requests.take(2))
         assertTrue(Opcode.LIST in requests)
     }
 

@@ -14,7 +14,6 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     private var control: CBCharacteristic?
     private var response: CBCharacteristic?
     private var clockAttempted = false
-    private var clockSynchronized = false
     private var identity: SyncIdentity?
     private var tokenTimer: Timer?
     private var requestingToken = false
@@ -332,7 +331,6 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         requestingToken = false
         identity = nil
         clockAttempted = false
-        clockSynchronized = false
         control = nil
         response = nil
         state.wifiAccessReset()
@@ -404,7 +402,6 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
             MainActor.assumeIsolated { self?.write(body) }
         }
         link.identify(station: identity.station, boot: identity.boot)
-        if clockSynchronized { link.markClockSynchronized() }
         self.link = link
         if !responseSubscribed { operations.append(.subscribe(response)) }
         // The engine ends a stalled sync itself, so the step timers are no longer needed.
@@ -448,23 +445,22 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         link.identify(station: identity.station, boot: identity.boot)
         self.link = link
         if !responseSubscribed { operations.append(.subscribe(response)) }
-        state.today.commandStarted()
-        syncHandle = engine.command(link: link, command: command) { [weak self] result in
-            MainActor.assumeIsolated { self?.commandEnded(result, link: link) }
+        if !automatic { state.today.commandStarted() }
+        syncHandle = engine.command(link: link, command: command, automatic: automatic) { [weak self] result in
+            MainActor.assumeIsolated { self?.commandEnded(result, link: link, automatic: automatic) }
         }
         performNext()
     }
 
-    private func commandEnded(_ result: CommandResult, link: SensorLink) {
+    private func commandEnded(_ result: CommandResult, link: SensorLink, automatic: Bool) {
         guard self.link === link else { return }
-        if result.clockSynchronized { clockSynchronized = true }
         if self.link === link {
             self.link = nil
             syncHandle = nil
         }
-        // The command may have queued a last write, the status request after SET_TIME. Today hears the
-        // outcome, and Smart Sync starts its file sync, once that write completes.
-        state.today.commandEnded(result: result)
+        // A final STATUS write may still be queued. Today hears an explicit command outcome
+        // after that write completes; automatic maintenance remains silent.
+        if !automatic { state.today.commandEnded(result: result) }
         settle()
     }
 
@@ -839,7 +835,9 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
             freshnessTimer = Timer.scheduledTimer(withTimeInterval: 35, repeats: false) { [weak self] _ in
                 MainActor.assumeIsolated { self?.state.readingExpired() }
             }
-        case CBUUID(string: state.statusUuid): state.receiveStatus(json: json)
+        case CBUUID(string: state.statusUuid):
+            state.receiveStatus(json: json)
+            link?.deliverStatus(json: json)
         default: return
         }
         if case .read(let expected) = pending, expected === characteristic {

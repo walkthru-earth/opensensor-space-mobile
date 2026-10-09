@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.emptyFlow
@@ -52,11 +53,10 @@ class SensorLink internal constructor(
         this.boot = boot
     }
 
-    internal var clockSynchronized: Boolean = false
-        private set
+    private val statusPushes = MutableSharedFlow<ByteArray>(extraBufferCapacity = 8)
 
-    /** Reuse the UTC handshake already completed on this same native connection. */
-    fun markClockSynchronized() { clockSynchronized = true }
+    /** Native status pushes also reach the shared clock policy, independently of file replies. */
+    fun deliverStatus(json: String) { statusPushes.tryEmit(json.encodeToByteArray()) }
 
     private val frames = Channel<ByteArray>(Channel.UNLIMITED)
     private val state = MutableStateFlow<ConnectionState>(ConnectionState.Ready(mtu))
@@ -101,7 +101,7 @@ class SensorLink internal constructor(
         override val endpoint: String = address
         override val connectionState: StateFlow<ConnectionState> = state
         override val mtu: Int = mtu
-        override val statusNotifications: Flow<ByteArray> = emptyFlow()
+        override val statusNotifications: Flow<ByteArray> = statusPushes
         override val liveNotifications: Flow<ByteArray> = emptyFlow()
         override val responseFrames: ReceiveChannel<ByteArray> = frames
 

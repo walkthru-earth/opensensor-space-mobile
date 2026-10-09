@@ -4,6 +4,32 @@
 **Code:** `./gradlew verify` (the gate), `.github/workflows/verify.yml`.
 **Related:** measured device behaviour is recorded in the board-specific `../aq-parquet/docs/boards/*/bench-verified.md`; anything not recorded there is unverified.
 
+## 2026-10-10 — interval fragmentation fix, clean Android install and shared iOS checks
+
+Android and iOS now use the shared clock policy to request fresh device status
+before automatic maintenance. A usable recent external anchor survives reconnect;
+missing/RTC clocks, anchors at least six hours old and drift above two seconds
+plus measured link uncertainty request an acknowledged update. Only an actual
+`TIME_SET` creates a clock receipt. Firmware v6.10 also stops flushing unfinished
+intervals on every anchor update. Existing immutable source files are preserved
+by normal sync; no merging or rewriting is required.
+
+After the owner uninstalled the Android app and forgot the sensor bond, the
+fresh debug APK was installed on the connected OnePlus 7 Pro (GM1911, Android
+16). Bluetooth scan/connect grants were applied and the app launched to the
+AQ-6b40 pairing prompt. APK SHA-256:
+`a991b60c2870f39d0dec8157d0f9cceb0c703451620ae507271ce868921b7aeb`.
+The CoreS3 was separately reset and reflashed; its new station and empty initial
+archive are recorded in the board bench evidence. Pairing, reconnect and file
+transfer with this new installation are not yet qualified by this entry.
+
+With Kotlin 2.4.21, `./gradlew --no-daemon verify` passed (957 tasks), including
+Android lint/APK/unit tests, shared host tests, shared iOS simulator tests and
+framework link. Swift host checks and the unsigned Debug iOS simulator app
+build also passed. Independent review completed without a remaining blocking
+finding. Logs are ignored build artifacts. The owner deferred iPhone deployment;
+no iPhone install or radio test was performed for this change.
+
 ## 2026-10-09 — fresh installs on Android and iPhone
 
 After the owner deleted both apps, GitHub `main` still matched local commit

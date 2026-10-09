@@ -440,7 +440,7 @@ final class LanDiscovery {
             }
             self.state.today.commandStarted()
             let ended = await withCheckedContinuation { (continuation: CheckedContinuation<CommandEnded, Never>) in
-                self.handles[name] = self.engine.command(link: link, command: command) { result in
+                self.handles[name] = self.engine.command(link: link, command: command, automatic: false) { result in
                     continuation.resume(returning: CommandEnded(result: result))
                 }
             }

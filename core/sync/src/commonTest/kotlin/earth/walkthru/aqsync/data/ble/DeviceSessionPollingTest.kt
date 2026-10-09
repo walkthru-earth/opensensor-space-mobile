@@ -11,6 +11,7 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
@@ -206,7 +207,81 @@ class DeviceSessionPollingTest {
         assertEquals(1, transport.writes.size)
     }
 
-    private class ResponseTransport : AqTransport {
+    @Test
+    fun maintenanceReadsFreshStatusAndRetainsARecentExternalClock() = runTest {
+        val transport = ResponseTransport()
+        val session = DeviceSession(transport)
+        for (source in listOf(1, 3)) {
+            val request = async { session.synchronizeClockIfNeeded { 1_000_000L } }
+            runCurrent()
+            assertContentEquals(Request.Status.encode(), transport.writes.last())
+            transport.statusNotifications.emit("{\"utc\":1,\"clk\":$source,\"utc_ms\":1000000,\"clk_age_s\":60}".encodeToByteArray())
+            assertEquals(null, request.await())
+        }
+        assertEquals(2, transport.writes.size)
+    }
+
+    @Test
+    fun maintenanceAnchorsMissingRtcAndOldExternalClocks() = runTest {
+        for (json in listOf("{\"utc\":0}", "{\"utc\":1,\"clk\":2}", "{\"utc\":1,\"clk\":1,\"clk_age_s\":21600}")) {
+            val transport = ResponseTransport()
+            val request = async { DeviceSession(transport).synchronizeClockIfNeeded { 1_000_000L } }
+            runCurrent()
+            transport.statusNotifications.emit(json.encodeToByteArray())
+            runCurrent()
+            assertContentEquals(Request.SetTime(1000L, 0).encode(), transport.writes.last())
+            val ack = Frame.TimeSet(1000L, 501L, 0)
+            transport.responseFrames.send(FrameCodec.encode(ack))
+            assertEquals(ack, request.await())
+        }
+    }
+
+    @Test
+    fun maintenanceFallsBackForFirmwareWithoutStatusNotifications() = runTest {
+        val transport = ResponseTransport()
+        val request = async { DeviceSession(transport).synchronizeClockIfNeeded { 1_000_000L } }
+        runCurrent()
+        advanceTimeBy(5_000)
+        runCurrent()
+        assertContentEquals(Request.SetTime(1000L, 0).encode(), transport.writes.last())
+        transport.responseFrames.send(FrameCodec.encode(Frame.TimeSet(1000L, 501L, 0)))
+        assertEquals(501L, request.await()?.monotonicMicros)
+    }
+
+    @Test
+    fun legacyStatusReadFallbackRetainsAnAlreadyUsableUtcClock() = runTest {
+        val transport = ResponseTransport("{\"utc\":1}".encodeToByteArray())
+        val request = async { DeviceSession(transport).synchronizeClockIfNeeded { 1_000_000L } }
+        runCurrent()
+        advanceTimeBy(5_000)
+        runCurrent()
+        assertEquals(null, request.await())
+        assertEquals(1, transport.writes.size)
+        assertContentEquals(Request.Status.encode(), transport.writes.single())
+    }
+
+    @Test
+    fun aCachedFallbackCannotBeMistakenForClockDrift() = runTest {
+        val transport = ResponseTransport("{\"utc\":1,\"clk\":1,\"utc_ms\":985000,\"clk_age_s\":60}".encodeToByteArray())
+        val request = async { DeviceSession(transport).synchronizeClockIfNeeded { 1_000_000L } }
+        runCurrent()
+        advanceTimeBy(5_000)
+        runCurrent()
+        assertEquals(null, request.await())
+        assertEquals(1, transport.writes.size)
+    }
+
+    @Test
+    fun maintenanceCancellationNeverSetsTime() = runTest {
+        val transport = ResponseTransport()
+        val request = async { DeviceSession(transport).synchronizeClockIfNeeded { 1_000_000L } }
+        runCurrent()
+        request.cancelAndJoin()
+        assertEquals(1, transport.writes.size)
+        assertContentEquals(Request.Status.encode(), transport.writes.single())
+    }
+
+    private class ResponseTransport(private val statusSnapshot: ByteArray? = null) : AqTransport {
         override val address = "test-poll-boundary"
         override val displayName = "Test device"
         override val kind = TransportKind.FAKE
@@ -214,12 +289,12 @@ class DeviceSessionPollingTest {
         override val mtu = 517
         override val connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Ready(mtu))
         override val responseFrames = Channel<ByteArray>(Channel.UNLIMITED)
-        override val statusNotifications: Flow<ByteArray> = emptyFlow()
+        override val statusNotifications = MutableSharedFlow<ByteArray>(extraBufferCapacity = 8)
         override val liveNotifications: Flow<ByteArray> = emptyFlow()
         override suspend fun connect() {}
         override suspend fun disconnect() { connectionState.value = ConnectionState.Disconnected }
         override suspend fun readInfo(): ByteArray = error("unused")
-        override suspend fun readStatus(): ByteArray = error("unused")
+        override suspend fun readStatus(): ByteArray = statusSnapshot ?: error("unused")
         override suspend fun readLive(): ByteArray = error("unused")
         val writes = mutableListOf<ByteArray>()
         override suspend fun writeControl(request: ByteArray) { writes += request }

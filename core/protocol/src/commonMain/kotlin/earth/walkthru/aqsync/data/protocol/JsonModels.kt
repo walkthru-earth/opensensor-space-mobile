@@ -72,8 +72,12 @@ data class DeviceStatus(
     val utc: Int? = null,
     /** Anchor generation (clock_epoch). */
     val gen: Int? = null,
-    /** Firmware v6.2+: anchor source, 0 none, 1 host SET_TIME, 2 restored from RTC. */
+    /** Anchor source: 0 none, 1 host SET_TIME, 2 restored RTC, 3 network SNTP. */
     @SerialName("clk") val clockSource: Int? = null,
+    /** Current UTC estimate at the STATUS snapshot; absent on older firmware or without UTC. */
+    @SerialName("utc_ms") val utcEpochMillis: Long? = null,
+    /** Seconds since the latest accepted UTC anchor; absent before anchoring or on older firmware. */
+    @SerialName("clk_age_s") val clockAgeSeconds: Long? = null,
     /** Firmware v6.2+: RTC state, 0 not read, 1 in use/written, 2 unusable. */
     @SerialName("rtc") val rtcState: Int? = null,
     /** 1 when the card is mounted and the output directory exists. */

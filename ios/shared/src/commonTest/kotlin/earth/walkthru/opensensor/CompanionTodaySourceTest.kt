@@ -5,7 +5,6 @@ import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.history.TodaySoFar
 import earth.walkthru.aqsync.data.sync.ClockSyncMode
-import earth.walkthru.opensensor.today.TodayCommand
 import earth.walkthru.opensensor.today.TodayNotice
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -152,38 +151,24 @@ class CompanionTodaySourceTest {
         assertEquals(listOf("sync"), calls.list)
     }
 
-    @Test fun legacyAskModeSynchronizesAutomatically() = runTest {
-        val calls = Calls()
-        val notices = mutableListOf<TodayNotice>()
-        val source = source(connected("{\"utc\":0,\"clk\":0}"), calls, notices)
-        source.sync(ClockSyncMode.ASK, clockConfirmed = false)
-        assertTrue(notices.isEmpty())
-        assertEquals(listOf("SET_TIME"), calls.list)
+    @Test fun allClockQualitiesDelegateMaintenanceToTheSharedRunner() = runTest {
+        for (json in listOf("{\"utc\":0,\"clk\":0}", "{\"utc\":1,\"clk\":2}", "{}")) {
+            val calls = Calls()
+            val notices = mutableListOf<TodayNotice>()
+            val source = source(connected(json), calls, notices)
+            source.sync(ClockSyncMode.ASK, clockConfirmed = false)
+            assertEquals(listOf("sync"), calls.list)
+            assertTrue(notices.isEmpty())
+        }
     }
 
-    @Test fun theClockStepThenTheFileSync() = runTest {
+    @Test fun explicitClockNoticeWaitsForTheLastNativeWrite() = runTest {
         val state = connected("{\"utc\":0,\"clk\":0}")
         val calls = Calls()
         val notices = mutableListOf<TodayNotice>()
         val source = source(state, calls, notices)
-        source.sync(ClockSyncMode.AUTOMATIC, clockConfirmed = false)
-        assertEquals(listOf("SET_TIME"), calls.list)
+        source.setTime()
         state.today.commandStarted()
-        state.today.commandFinished(CommandResult(TodayNotice.ClockSet))
-        runCurrent()
-        assertEquals(listOf("SET_TIME", "sync"), calls.list)
-        assertEquals(listOf<TodayNotice>(TodayNotice.ClockSet), notices)
-        assertFalse(state.today.busy)
-    }
-
-    @Test fun theFileSyncWaitsForTheLastWriteOfTheClockStep() = runTest {
-        val state = connected("{\"utc\":0,\"clk\":0}")
-        val calls = Calls()
-        val notices = mutableListOf<TodayNotice>()
-        val source = source(state, calls, notices)
-        source.sync(ClockSyncMode.AUTOMATIC, clockConfirmed = false)
-        state.today.commandStarted()
-        // SET_TIME is confirmed, but the status request it queued is still being written.
         state.today.commandEnded(CommandResult(TodayNotice.ClockSet))
         runCurrent()
         assertEquals(listOf("SET_TIME"), calls.list)
@@ -191,30 +176,11 @@ class CompanionTodaySourceTest {
         assertTrue(state.today.busy)
         state.today.linkIdle()
         runCurrent()
-        assertEquals(listOf("SET_TIME", "sync"), calls.list)
         assertEquals(listOf<TodayNotice>(TodayNotice.ClockSet), notices)
         assertFalse(state.today.busy)
-        // A second idle link reports nothing more.
         state.today.linkIdle()
         runCurrent()
-        assertEquals(listOf("SET_TIME", "sync"), calls.list)
-    }
-
-    @Test fun aRefusedClockStepStillCollectsTheOriginalFiles() = runTest {
-        val state = connected("{\"utc\":0,\"clk\":0}")
-        val calls = Calls()
-        val notices = mutableListOf<TodayNotice>()
-        val source = source(state, calls, notices)
-        source.sync(ClockSyncMode.AUTOMATIC, clockConfirmed = false)
-        state.today.commandStarted()
-        state.today.commandFinished(CommandResult(TodayNotice.Rejected(TodayCommand.SET_TIME)))
-        runCurrent()
-        assertEquals(listOf("SET_TIME", "sync"), calls.list)
-        // A later automatic clock retry does not start another sync on its own.
-        source.setTime()
-        state.today.commandFinished(CommandResult(TodayNotice.ClockSet))
-        runCurrent()
-        assertEquals(listOf("SET_TIME", "sync", "SET_TIME"), calls.list)
+        assertEquals(listOf("SET_TIME"), calls.list)
     }
 
     @Test fun nothingIsSentWhileACommandOrSyncRuns() = runTest {

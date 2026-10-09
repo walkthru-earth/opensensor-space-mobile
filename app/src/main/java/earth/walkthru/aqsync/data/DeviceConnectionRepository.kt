@@ -41,7 +41,6 @@ import earth.walkthru.aqsync.data.protocol.LiveSample
 import earth.walkthru.aqsync.data.protocol.hexToBytes
 import earth.walkthru.aqsync.data.protocol.toHex
 import earth.walkthru.aqsync.data.sync.ArchivedIdentity
-import earth.walkthru.aqsync.data.sync.ClockSyncAction
 import earth.walkthru.aqsync.data.sync.ClockSyncMode
 import earth.walkthru.aqsync.data.sync.FileArchive
 import earth.walkthru.aqsync.data.sync.FileOutcome
@@ -49,7 +48,6 @@ import earth.walkthru.aqsync.data.sync.FileSyncState
 import earth.walkthru.aqsync.data.sync.ManifestEntry
 import earth.walkthru.aqsync.data.sync.RateMeter
 import earth.walkthru.aqsync.data.sync.ReadWindow
-import earth.walkthru.aqsync.data.sync.SmartSyncPolicy
 import earth.walkthru.aqsync.data.sync.SyncEndCause
 import earth.walkthru.aqsync.data.sync.SyncEngine
 import earth.walkthru.aqsync.data.sync.SyncPlan
@@ -555,7 +553,7 @@ class DeviceConnectionRepository @Inject constructor(
                 )
             )
             _info.value = info
-            setTimeFromPhoneNow(session, quiet = true)
+            setTimeFromPhoneNow(session, quiet = true, automatic = true)
             if (_session.value !== session) return false
             identityReady.value = true
             suspendRunCatching { transport.readStatus().decodeToString() }.onSuccess { raw ->
@@ -822,11 +820,7 @@ class DeviceConnectionRepository @Inject constructor(
         if (_sync.value.running) return
         val session = interactiveSession() ?: return
         scope.launch {
-            val decision = SmartSyncPolicy.decide(_status.value?.status, ClockSyncMode.AUTOMATIC)
-            recordDiagnostic("clock", "${decision.quality}: ${decision.reason}; action=${decision.action}")
-            if (decision.action != ClockSyncAction.CONTINUE) {
-                setTimeFromPhoneNow(session, quiet = false)
-            }
+            setTimeFromPhoneNow(session, quiet = true, automatic = true)
             val latest = plan.value ?: run {
                 _events.emit(DeviceEvent.Error(DeviceMessage.FileListNotReady))
                 return@launch
@@ -1220,27 +1214,33 @@ class DeviceConnectionRepository @Inject constructor(
         scope.launch { setTimeFromPhoneNow(session, quiet = false) }
     }
 
-    private suspend fun setTimeFromPhoneNow(session: DeviceSession, quiet: Boolean): Boolean = try {
-        val info = _info.value
-        val r = session.synchronizeClock(clock::nowEpochMs)
-        check(_session.value === session) { "clock session replaced" }
-        if (info?.station != null && info.boot != null) {
-            historyDeriver.recordClockAnchor(info.station!!, info.boot!!, r.epochNanos, r.monotonicMicros)
+    private suspend fun setTimeFromPhoneNow(session: DeviceSession, quiet: Boolean, automatic: Boolean = false): Boolean {
+        return try {
+            val info = _info.value
+            val r = if (automatic) session.synchronizeClockIfNeeded(clock::nowEpochMs) else session.synchronizeClock(clock::nowEpochMs)
+            check(_session.value === session) { "clock session replaced" }
+            if (r == null) {
+                recordDiagnostic("clock", "external clock remains usable; SET_TIME skipped")
+                return true
+            }
+            if (info?.station != null && info.boot != null) {
+                historyDeriver.recordClockAnchor(info.station!!, info.boot!!, r.epochNanos, r.monotonicMicros)
+            }
+            recordDiagnostic("clock", "SET_TIME accepted at epoch ${r.epochSeconds}")
+            if (!quiet) _events.emit(DeviceEvent.Info(DeviceMessage.ClockSet))
+            suspendRunCatching { session.readStatus() }.onSuccess { _status.value = TimedStatus(it, clock.nowEpochMs()) }
+            true
+        } catch (e: DeviceErrorException) {
+            recordDiagnostic("clock", "SET_TIME rejected: ${e.message}")
+            if (!quiet) _events.emit(DeviceEvent.Error(DeviceMessage.CommandRejected(DeviceMessage.Command.SET_TIME)))
+            false
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            recordDiagnostic("clock", "SET_TIME failed: ${e.message ?: e::class.simpleName}")
+            if (!quiet) _events.emit(DeviceEvent.Error(DeviceMessage.CommandFailed(DeviceMessage.Command.SET_TIME)))
+            false
         }
-        recordDiagnostic("clock", "SET_TIME accepted at epoch ${r.epochSeconds}")
-        if (!quiet) _events.emit(DeviceEvent.Info(DeviceMessage.ClockSet))
-        suspendRunCatching { session.readStatus() }.onSuccess { _status.value = TimedStatus(it, clock.nowEpochMs()) }
-        true
-    } catch (e: DeviceErrorException) {
-        recordDiagnostic("clock", "SET_TIME rejected: ${e.message}")
-        if (!quiet) _events.emit(DeviceEvent.Error(DeviceMessage.CommandRejected(DeviceMessage.Command.SET_TIME)))
-        false
-    } catch (e: CancellationException) {
-        throw e
-    } catch (e: Exception) {
-        recordDiagnostic("clock", "SET_TIME failed: ${e.message ?: e::class.simpleName}")
-        if (!quiet) _events.emit(DeviceEvent.Error(DeviceMessage.CommandFailed(DeviceMessage.Command.SET_TIME)))
-        false
     }
 
     /** FLUSH: finalize the RAM batch into a short file so it can be pulled now. */

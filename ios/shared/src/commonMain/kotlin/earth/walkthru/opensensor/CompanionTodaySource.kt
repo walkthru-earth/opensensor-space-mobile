@@ -8,10 +8,8 @@ import earth.walkthru.aqsync.data.history.TodaySoFar
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.protocol.DeviceStatus
 import earth.walkthru.aqsync.data.protocol.LiveSample
-import earth.walkthru.aqsync.data.sync.ClockSyncAction
 import earth.walkthru.aqsync.data.sync.ClockSyncMode
 import earth.walkthru.aqsync.data.sync.FileOutcome
-import earth.walkthru.aqsync.data.sync.SmartSyncPolicy
 import earth.walkthru.opensensor.designsystem.nowEpochMillis
 import earth.walkthru.opensensor.today.TodayArchive
 import earth.walkthru.opensensor.today.TodayNotice
@@ -26,7 +24,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.merge
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.runningFold
 import kotlinx.coroutines.flow.stateIn
 import earth.walkthru.aqsync.data.SyncProgress as RunProgress
@@ -170,19 +167,7 @@ internal class CompanionTodaySource(
 
     private val local = MutableSharedFlow<TodayNotice>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
-    /** A Smart Sync waits for its `SET_TIME`. Read and written on the main thread only. */
-    private var syncAfterClock = false
-
-    override val notices: Flow<TodayNotice> = merge(
-        state.today.notices.onEach {
-            if (syncAfterClock) {
-                syncAfterClock = false
-                // Preserve original files even when the automatic clock refresh failed.
-                if (linked) actions.syncFiles(address)
-            }
-        },
-        local,
-    )
+    override val notices: Flow<TodayNotice> = merge(state.today.notices, local)
 
     /** The one Bluetooth link is open to this sensor. Nothing is sent to another one. */
     private val linked: Boolean get() = state.connectedLanForStation(stationFor(address)) != null || (state.selectedId == address && state.connected)
@@ -194,20 +179,9 @@ internal class CompanionTodaySource(
             local.tryEmit(TodayNotice.Busy)
             return
         }
-        val lan = state.connectedLanForStation(stationFor(address))
-        val status = if (lan != null) state.lanStatus[lan] else state.status.takeIf { state.selectedId == address }
-        val decision = SmartSyncPolicy.decide(status, ClockSyncMode.AUTOMATIC)
-        val device = if (lan != null) state.lanInfo[lan]?.dev else state.info?.dev
-        IosSyncDiagnostics.record(device, "clock", "${decision.action.name.lowercase()} (${mode.name.lowercase()})")
-        when (decision.action) {
-            ClockSyncAction.CONTINUE -> actions.syncFiles(address)
-            ClockSyncAction.SET_TIME, ClockSyncAction.ASK_USER -> clockThenSync()
-        }
-    }
-
-    private fun clockThenSync() {
-        syncAfterClock = true
-        actions.command(address, SensorCommand.SET_TIME)
+        // SensorSync checks a fresh STATUS through the common clock policy before LIST on either
+        // transport. Clock failure still permits preserving immutable original files.
+        actions.syncFiles(address)
     }
 
     override fun setTime() = send(SensorCommand.SET_TIME)

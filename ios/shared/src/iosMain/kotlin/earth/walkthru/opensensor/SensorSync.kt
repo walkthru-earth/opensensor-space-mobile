@@ -45,7 +45,7 @@ class SyncHandle internal constructor(private val job: Job?) {
  *
  * Make one per app and call [start] on the main thread. Work runs off the main thread. Every
  * callback arrives on the main thread, `progress` at most four times a second and `finished`
- * exactly once, last. A station syncs over one link at a time. The runner synchronizes UTC,
+ * exactly once, last. A station syncs over one link at a time. The runner maintains UTC if needed,
  * then lists, opens, reads and closes files. It never asks the sensor to delete, rename or rewrite one.
  */
 class SensorSync internal constructor(
@@ -107,16 +107,14 @@ class SensorSync internal constructor(
                 var last: TimeSource.Monotonic.ValueTimeMark? = null
                 var lastDone = -1
                 val session = DeviceSession(link.transport, debugFrames.recorderFor(link.transport.address))
-                if (!link.clockSynchronized) {
-                    try {
-                        synchronizeClock(session, link)
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        // Preserve immutable unsynced files even when UTC could not be refreshed.
-                        // A broken pipe will still fail the normal LIST/transfer checks.
-                        syncLog("automatic UTC unavailable, ${e::class.simpleName}; collecting original files")
-                    }
+                try {
+                    synchronizeClock(session, link, automatic = true)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // Preserve immutable unsynced files even when UTC could not be refreshed.
+                    // A broken pipe will still fail the normal LIST/transfer checks.
+                    syncLog("automatic UTC unavailable, ${e::class.simpleName}; collecting original files")
                 }
                 val summary = collector.collect(session, station, device, maxRead, onlyName) { p: CollectionProgress ->
                     listed = p.filesTotal
@@ -154,10 +152,11 @@ class SensorSync internal constructor(
         return SyncHandle(job)
     }
 
-    private suspend fun synchronizeClock(session: DeviceSession, link: SensorLink) {
+    private suspend fun synchronizeClock(session: DeviceSession, link: SensorLink, automatic: Boolean = false) {
         val station = link.station
         val boot = link.boot
-        val anchor = session.synchronizeClock(::nowEpochMillis)
+        val anchor = if (automatic) session.synchronizeClockIfNeeded(::nowEpochMillis) else session.synchronizeClock(::nowEpochMillis)
+        if (anchor == null) return
         if (station != null && boot != null) {
             recordClockAnchor(station, boot, anchor.epochNanos, anchor.monotonicMicros)
         }
@@ -170,13 +169,13 @@ class SensorSync internal constructor(
      * exactly once on the main thread, also when the link closes or [SyncHandle.cancel] lands.
      */
     @OptIn(DelicateCoroutinesApi::class)
-    fun command(link: SensorLink, command: SensorCommand, finished: (CommandResult) -> Unit): SyncHandle {
+    fun command(link: SensorLink, command: SensorCommand, automatic: Boolean = false, finished: (CommandResult) -> Unit): SyncHandle {
         val job = scope.launch(work, CoroutineStart.ATOMIC) {
             val session = DeviceSession(link.transport)
             val notice = try {
                 when (command) {
                     SensorCommand.SET_TIME -> {
-                        synchronizeClock(session, link)
+                        synchronizeClock(session, link, automatic)
                         try {
                             session.requestStatus()
                         } catch (e: TransportException) {

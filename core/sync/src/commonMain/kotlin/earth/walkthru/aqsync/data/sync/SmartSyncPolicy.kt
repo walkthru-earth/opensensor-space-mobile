@@ -29,34 +29,52 @@ data class ClockSyncDecision(
  * immutable; FLUSH is deliberately excluded and stays an explicit "sync through now" action.
  */
 object SmartSyncPolicy {
-    fun decide(status: DeviceStatus?, mode: ClockSyncMode): ClockSyncDecision {
+    /** A fresh snapshot is compared at the request midpoint; [uncertaintyMillis] bounds link delay. */
+    fun decide(
+        status: DeviceStatus?,
+        mode: ClockSyncMode,
+        nowEpochMillis: Long? = null,
+        uncertaintyMillis: Long = 0,
+    ): ClockSyncDecision {
         val quality = quality(status)
-        if (quality == ClockQuality.HOST_ANCHORED) {
-            return ClockSyncDecision(quality, ClockSyncAction.CONTINUE, "clock already anchored by a host or network")
-        }
-        if (quality == ClockQuality.UNKNOWN) {
-            return ClockSyncDecision(quality, ClockSyncAction.CONTINUE, "firmware did not report enough clock state")
-        }
-        if (mode == ClockSyncMode.NEVER) {
-            return ClockSyncDecision(quality, ClockSyncAction.CONTINUE, "automatic clock updates are disabled")
-        }
-        val reason = when (quality) {
-            ClockQuality.MISSING -> "device has no UTC anchor, new rows go to the unsynced tree"
-            ClockQuality.RTC_RESTORED -> "device clock was restored from the RTC and has not been checked by this phone"
-            ClockQuality.HOST_ANCHORED, ClockQuality.UNKNOWN -> error("handled above")
+        val ageSeconds = status?.clockAgeSeconds
+        val deviceUtcMillis = status?.utcEpochMillis
+        val reason = when {
+            mode == ClockSyncMode.NEVER -> null
+            quality == ClockQuality.MISSING -> "device has no UTC anchor, new rows go to the unsynced tree"
+            quality == ClockQuality.RTC_RESTORED -> "RTC clock needs an external anchor this boot"
+            quality == ClockQuality.UNKNOWN -> "clock state unavailable, obtain an acknowledged phone anchor"
+            ageSeconds != null && ageSeconds >= REFRESH_AGE_SECONDS -> "external anchor is at least six hours old"
+            nowEpochMillis != null && deviceUtcMillis != null &&
+                (
+                    deviceUtcMillis > nowEpochMillis + MAX_DRIFT_MILLIS + uncertaintyMillis.coerceAtLeast(0) ||
+                        deviceUtcMillis < nowEpochMillis - MAX_DRIFT_MILLIS - uncertaintyMillis.coerceAtLeast(0)
+                    ) ->
+                "clock differs from the phone by more than two seconds plus link uncertainty"
+            else -> null
         }
         return ClockSyncDecision(
-            quality = quality,
-            action = if (mode == ClockSyncMode.AUTOMATIC) ClockSyncAction.SET_TIME else ClockSyncAction.ASK_USER,
-            reason = reason,
+            quality,
+            if (reason == null) {
+                ClockSyncAction.CONTINUE
+            } else if (mode == ClockSyncMode.AUTOMATIC) {
+                ClockSyncAction.SET_TIME
+            } else {
+                ClockSyncAction.ASK_USER
+            },
+            reason ?: "clock is anchored; no refresh required",
         )
     }
 
+    // At the archive's 50 ppm drift assumption, six hours contributes about 1.08 seconds.
+    const val REFRESH_AGE_SECONDS = 6 * 60 * 60L
+    const val MAX_DRIFT_MILLIS = 2_000L
+
     fun quality(status: DeviceStatus?): ClockQuality = when {
         status == null -> ClockQuality.UNKNOWN
+        status.utc == 0 || status.clockSource == 0 -> ClockQuality.MISSING
         status.clockSource == 1 || status.clockSource == 3 -> ClockQuality.HOST_ANCHORED
         status.clockSource == 2 -> ClockQuality.RTC_RESTORED
-        status.clockSource == 0 || status.utc == 0 -> ClockQuality.MISSING
         status.clockSource == null && status.utc == 1 -> ClockQuality.HOST_ANCHORED
         else -> ClockQuality.UNKNOWN
     }

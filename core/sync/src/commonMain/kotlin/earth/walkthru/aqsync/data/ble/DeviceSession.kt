@@ -12,16 +12,25 @@ import earth.walkthru.aqsync.data.protocol.LiveSample
 import earth.walkthru.aqsync.data.protocol.Opcode
 import earth.walkthru.aqsync.data.protocol.ProtocolError
 import earth.walkthru.aqsync.data.protocol.Request
+import earth.walkthru.aqsync.data.sync.ClockSyncAction
+import earth.walkthru.aqsync.data.sync.ClockSyncMode
+import earth.walkthru.aqsync.data.sync.SmartSyncPolicy
 import earth.walkthru.aqsync.sync.monotonicMs
 import earth.walkthru.aqsync.sync.nowEpochMs
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.selects.onTimeout
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.time.TimeSource
 
 /** The device answered a request with an `ERROR` frame. Subclasses type the v2 codes callers branch on. */
@@ -248,6 +257,40 @@ class DeviceSession(val transport: AqTransport, val frames: FrameRecorder = Fram
             if (e.protocolError != ProtocolError.MALFORMED_REQUEST) throw e
             setTime(nowMillis() / 1000)
         }
+    }
+
+    /**
+     * Shared Android/iOS clock maintenance. Request fresh STATUS before deciding, rather than
+     * treating reconnect or a new native byte pipe as a reason to cut the current archive window.
+     * Null means the external clock is already usable; only a real TIME_SET is receipt evidence.
+     * Legacy status has no age/drift fields, so a reported usable UTC anchor is retained.
+     */
+    suspend fun synchronizeClockIfNeeded(nowMillis: () -> Long = ::nowEpochMs): Frame.TimeSet? {
+        val before = nowMillis()
+        val elapsed = TimeSource.Monotonic.markNow()
+        val snapshot = coroutineScope {
+            val waiting = async(start = CoroutineStart.UNDISPATCHED) {
+                withTimeoutOrNull(STATUS_CLOCK_TIMEOUT_MS) { status.first() }
+            }
+            try {
+                requestStatus()
+                waiting.await() ?: try {
+                    // Native characteristic/LAN reads can return cached snapshots. Quality and
+                    // age still guide initialization/maintenance; cached UTC cannot measure drift.
+                    readStatus().copy(utcEpochMillis = null)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    null
+                }
+            } finally {
+                waiting.cancel()
+            }
+        }
+        val delayMillis = elapsed.elapsedNow().inWholeMilliseconds.coerceAtLeast(0)
+        val midpoint = before + delayMillis / 2
+        val decision = SmartSyncPolicy.decide(snapshot, ClockSyncMode.AUTOMATIC, midpoint, (delayMillis + 1) / 2)
+        return if (decision.action == ClockSyncAction.SET_TIME) synchronizeClock(nowMillis) else null
     }
 
     /** `FLUSH` → `FLUSHED` or `ERROR` 10. Finalizes the RAM batch into a short file. */
@@ -562,6 +605,8 @@ class DeviceSession(val transport: AqTransport, val frames: FrameRecorder = Fram
         ProtocolViolationException("unexpected ${frame::class.simpleName} frame in response to $request")
 
     companion object {
+        private const val STATUS_CLOCK_TIMEOUT_MS = 5_000L
+
         /** Gap between two frames of one response, including LIST on a large card. */
         const val FRAME_TIMEOUT_MS = 15_000L
 

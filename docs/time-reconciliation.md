@@ -5,8 +5,16 @@ sample timing and durable anchor evidence. The server is not required for local 
 
 ## Connection and storage
 
-Android and iOS automatically send their system UTC after the authenticated connection
-is ready, before listing files. There is no user-facing device-time setting or confirmation.
+Android and iOS run one shared clock policy after authentication and before listing files.
+A fresh `STATUS` snapshot reports clock source, current `utc_ms` and `clk_age_s`. Send phone
+UTC when no anchor exists, the clock came from RTC, an external anchor is at least six hours
+old, or device UTC differs by more than two seconds plus half the measured request delay.
+The six-hour cadence uses the existing 50 ppm drift assumption (about 1.08 seconds), not
+measured oscillator accuracy. A recent host or network clock survives reconnects, switching
+transports and creating a new iOS byte pipe without another `SET_TIME`. Explicit Set time
+still sends an update. Legacy firmware with a usable UTC clock but no age/drift fields keeps
+that anchor; unavailable status obtains an initial acknowledged phone anchor. A failed clock
+check does not prevent downloading verified original files. There is no user-facing device-time setting or confirmation.
 The optional microsecond remainder in `SET_TIME` retains the phone's millisecond precision;
 legacy firmware falls back to integer seconds. Only the acknowledged UTC/monotonic pair is
 persisted as evidence, bound to the connection's original station and full boot ID.
@@ -21,10 +29,14 @@ and boot identity. A valid RTC can seed it; otherwise UTC remains null until a n
 
 The device retains monotonic microseconds in its unknown-UTC Parquet files, under
 `station=<id>/unsynced/boot=<id>/`. No Unix-epoch date or phone-local date is invented for them.
-Unanchored batches finalize after six genuine samples (normally about one minute), and an
-accepted anchor flushes any shorter pending batch. Footer `reconciliation_anchor_mono_us`,
+Unanchored batches finalize after six genuine samples (normally about one minute). An
+accepted anchor does not flush the pending batch; the next genuine sample finalizes the
+previous clock epoch when the quality transition or correction requires a new epoch. Footer `reconciliation_anchor_mono_us`,
 `reconciliation_anchor_utc_ns` and `reconciliation_anchor_source` preserve same-boot evidence
-in newly finalized files. The first genuine timed sample also finalizes promptly.
+in newly finalized files. The first genuine timed sample begins its normal interval file. First UTC, an RTC-to-external
+quality upgrade, or a correction exceeding two seconds starts a new clock epoch; smaller
+external refreshes preserve the epoch and open file. Normal interval rollover finalizes it,
+while explicit Finalize can still cut a short chunk. The card never merges finalized originals.
 
 ## Reconciliation
 
@@ -69,7 +81,26 @@ those require separately recorded Android, iPhone and board runs.
 
 [Parquet UTC logical timestamps](https://parquet.apache.org/docs/file-format/types/logicaltypes/)
 define epoch-based millisecond, microsecond and nanosecond representations. The firmware's
-monotonic clock is boot-relative; see [Espressif ESP Timer](https://docs.espressif.com/projects/esp-idf/en/release-v5.2/esp32s3/api-reference/system/esp_timer.html).
-The platform's [system-time documentation](https://docs.espressif.com/projects/esp-idf/en/v5.2/esp32s3/api-reference/system/system_time.html)
+monotonic clock is boot-relative; see [Espressif ESP Timer](https://docs.espressif.com/projects/esp-idf/en/v6.1/esp32s3/api-reference/system/esp_timer.html).
+The platform's [system-time documentation](https://docs.espressif.com/projects/esp-idf/en/v6.1/esp32s3/api-reference/system/system_time.html)
 describes SNTP synchronization separately from RTC retention. Actual build versions and
 board evidence remain in the firmware repository.
+
+## Shared mobile clock policy implementation (2026-10-10)
+
+`DeviceSession.synchronizeClockIfNeeded` in `core/sync/commonMain` subscribes before sending
+`STATUS`, so the response cannot outrun its waiter. BLE and LAN status pushes reach the same
+policy on Android and iOS. A five-second legacy fallback reads platform status for quality and
+anchor age, but excludes potentially cached UTC from drift comparisons; cancellation
+propagates rather than sending a late clock command. Only real `TIME_SET` acknowledgements
+create reconciliation receipts. File sync does not issue `FLUSH`, so the current unfinished
+interval stays on the logger; live readings remain available.
+
+Kotlin was updated from 2.4.20 to the latest stable patch 2.4.21, released October 8, using the
+[official release history](https://kotlinlang.org/docs/releases.html) and
+[KMP compatibility guidance](https://kotlinlang.org/docs/multiplatform/multiplatform-compatibility-guide.html).
+The Compose compiler uses the same Kotlin pin. The shared policy and tests stay in common
+source sets, consistent with the [KMP source-set guide](https://kotlinlang.org/docs/multiplatform/multiplatform-discover-project.html);
+Swift remains the Apple transport adapter through the existing
+[Objective-C interop](https://kotlinlang.org/docs/native-objc-interop.html). No new platform
+framework or deployment target is required. Build and phone evidence is recorded separately.
