@@ -118,6 +118,7 @@ jobs:
           echo "cert_sha256=$actual" >> "$GITHUB_OUTPUT"
 
       - name: Run the full verification suite and build the release APK
+        shell: bash
         env:
           AQSYNC_VERSION_CODE: ${{ steps.meta.outputs.version_code }}
           AQSYNC_VERSION_NAME: ${{ steps.meta.outputs.version_name }}
@@ -126,9 +127,22 @@ jobs:
           AQSYNC_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           AQSYNC_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
+          set -euo pipefail
           python3 tools/validate_station_epoch_migration.py
           python3 tools/validate_sensor_installation_migration.py
-          ./gradlew --no-daemon verify :app:assembleRelease
+          # Maven may redirect a Kotlin compiler artifact to a GitHub release asset.
+          # Retry only an upstream 5xx; compiler, test and signing failures still fail at once.
+          for attempt in 1 2 3; do
+            log="${RUNNER_TEMP}/release-gradle-attempt-${attempt}.log"
+            if ./gradlew --no-daemon verify :app:assembleRelease 2>&1 | tee "$log"; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ] || ! grep -Eq 'Received status code 5[0-9][0-9] from server|HTTP response code: 5[0-9][0-9]' "$log"; then
+              exit 1
+            fi
+            echo "::warning::Dependency server returned 5xx; retrying Gradle ($attempt/3)"
+            sleep "$((15 * attempt))"
+          done
 
       - name: Verify the built APK signer
         shell: bash
