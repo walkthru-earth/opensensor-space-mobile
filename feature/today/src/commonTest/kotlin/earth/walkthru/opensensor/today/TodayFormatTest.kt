@@ -5,6 +5,7 @@ import earth.walkthru.aqsync.data.history.HistorySeries
 import earth.walkthru.aqsync.data.history.HistoryWindow
 import earth.walkthru.aqsync.data.history.MetricSpec
 import earth.walkthru.aqsync.data.history.TodaySoFar
+import earth.walkthru.aqsync.data.sync.ClockQuality
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.filterNotNull
@@ -16,6 +17,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.TimeZone
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 
 class TodayFormatTest {
@@ -55,6 +57,12 @@ class TodayFormatTest {
     fun fillReplacesEitherPlaceholder() {
         assertEquals("12 s ago", fill("%1\$s s ago", "12"))
         assertEquals("قبل 12 ث", fill("قبل %1\$d ث", "12"))
+    }
+
+    @Test
+    fun eachClockProblemHasItsOwnReason() {
+        assertNotEquals(ClockQuality.MISSING.reasonRes(), ClockQuality.RTC_RESTORED.reasonRes())
+        assertNotEquals(ClockQuality.MISSING.reasonRes(), ClockQuality.UNKNOWN.reasonRes())
     }
 
     @Test

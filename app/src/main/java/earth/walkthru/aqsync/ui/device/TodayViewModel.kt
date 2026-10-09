@@ -8,158 +8,135 @@ import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import earth.walkthru.aqsync.data.ArchiveTimeSummary
 import earth.walkthru.aqsync.data.DeviceConnectionManager
+import earth.walkthru.aqsync.data.DeviceConnectionRepository
 import earth.walkthru.aqsync.data.DeviceEvent
 import earth.walkthru.aqsync.data.ReconnectState
 import earth.walkthru.aqsync.data.SyncProgress
 import earth.walkthru.aqsync.data.TimedLive
 import earth.walkthru.aqsync.data.TimedStatus
+import earth.walkthru.aqsync.data.ble.BleConnectionFailure
 import earth.walkthru.aqsync.data.ble.ConfigSnapshot
 import earth.walkthru.aqsync.data.ble.ConnectionState
+import earth.walkthru.aqsync.data.ble.DeviceSession
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.fake.FakeTransport
-import earth.walkthru.aqsync.data.history.ArchiveDayQuery
-import earth.walkthru.aqsync.data.history.ArchiveQueryResult
-import earth.walkthru.aqsync.data.history.DeviceCapabilities
 import earth.walkthru.aqsync.data.history.HistoryRepository
-import earth.walkthru.aqsync.data.history.Metrics
 import earth.walkthru.aqsync.data.history.TodaySoFar
-import earth.walkthru.aqsync.data.history.archiveQueryResults
+import earth.walkthru.aqsync.data.local.database.KnownDevice
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.settings.AppSettings
-import earth.walkthru.aqsync.data.settings.DetailLevel
+import earth.walkthru.aqsync.data.settings.toShared
 import earth.walkthru.aqsync.data.sync.ClockSyncMode
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.delay
+import earth.walkthru.opensensor.today.TodayArchive
+import earth.walkthru.opensensor.today.TodayController
+import earth.walkthru.opensensor.today.TodayNotice
+import earth.walkthru.opensensor.today.TodayReconnect
+import earth.walkthru.opensensor.today.TodaySnapshot
+import earth.walkthru.opensensor.today.TodaySource
+import earth.walkthru.opensensor.today.todaySoFar
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.stateIn
-import java.time.LocalDate
-import java.time.ZoneId
 
-data class TodayUiState(
-    val address: String? = null,
-    val name: String? = null,
-    val connection: ConnectionState = ConnectionState.Disconnected,
-    val info: DeviceInfo? = null,
-    val status: TimedStatus? = null,
-    val live: TimedLive? = null,
-    val sync: SyncProgress = SyncProgress(),
-    val isFake: Boolean = false,
-    val transport: TransportKind? = null,
-    val advancedMode: Boolean = false,
-    val reconnecting: ReconnectState? = null,
-    val detailLevel: DetailLevel = DetailLevel.SIMPLE,
-    val clockSyncMode: ClockSyncMode = ClockSyncMode.ASK,
-    val archiveTime: ArchiveTimeSummary = ArchiveTimeSummary(),
-    /** Today (local calendar day) for this station from the hourly tier, once the phone archive has timed rows for it. */
-    val todaySoFar: TodaySoFar? = null,
-    /** The last `GET_CONFIG` answer (the board's sensor opt-in for the batch estimate). */
-    val config: ConfigSnapshot? = null,
-    /** What this device can do, from `INFO` (shared mapping, no schema strings in the UI). */
-    val capabilities: DeviceCapabilities = DeviceCapabilities.NONE,
-) {
-    /** The particle reading (mood and PM2.5) applies to this device and sample. */
-    val showsParticles: Boolean get() = capabilities.showsParticles(live?.sample)
-
-    /** The board opted in to the unvalidated batch estimate and its dictionary is reviewed. */
-    val showsBatchEstimate: Boolean get() = capabilities.showsBatchEstimate(config?.config?.sensor?.batchCandidate)
-}
-
+/**
+ * Android host of the shared Today ([TodayController], `:feature:today`). The screen, its cards and
+ * the confirmation dialogs are shared with iOS. This class only adapts the device's
+ * [DeviceConnectionRepository] to the [TodaySource] port and reads the settings store.
+ */
 @HiltViewModel(assistedFactory = TodayViewModel.Factory::class)
 class TodayViewModel @AssistedInject constructor(
     manager: DeviceConnectionManager,
-    @Assisted private val deviceAddress: String,
+    @Assisted deviceAddress: String,
     settings: AppSettings,
     history: HistoryRepository,
     knownDeviceDao: KnownDeviceDao,
 ) : ViewModel() {
-    private val repository = manager.controller(deviceAddress)
-    private val enrolledDevice = knownDeviceDao.observeAll().map { devices -> devices.firstOrNull { it.address == deviceAddress } }
-    private val fakeEndpoint = deviceAddress == FakeTransport.FAKE_ADDRESS || deviceAddress == FakeTransport.FAKE_LAN_ADDRESS
-    private val zone = ZoneId.systemDefault()
-
     @AssistedFactory
     interface Factory {
         fun create(deviceAddress: String): TodayViewModel
     }
 
+    private val repository = manager.controller(deviceAddress)
+
+    /** Info and errors stay Android's own snackbar lines. The clock question goes to the controller. */
     val events: SharedFlow<DeviceEvent> = repository.events
-    private val dayStart = localDayStart().stateIn(viewModelScope, SharingStarted.Eagerly, currentDayStart())
 
-    /**
-     * Today so far for the connected station — the **local** calendar day, like the History Day view,
-     * folded from the hourly tier with exact raw reads at partial UTC bucket edges. Re-emits as the deriver rebuilds, and rolls
-     * over at local midnight while the screen stays open ([localDayStart] ticks once a minute).
-     */
-    @OptIn(ExperimentalCoroutinesApi::class)
-    private val todaySoFar = combine(repository.info.map { it?.station }.distinctUntilChanged(), dayStart) { station, start -> ArchiveDayQuery(station, start, zone) }
-        .archiveQueryResults { query ->
-            val station = query.station
-            if (station == null) {
-                flowOf(null)
-            } else {
-                history.observeHourlyDay(station, Metrics.primary, query.window).map { series ->
-                    series.mean?.let { TodaySoFar(it, series.validRows.toInt(), series.coverage) }
-                }
-            }
-        }
+    private val source = RepositoryTodaySource(
+        scope = viewModelScope,
+        repository = repository,
+        address = deviceAddress,
+        enrolled = knownDeviceDao.observeAll().map { devices -> devices.firstOrNull { it.address == deviceAddress } },
+        todaySoFar = todaySoFar(repository.info.map { it?.station }, history::observeHourlyDay),
+    )
 
-    val uiState: StateFlow<TodayUiState> = combine(
-        repository.session, repository.connectionState, repository.info, repository.status, repository.live, repository.sync,
-        settings.detailLevel, repository.reconnecting, repository.activeTransport, todaySoFar, settings.clockSyncMode, repository.archiveTimeSummary, enrolledDevice, dayStart,
-        repository.config,
+    val controller = TodayController(
+        scope = viewModelScope,
+        source = source,
+        detailLevel = settings.detailLevel,
+        clockSyncMode = settings.clockSyncMode.map { it.toShared() },
+    )
+}
+
+/** [DeviceConnectionRepository] as the shared Today port. Every verb is a call the old screen made. */
+private class RepositoryTodaySource(
+    scope: CoroutineScope,
+    private val repository: DeviceConnectionRepository,
+    private val address: String,
+    enrolled: Flow<KnownDevice?>,
+    todaySoFar: Flow<TodaySoFar?>,
+) : TodaySource {
+    private val fakeEndpoint = address == FakeTransport.FAKE_ADDRESS || address == FakeTransport.FAKE_LAN_ADDRESS
+
+    override val snapshot: StateFlow<TodaySnapshot> = combine(
+        repository.session, repository.connectionState, repository.info, repository.status, repository.live,
+        repository.sync, repository.reconnecting, repository.activeTransport, todaySoFar, repository.archiveTimeSummary,
+        enrolled, repository.config,
     ) { values ->
-        val session = values[0] as earth.walkthru.aqsync.data.ble.DeviceSession?
-        val info = values[2] as DeviceInfo?
-
-        @Suppress("UNCHECKED_CAST")
-        val today = values[9] as ArchiveQueryResult<ArchiveDayQuery, TodaySoFar>
-        TodayUiState(
-            address = session?.address ?: deviceAddress,
-            name = session?.transport?.displayName ?: (values[12] as earth.walkthru.aqsync.data.local.database.KnownDevice?)?.name,
-            connection = values[1] as ConnectionState,
-            info = info,
-            status = values[3] as TimedStatus?,
-            live = values[4] as TimedLive?,
+        val session = values[0] as DeviceSession?
+        val connection = values[1] as ConnectionState
+        val status = values[3] as TimedStatus?
+        val live = values[4] as TimedLive?
+        val reconnect = values[6] as ReconnectState?
+        val archive = values[9] as ArchiveTimeSummary
+        TodaySnapshot(
+            address = session?.address ?: address,
+            name = session?.transport?.displayName ?: (values[10] as KnownDevice?)?.name,
+            connection = connection,
+            // From the repository's own flow, not from the session object, see activeTransport.
+            transport = values[7] as TransportKind?,
+            info = values[2] as DeviceInfo?,
+            status = status?.status,
+            statusAtEpochMs = status?.receivedAtEpochMs,
+            live = live?.sample,
+            liveAtEpochMs = live?.receivedAtEpochMs,
             sync = values[5] as SyncProgress,
-            isFake = repository.isFake || fakeEndpoint,
-            // From the repository's own flow, not from the session object: see activeTransport.
-            transport = values[8] as TransportKind?,
-            advancedMode = (values[6] as DetailLevel).developer,
-            detailLevel = values[6] as DetailLevel,
-            reconnecting = values[7] as ReconnectState?,
-            todaySoFar = today.forQuery(ArchiveDayQuery(info?.station, values[13] as Long, zone)),
-            clockSyncMode = values[10] as ClockSyncMode,
-            archiveTime = values[11] as ArchiveTimeSummary,
-            config = values[14] as ConfigSnapshot?,
-            capabilities = DeviceCapabilities.from(info),
+            archive = TodayArchive(files = archive.files, estimatedRows = archive.estimatedRows, unplacedRows = archive.unplacedRows),
+            config = values[11] as ConfigSnapshot?,
+            reconnecting = reconnect?.let { TodayReconnect(it.attempt, it.maxAttempts, it.reason) },
+            needsPairingRepair = BleConnectionFailure.needsPairingRepair(connection),
+            todaySoFar = values[8] as TodaySoFar?,
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TodayUiState())
+    }.stateIn(scope, SharingStarted.Eagerly, TodaySnapshot(address = address))
 
-    /** Start of the current local day (epoch seconds), re-evaluated every minute so midnight moves the window. */
-    private fun localDayStart(): Flow<Long> = flow {
-        while (true) {
-            emit(currentDayStart())
-            delay(60_000)
-        }
-    }.distinctUntilChanged()
-
-    private fun currentDayStart(): Long = LocalDate.now(zone).atStartOfDay(zone).toEpochSecond()
-
-    fun smartSync(clockConfirmed: Boolean = false) = repository.smartSync(uiState.value.clockSyncMode, clockConfirmed)
-    fun setTimeFromPhone() = repository.setTimeFromPhone()
-    fun flush() = repository.flush()
-    fun requestStatus() = repository.requestStatus()
-    fun disconnect() = repository.disconnect()
-    fun reconnect() {
-        repository.connect(deviceAddress, uiState.value.name, fake = fakeEndpoint)
+    /** Only the clock question. Info and error lines are shown from [DeviceConnectionRepository.events]. */
+    override val notices: Flow<TodayNotice> = repository.events.mapNotNull { event ->
+        (event as? DeviceEvent.ClockConfirmationRequired)?.let { TodayNotice.ClockConfirmationRequired(it.quality) }
     }
+
+    override fun sync(mode: ClockSyncMode, clockConfirmed: Boolean) = repository.smartSync(mode, clockConfirmed)
+
+    override fun setTime() = repository.setTimeFromPhone()
+
+    override fun flush() = repository.flush()
+
+    override fun reconnect() = repository.connect(address, snapshot.value.name, fake = fakeEndpoint)
+
+    override fun disconnect() = repository.disconnect()
 }
