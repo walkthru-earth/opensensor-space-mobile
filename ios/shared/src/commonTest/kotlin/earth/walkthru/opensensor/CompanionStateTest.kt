@@ -161,7 +161,7 @@ class CompanionStateTest {
     }
 
     @Test fun warmingCopyMatchesAndroid() {
-        // Same words as Android strings.xml pms_warming_hint.
+        // Same words as the shared Today pms_warming_hint.
         val warming = NowReading.of(LiveSample.parse("{\"pms\":1}"))
         assertEquals("The sensor is warming up. It takes about a minute after power on.", (warming as NowReading.SensorNotReady).hint)
     }

@@ -56,18 +56,6 @@
     <string name="pms_error_title">Sensor error</string>
     <string name="pms_valid_title">Reading</string>
 
-    <!-- Storage -->
-    <plurals name="row_groups">
-        <item quantity="one">%1$d row group</item>
-        <item quantity="other">%1$d row groups</item>
-    </plurals>
-
-    <!-- Smart Sync -->
-    <plurals name="sync_some_failed">
-        <item quantity="one">%1$d file did not sync. Try again.</item>
-        <item quantity="other">%1$d files did not sync. Try again.</item>
-    </plurals>
-
     <!-- Device -->
     <string name="device_screen_title">Device</string>
     <string name="device_title">Device</string>

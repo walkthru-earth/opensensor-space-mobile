@@ -57,26 +57,6 @@
     <string name="pms_error_title">خطأ في المستشعر</string>
     <string name="pms_valid_title">قراءة</string>
 
-    <!-- Storage -->
-    <plurals name="row_groups">
-        <item quantity="zero">%1$d مجموعة صفوف</item>
-        <item quantity="one">%1$d مجموعة صفوف</item>
-        <item quantity="two">%1$d مجموعتا صفوف</item>
-        <item quantity="few">%1$d مجموعات صفوف</item>
-        <item quantity="many">%1$d مجموعة صفوف</item>
-        <item quantity="other">%1$d مجموعة صفوف</item>
-    </plurals>
-
-    <!-- Smart Sync -->
-    <plurals name="sync_some_failed">
-        <item quantity="zero">لم تتم مزامنة %1$d ملف. حاول مرة أخرى.</item>
-        <item quantity="one">لم تتم مزامنة %1$d ملف. حاول مرة أخرى.</item>
-        <item quantity="two">لم تتم مزامنة %1$d ملفين. حاول مرة أخرى.</item>
-        <item quantity="few">لم تتم مزامنة %1$d ملفات. حاول مرة أخرى.</item>
-        <item quantity="many">لم تتم مزامنة %1$d ملفًا. حاول مرة أخرى.</item>
-        <item quantity="other">لم تتم مزامنة %1$d ملف. حاول مرة أخرى.</item>
-    </plurals>
-
     <!-- Device -->
     <string name="device_screen_title">الجهاز</string>
     <string name="device_title">الجهاز</string>
