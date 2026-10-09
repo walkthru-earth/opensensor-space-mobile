@@ -4,6 +4,29 @@
 **Code:** `./gradlew verify` (the gate), `.github/workflows/verify.yml`.
 **Related:** measured device behaviour is recorded in the board-specific `../aq-parquet/docs/boards/*/bench-verified.md`; anything not recorded there is unverified.
 
+## 2026-10-09 — fresh installs on Android and iPhone
+
+After the owner deleted both apps, GitHub `main` still matched local commit
+`76f31e2`. The locally signed, minified Android release APK built with
+`-Paqsync.localRelease=true` and installed on the connected OnePlus 7 Pro
+(`GM1911`). Launch succeeded and `adb` listed its process. APK SHA-256:
+`0d2768ae810c6d9e16bb73fd6e1f77b70ef3c36d195c12cb39041af400d44e94`.
+The previously built and locally signed Debug iOS app from the same commit was
+verified, installed on the paired iPhone 16 Pro, and launched after the phone was
+unlocked. CoreDevice listed its process running. These are fresh install and
+launch checks; no sensor connection, archive, permission or screen behavior was
+tested on either phone.
+
+## 2026-10-09 — iPhone install of current main
+
+Commit `76f31e2` on `main` matched GitHub `origin/main`. Xcode 27.0 built the
+signed Debug iOS app for the paired iPhone 16 Pro using the existing local
+development team. `devicectl` installed `earth.walkthru.opensensor` in place,
+launched it, and listed its process running afterward. The app's Debug dylib
+SHA-256 was `85a523c66b2a192f44b8e6dd1a2ef91533bdb2a67596cdd711bcc777818ed3a2`.
+This confirms the build, install and launch; no screen, radio or sync behavior was
+inspected during this check.
+
 ## 2026-10-09 — peacock expressions and Today layout (OnePlus and host/simulator)
 
 Eight transparent expression portraits now share the original peacock's identity,
