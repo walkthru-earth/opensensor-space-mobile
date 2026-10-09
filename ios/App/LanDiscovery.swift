@@ -38,6 +38,16 @@ final class LanDiscovery {
     private var collectOpened = Set<String>()
     /// A Collect all step ended: the sensor id and whether every listed file is on this phone.
     var onCollectFinished: ((String, Bool) -> Void)?
+    /// Auto-sync (#23). Its own browser, so the user's Find Wi-Fi sensors state stays untouched.
+    private var backgroundBrowser: NWBrowser?
+    private var backgroundBrowseTimer: Timer?
+    private var backgroundFound: [String: Device] = [:]
+    private var backgroundBrowseDone: (([String], [String]) -> Void)?
+    /// Auto-sync steps by service name. Each opens its own session and closes it when it ends.
+    private var backgroundRuns: [String: (BackgroundStepResult) -> Void] = [:]
+    private var backgroundBytes: [String: Int64] = [:]
+    /// An Auto-sync step's progress, files done and files listed.
+    var onBackgroundProgress: ((Int, Int) -> Void)?
     init(state: CompanionState, engine: SensorSync) {
         self.state = state
         self.engine = engine
@@ -78,17 +88,7 @@ final class LanDiscovery {
         browser.browseResultsChangedHandler = { [weak self, weak browser] results, _ in
             MainActor.assumeIsolated {
                 guard let self, let browser, self.browser === browser else { return }
-                var devices: [String: Device] = [:]
-                for result in results {
-                    guard case .service(let name, let type, let domain, _) = result.endpoint,
-                        type.trimmingCharacters(in: CharacterSet(charactersIn: ".")) == self.state.lanServiceType,
-                        domain == "local.", case .bonjour(let txt) = result.metadata,
-                        case .string(let station)? = txt.getEntry(for: "station"),
-                        case .string(let device)? = txt.getEntry(for: "dev"),
-                        case .string("2")? = txt.getEntry(for: "proto")
-                    else { continue }
-                    devices[name] = Device(endpoint: result.endpoint, station: station, device: device.lowercased())
-                }
+                let devices = self.sensors(in: results)
                 self.devices = devices
                 let names = Array(devices.keys)
                 self.state.lanSensorsFound(names: names, stations: names.map { devices[$0]?.station ?? "" })
@@ -99,6 +99,22 @@ final class LanDiscovery {
         timer = Timer.scheduledTimer(withTimeInterval: 40, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated { self?.stop() }
         }
+    }
+
+    /// Protocol 2 sensors in a browse result, by service name. Station and hardware id come from TXT.
+    private func sensors(in results: Set<NWBrowser.Result>) -> [String: Device] {
+        var devices: [String: Device] = [:]
+        for result in results {
+            guard case .service(let name, let type, let domain, _) = result.endpoint,
+                type.trimmingCharacters(in: CharacterSet(charactersIn: ".")) == state.lanServiceType,
+                domain == "local.", case .bonjour(let txt) = result.metadata,
+                case .string(let station)? = txt.getEntry(for: "station"),
+                case .string(let device)? = txt.getEntry(for: "dev"),
+                case .string("2")? = txt.getEntry(for: "proto")
+            else { continue }
+            devices[name] = Device(endpoint: result.endpoint, station: station, device: device.lowercased())
+        }
+        return devices
     }
 
     func connect(name: String) {
@@ -252,6 +268,10 @@ final class LanDiscovery {
                 progress: { [weak self] update in
                     MainActor.assumeIsolated {
                         guard let self, self.attempts[name] == attempt, self.sessions[name] === session else { return }
+                        if self.backgroundRuns[name] != nil {
+                            self.backgroundBytes[name] = update.receivedBytes
+                            self.onBackgroundProgress?(Int(update.filesDone), Int(update.filesTotal))
+                        }
                         self.report(
                             name, connected: true, busy: true, message: "Syncing verified files", done: Int(update.filesDone),
                             total: Int(update.filesTotal), bytes: update.fileBytes, rate: update.bytesPerSecond)
@@ -341,7 +361,7 @@ final class LanDiscovery {
     func enterBackground() {
         isBackground = true
         stop()
-        for name in Array(sessions.keys) where !collecting.contains(name) {
+        for name in Array(sessions.keys) where !collecting.contains(name) && backgroundRuns[name] == nil {
             if pendingResume.contains(name) { close(name: name, message: pauseMessage) }
             else { disconnect(name: name) }
         }
@@ -445,6 +465,155 @@ final class LanDiscovery {
         old?.browseResultsChangedHandler = nil
         old?.cancel()
         state.lanScanStopped()
+    }
+}
+
+/// Auto-sync over Wi-Fi (#23). Only sensors with saved Wi-Fi access, found by `_aqsync._tcp` and
+/// matching the saved station, are opened. Requests are the sync engine's LIST, OPEN, READ and CLOSE.
+extension LanDiscovery {
+    /// Looks for sensors for up to [timeout] seconds, then answers with service names and their TXT
+    /// stations. Found sensors are kept so a step can open them.
+    func backgroundBrowse(timeout: TimeInterval, done: @escaping ([String], [String]) -> Void) {
+        endBackgroundBrowse()
+        let browser = NWBrowser(for: .bonjourWithTXTRecord(type: state.lanServiceType, domain: "local."), using: .tcp)
+        backgroundBrowser = browser
+        backgroundBrowseDone = done
+        browser.stateUpdateHandler = { [weak self, weak browser] update in
+            MainActor.assumeIsolated {
+                guard let self, let browser, self.backgroundBrowser === browser else { return }
+                if case .failed = update { self.endBackgroundBrowse() }
+            }
+        }
+        browser.browseResultsChangedHandler = { [weak self, weak browser] results, _ in
+            MainActor.assumeIsolated {
+                guard let self, let browser, self.backgroundBrowser === browser else { return }
+                self.backgroundFound = self.sensors(in: results)
+            }
+        }
+        browser.start(queue: .main)
+        backgroundBrowseTimer = Timer.scheduledTimer(withTimeInterval: timeout, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated { self?.endBackgroundBrowse() }
+        }
+    }
+
+    private func endBackgroundBrowse() {
+        backgroundBrowseTimer?.invalidate()
+        backgroundBrowseTimer = nil
+        let browser = backgroundBrowser
+        backgroundBrowser = nil
+        browser?.stateUpdateHandler = nil
+        browser?.browseResultsChangedHandler = nil
+        browser?.cancel()
+        let found = backgroundFound
+        backgroundFound = [:]
+        for (name, device) in found { devices[name] = device }
+        guard let done = backgroundBrowseDone else { return }
+        backgroundBrowseDone = nil
+        let names = Array(found.keys)
+        done(names, names.map { found[$0]?.station ?? "" })
+    }
+
+    /// One step of the shared background run. Opens its own session to this service, syncs, closes
+    /// it and answers once. A session or task the user holds is left alone and the step is skipped.
+    func backgroundSync(name: String, done: @escaping (BackgroundStepResult) -> Void) {
+        guard backgroundRuns[name] == nil, tasks[name] == nil, sessions[name] == nil, collectSteps[name] == nil,
+            activeTransfers < 2
+        else {
+            done(.skipped("in use"))
+            return
+        }
+        guard let device = devices[name] else {
+            done(.skipped("not found"))
+            return
+        }
+        guard let credential = credentials.find(device: device.device), credential.station == device.station else {
+            done(.skipped("no wifi access"))
+            return
+        }
+        guard claims.connect(name: name, device: device.device) else {
+            done(.skipped("in use"))
+            return
+        }
+        let session = LanSession(endpoint: device.endpoint)
+        let attempt = UUID()
+        attempts[name] = attempt
+        sessions[name] = session
+        backgroundRuns[name] = done
+        backgroundBytes[name] = 0
+        let events = session.events
+        Task { [weak self, weak session] in
+            for await event in events {
+                guard let self, let session, self.sessions[name] === session else { continue }
+                if case .closed = event {
+                    self.sessions[name] = nil
+                    self.claims.closeSession(name: name)
+                }
+            }
+        }
+        activeTransfers += 1
+        taskIDs[name] = attempt
+        tasks[name] = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                self.activeTransfers -= 1
+                self.finishTask(name, id: attempt)
+            }
+            do {
+                try await session.connect(credential: credential)
+            } catch {
+                session.close()
+                if self.sessions[name] === session {
+                    self.sessions[name] = nil
+                    self.claims.closeSession(name: name)
+                }
+                // Nothing was sent, so the runner tries the paired Bluetooth link next, as Android does.
+                if case LanFailure.authentication = error {
+                    self.credentials.remove(device: device.device)
+                    self.finishBackground(name, .skipped("wifi access refused"))
+                } else {
+                    self.finishBackground(name, .skipped("connect failed"))
+                }
+                return
+            }
+            let result: SyncResult? =
+                if self.attempts[name] == attempt, self.sessions[name] === session {
+                    await self.collect(name: name, session: session, attempt: attempt)
+                } else { nil }
+            session.close()
+            if self.sessions[name] === session {
+                self.sessions[name] = nil
+                self.claims.closeSession(name: name)
+                self.state.lanReadingExpired(name: name)
+            }
+            if result?.end == .authFailed { self.credentials.remove(device: device.device) }
+            let bytes = self.backgroundBytes[name] ?? 0
+            if let result {
+                self.state.lanSyncFinished(name: name, connected: false, result: result)
+            }
+            self.finishBackground(name, result.map { BackgroundStepResult.ended($0, bytes: bytes) } ?? .lost())
+        }
+    }
+
+    private func finishBackground(_ name: String, _ result: BackgroundStepResult) {
+        backgroundBytes[name] = nil
+        backgroundRuns.removeValue(forKey: name)?(result)
+    }
+
+    /// The task expired or the run was cancelled. Every Auto-sync session closes now, without answering.
+    func cancelBackground() {
+        backgroundBrowseDone = nil
+        endBackgroundBrowse()
+        for name in Array(backgroundRuns.keys) {
+            backgroundRuns[name] = nil
+            backgroundBytes[name] = nil
+            close(name: name, message: "Disconnected. Collected files stay on this phone.")
+        }
+    }
+
+    /// True while the user holds a Wi-Fi session or sync with this hardware id.
+    func holds(device: String) -> Bool {
+        let names = Set(sessions.keys).union(tasks.keys).union(pendingResume)
+        return names.contains { devices[$0]?.device == device.lowercased() && backgroundRuns[$0] == nil }
     }
 }
 

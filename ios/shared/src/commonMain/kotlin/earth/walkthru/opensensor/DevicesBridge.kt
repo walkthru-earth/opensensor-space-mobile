@@ -211,6 +211,25 @@ class DevicesBridge internal constructor(
                 ?: records.value.firstOrNull { it.peripheral.equals(id, ignoreCase = true) }?.name
         }
 
+    internal fun nowMs(): Long = now()
+
+    /** The 12-hex hardware id INFO gave for this peripheral, so Swift can find its Wi-Fi session. */
+    fun deviceFor(peripheral: String): String? = records.value.firstOrNull { it.peripheral.equals(peripheral, ignoreCase = true) }?.device
+
+    private val openRequests = MutableStateFlow(false)
+
+    /** True after a tapped Auto-sync summary asked for My devices, until the shell shows it. */
+    internal val openRequested: StateFlow<Boolean> get() = openRequests.asStateFlow()
+
+    /** The user tapped an Auto-sync summary. The shell opens My devices once it is on screen. */
+    fun openMyDevices() {
+        openRequests.value = true
+    }
+
+    internal fun openHandled() {
+        openRequests.value = false
+    }
+
     internal fun knownNow(): List<KnownSensor> = IosKnown.merge(records.value, credentials.value)
 
     internal fun wifiNow(): List<WifiSensor> = state.lanDevices.map { WifiSensor(it, state.lanStations[it]) }

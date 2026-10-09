@@ -109,4 +109,37 @@
     <string name="msg_lan_token_stored">حُفظ رمز الوصول عبر Wi-Fi على هذا الهاتف.</string>
     <string name="msg_failed_get_token">تعذّر الحصول على رمز الوصول عبر Wi-Fi. حاول مرة أخرى.</string>
     <string name="msg_rejected_get_token">رفض المستشعر مشاركة رمز الوصول عبر Wi-Fi.</string>
+    <string name="autosync_title">المزامنة التلقائية</string>
+    <string name="files_bg_sync">زامِن الآن في الخلفية</string>
+    <string name="files_bg_event">المزامنة في الخلفية في الانتظار. يمكنك مغادرة التطبيق.</string>
+    <string name="notif_device">مستشعر</string>
+    <plurals name="notif_synced">
+        <item quantity="zero">تمت مزامنة %1$d ملف جديد من %2$s · %3$s</item>
+        <item quantity="one">تمت مزامنة %1$d ملف جديد من %2$s · %3$s</item>
+        <item quantity="two">تمت مزامنة %1$d ملفين جديدين من %2$s · %3$s</item>
+        <item quantity="few">تمت مزامنة %1$d ملفات جديدة من %2$s · %3$s</item>
+        <item quantity="many">تمت مزامنة %1$d ملفًا جديدًا من %2$s · %3$s</item>
+        <item quantity="other">تمت مزامنة %1$d ملف جديد من %2$s · %3$s</item>
+    </plurals>
+    <string name="notif_problems">واجهت المزامنة من %1$s مشكلات</string>
+    <plurals name="notif_failures">
+        <item quantity="zero">تعذّر التحقق من %1$d ملف. ستُعاد المحاولة في المرة القادمة.</item>
+        <item quantity="one">تعذّر التحقق من %1$d ملف. ستُعاد المحاولة في المرة القادمة.</item>
+        <item quantity="two">تعذّر التحقق من %1$d ملفين. ستُعاد المحاولة في المرة القادمة.</item>
+        <item quantity="few">تعذّر التحقق من %1$d ملفات. ستُعاد المحاولة في المرة القادمة.</item>
+        <item quantity="many">تعذّر التحقق من %1$d ملفًا. ستُعاد المحاولة في المرة القادمة.</item>
+        <item quantity="other">تعذّر التحقق من %1$d ملف. ستُعاد المحاولة في المرة القادمة.</item>
+    </plurals>
+    <string name="notif_verified">تم التحقق منها وحفظها في الأرشيف على هذا الهاتف.</string>
+    <string name="autosync_ios_hint">يختار iOS وقت التشغيل.</string>
+    <string name="autosync_ios_keep_open">أبقِ التطبيق مفتوحًا حتى تنتهي.</string>
+    <string name="autosync_progress_title">جارٍ الجمع من المستشعرات</string>
+    <plurals name="autosync_sensors">
+        <item quantity="zero">%1$d مستشعر</item>
+        <item quantity="one">%1$d مستشعر</item>
+        <item quantity="two">%1$d مستشعران</item>
+        <item quantity="few">%1$d مستشعرات</item>
+        <item quantity="many">%1$d مستشعرًا</item>
+        <item quantity="other">%1$d مستشعر</item>
+    </plurals>
 </resources>

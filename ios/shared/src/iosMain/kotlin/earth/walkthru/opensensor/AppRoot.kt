@@ -75,6 +75,7 @@ import earth.walkthru.opensensor.shell.FilesKey
 import earth.walkthru.opensensor.shell.HistoryKey
 import earth.walkthru.opensensor.shell.ScanKey
 import earth.walkthru.opensensor.shell.SettingsKey
+import earth.walkthru.opensensor.shell.ShellBottomBar
 import earth.walkthru.opensensor.shell.TabNavigator
 import earth.walkthru.opensensor.shell.TodayKey
 import earth.walkthru.opensensor.shell.TopTab
@@ -112,6 +113,21 @@ private class DiscoverHolder : ViewModel() {
     )
 }
 
+/** One page's hold on a Bluetooth sensor, released when its navigation entry is removed. */
+private class PageLease(private val leases: PeripheralLeases, private val id: String) : ViewModel() {
+    init {
+        leases.acquire(id)
+    }
+
+    override fun onCleared() = leases.release(id)
+}
+
+/** Holds this entry's lease on [id], so popping the last page for the sensor offers its link back. */
+@Composable
+private fun LeasePeripheral(leases: PeripheralLeases, id: String) {
+    viewModel(key = "page-lease-$id") { PageLease(leases, id) }
+}
+
 /** Holds the My devices controller for its entry, cleared when the entry leaves the back stack. */
 private class DevicesHolder(bridge: DevicesBridge) : ViewModel() {
     val controller = bridge.controller(viewModelScope)
@@ -134,7 +150,8 @@ private class DebugHolder(address: String, state: CompanionState, openLink: (Str
  * and the detail level from the shared Settings (`:feature:settings`, `:core:settings`). At the
  * Developer level the device page also gets an open Debug action, and the shared Debug screen
  * (`:feature:debug`) borrows short links from Swift through [openDebugLink]. A Bluetooth sensor
- * opens on the shared Today over [today], and its Device section is the [devicePage].
+ * opens on the shared Today over [today], and its Device section is the [devicePage]. Today and
+ * Device each hold a lease on that sensor, and popping the last of them calls [closeIdle] once.
  */
 @Composable
 internal fun AppRoot(
@@ -143,6 +160,7 @@ internal fun AppRoot(
     requestBluetooth: () -> Unit,
     openSensor: (String) -> Unit,
     openDebugLink: (String) -> SensorLink?,
+    closeIdle: (String) -> Unit,
     devicePage: @Composable (id: String, units: UnitSystem, level: DetailLevel, openDebug: ((String) -> Unit)?, onBack: () -> Unit) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -156,6 +174,7 @@ internal fun AppRoot(
     val units = if (unitChoice == UnitSystem.AUTO) systemUnits else unitChoice
     val level = prefs?.detailLevel ?: DetailLevel.SIMPLE
     val version = remember { appVersion() }
+    val leases = remember { PeripheralLeases(closeIdle) }
     OpenSensorTheme {
         AppShell(
             entries = { nav ->
@@ -178,6 +197,7 @@ internal fun AppRoot(
                 // companion page, which holds its Wi-Fi session. Device opens that page for a Bluetooth sensor too.
                 entry<TodayKey> { key ->
                     if (IosKnown.isPeripheral(key.address)) {
+                        LeasePeripheral(leases, key.address)
                         TodayEntry(key.address, today, settingsRepository, units) { action ->
                             when (action) {
                                 TodayAction.OpenHistory -> nav.push(HistoryKey(PHONE_ARCHIVE))
@@ -199,6 +219,7 @@ internal fun AppRoot(
                     }
                 }
                 entry<DeviceKey> { key ->
+                    if (IosKnown.isPeripheral(key.address)) LeasePeripheral(leases, key.address)
                     DevicePage(key.address, units, level, nav, devicePage)
                 }
                 entry<HistoryKey> {
@@ -234,6 +255,17 @@ internal fun AppRoot(
                 }
             },
             modifier = Modifier.fillMaxSize(),
+            bottomBar = { nav ->
+                ShellBottomBar(nav)
+                // A tapped Auto-sync summary opens My devices (#23).
+                val openDevices by devices.openRequested.collectAsState()
+                LaunchedEffect(openDevices) {
+                    if (openDevices) {
+                        nav.toMyDevicesRoot()
+                        devices.openHandled()
+                    }
+                }
+            },
         )
     }
 }

@@ -119,8 +119,8 @@ class AppAutoSyncGateway @Inject constructor(
     override suspend fun sync(device: KnownDevice, link: AutoSyncLink): BackgroundSyncResult = syncOwned(device, link, "background")
 
     private suspend fun syncOwned(device: KnownDevice, link: AutoSyncLink, owner: String): BackgroundSyncResult = when (link) {
-        is AutoSyncLink.Lan -> manager.controller(device.address).syncInBackground(device.address, link.target, owner = owner)
-        AutoSyncLink.Ble -> manager.controller(device.address).syncInBackground(device.address, null, owner = owner)
+        is BackgroundSyncLink.Lan -> manager.controller(device.address).syncInBackground(device.address, link.target, owner = owner)
+        BackgroundSyncLink.Ble -> manager.controller(device.address).syncInBackground(device.address, null, owner = owner)
     }
 
     private companion object {

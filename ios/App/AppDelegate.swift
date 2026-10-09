@@ -1,11 +1,25 @@
+import CoreBluetooth
 import OpenSensorShared
 import UIKit
+import UserNotifications
 
 @main
-final class AppDelegate: UIResponder, UIApplicationDelegate {
+final class AppDelegate: UIResponder, UIApplicationDelegate, @preconcurrency UNUserNotificationCenterDelegate {
+    /// The adapters live with the app, not the scene, because iOS can launch the app for a
+    /// background task or a Bluetooth restoration without showing a screen.
+    let services = AppServices()
+
     override init() {
         AppLanguage.align()
         super.init()
+    }
+
+    func application(
+        _ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
+    ) -> Bool {
+        UNUserNotificationCenter.current().delegate = self
+        services.launch(restoringBluetooth: launchOptions?[.bluetoothCentrals] != nil)
+        return true
     }
 
     func application(
@@ -16,28 +30,48 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         configuration.delegateClass = SceneDelegate.self
         return configuration
     }
+
+    /// A summary posted while the app is on screen still shows as a banner.
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter, willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .list])
+    }
+
+    /// Tapping an Auto-sync summary opens My devices.
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        if response.notification.request.content.threadIdentifier == AutoSync.notificationThread {
+            services.devices.openMyDevices()
+        }
+        completionHandler()
+    }
 }
 
-final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
-    var window: UIWindow?
+/// The app's adapters, made once per process. Only ids, names and stations cross into Kotlin.
+@MainActor
+final class AppServices {
     /// One shared engine, so LAN and Bluetooth save into the same archive and never sync a station twice at once.
-    private let engine = IosArchiveKt.sharedSensorSync()
-    private lazy var bluetooth = BluetoothCompanion(engine: engine)
-    private lazy var lan = LanDiscovery(state: bluetooth.state, engine: engine)
-    private let credentials = LanCredentials()
+    let engine = IosArchiveKt.sharedSensorSync()
+    private(set) lazy var bluetooth = BluetoothCompanion(engine: engine)
+    private(set) lazy var lan = LanDiscovery(state: bluetooth.state, engine: engine)
+    let credentials = LanCredentials()
     /// My devices over the adapters. Only ids, names and stations cross, never a token.
-    private lazy var devices: DevicesBridge = DevicesBridgeIosKt.devicesBridge(
+    private(set) lazy var devices: DevicesBridge = DevicesBridgeIosKt.devicesBridge(
         state: bluetooth.state, sync: engine,
         startScan: { [weak self] in self?.bluetooth.scan() },
         stopScan: { [weak self] in self?.bluetooth.stopScan() },
         forget: { [weak self] peripheral, device in self?.forget(peripheral: peripheral, device: device) },
         collect: { [weak self] id, wifiName in self?.collect(id: id, wifiName: wifiName) }
     )
+    private(set) lazy var autoSync = AutoSync(bluetooth: bluetooth, lan: lan, devices: devices)
 
-    func scene(
-        _ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions
-    ) {
-        guard let windowScene = scene as? UIWindowScene else { return }
+    /// Before launch ends. Registers the background task, and creates the central manager when iOS
+    /// restores Bluetooth or a switch is on and access was already given, so no prompt shows here.
+    func launch(restoringBluetooth: Bool) {
         bluetooth.onSensorOpened = { [weak self] peripheral, name, station, device in
             self?.devices.sensorOpened(peripheral: peripheral, name: name, station: station, device: device)
         }
@@ -45,54 +79,26 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         bluetooth.onCollectFinished = { [weak self] id, ok in self?.devices.collectFinished(id: id, ok: ok) }
         lan.onCollectFinished = { [weak self] id, ok in self?.devices.collectFinished(id: id, ok: ok) }
         credentialsChanged()
-        let controller = MainViewControllerKt.mainViewController(
-            state: bluetooth.state,
-            devices: devices,
-            requestBluetooth: { [weak self] in self?.bluetooth.requestAccess() },
-            openSensor: { [weak self] id in self?.bluetooth.open(id: id) },
-            disconnect: { [weak self] in self?.bluetooth.disconnect() },
-            scanLan: { [weak self] in self?.lan.scan() },
-            saveWifiAccess: { [weak self] in self?.bluetooth.saveWifiAccess() },
-            connectLan: { [weak self] name in self?.lan.connect(name: name) },
-            syncLan: { [weak self] name in self?.lan.sync(name: name) },
-            disconnectLan: { [weak self] name in self?.lan.disconnect(name: name) },
-            syncBluetooth: { [weak self] in self?.syncConnectedSensor() },
-            openDebugLink: { [weak self] device in self?.bluetooth.openDebugLink(device: device) },
-            command: { [weak self] command in self?.bluetooth.command(command) }
-        )
-        let window = UIWindow(windowScene: windowScene)
-        window.rootViewController = controller
-        window.makeKeyAndVisible()
-        self.window = window
-    }
-
-    func sceneDidEnterBackground(_ scene: UIScene) {
-        // Collect all is a foreground pass. The step in flight ends with the link below.
-        devices.cancelCollectAll()
-        bluetooth.suspend()
-        lan.enterBackground()
-    }
-    func sceneDidBecomeActive(_ scene: UIScene) {
-        bluetooth.resume()
-        lan.resume()
-    }
-    func sceneDidDisconnect(_ scene: UIScene) {
-        devices.cancelCollectAll()
-        bluetooth.suspend()
-        lan.suspend()
+        bluetooth.launchedOffScreen()
+        autoSync.register()
+        if restoringBluetooth || (autoSync.hasSensors && CBManager.authorization == .allowedAlways) {
+            bluetooth.requestAccess()
+        }
     }
 
     /// Tells My devices which sensors hold Wi-Fi access. Ids only, the token stays in the Keychain.
-    private func credentialsChanged() {
+    func credentialsChanged() {
         let entries = credentials.list()
         devices.credentialsChanged(
             peripherals: entries.map(\.peripheral), stations: entries.map(\.station), devices: entries.map(\.device))
     }
 
     /// The user confirmed Forget. The bridge already dropped its record. This closes any link to the
-    /// sensor and removes its Wi-Fi access. The system bond stays until removed in iOS Settings.
+    /// sensor, turns its Auto-sync off and removes its Wi-Fi access. The system bond stays until
+    /// removed in iOS Settings.
     private func forget(peripheral: String, device: String?) {
         bluetooth.close(id: peripheral)
+        autoSync.forget(peripheral: peripheral)
         if let device {
             lan.disconnect(device: device)
             credentials.remove(device: device)
@@ -110,12 +116,74 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
 
     /// Wi-Fi is faster, so an open, idle Wi-Fi session for the same sensor takes the sync.
-    private func syncConnectedSensor() {
+    func syncConnectedSensor() {
         if let device = bluetooth.deviceId, let name = lan.connectedSession(device: device) {
             lan.sync(name: name)
         } else {
             bluetooth.sync()
         }
+    }
+}
+
+final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
+    var window: UIWindow?
+    private var services: AppServices? { (UIApplication.shared.delegate as? AppDelegate)?.services }
+
+    func scene(
+        _ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions
+    ) {
+        guard let windowScene = scene as? UIWindowScene, let services else { return }
+        // Opened from a tapped summary while the app was not running.
+        if connectionOptions.notificationResponse?.notification.request.content.threadIdentifier
+            == AutoSync.notificationThread
+        {
+            services.devices.openMyDevices()
+        }
+        let bluetooth = services.bluetooth
+        let lan = services.lan
+        let controller = MainViewControllerKt.mainViewController(
+            state: bluetooth.state,
+            devices: services.devices,
+            autoSync: services.autoSync.settings,
+            requestBluetooth: { bluetooth.requestAccess() },
+            openSensor: { id in bluetooth.open(id: id) },
+            disconnect: { bluetooth.disconnect() },
+            scanLan: { lan.scan() },
+            saveWifiAccess: { bluetooth.saveWifiAccess() },
+            connectLan: { name in lan.connect(name: name) },
+            syncLan: { name in lan.sync(name: name) },
+            disconnectLan: { name in lan.disconnect(name: name) },
+            syncBluetooth: { [weak services] in services?.syncConnectedSensor() },
+            syncInBackground: { [weak services] id in KotlinBoolean(value: services?.autoSync.syncInBackground(id) ?? false) },
+            closeIdle: { id in bluetooth.closeIdle(id: id) },
+            openDebugLink: { device in bluetooth.openDebugLink(device: device) },
+            command: { command in bluetooth.command(command) }
+        )
+        let window = UIWindow(windowScene: windowScene)
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        self.window = window
+    }
+
+    func sceneDidEnterBackground(_ scene: UIScene) {
+        guard let services else { return }
+        // Collect all is a foreground pass. The step in flight ends with the link below.
+        services.devices.cancelCollectAll()
+        services.bluetooth.suspend()
+        services.lan.enterBackground()
+        services.autoSync.enteredBackground()
+    }
+    func sceneDidBecomeActive(_ scene: UIScene) {
+        guard let services else { return }
+        services.bluetooth.resume()
+        services.lan.resume()
+        services.autoSync.becameActive()
+    }
+    func sceneDidDisconnect(_ scene: UIScene) {
+        guard let services else { return }
+        services.devices.cancelCollectAll()
+        services.bluetooth.suspend()
+        services.lan.suspend()
     }
 }
 

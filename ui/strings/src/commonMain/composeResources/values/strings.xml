@@ -97,4 +97,28 @@
     <string name="msg_lan_token_stored">Wi-Fi token stored on this phone.</string>
     <string name="msg_failed_get_token">Could not get the Wi-Fi token. Try again.</string>
     <string name="msg_rejected_get_token">The sensor refused to share its Wi-Fi token.</string>
+
+    <!-- Auto-sync and its summary notification (#23). Android keys keep the Android words. -->
+    <string name="autosync_title">Auto-sync</string>
+    <string name="files_bg_sync">Sync now in background</string>
+    <string name="files_bg_event">Background sync queued. You can leave the app.</string>
+    <string name="notif_device">sensor</string>
+    <plurals name="notif_synced">
+        <item quantity="one">Synced %1$d new file from %2$s · %3$s</item>
+        <item quantity="other">Synced %1$d new files from %2$s · %3$s</item>
+    </plurals>
+    <string name="notif_problems">Sync from %1$s had problems</string>
+    <plurals name="notif_failures">
+        <item quantity="one">%1$d file could not be verified. It is retried next time.</item>
+        <item quantity="other">%1$d files could not be verified. They are retried next time.</item>
+    </plurals>
+    <string name="notif_verified">Verified and stored in the archive on this phone.</string>
+    <!-- iOS only. -->
+    <string name="autosync_ios_hint">iOS picks when it runs.</string>
+    <string name="autosync_ios_keep_open">Keep the app open until it finishes.</string>
+    <string name="autosync_progress_title">Collecting from sensors</string>
+    <plurals name="autosync_sensors">
+        <item quantity="one">%1$d sensor</item>
+        <item quantity="other">%1$d sensors</item>
+    </plurals>
 </resources>

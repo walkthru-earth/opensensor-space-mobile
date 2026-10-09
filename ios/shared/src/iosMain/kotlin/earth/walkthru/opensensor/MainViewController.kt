@@ -1,5 +1,7 @@
 package earth.walkthru.opensensor
 
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.window.ComposeUIViewController
 import platform.UIKit.UIViewController
@@ -14,8 +16,29 @@ import platform.UIKit.UIViewController
  * with this hardware id, or returns null while a sync or another request holds it. Closing the
  * link hands it back. [command] sends a confirmed `SET_TIME` or `FLUSH` from Today over the
  * Bluetooth connection.
+ * [autoSync] holds the per device Auto-sync switches, and [syncInBackground] hands one sensor to
+ * the background run, answering true only when iOS took it as a continued task. [closeIdle] runs
+ * when the last Today or Device page for a sensor leaves the back stack. Swift closes that
+ * peripheral's link only when it is idle, never during a sync, a command, Collect all or a Debug lend.
  */
-fun mainViewController(state: CompanionState, devices: DevicesBridge, requestBluetooth: () -> Unit, openSensor: (String) -> Unit, disconnect: () -> Unit, scanLan: () -> Unit, saveWifiAccess: () -> Unit, connectLan: (String) -> Unit, syncLan: (String) -> Unit, disconnectLan: (String) -> Unit, syncBluetooth: () -> Unit, openDebugLink: (String) -> SensorLink?, command: (SensorCommand) -> Unit): UIViewController =
+fun mainViewController(
+    state: CompanionState,
+    devices: DevicesBridge,
+    autoSync: AutoSyncSettings,
+    requestBluetooth: () -> Unit,
+    openSensor: (String) -> Unit,
+    disconnect: () -> Unit,
+    scanLan: () -> Unit,
+    saveWifiAccess: () -> Unit,
+    connectLan: (String) -> Unit,
+    syncLan: (String) -> Unit,
+    disconnectLan: (String) -> Unit,
+    syncBluetooth: () -> Unit,
+    syncInBackground: (String) -> Boolean,
+    closeIdle: (String) -> Unit,
+    openDebugLink: (String) -> SensorLink?,
+    command: (SensorCommand) -> Unit,
+): UIViewController =
     ComposeUIViewController {
         // A sensor the user opens takes the one Bluetooth link, so Collect all stops first.
         val userOpen: (String) -> Unit = { id ->
@@ -23,13 +46,16 @@ fun mainViewController(state: CompanionState, devices: DevicesBridge, requestBlu
             openSensor(id)
         }
         val today = remember { CompanionToday(state, CompanionLinkActions(syncFiles = syncBluetooth, command = command, connect = userOpen, disconnect = disconnect)) }
-        AppRoot(devices, today, requestBluetooth, userOpen, openDebugLink) { id, units, level, openDebug, onBack ->
+        AppRoot(devices, today, requestBluetooth, userOpen, openDebugLink, closeIdle) { id, units, level, openDebug, onBack ->
+            val peripheral = IosKnown.isPeripheral(id)
+            val records by devices.known.collectAsState()
+            val known = peripheral && records.any { it.peripheral.equals(id, ignoreCase = true) }
             // Detailed and Developer reveal the technical lines (signal, firmware, byte counters), as on Android.
             CompanionScreen(
                 state = state,
                 title = devices.nameFor(id),
                 onBack = onBack,
-                reconnect = if (IosKnown.isPeripheral(id)) ({ userOpen(id) }) else null,
+                reconnect = if (peripheral) ({ userOpen(id) }) else null,
                 disconnect = disconnect,
                 scanLan = scanLan,
                 saveWifiAccess = saveWifiAccess,
@@ -40,6 +66,7 @@ fun mainViewController(state: CompanionState, devices: DevicesBridge, requestBlu
                 units = units,
                 showTechnical = level.detailed,
                 onOpenDebug = openDebug,
+                autoSync = if (known) ({ AutoSyncSwitch(autoSync, id, syncInBackground) }) else null,
             )
         }
     }

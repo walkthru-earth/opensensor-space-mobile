@@ -7,16 +7,17 @@ import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Upsert
+import earth.walkthru.aqsync.data.background.BackgroundSyncDevice
 import kotlinx.coroutines.flow.Flow
 
 /** A logger we have connected to at least once. Keyed by Bluetooth address. */
 @Entity(tableName = "known_device")
 data class KnownDevice(
-    @PrimaryKey val address: String,
+    @PrimaryKey override val address: String,
     /** Advertised local name, `AQ-xxxx`. */
-    val name: String?,
+    override val name: String?,
     /** `info.station` UUID once read; null until the first successful connection. */
-    val station: String?,
+    override val station: String?,
     /** `info.dev`, 12 hex. */
     val deviceId: String?,
     val firmware: String?,
@@ -45,8 +46,8 @@ data class KnownDevice(
      * memory of it so the Device screen and the presence service can skip a lookup. Schema v8.
      */
     val companionAssociationId: Int? = null,
-) {
-    val hasLanToken: Boolean get() = lanToken != null
+) : BackgroundSyncDevice {
+    override val hasLanToken: Boolean get() = lanToken != null
     val hasCompanion: Boolean get() = companionAssociationId != null
 
     /** Safe for logs: identity without the secret. */
