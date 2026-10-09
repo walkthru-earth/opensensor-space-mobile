@@ -3,6 +3,11 @@ import UIKit
 
 @main
 final class AppDelegate: UIResponder, UIApplicationDelegate {
+    override init() {
+        AppLanguage.align()
+        super.init()
+    }
+
     func application(
         _ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession,
         options: UIScene.ConnectionOptions
@@ -111,5 +116,34 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate, UIDocumentPickerD
         exportFolder = nil
         preparedExport = nil
         bluetooth.state.exportChanged(busy: false, explanation: message)
+    }
+}
+
+/// One language for the whole app (docs/cross-platform-guide.md, Languages and right to left).
+///
+/// UIKit takes the first of the phone's languages that the app ships (`CFBundleLocalizations`) for
+/// the layout direction and the purpose strings. Compose resources read only the first preferred
+/// language. With French then Arabic that would mix English shared screens with a right-to-left
+/// layout and Arabic prompts. `align` puts the language the bundle resolved first, through the
+/// argument domain, which lasts for this launch and is never saved, so the user's own per-app
+/// language choice stays theirs. That choice already leads the list, so `align` leaves it alone.
+enum AppLanguage {
+    static func align() {
+        guard let resolved = Bundle.main.preferredLocalizations.first else { return }
+        let preferred = Locale.preferredLanguages
+        guard let ordered = reorder(preferred, resolved) else { return }
+        var arguments = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)
+        arguments["AppleLanguages"] = ordered
+        UserDefaults.standard.setVolatileDomain(arguments, forName: UserDefaults.argumentDomain)
+    }
+
+    /// `languages` with the first tag in `language` moved to the front, or nil when it already leads
+    /// or is absent (then English applies everywhere and nothing mixes).
+    static func reorder(_ languages: [String], _ language: String) -> [String]? {
+        func code(_ tag: String) -> String? { Locale(identifier: tag).language.languageCode?.identifier }
+        guard let index = languages.firstIndex(where: { code($0) == code(language) }), index > 0 else { return nil }
+        var ordered = languages
+        ordered.insert(ordered.remove(at: index), at: 0)
+        return ordered
     }
 }

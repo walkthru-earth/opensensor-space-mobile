@@ -8,6 +8,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.intl.Locale
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.sp
@@ -83,11 +84,13 @@ fun usesCairoText(language: String, direction: LayoutDirection): Boolean =
     usesArabicScript(language) || direction == LayoutDirection.Rtl
 
 /**
- * The language of the phone's first preferred locale (Android `Configuration.locales[0]`, iOS
- * `NSLocale.preferredLanguages`). Recomposes when Android changes its configuration.
+ * The app's language, read where Compose resources read it (`Locale.current`), so the font always
+ * matches the strings on screen. Each platform first moves the language its own resources resolved
+ * to the front (Android `AppLanguage`, iOS `AppLanguage` in `AppDelegate.swift`), so a phone set to
+ * French then Arabic gets Arabic strings, Cairo and a right-to-left layout together.
  */
 @Composable
-expect fun preferredLanguage(): String
+fun preferredLanguage(): String = Locale.current.language
 
 /**
  * The type scale. Headings are bold and rounded like the website (`.brand-page h1..h4` are weight

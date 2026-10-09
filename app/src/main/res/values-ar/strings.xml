@@ -7,6 +7,8 @@
 -->
 <resources>
     <string name="app_name">opensensor.space</string>
+    <!-- The language this folder holds, read by AppLanguage. Not copy, keep the tag. -->
+    <string name="locale_tag">ar</string>
 
     <!-- Common -->
     <string name="action_cancel">إلغاء</string>
