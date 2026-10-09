@@ -191,8 +191,15 @@ the user pages back, and opens on the last local day with readings.
 | Tiers | Room `metric_bucket` (`RoomHistoryTiers`) | computed in memory from the archive (`ArchiveHistoryTiers`) |
 | Current station | the known device's station | the archived station with the latest reading |
 | Chips | the device's authenticated station epochs | every archived station, oldest latest reading first |
-| Index repair | `HistoryIndexer.backfillAll` once per process from `AqSyncApplication`, and after each sync | `IosArchive.startIndexRepair`, at launch and whenever a receipt waits for its index |
+| Index repair | `HistoryIndexer.backfillAll` once per process from `AqSyncApplication`, and after each sync | `ArchiveIndexRepair.repairWhenWaiting` from `IosArchive.startIndexRepair`, at launch and whenever a receipt waits for its index. Changes during a pass are conflated, and passes repeat until no record is waiting |
 | Header | device section tabs and the link chip | a back arrow, opened from a History button on My devices |
+
+Repair writes only its own columns. It merges the index and estimate columns onto the latest
+record with `ArchiveIndex.update`, so a fingerprint the engine fills during a pass survives.
+`ReceiptArchiveIndex` reads and writes under its lock. Room uses the default read then write,
+which narrows the race but is not atomic (follow-up, a Room transaction). The engine's own
+fingerprint fill still writes back a whole record. When that snapshot lacks the index columns,
+the record waits again and the next pass repairs it.
 
 `commonTest` covers the presentation helpers, the y axis ticks (metric and imperial) and the
 controller over a fake archive. It runs as the Android host test and on the iOS simulator.

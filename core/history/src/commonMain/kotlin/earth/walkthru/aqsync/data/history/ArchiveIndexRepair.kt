@@ -88,7 +88,8 @@ class ArchiveIndexRepair(
                 }
                 // A failed retry of an already failed record changes nothing. Skip the write so the loop ends.
                 if (record.indexError != null && updated.indexError != null) continue
-                index.put(updated)
+                // Only the index columns are repair's. The engine may have changed the rest meanwhile.
+                index.update(record.key) { latest -> withIndexColumns(latest, updated) }
                 done++
             }
             if (done > 0) log("indexed $done files (${pending.size} candidates)")
@@ -154,7 +155,7 @@ class ArchiveIndexRepair(
             for (f in files) {
                 val updated = estimated(f, anchors)
                 if (updated != f) {
-                    index.put(updated)
+                    index.update(f.key) { latest -> latest.copy(estFirstUtcNs = updated.estFirstUtcNs, estLastUtcNs = updated.estLastUtcNs, estAnchorFile = updated.estAnchorFile) }
                     changed++
                 }
             }
@@ -170,6 +171,25 @@ class ArchiveIndexRepair(
             is HivePartition.Unsynced -> partition.station
             else -> null
         }
+
+        /** [latest] with the index columns of [indexed], which repair filled from the file. Every other column stays as [latest] has it. */
+        fun withIndexColumns(latest: ArchiveRecord, indexed: ArchiveRecord): ArchiveRecord = latest.copy(
+            indexedAtEpochMs = indexed.indexedAtEpochMs,
+            indexError = indexed.indexError,
+            rows = indexed.rows,
+            rowGroups = indexed.rowGroups,
+            schemaVersion = indexed.schemaVersion,
+            bootId = indexed.bootId,
+            purpose = indexed.purpose,
+            utcRows = indexed.utcRows,
+            firstUtcNs = indexed.firstUtcNs,
+            lastUtcNs = indexed.lastUtcNs,
+            firstMonoUs = indexed.firstMonoUs,
+            lastMonoUs = indexed.lastMonoUs,
+            firstSeq = indexed.firstSeq,
+            lastSeq = indexed.lastSeq,
+            pmValidRows = indexed.pmValidRows,
+        )
 
         /** [file] with its estimate set from [anchors], or cleared when the anchor is gone or the file now has UTC. */
         fun estimated(file: ArchiveRecord, anchors: Map<String, TimeEstimate.Anchor>): ArchiveRecord {

@@ -33,7 +33,13 @@ class HistorySourcesTest {
         override suspend fun openPartial(key: ArchiveKey, meta: PartialMeta): PartialWriter = error("read only")
         override suspend fun discardPartial(key: ArchiveKey) = Unit
         override suspend fun exists(key: ArchiveKey): Boolean = key in files
-        override fun reader(key: ArchiveKey, partial: Boolean): ByteReader = ByteArrayReader(files[key] ?: throw NoSuchElementException(key.name))
+
+        /** Runs once, on the first read, while repair holds a snapshot of the record. */
+        var onFirstRead: (() -> Unit)? = null
+        override fun reader(key: ArchiveKey, partial: Boolean): ByteReader {
+            onFirstRead?.also { onFirstRead = null }?.invoke()
+            return ByteArrayReader(files[key] ?: throw NoSuchElementException(key.name))
+        }
         override suspend fun commit(key: ArchiveKey) = Unit
         override suspend fun listFinal(station: String?): List<ArchiveKey> = files.keys.filter { station == null || it.station == station }
     }
@@ -125,6 +131,22 @@ class HistorySourcesTest {
         repair.backfillUntilSettled()
         assertTrue(index.get(first.key)!!.indexed)
         assertTrue(index.get(late.key)!!.indexed)
+    }
+
+    @Test
+    fun repairKeepsAFingerprintTheEngineFilledDuringThePass() = runTest {
+        val store = Store()
+        val index = Index()
+        val old = record("station=$station/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet").copy(sha256 = "")
+        store.files[old.key] = board
+        index.put(old)
+        // The engine fills the fingerprint of an older receipt while repair reads the file.
+        store.onFirstRead = { index.rows.value = index.rows.value.map { if (it.key == old.key) it.copy(sha256 = "filled") else it } }
+        ArchiveIndexRepair(store, index, nowEpochMs = { 42L }).backfillAll()
+        val after = index.get(old.key)!!
+        assertEquals("filled", after.sha256)
+        assertTrue(after.indexed)
+        assertEquals(105L, after.rows)
     }
 
     @Test
