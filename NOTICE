@@ -12,3 +12,9 @@ The per-file template headers were replaced by this notice. Files derived from t
 template remain available under the Apache License 2.0 terms for those portions.
 
 Bundled fonts Quicksand and Cairo are licensed under the SIL Open Font License 1.1.
+Their licence texts ship in ui/designsystem/src/commonMain/composeResources/files/licenses/.
+
+  Cairo, Cairo[slnt,wght].ttf version 3.130, from https://github.com/google/fonts
+  ofl/cairo at commit a2c83daed9bc723922de8d0a9512990bd3d91df4 (upstream
+  https://github.com/Gue3bara/Cairo). Copyright 2009 The Cairo Project Authors.
+  Quicksand, the variable TTF from https://github.com/google/fonts ofl/quicksand.
