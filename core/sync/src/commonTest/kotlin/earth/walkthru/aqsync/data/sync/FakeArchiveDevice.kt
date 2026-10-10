@@ -76,7 +76,7 @@ class FakeArchiveDevice(
 
     override suspend fun connect() = Unit
     override suspend fun disconnect() = Unit
-    override suspend fun readInfo(): ByteArray = """{"proto":2,"station":"$station","max_read":$maxRead}""".encodeToByteArray()
+    override suspend fun readInfo(): ByteArray = """{"proto":3,"station":"$station","max_read":$maxRead}""".encodeToByteArray()
     override suspend fun readStatus(): ByteArray = "{}".encodeToByteArray()
     override suspend fun readLive(): ByteArray = "{}".encodeToByteArray()
     override fun close() {
@@ -99,7 +99,7 @@ class FakeArchiveDevice(
         when (op) {
             Opcode.LIST -> {
                 files.forEach { send(Frame.File(it.bytes.size.toLong(), it.name)) }
-                send(Frame.ListEnd(files.size, 0, 0, 0))
+                send(Frame.ListEnd(files.size.toLong(), 0, 0, 0))
             }
             Opcode.OPEN -> {
                 val name = req.copyOfRange(1, req.size).decodeToString()

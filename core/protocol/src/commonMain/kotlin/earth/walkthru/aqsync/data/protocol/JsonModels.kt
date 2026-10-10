@@ -87,12 +87,26 @@ data class DeviceStatus(
     val heap: Long? = null,
     /** Retained `.partial` files seen at the last listing. */
     val part: Int? = null,
+    /** Protocol 3. BLE and LAN sessions closed since boot, refused LAN clients included, saturating at 65535. */
+    val dc: Int? = null,
+    /** Protocol 3. The latest [DisconnectReason] code, absent while [dc] is 0. */
+    val dr: Int? = null,
+    /** Card state from walkthru-earth/aq-parquet#5, 0 ready, 1 degraded, 2 full, 3 retrying after an error. */
+    @SerialName("sd_state") val sdState: Int? = null,
 ) {
     val utcSynced: Boolean get() = utc == 1
     val storageFailed: Boolean get() = fail == 1
     val sdMounted: Boolean get() = sd == 1
+    val lastDisconnect: DisconnectReason? get() = dr?.let(DisconnectReason::fromCode)
+    val sdDegraded: Boolean get() = sdState == SD_DEGRADED
+    val sdFull: Boolean get() = sdState == SD_FULL
 
     companion object {
+        const val SD_READY: Int = 0
+        const val SD_DEGRADED: Int = 1
+        const val SD_FULL: Int = 2
+        const val SD_RETRY: Int = 3
+
         fun parse(text: String): DeviceStatus = AqJson.decodeFromString(serializer(), text)
     }
 }

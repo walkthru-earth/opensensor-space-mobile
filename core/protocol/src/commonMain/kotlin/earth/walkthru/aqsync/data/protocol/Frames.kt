@@ -1,8 +1,9 @@
 package earth.walkthru.aqsync.data.protocol
 
 /**
- * Binary `control` requests and `response` frames from docs/ble-sync-protocol.md (protocol v2;
- * v1 is a strict subset).
+ * Binary `control` requests and `response` frames from docs/ble-sync-protocol.md (protocol v3).
+ * Protocol 3 widens `LIST_END.count` to u32 and adds `GET_DIAG`, `ABORT`, `BYE`, `DIAG` and
+ * `ABORTED`. A proto 2 `LIST_END` is rejected.
  *
  * Every multi-byte integer is little-endian. Text is UTF-8 with no terminator; its length is
  * implied by the frame length. The first byte of a request is the opcode; the first byte of a
@@ -25,6 +26,10 @@ object Opcode {
     const val LOG_TAIL: Int = 0x0C
     const val GET_TOKEN: Int = 0x0D
 
+    // Protocol v3 (disconnect diagnostics, abort).
+    const val GET_DIAG: Int = 0x0E
+    const val ABORT: Int = 0x0F
+
     fun name(op: Int): String = when (op) {
         LIST -> "LIST"
         OPEN -> "OPEN"
@@ -39,6 +44,8 @@ object Opcode {
         REBOOT -> "REBOOT"
         LOG_TAIL -> "LOG_TAIL"
         GET_TOKEN -> "GET_TOKEN"
+        GET_DIAG -> "GET_DIAG"
+        ABORT -> "ABORT"
         else -> "0x${op.toString(16).padStart(2, '0')}"
     }
 }
@@ -73,6 +80,13 @@ object FrameType {
 
     /** BLE-only slices of a CONFIG JSON body when one notification cannot carry it. */
     const val CONFIG_CHUNK: Int = 0x4A
+
+    // Protocol v3.
+
+    /** LAN only: the device's reason for closing, sent just before the socket closes. */
+    const val BYE: Int = 0x4B
+    const val DIAG: Int = 0x4C
+    const val ABORTED: Int = 0x4D
     const val ERROR: Int = 0x7F
 
     fun name(type: Int): String = when (type) {
@@ -95,6 +109,9 @@ object FrameType {
         STATUS -> "STATUS"
         CONFIG_CHUNK -> "CONFIG_CHUNK"
         LIVE -> "LIVE"
+        BYE -> "BYE"
+        DIAG -> "DIAG"
+        ABORTED -> "ABORTED"
         ERROR -> "ERROR"
         else -> "0x${type.toString(16).padStart(2, '0')}"
     }
@@ -116,7 +133,8 @@ enum class ProtocolError(val code: Int, val label: String) {
     INVALID_CONFIG(12, "invalid config"),
     NOT_ALLOWED_ON_LINK(13, "not allowed on this link"),
     AUTH_FAILED(14, "authentication failed"),
-    WIFI_UNAVAILABLE(15, "Wi-Fi unavailable");
+    WIFI_UNAVAILABLE(15, "Wi-Fi unavailable"),
+    ABORTED(16, "aborted");
 
     companion object {
         fun fromCode(code: Int): ProtocolError? = entries.firstOrNull { it.code == code }
@@ -230,6 +248,20 @@ sealed interface Request {
         override val opcode: Int = Opcode.GET_TOKEN
         override fun encode(): ByteArray = byteArrayOf(opcode.toByte())
     }
+
+    // ------------------------------------------------------------------ v3
+
+    /** Empty body. Answered by `DIAG`, or `ERROR` 7 `mtu` on a link narrower than 38 bytes. */
+    data object GetDiag : Request {
+        override val opcode: Int = Opcode.GET_DIAG
+        override fun encode(): ByteArray = byteArrayOf(opcode.toByte())
+    }
+
+    /** Empty body. Answered by `ABORTED` with the opcode it stopped, 0 when idle. */
+    data object Abort : Request {
+        override val opcode: Int = Opcode.ABORT
+        override fun encode(): ByteArray = byteArrayOf(opcode.toByte())
+    }
 }
 
 /** `WIFI_AP.auth` values. */
@@ -254,8 +286,8 @@ sealed interface Frame {
     /** `bytes` u32, `name` utf8. */
     data class File(val bytes: Long, val name: String) : Frame
 
-    /** `count` u16, `partials` u16, `sd_kib` u32, `sd_used_kib` u32. */
-    data class ListEnd(val count: Int, val partials: Int, val sdKib: Long, val sdUsedKib: Long) : Frame
+    /** `count` u32, `partials` u16, `sd_kib` u32, `sd_used_kib` u32. 15 bytes with the type. */
+    data class ListEnd(val count: Long, val partials: Int, val sdKib: Long, val sdUsedKib: Long) : Frame
 
     /** `handle` u16, `size` u32, `crc32` u32, `name` utf8. */
     data class Opened(val handle: Int, val size: Long, val crc32: Long, val name: String) : Frame
@@ -334,6 +366,28 @@ sealed interface Frame {
     /** LAN only, push: live JSON. */
     data class LivePush(val json: String) : Frame
 
+    // ------------------------------------------------------------------ v3
+
+    /**
+     * LAN only, sent once before the device closes the socket. `reason` u8, `generation` u32,
+     * `err` i16, `queued` u16, `uptime_s` u32. It can be lost, so EOF without BYE means unknown.
+     */
+    data class Bye(val reason: Int, val generation: Long, val err: Int, val queued: Int, val uptimeSeconds: Long) : Frame {
+        val disconnectReason: DisconnectReason get() = DisconnectReason.fromCode(reason)
+    }
+
+    /**
+     * `boot_seq` u16, one saturating u16 counter per [DisconnectReason] code, `n` u8, then `n`
+     * events oldest first.
+     */
+    data class Diag(val bootSeq: Int, val counts: List<Int>, val events: List<DisconnectEvent>) : Frame {
+        /** Counter for one reason, 0 when the device reported fewer slots. */
+        fun count(reason: DisconnectReason): Int = counts.getOrElse(reason.code) { 0 }
+    }
+
+    /** `op` u8, the opcode `ABORT` stopped, 0 when nothing was running. */
+    data class Aborted(val op: Int) : Frame
+
     /** `op` u8, `code` u8, `detail` utf8. */
     data class Error(val op: Int, val code: Int, val detail: String) : Frame {
         val error: ProtocolError? get() = ProtocolError.fromCode(code)
@@ -358,12 +412,15 @@ object FrameCodec {
         return try {
             when (type) {
                 FrameType.FILE -> Frame.File(bytes = buf.u32(), name = buf.restUtf8())
-                FrameType.LIST_END -> Frame.ListEnd(
-                    count = buf.u16(),
-                    partials = buf.u16(),
-                    sdKib = buf.u32(),
-                    sdUsedKib = buf.u32()
-                )
+                FrameType.LIST_END -> {
+                    if (raw.size != LIST_END_BYTES) throw FrameDecodeException("invalid LIST_END length ${raw.size}")
+                    Frame.ListEnd(
+                        count = buf.u32(),
+                        partials = buf.u16(),
+                        sdKib = buf.u32(),
+                        sdUsedKib = buf.u32()
+                    )
+                }
                 FrameType.OPENED -> Frame.Opened(
                     handle = buf.u16(),
                     size = buf.u32(),
@@ -414,6 +471,30 @@ object FrameCodec {
                 FrameType.HELLO -> Frame.Hello(proto = buf.u8(), payloadMax = buf.u16(), infoJson = buf.restUtf8())
                 FrameType.STATUS -> Frame.StatusPush(buf.restUtf8())
                 FrameType.LIVE -> Frame.LivePush(buf.restUtf8())
+                FrameType.BYE -> {
+                    if (raw.size != BYE_BYTES) throw FrameDecodeException("invalid BYE length ${raw.size}")
+                    Frame.Bye(
+                        reason = buf.u8(),
+                        generation = buf.u32(),
+                        err = buf.short.toInt(),
+                        queued = buf.u16(),
+                        uptimeSeconds = buf.u32(),
+                    )
+                }
+                FrameType.DIAG -> {
+                    val bootSeq = buf.u16()
+                    val counts = List(DisconnectReason.COUNT) { buf.u16() }
+                    val n = buf.u8()
+                    if (buf.remaining() != n * DisconnectEvent.BYTES) {
+                        throw FrameDecodeException("DIAG declares $n events but carries ${buf.remaining()} bytes")
+                    }
+                    val events = List(n) { i -> DisconnectEvent.decode(raw, DIAG_HEADER_BYTES + i * DisconnectEvent.BYTES) }
+                    Frame.Diag(bootSeq, counts, events)
+                }
+                FrameType.ABORTED -> {
+                    if (raw.size != 2) throw FrameDecodeException("invalid ABORTED length ${raw.size}")
+                    Frame.Aborted(op = buf.u8())
+                }
                 FrameType.ERROR -> Frame.Error(op = buf.u8(), code = buf.u8(), detail = buf.restUtf8())
                 else -> throw FrameDecodeException("unknown frame type 0x${type.toString(16).padStart(2, '0')}")
             }
@@ -433,8 +514,8 @@ object FrameCodec {
                 val n = frame.name.encodeToByteArray()
                 le(5 + n.size).put(FrameType.FILE.toByte()).putInt(frame.bytes.toInt()).put(n).array()
             }
-            is Frame.ListEnd -> le(13).put(FrameType.LIST_END.toByte())
-                .putShort(frame.count.toShort()).putShort(frame.partials.toShort())
+            is Frame.ListEnd -> le(LIST_END_BYTES).put(FrameType.LIST_END.toByte())
+                .putInt(frame.count.toInt()).putShort(frame.partials.toShort())
                 .putInt(frame.sdKib.toInt()).putInt(frame.sdUsedKib.toInt()).array()
             is Frame.Opened -> {
                 val n = frame.name.encodeToByteArray()
@@ -485,8 +566,31 @@ object FrameCodec {
                 val j = frame.json.encodeToByteArray()
                 le(1 + j.size).put(FrameType.LIVE.toByte()).put(j).array()
             }
+            is Frame.Bye -> le(BYE_BYTES).put(FrameType.BYE.toByte()).put(frame.reason.toByte())
+                .putInt(frame.generation.toInt()).putShort(frame.err.toShort())
+                .putShort(frame.queued.toShort()).putInt(frame.uptimeSeconds.toInt()).array()
+            is Frame.Diag -> {
+                require(frame.counts.size == DisconnectReason.COUNT) { "DIAG needs ${DisconnectReason.COUNT} counts" }
+                require(frame.events.size <= 0xFF) { "DIAG carries at most 255 events" }
+                val out = le(DIAG_HEADER_BYTES + frame.events.size * DisconnectEvent.BYTES)
+                    .put(FrameType.DIAG.toByte()).putShort(frame.bootSeq.toShort())
+                frame.counts.forEach { out.putShort(it.toShort()) }
+                out.put(frame.events.size.toByte())
+                frame.events.forEach { out.put(it.encode()) }
+                out.array()
+            }
+            is Frame.Aborted -> le(2).put(FrameType.ABORTED.toByte()).put(frame.op.toByte()).array()
         }
     }
+
+    /** `LIST_END` size with the type byte. Proto 2 sent 13. */
+    const val LIST_END_BYTES: Int = 15
+
+    /** `BYE` size with the type byte. The LAN wire adds the two-byte length. */
+    const val BYE_BYTES: Int = 14
+
+    /** `DIAG` size with the type byte and no events. */
+    const val DIAG_HEADER_BYTES: Int = 4 + 2 * DisconnectReason.COUNT
 
     /** Frame type byte of a raw frame, or null when empty. Cheap dispatch without a full decode. */
     fun typeOf(raw: ByteArray): Int? = raw.firstOrNull()?.toInt()?.and(0xFF)
