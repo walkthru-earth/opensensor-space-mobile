@@ -190,9 +190,9 @@ class ParquetReader private constructor(
 
         var groups = request.rowGroups?.distinct()?.sorted() ?: metadata.rowGroups.indices.toList()
         for (g in groups) if (g !in metadata.rowGroups.indices) throw ParquetFormatException("row group $g does not exist in ${s.id.uri}")
+        val valueRanges = ValueRanges(request.filterRanges)
         if (filterLeaf != null) {
-            val ranges = request.filterRanges.filter { !it.isEmpty() }
-            val kept = metadata.rowGroupsOverlapping(filterLeaf.name, ranges).toSet()
+            val kept = metadata.rowGroupsOverlapping(filterLeaf.name, valueRanges.ranges).toSet()
             groups = groups.filter { it in kept }
         }
 
@@ -202,7 +202,7 @@ class ParquetReader private constructor(
         val plans = ArrayList<Plan>()
         if (usePages) loadPageIndexes(groups, decoded, filterLeaf!!, offsetIndexes)
         for (g in groups) {
-            val selection = if (usePages) selectRows(g, filterLeaf!!, request.filterRanges, offsetIndexes) else null
+            val selection = if (usePages) selectRows(g, filterLeaf!!, valueRanges, offsetIndexes) else null
             if (selection != null && selection.starts.isEmpty()) continue
             plans += Plan(g, selection)
         }
@@ -267,7 +267,7 @@ class ParquetReader private constructor(
             }
         }
         val columns = work.associate { it.leaf to it.sink.build() }
-        val batch = if (filterLeaf != null) keepMatching(columns, filterLeaf, request.filterRanges) else columns
+        val batch = if (filterLeaf != null) keepMatching(columns, filterLeaf, valueRanges) else columns
         val rows = batch.values.firstOrNull()?.size ?: if (filterLeaf != null) 0 else rowCount.toInt()
         val out = LinkedHashMap<String, PrimitiveColumn>()
         for (leaf in wanted) out[leaf.name] = batch.getValue(leaf)
@@ -313,7 +313,7 @@ class ParquetReader private constructor(
      * The rows of [rowGroup] whose page of [filterLeaf] may hold a value in [ranges], by the column index;
      * null (every row) when the file has no usable page index for it.
      */
-    private suspend fun selectRows(rowGroup: Int, filterLeaf: LeafColumn, ranges: List<LongRange>, offsetIndexes: Map<Long, OffsetIndex>): RowSelection? {
+    private suspend fun selectRows(rowGroup: Int, filterLeaf: LeafColumn, ranges: ValueRanges, offsetIndexes: Map<Long, OffsetIndex>): RowSelection? {
         val k = key(rowGroup, filterLeaf.index)
         val oi = offsetIndexes[k] ?: return null
         val ci = cache.withEntry(state.entry) { it.columnIndexes[k] } ?: return null
@@ -325,7 +325,7 @@ class ParquetReader private constructor(
             if (ci.nullPages[p]) continue
             val lo = ci.minLong(p, filterLeaf.type)
             val hi = ci.maxLong(p, filterLeaf.type)
-            val may = lo == null || hi == null || ranges.any { r -> !r.isEmpty() && r.first <= hi && r.last >= lo }
+            val may = lo == null || hi == null || ranges.overlaps(lo, hi)
             if (may) {
                 from += oi.firstRows[p]
                 until += oi.pageRowEnd(p, rows)
@@ -335,12 +335,11 @@ class ParquetReader private constructor(
     }
 
     /** The rows whose [filterLeaf] value lies in one of [ranges], every column compacted alike. */
-    private fun keepMatching(columns: Map<LeafColumn, PrimitiveColumn>, filterLeaf: LeafColumn, ranges: List<LongRange>): Map<LeafColumn, PrimitiveColumn> {
+    private fun keepMatching(columns: Map<LeafColumn, PrimitiveColumn>, filterLeaf: LeafColumn, ranges: ValueRanges): Map<LeafColumn, PrimitiveColumn> {
         val filter = columns.getValue(filterLeaf)
         val n = filter.size
         val keep = BooleanArray(n)
         var kept = 0
-        val sorted = ranges.filter { !it.isEmpty() }
         for (i in 0 until n) {
             if (filter.isNull(i)) continue
             val value = when (filter) {
@@ -348,7 +347,7 @@ class ParquetReader private constructor(
                 is PrimitiveColumn.I32 -> filter.values[i].toLong()
                 else -> continue
             }
-            if (sorted.any { value >= it.first && value <= it.last }) {
+            if (ranges.contains(value)) {
                 keep[i] = true
                 kept++
             }
@@ -435,5 +434,41 @@ class ParquetReader private constructor(
         }
 
         private fun key(rowGroup: Int, column: Int): Long = (rowGroup.toLong() shl 32) or column.toLong()
+    }
+}
+
+/** Inclusive value ranges, sorted and merged once, so each test is a binary search. */
+internal class ValueRanges(ranges: List<LongRange>) {
+    val ranges: List<LongRange> = buildList {
+        for (r in ranges.filter { !it.isEmpty() }.sortedBy { it.first }) {
+            val last = lastOrNull()
+            if (last != null && (r.first <= last.last || (last.last != Long.MAX_VALUE && r.first == last.last + 1))) {
+                if (r.last > last.last) set(size - 1, last.first..r.last)
+            } else {
+                add(r)
+            }
+        }
+    }
+
+    /** The first range whose end is at or after [value], or [ranges].size. */
+    private fun firstEndingAtOrAfter(value: Long): Int {
+        var lo = 0
+        var hi = ranges.size
+        while (lo < hi) {
+            val mid = (lo + hi) ushr 1
+            if (ranges[mid].last < value) lo = mid + 1 else hi = mid
+        }
+        return lo
+    }
+
+    fun contains(value: Long): Boolean {
+        val i = firstEndingAtOrAfter(value)
+        return i < ranges.size && ranges[i].first <= value
+    }
+
+    /** Whether some range meets `[lo, hi]`. */
+    fun overlaps(lo: Long, hi: Long): Boolean {
+        val i = firstEndingAtOrAfter(lo)
+        return i < ranges.size && ranges[i].first <= hi
     }
 }

@@ -17,7 +17,9 @@ The layout and schema follow docs/devices-and-discovery.md, "Public feed contrac
   `__mean`, `__min`, `__max` (DOUBLE, null when the cell does not measure the property).
 - Hourly means only. Values are rounded to each property's precision.
 - SNAPPY compression (never ZSTD), PLAIN or RLE_DICTIONARY encodings, statistics on every
-  column, page indexes, and small row groups so that pruning by `h3_index` ranges matters.
+  column. One row group per file, sorted by `h3_index` (declared in `sorting_columns`), cut
+  into small pages of about PAGE_ROWS rows with a page index, so a viewport reads only the
+  pages whose `h3_index` range it covers, as the live feed will.
 - Key value metadata `sample = true` and `dictionary` (property id, label, unit, category,
   precision), so the app reads labels and units from the file, never from code.
 
@@ -44,7 +46,7 @@ PARTITION = datetime(2026, 10, 8, 10, tzinfo=timezone.utc)  # the last complete 
 HOURS = 7 * 24
 FINEST = 7
 COARSEST = 2
-ROW_GROUP_ROWS = 24
+PAGE_ROWS = 16
 WINDOWS = {"1h": 1, "24h": 24, "7d": HOURS}
 
 # Property dictionary. Precision follows the privacy rule on rounding (PM to 1 µg/m³,
@@ -187,7 +189,12 @@ def write(rows: list[tuple[int, dict]], path: Path, window: str, res: int) -> No
         table,
         path,
         compression="snappy",
-        row_group_size=ROW_GROUP_ROWS,
+        row_group_size=len(rows),
+        # A page closes once it holds data_page_size bytes, checked every write_batch_size rows,
+        # so a tiny page size gives pages of exactly PAGE_ROWS rows.
+        data_page_size=1,
+        write_batch_size=PAGE_ROWS,
+        sorting_columns=[pq.SortingColumn(0)],
         use_dictionary=False,
         write_statistics=True,
         write_page_index=True,
