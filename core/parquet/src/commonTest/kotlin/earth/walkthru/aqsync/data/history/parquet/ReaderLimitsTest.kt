@@ -43,4 +43,14 @@ class ReaderLimitsTest {
         // The untouched columns still read.
         assertEquals(190, openWith(small).use { it.scan(ScanRequest(listOf("devices"))) }.rowCount)
     }
+
+    @Test
+    fun `an offset index that leaves its chunk fails instead of reading outside it`() = runTest {
+        val short = withChunk("h3_index") { it.copy(totalCompressedSize = 64) }
+        val h3 = (ParquetFile.wrap(bytes, path).readColumn("h3_index") as ColumnValues.Int64).values
+        // A range inside the row group, so the scan needs the page index.
+        val request = ScanRequest(listOf("h3_index"), filterColumn = "h3_index", filterRanges = listOf(h3[45]..h3[50]))
+        val e = assertFailsWith<ParquetFormatException> { openWith(short).use { it.scan(request) } }
+        assertTrue(e.message, e.message!!.contains("leaves its chunk"))
+    }
 }

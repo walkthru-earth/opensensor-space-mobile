@@ -269,8 +269,9 @@ class ParquetReader private constructor(
                 val pageViews = List(segment.pages.size) { views[v++] }
                 val starts = LongArray(segment.pages.size) { oi.offsets[segment.pages[it]] }
                 val firstRows = LongArray(segment.pages.size) { oi.firstRows[segment.pages[it]] }
+                val pageRows = LongArray(segment.pages.size) { oi.pageRowEnd(segment.pages[it], rg.numRows) - firstRows[it] }
                 try {
-                    decoder.decodePages(prefix, segment.prefix!!.first, pageViews, starts, firstRows)
+                    decoder.decodePages(prefix, segment.prefix!!.first, pageViews, starts, firstRows, pageRows)
                 } catch (e: ChunkDecoder.WindowTooShort) {
                     throw ParquetFormatException("'${segment.leaf.name}': page at ${e.offset} does not match its offset index (${s.id.uri})")
                 }
@@ -291,7 +292,7 @@ class ParquetReader private constructor(
     private suspend fun loadPageIndexes(groups: List<Int>, decoded: List<LeafColumn>, filterLeaf: LeafColumn, offsetIndexes: HashMap<Long, OffsetIndex>) {
         val s = state
         val entry = s.entry
-        class Want(val key: Long, val column: Boolean, val range: LongRange)
+        class Want(val key: Long, val column: Boolean, val range: LongRange, val location: ChunkLocation)
         val wants = ArrayList<Want>()
         cache.withEntry(entry) { e ->
             for (g in groups) {
@@ -299,8 +300,8 @@ class ParquetReader private constructor(
                     val k = key(g, leaf.index)
                     val location = s.metadata.chunkLocation(g, leaf, s.id.size)
                     val oi = e.offsetIndexes[k]
-                    if (oi != null) offsetIndexes[k] = oi else location.offsetIndex?.let { wants += Want(k, false, it) }
-                    if (leaf.index == filterLeaf.index && e.columnIndexes[k] == null) location.columnIndex?.let { wants += Want(k, true, it) }
+                    if (oi != null) offsetIndexes[k] = oi else location.offsetIndex?.let { wants += Want(k, false, it, location) }
+                    if (leaf.index == filterLeaf.index && e.columnIndexes[k] == null) location.columnIndex?.let { wants += Want(k, true, it, location) }
                 }
             }
         }
@@ -310,7 +311,13 @@ class ParquetReader private constructor(
         val parsedColumns = HashMap<Long, ColumnIndex>()
         wants.forEachIndexed { i, w ->
             try {
-                if (w.column) parsedColumns[w.key] = ColumnIndex.parse(views[i]) else parsedOffsets[w.key] = OffsetIndex.parse(views[i])
+                if (w.column) {
+                    parsedColumns[w.key] = ColumnIndex.parse(views[i])
+                } else {
+                    val oi = OffsetIndex.parse(views[i])
+                    oi.checkWithin(w.location.pages, s.metadata.rowGroups[w.location.rowGroup].numRows)
+                    parsedOffsets[w.key] = oi
+                }
             } catch (e: ParquetFormatException) {
                 throw ParquetFormatException("${e.message} (${s.id.uri})", e)
             }
