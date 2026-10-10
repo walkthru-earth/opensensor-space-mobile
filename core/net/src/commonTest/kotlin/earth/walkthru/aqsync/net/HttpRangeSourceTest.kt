@@ -2,6 +2,9 @@ package earth.walkthru.aqsync.net
 
 import earth.walkthru.aqsync.data.history.parquet.SourceChangedException
 import earth.walkthru.aqsync.data.history.parquet.SourceId
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -10,15 +13,27 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 
 class HttpRangeSourceTest {
-    private class Request(val range: String?, val ifRange: String?)
+    private class Request(val range: String?, val ifRange: String?, val limit: BodyLimit)
 
-    /** Answers from [server], or from [override] when it returns non-null, and records every request. */
-    private class FakeEngine(val server: RangeServer, val override: (String?, String?) -> HttpRangeResponse? = { _, _ -> null }) : HttpRangeEngine {
+    /**
+     * Answers from [server], or from [override] when it returns non-null, and records every request.
+     * [hold] runs once the response is chosen (with the request's index), so a test can delay it. Like a
+     * real engine it refuses a body over the limit.
+     */
+    private class FakeEngine(
+        val server: RangeServer,
+        val hold: suspend (Int) -> Unit = {},
+        val override: (String?, String?) -> HttpRangeResponse? = { _, _ -> null },
+    ) : HttpRangeEngine {
         val requests = ArrayList<Request>()
 
-        override suspend fun get(url: String, range: String?, ifRange: String?, ifNoneMatch: String?): HttpRangeResponse {
-            requests += Request(range, ifRange)
-            return override(range, ifRange) ?: server.respond(range, ifRange)
+        override suspend fun get(url: String, range: String?, ifRange: String?, ifNoneMatch: String?, limit: BodyLimit): HttpRangeResponse {
+            requests += Request(range, ifRange, limit)
+            val index = requests.size - 1
+            val response = override(range, ifRange) ?: server.respond(range, ifRange)
+            hold(index)
+            if (response.body.size > limit.of(response.status)) throw bodyTooLarge(response.status, url, limit.of(response.status))
+            return response
         }
     }
 
@@ -131,8 +146,85 @@ class HttpRangeSourceTest {
 
         source.readTail(1000)
         assertContentEquals(bytes.copyOfRange(5, 15), source.readRanges(listOf(5L until 15L)).single().toByteArray())
-        assertEquals(SourceId(url, 300_000, "W/\"e1\""), source.id())
+        assertEquals(SourceId(url, 300_000, "W/\"e1\"", cacheable = false), source.id())
         assertEquals(listOf<String?>(null, null), engine.requests.map { it.ifRange })
+    }
+
+    @Test
+    fun `only a strong ETag makes the id cacheable`() = runTest {
+        assertEquals(true, HttpRangeSource(url, FakeEngine(RangeServer(payload(1000), "\"e1\""))).id().cacheable)
+        val unversioned = HttpRangeSource(url, FakeEngine(RangeServer(payload(1000), null))).id()
+        assertEquals(false, unversioned.cacheable)
+        assertEquals(1000, unversioned.size)
+    }
+
+    @Test
+    fun `a 206 may carry the requested length and any other body maxWholeBytes`() = runTest {
+        val engine = FakeEngine(RangeServer(payload(300_000), "\"e1\""))
+        val source = HttpRangeSource(url, engine, maxWholeBytes = 1_000_000)
+
+        source.readTail(1000)
+        source.readRanges(listOf(10L until 20L))
+        assertEquals(listOf(1000L, 10L), engine.requests.map { it.limit.partial })
+        assertEquals(listOf(1_000_000L, 1_000_000L), engine.requests.map { it.limit.whole })
+    }
+
+    @Test
+    fun `a whole object over maxWholeBytes is refused`() = runTest {
+        val server = RangeServer(payload(5000), "\"e1\"")
+        val engine = FakeEngine(server) { _, _ -> server.whole() }
+        val error = assertFailsWith<HttpRangeException> { HttpRangeSource(url, engine, maxWholeBytes = 4000).readTail(1000) }
+        assertEquals(200, error.status)
+        assertEquals(false, error.message.orEmpty().contains("secret"))
+    }
+
+    @Test
+    fun `the 416 fallback GET is bounded by maxWholeBytes`() = runTest {
+        val engine = FakeEngine(RangeServer(ByteArray(0), "\"e1\"")) { range, _ ->
+            if (range == null) HttpRangeResponse(200, "\"e1\"", null, null, payload(5000)) else null
+        }
+        assertFailsWith<HttpRangeException> { HttpRangeSource(url, engine, maxWholeBytes = 4000).readTail(1000) }
+        assertEquals(listOf("bytes=-1000", null), engine.requests.map { it.range })
+        assertEquals(4000L, engine.requests[1].limit.of(206))
+        assertEquals(4000L, engine.requests[1].limit.of(200))
+    }
+
+    @Test
+    fun `a parallel tail for another object throws SourceChangedException`() = runTest {
+        val server = RangeServer(payload(300_000), "\"e1\"")
+        val release = CompletableDeferred<Unit>()
+        val engine = FakeEngine(server, hold = { if (it == 0) release.await() })
+        val source = HttpRangeSource(url, engine)
+
+        val first = async(start = CoroutineStart.UNDISPATCHED) { assertFailsWith<SourceChangedException> { source.readTail(1000) } }
+        server.bytes = payload(310_000)
+        server.etag = "\"e2\""
+        source.readTail(1000)
+        release.complete(Unit)
+        val error = first.await()
+        assertEquals(SourceId(url, 310_000, "\"e2\""), error.previous)
+    }
+
+    @Test
+    fun `a stale change does not replace a newer one from a parallel read`() = runTest {
+        val server = RangeServer(payload(300_000), "\"e1\"")
+        val release = CompletableDeferred<Unit>()
+        val engine = FakeEngine(server, hold = { if (it == 1) release.await() })
+        val source = HttpRangeSource(url, engine)
+        source.readTail(1000)
+
+        server.bytes = payload(310_000)
+        server.etag = "\"e2\""
+        val stale = async(start = CoroutineStart.UNDISPATCHED) { assertFailsWith<SourceChangedException> { source.readRanges(listOf(0L until 100L)) } }
+        server.bytes = payload(320_000)
+        server.etag = "\"e3\""
+        val newer = assertFailsWith<SourceChangedException> { source.readRanges(listOf(0L until 100L)) }
+        release.complete(Unit)
+        val error = stale.await()
+
+        assertEquals(SourceId(url, 300_000, "\"e1\""), newer.previous)
+        assertEquals(SourceId(url, 300_000, "\"e1\""), error.previous)
+        assertEquals(SourceId(url, 320_000, "\"e3\""), source.id())
     }
 
     @Test

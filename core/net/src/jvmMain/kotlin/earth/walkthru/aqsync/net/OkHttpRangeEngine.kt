@@ -21,7 +21,7 @@ import kotlin.coroutines.resumeWithException
  * body transparently, and byte offsets of a gzip encoded body are not offsets in the file.
  */
 class OkHttpRangeEngine(private val client: OkHttpClient) : HttpRangeEngine {
-    override suspend fun get(url: String, range: String?, ifRange: String?, ifNoneMatch: String?): HttpRangeResponse {
+    override suspend fun get(url: String, range: String?, ifRange: String?, ifNoneMatch: String?, limit: BodyLimit): HttpRangeResponse {
         val request = Request.Builder().url(url).get().header("Accept-Encoding", "identity").apply {
             if (range != null) header("Range", range)
             if (ifRange != null) header("If-Range", ifRange)
@@ -39,7 +39,8 @@ class OkHttpRangeEngine(private val client: OkHttpClient) : HttpRangeEngine {
                     override fun onResponse(call: Call, response: Response) {
                         val result = runCatching {
                             response.use {
-                                HttpRangeResponse(it.code, it.header("ETag"), it.header("Content-Range"), it.header("Cache-Control"), it.body.bytes())
+                                val body = readBody(it, url, limit.of(it.code))
+                                HttpRangeResponse(it.code, it.header("ETag"), it.header("Content-Range"), it.header("Cache-Control"), body)
                             }
                         }
                         result.fold({ continuation.resume(it) }, { continuation.resumeWithException(it) })
@@ -47,6 +48,18 @@ class OkHttpRangeEngine(private val client: OkHttpClient) : HttpRangeEngine {
                 },
             )
         }
+    }
+
+    /**
+     * The body, at most [max] bytes. A larger `Content-Length` fails before reading, and a body without
+     * one is buffered to `max + 1` bytes at most, so an oversized body fails without being read whole.
+     */
+    private fun readBody(response: Response, url: String, max: Long): ByteArray {
+        val body = response.body
+        if (body.contentLength() > max) throw bodyTooLarge(response.code, url, max)
+        val source = body.source()
+        if (source.request(max + 1)) throw bodyTooLarge(response.code, url, max)
+        return source.buffer.readByteArray()
     }
 
     companion object {

@@ -51,23 +51,34 @@ class StubUrlProtocol @OverrideInit constructor(
         StubOrigin.requests += headers
         val answer = StubOrigin.server.respond(headers["Range"], headers["If-Range"])
         val fields = buildMap<Any?, Any?> {
-            put("Content-Length", answer.body.size.toString())
+            if (!StubOrigin.chunked) put("Content-Length", answer.body.size.toString())
             answer.etag?.let { put("ETag", it) }
             answer.contentRange?.let { put("Content-Range", it) }
         }
         val response = NSHTTPURLResponse(request.URL!!, answer.status.toLong(), "HTTP/1.1", fields)
         val client = client ?: return
         client.URLProtocol(this, didReceiveResponse = response, cacheStoragePolicy = NSURLCacheStoragePolicy.NSURLCacheStorageNotAllowed)
-        client.URLProtocol(this, didLoadData = answer.body.toNSData())
+        if (StubOrigin.chunked) {
+            for (start in answer.body.indices step CHUNK) {
+                client.URLProtocol(this, didLoadData = answer.body.copyOfRange(start, minOf(start + CHUNK, answer.body.size)).toNSData())
+            }
+        } else {
+            client.URLProtocol(this, didLoadData = answer.body.toNSData())
+        }
         client.URLProtocolDidFinishLoading(this)
     }
 
     override fun stopLoading() {}
 }
 
+private const val CHUNK = 16 * 1024
+
 /** What [StubUrlProtocol] serves and the headers it saw, reset by each test. */
 object StubOrigin {
     var server = RangeServer(ByteArray(0), null)
+
+    /** Leave out Content-Length and deliver the body in 16 KiB pieces. */
+    var chunked = false
     val requests = ArrayList<Map<String, String?>>()
 }
 
@@ -81,6 +92,7 @@ class UrlSessionRangeEngineTest {
     private fun engine(): UrlSessionRangeEngine {
         StubOrigin.server = RangeServer(bytes, "\"e1\"")
         StubOrigin.requests.clear()
+        StubOrigin.chunked = false
         val configuration = UrlSessionRangeEngine.configuration(allowsExpensive = true, allowsConstrained = true)
         configuration.setProtocolClasses(listOf(StubUrlProtocol))
         return UrlSessionRangeEngine(NSURLSession.sessionWithConfiguration(configuration))
@@ -89,6 +101,7 @@ class UrlSessionRangeEngineTest {
     @AfterTest
     fun reset() {
         StubOrigin.requests.clear()
+        StubOrigin.chunked = false
     }
 
     @Test
@@ -125,5 +138,28 @@ class UrlSessionRangeEngineTest {
         assertEquals(0, source.readTail(1000).length)
         assertEquals(0, source.id().size)
         assertEquals(listOf("bytes=-1000", null), StubOrigin.requests.map { it["Range"] })
+    }
+
+    @Test
+    fun `a whole body over maxWholeBytes fails on its Content-Length`() = runBlocking<Unit> {
+        val source = HttpRangeSource(url, engine(), maxWholeBytes = 100_000)
+        source.readTail(1000)
+
+        StubOrigin.server.etag = "\"e2\""
+        val error = assertFailsWith<HttpRangeException> { source.readRanges(listOf(0L until 100L)) }
+        assertEquals(200, error.status)
+    }
+
+    @Test
+    fun `a body without a length is collected in pieces and stops at the limit`() = runBlocking<Unit> {
+        val engine = engine()
+        StubOrigin.chunked = true
+
+        val whole = engine.get(url, null, null, null, BodyLimit(300_000, 300_000))
+        assertEquals(200, whole.status)
+        assertContentEquals(bytes, whole.body)
+
+        val error = assertFailsWith<HttpRangeException> { engine.get(url, null, null, null, BodyLimit(100_000, 100_000)) }
+        assertEquals(200, error.status)
     }
 }

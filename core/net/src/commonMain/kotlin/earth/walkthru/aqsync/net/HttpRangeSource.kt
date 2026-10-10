@@ -23,12 +23,18 @@ import kotlin.random.Random
  *   previous id, so the reader drops what it read and starts again.
  * - Once the whole object is in memory (a 200, or a tail that covered the file) every read is served
  *   from it with no request.
+ * - No body is buffered past its [BodyLimit]: a 206 at most the requested length, any other status
+ *   (a whole object) at most [maxWholeBytes]. That bounds a server that ignores `Range`, an `If-Range`
+ *   mismatch and the 416 full GET alike. A larger body fails with [HttpRangeException].
+ * - Parallel reads that see different objects throw [SourceChangedException]: a response for another
+ *   object than the one known replaces it and throws with the id it replaced, and a read that learns of
+ *   a change only replaces the known object when no other read has replaced it already.
  *
  * Only a strong ETag is sent as `If-Range`. RFC 9110 section 13.1.5 forbids a weak validator (`W/"..."`)
  * there, so a weak or missing ETag leaves the object unpinned. Such reads still detect a change of
- * size or ETag in the response, but cannot detect a same size rewrite under no ETag. Without an ETag the
- * [id] version is unique to this source instance, so a shared `FooterCache` never serves its footer to
- * another reader.
+ * size or ETag in the response, but cannot detect a same size rewrite under no ETag. The [id] of such an
+ * object is not [SourceId.cacheable], so a shared `FooterCache` keeps nothing for it. Without an ETag
+ * its version is unique to this source instance.
  *
  * Nothing is logged, and exception messages carry the URL without its query string.
  * A disk `BlockCache` is out of scope until issues #60 and #61 land.
@@ -37,11 +43,13 @@ class HttpRangeSource(
     private val url: String,
     private val engine: HttpRangeEngine,
     private val openTailBytes: Int = DEFAULT_TAIL_BYTES,
+    /** The largest whole object body (any status but 206) this source buffers, see [DEFAULT_MAX_WHOLE_BYTES]. */
+    private val maxWholeBytes: Int = DEFAULT_MAX_WHOLE_BYTES,
 ) : RangeSource {
     private val unversioned = "unversioned-" + Random.nextLong().toULong().toString(16)
 
     init {
-        require(openTailBytes > 0)
+        require(openTailBytes > 0 && maxWholeBytes >= 0)
     }
 
     /** What the last response said about the object: [tail] is its last `tail.size` bytes. */
@@ -53,8 +61,8 @@ class HttpRangeSource(
 
         fun sameObject(other: Known): Boolean = size == other.size && etag == other.etag
 
-        /** Without an ETag the version is unique to this source, so a footer cache never reuses it. */
-        fun id(uri: String, unversioned: String): SourceId = SourceId(uri, size, etag ?: unversioned)
+        /** Cacheable only under a strong ETag. Without an ETag the version is unique to this source. */
+        fun id(uri: String, unversioned: String): SourceId = SourceId(uri, size, etag ?: unversioned, cacheable = pin != null)
 
         /** [range] from memory, or null when the held tail does not cover it. */
         fun slice(range: LongRange): ByteView? {
@@ -77,7 +85,7 @@ class HttpRangeSource(
             val want = minOf(n.toLong(), previous.size).toInt()
             if (previous.tail.size >= want) return ByteView(previous.tail, previous.tail.size - want, want)
         }
-        val response = send("bytes=-$n", previous)
+        val response = send("bytes=-$n", n.toLong(), previous)
         if (response.status == 200) {
             val whole = acceptWhole(previous, response)
             val want = minOf(n, whole.size)
@@ -109,7 +117,7 @@ class HttpRangeSource(
 
     private suspend fun fetch(previous: Known, range: LongRange): ByteView {
         val header = "bytes=${range.first}-${range.last}"
-        val response = send(header, previous)
+        val response = send(header, length(range).toLong(), previous)
         if (response.status == 200) {
             acceptWhole(previous, response)
             return checkNotNull(known).slice(range) ?: throw IndexOutOfBoundsException("range $range outside ${redact(url)}")
@@ -128,12 +136,16 @@ class HttpRangeSource(
         return checkNotNull(known)
     }
 
-    /** One GET. A 416 becomes a full GET, any status but 200 and 206 is an error. */
-    private suspend fun send(range: String, previous: Known?): HttpRangeResponse {
-        val response = engine.get(url, range, previous?.pin, null)
+    /**
+     * One GET of [range], [length] bytes at most. A 416 becomes a full GET, any status but 200 and 206
+     * is an error. A 206 body may not pass [length], any other body may not pass [maxWholeBytes].
+     */
+    private suspend fun send(range: String, length: Long, previous: Known?): HttpRangeResponse {
+        val whole = maxWholeBytes.toLong()
+        val response = engine.get(url, range, previous?.pin, null, BodyLimit(length, whole))
         return when (response.status) {
             200, 206 -> response
-            416 -> engine.get(url, null, null, null).also { if (it.status != 200) throw HttpRangeException(it.status, url) }
+            416 -> engine.get(url, null, null, null, BodyLimit(whole, whole)).also { if (it.status != 200) throw HttpRangeException(it.status, url) }
             else -> throw HttpRangeException(response.status, url)
         }
     }
@@ -146,18 +158,30 @@ class HttpRangeSource(
         return response.body
     }
 
+    /**
+     * Pins [next] in place of [previous] and throws. A parallel read may have replaced [previous] already,
+     * and then its newer pin stays.
+     */
     private suspend fun changed(previous: Known, next: Known): Nothing {
-        updateLock.withLock { known = next }
-        throw SourceChangedException(previous.id(url, unversioned), "${redact(url)} changed from ${previous.size} to ${next.size} bytes")
+        updateLock.withLock { if (known?.sameObject(previous) != false) known = next }
+        throw changedFrom(previous, next)
     }
 
-    /** Keeps the longer tail of one object, or the newer object. */
+    /**
+     * Keeps the longer tail of one object. When a parallel read pinned another object meanwhile, pins
+     * [next] and throws with the id it replaced, so no caller mixes bytes of the two.
+     */
     private suspend fun adopt(next: Known) {
-        updateLock.withLock {
+        val replaced = updateLock.withLock {
             val current = known
-            if (current == null || !current.sameObject(next) || current.tail.size < next.tail.size) known = next
+            if (current == null || current.tail.size < next.tail.size || !current.sameObject(next)) known = next
+            current?.takeUnless { it.sameObject(next) }
         }
+        if (replaced != null) throw changedFrom(replaced, next)
     }
+
+    private fun changedFrom(previous: Known, next: Known) =
+        SourceChangedException(previous.id(url, unversioned), "${redact(url)} changed from ${previous.size} to ${next.size} bytes")
 
     private fun contentRange(response: HttpRangeResponse): Triple<Long, Long, Long> {
         val value = response.contentRange?.trim()
@@ -177,6 +201,13 @@ class HttpRangeSource(
     companion object {
         /** The tail [id] reads when nothing is known yet, enough for most footers and page indexes. */
         const val DEFAULT_TAIL_BYTES: Int = 64 * 1024
+
+        /**
+         * The default [maxWholeBytes], 32 MiB: far above the files a reader fetches whole on purpose
+         * (`RangePolicy.WIFI` does so below 1 MiB) and well under what a phone can hold, so a server that
+         * ignores `Range` on a large object fails fast instead of filling memory.
+         */
+        const val DEFAULT_MAX_WHOLE_BYTES: Int = 32 * 1024 * 1024
 
         private val CONTENT_RANGE = Regex("""bytes\s+(\d+)-(\d+)/(\d+)""", RegexOption.IGNORE_CASE)
         private val EMPTY = ByteArray(0)

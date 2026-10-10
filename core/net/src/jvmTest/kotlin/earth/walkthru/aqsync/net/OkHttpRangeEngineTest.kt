@@ -10,15 +10,18 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import mockwebserver3.Dispatcher
 import mockwebserver3.MockResponse
+import mockwebserver3.MockResponseBody
 import mockwebserver3.MockWebServer
 import mockwebserver3.RecordedRequest
 import okhttp3.OkHttpClient
 import okio.Buffer
+import okio.BufferedSink
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -36,11 +39,31 @@ class OkHttpRangeEngineTest {
     @Volatile
     private var delaySeconds = 0L
 
+    /** Answers a request in place of [origin] when it returns non-null. */
+    @Volatile
+    private var special: (RecordedRequest) -> MockResponse? = { null }
+
+    /** [total] bytes in 8 KiB writes with no Content-Length, counting what reached the socket. */
+    private class StreamingBody(val total: Long) : MockResponseBody {
+        val written = AtomicLong()
+        override val contentLength: Long get() = -1L
+
+        override fun writeTo(sink: BufferedSink) {
+            val chunk = ByteArray(8192)
+            while (written.get() < total) {
+                sink.write(chunk)
+                sink.flush()
+                written.addAndGet(chunk.size.toLong())
+            }
+        }
+    }
+
     @Before
     fun start() {
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
                 requests += request
+                special(request)?.let { return it }
                 val answer = origin.respond(request.headers["Range"], request.headers["If-Range"])
                 return MockResponse.Builder().code(answer.status).apply {
                     answer.etag?.let { addHeader("ETag", it) }
@@ -62,6 +85,8 @@ class OkHttpRangeEngineTest {
 
     private fun url() = server.url("/feed/part.parquet").toString()
 
+    private val roomy = BodyLimit(Int.MAX_VALUE.toLong(), Int.MAX_VALUE.toLong())
+
     @Test
     fun `206 partial reads go through the socket with If-Range and identity encoding`() = runBlocking<Unit> {
         val source = HttpRangeSource(url(), engine)
@@ -79,14 +104,14 @@ class OkHttpRangeEngineTest {
 
     @Test
     fun `the raw engine maps 206 and 200 and 416`() = runBlocking<Unit> {
-        val partial = engine.get(url(), "bytes=0-9", null, null)
+        val partial = engine.get(url(), "bytes=0-9", null, null, BodyLimit(10, 300_000))
         assertEquals(206, partial.status)
         assertEquals("bytes 0-9/300000", partial.contentRange)
         assertEquals("\"e1\"", partial.etag)
         assertContentEquals(bytes.copyOfRange(0, 10), partial.body)
 
-        assertEquals(200, engine.get(url(), "bytes=0-9", "\"other\"", null).status)
-        assertEquals(416, engine.get(url(), "bytes=400000-400010", null, null).status)
+        assertEquals(200, engine.get(url(), "bytes=0-9", "\"other\"", null, BodyLimit(10, 300_000)).status)
+        assertEquals(416, engine.get(url(), "bytes=400000-400010", null, null, roomy).status)
     }
 
     @Test
@@ -128,7 +153,7 @@ class OkHttpRangeEngineTest {
     fun `cancelling the coroutine cancels the call promptly`() = runBlocking<Unit> {
         delaySeconds = 30
         val started = System.nanoTime()
-        val read = async(Dispatchers.IO, start = CoroutineStart.UNDISPATCHED) { engine.get(url(), "bytes=-10", null, null) }
+        val read = async(Dispatchers.IO, start = CoroutineStart.UNDISPATCHED) { engine.get(url(), "bytes=-10", null, null, roomy) }
         withTimeout(5_000) { while (client.dispatcher.runningCallsCount() == 0 || requests.isEmpty()) delay(10) }
         val call = client.dispatcher.runningCalls().single()
 
@@ -137,5 +162,47 @@ class OkHttpRangeEngineTest {
         assertTrue(read.isCancelled)
         assertTrue(call.isCanceled())
         assertTrue(TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - started) < 10)
+    }
+
+    @Test
+    fun `a 200 body without a length over the limit fails without being read whole`() = runBlocking<Unit> {
+        val body = StreamingBody(total = 64L * 1024 * 1024)
+        special = { MockResponse.Builder().code(200).body(body).build() }
+
+        val error = assertFailsWith<HttpRangeException> { engine.get(url(), "bytes=-10", null, null, BodyLimit(10, 1024 * 1024)) }
+        assertEquals(200, error.status)
+        assertTrue(body.written.get() < 32L * 1024 * 1024, "server wrote ${body.written.get()} bytes")
+    }
+
+    @Test
+    fun `a Content-Length over the limit fails before the body is read`() = runBlocking<Unit> {
+        // The body only starts after 30 s, so reading any of it would outlast the assertion below.
+        special = { MockResponse.Builder().code(200).bodyDelay(30, TimeUnit.SECONDS).body(Buffer().write(ByteArray(2 * 1024 * 1024))).build() }
+        val started = System.nanoTime()
+
+        val error = assertFailsWith<HttpRangeException> { engine.get(url(), null, null, null, BodyLimit(1024 * 1024, 1024 * 1024)) }
+        assertEquals(200, error.status)
+        assertTrue(TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - started) < 10)
+    }
+
+    @Test
+    fun `a 206 body longer than the requested range fails`() = runBlocking<Unit> {
+        special = {
+            MockResponse.Builder().code(206).addHeader("Content-Range", "bytes 0-9/300000").body(Buffer().write(ByteArray(1000))).build()
+        }
+
+        val error = assertFailsWith<HttpRangeException> { engine.get(url(), "bytes=0-9", null, null, BodyLimit(10, 300_000)) }
+        assertEquals(206, error.status)
+    }
+
+    @Test
+    fun `a 416 fallback GET over maxWholeBytes fails`() = runBlocking<Unit> {
+        origin.bytes = ByteArray(0)
+        special = { if (it.headers["Range"] == null) MockResponse.Builder().code(200).body(Buffer().write(payload(5000))).build() else null }
+        val source = HttpRangeSource(url(), engine, maxWholeBytes = 4000)
+
+        val error = assertFailsWith<HttpRangeException> { source.readTail(1000) }
+        assertEquals(200, error.status)
+        assertEquals(listOf("bytes=-1000", null), requests.map { it.headers["Range"] })
     }
 }
