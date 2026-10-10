@@ -235,7 +235,7 @@ data class ColumnChunkMeta(
     /** File bytes of this chunk's `ColumnIndex` (ColumnChunk fields 6 and 7), null when absent. */
     val columnIndex: LongRange? = null,
 ) {
-    val name: String get() = pathInSchema.joinToString(".")
+    val name: String get() = if (pathInSchema.size == 1) pathInSchema[0] else pathInSchema.joinToString(".")
 
     /** Where the first page header starts: the dictionary page, if any, comes before the data pages. */
     val firstPageOffset: Long get() = dictionaryPageOffset?.takeIf { it > 0 && it < dataPageOffset } ?: dataPageOffset

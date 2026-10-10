@@ -172,8 +172,6 @@ class ParquetReader private constructor(
         return out.map { it!! }
     }
 
-    private class Work(val leaf: LeafColumn, val sink: ColumnSink)
-
     private class Plan(val rowGroup: Int, val selection: RowSelection?)
 
     private suspend fun scanOnce(request: ScanRequest): ColumnBatch {
@@ -191,40 +189,54 @@ class ParquetReader private constructor(
         var groups = request.rowGroups?.distinct()?.sorted() ?: metadata.rowGroups.indices.toList()
         for (g in groups) if (g !in metadata.rowGroups.indices) throw ParquetFormatException("row group $g does not exist in ${s.id.uri}")
         val valueRanges = ValueRanges(request.filterRanges)
+        // A row group whose statistics lie inside one range and that has no null filter value matches
+        // whole: it needs neither its page index nor the row filter.
+        val covered = BooleanArray(metadata.rowGroups.size)
         if (filterLeaf != null) {
-            val kept = metadata.rowGroupsOverlapping(filterLeaf.name, valueRanges.ranges).toSet()
-            groups = groups.filter { it in kept }
+            val stats = metadata.longStatistics(filterLeaf.name)
+            groups = groups.filter { g ->
+                val st = stats[g] ?: return@filter true
+                val lo = st.min ?: return@filter false
+                val hi = st.max ?: return@filter false
+                if (st.nullCount == 0L && valueRanges.covers(lo, hi)) covered[g] = true
+                valueRanges.overlaps(lo, hi)
+            }
         }
 
         // Page index: which rows of each row group may match, and where each column's pages are.
         val usePages = filterLeaf != null && request.usePageIndex
         val offsetIndexes = HashMap<Long, OffsetIndex>()
-        val plans = ArrayList<Plan>()
-        if (usePages) loadPageIndexes(groups, decoded, filterLeaf!!, offsetIndexes)
+        val plans = ArrayList<Plan>(groups.size)
+        val partial = groups.filter { !covered[it] }
+        if (usePages && partial.isNotEmpty()) loadPageIndexes(partial, decoded, filterLeaf!!, offsetIndexes)
         for (g in groups) {
-            val selection = if (usePages) selectRows(g, filterLeaf!!, valueRanges, offsetIndexes) else null
+            val selection = if (usePages && !covered[g]) selectRows(g, filterLeaf!!, valueRanges, offsetIndexes) else null
             if (selection != null && selection.starts.isEmpty()) continue
             plans += Plan(g, selection)
         }
 
-        // Every byte range of the scan, fetched in one planned read.
-        class Segment(val plan: Plan, val leaf: LeafColumn, val whole: ChunkRange?, val prefix: LongRange?, val pages: IntArray)
-        val segments = ArrayList<Segment>()
-        val ranges = ArrayList<LongRange>()
+        // Every byte range of the scan, fetched in one planned read, and one sink per column sized for
+        // the selected rows.
+        val rowCount = plans.sumOf { it.selection?.count() ?: metadata.rowGroups[it.rowGroup].numRows }
+        val planGroups = plans.map { it.rowGroup }
+        val sinks = decoded.map { chunks.sink(it, rowCount, planGroups) }
+        class Segment(val plan: Plan, val leaf: LeafColumn, val sink: ColumnSink, val whole: ChunkRange?, val prefix: LongRange?, val pages: IntArray)
+        val segments = ArrayList<Segment>(plans.size * decoded.size)
+        val ranges = ArrayList<LongRange>(plans.size * decoded.size)
         for (plan in plans) {
-            for (leaf in decoded) {
+            for ((d, leaf) in decoded.withIndex()) {
                 val oi = offsetIndexes[key(plan.rowGroup, leaf.index)]
                 val sel = plan.selection
                 if (sel == null || oi == null || oi.pageCount == 0) {
                     val range = chunks.range(leaf, plan.rowGroup)
-                    segments += Segment(plan, leaf, range, null, IntArray(0))
+                    segments += Segment(plan, leaf, sinks[d], range, null, NO_PAGES)
                     ranges += byteRange(range.start, range.length)
                 } else {
                     val rows = metadata.rowGroups[plan.rowGroup].numRows
                     val pages = (0 until oi.pageCount).filter { sel.overlaps(oi.firstRows[it], oi.pageRowEnd(it, rows)) }.toIntArray()
                     val chunk = metadata.rowGroups[plan.rowGroup].columns[leaf.index]
                     val prefix = chunk.firstPageOffset until oi.offsets[0]
-                    segments += Segment(plan, leaf, null, prefix, pages)
+                    segments += Segment(plan, leaf, sinks[d], null, prefix, pages)
                     ranges += prefix
                     for (p in pages) ranges += oi.pageRange(p)
                 }
@@ -232,15 +244,12 @@ class ParquetReader private constructor(
         }
         val views = read(ranges)
 
-        // Decode each column into one sink sized for the selected rows.
-        val rowCount = plans.sumOf { it.selection?.count() ?: metadata.rowGroups[it.rowGroup].numRows }
-        val work = decoded.map { Work(it, chunks.sink(it, rowCount, plans.map { p -> p.rowGroup })) }
         val scratch = DecodeScratch()
         var pagesRead = 0
         var pagesTotal = 0
         var v = 0
         for (segment in segments) {
-            val sink = work.first { it.leaf.index == segment.leaf.index }.sink
+            val sink = segment.sink
             val g = segment.plan.rowGroup
             if (segment.whole != null) {
                 val range = segment.whole
@@ -266,8 +275,9 @@ class ParquetReader private constructor(
                 pagesTotal += oi.pageCount
             }
         }
-        val columns = work.associate { it.leaf to it.sink.build() }
-        val batch = if (filterLeaf != null) keepMatching(columns, filterLeaf, valueRanges) else columns
+        val columns = HashMap<LeafColumn, PrimitiveColumn>(decoded.size * 2)
+        for (d in decoded.indices) columns[decoded[d]] = sinks[d].build()
+        val batch = if (filterLeaf != null && plans.any { !covered[it.rowGroup] }) keepMatching(columns, filterLeaf, valueRanges) else columns
         val rows = batch.values.firstOrNull()?.size ?: if (filterLeaf != null) 0 else rowCount.toInt()
         val out = LinkedHashMap<String, PrimitiveColumn>()
         for (leaf in wanted) out[leaf.name] = batch.getValue(leaf)
@@ -433,6 +443,8 @@ class ParquetReader private constructor(
             return reader
         }
 
+        private val NO_PAGES = IntArray(0)
+
         private fun key(rowGroup: Int, column: Int): Long = (rowGroup.toLong() shl 32) or column.toLong()
     }
 }
@@ -464,6 +476,12 @@ internal class ValueRanges(ranges: List<LongRange>) {
     fun contains(value: Long): Boolean {
         val i = firstEndingAtOrAfter(value)
         return i < ranges.size && ranges[i].first <= value
+    }
+
+    /** Whether one range holds all of `[lo, hi]`. */
+    fun covers(lo: Long, hi: Long): Boolean {
+        val i = firstEndingAtOrAfter(lo)
+        return i < ranges.size && ranges[i].first <= lo && ranges[i].last >= hi
     }
 
     /** Whether some range meets `[lo, hi]`. */

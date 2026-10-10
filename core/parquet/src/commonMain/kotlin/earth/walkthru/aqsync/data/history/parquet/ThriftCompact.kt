@@ -27,13 +27,19 @@ internal class ThriftCompactReader(private val buf: ByteCursor) {
         const val STRUCT = 12
     }
 
-    class FieldHeader(val type: Int, val id: Int) {
+    /** A field's wire type and id, packed into one Int so reading a header allocates nothing. */
+    @kotlin.jvm.JvmInline
+    value class FieldHeader(private val packed: Int) {
+        constructor(type: Int, id: Int) : this((id shl 4) or (type and 0x0F))
+
+        val type: Int get() = packed and 0x0F
+        val id: Int get() = packed shr 4
         val isStop: Boolean get() = type == Type.STOP
     }
 
-    private class Frame(var lastFieldId: Int = 0)
-
-    private val frames = ArrayDeque<Frame>().apply { addLast(Frame()) }
+    /** The last field id of every open struct, innermost at [depth]. */
+    private var lastFieldIds = IntArray(4)
+    private var depth = 0
 
     /** Position of the next unread byte, relative to the start of the window. */
     val position: Int get() = buf.pos - buf.start
@@ -43,19 +49,20 @@ internal class ThriftCompactReader(private val buf: ByteCursor) {
         val type = byte and 0x0F
         if (type == Type.STOP) return FieldHeader(Type.STOP, 0)
         val delta = byte ushr 4
-        val frame = frames.last()
-        val id = if (delta == 0) readZigZag32() else frame.lastFieldId + delta
-        frame.lastFieldId = id
+        val id = if (delta == 0) readZigZag32() else lastFieldIds[depth] + delta
+        lastFieldIds[depth] = id
         return FieldHeader(type, id)
     }
 
     /** Enter a nested struct: field ids inside restart from 0. Pair with [exitStruct]. */
     fun enterStruct() {
-        frames.addLast(Frame())
+        if (++depth == lastFieldIds.size) lastFieldIds = lastFieldIds.copyOf(depth * 2)
+        lastFieldIds[depth] = 0
     }
 
     fun exitStruct() {
-        frames.removeLast()
+        check(depth > 0) { "exitStruct without enterStruct" }
+        depth--
     }
 
     /** Reads a whole struct, calling [onField] for every field (the callback must consume the value). */
@@ -69,7 +76,14 @@ internal class ThriftCompactReader(private val buf: ByteCursor) {
         exitStruct()
     }
 
-    class ListHeader(val elementType: Int, val size: Int)
+    /** A list's element type and size, packed into one Long. */
+    @kotlin.jvm.JvmInline
+    value class ListHeader(private val packed: Long) {
+        constructor(elementType: Int, size: Int) : this((size.toLong() shl 4) or (elementType and 0x0F).toLong())
+
+        val elementType: Int get() = (packed and 0x0F).toInt()
+        val size: Int get() = (packed shr 4).toInt()
+    }
 
     fun readListHeader(): ListHeader {
         val byte = buf.getU8()
@@ -125,7 +139,13 @@ internal class ThriftCompactReader(private val buf: ByteCursor) {
         return out
     }
 
-    fun readString(): String = readBinary().decodeToString()
+    fun readString(): String {
+        val length = readVarint32()
+        require(length >= 0 && length <= buf.remaining) { "binary length $length exceeds buffer" }
+        val from = buf.pos
+        buf.pos += length
+        return buf.data.decodeToString(from, from + length)
+    }
 
     /** A boolean field carries its value in the header type; a boolean list element is one byte. */
     fun booleanFromHeader(header: FieldHeader): Boolean = when (header.type) {
