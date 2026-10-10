@@ -421,7 +421,7 @@ matrix the fixtures cover.
    coordinates in `DoubleArray`s). Pure, tested against PyArrow's `geo_statistics` bbox and DuckDB's
    `ST_AsText`. A `bbox()` per geometry and per column.
 4. **Pages.** The decoder grows: dictionary page (PLAIN values) → indices (`RLE_DICTIONARY`: one byte bit
-   width, RLE/bit-packed hybrid — `RleBitPackedHybrid` already decodes any width ≤ 32); Data Page V2
+   width, RLE/bit-packed hybrid, which the streaming `RleDecoder` in `ColumnDecoder.kt` decodes at any width ≤ 32); Data Page V2
    (levels uncompressed and outside the compressed block, `is_compressed` flag, `num_nulls`, `num_rows`).
    Everything else still raises `ParquetFormatException` naming the feature.
 5. **Codecs.** `interface PageDecompressor`, `ParquetCodecs.builtIn` (UNCOMPRESSED, LZ4_RAW, SNAPPY, GZIP),
