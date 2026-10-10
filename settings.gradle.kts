@@ -28,6 +28,8 @@ include(":core:publicfeed")
 include(":core:units")
 // WHO 2021 air quality guideline scales and their palette, for every chart and the map.
 include(":core:airquality")
+// HTTP range reads for remote Parquet, OkHttp on Android and NSURLSession on iOS (issue #62).
+include(":core:net")
 // Planned shared sync engine, phone archive and app settings (docs/platform-parity-plan.md).
 include(":core:sync")
 include(":core:archive")
