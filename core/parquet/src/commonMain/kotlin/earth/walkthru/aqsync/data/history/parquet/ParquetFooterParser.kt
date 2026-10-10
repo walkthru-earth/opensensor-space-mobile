@@ -106,7 +106,9 @@ object ParquetFooterParser {
         val leafCount = schema.size - 1
         if (root.numChildren != leafCount) throw ParquetFormatException("nested schema (root has ${root.numChildren} children, $leafCount elements): only flat schemas are supported")
         schema.drop(1).forEach { e -> if (!e.isLeaf) throw ParquetFormatException("group column '${e.name}': only flat schemas are supported") }
+        if (numRows < 0) throw ParquetFormatException("footer declares $numRows rows")
         rowGroups.forEachIndexed { g, rg ->
+            if (rg.numRows < 0) throw ParquetFormatException("row group $g declares ${rg.numRows} rows")
             if (rg.columns.size != leafCount) throw ParquetFormatException("row group $g has ${rg.columns.size} column chunks for $leafCount leaves")
         }
         return ParquetFileMetadata(version, schema, numRows, rowGroups, kv, createdBy, columnOrders, footerLength)
