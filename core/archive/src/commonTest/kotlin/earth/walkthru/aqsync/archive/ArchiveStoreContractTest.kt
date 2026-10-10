@@ -1,9 +1,11 @@
 package earth.walkthru.aqsync.archive
 
 import earth.walkthru.aqsync.data.protocol.ParquetVerify
+import earth.walkthru.aqsync.storage.AlreadyCommitted
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -57,8 +59,10 @@ abstract class ArchiveStoreContract {
         assertEquals(listOf(key), store.listFinal())
         assertTrue(store.listFinal("other").isEmpty())
         store.openPartial(key, meta).use { w -> w.writeAt(0, bytes) }
-        assertTrue(runCatching { store.commit(key) }.isFailure)
+        assertFailsWith<AlreadyCommitted> { store.commit(key) }
         assertTrue(bytes.contentEquals(store.reader(key).read(0, bytes.size)))
+        // The refused partial stays for the caller to discard.
+        assertEquals(mapOf(key.name to bytes.size.toLong()), store.partialLengths(station))
     }
 
     @Test

@@ -10,6 +10,9 @@ import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 import earth.walkthru.aqsync.data.history.parquet.ParquetSink
 import earth.walkthru.aqsync.data.protocol.ParquetVerify
 import earth.walkthru.aqsync.data.protocol.sha256Hex
+import earth.walkthru.aqsync.storage.AtomicFiles
+import earth.walkthru.aqsync.storage.IosAtomicFiles
+import earth.walkthru.aqsync.storage.StorageClass
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.Dispatchers
@@ -24,9 +27,6 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
-import platform.Foundation.NSData
-import platform.Foundation.NSDataWritingAtomic
-import platform.Foundation.NSDataWritingFileProtectionCompleteUntilFirstUserAuthentication
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSFileProtectionCompleteUntilFirstUserAuthentication
 import platform.Foundation.NSFileProtectionKey
@@ -35,23 +35,23 @@ import platform.Foundation.NSFileTypeRegular
 import platform.Foundation.NSFileTypeSymbolicLink
 import platform.Foundation.NSURL
 import platform.Foundation.NSURLIsExcludedFromBackupKey
-import platform.Foundation.NSUUID
-import platform.Foundation.create
-import platform.Foundation.writeToFile
 import platform.posix.O_WRONLY
 import platform.posix.close
 import platform.posix.fsync
 import platform.posix.open
-import platform.posix.rename
 import platform.posix.write
 import kotlin.time.Instant
 
 /**
  * Atomic on-disk daily Parquet cache for iOS. [root] is Application Support; the shared layout
  * puts files in `derived/v1/<station>/day=YYYY-MM-DD.parquet`. Rebuild runs after index repair on
- * startup, after downloads and after durable clock receipts arrive. It needs no network.
+ * startup, after downloads and after durable clock receipts arrive. It needs no network. Temps live
+ * in `<root>/storage-tmp` and commit with [AtomicFiles.commitReplace] as Rebuildable data (#60).
  */
-class IosDailyDerivedStore(root: String) {
+class IosDailyDerivedStore(
+    root: String,
+    private val atomic: AtomicFiles = IosAtomicFiles("${root.trimEnd('/')}/${AtomicFiles.TEMP_DIR}"),
+) {
     private val root = root.trimEnd('/')
     private val mutex = Mutex()
     private val fm get() = NSFileManager.defaultManager
@@ -94,8 +94,7 @@ class IosDailyDerivedStore(root: String) {
                     paths += target
                     continue
                 }
-                val temporary = "$target.${NSUUID().UUIDString()}.tmp"
-                check(fm.createFileAtPath(temporary, null, protection)) { "cannot create derived temporary file" }
+                val temporary = atomic.createTemp(".parquet")
                 try {
                     val opened = sources.map { DailyParquetSource(it, ParquetFile.open(archive.reader(it.key))) }
                     val sink = FileSink(temporary)
@@ -113,7 +112,7 @@ class IosDailyDerivedStore(root: String) {
                     check(ParquetFile.open(MappedDataReader(temporary)).numRows == result.rows.toLong()) { "derived row count mismatch" }
                     // A crash between the two commits must leave no receipt claiming older bytes.
                     remove(manifest)
-                    check(rename(temporary, target) == 0) { "cannot commit derived Parquet" }
+                    atomic.commitReplace(temporary, target, StorageClass.Rebuildable)
                     writeManifest(manifest, station, day, result, signature, nowEpochS)
                     paths += target
                 } finally {
@@ -174,10 +173,7 @@ class IosDailyDerivedStore(root: String) {
                 }
             )
         }.toString().encodeToByteArray()
-        json.usePinned {
-            val data = NSData.create(bytes = it.addressOf(0), length = json.size.toULong())
-            check(data.writeToFile(path, NSDataWritingAtomic or NSDataWritingFileProtectionCompleteUntilFirstUserAuthentication, null)) { "cannot commit derived manifest" }
-        }
+        atomic.writeAtomically(path, json, StorageClass.Rebuildable)
     }
 
     private fun isFile(path: String): Boolean = fm.attributesOfItemAtPath(path, null)?.get(NSFileType) == NSFileTypeRegular
@@ -210,6 +206,6 @@ class IosDailyDerivedStore(root: String) {
             }
         }
         override fun flush() { check(fsync(descriptor) == 0) { "cannot sync derived Parquet" } }
-        fun close() { close(descriptor) }
+        fun close() { check(close(descriptor) == 0) { "cannot close derived Parquet" } }
     }
 }

@@ -6,7 +6,11 @@ implements the reader/writer and codec SPI; `history/` owns metrics, indexing,
 aggregation and presentation-ready analysis; `publicfeed/` owns the Discover feed
 port, H3 and the viewport cover; `units/` owns display units; `airquality/` owns
 the WHO 2021 scales and palette. `archive/` owns the archive layout, verifier,
-records and the `ArchiveStore` and `ArchiveIndex` ports. `sync/` and `settings/` are empty
+records and the `ArchiveStore` and `ArchiveIndex` ports. `storage/` owns `StorageClass`,
+`StorageRoots`, `AtomicFiles` (no-replace commit, F_FULLFSYNC on iOS, directory sync),
+`StorageBudget` and `StorageTree`. Every file writer goes through `AtomicFiles`, and the
+`StorageJanitor` (in `sync/`, it needs the archive ports) sweeps Scratch at start and never deletes
+Durable data. `sync/` and `settings/` are empty
 skeletons that `docs/platform-parity-plan.md` fills. See `docs/README.md` in the repo
 root for the relevant concern. No Android, Hilt, Room, `Context` or
 `android.util.Log` in any `:core:*` module.
@@ -42,7 +46,8 @@ root for the relevant concern. No Android, Hilt, Room, `Context` or
   See `docs/architecture.md`.
 - Sync rules that both phones must share live in `protocol/commonMain`. `ParquetVerify` (size,
   CRC-32, `PAR1` head and tail) decides when a file is synced, `Crc32` is the streaming checksum,
-  and `SafeName` is the firmware name rule (charset, no `..` or `//`, 399-byte cap). Platform code
+  and `SafeName` is the firmware name rule (charset, no `..` or `//`, 399-byte cap) plus the phone's
+  241-byte segment cap, so `<segment>.verified.json` fits a 255-byte file name. Platform code
   measures and calls them, it does not re-implement them.
 - Shared tests live in `commonTest` with `kotlin.test` and run on JVM through `verify` and on the
   iOS simulator through `verifyIos` (macOS, and part of `verify` on a Mac). The convention plugin

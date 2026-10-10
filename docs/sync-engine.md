@@ -100,7 +100,10 @@ transfer concurrently. A second writer for the same identity waits cancellably a
 any committed destination against the current OPENED size/CRC/PAR1 and recorded SHA-256.
 Identical content is reused without changing source provenance; `alreadyArchived` excludes it from
 worker new-file counts. Conflicting or corrupt existing bytes are retained and reported, never
-replaced. `commit` also refuses an existing destination. Host coverage: `ConcurrentArchiveTest`;
+replaced. `commit` also refuses an existing destination with `AlreadyCommitted` (`AtomicFiles.commitNoReplace`,
+#60). The engine then adopts the existing file through the same size, CRC, `PAR1` and SHA-256
+check, so a final that appears between the plan and the commit is never replaced. A crash between
+the commit and the index record is repaired by `StorageJanitor` at the next start. Host coverage: `ConcurrentArchiveTest`;
 physical concurrent transfers remain unverified.
 
 The per-address controller reserves interactive/background ownership and the manager rejects

@@ -1,13 +1,23 @@
 package earth.walkthru.aqsync.archive
 
+import earth.walkthru.aqsync.storage.AlreadyCommitted
+import earth.walkthru.aqsync.storage.AtomicFiles
+import earth.walkthru.aqsync.storage.IosAtomicFiles
+import earth.walkthru.aqsync.storage.StorageClass
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
-/** iOS clock receipts have archive file protection and are excluded from device backups. */
-class IosClockAnchorStore(root: String) : ClockAnchorStore {
+/**
+ * iOS clock receipts have archive file protection and are excluded from device backups. A receipt is
+ * Durable and immutable: written once with [AtomicFiles.createNoReplace] (#60).
+ */
+class IosClockAnchorStore(
+    root: String,
+    private val atomic: AtomicFiles = IosAtomicFiles(IosArchiveStore.tempDirBeside(root.trimEnd('/'))),
+) : ClockAnchorStore {
     private val root = root.trimEnd('/')
     private val mutex = Mutex()
 
@@ -31,10 +41,10 @@ class IosClockAnchorStore(root: String) : ClockAnchorStore {
             IosFiles.prepareRoot(root)
             IosFiles.mkdirs(path.substringBeforeLast('/'))
             val bytes = ClockAnchorReceipt.encode(anchor)
-            if (IosFiles.kind(path) != IosFiles.Kind.ABSENT) {
+            try {
+                atomic.createNoReplace(path, bytes, StorageClass.Durable)
+            } catch (_: AlreadyCommitted) {
                 check(IosFiles.readSmall(path, ClockAnchorReceipt.MAX_BYTES)?.contentEquals(bytes) == true) { "conflicting clock receipt" }
-            } else {
-                IosFiles.writeAtomically(path, bytes)
             }
         }
     }

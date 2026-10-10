@@ -1,6 +1,8 @@
 package earth.walkthru.aqsync.archive
 
 import earth.walkthru.aqsync.data.history.parquet.ByteReader
+import earth.walkthru.aqsync.storage.AlreadyCommitted
+import earth.walkthru.aqsync.storage.AtomicFiles
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -31,8 +33,9 @@ interface ArchiveStore {
     fun reader(key: ArchiveKey, partial: Boolean = false): ByteReader
 
     /**
-     * Moves a verified partial into the archive, atomically. Throws when the final already exists:
-     * an archived file is never replaced.
+     * Moves a verified partial into the archive, atomically and durably ([AtomicFiles.commitNoReplace]).
+     * Throws [AlreadyCommitted] when the final already exists, and leaves the partial in place: an
+     * archived file is never replaced.
      */
     suspend fun commit(key: ArchiveKey)
 

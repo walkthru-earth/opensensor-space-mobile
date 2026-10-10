@@ -30,7 +30,10 @@ class IosExportSpace(private val root: String) : ExportSpace {
 
     companion object {
         /** The default space, `NSTemporaryDirectory()/opensensor-export`. */
-        fun inTemporaryDirectory(): IosExportSpace = IosExportSpace(NSTemporaryDirectory().trimEnd('/') + "/opensensor-export")
+        fun inTemporaryDirectory(): IosExportSpace = IosExportSpace(temporaryRoot())
+
+        /** Where [inTemporaryDirectory] puts its runs, Scratch for the startup janitor (#60). */
+        fun temporaryRoot(): String = NSTemporaryDirectory().trimEnd('/') + "/opensensor-export"
     }
 }
 

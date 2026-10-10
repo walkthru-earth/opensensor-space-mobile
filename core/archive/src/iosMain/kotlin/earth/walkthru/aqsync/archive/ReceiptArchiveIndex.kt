@@ -1,6 +1,9 @@
 package earth.walkthru.aqsync.archive
 
 import earth.walkthru.aqsync.archive.IosFiles.Kind
+import earth.walkthru.aqsync.storage.AtomicFiles
+import earth.walkthru.aqsync.storage.IosAtomicFiles
+import earth.walkthru.aqsync.storage.StorageClass
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
@@ -34,6 +37,8 @@ import kotlinx.serialization.json.put
 class ReceiptArchiveIndex(
     private val finalRoot: String,
     private val io: CoroutineDispatcher = Dispatchers.IO,
+    /** Receipts are Durable: flushed with `F_FULLFSYNC` and renamed into place (#60). */
+    private val atomic: AtomicFiles = IosAtomicFiles(IosArchiveStore.tempDirBeside(finalRoot)),
 ) : ArchiveIndex {
     private val mutex = Mutex()
     private val rows = MutableStateFlow<List<ArchiveRecord>?>(null)
@@ -83,7 +88,7 @@ class ReceiptArchiveIndex(
             val kind = IosFiles.kind(path)
             check(kind == Kind.ABSENT || kind == Kind.FILE) { "archive receipt is not a file" }
             IosFiles.mkdirs(path.substringBeforeLast('/'))
-            IosFiles.writeAtomically(path, encode(record).encodeToByteArray())
+            atomic.writeAtomically(path, encode(record).encodeToByteArray(), StorageClass.Durable)
         }
         rows.value = current.filterNot { it.station == record.station && it.name == record.name } + record
     }

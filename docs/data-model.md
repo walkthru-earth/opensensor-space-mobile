@@ -189,6 +189,7 @@ Unrelated crypto, programming and database failures also propagate.
 
 - **`@Upsert` on an entity with an auto id and a unique index updates nothing** (it runs `UPDATE … WHERE id = ?` with id 0). `archived_file` and `derived_day` use `@Insert(onConflict = REPLACE)` — the id carries no meaning. `known_device` (address is the PK) may use `@Upsert`.
 - **`openSession` rewrites every `KnownDevice` column.** The post-`info` upsert carries `previous?.autoSync` and `previous?.companionAssociationId`; future columns must be preserved too. Identity checks run before the upsert, and a station change deliberately discards the old token and port.
+- **`ArchiveIndex.update` is one Room transaction** (`ArchivedFileDao.update`, `@Transaction`), so index repair and a sync never lose each other's columns. `RoomArchiveIndexTest` runs 64 concurrent updates on one key.
 - `derived_day.dailyFile == null` means the daily Parquet failed → its signature is treated as stale next pass.
 
 ## DataStore (`:core:settings`, `SettingsRepository`)
@@ -218,6 +219,30 @@ derived/v1/<station>/day=YYYY-MM-DD.manifest.json  sources (name, crc32, time_an
 
 Derived files are written atomically (temp + rename) and **never inside `archive/`**, so the raw
 zip stays the byte-exact mirror and the derived zip is the small analysis-ready export.
+
+### Storage classes and atomic writes (#60)
+
+`:core:storage` gives every directory a `StorageClass` through `StorageRoots`.
+
+| Class | Directories | Janitor |
+| --- | --- | --- |
+| Durable | `archive/`, the Room database, `clock-anchors/` (iOS `SensorArchive/`, its receipts, `SensorArchive-clock-anchors/`) | never deletes |
+| Rebuildable | `derived/v1/` | old derived temps only |
+| Scratch | `archive-partial/`, `storage-tmp/`, `cache/export/` (iOS `tmp/opensensor-export/`) | temps after 1 min, export runs after 1 h, partials of an unknown station after 1 h, any partial after 30 days |
+| Settings | `datastore/` | never deletes |
+
+Every writer goes through `AtomicFiles`. Temps are `storage-tmp/.aqtmp-*` beside the roots, on the
+same volume. `commitNoReplace` refuses an existing destination with `AlreadyCommitted` and leaves
+the partial. Android has no hard links for apps (SELinux), so the JVM adapter takes a process lock,
+checks the destination and runs `ATOMIC_MOVE`. iOS uses `renamex_np(RENAME_EXCL)`. Durable data is
+flushed with `F_FULLFSYNC` on iOS (fsync only when the volume does not support it) and the parent
+directory is synced on both platforms. Clock receipts are written once with `createNoReplace`.
+
+`StorageJanitor` runs once per process, Android through the unique `storage-janitor` WorkManager job,
+iOS from `IosArchive.startIndexRepair`. It also finds final files without an index record (a crash
+between commit and record), checks size, CRC-32, SHA-256 and `PAR1`, and indexes them with
+`sourceDevice = "adopted"`. A final that fails `PAR1` stays in place, counted as unverifiable. The
+log line has counts only. `StorageBudget` reports free bytes per class for the free-space gate of #55.
 
 These relative paths are defined once, in `ArchiveLayout` (`:core:archive`), for both phones. The
 root is Android `filesDir`. iOS still keeps its finals under `Application Support/SensorArchive/`

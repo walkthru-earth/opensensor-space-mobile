@@ -7,6 +7,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
+import androidx.room.Transaction
 import earth.walkthru.aqsync.data.history.IndexedFileInfo
 import kotlinx.coroutines.flow.Flow
 
@@ -109,6 +110,15 @@ interface ArchivedFileDao {
      */
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(file: ArchivedFile)
+
+    /**
+     * Reads the row of `(station, name)` and writes [transform] of it in one transaction, the same as
+     * Room's `withTransaction`, so two writers of different columns never lose each other's change (#60).
+     */
+    @Transaction
+    suspend fun update(station: String, name: String, transform: (ArchivedFile) -> ArchivedFile) {
+        get(station, name)?.let { upsert(transform(it)) }
+    }
 
     /** Rows not yet indexed (pre-v4 rows, or a previous attempt that failed and should be retried after an app update). */
     @Query("SELECT * FROM archived_file WHERE indexedAtEpochMs IS NULL OR indexError IS NOT NULL ORDER BY (indexedAtEpochMs IS NULL) DESC, name LIMIT :limit")

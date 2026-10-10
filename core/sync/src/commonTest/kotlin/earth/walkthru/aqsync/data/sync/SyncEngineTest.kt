@@ -247,6 +247,35 @@ class SyncEngineTest {
     }
 
     @Test
+    fun aFinalThatAppearsBeforeTheCommitIsAdoptedNotReplaced() = runTest {
+        val a = device(backgroundScope)
+        val file = a.first.files[0]
+        val key = ArchiveKey(a.first.station, file.name)
+        // Another writer committed the same verified bytes after the planner looked, and crashed before indexing.
+        store.beforeCommit = { store.files[ArchiveLayout.finalPath(it)] = file.bytes.copyOf() }
+
+        val outcome = assertIs<FileOutcome.Synced>(engine.pull(a, 0))
+
+        assertTrue(outcome.alreadyArchived)
+        assertContentEquals(file.bytes, finalBytes(key.station, key.name))
+        assertEquals(key, index.records.single().key)
+        assertFalse(hasPartials())
+    }
+
+    @Test
+    fun aConflictingFinalThatAppearsBeforeTheCommitIsKept() = runTest {
+        val a = device(backgroundScope)
+        val file = a.first.files[0]
+        val other = file.bytes.copyOf().also { it[it.size / 2] = (it[it.size / 2] + 1).toByte() }
+        store.beforeCommit = { store.files[ArchiveLayout.finalPath(it)] = other }
+
+        assertIs<FileOutcome.Mismatch>(engine.pull(a, 0))
+
+        assertContentEquals(other, finalBytes(a.first.station, file.name))
+        assertTrue(index.records.isEmpty())
+    }
+
+    @Test
     fun aRecordWithoutAFingerprintIsFilledNotRefused() = runTest {
         val a = device(backgroundScope)
         assertIs<FileOutcome.Synced>(engine.pull(a, 0))

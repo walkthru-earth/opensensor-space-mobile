@@ -2,6 +2,7 @@ package earth.walkthru.aqsync.archive
 
 import earth.walkthru.aqsync.data.history.parquet.ByteArrayReader
 import earth.walkthru.aqsync.data.history.parquet.ByteReader
+import earth.walkthru.aqsync.storage.AlreadyCommitted
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
@@ -55,7 +56,7 @@ class InMemoryArchiveStore : ArchiveStore {
 
     override suspend fun commit(key: ArchiveKey) {
         val final = ArchiveLayout.finalPath(key)
-        check(final !in files) { "refusing to replace archived file" }
+        if (final in files) throw AlreadyCommitted()
         files[final] = files.remove(ArchiveLayout.partialPath(key)) ?: error("no partial to commit")
         files.remove(ArchiveLayout.partialMetaPath(key))
     }

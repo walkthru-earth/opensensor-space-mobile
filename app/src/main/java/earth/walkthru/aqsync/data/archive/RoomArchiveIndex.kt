@@ -20,6 +20,10 @@ class RoomArchiveIndex @Inject constructor(private val dao: ArchivedFileDao) : A
 
     override suspend fun put(record: ArchiveRecord) = dao.upsert(record.toEntity())
 
+    /** Read and write in one Room transaction, not the port's default get then put (#60). */
+    override suspend fun update(key: ArchiveKey, transform: (ArchiveRecord) -> ArchiveRecord) =
+        dao.update(key.station, key.name) { row -> transform(row.toRecord()).toEntity(row.id) }
+
     override suspend fun remove(key: ArchiveKey) = dao.delete(key.station, key.name)
 
     override suspend fun unindexed(limit: Int): List<ArchiveRecord> = dao.unindexed(limit).map { it.toRecord() }

@@ -13,6 +13,8 @@ kotlin {
             api(project(":core:protocol"))
             // ByteReader is how the verifier and the stores hand out file bytes.
             api(project(":core:parquet"))
+            // Every archive write goes through AtomicFiles, and a commit can throw AlreadyCommitted (#60).
+            api(project(":core:storage"))
             // ArchiveIndex observes rows as a Flow.
             api(libs.kotlinx.coroutines.core)
             // UTC day labels of the derived files.

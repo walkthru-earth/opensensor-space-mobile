@@ -31,6 +31,8 @@ include(":core:airquality")
 // Planned shared sync engine, phone archive and app settings (docs/platform-parity-plan.md).
 include(":core:sync")
 include(":core:archive")
+// Storage classes, durable no-replace commits, free space and the startup janitor's walk (issue #60).
+include(":core:storage")
 include(":core:settings")
 // The Discover map, shared Compose for Android and iOS.
 include(":ui:designsystem")

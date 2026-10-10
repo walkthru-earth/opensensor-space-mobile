@@ -7,6 +7,7 @@ import earth.walkthru.aqsync.archive.ArchiveRecord
 import earth.walkthru.aqsync.archive.ArchiveStore
 import earth.walkthru.aqsync.archive.ArchiveVerifier
 import earth.walkthru.aqsync.archive.PartialMeta
+import earth.walkthru.aqsync.archive.PartialWriter
 import earth.walkthru.aqsync.data.ble.AuthFailedException
 import earth.walkthru.aqsync.data.ble.DeviceBusyException
 import earth.walkthru.aqsync.data.ble.DeviceErrorException
@@ -17,6 +18,7 @@ import earth.walkthru.aqsync.data.protocol.ParquetVerify
 import earth.walkthru.aqsync.data.protocol.ProtocolError
 import earth.walkthru.aqsync.data.protocol.Sha256
 import earth.walkthru.aqsync.data.protocol.toHex
+import earth.walkthru.aqsync.storage.AlreadyCommitted
 import earth.walkthru.aqsync.sync.nowEpochMs
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
@@ -127,7 +129,7 @@ class SyncEngine(
                 var offset = resumeFrom
                 val progress = FileProgressReporter(name, opened.size, resumeFrom, onProgress)
                 progress.report(offset, windowsRecovered)
-                writer.use { w ->
+                writer.useInStorage { w ->
                     val readLength = maxRead.coerceAtLeast(1).toLong()
                     var attempt = 0
                     try {
@@ -205,7 +207,17 @@ class SyncEngine(
                     }
                     return FileOutcome.Mismatch(name, verdict.describe())
                 }
-                storage { store.commit(key) }
+                // A final that appeared since the check above (another process, or a crash after an
+                // earlier commit) is never replaced. The waiter's path re-checks it against OPENED.
+                val committed = storage {
+                    try {
+                        store.commit(key)
+                        true
+                    } catch (_: AlreadyCommitted) {
+                        false
+                    }
+                }
+                if (!committed) return storage { adoptExisting(key, meta, sourceDevice, onProgress) }
                 val record = ArchiveRecord(
                     station = key.station,
                     name = name,
@@ -307,6 +319,22 @@ class SyncEngine(
         throw e
     } catch (e: Exception) {
         throw StorageFault(e)
+    }
+
+    /** Like `use`, but a failed close after a good transfer (the partial's final sync) is a [StorageFault]. */
+    private inline fun <R> PartialWriter.useInStorage(block: (PartialWriter) -> R): R {
+        val result = try {
+            block(this)
+        } catch (e: Throwable) {
+            try {
+                close()
+            } catch (closing: Throwable) {
+                e.addSuppressed(closing)
+            }
+            throw e
+        }
+        storage { close() }
+        return result
     }
 
     /** This phone's archive failed (disk full, a refused path, a failed move or receipt). */
