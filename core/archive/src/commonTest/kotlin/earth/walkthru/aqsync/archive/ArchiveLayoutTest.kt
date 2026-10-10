@@ -47,15 +47,16 @@ class ArchiveLayoutTest {
         // The list from ios/tests/ArchiveChecks.swift.
         val unsafe = listOf(
             "../escape.parquet", "/escape.parquet", "a//b.parquet", "a/./b.parquet", "a\\b.parquet", "a\u0000b.parquet",
-            "UPPER.parquet", ".parquet", "a..b.parquet", "a".repeat(392) + ".parquet",
+            "UPPER.parquet", ".parquet", "a..b.parquet", "a".repeat(200) + "/" + "a".repeat(191) + ".parquet", "a".repeat(234) + ".parquet",
             "./a.parquet", "$dated.partial", "$dated.verified.json",
         )
         for (name in unsafe) {
             assertFalse(ArchiveLayout.isArchiveName(name), name)
             assertFailsWith<IllegalArgumentException> { ArchiveKey(station, name) }
         }
-        // Exactly 399 bytes is the contract maximum.
-        assertTrue(ArchiveLayout.isArchiveName("a".repeat(391) + ".parquet"))
+        // Exactly 399 bytes is the contract maximum, with no segment over 241 bytes (#60).
+        assertTrue(ArchiveLayout.isArchiveName("a".repeat(200) + "/" + "a".repeat(190) + ".parquet"))
+        assertTrue(ArchiveLayout.isArchiveName("a".repeat(233) + ".parquet"))
     }
 
     @Test

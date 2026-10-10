@@ -45,8 +45,9 @@ class SyncPlannerTest {
     @Test
     fun safeNameAccepts399BytesAndRejects400PerTheContract() {
         val suffix = ".parquet"
-        val at399 = "a".repeat(399 - suffix.length) + suffix
-        val at400 = "a".repeat(400 - suffix.length) + suffix
+        // Segments stay within the 241-byte phone limit (#60), so only the total length is tested.
+        val at399 = "a".repeat(200) + "/" + "a".repeat(198 - suffix.length) + suffix
+        val at400 = "a".repeat(200) + "/" + "a".repeat(199 - suffix.length) + suffix
         assertEquals(399, at399.encodeToByteArray().size)
         assertTrue(SafeName.isValid(at399))
         assertFalse(SafeName.isValid(at400))

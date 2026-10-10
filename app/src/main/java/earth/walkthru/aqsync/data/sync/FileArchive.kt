@@ -110,7 +110,7 @@ class FileArchive(
 
     /** Station UUIDs are `[0-9a-f-]`; anything else is refused rather than used as a path. */
     private fun safeStation(station: String): String {
-        require(station !in setOf(".", "..") && station.isNotEmpty() && station.matches(Regex("[0-9A-Za-z._-]+"))) { "unsafe station id: $station" }
+        require(station !in setOf(".", "..") && station.isNotEmpty() && station.matches(Regex("[0-9A-Za-z._-]+"))) { "unsafe station id" }
         return station
     }
 

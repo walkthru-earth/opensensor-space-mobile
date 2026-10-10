@@ -61,6 +61,8 @@ class JvmAtomicFiles(private val tempDir: File) : AtomicFiles {
         val target = File(to).toPath()
         syncFile(from, cls)
         val parent = checkNotNull(target.parent) { "commit target has no parent" }
+        // A directory created here is durable only once its own entry is synced, up to the first one that existed.
+        val existing = generateSequence(parent) { it.parent }.first { Files.isDirectory(it, LinkOption.NOFOLLOW_LINKS) || it.parent == null }
         io("cannot create destination directory") { Files.createDirectories(parent) }
         synchronized(LOCK) {
             if (!replace && Files.exists(target, LinkOption.NOFOLLOW_LINKS)) throw AlreadyCommitted()
@@ -73,7 +75,10 @@ class JvmAtomicFiles(private val tempDir: File) : AtomicFiles {
                 throw StorageException("cannot rename into place", e)
             }
         }
-        syncDir(parent.toString())
+        for (dir in generateSequence(parent) { it.parent }) {
+            syncDir(dir.toString())
+            if (dir == existing) break
+        }
     }
 
     private inline fun write(file: File, block: (FileChannel) -> Unit) = io("cannot write temp file") {

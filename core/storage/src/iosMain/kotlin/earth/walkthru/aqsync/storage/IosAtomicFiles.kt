@@ -129,13 +129,22 @@ class IosAtomicFiles internal constructor(private val tempDir: String, private v
 
     private fun rename(from: String, to: String, cls: StorageClass, replace: Boolean) {
         val parent = to.substringBeforeLast('/')
+        // A directory created here is durable only once its own entry is synced, up to the first one that existed.
+        val fm = NSFileManager.defaultManager
+        val existing = generateSequence(parent) { dir -> dir.substringBeforeLast('/', "").takeIf { it.isNotEmpty() } }
+            .firstOrNull { fm.fileExistsAtPath(it) } ?: parent
         mkdirs(parent)
         val result = if (replace) posix.rename(from, to) else posix.renameExclusive(from, to)
         if (result != 0) {
             if (!replace && posix.errno() == EEXIST) throw AlreadyCommitted()
             fail("cannot rename into place")
         }
-        syncDir(parent, cls)
+        var dir = parent
+        while (true) {
+            syncDir(dir, cls)
+            if (dir == existing || '/' !in dir) break
+            dir = dir.substringBeforeLast('/')
+        }
     }
 
     /**

@@ -19,6 +19,7 @@ import earth.walkthru.aqsync.data.protocol.ProtocolError
 import earth.walkthru.aqsync.data.protocol.Sha256
 import earth.walkthru.aqsync.data.protocol.toHex
 import earth.walkthru.aqsync.storage.AlreadyCommitted
+import earth.walkthru.aqsync.storage.StorageException
 import earth.walkthru.aqsync.sync.nowEpochMs
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
@@ -234,9 +235,10 @@ class SyncEngine(
             }
         } catch (e: StorageFault) {
             // This phone's archive failed for this file. The link and the session are fine, so the
-            // next file runs. The class and message only, never bytes.
+            // next file runs. Only a StorageException message is known to be free of paths and
+            // station ids, so any other cause reports its class alone.
             val cause = e.cause ?: e
-            val reason = "storage ${cause::class.simpleName}: ${cause.message}"
+            val reason = if (cause is StorageException) "storage ${cause::class.simpleName}: ${cause.message}" else "storage ${cause::class.simpleName}"
             log("$name not saved, $reason")
             return FileOutcome.Failed(name, reason, storage = true)
         } catch (e: DeviceErrorException) {
@@ -265,13 +267,9 @@ class SyncEngine(
         onProgress: (FileProgress) -> Unit,
     ): FileOutcome {
         val name = key.name
-        val reader = try {
-            store.reader(key)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            return FileOutcome.Mismatch(name, "archive destination is not a file")
-        }
+        // A destination that cannot be opened (a directory, say) is this phone's storage fault, not a
+        // conflict with the device: the caller's storage wrapper fails this file and keeps the partial.
+        val reader = store.reader(key)
         val (verdict, sha256) = verifyAndHash(reader, meta)
         if (!verdict.ok) return FileOutcome.Mismatch(name, "existing archive conflicts with device: ${verdict.describe()}")
         val row = index.get(key)
