@@ -113,8 +113,10 @@ class ParquetReader private constructor(
         scanOnce(request)
     } catch (e: SourceChangedException) {
         cache.invalidate(e.previous)
-        load()
-        scanOnce(request)
+        retryOnce(e) {
+            load()
+            scanOnce(request)
+        }
     }
 
     /** All rows of [columns], every row group. */
@@ -455,7 +457,7 @@ class ParquetReader private constructor(
                     reader.load()
                 } catch (e: SourceChangedException) {
                     footerCache.invalidate(e.previous)
-                    reader.load()
+                    retryOnce(e) { reader.load() }
                 }
             } catch (e: Throwable) {
                 source.close()
@@ -510,4 +512,11 @@ internal class ValueRanges(ranges: List<LongRange>) {
         val i = firstEndingAtOrAfter(lo)
         return i < ranges.size && ranges[i].first <= hi
     }
+}
+
+/** Runs [block] once more after [first]. A source that changes again fails as a format error. */
+private inline fun <T> retryOnce(first: SourceChangedException, block: () -> T): T = try {
+    block()
+} catch (again: SourceChangedException) {
+    throw ParquetFormatException("${again.previous.uri} changed again while it was read, after ${first.message}", again)
 }
