@@ -1,8 +1,7 @@
 package earth.walkthru.aqsync.publicfeed
 
-import earth.walkthru.aqsync.data.history.parquet.ByteArrayReader
-import earth.walkthru.aqsync.data.history.parquet.SuspendByteReader
-import earth.walkthru.aqsync.data.history.parquet.asSuspend
+import earth.walkthru.aqsync.data.history.parquet.MemoryRangeSource
+import earth.walkthru.aqsync.data.history.parquet.RangeSource
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -61,6 +60,9 @@ data class CellsTable(
     val rows: List<CellRow>,
     val rowGroupsRead: Int,
     val rowGroupsTotal: Int,
+    /** Data pages decoded, of the pages in the row groups that were read. */
+    val pagesRead: Int = 0,
+    val pagesTotal: Int = 0,
 ) {
     companion object {
         val EMPTY = CellsTable(CellsFileInfo(sample = false, window = null, h3Res = null, properties = emptyList()), emptyList(), 0, 0)
@@ -77,10 +79,10 @@ interface FeedReader {
     val available: Boolean get() = true
 
     /**
-     * Rows whose `h3_index` falls in [ranges] (all rows when null). Row groups whose `h3_index`
-     * statistics miss every range are skipped without reading their pages.
+     * Rows whose `h3_index` falls in [ranges] (all rows when null). Row groups and pages whose
+     * `h3_index` statistics miss every range are skipped without fetching them. Closes [source].
      */
-    suspend fun readCells(reader: SuspendByteReader, source: String, ranges: List<LongRange>?): CellsTable
+    suspend fun readCells(source: RangeSource, ranges: List<LongRange>?): CellsTable
 }
 
 /** The public feed port. The bundled sample and, later, the live source.coop feed implement it. */
@@ -132,6 +134,6 @@ class BundledSampleFeed(
         if (!reader.available) return CellsTable.EMPTY
         val path = "$root/${FeedPaths.cells(partition, window, res)}"
         val data = bytes[path] ?: load(path).also { bytes[path] = it }
-        return reader.readCells(ByteArrayReader(data).asSuspend(), path, ranges)
+        return reader.readCells(MemoryRangeSource(data, path, "bundled"), ranges)
     }
 }
