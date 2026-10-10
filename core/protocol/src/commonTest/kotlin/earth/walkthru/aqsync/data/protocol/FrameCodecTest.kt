@@ -57,9 +57,9 @@ class FrameCodecTest {
 
     @Test
     fun `LIST_END decodes counts and card size`() {
-        // count=766 (0x02FE) partials=0 sd_kib=30704848 (0x01D48CD0) used=36576 (0x8EE0)
-        val frame = FrameCodec.decode("11 fe02 0000 d084d401 e08e0000".hexToBytes()) as Frame.ListEnd
-        assertEquals(766, frame.count)
+        // Proto 3 layout. count=766 (0x02FE, u32) partials=0 sd_kib=30704848 (0x01D48CD0) used=36576 (0x8EE0)
+        val frame = FrameCodec.decode("11 fe020000 0000 d084d401 e08e0000".hexToBytes()) as Frame.ListEnd
+        assertEquals(766L, frame.count)
         assertEquals(0, frame.partials)
         assertEquals(30_704_848L, frame.sdKib)
         assertEquals(36_576L, frame.sdUsedKib)

@@ -12,8 +12,8 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class DeviceCapabilitiesTest {
-    private val waveshareV2 = DeviceInfo(proto = 2, schema = "waveshare-sim7670g-telemetry-v2", dict = LiveProfiles.WAVESHARE_V2_DICTIONARY)
-    private val waveshareV1 = DeviceInfo(proto = 2, schema = "waveshare-sim7670g-telemetry-v1", dict = LiveProfiles.WAVESHARE_DICTIONARY)
+    private val waveshareV2 = DeviceInfo(proto = 3, schema = "waveshare-sim7670g-telemetry-v2", dict = LiveProfiles.WAVESHARE_V2_DICTIONARY)
+    private val waveshareV1 = DeviceInfo(proto = 3, schema = "waveshare-sim7670g-telemetry-v1", dict = LiveProfiles.WAVESHARE_DICTIONARY)
     private val cores3 = DeviceInfo(proto = 1, schema = "cores3-telemetry-v3", dict = LiveProfiles.CORES3_DICTIONARY)
 
     @Test fun noInfoMeansNothingIsAssumed() {
@@ -65,8 +65,8 @@ class DeviceCapabilitiesTest {
     }
 
     @Test fun locationSchemasPreserveReviewedLiveMeanings() {
-        val wave = DeviceInfo(proto = 2, schema = "waveshare-sim7670g-telemetry-v3", dict = LiveProfiles.WAVESHARE_V3_DICTIONARY)
-        val core = DeviceInfo(proto = 2, schema = "cores3-telemetry-v4", dict = LiveProfiles.CORES3_V4_DICTIONARY)
+        val wave = DeviceInfo(proto = 3, schema = "waveshare-sim7670g-telemetry-v3", dict = LiveProfiles.WAVESHARE_V3_DICTIONARY)
+        val core = DeviceInfo(proto = 3, schema = "cores3-telemetry-v4", dict = LiveProfiles.CORES3_V4_DICTIONARY)
         assertEquals(TemperatureSource.AMBIENT, DeviceCapabilities.from(wave).liveProfile?.temperature)
         assertTrue(DeviceCapabilities.from(wave).batchEstimate)
         assertEquals(TemperatureSource.BOARD, DeviceCapabilities.from(core).liveProfile?.temperature)

@@ -59,6 +59,9 @@ object FrameRedaction {
         is Frame.StatusPush -> "STATUS ${scrubSecrets(frame.json)}"
         is Frame.LivePush -> "LIVE ${scrubSecrets(frame.json)}"
         is Frame.Hello -> "HELLO proto=${frame.proto} payload_max=${frame.payloadMax} ${scrubSecrets(frame.infoJson)}"
+        is Frame.Bye -> "BYE ${frame.disconnectReason.wireName} gen=${frame.generation} err=${frame.err} queued=${frame.queued} up=${frame.uptimeSeconds}s"
+        is Frame.Diag -> "DIAG boot=${frame.bootSeq} events=${frame.events.size} counts=${frame.counts.joinToString(",")}"
+        is Frame.Aborted -> "ABORTED op=${Opcode.name(frame.op)}"
         else -> frame.toString()
     }
 
