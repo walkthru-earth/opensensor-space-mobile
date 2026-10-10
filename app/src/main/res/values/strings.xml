@@ -205,6 +205,8 @@
     <string name="msg_lan_busy">Another phone is connected over Wi-Fi. Using Bluetooth.</string>
     <string name="msg_lan_failed">Wi-Fi connection failed. Using Bluetooth.</string>
     <string name="msg_newer_protocol">Sensor protocol v%1$d, app protocol v%2$d. Newer features are ignored.</string>
+    <string name="msg_firmware_update_required">Update the sensor firmware to connect. It speaks protocol %1$d, this app needs %2$d.</string>
+    <string name="msg_firmware_update_required_unknown">Update the sensor firmware to connect. This app needs protocol %1$d.</string>
     <string name="msg_hardware_in_use">This sensor is already connected another way.</string>
     <string name="msg_verification_failed">Could not verify the sensor. Try again.</string>
     <string name="msg_station_changed">The sensor was reset. Earlier history is kept and Wi-Fi access renews over Bluetooth.</string>

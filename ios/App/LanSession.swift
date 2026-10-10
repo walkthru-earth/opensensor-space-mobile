@@ -120,7 +120,7 @@ actor LanSession {
         try await sendRaw(wire.handshake(token: credential.token))
         let hello = try await reply(timeout: Self.requestTimeout)
         try Self.refuse(hello)
-        guard hello.kind == "hello", hello.code == 2, (64...1024).contains(Int(hello.count)),
+        guard hello.kind == "hello", hello.code >= 3, (64...1024).contains(Int(hello.count)),
             let identity = wire.identity(json: hello.json)
         else { throw LanFailure.invalidReply }
         guard identity.device == credential.device else { throw LanFailure.hardwareChanged }

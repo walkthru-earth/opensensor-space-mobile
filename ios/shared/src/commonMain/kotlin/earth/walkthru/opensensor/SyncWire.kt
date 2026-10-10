@@ -5,7 +5,9 @@ import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.protocol.FrameCodec
 import earth.walkthru.aqsync.data.protocol.LanProtocol
+import earth.walkthru.aqsync.data.protocol.ProtoGate
 import earth.walkthru.aqsync.data.protocol.Request
+import earth.walkthru.aqsync.data.protocol.requireProto3
 
 /**
  * Small Swift facade around the canonical shared codec for the session itself: the token
@@ -27,7 +29,7 @@ class SyncWire {
         val info = DeviceInfo.parse(json)
         val station = info.station ?: error("missing station")
         val device = info.dev ?: error("missing hardware identity")
-        require(info.proto == 2 && Regex("[0-9a-fA-F]{12}").matches(device))
+        require(requireProto3(info) is ProtoGate.Accepted && Regex("[0-9a-fA-F]{12}").matches(device))
         require(isStationId(station))
         // Android ReadWindow.kt:21 uses 4096 when max_read is absent. Never above the advertised value.
         val maxRead = info.maxRead ?: DEFAULT_MAX_READ
@@ -51,7 +53,8 @@ class SyncWire {
     internal fun decodeFrame(bytes: ByteArray): SyncReply? = runCatching {
         when (val frame = FrameCodec.decode(bytes)) {
             is Frame.File -> SyncReply("file", name = frame.name, size = frame.bytes)
-            is Frame.ListEnd -> SyncReply("listEnd", count = frame.count)
+            // The native layer never reads this count. Saturate the u32 into the Int field.
+            is Frame.ListEnd -> SyncReply("listEnd", count = frame.count.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
             is Frame.Opened -> SyncReply("opened", name = frame.name, size = frame.size, crc = frame.crc32, handle = frame.handle)
             is Frame.Chunk -> SyncReply("chunk", handle = frame.handle, offset = frame.offset, bytes = frame.payload)
             is Frame.ReadEnd -> SyncReply("readEnd", handle = frame.handle, offset = frame.nextOffset, code = frame.status)

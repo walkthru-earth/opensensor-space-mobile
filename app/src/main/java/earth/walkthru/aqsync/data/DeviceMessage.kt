@@ -34,6 +34,9 @@ sealed interface DeviceMessage {
     data class LanFallback(val failure: LanFailure?) : DeviceMessage
     data object ConnectFailed : DeviceMessage
     data class NewerProtocol(val device: Int, val app: Int) : DeviceMessage
+
+    /** The sensor reports protocol [device] (null when absent), below the [app] minimum. */
+    data class FirmwareUpdateRequired(val device: Int?, val app: Int) : DeviceMessage
     data class IdentityRejected(val reason: DeviceContinuityPolicy.Reason) : DeviceMessage
     data object HardwareInUse : DeviceMessage
     data object VerificationFailed : DeviceMessage
