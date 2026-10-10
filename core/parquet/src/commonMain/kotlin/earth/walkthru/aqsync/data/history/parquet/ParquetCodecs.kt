@@ -1,14 +1,16 @@
 package earth.walkthru.aqsync.data.history.parquet
 
 /**
- * Decompresses one Parquet page body. Implementations are stateless and thread-safe.
+ * Decompresses one Parquet page body. Implementations are thread-safe and may keep per-thread state
+ * (an inflater, a ZSTD context) between calls.
  *
- * [input] holds exactly the compressed bytes of the page and belongs to the decompressor (it may keep or
- * modify it). The result must hold exactly [uncompressedSize] bytes (the page header says so) or the
- * caller throws a [ParquetFormatException].
+ * The compressed page is `src[srcOffset, srcOffset + srcLength)`, a window of the bytes the reader
+ * fetched, which the decompressor must not modify or keep. It writes exactly [dstLength] bytes (the
+ * page header says so) into `dst[dstOffset, dstOffset + dstLength)` and returns the count written; the
+ * caller throws a [ParquetFormatException] for any other count.
  */
 fun interface PageDecompressor {
-    fun decompress(input: ByteArray, uncompressedSize: Int): ByteArray
+    fun decompress(src: ByteArray, srcOffset: Int, srcLength: Int, dst: ByteArray, dstOffset: Int, dstLength: Int): Int
 }
 
 /**
@@ -31,13 +33,14 @@ class ParquetCodecs private constructor(private val table: Map<ParquetCodec, Pag
     companion object {
         val builtIn: ParquetCodecs = ParquetCodecs(
             mapOf(
-                ParquetCodec.UNCOMPRESSED to PageDecompressor { input, size ->
-                    if (input.size != size) throw ParquetFormatException("uncompressed page sizes disagree (${input.size} vs $size)")
-                    input
+                ParquetCodec.UNCOMPRESSED to PageDecompressor { src, srcOffset, srcLength, dst, dstOffset, dstLength ->
+                    if (srcLength != dstLength) throw ParquetFormatException("uncompressed page sizes disagree ($srcLength vs $dstLength)")
+                    src.copyInto(dst, dstOffset, srcOffset, srcOffset + srcLength)
+                    dstLength
                 },
-                ParquetCodec.LZ4_RAW to PageDecompressor { input, size -> Lz4Block.decompress(input, size) },
-                ParquetCodec.SNAPPY to PageDecompressor { input, size -> Snappy.decompress(input, size) },
-                ParquetCodec.GZIP to PageDecompressor { input, size -> Gzip.decompress(input, size) },
+                ParquetCodec.LZ4_RAW to PageDecompressor(Lz4Block::decompressInto),
+                ParquetCodec.SNAPPY to PageDecompressor(Snappy::decompressInto),
+                ParquetCodec.GZIP to PageDecompressor(::gunzipInto),
             ),
         )
     }
@@ -49,7 +52,17 @@ class ParquetCodecs private constructor(private val table: Map<ParquetCodec, Pag
  */
 object Snappy {
     fun decompress(input: ByteArray, expectedSize: Int): ByteArray {
-        val src = ByteCursor(input)
+        if (expectedSize < 0) throw ParquetFormatException("snappy: negative output size")
+        val out = ByteArray(expectedSize)
+        decompressInto(input, 0, input.size, out, 0, expectedSize)
+        return out
+    }
+
+    /** Decodes `input[srcOffset, srcOffset + srcLength)` into exactly `out[dstOffset, dstOffset + expectedSize)`. */
+    fun decompressInto(input: ByteArray, srcOffset: Int, srcLength: Int, out: ByteArray, dstOffset: Int, expectedSize: Int): Int {
+        if (srcOffset < 0 || srcLength < 0 || srcOffset.toLong() + srcLength > input.size) throw ParquetFormatException("snappy: input window outside the buffer")
+        if (dstOffset < 0 || expectedSize < 0 || dstOffset.toLong() + expectedSize > out.size) throw ParquetFormatException("snappy: output window outside the buffer")
+        val src = ByteCursor(input, srcOffset, srcOffset + srcLength)
         // Preamble: uncompressed length as a little-endian varint.
         var length = 0L
         var shift = 0
@@ -62,8 +75,8 @@ object Snappy {
             if (shift > 32) throw ParquetFormatException("snappy: length varint too long")
         }
         if (length != expectedSize.toLong()) throw ParquetFormatException("snappy: block declares $length bytes, page header says $expectedSize")
-        val out = ByteArray(expectedSize)
-        var pos = 0
+        val end = dstOffset + expectedSize
+        var pos = dstOffset
         while (src.hasRemaining) {
             val tag = src.getU8()
             when (tag and 3) {
@@ -75,39 +88,39 @@ object Snappy {
                         for (i in 0 until bytes) len = len or ((src.getOrThrow().toInt() and 0xFF) shl (8 * i))
                     }
                     len += 1
-                    if (len > src.remaining || pos + len > out.size) throw ParquetFormatException("snappy: literal of $len bytes overruns")
+                    if (len > src.remaining || pos + len > end) throw ParquetFormatException("snappy: literal of $len bytes overruns")
                     src.get(out, pos, len)
                     pos += len
                 }
                 1 -> {
                     val len = 4 + ((tag ushr 2) and 7)
                     val offset = ((tag ushr 5) shl 8) or (src.getOrThrow().toInt() and 0xFF)
-                    pos = copy(out, pos, offset, len)
+                    pos = copy(out, dstOffset, end, pos, offset, len)
                 }
                 2 -> {
                     val len = (tag ushr 2) + 1
                     val offset = (src.getOrThrow().toInt() and 0xFF) or ((src.getOrThrow().toInt() and 0xFF) shl 8)
-                    pos = copy(out, pos, offset, len)
+                    pos = copy(out, dstOffset, end, pos, offset, len)
                 }
                 else -> {
                     val len = (tag ushr 2) + 1
                     if (src.remaining < 4) throw ParquetFormatException("snappy: truncated copy")
                     val offset = src.getInt()
                     if (offset < 0) throw ParquetFormatException("snappy: copy offset out of range")
-                    pos = copy(out, pos, offset, len)
+                    pos = copy(out, dstOffset, end, pos, offset, len)
                 }
             }
         }
-        if (pos != expectedSize) throw ParquetFormatException("snappy: produced $pos of $expectedSize bytes")
-        return out
+        if (pos != end) throw ParquetFormatException("snappy: produced ${pos - dstOffset} of $expectedSize bytes")
+        return expectedSize
     }
 
     private fun ByteCursor.getOrThrow(): Byte = if (hasRemaining) get() else throw ParquetFormatException("snappy: truncated block")
 
     /** Back-reference; [offset] may be smaller than [len] (overlapping copy = run), so copy byte by byte. */
-    private fun copy(out: ByteArray, pos: Int, offset: Int, len: Int): Int {
-        if (offset <= 0 || offset > pos) throw ParquetFormatException("snappy: copy offset $offset at $pos is invalid")
-        if (pos + len > out.size) throw ParquetFormatException("snappy: copy of $len bytes overruns")
+    private fun copy(out: ByteArray, base: Int, end: Int, pos: Int, offset: Int, len: Int): Int {
+        if (offset <= 0 || offset > pos - base) throw ParquetFormatException("snappy: copy offset $offset at ${pos - base} is invalid")
+        if (pos + len > end) throw ParquetFormatException("snappy: copy of $len bytes overruns")
         if (offset >= len) {
             out.copyInto(out, pos, pos - offset, pos - offset + len)
         } else {
@@ -120,11 +133,17 @@ object Snappy {
 /** Parquet GZIP = a gzip member stream (RFC 1952) around the page. */
 object Gzip {
     /** Inflates [input] into exactly [expectedSize] bytes. */
-    fun decompress(input: ByteArray, expectedSize: Int): ByteArray = gunzip(input, expectedSize)
+    fun decompress(input: ByteArray, expectedSize: Int): ByteArray {
+        if (expectedSize < 0) throw ParquetFormatException("gzip: negative output size")
+        val out = ByteArray(expectedSize)
+        gunzipInto(input, 0, input.size, out, 0, expectedSize)
+        return out
+    }
 }
 
 /**
- * Platform gzip: `java.util.zip` on the JVM, the system zlib on iOS. Produces exactly [expectedSize]
- * bytes or throws [ParquetFormatException] (short output, trailing data, corrupt stream).
+ * Platform gzip, one or more concatenated members: `java.util.zip.Inflater` on the JVM, the system zlib
+ * on iOS, each reused per thread. Writes exactly [dstLength] bytes or throws [ParquetFormatException]
+ * (short output, trailing data, corrupt stream, CRC mismatch).
  */
-internal expect fun gunzip(input: ByteArray, expectedSize: Int): ByteArray
+internal expect fun gunzipInto(src: ByteArray, srcOffset: Int, srcLength: Int, dst: ByteArray, dstOffset: Int, dstLength: Int): Int

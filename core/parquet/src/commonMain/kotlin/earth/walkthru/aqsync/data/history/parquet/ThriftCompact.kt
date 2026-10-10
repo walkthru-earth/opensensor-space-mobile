@@ -77,6 +77,8 @@ internal class ThriftCompactReader(private val buf: ByteCursor) {
         val sizeNibble = byte ushr 4
         val size = if (sizeNibble == 0x0F) readVarint32() else sizeNibble
         require(size >= 0) { "negative list size" }
+        // Every element takes at least one byte, so a larger count is a corrupt or truncated footer.
+        require(size <= buf.remaining) { "list of $size elements in ${buf.remaining} bytes" }
         return ListHeader(elementType, size)
     }
 

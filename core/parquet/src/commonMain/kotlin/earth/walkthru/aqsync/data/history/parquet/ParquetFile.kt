@@ -522,15 +522,15 @@ internal class ColumnChunkDecoder(
             if (compressedSize != uncompressedSize) throw ParquetFormatException("'$column': uncompressed page sizes disagree ($compressedSize vs $uncompressedSize) ($source)")
             return raw
         }
-        val input = raw.data.copyOfRange(raw.start, raw.limit)
-        val out = try {
-            decompressor.decompress(input, uncompressedSize)
+        val out = ByteArray(uncompressedSize)
+        val written = try {
+            decompressor.decompress(raw.data, raw.start, raw.limit - raw.start, out, 0, uncompressedSize)
         } catch (e: ParquetFormatException) {
             throw ParquetFormatException("'$column': ${e.message} ($source)", e)
         } catch (e: RuntimeException) {
             throw ParquetFormatException("'$column': $codec page failed to decompress: ${e.message} ($source)", e)
         }
-        if (out.size != uncompressedSize) throw ParquetFormatException("'$column': $codec page produced ${out.size} bytes, header says $uncompressedSize ($source)")
+        if (written != uncompressedSize) throw ParquetFormatException("'$column': $codec page produced $written bytes, header says $uncompressedSize ($source)")
         return ByteCursor(out)
     }
 
