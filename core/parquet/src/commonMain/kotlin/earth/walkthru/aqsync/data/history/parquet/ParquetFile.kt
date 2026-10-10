@@ -180,11 +180,12 @@ internal class ColumnChunks(
     }
 
     /**
-     * A sink for [rows] rows of [leaf] over [rowGroups]. BYTE_ARRAY bytes start at the uncompressed size
-     * the footer declares, capped so a hostile footer cannot ask for a huge array up front.
+     * A sink for [rows] rows of [leaf] over [rowGroups]. The row count comes from the footer, so it is
+     * capped at [ParquetLimits.MAX_ROWS] before any slot is allocated. BYTE_ARRAY bytes start at the
+     * uncompressed size the footer declares, capped so a hostile footer cannot ask for a huge array up front.
      */
     fun sink(leaf: LeafColumn, rows: Long, rowGroups: Iterable<Int>): ColumnSink {
-        if (rows >= Int.MAX_VALUE) throw ParquetFormatException("'${leaf.name}': $rows rows do not fit one column ($source)")
+        if (rows !in 0..ParquetLimits.MAX_ROWS) throw ParquetFormatException("'${leaf.name}': $rows rows exceed the limit of ${ParquetLimits.MAX_ROWS} per column ($source)")
         var hint = 0L
         if (leaf.type == ParquetType.BYTE_ARRAY) for (rg in rowGroups) hint += chunk(leaf, rg).second.totalUncompressedSize.coerceAtLeast(0)
         return ColumnSink(leaf, rows.toInt(), hint.coerceAtMost(MAX_BINARY_HINT).toInt(), source)

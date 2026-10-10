@@ -36,6 +36,20 @@ internal class RowSelection(val starts: LongArray, val ends: LongArray) {
 }
 
 /**
+ * Bounds on sizes a file declares before the reader allocates for them. Footers and page headers are
+ * untrusted (a remote file is read over HTTP), and a few bytes can declare billions of rows or a 2 GiB
+ * page. Row counts cannot be bounded by bytes, since one RLE run encodes any number of nulls, so they get
+ * a fixed cap far above any file the app reads (device archives hold under 2,000 rows a file).
+ */
+internal object ParquetLimits {
+    /** Rows of one column in one decode, 16 Mi, 128 MiB as INT64. */
+    const val MAX_ROWS: Long = 1L shl 24
+
+    /** Uncompressed bytes of one page. Writers default to 1 MiB pages and 1 MiB dictionaries. */
+    const val MAX_PAGE_BYTES: Int = 64 * 1024 * 1024
+}
+
+/**
  * The output of one column across a scan: exactly [capacity] slots, filled in row order by one
  * [ChunkDecoder] per row group. Fixed-width arrays are allocated once at their final size; BYTE_ARRAY
  * bytes grow from [binaryHint].
@@ -182,6 +196,9 @@ internal class ChunkDecoder(
     private val optional = leaf.maxDefinitionLevel > 0
     private val width = if (leaf.type == ParquetType.BYTE_ARRAY) 0 else leaf.type.plainWidth
 
+    /** No page is larger than its whole chunk claims to be, nor than [ParquetLimits.MAX_PAGE_BYTES]. */
+    private val maxPageBytes: Int = chunk.totalUncompressedSize.let { if (it in 1 until ParquetLimits.MAX_PAGE_BYTES) it.toInt() else ParquetLimits.MAX_PAGE_BYTES }
+
     private var dictionary: ByteArray? = null
     private var dictionaryCount = 0
     private var selectionIndex = 0
@@ -233,6 +250,7 @@ internal class ChunkDecoder(
         if (offset < viewStart || offset >= viewEnd) throw WindowTooShort(offset)
         val base = view.offset - viewStart
         val header = readPageHeader(view.array, (base + offset).toInt(), (viewEnd - offset).toInt(), offset, viewEnd)
+        if (header.uncompressedSize > maxPageBytes) throw ParquetFormatException("'${leaf.name}': page at $offset declares ${header.uncompressedSize} bytes, more than the $maxPageBytes its chunk allows ($source)")
         val bodyStart = offset + header.headerLength
         val bodyEnd = bodyStart + header.compressedSize
         if (bodyEnd > dataEnd) throw ParquetFormatException("'${leaf.name}': page at $offset runs past the end of the file ($source)")
