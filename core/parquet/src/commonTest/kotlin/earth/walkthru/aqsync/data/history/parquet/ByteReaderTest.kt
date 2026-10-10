@@ -4,23 +4,26 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 
 /**
- * The storage seam: [ByteReader], the footer-first [SuspendParquetFile] that a remote range source will
- * use, row group statistics for pruning, and the typed accessors. Real fixtures, every platform.
+ * The storage seams: [ByteReader] behind [ParquetFile], the footer-first [ParquetReader] over a
+ * [RangeSource], row group statistics for pruning, and the typed accessors. Real fixtures, every platform.
  */
 class ByteReaderTest {
 
     private val hourly = "parquet/v3/v3-hourly-lz4.parquet" // 4 row groups, INT64 TIMESTAMP statistics
     private val device = "parquet/device/v2-none-90rows-unsynced.parquet"
 
-    /** Records every range read, so a test can prove what was (and was not) fetched. */
-    private class CountingReader(private val bytes: ByteArray) : SuspendByteReader {
-        val reads = mutableListOf<Pair<Long, Int>>()
-        override suspend fun size(): Long = bytes.size.toLong()
-        override suspend fun read(offset: Long, length: Int): ByteArray {
-            reads += offset to length
-            return ByteArrayReader(bytes).read(offset, length)
-        }
+    /** Records every request a [ParquetReader] makes: tail reads and the ranges of each read. */
+    private class RecordingSource(bytes: ByteArray) : RangeSource {
+        private val inner = MemoryRangeSource(bytes, "remote")
+        val tails = mutableListOf<Int>()
+        val reads = mutableListOf<List<LongRange>>()
+        override suspend fun id(): SourceId = inner.id()
+        override suspend fun readTail(n: Int): ByteView = inner.readTail(n).also { tails += n }
+        override suspend fun readRanges(ranges: List<LongRange>): List<ByteView> = inner.readRanges(ranges).also { reads += ranges }
     }
+
+    /** A policy that never reads a fixture whole, so the tests see the per-chunk reads. */
+    private fun ranged(tail: Int = 64 * 1024) = RangePolicy.LOCAL.copy(wholeFileBelowBytes = 0, tailPrefetchBytes = tail)
 
     @Test
     fun `byte array reader returns exact ranges and refuses ranges outside the file`() {
@@ -48,48 +51,54 @@ class ByteReaderTest {
     }
 
     @Test
-    fun `suspend file reads the footer from the tail and only the requested chunks`() = runTest {
+    fun `range reader reads the footer from the tail and only the requested chunks`() = runTest {
         val bytes = fixtureBytes(hourly)
-        val source = CountingReader(bytes)
-        val remote = SuspendParquetFile.open(source, "remote")
-        assertEquals("one tail read covers the footer", 1, source.reads.size)
-        assertEquals(bytes.size.toLong(), source.reads.single().first + source.reads.single().second)
+        val source = RecordingSource(bytes)
+        val remote = ParquetReader.open(source, policy = ranged())
+        assertEquals("one tail read covers the footer", 1, source.tails.size)
+        assertEquals(0, source.reads.size)
         val local = ParquetFile.wrap(bytes)
         assertEquals(local.metadata.numRows, remote.numRows)
         assertEquals(4, remote.rowGroupCount)
 
-        val time = remote.leaf("time_ms")
-        val part = remote.readColumn(time, 2) as ColumnValues.Int64
-        assertEquals("one more read for one chunk", 2, source.reads.size)
+        val time = remote.metadata.leaf("time_ms")!!
+        val part = remote.scan(ScanRequest(listOf("time_ms"), rowGroups = listOf(2)))
         val chunk = remote.metadata.rowGroups[2].columns[time.index]
-        assertEquals(chunk.firstPageOffset to chunk.totalCompressedSize.toInt(), source.reads.last())
-        kotlin.test.assertContentEquals((local.readColumn(time, 2) as ColumnValues.Int64).values, part.values)
+        val chunkRange = byteRange(chunk.firstPageOffset, chunk.totalCompressedSize.toInt())
+        if (chunkRange.first < bytes.size - 64 * 1024) {
+            assertEquals("one more read for one chunk", listOf(listOf(chunkRange)), source.reads)
+        } else {
+            assertEquals("the chunk lies inside the tail", 0, source.reads.size)
+        }
+        assertEquals(1, part.rowGroupsRead)
+        kotlin.test.assertContentEquals((local.readColumn(time, 2) as ColumnValues.Int64).values, (part["time_ms"] as PrimitiveColumn.I64).values)
 
-        val all = remote.readColumn(time) as ColumnValues.Int64
-        kotlin.test.assertContentEquals((local.readColumn(time) as ColumnValues.Int64).values, all.values)
-        val two = remote.readColumns(listOf("time_ms", "counter"), 0)
-        assertEquals(listOf("time_ms", "counter"), two.keys.toList())
+        val all = remote.readColumns(listOf("time_ms", "counter", "no_such_column"))
+        kotlin.test.assertContentEquals((local.readColumn(time) as ColumnValues.Int64).values, (all["time_ms"] as PrimitiveColumn.I64).values)
+        assertEquals(listOf("time_ms", "counter"), all.columns.keys.toList())
+        assertEquals(local.metadata.numRows.toInt(), all.rowCount)
     }
 
     @Test
     fun `a footer longer than the first tail read is completed with one more read`() = runTest {
         val bytes = fixtureBytes(device)
-        val source = CountingReader(bytes)
-        val remote = SuspendParquetFile.open(source, "remote", tailBytes = 64)
-        assertEquals(2, source.reads.size)
+        val source = RecordingSource(bytes)
+        val remote = ParquetReader.open(source, policy = ranged(tail = 64))
+        assertEquals(1, source.tails.size)
+        assertEquals(1, source.reads.size)
         val local = ParquetFile.wrap(bytes)
         assertEquals(local.metadata.leaves, remote.metadata.leaves)
         assertEquals(local.metadata.keyValueMetadata, remote.metadata.keyValueMetadata)
         val a = local.readColumn("monotonic_us") as ColumnValues.Int64
-        val b = remote.readColumn(remote.leaf("monotonic_us")) as ColumnValues.Int64
+        val b = remote.readColumns(listOf("monotonic_us"))["monotonic_us"] as PrimitiveColumn.I64
         kotlin.test.assertContentEquals(a.values, b.values)
     }
 
     @Test
-    fun `suspend open refuses a file that is not Parquet`() = runTest {
+    fun `range reader refuses a file that is not Parquet`() = runTest {
         val notParquet = ByteArray(100) { 7 }
         try {
-            SuspendParquetFile.open(ByteArrayReader(notParquet).asSuspend())
+            ParquetReader.open(MemoryRangeSource(notParquet))
             fail("accepted a non-Parquet file")
         } catch (e: ParquetFormatException) {
             assertTrue(e.message, e.message!!.contains("PAR1"))

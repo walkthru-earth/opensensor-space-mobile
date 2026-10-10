@@ -39,8 +39,8 @@ object RangePlanner {
         for (i in order) {
             val r = ranges[i]
             if (r.first < 0) throw IndexOutOfBoundsException("range $r starts before the file")
-            val rEnd = r.last + 1
             rangeLength(r)
+            val rEnd = r.last + 1
             if (members.isNotEmpty() && r.first <= end + policy.coalesceGapBytes && maxOf(end, rEnd) - start <= policy.maxRequestBytes) {
                 end = maxOf(end, rEnd)
             } else {
