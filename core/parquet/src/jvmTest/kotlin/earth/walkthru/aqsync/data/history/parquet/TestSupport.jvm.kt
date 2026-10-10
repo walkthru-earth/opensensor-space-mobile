@@ -18,3 +18,8 @@ actual val testCodecs: ParquetCodecs = ParquetCodecs.builtIn.with(ParquetCodec.Z
 actual fun saveSample(dir: String, name: String, bytes: ByteArray) {
     File("build/$dir").apply { mkdirs() }.resolve(name).writeBytes(bytes)
 }
+
+actual fun tempLocalFile(name: String, bytes: ByteArray): LocalFile =
+    File.createTempFile(name, ".bin").apply { deleteOnExit() }.also { it.writeBytes(bytes) }
+
+actual fun writeLocalFile(file: LocalFile, bytes: ByteArray) = file.writeBytes(bytes)
