@@ -38,7 +38,9 @@ import earth.walkthru.aqsync.data.protocol.ConfigPatch
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.protocol.DeviceStatus
 import earth.walkthru.aqsync.data.protocol.LiveSample
+import earth.walkthru.aqsync.data.protocol.ProtoGate
 import earth.walkthru.aqsync.data.protocol.hexToBytes
+import earth.walkthru.aqsync.data.protocol.requireProto3
 import earth.walkthru.aqsync.data.protocol.toHex
 import earth.walkthru.aqsync.data.sync.ArchivedIdentity
 import earth.walkthru.aqsync.data.sync.ClockSyncMode
@@ -510,6 +512,13 @@ class DeviceConnectionRepository @Inject constructor(
         try {
             val info = session.readInfo()
             val proto = info.proto
+            val gate = requireProto3(info)
+            if (gate is ProtoGate.UpdateFirmware) {
+                Log.w(TAG, "firmware update required (proto ${gate.reported})")
+                connectionFailure.value = "firmware update required"
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.FirmwareUpdateRequired(gate.reported, gate.required)))
+                return false
+            }
             if (proto != null && proto > AqUuids.PROTOCOL_VERSION) {
                 _events.tryEmit(DeviceEvent.Info(DeviceMessage.NewerProtocol(proto, AqUuids.PROTOCOL_VERSION)))
             }

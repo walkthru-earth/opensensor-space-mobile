@@ -6,6 +6,8 @@ import earth.walkthru.opensensor.permissions.AccessStatus
 import earth.walkthru.opensensor.permissions.PermissionFlow
 import earth.walkthru.opensensor.strings.UiText
 import earth.walkthru.opensensor.strings.resources.Res
+import earth.walkthru.opensensor.strings.resources.companion_firmware_update
+import earth.walkthru.opensensor.strings.resources.companion_firmware_update_unknown
 import earth.walkthru.opensensor.strings.resources.companion_info_invalid
 import earth.walkthru.opensensor.strings.resources.companion_lan_denied
 import earth.walkthru.opensensor.strings.resources.companion_lan_waiting
@@ -120,7 +122,7 @@ class CompanionStateTest {
 
     private fun connected(): CompanionState = CompanionState().also {
         it.connectionStarted("device")
-        assertTrue(it.receiveInfo("{\"proto\":2,\"dev\":\"112233445566\"}"))
+        assertTrue(it.receiveInfo("{\"proto\":3,\"dev\":\"112233445566\"}"))
     }
 
     @Test fun disconnectedLanSensorCannotKeepOrRestoreAnOldReading() {
@@ -139,7 +141,7 @@ class CompanionStateTest {
     @Test fun lanTodaySnapshotBelongsOnlyToConnectedStationAndClearsOnClose() {
         val state = CompanionState()
         state.lanSessionChanged("kitchen", true, false, "connected", 0, 0, 0)
-        state.lanInfoReceived("kitchen", "{\"proto\":2,\"station\":\"station-a\",\"dev\":\"112233445566\"}")
+        state.lanInfoReceived("kitchen", "{\"proto\":3,\"station\":\"station-a\",\"dev\":\"112233445566\"}")
         state.lanStatusReceived("kitchen", "{\"utc\":1,\"clk\":1}")
         state.lanReadingReceived("kitchen", "{\"pms\":4,\"pm25\":12.0}")
         assertEquals("kitchen", state.connectedLanForStation("station-a"))
@@ -199,9 +201,19 @@ class CompanionStateTest {
     @Test fun unsupportedInfoNeverOpensAReadingSession() {
         val state = CompanionState()
         state.connectionStarted("device")
-        assertFalse(state.receiveInfo("{\"proto\":3,\"dev\":\"112233445566\"}"))
+        assertFalse(state.receiveInfo("{\"proto\":2,\"dev\":\"112233445566\"}"))
         assertFalse(state.connected)
+        assertEquals(UiText.of(Res.string.companion_firmware_update, 2, 3), state.message)
+        state.connectionStarted("device")
+        assertFalse(state.receiveInfo("{\"dev\":\"112233445566\"}"))
+        assertEquals(UiText.of(Res.string.companion_firmware_update_unknown, 3), state.message)
         assertFalse(state.receiveInfo("{}"))
+    }
+
+    @Test fun newerProtocolStillOpensAReadingSession() {
+        val state = CompanionState()
+        state.connectionStarted("device")
+        assertTrue(state.receiveInfo("{\"proto\":4,\"dev\":\"112233445566\"}"))
     }
 
     @Test fun duplicateAdvertisementsUpdateOneDevice() {

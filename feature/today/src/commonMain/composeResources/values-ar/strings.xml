@@ -216,6 +216,8 @@
     <string name="storage_uptime">مدة التشغيل</string>
     <string name="storage_heap">الذاكرة الحرة</string>
     <string name="storage_failed">توقف التخزين عن الكتابة بعد خطأ. الصفوف الجديدة لا تُحفظ.</string>
+    <string name="storage_degraded">البطاقة متدهورة. استبدلها قريبًا.</string>
+    <string name="storage_full">البطاقة ممتلئة. الصفوف الجديدة لا تُحفظ.</string>
     <string name="device_title">الجهاز</string>
     <string name="device_connected_over">متصل عبر %1$s</string>
     <string name="device_firmware">البرنامج الثابت</string>

@@ -184,6 +184,8 @@
     <string name="storage_uptime">uptime</string>
     <string name="storage_heap">free heap</string>
     <string name="storage_failed">Storage stopped writing after an error. New rows are not being saved.</string>
+    <string name="storage_degraded">The card is degraded. Replace it soon.</string>
+    <string name="storage_full">The card is full. New rows are not being saved.</string>
     <string name="device_title">Device</string>
     <string name="device_connected_over">Connected over %1$s</string>
     <string name="device_firmware">firmware</string>

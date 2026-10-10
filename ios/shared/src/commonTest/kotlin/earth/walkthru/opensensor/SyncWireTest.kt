@@ -9,7 +9,7 @@ class SyncWireTest {
     private val wire = SyncWire()
 
     @Test fun clockIdentityRetainsTheFullBootValue() {
-        val identity = wire.identity("""{"proto":2,"station":"abc-123","dev":"AABBCCDDEEFF","boot":"b41d37a48c04031e9397e28ce48c2f43"}""")!!
+        val identity = wire.identity("""{"proto":3,"station":"abc-123","dev":"AABBCCDDEEFF","boot":"b41d37a48c04031e9397e28ce48c2f43"}""")!!
         assertEquals("b41d37a48c04031e9397e28ce48c2f43", identity.boot)
     }
 
@@ -49,17 +49,18 @@ class SyncWireTest {
     }
 
     @Test fun identityMustBeValidBeforeNativePathsOrCredentialUse() {
-        val json = "{\"proto\":2,\"station\":\"abc-123\",\"dev\":\"AABBCCDDEEFF\",\"max_read\":65536}"
+        val json = "{\"proto\":3,\"station\":\"abc-123\",\"dev\":\"AABBCCDDEEFF\",\"max_read\":65536}"
         val identity = wire.identity(json)!!
         assertEquals("aabbccddeeff", identity.device)
         assertEquals(16384, identity.maxRead)
         assertNull(wire.identity(json.replace("abc-123", "../escape")))
         assertNull(wire.identity(json.replace("AABBCCDDEEFF", "invalid")))
         assertNull(wire.identity("{}"))
+        assertNull(wire.identity(json.replace("\"proto\":3", "\"proto\":2")), "proto 2 needs a firmware update")
     }
 
     @Test fun stationIdAllowsDotButNoPathTraversal() {
-        val json = "{\"proto\":2,\"station\":\"STATION\",\"dev\":\"AABBCCDDEEFF\"}"
+        val json = "{\"proto\":3,\"station\":\"STATION\",\"dev\":\"AABBCCDDEEFF\"}"
         assertEquals("aq.lab_1-b", wire.identity(json.replace("STATION", "aq.lab_1-b"))!!.station)
         for (unsafe in listOf(".", "..", "a/b", "../x", "a\\\\b", "", "a b")) {
             assertNull(wire.identity(json.replace("STATION", unsafe)), unsafe)
@@ -67,7 +68,7 @@ class SyncWireTest {
     }
 
     @Test fun missingMaxReadUsesAndroidDefaultAndNeverExceedsAdvertised() {
-        val json = "{\"proto\":2,\"station\":\"s\",\"dev\":\"AABBCCDDEEFF\"}"
+        val json = "{\"proto\":3,\"station\":\"s\",\"dev\":\"AABBCCDDEEFF\"}"
         assertEquals(SyncWire.DEFAULT_MAX_READ, wire.identity(json)!!.maxRead)
         assertEquals(4096, SyncWire.DEFAULT_MAX_READ)
         assertEquals(2048, wire.identity(json.replace("}", ",\"max_read\":2048}"))!!.maxRead)

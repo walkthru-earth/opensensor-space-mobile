@@ -195,7 +195,7 @@ final class LanDiscovery {
                 domain == "local.", case .bonjour(let txt) = result.metadata,
                 case .string(let station)? = txt.getEntry(for: "station"),
                 case .string(let device)? = txt.getEntry(for: "dev"),
-                case .string("2")? = txt.getEntry(for: "proto")
+                case .string(let proto)? = txt.getEntry(for: "proto"), (Int(proto) ?? 0) >= 3
             else { continue }
             devices[name] = Device(endpoint: result.endpoint, station: station, device: device.lowercased())
         }

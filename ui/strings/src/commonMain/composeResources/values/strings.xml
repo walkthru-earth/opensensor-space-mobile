@@ -31,6 +31,8 @@
     <string name="companion_now">Now</string>
     <string name="companion_pm25_mood">PM2.5 · %1$s</string>
     <string name="companion_storage_error">The sensor reports a storage error.</string>
+    <string name="companion_storage_degraded">The sensor card is degraded. Replace it soon.</string>
+    <string name="companion_storage_full">The sensor card is full. New rows are not being saved.</string>
     <plurals name="companion_files_finalized">
         <item quantity="one">%1$s file finalized on the sensor</item>
         <item quantity="other">%1$s files finalized on the sensor</item>
@@ -41,6 +43,8 @@
     <string name="companion_connect">Connect</string>
     <string name="companion_connecting_pin">Connecting… If asked, enter the pairing PIN shown by your sensor.</string>
     <string name="companion_info_invalid">This sensor has invalid or unsupported device information.</string>
+    <string name="companion_firmware_update">Update the sensor firmware to connect. It speaks protocol %1$d, this app needs %2$d.</string>
+    <string name="companion_firmware_update_unknown">Update the sensor firmware to connect. This app needs protocol %1$d.</string>
     <string name="companion_live">Connected · live readings</string>
     <string name="companion_status_unreadable">The sensor sent an unreadable status.</string>
     <string name="companion_live_unreadable">The sensor sent an unreadable reading.</string>

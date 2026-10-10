@@ -244,7 +244,7 @@ class FakeTransport(
                     send(Frame.File(f.bytes.size.toLong(), f.name))
                     delay(2)
                 }
-                send(Frame.ListEnd(files.size, 1, SD_KIB, sdUsedKib()))
+                send(Frame.ListEnd(files.size.toLong(), 1, SD_KIB, sdUsedKib()))
             }
             Opcode.OPEN -> {
                 val name = String(ByteArray(buf.remaining()).also { buf.get(it) }, Charsets.UTF_8)
@@ -500,7 +500,7 @@ class FakeTransport(
     }
 
     private fun infoJson(): String =
-        """{"proto":2,"fw":"arduino-cores3-parquet-v5 (fake)","schema":"cores3-telemetry-v2","cols":77,""" +
+        """{"proto":3,"fw":"arduino-cores3-parquet-v5 (fake)","schema":"cores3-telemetry-v2","cols":77,""" +
             """"dict":"20f850852413abb1165f3f7ca95b4831a0e90a34ae7c7fcb41c44b108d3513c3","station":"$station","dev":"$deviceId","boot":"$bootId","max_read":$maxRead}"""
 
     private fun statusJson(): String =

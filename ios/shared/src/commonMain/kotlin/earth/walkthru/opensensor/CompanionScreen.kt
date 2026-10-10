@@ -70,7 +70,9 @@ import earth.walkthru.opensensor.strings.resources.companion_lan_rate
 import earth.walkthru.opensensor.strings.resources.companion_lan_title
 import earth.walkthru.opensensor.strings.resources.companion_now
 import earth.walkthru.opensensor.strings.resources.companion_pm25_mood
+import earth.walkthru.opensensor.strings.resources.companion_storage_degraded
 import earth.walkthru.opensensor.strings.resources.companion_storage_error
+import earth.walkthru.opensensor.strings.resources.companion_storage_full
 import earth.walkthru.opensensor.strings.resources.companion_sync
 import earth.walkthru.opensensor.strings.resources.companion_wifi_access_save
 import earth.walkthru.opensensor.strings.resources.companion_wifi_access_saving
@@ -155,6 +157,9 @@ internal fun CompanionScreen(state: CompanionState, title: String?, onBack: () -
                             }
                             state.status?.let { status ->
                                 if (status.storageFailed) Text(stringResource(Res.string.companion_storage_error), color = MaterialTheme.colorScheme.error)
+                                if (status.sdFull || status.sdDegraded) {
+                                    Text(stringResource(if (status.sdFull) Res.string.companion_storage_full else Res.string.companion_storage_degraded), color = MaterialTheme.colorScheme.error)
+                                }
                                 if (showTechnical) status.fin?.let { Text(pluralStringResource(Res.plurals.companion_files_finalized, it.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(), it), color = muted) }
                             }
                             if (showTechnical) state.info?.fw?.let { Text(stringResource(Res.string.companion_firmware, it), style = MaterialTheme.typography.bodySmall, color = muted) }

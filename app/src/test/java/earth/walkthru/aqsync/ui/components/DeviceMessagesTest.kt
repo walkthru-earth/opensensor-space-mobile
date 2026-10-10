@@ -17,6 +17,8 @@ class DeviceMessagesTest {
         assertEquals(UiText.Res(R.string.msg_busy), DeviceMessage.Busy.toUiText())
         assertEquals(UiText.Res(R.string.msg_reconnecting, listOf(2, 3)), DeviceMessage.Reconnecting(2, 3).toUiText())
         assertEquals(UiText.Res(R.string.msg_newer_protocol, listOf(3, 2)), DeviceMessage.NewerProtocol(device = 3, app = 2).toUiText())
+        assertEquals(UiText.Res(R.string.msg_firmware_update_required, listOf(2, 3)), DeviceMessage.FirmwareUpdateRequired(device = 2, app = 3).toUiText())
+        assertEquals(UiText.Res(R.string.msg_firmware_update_required_unknown, listOf(3)), DeviceMessage.FirmwareUpdateRequired(device = null, app = 3).toUiText())
         assertEquals(UiText.Plural(R.plurals.msg_sync_finished, 4, listOf(3, 4)), DeviceMessage.SyncFinished(synced = 3, total = 4).toUiText())
         assertEquals(UiText.Plural(R.plurals.msg_unplaced, 12, listOf(12L)), DeviceMessage.UnplacedReadings(12).toUiText())
         assertEquals(UiText.Plural(R.plurals.msg_finalized, 5, listOf<Any>(5, 2L)), DeviceMessage.Finalized(rows = 5, files = 2).toUiText())

@@ -33,7 +33,7 @@ import kotlin.test.assertTrue
 private const val SECRET_PIN = "482913"
 private const val SECRET_PSK = "correct horse battery"
 
-private val v2Info = DeviceInfo(proto = 2, schema = DeviceCapabilities.WAVESHARE_V2_SCHEMA)
+private val v2Info = DeviceInfo(proto = 3, schema = DeviceCapabilities.WAVESHARE_V2_SCHEMA)
 
 private fun config(wifiState: String = "off", sensor: SensorConfig? = null) = ConfigSnapshot(
     config = DeviceConfig(
