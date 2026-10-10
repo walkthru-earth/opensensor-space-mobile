@@ -58,6 +58,17 @@ class ReaderLimitsTest {
     }
 
     @Test
+    fun `a footer cache keeps nothing for an id that cannot tell versions apart`() = runTest {
+        val cache = FooterCache()
+        val id = SourceId("https://example.org/a.parquet", bytes.size.toLong(), "W/\"weak\"", cacheable = false)
+        cache.put(id, md)
+        assertEquals(0, cache.size)
+        assertNull(cache.get(id))
+        cache.put(id.copy(cacheable = true), md)
+        assertEquals(1, cache.size)
+    }
+
+    @Test
     fun `the head magic is checked on a scan near the head when the tail misses it`() = runTest {
         val good = ParquetReader.open(MemoryRangeSource(bytes, path), policy = remote).use { it.scan(ScanRequest(listOf("h3_index"))) }
         assertEquals(190, good.rowCount)

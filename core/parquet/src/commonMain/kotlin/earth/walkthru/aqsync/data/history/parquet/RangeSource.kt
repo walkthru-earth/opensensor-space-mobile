@@ -36,9 +36,11 @@ class ByteView(val array: ByteArray, val offset: Int = 0, val length: Int = arra
 
 /**
  * The identity of one immutable version of a file. [version] is the ETag over HTTP and size plus
- * modification time for a local file, so a replaced object never matches a cached footer.
+ * modification time for a local file, so a replaced object never matches a cached footer. [cacheable]
+ * is false when [version] cannot tell two versions of the same size apart (an HTTP object with a weak
+ * or missing ETag); a [FooterCache] then keeps nothing for it.
  */
-data class SourceId(val uri: String, val size: Long, val version: String)
+data class SourceId(val uri: String, val size: Long, val version: String, val cacheable: Boolean = true)
 
 /**
  * Bytes of one file, many ranges per call. Ranges are byte offsets in the file, `first..last`

@@ -25,18 +25,27 @@ class FooterCache(val maxEntries: Int = 256) {
 
     val size: Int get() = entries.size
 
-    internal suspend fun get(id: SourceId): Entry? = mutex.withLock {
-        // Reinsert on access so iteration order is least recently used first.
-        entries.remove(id)?.also { entries[id] = it }
+    internal suspend fun get(id: SourceId): Entry? = if (!id.cacheable) {
+        null
+    } else {
+        mutex.withLock {
+            // Reinsert on access so iteration order is least recently used first.
+            entries.remove(id)?.also { entries[id] = it }
+        }
     }
 
-    internal suspend fun put(id: SourceId, metadata: ParquetFileMetadata): Entry = mutex.withLock {
-        entries.remove(id)?.let { existing ->
-            entries[id] = existing
-            return@withLock existing
+    /** Stores [metadata] under [id], or only hands back a fresh entry when [id] is not cacheable. */
+    internal suspend fun put(id: SourceId, metadata: ParquetFileMetadata): Entry = if (!id.cacheable) {
+        Entry(metadata)
+    } else {
+        mutex.withLock {
+            entries.remove(id)?.let { existing ->
+                entries[id] = existing
+                return@withLock existing
+            }
+            while (entries.size >= maxEntries) entries.remove(entries.keys.first())
+            Entry(metadata).also { entries[id] = it }
         }
-        while (entries.size >= maxEntries) entries.remove(entries.keys.first())
-        Entry(metadata).also { entries[id] = it }
     }
 
     internal suspend fun <T> withEntry(entry: Entry, block: (Entry) -> T): T = mutex.withLock { block(entry) }
