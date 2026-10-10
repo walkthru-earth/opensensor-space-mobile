@@ -63,7 +63,9 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -243,6 +245,7 @@ class DeviceConnectionRepository @Inject constructor(
 
     private val _manifest = MutableStateFlow<ManifestState>(ManifestState.Idle)
     val manifest: StateFlow<ManifestState> = _manifest.asStateFlow()
+    private val manifestMutex = Mutex()
 
     private val _sync = MutableStateFlow(SyncProgress())
     val sync: StateFlow<SyncProgress> = _sync.asStateFlow()
@@ -758,7 +761,7 @@ class DeviceConnectionRepository @Inject constructor(
      */
     private suspend fun resumeAfterReconnect() {
         val session = _session.value ?: return
-        val plan = withTimeoutOrNull(MANIFEST_WAIT_MS) { if (refreshManifestNow(session)) planFor(session) else null }
+        val plan = withTimeoutOrNull(MANIFEST_WAIT_MS) { refreshManifestNow(session)?.let { planFor(session, it) } }
         if (plan == null) {
             Log.w(TAG, "no plan for the re-established session; not resuming")
             return
@@ -770,11 +773,10 @@ class DeviceConnectionRepository @Inject constructor(
      * The plan for [session], computed from the listing that session loaded and the archive as it
      * is now. Null when the session is no longer current or has not listed yet.
      */
-    private suspend fun planFor(session: DeviceSession): SyncPlan? {
+    private suspend fun planFor(session: DeviceSession, loaded: ManifestState.Loaded): SyncPlan? {
         if (_session.value !== session) return null
         val station = _info.value?.station ?: return null
-        val loaded = _manifest.value.last ?: return null
-        val archived = archivedFileDao.observeAll().first().map { ArchivedIdentity(it.station, it.name, it.bytes, it.crc32) }
+        val archived = archivedFileDao.forStation(station).map { ArchivedIdentity(it.station, it.name, it.bytes, it.crc32) }
         val plan = SyncPlanner.plan(station, loaded.files, archived, archive.partialLengths(station))
         return plan.takeIf { _session.value === session }
     }
@@ -793,20 +795,20 @@ class DeviceConnectionRepository @Inject constructor(
      * [connectLocked] issues a fresh `LIST`; a timeout means the device is not answering and a
      * second request would only queue behind the stale reply ([DeviceSession] drains it first).
      */
-    private suspend fun refreshManifestNow(session: DeviceSession): Boolean {
-        check(_session.value === session) { "clock session replaced" }
+    private suspend fun refreshManifestNow(session: DeviceSession): ManifestState.Loaded? = manifestMutex.withLock {
+        if (_session.value !== session) return@withLock null
         _manifest.update { it.refreshing() }
-        return try {
+        try {
             val (files, end) = session.list()
-            check(_session.value === session) { "clock session replaced" }
-            _manifest.update { it.loaded(files, end, clock.nowEpochMs()) }
-            true
+            check(_session.value === session) { "LIST session replaced" }
+            ManifestState.Loaded(files, end, clock.nowEpochMs()).also { _manifest.value = it }
         } catch (e: CancellationException) {
+            if (_session.value === session) _manifest.update { it.failed("LIST cancelled") }
             throw e
         } catch (e: Exception) {
             Log.w(TAG, "LIST failed: ${e.message}")
             if (_session.value === session) _manifest.update { it.failed(e.message ?: "LIST failed") }
-            false
+            null
         }
     }
 
@@ -817,23 +819,66 @@ class DeviceConnectionRepository @Inject constructor(
      * download every immutable missing file. FLUSH is not part of this operation.
      */
     fun smartSync(mode: ClockSyncMode, clockConfirmed: Boolean = false) {
-        if (_sync.value.running) return
-        val session = interactiveSession() ?: return
-        scope.launch {
-            setTimeFromPhoneNow(session, quiet = true, automatic = true)
-            val latest = plan.value ?: run {
-                _events.emit(DeviceEvent.Error(DeviceMessage.FileListNotReady))
-                return@launch
-            }
-            recordDiagnostic("plan", "${latest.toDownload.size} file(s), ${latest.missingBytes} byte(s) missing")
-            startSync(latest.toDownload)
-        }
+        startFreshSync(synchronizeClock = true)
     }
 
-    /** Download every file the plan marks as missing or partial, without changing device state. */
+    /** Refresh the device listing, then download every missing or partial immutable file. */
     fun syncAll() {
-        val plan = this.plan.value ?: return
-        startSync(plan.toDownload)
+        startFreshSync(synchronizeClock = false)
+    }
+
+    /** Reserve the operation slot before launching, then hand it to the transfer atomically. */
+    @Synchronized
+    private fun startFreshSync(synchronizeClock: Boolean) {
+        if (closing || _sync.value.running) return
+        val session = interactiveSession() ?: return
+        if (!tryBeginCommand(refuseWhileSyncing = true)) return refuseBusy()
+        var ownsCommand = true
+        val job = scope.launch(start = CoroutineStart.LAZY) {
+            try {
+                if (synchronizeClock) setTimeFromPhoneNow(session, quiet = true, automatic = true)
+                val listing = refreshManifestNow(session)
+                val latest = listing?.let { planFor(session, it) }
+                if (latest == null) {
+                    _events.emit(DeviceEvent.Error(DeviceMessage.FileListNotReady))
+                    return@launch
+                }
+                recordDiagnostic("plan", "${latest.toDownload.size} file(s), ${latest.missingBytes} byte(s) missing")
+                val preparationContext = currentCoroutineContext()
+                synchronized(this@DeviceConnectionRepository) {
+                    preparationContext.ensureActive()
+                    // No config or background run can enter between releasing the command slot and
+                    // publishing sync.running. Use this LIST result, never the lagging plan flow.
+                    endCommand()
+                    ownsCommand = false
+                    if (_session.value === session) startSync(latest.toDownload)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "sync preparation failed: ${e.message}")
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.FileListNotReady))
+            } finally {
+                synchronized(this@DeviceConnectionRepository) {
+                    if (ownsCommand) {
+                        endCommand()
+                        ownsCommand = false
+                    }
+                }
+            }
+        }
+        syncJob = job
+        job.invokeOnCompletion {
+            synchronized(this) {
+                // A lazy job can be cancelled before its body (and finally) starts.
+                if (ownsCommand) {
+                    endCommand()
+                    ownsCommand = false
+                }
+                if (syncJob === job) syncJob = null
+            }
+        }
+        job.start()
     }
 
     fun syncOne(name: String) {
@@ -844,7 +889,7 @@ class DeviceConnectionRepository @Inject constructor(
     }
 
     fun cancelSync() {
-        synchronized(this) { syncJob }?.cancel()
+        synchronized(this) { syncJob?.cancel() }
     }
 
     /**
@@ -1078,9 +1123,9 @@ class DeviceConnectionRepository @Inject constructor(
         try {
             val displayName = session.transport.displayName ?: name
             val kind = session.transport.kind
-            if (!refreshManifestNow(session)) return skip("LIST failed", kind).copy(deviceName = displayName)
+            val listing = refreshManifestNow(session) ?: return skip("LIST failed", kind).copy(deviceName = displayName)
             // This session's own listing, not the shared plan flow (it can lag one session behind).
-            val plan = planFor(session) ?: return skip("no plan", kind).copy(deviceName = displayName)
+            val plan = planFor(session, listing) ?: return skip("no plan", kind).copy(deviceName = displayName)
             val wanted = plan.toDownload.size
             val job = startSync(plan.toDownload, foregroundService = false)
                 ?: return BackgroundSyncResult(address, displayName, kind, 0, 0, 0)

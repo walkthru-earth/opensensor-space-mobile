@@ -365,7 +365,7 @@ fun FilesScreen(
                         }
                     }
                     manifest.error?.let { reason ->
-                        // The refresh failed. The list below is still valid, device files are immutable.
+                        // Keep immutable known files visible, but this snapshot may omit newer files.
                         Text(
                             if (level.developer) stringResource(Res.string.files_refresh_failed, reason) else stringResource(Res.string.files_refresh_failed_simple),
                             style = MaterialTheme.typography.bodySmall,
@@ -381,7 +381,7 @@ fun FilesScreen(
                         )
                     }
                 }
-                if (plan != null && plan.entries.isNotEmpty() && plan.missingCount == 0) {
+                if (manifest.confirmsAllSynced(plan)) {
                     item(key = "all-synced") {
                         MascotGuide(title = stringResource(Res.string.files_all_synced_title), body = stringResource(Res.string.files_all_synced_body), expression = PeacockExpression.HAPPY)
                     }

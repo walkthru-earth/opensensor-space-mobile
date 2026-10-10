@@ -29,6 +29,36 @@ class DeviceSessionPollingTest {
     private val opened = Frame.Opened(1, 12, 0, "legacy-parquet/boundary.parquet")
 
     @Test
+    fun incompleteListFailsAndItsConsumedTerminalDoesNotDelayTheNextRequest() = runTest {
+        val transport = ResponseTransport()
+        val session = DeviceSession(transport)
+        val listing = async { runCatching { session.list() } }
+        runCurrent()
+        transport.responseFrames.send(FrameCodec.encode(Frame.File(12, opened.name)))
+        transport.responseFrames.send(FrameCodec.encode(Frame.ListEnd(2, 0, 1024, 0)))
+        runCurrent()
+        assertTrue(listing.await().exceptionOrNull() is ProtocolViolationException)
+
+        val next = async { session.list() }
+        runCurrent()
+        assertEquals(2, transport.writes.size, "a consumed LIST_END must not trigger stale-drain waiting")
+        transport.responseFrames.send(FrameCodec.encode(Frame.ListEnd(0, 0, 1024, 0)))
+        runCurrent()
+        assertTrue(next.await().first.isEmpty())
+    }
+
+    @Test
+    fun tooManyFileFramesFailInsteadOfAcceptingAnUnreliableListing() = runTest {
+        val transport = ResponseTransport()
+        val listing = async { runCatching { DeviceSession(transport).list() } }
+        runCurrent()
+        transport.responseFrames.send(FrameCodec.encode(Frame.File(12, opened.name)))
+        transport.responseFrames.send(FrameCodec.encode(Frame.ListEnd(0, 0, 1024, 0)))
+        runCurrent()
+        assertTrue(listing.await().exceptionOrNull() is ProtocolViolationException)
+    }
+
+    @Test
     fun responseArrivingAtPollingBoundaryIsDeliveredEvenBeforeReceiverResumes() = runTest {
         val transport = ResponseTransport()
         // Schedule the sender's timer first. At 250 ms send extracts a waiting receiver, but its

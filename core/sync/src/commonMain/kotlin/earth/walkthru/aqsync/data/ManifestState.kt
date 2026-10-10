@@ -1,13 +1,17 @@
 package earth.walkthru.aqsync.data
 
 import earth.walkthru.aqsync.data.protocol.Frame
+import earth.walkthru.aqsync.data.sync.FileSyncState
+import earth.walkthru.aqsync.data.sync.SyncPlan
 
 /**
  * The device's file listing (`LIST` → `FILE` × n → `LIST_END`) as the app knows it.
  *
  * A refresh never throws the previous listing away: [Loading] and [Error] carry the last
  * [Loaded] in [last], so the Files screen keeps showing the list (with an age and, on failure, a
- * one-line reason) and `DeviceConnectionRepository.plan` stays usable. Before this, a post-sync
+ * one-line reason) and `DeviceConnectionRepository.plan` stays available for display. Retained
+ * listings cannot establish that every device file is synced: explicit whole-device sync takes a
+ * fresh complete LIST and plans directly from its result. Before this, a post-sync
  * `LIST` that died with "link lost while waiting for a response" replaced the whole list with a red
  * banner right after a successful sync, and the plan went null. The list is dropped only on
  * [Idle] — a new session, `DeviceConnectionRepository.resetDerivedState`.
@@ -27,7 +31,7 @@ sealed interface ManifestState {
         override val last: Loaded get() = this
     }
 
-    /** The most recent `LIST` failed with [message]; [last] is the listing that remains valid until the next success. */
+    /** The most recent `LIST` failed with [message]; [last] remains visible as a previous snapshot. */
     data class Error(val message: String, override val last: Loaded? = null) : ManifestState
 
     /** True while a `LIST` request is in flight. */
@@ -35,6 +39,18 @@ sealed interface ManifestState {
 
     /** The failure of the most recent refresh, if it failed; null after a success or before any attempt. */
     val error: String? get() = (this as? Error)?.message
+
+    /** A success banner requires verified entries from this exact successful listing. */
+    fun confirmsAllSynced(plan: SyncPlan?): Boolean {
+        if (this !is Loaded || plan == null || files.isEmpty() || files.size != plan.entries.size) return false
+        // SyncPlanner preserves FILE order. Compare directly without allocating a second index;
+        // manifest and derived plan flows may reach a screen on different coroutine turns.
+        return files.indices.all { index ->
+            val file = files[index]
+            val entry = plan.entries[index]
+            entry.state == FileSyncState.SYNCED && entry.name == file.name && entry.bytes == file.bytes
+        }
+    }
 
     /** Transition: a refresh starts. The previous listing is kept. */
     fun refreshing(): ManifestState = Loading(last)

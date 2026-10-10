@@ -143,19 +143,22 @@ class DeviceSession(val transport: AqTransport, val frames: FrameRecorder = Fram
         transport.writeControl(bytes)
     }
 
-    /** `LIST` → `FILE` × n, then `LIST_END`. */
-    suspend fun list(): Pair<List<Frame.File>, Frame.ListEnd> = request(Opcode.LIST) {
+    /** `LIST` → `FILE` × n, then `LIST_END`. An incomplete listing is never a successful snapshot. */
+    suspend fun list(): Pair<List<Frame.File>, Frame.ListEnd> = request<Pair<List<Frame.File>, Frame.ListEnd>>(Opcode.LIST) {
         write(Request.List)
         val files = ArrayList<Frame.File>()
         while (true) {
             when (val frame = nextFrame(Opcode.LIST, FRAME_TIMEOUT_MS)) {
                 is Frame.File -> files += frame
-                is Frame.ListEnd -> return files to frame
+                is Frame.ListEnd -> return@request files to frame
                 else -> throw unexpected("LIST", frame)
             }
         }
         @Suppress("UNREACHABLE_CODE")
         error("unreachable")
+    }.also { (files, end) ->
+        // Validate after request consumes LIST_END: the response is clean even when its count is wrong.
+        if (files.size != end.count) throw ProtocolViolationException("LIST count ${end.count} differs from ${files.size} FILE frames")
     }
 
     /**

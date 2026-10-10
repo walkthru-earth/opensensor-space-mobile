@@ -1,6 +1,9 @@
 package earth.walkthru.aqsync.data
 
 import earth.walkthru.aqsync.data.protocol.Frame
+import earth.walkthru.aqsync.data.sync.ArchivedIdentity
+import earth.walkthru.aqsync.data.sync.FileSyncState
+import earth.walkthru.aqsync.data.sync.SyncPlanner
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -16,7 +19,7 @@ import kotlin.test.assertTrue
  */
 class ManifestStateTest {
 
-    private val files = listOf(Frame.File(4096, "archive/AQ-6b40/date=2026-09-16/part-0001.parquet"))
+    private val files = listOf(Frame.File(4096, "legacy-parquet/part-0001.parquet"))
     private val end = Frame.ListEnd(count = 1, partials = 0, sdKib = 31_000_000, sdUsedKib = 12_000)
     private val loaded = ManifestState.Loaded(files, end, atEpochMs = 1_000L)
 
@@ -63,5 +66,30 @@ class ManifestStateTest {
         assertNull(ManifestState.Idle.last)
         assertNull(ManifestState.Idle.error)
         assertFalse(ManifestState.Idle.isLoading)
+    }
+
+    @Test
+    fun retainedOrLaggingPlansCannotConfirmAllFilesSynced() {
+        val archived = files.map { ArchivedIdentity("station", it.name, it.bytes, 0) }
+        val plan = SyncPlanner.plan("station", files, archived)
+        assertTrue(loaded.confirmsAllSynced(plan))
+        assertFalse(loaded.refreshing().confirmsAllSynced(plan))
+        assertFalse(loaded.failed("card scan failed").confirmsAllSynced(plan))
+        assertFalse(ManifestState.Idle.confirmsAllSynced(plan))
+        val replacement = files.map { it.copy(name = it.name.replace("0001", "0002")) }
+        assertFalse(loaded.copy(files = replacement).confirmsAllSynced(plan))
+        assertFalse(loaded.copy(files = files.map { it.copy(bytes = it.bytes + 1) }).confirmsAllSynced(plan))
+        assertFalse(loaded.confirmsAllSynced(null))
+    }
+
+    @Test
+    fun noDownloadableFilesDoesNotMeanEveryFileIsVerified() {
+        val plan = SyncPlanner.plan("station", files, emptyList())
+        val invalid = plan.copy(entries = plan.entries.map { it.copy(state = FileSyncState.INVALID_NAME) }, toDownload = emptyList())
+        val mismatch = plan.copy(entries = plan.entries.map { it.copy(state = FileSyncState.MISMATCH) }, toDownload = emptyList())
+        assertFalse(loaded.confirmsAllSynced(invalid))
+        assertFalse(loaded.confirmsAllSynced(mismatch))
+        val empty = ManifestState.Loaded(emptyList(), end.copy(count = 0), 2_000L)
+        assertFalse(empty.confirmsAllSynced(SyncPlanner.plan("station", emptyList(), emptyList())))
     }
 }

@@ -212,6 +212,19 @@ session: a lost link is a reconnect (which re-lists), a timeout means the device
 and a second request would only queue behind the stale reply. Longer timeouts are not the answer
 either — "link lost" fires on the transport's state change, not on `FRAME_TIMEOUT_MS`.
 
+**Explicit whole-device sync takes a fresh listing (2026-10-10).** Android Sync all and Smart
+Sync reserve the same operation gate before launching, issue `LIST`, and plan directly from the
+returned snapshot and current archive. They never execute a retained `plan` flow from an earlier
+listing, even when that plan has zero missing files. A failed refresh keeps known files visible
+but reports `FileListNotReady`, starts no download, and cannot emit `UpToDate`. The Files screen
+suppresses its all-synced message while the latest refresh is loading or failed. Stop and disconnect
+also cancel preparation before the first OPEN; the command slot hands off atomically to the transfer.
+Host regressions: `DeviceConnectionRepositoryTest`. The shared `DeviceSession.list` rejects a
+FILE-frame count that differs from LIST_END on both phone platforms without delaying the next
+request to drain a terminal that has already arrived (`DeviceSessionPollingTest`). These checks
+cannot detect a firmware scan that silently skips card entries and reports its own smaller count;
+the firmware must report scan failure instead of LIST_END in that case.
+
 ## Resume after a lost link
 
 `SyncResumePolicy.shouldResume` (pure).

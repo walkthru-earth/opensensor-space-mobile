@@ -15,6 +15,7 @@ import earth.walkthru.aqsync.data.protocol.LanFraming
 import earth.walkthru.aqsync.data.protocol.Opcode
 import earth.walkthru.aqsync.data.protocol.ProtocolError
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -61,12 +62,20 @@ import java.util.concurrent.atomic.AtomicLong
  * value from `HELLO` (1024 on today's firmware). The socket is unencrypted by contract; the token is
  * a bearer secret and is never logged.
  */
-class TcpTransport(
+internal data class TcpLiveness(
+    val pollMs: Long = TcpTransport.KEEPALIVE_POLL_MS,
+    val idleMs: Long = LanFraming.KEEPALIVE_AFTER_IDLE_MS,
+    val deadMs: Long = TcpTransport.DEAD_AFTER_MS,
+)
+
+class TcpTransport internal constructor(
     override val address: String,
     override val displayName: String?,
     private val host: InetAddress,
     private val port: Int,
     private val token: ByteArray,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val liveness: TcpLiveness = TcpLiveness(),
 ) : AqTransport {
 
     init {
@@ -88,7 +97,9 @@ class TcpTransport(
     override val statusNotifications: Flow<ByteArray> = _status
     override val liveNotifications: Flow<ByteArray> = _live
 
-    private val _responses = Channel<ByteArray>(Channel.UNLIMITED)
+    // Bound retained replies; suspension lets TCP backpressure reach the sensor instead of
+    // accumulating an unlimited manifest/transfer in the phone's heap. Frames are never dropped.
+    private val _responses = Channel<ByteArray>(RESPONSE_CAPACITY)
     override val responseFrames: ReceiveChannel<ByteArray> = _responses
 
     /** `HELLO.infoJson`, the same document as the `info` characteristic. */
@@ -96,7 +107,7 @@ class TcpTransport(
     var hello: Frame.Hello? = null
         private set
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
     private val connectMutex = Mutex()
     private val writeMutex = Mutex()
 
@@ -182,9 +193,11 @@ class TcpTransport(
                 s.soTimeout = 0
                 lastRxAt.set(System.currentTimeMillis())
             }
+            _state.value = ConnectionState.Ready(mtu)
+            // Publish readiness before either child runs: an eager keepalive must not exit while
+            // still Authenticating, and an eager reader failure must not be overwritten by Ready.
             readerJob = scope.launch { readerLoop() }
             keepaliveJob = scope.launch { keepaliveLoop() }
-            _state.value = ConnectionState.Ready(mtu)
             Log.i(TAG, "ready: $endpoint payload_max=$payloadMax proto=${hello?.proto}")
         } catch (e: CancellationException) {
             closeSocket()
@@ -221,11 +234,11 @@ class TcpTransport(
         }
     }
 
-    private fun dispatch(raw: ByteArray) {
+    private suspend fun dispatch(raw: ByteArray) {
         when (FrameCodec.typeOf(raw)) {
             FrameType.STATUS -> _status.tryEmit(raw.copyOfRange(1, raw.size))
             FrameType.LIVE -> _live.tryEmit(raw.copyOfRange(1, raw.size))
-            else -> _responses.trySend(raw)
+            else -> _responses.send(raw)
         }
     }
 
@@ -236,13 +249,13 @@ class TcpTransport(
      */
     private suspend fun keepaliveLoop() {
         while (scope.isActive && _state.value.isReady) {
-            delay(KEEPALIVE_POLL_MS)
+            delay(liveness.pollMs)
             val now = System.currentTimeMillis()
-            if (now - lastRxAt.get() > DEAD_AFTER_MS) {
-                linkLost("no data from the device for ${DEAD_AFTER_MS / 1000} s")
+            if (now - lastRxAt.get() > liveness.deadMs) {
+                linkLost("no data from the device for ${liveness.deadMs / 1000} s")
                 return
             }
-            if (now - lastTxAt.get() > LanFraming.KEEPALIVE_AFTER_IDLE_MS) {
+            if (now - lastTxAt.get() > liveness.idleMs) {
                 suspendRunCatching { writeControl(byteArrayOf(Opcode.STATUS.toByte())) }
                     .onFailure { Log.w(TAG, "keep-alive failed: ${it.message}") }
             }
@@ -330,6 +343,7 @@ class TcpTransport(
 
     companion object {
         private const val TAG = "TcpTransport"
+        private const val RESPONSE_CAPACITY = 64
         const val CONNECT_TIMEOUT_MS = 5_000
         const val HANDSHAKE_TIMEOUT_MS = 8_000
         const val KEEPALIVE_POLL_MS = 15_000L

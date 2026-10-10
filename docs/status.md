@@ -4,6 +4,49 @@
 **Code:** `./gradlew verify` (the gate), `.github/workflows/verify.yml`.
 **Related:** measured device behaviour is recorded in the board-specific `../aq-parquet/docs/boards/*/bench-verified.md`; anything not recorded there is unverified.
 
+## 2026-10-10 — incomplete LAN listings, memory bounds and Android recovery
+
+On the connected OnePlus 7 Pro (GM1911, Android 16), the old firmware returned
+successful Wi-Fi LIST snapshots of only 12–13 files, ending near 02:30–02:45
+local time. USB enumeration of the same CoreS3 returned 35, including the morning
+files. Concurrent serial output reported `allocate_dma_buf: not enough mem,
+err=0x101` and failed SD reads. The firmware had mistaken a failed directory
+read for EOF and emitted LIST_END for a prefix; the phone's “All synced” banner
+therefore described an incomplete device snapshot. The files remained on SD.
+Before this fix, BLE recovery copied 22 files (1,062,753 bytes), with zero
+failures and measurements through 08:14:59 local time.
+
+Whole-device Sync all and Smart Sync now fetch a fresh LIST and build their plan
+directly from its result. LIST count mismatches fail, and retained/error/loading
+snapshots cannot establish “All synced.” Planning queries this station's local
+archive. Android TCP retains at most 64 response frames and applies backpressure
+without dropping them; readiness is published before the reader and keepalive
+start, fixing an eager-start keepalive race. Firmware v6.11 reserves an SD DMA
+buffer before radios start and rejects failed archive enumeration.
+
+`./gradlew --no-daemon verify` passed (957 tasks), including Android lint, APK,
+unit tests, shared host tests, shared iOS simulator tests and framework link.
+The eight TCP tests include eager keepalive startup, a 257-file response burst
+and disconnect while backpressured. Sanitized firmware directory, archive and
+SD-buffer and Parquet conformance tests and all three native board builds passed separately.
+
+The debug APK was installed with `adb install -r`, preserving the archive,
+settings and bond. APK SHA-256:
+`e56c48aabb3ff9f8256ec323814770e3adf7255dc5624bab38c3c32454daadd6`.
+After the v6.11 flash, automatic LAN sync copied three additional files
+(97,718 bytes), with zero failures. Files displayed Wi-Fi LAN, 37/37 checked
+files, 1.55 MiB, and the 08:00 file; USB independently listed the same 37.
+A later refresh returned 37 again, and the interactive LAN connection remained
+ready beyond five minutes without a reconnect. At the next automatic rotation,
+the board finalized a 90-row file. “Sync now in background” discovered and copied
+its 49,839 bytes over LAN, with zero failures; Files then showed 38/38 checked,
+1.59 MiB and the new 17:00 interval. Independent read-only extraction from the
+phone matched the device CRC-32 `bf653c17`; PyArrow and DuckDB read all 90 rows
+(sequences 0–89), with zero drop, missed-deadline and storage-error fields.
+Captures are ignored board
+artifacts under `lan-memory-20261010/`. This is a short Android/SD/LAN check;
+overnight endurance and real iPhone radio behavior are not qualified.
+
 ## 2026-10-10 — pushed interval fix and fresh iPhone installation
 
 Firmware `4d20dad` and mobile `655d865` were pushed to their GitHub `main`

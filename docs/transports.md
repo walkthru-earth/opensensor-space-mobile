@@ -44,6 +44,18 @@ shared `LanWifiLock`; the last transfer releases it.
 
 ## Concurrent Wi-Fi collection
 
+Android's TCP reply queue is bounded to 64 frames. A full queue suspends the
+reader and applies TCP backpressure; it never drops archive frames. STATUS and
+LIVE remain separate bounded snapshot streams. A large-list regression waits
+for a 257-frame burst before consuming replies, and disconnect is also checked
+while the reader is backpressured.
+
+Readiness is published before reader and keepalive jobs start. Previously an
+eager keepalive could see `Authenticating` and exit permanently, or an early
+reader failure could be overwritten by `Ready`. The eager-start regression
+checks an actual STATUS heartbeat against a local protocol server. This is a
+host-tested startup fix, separate from the reproduced SD memory failure.
+
 The shared firmware supports up to three LAN clients per sensor alongside its
 single BLE connection. Each phone has an independent file handle and offsets;
 one phone connecting or opening a file does not disconnect another. A full

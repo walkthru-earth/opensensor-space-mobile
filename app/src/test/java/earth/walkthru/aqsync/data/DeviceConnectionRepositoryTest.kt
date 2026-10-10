@@ -25,6 +25,7 @@ import earth.walkthru.aqsync.data.local.security.SecureKnownDeviceDao
 import earth.walkthru.aqsync.data.protocol.ConfigPatch
 import earth.walkthru.aqsync.data.protocol.LanFraming
 import earth.walkthru.aqsync.data.protocol.Opcode
+import earth.walkthru.aqsync.data.sync.ClockSyncMode
 import earth.walkthru.aqsync.data.sync.FileArchive
 import earth.walkthru.aqsync.data.sync.FileOutcome
 import earth.walkthru.aqsync.data.sync.androidSyncEngine
@@ -34,6 +35,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -98,6 +100,116 @@ class DeviceConnectionRepositoryTest {
         h.until { h.repo.plan.value != null }
         assertTrue(h.repo.plan.value!!.toDownload.isNotEmpty())
         assertEquals(0, h.repo.status.value?.status?.utc)
+    }
+
+    @Test
+    fun `sync all lists again and downloads a file finalized after the previous listing`() = harnessTest { h ->
+        h.repo.connect(ADDRESS, "AQ-6b40", fake = true)
+        h.until { h.repo.plan.value != null }
+        h.repo.syncAll()
+        h.until { h.archived.rows.size == h.device.files.size && !h.repo.sync.value.running }
+        h.until { h.repo.plan.value?.missingCount == 0 }
+        h.events.clear()
+        val previousListCount = h.factory.requests.count { it == Opcode.LIST }
+        val newer = h.newFile()
+        h.device.files += newer
+
+        h.repo.syncAll()
+        h.until { h.archived.rows.any { it.name == newer.name } && !h.repo.sync.value.running }
+
+        assertEquals(previousListCount + 2, h.factory.requests.count { it == Opcode.LIST })
+        assertEquals(listOf(newer.name), h.repo.sync.value.outcomes.map { it.name })
+        assertFalse(h.events.contains(DeviceEvent.Info(DeviceMessage.UpToDate)))
+    }
+
+    @Test
+    fun `smart sync uses its fresh listing instead of the plan from connection`() = harnessTest { h ->
+        h.clockEpochOffset = 1_789_581_931_987L
+        h.repo.connect(ADDRESS, "AQ-6b40", fake = true)
+        h.until { h.repo.plan.value != null }
+        val newer = h.newFile()
+        h.device.files += newer
+
+        h.repo.smartSync(ClockSyncMode.AUTOMATIC)
+        h.until { h.archived.rows.size == h.device.files.size && !h.repo.sync.value.running }
+
+        assertTrue(h.repo.sync.value.outcomes.any { it.name == newer.name })
+        assertFalse(h.factory.requests.contains(Opcode.FLUSH))
+    }
+
+    @Test
+    fun `failed pre sync listing retains old files but never declares up to date`() = harnessTest { h ->
+        h.repo.connect(ADDRESS, "AQ-6b40", fake = true)
+        h.until { h.repo.plan.value != null }
+        h.repo.syncAll()
+        h.until { h.archived.rows.size == h.device.files.size && !h.repo.sync.value.running }
+        h.until { h.repo.plan.value?.missingCount == 0 }
+        h.events.clear()
+        val previous = h.repo.manifest.value.last
+        val previousOpenCount = h.factory.requests.count { it == Opcode.OPEN }
+        h.device.files += h.newFile()
+        h.factory.listFailure = TransportException("SD listing unavailable")
+
+        h.repo.syncAll()
+        h.until { h.repo.manifest.value is ManifestState.Error && !h.repo.busy.value }
+
+        assertEquals(previous, h.repo.manifest.value.last)
+        assertEquals(previousOpenCount, h.factory.requests.count { it == Opcode.OPEN })
+        assertTrue(h.events.contains(DeviceEvent.Error(DeviceMessage.FileListNotReady)))
+        assertFalse(h.events.contains(DeviceEvent.Info(DeviceMessage.UpToDate)))
+    }
+
+    @Test
+    fun `overlapping sync requests reserve preparation only once`() = harnessTest { h ->
+        h.repo.connect(ADDRESS, "AQ-6b40", fake = true)
+        h.until { h.repo.plan.value != null }
+        val before = h.factory.requests.count { it == Opcode.LIST }
+
+        h.repo.syncAll()
+        h.repo.smartSync(ClockSyncMode.AUTOMATIC)
+        h.until { h.archived.rows.size == h.device.files.size && !h.repo.sync.value.running }
+
+        assertTrue(h.events.contains(DeviceEvent.Info(DeviceMessage.Busy)))
+        assertEquals(before + 2, h.factory.requests.count { it == Opcode.LIST })
+        assertFalse(h.repo.busy.value)
+    }
+
+    @Test
+    fun `cancelling sync before preparation starts releases its operation slot`() = harnessTest { h ->
+        h.repo.connect(ADDRESS, "AQ-6b40", fake = true)
+        h.until { h.repo.plan.value != null }
+        val before = h.factory.requests.count { it == Opcode.LIST }
+
+        h.repo.syncAll()
+        h.repo.cancelSync()
+        runCurrent()
+
+        assertEquals(before, h.factory.requests.count { it == Opcode.LIST })
+        assertFalse(h.repo.busy.value)
+        assertFalse(h.repo.sync.value.running)
+        h.repo.syncAll()
+        h.until { h.archived.rows.size == h.device.files.size && !h.repo.sync.value.running }
+    }
+
+    @Test
+    fun `cancelling during list retains the previous snapshot without leaving refresh running`() = harnessTest { h ->
+        h.repo.connect(ADDRESS, "AQ-6b40", fake = true)
+        h.until { h.repo.plan.value != null }
+        val previous = h.repo.manifest.value.last
+        h.factory.listDelayMs = 60_000
+        h.repo.syncAll()
+        h.until { h.repo.manifest.value.isLoading }
+
+        h.repo.cancelSync()
+        h.until { !h.repo.busy.value }
+
+        assertTrue(h.repo.manifest.value is ManifestState.Error)
+        assertEquals(previous, h.repo.manifest.value.last)
+        assertFalse(h.repo.sync.value.running)
+        assertTrue(h.archived.rows.isEmpty())
+        h.factory.listDelayMs = 0
+        h.repo.syncAll()
+        h.until { h.archived.rows.size == h.device.files.size && !h.repo.sync.value.running }
     }
 
     @Test
@@ -360,6 +472,11 @@ class DeviceConnectionRepositoryTest {
             lanPort = 47390,
         )
 
+        fun newFile() = FakeTransport.FakeFile(
+            "station=${device.station}/year=2026/month=09/day=17/data_0900_${device.bootId}_20000-20089-90.parquet",
+            device.files.first().bytes,
+        )
+
         fun lanTarget() = LanDevice(
             serviceName = "AQ-6b40",
             host = InetAddress.getLoopbackAddress(),
@@ -390,17 +507,31 @@ class DeviceConnectionRepositoryTest {
         var lanFailure: Exception = LanConnectException(LanFailure.UNREACHABLE)
         val lanTransports = CopyOnWriteArrayList<FailingLanTransport>()
         var fakeConnects = 0
+        var listFailure: Exception? = null
+        var listDelayMs = 0L
+        val requests = CopyOnWriteArrayList<Int>()
+        private val observedDevice = object : AqTransport by device {
+            override suspend fun writeControl(request: ByteArray) {
+                val op = request.first().toInt() and 0xff
+                requests += op
+                if (op == Opcode.LIST) {
+                    delay(listDelayMs)
+                    listFailure?.let { throw it }
+                }
+                device.writeControl(request)
+            }
+        }
 
         override fun ble(address: String): AqTransport = counted()
         override fun bleUnattended(address: String, connectTimeoutMs: Long): AqTransport = counted()
         override fun lan(address: String, name: String?, host: InetAddress, port: Int, token: ByteArray): AqTransport =
             FailingLanTransport(address, lanFailure).also { lanTransports += it }
         override fun fake(address: String): AqTransport = counted()
-        override fun isFake(transport: AqTransport): Boolean = transport === device
+        override fun isFake(transport: AqTransport): Boolean = transport === observedDevice
 
         private fun counted(): AqTransport {
             fakeConnects++
-            return device
+            return observedDevice
         }
     }
 

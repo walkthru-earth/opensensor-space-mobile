@@ -10,6 +10,7 @@ import earth.walkthru.aqsync.data.protocol.LanFraming
 import earth.walkthru.aqsync.data.protocol.LiveSample
 import earth.walkthru.aqsync.data.protocol.Opcode
 import earth.walkthru.aqsync.data.protocol.ProtocolError
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
@@ -26,7 +27,11 @@ import java.io.DataInputStream
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.coroutines.CoroutineContext
 
 /**
  * The real [TcpTransport] against an in-JVM device that speaks the LAN envelope from
@@ -41,6 +46,7 @@ class TcpTransportTest {
     private class FakeLanDevice(
         private val token: ByteArray,
         private val hello: ByteArray?,
+        private val afterResponses: () -> Unit = {},
         private val onRequest: (ByteArray) -> List<ByteArray>,
     ) : AutoCloseable {
         val server = ServerSocket(0, 1, InetAddress.getLoopbackAddress())
@@ -72,6 +78,7 @@ class TcpTransportTest {
             while (true) {
                 val req = LanFraming.read(inp, 512) ?: return
                 for (f in onRequest(req)) LanFraming.write(out, f)
+                afterResponses()
             }
         }
 
@@ -82,6 +89,86 @@ class TcpTransportTest {
     }
 
     private fun hello(payloadMax: Int = 1024) = FrameCodec.encode(Frame.Hello(2, payloadMax, info))
+
+    @Test
+    fun `keepalive started eagerly after handshake still sends STATUS`() = runBlocking {
+        val ping = CountDownLatch(1)
+        val launches = AtomicInteger()
+        // Force the second child (keepalive) to execute before launch returns. The reader uses
+        // its normal IO thread so a blocking socket read cannot stall the connect coroutine.
+        val eager = object : CoroutineDispatcher() {
+            override fun dispatch(context: CoroutineContext, block: Runnable) {
+                if (launches.getAndIncrement() == 1) block.run() else Dispatchers.IO.dispatch(context, block)
+            }
+        }
+        FakeLanDevice(token, hello()) { req ->
+            if (req[0].toInt() == Opcode.STATUS) {
+                ping.countDown()
+                listOf(FrameCodec.encode(Frame.StatusPush("""{"up_s":43}""")))
+            } else {
+                emptyList()
+            }
+        }.use { device ->
+            device.start()
+            val transport = TcpTransport("AA:BB:CC:DD:EE:FF", null, InetAddress.getLoopbackAddress(), device.port, token, eager, TcpLiveness(pollMs = 10, idleMs = 20, deadMs = 5_000))
+            try {
+                withTimeout(5_000) { transport.connect() }
+                assertTrue("an eager keepalive must remain active", ping.await(3, TimeUnit.SECONDS))
+            } finally {
+                transport.close()
+            }
+        }
+    }
+
+    @Test
+    fun `large listing drains bounded response queue without losing frames`() = runBlocking {
+        val count = 257
+        val sent = CountDownLatch(1)
+        FakeLanDevice(token, hello(), afterResponses = { sent.countDown() }) { req ->
+            if (req[0].toInt() == Opcode.LIST) {
+                (0 until count).map { FrameCodec.encode(Frame.File(100, "file_$it.parquet")) } + FrameCodec.encode(Frame.ListEnd(count, 0, 1, 1))
+            } else {
+                emptyList()
+            }
+        }.use { device ->
+            device.start()
+            val transport = TcpTransport("AA:BB:CC:DD:EE:FF", null, InetAddress.getLoopbackAddress(), device.port, token)
+            try {
+                withTimeout(5_000) { transport.connect() }
+                transport.writeControl(byteArrayOf(Opcode.LIST.toByte()))
+                // Delay consumption until the device has sent the entire burst. This exceeds
+                // the queue capacity, exercising the suspended producer and TCP buffering.
+                assertTrue(sent.await(3, TimeUnit.SECONDS))
+                val frames = withTimeout(5_000) { (0..count).map { FrameCodec.decode(transport.responseFrames.receive()) } }
+                val files = frames.dropLast(1).map { it as Frame.File }
+                val end = frames.last() as Frame.ListEnd
+                assertEquals(count, end.count)
+                assertEquals((0 until count).map { "file_$it.parquet" }, files.map { it.name })
+            } finally {
+                transport.close()
+            }
+        }
+    }
+
+    @Test
+    fun `disconnect releases a reader blocked by response backpressure`() = runBlocking {
+        val sent = CountDownLatch(1)
+        FakeLanDevice(token, hello(), afterResponses = { sent.countDown() }) {
+            (0 until 257).map { FrameCodec.encode(Frame.File(100, "file_$it.parquet")) }
+        }.use { device ->
+            device.start()
+            val transport = TcpTransport("AA:BB:CC:DD:EE:FF", null, InetAddress.getLoopbackAddress(), device.port, token)
+            try {
+                withTimeout(5_000) { transport.connect() }
+                transport.writeControl(byteArrayOf(Opcode.LIST.toByte()))
+                assertTrue(sent.await(3, TimeUnit.SECONDS))
+                withTimeout(5_000) { transport.disconnect() }
+                assertTrue(transport.connectionState.value is ConnectionState.Disconnected)
+            } finally {
+                transport.close()
+            }
+        }
+    }
 
     @Test
     fun `handshake HELLO info and interleaved pushes are demultiplexed in order`() = runBlocking {
