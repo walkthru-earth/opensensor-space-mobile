@@ -67,4 +67,30 @@ class ReaderLimitsTest {
         val e = assertFailsWith<ParquetFormatException> { reader.use { it.scan(ScanRequest(listOf("h3_index"))) } }
         assertTrue(e.message, e.message!!.contains("PAR1"))
     }
+
+    @Test
+    fun `a source that changes again after the retry fails as a format error`() = runTest {
+        val changing = object : RangeSource {
+            val inner = MemoryRangeSource(bytes, path)
+            var tails = 0
+            override suspend fun id() = inner.id()
+            override suspend fun readTail(n: Int): ByteView {
+                tails++
+                return inner.readTail(n)
+            }
+            override suspend fun readRanges(ranges: List<LongRange>): List<ByteView> = throw SourceChangedException(inner.id(), "changed")
+        }
+        val reader = ParquetReader.open(changing, policy = remote)
+        val e = assertFailsWith<ParquetFormatException> { reader.use { it.scan(ScanRequest(listOf("h3_index"))) } }
+        assertTrue(e.message, e.message!!.contains("changed again"))
+        assertEquals("one reopen", 2, changing.tails)
+
+        val neverOpens = object : RangeSource {
+            val inner = MemoryRangeSource(bytes, path)
+            override suspend fun id() = inner.id()
+            override suspend fun readTail(n: Int): ByteView = throw SourceChangedException(inner.id(), "changed")
+            override suspend fun readRanges(ranges: List<LongRange>): List<ByteView> = inner.readRanges(ranges)
+        }
+        assertFailsWith<ParquetFormatException> { ParquetReader.open(neverOpens, policy = remote) }
+    }
 }

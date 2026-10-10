@@ -133,6 +133,6 @@ fun byteRange(offset: Long, length: Int): LongRange = offset until offset + leng
 /**
  * The object behind a [RangeSource] changed between reads (an HTTP `If-Range` answered 200 with a new
  * ETag). Bytes read under [previous] must not be combined with later ones. The reader drops cached
- * footers for [previous] and starts the read again once.
+ * footers for [previous] and starts the read again once. A second change fails as a [ParquetFormatException].
  */
 class SourceChangedException(val previous: SourceId, message: String) : RuntimeException(message)
