@@ -18,6 +18,22 @@ class OffsetIndex(
     /** Rows `[firstRows[page], end)` of [page] in a row group of [rowGroupRows] rows. */
     fun pageRowEnd(page: Int, rowGroupRows: Long): Long = if (page + 1 < pageCount) firstRows[page + 1] else rowGroupRows
 
+    /**
+     * Checks this index against its chunk: pages in ascending, non-overlapping order inside [chunk],
+     * the first page at row 0 and every page starting before [rowGroupRows]. A reader then never asks
+     * for bytes outside the chunk, however the index was written.
+     */
+    fun checkWithin(chunk: LongRange, rowGroupRows: Long) {
+        if (pageCount == 0) return
+        if (firstRows[0] != 0L) throw ParquetFormatException("offset index starts at row ${firstRows[0]}, not 0")
+        var end = chunk.first
+        for (i in 0 until pageCount) {
+            if (offsets[i] < end || offsets[i] > chunk.last || sizes[i] > chunk.last - offsets[i] + 1) throw ParquetFormatException("offset index page $i at ${offsets[i]} (${sizes[i]} bytes) overlaps or leaves its chunk $chunk")
+            if (firstRows[i] >= rowGroupRows) throw ParquetFormatException("offset index page $i starts at row ${firstRows[i]} of $rowGroupRows")
+            end = offsets[i] + sizes[i]
+        }
+    }
+
     companion object {
         fun parse(view: ByteView): OffsetIndex {
             val r = ThriftCompactReader(view.cursor())

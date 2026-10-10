@@ -228,9 +228,9 @@ internal class ChunkDecoder(
     /**
      * Decodes the pages the page index points at: [prefix] (the dictionary page, when the chunk has one,
      * from the first page offset up to the first data page) and each of [pages], one data page each,
-     * whose first rows are [firstRows].
+     * whose first rows are [firstRows] and that hold [pageRows] rows by the offset index.
      */
-    fun decodePages(prefix: ByteView?, prefixStart: Long, pages: List<ByteView>, pageStarts: LongArray, firstRows: LongArray) {
+    fun decodePages(prefix: ByteView?, prefixStart: Long, pages: List<ByteView>, pageStarts: LongArray, firstRows: LongArray, pageRows: LongArray) {
         if (prefix != null && prefix.length > 0) {
             var offset = prefixStart
             val end = prefixStart + prefix.length
@@ -239,7 +239,8 @@ internal class ChunkDecoder(
             }
         }
         for (i in pages.indices) {
-            decodePageAt(pages[i], pageStarts[i], pageStarts[i], firstRows[i]) { }
+            val held = decodePageAt(pages[i], pageStarts[i], pageStarts[i], firstRows[i]) { }
+            if (held != pageRows[i]) throw ParquetFormatException("'${leaf.name}': page at ${pageStarts[i]} holds $held rows, its offset index says ${pageRows[i]} ($source)")
         }
     }
 

@@ -2,6 +2,7 @@ package earth.walkthru.aqsync.data.history.parquet
 
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
+import kotlin.test.assertFailsWith
 
 /**
  * The page index against a real PyArrow file. `parquet/discover/cells-24h-res7-pageindex.parquet` is the
@@ -236,6 +237,22 @@ class PageIndexTest {
         assertEquals(6, batch.rowCount)
         assertEquals("every page of the three columns", batch.pagesTotal, batch.pagesRead)
         assertRows("partial index", names, expected, (45..50).toList(), batch)
+    }
+
+    @Test
+    fun `an offset index must ascend inside its chunk and start at row 0`() {
+        val oi = offsetIndex("h3_index")
+        val chunk = md.chunkLocation(0, file.leaf("h3_index"), bytes.size.toLong()).pages
+        oi.checkWithin(chunk, 190)
+        fun bad(label: String, offsets: LongArray = oi.offsets, sizes: IntArray = oi.sizes, firstRows: LongArray = oi.firstRows) {
+            assertFailsWith<ParquetFormatException>(label) { OffsetIndex(offsets, sizes, firstRows).checkWithin(chunk, 190) }
+        }
+        bad("first row not 0", firstRows = oi.firstRows.copyOf().also { it[0] = 1 })
+        bad("pages overlap", offsets = oi.offsets.copyOf().also { it[1] = it[0] })
+        bad("page before the chunk", offsets = oi.offsets.copyOf().also { it[0] = chunk.first - 1 })
+        bad("page past the chunk", sizes = oi.sizes.copyOf().also { it[11] += 1 })
+        bad("offset near Long.MAX_VALUE", offsets = oi.offsets.copyOf().also { it[11] = Long.MAX_VALUE - 1 })
+        bad("page starts past the rows", firstRows = oi.firstRows.copyOf().also { it[11] = 190 })
     }
 
     private suspend fun scan(request: ScanRequest): ColumnBatch =
