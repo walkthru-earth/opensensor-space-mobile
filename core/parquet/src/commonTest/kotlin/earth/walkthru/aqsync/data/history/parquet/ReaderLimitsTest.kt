@@ -15,6 +15,9 @@ class ReaderLimitsTest {
     private val bytes by lazy { fixtureBytes(path) }
     private val md by lazy { ParquetFile.wrap(bytes, path).metadata }
 
+    /** A tail that misses the head of the 31 KiB fixture, and no whole-file read. */
+    private val remote = RangePolicy(4096, 8L shl 20, parallelism = 1, wholeFileBelowBytes = 0, tailPrefetchBytes = 8192)
+
     private suspend fun openWith(metadata: ParquetFileMetadata): ParquetReader {
         val cache = FooterCache()
         val source = MemoryRangeSource(bytes, path)
@@ -52,5 +55,16 @@ class ReaderLimitsTest {
         val request = ScanRequest(listOf("h3_index"), filterColumn = "h3_index", filterRanges = listOf(h3[45]..h3[50]))
         val e = assertFailsWith<ParquetFormatException> { openWith(short).use { it.scan(request) } }
         assertTrue(e.message, e.message!!.contains("leaves its chunk"))
+    }
+
+    @Test
+    fun `the head magic is checked on a scan near the head when the tail misses it`() = runTest {
+        val good = ParquetReader.open(MemoryRangeSource(bytes, path), policy = remote).use { it.scan(ScanRequest(listOf("h3_index"))) }
+        assertEquals(190, good.rowCount)
+
+        val bad = bytes.copyOf().also { it[0] = 'X'.code.toByte() }
+        val reader = ParquetReader.open(MemoryRangeSource(bad, path), policy = remote)
+        val e = assertFailsWith<ParquetFormatException> { reader.use { it.scan(ScanRequest(listOf("h3_index"))) } }
+        assertTrue(e.message, e.message!!.contains("PAR1"))
     }
 }

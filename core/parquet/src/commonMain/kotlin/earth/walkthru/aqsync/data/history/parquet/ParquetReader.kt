@@ -96,6 +96,8 @@ class ParquetReader private constructor(
         val entry: FooterCache.Entry,
         /** Bytes already held, by file offset: the tail, and the whole file once it was read. */
         val held: MutableList<Pair<Long, ByteView>>,
+        /** Whether the head `PAR1` was seen. A tail that misses it leaves the check to a scan that reads near it. */
+        var headChecked: Boolean,
     ) {
         val metadata: ParquetFileMetadata get() = entry.metadata
     }
@@ -134,7 +136,7 @@ class ParquetReader private constructor(
             }
             cache.put(id, metadata)
         }
-        state = State(id, entry, held)
+        state = State(id, entry, held, headChecked = tailStart == 0L)
     }
 
     /** One view per range, served from bytes already held when possible, the rest in one planned read. */
@@ -245,7 +247,16 @@ class ParquetReader private constructor(
                 }
             }
         }
+        // The head magic rides on a data read that starts near it, so it never costs a request of its own.
+        // A scan far from the head skips it: the tail magic and a parsed footer already identify the file.
+        val checkHead = !s.headChecked && ranges.isNotEmpty() && ranges.minOf { it.first } <= 4 + policy.coalesceGapBytes
+        if (checkHead) ranges += 0L until 4L
         val views = read(ranges)
+        if (checkHead) {
+            val head = views.last()
+            for (i in 0 until 4) if (head[i] != ParquetFooterParser.MAGIC[i]) throw ParquetFormatException("PAR1 magic missing at the start (${s.id.uri})")
+            s.headChecked = true
+        }
 
         val scratch = DecodeScratch()
         var pagesRead = 0
