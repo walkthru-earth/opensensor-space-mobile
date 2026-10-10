@@ -7,6 +7,7 @@ import earth.walkthru.aqsync.data.history.parquet.SourceId
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.concurrent.Volatile
+import kotlin.random.Random
 
 /**
  * A [RangeSource] over one HTTP object, one GET per request through [engine].
@@ -25,7 +26,9 @@ import kotlin.concurrent.Volatile
  *
  * Only a strong ETag is sent as `If-Range`. RFC 9110 section 13.1.5 forbids a weak validator (`W/"..."`)
  * there, so a weak or missing ETag leaves the object unpinned. Such reads still detect a change of
- * size or ETag in the response, but cannot detect a same size rewrite under no ETag.
+ * size or ETag in the response, but cannot detect a same size rewrite under no ETag. Without an ETag the
+ * [id] version is unique to this source instance, so a shared `FooterCache` never serves its footer to
+ * another reader.
  *
  * Nothing is logged, and exception messages carry the URL without its query string.
  * A disk `BlockCache` is out of scope until issues #60 and #61 land.
@@ -35,6 +38,8 @@ class HttpRangeSource(
     private val engine: HttpRangeEngine,
     private val openTailBytes: Int = DEFAULT_TAIL_BYTES,
 ) : RangeSource {
+    private val unversioned = "unversioned-" + Random.nextLong().toULong().toString(16)
+
     init {
         require(openTailBytes > 0)
     }
@@ -48,7 +53,8 @@ class HttpRangeSource(
 
         fun sameObject(other: Known): Boolean = size == other.size && etag == other.etag
 
-        fun id(uri: String): SourceId = SourceId(uri, size, etag ?: "")
+        /** Without an ETag the version is unique to this source, so a footer cache never reuses it. */
+        fun id(uri: String, unversioned: String): SourceId = SourceId(uri, size, etag ?: unversioned)
 
         /** [range] from memory, or null when the held tail does not cover it. */
         fun slice(range: LongRange): ByteView? {
@@ -62,7 +68,7 @@ class HttpRangeSource(
     private val updateLock = Mutex()
     private val openLock = Mutex()
 
-    override suspend fun id(): SourceId = open().id(url)
+    override suspend fun id(): SourceId = open().id(url, unversioned)
 
     override suspend fun readTail(n: Int): ByteView {
         if (n <= 0) return ByteView.EMPTY
@@ -142,7 +148,7 @@ class HttpRangeSource(
 
     private suspend fun changed(previous: Known, next: Known): Nothing {
         updateLock.withLock { known = next }
-        throw SourceChangedException(previous.id(url), "${redact(url)} changed from ${previous.size} to ${next.size} bytes")
+        throw SourceChangedException(previous.id(url, unversioned), "${redact(url)} changed from ${previous.size} to ${next.size} bytes")
     }
 
     /** Keeps the longer tail of one object, or the newer object. */

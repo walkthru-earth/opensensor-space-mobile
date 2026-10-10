@@ -184,7 +184,7 @@ internal class ColumnChunks(
      * the footer declares, capped so a hostile footer cannot ask for a huge array up front.
      */
     fun sink(leaf: LeafColumn, rows: Long, rowGroups: Iterable<Int>): ColumnSink {
-        if (rows > Int.MAX_VALUE) throw ParquetFormatException("'${leaf.name}': $rows rows do not fit one column ($source)")
+        if (rows >= Int.MAX_VALUE) throw ParquetFormatException("'${leaf.name}': $rows rows do not fit one column ($source)")
         var hint = 0L
         if (leaf.type == ParquetType.BYTE_ARRAY) for (rg in rowGroups) hint += chunk(leaf, rg).second.totalUncompressedSize.coerceAtLeast(0)
         return ColumnSink(leaf, rows.toInt(), hint.coerceAtMost(MAX_BINARY_HINT).toInt(), source)

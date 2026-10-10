@@ -267,6 +267,7 @@ internal class ChunkDecoder(
         if (width > 0) {
             if (count.toLong() * width > size) throw ParquetFormatException("'${leaf.name}': $count PLAIN values do not fit the page ($source)")
         } else {
+            if (count.toLong() * 4 > size) throw ParquetFormatException("'${leaf.name}': $count BYTE_ARRAY values do not fit the page ($source)")
             val entries = scratch.dictionaryEntries(count)
             var pos = 0
             for (i in 0 until count) {

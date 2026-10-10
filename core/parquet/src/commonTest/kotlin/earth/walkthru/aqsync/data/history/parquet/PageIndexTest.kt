@@ -217,6 +217,27 @@ class PageIndexTest {
         }
     }
 
+    @Test
+    fun `a column without an offset index reads the row group whole and still filters exactly`() = runTest {
+        val names = listOf("h3_index", "updated", "pm25__mean")
+        val expected = names.associateWith { rows(file.readColumn(it)) }
+        val pm25 = file.leaf("pm25__mean").index
+        val stripped = md.copy(
+            rowGroups = md.rowGroups.map { rg ->
+                rg.copy(columns = rg.columns.mapIndexed { i, c -> if (i == pm25) c.copy(offsetIndex = null, columnIndex = null) else c })
+            },
+        )
+        val cache = FooterCache()
+        val source = MemoryRangeSource(bytes, path)
+        cache.put(source.id(), stripped)
+        val batch = ParquetReader.open(source, footerCache = cache).use {
+            it.scan(ScanRequest(names, filterColumn = "h3_index", filterRanges = listOf(h3[45]..h3[50])))
+        }
+        assertEquals(6, batch.rowCount)
+        assertEquals("every page of the three columns", batch.pagesTotal, batch.pagesRead)
+        assertRows("partial index", names, expected, (45..50).toList(), batch)
+    }
+
     private suspend fun scan(request: ScanRequest): ColumnBatch =
         ParquetReader.open(MemoryRangeSource(bytes, path)).use { it.scan(request) }
 
