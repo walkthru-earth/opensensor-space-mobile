@@ -121,9 +121,10 @@ class MemoryRangeSource(
 /** Length of a non-empty [range] as an Int; a read longer than 2 GiB is refused. */
 internal fun rangeLength(range: LongRange): Int {
     if (range.isEmpty()) return 0
-    val length = range.last - range.first + 1
-    if (length > Int.MAX_VALUE) throw IndexOutOfBoundsException("range $range is longer than 2 GiB")
-    return length.toInt()
+    if (range.first < 0) throw IndexOutOfBoundsException("range $range starts before the file")
+    // With a non-negative start the difference cannot overflow, even for a range ending at Long.MAX_VALUE.
+    if (range.last - range.first >= Int.MAX_VALUE) throw IndexOutOfBoundsException("range $range is longer than 2 GiB")
+    return (range.last - range.first + 1).toInt()
 }
 
 /** `[offset, offset + length)` as an inclusive [LongRange]. */
