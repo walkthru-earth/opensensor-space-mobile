@@ -230,6 +230,10 @@ data class ColumnChunkMeta(
     val chunkFileOffset: Long,
     /** parquet-format 2.11 `geospatial_statistics`, present on GEOMETRY/GEOGRAPHY chunks from writers that compute it. */
     val geospatialStatistics: GeospatialStatistics? = null,
+    /** File bytes of this chunk's `OffsetIndex` (ColumnChunk fields 4 and 5), null when the writer wrote no page index. */
+    val offsetIndex: LongRange? = null,
+    /** File bytes of this chunk's `ColumnIndex` (ColumnChunk fields 6 and 7), null when absent. */
+    val columnIndex: LongRange? = null,
 ) {
     val name: String get() = pathInSchema.joinToString(".")
 
@@ -275,7 +279,14 @@ data class ParquetFileMetadata(
         )
     }
 
-    fun leaf(name: String): LeafColumn? = leaves.firstOrNull { it.name == name }
+    private val leafByName: Map<String, LeafColumn> by lazy {
+        val map = HashMap<String, LeafColumn>(leaves.size * 2)
+        for (leaf in leaves) if (leaf.name !in map) map[leaf.name] = leaf
+        map
+    }
+
+    /** The first leaf called [name], from a map built once per footer. */
+    fun leaf(name: String): LeafColumn? = leafByName[name]
 
     /**
      * The footer min and max of an INT64 (or INT32) column in every row group, without reading a page.

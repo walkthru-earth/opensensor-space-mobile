@@ -25,22 +25,49 @@ object ParquetFooterParser {
     }
 
     /**
-     * Reads the footer through [reader]: the head magic, the last 8 bytes (length + `PAR1`), then the footer.
-     * Three small reads on a mapped file; never the column data.
+     * Reads the footer through [reader] with one tail read of up to [DEFAULT_TAIL_BYTES], which holds the
+     * whole footer of every file the app writes. A longer footer costs one more read, and the head magic
+     * is read on its own only when the tail does not reach the start of the file. Never the column data.
      */
     fun parse(reader: ByteReader): ParquetFileMetadata {
         val size = reader.size
         if (size < 12) throw ParquetFormatException("file too small ($size bytes)")
-        if (!reader.read(0, 4).contentEquals(MAGIC)) throw ParquetFormatException("PAR1 magic missing")
-        val footerLength = footerLength(reader.read(size - 8, 8), size)
-        return parseFooter(reader.read(size - 8 - footerLength, footerLength), 0, footerLength)
+        val tailLength = minOf(size, DEFAULT_TAIL_BYTES.toLong()).toInt()
+        val tailStart = size - tailLength
+        if (tailStart > 0 && !reader.read(0, 4).contentEquals(MAGIC)) throw ParquetFormatException("PAR1 magic missing")
+        return parseTail(ByteView(reader.read(tailStart, tailLength)), size) { start, length -> ByteView(reader.read(start, length)) }
+    }
+
+    /** First read of a file: holds the footer of every file the app and the public feed write. */
+    const val DEFAULT_TAIL_BYTES: Int = 64 * 1024
+
+    /**
+     * Parses the footer from [tail], the last bytes of a file of [size] bytes. When the tail reaches the
+     * start of the file its head `PAR1` is checked too. When the footer is longer than the tail,
+     * [readMissing] fetches the bytes before it and the two are joined once.
+     */
+    internal inline fun parseTail(tail: ByteView, size: Long, readMissing: (start: Long, length: Int) -> ByteView): ParquetFileMetadata {
+        if (size < 12 || tail.length < 8) throw ParquetFormatException("file too small ($size bytes)")
+        val tailStart = size - tail.length
+        if (tailStart == 0L && !(tail[0] == MAGIC[0] && tail[1] == MAGIC[1] && tail[2] == MAGIC[2] && tail[3] == MAGIC[3])) throw ParquetFormatException("PAR1 magic missing")
+        val footerLength = footerLength(tail.array, tail.offset + tail.length - 8, size)
+        val footerStart = size - 8 - footerLength
+        if (footerStart >= tailStart) return parseFooter(tail.array, tail.offset + (footerStart - tailStart).toInt(), footerLength)
+        val missing = readMissing(footerStart, (tailStart - footerStart).toInt())
+        val joined = ByteArray(footerLength)
+        missing.array.copyInto(joined, 0, missing.offset, missing.offset + missing.length)
+        tail.array.copyInto(joined, missing.length, tail.offset, tail.offset + footerLength - missing.length)
+        return parseFooter(joined, 0, footerLength)
     }
 
     /** Validates the trailing `<i32 LE length> PAR1` of a file of [size] bytes and returns the footer length. */
-    internal fun footerLength(tail8: ByteArray, size: Long): Int {
+    internal fun footerLength(tail8: ByteArray, size: Long): Int = footerLength(tail8, 0, size)
+
+    /** The same, for the 8 bytes at [at] of [bytes]. */
+    internal fun footerLength(bytes: ByteArray, at: Int, size: Long): Int {
         if (size < 12) throw ParquetFormatException("file too small ($size bytes)")
-        if (!tail8.copyOfRange(4, 8).contentEquals(MAGIC)) throw ParquetFormatException("PAR1 magic missing")
-        val footerLength = leInt(tail8, 0)
+        if (bytes[at + 4] != MAGIC[0] || bytes[at + 5] != MAGIC[1] || bytes[at + 6] != MAGIC[2] || bytes[at + 7] != MAGIC[3]) throw ParquetFormatException("PAR1 magic missing")
+        val footerLength = leInt(bytes, at)
         if (footerLength <= 0 || footerLength > size - 12) throw ParquetFormatException("footer length $footerLength out of range for $size bytes")
         return footerLength
     }
@@ -258,19 +285,53 @@ object ParquetFooterParser {
 
     private fun readColumnChunk(r: ThriftCompactReader): ColumnChunkMeta {
         var fileOffset = 0L
-        var meta: ColumnChunkMeta? = null
+        var meta: ColumnMetaDataFields? = null
+        var offsetIndexOffset: Long? = null
+        var offsetIndexLength: Int? = null
+        var columnIndexOffset: Long? = null
+        var columnIndexLength: Int? = null
         r.readStruct { f ->
             when (f.id) {
                 1 -> r.readString() // file_path: never set by our writers (single-file)
                 2 -> fileOffset = r.readI64()
                 3 -> meta = readColumnMetaData(r)
+                4 -> offsetIndexOffset = r.readI64()
+                5 -> offsetIndexLength = r.readI32()
+                6 -> columnIndexOffset = r.readI64()
+                7 -> columnIndexLength = r.readI32()
                 else -> r.skip(f.type)
             }
         }
-        return (meta ?: throw ParquetFormatException("column chunk without meta_data")).copy(chunkFileOffset = fileOffset)
+        val m = meta ?: throw ParquetFormatException("column chunk without meta_data")
+        return ColumnChunkMeta(
+            m.type, m.encodings, m.path, m.codec, m.numValues, m.uncompressed, m.compressed, m.dataPageOffset, m.indexPageOffset,
+            m.dictionaryPageOffset, m.statistics, chunkFileOffset = fileOffset, geospatialStatistics = m.geo,
+            offsetIndex = pageIndexRange(offsetIndexOffset, offsetIndexLength),
+            columnIndex = pageIndexRange(columnIndexOffset, columnIndexLength),
+        )
     }
 
-    private fun readColumnMetaData(r: ThriftCompactReader): ColumnChunkMeta {
+    /** A page index pointer, or null when either half is missing or out of range. */
+    private fun pageIndexRange(offset: Long?, length: Int?): LongRange? =
+        if (offset == null || length == null || offset < 0 || length <= 0) null else offset until offset + length
+
+    /** `ColumnMetaData` before it becomes a [ColumnChunkMeta], so the chunk is built once with its page index pointers. */
+    private class ColumnMetaDataFields(
+        val type: ParquetType,
+        val encodings: List<ParquetEncoding>,
+        val path: List<String>,
+        val codec: ParquetCodec,
+        val numValues: Long,
+        val uncompressed: Long,
+        val compressed: Long,
+        val dataPageOffset: Long,
+        val indexPageOffset: Long?,
+        val dictionaryPageOffset: Long?,
+        val statistics: ColumnStatistics?,
+        val geo: GeospatialStatistics?,
+    )
+
+    private fun readColumnMetaData(r: ThriftCompactReader): ColumnMetaDataFields {
         var type = ParquetType.UNKNOWN
         var encodings: List<ParquetEncoding> = emptyList()
         var path: List<String> = emptyList()
@@ -300,7 +361,7 @@ object ParquetFooterParser {
                 else -> r.skip(f.type)
             }
         }
-        return ColumnChunkMeta(type, encodings, path, codec, numValues, uncompressed, compressed, dataPageOffset, indexPageOffset, dictionaryPageOffset, statistics, chunkFileOffset = 0L, geospatialStatistics = geo)
+        return ColumnMetaDataFields(type, encodings, path, codec, numValues, uncompressed, compressed, dataPageOffset, indexPageOffset, dictionaryPageOffset, statistics, geo)
     }
 
     private fun readStatistics(r: ThriftCompactReader): ColumnStatistics {
