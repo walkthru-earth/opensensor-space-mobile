@@ -315,8 +315,8 @@ data class ParquetFileMetadata(
     /**
      * The row groups whose [column] values may fall inside one of [ranges] (inclusive), judged by the footer
      * statistics alone. A row group without statistics is kept (it cannot be ruled out); one whose values
-     * are all null is dropped. The caller still filters the decoded rows exactly. Page-index pruning is a
-     * later step (docs/parquet.md).
+     * are all null is dropped. The caller still filters the decoded rows exactly. [ParquetReader.scan]
+     * applies the same rule and then prunes pages by the column index (docs/parquet.md).
      */
     fun rowGroupsOverlapping(column: String, ranges: List<LongRange>): List<Int> {
         val stats = longStatistics(column)
