@@ -50,12 +50,14 @@ internal class ThriftCompactReader(private val buf: ByteCursor) {
         if (type == Type.STOP) return FieldHeader(Type.STOP, 0)
         val delta = byte ushr 4
         val id = if (delta == 0) readZigZag32() else lastFieldIds[depth] + delta
+        require(id in 0..Short.MAX_VALUE) { "thrift field id $id out of range" }
         lastFieldIds[depth] = id
         return FieldHeader(type, id)
     }
 
     /** Enter a nested struct: field ids inside restart from 0. Pair with [exitStruct]. */
     fun enterStruct() {
+        require(depth < MAX_DEPTH) { "thrift structs nested deeper than $MAX_DEPTH" }
         if (++depth == lastFieldIds.size) lastFieldIds = lastFieldIds.copyOf(depth * 2)
         lastFieldIds[depth] = 0
     }
@@ -156,6 +158,18 @@ internal class ThriftCompactReader(private val buf: ByteCursor) {
 
     /** Skips one value of [type] (the header has already been read). */
     fun skip(type: Int) {
+        require(skipDepth < MAX_DEPTH) { "thrift values nested deeper than $MAX_DEPTH" }
+        skipDepth++
+        try {
+            skipValue(type)
+        } finally {
+            skipDepth--
+        }
+    }
+
+    private var skipDepth = 0
+
+    private fun skipValue(type: Int) {
         when (type) {
             Type.BOOLEAN_TRUE, Type.BOOLEAN_FALSE -> Unit // value lives in the header
             Type.BYTE -> buf.get()
@@ -192,4 +206,9 @@ internal class ThriftCompactReader(private val buf: ByteCursor) {
     }
 
     fun readListBoolean(): Boolean = (buf.getU8() and 0x0F) == Type.BOOLEAN_TRUE
+
+    private companion object {
+        /** Parquet nests a few levels deep. A hostile file must fail, not overflow the stack. */
+        const val MAX_DEPTH = 64
+    }
 }

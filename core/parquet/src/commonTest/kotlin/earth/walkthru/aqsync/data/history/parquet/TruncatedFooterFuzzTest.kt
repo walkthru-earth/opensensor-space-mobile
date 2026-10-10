@@ -232,4 +232,14 @@ class TruncatedFooterFuzzTest {
             "geoparquet/pyarrow/pa-snappy-dict-v1.parquet",
         )
     }
+
+    @Test
+    fun `deeply nested thrift structs fail as a format error, not a stack overflow`() = runTest {
+        // An unknown struct field whose value opens another struct, 100,000 levels deep.
+        val footer = ByteArray(100_000) { 0x1C }
+        val bytes = "PAR1".encodeToByteArray() + footer + byteArrayOf(0xA0.toByte(), 0x86.toByte(), 0x01, 0x00) + "PAR1".encodeToByteArray()
+        assertFailsWith<ParquetFormatException> { ParquetFooterParser.parse(bytes) }
+        assertFailsWith<ParquetFormatException> { ParquetFile.wrap(bytes, "nested") }
+        assertFailsWith<ParquetFormatException> { ParquetReader.open(MemoryRangeSource(bytes, "nested")) }
+    }
 }

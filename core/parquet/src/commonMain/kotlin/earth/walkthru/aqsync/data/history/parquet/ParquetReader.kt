@@ -6,8 +6,9 @@ import kotlinx.coroutines.sync.withLock
 /**
  * Footers and page indexes of recently opened files, keyed by [SourceId], so reopening a file the app
  * read a moment ago parses nothing. Least recently used entries go first once [maxEntries] is reached.
- * A [SourceId] names one immutable version of a file, so an entry never goes stale; a source that
- * changed under a reader is dropped with [invalidate].
+ * A [SourceId] names one version of a file. It is only as good as the source's version string: a
+ * source with an empty version (a [MemoryRangeSource] by default) must not reuse a uri for other bytes
+ * of the same size. A source that changed under a reader is dropped with [invalidate].
  */
 class FooterCache(val maxEntries: Int = 256) {
     init {
@@ -210,8 +211,10 @@ class ParquetReader private constructor(
         val partial = groups.filter { !covered[it] }
         if (usePages && partial.isNotEmpty()) loadPageIndexes(partial, decoded, filterLeaf!!, offsetIndexes)
         for (g in groups) {
-            val selection = if (usePages && !covered[g]) selectRows(g, filterLeaf!!, valueRanges, offsetIndexes) else null
+            var selection = if (usePages && !covered[g]) selectRows(g, filterLeaf!!, valueRanges, offsetIndexes) else null
             if (selection != null && selection.starts.isEmpty()) continue
+            // A column without pages to select from is decoded whole, so the group is read whole.
+            if (selection != null && decoded.any { (offsetIndexes[key(g, it.index)]?.pageCount ?: 0) == 0 }) selection = null
             plans += Plan(g, selection)
         }
 
