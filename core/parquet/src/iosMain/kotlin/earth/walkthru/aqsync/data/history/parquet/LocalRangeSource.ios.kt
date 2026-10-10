@@ -24,9 +24,16 @@ import platform.posix.stat
 import platform.posix.strerror
 import kotlin.concurrent.AtomicInt
 
+/**
+ * Reads with `pread` on one descriptor. [close] may race reads on other threads, so the descriptor is
+ * reference counted: each read holds it, and the last of [close] and the reads in flight closes it. A
+ * read can therefore never reach a descriptor number the process has reused for another file.
+ */
 actual class LocalRangeSource actual constructor(private val file: LocalFile) : RangeSource {
     private val fd: Int = open(file.path, O_RDONLY).also { if (it < 0) throw ParquetFormatException("cannot open ${file.path}: ${strerror(errno)?.toKString()}") }
-    private val closed = AtomicInt(0)
+
+    /** Reads in flight, plus [CLOSED] once [close] ran. */
+    private val state = AtomicInt(0)
     private val size: Long
     private val id: SourceId
 
@@ -55,7 +62,15 @@ actual class LocalRangeSource actual constructor(private val file: LocalFile) : 
     }
 
     private fun read(offset: Long, length: Int): ByteView {
-        if (closed.value != 0) throw IllegalStateException("${file.path} is closed")
+        acquire()
+        try {
+            return readOpen(offset, length)
+        } finally {
+            release()
+        }
+    }
+
+    private fun readOpen(offset: Long, length: Int): ByteView {
         val out = ByteArray(length)
         if (length == 0) return ByteView(out)
         out.usePinned { pin ->
@@ -73,7 +88,31 @@ actual class LocalRangeSource actual constructor(private val file: LocalFile) : 
         return ByteView(out)
     }
 
+    private fun acquire() {
+        while (true) {
+            val s = state.value
+            if (s and CLOSED != 0) throw IllegalStateException("${file.path} is closed")
+            if (state.compareAndSet(s, s + 1)) return
+        }
+    }
+
+    /** The read that leaves a closed source with no reader closes the descriptor. */
+    private fun release() {
+        if (state.decrementAndGet() == CLOSED) platform.posix.close(fd)
+    }
+
     override fun close() {
-        if (closed.compareAndSet(0, 1)) platform.posix.close(fd)
+        while (true) {
+            val s = state.value
+            if (s and CLOSED != 0) return
+            if (state.compareAndSet(s, s or CLOSED)) {
+                if (s == 0) platform.posix.close(fd)
+                return
+            }
+        }
+    }
+
+    private companion object {
+        const val CLOSED = 1 shl 30
     }
 }
