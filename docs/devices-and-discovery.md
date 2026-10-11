@@ -518,7 +518,8 @@ LZ4 and Snappy). Issue #62 added `ParquetReader` over a `RangeSource`, an in-mem
 offset indexes. `:core:net` adds `HttpRangeSource` over OkHttp 5.5.0 on Android and
 `NSURLSession` on iOS. It sends `Accept-Encoding: identity`, so byte offsets stay true, and checks
 `If-Range` against the ETag, so a replaced file is read again from its new footer. Host and
-simulator tests only, and not yet wired to the live feed. A byte block cache on disk waits for
+simulator tests only. `OpenAqAggregatesFeed` reads the OpenAQ aggregates through it (below), and
+the apps do not build that feed yet. A byte block cache on disk waits for
 issues #60 and #61. No third-party Parquet or DuckDB library exists for iOS that would do this
 better.
 
@@ -529,6 +530,39 @@ newest hour moves on. The last complete hour stays on disk for offline use.
 and PyArrow, including `sample = true` in the key value metadata, and the files ship in the app.
 The phone reads them through the same reader from a local file source, so the sample and the
 live feed share one code path. The pill shows while `sample` is true.
+
+**Live feed, OpenAQ aggregates (current).** Until the opensensor publisher exists, the live feed
+is the OpenAQ aggregates collection on source.coop, read with the same reader. Design
+`docs/superpowers/specs/2026-10-12-openaq-live-feed-design.md`. Root
+`https://data.source.coop/walkthru-earth/opensensor-space/openaq-aggregates/`.
+
+- `manifest.json` carries `as_of` (`YYYY-MM-DD`, the newest complete PM2.5 day) and
+  `generation`, plus fields the phone ignores. `latest()` answers `FeedPartition(as_of, 0)` and
+  keeps it for 5 minutes. A failed read throws and is not cached.
+- `cells/h3_res=<1..9>/data.parquet`, one file per resolution holding every day since 2023,
+  written by DuckDB. Verified on 2026-10-12 against `h3_res=3` (250 KB, 3,131 rows, generation
+  `007d89a5...`): one row group, SNAPPY, dictionary encoded, min and max statistics, no page
+  index, every column optional. Columns `h3_index` INT64, `date` INT32 with the DATE converted
+  type (days since 1970-01-01, the station local day), `devices` INT32 (stations, 1 or more, no
+  crowd rule, key `crowd_rule = none, public licensed stations`), then `<id>__n` INT32 and
+  `<id>__mean`, `__min`, `__max` DOUBLE, null when not measured. Rows sort by `h3_index` then
+  `date`. Key value metadata `feed = openaq-aggregates`, `window = 1d`, `h3_res`, `generation`
+  and `dictionary` (`pm25`, `pm10`, `pm1`, `no2`, `temperature`, `humidity`, `um003`). Only
+  complete days (18 or more hours) are present, and data lags OpenAQ by about 72 hours.
+- `ParquetFeedReader` reads this daily schema when `updated` is absent and `date` is present.
+  Each row keeps its `CellRow.date`, its `updatedEpochMs` is the UTC midnight after that date,
+  and an optional day range drops other days before a row is built. The hourly schema is
+  unchanged.
+- `DailyCellFold` turns the daily rows of the 7 days ending at `as_of` into one cell each. 24
+  hours takes, per property, the newest day in range that has a mean, as it is. 7 days takes the
+  mean of the daily means, the min of the mins, the max of the maxes and the largest daily `n`,
+  skipping days without the property. `devices` is the largest daily count among the days used,
+  `updated` the end of the newest day used. A cell with nothing in range is dropped. Null stays
+  null.
+- The feed offers 24 hours and 7 days only. Last hour answers an empty table without a request.
+  Errors propagate, the screen decides what to show. Tests use a 13 row fixture from
+  `tools/discover-fixture/make_openaq_fixture.py` served by a fake HTTP engine. The live URL is
+  not in the gate.
 
 **What we do not copy from the website.** The EOX Sentinel-2 cloudless basemap, whose licence
 restricts commercial use, and the deck.gl globe view. Some current website datasets also still
@@ -622,7 +656,7 @@ starts with the target layout from the producer guidance.
 | Module | Owns |
 | --- | --- |
 | `:core:model` | `Device`, `DeviceFamily`, `Capability`, `ObservedProperty`, `Scale`, registry |
-| `:core:publicfeed` | `PublicFeed` and `FeedReader` ports, `ParquetFeedReader` (common, one `ParquetReader.scan` filtered on `h3_index` with page pruning, `CellsTable` reports pages read of total), `BundledSampleFeed`, the `H3Grid` interface (`com.uber:h3` 4.5.0 on Android and JVM, the vendored H3 C 4.5.0 through cinterop on iOS), `H3Index` bit arithmetic and descendant ranges, `ViewportCover`, `CellScale` (WHO steps from `:core:airquality` for PM2.5 and PM10, else `PercentileScale`), `HealthAxis`, `PropertyRanking`, `CellGeoJson`, `TimeZoneRegions`. Built 2026-10-08. Planned here: S3 listing, the live feed over `:core:net`, a disk block cache (issues #60 and #61) |
+| `:core:publicfeed` | `PublicFeed` and `FeedReader` ports, `ParquetFeedReader` (common, one `ParquetReader.scan` filtered on `h3_index` with page pruning, `CellsTable` reports pages read of total), `BundledSampleFeed`, the `H3Grid` interface (`com.uber:h3` 4.5.0 on Android and JVM, the vendored H3 C 4.5.0 through cinterop on iOS), `H3Index` bit arithmetic and descendant ranges, `ViewportCover`, `CellScale` (WHO steps from `:core:airquality` for PM2.5 and PM10, else `PercentileScale`), `HealthAxis`, `PropertyRanking`, `CellGeoJson`, `TimeZoneRegions`. Built 2026-10-08. `OpenAqAggregatesFeed` over `:core:net`, the daily schema in `ParquetFeedReader` and `DailyCellFold`, built 2026-10-12 (host and simulator tests only). Planned here: S3 listing for the opensensor feed, a disk block cache (issues #60 and #61) |
 | `:core:net` | `HttpRangeSource` and the `HttpRangeEngine` port, `OkHttpRangeEngine` (OkHttp 5.5.0, Android and JVM), `UrlSessionRangeEngine` (`NSURLSession`, iOS). Built with issue #62, not yet used by the apps |
 | `:core:parquet` | The portable reader from W8, with `RangeSource`, `ParquetReader` (footer cache, coalesced reads, one-pass decoding), row group pruning by INT64 statistics and page pruning by the column and offset indexes |
 | `:feature:discover` | CMP `commonMain` map screen (`DiscoverScreen`), `DiscoverController` state holder, `DiscoverStrings` read from its Compose resources, one copy for both apps, the bundled sample and basemap styles as Compose resources. Targets Android (`com.android.kotlin.multiplatform.library`) and iOS, not the JVM, because the maplibre-compose desktop variant needs Java 25. Planned here: the public device page |
@@ -644,7 +678,7 @@ the Protomaps OpenStreetMap PMTiles build on source.coop (`pmtiles://` rendered 
 emulator and the iOS simulator), "© OpenStreetMap" shows at launch and collapses to an info button.
 "Show public sensors" in Settings (both apps) swaps in a plain background style, so no request
 leaves the phone. Not built yet. Near me, the GeoNames place list, the offline map download (TODO),
-the half sheet height, stale outline dashes, the device list and device page, the live feed, the
+the half sheet height, stale outline dashes, the device list and device page, the live feed on screen, the
 peacock on the first-run card and recolouring the basemap to the sensing palette. The basemap
 still points at the Protomaps build on source.coop, not at our own extract. HTTP range reads use
 OkHttp and `NSURLSession` behind `:core:net` (issue #62) instead of Ktor.

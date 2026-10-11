@@ -14,7 +14,7 @@ flowchart TB
     NT[":core:net<br/>HTTP range source, OkHttp and NSURLSession"]
     AQ[":core:airquality<br/>WHO 2021 scales and palette"]
     HI[":core:history<br/>sensor rules, file index, aggregation, calendar windows"]
-    PF[":core:publicfeed<br/>Discover feed port, H3, viewport cover, sample"]
+    PF[":core:publicfeed<br/>Discover feed port, H3, viewport cover, sample, OpenAQ live feed"]
     UN[":core:units<br/>display units, axis ticks"]
     AR1[":core:archive<br/>layout, verifier, records, store ports"]
     SE[":core:settings<br/>app preferences on DataStore, detail level"]
@@ -34,7 +34,7 @@ flowchart TB
   SY1 --> PR & AR1
   AR1 --> PR & PQ & ST
   HI --> PQ & PR & AQ
-  PF --> PQ & AQ
+  PF --> PQ & AQ & NT
   NT --> PQ
   DI --> PF & UN & DS & PM & SE
   DS --> AQ
@@ -47,8 +47,10 @@ flowchart TB
 ```
 
 `:core:history` exposes `:core:parquet`, `:core:protocol` and `:core:airquality` as `api`, and
-`:core:publicfeed` exposes `:core:parquet` and `:core:airquality`. `:core:net` exposes
-`:core:parquet` and is not yet used by either app. A `:core` class cannot import
+`:core:publicfeed` exposes `:core:parquet`, `:core:airquality`, `:core:net` (its
+`OpenAqAggregatesFeed` takes an `HttpRangeEngine` and reads through `HttpRangeSource`) and
+kotlinx-datetime (daily rows carry a local date). `:core:net` exposes `:core:parquet`. Neither app
+builds an `OpenAqAggregatesFeed` yet. A `:core` class cannot import
 `android.*`, and the build enforces it. Every `:core` module compiles for JVM and iOS from
 `src/commonMain`. Platform edges live in `src/jvmMain` (Java files, streams, positional `FileChannel` reads,
 `java.util.zip`, `com.uber:h3`, OkHttp) and `src/iosMain` (`pread`, system zlib, H3 C
