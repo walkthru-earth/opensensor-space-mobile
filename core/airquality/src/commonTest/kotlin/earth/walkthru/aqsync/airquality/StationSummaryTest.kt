@@ -42,4 +42,13 @@ class StationSummaryTest {
         assertNull(s.step)
         assertTrue(s.blocks.isEmpty())
     }
+
+    @Test
+    fun anUnscaledPropertyWithoutAValueStaysNotAvailable() {
+        val s = StationSummary.of("co2", "ppm", value = null, updatedEpochMs = 5L, history = listOf(null, null, null))
+        assertFalse(s.scaled)
+        assertNull(s.value)
+        assertNull(s.step)
+        assertTrue(s.blocks.isEmpty())
+    }
 }

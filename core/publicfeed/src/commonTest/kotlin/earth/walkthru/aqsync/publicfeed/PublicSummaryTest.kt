@@ -40,7 +40,18 @@ class PublicSummaryTest {
         assertEquals(listOf(null, null, WhoStep.GUIDELINE), s.blocks.map { it.step })
         assertNull(s.value)
         assertNull(s.step)
-        assertEquals(50L, s.updatedEpochMs)
+        // The time is the headline window's. A fresh hour never sits beside an n/a headline.
+        assertNull(s.updatedEpochMs)
+    }
+
+    @Test
+    fun theUpdateTimeIsTheDayWindowsEvenWhenAnotherIsNewer() {
+        val s = PublicSummary.of(
+            "pm25",
+            "µg/m³",
+            mapOf(FeedWindow.DAY to row(30.0, 300L), FeedWindow.LAST_HOUR to row(80.0, 900L)),
+        )
+        assertEquals(300L, s.updatedEpochMs)
     }
 
     @Test
