@@ -6,6 +6,7 @@ import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 import earth.walkthru.aqsync.data.history.parquet.ParquetLogicalType
 import earth.walkthru.aqsync.data.history.parquet.RangeSource
 import earth.walkthru.aqsync.data.history.parquet.SourceId
+import earth.walkthru.aqsync.storage.MemoryPressure
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -121,6 +122,34 @@ class SampleFeedTest {
                 }
             }
         }
+    }
+
+    @Test
+    fun `memory pressure empties the byte cache and the next read loads the file again`() = runTest {
+        var loads = 0
+        val counted = BundledSampleFeed(root = "v1") { path -> loads++; sampleBytes(path) }
+        val partition = counted.latest()!!
+        loads = 0
+        val before = FeedWindow.entries.flatMap { window -> (2..7).map { res -> counted.cells(partition, window, res, ranges = null) } }
+        val files = FeedWindow.entries.size * 6
+        assertEquals(files, loads)
+        val full = counted.cachedBytes()
+        assertTrue(full in 1..BundledSampleFeed.DEFAULT_BUDGET_BYTES, "cached $full")
+
+        // A second pass is served from the cache.
+        counted.cells(partition, FeedWindow.DAY, 5, ranges = null)
+        assertEquals(files, loads)
+
+        counted.trim(MemoryPressure.Level.Moderate)
+        assertTrue(counted.cachedBytes() <= BundledSampleFeed.DEFAULT_BUDGET_BYTES / 2)
+
+        counted.trim(MemoryPressure.Level.Critical)
+        assertEquals(0L, counted.cachedBytes())
+
+        val after = FeedWindow.entries.flatMap { window -> (2..7).map { res -> counted.cells(partition, window, res, ranges = null) } }
+        assertEquals(before.map { it.rows }, after.map { it.rows })
+        assertEquals(2 * files, loads)
+        assertEquals(full, counted.cachedBytes())
     }
 
     /** Counts every request: a tail read and each range handed to the source. */

@@ -188,6 +188,7 @@
     <string name="fm_col_footer_says">التذييل يقول من %1$s إلى %2$s</string>
     <string name="fm_metadata">بيانات الملف الوصفية</string>
     <string name="files_export_failed">تعذّر تجهيز التصدير. حاول مرة أخرى.</string>
+    <string name="files_export_no_space">لا توجد مساحة كافية على هذا الهاتف للتصدير.</string>
     <!-- File metrics screen, spoken by the screen reader on the loading spinner. -->
     <string name="fm_loading">جارٍ قراءة هذا الملف…</string>
     <!-- Files screen, the click label of a device file row that syncs it. -->

@@ -68,6 +68,8 @@ jobs:
       - name: Validate sensor installation migration
         run: python3 tools/validate_sensor_installation_migration.py
       - run: ./gradlew --no-daemon verify
+      - name: Check the APK native ABIs
+        run: python3 tools/check_apk_abis.py app/build/outputs/apk/debug/app-debug.apk
       - name: Upload debug APK
         if: success()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

@@ -74,40 +74,42 @@ object FileInspector {
             if (!store.exists(key)) return FileMetricsState.Failed(FailReason.NOT_IN_ARCHIVE, name)
             val mark = TimeSource.Monotonic.markNow()
             val reader = store.reader(key)
-            val pf = ParquetFile.open(reader, name)
-            val index = ParquetIndexer.index(pf)
-            val md = pf.metadata
-            val utcLeaf = md.leaf(ParquetIndexer.UTC)
-            val groups = md.rowGroups.mapIndexed { g, rg ->
-                val s = utcLeaf?.let { rg.columns[it.index].statistics }
-                RowGroupSummary(g, rg.numRows, rg.totalByteSize, s?.minLong(ParquetType.INT64), s?.maxLong(ParquetType.INT64))
-            }
-            val columns = pf.leaves.map { leaf ->
-                val col = pf.readColumn(leaf)
-                val stats = md.rowGroups.firstOrNull()?.columns?.get(leaf.index)?.statistics?.takeIf { md.rowGroups.size == 1 && it.hasMinMax }
-                val float = leaf.type == ParquetType.FLOAT
-                summarize(
-                    leaf.name,
-                    leaf.type,
-                    leaf.isTimestampNanosUtc,
-                    col,
-                    stats?.let { s -> if (float) s.minFloat()?.toString() else s.minLong(leaf.type)?.toString() },
-                    stats?.let { s -> if (float) s.maxFloat()?.toString() else s.maxLong(leaf.type)?.toString() },
+            // Closes the file and its reader before returning (#61).
+            ParquetFile.open(reader, name).use { pf ->
+                val index = ParquetIndexer.index(pf)
+                val md = pf.metadata
+                val utcLeaf = md.leaf(ParquetIndexer.UTC)
+                val groups = md.rowGroups.mapIndexed { g, rg ->
+                    val s = utcLeaf?.let { rg.columns[it.index].statistics }
+                    RowGroupSummary(g, rg.numRows, rg.totalByteSize, s?.minLong(ParquetType.INT64), s?.maxLong(ParquetType.INT64))
+                }
+                val columns = pf.leaves.map { leaf ->
+                    val col = pf.readColumn(leaf)
+                    val stats = md.rowGroups.firstOrNull()?.columns?.get(leaf.index)?.statistics?.takeIf { md.rowGroups.size == 1 && it.hasMinMax }
+                    val float = leaf.type == ParquetType.FLOAT
+                    summarize(
+                        leaf.name,
+                        leaf.type,
+                        leaf.isTimestampNanosUtc,
+                        col,
+                        stats?.let { s -> if (float) s.minFloat()?.toString() else s.minLong(leaf.type)?.toString() },
+                        stats?.let { s -> if (float) s.maxFloat()?.toString() else s.maxLong(leaf.type)?.toString() },
+                    )
+                }
+                FileMetricsState.Loaded(
+                    station = station,
+                    name = name,
+                    sizeBytes = reader.size,
+                    index = index,
+                    codec = md.rowGroups.firstOrNull()?.columns?.firstOrNull()?.codec,
+                    footerBytes = md.footerLength,
+                    columnOrders = md.columnOrders.size,
+                    rowGroups = groups,
+                    columns = columns,
+                    metadata = md.keyValueMetadata,
+                    decodeMillis = mark.elapsedNow().inWholeMilliseconds,
                 )
             }
-            FileMetricsState.Loaded(
-                station = station,
-                name = name,
-                sizeBytes = reader.size,
-                index = index,
-                codec = md.rowGroups.firstOrNull()?.columns?.firstOrNull()?.codec,
-                footerBytes = md.footerLength,
-                columnOrders = md.columnOrders.size,
-                rowGroups = groups,
-                columns = columns,
-                metadata = md.keyValueMetadata,
-                decodeMillis = mark.elapsedNow().inWholeMilliseconds,
-            )
         } catch (e: ParquetFormatException) {
             FileMetricsState.Failed(FailReason.READER_REFUSED, e.message)
         } catch (e: CancellationException) {

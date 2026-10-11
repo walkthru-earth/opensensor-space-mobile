@@ -2,6 +2,11 @@ package earth.walkthru.aqsync.publicfeed
 
 import earth.walkthru.aqsync.data.history.parquet.MemoryRangeSource
 import earth.walkthru.aqsync.data.history.parquet.RangeSource
+import earth.walkthru.aqsync.storage.ByteBudgetLru
+import earth.walkthru.aqsync.storage.MemoryPressure
+import earth.walkthru.aqsync.storage.MemoryTrimmable
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -114,14 +119,23 @@ object FeedPaths {
 /**
  * The sample feed that ships in the app, in the live layout and read through the same
  * [FeedReader]. [load] returns the bytes of a bundled file by its path under [root]. `latest.json`
- * stands in for the S3 listing until the live feed exists.
+ * stands in for the S3 listing until the live feed exists. Loaded files stay in a least recently used
+ * cache of [budgetBytes], which [trim] shrinks or drops on [MemoryPressure] (#61).
  */
 class BundledSampleFeed(
     private val reader: FeedReader = ParquetFeedReader(),
     private val root: String = "files/discover-sample/v1",
+    budgetBytes: Long = DEFAULT_BUDGET_BYTES,
     private val load: suspend (String) -> ByteArray,
-) : PublicFeed {
-    private val bytes = HashMap<String, ByteArray>()
+) : PublicFeed,
+    MemoryTrimmable {
+    private val mutex = Mutex()
+    private val bytes = ByteBudgetLru<String, ByteArray>(budgetBytes) { path, data -> data.size + 2L * path.length }
+
+    /** Bytes the cache holds now. */
+    suspend fun cachedBytes(): Long = mutex.withLock { bytes.sizeBytes }
+
+    override suspend fun trim(level: MemoryPressure.Level) = mutex.withLock { bytes.trim(level) }
 
     override val isSample: Boolean get() = true
     override val available: Boolean get() = reader.available
@@ -133,7 +147,12 @@ class BundledSampleFeed(
     override suspend fun cells(partition: FeedPartition, window: FeedWindow, res: Int, ranges: List<LongRange>?): CellsTable {
         if (!reader.available) return CellsTable.EMPTY
         val path = "$root/${FeedPaths.cells(partition, window, res)}"
-        val data = bytes[path] ?: load(path).also { bytes[path] = it }
+        val data = mutex.withLock { bytes[path] } ?: load(path).also { loaded -> mutex.withLock { bytes.put(path, loaded) } }
         return reader.readCells(MemoryRangeSource(data, path, "bundled"), ranges)
+    }
+
+    companion object {
+        /** Every bundled sample is about 280 KB together, so 1 MiB keeps them all in normal use. */
+        const val DEFAULT_BUDGET_BYTES: Long = 1024L * 1024
     }
 }

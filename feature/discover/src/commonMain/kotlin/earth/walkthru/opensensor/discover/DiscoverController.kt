@@ -14,6 +14,8 @@ import earth.walkthru.aqsync.publicfeed.PropertyRanking
 import earth.walkthru.aqsync.publicfeed.PublicFeed
 import earth.walkthru.aqsync.publicfeed.TimeZoneRegions
 import earth.walkthru.aqsync.publicfeed.ViewportCover
+import earth.walkthru.aqsync.storage.MemoryTrimmable
+import earth.walkthru.aqsync.storage.trimOnMemoryPressure
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -107,6 +109,8 @@ class DiscoverController(
     private var restyleJob: Job? = null
 
     init {
+        // A feed that caches bytes in memory gives them back under memory pressure (#61).
+        if (feed is MemoryTrimmable) scope.trimOnMemoryPressure(feed)
         scope.launch {
             saved = runCatching { prefs.load() }.getOrDefault(DiscoverSaved())
             val start = saved.camera?.let { StartView.Camera(it) } ?: StartView.Region(TimeZoneRegions.regionFor(timeZoneId))

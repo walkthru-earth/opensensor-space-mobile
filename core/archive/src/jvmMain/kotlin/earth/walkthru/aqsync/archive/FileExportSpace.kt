@@ -1,6 +1,6 @@
 package earth.walkthru.aqsync.archive
 
-import earth.walkthru.aqsync.data.history.parquet.MappedFileReader
+import earth.walkthru.aqsync.data.history.parquet.LocalFileReader
 import java.io.File
 import java.io.FileOutputStream
 import java.util.UUID
@@ -16,6 +16,8 @@ class FileExportSpace(private val root: File) : ExportSpace {
         check(dir.mkdirs()) { "cannot create the export folder" }
         return FileExportRun(dir)
     }
+
+    override fun freeBytes(): Long? = generateSequence(root) { it.parentFile }.firstOrNull { it.exists() }?.usableSpace
 }
 
 private class FileExportRun(private val dir: File) : ExportRun {
@@ -41,10 +43,10 @@ private class FileExportRun(private val dir: File) : ExportRun {
 
 /**
  * Every regular file under [root] as an [ExportEntry] named `<prefix>/<relative path>`, for the daily
- * export of Android's derived files (`filesDir/derived/v1`). Read through a read-only mapping.
+ * export of Android's derived files (`filesDir/derived/v1`). Read with positional reads, no mapping.
  */
 fun directoryEntries(root: File, prefix: String): List<ExportEntry> =
     root.walkTopDown().filter { it.isFile }.map { f ->
         val relative = f.relativeTo(root).invariantSeparatorsPath
-        ExportEntry("$prefix/$relative", f.lastModified()) { MappedFileReader(f) }
+        ExportEntry("$prefix/$relative", f.lastModified()) { LocalFileReader(f) }
     }.toList()

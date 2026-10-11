@@ -5,7 +5,7 @@ package earth.walkthru.aqsync.data.history
 import earth.walkthru.aqsync.archive.ArchiveLayout
 import earth.walkthru.aqsync.archive.ArchiveRecord
 import earth.walkthru.aqsync.archive.ArchiveStore
-import earth.walkthru.aqsync.data.history.parquet.MappedDataReader
+import earth.walkthru.aqsync.data.history.parquet.LocalFileReader
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 import earth.walkthru.aqsync.data.history.parquet.ParquetSink
 import earth.walkthru.aqsync.data.protocol.ParquetVerify
@@ -33,8 +33,6 @@ import platform.Foundation.NSFileProtectionKey
 import platform.Foundation.NSFileType
 import platform.Foundation.NSFileTypeRegular
 import platform.Foundation.NSFileTypeSymbolicLink
-import platform.Foundation.NSURL
-import platform.Foundation.NSURLIsExcludedFromBackupKey
 import platform.posix.O_WRONLY
 import platform.posix.close
 import platform.posix.fsync
@@ -43,10 +41,15 @@ import platform.posix.write
 import kotlin.time.Instant
 
 /**
- * Atomic on-disk daily Parquet cache for iOS. [root] is Application Support; the shared layout
- * puts files in `derived/v1/<station>/day=YYYY-MM-DD.parquet`. Rebuild runs after index repair on
- * startup, after downloads and after durable clock receipts arrive. It needs no network. Temps live
- * in `<root>/storage-tmp` and commit with [AtomicFiles.commitReplace] as Rebuildable data (#60).
+ * Atomic on-disk daily Parquet cache for iOS. [root] is `Library/Caches` (#61), which iOS may purge
+ * and never backs up; the shared layout puts files in `derived/v1/<station>/day=YYYY-MM-DD.parquet`.
+ * Rebuild runs after index repair on startup, after downloads and after durable clock receipts
+ * arrive. It needs no network. Temps commit with [AtomicFiles.commitReplace] as Rebuildable data
+ * (#60). Pass the app's [AtomicFiles], whose temp directory is on the same volume.
+ *
+ * A day whose manifest still carries the current signature but whose Parquet is gone was evicted by
+ * the quota or purged by iOS. It is a cache miss, skipped here and kept, so eviction never makes
+ * rebuild passes churn.
  */
 class IosDailyDerivedStore(
     root: String,
@@ -57,7 +60,7 @@ class IosDailyDerivedStore(
     private val fm get() = NSFileManager.defaultManager
     private val protection = mapOf<Any?, Any?>(NSFileProtectionKey to NSFileProtectionCompleteUntilFirstUserAuthentication)
 
-    /** Rebuild changed UTC days, remove obsolete partitions, and return the current daily paths. */
+    /** Rebuild changed UTC days, remove obsolete partitions, and return the daily paths present now. */
     suspend fun rebuild(
         station: String,
         files: List<ArchiveRecord>,
@@ -68,10 +71,11 @@ class IosDailyDerivedStore(
         mutex.withLock {
             val directory = checked("$root/${ArchiveLayout.derivedStationDir(station)}")
             check(fm.createDirectoryAtPath(directory, true, protection, null)) { "cannot create derived directory" }
-            NSURL.fileURLWithPath("$root/${ArchiveLayout.DERIVED}", true).setResourceValue(true, NSURLIsExcludedFromBackupKey, null)
             val records = files.filter { it.station == station && it.indexed && it.isTelemetry }
             val days = StationDays.of(records)[station].orEmpty()
             val paths = mutableListOf<String>()
+            // Day files this pass keeps, built or evicted. Everything else in the directory is stale.
+            val kept = HashSet<String>()
             for (day in days.sorted()) {
                 val start = day * StationDays.DAY_NS
                 val sources = records.filter { it.onTimeline(start, start + StationDays.DAY_NS) }
@@ -90,16 +94,18 @@ class IosDailyDerivedStore(
                 val signature = ParquetVerify.sha256Hex(signatureText.encodeToByteArray())
                 val target = checked("$root/${ArchiveLayout.derivedDayPath(station, day)}")
                 val manifest = checked("$root/${ArchiveLayout.derivedManifestPath(station, day)}")
-                if (isFile(target) && cachedSignature(manifest) == signature) {
-                    paths += target
+                if (cachedSignature(manifest) == signature) {
+                    if (isFile(target)) paths += target
+                    kept += target.substringAfterLast('/')
                     continue
                 }
                 val temporary = atomic.createTemp(".parquet")
                 try {
-                    val opened = sources.map { DailyParquetSource(it, ParquetFile.open(archive.reader(it.key))) }
+                    // The builder opens and closes one source at a time (#61).
+                    val daily = sources.map { source -> DailyParquetSource(source) { ParquetFile.open(archive.reader(source.key)) } }
                     val sink = FileSink(temporary)
                     val result = try {
-                        DailyParquetBuilder.build(station, day, opened, sink, anchors, nowEpochS)
+                        DailyParquetBuilder.build(station, day, daily, sink, anchors, nowEpochS)
                     } finally {
                         sink.close()
                     }
@@ -109,17 +115,17 @@ class IosDailyDerivedStore(
                         continue
                     }
                     // Parse the footer before replacing a previously good cache entry.
-                    check(ParquetFile.open(MappedDataReader(temporary)).numRows == result.rows.toLong()) { "derived row count mismatch" }
+                    check(ParquetFile.open(LocalFileReader(temporary)).use { it.numRows } == result.rows.toLong()) { "derived row count mismatch" }
                     // A crash between the two commits must leave no receipt claiming older bytes.
                     remove(manifest)
                     atomic.commitReplace(temporary, target, StorageClass.Rebuildable)
                     writeManifest(manifest, station, day, result, signature, nowEpochS)
                     paths += target
+                    kept += target.substringAfterLast('/')
                 } finally {
                     fm.removeItemAtPath(temporary, null)
                 }
             }
-            val wanted = paths.map { it.substringAfterLast('/') }.toSet()
             val names = fm.contentsOfDirectoryAtPath(directory, null).orEmpty().filterIsInstance<String>()
             for (name in names) {
                 if (!name.startsWith("day=")) continue
@@ -128,7 +134,7 @@ class IosDailyDerivedStore(
                     name.endsWith(".manifest.json") -> name.removeSuffix(".manifest.json") + ".parquet"
                     else -> continue
                 }
-                if (parquetName !in wanted) remove(checked("$directory/$name"))
+                if (parquetName !in kept) remove(checked("$directory/$name"))
             }
             paths
         }
@@ -137,9 +143,10 @@ class IosDailyDerivedStore(
     private fun cachedSignature(path: String): String? {
         if (!isFile(path)) return null
         return try {
-            val reader = MappedDataReader(path)
-            if (reader.size > 1_048_576) return null
-            Json.parseToJsonElement(reader.read(0, reader.size.toInt()).decodeToString()).jsonObject["source_signature"]?.jsonPrimitive?.content
+            LocalFileReader(path).use { reader ->
+                if (reader.size > 1_048_576) return null
+                Json.parseToJsonElement(reader.read(0, reader.size.toInt()).decodeToString()).jsonObject["source_signature"]?.jsonPrimitive?.content
+            }
         } catch (_: Exception) {
             null
         }

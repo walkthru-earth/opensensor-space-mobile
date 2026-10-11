@@ -82,6 +82,7 @@ import earth.walkthru.opensensor.files.resources.files_all_synced_title
 import earth.walkthru.opensensor.files.resources.files_bytes_of
 import earth.walkthru.opensensor.files.resources.files_dev_summary
 import earth.walkthru.opensensor.files.resources.files_export_failed
+import earth.walkthru.opensensor.files.resources.files_export_no_space
 import earth.walkthru.opensensor.files.resources.files_frame_mismatch
 import earth.walkthru.opensensor.files.resources.files_group_benchmarks
 import earth.walkthru.opensensor.files.resources.files_group_boot
@@ -181,6 +182,7 @@ fun FilesScreen(
                 when (m) {
                     FilesMessage.NO_DAILY -> getString(Res.string.files_no_daily)
                     FilesMessage.EXPORT_FAILED -> getString(Res.string.files_export_failed)
+                    FilesMessage.NO_SPACE -> getString(Res.string.files_export_no_space)
                 },
             )
         }

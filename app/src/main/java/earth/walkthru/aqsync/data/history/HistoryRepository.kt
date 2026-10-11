@@ -56,7 +56,7 @@ class HistoryRepository @Inject constructor(
             val file = archive.fileFor(f.station, f.name)
             if (!file.isFile) return@mapNotNull null
             try {
-                FileSummary.of(f.name, ParquetFile.open(file), if (f.hasEstimatedUtc) anchors[f.bootId] else null)
+                ParquetFile.open(file).use { FileSummary.of(f.name, it, if (f.hasEstimatedUtc) anchors[f.bootId] else null) }
                     .also { synchronized(summaryCache) { summaryCache[key] = it } }
             } catch (e: ParquetFormatException) {
                 null

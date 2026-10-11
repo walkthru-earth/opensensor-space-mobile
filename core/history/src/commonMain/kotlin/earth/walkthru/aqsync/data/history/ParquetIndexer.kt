@@ -41,7 +41,7 @@ data class ParquetIndex(
     val isTelemetry: Boolean get() = purpose == null || purpose == "telemetry"
 }
 
-/** Builds a [ParquetIndex]. Pure: no Android, no I/O beyond the mapped file. */
+/** Builds a [ParquetIndex]. Pure: no Android, no I/O beyond the opened file. */
 object ParquetIndexer {
 
     const val UTC = "event_time_utc_ns"

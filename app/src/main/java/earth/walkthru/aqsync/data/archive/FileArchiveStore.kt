@@ -7,7 +7,7 @@ import earth.walkthru.aqsync.archive.PartialMeta
 import earth.walkthru.aqsync.archive.PartialWriter
 import earth.walkthru.aqsync.data.coroutines.IoDispatcher
 import earth.walkthru.aqsync.data.history.parquet.ByteReader
-import earth.walkthru.aqsync.data.history.parquet.MappedFileReader
+import earth.walkthru.aqsync.data.history.parquet.LocalFileReader
 import earth.walkthru.aqsync.data.sync.FileArchive
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
@@ -48,7 +48,7 @@ class FileArchiveStore @Inject constructor(
     override suspend fun exists(key: ArchiveKey): Boolean = withContext(io) { archive.exists(key.station, key.name) }
 
     override fun reader(key: ArchiveKey, partial: Boolean): ByteReader =
-        MappedFileReader(File(base, if (partial) ArchiveLayout.partialPath(key) else ArchiveLayout.finalPath(key)))
+        LocalFileReader(File(base, if (partial) ArchiveLayout.partialPath(key) else ArchiveLayout.finalPath(key)))
 
     override suspend fun commit(key: ArchiveKey) {
         withContext(io) { archive.commit(key.station, key.name) }

@@ -11,6 +11,7 @@ import earth.walkthru.aqsync.data.history.HistoryIndexer
 import earth.walkthru.aqsync.data.sync.ArchiveRecordIndexer
 import earth.walkthru.aqsync.data.sync.FileArchive
 import earth.walkthru.aqsync.data.sync.SyncEngine
+import earth.walkthru.aqsync.data.sync.WriterLeases
 import javax.inject.Singleton
 
 /**
@@ -20,6 +21,11 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object SyncEngineModule {
+    /** One writer per archive file, shared by the engine and the storage janitor's partial sweep. */
+    @Provides
+    @Singleton
+    fun provideWriterLeases(): WriterLeases = WriterLeases()
+
     @Provides
     @Singleton
     fun provideSyncEngine(
@@ -28,7 +34,8 @@ object SyncEngineModule {
         archive: FileArchive,
         historyIndexer: HistoryIndexer,
         clock: WallClock,
-    ): SyncEngine = SyncEngine(store, index, historyIndexer.asRecordIndexer(archive), clock = clock::nowEpochMs)
+        leases: WriterLeases,
+    ): SyncEngine = SyncEngine(store, index, historyIndexer.asRecordIndexer(archive), leases = leases, clock = clock::nowEpochMs)
 }
 
 /** Indexes the committed copy in `filesDir`, the file [HistoryIndexer] reads. */

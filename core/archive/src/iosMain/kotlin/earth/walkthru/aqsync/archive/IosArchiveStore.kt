@@ -4,7 +4,7 @@ package earth.walkthru.aqsync.archive
 
 import earth.walkthru.aqsync.archive.IosFiles.Kind
 import earth.walkthru.aqsync.data.history.parquet.ByteReader
-import earth.walkthru.aqsync.data.history.parquet.MappedDataReader
+import earth.walkthru.aqsync.data.history.parquet.LocalFileReader
 import earth.walkthru.aqsync.storage.AtomicFiles
 import earth.walkthru.aqsync.storage.IosAtomicFiles
 import earth.walkthru.aqsync.storage.StorageClass
@@ -157,7 +157,7 @@ class IosArchiveStore(
     override fun reader(key: ArchiveKey, partial: Boolean): ByteReader {
         val path = if (partial) partialFile(key) else finalFile(key)
         check(IosFiles.kind(path) == Kind.FILE) { "archive entry is not a file" }
-        return MappedDataReader(path)
+        return LocalFileReader(path)
     }
 
     override suspend fun commit(key: ArchiveKey) = withContext(io) {

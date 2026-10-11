@@ -3,10 +3,12 @@ package earth.walkthru.aqsync.archive
 import earth.walkthru.aqsync.data.history.parquet.ByteArrayReader
 import earth.walkthru.aqsync.data.history.parquet.ByteReader
 import earth.walkthru.aqsync.data.protocol.Crc32
+import earth.walkthru.aqsync.storage.StorageException
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /** A sink that keeps the bytes in memory. */
@@ -209,6 +211,11 @@ class MemoryExportSpace : ExportSpace {
 
     val runs = ArrayList<Run>()
 
+    /** What [freeBytes] reports, null when unknown. */
+    var free: Long? = null
+
+    override fun freeBytes(): Long? = free
+
     override fun newRun(): ExportRun {
         runs.forEach { it.deleted = true }
         return Run(runs.size).also { runs += it }
@@ -266,6 +273,42 @@ class ArchiveExportTest {
     }
 
     @Test
+    fun theSinkWriterAndTheStagedZipAreTheSameBytes() {
+        val entries = listOf(entry("A/x.parquet", ByteArray(70_000) { it.toByte() }), entry("B/y.parquet"))
+        val memory = MemorySink()
+        ArchiveExport.writeZip(memory, entries)
+        val space = MemoryExportSpace()
+        ArchiveExport.stageZip(space, entries, "z.zip")
+        assertContentEquals(memory.bytes(), space.runs.single().files.getValue("z.zip").bytes())
+        assertTrue(memory.bytes().size <= ArchiveExport.plannedZipBytes(entries))
+    }
+
+    @Test
+    fun aZipThatDoesNotFitLeavesNoFileBehind() {
+        val entries = listOf(entry("A/x.parquet", ByteArray(1_000)))
+        val space = MemoryExportSpace().apply { free = 1_000 }
+        assertFailsWith<StorageException> { ArchiveExport.stageZip(space, entries, "z.zip") }
+        assertTrue(space.runs.single().deleted)
+        assertTrue(space.runs.single().files.isEmpty())
+        space.free = ArchiveExport.plannedZipBytes(entries)
+        ArchiveExport.stageZip(space, entries, "z.zip")
+        assertFalse(space.runs.last().deleted)
+    }
+
+    @Test
+    fun everyExportClosesTheReadersItOpened() {
+        val opened = ArrayList<ClosingReader>()
+        val entries = listOf("A/x.parquet", "B/y.parquet").map { path ->
+            ExportEntry(path, 0) { ClosingReader(byteArrayOf(4, 5)).also { opened += it } }
+        }
+        ArchiveExport.stageZip(MemoryExportSpace().apply { free = Long.MAX_VALUE }, entries, "z.zip")
+        ArchiveExport.stageCopies(MemoryExportSpace(), entries)
+        // Planning opens each entry once, the zip once more, the loose copies once more.
+        assertEquals(6, opened.size)
+        assertTrue(opened.all { it.closes == 1 })
+    }
+
+    @Test
     fun archiveEntriesListEveryFinalFileSorted() = kotlinx.coroutines.test.runTest {
         val store = InMemoryArchiveStore()
         store.files["${ArchiveLayout.ARCHIVE}/B/b.parquet"] = byteArrayOf(9)
@@ -274,5 +317,15 @@ class ArchiveExportTest {
         assertEquals(listOf("A/a.parquet", "B/b.parquet"), entries.map { it.path })
         assertEquals(42, entries.first().modifiedEpochMs)
         assertContentEquals(byteArrayOf(8), entries.first().open().read(0, 1))
+    }
+}
+
+/** A reader over [bytes] that counts its closes. */
+class ClosingReader(private val bytes: ByteArray) : ByteReader {
+    var closes = 0
+    override val size: Long get() = bytes.size.toLong()
+    override fun read(offset: Long, length: Int): ByteArray = bytes.copyOfRange(offset.toInt(), offset.toInt() + length)
+    override fun close() {
+        closes++
     }
 }

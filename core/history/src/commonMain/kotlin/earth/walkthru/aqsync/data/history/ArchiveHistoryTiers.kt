@@ -6,6 +6,9 @@ import earth.walkthru.aqsync.archive.ArchiveStore
 import earth.walkthru.aqsync.archive.ClockAnchorStore
 import earth.walkthru.aqsync.archive.EmptyClockAnchorStore
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
+import earth.walkthru.aqsync.storage.ByteBudgetLru
+import earth.walkthru.aqsync.storage.MemoryPressure
+import earth.walkthru.aqsync.storage.MemoryTrimmable
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -24,21 +27,34 @@ import kotlinx.coroutines.sync.withLock
  * keeping the buckets that start inside the day.
  *
  * Each day is cached in memory by its source signature (file name, CRC and estimate), so a new file
- * rebuilds only its day and an unchanged day costs one string comparison. Nothing is written.
+ * rebuilds only its day and an unchanged day costs one string comparison. The cache is a least
+ * recently used map within [budgetBytes] of estimated size (#61), and [trim] gives memory back on
+ * [MemoryPressure]. An evicted day is rebuilt from the archive the next time a pass needs it.
+ * Nothing is written.
  */
 class ArchiveHistoryTiers(
     private val store: ArchiveStore,
     private val index: ArchiveIndex,
     private val io: CoroutineDispatcher = Dispatchers.Default,
     private val clockAnchors: ClockAnchorStore = EmptyClockAnchorStore,
-) : HistoryTiers {
-    private class Day(val signature: String, val buckets: Map<Resolution, Map<String, List<TierBucket>>>)
+    budgetBytes: Long = DEFAULT_BUDGET_BYTES,
+) : HistoryTiers,
+    MemoryTrimmable {
+    internal class Day(val signature: String, val buckets: Map<Resolution, Map<String, List<TierBucket>>>)
 
     /** What one station's tiers depend on, each UTC day's source files and the boots' time anchors. */
     private data class Sources(val days: Map<Long, List<ArchiveRecord>>, val anchors: Map<String, TimeEstimate.Anchor>)
 
     private val mutex = Mutex()
-    private val cache = HashMap<Pair<String, Long>, Day>()
+    private val cache = ByteBudgetLru<Pair<String, Long>, Day>(budgetBytes) { key, day -> estimatedBytes(key, day) }
+
+    /** Estimated bytes the cache keeps alive now, for tests and logs. */
+    suspend fun cachedBytes(): Long = mutex.withLock { cache.sizeBytes }
+
+    /** How many days the cache holds now. */
+    suspend fun cachedDays(): Int = mutex.withLock { cache.size }
+
+    override suspend fun trim(level: MemoryPressure.Level) = mutex.withLock { cache.trim(level) }
 
     override fun observe(station: String, metricId: String, tier: Resolution, fromS: Long, toS: Long): Flow<List<TierBucket>> =
         days(station).map { days ->
@@ -84,7 +100,7 @@ class ArchiveHistoryTiers(
             out[day] = if (cached?.signature == sig) cached else buildDay(station, day, files, anchors, sig).also { cache[key] = it }
         }
         // Days that lost every source drop out of the cache too.
-        cache.keys.removeAll { it.first == station && it.second !in sources.days }
+        cache.removeAll { it.first == station && it.second !in sources.days }
         out
     }
 
@@ -97,11 +113,14 @@ class ArchiveHistoryTiers(
             } catch (e: Exception) {
                 continue
             }
-            try {
-                // Estimated time only for files with no UTC of their own whose boot has an anchor.
-                agg.add(pf, if (src.hasEstimatedUtc) anchors[src.bootId] else null)
-            } catch (e: Exception) {
-                continue
+            // One file at a time, closed before the next opens, so 32-bit phones keep address space (#61).
+            pf.use {
+                try {
+                    // Estimated time only for files with no UTC of their own whose boot has an anchor.
+                    agg.add(it, if (src.hasEstimatedUtc) anchors[src.bootId] else null)
+                } catch (e: Exception) {
+                    // A file the aggregator refuses is skipped, like one that does not open.
+                }
             }
         }
         // Keep the buckets that start inside this day. A file across midnight gives its other rows to
@@ -117,6 +136,25 @@ class ArchiveHistoryTiers(
 
     companion object {
         private const val DAY_S = 86_400L
+
+        /** The cache budget of #61. A day of one station with every tier and metric is about 100 KB. */
+        const val DEFAULT_BUDGET_BYTES: Long = 8L * 1024 * 1024
+
+        // Rough JVM and Kotlin/Native object sizes: a TierBucket is a header and seven fields, each
+        // list or map entry adds a reference and its node.
+        private const val BUCKET_BYTES = 56L
+        private const val ENTRY_BYTES = 48L
+        private const val DAY_BYTES = 96L
+
+        /** What one cached day keeps alive, estimated from its bucket and entry counts. */
+        internal fun estimatedBytes(key: Pair<String, Long>, day: Day): Long {
+            var bytes = DAY_BYTES + 2L * (key.first.length + day.signature.length)
+            for ((_, perMetric) in day.buckets) {
+                bytes += ENTRY_BYTES
+                for ((metric, list) in perMetric) bytes += ENTRY_BYTES + 2L * metric.length + list.size * (BUCKET_BYTES + 8)
+            }
+            return bytes
+        }
 
         /** The identity of one day's sources, sorted `name:crc32[:est<anchor>:<first>]` lines (the derive signature without the hash). */
         fun signature(files: List<ArchiveRecord>): String = files

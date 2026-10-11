@@ -15,6 +15,7 @@ import earth.walkthru.aqsync.data.sync.CollectionSummary
 import earth.walkthru.aqsync.data.sync.FileProblem
 import earth.walkthru.aqsync.data.sync.InsufficientSpaceException
 import earth.walkthru.aqsync.data.sync.SyncEngine
+import earth.walkthru.aqsync.data.sync.WriterLeases
 import earth.walkthru.aqsync.storage.IosStorageBudget
 import earth.walkthru.aqsync.storage.StorageBudget
 import earth.walkthru.aqsync.storage.StorageRole
@@ -62,13 +63,15 @@ class SensorSync internal constructor(
     private val progressInterval: Long = PROGRESS_INTERVAL_MS,
     private val recordClockAnchor: suspend (String, String, Long, Long) -> Unit = { _, _, _, _ -> },
     budget: StorageBudget,
+    /** Shared with the storage janitor, so it never sweeps a partial this runner is writing. */
+    leases: WriterLeases = WriterLeases(),
 ) {
     constructor() : this(IosArchiveStore.inApplicationSupport(), Dispatchers.Default, Dispatchers.Main)
 
     private constructor(store: IosArchiveStore, work: CoroutineContext, callbacks: CoroutineContext) :
         this(store, ReceiptArchiveIndex(store.finalRoot), work, callbacks, budget = IosStorageBudget(StorageRoots(mapOf(StorageRole.Archive to store.finalRoot))))
 
-    private val collector = ArchiveCollector(store, index, SyncEngine(store, index, log = ::syncLog), budget)
+    private val collector = ArchiveCollector(store, index, SyncEngine(store, index, leases = leases, log = ::syncLog), budget)
     private val scope = CoroutineScope(SupervisorJob())
     private val lock = NSLock()
     private val active = HashSet<String>()

@@ -14,12 +14,14 @@ package earth.walkthru.aqsync.data.history.parquet
  *   statistics are exposed, not required.
  *
  * Anything else raises [ParquetFormatException] naming the feature, so a file from another writer is
- * refused loudly rather than misread. Bytes come from a [ByteReader] (a memory-mapped file from [open],
+ * refused loudly rather than misread. Bytes come from a [ByteReader] (a positional file reader from [open],
  * an array from [wrap]); only the requested column chunks are read and they decode straight into
  * primitive arrays ([ColumnValues]). A chart that needs three of 77 columns touches three column chunks.
  * [ParquetReader] is the suspending reader over a [RangeSource], with page-level pruning.
  *
  * Concurrent reads of the *same* instance are fine when its [ByteReader] is (the built-in ones are).
+ * [close] closes the [ByteReader], so a builder that opens many files releases each descriptor when it
+ * is done with it (#61).
  */
 class ParquetFile private constructor(
     private val reader: ByteReader,
@@ -27,7 +29,7 @@ class ParquetFile private constructor(
     /** Where the bytes came from, for messages. */
     val source: String,
     codecs: ParquetCodecs,
-) {
+) : AutoCloseable {
     private val chunks = ColumnChunks(metadata, source, codecs, reader.size)
 
     val leaves: List<LeafColumn> get() = metadata.leaves
@@ -35,6 +37,9 @@ class ParquetFile private constructor(
     val rowGroupCount: Int get() = metadata.rowGroups.size
 
     fun leaf(name: String): LeafColumn = chunks.leaf(name)
+
+    /** Closes the [ByteReader]. Reading a column afterwards throws [IllegalStateException]. */
+    override fun close() = reader.close()
 
     /** One column across every row group, in row order. */
     fun readColumn(name: String): ColumnValues = readColumn(leaf(name))
@@ -84,15 +89,25 @@ class ParquetFile private constructor(
 
     companion object {
         /**
-         * Maps [file] read-only (`FileChannel.map` on the JVM, `NSData` mapped on iOS) and parses its
-         * footer. The mapping outlives any file handle.
+         * Opens [file] for positional reads (`FileChannel` on the JVM, `pread` on iOS, no mapping) and
+         * parses its footer. The file holds one descriptor until [close].
          */
         fun open(file: LocalFile, codecs: ParquetCodecs = ParquetCodecs.builtIn): ParquetFile =
-            open(file.mapReadOnly(), file.displayName, codecs)
+            open(file.openReader(), file.displayName, codecs)
 
-        /** Opens the file behind any [ByteReader]: reads the footer now, column chunks on demand. */
-        fun open(reader: ByteReader, source: String = "bytes", codecs: ParquetCodecs = ParquetCodecs.builtIn): ParquetFile =
-            ParquetFile(reader, ParquetFooterParser.parse(reader), source, codecs)
+        /**
+         * Opens the file behind any [ByteReader]: reads the footer now, column chunks on demand. The
+         * file owns [reader] from here, and a footer that does not parse closes it before throwing.
+         */
+        fun open(reader: ByteReader, source: String = "bytes", codecs: ParquetCodecs = ParquetCodecs.builtIn): ParquetFile {
+            val metadata = try {
+                ParquetFooterParser.parse(reader)
+            } catch (e: Throwable) {
+                reader.close()
+                throw e
+            }
+            return ParquetFile(reader, metadata, source, codecs)
+        }
 
         /** For tests and for bytes that were just verified in memory. */
         fun wrap(bytes: ByteArray, source: String = "bytes", codecs: ParquetCodecs = ParquetCodecs.builtIn): ParquetFile =
@@ -105,7 +120,7 @@ internal class ChunkRange(val start: Long, val length: Int)
 
 /**
  * What [ParquetFile] and [ParquetReader] share: where a column chunk lives and how its bytes decode.
- * Storage stays outside, so the same decoding serves a mapped file, an array and a remote range source.
+ * Storage stays outside, so the same decoding serves a local file, an array and a remote range source.
  */
 internal class ColumnChunks(
     val metadata: ParquetFileMetadata,

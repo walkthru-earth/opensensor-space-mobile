@@ -2,19 +2,20 @@ package earth.walkthru.aqsync.data.history.parquet
 
 import kotlin.test.Test
 
-/** The iOS edges: `NSData` mapping behind `ParquetFile.open(LocalFile)` (GZIP through the system zlib is covered by the common `GzipTest`). */
+/** The iOS edges: the `pread` reader behind `ParquetFile.open(LocalFile)` (GZIP through the system zlib is covered by the common `GzipTest`). */
 class IosParquetFileTest {
 
     @Test
-    fun `mapped NSData open reads the same values as wrap`() {
+    fun `file open reads the same values as wrap`() {
         val path = "parquet/device/v1-lz4-90rows-dated.parquet"
-        val mapped = ParquetFile.open(LocalFile("$fixtureRoot/$path"))
-        assertEquals("v1-lz4-90rows-dated.parquet", mapped.source)
+        val opened = ParquetFile.open(LocalFile("$fixtureRoot/$path"))
+        assertEquals("v1-lz4-90rows-dated.parquet", opened.source)
         val wrapped = ParquetFile.wrap(fixtureBytes(path))
-        val a = mapped.readColumn("pm25_atmospheric_ug_m3") as ColumnValues.Int32
+        val a = opened.readColumn("pm25_atmospheric_ug_m3") as ColumnValues.Int32
         val b = wrapped.readColumn("pm25_atmospheric_ug_m3") as ColumnValues.Int32
         kotlin.test.assertContentEquals(b.values, a.values)
         assertEquals(90, a.size)
+        opened.close()
     }
 
     @Test

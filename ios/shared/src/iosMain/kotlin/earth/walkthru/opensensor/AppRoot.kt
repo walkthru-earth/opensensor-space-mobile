@@ -182,7 +182,7 @@ internal fun AppRoot(
     devicePage: DevicePageContent,
 ) {
     val scope = rememberCoroutineScope()
-    val settings = remember { SettingsController(scope, settingsRepository) }
+    val settings = remember { SettingsController(scope, settingsRepository, IosArchive.storageControls) }
     val prefs by settings.prefs.collectAsState()
     // Off until the saved switch is read, so no request leaves the phone before then.
     val showPublic = prefs?.showPublicSensors == true

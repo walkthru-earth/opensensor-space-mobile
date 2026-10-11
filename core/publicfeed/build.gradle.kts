@@ -11,6 +11,8 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(project(":core:parquet"))
+            // ByteBudgetLru and MemoryPressure bound the bundled sample cache (#61).
+            api(project(":core:storage"))
             // WHO 2021 steps for PM2.5 and PM10 (CellScale, HealthAxis).
             api(project(":core:airquality"))
             implementation(libs.kotlinx.serialization.json)

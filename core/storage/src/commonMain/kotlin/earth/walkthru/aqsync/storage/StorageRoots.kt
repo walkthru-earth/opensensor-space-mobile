@@ -1,8 +1,8 @@
 package earth.walkthru.aqsync.storage
 
 /**
- * The one typed lookup from [StorageRole] to an absolute directory. This issue keeps every current
- * location (#60). Moving Rebuildable data to cache directories is #61. A role a platform does not
+ * The one typed lookup from [StorageRole] to an absolute directory. Rebuildable data lives in the OS
+ * cache directory (`cacheDir` on Android, `Library/Caches` on iOS, #61). A role a platform does not
  * use is simply absent.
  */
 class StorageRoots(private val directories: Map<StorageRole, String>) {

@@ -26,10 +26,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -74,9 +76,18 @@ import earth.walkthru.opensensor.settings.resources.settings_level_simple
 import earth.walkthru.opensensor.settings.resources.settings_more_about
 import earth.walkthru.opensensor.settings.resources.settings_public_sensors
 import earth.walkthru.opensensor.settings.resources.settings_public_sensors_body
+import earth.walkthru.opensensor.settings.resources.settings_storage
+import earth.walkthru.opensensor.settings.resources.settings_storage_body
 import earth.walkthru.opensensor.settings.resources.settings_title
 import earth.walkthru.opensensor.settings.resources.settings_units
 import earth.walkthru.opensensor.settings.resources.settings_units_auto
+import earth.walkthru.opensensor.settings.resources.storage_clear
+import earth.walkthru.opensensor.settings.resources.storage_clear_named
+import earth.walkthru.opensensor.settings.resources.storage_history_cache
+import earth.walkthru.opensensor.settings.resources.storage_map_cache
+import earth.walkthru.opensensor.settings.resources.storage_megabytes
+import earth.walkthru.opensensor.settings.resources.storage_sensor_files
+import earth.walkthru.opensensor.settings.resources.storage_temporary
 import earth.walkthru.opensensor.settings.resources.units_auto
 import earth.walkthru.opensensor.settings.resources.units_imperial
 import earth.walkthru.opensensor.settings.resources.units_metric
@@ -153,6 +164,7 @@ fun SettingsScreen(
                 PublicSensorsRow(prefs.showPublicSensors, controller::setShowPublicSensors)
                 Caption(stringResource(Res.string.settings_public_sensors_body), top = 0.dp)
             }
+            if (controller.hasStorage) StorageCard(controller)
             About(appVersion)
         }
     }
@@ -200,6 +212,44 @@ private fun PublicSensorsRow(on: Boolean, onChange: (Boolean) -> Unit) {
                 uncheckedBorderColor = colors.outline,
             ),
         )
+    }
+}
+
+/** Usage per storage class, and clear actions for the two rebuildable caches (#61). */
+@Composable
+private fun StorageCard(controller: SettingsController) {
+    val usage by controller.storageUsage.collectAsState()
+    val clearing by controller.clearing.collectAsState()
+    // Measured each time the card shows, so a sync or a clear elsewhere is reflected.
+    LaunchedEffect(controller) { controller.refreshStorage() }
+    SettingsCard {
+        Text(stringResource(Res.string.settings_storage), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
+        val sizes = usage ?: return@SettingsCard
+        StorageRow(stringResource(Res.string.storage_sensor_files), sizes.sensorFilesBytes)
+        StorageRow(stringResource(Res.string.storage_history_cache), sizes.historyCacheBytes, !clearing, controller::clearHistoryCache)
+        StorageRow(stringResource(Res.string.storage_map_cache), sizes.mapCacheBytes, !clearing, controller::clearMapCache)
+        StorageRow(stringResource(Res.string.storage_temporary), sizes.temporaryBytes)
+        Caption(stringResource(Res.string.settings_storage_body), top = 4.dp)
+    }
+}
+
+@Composable
+private fun StorageRow(label: String, bytes: Long, enabled: Boolean = true, onClear: (() -> Unit)? = null) {
+    Row(Modifier.fillMaxWidth().heightIn(min = FloatingControl.Size), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                stringResource(Res.string.storage_megabytes, megabytes(bytes)),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (onClear != null) {
+            val description = stringResource(Res.string.storage_clear_named, label)
+            TextButton(onClick = onClear, enabled = enabled, modifier = Modifier.semantics { contentDescription = description }) {
+                Text(stringResource(Res.string.storage_clear))
+            }
+        }
     }
 }
 
