@@ -13,6 +13,19 @@ object BleDisconnectCauses {
     /** Our own marker for `ACTION_KEY_MISSING`. Android has no GATT status for it. */
     const val KEY_MISSING = -2
 
+    /**
+     * HCI 0x06, PIN or key missing. AOSP `hci_error_code.h` `HCI_ERR_KEY_MISSING`. The peer has no
+     * key for the one this phone used, typically after the sensor's bonds were wiped.
+     */
+    const val HCI_KEY_MISSING = 6
+
+    /**
+     * HCI 0x3D, connection terminated due to MIC failure (Core spec Vol 1 Part F). AOSP has no name
+     * for it, but `gatt_main.cc` passes the raw HCI reason through as the status. Both sides
+     * encrypted with different keys, the same stale bond.
+     */
+    const val HCI_MIC_FAILURE = 61
+
     /** HCI 0x08, the supervision timeout. The radio lost the peer. */
     const val CONNECTION_TIMEOUT = 8
 
@@ -28,7 +41,7 @@ object BleDisconnectCauses {
         PEER_USER, BleLinkDriver.GATT_DISCONNECTED -> DisconnectCause.PeerClosed()
         INSUFFICIENT_AUTHENTICATION -> DisconnectCause.Auth(AuthKind.BOND_FAILED)
         INSUFFICIENT_ENCRYPTION -> DisconnectCause.Auth(AuthKind.ENCRYPTION_FAILED)
-        KEY_MISSING -> DisconnectCause.Auth(AuthKind.BOND_MISSING)
+        KEY_MISSING, HCI_KEY_MISSING, HCI_MIC_FAILURE -> DisconnectCause.Auth(AuthKind.BOND_MISSING)
         else -> DisconnectCause.LocalAbort(gattStatus = status)
     }
 

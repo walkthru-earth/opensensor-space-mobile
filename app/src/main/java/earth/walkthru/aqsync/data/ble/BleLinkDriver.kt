@@ -67,7 +67,9 @@ import kotlin.time.Duration.Companion.milliseconds
  * straight to the session's sink, `status` and `live` go to its push path and to the read only
  * flows. Nothing is queued here, the session's budget bounds what a slow consumer may hold. A
  * link that drops after Ready reports one typed cause ([BleDisconnectCauses]). Android 16 reports
- * lost bond keys as `ACTION_KEY_MISSING`, which ends the link as `Auth(BOND_MISSING)`.
+ * lost bond keys as `ACTION_KEY_MISSING`, which ends the link as `Auth(BOND_MISSING)`. Older
+ * Android gets the same result from HCI 0x06 or 0x3D, or from [BleStaleBondDetector] when a bonded
+ * link keeps closing while it opens.
  *
  * Permissions: every call here needs BLUETOOTH_CONNECT. The UI gates on it before any transport is
  * created ([earth.walkthru.aqsync.ui.permissions]); lint cannot see that, hence the suppression.
@@ -127,6 +129,10 @@ class BleLinkDriver(
     @Volatile
     private var acceptConnectionCallbacks = false
 
+    /** This attempt reached CONNECTED. A 133 before that is an absent sensor, not a stale bond. */
+    @Volatile
+    private var linkConnected = false
+
     @Volatile
     private var gatt: BluetoothGatt? = null
 
@@ -156,6 +162,7 @@ class BleLinkDriver(
             val newState = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.BOND_NONE)
             val previousState = intent.getIntExtra(BluetoothDevice.EXTRA_PREVIOUS_BOND_STATE, -1)
             Log.i(TAG, "bond state ${bondState.current.state} -> $newState")
+            staleBond.onBondStateChanged(device.address)
             bondState.update(newState.toBondState(), previousState.takeIf { it != -1 }?.toBondState())
         }
     }
@@ -166,6 +173,7 @@ class BleLinkDriver(
             if (!acceptConnectionCallbacks || (gatt != null && gatt !== g)) return
             Log.i(TAG, "connection state=$newState status=$status")
             if (newState == BluetoothProfile.STATE_CONNECTED && status == BluetoothGatt.GATT_SUCCESS) {
+                linkConnected = true
                 pendingConnect.getAndSet(null)?.resume(status)
             } else {
                 val failureStatus = linkFailure.recordDisconnected(status)
@@ -311,6 +319,7 @@ class BleLinkDriver(
         registerBondReceiver()
         try {
             linkFailure.reset()
+            linkConnected = false
             _state.value = ConnectionState.Connecting
             acceptConnectionCallbacks = true
             // withTimeoutOrNull, so a radio timeout is a typed failure and not a cancellation.
@@ -355,15 +364,21 @@ class BleLinkDriver(
             enableNotifications(gattRef, response ?: missing("response"))
 
             _state.value = ConnectionState.Ready(mtu)
+            staleBond.onReady(device.address)
             Log.i(TAG, "ready: mtu=$mtu bonded=${bondState.current.state == BleBondAwaiter.State.BONDED}")
         } catch (e: CancellationException) {
             teardown()
             _state.value = ConnectionState.Disconnected
             throw e
         } catch (e: Exception) {
-            val failure = linkFailure.exceptionOrNull() ?: e
+            val linkClosed = linkFailure.exceptionOrNull()
+            val failure = linkClosed ?: e
             teardown()
-            val reason = if (failure is TransportException && (failure.gattStatus == 5 || failure.gattStatus == 15)) {
+            val bonded = device.bondState == BluetoothDevice.BOND_BONDED
+            val staleBondSuspected = staleBond.onOpenFailed(device.address, bonded, linkClosed?.gattStatus?.takeIf { linkConnected })
+            // A suspected stale bond reports as missing keys, so retries stop as on API 36.
+            val status = if (staleBondSuspected) BleDisconnectCauses.KEY_MISSING else (failure as? TransportException)?.gattStatus
+            val reason = if (BleConnectionFailure.isRepairStatus(status)) {
                 BleConnectionFailure.PAIRING_REPAIR_MESSAGE
             } else {
                 when (failure) {
@@ -371,9 +386,10 @@ class BleLinkDriver(
                     else -> failure.message ?: failure::class.simpleName ?: "connection failed"
                 }
             }
-            Log.w(TAG, "connection failed (GATT status ${(failure as? TransportException)?.gattStatus}): $reason")
-            _state.value = ConnectionState.Failed(reason, (failure as? TransportException)?.gattStatus)
-            throw TransportException(reason, (failure as? TransportException)?.gattStatus, e)
+            if (staleBondSuspected) Log.w(TAG, "bonded link closed again while opening (GATT status ${linkClosed?.gattStatus}); stale bond suspected")
+            Log.w(TAG, "connection failed (GATT status $status): $reason")
+            _state.value = ConnectionState.Failed(reason, status)
+            throw TransportException(reason, status, e)
         }
     }
 
@@ -610,6 +626,9 @@ class BleLinkDriver(
         /** `BluetoothDevice.ACTION_KEY_MISSING`, API 36. Protected, sent by the Bluetooth app. */
         const val ACTION_KEY_MISSING = "android.bluetooth.device.action.KEY_MISSING"
         const val GATT_DISCONNECTED = -1
+
+        /** Consecutive stale bond closes per address, shared by every driver in this process. */
+        private val staleBond = BleStaleBondDetector(enabled = Build.VERSION.SDK_INT < BleStaleBondDetector.KEY_MISSING_ACTION_API)
 
         /** HCI 0x13 as surfaced by `onConnectionStateChange`: the device closed the link on purpose. */
         const val GATT_CONN_TERMINATE_PEER_USER = 19

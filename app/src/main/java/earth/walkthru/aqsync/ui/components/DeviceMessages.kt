@@ -55,6 +55,7 @@ fun DeviceMessage.toUiText(): UiText = when (this) {
         },
     )
     DeviceMessage.ConnectFailed -> res(R.string.conn_failed)
+    DeviceMessage.PairingRepair -> res(R.string.conn_pairing_repair)
     is DeviceMessage.NewerProtocol -> res(R.string.msg_newer_protocol, device, app)
     is DeviceMessage.FirmwareUpdateRequired ->
         device?.let { res(R.string.msg_firmware_update_required, it, app) } ?: res(R.string.msg_firmware_update_required_unknown, app)
