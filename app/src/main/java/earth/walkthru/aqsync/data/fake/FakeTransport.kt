@@ -237,13 +237,30 @@ class FakeTransport(
 
     // -------------------------------------------------------------------- commands
 
+    // The op whose reply is streaming, so ABORT can stop it like proto 3 firmware does.
+    private var streaming = 0
+    private var abortRequested = false
+
+    private fun stoppedByAbort(op: Int): Boolean {
+        if (!abortRequested) return false
+        abortRequested = false
+        streaming = 0
+        error(op, ProtocolError.ABORTED)
+        send(Frame.Aborted(op))
+        return true
+    }
+
     private suspend fun handle(op: Int, buf: ByteBuffer) {
         when (op) {
+            Opcode.ABORT -> if (streaming != 0) abortRequested = true else send(Frame.Aborted(0))
             Opcode.LIST -> {
+                streaming = op
                 for (f in files) {
+                    if (stoppedByAbort(op)) return
                     send(Frame.File(f.bytes.size.toLong(), f.name))
                     delay(2)
                 }
+                streaming = 0
                 send(Frame.ListEnd(files.size.toLong(), 1, SD_KIB, sdUsedKib()))
             }
             Opcode.OPEN -> {
@@ -269,12 +286,15 @@ class FakeTransport(
                 val chunkMax = (mtu - 3) - 7
                 var toDrop = dropLeadingChunks(++readCount)
                 var pos = offset
+                streaming = op
                 while (pos < end) {
+                    if (stoppedByAbort(op)) return
                     val n = minOf(chunkMax.toLong(), end - pos).toInt()
                     if (toDrop > 0) toDrop-- else send(Frame.Chunk(handle, pos, f.bytes.copyOfRange(pos.toInt(), pos.toInt() + n)))
                     pos += n
                     if (chunkDelayMs > 0) delay(chunkDelayMs)
                 }
+                streaming = 0
                 send(Frame.ReadEnd(handle, pos, 0))
             }
             Opcode.CLOSE -> {

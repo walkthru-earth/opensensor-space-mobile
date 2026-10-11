@@ -45,8 +45,11 @@ sealed interface LinkState {
     data class Closed(val cause: DisconnectCause) : LinkState
 }
 
-/** The link is gone, or refused this request. [disconnectCause] says why. */
-class LinkClosedException(val disconnectCause: DisconnectCause) : TransportException("link closed, ${disconnectCause.describe()}")
+/**
+ * The link is gone, or refused this request. [disconnectCause] says why. A transport failure while
+ * opening keeps its own message (a pairing timeout, a refused bond) and is the [cause].
+ */
+class LinkClosedException(val disconnectCause: DisconnectCause, cause: TransportException? = null) : TransportException(cause?.message ?: "link closed, ${disconnectCause.describe()}", cause?.gattStatus, cause)
 
 /** A request made no progress in time. The link stays open and the reply is drained. */
 class LinkTimeoutException(val timeout: DisconnectCause.Timeout) : TransportException("no reply, ${timeout.describe()}")
@@ -75,7 +78,8 @@ data class Heartbeat(val pingAfterIdle: Duration, val deadline: Duration) {
  * The driver's reader never waits on a consumer. Frames that are not yet consumed count against
  * [inboxBudget], and passing it closes the link with [DisconnectCause.ResponseOverflow].
  * A cancelled or timed out request is drained to its terminal within its [DrainBound], with an
- * `ABORT` sent first on a proto 3 peer.
+ * `ABORT` sent first on a proto 3 peer. A `CLOSE` the caller could not wait for is owed to the
+ * link ([oweClose]) and goes out once that drain ends, before any later request.
  */
 @OptIn(ExperimentalAtomicApi::class)
 class LinkSession(
@@ -138,7 +142,7 @@ class LinkSession(
             throw e
         } catch (e: TransportException) {
             terminate(DisconnectCause.LocalAbort(gattStatus = e.gattStatus))
-            throw LinkClosedException(_closed.getCompleted())
+            throw LinkClosedException(_closed.getCompleted(), e)
         } catch (e: Throwable) {
             // For example a malformed info JSON. Never leave a connected link behind.
             terminate(DisconnectCause.FramingViolation("bad device info"))
@@ -163,6 +167,15 @@ class LinkSession(
      */
     suspend fun <R : Any> exchange(spec: RequestSpec, onFrame: suspend (frame: Frame, terminal: Boolean) -> R?): R {
         require(spec.expectsResponse) { "${Opcode.name(spec.op)} has no reply, use send" }
+        return withSlot(spec) { owner -> receive(owner) { _, frame, terminal -> onFrame(frame, terminal) } }
+    }
+
+    /** [exchange] that also hands over each frame's bytes as received, for the debug raw command. */
+    suspend fun <R : Any> exchangeRaw(
+        spec: RequestSpec,
+        onFrame: suspend (raw: ByteArray, frame: Frame, terminal: Boolean) -> R?,
+    ): R {
+        require(spec.expectsResponse) { "${Opcode.name(spec.op)} has no reply, use send" }
         return withSlot(spec) { owner -> receive(owner, onFrame) }
     }
 
@@ -179,6 +192,18 @@ class LinkSession(
     suspend fun ping() {
         ensureUsable()
         writeLock.withLock { driver.send(Request.Status.encode(), RequestSpec.WRITE_DEADLINE) }
+    }
+
+    /**
+     * Owe the device a `CLOSE` for [handle] without waiting for it. The router sends it once the
+     * request in flight and any drain have ended, consumes its `CLOSED`, and only then admits the
+     * next request. A cancelled transfer calls this instead of waiting, so Stop never queues behind
+     * the abandoned `READ`. On a closed link this does nothing, the device closes handles on
+     * disconnect.
+     */
+    fun oweClose(handle: Int) {
+        if (_closed.isCompleted) return
+        events.trySend(Event.OweClose(handle))
     }
 
     /** Close the link on purpose. [reason] is a fixed developer label. */
@@ -298,7 +323,7 @@ class LinkSession(
         }
     }
 
-    private suspend fun <R : Any> receive(owner: Owner, onFrame: suspend (Frame, Boolean) -> R?): R {
+    private suspend fun <R : Any> receive(owner: Owner, onFrame: suspend (ByteArray, Frame, Boolean) -> R?): R {
         val spec = owner.spec
         var frames = 0
         while (true) {
@@ -312,11 +337,11 @@ class LinkSession(
                 }
                 onTimeoutOrNever(if (frames == 0) spec.firstFrameTimeout else spec.interFrameTimeout) { null }
             } ?: throw LinkTimeoutException(DisconnectCause.Timeout(phase, spec.op))
-            queuedBytes.addAndFetch(-delivery.size)
+            queuedBytes.addAndFetch(-delivery.raw.size.toLong())
             frames++
             val terminal = delivery.routing == Routing.TERMINAL
             if (terminal) owner.complete = true
-            val result = onFrame(delivery.frame, terminal)
+            val result = onFrame(delivery.raw, delivery.frame, terminal)
             if (result != null) return result
             if (terminal) throw ProtocolViolationException("${Opcode.name(spec.op)} ended without a result")
         }
@@ -327,6 +352,7 @@ class LinkSession(
     private val waiting = ArrayDeque<Owner>()
     private var current: Owner? = null
     private var drain: Drain? = null
+    private val owed = ArrayDeque<Int>()
 
     private suspend fun route() {
         try {
@@ -341,6 +367,11 @@ class LinkSession(
                     is Event.Rx -> onRx(event.raw)
                     is Event.Enqueue -> onEnqueue(event.owner)
                     is Event.Release -> onRelease(event.owner)
+                    is Event.OweClose -> {
+                        owed.addLast(event.handle)
+                        admitNext()
+                    }
+                    Event.OwedWriteFailed -> drain?.let { if (it.owed) endDrain(it) }
                     Event.ByeSeen -> refuseWaiting()
                     Event.AbortFailed -> drain?.let { it.abortPending = false; finishDrainIfDone(it) }
                     Event.DrainTimeout -> drain?.let { exceed(it) }
@@ -383,7 +414,7 @@ class LinkSession(
             if (!(frame is Frame.Aborted && frame.op == 0)) log.event(LinkEvent.ForeignDropped(type, owner?.spec?.op ?: 0))
             return
         }
-        owner.inbox.trySend(Delivery(frame, size, routing))
+        owner.inbox.trySend(Delivery(frame, raw, routing))
         owner.forwarded++
         if (routing == Routing.TERMINAL) {
             owner.terminalForwarded = true
@@ -422,6 +453,10 @@ class LinkSession(
 
     private fun admitNext() {
         if (current != null || drain != null) return
+        if (owed.isNotEmpty()) {
+            sendOwedClose(owed.removeFirst())
+            return
+        }
         while (waiting.isNotEmpty()) {
             val next = waiting.removeFirst()
             if (next.admitted.complete(Unit)) {
@@ -434,7 +469,7 @@ class LinkSession(
     private fun discardInbox(owner: Owner) {
         while (true) {
             val left = owner.inbox.tryReceive().getOrNull() ?: break
-            queuedBytes.addAndFetch(-left.size)
+            queuedBytes.addAndFetch(-left.raw.size.toLong())
         }
     }
 
@@ -451,6 +486,26 @@ class LinkSession(
                 throw e
             } catch (_: Exception) {
                 events.trySend(Event.AbortFailed)
+            }
+        }
+    }
+
+    /**
+     * An owed `CLOSE` runs as a drain with no caller. Its `CLOSED`, or an `ERROR` for `CLOSE`,
+     * ends it. A write that fails ends it at once, since the device then never saw the request and
+     * closes the handle on the next `OPEN` or on disconnect.
+     */
+    private fun sendOwedClose(handle: Int) {
+        val spec = RequestSpec.of(Request.Close(handle))
+        drain = Drain(spec.op, spec.drainBound, timeSource.markNow(), abortPending = false, replied = false, owed = true)
+        own.launch {
+            try {
+                writeLock.withLock { driver.send(spec.body, spec.writeDeadline) }
+                log.event(LinkEvent.CloseSent(handle))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                events.trySend(Event.OwedWriteFailed)
             }
         }
     }
@@ -482,10 +537,14 @@ class LinkSession(
 
     private fun finishDrainIfDone(d: Drain): Boolean {
         if (!d.terminalSeen || d.abortPending) return false
+        endDrain(d)
+        return true
+    }
+
+    private fun endDrain(d: Drain) {
         log.event(LinkEvent.Drained(d.op, d.frames, d.bytes))
         drain = null
         admitNext()
-        return true
     }
 
     private fun exceed(d: Drain) {
@@ -535,7 +594,7 @@ class LinkSession(
         var terminalForwarded = false
     }
 
-    private class Delivery(val frame: Frame, val size: Long, val routing: Routing)
+    private class Delivery(val frame: Frame, val raw: ByteArray, val routing: Routing)
 
     private class Drain(
         val op: Int,
@@ -543,6 +602,7 @@ class LinkSession(
         val started: ComparableTimeMark,
         var abortPending: Boolean,
         val replied: Boolean,
+        val owed: Boolean = false,
     ) {
         var frames = 0
         var bytes = 0L
@@ -553,6 +613,8 @@ class LinkSession(
         class Rx(val raw: ByteArray) : Event
         class Enqueue(val owner: Owner) : Event
         class Release(val owner: Owner) : Event
+        class OweClose(val handle: Int) : Event
+        data object OwedWriteFailed : Event
         data object ByeSeen : Event
         data object AbortFailed : Event
         data object DrainTimeout : Event

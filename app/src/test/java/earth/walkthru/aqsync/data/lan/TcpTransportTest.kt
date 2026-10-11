@@ -196,15 +196,15 @@ class TcpTransportTest {
         device.use {
             it.start()
             val t = TcpTransport("AA:BB:CC:DD:EE:FF", "AQ-6b40", InetAddress.getLoopbackAddress(), it.port, token)
-            val session = DeviceSession(t)
+            val session = DeviceSession.over(t, this)
             val liveSeen = async(Dispatchers.Default) { withTimeout(5_000) { session.live.first() } }
 
-            withTimeout(5_000) { t.connect() }
+            val info = withTimeout(5_000) { session.link.open() }
             assertTrue(t.connectionState.value is ConnectionState.Ready)
             assertEquals(1024 + 3, t.mtu)
             assertEquals(1024, session.payloadMax)
             assertArrayEquals(LanFraming.handshake(token), it.receivedHandshake)
-            assertEquals("53315f5f-cb85-4d8d-b623-d56266084189", session.readInfo().station)
+            assertEquals("53315f5f-cb85-4d8d-b623-d56266084189", info.info.station)
             assertEquals(3, DeviceInfo.parse(t.hello!!.infoJson).proto)
 
             val (files, end) = withTimeout(5_000) { session.list() }
@@ -231,6 +231,7 @@ class TcpTransportTest {
             } catch (_: NotAllowedOnLinkException) {
             }
 
+            session.link.close("done")
             t.disconnect()
             assertTrue(t.connectionState.value is ConnectionState.Disconnected)
             t.close()

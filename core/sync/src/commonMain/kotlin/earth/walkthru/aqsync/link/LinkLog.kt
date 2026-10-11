@@ -14,6 +14,7 @@ sealed interface LinkEvent {
     data class Completed(val op: Int, val frames: Int) : LinkEvent
     data class Abandoned(val op: Int, val framesSeen: Int, val written: Boolean) : LinkEvent
     data class AbortSent(val op: Int) : LinkEvent
+    data class CloseSent(val handle: Int) : LinkEvent
     data class Drained(val op: Int, val frames: Int, val bytes: Long) : LinkEvent
     data class ForeignDropped(val type: Int, val op: Int) : LinkEvent
     data class UnknownDropped(val type: Int) : LinkEvent
@@ -36,6 +37,7 @@ fun LinkEvent.describe(): String = when (this) {
     is LinkEvent.Completed -> "${Opcode.name(op)} done after $frames frames"
     is LinkEvent.Abandoned -> "${Opcode.name(op)} abandoned after $framesSeen frames written=$written"
     is LinkEvent.AbortSent -> "ABORT sent for ${Opcode.name(op)}"
+    is LinkEvent.CloseSent -> "owed CLOSE sent for handle $handle"
     is LinkEvent.Drained -> "${Opcode.name(op)} drained $frames frames $bytes bytes"
     is LinkEvent.ForeignDropped -> "dropped ${FrameType.name(type)} while ${Opcode.name(op)} owns the link"
     is LinkEvent.UnknownDropped -> "dropped unknown frame ${FrameType.name(type)}"
