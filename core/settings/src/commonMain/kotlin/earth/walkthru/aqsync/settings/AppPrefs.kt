@@ -34,6 +34,19 @@ enum class ClockSyncMode {
     NEVER,
 }
 
+/** Which public feed the Discover map reads. Unknown stored names read as [SAMPLE]. */
+enum class DiscoverSource {
+    /** The bundled sample feed. */
+    SAMPLE,
+
+    /** Live licensed stations (OpenAQ). */
+    OPENAQ,
+}
+
+/** The feed Discover actually uses. Public sensors off always means the bundled [DiscoverSource.SAMPLE]. */
+fun effectiveDiscoverSource(source: DiscoverSource, showPublicSensors: Boolean): DiscoverSource =
+    if (showPublicSensors) source else DiscoverSource.SAMPLE
+
 /**
  * Every app-level preference with its default in one place. Nothing here is a device setting, those
  * live on the device and are read and written with `GET_CONFIG` and `SET_CONFIG`.
@@ -49,4 +62,6 @@ data class AppPrefs(
     val showPublicSensors: Boolean = true,
     /** Display units, Automatic (the phone's region) by default. Display only, stored data stays SI. */
     val unitSystem: UnitSystem = UnitSystem.AUTO,
+    /** Which public feed Discover reads. Applies only while [showPublicSensors] is on. */
+    val discoverSource: DiscoverSource = DiscoverSource.SAMPLE,
 )

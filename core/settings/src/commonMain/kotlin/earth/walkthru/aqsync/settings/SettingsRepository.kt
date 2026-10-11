@@ -26,6 +26,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     val clockSyncMode: Flow<ClockSyncMode> = prefs.map { it.clockSyncMode }.distinctUntilChanged()
     val showPublicSensors: Flow<Boolean> = prefs.map { it.showPublicSensors }.distinctUntilChanged()
     val unitSystem: Flow<UnitSystem> = prefs.map { it.unitSystem }.distinctUntilChanged()
+    val discoverSource: Flow<DiscoverSource> = prefs.map { it.discoverSource }.distinctUntilChanged()
 
     /** The stored values once, for callers outside a flow. */
     suspend fun current(): AppPrefs = prefs.first()
@@ -49,6 +50,10 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     suspend fun setUnitSystem(system: UnitSystem) {
         store.edit { it[SettingsKeys.UNIT_SYSTEM] = system.name }
     }
+
+    suspend fun setDiscoverSource(source: DiscoverSource) {
+        store.edit { it[SettingsKeys.DISCOVER_SOURCE] = source.name }
+    }
 }
 
 /** Reads [AppPrefs] with the defaults and the legacy `advanced_mode` rule. Unknown names read as the default. */
@@ -62,6 +67,8 @@ fun Preferences.toAppPrefs(): AppPrefs {
             ?: defaults.clockSyncMode,
         showPublicSensors = this[SettingsKeys.SHOW_PUBLIC_SENSORS] ?: defaults.showPublicSensors,
         unitSystem = UnitSystem.parse(this[SettingsKeys.UNIT_SYSTEM]),
+        discoverSource = this[SettingsKeys.DISCOVER_SOURCE]?.let { name -> DiscoverSource.entries.firstOrNull { it.name == name } }
+            ?: defaults.discoverSource,
     )
 }
 
