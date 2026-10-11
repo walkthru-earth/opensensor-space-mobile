@@ -7,8 +7,9 @@ import earth.walkthru.aqsync.airquality.WhoStep
 import earth.walkthru.aqsync.data.protocol.PmsStatus
 
 /**
- * App copy for the shared moods and sensor states. The WHO edges stay in `:core:airquality`, only the
- * words come from `strings.xml`, so they follow the app's copy rules and can be translated.
+ * App copy for sensor states and the WHO step names. The WHO edges stay in `:core:airquality`, only
+ * the words come from `strings.xml`, so they follow the app's copy rules and can be translated. The
+ * mood words and lines live in `:ui:designsystem`.
  */
 @Composable
 fun PmsStatus.titleText(): String = stringResource(

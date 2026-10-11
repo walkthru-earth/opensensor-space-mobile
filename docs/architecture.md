@@ -36,7 +36,8 @@ flowchart TB
   HI --> PQ & PR & AQ
   PF --> PQ & AQ
   NT --> PQ
-  DI --> PF & UN & DS & PM
+  DI --> PF & UN & DS & PM & SE
+  DS --> AQ
   SE --> UN
   FS --> SE & DS
   SH --> DS
@@ -103,7 +104,7 @@ flowchart TB
   AR --> PQ2
   HI2 --> PQ2 & MO
   FE --> SY & ST & HI2 & DS
-  DI --> PF & DS
+  DI --> PF & DS & ST
   APP2 --> FE & DI
   IOS2 --> FE & DI
 ```

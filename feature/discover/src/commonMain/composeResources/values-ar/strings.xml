@@ -72,7 +72,7 @@
     <string name="discover_who_step_spoken">%1$s، حتى %2$s %3$s</string>
     <string name="discover_mood_info_title">حالة الهواء</string>
     <string name="discover_mood_info1">كل لون حالة للهواء، من الهواء النقي إلى الدخان الكثيف. اللون يعني الشيء نفسه في كل مكان وكل عرض.</string>
-    <string name="discover_mood_info2">اختر مستوى التفاصيل في الإعدادات لترى الإرشاد الصحي والأرقام وراء كل لون.</string>
+    <string name="discover_mood_info2">اختر «مفصّل» في الإعدادات لترى الإرشاد الصحي والأرقام وراء كل لون.</string>
     <plurals name="discover_spread_summary">
         <item quantity="zero">%1$s عبر %2$d منطقة، من %3$s إلى %4$s %5$s</item>
         <item quantity="one">%1$s عبر %2$d منطقة، من %3$s إلى %4$s %5$s</item>

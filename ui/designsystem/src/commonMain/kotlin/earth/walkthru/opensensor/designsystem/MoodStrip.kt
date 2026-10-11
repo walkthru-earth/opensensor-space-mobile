@@ -238,7 +238,7 @@ internal fun MoodLegendLayout(words: List<String>, title: String?, modifier: Mod
         WhoStep.entries.chunked(2).forEach { pair ->
             Row(Modifier.fillMaxWidth()) {
                 pair.forEach { step ->
-                    Row(Modifier.weight(1f).height(20.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.weight(1f).heightIn(min = 20.dp), verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(10.dp).clip(RoundedCornerShape(3.dp)).background(Color(step.color)))
                         Spacer(Modifier.width(6.dp))
                         Text(words.getOrElse(step.ordinal) { "" }, style = MaterialTheme.typography.labelSmall)

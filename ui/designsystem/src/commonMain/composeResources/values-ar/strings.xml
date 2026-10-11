@@ -16,7 +16,7 @@
     <string name="mood_fair_line">مناسب لمعظم الناس.</string>
     <string name="mood_hazy_line">قد يلاحظه الأشخاص الحساسون.</string>
     <string name="mood_poor_line">خفف المجهود الطويل في الخارج.</string>
-    <string name="mood_smoky_line">ابقَ في الداخل إن استطعت. المرشح يساعد.</string>
+    <string name="mood_smoky_line">ابقَ في الداخل إن استطعت. فلتر الهواء يساعد.</string>
     <string name="mood_thick_line">ابقَ في الداخل والنوافذ مغلقة.</string>
     <string name="mood_none_line">لا توجد قراءة هنا بعد.</string>
     <string name="value_not_available">غير متاح</string>

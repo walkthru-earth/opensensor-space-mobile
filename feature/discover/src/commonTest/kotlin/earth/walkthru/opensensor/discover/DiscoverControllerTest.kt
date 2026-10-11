@@ -44,11 +44,15 @@ class DiscoverControllerTest {
         val calls = mutableListOf<Pair<FeedWindow, List<LongRange>?>>()
         val gates = mutableMapOf<Long, CompletableDeferred<Unit>>()
 
+        /** Holds the next viewport reads, the ones that are not for a single cell. */
+        var viewportGate: CompletableDeferred<Unit>? = null
+
         override suspend fun latest() = FeedPartition("2026-10-12", 10)
 
         override suspend fun cells(partition: FeedPartition, window: FeedWindow, res: Int, ranges: List<LongRange>?): CellsTable {
             calls += window to ranges
             ranges?.singleOrNull()?.takeIf { it.first == it.last }?.let { gates[it.first]?.await() }
+                ?: viewportGate?.await()
             val rows = listOf(cellA, cellB)
                 .filter { c -> ranges == null || ranges.any { c in it } }
                 .map { c -> CellRow(c, devices = 3, updatedEpochMs = 1_000L, stats = mapOf("pm25" to CellStat(3, value(c, window), null, null))) }
@@ -178,5 +182,19 @@ class DiscoverControllerTest {
         assertTrue(feed.calls.none { it.second == listOf(cellA..cellA) }, "reread ${feed.calls}")
         assertEquals(3, c.state.value.selectedWindows.size)
         assertEquals(30.0, c.state.value.selectedSummary(pm25)?.value)
+    }
+
+    @Test
+    fun aTapMadeDuringTheViewportReadIsNotRevertedWhenItLands() = runTest {
+        val feed = FakeFeed()
+        val c = controller(feed)
+        val gate = CompletableDeferred<Unit>()
+        feed.viewportGate = gate
+        c.onCamera(CameraRest(GeoBounds(-122.02, 36.98, -121.98, 37.02), zoom = 6.25, lat = 37.0, lng = -122.0))
+        settle()
+        c.selectCell(H3Index.toHex(cellA))
+        gate.complete(Unit)
+        settle()
+        assertEquals(cellA, c.state.value.selected?.h3)
     }
 }

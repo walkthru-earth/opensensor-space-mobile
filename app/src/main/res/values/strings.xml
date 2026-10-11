@@ -26,7 +26,6 @@
     <!-- Today -->
     <string name="today_title">Today</string>
 
-    <!-- Moods, one per WHO 2021 step. The edges live in :core:airquality. Only the words are here. -->
     <!-- WHO 2021 steps, named in text so colour is never the only carrier. One set for every screen,
          Discover included. Keep identical to feature/discover composeResources, CopyRulesTest checks. -->
     <string name="who_step_guideline">Within the WHO guideline</string>

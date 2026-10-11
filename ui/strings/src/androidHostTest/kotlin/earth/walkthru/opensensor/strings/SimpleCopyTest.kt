@@ -58,10 +58,18 @@ class SimpleCopyTest {
     /** The mood words live once, in the design system. A copy elsewhere drifts, as iOS once did. */
     @Test
     fun moodWordsLiveOnlyInTheDesignSystem() {
-        val duplicate = Regex("""mood_\w+_title|mood_none""")
+        val duplicate = Regex("""mood_(fresh|fair|hazy|poor|smoky|thick|none)(_title)?""")
         val found = Catalogues.all()
             .filter { !Catalogues.relative(it).startsWith("ui/designsystem/") }
             .flatMap { file -> Catalogues.parse(file).keys.filter { duplicate.matches(it) }.map { "${Catalogues.relative(file)} $it" } }
         if (found.isNotEmpty()) fail("Mood words duplicated outside the design system $found")
+    }
+
+    /** The Today hero's advice names the guideline body, so only the detailed levels may show it. */
+    @Test
+    fun todayAdviceIsNeverShownAtSimple() {
+        val src = File(Catalogues.root, "feature/today/src/commonMain/kotlin/earth/walkthru/opensensor/today/TodayCards.kt").readLines()
+        val unguarded = src.withIndex().filter { (_, l) -> "adviceText()" in l && "level.detailed" !in l }
+        if (unguarded.isNotEmpty()) fail("adviceText() must sit on a level.detailed branch, lines ${unguarded.map { it.index + 1 }}")
     }
 }

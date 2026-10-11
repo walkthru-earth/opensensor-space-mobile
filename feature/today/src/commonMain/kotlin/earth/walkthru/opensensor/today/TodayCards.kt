@@ -61,6 +61,7 @@ import earth.walkthru.opensensor.designsystem.StatLine
 import earth.walkthru.opensensor.designsystem.StatusDot
 import earth.walkthru.opensensor.designsystem.TickingText
 import earth.walkthru.opensensor.designsystem.WarningNote
+import earth.walkthru.opensensor.designsystem.moodLine
 import earth.walkthru.opensensor.designsystem.moodWord
 import earth.walkthru.opensensor.designsystem.nowEpochMillis
 import earth.walkthru.opensensor.designsystem.peacockExpressionFor
@@ -303,7 +304,7 @@ internal fun MetricHeroCard(
                     Text(reading.mood.comparisonText(), style = MaterialTheme.typography.bodySmall, color = quiet, modifier = Modifier.weight(1f))
                 }
                 Spacer(Modifier.height(12.dp))
-                Text(reading.mood.adviceText(), style = MaterialTheme.typography.bodyLarge)
+                Text(if (level.detailed) reading.mood.adviceText() else moodLine(reading.mood.step), style = MaterialTheme.typography.bodyLarge)
             }
             if (level.developer) {
                 live?.seq?.let {

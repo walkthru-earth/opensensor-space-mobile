@@ -766,7 +766,9 @@ private fun SimpleCellDetail(
         val property = state.property
         val units = LocalDiscoverUnits.current
         val summary = property?.let { state.selectedSummary(it) }
-        if (property != null && summary != null) {
+        // A cell that does not measure the property says so, as Detailed does, not "No reading".
+        val unmeasured = property != null && state.selectedWindows.values.none { it?.stats?.containsKey(property.id) == true }
+        if (property != null && summary != null && !unmeasured) {
             val unit = unitLabel(property, units)
             val value = summary.value?.let { formatValue(it, property, units) }
             val shown = value ?: notAvailableText()

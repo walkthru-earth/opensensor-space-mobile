@@ -228,7 +228,8 @@ class DiscoverController(
         val ranked = PropertyRanking.rank(rows, dictionary)
         val wanted = current.property?.id ?: saved.property
         val property = ranked.firstOrNull { it.id == wanted } ?: dictionary.firstOrNull { it.id == wanted && ranked.isEmpty() } ?: ranked.firstOrNull()
-        val selected = current.selected?.let { s -> rows.firstOrNull { it.h3 == s.h3 } }
+        // Read after the suspended feed read, so a tap made while it ran is not reverted.
+        val selected = _state.value.selected?.let { s -> rows.firstOrNull { it.h3 == s.h3 } }
         val sameWindows = selected != null && windowsFor == Triple(selected.h3, window, res)
         rowsWindow = window
         _state.update {
