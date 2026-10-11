@@ -3,6 +3,8 @@ package earth.walkthru.aqsync.data
 import android.content.Context
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
+import earth.walkthru.aqsync.collection.CollectionLink
+import earth.walkthru.aqsync.collection.LinkPreference
 import earth.walkthru.aqsync.data.background.CompanionUnlinker
 import earth.walkthru.aqsync.data.background.SyncForegroundService
 import earth.walkthru.aqsync.data.ble.BleConnectionFailure
@@ -21,6 +23,7 @@ import earth.walkthru.aqsync.data.coroutines.IoDispatcher
 import earth.walkthru.aqsync.data.coroutines.MonotonicTime
 import earth.walkthru.aqsync.data.coroutines.WallClock
 import earth.walkthru.aqsync.data.coroutines.suspendRunCatching
+import earth.walkthru.aqsync.data.fake.FakeTransport
 import earth.walkthru.aqsync.data.history.HistoryRefresher
 import earth.walkthru.aqsync.data.lan.LanConnectException
 import earth.walkthru.aqsync.data.lan.LanDevice
@@ -61,6 +64,7 @@ import earth.walkthru.aqsync.link.DisconnectCause
 import earth.walkthru.aqsync.link.LinkClosedException
 import earth.walkthru.aqsync.link.LinkLog
 import earth.walkthru.aqsync.link.LinkState
+import earth.walkthru.aqsync.link.TimeoutPhase
 import earth.walkthru.aqsync.link.describe
 import earth.walkthru.aqsync.storage.StorageBudget
 import kotlinx.coroutines.CancellationException
@@ -97,7 +101,11 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 /** A `live` sample with the wall-clock instant it arrived, for the freshness indicator. */
 data class TimedLive(val sample: LiveSample, val receivedAtEpochMs: Long)
@@ -325,6 +333,15 @@ class DeviceConnectionRepository @Inject constructor(
     private val connectMutex = Mutex()
     private val connectionIntent = ConnectionIntent()
 
+    /** Links lent to collections and not yet returned. Changed only under [connectMutex] when it grows. */
+    private val lends = AtomicInteger(0)
+
+    /** The session [lendLink] opened itself. Closed when its last lend returns, unless the UI took it. */
+    private var lendOwned: DeviceSession? = null
+
+    /** Why the last [openSession] failed, for [lendLink]. Written under [connectMutex]. */
+    private var lastOpenFailure: DisconnectCause? = null
+
     // ------------------------------------------------------------------ connect
 
     /**
@@ -374,7 +391,9 @@ class DeviceConnectionRepository @Inject constructor(
         val existing = _session.value
         if (existing != null && existing.address == address && existing.isUsable) {
             // A repeated Connect is a new explicit intent even when it can reuse the pipe. Give
-            // the existing link watcher the new claim so future loss still reconnects it.
+            // the existing link watcher the new claim so future loss still reconnects it. A link a
+            // collection opened now belongs to the UI too and stays open after the collection.
+            lendOwned = null
             watchLink(existing, address, name, fake, claim, preference)
             return true
         }
@@ -486,6 +505,7 @@ class DeviceConnectionRepository @Inject constructor(
     }
 
     private fun reportOpenFailure(e: LinkClosedException) {
+        lastOpenFailure = e.disconnectCause
         when (val cause = e.disconnectCause) {
             is DisconnectCause.UpdateFirmware -> {
                 Log.w(TAG, "firmware update required (proto ${cause.reported})")
@@ -731,6 +751,7 @@ class DeviceConnectionRepository @Inject constructor(
         // mistakes this deliberate close for a lost link.
         val s = _session.value
         _session.value = null
+        lendOwned = null
         identityReady.value = false
         if (s != null) {
             s.link.close("disconnect")
@@ -741,6 +762,103 @@ class DeviceConnectionRepository @Inject constructor(
         identityLease = null
         _sync.update { it.copy(running = false, current = null) }
         synchronized(this@DeviceConnectionRepository) { closing = false }
+    }
+
+    // ------------------------------------------------------------- collection links
+
+    /**
+     * Lend a ready link to [address] to a `CollectionController`. Reuses the UI's session when it
+     * is Ready, otherwise opens one per [prefer] without the auto reconnect, since the controller
+     * retries itself. Throws [LinkClosedException] with a typed cause when no link can be had.
+     *
+     * Every returned link must be released once, [CollectionLink.release] is idempotent. A session
+     * this call opened closes when its last lend returns.
+     *
+     * Bounded and cancellable. The controller joins the previous run before connecting, so a
+     * connect that hung would park every later Stop then Sync. The whole call, waiting for the
+     * slot included, ends after [LEND_TIMEOUT] with `Timeout(OPEN)`, and a cancel ends it at the
+     * next suspension. A lend taken by a call that is cancelled or timed out is returned here.
+     */
+    suspend fun lendLink(address: String, prefer: LinkPreference): CollectionLink {
+        check(boundAddress == null || boundAddress == address) { "controller belongs to another device" }
+        var lent: CollectionLink? = null
+        try {
+            withTimeoutOrNull(LEND_TIMEOUT) {
+                connectMutex.withLock { lent = lendLocked(address, prefer) }
+            }
+            currentCoroutineContext().ensureActive()
+            val link = lent ?: throw LinkClosedException(DisconnectCause.Timeout(TimeoutPhase.OPEN, 0))
+            lent = null
+            return link
+        } finally {
+            // Set only when the lend did not reach the caller: cancelled, or the timeout raced it.
+            lent?.release()
+        }
+    }
+
+    private suspend fun lendLocked(address: String, prefer: LinkPreference): CollectionLink {
+        if (backgroundOwner.value != null || _reconnecting.value != null) throw LinkClosedException(DisconnectCause.Busy)
+        val current = _session.value
+        val session = when {
+            current == null -> openForLend(address, prefer)
+            current.address == address && current.isUsable -> current
+            else -> throw LinkClosedException(DisconnectCause.Busy)
+        }
+        val info = (session.link.state.value as? LinkState.Ready)?.info?.info
+            ?: throw LinkClosedException(DisconnectCause.Unreachable)
+        val station = info.station ?: throw LinkClosedException(DisconnectCause.FramingViolation("info without station"))
+        val maxRead = ReadWindow.forTransport(session.transport, info.maxRead)
+        // Nothing below suspends, so a lend counted here always reaches the caller's finally.
+        lends.incrementAndGet()
+        val returned = AtomicBoolean(false)
+        return CollectionLink(session, station, maxRead) {
+            if (returned.compareAndSet(false, true)) returnLend(session)
+        }
+    }
+
+    /** Opens a session for a collection. Caller holds [connectMutex] and the slot is empty. */
+    private suspend fun openForLend(address: String, prefer: LinkPreference): DeviceSession {
+        resetDerivedState()
+        lastOpenFailure = null
+        val known = knownDeviceDao.get(address)
+        val name = known?.name
+        val fake = address == FakeTransport.FAKE_ADDRESS || address == FakeTransport.FAKE_LAN_ADDRESS
+        var link: AndroidLink? = if (fake) transportFactory.fake(address) else null
+        if (link == null && prefer != LinkPreference.BLE) {
+            when (val lan = tryLan(address, name, known, fallbackToBle = prefer == LinkPreference.ANY)) {
+                is LanAttempt.Opened -> link = lan.link
+                LanAttempt.Refused -> throw LinkClosedException(lastOpenFailure ?: DisconnectCause.UpdateFirmware(null, AqUuids.PROTOCOL_VERSION))
+                LanAttempt.Skipped -> Unit
+            }
+        }
+        if (link == null) {
+            if (prefer == LinkPreference.LAN) throw LinkClosedException(DisconnectCause.Unreachable)
+            link = transportFactory.ble(address)
+        }
+        val opened = try {
+            openSession(link, address, name, fake = transportFactory.isFake(link), watch = false)
+        } catch (e: CancellationException) {
+            withContext(NonCancellable) { closeSessionLocked() }
+            throw e
+        }
+        val session = _session.value
+        if (!opened || session == null) {
+            closeSessionLocked()
+            throw LinkClosedException(lastOpenFailure ?: DisconnectCause.Deliberate("verification failed"))
+        }
+        lendOwned = session
+        return session
+    }
+
+    /** One lend came back. The last one closes a session that only collections used. */
+    private fun returnLend(session: DeviceSession) {
+        if (lends.decrementAndGet() > 0) return
+        scope.launch(NonCancellable) {
+            connectMutex.withLock {
+                // A new lend taken meanwhile holds the mutex to count itself, so this sees it.
+                if (lends.get() == 0 && lendOwned === session && _session.value === session) closeSessionLocked()
+            }
+        }
     }
 
     // ------------------------------------------------------------- link watch
@@ -1662,6 +1780,12 @@ class DeviceConnectionRepository @Inject constructor(
 
     companion object {
         private const val TAG = "DeviceConnection"
+
+        /**
+         * Bound on one [lendLink]. The link open (with a passkey typed on the phone) has
+         * [LINK_OPEN_TIMEOUT], the rest covers verification and waiting for a UI connect to finish.
+         */
+        val LEND_TIMEOUT: Duration = LINK_OPEN_TIMEOUT + 60.seconds
 
         /** Boot + BLE stack start + advertising on the CoreS3; generous. */
         const val REBOOT_RECONNECT_DELAY_MS = 6_000L

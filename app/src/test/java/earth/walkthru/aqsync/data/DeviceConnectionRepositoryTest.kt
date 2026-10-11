@@ -1,6 +1,7 @@
 package earth.walkthru.aqsync.data
 
 import android.content.ContextWrapper
+import earth.walkthru.aqsync.collection.LinkPreference
 import earth.walkthru.aqsync.data.ble.AqTransport
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.DeviceSession
@@ -29,10 +30,14 @@ import earth.walkthru.aqsync.data.sync.ClockSyncMode
 import earth.walkthru.aqsync.data.sync.FileArchive
 import earth.walkthru.aqsync.data.sync.FileOutcome
 import earth.walkthru.aqsync.data.sync.androidSyncEngine
+import earth.walkthru.aqsync.link.DisconnectCause
+import earth.walkthru.aqsync.link.LinkClosedException
 import earth.walkthru.aqsync.storage.FakeStorageBudget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
@@ -404,6 +409,109 @@ class DeviceConnectionRepositoryTest {
      * Runs [block] with a fresh [Harness] and always shuts it down: the fake's live loop and any
      * reconnect would otherwise keep the virtual clock busy forever after the test body.
      */
+    @Test
+    fun `a collection opens its own link and the last release closes it`() = harnessTest { h ->
+        h.knownDao.upsert(h.enrolled(token = null))
+        val first = async { h.repo.lendLink(ADDRESS, LinkPreference.ANY) }
+        h.until { first.isCompleted }
+        val a = first.await()
+        assertEquals(1, h.factory.fakeConnects)
+        assertEquals(h.device.station, a.station)
+        val b = async { h.repo.lendLink(ADDRESS, LinkPreference.ANY) }.also { h.until { it.isCompleted } }.await()
+        assertTrue("the second lend shares the link", a.session === b.session)
+        assertEquals(1, h.factory.fakeConnects)
+
+        a.release()
+        a.release() // once per lend, a second call is a no-op
+        runCurrent()
+        assertTrue("one lend is still out", h.repo.isConnectedTo(ADDRESS))
+        b.release()
+        runCurrent()
+        assertNull(h.repo.interactiveSessionAddress)
+    }
+
+    @Test
+    fun `a lent UI link stays open after the collection returns it`() = harnessTest { h ->
+        h.knownDao.upsert(h.enrolled(token = null))
+        h.repo.connect(ADDRESS, "AQ-6b40", fake = true)
+        h.until { h.repo.connectionState.value.isReady }
+        val lent = async { h.repo.lendLink(ADDRESS, LinkPreference.ANY) }.also { h.until { it.isCompleted } }.await()
+        assertEquals(1, h.factory.fakeConnects)
+        lent.release()
+        runCurrent()
+        assertTrue(h.repo.isConnectedTo(ADDRESS))
+    }
+
+    @Test
+    fun `the UI connecting during a collection keeps the link after release`() = harnessTest { h ->
+        h.knownDao.upsert(h.enrolled(token = null))
+        val lent = async { h.repo.lendLink(ADDRESS, LinkPreference.ANY) }.also { h.until { it.isCompleted } }.await()
+        h.repo.connect(ADDRESS, "AQ-6b40", fake = true)
+        runCurrent()
+        assertEquals("the UI reuses the lent link", 1, h.factory.fakeConnects)
+        lent.release()
+        runCurrent()
+        assertTrue(h.repo.isConnectedTo(ADDRESS))
+    }
+
+    @Test
+    fun `a cancelled lend leaves no link and no count behind`() = harnessTest { h ->
+        h.knownDao.upsert(h.enrolled(token = null))
+        val cancelled = launch { h.repo.lendLink(ADDRESS, LinkPreference.ANY) }
+        runCurrent()
+        cancelled.cancel()
+        h.until { cancelled.isCompleted }
+        runCurrent()
+        assertNull(h.repo.interactiveSessionAddress)
+
+        val again = async { h.repo.lendLink(ADDRESS, LinkPreference.ANY) }.also { h.until { it.isCompleted } }.await()
+        again.release()
+        runCurrent()
+        assertNull("one release closes it, so the cancelled lend was never counted", h.repo.interactiveSessionAddress)
+    }
+
+    @Test
+    fun `LAN only lend without a LAN target is Unreachable`() = harnessTest { h ->
+        val e = runCatching { h.repo.lendLink(ADDRESS, LinkPreference.LAN) }.exceptionOrNull()
+        assertEquals(DisconnectCause.Unreachable, (e as LinkClosedException).disconnectCause)
+        assertEquals(0, h.factory.fakeConnects)
+    }
+
+    @Test
+    fun `a lend whose connect hangs ends at once on cancel`() = harnessTest { h ->
+        h.knownDao.upsert(h.enrolled(token = null))
+        h.factory.hangConnect = true
+        val stuck = launch { h.repo.lendLink(ADDRESS, LinkPreference.ANY) }
+        advanceTimeBy(10_000)
+        runCurrent()
+        assertFalse(stuck.isCompleted)
+        stuck.cancel()
+        runCurrent()
+        assertTrue("cancel ends the connect without waiting for the device", stuck.isCompleted)
+        runCurrent()
+        assertNull(h.repo.interactiveSessionAddress)
+
+        h.factory.hangConnect = false
+        val again = async { h.repo.lendLink(ADDRESS, LinkPreference.ANY) }.also { h.until { it.isCompleted } }.await()
+        again.release()
+        runCurrent()
+        assertNull("the cancelled lend was never counted", h.repo.interactiveSessionAddress)
+    }
+
+    @Test
+    fun `a lend whose connect hangs fails within the lend timeout`() = harnessTest { h ->
+        h.knownDao.upsert(h.enrolled(token = null))
+        h.factory.hangConnect = true
+        val stuck = async { runCatching { h.repo.lendLink(ADDRESS, LinkPreference.ANY) } }
+        advanceTimeBy(DeviceConnectionRepository.LEND_TIMEOUT.inWholeMilliseconds + 1)
+        runCurrent()
+        assertTrue(stuck.isCompleted)
+        val e = stuck.await().exceptionOrNull()
+        assertTrue("a typed close, not a cancel: $e", e is LinkClosedException)
+        runCurrent()
+        assertNull(h.repo.interactiveSessionAddress)
+    }
+
     private fun harnessTest(chunkDelayMs: Long = 0, block: suspend TestScope.(Harness) -> Unit) = runTest {
         val h = Harness(this, chunkDelayMs)
         try {
@@ -512,6 +620,9 @@ class DeviceConnectionRepositoryTest {
         var lanFailure: Exception = LanConnectException(LanFailure.UNREACHABLE)
         val lanTransports = CopyOnWriteArrayList<FailingLanTransport>()
         var fakeConnects = 0
+
+        /** When set, Bluetooth links never finish connecting and ignore everything but cancel. */
+        var hangConnect = false
         var listFailure: Exception? = null
         var listDelayMs = 0L
         val requests = CopyOnWriteArrayList<Int>()
@@ -536,8 +647,14 @@ class DeviceConnectionRepositoryTest {
 
         private fun counted(): AndroidLink {
             fakeConnects++
+            if (hangConnect) return TransportLink(HangingTransport(observedDevice), scope)
             return TransportLink(observedDevice, scope)
         }
+    }
+
+    /** A GATT connect with no timeout of its own. Only cancellation ends it. */
+    private class HangingTransport(device: AqTransport) : AqTransport by device {
+        override suspend fun connect() = awaitCancellation()
     }
 
     private class FailingLanTransport(override val address: String, private val failure: Exception) : AqTransport {
