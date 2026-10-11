@@ -327,4 +327,32 @@ class SensorSyncTest {
         assertEquals(SyncEnd.FAILED, result.end)
         assertTrue(result.keepsLink)
     }
+
+    @Test
+    fun aFailedSyncWithAnUnansweredCloseStopsWithItsLinkAndTheNextLinkStartsClean() = runBlocking {
+        // The READ reply carries a foreign handle and never ends, so the CLOSE waits behind its drain.
+        val endedSends = AtomicInt(0)
+        val ended = sensor { link, req ->
+            endedSends.incrementAndGet()
+            when (req[0].toInt() and 0xFF) {
+                Opcode.READ -> true.also { link.reply(Frame.Chunk(9, 0, ByteArray(16))) }
+                Opcode.CLOSE -> true
+                else -> false
+            }
+        }
+        assertEquals(SyncEnd.FAILED, run(ended).end)
+        assertFalse(Opcode.CLOSE in requests, "the CLOSE is still owed")
+        val session = ended.session()
+        assertFalse(session.link.closed.isCompleted)
+
+        // What the Swift owner does on syncEnded. The ended link stops with its drain.
+        ended.linkClosed()
+        withTimeout(10_000) { session.link.closed.await() }
+        val sent = endedSends.value
+
+        requests.clear()
+        assertEquals(SyncEnd.COMPLETE, run(sensor()).end)
+        assertEquals(listOf(Opcode.STATUS, Opcode.SET_TIME, Opcode.LIST), requests.take(3))
+        assertEquals(sent, endedSends.value, "the ended link wrote nothing after it closed")
+    }
 }

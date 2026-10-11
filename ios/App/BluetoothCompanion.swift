@@ -499,6 +499,9 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         guard self.link === link else { return }
         if result.resumable, scheduleInteractiveResume(notice: .syncAborted, result: result) { return }
         clearInteractiveResume()
+        // Every sync takes a fresh link. The ended one stops here, so a drain or an owed CLOSE it
+        // still holds never writes over the next one. The device closes a stale handle on the next OPEN.
+        link.linkClosed()
         self.link = nil
         syncHandle = nil
         let collected = collectId
