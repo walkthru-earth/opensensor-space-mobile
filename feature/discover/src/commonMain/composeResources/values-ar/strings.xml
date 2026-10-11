@@ -70,6 +70,9 @@
     <string name="discover_who_info3">الإرشاد والأهداف متوسطات لـ 24 ساعة. في عرض آخر ساعة وعرض 7 أيام، تُقارن تلك المتوسطات بالقيم نفسها.</string>
     <string name="discover_off_scale">بعض المناطق تتجاوز الرسم البياني، حتى %1$s</string>
     <string name="discover_who_step_spoken">%1$s، حتى %2$s %3$s</string>
+    <string name="discover_mood_info_title">حالة الهواء</string>
+    <string name="discover_mood_info1">كل لون حالة للهواء، من الهواء النقي إلى الدخان الكثيف. اللون يعني الشيء نفسه في كل مكان وكل عرض.</string>
+    <string name="discover_mood_info2">اختر مستوى التفاصيل في الإعدادات لترى الإرشاد الصحي والأرقام وراء كل لون.</string>
     <plurals name="discover_spread_summary">
         <item quantity="zero">%1$s عبر %2$d منطقة، من %3$s إلى %4$s %5$s</item>
         <item quantity="one">%1$s عبر %2$d منطقة، من %3$s إلى %4$s %5$s</item>

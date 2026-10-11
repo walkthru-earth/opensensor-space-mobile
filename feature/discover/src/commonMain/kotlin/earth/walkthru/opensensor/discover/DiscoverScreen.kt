@@ -46,6 +46,7 @@ import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.material3.rememberStandardBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -53,6 +54,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -73,6 +75,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationBackHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
+import earth.walkthru.aqsync.airquality.HealthScale
 import earth.walkthru.aqsync.airquality.WhoStep
 import earth.walkthru.aqsync.publicfeed.CellRow
 import earth.walkthru.aqsync.publicfeed.CellScale
@@ -85,9 +88,15 @@ import earth.walkthru.aqsync.units.UnitFormatter
 import earth.walkthru.aqsync.units.UnitSystem
 import earth.walkthru.opensensor.designsystem.FloatingControl
 import earth.walkthru.opensensor.designsystem.FloatingSurface
+import earth.walkthru.opensensor.designsystem.MoodLegend
+import earth.walkthru.opensensor.designsystem.MoodStrip
 import earth.walkthru.opensensor.designsystem.Peacock
 import earth.walkthru.opensensor.designsystem.PeacockExpression
 import earth.walkthru.opensensor.designsystem.PeacockIcon
+import earth.walkthru.opensensor.designsystem.moodLine
+import earth.walkthru.opensensor.designsystem.moodWord
+import earth.walkthru.opensensor.designsystem.notAvailableText
+import earth.walkthru.opensensor.designsystem.peacockExpressionFor
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.maplibre.compose.camera.CameraPosition
@@ -168,6 +177,7 @@ private fun DiscoverContent(
                 state = state,
                 strings = strings,
                 networkAllowed = networkAllowed,
+                simple = simple,
                 showAll = showAll,
                 infoButton = infoButton,
                 onAddSensor = { controller.dismissFirstRun(); onAddSensor() },
@@ -212,6 +222,7 @@ private fun DiscoverContent(
                     onMapClick = {
                         controller.selectCell(null)
                         clearSignal++
+                        highlight = null
                         showAll = false
                         peek()
                     },
@@ -248,7 +259,8 @@ private fun DiscoverContent(
                     val property = state.property
                     val scale = state.scale
                     if (property != null && scale != null) {
-                        Legend(property, scale, state.window, strings, infoButton)
+                        // Simple shows mood words for a health scale. A property without one keeps its gradient.
+                        if (simple && scale is CellScale.Health) SimpleLegend(property, strings, infoButton) else Legend(property, scale, state.window, strings, infoButton)
                     }
                     Spacer(Modifier.weight(1f))
                     Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -434,6 +446,17 @@ private fun Legend(
     }
 }
 
+/** The Simple legend. The six moods with their colours, the property as title, no numbers. */
+@Composable
+private fun SimpleLegend(property: FeedProperty, strings: DiscoverStrings, infoButton: @Composable (InfoText, Modifier) -> Unit) {
+    FloatingSurface {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 10.dp)) {
+            MoodLegend(Modifier.width(212.dp).padding(vertical = 8.dp), title = property.label)
+            infoButton(strings.moodInfo, Modifier.size(40.dp))
+        }
+    }
+}
+
 /** A small swatch in [step]'s colour and its name, so the step never rests on colour alone. */
 @Composable
 private fun StepLabel(step: WhoStep, strings: DiscoverStrings, modifier: Modifier = Modifier) {
@@ -462,6 +485,7 @@ private fun SheetContent(
     state: DiscoverUiState,
     strings: DiscoverStrings,
     networkAllowed: Boolean,
+    simple: Boolean,
     showAll: Boolean,
     infoButton: @Composable (InfoText, Modifier) -> Unit,
     onAddSensor: () -> Unit,
@@ -480,9 +504,10 @@ private fun SheetContent(
         when {
             !state.available -> DiscoverStateMessage(strings.unavailable, PeacockExpression.CONCERNED)
             showAll -> AllProperties(state, strings, onPickProperty)
+            state.selected != null && simple -> SimpleCellDetail(state.selected, state, strings, infoButton, reference, onShowProperty)
             state.selected != null -> CellDetail(state.selected, state, strings, infoButton, reference, clearSignal, onHighlight, onShowProperty)
             state.firstRun -> FirstRunCard(strings, onAddSensor, onExplore)
-            else -> InView(state, strings, networkAllowed, reference, highlight, clearSignal, onHighlight, onPickCell)
+            else -> InView(state, strings, networkAllowed, simple, reference, highlight, clearSignal, onHighlight, onPickCell)
         }
     }
 }
@@ -512,6 +537,7 @@ private fun InView(
     state: DiscoverUiState,
     strings: DiscoverStrings,
     networkAllowed: Boolean,
+    simple: Boolean,
     reference: Long,
     highlight: ValueBand?,
     clearSignal: Int,
@@ -535,11 +561,20 @@ private fun InView(
     val property = state.property
     val units = LocalDiscoverUnits.current
     val values = property?.let { p -> state.rows.mapNotNull { it.mean(p.id) } }.orEmpty()
+    val health = (state.scale as? CellScale.Health)?.scale
     if (property != null && values.size >= 2) {
-        ChartTitle(property, strings, state)
-        Spacer(Modifier.height(8.dp))
-        SpreadChart(values, property, state.scale, strings, clearSignal = clearSignal, onHighlight = onHighlight)
-        Spacer(Modifier.height(12.dp))
+        if (!simple) {
+            ChartTitle(property, strings, state)
+            Spacer(Modifier.height(8.dp))
+            SpreadChart(values, property, state.scale, strings, clearSignal = clearSignal, onHighlight = onHighlight)
+            Spacer(Modifier.height(12.dp))
+        } else if (health != null) {
+            // Simple. Areas per mood, no axis. A property without a health scale shows no chart, no mood is invented.
+            ChartTitle(property, strings, state)
+            Spacer(Modifier.height(8.dp))
+            SimpleSpread(values, health, strings, highlight, onHighlight)
+            Spacer(Modifier.height(12.dp))
+        }
     }
     Text(strings.areasInView(state.rows.size), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
     freshness(strings, state.newestUpdateEpochMs, reference)?.let {
@@ -564,12 +599,35 @@ private fun InView(
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text("${formatValue(value, property, units)} ${unitLabel(property, units)}", style = MaterialTheme.typography.bodyLarge)
-                    if (step != null) Text(strings.stepName(step), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (step != null) Text(if (simple) moodWord(step) else strings.stepName(step), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Text(strings.sensors(row.devices), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
+}
+
+/**
+ * Areas in view per mood, as wide as their count. Tapping a block filters the map and the list to
+ * that mood, tapping it again lets go. Leaving the list, another measurement, or a pan that empties
+ * the chosen mood lets go too, like the spread chart.
+ */
+@Composable
+private fun SimpleSpread(values: List<Double>, health: HealthScale, strings: DiscoverStrings, highlight: ValueBand?, onHighlight: (ValueBand?) -> Unit) {
+    val shown = stepBlocks(values, health).filter { it.weight > 0f }
+    val captions = shown.map { strings.areaCount(it.weight.toInt()) }
+    val bands = shown.map { b -> b.step?.let { stepBand(health, it) } }
+    val selected = spreadSelection(bands, highlight)
+    val release = rememberUpdatedState(onHighlight)
+    DisposableEffect(health) { onDispose { release.value(null) } }
+    // A chosen mood with no area left in view has no block to tap again, so it lets go by itself.
+    LaunchedEffect(highlight, selected) { if (highlight != null && selected == null) release.value(null) }
+    MoodStrip(
+        blocks = shown,
+        captions = captions,
+        selected = selected,
+        onBlock = { i -> onHighlight(spreadTap(bands, i, highlight)) },
+    )
 }
 
 @Composable
@@ -680,6 +738,90 @@ private fun CellDetail(
                     Text(category, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 12.dp, bottom = 2.dp).semantics { heading() })
                 }
                 ranges.forEach { r -> RangeRow(r, strings) { onShowProperty(r.property.id) } }
+            }
+        }
+    }
+}
+
+/**
+ * The cell at the Simple level. Peacock and mood word beside the 24 hour value, or "n/a", one plain
+ * line, then the mood of the last 7 days, 24 hours and hour. A property without a health scale
+ * shows its number only. Other measurements are plain value rows.
+ */
+@Composable
+private fun SimpleCellDetail(
+    row: CellRow,
+    state: DiscoverUiState,
+    strings: DiscoverStrings,
+    infoButton: @Composable (InfoText, Modifier) -> Unit,
+    reference: Long,
+    onShowProperty: (String) -> Unit,
+) {
+    Column(Modifier.verticalScroll(rememberScrollState())) {
+        if (state.isSample) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(strings.sampleData, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.weight(1f))
+                infoButton(strings.sampleInfo, Modifier.size(40.dp))
+            }
+        }
+        val property = state.property
+        val units = LocalDiscoverUnits.current
+        val summary = property?.let { state.selectedSummary(it) }
+        if (property != null && summary != null) {
+            val unit = unitLabel(property, units)
+            val value = summary.value?.let { formatValue(it, property, units) }
+            val shown = value ?: notAvailableText()
+            val word = if (summary.scaled) moodWord(summary.step) else null
+            val spoken = listOfNotNull(word, property.label, if (value != null) "$value $unit" else shown).joinToString(", ")
+            Row(
+                Modifier.clearAndSetSemantics {
+                    contentDescription = spoken
+                    heading()
+                },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (summary.scaled) {
+                    PeacockIcon(peacockExpressionFor(summary.step), Modifier.size(56.dp))
+                    Spacer(Modifier.width(12.dp))
+                }
+                Column {
+                    if (word != null) Text(word, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+                    Row {
+                        Text(shown, style = MaterialTheme.typography.titleLarge, modifier = Modifier.alignByBaseline())
+                        if (value != null) {
+                            Spacer(Modifier.width(6.dp))
+                            Text(unit, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.alignByBaseline())
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Text(property.label, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.alignByBaseline())
+                    }
+                }
+            }
+            if (summary.scaled) {
+                Spacer(Modifier.height(4.dp))
+                Text(moodLine(summary.step), style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(12.dp))
+                MoodStrip(summary.blocks, captions = listOf(strings.window7Days, strings.window24Hours, strings.windowLastHour))
+            }
+        } else {
+            Text(strings.notMeasured, style = MaterialTheme.typography.titleMedium)
+        }
+        Spacer(Modifier.height(8.dp))
+        val stale = reference - row.updatedEpochMs >= earth.walkthru.aqsync.publicfeed.CellFreshness.STALE_AFTER_MS
+        val parts = listOfNotNull(strings.sensors(row.devices), if (stale) strings.stale else freshness(strings, row.updatedEpochMs, reference))
+        Text(parts.joinToString("  "), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        val others = state.dictionary.filter { it.id != property?.id }.mapNotNull { p -> row.mean(p.id)?.let { p to it } }
+        if (others.isNotEmpty()) {
+            Spacer(Modifier.height(16.dp))
+            HorizontalDivider()
+            others.forEach { (p, mean) ->
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(role = Role.Button) { onShowProperty(p.id) }.padding(vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(p.label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                    Text("${formatValue(mean, p, units)} ${unitLabel(p, units)}", style = MaterialTheme.typography.bodyLarge)
+                }
             }
         }
     }

@@ -153,3 +153,11 @@ internal fun stepBand(health: HealthScale, step: WhoStep): ValueBand {
     val (low, high) = health.rangeOf(step)
     return ValueBand(low ?: Double.NEGATIVE_INFINITY, high ?: Double.POSITIVE_INFINITY, upperInclusive = true)
 }
+
+/** The shown block whose band is [highlight], or null when nothing is chosen or its block is gone. */
+internal fun spreadSelection(bands: List<ValueBand?>, highlight: ValueBand?): Int? =
+    highlight?.let { h -> bands.indexOf(h).takeIf { it >= 0 } }
+
+/** The highlight after tapping block [index]. Its band, or null when that block was already chosen. */
+internal fun spreadTap(bands: List<ValueBand?>, index: Int, highlight: ValueBand?): ValueBand? =
+    bands.getOrNull(index)?.takeIf { it != highlight }

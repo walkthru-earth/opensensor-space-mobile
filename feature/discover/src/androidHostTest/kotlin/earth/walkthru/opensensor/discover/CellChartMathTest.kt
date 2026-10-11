@@ -140,4 +140,24 @@ class CellChartMathTest {
             assertEquals(pm.stepOf(v), WhoStep.entries.single { v in stepBand(pm, it) }, "value $v")
         }
     }
+
+    @Test
+    fun aMoodBlockTapPicksItsStepAndASecondTapLetsGo() {
+        val pm = WhoGuidelines.PM25
+        val bands = listOf(stepBand(pm, WhoStep.GUIDELINE), stepBand(pm, WhoStep.IT2))
+        val picked = spreadTap(bands, 1, highlight = null)
+        assertEquals(bands[1], picked)
+        assertEquals(1, spreadSelection(bands, picked))
+        assertNull(spreadTap(bands, 1, highlight = picked))
+        assertEquals(bands[0], spreadTap(bands, 0, highlight = picked))
+    }
+
+    @Test
+    fun aHighlightWhoseBlockIsGoneSelectsNothing() {
+        val pm = WhoGuidelines.PM25
+        val bands = listOf(stepBand(pm, WhoStep.GUIDELINE))
+        assertNull(spreadSelection(bands, null))
+        assertNull(spreadSelection(bands, stepBand(pm, WhoStep.IT1)))
+        assertNull(spreadSelection(bands, stepBand(WhoGuidelines.PM10, WhoStep.GUIDELINE)))
+    }
 }

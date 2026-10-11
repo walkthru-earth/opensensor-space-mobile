@@ -70,6 +70,10 @@
     <string name="discover_who_info3">The guideline and the targets are 24-hour means. In the last hour and 7 day views, those means are compared with the same values.</string>
     <string name="discover_off_scale">Some areas go past the chart, up to %1$s</string>
     <string name="discover_who_step_spoken">%1$s, up to %2$s %3$s</string>
+    <!-- The Simple legend info sheet. Simple never names the guideline body. -->
+    <string name="discover_mood_info_title">Air mood</string>
+    <string name="discover_mood_info1">Each colour is a mood of the air, from fresh air to thick smoke. A colour means the same in every place and every view.</string>
+    <string name="discover_mood_info2">Choose Detailed in Settings to see the health guideline and the numbers behind each colour.</string>
     <plurals name="discover_spread_summary">
         <item quantity="one">%1$s across %2$d area, from %3$s to %4$s %5$s</item>
         <item quantity="other">%1$s across %2$d areas, from %3$s to %4$s %5$s</item>

@@ -25,6 +25,9 @@ import earth.walkthru.opensensor.discover.resources.discover_map_label
 import earth.walkthru.opensensor.discover.resources.discover_map_title
 import earth.walkthru.opensensor.discover.resources.discover_max
 import earth.walkthru.opensensor.discover.resources.discover_min
+import earth.walkthru.opensensor.discover.resources.discover_mood_info1
+import earth.walkthru.opensensor.discover.resources.discover_mood_info2
+import earth.walkthru.opensensor.discover.resources.discover_mood_info_title
 import earth.walkthru.opensensor.discover.resources.discover_more
 import earth.walkthru.opensensor.discover.resources.discover_near_me
 import earth.walkthru.opensensor.discover.resources.discover_near_me_access_body
@@ -136,6 +139,9 @@ class DiscoverStrings internal constructor(
     val noHealthScale: String,
     /** The legend info sheet for PM2.5 and PM10. */
     val whoInfo: InfoText,
+
+    /** The legend info sheet at the Simple level. No guideline body, no numbers. */
+    val moodInfo: InfoText,
     /** Joins two ends of a range, as in "15 to 25". */
     val to: String,
     /** The map's spoken name, followed by the chosen measurement. */
@@ -259,6 +265,10 @@ fun discoverStrings(): DiscoverStrings = DiscoverStrings(
             stringResource(Res.string.discover_who_info3),
             stringResource(Res.string.discover_scale_info2),
         ),
+    ),
+    moodInfo = InfoText(
+        stringResource(Res.string.discover_mood_info_title),
+        listOf(stringResource(Res.string.discover_mood_info1), stringResource(Res.string.discover_mood_info2)),
     ),
     to = stringResource(Res.string.discover_range_to),
     mapLabel = stringResource(Res.string.discover_map_label),

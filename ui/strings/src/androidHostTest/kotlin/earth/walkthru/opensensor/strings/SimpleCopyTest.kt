@@ -45,6 +45,16 @@ class SimpleCopyTest {
         if (found.isNotEmpty()) fail("Simple copy names the guideline body $found")
     }
 
+    @Test
+    fun simpleDiscoverHasItsMoodInfoSheet() {
+        discover.forEach { file ->
+            val keys = Catalogues.parse(file).keys
+            listOf("discover_mood_info_title", "discover_mood_info1", "discover_mood_info2").forEach { k ->
+                assertTrue(k in keys, "${file.parentFile.name} lacks $k")
+            }
+        }
+    }
+
     /** The mood words live once, in the design system. A copy elsewhere drifts, as iOS once did. */
     @Test
     fun moodWordsLiveOnlyInTheDesignSystem() {
