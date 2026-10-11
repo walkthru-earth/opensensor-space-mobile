@@ -29,7 +29,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.withContext
 import platform.Foundation.NSLock
-import kotlin.concurrent.AtomicLong
+import kotlin.concurrent.atomics.AtomicLong
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.concurrent.atomics.incrementAndFetch
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.TimeSource
@@ -46,6 +48,7 @@ import kotlin.time.TimeSource
  * A station syncs over one link at a time, shared with [SensorSync]. The clock receipt of an
  * acknowledged `SET_TIME` is recorded against the exact link it was sent over.
  */
+@OptIn(ExperimentalAtomicApi::class)
 class SensorCollections internal constructor(
     private val sync: SensorSync,
     private val provider: IosLinkProvider,
@@ -84,7 +87,7 @@ class SensorCollections internal constructor(
         progress: (SyncProgress) -> Unit,
         finished: (SyncResult) -> Unit,
     ): SyncHandle {
-        val id = ids.incrementAndGet()
+        val id = ids.incrementAndFetch()
         val request = Request(onlyName, progress, finished)
         val controller = controllerFor(device)
         // Registered before start, so a refusal published inside start still finds it.
@@ -187,8 +190,9 @@ class SensorCollections internal constructor(
         lateinit var outer: CollectionLink
         outer = CollectionLink(inner.session, station, inner.maxRead) {
             locked { lent.remove(outer) }
-            sync.release(station)
+            // The IosLink lease ends before the station is free, so a sync it admits finds the link idle.
             inner.release()
+            sync.release(station)
         }
         locked { lent[outer] = link }
         outer
