@@ -526,6 +526,11 @@ class DeviceConnectionRepository @Inject constructor(
                 Log.w(TAG, "firmware update required (proto ${cause.reported})")
                 connectionFailure.value = "firmware update required"
                 _events.tryEmit(DeviceEvent.Error(DeviceMessage.FirmwareUpdateRequired(cause.reported, cause.required)))
+            } else if (cause is DisconnectCause.FramingViolation) {
+                // Connected, but the info reply was missing or malformed.
+                Log.w(TAG, "device verification failed (${cause.describe()})")
+                connectionFailure.value = "verification failed"
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.VerificationFailed))
             } else {
                 Log.w(TAG, "connect failed (${cause.describe()})")
                 connectionFailure.value = e.message ?: "connection failed"

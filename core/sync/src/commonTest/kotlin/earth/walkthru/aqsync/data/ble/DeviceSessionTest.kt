@@ -6,6 +6,7 @@ import earth.walkthru.aqsync.data.protocol.FrameCodec
 import earth.walkthru.aqsync.data.protocol.Opcode
 import earth.walkthru.aqsync.data.protocol.ProtocolError
 import earth.walkthru.aqsync.data.protocol.Request
+import earth.walkthru.aqsync.link.DisconnectCause
 import earth.walkthru.aqsync.link.LinkClosedException
 import earth.walkthru.aqsync.link.LinkEvent
 import earth.walkthru.aqsync.link.LinkSession
@@ -521,11 +522,31 @@ class DeviceSessionTest {
         assertIs<LinkState.Closed>(session.link.state.value)
     }
 
+    @Test
+    fun aMalformedInfoReplyFailsTheOpenAsAFramingViolation() = runTest {
+        val session = DeviceSession.over(StubTransport(infoReply = "not json".encodeToByteArray()), backgroundScope)
+
+        val e = assertFailsWith<LinkClosedException> { session.link.open() }
+
+        assertIs<DisconnectCause.FramingViolation>(e.disconnectCause)
+        assertIs<LinkState.Closed>(session.link.state.value)
+    }
+
+    @Test
+    fun aFailedInfoReadFailsTheOpenAsAFramingViolation() = runTest {
+        val session = DeviceSession.over(StubTransport(), backgroundScope)
+
+        val e = assertFailsWith<LinkClosedException> { session.link.open() }
+
+        assertIs<DisconnectCause.FramingViolation>(e.disconnectCause)
+    }
+
     /** The parts of [AqTransport] a [DeviceSession] still reads: pushes, the status read, and writes for [DeviceSession.over]. */
     private class StubTransport(
         private val statusSnapshot: ByteArray? = null,
         private val connectDelay: Duration = Duration.ZERO,
         private val connectError: TransportException? = null,
+        private val infoReply: ByteArray? = null,
     ) : AqTransport {
         override val address = "test-device"
         override val displayName = "Test device"
@@ -544,7 +565,7 @@ class DeviceSessionTest {
         override suspend fun disconnect() {
             connectionState.value = ConnectionState.Disconnected
         }
-        override suspend fun readInfo(): ByteArray = error("unused")
+        override suspend fun readInfo(): ByteArray = infoReply ?: throw TransportException("info read failed")
         override suspend fun readStatus(): ByteArray = statusSnapshot ?: error("no status snapshot")
         override suspend fun readLive(): ByteArray = error("unused")
         override suspend fun writeControl(request: ByteArray) {

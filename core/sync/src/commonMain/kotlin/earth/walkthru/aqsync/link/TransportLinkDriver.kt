@@ -6,6 +6,7 @@ import earth.walkthru.aqsync.data.ble.FrameRecorder
 import earth.walkthru.aqsync.data.ble.TransportException
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -45,7 +46,15 @@ class TransportLinkDriver(
         } catch (e: TransportException) {
             throw LinkClosedException(DisconnectCause.LocalAbort(gattStatus = e.gattStatus), e)
         }
-        val info = info?.invoke() ?: DeviceInfo.parse(transport.readInfo().decodeToString())
+        // A device that connects but gives no valid info is not verified, not unreachable.
+        val info = try {
+            info?.invoke() ?: DeviceInfo.parse(transport.readInfo().decodeToString())
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            val cause = e as? TransportException ?: TransportException("bad device info (${e.message})", cause = e)
+            throw LinkClosedException(DisconnectCause.FramingViolation("bad device info"), cause)
+        }
         val pumpScope = CoroutineScope(scope.coroutineContext + pumps)
         pumpScope.launch {
             for (raw in transport.responseFrames) {
