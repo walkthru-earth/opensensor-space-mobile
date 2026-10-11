@@ -16,6 +16,7 @@ import earth.walkthru.aqsync.data.archive.FileArchiveStore
 import earth.walkthru.aqsync.data.archive.RoomArchiveIndex
 import earth.walkthru.aqsync.data.archive.asRecordIndexer
 import earth.walkthru.aqsync.data.ble.AqTransport
+import earth.walkthru.aqsync.data.ble.BleConnectionFailure
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.DeviceSession
 import earth.walkthru.aqsync.data.ble.FrameDirection
@@ -193,6 +194,10 @@ class DeviceConnectionRepositoryTest {
         assertNull(result.skipped)
         assertEquals(0, result.newFiles)
         assertFalse(result.incomplete)
+        // The repair banner outlives the closed session and the reason is said once.
+        assertTrue(BleConnectionFailure.needsPairingRepair(h.repo.connectionState.value))
+        assertEquals(1, h.events.count { it == DeviceEvent.Error(DeviceMessage.PairingRepair) })
+        assertFalse(h.events.contains(DeviceEvent.Error(DeviceMessage.SyncAborted)))
     }
 
     @Test

@@ -9,7 +9,7 @@ import org.junit.Test
 class BleConnectionFailureTest {
     @Test
     fun `auth disconnect during connect settle survives later teardown and stage failure`() {
-        for (status in listOf(5, 15)) {
+        for (status in listOf(5, 15, 6, 61)) {
             val failure = BleConnectionFailure()
             failure.recordDisconnected(status)
             failure.recordDisconnected(0)
@@ -44,11 +44,26 @@ class BleConnectionFailureTest {
     }
 
     @Test
+    fun `key statuses read as pairing repair and radio statuses do not`() {
+        for (status in listOf(5, 15, 6, 61, BleDisconnectCauses.KEY_MISSING)) {
+            assertEquals(BleConnectionFailure.PAIRING_REPAIR_MESSAGE, BleConnectionFailure.message(status))
+        }
+        for (status in listOf(8, 19, 22, 133)) {
+            assertFalse(BleConnectionFailure.isRepairStatus(status))
+        }
+        assertFalse(BleConnectionFailure.isRepairStatus(null))
+    }
+
+    @Test
     fun `repair shortcut survives repositories retaining reason without status`() {
         assertTrue(BleConnectionFailure.needsPairingRepair(ConnectionState.Failed(BleConnectionFailure.PAIRING_REPAIR_MESSAGE)))
         assertTrue(BleConnectionFailure.needsPairingRepair(ConnectionState.Failed("auth failure", 5)))
         assertTrue(BleConnectionFailure.needsPairingRepair(ConnectionState.Failed("encryption failure", 15)))
+        assertTrue(BleConnectionFailure.needsPairingRepair(ConnectionState.Failed("key missing", 6)))
+        assertTrue(BleConnectionFailure.needsPairingRepair(ConnectionState.Failed("mic failure", 61)))
+        assertTrue(BleConnectionFailure.needsPairingRepair(ConnectionState.Failed("stale bond", BleDisconnectCauses.KEY_MISSING)))
         assertFalse(BleConnectionFailure.needsPairingRepair(ConnectionState.Failed("stack error", 133)))
+        assertFalse(BleConnectionFailure.needsPairingRepair(ConnectionState.Failed("peer closed", 19)))
         assertFalse(BleConnectionFailure.needsPairingRepair(ConnectionState.Bonding))
         assertFalse(BleConnectionFailure.needsPairingRepair(ConnectionState.Disconnected))
     }

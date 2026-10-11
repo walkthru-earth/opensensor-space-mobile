@@ -25,12 +25,23 @@ internal class BleConnectionFailure {
         fun disconnectedResult(status: Int): Int = if (status == 0) -1 else status
 
         fun message(status: Int): String = when (status) {
-            5, 15, BleDisconnectCauses.KEY_MISSING -> PAIRING_REPAIR_MESSAGE
+            in REPAIR_STATUSES -> PAIRING_REPAIR_MESSAGE
             -1 -> "Bluetooth link disconnected"
             else -> "link lost (GATT status $status)"
         }
 
+        /** GATT 5 and 15, HCI 0x06 and 0x3D, and our key missing marker. Only pairing again helps. */
+        private val REPAIR_STATUSES = setOf(
+            BleDisconnectCauses.INSUFFICIENT_AUTHENTICATION,
+            BleDisconnectCauses.INSUFFICIENT_ENCRYPTION,
+            BleDisconnectCauses.HCI_KEY_MISSING,
+            BleDisconnectCauses.HCI_MIC_FAILURE,
+            BleDisconnectCauses.KEY_MISSING,
+        )
+
+        fun isRepairStatus(status: Int?): Boolean = status in REPAIR_STATUSES
+
         fun needsPairingRepair(state: ConnectionState): Boolean = state is ConnectionState.Failed &&
-            (state.gattStatus == 5 || state.gattStatus == 15 || state.gattStatus == BleDisconnectCauses.KEY_MISSING || state.reason.startsWith("Bluetooth pairing needs repair."))
+            (isRepairStatus(state.gattStatus) || state.reason.startsWith("Bluetooth pairing needs repair."))
     }
 }

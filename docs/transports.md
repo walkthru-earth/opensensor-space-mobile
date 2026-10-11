@@ -172,6 +172,10 @@ Wi-Fi. Android may still report `BOND_BONDED` after firmware lost its keys. The 
 forget bonds, downgrade security or pair from a worker: stale-bond repair requires the foreground
 and Android's pairing/settings interaction. There is no guaranteed fully automatic reconnection
 after all device trust material is erased, nor a hidden `removeBond` recovery path.
+The app recognises the stale bond and stops retrying with `Auth(BOND_MISSING)` and the pairing
+repair banner from `ACTION_KEY_MISSING` (API 36), a link close with HCI 0x06 or 0x3D, or, below
+API 36, the second consecutive close of a bonded link that had connected but was not yet Ready
+(19, 22, 133 or a bare disconnect, `BleStaleBondDetector`).
 
 Station generations preserve the original archive and Hive paths; they do not reparent old data
 ([data model](data-model.md#station-generations-and-device-continuity)). The policies and migration
