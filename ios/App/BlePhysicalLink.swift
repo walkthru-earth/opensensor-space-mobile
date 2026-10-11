@@ -51,6 +51,9 @@ actor BlePhysicalLink {
     /// Pending connects armed off screen, or restored by iOS. They complete when the sensor is in range.
     private var waiting: [String: CBPeripheral] = [:]
     private var current: CBPeripheral?
+    /// Peripherals whose cancel was issued and whose disconnect callback has not arrived yet. That late
+    /// callback belongs to the ended connection, so it never ends a newer one to the same sensor.
+    private var cancelling: Set<UUID> = []
     /// The main actor's number for the connection in [current]. Zero when none.
     private var connection: UInt64 = 0
     private var control: CBCharacteristic?
@@ -64,6 +67,10 @@ actor BlePhysicalLink {
     private var sink: IosLink?
     /// True while the native token request waits for its reply.
     private var nativeReply = false
+    /// Peripherals that answered an encrypted read before. Only for these can a refused encryption
+    /// mean a broken bond. Ids only, no secrets.
+    private var bonded: Set<String>
+    private static let bondedKey = "ble.bonded.v1"
 
     struct Uuids: Sendable {
         let service: String
@@ -78,6 +85,7 @@ actor BlePhysicalLink {
         queue = DispatchSerialQueue(label: "earth.walkthru.opensensor.ble")
         self.uuids = uuids
         self.deliver = deliver
+        bonded = Set(UserDefaults.standard.stringArray(forKey: Self.bondedKey) ?? [])
     }
 
     // MARK: Main actor entry points. Each hops onto the queue, so calls keep their order.
@@ -209,7 +217,7 @@ actor BlePhysicalLink {
                 for id in ids {
                     guard let peripheral = link.waiting[id], peripheral !== link.current else { continue }
                     link.waiting[id] = nil
-                    link.central?.cancelPeripheralConnection(peripheral)
+                    link.cancel(peripheral)
                 }
             }
         }
@@ -233,12 +241,38 @@ actor BlePhysicalLink {
         connection = number
         current = peripheral
         peripheral.delegate = callbacks
+        if cancelling.contains(peripheral.identifier) {
+            // An earlier cancel is still in flight. Its disconnect callback connects this one.
+            return
+        }
         if peripheral.state == .connected {
             // A pending connect already reached the sensor. Discovery starts as after a fresh connect.
             peripheral.discoverServices([CBUUID(string: uuids.service)])
         } else {
             central.connect(peripheral)
         }
+    }
+
+    /// Cancels a connection or pending connect. When Core Bluetooth will answer with a disconnect
+    /// callback, the peripheral is marked so that callback cannot end a newer connection.
+    private func cancel(_ peripheral: CBPeripheral) {
+        guard let central, central.state == .poweredOn else { return }
+        if peripheral.state == .connected || peripheral.state == .connecting {
+            cancelling.insert(peripheral.identifier)
+        }
+        central.cancelPeripheralConnection(peripheral)
+    }
+
+    /// True when this callback answers an earlier cancel. A connection opened since then connects now.
+    private func answersCancel(_ peripheral: CBPeripheral) -> Bool {
+        guard cancelling.remove(peripheral.identifier) != nil else { return false }
+        if current === peripheral, peripheral.state != .connected { central?.connect(peripheral) }
+        return true
+    }
+
+    /// True when Core Bluetooth's bond signal means this sensor refused keys that once worked.
+    private func broken(_ signal: BleBondFailure.Signal, _ peripheral: CBPeripheral) -> Bool {
+        signal.isBroken(previouslyBonded: bonded.contains(peripheral.identifier.uuidString))
     }
 
     /// Ends the current connection on this queue. Queued writes fail and no port may write again.
@@ -254,7 +288,7 @@ actor BlePhysicalLink {
         if let peripheral = current {
             current = nil
             peripheral.delegate = nil
-            if let central, central.state == .poweredOn { central.cancelPeripheralConnection(peripheral) }
+            cancel(peripheral)
         }
         connection = 0
     }
@@ -298,9 +332,11 @@ actor BlePhysicalLink {
             waiting.removeAll()
             discovered.removeAll()
         }
+        // No disconnect callback follows a cancel once the radio is gone.
+        if state != .poweredOn { cancelling.removeAll() }
         if state != .poweredOn, current != nil {
             // Replies already offered still reach their callers, then the run sees the radio go.
-            sink?.linkLost(reason: IosLink.companion.REASON_PEER_CLOSED)
+            sink?.linkLost(reason: IosLink.companion.REASON_RADIO_BLUETOOTH)
             end()
         }
         deliver(0, .power(state))
@@ -333,36 +369,38 @@ actor BlePhysicalLink {
             return
         }
         guard current === peripheral else {
-            central?.cancelPeripheralConnection(peripheral)
+            cancel(peripheral)
             return
         }
         deliver(connection, .connected)
         peripheral.discoverServices([CBUUID(string: uuids.service)])
     }
 
-    fileprivate func failedToConnect(_ peripheral: CBPeripheral, bond: Bool) {
+    fileprivate func failedToConnect(_ peripheral: CBPeripheral, bond: BleBondFailure.Signal) {
+        if answersCancel(peripheral) { return }
         guard current === peripheral else {
             waiting[peripheral.identifier.uuidString] = nil
             return
         }
-        if bond { return loseBond() }
+        if broken(bond, peripheral) { return loseBond() }
         lose(.connectFailed)
     }
 
-    fileprivate func disconnected(_ peripheral: CBPeripheral, bond: Bool) {
+    fileprivate func disconnected(_ peripheral: CBPeripheral, bond: BleBondFailure.Signal) {
+        if answersCancel(peripheral) { return }
         guard current === peripheral else {
             waiting[peripheral.identifier.uuidString] = nil
             return
         }
-        if bond { return loseBond() }
+        if broken(bond, peripheral) { return loseBond() }
         // Replies already offered still reach their callers, then the run sees the peer go.
         sink?.linkLost(reason: IosLink.companion.REASON_PEER_CLOSED)
         lose(.disconnected)
     }
 
-    fileprivate func discoveredServices(_ peripheral: CBPeripheral, failed: Bool, bond: Bool) {
+    fileprivate func discoveredServices(_ peripheral: CBPeripheral, failed: Bool, bond: BleBondFailure.Signal) {
         guard current === peripheral else { return }
-        if bond { return loseBond() }
+        if broken(bond, peripheral) { return loseBond() }
         guard !failed, let service = peripheral.services?.first(where: { $0.uuid == CBUUID(string: uuids.service) })
         else { return lose(.serviceMissing) }
         peripheral.discoverCharacteristics(
@@ -372,9 +410,9 @@ actor BlePhysicalLink {
             ], for: service)
     }
 
-    fileprivate func discoveredCharacteristics(_ peripheral: CBPeripheral, service: CBService, failed: Bool, bond: Bool) {
+    fileprivate func discoveredCharacteristics(_ peripheral: CBPeripheral, service: CBService, failed: Bool, bond: BleBondFailure.Signal) {
         guard current === peripheral else { return }
-        if bond { return loseBond() }
+        if broken(bond, peripheral) { return loseBond() }
         let characteristics = service.characteristics ?? []
         guard !failed,
             let info = characteristics.first(where: { $0.uuid == CBUUID(string: uuids.info) }),
@@ -395,9 +433,9 @@ actor BlePhysicalLink {
         performNext()
     }
 
-    fileprivate func wrote(_ peripheral: CBPeripheral, characteristic: CBCharacteristic, failed: Bool, bond: Bool) {
+    fileprivate func wrote(_ peripheral: CBPeripheral, characteristic: CBCharacteristic, failed: Bool, bond: BleBondFailure.Signal) {
         guard current === peripheral else { return }
-        if bond { return loseBond() }
+        if broken(bond, peripheral) { return loseBond() }
         switch gatt.finish(write: characteristic, ok: !failed) {
         case .stale: return
         // The request state on the sensor is unknown, so the shared link is poisoned. The run ends
@@ -408,17 +446,17 @@ actor BlePhysicalLink {
         }
     }
 
-    fileprivate func notifying(_ peripheral: CBPeripheral, characteristic: CBCharacteristic, failed: Bool, bond: Bool) {
+    fileprivate func notifying(_ peripheral: CBPeripheral, characteristic: CBCharacteristic, failed: Bool, bond: BleBondFailure.Signal) {
         guard current === peripheral else { return }
-        if bond { return loseBond() }
+        if broken(bond, peripheral) { return loseBond() }
         guard !failed, characteristic.isNotifying else { return lose(.notifyFailed) }
         if characteristic.uuid == CBUUID(string: uuids.response) { responseSubscribed = true }
         if gatt.finish(subscribe: characteristic) { performNext() }
     }
 
-    fileprivate func updated(_ peripheral: CBPeripheral, characteristic: CBCharacteristic, failed: Bool, bond: Bool) {
+    fileprivate func updated(_ peripheral: CBPeripheral, characteristic: CBCharacteristic, failed: Bool, bond: BleBondFailure.Signal) {
         guard current === peripheral else { return }
-        if bond { return loseBond() }
+        if broken(bond, peripheral) { return loseBond() }
         if characteristic.uuid == CBUUID(string: uuids.response) {
             guard !failed, let data = characteristic.value else { return }
             // Only the token reply stays native. Every other frame goes to the shared link, which
@@ -438,6 +476,10 @@ actor BlePhysicalLink {
         switch characteristic.uuid {
         case CBUUID(string: uuids.info):
             let id = peripheral.identifier.uuidString
+            // Every characteristic needs an encrypted link, so a read INFO proves a working bond.
+            if bonded.insert(id).inserted {
+                UserDefaults.standard.set(Array(bonded).sorted(), forKey: Self.bondedKey)
+            }
             deliver(
                 connection,
                 .info(
@@ -504,25 +546,25 @@ private final class Callbacks: NSObject, CBCentralManagerDelegate, CBPeripheralD
     }
 
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
-        let bond = BleBondFailure.matches(error)
+        let bond = BleBondFailure.signal(error)
         let peripheral = Delivered(peripheral)
         link?.assumeIsolated { $0.failedToConnect(peripheral.value, bond: bond) }
     }
 
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
-        let bond = BleBondFailure.matches(error)
+        let bond = BleBondFailure.signal(error)
         let peripheral = Delivered(peripheral)
         link?.assumeIsolated { $0.disconnected(peripheral.value, bond: bond) }
     }
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
-        let failed = error != nil, bond = BleBondFailure.matches(error)
+        let failed = error != nil, bond = BleBondFailure.signal(error)
         let peripheral = Delivered(peripheral)
         link?.assumeIsolated { $0.discoveredServices(peripheral.value, failed: failed, bond: bond) }
     }
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
-        let failed = error != nil, bond = BleBondFailure.matches(error)
+        let failed = error != nil, bond = BleBondFailure.signal(error)
         let objects = Delivered((peripheral, service))
         link?.assumeIsolated {
             $0.discoveredCharacteristics(objects.value.0, service: objects.value.1, failed: failed, bond: bond)
@@ -530,7 +572,7 @@ private final class Callbacks: NSObject, CBCentralManagerDelegate, CBPeripheralD
     }
 
     func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
-        let failed = error != nil, bond = BleBondFailure.matches(error)
+        let failed = error != nil, bond = BleBondFailure.signal(error)
         let objects = Delivered((peripheral, characteristic))
         link?.assumeIsolated {
             $0.wrote(objects.value.0, characteristic: objects.value.1, failed: failed, bond: bond)
@@ -540,7 +582,7 @@ private final class Callbacks: NSObject, CBCentralManagerDelegate, CBPeripheralD
     func peripheral(
         _ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?
     ) {
-        let failed = error != nil, bond = BleBondFailure.matches(error)
+        let failed = error != nil, bond = BleBondFailure.signal(error)
         let objects = Delivered((peripheral, characteristic))
         link?.assumeIsolated {
             $0.notifying(objects.value.0, characteristic: objects.value.1, failed: failed, bond: bond)
@@ -548,7 +590,7 @@ private final class Callbacks: NSObject, CBCentralManagerDelegate, CBPeripheralD
     }
 
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
-        let failed = error != nil, bond = BleBondFailure.matches(error)
+        let failed = error != nil, bond = BleBondFailure.signal(error)
         let objects = Delivered((peripheral, characteristic))
         link?.assumeIsolated {
             $0.updated(objects.value.0, characteristic: objects.value.1, failed: failed, bond: bond)

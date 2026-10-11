@@ -132,13 +132,19 @@ enum BleGattChecks {
     }
 
     private static func brokenBondIsTold() {
-        let bond: [NSError] = [
-            NSError(domain: CBErrorDomain, code: CBError.Code.peerRemovedPairingInformation.rawValue),
+        let removed = NSError(domain: CBErrorDomain, code: CBError.Code.peerRemovedPairingInformation.rawValue)
+        precondition(BleBondFailure.matches(removed, previouslyBonded: false), "removed keys are a broken bond")
+        precondition(BleBondFailure.matches(removed, previouslyBonded: true), "removed keys are a broken bond")
+        let refused: [NSError] = [
             NSError(domain: CBErrorDomain, code: CBError.Code.encryptionTimedOut.rawValue),
             NSError(domain: CBATTErrorDomain, code: CBATTError.Code.insufficientEncryption.rawValue),
             NSError(domain: CBATTErrorDomain, code: CBATTError.Code.insufficientAuthentication.rawValue),
         ]
-        for error in bond { precondition(BleBondFailure.matches(error), "a broken bond is told apart") }
+        for error in refused {
+            precondition(BleBondFailure.matches(error, previouslyBonded: true), "a refused bonded sensor is told apart")
+            // A cancelled first pairing prompt reports the same errors, and it is an ordinary failure.
+            precondition(!BleBondFailure.matches(error, previouslyBonded: false), "a first pairing refusal retries")
+        }
         let ordinary: [NSError?] = [
             nil,
             NSError(domain: CBErrorDomain, code: CBError.Code.peripheralDisconnected.rawValue),
@@ -147,6 +153,8 @@ enum BleGattChecks {
             // The same number in another domain is not a Bluetooth bond failure.
             NSError(domain: NSPOSIXErrorDomain, code: CBError.Code.peerRemovedPairingInformation.rawValue),
         ]
-        for error in ordinary { precondition(!BleBondFailure.matches(error), "an ordinary loss still retries") }
+        for error in ordinary {
+            precondition(!BleBondFailure.matches(error, previouslyBonded: true), "an ordinary loss still retries")
+        }
     }
 }
