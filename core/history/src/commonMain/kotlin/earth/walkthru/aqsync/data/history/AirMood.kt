@@ -8,9 +8,9 @@ import earth.walkthru.aqsync.data.protocol.PmsStatus
 
 /**
  * The friendly layer, as pure data: one mood per step of the WHO 2021 PM2.5 scale
- * ([WhoGuidelines.PM25], edges 15, 25, 37.5, 50 and 75 µg/m³), each with a
- * one-line "what to do" and a familiar comparison. The edges live only in `:core:airquality` and are
- * inclusive from below, as WHO states them ("at or below 15 µg/m³ meets the guideline").
+ * ([WhoGuidelines.PM25], edges 15, 25, 37.5, 50 and 75 µg/m³), each with a one-line "what to do"
+ * and a familiar comparison. The edges live only in `:core:airquality` and are inclusive from
+ * below, as WHO states them ("at or below 15 µg/m³ meets the guideline").
  *
  * The WHO values are 24-hour means. A mood is **not** an AQI, and the live number is a 10-second
  * snapshot, not a 24-hour mean, so the Now card reads it against the scale and says so.
