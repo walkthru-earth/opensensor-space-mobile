@@ -3,6 +3,7 @@ package earth.walkthru.aqsync.data.sync
 import earth.walkthru.aqsync.archive.ArchiveIndex
 import earth.walkthru.aqsync.archive.ArchiveStore
 import earth.walkthru.aqsync.data.ble.DeviceSession
+import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.storage.StorageBudget
 import kotlinx.coroutines.flow.first
 import kotlin.time.TimeSource
@@ -90,13 +91,23 @@ class ArchiveCollector(
         onProgress: (CollectionProgress) -> Unit,
     ): CollectionSummary {
         val (files, _) = session.list()
+        val planned = plan(station, files, onlyName)
+        return transfer(session, planned, station, sourceDevice, maxRead, onProgress)
+    }
+
+    /**
+     * Plans one run from a fresh `LIST` result against the archive and reserves room for it.
+     * [onlyName] narrows the run to that listed file. Throws [InsufficientSpaceException] when
+     * the missing bytes do not fit, before anything is opened.
+     */
+    suspend fun plan(station: String, files: List<Frame.File>, onlyName: String? = null): PlannedCollection {
         val scopedFiles = if (onlyName == null) files else files.filter { it.name == onlyName }
         if (onlyName != null && scopedFiles.isEmpty()) {
-            return CollectionSummary(1, listOf(FileNotSaved(onlyName, FileProblem.REFUSED)))
+            return PlannedCollection(SyncPlan(emptyList(), emptyList()), listOf(FileNotSaved(onlyName, FileProblem.REFUSED)), unlisted = true)
         }
         val archived = index.observeStation(station).first().map { ArchivedIdentity(it.station, it.name, it.bytes, it.crc32) }
         val plan = SyncPlanner.plan(station, scopedFiles, archived, store.partialLengths(station))
-        val notSaved = plan.entries.mapNotNullTo(ArrayList()) { entry ->
+        val notSaved = plan.entries.mapNotNull { entry ->
             when (entry.state) {
                 FileSyncState.INVALID_NAME -> FileNotSaved(entry.name, FileProblem.INVALID_ENTRY)
                 FileSyncState.MISMATCH -> FileNotSaved(entry.name, FileProblem.LOCAL_CONFLICT)
@@ -104,6 +115,21 @@ class ArchiveCollector(
             }
         }
         budget.requireRoom(plan.missingBytes)
+        return PlannedCollection(plan, notSaved)
+    }
+
+    /** Every missing file of [planned] through the [SyncEngine], in plan order. */
+    suspend fun transfer(
+        session: DeviceSession,
+        planned: PlannedCollection,
+        station: String,
+        sourceDevice: String,
+        maxRead: Int,
+        onProgress: (CollectionProgress) -> Unit,
+    ): CollectionSummary {
+        val plan = planned.plan
+        if (planned.unlisted) return CollectionSummary(1, planned.notSaved)
+        val notSaved = ArrayList(planned.notSaved)
         val total = plan.entries.size
         val bytesTotal = plan.missingBytes
         var done = total - plan.toDownload.size
@@ -131,3 +157,9 @@ class ArchiveCollector(
         return CollectionSummary(total, notSaved)
     }
 }
+
+/**
+ * One run's plan from a fresh `LIST`. [notSaved] holds the entries reported without a transfer.
+ * [unlisted] means the one selected file was not in the listing, so nothing runs.
+ */
+class PlannedCollection(val plan: SyncPlan, val notSaved: List<FileNotSaved>, val unlisted: Boolean = false)

@@ -11,8 +11,8 @@ records and the `ArchiveStore` and `ArchiveIndex` ports. `storage/` owns `Storag
 `StorageRoots`, `AtomicFiles` (no-replace commit, F_FULLFSYNC on iOS, directory sync),
 `StorageBudget` and `StorageTree`. Every file writer goes through `AtomicFiles`, and the
 `StorageJanitor` (in `sync/`, it needs the archive ports) sweeps Scratch at start and never deletes
-Durable data. `sync/` and `settings/` are empty
-skeletons that `docs/platform-parity-plan.md` fills. See `docs/README.md` in the repo
+Durable data. `sync/` holds the link session, the sync engine and, in `collection/`, the per-device
+`CollectionController` (docs/sync-engine.md). `settings/` is an empty skeleton. See `docs/README.md` in the repo
 root for the relevant concern. No Android, Hilt, Room, `Context` or
 `android.util.Log` in any `:core:*` module.
 

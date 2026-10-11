@@ -1,8 +1,8 @@
 # Sync engine — pull, verify, archive
 
 **Scope:** the file transfer: planner → engine → archive; integrity; lost windows; stale-frame drain; resume; the state-changing requests.
-**Code:** Shared in `core/sync` commonMain: `data/sync/SyncEngine.kt`, `ArchiveCollector.kt`, `data/sync/SyncPlanner.kt`, `ReadWindow.kt`, `WindowRetryPolicy.kt`, `SyncResumePolicy.kt`, `FileProgress.kt`, `FileProgressReporter.kt`, `RateMeter.kt`, `data/ManifestState.kt`, `data/SyncProgress.kt`, `ArchiveWriter.kt`, `ArchiveRoom.kt`, `data/ble/DeviceSession.kt` (`read`, `reboot`), `link/LinkSession.kt`. `core/protocol/…/ParquetVerify.kt`, `Sha256.kt`. Android adapters `data/archive/FileArchiveStore.kt`, `SyncEngineModule.kt`, `data/sync/FileArchive.kt`. iOS adapters `core/archive` iosMain `IosArchiveStore.kt`, `ReceiptArchiveIndex.kt`, and `ios/shared` iosMain `SensorSync.kt`, `SensorLink.kt`.
-**Tests:** `:core:sync` commonTest `SyncEngineTest`, `ArchiveCollectorTest`, `SyncPlannerTest`, `StopAndBackpressureTest`, `DeviceSessionTest`, `LinkSessionTest`, `LinkOweCloseTest`, `WindowRetryPolicyTest`, `RateMeterTest`, `SyncResumePolicyTest` (fake `FakeArchiveDevice` with `dropLeadingChunks` / `closedDelayMs`). App `ConcurrentArchiveTest` over the Android adapters. iOS simulator `SensorSyncTest`. `:core:protocol` `ParquetVerifyTest`, `Sha256Test`.
+**Code:** Shared in `core/sync` commonMain: `data/sync/SyncEngine.kt`, `ArchiveCollector.kt`, `data/sync/SyncPlanner.kt`, `ReadWindow.kt`, `WindowRetryPolicy.kt`, `SyncResumePolicy.kt`, `FileProgress.kt`, `FileProgressReporter.kt`, `RateMeter.kt`, `data/ManifestState.kt`, `data/SyncProgress.kt`, `ArchiveWriter.kt`, `ArchiveRoom.kt`, `data/ble/DeviceSession.kt` (`read`, `reboot`), `link/LinkSession.kt`, `collection/` (`CollectionController`, #56). `core/protocol/…/ParquetVerify.kt`, `Sha256.kt`. Android adapters `data/archive/FileArchiveStore.kt`, `SyncEngineModule.kt`, `data/sync/FileArchive.kt`. iOS adapters `core/archive` iosMain `IosArchiveStore.kt`, `ReceiptArchiveIndex.kt`, and `ios/shared` iosMain `SensorSync.kt`, `SensorLink.kt`.
+**Tests:** `:core:sync` commonTest `SyncEngineTest`, `ArchiveCollectorTest`, `SyncPlannerTest`, `StopAndBackpressureTest`, `DeviceSessionTest`, `LinkSessionTest`, `LinkOweCloseTest`, `WindowRetryPolicyTest`, `RateMeterTest`, `SyncResumePolicyTest`, `CollectionControllerTest` (fake `FakeArchiveDevice` with `dropLeadingChunks` / `closedDelayMs`). App `ConcurrentArchiveTest` over the Android adapters. iOS simulator `SensorSyncTest`. `:core:protocol` `ParquetVerifyTest`, `Sha256Test`.
 **Related:** [transports.md](transports.md) (the pipe underneath), [data-model.md](data-model.md) (what is recorded), [history-pipeline.md](history-pipeline.md) (what runs after).
 
 ## One engine on both phones
@@ -201,6 +201,59 @@ drivers land (#57, #58) `TransportLinkDriver` runs it over an `AqTransport`.
   `FramingViolation` and `UpdateFirmware`. A `BYE` refuses new requests and attaches its reason
   to the close.
 - `open` applies `requireProto3`, so firmware below proto 3 ends as `UpdateFirmware`.
+
+## Collection controller (`core/sync` `collection/`, #56)
+
+`CollectionController` is one device's collection as a single state machine, from the tap to its
+outcome. Preparation is part of the collection, so a lost link during `LIST` is retried like a
+lost link during a `READ`. One controller per device, so two devices run independent machines.
+Android (#57) and iOS (#58) wire it in. Until then both phones still call
+`ArchiveCollector.collect`, which now runs the same `plan` and `transfer` steps the controller
+calls separately.
+
+```mermaid
+stateDiagram-v2
+  [*] --> Preparing: start(intent), PROCESS taken before the first suspension
+  Preparing --> Preparing: CONNECT, CLOCK, LIST, PLAN
+  Preparing --> Transferring
+  Transferring --> Finalizing: every planned file has an outcome
+  Finalizing --> Done
+  Preparing --> Waiting: retryable loss
+  Transferring --> Waiting: retryable loss
+  Waiting --> Preparing: CONNECT, then a fresh LIST
+  Preparing --> Failed: Auth, storage, device error, retries spent
+  Transferring --> Failed
+  Preparing --> Stopped: stop() or a Deliberate close
+  Transferring --> Stopped
+  Waiting --> Stopped
+```
+
+- **Ownership.** The controller job alone owns the PROCESS lease, the WIFI lease, the shared
+  `Semaphore` permit and the lent `CollectionLink`. One outermost `finally` lets them go in reverse
+  order. Every lease is wrapped so it closes once, whoever calls it.
+- **PROCESS** is taken inside `start`, before the job is launched, and held in every non-terminal
+  state, `Waiting` included. A refused PROCESS lease ends as `Failed(KeepAliveRefused)` with no
+  connect.
+- **WIFI** is held only when the link is LAN and the state is `Preparing(LIST or PLAN)`,
+  `Transferring` or `Finalizing`. One `syncLeases` call runs on every transition. A refused WIFI
+  lease is logged once and the collection goes on, since the lock only keeps the radio fast. It
+  is asked again only after the link stops carrying data.
+- **Stop** moves the state to `Stopped` with a compare and set, then cancels the job. Every later
+  transition of that request checks that it still owns the state, so Stop always wins. Stop never
+  closes the link. The abandoned request drains behind its `ABORT` and the link stays Ready.
+  Each run owns a private copy of its intent, so a restart with the same intent object never
+  lets the old job write. A job cancelled by its scope, not by `stop`, ends `Stopped(SYSTEM)`.
+- **Retry.** A retryable `DisconnectCause` publishes `Waiting(attempt, retryAtEpochMs)`, waits per
+  `RetryPolicy` (2 s doubling to 60 s, 5 attempts, 30 min ceiling) and starts again at
+  `Preparing(CONNECT)` with a fresh `LIST`. An attempt that received bytes resets the count.
+  `Auth` fails at once, `Deliberate` ends `Stopped(APP)`. Spent retries end
+  `Failed(Link(lastCause))`. Partial files resume by offset through the collector.
+- **Outcomes** stay in `state`. `events` is a bounded channel of terminal states for one toast
+  consumer and drops the oldest when nobody reads.
+- **Logs** carry the intent id, state names, causes and counts, never names of networks, tokens or
+  a PIN.
+
+`SyncResumePolicy` stays until the app adopts the controller (#57).
 
 ## Sync run state
 
