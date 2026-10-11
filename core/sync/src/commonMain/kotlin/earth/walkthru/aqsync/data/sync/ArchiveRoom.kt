@@ -18,16 +18,21 @@ class InsufficientSpaceException(val needed: Long, val available: Long) : Except
 /**
  * Makes room for [missingBytes] plus the headroom in [StorageClass.Durable], where the files land.
  * Android's [StorageBudget.reserve] clears other apps' caches to get it. Throws
- * [InsufficientSpaceException] when it does not fit, and nothing of the archive is removed.
+ * [InsufficientSpaceException] when it does not fit or the free space cannot be read, and nothing
+ * of the archive is removed.
  */
 suspend fun StorageBudget.requireRoom(missingBytes: Long) {
     if (missingBytes <= 0) return
     val needed = missingBytes + ARCHIVE_HEADROOM_BYTES
-    val free = freeBytes(StorageClass.Durable)
+    val free = try {
+        freeBytes(StorageClass.Durable)
+    } catch (_: StorageException) {
+        throw InsufficientSpaceException(needed, 0)
+    }
     if (free < needed) throw InsufficientSpaceException(needed, free)
     try {
         reserve(StorageClass.Durable, needed)
-    } catch (e: StorageException) {
-        throw InsufficientSpaceException(needed, freeBytes(StorageClass.Durable))
+    } catch (_: StorageException) {
+        throw InsufficientSpaceException(needed, free)
     }
 }

@@ -18,6 +18,7 @@ import earth.walkthru.aqsync.data.protocol.ProtocolError
 import earth.walkthru.aqsync.storage.FakeStorageBudget
 import earth.walkthru.aqsync.storage.StorageBudget
 import earth.walkthru.aqsync.storage.StorageClass
+import earth.walkthru.aqsync.storage.StorageException
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
@@ -214,6 +215,20 @@ class ArchiveCollectorTest {
         assertEquals(Opcode.LIST, fake.requests.last())
         assertContentEquals(kept.bytes, finalBytes(fake.station, kept.name))
         assertEquals(kept.name, index.records.single().name)
+    }
+
+    @Test
+    fun freeSpaceThatCannotBeReadOpensNothing() = runTest {
+        val fake = FakeArchiveDevice(backgroundScope)
+        val unreadable = object : StorageBudget by FakeStorageBudget() {
+            override suspend fun freeBytes(cls: StorageClass): Long = throw StorageException("statfs failed")
+        }
+
+        val e = assertFailsWith<InsufficientSpaceException> { collect(fake, budget = unreadable) }
+
+        assertEquals(0L, e.available)
+        assertTrue(fake.requests.none { it == Opcode.OPEN }, "no OPEN when the free space is unknown")
+        assertTrue(index.records.isEmpty())
     }
 
     @Test
