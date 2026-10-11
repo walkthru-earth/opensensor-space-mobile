@@ -7,6 +7,10 @@ import earth.walkthru.aqsync.data.protocol.ParquetVerify
 import earth.walkthru.aqsync.data.protocol.sha256Hex
 import earth.walkthru.aqsync.data.sync.MemoryArchiveIndex
 import earth.walkthru.aqsync.data.sync.MemoryArchiveStore
+import earth.walkthru.aqsync.data.sync.WriterLeases
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -25,6 +29,7 @@ class StorageJanitorTest {
             StorageRole.Partials to "$base/archive-partial",
             StorageRole.ClockAnchors to "$base/clock-anchors",
             StorageRole.Derived to "$base/derived/v1",
+            StorageRole.LegacyDerived to "$base/files/derived/v1",
             StorageRole.Temp to "$base/storage-tmp",
             StorageRole.Exports to "$base/cache/export",
         ),
@@ -37,8 +42,12 @@ class StorageJanitorTest {
         val entries = LinkedHashMap<String, Pair<Boolean, Long>>()
         val deleted = mutableListOf<String>()
 
-        fun file(path: String, modified: Long) {
+        /** File sizes, for the quota step. A file not listed here has 0 bytes. */
+        val sizes = HashMap<String, Long>()
+
+        fun file(path: String, modified: Long, bytes: Long = 0L) {
             entries[path] = false to modified
+            sizes[path] = bytes
         }
 
         fun dir(path: String, modified: Long) {
@@ -46,7 +55,7 @@ class StorageJanitorTest {
         }
 
         override fun list(dir: String): List<StorageEntry> = entries.filterKeys { it.startsWith("$dir/") }.map { (path, e) ->
-            StorageEntry(path.removePrefix("$dir/"), e.first, 0L, e.second)
+            StorageEntry(path.removePrefix("$dir/"), e.first, sizes[path] ?: 0L, e.second)
         }
 
         override fun delete(path: String) {
@@ -57,7 +66,14 @@ class StorageJanitorTest {
 
     private val parquet = ParquetVerify.MAGIC + byteArrayOf(1, 2, 3) + ParquetVerify.MAGIC
 
-    private fun janitor(tree: FakeTree, store: MemoryArchiveStore, index: MemoryArchiveIndex, scheduler: kotlinx.coroutines.test.TestCoroutineScheduler) =
+    private fun janitor(
+        tree: FakeTree,
+        store: MemoryArchiveStore,
+        index: MemoryArchiveIndex,
+        scheduler: kotlinx.coroutines.test.TestCoroutineScheduler,
+        leases: WriterLeases = WriterLeases(),
+        quota: DerivedQuota? = null,
+    ) =
         StorageJanitor(
             roots = roots,
             tree = tree,
@@ -66,6 +82,8 @@ class StorageJanitorTest {
             io = StandardTestDispatcher(scheduler),
             knownStations = { listOf(known) },
             clock = { now },
+            leases = leases,
+            quota = quota,
         )
 
     @Test
@@ -134,6 +152,40 @@ class StorageJanitorTest {
     }
 
     @Test
+    fun aResumeHoldingTheLeaseKeepsItsStalePartial() = runTest {
+        val tree = FakeTree()
+        val key = ArchiveKey(known, "year=2026/month=10/day=03/data.parquet")
+        val partial = "$base/${ArchiveLayout.partialPath(key)}"
+        val meta = "$base/${ArchiveLayout.partialMetaPath(key)}"
+        tree.file(partial, now - StorageJanitor.STALE_PARTIAL_AGE_MS)
+        tree.file(meta, now - StorageJanitor.STALE_PARTIAL_AGE_MS)
+        val leases = WriterLeases()
+        val opened = CompletableDeferred<Unit>()
+        val reopen = CompletableDeferred<Unit>()
+        // A resume that took the lease before the sweep, and rewrites its meta while the sweep waits.
+        launch {
+            leases.withLease(key) {
+                opened.complete(Unit)
+                reopen.await()
+                tree.file(meta, now)
+            }
+        }
+        opened.await()
+
+        val sweep = async { janitor(tree, MemoryArchiveStore(), MemoryArchiveIndex(), testScheduler, leases).run() }
+        testScheduler.advanceUntilIdle()
+        // The first listing saw a stale download, and the sweep now waits for the lease.
+        assertTrue(tree.deleted.isEmpty())
+        reopen.complete(Unit)
+        val report = sweep.await()
+
+        assertEquals(0, report.partialsSwept)
+        assertEquals(1, report.partialsKept)
+        assertTrue(partial in tree.entries)
+        assertTrue(meta in tree.entries)
+    }
+
+    @Test
     fun anIndexedFinalIsLeftAsItIs() = runTest {
         val store = MemoryArchiveStore()
         val index = MemoryArchiveIndex()
@@ -190,5 +242,90 @@ class StorageJanitorTest {
         assertEquals(1, report.refused)
         assertTrue(tree.deleted.isEmpty())
         assertFalse(report.exportsSwept > 0)
+    }
+
+    /** Durable files far larger than any quota, with their absolute paths. None may ever be deleted. */
+    private fun FakeTree.durable(): List<String> {
+        val paths = listOf(
+            "$base/archive/$known/year=2026/month=10/day=01/data.parquet",
+            "$base/clock-anchors/$known/boot.parquet",
+        )
+        for (path in paths) file(path, 0L, bytes = 1L shl 30)
+        return paths
+    }
+
+    @Test
+    fun theLegacyDerivedRootIsRemovedWhole() = runTest {
+        val tree = FakeTree()
+        val durable = tree.durable()
+        val legacy = "$base/files/derived/v1"
+        tree.dir("$legacy/$known", now)
+        tree.file("$legacy/$known/2026-10-01.parquet", now)
+        tree.file("$legacy/$known/manifest.json", now)
+
+        val report = janitor(tree, MemoryArchiveStore(), MemoryArchiveIndex(), testScheduler).run()
+
+        assertEquals(1, report.legacyDerivedSwept)
+        assertEquals(0, report.refused)
+        assertEquals(0, report.failures)
+        // One delete of the root itself, never of anything below a Durable root.
+        assertEquals(listOf(legacy), tree.deleted)
+        assertTrue(tree.entries.keys.none { it.startsWith("$legacy/") })
+        for (path in durable) assertTrue(path in tree.entries, "kept $path")
+
+        // A second run finds nothing left to remove.
+        assertEquals(0, janitor(tree, MemoryArchiveStore(), MemoryArchiveIndex(), testScheduler).run().legacyDerivedSwept)
+    }
+
+    @Test
+    fun aLegacyDerivedRootInsideTheArchiveIsRefused() = runTest {
+        val unsafe = StorageRoots(
+            mapOf(
+                StorageRole.Archive to "$base/archive",
+                StorageRole.LegacyDerived to "$base/archive/derived/v1",
+            ),
+        )
+        val tree = FakeTree()
+        tree.file("$base/archive/derived/v1/$known/2026-10-01.parquet", 0L)
+        val janitor = StorageJanitor(unsafe, tree, MemoryArchiveStore(), MemoryArchiveIndex(), StandardTestDispatcher(testScheduler), clock = { now })
+
+        val report = janitor.run()
+
+        assertEquals(0, report.legacyDerivedSwept)
+        assertEquals(1, report.refused)
+        assertTrue(tree.deleted.isEmpty())
+    }
+
+    @Test
+    fun theQuotaStepEvictsTheOldestDayFilesAndReportsThem() = runTest {
+        val tree = FakeTree()
+        val durable = tree.durable()
+        val derived = "$base/derived/v1/$known"
+        tree.file("$derived/2026-10-01.parquet", now - 3_000, bytes = 100)
+        tree.file("$derived/2026-10-02.parquet", now - 2_000, bytes = 100)
+        tree.file("$derived/2026-10-03.parquet", now - 1_000, bytes = 100)
+        tree.file("$derived/manifest.json", now - 4_000, bytes = 10)
+        val quota = DerivedQuota(QuotaEnforcer(roots, tree)) { 150L }
+
+        val report = janitor(tree, MemoryArchiveStore(), MemoryArchiveIndex(), testScheduler, quota = quota).run()
+
+        assertEquals(2, report.derivedEvicted)
+        assertEquals(0, report.refused)
+        assertEquals(0, report.failures)
+        assertEquals(listOf("$derived/2026-10-01.parquet", "$derived/2026-10-02.parquet"), tree.deleted)
+        assertTrue("$derived/2026-10-03.parquet" in tree.entries)
+        assertTrue("$derived/manifest.json" in tree.entries)
+        for (path in durable) assertTrue(path in tree.entries, "kept $path")
+    }
+
+    @Test
+    fun withoutAQuotaTheDayFilesStay() = runTest {
+        val tree = FakeTree()
+        tree.file("$base/derived/v1/$known/2026-10-01.parquet", now - 1_000, bytes = 1L shl 40)
+
+        val report = janitor(tree, MemoryArchiveStore(), MemoryArchiveIndex(), testScheduler).run()
+
+        assertEquals(0, report.derivedEvicted)
+        assertTrue(tree.deleted.isEmpty())
     }
 }

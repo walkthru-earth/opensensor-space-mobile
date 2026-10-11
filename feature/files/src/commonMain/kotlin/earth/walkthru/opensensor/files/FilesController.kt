@@ -11,6 +11,7 @@ import earth.walkthru.aqsync.archive.StagedFile
 import earth.walkthru.aqsync.data.sync.FileSyncState
 import earth.walkthru.aqsync.data.sync.HivePartition
 import earth.walkthru.aqsync.data.sync.ManifestEntry
+import earth.walkthru.aqsync.storage.StorageException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -46,7 +47,7 @@ interface ExportPresenter {
 }
 
 /** One-off notices for the snackbar. */
-enum class FilesMessage { NO_DAILY, EXPORT_FAILED }
+enum class FilesMessage { NO_DAILY, EXPORT_FAILED, NO_SPACE }
 
 data class FilesState(
     /** Every verified file on this phone, of every station. */
@@ -77,6 +78,8 @@ class FilesController(
     owner: Flow<String?>,
     /** Lists the derived daily files, or null on a platform that has none. */
     private val daily: (suspend () -> List<ExportEntry>)? = null,
+    /** Runs the daily listing and zip with the cache quota paused, so no listed day file is evicted. */
+    private val holdDaily: suspend (suspend () -> Unit) -> Unit = { it() },
     private val now: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     private val io: CoroutineDispatcher = Dispatchers.IO,
 ) {
@@ -121,13 +124,17 @@ class FilesController(
 
     fun shareDaily(presenter: ExportPresenter) = run(presenter) {
         val list = daily ?: return@run null
-        val entries = withContext(io) { ArchiveExport.dailyEntries(list()) }
-        if (entries == null) {
+        var zip: StagedFile? = null
+        holdDaily {
+            val entries = withContext(io) { ArchiveExport.dailyEntries(list()) }
+            if (entries != null) zip = withContext(io) { ArchiveExport.stageZip(space, entries, ArchiveExport.dailyZipName(now())) }
+        }
+        val staged = zip
+        if (staged == null) {
             _messages.tryEmit(FilesMessage.NO_DAILY)
             return@run null
         }
-        val zip = withContext(io) { ArchiveExport.stageZip(space, entries, ArchiveExport.dailyZipName(now())) }
-        present(it, listOf(zip), ShareKind.ARCHIVE)
+        present(it, listOf(staged), ShareKind.ARCHIVE)
     }
 
     private suspend fun <T> stage(block: suspend () -> T): T = withContext(io) { block() }
@@ -149,6 +156,8 @@ class FilesController(
                 block(presenter)
             } catch (e: CancellationException) {
                 throw e
+            } catch (_: StorageException) {
+                _messages.tryEmit(FilesMessage.NO_SPACE)
             } catch (_: Exception) {
                 _messages.tryEmit(FilesMessage.EXPORT_FAILED)
             } finally {

@@ -34,6 +34,16 @@
     <string name="settings_public_sensors">عرض المستشعرات العامة</string>
     <string name="settings_public_sensors_body">عند الإيقاف، لا تستخدم الخريطة الإنترنت وتعرض بيانات تجريبية فقط.</string>
 
+    <string name="settings_storage">التخزين</string>
+    <string name="storage_sensor_files">ملفات المستشعر</string>
+    <string name="storage_history_cache">ذاكرة السجل المؤقتة</string>
+    <string name="storage_map_cache">ذاكرة الخريطة المؤقتة</string>
+    <string name="storage_temporary">ملفات مؤقتة</string>
+    <string name="storage_megabytes">%1$s ميغابايت</string>
+    <string name="storage_clear">مسح</string>
+    <string name="storage_clear_named">مسح %1$s</string>
+    <string name="settings_storage_body">تُبنى الذاكرة المؤقتة من جديد تلقائيًا عند الحاجة. لا تُحذف ملفات المستشعر أبدًا.</string>
+
     <string name="settings_about">حول التطبيق</string>
     <string name="settings_about_body">opensensor.space %1$s</string>
     <string name="info_privacy">لا يصل Bluetooth وشبكة Wi-Fi المحلية إلا إلى مستشعراتك. لا حساب ولا تحليلات ولا رفع. يُستخدم الموقع التقريبي فقط عند النقر على بالقرب مني، لتحريك الخريطة. تبقى ملفاتك على هذا الهاتف ما لم تشاركها.</string>

@@ -23,6 +23,7 @@ import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.history.ArchiveQueryResult
 import earth.walkthru.aqsync.data.history.DerivedStore
 import earth.walkthru.aqsync.data.history.FileSummary
+import earth.walkthru.aqsync.data.history.HistoryDeriver
 import earth.walkthru.aqsync.data.history.HistoryRepository
 import earth.walkthru.aqsync.data.history.MetricSpec
 import earth.walkthru.aqsync.data.history.Metrics
@@ -34,6 +35,7 @@ import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
 import earth.walkthru.aqsync.data.settings.AppSettings
 import earth.walkthru.aqsync.data.settings.DetailLevel
 import earth.walkthru.aqsync.data.sync.SyncPlan
+import earth.walkthru.aqsync.storage.DerivedQuota
 import earth.walkthru.aqsync.ui.components.ScreenMessage
 import earth.walkthru.opensensor.files.FileMetricsController
 import earth.walkthru.opensensor.files.FilesController
@@ -118,6 +120,8 @@ class FilesViewModel @AssistedInject constructor(
     store: ArchiveStore,
     index: ArchiveIndex,
     derived: DerivedStore,
+    deriver: HistoryDeriver,
+    quota: DerivedQuota,
     private val autoSyncScheduler: AutoSyncScheduler,
     settings: AppSettings,
 ) : ViewModel() {
@@ -134,7 +138,8 @@ class FilesViewModel @AssistedInject constructor(
 
     /**
      * The archive list and the exports, shared with iOS. Staged copies go to `cache/export/<run>`,
-     * which the FileProvider serves. The daily zip reads the derived `derived/v1` tree.
+     * which the FileProvider serves. The daily zip reads the derived `derived/v1` tree, after
+     * rebuilding the days the cache quota or the OS evicted. The quota waits until the zip is staged (#61).
      */
     val files = FilesController(
         scope = viewModelScope,
@@ -142,7 +147,11 @@ class FilesViewModel @AssistedInject constructor(
         index = index,
         space = FileExportSpace(File(context.cacheDir, "export")),
         owner = archiveStation,
-        daily = { directoryEntries(derived.root, "derived/v1") },
+        daily = {
+            deriver.ensureDailyFiles()
+            directoryEntries(derived.root, "derived/v1")
+        },
+        holdDaily = { block -> quota.holding { block() } },
     )
 
     private val localEvents = MutableSharedFlow<ScreenMessage>(extraBufferCapacity = 4)

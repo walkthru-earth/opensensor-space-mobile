@@ -7,7 +7,11 @@ import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.convert
 import kotlinx.cinterop.usePinned
+import platform.Foundation.NSFileManager
+import platform.Foundation.NSNumber
 import platform.Foundation.NSTemporaryDirectory
+import platform.Foundation.NSURL
+import platform.Foundation.NSURLVolumeAvailableCapacityForOpportunisticUsageKey
 import platform.Foundation.NSUUID
 import platform.posix.O_CREAT
 import platform.posix.O_EXCL
@@ -26,6 +30,14 @@ class IosExportSpace(private val root: String) : ExportSpace {
         val dir = "$root/run-${NSUUID().UUIDString}"
         IosFiles.mkdirs(dir)
         return IosExportRun(dir)
+    }
+
+    /** Scratch capacity, the "opportunistic usage" figure that excludes what iOS would purge (#61). */
+    override fun freeBytes(): Long? {
+        var dir = root
+        while (dir.length > 1 && !NSFileManager.defaultManager.fileExistsAtPath(dir)) dir = dir.substringBeforeLast('/').ifEmpty { "/" }
+        val key = NSURLVolumeAvailableCapacityForOpportunisticUsageKey
+        return (NSURL.fileURLWithPath(dir, true).resourceValuesForKeys(listOf(key), null)?.get(key) as? NSNumber)?.longLongValue
     }
 
     companion object {

@@ -84,7 +84,8 @@ Means over a span are weighted by valid rows — never averages of averages.
 
 ## Derived daily Parquet (`DailyParquetBuilder`)
 
-`derived/v1/<station>/day=YYYY-MM-DD.parquet` + `.manifest.json` on both platforms, written by the shared
+`derived/v1/<station>/day=YYYY-MM-DD.parquet` + `.manifest.json` on both platforms, in the OS cache
+directory under the derived quota (`docs/data-model.md`, Quotas and memory pressure), written by the shared
 `ParquetWriter`. Rows: every UTC row of the day from the verified files, time-ordered,
 de-duplicated; **one row group per UTC hour**. Columns: union of sources (v1 files leave the four v2
 columns null) + `source_file_index` (INT32 into the manifest's `sources`) +

@@ -4,6 +4,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.window.ComposeUIViewController
+import earth.walkthru.aqsync.storage.RetentionPolicy
+import earth.walkthru.opensensor.discover.MapCache
 import platform.UIKit.UIViewController
 
 /**
@@ -52,8 +54,11 @@ fun mainViewController(
     cancelSync: (String) -> Unit,
     forgetWifiAccess: (String) -> Unit,
     scanSticker: ScanSticker?,
-): UIViewController =
-    ComposeUIViewController {
+): UIViewController {
+    // The basemap tile cache stays in Library/Caches under its cap, set before any map runs (#61).
+    MapCache.configure(cachesDirectory(), RetentionPolicy.DEFAULT_MAP_CACHE_BYTES)
+    IosMemoryPressure.install()
+    return ComposeUIViewController {
         // A sensor the user opens may take Wi-Fi or the one Bluetooth link, so Collect all stops first.
         val userOpen: (String) -> Unit = { id ->
             devices.cancelCollectAll()
@@ -116,3 +121,4 @@ fun mainViewController(
             )
         }
     }
+}

@@ -2,6 +2,8 @@ package earth.walkthru.aqsync.data.history.parquet
 
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayOutputStream
@@ -40,6 +42,20 @@ class JvmParquetFileTest {
             }.apply { start() }
         }
         threads.forEach { it.join() }
+    }
+
+    @Test
+    fun `a closed mapped reader refuses reads`() {
+        val tmp = File.createTempFile("aq-parquet", ".parquet").apply { deleteOnExit(); writeBytes(fixtureBytes(device)) }
+        val reader = MappedFileReader(tmp)
+        assertFalse(reader.isClosed)
+        ParquetFile.open(reader, tmp.name).use { assertEquals(90L, it.metadata.numRows) }
+
+        assertTrue(reader.isClosed)
+        assertThrows(IllegalStateException::class.java) { reader.read(0, 4) }
+        // A second close is harmless.
+        reader.close()
+        assertTrue(reader.isClosed)
     }
 
     @Test

@@ -50,6 +50,40 @@ class ByteReaderTest {
         }
     }
 
+    /** A [ByteArrayReader] that counts its closes. */
+    private class CountingReader(bytes: ByteArray) : ByteReader {
+        private val inner = ByteArrayReader(bytes)
+        var closes = 0
+        override val size: Long get() = inner.size
+        override fun read(offset: Long, length: Int): ByteArray = inner.read(offset, length)
+        override fun close() {
+            closes++
+        }
+    }
+
+    @Test
+    fun `a file opened over a ByteReader closes it exactly once`() {
+        val bytes = fixtureBytes(device)
+        val read = CountingReader(bytes)
+        val rows = ParquetFile.open(read, "reader").use { it.metadata.numRows }
+        assertEquals(90L, rows)
+        assertEquals(1, read.closes)
+
+        val failing = CountingReader(bytes)
+        try {
+            ParquetFile.open(failing, "reader").use { error("caller failed") }
+        } catch (_: IllegalStateException) { }
+        assertEquals(1, failing.closes)
+
+        // A footer that does not parse is closed by open itself, before the caller ever holds the file.
+        val truncated = CountingReader(bytes.copyOf(bytes.size - 8))
+        try {
+            ParquetFile.open(truncated, "reader")
+            fail("opened a truncated file")
+        } catch (_: ParquetFormatException) { }
+        assertEquals(1, truncated.closes)
+    }
+
     @Test
     fun `range reader reads the footer from the tail and only the requested chunks`() = runTest {
         val bytes = fixtureBytes(hourly)

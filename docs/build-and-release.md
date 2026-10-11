@@ -237,6 +237,11 @@ third of the native share. The minified build started on Discover on a fresh ins
 arm64 emulator, drew H3 cells (h3 JNI after R8) and switched to the plain style when "Show public
 sensors" was off. Not a phone run.
 
+ABI filter on 2026-10-11 (#61, same kind of host check, not a phone run). `ndk.abiFilters` keeps
+`arm64-v8a` and `armeabi-v7a`. The local minified release APK went from 51,731,831 bytes (x86 and
+x86_64 included, x86_64 without h3) to 35,130,751 bytes. `tools/check_apk_abis.py` fails the verify
+and release workflows when the APK holds any other ABI or one ABI lacks MapLibre, zstd-jni or h3.
+
 **R8 runtime behavior is not yet qualified on a phone.** Before the first tagged release
 with R8, install the minified APK on a phone and check BLE and LAN sync, ZSTD GeoParquet import,
 History charts, background sync, error messages and back stack restore after process death.
@@ -269,8 +274,8 @@ qualify a controlled v8→v9 Android Room migration; that scenario remains unver
 
 ## Releases
 
-Every push to `main` refreshes the rolling **`latest`** pre-release (one universal APK, since no native
-ABI split matters for an Android 12+ app and `zstd-jni` ships all ABIs, plus
+Every push to `main` refreshes the rolling **`latest`** pre-release (one APK with the two ARM ABIs,
+`arm64-v8a` and `armeabi-v7a`, the only ones every native library ships, h3 has no x86 build, plus
 `SHA256SUMS.txt`); a `v*` tag publishes a permanent release. Artifact retention 14 days (org max).
 Signing is **fail-closed**. Release tasks require all four `AQSYNC_*` signing variables and an
 existing keystore. Gradle substitutes the debug signing config only for the explicit local

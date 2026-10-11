@@ -2,6 +2,7 @@ package earth.walkthru.aqsync.storage
 
 import earth.walkthru.aqsync.archive.ArchiveIndex
 import earth.walkthru.aqsync.archive.ArchiveKey
+import earth.walkthru.aqsync.archive.ArchiveLayout
 import earth.walkthru.aqsync.archive.ArchiveRecord
 import earth.walkthru.aqsync.archive.ArchiveStore
 import earth.walkthru.aqsync.archive.ArchiveVerifier
@@ -9,6 +10,7 @@ import earth.walkthru.aqsync.data.protocol.ParquetVerify
 import earth.walkthru.aqsync.data.protocol.Sha256
 import earth.walkthru.aqsync.data.protocol.toHex
 import earth.walkthru.aqsync.data.sync.ArchiveRecordIndexer
+import earth.walkthru.aqsync.data.sync.WriterLeases
 import earth.walkthru.aqsync.sync.nowEpochMs
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -26,6 +28,8 @@ import kotlinx.coroutines.withContext
  *    untouched for [STALE_PARTIAL_AGE_MS]. A fresh partial of a known station is kept for resume.
  * 4. Final files without an index record, left by a crash between the commit and the record. Each is
  *    hashed (size, CRC-32, SHA-256) and checked for `PAR1`, then indexed as adopted.
+ * 5. The pre #61 `derived/v1` in app files ([StorageRole.LegacyDerived]), removed whole, and the
+ *    derived day files over the quota, through [quota] (#61).
  *
  * It never deletes anything under a [StorageClass.Durable] root: [sweep] refuses any path not under
  * a Scratch or Rebuildable root. It logs counts only, never paths or station ids.
@@ -41,6 +45,10 @@ class StorageJanitor(
     private val knownStations: suspend () -> Collection<String> = { emptyList() },
     private val clock: () -> Long = ::nowEpochMs,
     private val log: (String) -> Unit = {},
+    /** Evicts derived day files over the quota. Null skips the quota step. */
+    private val quota: DerivedQuota? = null,
+    /** The [SyncEngine][earth.walkthru.aqsync.data.sync.SyncEngine] leases, so a stale partial is never swept while a resume writes it. */
+    private val leases: WriterLeases = WriterLeases(),
 ) {
     data class Report(
         val tempsSwept: Int = 0,
@@ -52,12 +60,17 @@ class StorageJanitor(
         val unverifiable: Int = 0,
         /** Deletes refused because the path was not under a Scratch or Rebuildable root. */
         val refused: Int = 0,
+        /** The pre #61 derived directory was found and removed. */
+        val legacyDerivedSwept: Int = 0,
+        /** Derived day files evicted to bring the derived root under its quota. */
+        val derivedEvicted: Int = 0,
         /** Steps or files that threw. The rest of the sweep went on. */
         val failures: Int = 0,
     ) {
         fun describe(): String =
             "storage janitor: swept $tempsSwept temp, $exportsSwept export, $partialsSwept partial, kept $partialsKept partial, " +
-                "adopted $adopted, unverifiable $unverifiable, refused $refused, failures $failures"
+                "adopted $adopted, unverifiable $unverifiable, legacy derived $legacyDerivedSwept, evicted $derivedEvicted, " +
+                "refused $refused, failures $failures"
     }
 
     private var report = Report()
@@ -69,6 +82,8 @@ class StorageJanitor(
         step { sweepExports(now) }
         step { sweepPartials(now) }
         step { adoptOrphans() }
+        step { sweepLegacyDerived() }
+        step { enforceQuota() }
         log(report.describe())
         return report
     }
@@ -114,17 +129,49 @@ class StorageJanitor(
             return age >= STALE_PARTIAL_AGE_MS || (station !in known && age >= UNKNOWN_STATION_AGE_MS)
         }
         for ((download, files) in downloads) {
-            // Opening a partial rewrites its meta, so a resume that started since the listing shows up as fresh here.
-            val current = if (isStale(download, files)) list(dir).filter { !it.isDirectory && it.path.removeSuffix(".meta") == download } else files
-            if (current.isEmpty()) continue
-            if (!isStale(download, current)) {
+            if (!isStale(download, files)) {
                 report = report.copy(partialsKept = report.partialsKept + 1)
                 continue
             }
-            var swept = false
-            for (file in current) swept = sweep("$dir/${file.path}") || swept
-            if (swept) report = report.copy(partialsSwept = report.partialsSwept + 1)
+            // Under the writer lease of that file, a resume either finished opening (its meta is fresh in
+            // the second listing) or waits until the sweep is done and starts over from zero.
+            withLease(download) {
+                val current = list(dir).filter { !it.isDirectory && it.path.removeSuffix(".meta") == download }
+                when {
+                    current.isEmpty() -> Unit
+                    !isStale(download, current) -> report = report.copy(partialsKept = report.partialsKept + 1)
+                    else -> {
+                        var swept = false
+                        for (file in current) swept = sweep("$dir/${file.path}") || swept
+                        if (swept) report = report.copy(partialsSwept = report.partialsSwept + 1)
+                    }
+                }
+            }
         }
+    }
+
+    /** Runs [block] under the lease of the file behind a `<station>/<name>.partial` path. A stray name no engine writes needs none. */
+    private suspend fun withLease(download: String, block: suspend () -> Unit) {
+        val key = runCatching {
+            ArchiveKey(download.substringBefore('/'), download.substringAfter('/').removeSuffix(ArchiveLayout.PARTIAL_SUFFIX))
+        }.getOrNull()
+        if (key == null) block() else leases.withLease(key) { block() }
+    }
+
+    private suspend fun sweepLegacyDerived() {
+        val dir = roots[StorageRole.LegacyDerived] ?: return
+        if (list(dir).isEmpty()) return
+        if (sweep(dir)) report = report.copy(legacyDerivedSwept = report.legacyDerivedSwept + 1)
+    }
+
+    private suspend fun enforceQuota() {
+        val derived = quota ?: return
+        val result = withContext(io) { derived.enforce() }
+        report = report.copy(
+            derivedEvicted = report.derivedEvicted + result.evicted,
+            refused = report.refused + result.refused,
+            failures = report.failures + result.failures,
+        )
     }
 
     private suspend fun adoptOrphans() {

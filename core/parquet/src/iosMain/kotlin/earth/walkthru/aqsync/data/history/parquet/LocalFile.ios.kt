@@ -31,25 +31,34 @@ internal actual val LocalFile.displayName: String get() = path.substringAfterLas
 /**
  * A [ByteReader] over `NSData` read with `NSDataReadingMappedIfSafe`: Foundation maps the file when it
  * can (local volumes) and reads it otherwise. Reads copy only the requested range. Thread-safe: the
- * data object is immutable.
+ * data object is immutable. [close] drops the reader's reference, and Foundation unmaps the file when
+ * the last reference goes.
  *
  * @throws ParquetFormatException when the file cannot be opened.
  */
 class MappedDataReader(path: String) : ByteReader {
-    private val data: NSData = memScoped {
+    private var data: NSData? = memScoped {
         val error = alloc<ObjCObjectVar<NSError?>>()
         NSData.dataWithContentsOfFile(path, NSDataReadingMappedIfSafe, error.ptr)
             ?: throw ParquetFormatException("cannot open $path: ${error.value?.localizedDescription ?: "unknown error"}")
     }
 
-    override val size: Long = data.length.toLong()
+    override val size: Long = data!!.length.toLong()
+
+    /** Whether [close] released the data. */
+    val isClosed: Boolean get() = data == null
 
     override fun read(offset: Long, length: Int): ByteArray {
+        val bytes = checkNotNull(data) { "reader is closed" }
         checkRange(offset, length, size)
         val out = ByteArray(length)
         if (length == 0) return out
-        val base = data.bytes?.reinterpret<ByteVar>() ?: throw ParquetFormatException("mapped file has no bytes")
+        val base = bytes.bytes?.reinterpret<ByteVar>() ?: throw ParquetFormatException("mapped file has no bytes")
         out.usePinned { pinned -> memcpy(pinned.addressOf(0), base + offset, length.convert()) }
         return out
+    }
+
+    override fun close() {
+        data = null
     }
 }

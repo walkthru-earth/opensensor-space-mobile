@@ -1,7 +1,5 @@
 package earth.walkthru.aqsync.data.history
 
-import android.content.Context
-import dagger.hilt.android.qualifiers.ApplicationContext
 import earth.walkthru.aqsync.archive.ArchiveLayout
 import earth.walkthru.aqsync.data.archive.toRecord
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
@@ -10,6 +8,8 @@ import earth.walkthru.aqsync.data.local.database.ArchivedFile
 import earth.walkthru.aqsync.storage.AtomicFiles
 import earth.walkthru.aqsync.storage.JvmAtomicFiles
 import earth.walkthru.aqsync.storage.StorageClass
+import earth.walkthru.aqsync.storage.StorageRole
+import earth.walkthru.aqsync.storage.StorageRoots
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -18,15 +18,20 @@ import java.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Where the derived layer lives, `filesDir/derived/v1/<station>/day=YYYY-MM-DD.parquet` + `.manifest.json` ([ArchiveLayout]). Never inside `archive/`. */
+/**
+ * Where the derived layer lives, `cacheDir/derived/v1/<station>/day=YYYY-MM-DD.parquet` + `.manifest.json`
+ * ([ArchiveLayout]). Never inside `archive/`. It is a cache the OS or the quota may clear, the derive
+ * pass and [HistoryDeriver.ensureDailyFiles] rebuild it from the archive (#61).
+ */
 @Singleton
 class DerivedStore(
     baseDir: File,
-    /** Temps and commits of the derived layer, Rebuildable (#60). Temps live in `filesDir/storage-tmp`. */
+    /** Temps and commits of the derived layer, Rebuildable (#60). */
     val atomic: AtomicFiles = JvmAtomicFiles(File(baseDir, AtomicFiles.TEMP_DIR)),
 ) {
+    /** [StorageRole.Derived] is `<base>/derived/v1`. Temps go through the app's [AtomicFiles]. */
     @Inject
-    constructor(@ApplicationContext context: Context) : this(context.filesDir)
+    constructor(roots: StorageRoots, atomic: AtomicFiles) : this(baseOf(roots), atomic)
 
     private val base: File = baseDir
     val root: File = File(baseDir, ArchiveLayout.DERIVED)
@@ -40,6 +45,12 @@ class DerivedStore(
 
     companion object {
         fun dayLabel(epochDay: Long): String = ArchiveLayout.dayLabel(epochDay)
+
+        private fun baseOf(roots: StorageRoots): File {
+            val root = roots.rootOf(StorageRole.Derived)
+            check(root.endsWith("/${ArchiveLayout.DERIVED}")) { "derived root must end in ${ArchiveLayout.DERIVED}" }
+            return File(root.removeSuffix("/${ArchiveLayout.DERIVED}"))
+        }
     }
 }
 
@@ -81,7 +92,24 @@ class DailyDerivedBuilder(private val store: DerivedStore, private val fileFor: 
         anchors: Map<String, TimeEstimate.Anchor> = emptyMap(),
         nowEpochS: Long = System.currentTimeMillis() / 1000,
     ): DailyBuildResult? {
-        val opened = sources.map { DailyParquetSource(it.toRecord(), ParquetFile.open(fileFor(it.station, it.name))) }
+        val opened = ArrayList<DailyParquetSource>(sources.size)
+        try {
+            for (source in sources) opened += DailyParquetSource(source.toRecord(), ParquetFile.open(fileFor(source.station, source.name)))
+            return write(station, epochDay, opened, sourceSignature, anchors, nowEpochS)
+        } finally {
+            // Release every mapping now, not when the next GC runs (#61).
+            opened.forEach { it.file.close() }
+        }
+    }
+
+    private fun write(
+        station: String,
+        epochDay: Long,
+        opened: List<DailyParquetSource>,
+        sourceSignature: String,
+        anchors: Map<String, TimeEstimate.Anchor>,
+        nowEpochS: Long,
+    ): DailyBuildResult? {
         val target = store.dayFile(station, epochDay)
         check(target.parentFile!!.isDirectory || target.parentFile!!.mkdirs()) { "cannot create derived directory" }
         val atomic = store.atomic
@@ -96,7 +124,7 @@ class DailyDerivedBuilder(private val store: DerivedStore, private val fileFor: 
                 }
                 DailyParquetBuilder.build(station, epochDay, opened, sink, anchors, nowEpochS)
             } ?: return null
-            check(ParquetFile.open(tmp).numRows == result.rows.toLong()) { "derived row count mismatch" }
+            check(ParquetFile.open(tmp).use { it.numRows } == result.rows.toLong()) { "derived row count mismatch" }
             val manifest = DailyManifest(
                 station = station,
                 day = DerivedStore.dayLabel(epochDay),

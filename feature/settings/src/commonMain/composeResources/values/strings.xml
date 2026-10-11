@@ -34,6 +34,16 @@
     <string name="settings_public_sensors">Show public sensors</string>
     <string name="settings_public_sensors_body">When off, the map uses no internet and shows only sample data.</string>
 
+    <string name="settings_storage">Storage</string>
+    <string name="storage_sensor_files">Sensor files</string>
+    <string name="storage_history_cache">History cache</string>
+    <string name="storage_map_cache">Map cache</string>
+    <string name="storage_temporary">Temporary files</string>
+    <string name="storage_megabytes">%1$s MB</string>
+    <string name="storage_clear">Clear</string>
+    <string name="storage_clear_named">Clear %1$s</string>
+    <string name="settings_storage_body">Caches rebuild on their own when needed. Sensor files are never deleted.</string>
+
     <string name="settings_about">About</string>
     <string name="settings_about_body">opensensor.space %1$s</string>
     <string name="info_privacy">Bluetooth and your local Wi-Fi reach only your own sensors. No account, no analytics and no uploads. Approximate location is used only when you tap Near me, to move the map. Your files stay on this phone unless you share them.</string>

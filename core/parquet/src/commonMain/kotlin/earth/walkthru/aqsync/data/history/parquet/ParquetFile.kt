@@ -20,6 +20,8 @@ package earth.walkthru.aqsync.data.history.parquet
  * [ParquetReader] is the suspending reader over a [RangeSource], with page-level pruning.
  *
  * Concurrent reads of the *same* instance are fine when its [ByteReader] is (the built-in ones are).
+ * [close] closes the [ByteReader], so a builder that opens many files releases each mapping when it
+ * is done with it (#61).
  */
 class ParquetFile private constructor(
     private val reader: ByteReader,
@@ -27,7 +29,7 @@ class ParquetFile private constructor(
     /** Where the bytes came from, for messages. */
     val source: String,
     codecs: ParquetCodecs,
-) {
+) : AutoCloseable {
     private val chunks = ColumnChunks(metadata, source, codecs, reader.size)
 
     val leaves: List<LeafColumn> get() = metadata.leaves
@@ -35,6 +37,9 @@ class ParquetFile private constructor(
     val rowGroupCount: Int get() = metadata.rowGroups.size
 
     fun leaf(name: String): LeafColumn = chunks.leaf(name)
+
+    /** Closes the [ByteReader]. Reading a column afterwards throws [IllegalStateException]. */
+    override fun close() = reader.close()
 
     /** One column across every row group, in row order. */
     fun readColumn(name: String): ColumnValues = readColumn(leaf(name))
@@ -90,9 +95,19 @@ class ParquetFile private constructor(
         fun open(file: LocalFile, codecs: ParquetCodecs = ParquetCodecs.builtIn): ParquetFile =
             open(file.mapReadOnly(), file.displayName, codecs)
 
-        /** Opens the file behind any [ByteReader]: reads the footer now, column chunks on demand. */
-        fun open(reader: ByteReader, source: String = "bytes", codecs: ParquetCodecs = ParquetCodecs.builtIn): ParquetFile =
-            ParquetFile(reader, ParquetFooterParser.parse(reader), source, codecs)
+        /**
+         * Opens the file behind any [ByteReader]: reads the footer now, column chunks on demand. The
+         * file owns [reader] from here, and a footer that does not parse closes it before throwing.
+         */
+        fun open(reader: ByteReader, source: String = "bytes", codecs: ParquetCodecs = ParquetCodecs.builtIn): ParquetFile {
+            val metadata = try {
+                ParquetFooterParser.parse(reader)
+            } catch (e: Throwable) {
+                reader.close()
+                throw e
+            }
+            return ParquetFile(reader, metadata, source, codecs)
+        }
 
         /** For tests and for bytes that were just verified in memory. */
         fun wrap(bytes: ByteArray, source: String = "bytes", codecs: ParquetCodecs = ParquetCodecs.builtIn): ParquetFile =

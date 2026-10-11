@@ -7,6 +7,11 @@ import earth.walkthru.aqsync.data.local.database.DerivedDayDao
 import earth.walkthru.aqsync.data.local.database.MetricBucket
 import earth.walkthru.aqsync.data.local.database.MetricBucketDao
 import earth.walkthru.aqsync.data.sync.FileArchive
+import earth.walkthru.aqsync.storage.DerivedQuota
+import earth.walkthru.aqsync.storage.JvmStorageTree
+import earth.walkthru.aqsync.storage.QuotaEnforcer
+import earth.walkthru.aqsync.storage.StorageRole
+import earth.walkthru.aqsync.storage.StorageRoots
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
@@ -31,7 +36,8 @@ class HistoryDeriverTest {
         val days = InMemoryDays()
         val indexer = HistoryIndexer(archive, files)
         val store = DerivedStore(tmp)
-        val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer)
+        val quota = derivedQuota(tmp)
+        val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, quota)
 
         fun put(name: String, resource: String, crc: Long) {
             archive.fileFor(station, name).apply { parentFile!!.mkdirs(); writeBytes(bytes(resource)) }
@@ -69,13 +75,15 @@ class HistoryDeriverTest {
         val second = deriver.deriveStale()
         assertEquals(0, second.daysRebuilt)
 
-        // The Room signature is a cache marker; missing output files must be rebuilt from the archive.
-        assertTrue(store.manifestFile(station, 20713).delete())
-        assertEquals(1, deriver.deriveStale().daysRebuilt)
-        assertTrue(store.manifestFile(station, 20713).isFile)
+        // An evicted day file is a cache miss (#61). A derive pass does not rebuild it, so the quota
+        // never makes passes churn, and the export rebuilds it when it reads the tree.
         assertTrue(dayFile.delete())
-        assertEquals(1, deriver.deriveStale().daysRebuilt)
+        assertEquals(0, deriver.deriveStale().daysRebuilt)
+        assertFalse(dayFile.isFile)
+        assertEquals(1, deriver.ensureDailyFiles())
         assertTrue(dayFile.isFile)
+        assertEquals(105L, earth.walkthru.aqsync.data.history.parquet.ParquetFile.open(dayFile).use { it.numRows })
+        assertEquals(0, deriver.ensureDailyFiles())
         assertEquals(0, deriver.deriveStale().daysRebuilt)
 
         // A second file for the same day (here: the same bytes under another name and CRC) changes the signature.
@@ -124,7 +132,8 @@ class HistoryDeriverTest {
             val days = InMemoryDays()
             val indexer = HistoryIndexer(archive, files)
             val store = DerivedStore(tmp)
-            val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer)
+            val quota = derivedQuota(tmp)
+            val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, quota)
             val name = "station=$station/unsynced/boot=e452563e96c72ca057a48924550779b6/raw.parquet"
             val raw = archive.fileFor(station, name).apply {
                 parentFile!!.mkdirs()
@@ -162,6 +171,11 @@ class HistoryDeriverTest {
             tmp.deleteRecursively()
         }
     }
+
+    /** The derived quota over [tmp]'s derived root, with the default budget. */
+    private fun derivedQuota(tmp: File) = DerivedQuota(
+        QuotaEnforcer(StorageRoots(mapOf(StorageRole.Derived to File(tmp, "derived/v1").absolutePath)), JvmStorageTree()),
+    )
 
     private class InMemoryFiles : ArchivedFileDao {
         val rows = mutableListOf<ArchivedFile>()

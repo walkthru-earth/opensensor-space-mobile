@@ -24,8 +24,11 @@ enum class StorageRole(val storageClass: StorageClass) {
     /** Clock anchors, the only record of a boot's UTC offset once the device rotated the file. */
     ClockAnchors(StorageClass.Durable),
 
-    /** `derived/v1` day files. */
+    /** `derived/v1` day files, in the OS cache directory so the OS may purge them (#61). */
     Derived(StorageClass.Rebuildable),
+
+    /** Where builds before #61 kept `derived/v1`, in app files. The startup janitor removes it whole. */
+    LegacyDerived(StorageClass.Rebuildable),
 
     /** `archive-partial/`, resumable downloads and their metas. */
     Partials(StorageClass.Scratch),

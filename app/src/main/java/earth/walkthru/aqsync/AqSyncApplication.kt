@@ -1,6 +1,7 @@
 package earth.walkthru.aqsync
 
 import android.app.Application
+import android.content.ComponentCallbacks2
 import android.util.Log
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
@@ -12,6 +13,9 @@ import earth.walkthru.aqsync.data.history.HistoryDeriver
 import earth.walkthru.aqsync.data.history.HistoryIndexer
 import earth.walkthru.aqsync.data.local.security.LanTokenMigration
 import earth.walkthru.aqsync.data.storage.StorageJanitorWorker
+import earth.walkthru.aqsync.storage.MemoryPressure
+import earth.walkthru.aqsync.storage.RetentionPolicy
+import earth.walkthru.opensensor.discover.MapCache
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -49,6 +53,9 @@ class AqSyncApplication :
     @Inject
     lateinit var historyDeriver: HistoryDeriver
 
+    @Inject
+    lateinit var retention: RetentionPolicy
+
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override val workManagerConfiguration: Configuration
@@ -58,6 +65,8 @@ class AqSyncApplication :
         super.onCreate()
         // Shared Compose screens read the first default locale. Make it the language `res/` chose.
         AppLanguage.alignDefault(this)
+        // The basemap tile cache stays in cacheDir under its cap, set before any map runs (#61).
+        MapCache.configure(cacheDir.absolutePath, retention.mapCacheBytes)
         // Sweep temps and stale partials and index orphan finals once per process (#60).
         StorageJanitorWorker.enqueue(WorkManager.getInstance(this))
         appScope.launch {
@@ -84,7 +93,26 @@ class AqSyncApplication :
         AppLanguage.alignDefault(this)
     }
 
-    private companion object {
-        const val TAG = "AqSyncApplication"
+    /** Rebuildable memory caches (the discover feed) shrink when the UI hides and clear before a kill (#61). */
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        memoryPressureLevel(level)?.let(MemoryPressure::signal)
+    }
+
+    internal companion object {
+        private const val TAG = "AqSyncApplication"
+
+        /**
+         * Hidden or cached levels, and the running levels a foreground app gets while the device runs
+         * low (API 33 and older), mapped to the shared signal. Other levels ask for nothing.
+         */
+        @Suppress("DEPRECATION")
+        fun memoryPressureLevel(level: Int): MemoryPressure.Level? = when {
+            level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND -> MemoryPressure.Level.Critical
+            level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL -> MemoryPressure.Level.Critical
+            level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN -> MemoryPressure.Level.Moderate
+            level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW -> MemoryPressure.Level.Moderate
+            else -> null
+        }
     }
 }

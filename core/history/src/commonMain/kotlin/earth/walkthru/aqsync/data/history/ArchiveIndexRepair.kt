@@ -49,10 +49,11 @@ class ArchiveIndexRepair(
                 indexError = "file belongs to station $producer, raw bytes kept, excluded from the history of station ${record.station}",
             )
         } else {
-            val file = ParquetFile.open(reader(), record.name)
-            val metadataStation = file.metadata.keyValueMetadata["station_id"]
-            require(metadataStation == null || metadataStation == record.station) { "file metadata belongs to another station" }
-            val index = ParquetIndexer.index(file)
+            val index = ParquetFile.open(reader(), record.name).use { file ->
+                val metadataStation = file.metadata.keyValueMetadata["station_id"]
+                require(metadataStation == null || metadataStation == record.station) { "file metadata belongs to another station" }
+                ParquetIndexer.index(file)
+            }
             record.copy(
                 indexedAtEpochMs = nowEpochMs,
                 indexError = null,
@@ -181,7 +182,7 @@ class ArchiveIndexRepair(
         for (record in files) {
             if (record.key in scannedAnchors || !record.isTelemetry) continue
             try {
-                val metadata = ParquetFile.open(store.reader(record.key), record.name).metadata
+                val metadata = ParquetFile.open(store.reader(record.key), record.name).use { it.metadata }
                 val boot = metadata.bootId ?: continue
                 val producer = metadata.keyValueMetadata["station_id"]
                 if (producer != null && producer != record.station) continue

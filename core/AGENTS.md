@@ -9,10 +9,13 @@ the WHO 2021 scales and palette. `net/` owns HTTP range reads (`HttpRangeSource`
 on Android and the JVM, `NSURLSession` on iOS). `archive/` owns the archive layout, verifier,
 records and the `ArchiveStore` and `ArchiveIndex` ports. `storage/` owns `StorageClass`,
 `StorageRoots`, `AtomicFiles` (no-replace commit, F_FULLFSYNC on iOS, directory sync),
-`StorageBudget` and `StorageTree`. Every file writer goes through `AtomicFiles`, and the
-`StorageJanitor` (in `sync/`, it needs the archive ports) sweeps Scratch at start and never deletes
-Durable data. `sync/` holds the link session, the sync engine and, in `collection/`, the per-device
-`CollectionController` (docs/sync-engine.md). `settings/` is an empty skeleton. See `docs/README.md` in the repo
+`StorageBudget`, `StorageTree`, `RetentionPolicy` with the derived `QuotaEnforcer`, and
+`MemoryPressure` with `ByteBudgetLru` for memory caches that trim on the OS signal (#61). Every file
+writer goes through `AtomicFiles`, and the `StorageJanitor` (in `sync/`, it needs the archive ports)
+sweeps Scratch at start, enforces the derived quota and never deletes Durable data. `ParquetFile` and
+`ByteReader` are `AutoCloseable`, open them with `use`. `sync/` holds the link session, the sync
+engine and, in `collection/`, the per-device `CollectionController` (docs/sync-engine.md).
+`settings/` is an empty skeleton. See `docs/README.md` in the repo
 root for the relevant concern. No Android, Hilt, Room, `Context` or
 `android.util.Log` in any `:core:*` module.
 

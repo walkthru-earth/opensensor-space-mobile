@@ -16,6 +16,8 @@ class FileExportSpace(private val root: File) : ExportSpace {
         check(dir.mkdirs()) { "cannot create the export folder" }
         return FileExportRun(dir)
     }
+
+    override fun freeBytes(): Long? = generateSequence(root) { it.parentFile }.firstOrNull { it.exists() }?.usableSpace
 }
 
 private class FileExportRun(private val dir: File) : ExportRun {

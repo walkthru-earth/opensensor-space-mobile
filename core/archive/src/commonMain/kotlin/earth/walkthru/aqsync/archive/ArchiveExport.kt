@@ -1,6 +1,7 @@
 package earth.walkthru.aqsync.archive
 
 import earth.walkthru.aqsync.data.history.parquet.ByteReader
+import earth.walkthru.aqsync.storage.StorageException
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Instant
@@ -27,6 +28,9 @@ class StagedFile(val path: String, val name: String, val mime: String, val run: 
 interface ExportSpace {
     /** Removes every earlier run, then creates a new, empty one. */
     fun newRun(): ExportRun
+
+    /** Bytes a new run may still use, or null when the platform cannot tell (#61). */
+    fun freeBytes(): Long? = null
 }
 
 /** One export's directory. */
@@ -87,16 +91,38 @@ object ArchiveExport {
         return "${p(t.year, 4)}${p(t.month.ordinal + 1)}${p(t.day)}-${p(t.hour)}${p(t.minute)}${p(t.second)}"
     }
 
-    /** Writes [entries] as one STORED zip named [name] into a new run. The run is deleted on failure. */
+    /**
+     * Writes [entries] as one STORED zip into [sink], the writer every zip export shares (#61). Each
+     * entry is opened once and closed after its copy. The sink stays open for the caller to close.
+     */
+    fun writeZip(sink: ExportSink, entries: List<ExportEntry>) {
+        val zip = StoredZipWriter(sink)
+        for (e in entries) e.open().use { zip.add(e.path, it, e.modifiedEpochMs) }
+        zip.finish()
+    }
+
+    /**
+     * An upper bound of the zip [writeZip] writes for [entries]: the bytes, both headers with their
+     * zip64 fields per entry, and the end records.
+     */
+    fun plannedZipBytes(entries: List<ExportEntry>): Long = entries.sumOf { e ->
+        val name = e.path.encodeToByteArray().size.toLong()
+        e.open().use { it.size } + 2 * name + ZIP_ENTRY_OVERHEAD
+    } + ZIP_END_OVERHEAD
+
+    /**
+     * Writes [entries] as one STORED zip named [name] into a new run. A space that reports fewer free
+     * bytes than [plannedZipBytes] fails with [StorageException] before a run exists. The run is
+     * deleted on failure.
+     */
     fun stageZip(space: ExportSpace, entries: List<ExportEntry>, name: String): StagedFile {
         require(entries.isNotEmpty()) { "nothing to export" }
+        // A new run first deletes the runs before it, so their bytes count as free.
         val run = space.newRun()
         try {
-            run.create(name).use { sink ->
-                val zip = StoredZipWriter(sink)
-                for (e in entries) zip.add(e.path, e.open(), e.modifiedEpochMs)
-                zip.finish()
-            }
+            val free = space.freeBytes()
+            if (free != null && plannedZipBytes(entries) > free) throw StorageException("not enough free space for the export")
+            run.create(name).use { sink -> writeZip(sink, entries) }
             return StagedFile(run.path(name), name, ZIP_MIME, run)
         } catch (t: Throwable) {
             run.delete()
@@ -119,7 +145,7 @@ object ArchiveExport {
                 var name = base
                 var n = 1
                 while (!used.add(name)) name = "${n++}-$base"
-                run.create(name).use { sink -> copy(e.open(), sink) }
+                run.create(name).use { sink -> e.open().use { copy(it, sink) } }
                 StagedFile(run.path(name), name, PARQUET_MIME, run)
             }
         } catch (t: Throwable) {
@@ -127,6 +153,12 @@ object ArchiveExport {
             throw t
         }
     }
+
+    // Local header 30 + zip64 extra 20, central header 46 + zip64 extra 28.
+    private const val ZIP_ENTRY_OVERHEAD = 124L
+
+    // End of central directory 22, zip64 end record 56 and its locator 20.
+    private const val ZIP_END_OVERHEAD = 98L
 
     private fun copy(reader: ByteReader, sink: ExportSink) {
         var at = 0L

@@ -107,32 +107,33 @@ class HistorySeriesReader(
         val seen = RowKeys()
         var estimatedRows = 0L
         for (f in files) {
-            val pf = open(f) ?: continue
-            val md = pf.metadata
-            val utc = md.leaf(ParquetIndexer.UTC)?.let { pf.readColumn(it) } ?: continue
-            val bootHi = md.leaf("boot_id_hi")?.let { pf.readColumn(it) }
-            val bootLo = md.leaf("boot_id_lo")?.let { pf.readColumn(it) }
-            val seq = md.leaf(ParquetIndexer.SEQ)?.let { pf.readColumn(it) }
-            val anchor = if (f.hasEstimatedUtc) anchors[f.bootId]?.takeIf { it.boot == md.bootId } else null
-            val mono = if (anchor != null) md.leaf(ParquetIndexer.MONO)?.let { pf.readColumn(it) } else null
-            val gate = metric.gate?.let { g -> md.leaf(g.column)?.let { pf.readColumn(it) } }
-            val col = md.leaf(metric.column)?.let { pf.readColumn(it) }
-            for (i in 0 until utc.size) {
-                var est = false
-                val ns = utc.asLong(i) ?: run {
-                    val m = mono?.asLong(i) ?: return@run null
-                    est = true
-                    anchor?.estimateNsOrNull(m)
-                } ?: continue
-                val s = ns.floorDiv(NS)
-                if (s < fromS || s >= toS) continue
-                if (!seen.firstSight(bootHi?.asLong(i), bootLo?.asLong(i), seq?.asLong(i), ns)) continue
-                val ok = metric.accepts(gate?.asLong(i))
-                val v = if (ok) col?.asDouble(i)?.toFloat()?.takeIf { it.isFinite() } else null
-                times += s
-                values += (v ?: Float.NaN)
-                estimatedFlags += est
-                if (est && v != null) estimatedRows++
+            open(f)?.use { pf ->
+                val md = pf.metadata
+                val utc = md.leaf(ParquetIndexer.UTC)?.let { pf.readColumn(it) } ?: return@use
+                val bootHi = md.leaf("boot_id_hi")?.let { pf.readColumn(it) }
+                val bootLo = md.leaf("boot_id_lo")?.let { pf.readColumn(it) }
+                val seq = md.leaf(ParquetIndexer.SEQ)?.let { pf.readColumn(it) }
+                val anchor = if (f.hasEstimatedUtc) anchors[f.bootId]?.takeIf { it.boot == md.bootId } else null
+                val mono = if (anchor != null) md.leaf(ParquetIndexer.MONO)?.let { pf.readColumn(it) } else null
+                val gate = metric.gate?.let { g -> md.leaf(g.column)?.let { pf.readColumn(it) } }
+                val col = md.leaf(metric.column)?.let { pf.readColumn(it) }
+                for (i in 0 until utc.size) {
+                    var est = false
+                    val ns = utc.asLong(i) ?: run {
+                        val m = mono?.asLong(i) ?: return@run null
+                        est = true
+                        anchor?.estimateNsOrNull(m)
+                    } ?: continue
+                    val s = ns.floorDiv(NS)
+                    if (s < fromS || s >= toS) continue
+                    if (!seen.firstSight(bootHi?.asLong(i), bootLo?.asLong(i), seq?.asLong(i), ns)) continue
+                    val ok = metric.accepts(gate?.asLong(i))
+                    val v = if (ok) col?.asDouble(i)?.toFloat()?.takeIf { it.isFinite() } else null
+                    times += s
+                    values += (v ?: Float.NaN)
+                    estimatedFlags += est
+                    if (est && v != null) estimatedRows++
+                }
             }
         }
         // Files come ordered by first UTC and rows inside are ordered, a FLUSH file can still interleave.

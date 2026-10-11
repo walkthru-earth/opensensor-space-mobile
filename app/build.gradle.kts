@@ -57,6 +57,13 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+        // The ABIs every native library ships for. x86 and x86_64 lack h3, so they are not packaged (#61).
+        // tools/check_apk_abis.py fails CI when the APK carries any other set.
+        ndk {
+            // ChromeOS runs these ARM builds through its binary translator.
+            //noinspection ChromeOsAbiSupport
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
     }
 
     signingConfigs {

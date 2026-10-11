@@ -70,6 +70,8 @@ class FilesControllerTest {
     /** Runs in memory, each one a map of name to bytes, with a flag once deleted. */
     private class Space : ExportSpace {
         val runs = mutableListOf<Run>()
+        var free: Long? = null
+        override fun freeBytes(): Long? = free
 
         inner class Run(val id: Int) : ExportRun {
             val files = LinkedHashMap<String, ByteArray>()
@@ -115,7 +117,14 @@ class FilesControllerTest {
     private fun record(station: String, name: String, bytes: ByteArray) =
         ArchiveRecord(station = station, name = name, bytes = bytes.size.toLong(), crc32 = 1, sha256 = "x", syncedAtEpochMs = 1_000, sourceDevice = station)
 
-    private class Fixture(scope: TestScope, val store: Store, val index: Index, owner: String?, daily: (suspend () -> List<ExportEntry>)? = null) {
+    private class Fixture(
+        scope: TestScope,
+        val store: Store,
+        val index: Index,
+        owner: String?,
+        daily: (suspend () -> List<ExportEntry>)? = null,
+        holdDaily: suspend (suspend () -> Unit) -> Unit = { it() },
+    ) {
         val space = Space()
         val owner = MutableStateFlow(owner)
 
@@ -130,17 +139,22 @@ class FilesControllerTest {
             space,
             this.owner,
             daily,
+            holdDaily,
             now = { 1_790_000_000_000L },
             io = UnconfinedTestDispatcher(scope.testScheduler),
         )
     }
 
-    private fun TestScope.fixture(owner: String? = "s", daily: (suspend () -> List<ExportEntry>)? = null): Fixture {
+    private fun TestScope.fixture(
+        owner: String? = "s",
+        daily: (suspend () -> List<ExportEntry>)? = null,
+        holdDaily: suspend (suspend () -> Unit) -> Unit = { it() },
+    ): Fixture {
         val a = record("s", nameA, bytesA)
         val b = record("s", nameB, bytesB)
         val other = record("t", nameA, bytesB)
         val store = Store(mapOf(a.key to bytesA, b.key to bytesB, other.key to bytesB))
-        return Fixture(this, store, Index(listOf(a, b, other)), owner, daily)
+        return Fixture(this, store, Index(listOf(a, b, other)), owner, daily, holdDaily)
     }
 
     @Test
@@ -183,6 +197,23 @@ class FilesControllerTest {
         val zip = p.saved.single()
         assertTrue(zip.name.startsWith("opensensor-space-archive-") && zip.name.endsWith(".zip"), zip.name)
         assertTrue(f.space.runs.single().deleted)
+    }
+
+    @Test
+    fun aZipWithoutRoomSaysSoAndStagesNothing() = runTest {
+        val f = fixture()
+        f.space.free = 10
+        val messages = mutableListOf<FilesMessage>()
+        collectMessages(f.controller, messages)
+        advanceUntilIdle()
+        val p = Presenter()
+        f.controller.saveZip(p)
+        advanceUntilIdle()
+        assertEquals(listOf(FilesMessage.NO_SPACE), messages)
+        assertTrue(p.saved.isEmpty())
+        assertTrue(f.space.runs.single().deleted)
+        assertTrue(f.space.runs.single().files.isEmpty())
+        assertFalse(f.controller.state.value.exporting)
     }
 
     @Test
@@ -236,6 +267,29 @@ class FilesControllerTest {
         advanceUntilIdle()
         assertEquals(listOf(FilesMessage.NO_DAILY), messages)
         assertTrue(p.shared.isEmpty())
+    }
+
+    @Test
+    fun theDailyZipIsListedAndStagedInsideTheHoldAndSharedAfterIt() = runTest {
+        val steps = mutableListOf<String>()
+        lateinit var f: Fixture
+        val p = Presenter(closesNow = false)
+        f = fixture(
+            daily = {
+                steps += "list"
+                listOf(ExportEntry("derived/v1/s/2026-10-01.parquet", bytesA.size.toLong()) { ByteArrayReader(bytesA) })
+            },
+            holdDaily = { block ->
+                steps += "hold"
+                block()
+                steps += "staged ${f.space.runs.size}, shared ${p.shared.size}"
+            },
+        )
+        advanceUntilIdle()
+        f.controller.shareDaily(p)
+        advanceUntilIdle()
+        assertEquals(listOf("hold", "list", "staged 1, shared 0"), steps)
+        assertEquals(ShareKind.ARCHIVE, p.shared.single().second)
     }
 
     @Test

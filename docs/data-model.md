@@ -213,6 +213,12 @@ through `AppSettings`. `SettingsRepositoryTest` holds the golden key list.
 ```
 archive/<station>/<hive path>.parquet              verified device files — byte-exact SD mirror   (sync-engine)
 archive-partial/<station>/<name>.partial(.meta)    in-progress downloads                           (sync-engine)
+```
+
+Derived day files live in the OS cache directory since #61, Android `cacheDir/derived/v1/` and
+iOS `Library/Caches/derived/v1/`, so the OS may drop them and backups skip them.
+
+```
 derived/v1/<station>/day=YYYY-MM-DD.parquet        one Parquet per UTC station-day               (history-pipeline)
 derived/v1/<station>/day=YYYY-MM-DD.manifest.json  sources (name, crc32, time_anchor), coverage    (history-pipeline)
 ```
@@ -227,7 +233,7 @@ zip stays the byte-exact mirror and the derived zip is the small analysis-ready 
 | Class | Directories | Janitor |
 | --- | --- | --- |
 | Durable | `archive/`, the Room database, `clock-anchors/` (iOS `SensorArchive/`, its receipts, `SensorArchive-clock-anchors/`) | never deletes |
-| Rebuildable | `derived/v1/` | old derived temps only |
+| Rebuildable | `cacheDir/derived/v1/` (iOS `Library/Caches/derived/v1/`), the map tile cache `cacheDir/maplibre-cache.db` | old derived temps, a `derived/` left in `filesDir` or Application Support by an older build (removed whole), then the derived quota |
 | Scratch | `archive-partial/`, `storage-tmp/`, `cache/export/` (iOS `tmp/opensensor-export/`) | temps after 1 h (derived builds stream into theirs), export runs after 1 h, partials of an unknown station after 1 h, any partial after 30 days |
 | Settings | `datastore/` | never deletes |
 
@@ -244,7 +250,28 @@ between commit and record), checks size, CRC-32, SHA-256 and `PAR1`, and indexes
 `sourceDevice = "adopted"` through `ArchiveIndex.putIfAbsent` (Room `INSERT OR IGNORE`, iOS
 `createNoReplace` receipt), so a record the engine writes meanwhile is never replaced. A final that
 fails `PAR1` stays in place, counted as unverifiable. A stale partial is re-listed before it is
-deleted, since opening a partial rewrites its meta. The log line has counts only. `StorageBudget` reports free bytes per class for the free-space gate of #55.
+deleted, since opening a partial rewrites its meta. The 30 day sweep re-lists under the station's
+`WriterLeases` lease, the one the sync engine holds while it writes that file, so a resume that
+starts during the sweep keeps its partial. The log line has counts only. `StorageBudget` reports free bytes per class for the free-space gate of #55.
+
+### Quotas and memory pressure (#61)
+
+`RetentionPolicy` (`:core:storage`) caps Rebuildable data, 64 MiB of derived day files and 20 MiB
+of map tiles. Durable data has no cap. `QuotaEnforcer` deletes only derived `.parquet` files, the
+oldest written first, until the total is under the cap, and keeps the manifests. A missing day file
+with a matching manifest is rebuilt when something reads it. On Android the daily export calls
+`HistoryDeriver.ensureDailyFiles()` first, and lists and zips the day files inside
+`DerivedQuota.holding`, so no eviction runs until the zip is staged. iOS has no derived reader yet.
+The quota runs after each derive pass and in the janitor. The map cap is set once per process through MapLibre
+`MapRuntimeOptions.maximumCacheSizeBytes`, before the first map. Settings shows the bytes per class
+and clears the History cache or the map cache. Sensor files have no clear button.
+
+`MemoryPressure` carries the OS signal to memory caches. Android maps `onTrimMemory`
+`TRIM_MEMORY_UI_HIDDEN` and `TRIM_MEMORY_RUNNING_LOW` to Moderate, and `TRIM_MEMORY_BACKGROUND` and
+above and `TRIM_MEMORY_RUNNING_CRITICAL` to Critical. iOS sends
+Critical on `UIApplicationDidReceiveMemoryWarningNotification`. A `MemoryTrimmable` cache trims to half
+its budget on Moderate and clears on Critical. The iOS History tiers keep at most 8 MiB of day
+columns (`ByteBudgetLru`) and the bundled Discover sample feed at most 1 MiB.
 
 These relative paths are defined once, in `ArchiveLayout` (`:core:archive`), for both phones. The
 root is Android `filesDir`. iOS still keeps its finals under `Application Support/SensorArchive/`

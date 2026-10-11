@@ -27,7 +27,7 @@ Bytes reach the decoder through two narrow seams, a blocking `ByteReader` and a 
 
 | Type | What it is | Implementations |
 | --- | --- | --- |
-| `ByteReader` | `size`, `read(offset, length)` and `view(offset, length)`, absolute and thread-safe, for `ParquetFile` | `ByteArrayReader`, `MappedFileReader` (JVM `FileChannel.map`), `MappedDataReader` (iOS `NSData`, `NSDataReadingMappedIfSafe`) |
+| `ByteReader` | `size`, `read(offset, length)` and `view(offset, length)`, absolute and thread-safe, for `ParquetFile`. `AutoCloseable` since #61, a read after `close()` throws. Close drops the mapping, the JVM unmaps it when collected and Foundation when the last `NSData` reference goes | `ByteArrayReader`, `MappedFileReader` (JVM `FileChannel.map`), `MappedDataReader` (iOS `NSData`, `NSDataReadingMappedIfSafe`) |
 | `RangeSource` | suspending `id()`, `readTail(n)`, `readRanges(ranges)` returning one `ByteView` per range, and `close()`, for `ParquetReader` | `MemoryRangeSource`, `LocalRangeSource` (JVM `FileChannel`, iOS `pread`), `CoalescingRangeSource` (wraps another), `HttpRangeSource` in `:core:net` |
 | `ByteView` | a read-only window over a `ByteArray`. The decoder slices views and never copies them | made by every source |
 | `SourceId` | uri, size and version (ETag over HTTP, size and modification time for a file), one immutable version of a file | the `FooterCache` key |

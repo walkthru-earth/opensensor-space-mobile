@@ -11,6 +11,8 @@ import earth.walkthru.aqsync.data.local.database.DerivedDayDao
 import earth.walkthru.aqsync.data.local.database.MetricBucket
 import earth.walkthru.aqsync.data.local.database.MetricBucketDao
 import earth.walkthru.aqsync.data.sync.FileArchive
+import earth.walkthru.aqsync.storage.DerivedQuota
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
@@ -44,6 +46,7 @@ class HistoryDeriver @Inject constructor(
     private val dayDao: DerivedDayDao,
     private val store: DerivedStore,
     private val indexer: HistoryIndexer,
+    private val quota: DerivedQuota,
 ) : HistoryRefresher {
     data class Result(val daysChecked: Int, val daysRebuilt: Int, val rowsAggregated: Long)
 
@@ -95,7 +98,9 @@ class HistoryDeriver @Inject constructor(
                     val sources = archivedFileDao.withUtcBetween(station, dayStartNs, dayStartNs + DAY_NS)
                     val sig = signature(sources)
                     val cached = known[day]
-                    if (cached?.sourceSignature == sig && cached.dailyFile != null && store.dayFile(station, day).isFile && store.manifestFile(station, day).isFile) continue
+                    // A missing day file with a current signature was evicted by the quota or the OS. It is a
+                    // cache miss, rebuilt when the export reads it, not here, so eviction never churns.
+                    if (cached?.sourceSignature == sig && cached.dailyFile != null) continue
                     val built = buildDay(station, day, sources, anchorsByStation[station] ?: emptyMap())
                     rebuilt++
                     rows += built
@@ -112,7 +117,55 @@ class HistoryDeriver @Inject constructor(
             // "derived 0 of N" (debug) is the healthy line after a pass with nothing new — a rebuild on
             // every pass was the symptom of the @Upsert bug (README decisions, 2026-09-18).
             if (rebuilt > 0) Log.i(TAG, "derived $rebuilt of $checked station-days ($rows rows)") else Log.d(TAG, "derived 0 of $checked station-days (nothing changed)")
+            if (rebuilt > 0) enforceQuota()
             Result(checked, rebuilt, rows)
+        }
+    }
+
+    /**
+     * Rebuilds the daily file of every derived day whose file is gone, evicted by the quota or cleared
+     * by the OS. The daily zip export calls it before it reads the derived tree. The quota is not
+     * enforced here, so the export sees every day, the next derive pass or janitor run trims it again.
+     * Returns how many files it rebuilt.
+     */
+    suspend fun ensureDailyFiles(station: String? = null): Int = mutex.withLock {
+        withContext(Dispatchers.IO) {
+            var rebuilt = 0
+            val stations = if (station != null) listOf(station) else dayDao.stations()
+            for (s in stations) {
+                val missing = dayDao.forStation(s).filter { it.dailyFile != null && !store.dayFile(s, it.epochDay).isFile }
+                if (missing.isEmpty()) continue
+                val files = archivedFileDao.forStation(s)
+                val anchors = TimeEstimate.anchors(files.map { it.info() }, indexer.clockAnchors.anchors(s))
+                for (day in missing) {
+                    val dayStartNs = day.epochDay * DAY_NS
+                    val sources = archivedFileDao.withUtcBetween(s, dayStartNs, dayStartNs + DAY_NS)
+                    val sig = signature(sources)
+                    try {
+                        // The signature check keeps a stale day for the next derive pass, which rebuilds its tiers too.
+                        if (day.sourceSignature != sig) continue
+                        dailyBuilder.build(s, day.epochDay, sources, sig, anchors) ?: continue
+                        rebuilt++
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Log.w(TAG, "daily file for a derived day: ${e.message}")
+                    }
+                }
+            }
+            if (rebuilt > 0) Log.i(TAG, "rebuilt $rebuilt evicted daily files")
+            rebuilt
+        }
+    }
+
+    private suspend fun enforceQuota() {
+        try {
+            val report = quota.enforce()
+            if (report.evicted > 0) Log.i(TAG, report.describe())
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "derived quota: ${e.message}")
         }
     }
 
@@ -125,10 +178,11 @@ class HistoryDeriver @Inject constructor(
             val file = archive.fileFor(src.station, src.name)
             if (!file.isFile) continue
             try {
-                val pf = ParquetFile.open(file)
-                // Estimated time only for files that have no UTC of their own and whose boot has an anchor.
-                agg.add(pf, if (src.hasEstimatedUtc) anchors[src.bootId] else null)
-                rows += pf.numRows
+                ParquetFile.open(file).use { pf ->
+                    // Estimated time only for files that have no UTC of their own and whose boot has an anchor.
+                    agg.add(pf, if (src.hasEstimatedUtc) anchors[src.bootId] else null)
+                    rows += pf.numRows
+                }
             } catch (e: ParquetFormatException) {
                 Log.w(TAG, "${src.name}: ${e.message}")
             }

@@ -4,7 +4,7 @@
 #   assets replaced after upload), so the newest build is at .../releases/tag/latest.
 # - A `v*` tag (e.g. `v1.2.0`) publishes a proper, permanent release with the same assets.
 #
-# One universal APK includes every ABI supplied by zstd-jni. Room uses the platform's SQLite;
+# One APK carries the two ARM ABIs every native library ships (x86 lacks h3, #61). Room uses the platform's SQLite;
 # the Parquet reader is pure Kotlin and delegates ZSTD decompression to that bundled library.
 # `minSdk 31` → Android 12 and newer, phones and tablets.
 #
@@ -162,6 +162,10 @@ jobs:
             echo "::error::Built APK signer does not match the validated release certificate"
             exit 1
           fi
+
+      - name: Check the APK native ABIs
+        shell: bash
+        run: python3 tools/check_apk_abis.py app/build/outputs/apk/release/app-release.apk
 
       - name: Name and checksum the artifacts
         id: files
