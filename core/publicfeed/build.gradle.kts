@@ -1,7 +1,8 @@
 // The public Discover feed (docs/devices-and-discovery.md Part 2). `commonMain` holds the feed port,
 // the Parquet feed reader (the portable :core:parquet reader, so Android and iOS share one path),
 // the H3 interface, the viewport cover, the bundled sample source and the colour scale. `jvmMain`
-// binds H3 to com.uber:h3. `iosMain` holds the iOS H3 binding.
+// binds H3 to com.uber:h3. `iosMain` holds the iOS H3 binding. The live OpenAQ aggregates feed reads
+// over :core:net HTTP ranges and folds daily rows with kotlinx-datetime local dates.
 plugins {
     id("opensensor.kmp.library")
     alias(libs.plugins.kotlin.serialization)
@@ -15,6 +16,10 @@ kotlin {
             api(project(":core:storage"))
             // WHO 2021 steps for PM2.5 and PM10 (CellScale, HealthAxis).
             api(project(":core:airquality"))
+            // OpenAqAggregatesFeed takes an HttpRangeEngine and reads through HttpRangeSource.
+            api(project(":core:net"))
+            // Daily rows carry a station local date (CellRow.date, DailyCellFold).
+            api(libs.kotlinx.datetime)
             implementation(libs.kotlinx.serialization.json)
         }
         commonTest.dependencies {
