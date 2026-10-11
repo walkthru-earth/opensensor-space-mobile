@@ -32,6 +32,7 @@ class ManifestPermissionsTest {
                 "android.permission.ACCESS_LOCAL_NETWORK",
                 "android.permission.FOREGROUND_SERVICE",
                 "android.permission.FOREGROUND_SERVICE_DATA_SYNC",
+                "android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE",
                 "android.permission.POST_NOTIFICATIONS",
                 "android.permission.WAKE_LOCK",
                 "android.permission.REQUEST_COMPANION_RUN_IN_BACKGROUND",

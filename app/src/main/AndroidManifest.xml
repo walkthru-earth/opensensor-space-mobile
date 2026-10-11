@@ -30,6 +30,9 @@
       and not a second longer. POST_NOTIFICATIONS is requested on API 33+ only when the user starts
       a sync or turns on Auto-sync, so the progress notification is visible. A denial only hides
       the notification, the service still runs.
+      FOREGROUND_SERVICE_CONNECTED_DEVICE: the same service asks for `connectedDevice` first, since
+      it talks to the user's own sensor and that type has no daily cap. Android 14+ grants it only
+      with BLUETOOTH_CONNECT or a network permission, otherwise the service falls back to dataSync.
       The auto-sync WorkManager worker (data/background/SyncWorker) uses the same type through
       WorkManager's SystemForegroundService, merged below.
 
@@ -63,6 +66,7 @@
     <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.REQUEST_COMPANION_RUN_IN_BACKGROUND" />
@@ -113,7 +117,7 @@
         <service
             android:name=".data.background.SyncForegroundService"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="connectedDevice|dataSync" />
 
         <!--
           Auto-sync (data/background/SyncWorker, AutoSyncScheduler). WorkManager's own foreground
