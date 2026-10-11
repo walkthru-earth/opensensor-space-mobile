@@ -1,8 +1,10 @@
 package earth.walkthru.aqsync.link
 
+import earth.walkthru.aqsync.data.ble.TransportException
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.protocol.Opcode
 import earth.walkthru.aqsync.data.protocol.Request
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
@@ -15,6 +17,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import kotlin.time.Duration
 
 class LinkOweCloseTest {
     private val events = mutableListOf<LinkEvent>()
@@ -101,5 +104,89 @@ class LinkOweCloseTest {
         assertTrue(driver.sent.isEmpty())
         assertTrue(events.none { it is LinkEvent.CloseSent })
         assertEquals(LinkState.Closed(DisconnectCause.Deliberate("test")), s.state.value)
+    }
+
+    @Test
+    fun aLateWriteFailureOfAnEarlierOwedCloseDoesNotEndTheNextOne() = runTest {
+        val peer = ScriptedLinkDriver(respond = listReply)
+        val driver = FailFirstCloseLate(peer)
+        val s = session(driver)
+        s.open()
+        s.oweClose(3)
+        s.oweClose(4)
+        runCurrent()
+        // CLOSED for 3 arrives while its write is still in flight, so the owed CLOSE for 4 starts.
+        peer.emit(Frame.Closed(3))
+        runCurrent()
+        val next = async { TinyApi(s).list() }
+        runCurrent()
+
+        driver.failWrite.complete(Unit)
+        runCurrent()
+        assertEquals(listOf(Opcode.CLOSE), peer.sent, "LIST waits for CLOSED 4")
+        assertFalse(next.isCompleted)
+
+        peer.emit(Frame.Closed(4))
+        runCurrent()
+        assertEquals(listOf("a.parquet"), next.await())
+        assertEquals(listOf(Opcode.CLOSE, Opcode.LIST), peer.sent)
+        assertTrue(events.none { it is LinkEvent.ForeignDropped }, "CLOSED 4 was consumed by its own drain")
+    }
+
+    @Test
+    fun aCloseCancelledAfterItsWriteIsDrainedAndNeverSentTwice() = runTest {
+        val driver = ScriptedLinkDriver(respond = listReply)
+        val s = session(driver)
+        s.open()
+        val close = launch { s.closeOwing(5) }
+        runCurrent()
+        close.cancelAndJoin()
+        runCurrent()
+        val next = async { TinyApi(s).list() }
+        runCurrent()
+
+        driver.emit(Frame.Closed(5), Frame.Aborted(Opcode.CLOSE))
+        runCurrent()
+        assertEquals(listOf("a.parquet"), next.await())
+        assertEquals(1, driver.sent.count { it == Opcode.CLOSE }, "the device sees one CLOSE")
+        assertTrue(events.none { it is LinkEvent.CloseSent })
+    }
+
+    @Test
+    fun aCloseCancelledBeforeItsWriteIsOwedOnce() = runTest {
+        val driver = ScriptedLinkDriver()
+        val s = session(driver)
+        s.open()
+        val list = async { TinyApi(s).list() }
+        runCurrent()
+        val close = launch { s.closeOwing(5) }
+        runCurrent()
+        close.cancelAndJoin()
+        runCurrent()
+        assertEquals(listOf(Opcode.LIST), driver.sent)
+
+        driver.emit(Frame.File(10, "a.parquet"), Frame.ListEnd(1, 0, 0, 0))
+        runCurrent()
+        assertEquals(listOf("a.parquet"), list.await())
+        assertEquals(listOf(Opcode.LIST, Opcode.CLOSE), driver.sent)
+        assertTrue(events.any { it == LinkEvent.CloseSent(5) })
+    }
+
+    private suspend fun LinkSession.closeOwing(handle: Int): Frame =
+        exchange(RequestSpec.of(Request.Close(handle)), oweCloseIfUnsent = handle) { frame, terminal -> if (terminal) frame else null }
+
+    /** Holds the first `CLOSE` write until [failWrite], then fails it. */
+    private class FailFirstCloseLate(private val peer: ScriptedLinkDriver) : LinkDriver by peer {
+        val failWrite = CompletableDeferred<Unit>()
+        private var held = false
+
+        override suspend fun send(body: ByteArray, deadline: Duration) {
+            if (!held && (body[0].toInt() and 0xFF) == Opcode.CLOSE) {
+                held = true
+                failWrite.await()
+                throw TransportException("write failed")
+            }
+            peer.send(body, deadline)
+        }
     }
 }

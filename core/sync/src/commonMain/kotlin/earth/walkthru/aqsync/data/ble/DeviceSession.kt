@@ -212,7 +212,7 @@ class DeviceSession(val link: LinkSession, val transport: AqTransport, val frame
     }
 
     /** `CLOSE handle` → `CLOSED`. */
-    suspend fun close(handle: Int): Frame.Closed = single(Request.Close(handle), "CLOSE")
+    suspend fun close(handle: Int): Frame.Closed = single(Request.Close(handle), "CLOSE", oweCloseIfUnsent = handle)
 
     /**
      * Leave `CLOSE handle` to the link without waiting. Used when a transfer is cancelled or
@@ -403,8 +403,8 @@ class DeviceSession(val link: LinkSession, val transport: AqTransport, val frame
      * Run one request on the link. An `ERROR` routed to it ends the reply, and becomes the typed
      * [DeviceErrorException]. [onFrame] returns the result on the terminal frame, null before it.
      */
-    private suspend fun <R : Any> request(request: Request, onFrame: suspend (Frame) -> R?): R = try {
-        link.exchange(RequestSpec.of(request)) { frame, _ ->
+    private suspend fun <R : Any> request(request: Request, oweCloseIfUnsent: Int? = null, onFrame: suspend (Frame) -> R?): R = try {
+        link.exchange(RequestSpec.of(request), oweCloseIfUnsent) { frame, _ ->
             if (frame is Frame.Error) throw DeviceErrorException.of(frame)
             onFrame(frame)
         }
@@ -412,8 +412,8 @@ class DeviceSession(val link: LinkSession, val transport: AqTransport, val frame
         frames.flush()
     }
 
-    private suspend inline fun <reified F : Frame> single(request: Request, label: String): F =
-        request(request) { frame -> frame as? F ?: throw unexpected(label, frame) }
+    private suspend inline fun <reified F : Frame> single(request: Request, label: String, oweCloseIfUnsent: Int? = null): F =
+        request(request, oweCloseIfUnsent) { frame -> frame as? F ?: throw unexpected(label, frame) }
 
     private fun concat(slices: List<ByteArray>): ByteArray {
         val out = ByteArray(slices.sumOf { it.size })

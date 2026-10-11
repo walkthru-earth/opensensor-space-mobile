@@ -164,10 +164,17 @@ class LinkSession(
      * Send [spec] and hand each reply frame to [onFrame], with `terminal` true on the last one.
      * Returns the first non-null result. Returning before the terminal frame, throwing,
      * cancelling or timing out all leave the rest of the reply to the router's drain.
+     *
+     * A `CLOSE` passes its handle as [oweCloseIfUnsent]. Abandoned before it was written, it is
+     * then owed ([oweClose]). Once written, its reply is drained instead, so it never goes out twice.
      */
-    suspend fun <R : Any> exchange(spec: RequestSpec, onFrame: suspend (frame: Frame, terminal: Boolean) -> R?): R {
+    suspend fun <R : Any> exchange(
+        spec: RequestSpec,
+        oweCloseIfUnsent: Int? = null,
+        onFrame: suspend (frame: Frame, terminal: Boolean) -> R?,
+    ): R {
         require(spec.expectsResponse) { "${Opcode.name(spec.op)} has no reply, use send" }
-        return withSlot(spec) { owner -> receive(owner) { _, frame, terminal -> onFrame(frame, terminal) } }
+        return withSlot(spec, oweCloseIfUnsent) { owner -> receive(owner) { _, frame, terminal -> onFrame(frame, terminal) } }
     }
 
     /** [exchange] that also hands over each frame's bytes as received, for the debug raw command. */
@@ -303,9 +310,9 @@ class LinkSession(
 
     // ---- caller side ----
 
-    private suspend fun <T> withSlot(spec: RequestSpec, block: suspend (Owner) -> T): T {
+    private suspend fun <T> withSlot(spec: RequestSpec, oweCloseIfUnsent: Int? = null, block: suspend (Owner) -> T): T {
         ensureUsable()
-        val owner = Owner(spec)
+        val owner = Owner(spec, oweCloseIfUnsent)
         if (events.trySend(Event.Enqueue(owner)).isFailure) throw LinkClosedException(_closed.getCompleted())
         try {
             select<Unit> {
@@ -371,9 +378,13 @@ class LinkSession(
                         owed.addLast(event.handle)
                         admitNext()
                     }
-                    Event.OwedWriteFailed -> drain?.let { if (it.owed) endDrain(it) }
+                    // A late failure of an earlier drain must not end the current one.
+                    is Event.OwedWriteFailed -> if (drain === event.drain) endDrain(event.drain)
                     Event.ByeSeen -> refuseWaiting()
-                    Event.AbortFailed -> drain?.let { it.abortPending = false; finishDrainIfDone(it) }
+                    is Event.AbortFailed -> if (drain === event.drain) {
+                        event.drain.abortPending = false
+                        finishDrainIfDone(event.drain)
+                    }
                     Event.DrainTimeout -> drain?.let { exceed(it) }
                 }
             }
@@ -435,7 +446,11 @@ class LinkSession(
     }
 
     private fun onRelease(owner: Owner) {
-        if (waiting.remove(owner)) return
+        if (!owner.written) owner.oweCloseIfUnsent?.let { owed.addLast(it) }
+        if (waiting.remove(owner)) {
+            admitNext()
+            return
+        }
         discardInbox(owner)
         if (owner !== current) return
         current = null
@@ -476,7 +491,8 @@ class LinkSession(
     private fun startDrain(spec: RequestSpec, replied: Boolean) {
         val proto = (_state.value as? LinkState.Ready)?.info?.proto ?: 0
         val sendAbort = proto >= AqGatt.PROTOCOL_VERSION && spec.op != Opcode.ABORT
-        drain = Drain(spec.op, spec.drainBound, timeSource.markNow(), abortPending = sendAbort, replied = replied)
+        val d = Drain(spec.op, spec.drainBound, timeSource.markNow(), abortPending = sendAbort, replied = replied)
+        drain = d
         if (!sendAbort) return
         own.launch {
             try {
@@ -485,7 +501,7 @@ class LinkSession(
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
-                events.trySend(Event.AbortFailed)
+                events.trySend(Event.AbortFailed(d))
             }
         }
     }
@@ -497,7 +513,8 @@ class LinkSession(
      */
     private fun sendOwedClose(handle: Int) {
         val spec = RequestSpec.of(Request.Close(handle))
-        drain = Drain(spec.op, spec.drainBound, timeSource.markNow(), abortPending = false, replied = false, owed = true)
+        val d = Drain(spec.op, spec.drainBound, timeSource.markNow(), abortPending = false, replied = false)
+        drain = d
         own.launch {
             try {
                 writeLock.withLock { driver.send(spec.body, spec.writeDeadline) }
@@ -505,7 +522,7 @@ class LinkSession(
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
-                events.trySend(Event.OwedWriteFailed)
+                events.trySend(Event.OwedWriteFailed(d))
             }
         }
     }
@@ -581,7 +598,7 @@ class LinkSession(
         }
     }
 
-    private class Owner(val spec: RequestSpec) {
+    private class Owner(val spec: RequestSpec, val oweCloseIfUnsent: Int?) {
         val inbox = Channel<Delivery>(Channel.UNLIMITED)
         val admitted = CompletableDeferred<Unit>()
 
@@ -602,7 +619,6 @@ class LinkSession(
         val started: ComparableTimeMark,
         var abortPending: Boolean,
         val replied: Boolean,
-        val owed: Boolean = false,
     ) {
         var frames = 0
         var bytes = 0L
@@ -614,9 +630,9 @@ class LinkSession(
         class Enqueue(val owner: Owner) : Event
         class Release(val owner: Owner) : Event
         class OweClose(val handle: Int) : Event
-        data object OwedWriteFailed : Event
+        class OwedWriteFailed(val drain: Drain) : Event
         data object ByeSeen : Event
-        data object AbortFailed : Event
+        class AbortFailed(val drain: Drain) : Event
         data object DrainTimeout : Event
     }
 

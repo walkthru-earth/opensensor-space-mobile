@@ -144,12 +144,14 @@ class SyncEngine(
         }
     }
 
-    /** `CLOSE` as a regular request. The device also closes on the next `OPEN` or on disconnect. */
+    /**
+     * `CLOSE` as a regular request. Cancelled before it was written, the link owes it. Once written,
+     * the link drains its reply. The device also closes on the next `OPEN` or on disconnect.
+     */
     private suspend fun closeHandle(session: DeviceSession, handle: Int) {
         try {
             session.close(handle)
         } catch (e: CancellationException) {
-            session.oweClose(handle)
             throw e
         } catch (e: Exception) {
             log("CLOSE $handle not confirmed, ${e::class.simpleName}")
