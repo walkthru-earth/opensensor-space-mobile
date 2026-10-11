@@ -14,7 +14,7 @@ class BleDisconnectCausesTest {
     fun `GATT statuses map to causes`() {
         assertEquals(DisconnectCause.PeerClosed(), BleDisconnectCauses.ofStatus(BleDisconnectCauses.PEER_USER))
         assertEquals(DisconnectCause.PeerClosed(), BleDisconnectCauses.ofStatus(BleLinkDriver.GATT_DISCONNECTED))
-        assertEquals(DisconnectCause.Auth(AuthKind.BOND_FAILED), BleDisconnectCauses.ofStatus(5))
+        assertEquals(DisconnectCause.Auth(AuthKind.ENCRYPTION_FAILED), BleDisconnectCauses.ofStatus(5))
         assertEquals(DisconnectCause.Auth(AuthKind.ENCRYPTION_FAILED), BleDisconnectCauses.ofStatus(15))
         assertEquals(DisconnectCause.Auth(AuthKind.BOND_MISSING), BleDisconnectCauses.ofStatus(BleDisconnectCauses.KEY_MISSING))
         assertEquals(DisconnectCause.Auth(AuthKind.BOND_MISSING), BleDisconnectCauses.ofStatus(6))
@@ -55,5 +55,16 @@ class BleDisconnectCausesTest {
         assertFalse(BleDisconnectCauses.needsPairingRepair(DisconnectCause.Auth(AuthKind.TOKEN_REJECTED)))
         assertFalse(BleDisconnectCauses.needsPairingRepair(DisconnectCause.PeerClosed()))
         assertFalse(BleDisconnectCauses.needsPairingRepair(null))
+    }
+
+    @Test
+    fun `a status that asks for repair maps to a cause that asks for repair`() {
+        for (status in listOf(5, 15, 6, 61, BleDisconnectCauses.KEY_MISSING, 8, 19, 22, 133, BleLinkDriver.GATT_DISCONNECTED)) {
+            assertEquals(
+                "status $status",
+                BleConnectionFailure.isRepairStatus(status),
+                BleDisconnectCauses.needsPairingRepair(BleDisconnectCauses.ofStatus(status)),
+            )
+        }
     }
 }

@@ -586,6 +586,23 @@ class DeviceConnectionRepositoryTest {
     }
 
     @Test
+    fun `idle reconnect stops at the first open that needs pairing repair`() = harnessTest { h ->
+        h.repo.connect(ADDRESS, "AQ-6b40", fake = true)
+        h.until { h.repo.connectionState.value.isReady }
+        h.factory.reconnectFailure = DisconnectCause.Auth(AuthKind.BOND_MISSING)
+        h.device.disconnect()
+        h.until { h.repo.reconnecting.value != null }
+        h.until { h.factory.fakeConnects == 2 }
+        h.advance(120_000)
+
+        assertEquals(2, h.factory.fakeConnects)
+        assertNull(h.repo.reconnecting.value)
+        assertTrue(BleConnectionFailure.needsPairingRepair(h.repo.connectionState.value))
+        assertEquals(1, h.events.count { it == DeviceEvent.Error(DeviceMessage.PairingRepair) })
+        assertFalse(h.events.any { it is DeviceEvent.Error && it.message is DeviceMessage.ReconnectFailed })
+    }
+
+    @Test
     fun `rejected LAN token is cleared and the Bluetooth session renews it`() = harnessTest { h ->
         h.knownDao.upsert(h.enrolled(token = OLD_TOKEN))
         h.lan.devices.value = mapOf(h.device.station to h.lanTarget())

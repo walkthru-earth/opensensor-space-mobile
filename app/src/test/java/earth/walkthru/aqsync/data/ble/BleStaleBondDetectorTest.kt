@@ -52,6 +52,35 @@ class BleStaleBondDetectorTest {
     }
 
     @Test
+    fun `the count starts over after it fires`() {
+        val detector = BleStaleBondDetector(enabled = true)
+        detector.onOpenFailed(a, bonded = true, linkStatus = 19)
+        assertTrue(detector.onOpenFailed(a, bonded = true, linkStatus = 19))
+        assertFalse(detector.onOpenFailed(a, bonded = true, linkStatus = 19))
+        assertTrue(detector.onOpenFailed(a, bonded = true, linkStatus = 19))
+    }
+
+    @Test
+    fun `closes older than the window do not count`() {
+        var clock = 0L
+        val detector = BleStaleBondDetector(enabled = true, now = { clock })
+        assertFalse(detector.onOpenFailed(a, bonded = true, linkStatus = 19))
+        clock += BleStaleBondDetector.WINDOW_MS + 1
+        assertFalse(detector.onOpenFailed(a, bonded = true, linkStatus = 19))
+        clock += BleStaleBondDetector.WINDOW_MS
+        assertTrue(detector.onOpenFailed(a, bonded = true, linkStatus = 19))
+    }
+
+    @Test
+    fun `a link to an unbonded device clears the count`() {
+        val detector = BleStaleBondDetector(enabled = true)
+        detector.onOpenFailed(a, bonded = true, linkStatus = 19)
+        detector.onUnbondedLink(a)
+        assertFalse(detector.onOpenFailed(a, bonded = true, linkStatus = 19))
+        assertTrue(detector.onOpenFailed(a, bonded = true, linkStatus = 19))
+    }
+
+    @Test
     fun `off where Android reports missing keys itself`() {
         val detector = BleStaleBondDetector(enabled = false)
         repeat(5) { assertFalse(detector.onOpenFailed(a, bonded = true, linkStatus = 19)) }
