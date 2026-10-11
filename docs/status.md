@@ -4,6 +4,91 @@
 **Code:** `./gradlew verify` (the gate), `.github/workflows/verify.yml`.
 **Related:** measured device behaviour is recorded in the board-specific `../aq-parquet/docs/boards/*/bench-verified.md`; anything not recorded there is unverified.
 
+## 2026-10-11, maplibre-compose 0.20.0 and Arabic map labels on iOS (#53)
+
+maplibre-compose 0.20.0 (maplibre-native-ffi 0.202610.0) links ICU on Apple, so iOS loads the
+same basemap styles as Android and the Latin-only styles are gone. `./gradlew --no-daemon verify`
+passed on a Mac, and an unsigned Debug Xcode build for the iPhone 17 simulator succeeded. On that
+simulator, launched in Arabic with the Cairo time zone, Discover drew القاهرة, الإسكندرية and
+الأقصر joined and right to left. Simulator only. Arabic labels on an iPhone set to Arabic, and
+Discover Back returning an open sheet to peek, still need a phone check.
+
+## 2026-10-11 — latest main installed on iPad and Android
+
+Fetched `walkthru-earth/opensensor-space-mobile` main at `5604fb3e` and built
+from a detached worktree, preserving the existing checkout and its local notes.
+The Debug APK built successfully and was installed in place with `adb install -r`
+on the USB-connected OnePlus 7 Pro (GM1911, Android 16). Launch returned
+`Status: ok`, and the app process remained running. The original installation
+timestamp was retained. APK SHA-256:
+`07e8d335c7b6013c3347d19ad585dee5a267dc6255d975d3ee35680c81356adf`.
+
+Xcode 27.0 built the signed Debug device app for the paired iPad Air 13-inch M2
+(iPad14,11, iPadOS 27.0.1). Strict/deep signature verification passed;
+`devicectl` installed `earth.walkthru.opensensor` in place and successfully
+launched it; a follow-up process check confirmed it remained running. Neither
+app was uninstalled or its data cleared. The iPad data-container identifier
+changed during the update; no before-install file inventory was taken, so
+retained contents were not independently verified.
+
+Build/install/launch evidence is retained under ignored
+`app/build/install-evidence-5604fb3e/` and
+`ios/build/DeviceInstall/evidence-5604fb3e-ipad/`. This run confirms build,
+installation and launch only; BLE, LAN and file transfer were not exercised.
+No source changes or commit were made, and the full `verify` gate was not rerun.
+
+## 2026-10-10 — latest checkout installed and launched on iPhone
+
+Xcode 27.0 built the signed Debug device app from mobile `bed7949`, which includes
+the fresh archive snapshot fix. Strict/deep signature verification passed. The
+USB-connected iPhone 16 Pro (iOS 26.6.2, Developer Mode enabled) accepted the
+`earth.walkthru.opensensor` installation, and `devicectl` successfully launched
+the app. Debug dylib SHA-256:
+`6bd2511ead905b86226b553e1adab0f68a1bc26c775bac55d93bf673df012548`.
+Build, install and launch evidence is retained under ignored
+`ios/build/DeviceInstall/evidence-bed7949/`. This confirms device installation
+and launch; BLE, LAN and file transfer behavior were not exercised in this run.
+
+## 2026-10-10 — sync stability investigation and Android follow-up
+
+Read-only review of mobile `bed7949` and firmware `a53d18e` identified Android
+preparation protection/resume gaps and a canceled large-LIST reader starvation
+case. Focused existing repository, TCP and shared polling host tests passed.
+Two temporary host reproductions confirmed that preparation does not request
+foreground protection and that loss during preparation reconnects without
+starting collection; their source additions were restored. An isolated compiled
+TCP fixture reproduced false liveness failure with a full bounded response queue,
+using accelerated deadlines. These are host findings, not phone reproductions.
+An older iOS retained-connection/late-terminal issue remains source-derived and
+unreproduced. No production repair was made.
+
+Code status as of main `5604fb3e` (2026-10-11). The preparation protection and
+resume gaps and the canceled large-LIST starvation case are repaired in code by the
+#59 work (#69, #70, #79), with host regression tests in `CollectionControllerTest`
+and `LinkSessionTest`. The iOS late-terminal guard landed with #69 and #73. None
+of these repairs has phone evidence yet.
+
+The USB OnePlus 7 Pro ran the APK recorded below (`e56c48aa…add6`). At 18:41 local
+(UTC+03:00), manual background sync used LAN and completed with zero new files
+and zero failures. Interactive reconnect showed Wi-Fi LAN at 18:43:02.887.
+A foreground LIST near the next rotation saw peer EOF at 18:45:19.162; LIST
+failed, and automatic reconnect reached Ready at 18:45:24.688. The initiating
+firmware cause is unconfirmed. The recovered listing contained 42 files.
+
+The new 18:30 file (46.6 KiB) was collected while screen-off followed the Sync
+tap. Afterward the UI showed 42/42 checked files, 1.74 MiB. At 18:46:22.764 a
+local socket abort occurred with `lastEnd=COMPLETED`; BLE was Ready at
+18:46:29.260. This is consistent with idle background socket handling, but no
+corroborating OS socket-destruction event was collected. The transfer is too short
+to qualify sustained screen-off collection. LOG_TAIL returned 8,192 bytes, but
+matching incident lines were not extracted before the owner ended checks.
+The temporary Developer detail level was restored to Simple.
+
+The full ecosystem report, including source findings, evidence limits and ten
+Mermaid diagrams, is [in the parent directory](../../SYNC-STABILITY-INVESTIGATION-2026-10-10.md).
+Ignored app evidence is under `ios/build/DeviceInstall/evidence-bed7949/`.
+No current iPhone radio qualification was performed.
+
 ## 2026-10-10 — incomplete LAN listings, memory bounds and Android recovery
 
 On the connected OnePlus 7 Pro (GM1911, Android 16), the old firmware returned
@@ -724,12 +809,3 @@ CoreDevice initially refused the launch check because the iPhone was locked.
 Real-phone selected-file retry, deliberate radio interruption/recovery, two-sensor
 Collect all, and throughput remain to be observed on hardware. An install or launch
 check alone does not qualify these flows.
-
-## 2026-10-11, maplibre-compose 0.20.0 and Arabic map labels on iOS (#53)
-
-maplibre-compose 0.20.0 (maplibre-native-ffi 0.202610.0) links ICU on Apple, so iOS loads the
-same basemap styles as Android and the Latin-only styles are gone. `./gradlew --no-daemon verify`
-passed on a Mac, and an unsigned Debug Xcode build for the iPhone 17 simulator succeeded. On that
-simulator, launched in Arabic with the Cairo time zone, Discover drew القاهرة, الإسكندرية and
-الأقصر joined and right to left. Simulator only. Arabic labels on an iPhone set to Arabic, and
-Discover Back returning an open sheet to peek, still need a phone check.

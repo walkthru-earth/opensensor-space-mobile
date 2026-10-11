@@ -9,6 +9,7 @@ import androidx.work.WorkManager
 import dagger.hilt.android.HiltAndroidApp
 import earth.walkthru.aqsync.data.background.AutoSyncScheduler
 import earth.walkthru.aqsync.data.background.SyncTriggers
+import earth.walkthru.aqsync.data.coroutines.suspendRunCatching
 import earth.walkthru.aqsync.data.history.HistoryDeriver
 import earth.walkthru.aqsync.data.history.HistoryIndexer
 import earth.walkthru.aqsync.data.local.security.LanTokenMigration
@@ -70,7 +71,7 @@ class AqSyncApplication :
         // Sweep temps and stale partials and index orphan finals once per process (#60).
         StorageJanitorWorker.enqueue(WorkManager.getInstance(this))
         appScope.launch {
-            runCatching { lanTokenMigration.migratePlaintextTokens() }
+            suspendRunCatching { lanTokenMigration.migratePlaintextTokens() }
             autoSyncScheduler.start(appScope)
             syncTriggers.register(appScope)
         }
