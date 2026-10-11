@@ -2,6 +2,7 @@ package earth.walkthru.aqsync.settings
 
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 
 /**
@@ -32,5 +33,12 @@ object SettingsKeys {
     /** The `UnitSystem` name. Missing or unknown reads as Automatic. */
     val UNIT_SYSTEM: Preferences.Key<String> = stringPreferencesKey("unit_system")
 
-    val ALL: List<Preferences.Key<*>> = listOf(DETAIL_LEVEL, ADVANCED_MODE, CLOCK_SYNC_MODE, SHOW_PUBLIC_SENSORS, UNIT_SYSTEM)
+    /** `RetentionPolicy.derivedQuotaBytes`. Missing or negative reads as the default. */
+    val DERIVED_QUOTA_BYTES: Preferences.Key<Long> = longPreferencesKey("derived_quota_bytes")
+
+    /** `RetentionPolicy.mapCacheBytes`. Missing or negative reads as the default. */
+    val MAP_CACHE_BYTES: Preferences.Key<Long> = longPreferencesKey("map_cache_bytes")
+
+    val ALL: List<Preferences.Key<*>> =
+        listOf(DETAIL_LEVEL, ADVANCED_MODE, CLOCK_SYNC_MODE, SHOW_PUBLIC_SENSORS, UNIT_SYSTEM, DERIVED_QUOTA_BYTES, MAP_CACHE_BYTES)
 }

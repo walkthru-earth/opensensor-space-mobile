@@ -5,6 +5,7 @@ import earth.walkthru.aqsync.archive.ArchiveRecord
 import earth.walkthru.aqsync.archive.ArchiveStore
 import earth.walkthru.aqsync.archive.ClockAnchorStore
 import earth.walkthru.aqsync.archive.EmptyClockAnchorStore
+import earth.walkthru.aqsync.data.history.parquet.FooterCache
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 import earth.walkthru.aqsync.data.history.parquet.ParquetReader
 import earth.walkthru.aqsync.data.history.parquet.PrimitiveColumn
@@ -43,6 +44,10 @@ fun interface DerivedDayFiles {
  * with the UTC range pruning row groups and pages, and the raw files otherwise (today, while files
  * still arrive). Reactive, a new synced, indexed or re-dated file re-emits. Pure reads, nothing
  * here writes to the archive or the index.
+ *
+ * [footers] keeps the parsed footers and page indexes of derived day files, keyed by path, size and
+ * modification time, so switching the metric or re-reading the same Day window parses nothing again.
+ * A rebuilt day is a new file with a new identity and never matches an old entry.
  */
 class HistorySeriesReader(
     private val store: ArchiveStore,
@@ -51,6 +56,7 @@ class HistorySeriesReader(
     private val io: CoroutineDispatcher = Dispatchers.Default,
     private val clockAnchors: ClockAnchorStore = EmptyClockAnchorStore,
     private val derived: DerivedDayFiles = DerivedDayFiles.NONE,
+    private val footers: FooterCache = FooterCache(DERIVED_FOOTERS),
 ) {
     @OptIn(ExperimentalCoroutinesApi::class)
     fun observe(station: String, metric: MetricSpec, range: HistoryRange, window: HistoryWindow): Flow<HistorySeries> {
@@ -272,7 +278,7 @@ class HistorySeriesReader(
     ): Boolean {
         return try {
             val source = derived.open(station, day, sources, anchors) ?: return false
-            val staged = ParquetReader.open(source).use { reader ->
+            val staged = ParquetReader.open(source, footerCache = footers).use { reader ->
                 val names = reader.leaves.mapTo(HashSet()) { it.name }
                 val estimated = DailyParquetBuilder.ESTIMATED_UTC in names
                 val wanted = listOfNotNull(ParquetIndexer.UTC, DailyParquetBuilder.ESTIMATED_UTC, "boot_id_hi", "boot_id_lo", ParquetIndexer.SEQ, metric.gate?.column, metric.column).filter { it in names }
@@ -378,6 +384,9 @@ class HistorySeriesReader(
     companion object {
         /** Above this many rows the day view bins to minutes. A full day is 8,640 rows, so a full day always bins. */
         const val RAW_POINT_CAP = 3_000
+
+        /** Derived day footers kept, a month of days. Each is a few tens of KB with its page index. */
+        const val DERIVED_FOOTERS = 32
         private const val NS = 1_000_000_000L
     }
 }

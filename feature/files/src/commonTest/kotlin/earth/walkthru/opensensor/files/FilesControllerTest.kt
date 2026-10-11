@@ -100,9 +100,31 @@ class FilesControllerTest {
         }
     }
 
-    private class Presenter(val closesNow: Boolean = true, val fail: Boolean = false, val waitForever: Boolean = false) : ExportPresenter {
+    private class Presenter(
+        val closesNow: Boolean = true,
+        val fail: Boolean = false,
+        val waitForever: Boolean = false,
+        val streams: Boolean = false,
+    ) : ExportPresenter {
         val shared = mutableListOf<Pair<List<StagedFile>, ShareKind>>()
         val saved = mutableListOf<StagedFile>()
+
+        /** Each streamed save as its name and the bytes written to the picked document. */
+        val streamed = mutableListOf<Pair<String, ByteArray>>()
+        override suspend fun saveStreaming(name: String, write: suspend (ExportSink) -> Unit): Boolean? {
+            if (!streams) return null
+            val out = mutableListOf<Byte>()
+            write(
+                object : ExportSink {
+                    override fun write(bytes: ByteArray, offset: Int, length: Int) {
+                        for (i in offset until offset + length) out += bytes[i]
+                    }
+                    override fun close() = Unit
+                },
+            )
+            streamed += name to out.toByteArray()
+            return true
+        }
         override suspend fun share(files: List<StagedFile>, kind: ShareKind): Boolean {
             if (fail) error("no sheet")
             shared += files to kind
@@ -200,6 +222,27 @@ class FilesControllerTest {
         val zip = p.saved.single()
         assertTrue(zip.name.startsWith("opensensor-space-archive-") && zip.name.endsWith(".zip"), zip.name)
         assertTrue(f.space.runs.single().deleted)
+    }
+
+    @Test
+    fun aStreamingSaveWritesTheZipIntoTheDocumentAndStagesNothing() = runTest {
+        val f = fixture()
+        f.space.free = 10
+        advanceUntilIdle()
+        val p = Presenter(streams = true)
+        f.controller.saveZip(p)
+        advanceUntilIdle()
+        val (name, zip) = p.streamed.single()
+        assertTrue(name.startsWith("opensensor-space-archive-") && name.endsWith(".zip"), name)
+        assertTrue(p.saved.isEmpty())
+        assertTrue(f.space.runs.isEmpty())
+        // Local file header first, end of central directory last, and every archive file stored inside.
+        assertContentEquals(byteArrayOf(0x50, 0x4B, 0x03, 0x04), zip.copyOfRange(0, 4))
+        assertContentEquals(byteArrayOf(0x50, 0x4B, 0x05, 0x06), zip.copyOfRange(zip.size - 22, zip.size - 18))
+        val text = zip.decodeToString()
+        for (path in listOf("s/$nameA", "s/$nameB", "t/$nameA")) assertTrue(path in text, path)
+        assertTrue(bytesA.decodeToString() in text && bytesB.decodeToString() in text)
+        assertFalse(f.controller.state.value.exporting)
     }
 
     @Test

@@ -106,6 +106,14 @@ opened file descriptor are acquired under the same short lock as replacement. A 
 stale manifest sends chart reads to immutable raw files. iOS rebuilds
 at startup, after index changes and after new clock receipts, without a History screen visit.
 
+Footer reuse. `DayPass` opens each source once per derive, so a derive has no repeated footer read
+to save. The repeats are on the read side. `HistorySeriesReader` opens a day's derived file again for
+every metric switch and every re-emission of the same Day window, so it keeps a `FooterCache` of 32
+derived footers and page indexes (`DERIVED_FOOTERS`, a few tens of KB each), keyed by `SourceId` (path,
+size and modification time). A rebuilt day is a new file with a new identity. Raw files still go
+through the blocking `ParquetFile` and parse their footer on each open (index, today's raw rows, file
+summaries, whose results Android already caches by name and CRC-32).
+
 ### When a day is rebuilt
 
 `derived_day.sourceSignature` = SHA-256 over `derive-v<DERIVE_VERSION>` + the day's sorted

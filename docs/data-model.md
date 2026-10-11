@@ -257,7 +257,10 @@ starts during the sweep keeps its partial. The log line has counts only. `Storag
 ### Quotas and memory pressure (#61)
 
 `RetentionPolicy` (`:core:storage`) caps Rebuildable data, 64 MiB of derived day files and 20 MiB
-of map tiles. Durable data has no cap. `QuotaEnforcer` deletes only derived `.parquet` files, the
+of map tiles by default. Durable data has no cap. The policy is stored in the shared settings DataStore
+(`derived_quota_bytes`, `map_cache_bytes`, `SettingsRepository.setRetention`), and a missing or negative
+value reads as the default. Both apps read the derived quota from it at each enforcement and the map cap
+once at process start. No screen edits the quotas yet. `QuotaEnforcer` deletes only derived `.parquet` files, the
 oldest written first, until the total is under the cap, and keeps the manifests. A missing day file
 with a matching manifest is rebuilt when something reads it. On Android the daily export calls
 `HistoryDeriver.ensureDailyFiles()` first, and lists and zips the day files inside

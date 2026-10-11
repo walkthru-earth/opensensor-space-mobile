@@ -496,9 +496,9 @@ LZ4 and Snappy). Issue #62 added `ParquetReader` over a `RangeSource`, an in-mem
 `CELLULAR`, `WIFI`) and pruning of row groups by footer statistics and of pages by the column and
 offset indexes. `:core:net` adds `HttpRangeSource` over OkHttp 5.5.0 on Android and
 `NSURLSession` on iOS. It sends `Accept-Encoding: identity`, so byte offsets stay true, and checks
-`If-Range` against the ETag, so a replaced file is read again from its new footer. Host and
-simulator tests only, and not yet wired to the live feed. A byte block cache on disk waits for
-issues #60 and #61. No third-party Parquet or DuckDB library exists for iOS that would do this
+`If-Range` against the ETag, so a replaced file is read again from its new footer. Issues #60
+and #61 are closed, but only `:core:net` tests use it so far. The live feed is not wired, and the
+disk byte block cache is not built yet. No third-party Parquet or DuckDB library exists for iOS that would do this
 better.
 
 Paths under `date=` and `hour=` never change, so footers and ranges are cached until the
@@ -603,7 +603,7 @@ starts with the target layout from the producer guidance.
 | Module | Owns |
 | --- | --- |
 | `:core:model` | `Device`, `DeviceFamily`, `Capability`, `ObservedProperty`, `Scale`, registry |
-| `:core:publicfeed` | `PublicFeed` and `FeedReader` ports, `ParquetFeedReader` (common, one `ParquetReader.scan` filtered on `h3_index` with page pruning, `CellsTable` reports pages read of total), `BundledSampleFeed`, the `H3Grid` interface (`com.uber:h3` 4.5.0 on Android and JVM, the vendored H3 C 4.5.0 through cinterop on iOS), `H3Index` bit arithmetic and descendant ranges, `ViewportCover`, `CellScale` (WHO steps from `:core:airquality` for PM2.5 and PM10, else `PercentileScale`), `HealthAxis`, `PropertyRanking`, `CellGeoJson`, `TimeZoneRegions`. Built 2026-10-08. Planned here: S3 listing, the live feed over `:core:net`, a disk block cache (issues #60 and #61) |
+| `:core:publicfeed` | `PublicFeed` and `FeedReader` ports, `ParquetFeedReader` (common, one `ParquetReader.scan` filtered on `h3_index` with page pruning, `CellsTable` reports pages read of total), `BundledSampleFeed`, the `H3Grid` interface (`com.uber:h3` 4.5.0 on Android and JVM, the vendored H3 C 4.5.0 through cinterop on iOS), `H3Index` bit arithmetic and descendant ranges, `ViewportCover`, `CellScale` (WHO steps from `:core:airquality` for PM2.5 and PM10, else `PercentileScale`), `HealthAxis`, `PropertyRanking`, `CellGeoJson`, `TimeZoneRegions`. Built 2026-10-08. Planned here: S3 listing, the live feed over `:core:net`, a disk byte block cache |
 | `:core:net` | `HttpRangeSource` and the `HttpRangeEngine` port, `OkHttpRangeEngine` (OkHttp 5.5.0, Android and JVM), `UrlSessionRangeEngine` (`NSURLSession`, iOS). Built with issue #62, not yet used by the apps |
 | `:core:parquet` | The portable reader from W8, with `RangeSource`, `ParquetReader` (footer cache, coalesced reads, one-pass decoding), row group pruning by INT64 statistics and page pruning by the column and offset indexes |
 | `:feature:discover` | CMP `commonMain` map screen (`DiscoverScreen`), `DiscoverController` state holder, `DiscoverStrings` read from its Compose resources, one copy for both apps, the bundled sample and basemap styles as Compose resources. Targets Android (`com.android.kotlin.multiplatform.library`) and iOS, not the JVM, because the maplibre-compose desktop variant needs Java 25. Planned here: the public device page |

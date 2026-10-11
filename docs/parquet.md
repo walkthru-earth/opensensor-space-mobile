@@ -41,7 +41,9 @@ Bytes reach the decoder through two narrow seams, a blocking `ByteReader` and a 
   (64 KiB `LOCAL`, 128 KiB `CELLULAR`, 256 KiB `WIFI`), which holds the footer and the page index, and
   one more read only when the footer is longer. A file under `wholeFileBelowBytes` is read whole the
   first time a scan needs bytes outside the tail. The `FooterCache` (LRU, 256 entries by default, keyed
-  by `SourceId`) keeps parsed footers and page indexes, so reopening a file parses nothing.
+  by `SourceId`) keeps parsed footers and page indexes, so reopening a file parses nothing. The Discover
+  feed and the History Day view's derived day files (32 entries, [history pipeline](history-pipeline.md))
+  use one.
 - `scan(ScanRequest(columns, rowGroups, filterColumn, filterRanges))` prunes row groups by footer
   statistics, then pages by the `ColumnIndex` min and max of the INT32 or INT64 filter column, mapped
   to byte ranges through each column's `OffsetIndex`. Only the surviving pages are fetched and decoded,
@@ -55,9 +57,10 @@ Bytes reach the decoder through two narrow seams, a blocking `ByteReader` and a 
 - `:core:net` gives `HttpRangeSource`, a `RangeSource` over one URL through an `HttpRangeEngine` (OkHttp
   5.5.0 on Android and the JVM, `NSURLSession` on iOS). The tail is a suffix range, later ranges carry
   `If-Range` with a strong ETag, and a 200 for a changed object raises `SourceChangedException`. It
-  sends `Accept-Encoding: identity`, skips the local HTTP cache and logs nothing. Host and simulator tests
-  only, not yet wired to the live feed. A byte block cache on disk (`BlockCache`) waits for issues #60
-  and #61.
+  sends `Accept-Encoding: identity`, skips the local HTTP cache and logs nothing. Issues #60 and #61
+  are closed, but nothing outside `:core:net` tests constructs `HttpRangeSource` or an engine yet. The
+  Discover map still reads the bundled sample, and wiring the live feed is open work. No disk byte
+  block cache (`BlockCache`) exists in code, it is planned with the live feed.
 - `ParquetFileMetadata.longStatistics(column)` returns the footer min, max and null count of an INT32
   or INT64 column per row group without reading a page. `rowGroupsOverlapping(column, ranges)` keeps the
   row groups whose `[min, max]` meets any inclusive `LongRange` (H3 descendant ranges in W12). A chunk

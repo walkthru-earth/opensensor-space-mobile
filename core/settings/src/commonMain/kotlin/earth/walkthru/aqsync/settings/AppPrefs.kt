@@ -1,5 +1,6 @@
 package earth.walkthru.aqsync.settings
 
+import earth.walkthru.aqsync.storage.RetentionPolicy
 import earth.walkthru.aqsync.units.UnitSystem
 
 /**
@@ -49,4 +50,6 @@ data class AppPrefs(
     val showPublicSensors: Boolean = true,
     /** Display units, Automatic (the phone's region) by default. Display only, stored data stays SI. */
     val unitSystem: UnitSystem = UnitSystem.AUTO,
+    /** Byte caps of the rebuildable caches (#61). No screen edits them yet, the stored value wins at start. */
+    val retention: RetentionPolicy = RetentionPolicy(),
 )
