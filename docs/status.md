@@ -4,6 +4,28 @@
 **Code:** `./gradlew verify` (the gate), `.github/workflows/verify.yml`.
 **Related:** measured device behaviour is recorded in the board-specific `../aq-parquet/docs/boards/*/bench-verified.md`; anything not recorded there is unverified.
 
+## 2026-10-11, stale-bond handling, iOS link queue and shared iOS controller (code only)
+
+Branch `fix/open-gaps-2026-10-11`. Host, simulator and gate results only. No phone or
+iPad run yet.
+
+- iOS. Core Bluetooth runs on one serial queue in `BlePhysicalLink`, with `BleGattQueue`
+  allowing one GATT operation at a time (#80). `BleBondFailure` treats CBError
+  `peerRemovedPairingInformation` and `encryptionTimedOut`, and CBATTError insufficient
+  encryption or authentication, as a removed pairing. The link ends without resume or retry
+  and `CompanionNotice.PAIRING_REMOVED` asks the owner to forget the sensor in iOS Settings
+  and pair again. If iPadOS reports this board's refusal as a plain disconnect, the check
+  does not catch it. A re-pair run on the iPad must confirm the real error.
+- iOS shared. `IosLinkProvider` can ask Swift to dial a link. `SensorCollections` holds one
+  `CollectionController` per device (#81, partial). Swift does not route Smart Sync, Collect
+  all or background collection through it yet, so the Swift resume and retry timers remain.
+  Early-ending runs now report the files they saved instead of 0.
+- Android. HCI 0x06 and 0x3D map to a missing bond. Below API 36, which has no
+  `ACTION_KEY_MISSING`, `BleStaleBondDetector` treats a second consecutive close of a bonded
+  link before Ready as a stale bond. Missing keys and failed encryption stop retries and show
+  the existing pairing repair message, also after Smart Sync and Collect. The app never
+  removes a bond on its own. Which status Android 12 reports for this case is unverified.
+
 ## 2026-10-11, iPad Smart Sync over Bluetooth fails on a stale bond
 
 The owner reported that Smart Sync on the iPad Air M2 (iPadOS 27.0.1, main `5604fb3e`)
