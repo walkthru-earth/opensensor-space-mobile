@@ -5,6 +5,10 @@ package earth.walkthru.aqsync.archive
 import earth.walkthru.aqsync.archive.IosFiles.Kind
 import earth.walkthru.aqsync.data.history.parquet.ByteReader
 import earth.walkthru.aqsync.data.history.parquet.MappedDataReader
+import earth.walkthru.aqsync.storage.AtomicFiles
+import earth.walkthru.aqsync.storage.IosAtomicFiles
+import earth.walkthru.aqsync.storage.StorageClass
+import earth.walkthru.aqsync.storage.StorageException
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.convert
@@ -18,6 +22,7 @@ import platform.Foundation.NSFileManager
 import platform.Foundation.NSUserDomainMask
 import platform.posix.O_RDWR
 import platform.posix.SEEK_END
+import platform.posix.errno
 import platform.posix.fsync
 import platform.posix.ftruncate
 import platform.posix.lseek
@@ -35,6 +40,9 @@ import platform.posix.pwrite
  * name, `<name>.<size>-<crc hex>.partial`, is adopted when its size and CRC match the device's OPENED
  * frame and removed otherwise. Nothing here asks a device to change a file.
  *
+ * Commits and metas go through [AtomicFiles] (#60): a commit is one `renamex_np(RENAME_EXCL)` after
+ * `F_FULLFSYNC`, so a final is never replaced and survives a power cut.
+ *
  * @param finalRoot absolute path of the verified copies, [ArchiveLayout.ARCHIVE] maps to it.
  * @param partialRoot absolute path of the partials, [ArchiveLayout.PARTIAL] maps to it.
  */
@@ -42,6 +50,7 @@ class IosArchiveStore(
     val finalRoot: String,
     val partialRoot: String,
     private val io: CoroutineDispatcher = Dispatchers.IO,
+    private val atomic: AtomicFiles = IosAtomicFiles(tempDirBeside(finalRoot)),
 ) : ArchiveStore {
     private var prepared = false
 
@@ -97,7 +106,7 @@ class IosArchiveStore(
         check(fd >= 0) { "cannot open archive partial" }
         try {
             if (resumeFrom == 0L) check(ftruncate(fd, 0) == 0) { "cannot reset archive partial" }
-            IosFiles.writeAtomically(metaPath, ArchiveLayout.encodeMeta(meta).encodeToByteArray())
+            atomic.writeAtomically(metaPath, ArchiveLayout.encodeMeta(meta).encodeToByteArray(), StorageClass.Scratch)
         } catch (e: Throwable) {
             platform.posix.close(fd)
             throw e
@@ -122,7 +131,7 @@ class IosArchiveStore(
             val legacyPath = "$dir/$entry"
             if (IosFiles.kind(legacyPath) != Kind.FILE) continue
             if (entry == current && IosFiles.kind(path) == Kind.ABSENT && IosFiles.size(legacyPath) <= meta.size) {
-                IosFiles.writeAtomically(metaPath, ArchiveLayout.encodeMeta(meta).encodeToByteArray())
+                atomic.writeAtomically(metaPath, ArchiveLayout.encodeMeta(meta).encodeToByteArray(), StorageClass.Scratch)
                 IosFiles.move(legacyPath, path)
             } else {
                 IosFiles.remove(legacyPath)
@@ -153,11 +162,11 @@ class IosArchiveStore(
 
     override suspend fun commit(key: ArchiveKey) = withContext(io) {
         val final = finalFile(key)
-        check(IosFiles.kind(final) == Kind.ABSENT) { "refusing to replace archived file" }
         val partial = partialFile(key)
         check(IosFiles.kind(partial) == Kind.FILE) { "no partial to commit" }
-        IosFiles.mkdirs(final.substringBeforeLast('/'))
-        IosFiles.move(partial, final)
+        // AtomicFiles creates the station and day directories and syncs each new level into its parent.
+        // Throws AlreadyCommitted when the final is there, whatever it is. Nothing is replaced.
+        atomic.commitNoReplace(partial, final, StorageClass.Durable)
         IosFiles.remove(metaFile(key))
     }
 
@@ -185,6 +194,9 @@ class IosArchiveStore(
             return IosArchiveStore("$base/${ArchiveLayout.LEGACY_IOS_ROOT}", "$base/${ArchiveLayout.PARTIAL}")
         }
 
+        /** The temp directory of [AtomicFiles] beside [root], in the same base directory and so on the same volume. */
+        internal fun tempDirBeside(root: String): String = root.substringBeforeLast('/') + "/" + AtomicFiles.TEMP_DIR
+
         internal fun applicationSupport(): String {
             val url = NSFileManager.defaultManager.URLForDirectory(NSApplicationSupportDirectory, NSUserDomainMask, null, true, null)
             return checkNotNull(url?.path) { "Application Support is unavailable" }
@@ -209,7 +221,11 @@ internal data class LegacyPartial(val name: String, val size: Long, val crc32: L
     }
 }
 
-/** Writes at absolute offsets with `pwrite`. [sync] and [close] reach storage with `fsync`. */
+/**
+ * Writes at absolute offsets with `pwrite`. [sync] and [close] reach storage with `fsync`, a partial
+ * being Scratch. [close] reports a failed `fsync` or `close` as a [StorageException] instead of
+ * dropping it, so a partial that never reached the disk is never verified as if it had.
+ */
 private class PosixPartialWriter(private val fd: Int, override val resumeFrom: Long) : PartialWriter {
     private var closed = false
 
@@ -232,13 +248,15 @@ private class PosixPartialWriter(private val fd: Int, override val resumeFrom: L
 
     override fun sync() {
         check(!closed) { "partial closed" }
-        check(fsync(fd) == 0) { "cannot sync archive partial" }
+        if (fsync(fd) != 0) throw StorageException("cannot sync archive partial (errno $errno)")
     }
 
     override fun close() {
         if (closed) return
         closed = true
-        fsync(fd)
-        platform.posix.close(fd)
+        val synced = fsync(fd) == 0
+        val syncErrno = errno
+        if (platform.posix.close(fd) != 0) throw StorageException("cannot close archive partial (errno $errno)")
+        if (!synced) throw StorageException("cannot sync archive partial (errno $syncErrno)")
     }
 }

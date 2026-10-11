@@ -1,9 +1,11 @@
 package earth.walkthru.opensensor
 
 import earth.walkthru.aqsync.archive.ArchiveIndex
+import earth.walkthru.aqsync.archive.ArchiveLayout
 import earth.walkthru.aqsync.archive.ClockAnchor
 import earth.walkthru.aqsync.archive.IosArchiveStore
 import earth.walkthru.aqsync.archive.IosClockAnchorStore
+import earth.walkthru.aqsync.archive.IosExportSpace
 import earth.walkthru.aqsync.archive.ReceiptArchiveIndex
 import earth.walkthru.aqsync.data.history.ArchiveHistoryTiers
 import earth.walkthru.aqsync.data.history.ArchiveIndexRepair
@@ -11,9 +13,15 @@ import earth.walkthru.aqsync.data.history.HistorySeriesReader
 import earth.walkthru.aqsync.data.history.IosDailyDerivedStore
 import earth.walkthru.aqsync.data.history.TimeEstimate
 import earth.walkthru.aqsync.data.history.info
+import earth.walkthru.aqsync.storage.AtomicFiles
+import earth.walkthru.aqsync.storage.IosStorageTree
+import earth.walkthru.aqsync.storage.StorageJanitor
+import earth.walkthru.aqsync.storage.StorageRole
+import earth.walkthru.aqsync.storage.StorageRoots
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.first
@@ -30,13 +38,28 @@ import kotlin.time.Clock
 internal object IosArchive {
     val store: IosArchiveStore by lazy { IosArchiveStore.inApplicationSupport() }
     val index: ArchiveIndex by lazy { ReceiptArchiveIndex(store.finalRoot) }
-    val clockAnchors by lazy { IosClockAnchorStore(store.finalRoot + "-clock-anchors") }
+    private val clockAnchorsRoot get() = store.finalRoot + "-clock-anchors"
+    val clockAnchors by lazy { IosClockAnchorStore(clockAnchorsRoot) }
     val tiers: ArchiveHistoryTiers by lazy { ArchiveHistoryTiers(store, index, clockAnchors = clockAnchors) }
     val reader: HistorySeriesReader by lazy { HistorySeriesReader(store, index, tiers, clockAnchors = clockAnchors) }
 
     private val derivedMutex = Mutex()
     private val derived by lazy { IosDailyDerivedStore(store.finalRoot.substringBeforeLast('/')) }
     private val repair by lazy { ArchiveIndexRepair(store, index, clockAnchors = clockAnchors) }
+    private val janitor by lazy {
+        val base = store.finalRoot.substringBeforeLast('/')
+        val roots = StorageRoots(
+            mapOf(
+                StorageRole.Archive to store.finalRoot,
+                StorageRole.Partials to store.partialRoot,
+                StorageRole.ClockAnchors to clockAnchorsRoot,
+                StorageRole.Derived to "$base/${ArchiveLayout.DERIVED}",
+                StorageRole.Temp to "$base/${AtomicFiles.TEMP_DIR}",
+                StorageRole.Exports to IosExportSpace.temporaryRoot(),
+            ),
+        )
+        StorageJanitor(roots, IosStorageTree(), store, index, Dispatchers.IO, log = ::println)
+    }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var started = false
 
@@ -63,6 +86,14 @@ internal object IosArchive {
         if (started) return
         started = true
         scope.launch {
+            // The startup sweep of #60 first, so an orphan final it adopts is indexed by the repair below.
+            try {
+                janitor.run()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                println("storage janitor failed: ${e::class.simpleName}")
+            }
             repair.backfillUntilSettled()
             repair.repairWhenWaiting()
         }

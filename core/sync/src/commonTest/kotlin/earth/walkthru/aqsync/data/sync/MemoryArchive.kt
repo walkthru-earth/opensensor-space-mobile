@@ -9,6 +9,7 @@ import earth.walkthru.aqsync.archive.PartialMeta
 import earth.walkthru.aqsync.archive.PartialWriter
 import earth.walkthru.aqsync.data.history.parquet.ByteArrayReader
 import earth.walkthru.aqsync.data.history.parquet.ByteReader
+import earth.walkthru.aqsync.storage.AlreadyCommitted
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
@@ -23,6 +24,13 @@ class MemoryArchiveStore : ArchiveStore {
 
     /** A storage fault to raise when that file is moved into the archive. */
     var failCommit: (ArchiveKey) -> Exception? = { null }
+
+    /** Runs just before a commit, so a test can place a final the planner did not see. */
+    var beforeCommit: (ArchiveKey) -> Unit = {}
+
+    /** Partial writers opened and not yet closed. */
+    var openWriters: Int = 0
+        private set
 
     override suspend fun partialLengths(station: String): Map<String, Long> {
         val dir = ArchiveLayout.partialStationDir(station) + "/"
@@ -39,7 +47,9 @@ class MemoryArchiveStore : ArchiveStore {
         val resumeFrom = if (existing != null && stored == meta && existing.size <= meta.size) existing.size.toLong() else 0L
         if (resumeFrom == 0L) files[path] = ByteArray(0)
         files[metaPath] = ArchiveLayout.encodeMeta(meta).encodeToByteArray()
+        openWriters++
         return object : PartialWriter {
+            private var closed = false
             override val resumeFrom: Long = resumeFrom
             override fun writeAt(offset: Long, payload: ByteArray) {
                 failWrite(key)?.let { throw it }
@@ -51,7 +61,10 @@ class MemoryArchiveStore : ArchiveStore {
             }
             override fun length(): Long = files.getValue(path).size.toLong()
             override fun sync() = Unit
-            override fun close() = Unit
+            override fun close() {
+                if (!closed) openWriters--
+                closed = true
+            }
         }
     }
 
@@ -69,8 +82,9 @@ class MemoryArchiveStore : ArchiveStore {
 
     override suspend fun commit(key: ArchiveKey) {
         failCommit(key)?.let { throw it }
+        beforeCommit(key)
         val final = ArchiveLayout.finalPath(key)
-        check(final !in files) { "refusing to replace archived file" }
+        if (final in files) throw AlreadyCommitted()
         files[final] = files.remove(ArchiveLayout.partialPath(key)) ?: error("no partial to commit")
         files.remove(ArchiveLayout.partialMetaPath(key))
     }

@@ -1,6 +1,8 @@
 package earth.walkthru.aqsync.archive
 
 import earth.walkthru.aqsync.data.history.parquet.ByteReader
+import earth.walkthru.aqsync.storage.AlreadyCommitted
+import earth.walkthru.aqsync.storage.AtomicFiles
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -31,8 +33,9 @@ interface ArchiveStore {
     fun reader(key: ArchiveKey, partial: Boolean = false): ByteReader
 
     /**
-     * Moves a verified partial into the archive, atomically. Throws when the final already exists:
-     * an archived file is never replaced.
+     * Moves a verified partial into the archive, atomically and durably ([AtomicFiles.commitNoReplace]).
+     * Throws [AlreadyCommitted] when the final already exists, and leaves the partial in place: an
+     * archived file is never replaced.
      */
     suspend fun commit(key: ArchiveKey)
 
@@ -69,6 +72,17 @@ interface ArchiveIndex {
 
     /** Inserts or replaces the record of (station, name). */
     suspend fun put(record: ArchiveRecord)
+
+    /**
+     * Inserts [record] only when (station, name) has none, and returns whether it did. A writer that
+     * must never replace another's record (the janitor adopting an orphan) uses it. The default reads
+     * then writes. An adapter shared across processes or threads overrides it to do both atomically.
+     */
+    suspend fun putIfAbsent(record: ArchiveRecord): Boolean {
+        if (get(record.key) != null) return false
+        put(record)
+        return true
+    }
 
     /**
      * Replaces the record of [key] with [transform] of its latest value, when there is one. A writer

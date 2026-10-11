@@ -7,6 +7,9 @@ import earth.walkthru.aqsync.data.archive.toRecord
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 import earth.walkthru.aqsync.data.history.parquet.ParquetSink
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
+import earth.walkthru.aqsync.storage.AtomicFiles
+import earth.walkthru.aqsync.storage.JvmAtomicFiles
+import earth.walkthru.aqsync.storage.StorageClass
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -17,7 +20,11 @@ import javax.inject.Singleton
 
 /** Where the derived layer lives, `filesDir/derived/v1/<station>/day=YYYY-MM-DD.parquet` + `.manifest.json` ([ArchiveLayout]). Never inside `archive/`. */
 @Singleton
-class DerivedStore(baseDir: File) {
+class DerivedStore(
+    baseDir: File,
+    /** Temps and commits of the derived layer, Rebuildable (#60). Temps live in `filesDir/storage-tmp`. */
+    val atomic: AtomicFiles = JvmAtomicFiles(File(baseDir, AtomicFiles.TEMP_DIR)),
+) {
     @Inject
     constructor(@ApplicationContext context: Context) : this(context.filesDir)
 
@@ -77,9 +84,9 @@ class DailyDerivedBuilder(private val store: DerivedStore, private val fileFor: 
         val opened = sources.map { DailyParquetSource(it.toRecord(), ParquetFile.open(fileFor(it.station, it.name))) }
         val target = store.dayFile(station, epochDay)
         check(target.parentFile!!.isDirectory || target.parentFile!!.mkdirs()) { "cannot create derived directory" }
-        val tmp = File.createTempFile(".derived-", ".parquet", target.parentFile)
+        val atomic = store.atomic
+        val tmp = File(atomic.createTemp(".parquet"))
         val manifestFile = store.manifestFile(station, epochDay)
-        val manifestTmp = File.createTempFile(".derived-", ".json", target.parentFile)
         try {
             val result = java.io.FileOutputStream(tmp).use { output ->
                 val buffered = output.buffered()
@@ -101,18 +108,13 @@ class DailyDerivedBuilder(private val store: DerivedStore, private val fileFor: 
                 builtAt = Instant.ofEpochSecond(nowEpochS).toString(),
                 sourceSignature = sourceSignature,
             )
-            java.io.FileOutputStream(manifestTmp).use { output ->
-                output.write(JSON.encodeToString(manifest).toByteArray())
-                output.fd.sync()
-            }
-            // A crash between the two renames must leave a missing manifest, never a stale cache receipt.
+            // A crash between the two commits must leave a missing manifest, never a stale cache receipt.
             check(!manifestFile.exists() || manifestFile.delete()) { "cannot invalidate derived manifest" }
-            check(tmp.renameTo(target)) { "cannot commit derived Parquet" }
-            check(manifestTmp.renameTo(manifestFile)) { "cannot commit derived manifest" }
+            atomic.commitReplace(tmp.path, target.path, StorageClass.Rebuildable)
+            atomic.writeAtomically(manifestFile.path, JSON.encodeToString(manifest).toByteArray(), StorageClass.Rebuildable)
             return DailyBuildResult(target, manifestFile, result.rows, result.columns.size, result.rowGroups, result.complete)
         } finally {
             tmp.delete()
-            manifestTmp.delete()
         }
     }
 

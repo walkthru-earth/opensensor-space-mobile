@@ -2,6 +2,11 @@ package earth.walkthru.aqsync.data.sync
 
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
+import earth.walkthru.aqsync.storage.AlreadyCommitted
+import earth.walkthru.aqsync.storage.AtomicFiles
+import earth.walkthru.aqsync.storage.JvmAtomicFiles
+import earth.walkthru.aqsync.storage.StorageClass
+import earth.walkthru.aqsync.storage.StorageException
 import java.io.File
 import java.io.IOException
 import java.io.RandomAccessFile
@@ -19,10 +24,13 @@ import javax.inject.Singleton
  *
  * The Hive path is kept verbatim below the station directory so the archive is a drop-in mirror
  * of the microSD card and of `tools/export_parquet.py` output. Files land in `archive/` only via
- * [commit], i.e. an atomic rename after verification.
+ * [commit], an atomic no-replace move after verification, synced to disk (#60).
  */
 @Singleton
-class FileArchive(baseDir: File) {
+class FileArchive(
+    baseDir: File,
+    private val atomic: AtomicFiles = JvmAtomicFiles(File(baseDir, AtomicFiles.TEMP_DIR)),
+) {
     @Inject
     constructor(@ApplicationContext context: Context) : this(context.filesDir)
 
@@ -76,7 +84,7 @@ class FileArchive(baseDir: File) {
             file.delete()
             meta.delete()
         }
-        meta.writeText(expectedMeta)
+        atomic.writeAtomically(meta.path, expectedMeta.encodeToByteArray(), StorageClass.Scratch)
         return PartialWriter(file) to resumeFrom
     }
 
@@ -86,23 +94,23 @@ class FileArchive(baseDir: File) {
     }
 
     /**
-     * Move a verified partial into the archive. Same filesystem, so `renameTo` is atomic; the
-     * destination is never observable half-written.
+     * Move a verified partial into the archive with [AtomicFiles.commitNoReplace]. The destination is
+     * never observable half-written and never replaced.
+     *
+     * @throws AlreadyCommitted when the final already exists. The partial is left in place.
      */
-    @Throws(IOException::class)
+    @Throws(StorageException::class)
     fun commit(station: String, name: String): File {
         val src = partialFor(station, name)
         val dst = fileFor(station, name)
-        dst.parentFile?.mkdirs()
-        if (dst.exists()) throw IOException("refusing to replace archived file ${dst.path}")
-        if (!src.renameTo(dst)) throw IOException("rename ${src.path} → ${dst.path} failed")
+        atomic.commitNoReplace(src.path, dst.path, StorageClass.Durable)
         metaFor(station, name).delete()
         return dst
     }
 
     /** Station UUIDs are `[0-9a-f-]`; anything else is refused rather than used as a path. */
     private fun safeStation(station: String): String {
-        require(station !in setOf(".", "..") && station.isNotEmpty() && station.matches(Regex("[0-9A-Za-z._-]+"))) { "unsafe station id: $station" }
+        require(station !in setOf(".", "..") && station.isNotEmpty() && station.matches(Regex("[0-9A-Za-z._-]+"))) { "unsafe station id" }
         return station
     }
 
@@ -119,9 +127,15 @@ class FileArchive(baseDir: File) {
 
         fun sync() = raf.fd.sync()
 
+        /** Syncs, then closes. Either failure is raised after the file is closed, never swallowed. */
         override fun close() {
-            runCatching { raf.fd.sync() }
-            raf.close()
+            val failure = runCatching { raf.fd.sync() }.exceptionOrNull()
+            try {
+                raf.close()
+            } catch (e: IOException) {
+                failure?.addSuppressed(e) ?: throw e
+            }
+            if (failure != null) throw IOException("partial sync failed", failure)
         }
     }
 }

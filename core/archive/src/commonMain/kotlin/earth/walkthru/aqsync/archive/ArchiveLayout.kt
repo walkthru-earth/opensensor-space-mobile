@@ -92,7 +92,7 @@ object ArchiveLayout {
     fun derivedManifestPath(station: String, epochDay: Long): String = "${derivedStationDir(station)}/day=${dayLabel(epochDay)}.manifest.json"
 
     private fun checkedStation(station: String): String {
-        require(isSafeStation(station)) { "unsafe station id: $station" }
+        require(isSafeStation(station)) { "unsafe station id" }
         return station
     }
 }
@@ -100,7 +100,7 @@ object ArchiveLayout {
 /** One archive file: the station directory and the Hive name below it. Both are checked once, here. */
 data class ArchiveKey(val station: String, val name: String) {
     init {
-        require(ArchiveLayout.isSafeStation(station)) { "unsafe station id: $station" }
+        require(ArchiveLayout.isSafeStation(station)) { "unsafe station id" }
         require(ArchiveLayout.isArchiveName(name)) { "unsafe archive name" }
     }
 }

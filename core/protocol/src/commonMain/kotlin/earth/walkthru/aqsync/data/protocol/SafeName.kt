@@ -8,10 +8,17 @@ package earth.walkthru.aqsync.data.protocol
  * when it uses only `[0-9a-z._=/-]`, contains no `..` and no `//`, does not start with `/`, ends in
  * `.parquet` with at least one character before it, and is at most [MAX_BYTES] bytes long. The
  * charset is ASCII, so the byte length equals the character count for every accepted name.
+ *
+ * The phone adds one rule the firmware does not have. No segment between slashes may exceed
+ * [MAX_SEGMENT_BYTES], so the longest sibling the phone writes (`<segment>.verified.json` on iOS)
+ * still fits the 255-byte file-name limit of APFS and ext4/f2fs (#60).
  */
 object SafeName {
     /** Longest name the firmware lists and opens (`OPENED.name` fits one MTU-517 PDU). */
     const val MAX_BYTES: Int = 399
+
+    /** 255 minus `.verified.json` (14 bytes), the longest suffix the phone appends to a name segment. */
+    const val MAX_SEGMENT_BYTES: Int = 255 - 14
 
     private const val SUFFIX = ".parquet"
 
@@ -20,7 +27,12 @@ object SafeName {
         // has exactly `length` bytes. Checking the length first bounds the work on hostile input.
         if (name.length <= SUFFIX.length || name.length > MAX_BYTES) return false
         if (name[0] == '/' || !name.endsWith(SUFFIX)) return false
-        for (c in name) if (!allowed(c)) return false
+        var segment = 0
+        for (c in name) {
+            if (!allowed(c)) return false
+            segment = if (c == '/') 0 else segment + 1
+            if (segment > MAX_SEGMENT_BYTES) return false
+        }
         return !name.contains("..") && !name.contains("//")
     }
 

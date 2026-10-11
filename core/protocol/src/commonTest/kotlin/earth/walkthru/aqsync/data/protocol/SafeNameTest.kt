@@ -6,11 +6,21 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class SafeNameTest {
+    /** A name of [length] bytes whose segments all stay within [SafeName.MAX_SEGMENT_BYTES]. */
     private fun nameOfLength(length: Int): String {
         val prefix = "station=a1/year=2026/month=10/day=08/"
         val suffix = ".parquet"
-        return prefix + "d".repeat(length - prefix.length - suffix.length) + suffix
+        var left = length - prefix.length - suffix.length
+        val body = StringBuilder()
+        while (left > 201) {
+            body.append("d".repeat(200)).append('/')
+            left -= 201
+        }
+        return prefix + body + "d".repeat(left) + suffix
     }
+
+    /** A name whose last segment is [segment] bytes, `.parquet` included. */
+    private fun nameWithSegment(segment: Int): String = "station=a1/" + "d".repeat(segment - ".parquet".length) + ".parquet"
 
     @Test
     fun realArchiveNamesAreAccepted() {
@@ -31,6 +41,17 @@ class SafeNameTest {
         assertTrue(SafeName.isValid(at))
         assertFalse(SafeName.isValid(over))
         assertFalse(SafeName.isValid(nameOfLength(512)))
+    }
+
+    @Test
+    fun segmentLimitIs241Bytes() {
+        assertEquals(241, SafeName.MAX_SEGMENT_BYTES)
+        assertEquals(255, SafeName.MAX_SEGMENT_BYTES + ".verified.json".length)
+        assertTrue(SafeName.isValid(nameWithSegment(241)))
+        assertFalse(SafeName.isValid(nameWithSegment(242)))
+        // A directory segment is bounded too, not only the file name.
+        assertTrue(SafeName.isValid("d".repeat(241) + "/x.parquet"))
+        assertFalse(SafeName.isValid("d".repeat(242) + "/x.parquet"))
     }
 
     @Test

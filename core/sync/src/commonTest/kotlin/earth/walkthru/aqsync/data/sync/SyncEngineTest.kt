@@ -55,6 +55,19 @@ class SyncEngineTest {
     private fun hasPartials(): Boolean = store.files.keys.any { it.startsWith(ArchiveLayout.PARTIAL + "/") }
 
     @Test
+    fun aFailedReadStillClosesThePartialWriter() = runTest {
+        val d = device(backgroundScope)
+        // Every window loses every CHUNK, so the engine gives up and returns from inside the writer block.
+        d.first.dropLeadingChunks = { 99 }
+
+        val outcome = engine.pull(d, 0)
+
+        assertIs<FileOutcome.Failed>(outcome)
+        assertEquals(0, store.openWriters, "the partial writer is closed on an early return")
+        assertTrue(hasPartials(), "the partial is kept for resume")
+    }
+
+    @Test
     fun lostWindowsAreReReadFromThePhoneOffsetAndCounted() = runTest {
         val d = device(backgroundScope)
         // File 0 is 24 000 bytes, so two 16 KiB windows of 507-byte chunks.
@@ -244,6 +257,35 @@ class SyncEngineTest {
         assertTrue(again.alreadyArchived)
         assertEquals("fake-b", index.records.single().sourceDevice)
         assertEquals(0, b.first.readCount)
+    }
+
+    @Test
+    fun aFinalThatAppearsBeforeTheCommitIsAdoptedNotReplaced() = runTest {
+        val a = device(backgroundScope)
+        val file = a.first.files[0]
+        val key = ArchiveKey(a.first.station, file.name)
+        // Another writer committed the same verified bytes after the planner looked, and crashed before indexing.
+        store.beforeCommit = { store.files[ArchiveLayout.finalPath(it)] = file.bytes.copyOf() }
+
+        val outcome = assertIs<FileOutcome.Synced>(engine.pull(a, 0))
+
+        assertTrue(outcome.alreadyArchived)
+        assertContentEquals(file.bytes, finalBytes(key.station, key.name))
+        assertEquals(key, index.records.single().key)
+        assertFalse(hasPartials())
+    }
+
+    @Test
+    fun aConflictingFinalThatAppearsBeforeTheCommitIsKept() = runTest {
+        val a = device(backgroundScope)
+        val file = a.first.files[0]
+        val other = file.bytes.copyOf().also { it[it.size / 2] = (it[it.size / 2] + 1).toByte() }
+        store.beforeCommit = { store.files[ArchiveLayout.finalPath(it)] = other }
+
+        assertIs<FileOutcome.Mismatch>(engine.pull(a, 0))
+
+        assertContentEquals(other, finalBytes(a.first.station, file.name))
+        assertTrue(index.records.isEmpty())
     }
 
     @Test

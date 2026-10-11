@@ -1,17 +1,26 @@
 package earth.walkthru.aqsync.archive
 
+import earth.walkthru.aqsync.storage.AlreadyCommitted
+import earth.walkthru.aqsync.storage.AtomicFiles
+import earth.walkthru.aqsync.storage.JvmAtomicFiles
+import earth.walkthru.aqsync.storage.StorageClass
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.io.FileOutputStream
 import java.nio.file.Files
 import java.nio.file.LinkOption.NOFOLLOW_LINKS
-import java.nio.file.StandardCopyOption.ATOMIC_MOVE
 
-/** Immutable receipts under a dedicated app-private directory, separate from the downloaded archive. */
-class FileClockAnchorStore(private val root: File) : ClockAnchorStore {
+/**
+ * Immutable receipts under a dedicated app-private directory, separate from the downloaded archive. A
+ * receipt is Durable and written once with [AtomicFiles.createNoReplace], so a second writer can never
+ * replace it (#60). Temps live in [AtomicFiles.TEMP_DIR] beside [root].
+ */
+class FileClockAnchorStore(
+    private val root: File,
+    private val atomic: AtomicFiles = JvmAtomicFiles(File(root.absoluteFile.parentFile, AtomicFiles.TEMP_DIR)),
+) : ClockAnchorStore {
     private val mutex = Mutex()
 
     override suspend fun anchors(station: String): List<ClockAnchor> = withContext(Dispatchers.IO) {
@@ -34,22 +43,13 @@ class FileClockAnchorStore(private val root: File) : ClockAnchorStore {
     override suspend fun put(anchor: ClockAnchor) = withContext(Dispatchers.IO) {
         mutex.withLock {
             val receipt = checked(File(root, "${anchor.station}/${ClockAnchorReceipt.relativePath(anchor)}"))
-            check(receipt.parentFile.isDirectory || receipt.parentFile.mkdirs()) { "cannot create clock receipt directory" }
-            if (receipt.exists()) {
-                check(receipt.isFile && receipt.readBytes().contentEquals(ClockAnchorReceipt.encode(anchor))) { "conflicting clock receipt" }
-                return@withLock
-            }
-            val temporary = File.createTempFile(".clock-", ".tmp", receipt.parentFile)
+            // AtomicFiles creates the station and boot directories and syncs each new level.
+            val bytes = ClockAnchorReceipt.encode(anchor)
             try {
-                FileOutputStream(temporary).use { stream ->
-                    stream.write(ClockAnchorReceipt.encode(anchor))
-                    stream.fd.sync()
-                }
-                Files.move(temporary.toPath(), receipt.toPath(), ATOMIC_MOVE)
-            } finally {
-                temporary.delete()
+                atomic.createNoReplace(receipt.path, bytes, StorageClass.Durable)
+            } catch (_: AlreadyCommitted) {
+                check(receipt.isFile && receipt.readBytes().contentEquals(bytes)) { "conflicting clock receipt" }
             }
-            Unit
         }
     }
 

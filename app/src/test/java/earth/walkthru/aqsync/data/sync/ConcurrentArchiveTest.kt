@@ -4,6 +4,7 @@ import earth.walkthru.aqsync.data.ble.DeviceSession
 import earth.walkthru.aqsync.data.fake.FakeTransport
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
+import earth.walkthru.aqsync.storage.AlreadyCommitted
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -18,7 +19,6 @@ import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
 import java.io.File
-import java.io.IOException
 import java.nio.file.Files
 import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.CRC32
@@ -181,7 +181,7 @@ class ConcurrentArchiveTest {
         try {
             archive.commit("station-a", name)
             fail("existing archive must not be replaced")
-        } catch (_: IOException) {
+        } catch (_: AlreadyCommitted) {
             assertArrayEquals(bytes, archive.fileFor("station-a", name).readBytes())
             assertTrue(archive.partialLengths("station-a").containsKey(name))
         }
@@ -220,6 +220,8 @@ class ConcurrentArchiveTest {
         override suspend fun upsert(file: ArchivedFile) {
             synchronized(rows) { upserts++; rows[file.station to file.name] = file }
         }
+        override suspend fun insertIfAbsent(file: ArchivedFile): Long =
+            synchronized(rows) { if (rows.putIfAbsent(file.station to file.name, file) == null) rows.size.toLong() else -1L }
         override suspend fun delete(station: String, name: String) { rows.remove(station to name) }
     }
 }

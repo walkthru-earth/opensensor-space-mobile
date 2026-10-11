@@ -214,6 +214,7 @@ dependencies {
     implementation(project(":core:history"))
     // Request session, sync policies, planner and progress maths, shared with iOS.
     implementation(project(":core:sync"))
+    implementation(project(":core:storage"))
     // The Discover map (shared Compose with iOS) and the public feed port behind it.
     implementation(project(":feature:discover"))
     implementation(project(":feature:history"))
@@ -282,6 +283,7 @@ dependencies {
     // Local tests: jUnit, coroutines, Android runner
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.androidx.sqlite.bundled.jvm)
 
     // Instrumented tests: jUnit rules and runners
 
