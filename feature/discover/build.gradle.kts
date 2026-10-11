@@ -17,6 +17,8 @@ kotlin {
             api(project(":core:publicfeed"))
             // DiscoverScreen takes the resolved UnitSystem from its host.
             api(project(":core:units"))
+            // DiscoverScreen takes the host's DetailLevel (Simple speaks in moods).
+            api(project(":core:settings"))
             api(project(":ui:designsystem"))
             // Near me follows the shared permission policy and its settings link.
             api(project(":ui:permissions"))
@@ -30,6 +32,10 @@ kotlin {
             runtimeOnly(libs.maplibre.compose.runtime.opengl.android)
             // The "Near me" coarse location prompt (NearMe.android.kt).
             implementation(libs.androidx.activity.compose)
+        }
+        commonTest.dependencies {
+            // DiscoverControllerTest drives the controller on a test scheduler.
+            implementation(libs.kotlinx.coroutines.test)
         }
     }
 }

@@ -1,5 +1,6 @@
 package earth.walkthru.opensensor.discover
 
+import earth.walkthru.aqsync.airquality.StationSummary
 import earth.walkthru.aqsync.publicfeed.CellFreshness
 import earth.walkthru.aqsync.publicfeed.CellGeoJson
 import earth.walkthru.aqsync.publicfeed.CellRow
@@ -12,6 +13,7 @@ import earth.walkthru.aqsync.publicfeed.H3Grid
 import earth.walkthru.aqsync.publicfeed.H3Index
 import earth.walkthru.aqsync.publicfeed.PropertyRanking
 import earth.walkthru.aqsync.publicfeed.PublicFeed
+import earth.walkthru.aqsync.publicfeed.PublicSummary
 import earth.walkthru.aqsync.publicfeed.TimeZoneRegions
 import earth.walkthru.aqsync.publicfeed.ViewportCover
 import earth.walkthru.aqsync.storage.MemoryTrimmable
@@ -21,6 +23,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -77,6 +80,11 @@ data class DiscoverUiState(
     val rows: List<CellRow> = emptyList(),
     val geoJson: String = EMPTY_GEOJSON,
     val selected: CellRow? = null,
+    /**
+     * The selected cell in each window that has been read. The current window comes with the
+     * selection, the other two follow from one read each, for that one cell.
+     */
+    val selectedWindows: Map<FeedWindow, CellRow?> = emptyMap(),
     val newestUpdateEpochMs: Long? = null,
     val firstRun: Boolean = false,
     val res: Int = ViewportCover.MIN_RES,
@@ -84,6 +92,12 @@ data class DiscoverUiState(
     companion object {
         const val EMPTY_GEOJSON = "{\"type\":\"FeatureCollection\",\"features\":[]}"
     }
+}
+
+/** The selected cell's summary for [property], three windows, headline the 24 hour mean. Null with no selection. */
+fun DiscoverUiState.selectedSummary(property: FeedProperty): StationSummary? {
+    selected ?: return null
+    return PublicSummary.of(property.id, property.unit, selectedWindows)
 }
 
 /**
@@ -107,6 +121,10 @@ class DiscoverController(
     private var saved = DiscoverSaved()
     private var partition: FeedPartition? = null
     private var restyleJob: Job? = null
+    private var windowsJob: Job? = null
+
+    /** The cell, window and resolution [windowsJob] read for, so a pan does not read them again. */
+    private var windowsFor: Triple<Long, FeedWindow, Int>? = null
 
     init {
         // A feed that caches bytes in memory gives them back under memory pressure (#61).
@@ -148,7 +166,8 @@ class DiscoverController(
         val row = hex?.let { h -> _state.value.rows.firstOrNull { H3Index.toHex(it.h3) == h } }
         if (row?.h3 == _state.value.selected?.h3) return
         // The selected outline is a filter on its own layer, so the GeoJSON is not rebuilt.
-        _state.update { it.copy(selected = row) }
+        _state.update { s -> s.copy(selected = row, selectedWindows = if (row == null) emptyMap() else mapOf(s.window to row)) }
+        readWindows(row)
     }
 
     fun dismissFirstRun() {
@@ -186,6 +205,7 @@ class DiscoverController(
         val wanted = current.property?.id ?: saved.property
         val property = ranked.firstOrNull { it.id == wanted } ?: dictionary.firstOrNull { it.id == wanted && ranked.isEmpty() } ?: ranked.firstOrNull()
         val selected = current.selected?.let { s -> rows.firstOrNull { it.h3 == s.h3 } }
+        val sameWindows = selected != null && windowsFor == Triple(selected.h3, window, res)
         _state.update {
             it.copy(
                 loading = false,
@@ -194,11 +214,46 @@ class DiscoverController(
                 ranked = ranked,
                 rows = rows,
                 selected = selected,
+                selectedWindows = when {
+                    selected == null -> emptyMap()
+                    sameWindows -> it.selectedWindows + (window to selected)
+                    else -> mapOf(window to selected)
+                },
                 res = res,
                 newestUpdateEpochMs = rows.maxOfOrNull { row -> row.updatedEpochMs },
             )
         }
+        if (!sameWindows) readWindows(selected)
         restyle(property?.id)
+    }
+
+    /**
+     * Reads [row]'s cell in the two windows not on screen, one small read each, the same anonymous
+     * feed the map uses. A newer selection cancels it, and a result for an older cell, window or
+     * resolution is dropped, so it never lands on the cell selected since.
+     */
+    private fun readWindows(row: CellRow?) {
+        windowsJob?.cancel()
+        windowsJob = null
+        windowsFor = null
+        row ?: return
+        val p = partition ?: return
+        val current = _state.value
+        val window = current.window
+        val res = current.res
+        windowsFor = Triple(row.h3, window, res)
+        windowsJob = scope.launch {
+            val read = withContext(io) {
+                FeedWindow.entries.filter { it != window }.associateWith { w ->
+                    runCatching { feed.cells(p, w, res, listOf(row.h3..row.h3)).rows.firstOrNull { it.h3 == row.h3 } }.getOrNull()
+                }
+            }
+            ensureActive()
+            _state.update {
+                if (it.selected?.h3 != row.h3 || it.window != window || it.res != res) return@update it
+                it.copy(selectedWindows = it.selectedWindows + read)
+            }
+        }
     }
 
     /** Recomputes chips, scale and GeoJSON for [propertyId] from the rows already loaded. */
