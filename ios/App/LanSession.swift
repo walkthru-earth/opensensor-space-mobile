@@ -219,7 +219,7 @@ actor LanSession {
     /// The shared link closed itself (a failed write, an inbox overflow). The socket ends as disconnected,
     /// so its owner reconnects with a fresh link. Safe from any thread.
     nonisolated func linkFailed() {
-        queue.async { [self] in assumeIsolated { $0.shutdown(reason: .disconnected) } }
+        queue.async { [self] in assumeIsolated { $0.shutdown(reason: .disconnected, local: true) } }
     }
 
     /// Safe from any thread. Closing is enqueued on the session queue; pending waits end as disconnected.
@@ -227,7 +227,8 @@ actor LanSession {
         queue.async { [self] in assumeIsolated { $0.shutdown(reason: nil) } }
     }
 
-    private static func linkReason(_ reason: LanFailure?) -> Int32 {
+    private static func linkReason(_ reason: LanFailure?, local: Bool) -> Int32 {
+        if local { return IosLink.companion.REASON_LOCAL }
         switch reason {
         case .none: return IosLink.companion.REASON_APP
         case .some(.disconnected): return IosLink.companion.REASON_PEER_CLOSED
@@ -256,7 +257,8 @@ actor LanSession {
             completion: .contentProcessed { [weak self] error in
                 done?(error == nil)
                 guard error != nil else { return }
-                self?.assumeIsolated { $0.shutdown(reason: .disconnected) }
+                // This phone failed to write, so Kotlin hears a local fault, not the sensor closing.
+                self?.assumeIsolated { $0.shutdown(reason: .disconnected, local: true) }
             })
     }
 
@@ -433,7 +435,8 @@ actor LanSession {
         write(wire.statusRequest())
     }
 
-    private func shutdown(reason: LanFailure?) {
+    /// [local] when this phone ended it, such as a failed write, which the user still sees as disconnected.
+    private func shutdown(reason: LanFailure?, local: Bool = false) {
         guard !closed else { return }
         closed = true
         heartbeat?.cancel()
@@ -455,7 +458,7 @@ actor LanSession {
         connection.stateUpdateHandler = nil
         connection.cancel()
         // Kotlin sees the link end at once, after every frame already offered.
-        sink?.link.linkLost(reason: Self.linkReason(reason))
+        sink?.link.linkLost(reason: Self.linkReason(reason, local: local))
         sink = nil
         if let reason { eventSink.yield(.closed(reason)) }
         eventSink.finish()
