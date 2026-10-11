@@ -18,6 +18,8 @@ import earth.walkthru.aqsync.storage.FakeStorageBudget
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -27,18 +29,23 @@ import platform.Foundation.NSFileManager
 import platform.Foundation.NSLock
 import platform.Foundation.NSTemporaryDirectory
 import platform.Foundation.NSUUID
-import kotlin.concurrent.AtomicInt
+import kotlin.concurrent.atomics.AtomicInt
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.concurrent.atomics.incrementAndFetch
 import kotlin.random.Random
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeSource
 
 /** The shared controller on iOS (#81), over a scripted board that Swift reconnects to through dial. */
+@OptIn(ExperimentalAtomicApi::class)
 class SensorCollectionsTest {
     private val base = NSTemporaryDirectory().trimEnd('/') + "/sensor-collections-" + NSUUID().UUIDString()
     private val finals = "$base/SensorArchive"
@@ -100,10 +107,11 @@ class SensorCollectionsTest {
         }
 
         /** Swift's reconnect, a fresh identified link. */
-        fun dial(name: String, prefer: LinkPreference) {
+        fun dial(name: String, prefer: LinkPreference, done: (Boolean) -> Unit) {
             assertEquals(device, name)
-            dials.incrementAndGet()
+            dials.incrementAndFetch()
             connect()
+            done(true)
         }
 
         private fun answer(link: IosLink, req: ByteArray) {
@@ -111,12 +119,12 @@ class SensorCollectionsTest {
             when (val op = req[0].toInt() and 0xFF) {
                 Opcode.STATUS -> link.offerStatus(if (anchored) "{\"utc\":1,\"clk\":1,\"clk_age_s\":60}" else "{\"utc\":0,\"clk\":0}")
                 Opcode.SET_TIME -> {
-                    timeSets.incrementAndGet()
+                    timeSets.incrementAndFetch()
                     anchored = true
                     reply(Frame.TimeSet(1_789_581_931L, 12_345_678L, 123_000))
                 }
                 Opcode.LIST -> {
-                    lists.incrementAndGet()
+                    lists.incrementAndFetch()
                     files.forEach { (name, bytes) -> reply(Frame.File(bytes.size.toLong(), name)) }
                     reply(Frame.ListEnd(files.size.toLong(), 0, 0, 0))
                 }
@@ -197,7 +205,7 @@ class SensorCollectionsTest {
             lock.lock()
             events += "finished"
             lock.unlock()
-            finishes.incrementAndGet()
+            finishes.incrementAndFetch()
             done.complete(result)
         }
     }
@@ -209,15 +217,98 @@ class SensorCollectionsTest {
         val board = Board()
         val provider = IosLinkProvider({ board.current }, 5.seconds, Dispatchers.Default, board::dial, poll = 10.milliseconds)
         val lent = provider.connect(device, LinkPreference.ANY)
-        assertEquals(1, board.dials.value)
+        assertEquals(1, board.dials.load())
         assertEquals(station, lent.station)
         assertTrue(board.current!!.syncRunning)
         lent.release()
         assertFalse(board.current!!.leased)
 
-        val silent = IosLinkProvider({ null }, 100.milliseconds, Dispatchers.Default, { _, _ -> }, poll = 10.milliseconds)
+        val silent = IosLinkProvider({ null }, 100.milliseconds, Dispatchers.Default, { _, _, _ -> }, poll = 10.milliseconds)
         val timedOut = assertFailsWith<LinkClosedException> { silent.connect(device, LinkPreference.ANY) }
         assertEquals(DisconnectCause.Timeout(TimeoutPhase.OPEN, 0), timedOut.disconnectCause)
+    }
+
+    @Test
+    fun aRefusedDialFailsAtOnceInsteadOfWaitingTheOpenTimeout() = runBlocking {
+        val dials = AtomicInt(0)
+        val provider = IosLinkProvider(
+            { null },
+            5.seconds,
+            Dispatchers.Default,
+            { _, _, done -> dials.incrementAndFetch().also { done(false) } },
+            poll = 1.seconds,
+        )
+        val began = TimeSource.Monotonic.markNow()
+        val refused = assertFailsWith<LinkClosedException> { provider.connect(device, LinkPreference.ANY) }
+        assertEquals(DisconnectCause.Unreachable, refused.disconnectCause)
+        assertTrue(began.elapsedNow() < 900.milliseconds, "failed after ${began.elapsedNow()}")
+        // A refused dial is no longer in flight, so the next attempt asks Swift again.
+        assertFailsWith<LinkClosedException> { provider.connect(device, LinkPreference.ANY) }
+        assertEquals(2, dials.load())
+    }
+
+    @Test
+    fun attemptsWhileADialIsInFlightWaitForItInsteadOfDiallingAgain() = runBlocking {
+        val board = Board()
+        val answer = CompletableDeferred<(Boolean) -> Unit>()
+        val dials = AtomicInt(0)
+        val provider = IosLinkProvider(
+            { board.current },
+            5.seconds,
+            Dispatchers.Default,
+            { _, _, done -> dials.incrementAndFetch().also { answer.complete(done) } },
+            poll = 10.milliseconds,
+        )
+        val first = async(Dispatchers.Default) { runCatching { provider.connect(device, LinkPreference.ANY) } }
+        val second = async(Dispatchers.Default) { runCatching { provider.connect(device, LinkPreference.ANY) } }
+        val done = withTimeout(5_000) { answer.await() }
+        repeat(10) { yield() }
+        board.connect()
+        done(true)
+        val results = listOf(first, second).awaitAll()
+        assertEquals(1, dials.load())
+        // One lends the new link, the other finds its sync lease taken.
+        val lent = results.mapNotNull { it.getOrNull() }
+        assertEquals(1, lent.size)
+        assertEquals(DisconnectCause.Busy, (results.firstNotNullOf { it.exceptionOrNull() } as LinkClosedException).disconnectCause)
+        lent.single().release()
+        assertFalse(board.current!!.leased)
+    }
+
+    @Test
+    fun aCancelDuringADialLeavesItInFlightAndTheRetryLendsItsLink() = runBlocking {
+        val board = Board()
+        val answer = CompletableDeferred<(Boolean) -> Unit>()
+        val dials = AtomicInt(0)
+        val provider = IosLinkProvider(
+            { board.current },
+            5.seconds,
+            Dispatchers.Default,
+            { _, _, done -> dials.incrementAndFetch().also { answer.complete(done) } },
+            poll = 10.milliseconds,
+        )
+        val cancelled = launch(Dispatchers.Default) { provider.connect(device, LinkPreference.ANY) }
+        val done = withTimeout(5_000) { answer.await() }
+        cancelled.cancel()
+        withTimeout(1_000) { cancelled.join() }
+        assertTrue(cancelled.isCancelled)
+
+        val retry = async(Dispatchers.Default) { provider.connect(device, LinkPreference.ANY) }
+        repeat(10) { yield() }
+        board.connect()
+        done(true)
+        val lent = withTimeout(5_000) { retry.await() }
+        assertEquals(1, dials.load(), "the retry waits for the dial Swift is still making")
+        assertEquals(station, lent.station)
+        lent.release()
+        assertFalse(board.current!!.leased)
+    }
+
+    @Test
+    fun collectionsIsOneInstancePerRunner() {
+        val board = Board()
+        val first = sync.collections({ board.current }, board::dial)
+        assertSame(first, sync.collections({ null }, { _, _, done -> done(false) }))
     }
 
     @Test
@@ -234,12 +325,12 @@ class SensorCollectionsTest {
         assertEquals(SyncEnd.COMPLETE, result.end)
         assertEquals(2, result.files)
         assertEquals(2, result.saved, "files of both attempts count")
-        assertEquals(1, board.dials.value)
-        assertEquals(2, board.lists.value, "every attempt plans from a fresh LIST")
-        assertEquals(1, board.timeSets.value)
+        assertEquals(1, board.dials.load())
+        assertEquals(2, board.lists.load(), "every attempt plans from a fresh LIST")
+        assertEquals(1, board.timeSets.load())
         assertEquals(listOf(Frame.TimeSet(1_789_581_931L, 12_345_678L, 123_000).epochNanos), anchors)
         assertFalse(board.current!!.leased)
-        assertEquals(1, seen.finishes.value)
+        assertEquals(1, seen.finishes.load())
         assertEquals("finished", seen.events.last())
     }
 
@@ -256,7 +347,7 @@ class SensorCollectionsTest {
         assertEquals(2, result.files)
         assertEquals(1, result.saved)
         assertEquals(0, result.notSaved)
-        assertEquals(0, board.dials.value, "an auth failure never reconnects")
+        assertEquals(0, board.dials.load(), "an auth failure never reconnects")
     }
 
     @Test
@@ -288,9 +379,9 @@ class SensorCollectionsTest {
         handle.cancel()
         // Late callbacks of the stopped run never reach it after its outcome.
         repeat(20) { yield() }
-        assertEquals(1, first.finishes.value)
+        assertEquals(1, first.finishes.load())
         assertEquals("finished", first.events.last())
-        assertEquals(1, next.finishes.value)
+        assertEquals(1, next.finishes.load())
         assertFalse(board.current!!.leased)
     }
 
