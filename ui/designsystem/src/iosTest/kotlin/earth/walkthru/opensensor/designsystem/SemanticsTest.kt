@@ -1,7 +1,11 @@
 package earth.walkthru.opensensor.designsystem
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
@@ -17,6 +21,7 @@ import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertHeightIsEqualTo
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertWidthIsEqualTo
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onChildren
@@ -189,5 +194,66 @@ class SemanticsTest {
         }
         onNodeWithTag("legend").assert(hasContentDescription("PM2.5. Fresh air, Fair, Getting hazy, Poor, Smoky, Thick smoke"))
         onNodeWithTag("legend").onChildren().assertCountEquals(0)
+    }
+
+    /** The public strip builds the selected state from its `mood_strip_selected` resource. */
+    @Test
+    fun aMoodStripAnnouncesTheChosenBlockFromItsResource() = runComposeUiTest {
+        setContent {
+            MaterialTheme {
+                MoodStrip(
+                    blocks = listOf(MoodBlock(WhoStep.GUIDELINE), MoodBlock(WhoStep.IT2)),
+                    captions = listOf("2 areas", "1 area"),
+                    selected = 1,
+                    onBlock = {},
+                    modifier = Modifier.testTag("strip"),
+                )
+            }
+        }
+        onNodeWithTag("strip").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Poor 1 area selected"))
+    }
+
+    /** A narrow block's caption wraps to a second line instead of cutting "128 areas" short. */
+    @Test
+    fun aLongCaptionInANarrowBlockWrapsAndTheStripGrows() = runComposeUiTest {
+        setContent {
+            MaterialTheme {
+                Column(Modifier.width(300.dp)) {
+                    MoodStripLayout(
+                        blocks = listOf(MoodBlock(WhoStep.GUIDELINE, weight = 1f), MoodBlock(WhoStep.IT2, weight = 99f)),
+                        words = listOf("Fresh air", "Poor"),
+                        captions = listOf("128 areas", "4 areas"),
+                        selected = null,
+                        selectedSpoken = null,
+                        onBlock = {},
+                        modifier = Modifier.testTag("narrow"),
+                    )
+                }
+            }
+        }
+        // 28 dp bar, 4 dp gap, two caption lines.
+        onNodeWithTag("narrow").assertHeightIsAtLeast(56.dp)
+    }
+
+    /** Inside a horizontal scroll the strip has no width to share, so each block takes a fixed width. */
+    @Test
+    fun anUnboundedStripStillLaysOut() = runComposeUiTest {
+        setContent {
+            MaterialTheme {
+                Row(Modifier.horizontalScroll(rememberScrollState())) {
+                    MoodStripLayout(
+                        blocks = listOf(MoodBlock(WhoStep.GUIDELINE), MoodBlock(null), MoodBlock(WhoStep.IT2)),
+                        words = listOf("Fresh air", "n/a", "Poor"),
+                        captions = emptyList(),
+                        selected = null,
+                        selectedSpoken = null,
+                        onBlock = null,
+                        modifier = Modifier.testTag("unbounded"),
+                    )
+                }
+            }
+        }
+        // Three 64 dp blocks and two 3 dp gaps.
+        onNodeWithTag("unbounded").assertWidthIsEqualTo(198.dp)
     }
 }

@@ -21,4 +21,6 @@
     <string name="mood_none_line">لا توجد قراءة هنا بعد.</string>
     <string name="value_not_available">غير متاح</string>
     <string name="mood_strip_selected">تم اختيار %1$s</string>
+    <!-- The list comma, spoken lists join with it and one space. -->
+    <string name="list_separator">،</string>
 </resources>

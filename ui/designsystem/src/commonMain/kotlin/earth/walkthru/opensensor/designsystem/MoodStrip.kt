@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import earth.walkthru.aqsync.airquality.MoodBlock
 import earth.walkthru.aqsync.airquality.WhoStep
 import earth.walkthru.opensensor.designsystem.resources.Res
+import earth.walkthru.opensensor.designsystem.resources.list_separator
 import earth.walkthru.opensensor.designsystem.resources.mood_fair
 import earth.walkthru.opensensor.designsystem.resources.mood_fair_line
 import earth.walkthru.opensensor.designsystem.resources.mood_fresh
@@ -89,16 +90,26 @@ fun moodLine(step: WhoStep?): String = stringResource(moodLineRes(step))
 @Composable
 fun notAvailableText(): String = stringResource(Res.string.value_not_available)
 
-/** "word caption" per block, joined with commas. Captions are optional per block. */
-internal fun moodSummary(words: List<String>, captions: List<String?>): String =
-    words.indices.joinToString(", ") { i -> blockLabel(words[i], captions.getOrNull(i)) }
+/**
+ * The list comma of the current language, "," in English and "،" in Arabic. Spoken lists join
+ * with it and one space, [spokenList].
+ */
+@Composable
+fun listSeparator(): String = stringResource(Res.string.list_separator)
+
+/** [items] joined with [separator] and one space, the way a screen reader reads a list. */
+fun spokenList(items: List<String>, separator: String): String = items.joinToString("$separator ")
+
+/** "word caption" per block, joined with the list comma. Captions are optional per block. */
+internal fun moodSummary(words: List<String>, captions: List<String?>, separator: String = ","): String =
+    spokenList(words.indices.map { i -> blockLabel(words[i], captions.getOrNull(i)) }, separator)
 
 /** One block read aloud, its word then its caption. */
 internal fun blockLabel(word: String, caption: String?): String = listOfNotNull(word, caption).joinToString(" ")
 
 /** The legend read as one sentence, the title then the six words. */
-internal fun legendSummary(words: List<String>, title: String?): String =
-    listOfNotNull(title, words.joinToString(", ")).joinToString(". ")
+internal fun legendSummary(words: List<String>, title: String?, separator: String = ","): String =
+    listOfNotNull(title, spokenList(words, separator)).joinToString(". ")
 
 /**
  * Mood blocks side by side, widths by [MoodBlock.weight], no axis. A null step is hatched and read
@@ -122,7 +133,7 @@ fun MoodStrip(
     }
     val chosen = selected?.takeIf { it in blocks.indices && blocks[it].weight > 0f }
     val selectedSpoken = chosen?.let { stringResource(Res.string.mood_strip_selected, blockLabel(words[it], captions.getOrNull(it))) }
-    MoodStripLayout(blocks, words, captions, selected, selectedSpoken, onBlock, modifier)
+    MoodStripLayout(blocks, words, captions, selected, selectedSpoken, onBlock, modifier, listSeparator())
 }
 
 @Composable
@@ -134,9 +145,10 @@ internal fun MoodStripLayout(
     selectedSpoken: String?,
     onBlock: ((Int) -> Unit)?,
     modifier: Modifier = Modifier,
+    separator: String = ",",
 ) {
     val shown = blocks.indices.filter { blocks[it].weight > 0f }
-    val summary = moodSummary(shown.map { words[it] }, shown.map { captions.getOrNull(it) })
+    val summary = moodSummary(shown.map { words[it] }, shown.map { captions.getOrNull(it) }, separator)
     val captioned = shown.any { captions.getOrNull(it) != null }
     val outline = MaterialTheme.colorScheme.onSurface
     val hatch = MaterialTheme.colorScheme.outline
@@ -190,7 +202,8 @@ internal fun MoodStripLayout(
                             style = MaterialTheme.typography.labelSmall,
                             color = muted,
                             textAlign = TextAlign.Center,
-                            maxLines = 1,
+                            // A 48 dp block wraps "128 areas" to two lines instead of cutting it.
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
@@ -202,14 +215,19 @@ internal fun MoodStripLayout(
 
 private val GAP = 3.dp
 
+/** The width of each block when the strip has no width to share, inside a horizontal scroll. */
+private const val UNBOUNDED_BLOCK = 64f
+
 /**
  * Block widths in [available], proportional to [weights], each at least [min]. A block whose share
  * falls under [min] is lifted to it and the others share what is left. When [min] cannot fit for
- * every block, they share the width equally.
+ * every block, they share the width equally. An unbounded [available] gives each block a fixed
+ * [UNBOUNDED_BLOCK] width, or [min] when that is wider.
  */
 internal fun blockWidths(weights: List<Float>, available: Float, min: Float): List<Float> {
     val n = weights.size
     if (n == 0) return emptyList()
+    if (!available.isFinite()) return List(n) { maxOf(UNBOUNDED_BLOCK, min) }
     if (min * n >= available) return List(n) { available / n }
     val fixed = BooleanArray(n)
     while (true) {
@@ -225,12 +243,12 @@ internal fun blockWidths(weights: List<Float>, available: Float, min: Float): Li
 @Composable
 fun MoodLegend(modifier: Modifier = Modifier, title: String? = null) {
     val words = WhoStep.entries.map { moodWord(it) }
-    MoodLegendLayout(words, title, modifier)
+    MoodLegendLayout(words, title, modifier, listSeparator())
 }
 
 @Composable
-internal fun MoodLegendLayout(words: List<String>, title: String?, modifier: Modifier = Modifier) {
-    val summary = legendSummary(words, title)
+internal fun MoodLegendLayout(words: List<String>, title: String?, modifier: Modifier = Modifier, separator: String = ",") {
+    val summary = legendSummary(words, title, separator)
     Column(modifier.clearAndSetSemantics { contentDescription = summary }) {
         if (title != null) {
             Text(title, style = MaterialTheme.typography.labelMedium)

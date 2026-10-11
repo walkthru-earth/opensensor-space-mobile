@@ -34,7 +34,17 @@ class MoodCopyTest {
             WhoStep.entries.map { peacockExpressionFor(it) },
         )
         assertEquals(PeacockExpression.CONFUSED, peacockExpressionFor(null as WhoStep?))
-        AirMood.entries.forEach { assertEquals(peacockExpressionFor(it.step), peacockExpressionFor(it)) }
+        assertEquals(
+            listOf(
+                PeacockExpression.HAPPY,
+                PeacockExpression.CALM,
+                PeacockExpression.CONCERNED,
+                PeacockExpression.MASKED,
+                PeacockExpression.MASKED,
+                PeacockExpression.FEATHER_SHIELD,
+            ),
+            AirMood.entries.map { peacockExpressionFor(it) },
+        )
     }
 
     @Test
@@ -44,6 +54,13 @@ class MoodCopyTest {
             moodSummary(listOf("Fresh air", "n/a", "Poor"), listOf("7 days", "24 hours", "1 hour")),
         )
         assertEquals("Fresh air, Poor", moodSummary(listOf("Fresh air", "Poor"), emptyList()))
+    }
+
+    @Test
+    fun theSummariesJoinWithTheLocalisedSeparator() {
+        assertEquals("هواء نقي 7 أيام، سيئ ساعة", moodSummary(listOf("هواء نقي", "سيئ"), listOf("7 أيام", "ساعة"), separator = "،"))
+        assertEquals("PM2.5. هواء نقي، مقبول", legendSummary(listOf("هواء نقي", "مقبول"), "PM2.5", separator = "،"))
+        assertEquals("a، b", spokenList(listOf("a", "b"), "،"))
     }
 
     @Test
@@ -70,5 +87,11 @@ class MoodCopyTest {
     @Test
     fun tooManyBlocksForTheMinimumShareTheWidthEqually() {
         assertEquals(listOf(50f, 50f, 50f), blockWidths(listOf(1f, 5f, 9f), available = 150f, min = 48f * 2))
+    }
+
+    @Test
+    fun anUnboundedStripFallsBackToAFixedWidthPerBlock() {
+        assertEquals(listOf(64f, 64f, 64f), blockWidths(listOf(1f, 5f, 9f), available = Float.POSITIVE_INFINITY, min = 48f))
+        assertEquals(listOf(64f), blockWidths(listOf(1f), available = Float.POSITIVE_INFINITY, min = 0f))
     }
 }

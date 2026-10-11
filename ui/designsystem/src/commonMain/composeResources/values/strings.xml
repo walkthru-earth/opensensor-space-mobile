@@ -25,4 +25,6 @@
     <string name="value_not_available">n/a</string>
     <!-- MoodStrip state when a block is chosen, the argument is the block word and caption. -->
     <string name="mood_strip_selected">%1$s selected</string>
+    <!-- The list comma, spoken lists join with it and one space. -->
+    <string name="list_separator">,</string>
 </resources>
