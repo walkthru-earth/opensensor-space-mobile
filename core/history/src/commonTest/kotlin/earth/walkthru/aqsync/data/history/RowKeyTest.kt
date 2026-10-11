@@ -72,4 +72,46 @@ class RowKeyTest {
         val utc = longArrayOf(t0)
         assertEquals(2, hourRows(file(utc, null, bootLo = 1L), file(utc, null, bootLo = 2L)))
     }
+
+    @Test
+    fun `the hashed set keeps every distinct key when every hash collides`() {
+        val keys = RowKeys { _, _, _, _ -> 42L }
+        // Keys that differ in one field only, so a hash match alone would wrongly drop them.
+        val distinct = listOf(
+            RowKey(1, 2, true, 5), RowKey(1, 2, false, 5), RowKey(1, 3, true, 5), RowKey(2, 2, true, 5),
+            RowKey(1, 2, true, 6), RowKey(0, 0, false, 0), RowKey(0, 0, true, 0),
+        )
+        for (k in distinct) assertTrue(keys.firstSight(k.bootHi, k.bootLo, k.bySequence, k.value), "$k is new")
+        for (k in distinct) assertFalse(keys.firstSight(k.bootHi, k.bootLo, k.bySequence, k.value), "$k was seen")
+        assertEquals(distinct.size, keys.size)
+    }
+
+    @Test
+    fun `the hashed set agrees with a set of RowKey objects through growth and collisions`() {
+        // A weak hash makes long probe chains, the table grows past its first capacity many times.
+        val keys = RowKeys { hi, lo, bySeq, v -> (hi xor lo xor v) and 0xff or (if (bySeq) 0x100L else 0L) }
+        val reference = HashSet<RowKey>()
+        var x = 12345L
+        repeat(20_000) {
+            x = x * 6364136223846793005L + 1442695040888963407L
+            val k = RowKey((x ushr 60) and 3, (x ushr 56) and 3, (x ushr 55) and 1L == 1L, (x ushr 40) and 0x3ff)
+            assertEquals(reference.add(k), keys.firstSight(k.bootHi, k.bootLo, k.bySequence, k.value), "$k")
+        }
+        assertEquals(reference.size, keys.size)
+    }
+
+    @Test
+    fun `the boxed and unboxed entry points name the same key`() {
+        val keys = RowKeys()
+        assertTrue(keys.firstSight(null, null, 9L, t0))
+        assertFalse(keys.firstSight(0L, 0L, true, 9L))
+        assertTrue(keys.firstSight(null, null, null, 9L), "a time key never matches a sequence key")
+        assertFalse(keys.firstSight(0L, 0L, false, 9L))
+    }
+
+    @Test
+    fun `equal keys hash equally`() {
+        assertEquals(RowKey.hash(1, 2, true, 3), RowKey.hash(1, 2, true, 3))
+        assertNotEquals(RowKey.hash(1, 2, true, 3), RowKey.hash(1, 2, false, 3))
+    }
 }

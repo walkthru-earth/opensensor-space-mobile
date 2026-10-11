@@ -17,6 +17,7 @@ import earth.walkthru.aqsync.data.lan.LanFailure
 import earth.walkthru.aqsync.data.lan.LanTargets
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
+import earth.walkthru.aqsync.data.local.database.DerivedArchivedFileQueries
 import earth.walkthru.aqsync.data.local.database.KnownDevice
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
 import earth.walkthru.aqsync.data.local.database.StationEpoch
@@ -789,7 +790,7 @@ class DeviceConnectionRepositoryTest {
         }
     }
 
-    private class InMemoryArchivedFileDao : ArchivedFileDao {
+    private class InMemoryArchivedFileDao : DerivedArchivedFileQueries {
         private val state = MutableStateFlow<List<ArchivedFile>>(emptyList())
         val rows: List<ArchivedFile> get() = state.value
         override fun observeAll(): Flow<List<ArchivedFile>> = state

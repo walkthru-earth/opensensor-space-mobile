@@ -5,6 +5,7 @@ import earth.walkthru.aqsync.archive.ArchiveKey
 import earth.walkthru.aqsync.archive.ArchiveRecord
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -15,6 +16,11 @@ class RoomArchiveIndex @Inject constructor(private val dao: ArchivedFileDao) : A
     override fun observeAll(): Flow<List<ArchiveRecord>> = dao.observeAll().map { rows -> rows.map { it.toRecord() } }
 
     override fun observeStation(station: String): Flow<List<ArchiveRecord>> = dao.observeForStation(station).map { rows -> rows.map { it.toRecord() } }
+
+    override fun observeNeverIndexed(): Flow<Boolean> = dao.observeAnyNeverIndexed().distinctUntilChanged()
+
+    override fun observeLatestTimed(): Flow<Map<String, Long>> =
+        dao.observeLatestTimed().map { rows -> rows.associate { it.station to (it.lastNs ?: Long.MIN_VALUE) } }.distinctUntilChanged()
 
     override suspend fun get(key: ArchiveKey): ArchiveRecord? = dao.get(key.station, key.name)?.toRecord()
 

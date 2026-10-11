@@ -1,7 +1,7 @@
 package earth.walkthru.aqsync.data.history
 
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
-import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
+import earth.walkthru.aqsync.data.local.database.DerivedArchivedFileQueries
 import earth.walkthru.aqsync.data.local.database.DerivedDay
 import earth.walkthru.aqsync.data.local.database.DerivedDayDao
 import earth.walkthru.aqsync.data.local.database.MetricBucket
@@ -64,7 +64,7 @@ class HistoryDeriverTest {
         assertTrue(daily.leaf("event_time_utc_ns").isTimestampNanosUtc)
         assertEquals("telemetry-derived-day", daily.metadata.keyValueMetadata["purpose"])
         assertTrue(daily.metadata.keyValueMetadata["complete"] in setOf("true", "false"))
-        assertTrue(store.manifestFile(station, 20713).readText().contains("\"rows_used\": 105"))
+        assertTrue(store.manifestFile(station, 20713).readText().contains("\"rows_used\":105"))
         assertEquals("day=2026-09-17.parquet", days.rows.single().dailyFile?.substringAfter('/'))
         // For tools/validate_parquet_samples.py (PyArrow + DuckDB): a real derived day built from the board's file.
         File("build/parquet-samples").apply { mkdirs() }.let { dir ->
@@ -95,7 +95,7 @@ class HistoryDeriverTest {
         assertEquals(2, days.rows.single().sourceFiles)
         // Same rows under two names: the daily file de-duplicates on (boot, sequence) — 105 rows, 2 sources in the manifest.
         assertEquals(105L, earth.walkthru.aqsync.data.history.parquet.ParquetFile.open(store.dayFile(station, 20713)).numRows)
-        assertTrue(store.manifestFile(station, 20713).readText().contains("\"rows_used\": 0"))
+        assertTrue(store.manifestFile(station, 20713).readText().contains("\"rows_used\":0"))
 
         // A second real v6 file (the full 10:00–10:29Z window, 180 rows) joins the day: 285 rows, two UTC hours → two row groups.
         put("station=$station/year=2026/month=09/day=17/data_1000_495ccef9f3eb8c5917070c921c9baec8_107-286-3.parquet", "device/v3-board-2rg-180rows.parquet", 4)
@@ -172,12 +172,19 @@ class HistoryDeriverTest {
         }
     }
 
+    @Test
+    fun `the signature hex is the lower-case two digits per byte it always was`() {
+        val bytes = ByteArray(256) { it.toByte() }
+        assertEquals(bytes.joinToString("") { "%02x".format(java.util.Locale.ROOT, it) }, HistoryDeriver.hex(bytes))
+        assertEquals("", HistoryDeriver.hex(ByteArray(0)))
+    }
+
     /** The derived quota over [tmp]'s derived root, with the default budget. */
     private fun derivedQuota(tmp: File) = DerivedQuota(
         QuotaEnforcer(StorageRoots(mapOf(StorageRole.Derived to File(tmp, "derived/v1").absolutePath)), JvmStorageTree()),
     )
 
-    private class InMemoryFiles : ArchivedFileDao {
+    private class InMemoryFiles : DerivedArchivedFileQueries {
         val rows = mutableListOf<ArchivedFile>()
         override fun observeAll(): Flow<List<ArchivedFile>> = flowOf(rows.toList())
         override fun observeForStation(station: String): Flow<List<ArchivedFile>> = flowOf(rows)
@@ -199,9 +206,8 @@ class HistoryDeriverTest {
         }
         override suspend fun unindexed(limit: Int) = rows.filter { it.indexedAtEpochMs == null || it.indexError != null }.take(limit)
         override fun observeUnindexedCount(): Flow<Int> = flowOf(0)
-        override suspend fun withUtcBetween(station: String, fromNs: Long, toNs: Long) =
-            rows.filter { it.station == station && it.indexError == null && (it.purpose == null || it.purpose == "telemetry") && (it.timelineLastNs ?: Long.MIN_VALUE) >= fromNs && (it.timelineFirstNs ?: Long.MAX_VALUE) < toNs }
-                .sortedBy { it.firstUtcNs }
+        // The deriver lists a station once and splits it by day (#63), a time query per day is a regression.
+        override suspend fun withUtcBetween(station: String, fromNs: Long, toNs: Long): List<ArchivedFile> = error("the deriver must not query per day")
         override suspend fun indexedForStation(station: String) = rows.filter { it.station == station && it.indexed }
         override suspend fun stations() = rows.map { it.station }.distinct()
     }

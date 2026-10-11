@@ -10,6 +10,7 @@ import earth.walkthru.aqsync.storage.ByteBudgetLru
 import earth.walkthru.aqsync.storage.MemoryPressure
 import earth.walkthru.aqsync.storage.MemoryTrimmable
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -17,8 +18,12 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlin.concurrent.atomics.AtomicReference
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 /**
  * [HistoryTiers] computed straight from the archive, for a phone without a derived tier store (iOS
@@ -29,8 +34,12 @@ import kotlinx.coroutines.sync.withLock
  * Each day is cached in memory by its source signature (file name, CRC and estimate), so a new file
  * rebuilds only its day and an unchanged day costs one string comparison. The cache is a least
  * recently used map within [budgetBytes] of estimated size (#61), and [trim] gives memory back on
- * [MemoryPressure]. An evicted day is rebuilt from the archive the next time a pass needs it.
- * Nothing is written.
+ * [MemoryPressure]. Behind it the [tierStore] keeps each day on disk under the same signature, so a
+ * new process or an evicted day reads its tiers without decoding Parquet (#63). Only a day missing
+ * from both is decoded, one [DayPass] over its files. Nothing is written to the archive.
+ *
+ * With a [shareScope] the three observers of one station share one upstream, so the index is mapped
+ * and the days are checked once per change instead of once per collector.
  */
 class ArchiveHistoryTiers(
     private val store: ArchiveStore,
@@ -38,9 +47,11 @@ class ArchiveHistoryTiers(
     private val io: CoroutineDispatcher = Dispatchers.Default,
     private val clockAnchors: ClockAnchorStore = EmptyClockAnchorStore,
     budgetBytes: Long = DEFAULT_BUDGET_BYTES,
+    private val tierStore: TierStore = TierStore.NONE,
+    private val shareScope: CoroutineScope? = null,
 ) : HistoryTiers,
     MemoryTrimmable {
-    internal class Day(val signature: String, val buckets: Map<Resolution, Map<String, List<TierBucket>>>)
+    internal class Day(val signature: String, val buckets: DayTiers)
 
     /** What one station's tiers depend on, each UTC day's source files and the boots' time anchors. */
     private data class Sources(val days: Map<Long, List<ArchiveRecord>>, val anchors: Map<String, TimeEstimate.Anchor>)
@@ -72,9 +83,29 @@ class ArchiveHistoryTiers(
         days.values.flatMap { day -> day.buckets[Resolution.DAY].orEmpty().filterValues { list -> list.any { it.validRows > 0 } }.keys }.toSet()
     }.distinctUntilChanged()
 
+    /** Decodes this instance ran, for tests and logs: one per day built from the archive. */
+    var decodedDays: Int = 0
+        private set
+
+    /** One shared upstream per station, an immutable map swapped whole. */
+    @OptIn(ExperimentalAtomicApi::class)
+    private val shared = AtomicReference<Map<String, Flow<Map<Long, Day>>>>(emptyMap())
+
     /** The station's derived days keyed by UTC epoch day, rebuilt only where the sources changed. */
+    @OptIn(ExperimentalAtomicApi::class)
+    private fun days(station: String): Flow<Map<Long, Day>> {
+        val scope = shareScope ?: return upstream(station)
+        // Lazily per station, kept for the process like the station itself. Idle for 5 s it stops collecting the index.
+        while (true) {
+            val now = shared.load()
+            now[station]?.let { return it }
+            val flow = upstream(station).shareIn(scope, SharingStarted.WhileSubscribed(5_000), replay = 1)
+            if (shared.compareAndSet(now, now + (station to flow))) return flow
+        }
+    }
+
     @OptIn(ExperimentalCoroutinesApi::class)
-    private fun days(station: String): Flow<Map<Long, Day>> = index.observeStation(station)
+    private fun upstream(station: String): Flow<Map<Long, Day>> = index.observeStation(station)
         .map { records -> sources(station, records) }
         .distinctUntilChanged()
         .mapLatest { sources -> build(station, sources) }
@@ -82,12 +113,10 @@ class ArchiveHistoryTiers(
 
     /** UTC epoch day to its source files, and the boots' anchors, from the index alone. */
     private suspend fun sources(station: String, records: List<ArchiveRecord>): Sources {
-        val own = records.filter { it.station == station }
-        val days = StationDays.of(own)[station].orEmpty().associateWith { day ->
-            val from = day * StationDays.DAY_NS
-            own.filter { it.indexed && it.onTimeline(from, from + StationDays.DAY_NS) }.sortedWith(ArchiveRecord.TIMELINE_ORDER)
-        }
-        return Sources(days, TimeEstimate.anchors(own.filter { it.indexed }.map { it.info() }, clockAnchors.anchors(station)))
+        val own = records.filter { it.station == station && it.indexed }
+        // One pass over the station for every day, in the timeline order the pass reads them (#63).
+        val days = StationDays.sourcesByDay(own) { it }
+        return Sources(days, TimeEstimate.anchors(own.map { it.info() }, clockAnchors.anchors(station)))
     }
 
     private suspend fun build(station: String, sources: Sources): Map<Long, Day> = mutex.withLock {
@@ -97,35 +126,28 @@ class ArchiveHistoryTiers(
             val sig = signature(files)
             val key = station to day
             val cached = cache[key]
-            out[day] = if (cached?.signature == sig) cached else buildDay(station, day, files, anchors, sig).also { cache[key] = it }
+            out[day] = if (cached?.signature == sig) {
+                cached
+            } else {
+                val saved = tierStore.load(station, day, sig)
+                val built = if (saved != null) Day(sig, saved) else buildDay(station, day, files, anchors, sig).also { tierStore.save(station, day, sig, it.buckets) }
+                built.also { cache[key] = it }
+            }
         }
-        // Days that lost every source drop out of the cache too.
+        // Days that lost every source drop out of the cache and the store too.
         cache.removeAll { it.first == station && it.second !in sources.days }
+        tierStore.retain(station, sources.days.keys)
         out
     }
 
     private fun buildDay(station: String, epochDay: Long, files: List<ArchiveRecord>, anchors: Map<String, TimeEstimate.Anchor>, signature: String): Day {
-        val dayStartS = epochDay * DAY_S
-        val agg = Aggregator(station)
-        for (src in files) {
-            val pf = try {
-                ParquetFile.open(store.reader(src.key), src.name)
-            } catch (e: Exception) {
-                continue
-            }
-            // One file at a time, closed before the next opens, so 32-bit phones keep address space (#61).
-            pf.use {
-                try {
-                    // Estimated time only for files with no UTC of their own whose boot has an anchor.
-                    agg.add(it, if (src.hasEstimatedUtc) anchors[src.bootId] else null)
-                } catch (e: Exception) {
-                    // A file the aggregator refuses is skipped, like one that does not open.
-                }
-            }
-        }
-        // Keep the buckets that start inside this day. A file across midnight gives its other rows to
-        // the neighbouring day, whose source set holds it too.
-        val buckets = agg.buckets().filter { it.startEpochS >= dayStartS && it.startEpochS < dayStartS + DAY_S }
+        decodedDays++
+        // One file at a time, closed before the next opens, so 32-bit phones keep address space (#61).
+        // A file that does not open or that the pass refuses is left out, the others still count.
+        val sources = files.map { src -> DailyParquetSource(src) { ParquetFile.open(store.reader(src.key), src.name) } }
+        // The pass keeps the buckets that start inside this day. A file across midnight gives its other
+        // rows to the neighbouring day, whose source set holds it too.
+        val buckets = DayPass.run(station, epochDay, sources, sink = null, anchors = anchors, nowEpochS = 0).buckets
         val byTier = buckets.groupBy { it.resolution }.mapValues { (_, list) ->
             val perMetric = HashMap<String, MutableList<TierBucket>>()
             for (b in list) for ((id, t) in b.tierBuckets()) perMetric.getOrPut(id) { ArrayList() } += t

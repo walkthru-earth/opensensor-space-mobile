@@ -18,7 +18,8 @@ import javax.inject.Singleton
 
 /**
  * Android's History source: the shared [HistorySeriesReader] over Room (`archived_file`,
- * `metric_bucket`) and the files in `filesDir`. Week, Month and Year read the tiers, Day the rows.
+ * `metric_bucket`) and the files in `filesDir`. Week, Month and Year read the tiers, Day the current
+ * derived day files ([RoomDerivedDayFiles]) and the raw rows of the other days.
  * Reactive and read only. [fileSummaries] serves the Android Files screen.
  */
 @Singleton
@@ -26,12 +27,13 @@ class HistoryRepository @Inject constructor(
     private val archive: FileArchive,
     archivedFileDao: ArchivedFileDao,
     bucketDao: MetricBucketDao,
+    derived: DerivedDayFiles,
 ) {
     val index = RoomArchiveIndex(archivedFileDao)
     val store = FileArchiveStore(archive, Dispatchers.IO)
     val tiers: HistoryTiers = RoomHistoryTiers(bucketDao)
     private val clockAnchors = FileClockAnchorStore(File(archive.root.parentFile, "clock-anchors"))
-    val reader = HistorySeriesReader(store, index, tiers, Dispatchers.IO, clockAnchors)
+    val reader = HistorySeriesReader(store, index, tiers, Dispatchers.IO, clockAnchors, derived)
 
     fun observe(station: String, metric: MetricSpec, range: HistoryRange, window: HistoryWindow): Flow<HistorySeries> =
         reader.observe(station, metric, range, window)

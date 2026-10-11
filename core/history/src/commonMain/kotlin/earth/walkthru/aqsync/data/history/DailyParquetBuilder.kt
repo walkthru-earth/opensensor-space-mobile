@@ -9,6 +9,7 @@ import earth.walkthru.aqsync.data.history.parquet.ParquetFormatException
 import earth.walkthru.aqsync.data.history.parquet.ParquetSink
 import earth.walkthru.aqsync.data.history.parquet.ParquetType
 import earth.walkthru.aqsync.data.history.parquet.ParquetWriter
+import kotlinx.coroutines.CancellationException
 
 /**
  * One immutable source and its verified archive identity. [DailyParquetBuilder] calls [open] once and
@@ -26,10 +27,47 @@ data class DailyParquetResult(
     val sources: List<DailyParquetContribution>,
 )
 
+/** What one [DayPass] gives back: the day's tier buckets and, when it had a sink, the daily file. */
+class DayPassResult(
+    /** Buckets of every resolution that start inside the day, empty when the pass ran without tiers. */
+    val buckets: List<Bucket>,
+    /** The daily file written to the sink, null without a sink, without rows, or after [dailyError]. */
+    val daily: DailyParquetResult?,
+    /** Rows of the sources that opened, read or not, what the Android derive reports as aggregated. */
+    val rowsRead: Long,
+    /** Sources that failed to open or decode. The tiers leave them out, the daily file is not written. */
+    val failedSources: List<ArchiveRecord>,
+    /** Why the daily file was not written although the sink was given, logged by the caller. */
+    val dailyError: Exception?,
+)
+
+/**
+ * One decode of a station-day's sources feeds both the tier [Aggregator] and the derived daily file
+ * (#63). Before it, the derive opened and decoded every source once for the tiers and again for the
+ * daily file. Rows are timed (UTC or the same-boot estimate), kept when they fall in the UTC day, and
+ * de-duplicated once with [RowKeys], so the tiers and the daily file count the same rows.
+ *
+ * A source that fails to open or decode is left out of the tiers, like before, and stops the daily
+ * file, which is retried on the next pass. Sources open one at a time (#61).
+ */
+object DayPass {
+    fun run(
+        station: String,
+        epochDay: Long,
+        sources: List<DailyParquetSource>,
+        sink: ParquetSink?,
+        anchors: Map<String, TimeEstimate.Anchor> = emptyMap(),
+        nowEpochS: Long,
+        tiers: Boolean = true,
+    ): DayPassResult = DailyParquetBuilder.pass(station, epochDay, sources, sink, anchors, nowEpochS, if (tiers) Aggregator(station) else null, strict = false)
+}
+
 /**
  * Shared Android/iOS derived UTC-day writer. Originals and their null UTC values are preserved;
  * same-boot estimates occupy a separate nanosecond timestamp column. Callers commit the sink only
  * after success. Sources are de-duplicated by boot and sequence and split at UTC day/hour boundaries.
+ * The rows are written in timeline order with a page index, and `sorting_columns = [utc]` when no
+ * estimate interleaves them.
  */
 object DailyParquetBuilder {
     fun build(
@@ -39,85 +77,151 @@ object DailyParquetBuilder {
         sink: ParquetSink,
         anchors: Map<String, TimeEstimate.Anchor> = emptyMap(),
         nowEpochS: Long,
-    ): DailyParquetResult? {
+    ): DailyParquetResult? = pass(station, epochDay, sources, sink, anchors, nowEpochS, aggregator = null, strict = true).daily
+
+    /** One open source after its pass. [decoded] holds every column of a contributing source, by leaf name. */
+    private class Src(
+        val row: ArchiveRecord,
+        val keepCount: Int,
+        val estimated: LongArray?,
+        val decoded: Map<String, ColumnValues>,
+        val keyValueMetadata: Map<String, String>,
+        val schemaVersion: String?,
+    )
+
+    /**
+     * The shared pass. [strict] throws the first source or schema failure, as the daily builder always
+     * did. Otherwise a failing source is skipped for the tiers and recorded, and the daily file is dropped.
+     */
+    internal fun pass(
+        station: String,
+        epochDay: Long,
+        sources: List<DailyParquetSource>,
+        sink: ParquetSink?,
+        anchors: Map<String, TimeEstimate.Anchor>,
+        nowEpochS: Long,
+        aggregator: Aggregator?,
+        strict: Boolean,
+    ): DayPassResult {
         require(ArchiveLayout.isSafeStation(station)) { "unsafe station id" }
         val dayStartNs = epochDay * StationDays.DAY_NS
         val dayEndNs = dayStartNs + StationDays.DAY_NS
+        var writing = sink != null
+        var dailyError: Exception? = null
+        val failed = ArrayList<ArchiveRecord>()
+        var rowsRead = 0L
 
-        // 1. Open one source at a time, gather its columns and the row indices that belong to this day,
-        // decode what the day needs and close it before the next (#61). Estimated times (§4.6) per source:
-        // monotonic → UTC for unsynced files whose boot has an anchor.
-        class Src(
-            val row: ArchiveRecord,
-            val keep: IntArray,
-            val estimated: LongArray?,
-            val decoded: Map<String, ColumnValues>,
-            val keyValueMetadata: Map<String, String>,
-            val schemaVersion: String?,
-        )
+        // 1. Open one source at a time, time its rows, keep those of this day seen for the first time,
+        // feed them to the tiers, decode what the daily file needs and close it before the next (#61).
+        // Estimated times (§4.6) per source: monotonic → UTC for unsynced files whose boot has an anchor.
         val opened = ArrayList<Src>()
         var anyEstimated = false
         val columnOrder = LinkedHashMap<String, ParquetType>()
         val timestampColumns = HashSet<String>()
         val seen = RowKeys()
+        // Every kept row in source order: its timeline ns and its row inside its source. starts[s] is
+        // the first kept row of opened source s.
+        var keptUtc = LongArray(256)
+        var keptRow = IntArray(256)
+        var kept = 0
+        val starts = ArrayList<Int>()
         for (source in sources.sortedWith(compareBy({ it.record.firstUtcNs ?: Long.MAX_VALUE }, { it.record.name }))) {
             val src = source.record
-            require(src.station == station) { "source belongs to another station" }
-            opened += source.open().use { pf ->
-                val md = pf.metadata
-                require(md.stationId == null || md.stationId == station) { "Parquet source belongs to another station" }
-                val utc = md.leaf(ParquetIndexer.UTC)?.let { pf.readColumn(it) } ?: return@use null
-                val bootHi = md.leaf("boot_id_hi")?.let { pf.readColumn(it) }
-                val bootLo = md.leaf("boot_id_lo")?.let { pf.readColumn(it) }
-                val seq = md.leaf(ParquetIndexer.SEQ)?.let { pf.readColumn(it) }
-                val anchor = if (src.hasEstimatedUtc) anchors[src.bootId]?.takeIf { it.boot == md.bootId } else null
-                val mono = if (anchor != null) md.leaf(ParquetIndexer.MONO)?.let { pf.readColumn(it) } else null
-                val estimated = if (anchor != null && mono != null) LongArray(utc.size) { i -> mono.asLong(i)?.let(anchor::estimateNsOrNull) ?: Long.MIN_VALUE } else null
-                val keep = ArrayList<Int>()
-                for (i in 0 until utc.size) {
-                    val ns = utc.asLong(i) ?: estimated?.get(i)?.takeIf { it != Long.MIN_VALUE } ?: continue
-                    if (ns < dayStartNs || ns >= dayEndNs) continue
-                    if (!seen.firstSight(bootHi?.asLong(i), bootLo?.asLong(i), seq?.asLong(i), ns)) continue
-                    keep += i
+            val first = kept
+            val one = try {
+                require(src.station == station) { "source belongs to another station" }
+                source.open().use { pf ->
+                    val md = pf.metadata
+                    require(md.stationId == null || md.stationId == station) { "Parquet source belongs to another station" }
+                    rowsRead += pf.numRows
+                    val cache = HashMap<String, ColumnValues?>()
+                    fun col(name: String): ColumnValues? = cache.getOrPut(name) { md.leaf(name)?.let { pf.readColumn(it) } }
+                    val utcValues = col(ParquetIndexer.UTC) ?: return@use null
+                    val utc = LongColumn.of(utcValues)
+                    val bootHi = col("boot_id_hi")?.let(LongColumn::of)
+                    val bootLo = col("boot_id_lo")?.let(LongColumn::of)
+                    val seq = col(ParquetIndexer.SEQ)?.let(LongColumn::of)
+                    val anchor = if (src.hasEstimatedUtc) anchors[src.bootId]?.takeIf { it.boot == md.bootId } else null
+                    val mono = if (anchor != null) col(ParquetIndexer.MONO)?.let(LongColumn::of) else null
+                    val estimated = if (anchor != null && mono != null) LongArray(utc.size) { i -> if (mono.has(i)) anchor.estimateNsOrNull(mono.values[i]) ?: Long.MIN_VALUE else Long.MIN_VALUE } else null
+                    val tierColumns = aggregator?.columns(::col)
+                    for (i in 0 until utc.size) {
+                        val real = utc.has(i)
+                        val ns = if (real) utc.values[i] else estimated?.get(i)?.takeIf { it != Long.MIN_VALUE } ?: continue
+                        if (ns < dayStartNs || ns >= dayEndNs) continue
+                        val bySeq = seq != null && seq.has(i)
+                        if (!seen.firstSight(bootHi.at(i), bootLo.at(i), bySeq, if (bySeq) seq!!.values[i] else ns)) continue
+                        if (tierColumns != null) aggregator.accumulate(tierColumns, i, ns, !real)
+                        if (kept == keptUtc.size) {
+                            keptUtc = keptUtc.copyOf(kept * 2)
+                            keptRow = keptRow.copyOf(kept * 2)
+                        }
+                        keptUtc[kept] = ns
+                        keptRow[kept] = i
+                        kept++
+                    }
+                    val keepCount = kept - first
+                    if (writing) {
+                        try {
+                            // A source whose rows are all duplicates (or outside the day) stays in the manifest with rows_used 0: provenance, not data.
+                            for (leaf in pf.leaves) {
+                                val prev = columnOrder[leaf.name]
+                                if (prev == null) columnOrder[leaf.name] = leaf.type
+                                if (prev != null && prev != leaf.type) throw ParquetFormatException("'${leaf.name}' is $prev in one file and ${leaf.type} in another")
+                                if (leaf.isTimestampNanosUtc) timestampColumns += leaf.name
+                            }
+                        } catch (e: ParquetFormatException) {
+                            if (strict) throw e
+                            dailyError = e
+                            writing = false
+                        }
+                    }
+                    if (estimated != null && keepCount > 0) anyEstimated = true
+                    // Decode every column of a contributing source once, while it is open. The tiers'
+                    // columns are already in the cache.
+                    val decoded = if (!writing || keepCount == 0) emptyMap() else pf.leaves.associate { it.name to (col(it.name) ?: pf.readColumn(it)) }
+                    Src(src, keepCount, estimated, decoded, md.keyValueMetadata, md.schemaVersion)
                 }
-                // A source whose rows are all duplicates (or outside the day) stays in the manifest with rows_used 0: provenance, not data.
-                for (leaf in pf.leaves) {
-                    val prev = columnOrder[leaf.name]
-                    if (prev == null) columnOrder[leaf.name] = leaf.type
-                    if (prev != null && prev != leaf.type) throw ParquetFormatException("'${leaf.name}' is $prev in one file and ${leaf.type} in another")
-                    if (leaf.isTimestampNanosUtc) timestampColumns += leaf.name
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (strict) throw e
+                // Rows already given to the tiers stay. Decoding fails before the row loop in practice.
+                failed += src
+                if (writing) {
+                    dailyError = e
+                    writing = false
                 }
-                if (estimated != null && keep.isNotEmpty()) anyEstimated = true
-                // Decode every column of a contributing source once, while it is open.
-                val decoded = if (keep.isEmpty()) emptyMap() else pf.leaves.associate { it.name to if (it.name == ParquetIndexer.UTC) utc else pf.readColumn(it) }
-                Src(src, keep.toIntArray(), estimated, decoded, md.keyValueMetadata, md.schemaVersion)
+                kept = first
+                null
+            } ?: run {
+                kept = first
+                null
             } ?: continue
+            starts += first
+            opened += one
         }
-        if (opened.isEmpty() || opened.all { it.keep.isEmpty() }) return null
+        val buckets = aggregator?.buckets().orEmpty()
+        if (!writing || opened.isEmpty() || kept == 0) return DayPassResult(buckets, null, rowsRead, failed, dailyError)
+        starts += kept
         // The two *_utc_ns columns are annotated even when the sources (v1/v2) did not annotate them.
         timestampColumns += listOf(ParquetIndexer.UTC, "clock_anchor_utc_ns").filter { it in columnOrder }
 
-        // 2. Flatten to (source index, row index, timeline utc) sorted by time — real UTC or the estimate.
-        data class Ref(val src: Int, val row: Int, val utcNs: Long)
-        val refs = ArrayList<Ref>()
-        opened.forEachIndexed { s, src ->
-            val utc = src.decoded[ParquetIndexer.UTC] ?: return@forEachIndexed
-            for (i in src.keep) refs += Ref(s, i, utc.asLong(i) ?: src.estimated!![i])
-        }
-        refs.sortBy { it.utcNs }
+        // 2. Sort the kept rows by timeline, real UTC or the estimate, keeping source order for ties.
+        val order = IntArray(kept) { it }
+        sortByTimeline(order, keptUtc)
 
         // 3. Columns to write: the union, the manifest index, and — when any row is estimated — the estimate.
         val columns = columnOrder.map { (name, type) -> ParquetWriter.Column(name, type, timestampNanosUtc = name in timestampColumns) } +
             ParquetWriter.Column(SOURCE_INDEX, ParquetType.INT32) +
             (if (anyEstimated) listOf(ParquetWriter.Column(ESTIMATED_UTC, ParquetType.INT64, timestampNanosUtc = true)) else emptyList())
         val utcIndex = columns.indexOfFirst { it.name == ParquetIndexer.UTC }
-        val estimatedBySource: List<LongArray?> = opened.map { it.estimated }
-        val decoded: List<Map<String, ColumnValues>> = opened.map { it.decoded }
+        val startsArray = starts.toIntArray()
 
         // 4. Metadata.
         val invariant = LinkedHashMap<String, String>()
-        val first = opened.first().keyValueMetadata
-        for ((k, v) in first) if (k in COPIED_METADATA && opened.all { it.keyValueMetadata[k] == v }) invariant[k] = v
+        val firstMeta = opened.first().keyValueMetadata
+        for ((k, v) in firstMeta) if (k in COPIED_METADATA && opened.all { it.keyValueMetadata[k] == v }) invariant[k] = v
         val complete = nowEpochS >= (epochDay + 1) * 86_400 + COMPLETE_GRACE_S
         val meta = LinkedHashMap<String, String>().apply {
             putAll(invariant)
@@ -126,78 +230,142 @@ object DailyParquetBuilder {
             put("derived_by", BUILDER)
             put("derived_version", "2")
             put("source_count", opened.size.toString())
-            put("coverage_rows", refs.size.toString())
+            put("coverage_rows", kept.toString())
             put("complete", complete.toString())
             put("schema_versions", opened.map { it.schemaVersion ?: "?" }.distinct().joinToString(","))
             put("purpose", "telemetry-derived-day")
             if (anyEstimated) {
-                put("estimated_rows", refs.count { r -> opened[r.src].estimated != null }.toString())
+                put("estimated_rows", opened.filter { it.estimated != null }.sumOf { it.keepCount }.toString())
                 put("time_estimate", "rows with null event_time_utc_ns carry $ESTIMATED_UTC = anchor_utc_ns + (monotonic_us - anchor_mono_us) * 1000 from a same-boot UTC anchor; source/transport error unmeasured; drift not corrected (assume ±${TimeEstimate.DRIFT_PPM.toInt()} ppm)")
             }
         }
 
         // Keep the partition's timeline order. With estimates interleaved, raw UTC is not sorted.
-        val writer = ParquetWriter(sink, columns, ParquetCodec.LZ4_RAW, meta, BUILDER, sortedBy = utcIndex.takeIf { it >= 0 && !anyEstimated })
+        val writer = ParquetWriter(
+            sink!!, columns, ParquetCodec.LZ4_RAW, meta, BUILDER,
+            sortedBy = utcIndex.takeIf { it >= 0 && !anyEstimated },
+            pageIndex = true,
+        )
         writer.begin()
         var groups = 0
         var start = 0
-        while (start < refs.size) {
-            val hour = refs[start].utcNs.floorDiv(HOUR_NS)
+        val rows = Rows(order, keptRow, startsArray)
+        while (start < kept) {
+            val hour = keptUtc[order[start]].floorDiv(HOUR_NS)
             var end = start
-            while (end < refs.size && refs[end].utcNs.floorDiv(HOUR_NS) == hour) end++
-            writer.rowGroup(gather(columns, decoded, estimatedBySource, refs.subList(start, end).map { it.src to it.row }))
+            while (end < kept && keptUtc[order[end]].floorDiv(HOUR_NS) == hour) end++
+            writer.rowGroup(gather(columns, opened, rows, start, end))
             groups++
             start = end
         }
         writer.finish()
-        return DailyParquetResult(
-            refs.size,
+        val daily = DailyParquetResult(
+            kept,
             columns.map { it.name },
             groups,
             complete,
-            opened.map { s -> DailyParquetContribution(s.row, s.keep.size, anchors[s.row.bootId]?.sourceFile.takeIf { s.estimated != null }) },
+            opened.map { s -> DailyParquetContribution(s.row, s.keepCount, anchors[s.row.bootId]?.sourceFile.takeIf { s.estimated != null }) },
         )
+        return DayPassResult(buckets, daily, rowsRead, failed, null)
     }
 
-    /** Builds one row group's columns by gathering rows (source, index) from the decoded sources. */
-    private fun gather(columns: List<ParquetWriter.Column>, decoded: List<Map<String, ColumnValues>>, estimated: List<LongArray?>, rows: List<Pair<Int, Int>>): List<ColumnValues> {
-        val n = rows.size
+    /** The kept rows in output order. Position [j] is kept row `order[j]`, of source [source] and row [row] there. */
+    private class Rows(val order: IntArray, private val keptRow: IntArray, private val starts: IntArray) {
+        fun source(j: Int): Int {
+            val k = order[j]
+            // The last start at or before k, a binary search over the opened sources.
+            var lo = 0
+            var hi = starts.size - 2
+            while (lo < hi) {
+                val mid = (lo + hi + 1) ushr 1
+                if (starts[mid] <= k) lo = mid else hi = mid - 1
+            }
+            return lo
+        }
+
+        fun row(j: Int): Int = keptRow[order[j]]
+    }
+
+    /** A stable sort of [order] by `utc[order[i]]`, a no-op when the rows already come in order. */
+    internal fun sortByTimeline(order: IntArray, utc: LongArray) {
+        var sorted = true
+        for (i in 1 until order.size) if (utc[order[i]] < utc[order[i - 1]]) { sorted = false; break }
+        if (sorted) return
+        var src = order
+        var dst = IntArray(order.size)
+        var width = 1
+        while (width < order.size) {
+            var lo = 0
+            while (lo < order.size) {
+                val mid = minOf(lo + width, order.size)
+                val hi = minOf(lo + 2 * width, order.size)
+                var a = lo
+                var b = mid
+                var o = lo
+                while (a < mid && b < hi) dst[o++] = if (utc[src[b]] < utc[src[a]]) src[b++] else src[a++]
+                while (a < mid) dst[o++] = src[a++]
+                while (b < hi) dst[o++] = src[b++]
+                lo = hi
+            }
+            val t = src
+            src = dst
+            dst = t
+            width *= 2
+        }
+        if (src !== order) src.copyInto(order)
+    }
+
+    /** Builds one row group's columns by gathering output rows [from] until [to] from the decoded sources. */
+    private fun gather(columns: List<ParquetWriter.Column>, opened: List<Src>, rows: Rows, from: Int, to: Int): List<ColumnValues> {
+        val n = to - from
+        val src = IntArray(n) { rows.source(from + it) }
+        val row = IntArray(n) { rows.row(from + it) }
         return columns.map { c ->
             if (c.name == SOURCE_INDEX) {
-                ColumnValues.Int32(IntArray(n) { rows[it].first }, null)
+                ColumnValues.Int32(src.copyOf(), null)
             } else if (c.name == ESTIMATED_UTC) {
                 val v = LongArray(n); val valid = BooleanArray(n)
-                rows.forEachIndexed { k, (s, i) -> estimated[s]?.get(i)?.takeIf { it != Long.MIN_VALUE }?.let { v[k] = it; valid[k] = true } }
+                for (k in 0 until n) opened[src[k]].estimated?.get(row[k])?.takeIf { it != Long.MIN_VALUE }?.let { v[k] = it; valid[k] = true }
                 ColumnValues.Int64(v, valid.takeIf { it.any { b -> !b } })
             } else {
+                val perSource = Array(opened.size) { opened[it].decoded[c.name] }
                 when (c.type) {
                     ParquetType.INT32 -> {
                         val v = IntArray(n); val valid = BooleanArray(n)
-                        rows.forEachIndexed { k, (s, i) -> val col = decoded[s][c.name]; if (col != null && !col.isNull(i)) { v[k] = (col as ColumnValues.Int32).values[i]; valid[k] = true } }
+                        for (k in 0 until n) { val col = perSource[src[k]]; val i = row[k]; if (col != null && !col.isNull(i)) { v[k] = (col as ColumnValues.Int32).values[i]; valid[k] = true } }
                         ColumnValues.Int32(v, valid.takeIf { it.any { b -> !b } })
                     }
                     ParquetType.INT64 -> {
                         val v = LongArray(n); val valid = BooleanArray(n)
-                        rows.forEachIndexed { k, (s, i) -> val col = decoded[s][c.name]; if (col != null && !col.isNull(i)) { v[k] = (col as ColumnValues.Int64).values[i]; valid[k] = true } }
+                        for (k in 0 until n) { val col = perSource[src[k]]; val i = row[k]; if (col != null && !col.isNull(i)) { v[k] = (col as ColumnValues.Int64).values[i]; valid[k] = true } }
                         ColumnValues.Int64(v, valid.takeIf { it.any { b -> !b } })
                     }
                     ParquetType.FLOAT -> {
                         val v = FloatArray(n); val valid = BooleanArray(n)
-                        rows.forEachIndexed { k, (s, i) -> val col = decoded[s][c.name]; if (col != null && !col.isNull(i)) { v[k] = (col as ColumnValues.Float32).values[i]; valid[k] = true } }
+                        for (k in 0 until n) { val col = perSource[src[k]]; val i = row[k]; if (col != null && !col.isNull(i)) { v[k] = (col as ColumnValues.Float32).values[i]; valid[k] = true } }
                         ColumnValues.Float32(v, valid.takeIf { it.any { b -> !b } })
                     }
                     ParquetType.DOUBLE -> {
                         val v = DoubleArray(n); val valid = BooleanArray(n)
-                        rows.forEachIndexed { k, (s, i) -> val col = decoded[s][c.name]; if (col != null && !col.isNull(i)) { v[k] = (col as ColumnValues.Float64).values[i]; valid[k] = true } }
+                        for (k in 0 until n) { val col = perSource[src[k]]; val i = row[k]; if (col != null && !col.isNull(i)) { v[k] = (col as ColumnValues.Float64).values[i]; valid[k] = true } }
                         ColumnValues.Float64(v, valid.takeIf { it.any { b -> !b } })
                     }
                     ParquetType.BYTE_ARRAY -> {
-                        val values = rows.map { (s, i) -> (decoded[s][c.name] as? ColumnValues.Binary)?.bytes(i) }
                         val offsets = IntArray(n + 1)
-                        values.forEachIndexed { i, bytes -> offsets[i + 1] = offsets[i] + (bytes?.size ?: 0) }
-                        val data = ByteArray(offsets.last())
-                        values.forEachIndexed { i, bytes -> bytes?.copyInto(data, offsets[i]) }
-                        ColumnValues.Binary(offsets, data, BooleanArray(n) { values[it] != null }.takeIf { it.any { b -> !b } })
+                        for (k in 0 until n) {
+                            val col = perSource[src[k]] as? ColumnValues.Binary
+                            offsets[k + 1] = offsets[k] + if (col != null && !col.isNull(row[k])) col.length(row[k]) else 0
+                        }
+                        val data = ByteArray(offsets[n])
+                        val valid = BooleanArray(n)
+                        for (k in 0 until n) {
+                            val col = perSource[src[k]] as? ColumnValues.Binary ?: continue
+                            val i = row[k]
+                            if (col.isNull(i)) continue
+                            valid[k] = true
+                            col.data.copyInto(data, offsets[k], col.offsets[i], col.offsets[i + 1])
+                        }
+                        ColumnValues.Binary(offsets, data, valid.takeIf { it.any { b -> !b } })
                     }
                     else -> throw ParquetFormatException("unsupported derived column type ${c.type}")
                 }

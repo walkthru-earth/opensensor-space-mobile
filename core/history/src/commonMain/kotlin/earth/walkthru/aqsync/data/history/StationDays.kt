@@ -29,4 +29,21 @@ object StationDays {
         }
         return out
     }
+
+    /**
+     * The sources of every day of one station's [items], from one listing instead of a query per day
+     * (#63). An item is in a day exactly when its record is [ArchiveRecord.onTimeline] for that day,
+     * since a span `[first, last]` overlaps the day `[d, d + 1)` when `dayOf(first) <= d <= dayOf(last)`.
+     * Each day keeps the [ArchiveRecord.TIMELINE_ORDER] of the time query.
+     */
+    fun <T> sourcesByDay(items: List<T>, record: (T) -> ArchiveRecord): Map<Long, List<T>> {
+        val out = HashMap<Long, MutableList<T>>()
+        val placed = items.mapNotNull { item -> record(item).let { r -> if (r.indexError == null && r.isTelemetry && r.timelineFirstNs != null && r.timelineLastNs != null) r to item else null } }
+        for ((r, item) in placed.sortedWith(compareBy(ArchiveRecord.TIMELINE_ORDER) { it.first })) {
+            var d = dayOf(r.timelineFirstNs!!)
+            val lastDay = dayOf(r.timelineLastNs!!)
+            while (d <= lastDay) { out.getOrPut(d) { ArrayList() } += item; d++ }
+        }
+        return out
+    }
 }

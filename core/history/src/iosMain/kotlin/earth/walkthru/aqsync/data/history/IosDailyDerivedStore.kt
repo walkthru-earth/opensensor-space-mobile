@@ -5,7 +5,9 @@ package earth.walkthru.aqsync.data.history
 import earth.walkthru.aqsync.archive.ArchiveLayout
 import earth.walkthru.aqsync.archive.ArchiveRecord
 import earth.walkthru.aqsync.archive.ArchiveStore
+import earth.walkthru.aqsync.data.history.parquet.LocalFile
 import earth.walkthru.aqsync.data.history.parquet.LocalFileReader
+import earth.walkthru.aqsync.data.history.parquet.LocalRangeSource
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 import earth.walkthru.aqsync.data.history.parquet.ParquetSink
 import earth.walkthru.aqsync.data.protocol.ParquetVerify
@@ -30,11 +32,17 @@ import kotlinx.serialization.json.put
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSFileProtectionCompleteUntilFirstUserAuthentication
 import platform.Foundation.NSFileProtectionKey
+import platform.Foundation.NSFileSize
 import platform.Foundation.NSFileType
 import platform.Foundation.NSFileTypeRegular
 import platform.Foundation.NSFileTypeSymbolicLink
+import platform.posix.EINVAL
+import platform.posix.ENOTSUP
+import platform.posix.F_FULLFSYNC
 import platform.posix.O_WRONLY
 import platform.posix.close
+import platform.posix.errno
+import platform.posix.fcntl
 import platform.posix.fsync
 import platform.posix.open
 import platform.posix.write
@@ -50,11 +58,14 @@ import kotlin.time.Instant
  * A day whose manifest still carries the current signature but whose Parquet is gone was evicted by
  * the quota or purged by iOS. It is a cache miss, skipped here and kept, so eviction never makes
  * rebuild passes churn.
+ *
+ * It is also the Day view's [DerivedDayFiles] (#63): a day file is read only while its manifest
+ * carries the signature of exactly the sources the view would read.
  */
 class IosDailyDerivedStore(
     root: String,
     private val atomic: AtomicFiles = IosAtomicFiles("${root.trimEnd('/')}/${AtomicFiles.TEMP_DIR}"),
-) {
+) : DerivedDayFiles {
     private val root = root.trimEnd('/')
     private val mutex = Mutex()
     private val fm get() = NSFileManager.defaultManager
@@ -72,26 +83,15 @@ class IosDailyDerivedStore(
             val directory = checked("$root/${ArchiveLayout.derivedStationDir(station)}")
             check(fm.createDirectoryAtPath(directory, true, protection, null)) { "cannot create derived directory" }
             val records = files.filter { it.station == station && it.indexed && it.isTelemetry }
-            val days = StationDays.of(records)[station].orEmpty()
+            // One pass over the station's records for every day, not a filter per day (#63).
+            val byDay = StationDays.sourcesByDay(records) { it }
             val paths = mutableListOf<String>()
             // Day files this pass keeps, built or evicted. Everything else in the directory is stale.
             val kept = HashSet<String>()
-            for (day in days.sorted()) {
-                val start = day * StationDays.DAY_NS
-                val sources = records.filter { it.onTimeline(start, start + StationDays.DAY_NS) }
+            for (day in byDay.keys.sorted()) {
+                val sources = byDay.getValue(day)
                 val complete = nowEpochS >= (day + 1) * 86_400 + DailyParquetBuilder.COMPLETE_GRACE_S
-                val signatureText = buildString {
-                    append("${DailyParquetBuilder.BUILDER}:$complete\n")
-                    for (source in sources.sortedBy { it.name }) {
-                        append("${source.name}:${source.bytes}:${source.crc32}:${source.sha256}")
-                        if (source.hasEstimatedUtc) {
-                            val anchor = anchors[source.bootId]
-                            append(":est${anchor?.boot}:${anchor?.utcNs}:${anchor?.monoUs}")
-                        }
-                        append('\n')
-                    }
-                }
-                val signature = ParquetVerify.sha256Hex(signatureText.encodeToByteArray())
+                val signature = signature(sources, anchors, complete)
                 val target = checked("$root/${ArchiveLayout.derivedDayPath(station, day)}")
                 val manifest = checked("$root/${ArchiveLayout.derivedManifestPath(station, day)}")
                 if (cachedSignature(manifest) == signature) {
@@ -114,8 +114,8 @@ class IosDailyDerivedStore(
                         remove(target)
                         continue
                     }
-                    // Parse the footer before replacing a previously good cache entry.
-                    check(ParquetFile.open(LocalFileReader(temporary)).use { it.numRows } == result.rows.toLong()) { "derived row count mismatch" }
+                    // The writer counted the rows, the synced length says every byte reached the file. No footer re-parse.
+                    check((fm.attributesOfItemAtPath(temporary, null)?.get(NSFileSize) as? Number)?.toLong() == sink.written) { "derived file is short" }
                     // A crash between the two commits must leave no receipt claiming older bytes.
                     remove(manifest)
                     atomic.commitReplace(temporary, target, StorageClass.Rebuildable)
@@ -138,6 +138,31 @@ class IosDailyDerivedStore(
             }
             paths
         }
+    }
+
+    override suspend fun open(station: String, epochDay: Long, sources: List<ArchiveRecord>, anchors: Map<String, TimeEstimate.Anchor>): LocalRangeSource? =
+        withContext(Dispatchers.IO) {
+            val target = checked("$root/${ArchiveLayout.derivedDayPath(station, epochDay)}")
+            val cached = cachedSignature(checked("$root/${ArchiveLayout.derivedManifestPath(station, epochDay)}")) ?: return@withContext null
+            // Completeness changes the receipt, not the rows, either one is current.
+            if (cached != signature(sources, anchors, true) && cached != signature(sources, anchors, false)) return@withContext null
+            if (isFile(target)) LocalRangeSource(LocalFile(target)) else null
+        }
+
+    /** The identity of a day's build: the builder, completeness, and every source with the anchor that dates it. */
+    private fun signature(sources: List<ArchiveRecord>, anchors: Map<String, TimeEstimate.Anchor>, complete: Boolean): String {
+        val text = buildString {
+            append("${DailyParquetBuilder.BUILDER}:$complete\n")
+            for (source in sources.sortedBy { it.name }) {
+                append("${source.name}:${source.bytes}:${source.crc32}:${source.sha256}")
+                if (source.hasEstimatedUtc) {
+                    val anchor = anchors[source.bootId]
+                    append(":est${anchor?.boot}:${anchor?.utcNs}:${anchor?.monoUs}")
+                }
+                append('\n')
+            }
+        }
+        return ParquetVerify.sha256Hex(text.encodeToByteArray())
     }
 
     private fun cachedSignature(path: String): String? {
@@ -201,8 +226,14 @@ class IosDailyDerivedStore(
 
     private class FileSink(path: String) : ParquetSink {
         private val descriptor = open(path, O_WRONLY).also { check(it >= 0) { "cannot open derived temporary file" } }
+
+        /** Bytes handed to the file so far. */
+        var written = 0L
+            private set
+
         override fun write(bytes: ByteArray) {
             if (bytes.isEmpty()) return
+            written += bytes.size
             bytes.usePinned { pinned ->
                 var offset = 0
                 while (offset < bytes.size) {
@@ -212,7 +243,12 @@ class IosDailyDerivedStore(
                 }
             }
         }
-        override fun flush() { check(fsync(descriptor) == 0) { "cannot sync derived Parquet" } }
+        // fsync alone leaves the bytes in the drive cache on Apple hardware. Volumes without F_FULLFSYNC fall back to it.
+        override fun flush() {
+            if (fcntl(descriptor, F_FULLFSYNC) == 0) return
+            val e = errno
+            check((e == ENOTSUP || e == EINVAL) && fsync(descriptor) == 0) { "cannot sync derived Parquet" }
+        }
         fun close() { check(close(descriptor) == 0) { "cannot close derived Parquet" } }
     }
 }

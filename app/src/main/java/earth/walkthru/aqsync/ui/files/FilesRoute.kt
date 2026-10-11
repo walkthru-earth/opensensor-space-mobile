@@ -26,7 +26,6 @@ import earth.walkthru.aqsync.ui.components.TransportChip
 import earth.walkthru.aqsync.ui.components.showScreenMessage
 import earth.walkthru.aqsync.ui.permissions.rememberNotificationPermission
 import earth.walkthru.opensensor.designsystem.AppIcons
-import earth.walkthru.opensensor.files.DeviceFiles
 import earth.walkthru.opensensor.files.DeviceFilesAction
 import earth.walkthru.opensensor.files.FileMetricsScreen
 import earth.walkthru.opensensor.files.FilesScreen
@@ -47,6 +46,7 @@ fun FilesRoute(
     viewModel: FilesViewModel = hiltViewModel<FilesViewModel, FilesViewModel.Factory>(key = address, creationCallback = { it.create(address) }),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val device by viewModel.deviceFiles.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val res = LocalResources.current
     val level = state.detailLevel
@@ -65,7 +65,7 @@ fun FilesRoute(
         controller = viewModel.files,
         level = level,
         onOpenFileMetrics = onOpenFileMetrics,
-        device = DeviceFiles(ready = state.connection.isReady, manifest = state.manifest, plan = state.plan, sync = state.sync),
+        device = device,
         onDeviceAction = { action ->
             when (action) {
                 DeviceFilesAction.Refresh -> viewModel.refresh()
@@ -108,7 +108,7 @@ fun FilesRoute(
             DropdownMenuItem(
                 text = { Text(stringResource(if (state.backgroundSyncActive) R.string.files_bg_queued else R.string.files_bg_sync)) },
                 leadingIcon = { Icon(AppIcons.CloudSync, contentDescription = null) },
-                enabled = state.connection.isReady && !state.sync.running && !state.backgroundSyncActive,
+                enabled = state.connection.isReady && !state.syncRunning && !state.backgroundSyncActive,
                 onClick = {
                     close()
                     notificationPermission.ensureThen { viewModel.syncNowInBackground() }

@@ -1,10 +1,13 @@
 package earth.walkthru.aqsync.data.history
 
 import earth.walkthru.aqsync.archive.ArchiveLayout
+import earth.walkthru.aqsync.archive.ArchiveRecord
 import earth.walkthru.aqsync.data.archive.toRecord
+import earth.walkthru.aqsync.data.history.parquet.LocalRangeSource
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 import earth.walkthru.aqsync.data.history.parquet.ParquetSink
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
+import earth.walkthru.aqsync.data.local.database.DerivedDayDao
 import earth.walkthru.aqsync.storage.AtomicFiles
 import earth.walkthru.aqsync.storage.JvmAtomicFiles
 import earth.walkthru.aqsync.storage.StorageClass
@@ -54,6 +57,21 @@ class DerivedStore(
     }
 }
 
+/**
+ * The Day view's derived files on Android (#63). A day file is handed out only when `derived_day`
+ * records it under the signature of exactly the sources the view would read, so a late file or a new
+ * time estimate sends the view back to the raw files until the next derive pass.
+ */
+@Singleton
+class RoomDerivedDayFiles @Inject constructor(private val store: DerivedStore, private val dayDao: DerivedDayDao) : DerivedDayFiles {
+    override suspend fun open(station: String, epochDay: Long, sources: List<ArchiveRecord>, anchors: Map<String, TimeEstimate.Anchor>): LocalRangeSource? {
+        val day = dayDao.get(station, epochDay) ?: return null
+        if (day.dailyFile == null || day.sourceSignature != HistoryDeriver.signatureOf(sources)) return null
+        val file = store.dayFile(station, epochDay)
+        return if (file.isFile) LocalRangeSource(file) else null
+    }
+}
+
 @Serializable
 data class DailyManifest(
     val station: String,
@@ -82,8 +100,12 @@ data class DailyManifest(
 
 data class DailyBuildResult(val file: File, val manifest: File, val rows: Int, val columns: Int, val rowGroups: Int, val complete: Boolean)
 
+/** What [DailyDerivedBuilder.pass] gives back: the shared pass and, when it was written, the daily file. */
+class DailyDerivedPass(val pass: DayPassResult, val daily: DailyBuildResult?)
+
 /** Android atomic-file adapter for the shared Android/iOS UTC-day writer. */
 class DailyDerivedBuilder(private val store: DerivedStore, private val fileFor: (station: String, name: String) -> File) {
+    /** The daily file alone, as the export's rebuild of an evicted file needs it. Throws when a source fails. */
     fun build(
         station: String,
         epochDay: Long,
@@ -92,34 +114,48 @@ class DailyDerivedBuilder(private val store: DerivedStore, private val fileFor: 
         anchors: Map<String, TimeEstimate.Anchor> = emptyMap(),
         nowEpochS: Long = System.currentTimeMillis() / 1000,
     ): DailyBuildResult? {
-        // The builder opens and closes one source at a time (#61).
-        val daily = sources.map { source -> DailyParquetSource(source.toRecord()) { ParquetFile.open(fileFor(source.station, source.name)) } }
-        return write(station, epochDay, daily, sourceSignature, anchors, nowEpochS)
+        val run = pass(station, epochDay, sources, sourceSignature, anchors, nowEpochS, tiers = false)
+        run.pass.dailyError?.let { throw it }
+        return run.daily
     }
 
-    private fun write(
+    /**
+     * One decode of the day's [sources] for the tiers and the daily file (#63). The daily file is
+     * committed only when every source read, otherwise [DailyDerivedPass.daily] is null and
+     * [DayPassResult.dailyError] says why.
+     */
+    fun pass(
         station: String,
         epochDay: Long,
-        sources: List<DailyParquetSource>,
+        sources: List<ArchivedFile>,
         sourceSignature: String,
-        anchors: Map<String, TimeEstimate.Anchor>,
-        nowEpochS: Long,
-    ): DailyBuildResult? {
+        anchors: Map<String, TimeEstimate.Anchor> = emptyMap(),
+        nowEpochS: Long = System.currentTimeMillis() / 1000,
+        tiers: Boolean = true,
+    ): DailyDerivedPass {
+        // The pass opens and closes one source at a time (#61).
+        val daily = sources.map { source -> DailyParquetSource(source.toRecord()) { ParquetFile.open(fileFor(source.station, source.name)) } }
         val target = store.dayFile(station, epochDay)
         check(target.parentFile!!.isDirectory || target.parentFile!!.mkdirs()) { "cannot create derived directory" }
         val atomic = store.atomic
         val tmp = File(atomic.createTemp(".parquet"))
         val manifestFile = store.manifestFile(station, epochDay)
         try {
-            val result = java.io.FileOutputStream(tmp).use { output ->
+            var written = 0L
+            val pass = java.io.FileOutputStream(tmp).use { output ->
                 val buffered = output.buffered()
                 val sink = object : ParquetSink {
-                    override fun write(bytes: ByteArray) { buffered.write(bytes) }
+                    override fun write(bytes: ByteArray) {
+                        buffered.write(bytes)
+                        written += bytes.size
+                    }
                     override fun flush() { buffered.flush(); output.fd.sync() }
                 }
-                DailyParquetBuilder.build(station, epochDay, sources, sink, anchors, nowEpochS)
-            } ?: return null
-            check(ParquetFile.open(tmp).use { it.numRows } == result.rows.toLong()) { "derived row count mismatch" }
+                DayPass.run(station, epochDay, daily, sink, anchors, nowEpochS, tiers)
+            }
+            val result = pass.daily ?: return DailyDerivedPass(pass, null)
+            // The writer counted the rows, the synced length says every byte reached the file. No footer re-parse.
+            check(tmp.length() == written) { "derived file is short" }
             val manifest = DailyManifest(
                 station = station,
                 day = DerivedStore.dayLabel(epochDay),
@@ -135,7 +171,7 @@ class DailyDerivedBuilder(private val store: DerivedStore, private val fileFor: 
             check(!manifestFile.exists() || manifestFile.delete()) { "cannot invalidate derived manifest" }
             atomic.commitReplace(tmp.path, target.path, StorageClass.Rebuildable)
             atomic.writeAtomically(manifestFile.path, JSON.encodeToString(manifest).toByteArray(), StorageClass.Rebuildable)
-            return DailyBuildResult(target, manifestFile, result.rows, result.columns.size, result.rowGroups, result.complete)
+            return DailyDerivedPass(pass, DailyBuildResult(target, manifestFile, result.rows, result.columns.size, result.rowGroups, result.complete))
         } finally {
             tmp.delete()
         }
@@ -147,6 +183,7 @@ class DailyDerivedBuilder(private val store: DerivedStore, private val fileFor: 
         const val ESTIMATED_UTC = DailyParquetBuilder.ESTIMATED_UTC
         const val HOUR_NS = DailyParquetBuilder.HOUR_NS
         const val COMPLETE_GRACE_S = DailyParquetBuilder.COMPLETE_GRACE_S
-        private val JSON = Json { prettyPrint = true }
+        /** Compact, a cache receipt read by code. */
+        private val JSON = Json
     }
 }

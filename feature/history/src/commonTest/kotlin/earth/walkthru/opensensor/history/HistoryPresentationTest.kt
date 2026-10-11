@@ -1,5 +1,6 @@
 package earth.walkthru.opensensor.history
 
+import earth.walkthru.aqsync.archive.ArchiveIndex
 import earth.walkthru.aqsync.archive.ArchiveRecord
 import earth.walkthru.aqsync.data.history.startOfDay
 import kotlinx.datetime.LocalDate
@@ -26,8 +27,8 @@ class HistoryPresentationTest {
     fun earlierTimedStationOpensByDefaultButAnExplicitCurrentSelectionStays() {
         val earlier = file("earlier", "earlier", dated = true)
         val current = file("current", "current", dated = false)
-        assertEquals("earlier", preferredHistoryStation("current", listOf("earlier", "current"), listOf(earlier, current), null))
-        assertEquals("current", preferredHistoryStation("current", listOf("earlier", "current"), listOf(earlier, current), "current"))
+        assertEquals("earlier", preferredHistoryStation("current", listOf("earlier", "current"), ArchiveIndex.latestTimedEnds(listOf(earlier, current)), null))
+        assertEquals("current", preferredHistoryStation("current", listOf("earlier", "current"), ArchiveIndex.latestTimedEnds(listOf(earlier, current)), "current"))
     }
 
     @Test

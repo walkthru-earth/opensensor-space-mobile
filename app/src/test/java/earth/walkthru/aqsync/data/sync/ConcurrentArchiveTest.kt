@@ -3,7 +3,7 @@ package earth.walkthru.aqsync.data.sync
 import earth.walkthru.aqsync.data.ble.DeviceSession
 import earth.walkthru.aqsync.data.fake.FakeTransport
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
-import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
+import earth.walkthru.aqsync.data.local.database.DerivedArchivedFileQueries
 import earth.walkthru.aqsync.storage.AlreadyCommitted
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -205,7 +205,7 @@ class ConcurrentArchiveTest {
         assertTrue(dao.rows.isEmpty())
     }
 
-    private class InMemoryDao : ArchivedFileDao {
+    private class InMemoryDao : DerivedArchivedFileQueries {
         val rows = ConcurrentHashMap<Pair<String, String>, ArchivedFile>()
         var upserts = 0
             private set

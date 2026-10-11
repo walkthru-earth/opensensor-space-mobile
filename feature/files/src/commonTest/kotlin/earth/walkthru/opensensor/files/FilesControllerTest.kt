@@ -56,8 +56,11 @@ class FilesControllerTest {
 
     private class Index(records: List<ArchiveRecord>) : ArchiveIndex {
         val rows = MutableStateFlow(records)
-        override fun observeAll(): Flow<List<ArchiveRecord>> = rows.map { r -> r.sortedBy { it.name } }
-        override fun observeStation(station: String): Flow<List<ArchiveRecord>> = rows.map { r -> r.filter { it.station == station } }
+
+        /** The scope of each subscription, a station or null for every record. */
+        val observed = mutableListOf<String?>()
+        override fun observeAll(): Flow<List<ArchiveRecord>> = rows.map { r -> r.sortedBy { it.name } }.also { observed += null }
+        override fun observeStation(station: String): Flow<List<ArchiveRecord>> = rows.map { r -> r.filter { it.station == station } }.also { observed += station }
         override suspend fun get(key: ArchiveKey): ArchiveRecord? = rows.value.firstOrNull { it.key == key }
         override suspend fun put(record: ArchiveRecord) = error("read only")
         override suspend fun remove(key: ArchiveKey) = error("read only")
@@ -305,6 +308,23 @@ class FilesControllerTest {
         assertNull(f.controller.archived(nameA))
         assertEquals(3, f.controller.state.value.shown.size)
         assertFalse(f.controller.state.value.dailyAvailable)
+    }
+
+    @Test
+    fun aKnownOwnerObservesOnlyItsStation() = runTest {
+        val f = fixture(owner = "t")
+        advanceUntilIdle()
+        assertEquals(listOf<String?>("t"), f.index.observed)
+        assertEquals(listOf("t"), f.controller.state.value.records.map { it.station })
+        // Another station's new file does not reach this owner's list.
+        val before = f.controller.state.value
+        f.index.rows.value = f.index.rows.value + record("s", "station=s/year=2026/month=09/day=21/data_0900_b_1-2-1.parquet", bytesA)
+        advanceUntilIdle()
+        assertEquals(before.records, f.controller.state.value.records)
+        f.owner.value = null
+        advanceUntilIdle()
+        assertEquals(listOf("t", null), f.index.observed)
+        assertEquals(4, f.controller.state.value.records.size)
     }
 
     @Test

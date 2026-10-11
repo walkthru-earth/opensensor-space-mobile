@@ -50,7 +50,11 @@ class HistoryControllerTest {
 
     private class Index(records: List<ArchiveRecord>) : ArchiveIndex {
         val rows = MutableStateFlow(records)
-        override fun observeAll(): Flow<List<ArchiveRecord>> = rows
+
+        /** How often a collector asked for every record. History asks for narrow flows only. */
+        var allObserved = 0
+        override fun observeAll(): Flow<List<ArchiveRecord>> = rows.also { allObserved++ }
+        override fun observeLatestTimed(): Flow<Map<String, Long>> = rows.map(ArchiveIndex::latestTimedEnds)
         override fun observeStation(station: String): Flow<List<ArchiveRecord>> = rows.map { list -> list.filter { it.station == station } }
         override suspend fun get(key: ArchiveKey): ArchiveRecord? = rows.value.firstOrNull { it.key == key }
         override suspend fun put(record: ArchiveRecord) {
@@ -91,9 +95,13 @@ class HistoryControllerTest {
         lastUtcNs = lastReadingS * 1_000_000_000L,
     )
 
-    private fun TestScope.controller(metricIds: Set<String> = setOf("ambient_c", "rh")): HistoryController {
+    private fun TestScope.controller(
+        metricIds: Set<String> = setOf("ambient_c", "rh"),
+        index: Index = Index(listOf(record("s1"))),
+        current: String = "s1",
+        stations: List<String> = listOf("s1"),
+    ): HistoryController {
         val store = Store()
-        val index = Index(listOf(record("s1")))
         val tiers = Tiers(metricIds)
         val reader = HistorySeriesReader(store, index, tiers, io = StandardTestDispatcher(testScheduler))
         return HistoryController(
@@ -101,8 +109,8 @@ class HistoryControllerTest {
             reader = reader,
             tiers = tiers,
             index = index,
-            currentStation = flowOf("s1"),
-            stations = flowOf(listOf("s1")),
+            currentStation = flowOf(current),
+            stations = flowOf(stations),
             zone = TimeZone.UTC,
             clock = clock,
             tickMs = 3_600_000,
@@ -120,6 +128,18 @@ class HistoryControllerTest {
         assertEquals(1, s.files.withTime)
         assertEquals(1, s.days.count)
         assertTrue(Metrics.PM25 !in s.availableMetrics)
+    }
+
+    @Test
+    fun aCurrentStationWithoutTimedReadingsOpensOnTheOneWithTheLatestWithoutReadingTheWholeIndex() = runTest {
+        val untimed = record("s2").copy(utcRows = 0, firstUtcNs = null, lastUtcNs = null)
+        val index = Index(listOf(record("s1"), untimed))
+        val c = controller(index = index, current = "s2", stations = listOf("s1", "s2"))
+        assertEquals("s1", c.state.first { !it.initializing && it.station != null }.station)
+        // A timed reading for the current station moves History back to it.
+        index.rows.value = listOf(record("s1"), record("s2"))
+        assertEquals("s2", c.state.first { it.station == "s2" }.station)
+        assertEquals(0, index.allObserved)
     }
 
     @Test
