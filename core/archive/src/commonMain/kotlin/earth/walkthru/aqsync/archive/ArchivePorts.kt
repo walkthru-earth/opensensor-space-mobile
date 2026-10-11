@@ -74,6 +74,17 @@ interface ArchiveIndex {
     suspend fun put(record: ArchiveRecord)
 
     /**
+     * Inserts [record] only when (station, name) has none, and returns whether it did. A writer that
+     * must never replace another's record (the janitor adopting an orphan) uses it. The default reads
+     * then writes. An adapter shared across processes or threads overrides it to do both atomically.
+     */
+    suspend fun putIfAbsent(record: ArchiveRecord): Boolean {
+        if (get(record.key) != null) return false
+        put(record)
+        return true
+    }
+
+    /**
      * Replaces the record of [key] with [transform] of its latest value, when there is one. A writer
      * that owns only some columns (index repair) uses it so it never writes back a stale snapshot over
      * another writer's change. The default reads then writes. An adapter with a lock overrides it to do

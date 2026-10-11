@@ -108,16 +108,21 @@ class StorageJanitor(
         val known = (index.stations() + knownStations()).toSet()
         // A partial and its meta form one download. Its age is the newest of the two.
         val downloads = list(dir).filter { !it.isDirectory }.groupBy { it.path.removeSuffix(".meta") }
-        for ((download, files) in downloads) {
+        fun isStale(download: String, files: List<StorageEntry>): Boolean {
             val station = download.substringBefore('/', missingDelimiterValue = "")
             val age = now - files.maxOf { it.modifiedEpochMs }
-            val stale = age >= STALE_PARTIAL_AGE_MS || (station !in known && age >= UNKNOWN_STATION_AGE_MS)
-            if (!stale) {
+            return age >= STALE_PARTIAL_AGE_MS || (station !in known && age >= UNKNOWN_STATION_AGE_MS)
+        }
+        for ((download, files) in downloads) {
+            // Opening a partial rewrites its meta, so a resume that started since the listing shows up as fresh here.
+            val current = if (isStale(download, files)) list(dir).filter { !it.isDirectory && it.path.removeSuffix(".meta") == download } else files
+            if (current.isEmpty()) continue
+            if (!isStale(download, current)) {
                 report = report.copy(partialsKept = report.partialsKept + 1)
                 continue
             }
             var swept = false
-            for (file in files) swept = sweep("$dir/${file.path}") || swept
+            for (file in current) swept = sweep("$dir/${file.path}") || swept
             if (swept) report = report.copy(partialsSwept = report.partialsSwept + 1)
         }
     }
@@ -145,7 +150,8 @@ class StorageJanitor(
             report = report.copy(unverifiable = report.unverifiable + 1)
             return
         }
-        // The engine may have written the record while this file was hashed. Its record wins.
+        // The engine may have written the record while this file was hashed. Its record wins: skip the
+        // footer parse when it is already there, and insert only if absent so a later one is never replaced.
         if (index.get(key) != null) return
         val (bytes, crc32, sha256) = hashed
         val record = ArchiveRecord(
@@ -157,8 +163,7 @@ class StorageJanitor(
             syncedAtEpochMs = clock(),
             sourceDevice = ADOPTED_SOURCE,
         )
-        index.put(indexer.indexed(record))
-        report = report.copy(adopted = report.adopted + 1)
+        if (index.putIfAbsent(indexer.indexed(record))) report = report.copy(adopted = report.adopted + 1)
     }
 
     /** Deletes [path] only when it lies under a Scratch or Rebuildable root. Returns whether it did. */
@@ -193,8 +198,8 @@ class StorageJanitor(
     }
 
     companion object {
-        /** A temp file this old belongs to no live write. */
-        const val TEMP_AGE_MS: Long = 60_000L
+        /** A temp file this old belongs to no live write. Derived builds stream into theirs for minutes. */
+        const val TEMP_AGE_MS: Long = 60L * 60_000L
 
         /** An export run this old has left the share sheet. */
         const val EXPORT_AGE_MS: Long = 60L * 60_000L

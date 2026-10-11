@@ -91,9 +91,9 @@ class StorageJanitorTest {
         val freshMeta = "$base/archive-partial/$known/fresh.parquet.partial.meta"
         val archived = "$base/archive/$known/year=2026/month=10/day=01/data.parquet"
         val clockTemp = "$base/clock-anchors/$known/.clock-1.tmp"
-        tree.file(oldTemp, now - 2 * 60_000L)
-        tree.file(liveTemp, now - 1_000L)
-        tree.file(legacyDerived, now - hour)
+        tree.file(oldTemp, now - 2 * hour)
+        tree.file(liveTemp, now - 10 * 60_000L)
+        tree.file(legacyDerived, now - 2 * hour)
         tree.file(dayFile, now - hour)
         tree.dir(oldRun, now - 2 * hour)
         tree.file("$oldRun/a.zip", now - 2 * hour)
@@ -146,6 +146,30 @@ class StorageJanitorTest {
 
         assertEquals(0, report.adopted)
         assertEquals(existing, index.get(key))
+    }
+
+    @Test
+    fun anEngineRecordWrittenDuringAdoptionIsNotReplaced() = runTest {
+        val store = MemoryArchiveStore()
+        val index = MemoryArchiveIndex()
+        val key = ArchiveKey(known, "year=2026/month=10/day=01/data.parquet")
+        store.files[ArchiveLayout.finalPath(key)] = parquet
+        val engine = ArchiveRecord(key.station, key.name, parquet.size.toLong(), 1L, "ab", 5L, "device")
+        // The engine commits and records the file while the janitor parses its footer.
+        val janitor = StorageJanitor(
+            roots,
+            FakeTree(),
+            store,
+            index,
+            StandardTestDispatcher(testScheduler),
+            indexer = { record -> index.put(engine); record },
+            clock = { now },
+        )
+
+        val report = janitor.run()
+
+        assertEquals(0, report.adopted)
+        assertEquals(engine, index.get(key))
     }
 
     @Test

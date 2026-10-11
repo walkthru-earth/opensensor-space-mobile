@@ -111,6 +111,10 @@ interface ArchivedFileDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(file: ArchivedFile)
 
+    /** Inserts only when (station, name) has no row. Returns the new row id, or -1 when one exists. */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertIfAbsent(file: ArchivedFile): Long
+
     /**
      * Reads the row of `(station, name)` and writes [transform] of it in one transaction, the same as
      * Room's `withTransaction`, so two writers of different columns never lose each other's change (#60).

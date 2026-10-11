@@ -627,6 +627,11 @@ class DeviceConnectionRepositoryTest {
         override suspend fun upsert(file: ArchivedFile) {
             state.value = rows.filterNot { it.station == file.station && it.name == file.name } + file
         }
+        override suspend fun insertIfAbsent(file: ArchivedFile): Long {
+            if (rows.any { it.station == file.station && it.name == file.name }) return -1L
+            state.value = rows + file
+            return rows.size.toLong()
+        }
         override suspend fun delete(station: String, name: String) {
             state.value = rows.filterNot { it.station == station && it.name == name }
         }

@@ -228,7 +228,7 @@ zip stays the byte-exact mirror and the derived zip is the small analysis-ready 
 | --- | --- | --- |
 | Durable | `archive/`, the Room database, `clock-anchors/` (iOS `SensorArchive/`, its receipts, `SensorArchive-clock-anchors/`) | never deletes |
 | Rebuildable | `derived/v1/` | old derived temps only |
-| Scratch | `archive-partial/`, `storage-tmp/`, `cache/export/` (iOS `tmp/opensensor-export/`) | temps after 1 min, export runs after 1 h, partials of an unknown station after 1 h, any partial after 30 days |
+| Scratch | `archive-partial/`, `storage-tmp/`, `cache/export/` (iOS `tmp/opensensor-export/`) | temps after 1 h (derived builds stream into theirs), export runs after 1 h, partials of an unknown station after 1 h, any partial after 30 days |
 | Settings | `datastore/` | never deletes |
 
 Every writer goes through `AtomicFiles`. Temps are `storage-tmp/.aqtmp-*` beside the roots, on the
@@ -241,8 +241,10 @@ directory is synced on both platforms. Clock receipts are written once with `cre
 `StorageJanitor` runs once per process, Android through the unique `storage-janitor` WorkManager job,
 iOS from `IosArchive.startIndexRepair`. It also finds final files without an index record (a crash
 between commit and record), checks size, CRC-32, SHA-256 and `PAR1`, and indexes them with
-`sourceDevice = "adopted"`. A final that fails `PAR1` stays in place, counted as unverifiable. The
-log line has counts only. `StorageBudget` reports free bytes per class for the free-space gate of #55.
+`sourceDevice = "adopted"` through `ArchiveIndex.putIfAbsent` (Room `INSERT OR IGNORE`, iOS
+`createNoReplace` receipt), so a record the engine writes meanwhile is never replaced. A final that
+fails `PAR1` stays in place, counted as unverifiable. A stale partial is re-listed before it is
+deleted, since opening a partial rewrites its meta. The log line has counts only. `StorageBudget` reports free bytes per class for the free-space gate of #55.
 
 These relative paths are defined once, in `ArchiveLayout` (`:core:archive`), for both phones. The
 root is Android `filesDir`. iOS still keeps its finals under `Application Support/SensorArchive/`

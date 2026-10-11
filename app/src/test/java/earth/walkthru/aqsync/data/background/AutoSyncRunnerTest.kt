@@ -481,6 +481,11 @@ class AutoSyncRunnerTest {
             rows.removeAll { it.station == file.station && it.name == file.name }
             rows += file
         }
+        override suspend fun insertIfAbsent(file: ArchivedFile): Long {
+            if (rows.any { it.station == file.station && it.name == file.name }) return -1L
+            rows += file
+            return rows.size.toLong()
+        }
         override suspend fun delete(station: String, name: String) {
             rows.removeAll { it.station == station && it.name == name }
         }

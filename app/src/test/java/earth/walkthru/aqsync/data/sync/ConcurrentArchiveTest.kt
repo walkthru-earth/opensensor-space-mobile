@@ -220,6 +220,8 @@ class ConcurrentArchiveTest {
         override suspend fun upsert(file: ArchivedFile) {
             synchronized(rows) { upserts++; rows[file.station to file.name] = file }
         }
+        override suspend fun insertIfAbsent(file: ArchivedFile): Long =
+            synchronized(rows) { if (rows.putIfAbsent(file.station to file.name, file) == null) rows.size.toLong() else -1L }
         override suspend fun delete(station: String, name: String) { rows.remove(station to name) }
     }
 }

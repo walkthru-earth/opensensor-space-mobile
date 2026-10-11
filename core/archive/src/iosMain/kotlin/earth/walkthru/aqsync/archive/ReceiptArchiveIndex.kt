@@ -1,6 +1,7 @@
 package earth.walkthru.aqsync.archive
 
 import earth.walkthru.aqsync.archive.IosFiles.Kind
+import earth.walkthru.aqsync.storage.AlreadyCommitted
 import earth.walkthru.aqsync.storage.AtomicFiles
 import earth.walkthru.aqsync.storage.IosAtomicFiles
 import earth.walkthru.aqsync.storage.StorageClass
@@ -73,6 +74,22 @@ class ReceiptArchiveIndex(
         mutex.withLock { putLocked(loadLocked(), record) }
     }
 
+    /** Writes the receipt with [AtomicFiles.createNoReplace] under the lock, so an existing receipt always wins. */
+    override suspend fun putIfAbsent(record: ArchiveRecord): Boolean = mutex.withLock {
+        val current = loadLocked()
+        if (current.any { it.station == record.station && it.name == record.name }) return@withLock false
+        val written = withContext(io) {
+            try {
+                atomic.createNoReplace(receiptPath(record.key), encode(record).encodeToByteArray(), StorageClass.Durable)
+                true
+            } catch (_: AlreadyCommitted) {
+                false
+            }
+        }
+        if (written) rows.value = current + record
+        written
+    }
+
     /** Reads the latest record and writes its replacement under one lock, so no concurrent put is lost. */
     override suspend fun update(key: ArchiveKey, transform: (ArchiveRecord) -> ArchiveRecord) {
         mutex.withLock {
@@ -87,7 +104,7 @@ class ReceiptArchiveIndex(
             val path = receiptPath(record.key)
             val kind = IosFiles.kind(path)
             check(kind == Kind.ABSENT || kind == Kind.FILE) { "archive receipt is not a file" }
-            IosFiles.mkdirs(path.substringBeforeLast('/'))
+            // AtomicFiles creates any new directory and syncs it into its parent.
             atomic.writeAtomically(path, encode(record).encodeToByteArray(), StorageClass.Durable)
         }
         rows.value = current.filterNot { it.station == record.station && it.name == record.name } + record
