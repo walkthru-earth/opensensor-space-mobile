@@ -37,10 +37,15 @@ object BleDisconnectCauses {
     const val INSUFFICIENT_AUTHENTICATION = 5
     const val INSUFFICIENT_ENCRYPTION = 15
 
+    /**
+     * GATT 5 reaches here only from a closed link or an operation that still failed after the bond
+     * retry, so the keys exist but do not work, the same as 15, and [BleConnectionFailure] treats
+     * both as a repair. A pairing that never finished (a PIN prompt that timed out) arrives as a
+     * [BleLinkDriver.BondException] and stays [AuthKind.BOND_FAILED] in [ofOpenFailure].
+     */
     fun ofStatus(status: Int): DisconnectCause = when (status) {
         PEER_USER, BleLinkDriver.GATT_DISCONNECTED -> DisconnectCause.PeerClosed()
-        INSUFFICIENT_AUTHENTICATION -> DisconnectCause.Auth(AuthKind.BOND_FAILED)
-        INSUFFICIENT_ENCRYPTION -> DisconnectCause.Auth(AuthKind.ENCRYPTION_FAILED)
+        INSUFFICIENT_AUTHENTICATION, INSUFFICIENT_ENCRYPTION -> DisconnectCause.Auth(AuthKind.ENCRYPTION_FAILED)
         KEY_MISSING, HCI_KEY_MISSING, HCI_MIC_FAILURE -> DisconnectCause.Auth(AuthKind.BOND_MISSING)
         else -> DisconnectCause.LocalAbort(gattStatus = status)
     }
