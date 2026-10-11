@@ -13,8 +13,10 @@ import earth.walkthru.aqsync.storage.FakeStorageBudget
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
@@ -24,10 +26,10 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.testTimeSource
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.concurrent.atomics.AtomicInt
 import kotlin.concurrent.atomics.AtomicLong
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
-import kotlin.concurrent.atomics.decrementAndFetch
 import kotlin.concurrent.atomics.incrementAndFetch
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -35,6 +37,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Stop, a late reply after Stop, and a slow disk, over the link a run shares with the next one
@@ -121,9 +124,10 @@ class StopAndBackpressureTest {
         assertTrue(events.none { it is LinkEvent.ForeignDropped }, "no late frame reached run B, $events")
     }
 
-    /** Wraps the partial writer so each `writeAt` waits for a permit on the writer's own thread. */
+    /** Wraps the partial writer so each `writeAt` waits for a pass on the writer's own thread. */
     private class GatedStore(private val inner: ArchiveStore) : ArchiveStore by inner {
-        val permits = AtomicInt(0)
+        /** One element lets one write through. Closed, it lets every write through. */
+        val passes = Channel<Unit>(Channel.UNLIMITED)
         val entered = AtomicInt(0)
 
         override suspend fun openPartial(key: ArchiveKey, meta: PartialMeta): PartialWriter {
@@ -131,10 +135,8 @@ class StopAndBackpressureTest {
             return object : PartialWriter by writer {
                 override fun writeAt(offset: Long, payload: ByteArray) {
                     entered.incrementAndFetch()
-                    while (permits.load() <= 0) {
-                        // A disk that does not answer. The test opens the gate from its own thread.
-                    }
-                    permits.decrementAndFetch()
+                    // A disk that does not answer until the test lets a write through.
+                    runBlocking { withTimeoutOrNull(10.seconds) { passes.receiveCatching() } } ?: error("the gate never opened")
                     writer.writeAt(offset, payload)
                 }
             }
@@ -162,7 +164,7 @@ class StopAndBackpressureTest {
         settle(entered = 1)
         assertEquals(1, fake.readCount, "no new READ while the writer is blocked")
         for (step in 2..4) {
-            gated.permits.store(1)
+            gated.passes.send(Unit)
             settle(entered = step)
             // Chunk `step` is being written. The reader handed over two more and waits on the next.
             assertEquals(step, gated.entered.load())
@@ -170,7 +172,7 @@ class StopAndBackpressureTest {
             assertEquals(1, fake.readCount, "no new READ while the writer is blocked")
         }
 
-        gated.permits.store(Int.MAX_VALUE)
+        gated.passes.close()
         assertIs<FileOutcome.Synced>(download.await())
         val file = fake.files[0]
         assertContentEquals(file.bytes, finalBytes(fake.station, file.name))

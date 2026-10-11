@@ -6,6 +6,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlin.concurrent.atomics.AtomicLong
 import kotlin.concurrent.atomics.AtomicReference
@@ -38,6 +39,8 @@ internal class ArchiveWriter(
     private val job = scope.launch(io.limitedParallelism(1), CoroutineStart.ATOMIC) {
         try {
             for (p in queue) {
+                // A queued chunk is taken without suspending, so a cancelled run is checked here.
+                ensureActive()
                 if (fault.load() != null) continue
                 try {
                     partial.writeAt(p.offset, p.bytes)
