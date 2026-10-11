@@ -5,7 +5,11 @@ import earth.walkthru.aqsync.data.fake.FakeTransport
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.storage.AlreadyCommitted
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
@@ -45,17 +49,19 @@ class ConcurrentArchiveTest {
 
     @After
     fun tearDown() {
+        scope.cancel()
         transports.forEach { it.close() }
         tmp.deleteRecursively()
     }
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private suspend fun device(payload: ByteArray = bytes): Pair<FakeTransport, DeviceSession> {
         val fake = FakeTransport(address = "fake-${transports.size}", chunkDelayMs = 1, liveIntervalMs = 3_600_000)
         transports += fake
         fake.files.clear()
         fake.files += FakeTransport.FakeFile(name, payload)
-        fake.connect()
-        return fake to DeviceSession(fake)
+        return fake to DeviceSession.over(fake, scope).also { it.link.open() }
     }
 
     private suspend fun download(device: Pair<FakeTransport, DeviceSession>, station: String, progress: (FileProgress) -> Unit = {}): FileOutcome =
