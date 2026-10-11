@@ -19,7 +19,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -107,23 +106,21 @@ class SyncForegroundService : Service() {
                 )
             }
                 .distinctUntilChanged()
-                // Progress arrives per CHUNK (hundreds per second on LAN); NotificationManager sheds
-                // posts above ~5/s ("Package enqueue rate … Shedding"), so coalesce and pace them.
-                .conflate()
-                .collect { snap ->
+                // Progress arrives per CHUNK (hundreds per second on LAN). Post at reading speed and
+                // only while the screen is on. The stop decision is final and always goes through.
+                .postPaced(NOTIFY_INTERVAL_MS, screenInteractive(this@SyncForegroundService), isFinal = { !it.needed }) { snap ->
                     if (!snap.needed) {
                         // A sync that just aborted because the link dropped flips `running` a moment
                         // before the reconnect state appears; give it that moment before stopping.
                         delay(STOP_GRACE_MS)
                         if (!needed()) finish()
-                        return@collect
+                        return@postPaced
                     }
                     if (inForeground) {
                         runCatching {
                             getSystemService(android.app.NotificationManager::class.java)
                                 .notify(SyncNotifications.FOREGROUND_ID, notifications.progress(snap.name, snap.progress, stopIntent(), snap.reconnect))
                         }
-                        delay(NOTIFY_INTERVAL_MS)
                     }
                 }
         }
@@ -179,7 +176,6 @@ class SyncForegroundService : Service() {
         const val ACTION_STOP = "earth.walkthru.aqsync.action.STOP_SYNC"
         private const val REQ_STOP = 11
         private const val STOP_GRACE_MS = 1_500L
-        private const val NOTIFY_INTERVAL_MS = 500L
 
         /**
          * Start the service for a sync that is about to run / has just started. Must be called while
