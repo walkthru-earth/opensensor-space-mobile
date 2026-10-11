@@ -178,7 +178,7 @@ tests, `docs/lessons-learned.md`, `docs/transports.md`, `docs/sync-engine.md`,
   Hex encoding builds one string per byte on the transfer hot path.
 - Move LAN receive and archive writes off the main actor onto a per-session queue, with larger
   receive buffers and progress published at a bounded rate.
-- Strict concurrency `complete` in Swift 5 mode, then prepare the Swift 6 switch.
+- Strict concurrency `complete`, then the Swift 6 language mode for the app and test targets (#65).
 - File protection `completeUntilFirstUserAuthentication` on the archive, backup exclusion once,
   Local Network policy-denied detection (TN3179).
 - An Xcode unit-test target with Swift Testing if it runs under the simulator in CI, otherwise

@@ -217,11 +217,11 @@ module and the Android host tests of `:ui:designsystem` and `:feature:discover`.
 Xcode on Linux. On a Mac it also runs `verifyIos` (skip with `-Popensensor.skipIos=true`).
 `verifyIos` runs the iOS simulator tests of every shared module, including the `:ios:shared`
 presentation tests, and links the shared framework. It needs an installed simulator runtime. The Xcode build compiles the Swift BLE
-adapter and app too, with `SWIFT_STRICT_CONCURRENCY = complete` and no warnings. The native
+adapter and app too, in the Swift 6 language mode with `SWIFT_STRICT_CONCURRENCY = complete` and no warnings. The native
 checks cover LAN claims, framing, Local Network denial detection, policy and outbound keepalive
 timing. Resume, verification, conflicts, names and window retry are tested once in `:core:sync`
 and `:core:archive` `commonTest`, and the iOS runner and notices in `ios/shared`
-(`SensorSyncTest`, `SyncOutcomeTest`, `CompanionNoticeTest`), all inside `verifyIos`. `verify-native.sh` compiles them on the Mac host with complete concurrency checking and
+(`SensorSyncTest`, `SyncOutcomeTest`, `CompanionNoticeTest`), all inside `verifyIos`. `verify-native.sh` compiles them on the Mac host in the Swift 6 language mode with complete concurrency checking and
 warnings as errors. The hostless `OpenSensorTests` Swift Testing target runs the same checks on an
 iOS simulator through the shared scheme's test action, without signing or the Kotlin framework.
 Neither a simulator build nor these tests qualifies real radio behavior.
