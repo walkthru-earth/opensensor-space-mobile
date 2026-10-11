@@ -1,5 +1,7 @@
 package earth.walkthru.opensensor.discover
 
+import earth.walkthru.aqsync.airquality.HealthScale
+import earth.walkthru.aqsync.airquality.MoodBlock
 import earth.walkthru.aqsync.airquality.WhoGuidelines
 import earth.walkthru.aqsync.airquality.WhoStep
 import earth.walkthru.aqsync.publicfeed.CellRow
@@ -133,3 +135,21 @@ internal fun metricRanges(row: CellRow, rows: List<CellRow>, dictionary: List<Fe
         val health = scale as? CellScale.Health
         MetricRange(p, mean, stat.min, stat.max, domain, color, health?.stepOf(mean), health?.scale?.guideline)
     }
+
+/**
+ * The Simple spread. Six blocks, one per WHO step in order, each as wide as the number of areas in
+ * that step. Non finite values are not counted. A block of zero areas is not drawn.
+ */
+internal fun stepBlocks(values: List<Double>, health: HealthScale): List<MoodBlock> {
+    val finite = values.filter { it.isFinite() }
+    return WhoStep.entries.map { step -> MoodBlock(step, finite.count { health.stepOf(it) == step }.toFloat()) }
+}
+
+/**
+ * The values of [step], as the map and the list filter them while its block is selected. Lower
+ * bound exclusive, upper inclusive, open at both ends of the scale, the same reading as [HealthScale.stepOf].
+ */
+internal fun stepBand(health: HealthScale, step: WhoStep): ValueBand {
+    val (low, high) = health.rangeOf(step)
+    return ValueBand(low ?: Double.NEGATIVE_INFINITY, high ?: Double.POSITIVE_INFINITY, upperInclusive = true)
+}
