@@ -25,9 +25,13 @@ enum class SensorCommand {
     }
 }
 
-/** How one command ended, from `SensorSync.command`. Swift hands it back to [TodayLink.commandEnded] unread. */
-class CommandResult internal constructor(internal val notice: TodayNotice) {
+/**
+ * How one command ended, from `SensorSync.command`. Swift hands it back to [TodayLink.commandEnded]
+ * unread. A null [notice] means it was stopped, which Today does not report as a failure.
+ */
+class CommandResult internal constructor(internal val notice: TodayNotice?) {
     val clockSynchronized: Boolean get() = notice == TodayNotice.ClockSet
+    val stopped: Boolean get() = notice == null
     override fun toString(): String = "CommandResult($notice)"
 }
 
@@ -57,6 +61,7 @@ class TodayLink {
 
     /** How the command ended, kept until [linkIdle]. Today stays busy until then. */
     private var ended: TodayNotice? = null
+    private var endedPending = false
 
     /**
      * The command ended and handed its link back. A write it queued last, such as the status
@@ -65,14 +70,17 @@ class TodayLink {
      */
     fun commandEnded(result: CommandResult) {
         ended = result.notice
+        endedPending = true
     }
 
     /** No write or read is queued or in flight. Also called when the connection closes. */
     fun linkIdle() {
-        val notice = ended ?: return
+        if (!endedPending) return
+        val notice = ended
         ended = null
+        endedPending = false
         busy = false
-        _notices.tryEmit(notice)
+        notice?.let(_notices::tryEmit)
     }
 
     /** The command ended on an idle link. */
@@ -84,6 +92,7 @@ class TodayLink {
     /** A LAN socket closed while it owned a command; release the busy state immediately. */
     fun commandInterrupted(command: SensorCommand) {
         ended = null
+        endedPending = false
         busy = false
         _notices.tryEmit(TodayNotice.Failed(command.today))
     }
