@@ -42,6 +42,8 @@ import earth.walkthru.opensensor.discover.resources.discover_off_scale
 import earth.walkthru.opensensor.discover.resources.discover_osm
 import earth.walkthru.opensensor.discover.resources.discover_range_summary
 import earth.walkthru.opensensor.discover.resources.discover_range_to
+import earth.walkthru.opensensor.discover.resources.discover_read_failed
+import earth.walkthru.opensensor.discover.resources.discover_retry
 import earth.walkthru.opensensor.discover.resources.discover_sample_data
 import earth.walkthru.opensensor.discover.resources.discover_sample_info
 import earth.walkthru.opensensor.discover.resources.discover_scale_info1
@@ -111,6 +113,9 @@ class DiscoverStrings internal constructor(
     val allMeasurements: String,
     val unavailable: String,
     val loading: String,
+    /** A cell's window read that failed after its retries, with [retry] beside it. */
+    val readFailed: String,
+    val retry: String,
     val noPlaces: String,
     val clearSearch: String,
     val updatedRecently: String,
@@ -226,6 +231,8 @@ fun discoverStrings(): DiscoverStrings = DiscoverStrings(
     allMeasurements = stringResource(Res.string.discover_all_measurements),
     unavailable = stringResource(Res.string.discover_unavailable),
     loading = stringResource(Res.string.discover_loading),
+    readFailed = stringResource(Res.string.discover_read_failed),
+    retry = stringResource(Res.string.discover_retry),
     noPlaces = stringResource(Res.string.discover_no_places),
     clearSearch = stringResource(Res.string.discover_clear_search),
     updatedRecently = stringResource(Res.string.discover_updated_recently),

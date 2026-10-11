@@ -86,6 +86,11 @@ data class DiscoverUiState(
      * selection, the other two follow from one read each, for that one cell.
      */
     val selectedWindows: Map<FeedWindow, CellRow?> = emptyMap(),
+    /**
+     * Windows of the selected cell whose read failed after its retries. Never in [selectedWindows].
+     * Cleared by a new cell, window or resolution, and by a later read that succeeds.
+     */
+    val failedWindows: Set<FeedWindow> = emptySet(),
     val newestUpdateEpochMs: Long? = null,
     val firstRun: Boolean = false,
     val res: Int = ViewportCover.MIN_RES,
@@ -119,6 +124,9 @@ internal enum class SimpleHeadline {
     /** The 24 hour row is not read yet. No mood, no "No reading", no "Not measured". */
     LOADING,
 
+    /** A read failed after its retries, the 24 hour one or one that could still hold the property. */
+    FAILED,
+
     /** Read, and no window read so far reports the property. */
     NOT_MEASURED,
 
@@ -127,15 +135,22 @@ internal enum class SimpleHeadline {
 }
 
 /**
- * A window key that is absent was not read yet (or its read failed and waits for a retry). A key
- * that is present was read, its row null when the cell has nothing in that window.
+ * A window key that is absent was not read yet, or is in [DiscoverUiState.failedWindows] when its
+ * read failed after the retries. A key that is present was read, its row null when the cell has
+ * nothing in that window. A failure is never taken as "not measured".
  */
 internal fun DiscoverUiState.simpleHeadline(): SimpleHeadline {
     val p = property ?: return SimpleHeadline.NOT_MEASURED
     if (selected == null) return SimpleHeadline.NOT_MEASURED
-    if (FeedWindow.DAY !in selectedWindows) return SimpleHeadline.LOADING
+    if (FeedWindow.DAY !in selectedWindows) {
+        return if (FeedWindow.DAY in failedWindows) SimpleHeadline.FAILED else SimpleHeadline.LOADING
+    }
     val measured = selectedWindows.values.any { it?.stats?.containsKey(p.id) == true }
-    return if (measured) SimpleHeadline.SHOWN else SimpleHeadline.NOT_MEASURED
+    return when {
+        measured -> SimpleHeadline.SHOWN
+        failedWindows.isNotEmpty() -> SimpleHeadline.FAILED
+        else -> SimpleHeadline.NOT_MEASURED
+    }
 }
 
 /**
@@ -212,7 +227,7 @@ class DiscoverController(
         if (_state.value.window == next) return
         saved = saved.copy(window = next)
         persist()
-        _state.update { it.copy(window = next, loading = true) }
+        _state.update { it.copy(window = next, loading = true, failedWindows = emptySet()) }
         reload.value++
     }
 
@@ -222,8 +237,19 @@ class DiscoverController(
         // Rows still from the previous window are not this window's values. The reload fills them.
         val current = row != null && rowsWindow == _state.value.window
         // The selected outline is a filter on its own layer, so the GeoJSON is not rebuilt.
-        _state.update { s -> s.copy(selected = row, selectedWindows = if (row != null && current) mapOf(s.window to row) else emptyMap()) }
+        _state.update { s -> s.copy(selected = row, selectedWindows = if (row != null && current) mapOf(s.window to row) else emptyMap(), failedWindows = emptySet()) }
         readWindows(row.takeIf { current })
+    }
+
+    /** Reads the selected cell's windows that are still missing, from the sheet's Retry. */
+    fun retryWindows() {
+        val s = _state.value
+        val row = s.selected ?: return
+        if (windowsJob?.isActive == true) return
+        val missing = FeedWindow.entries.filter { it !in s.selectedWindows }
+        if (missing.isEmpty()) return
+        _state.update { it.copy(failedWindows = emptySet()) }
+        readWindows(row, missing)
     }
 
     fun dismissFirstRun() {
@@ -277,6 +303,7 @@ class DiscoverController(
                     sameWindows -> it.selectedWindows + (window to selected)
                     else -> mapOf(window to selected)
                 },
+                failedWindows = if (sameWindows) it.failedWindows - window else emptySet(),
                 res = res,
                 newestUpdateEpochMs = rows.maxOfOrNull { row -> row.updatedEpochMs },
             )
@@ -286,7 +313,10 @@ class DiscoverController(
         } else if (windowsJob?.isActive != true) {
             // A window whose read failed has no key. The pan reads it again, only that one.
             val missing = FeedWindow.entries.filter { it !in _state.value.selectedWindows }
-            if (missing.isNotEmpty()) readWindows(selected, missing)
+            if (missing.isNotEmpty()) {
+                _state.update { it.copy(failedWindows = emptySet()) }
+                readWindows(selected, missing)
+            }
         }
         restyle(property?.id)
     }
@@ -294,8 +324,10 @@ class DiscoverController(
     /**
      * Reads [row]'s cell in the two windows not on screen, one small read each, the same anonymous
      * feed the map uses. A newer selection cancels it, and a result for an older cell, window or
-     * resolution is dropped, so it never lands on the cell selected since. A read that fails leaves
-     * its window out of the map, so it reads as "not loaded" and the next pan reads [only] it again.
+     * resolution is dropped, so it never lands on the cell selected since. Each window lands as soon
+     * as it is read. A read that fails is tried again after 1 s and then 2 s. One that still fails
+     * stays out of the map and goes into [DiscoverUiState.failedWindows], and the next pan or the
+     * sheet's Retry reads [only] the missing windows again.
      */
     private fun readWindows(row: CellRow?, only: List<FeedWindow>? = null) {
         windowsJob?.cancel()
@@ -309,21 +341,30 @@ class DiscoverController(
         windowsFor = Triple(row.h3, window, res)
         windowsJob = scope.launch {
             val wanted = only ?: FeedWindow.entries.filter { it != window }
-            val read = withContext(io) {
-                buildMap {
-                    wanted.forEach { w ->
-                        catching { feed.cells(p, w, res, listOf(row.h3..row.h3)).rows.firstOrNull { it.h3 == row.h3 } }
-                            .onSuccess { put(w, it) }
+            for (w in wanted) {
+                val read = withContext(io) {
+                    var result = catching { readCell(p, w, res, row.h3) }
+                    for (wait in RETRY_DELAYS_MS) {
+                        if (result.isSuccess) break
+                        delay(wait)
+                        result = catching { readCell(p, w, res, row.h3) }
                     }
+                    result
                 }
-            }
-            ensureActive()
-            _state.update {
-                if (it.selected?.h3 != row.h3 || it.window != window || it.res != res) return@update it
-                it.copy(selectedWindows = it.selectedWindows + read)
+                ensureActive()
+                _state.update {
+                    if (it.selected?.h3 != row.h3 || it.window != window || it.res != res) return@update it
+                    read.fold(
+                        onSuccess = { r -> it.copy(selectedWindows = it.selectedWindows + (w to r), failedWindows = it.failedWindows - w) },
+                        onFailure = { _ -> it.copy(failedWindows = it.failedWindows + w) },
+                    )
+                }
             }
         }
     }
+
+    private suspend fun readCell(p: FeedPartition, w: FeedWindow, res: Int, cell: Long): CellRow? =
+        feed.cells(p, w, res, listOf(cell..cell)).rows.firstOrNull { it.h3 == cell }
 
     /** Recomputes chips, scale and GeoJSON for [propertyId] from the rows already loaded. */
     private fun restyle(propertyId: String?) {
@@ -358,6 +399,9 @@ class DiscoverController(
 
     private companion object {
         const val REST_MS = 400L
+
+        /** The waits before the second and third try of a failed window read. */
+        val RETRY_DELAYS_MS = longArrayOf(1_000L, 2_000L)
 
         /** [runCatching] that lets cancellation through, so a cancelled read stops instead of reading on. */
         inline fun <T> catching(block: () -> T): Result<T> = try {

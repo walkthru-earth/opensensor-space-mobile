@@ -40,6 +40,8 @@
     <string name="discover_all_measurements">All measurements</string>
     <string name="discover_unavailable">Public sensors are not available on this phone yet</string>
     <string name="discover_loading">Loading</string>
+    <string name="discover_read_failed">Not available right now</string>
+    <string name="discover_retry">Retry</string>
     <string name="discover_no_places">No matching places</string>
     <string name="discover_clear_search">Clear search</string>
     <string name="discover_updated_recently">Updated within the hour</string>

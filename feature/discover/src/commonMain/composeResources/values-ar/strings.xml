@@ -40,6 +40,8 @@
     <string name="discover_all_measurements">كل القياسات</string>
     <string name="discover_unavailable">المستشعرات العامة غير متاحة على هذا الهاتف بعد</string>
     <string name="discover_loading">جارٍ التحميل</string>
+    <string name="discover_read_failed">غير متاح الآن</string>
+    <string name="discover_retry">أعد المحاولة</string>
     <string name="discover_no_places">لا توجد أماكن مطابقة</string>
     <string name="discover_clear_search">مسح البحث</string>
     <string name="discover_updated_recently">حُدّثت خلال الساعة</string>
