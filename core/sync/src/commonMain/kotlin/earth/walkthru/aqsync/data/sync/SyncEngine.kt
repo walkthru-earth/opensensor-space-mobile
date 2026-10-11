@@ -86,11 +86,27 @@ class SyncEngine(
         expectedBytes: Long,
         maxRead: Int,
         onProgress: (FileProgress) -> Unit,
+    ): FileOutcome = download(session, station, sourceDevice, name, expectedBytes, maxRead, onSettled = {}, onProgress = onProgress)
+
+    /**
+     * Reports each settled file once, before the cancellable CLOSE. A Synced result means verified
+     * bytes are committed and indexed, even when Stop cancels the wait for CLOSED afterwards.
+     * This overload keeps existing positional progress callbacks source-compatible.
+     */
+    suspend fun download(
+        session: DeviceSession,
+        station: String,
+        sourceDevice: String,
+        name: String,
+        expectedBytes: Long,
+        maxRead: Int,
+        onSettled: (FileOutcome) -> Unit,
+        onProgress: (FileProgress) -> Unit,
     ): FileOutcome {
-        if (!ArchiveLayout.isArchiveName(name)) return FileOutcome.Failed(name, "refusing unsafe name")
+        if (!ArchiveLayout.isArchiveName(name)) return FileOutcome.Failed(name, "refusing unsafe name").also(onSettled)
         // An unsafe station is a caller bug (the device identity was validated), so it throws.
         val key = ArchiveKey(station, name)
-        return leases.withLease(key) { downloadLocked(session, key, sourceDevice, expectedBytes, maxRead, onProgress) }
+        return leases.withLease(key) { downloadLocked(session, key, sourceDevice, expectedBytes, maxRead, onSettled, onProgress) }
     }
 
     private suspend fun downloadLocked(
@@ -99,6 +115,7 @@ class SyncEngine(
         sourceDevice: String,
         expectedBytes: Long,
         maxRead: Int,
+        onSettled: (FileOutcome) -> Unit,
         onProgress: (FileProgress) -> Unit,
     ): FileOutcome {
         val name = key.name
@@ -106,7 +123,7 @@ class SyncEngine(
             session.open(name)
         } catch (e: DeviceErrorException) {
             if (e.endsSession) throw e
-            return FileOutcome.DeviceError(name, e.protocolError, e.message ?: "OPEN failed")
+            return FileOutcome.DeviceError(name, e.protocolError, e.message ?: "OPEN failed").also(onSettled)
         }
         val handle = opened.handle
         if (opened.size != expectedBytes || (opened.name.isNotEmpty() && opened.name != name)) {
@@ -116,8 +133,12 @@ class SyncEngine(
             } else {
                 FileOutcome.Mismatch(name, "OPENED echoed a different name: ${opened.name}")
             }
-            closeHandle(session, handle)
-            return outcome
+            try {
+                onSettled(outcome)
+                return outcome
+            } finally {
+                closeHandle(session, handle)
+            }
         }
         // Set once the file reached an outcome with the link still usable. Anything else (Stop, a
         // lost link, a session error) leaves the CLOSE to the link, so nothing waits for it here.
@@ -138,6 +159,7 @@ class SyncEngine(
                 FileOutcome.DeviceError(name, e.protocolError, e.message ?: "device error")
             }
             settled = true
+            onSettled(outcome)
             return outcome
         } finally {
             if (settled) closeHandle(session, handle) else session.oweClose(handle)

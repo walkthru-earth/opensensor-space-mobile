@@ -7,10 +7,15 @@ import android.util.Log
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import earth.walkthru.aqsync.collection.KeepAlive
+import earth.walkthru.aqsync.collection.KeepAliveKind
+import earth.walkthru.aqsync.collection.Lease
+import earth.walkthru.aqsync.collection.StopSource
 import earth.walkthru.aqsync.data.DeviceConnectionManager
 import earth.walkthru.aqsync.data.SyncProgress
 import earth.walkthru.aqsync.data.collectionProgress
@@ -18,11 +23,13 @@ import earth.walkthru.aqsync.data.coroutines.suspendRunCatching
 import earth.walkthru.aqsync.data.history.HistoryDeriver
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
 
 /**
@@ -35,6 +42,11 @@ import java.util.UUID
  * plain job too. On Android 12+ [setForeground] can be refused while the app is in the background
  * (`ForegroundServiceStartNotAllowedException`); then the work still runs as a plain job, which
  * has network access for its own duration, and only the ongoing notification is missing.
+ *
+ * Android 16 accounts even foreground workers against JobScheduler runtime quota. Every attempt,
+ * including discovery and local derivation, has an eight-minute deadline and accepts earlier
+ * WorkManager cancellation. The PROCESS lease is supplied by this worker, including the bounded
+ * ordinary-job fallback; it never starts [SyncForegroundService].
  *
  * All decisions live in [AutoSyncRunner]; this class is WorkManager plumbing: foreground info,
  * progress mirroring, the end-of-run summary and the retry policy (a broken-off transfer retries
@@ -65,6 +77,13 @@ class SyncWorker @AssistedInject constructor(
     }
 
     override suspend fun doWork(): Result {
+        val result = boundedWorkerRun(MAX_RUN_MS) { protection -> runProtected(protection) }
+        if (result != null) return result
+        Log.i(TAG, "auto-sync deadline reached; releasing worker quota")
+        return retryOrGiveUp()
+    }
+
+    private suspend fun runProtected(protection: KeepAlive): Result {
         var foreground = false
         try {
             setForeground(getForegroundInfo())
@@ -98,7 +117,7 @@ class SyncWorker @AssistedInject constructor(
                 try {
                     val trigger = inputData.getString(KEY_TRIGGER) ?: (if (inputData.getString(KEY_ADDRESS) != null || inputData.getBoolean(KEY_ALL_KNOWN, false)) SyncTrigger.MANUAL.name else "PERIODIC")
                     Log.i(TAG, "auto-sync run: trigger=$trigger")
-                    AutoSyncRunner(gateway.forRun(owner), log = { Log.i(TAG, it) }).run(
+                    AutoSyncRunner(gateway.forRun(owner, protection) { workerStopSource(stopReason) }, log = { Log.i(TAG, it) }).run(
                         onlyAddress = inputData.getString(KEY_ADDRESS),
                         allKnown = inputData.getBoolean(KEY_ALL_KNOWN, false),
                         lanOnly = inputData.getBoolean(KEY_LAN_ONLY, false),
@@ -108,10 +127,10 @@ class SyncWorker @AssistedInject constructor(
                 }
             }
         } catch (e: CancellationException) {
-            Log.i(TAG, "auto-sync cancelled")
+            Log.i(TAG, "auto-sync cancelled, stopReason=$stopReason")
             throw e
         } catch (e: Exception) {
-            Log.w(TAG, "auto-sync run failed: ${e::class.simpleName}: ${e.message}")
+            Log.w(TAG, "auto-sync run failed: ${e::class.simpleName}")
             return retryOrGiveUp()
         } finally {
             if (!foreground) runCatching { notificationManager.cancel(notificationId) }
@@ -120,12 +139,12 @@ class SyncWorker @AssistedInject constructor(
         if (inputData.getString(KEY_TRIGGER) == null && inputData.getString(KEY_ADDRESS) == null && !inputData.getBoolean(KEY_ALL_KNOWN, false)) {
             // Periodic run: the cheapest place to re-arm the offloaded flag scan, which a Bluetooth
             // toggle silently drops (stop + start, de-duplicated by the receiver).
-            suspendRunCatching { advertScan.ensureRegisteredNow() }.onFailure { Log.w(TAG, "flag scan re-register failed: ${it.message}") }
+            suspendRunCatching { advertScan.ensureRegisteredNow() }.onFailure { Log.w(TAG, "flag scan re-register failed: ${it::class.simpleName}") }
         }
         if (report.newFiles > 0) {
             // Still inside the worker's run: the tiers for the days that just gained files. Older
             // stale days wait for the charging backfill.
-            suspendRunCatching { historyDeriver.deriveAfterSync(startedMs) }.onFailure { Log.w(TAG, "derive failed: ${it.message}") }
+            suspendRunCatching { historyDeriver.deriveAfterSync(startedMs) }.onFailure { Log.w(TAG, "derive failed: ${it::class.simpleName}") }
         }
         if (report.shouldNotify) {
             notifications.postSummary(report.summaryDeviceName, report.newFiles, report.newBytes, report.failures)
@@ -147,6 +166,9 @@ class SyncWorker @AssistedInject constructor(
 
         private const val TAG = "SyncWorker"
 
+        /** Below the ordinary WorkManager ten-minute window, leaving time for cooperative cleanup. */
+        internal const val MAX_RUN_MS = 8 * 60_000L
+
         /** Retries (with the request's exponential backoff) within one period before waiting for the next. */
         const val MAX_RETRIES = BackgroundSyncPolicy.MAX_RETRIES
 
@@ -163,3 +185,25 @@ class SyncWorker @AssistedInject constructor(
         const val KEY_LAN_ONLY = "lan_only"
     }
 }
+
+/**
+ * PROCESS here is the executing WorkManager job, promoted by setForeground when permitted.
+ * Collection cleanup stays a child of this deadline. After completion or cancellation the
+ * protection refuses new leases; WIFI remains the facade's Android lock responsibility.
+ */
+internal suspend fun <T : Any> boundedWorkerRun(timeoutMs: Long, run: suspend (KeepAlive) -> T): T? =
+    withTimeoutOrNull(timeoutMs) {
+        val job = currentCoroutineContext().job
+        val protection = KeepAlive { kind, _ ->
+            if (kind == KeepAliveKind.PROCESS && job.isActive) Lease {} else null
+        }
+        run(protection)
+    }
+
+/** WorkManager's notification cancel action is an explicit user Stop; quota and OS stops are not. */
+internal fun workerStopSource(reason: Int): StopSource =
+    when (reason) {
+        WorkInfo.STOP_REASON_CANCELLED_BY_APP, WorkInfo.STOP_REASON_USER -> StopSource.USER
+        WorkInfo.STOP_REASON_FOREGROUND_SERVICE_TIMEOUT -> StopSource.FGS_TIMEOUT
+        else -> StopSource.SYSTEM
+    }

@@ -11,6 +11,8 @@ data class CollectionIntent(
     val scope: CollectionScope,
     val origin: CollectionOrigin,
     val clockConfirmed: Boolean = false,
+    /** Restricts every connection attempt, including retries, to the allowed transport. */
+    val linkPreference: LinkPreference = LinkPreference.ANY,
 )
 
 /** Which listed files the collection covers. Both plan from a fresh `LIST`. */
@@ -34,4 +36,7 @@ enum class StopSource {
 
     /** The OS ended the background time the collection ran in. */
     SYSTEM,
+
+    /** The OS expired the foreground service's data-sync time allowance. */
+    FGS_TIMEOUT,
 }

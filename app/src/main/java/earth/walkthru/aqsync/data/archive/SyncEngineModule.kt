@@ -8,10 +8,14 @@ import earth.walkthru.aqsync.archive.ArchiveIndex
 import earth.walkthru.aqsync.archive.ArchiveStore
 import earth.walkthru.aqsync.data.coroutines.WallClock
 import earth.walkthru.aqsync.data.history.HistoryIndexer
+import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
+import earth.walkthru.aqsync.data.sync.ArchiveCollector
 import earth.walkthru.aqsync.data.sync.ArchiveRecordIndexer
 import earth.walkthru.aqsync.data.sync.FileArchive
 import earth.walkthru.aqsync.data.sync.SyncEngine
 import earth.walkthru.aqsync.data.sync.WriterLeases
+import earth.walkthru.aqsync.data.toIdentity
+import earth.walkthru.aqsync.storage.StorageBudget
 import javax.inject.Singleton
 
 /**
@@ -21,6 +25,22 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object SyncEngineModule {
+    @Provides
+    @Singleton
+    fun provideArchiveCollector(
+        store: ArchiveStore,
+        index: ArchiveIndex,
+        engine: SyncEngine,
+        budget: StorageBudget,
+        files: ArchivedFileDao,
+    ): ArchiveCollector = ArchiveCollector(
+        store,
+        index,
+        engine,
+        budget,
+        archivedIdentities = { station -> files.identitiesForStation(station).map { it.toIdentity() } },
+    )
+
     /** One writer per archive file, shared by the engine and the storage janitor's partial sweep. */
     @Provides
     @Singleton

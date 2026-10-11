@@ -66,7 +66,11 @@ sealed interface CollectionFailure {
     data class Link(val cause: DisconnectCause) : CollectionFailure
 
     /** This phone could not hold the files. Bytes already saved stay. */
-    data class Storage(val kind: StorageFailure) : CollectionFailure
+    data class Storage(
+        val kind: StorageFailure,
+        /** Known bytes that must be freed for NO_SPACE; absent for other storage faults. */
+        val shortBytes: Long? = null,
+    ) : CollectionFailure
 
     /** The device answered [op] with `ERROR` [code] for the whole session, not one file. */
     data class Device(val code: Int, val op: Int) : CollectionFailure

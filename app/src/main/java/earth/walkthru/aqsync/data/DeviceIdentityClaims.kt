@@ -22,7 +22,7 @@ class DeviceIdentityClaims @Inject constructor() {
 /** Shared across interactive and worker transfers. Two is a conservative policy, not a BLE limit. */
 @Singleton
 class CollectionBudget @Inject constructor() {
-    private val permits = Semaphore(2)
+    val permits = Semaphore(2)
     suspend fun acquire() = permits.acquire()
     fun release() = permits.release()
 }

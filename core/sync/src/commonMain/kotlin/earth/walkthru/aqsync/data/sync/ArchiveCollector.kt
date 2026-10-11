@@ -54,10 +54,23 @@ data class CollectionProgress(
     val bytesPerSecond: Double,
     /** Bytes still needed when LIST planned this run, after any reusable partials. */
     val bytesTotal: Long = 0,
+    /** The file currently in transfer, absent before transfer and after its outcome settles. */
+    val current: FileProgress? = null,
 )
 
-/** Every listed file was saved, already on this phone, or is in [notSaved]. */
-data class CollectionSummary(val files: Int, val notSaved: List<FileNotSaved>) {
+/**
+ * Every scoped file was saved, already on this phone, or is in [notSaved]. [files] is the scoped
+ * count; [newFiles] and [newBytes] count only newly archived [FileOutcome.Synced] results, including
+ * resumed bytes and excluding destinations reused after a concurrent writer committed them.
+ * [outcomes] contains the files actually passed through the transfer engine.
+ */
+data class CollectionSummary(
+    val files: Int,
+    val notSaved: List<FileNotSaved>,
+    val newFiles: Int = 0,
+    val newBytes: Long = 0,
+    val outcomes: List<FileOutcome> = emptyList(),
+) {
     val complete: Boolean get() = notSaved.isEmpty()
 }
 
@@ -81,6 +94,10 @@ class ArchiveCollector(
     private val engine: SyncEngine,
     private val budget: StorageBudget,
     private val time: TimeSource.WithComparableMarks = TimeSource.Monotonic,
+    /** A fresh planner snapshot. Adapters can project identity columns without loading history. */
+    private val archivedIdentities: suspend (String) -> List<ArchivedIdentity> = { station ->
+        index.observeStation(station).first().map { ArchivedIdentity(it.station, it.name, it.bytes, it.crc32) }
+    },
 ) {
     suspend fun collect(
         session: DeviceSession,
@@ -92,7 +109,7 @@ class ArchiveCollector(
     ): CollectionSummary {
         val (files, _) = session.list()
         val planned = plan(station, files, onlyName)
-        return transfer(session, planned, station, sourceDevice, maxRead, onProgress)
+        return transfer(session, planned, station, sourceDevice, maxRead, onProgress = onProgress)
     }
 
     /**
@@ -105,7 +122,7 @@ class ArchiveCollector(
         if (onlyName != null && scopedFiles.isEmpty()) {
             return PlannedCollection(SyncPlan(emptyList(), emptyList()), listOf(FileNotSaved(onlyName, FileProblem.REFUSED)), unlisted = true)
         }
-        val archived = index.observeStation(station).first().map { ArchivedIdentity(it.station, it.name, it.bytes, it.crc32) }
+        val archived = archivedIdentities(station)
         val plan = SyncPlanner.plan(station, scopedFiles, archived, store.partialLengths(station))
         val notSaved = plan.entries.mapNotNull { entry ->
             when (entry.state) {
@@ -118,13 +135,17 @@ class ArchiveCollector(
         return PlannedCollection(plan, notSaved)
     }
 
-    /** Every missing file of [planned] through the [SyncEngine], in plan order. */
+    /**
+     * Every missing file of [planned] through the [SyncEngine], in plan order. [onOutcome] records
+     * settled files even when a later link failure throws before this method returns a summary.
+     */
     suspend fun transfer(
         session: DeviceSession,
         planned: PlannedCollection,
         station: String,
         sourceDevice: String,
         maxRead: Int,
+        onOutcome: (FileOutcome) -> Unit = {},
         onProgress: (CollectionProgress) -> Unit,
     ): CollectionSummary {
         val plan = planned.plan
@@ -135,26 +156,31 @@ class ArchiveCollector(
         var done = total - plan.toDownload.size
         var received = 0L
         var fileBytes = 0L
+        val outcomes = ArrayList<FileOutcome>()
         val meter = RateMeter(time)
         onProgress(CollectionProgress(done, total, 0, 0, 0.0, bytesTotal))
         for ((at, entry) in plan.toDownload.withIndex()) {
             val before = received
-            val outcome = engine.download(session, station, sourceDevice, entry.name, entry.bytes, maxRead) { p ->
+            val outcome = engine.download(session, station, sourceDevice, entry.name, entry.bytes, maxRead, onSettled = { settled ->
+                outcomes += settled
+                onOutcome(settled)
+            }) { p ->
                 received = before + (p.bytesDone - p.resumedFrom).coerceAtLeast(0)
                 fileBytes = p.bytesDone
-                onProgress(CollectionProgress(done, total, fileBytes, received, meter.update(received), bytesTotal))
+                onProgress(CollectionProgress(done, total, fileBytes, received, meter.update(received), bytesTotal, current = p))
             }
             val problem = FileProblem.of(outcome)
             problem?.let { notSaved += FileNotSaved(entry.name, it) }
+            done++
+            onProgress(CollectionProgress(done, total, fileBytes, received, meter.update(received), bytesTotal))
             if (problem == FileProblem.STORAGE) {
                 // A full disk fails every later file the same way, so it ends the run here. The
                 // failed file counts from its planned resume point, as on Android.
                 budget.requireRoom(plan.toDownload.drop(at).sumOf { it.bytes - it.partialBytes })
             }
-            done++
-            onProgress(CollectionProgress(done, total, fileBytes, received, meter.update(received), bytesTotal))
         }
-        return CollectionSummary(total, notSaved)
+        val synced = outcomes.filterIsInstance<FileOutcome.Synced>().filter { !it.alreadyArchived }
+        return CollectionSummary(total, notSaved, synced.size, synced.sumOf { it.bytes }, outcomes)
     }
 }
 

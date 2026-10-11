@@ -7,8 +7,10 @@ import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.protocol.Opcode
 import earth.walkthru.aqsync.data.protocol.ProtocolError
+import earth.walkthru.aqsync.data.sync.ARCHIVE_HEADROOM_BYTES
 import earth.walkthru.aqsync.data.sync.ArchiveCollector
 import earth.walkthru.aqsync.data.sync.FakeArchiveDevice
+import earth.walkthru.aqsync.data.sync.FileOutcome
 import earth.walkthru.aqsync.data.sync.MemoryArchiveIndex
 import earth.walkthru.aqsync.data.sync.MemoryArchiveStore
 import earth.walkthru.aqsync.data.sync.SyncEngine
@@ -16,8 +18,12 @@ import earth.walkthru.aqsync.link.AuthKind
 import earth.walkthru.aqsync.link.DisconnectCause
 import earth.walkthru.aqsync.link.LinkState
 import earth.walkthru.aqsync.storage.FakeStorageBudget
+import earth.walkthru.aqsync.storage.StorageClass
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -92,6 +98,437 @@ class CollectionControllerTest {
     private suspend fun TestScope.settle(controller: CollectionController) {
         controller.state.first { !it.active }
         runCurrent()
+    }
+
+    @Test
+    fun platformCleanupKeepsProcessAndPermitUntilItFinishesEvenWhenItThrows() = runTest {
+        val cleaning = CompletableDeferred<Unit>()
+        val permits = Semaphore(1)
+        val keepAlive = CountingKeepAlive()
+        val links = FakeLinks(backgroundScope)
+        val request = intent()
+        val controller = CollectionController(
+            "fake-0",
+            links,
+            collector(),
+            keepAlive,
+            backgroundScope,
+            permits = permits,
+            onCleanup = { stopped ->
+                assertEquals(request, stopped)
+                assertEquals(1, links.releases, "the platform cleanup follows the returned lend")
+                cleaning.complete(Unit)
+                delay(100)
+                error("platform close failed")
+            },
+        )
+
+        controller.start(request)
+        cleaning.await()
+        assertIs<CollectionState.Done>(controller.state.value)
+        assertEquals(1, keepAlive.held(KeepAliveKind.PROCESS))
+        assertEquals(0, permits.availablePermits)
+        val cleanup = async { controller.awaitCleanup(request.id) }
+        runCurrent()
+        assertFalse(cleanup.isCompleted, "cleanup completion includes the platform close")
+        advanceTimeBy(100)
+        runCurrent()
+        cleanup.await()
+
+        assertIs<CollectionState.Done>(controller.state.value)
+        assertTrue(keepAlive.allClosedOnce())
+        assertEquals(1, permits.availablePermits, "a failed platform close cannot retain the permit")
+    }
+
+    @Test
+    fun timeoutDuringCloseRetainsTheCommittedFileAndStopsWithoutWaitingForClosed() = runTest {
+        val saved = CompletableDeferred<Unit>()
+        val outcomes = ArrayList<FileOutcome>()
+        val keepAlive = CountingKeepAlive()
+        val links = FakeLinks(backgroundScope, keepOpen = true) { closedDelayMs = 5_000 }
+        val controller = CollectionController(
+            "fake-0",
+            links,
+            collector(),
+            keepAlive,
+            backgroundScope,
+            onOutcome = { _, outcome ->
+                outcomes += outcome
+                saved.complete(Unit)
+            },
+        )
+        val request = intent()
+
+        controller.start(request)
+        saved.await()
+        runCurrent()
+        assertTrue(Opcode.CLOSE in links.devices.single().requests, "CLOSE is queued and waiting for delayed CLOSED")
+        assertEquals(1, index.records.size)
+        val stoppedAt = testScheduler.currentTime
+        assertTrue(controller.stop(StopSource.FGS_TIMEOUT, request.id))
+        controller.awaitCleanup(request.id)
+
+        assertEquals(stoppedAt, testScheduler.currentTime, "Stop must not wait for CLOSED")
+        assertEquals(CollectionState.Stopped(request.id, StopSource.FGS_TIMEOUT), controller.state.value)
+        val synced = assertIs<FileOutcome.Synced>(outcomes.single())
+        assertFalse(synced.alreadyArchived)
+        assertEquals(1, outcomes.filterIsInstance<FileOutcome.Synced>().count { !it.alreadyArchived })
+        assertEquals(links.files.first().bytes.size.toLong(), synced.bytes)
+        assertContentEquals(links.files.first().bytes, archived(links, synced.name))
+        assertTrue(keepAlive.allClosedOnce())
+        advanceTimeBy(5_001)
+        runCurrent()
+        assertIs<LinkState.Ready>(links.links.single().session.link.state.value)
+        assertEquals(1, outcomes.size, "the late CLOSED cannot re-report the saved file")
+    }
+
+    @Test
+    fun repairingAReceiptOnRetryCannotEraseAnEarlierNewFileOutcome() = runTest {
+        val keepAlive = CountingKeepAlive()
+        val links = FakeLinks(backgroundScope) { n ->
+            if (n == 1) beforeOpen = { name -> if (name == files[1].name) close() }
+        }
+        val observed = ArrayList<FileOutcome>()
+        var receiptRemoved = false
+        val controller = CollectionController(
+            "fake-0",
+            links,
+            collector(),
+            keepAlive,
+            backgroundScope,
+            onOutcome = { _, outcome ->
+                observed += outcome
+                if (!receiptRemoved && outcome is FileOutcome.Synced) {
+                    receiptRemoved = true
+                    backgroundScope.launch(start = CoroutineStart.UNDISPATCHED) { index.remove(ArchiveKey(links.station, outcome.name)) }
+                }
+            },
+        )
+
+        controller.start(intent())
+        settle(controller)
+
+        val summary = assertIs<CollectionState.Done>(controller.state.value).summary
+        assertEquals(2, links.connects)
+        assertTrue(observed.filterIsInstance<FileOutcome.Synced>().any { it.alreadyArchived }, "the repaired receipt reuses immutable bytes")
+        assertEquals(3, summary.newFiles)
+        assertEquals(links.files.sumOf { it.bytes.size.toLong() }, summary.newBytes)
+        assertEquals(3, summary.outcomes.filterIsInstance<FileOutcome.Synced>().count { !it.alreadyArchived })
+        assertAllArchived(links)
+    }
+
+    @Test
+    fun acceptedClockEvidenceIsAwaitedOnTheExactLinkBeforeListing() = runTest {
+        val accepted = Frame.TimeSet(1_789_581_931L, 123_456L, 789_000)
+        var persisted = false
+        val keepAlive = CountingKeepAlive()
+        val links = FakeLinks(backgroundScope) {
+            clockAck = accepted
+            beforeList = { assertTrue(persisted, "LIST must follow receipt persistence") }
+        }
+        val controller = CollectionController(
+            "fake-0",
+            links,
+            collector(),
+            keepAlive,
+            backgroundScope,
+            clock = { 1_789_581_931_789L },
+            onClockSet = { link, ack ->
+                assertTrue(link === links.links.single(), "the receipt belongs to the exact borrowed link")
+                assertEquals(accepted, ack)
+                assertFalse(Opcode.LIST in links.devices.single().requests)
+                assertEquals(1, keepAlive.held(KeepAliveKind.PROCESS))
+                delay(50)
+                persisted = true
+            },
+        )
+
+        controller.start(intent().copy(clockConfirmed = true))
+        settle(controller)
+
+        assertTrue(persisted)
+        assertIs<CollectionState.Done>(controller.state.value)
+        assertEquals(1, links.devices.single().requests.count { it == Opcode.SET_TIME })
+        assertTrue(keepAlive.allClosedOnce())
+    }
+
+    @Test
+    fun timeoutAfterClockAcknowledgementPersistsEvidenceThenStopsBeforeListing() = runTest {
+        val accepted = Frame.TimeSet(1_789_581_931L, 123_456L, 789_000)
+        val recording = CompletableDeferred<Unit>()
+        var recorded: Frame.TimeSet? = null
+        val keepAlive = CountingKeepAlive()
+        val links = FakeLinks(backgroundScope) { clockAck = accepted }
+        val controller = CollectionController(
+            "fake-0",
+            links,
+            collector(),
+            keepAlive,
+            backgroundScope,
+            clock = { 1_789_581_931_789L },
+            onClockSet = { _, ack ->
+                recording.complete(Unit)
+                delay(100)
+                recorded = ack
+            },
+        )
+        val request = intent().copy(clockConfirmed = true)
+
+        controller.start(request)
+        recording.await()
+        assertTrue(controller.stop(StopSource.FGS_TIMEOUT, request.id))
+        controller.awaitCleanup(request.id)
+
+        assertEquals(accepted, recorded)
+        assertEquals(CollectionState.Stopped(request.id, StopSource.FGS_TIMEOUT), controller.state.value)
+        assertFalse(Opcode.LIST in links.devices.single().requests)
+        assertTrue(keepAlive.allClosedOnce())
+    }
+
+    @Test
+    fun aRefusedClockCreatesNoReceiptAndKeepsOriginalFilesFlowing() = runTest {
+        val links = FakeLinks(backgroundScope)
+        val controller = CollectionController(
+            "fake-0",
+            links,
+            collector(),
+            CountingKeepAlive(),
+            backgroundScope,
+            onClockSet = { _, _ -> error("a refused clock cannot create receipt evidence") },
+        )
+
+        controller.start(intent().copy(clockConfirmed = true))
+        settle(controller)
+
+        assertIs<CollectionState.Done>(controller.state.value)
+        assertTrue(Opcode.SET_TIME in links.devices.single().requests)
+        assertAllArchived(links)
+    }
+
+    @Test
+    fun globalClockErrorEndsTheCollectionBeforeListingOrRecordingAnAnchor() = runTest {
+        val keepAlive = CountingKeepAlive()
+        val links = FakeLinks(backgroundScope) {
+            clockError = Frame.Error(0, ProtocolError.UNKNOWN_OPCODE.code, "")
+        }
+        val controller = CollectionController(
+            "fake-0",
+            links,
+            collector(),
+            keepAlive,
+            backgroundScope,
+            onClockSet = { _, _ -> error("a global error cannot create clock receipt evidence") },
+        )
+        val request = intent().copy(clockConfirmed = true)
+
+        controller.start(request)
+        settle(controller)
+        controller.awaitCleanup(request.id)
+
+        val failed = assertIs<CollectionState.Failed>(controller.state.value)
+        assertEquals(CollectionFailure.Device(ProtocolError.UNKNOWN_OPCODE.code, 0), failed.failure)
+        assertEquals(1, links.connects)
+        assertEquals(1, links.devices.single().requests.count { it == Opcode.SET_TIME })
+        assertFalse(Opcode.LIST in links.devices.single().requests)
+        assertTrue(index.records.isEmpty())
+        assertTrue(keepAlive.allClosedOnce())
+        assertEquals(1, links.releases)
+    }
+
+    @Test
+    fun terminalCallbackRetainsAStoppedRequestAcrossImmediateRestartAndIgnoresHostFaults() = runTest {
+        val terminals = ArrayList<CollectionState>()
+        val keepAlive = CountingKeepAlive()
+        val links = FakeLinks(backgroundScope)
+        val controller = CollectionController(
+            "fake-0",
+            links,
+            collector(),
+            keepAlive,
+            backgroundScope,
+            onTerminal = {
+                terminals += it
+                error("host notification failed")
+            },
+        )
+        val first = intent()
+        val second = intent()
+
+        controller.start(first)
+        assertTrue(controller.stop(StopSource.USER, first.id))
+        controller.start(second)
+        // No coroutine observed the transient Stopped state; StateFlow now contains request two.
+        assertEquals(second.id, controller.state.value.intentId)
+        assertEquals(listOf<CollectionState>(CollectionState.Stopped(first.id, StopSource.USER)), terminals)
+        settle(controller)
+
+        assertEquals(2, terminals.size, "the old job's cleanup must not emit a second terminal")
+        assertEquals(CollectionState.Stopped(first.id, StopSource.USER), terminals.first())
+        assertEquals(second.id, assertIs<CollectionState.Done>(terminals.last()).intentId)
+        assertTrue(keepAlive.allClosedOnce(), "a throwing callback never keeps protection held")
+        assertEquals(terminals, listOf(controller.events.receive(), controller.events.receive()))
+    }
+
+    @Test
+    fun settledOutcomesReachTheAdapterBeforeALaterSessionFailure() = runTest {
+        val outcomes = ArrayList<FileOutcome>()
+        val keepAlive = CountingKeepAlive()
+        val links = FakeLinks(backgroundScope) {
+            var opens = 0
+            refuseOpen = { if (++opens == 2) Frame.Error(0, ProtocolError.AUTH_FAILED.code, "") else null }
+        }
+        val controller = CollectionController(
+            "fake-0",
+            links,
+            collector(),
+            keepAlive,
+            backgroundScope,
+            onOutcome = { intent, outcome ->
+                assertEquals(CollectionOrigin.USER_TAP, intent.origin)
+                outcomes += outcome
+            },
+        )
+        val request = intent()
+
+        controller.start(request)
+        settle(controller)
+
+        assertEquals(CollectionState.Failed(request.id, CollectionFailure.Link(DisconnectCause.Auth(AuthKind.TOKEN_REJECTED))), controller.state.value)
+        val saved = assertIs<FileOutcome.Synced>(outcomes.single())
+        assertEquals(links.files.first().name, saved.name)
+        assertEquals(links.files.first().bytes.size.toLong(), saved.bytes)
+        assertFalse(saved.alreadyArchived)
+        assertContentEquals(links.files.first().bytes, archived(links, saved.name))
+        assertTrue(keepAlive.allClosedOnce())
+    }
+
+    @Test
+    fun aFreshListingIsDeliveredEvenWhenTheArchiveDoesNotHaveRoom() = runTest {
+        val links = FakeLinks(backgroundScope)
+        val keepAlive = CountingKeepAlive()
+        val collector = ArchiveCollector(
+            store,
+            index,
+            SyncEngine(store, index, io = StandardTestDispatcher(testScheduler)),
+            FakeStorageBudget(mapOf(StorageClass.Durable to 1L)),
+        )
+        var listed: List<Frame.File>? = null
+        var end: Frame.ListEnd? = null
+        val controller = CollectionController(
+            "fake-0",
+            links,
+            collector,
+            keepAlive,
+            backgroundScope,
+            onListed = { _, files, listEnd ->
+                listed = files
+                end = listEnd
+            },
+        )
+        val request = intent()
+
+        controller.start(request)
+        settle(controller)
+
+        assertEquals(links.files.map { it.name }, listed?.map { it.name })
+        assertEquals(links.files.size.toLong(), end?.count)
+        val shortage = links.files.sumOf { it.bytes.size.toLong() } + ARCHIVE_HEADROOM_BYTES - 1L
+        assertEquals(CollectionState.Failed(request.id, CollectionFailure.Storage(StorageFailure.NO_SPACE, shortage)), controller.state.value)
+        assertFalse(Opcode.OPEN in links.devices.single().requests)
+        assertTrue(keepAlive.allClosedOnce())
+    }
+
+    @Test
+    fun anAsynchronousProcessRefusalFailsOnlyItsRequest() = runTest {
+        val keepAlive = CountingKeepAlive()
+        val links = FakeLinks(backgroundScope).apply { connectDelayMs = { 5_000 } }
+        val controller = controller(links, keepAlive)
+        val first = intent()
+        controller.start(first)
+        advanceTimeBy(1_000)
+
+        assertTrue(controller.keepAliveRefused(KeepAliveKind.PROCESS, first.id))
+        controller.awaitCleanup(first.id)
+        val refused = CollectionState.Failed(first.id, CollectionFailure.KeepAliveRefused(KeepAliveKind.PROCESS))
+        assertEquals(refused, controller.state.value)
+        assertEquals(refused, controller.events.tryReceive().getOrNull())
+        assertTrue(keepAlive.allClosedOnce())
+        assertEquals(1, links.releases)
+
+        val second = intent()
+        controller.start(second)
+        assertFalse(controller.keepAliveRefused(KeepAliveKind.PROCESS, first.id))
+        assertTrue(controller.state.value.active)
+        assertEquals(second.id, controller.state.value.intentId)
+        settle(controller)
+        assertIs<CollectionState.Done>(controller.state.value)
+        assertTrue(keepAlive.allClosedOnce())
+    }
+
+    @Test
+    fun aWorkersLanPolicyIsKeptOnEveryRetry() = runTest {
+        val links = FakeLinks(backgroundScope, kind = TransportKind.LAN).apply {
+            refuse = { n -> if (n == 1) DisconnectCause.Unreachable else null }
+        }
+        val controller = controller(links, CountingKeepAlive())
+        val request = intent().copy(origin = CollectionOrigin.WORKER, linkPreference = LinkPreference.LAN)
+
+        controller.start(request)
+        settle(controller)
+
+        assertIs<CollectionState.Done>(controller.state.value)
+        assertEquals(listOf(LinkPreference.LAN, LinkPreference.LAN), links.preferences)
+    }
+
+    @Test
+    fun filesArchivedBeforeReconnectRemainInTheNewFileSummary() = runTest {
+        val links = FakeLinks(backgroundScope) { n ->
+            if (n == 1) beforeOpen = { name -> if (name == files[1].name) close() }
+        }
+        val controller = controller(links, CountingKeepAlive())
+
+        controller.start(intent())
+        settle(controller)
+
+        val summary = assertIs<CollectionState.Done>(controller.state.value).summary
+        assertEquals(2, links.connects)
+        assertEquals(3, summary.newFiles)
+        assertEquals(links.files.sumOf { it.bytes.size.toLong() }, summary.newBytes)
+        assertEquals(3, summary.outcomes.size)
+        assertAllArchived(links)
+    }
+
+    @Test
+    fun foregroundTimeoutWinsAndCleanupWaitsForTheStoppedLendOnly() = runTest {
+        val keepAlive = CountingKeepAlive()
+        val links = FakeLinks(backgroundScope, keepOpen = true).apply {
+            connectDelayMs = { n -> if (n == 1) 5_000 else 10_000 }
+            uninterruptible = true
+        }
+        val controller = controller(links, keepAlive)
+        val first = intent()
+        controller.start(first)
+        advanceTimeBy(1_000)
+
+        assertTrue(controller.stop(StopSource.FGS_TIMEOUT, first.id))
+        assertEquals(CollectionState.Stopped(first.id, StopSource.FGS_TIMEOUT), controller.state.value)
+        val second = intent()
+        controller.start(second)
+        val cleanup = async { controller.awaitCleanup(first.id) }
+        runCurrent()
+        assertFalse(cleanup.isCompleted)
+        assertEquals(2, keepAlive.held(KeepAliveKind.PROCESS))
+
+        advanceTimeBy(4_000)
+        runCurrent()
+        cleanup.await()
+        assertEquals(1, links.releases)
+        assertEquals(1, keepAlive.held(KeepAliveKind.PROCESS))
+        assertTrue(controller.state.value.active, "cleanup must not wait for the newer request")
+        assertFalse(controller.stop(StopSource.FGS_TIMEOUT, first.id), "an old timeout cannot stop the new request")
+        controller.stop(StopSource.USER, second.id)
+        controller.awaitCleanup(second.id)
+        assertTrue(keepAlive.allClosedOnce())
     }
 
     @Test
@@ -345,6 +782,40 @@ class CollectionControllerTest {
         assertEquals(1, links.connects)
         assertEquals(1, keepAlive.acquired(KeepAliveKind.WIFI))
         assertTrue(keepAlive.allClosedOnce())
+    }
+
+    @Test
+    fun stopDuringFinalizationKeepsItsReasonAndReleasesProtectionAfterCancellation() = runTest {
+        val keepAlive = CountingKeepAlive()
+        val links = FakeLinks(backgroundScope, kind = TransportKind.LAN)
+        val entered = CompletableDeferred<Unit>()
+        val controller = CollectionController(
+            "fake-0",
+            links,
+            collector(),
+            keepAlive,
+            backgroundScope,
+            onFinalizing = { _, summary ->
+                assertEquals(3, summary.newFiles)
+                assertEquals(1, keepAlive.held(KeepAliveKind.PROCESS))
+                assertEquals(1, keepAlive.held(KeepAliveKind.WIFI))
+                entered.complete(Unit)
+                delay(60_000)
+            },
+        )
+        val request = intent()
+
+        controller.start(request)
+        entered.await()
+        assertIs<CollectionState.Finalizing>(controller.state.value)
+        assertTrue(controller.stop(StopSource.FGS_TIMEOUT, request.id))
+        controller.awaitCleanup(request.id)
+
+        assertEquals(CollectionState.Stopped(request.id, StopSource.FGS_TIMEOUT), controller.state.value)
+        assertEquals(1, links.releases)
+        assertTrue(keepAlive.allClosedOnce())
+        assertEquals(CollectionState.Stopped(request.id, StopSource.FGS_TIMEOUT), controller.events.tryReceive().getOrNull())
+        assertTrue(controller.events.tryReceive().isFailure)
     }
 
     @Test

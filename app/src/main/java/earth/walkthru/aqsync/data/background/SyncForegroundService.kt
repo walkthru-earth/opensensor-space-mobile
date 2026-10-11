@@ -10,6 +10,7 @@ import android.os.IBinder
 import android.util.Log
 import androidx.core.app.ServiceCompat
 import dagger.hilt.android.AndroidEntryPoint
+import earth.walkthru.aqsync.collection.StopSource
 import earth.walkthru.aqsync.data.DeviceConnectionManager
 import earth.walkthru.aqsync.data.collectionProgress
 import kotlinx.coroutines.CoroutineScope
@@ -17,31 +18,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * Foreground service that runs for exactly as long as a user-started sync or an
- * [AndroidKeepAlive] PROCESS lease. Type `connectedDevice`, `dataSync` when that is refused.
- *
- * Why: on Android 16 (OnePlus 7 Pro, 2026-09) a LAN sync died ~2 min after the screen went off —
- * `ConnectivityService` logged "Destroyed live tcp sockets for uids={<ours>}" and `TcpLinkDriver`
- * saw "Software caused connection abort" 6 ms later. That is the background network restriction:
- * once the app is no longer foreground and the grace period ends, its sockets are killed. A
- * foreground service keeps the uid eligible for network for the duration of the transfer.
- *
- * The service owns no logic. [DeviceConnectionRepository] starts it when a transfer begins (the
- * app is in the foreground at that moment, so the API 31+ start restriction does not apply), the
- * service attaches to [DeviceConnectionRepository.sync], mirrors it into the notification and
- * stops itself when `running` turns false. The Stop action cancels the sync through the
- * repository. It is deliberately **not** kept alive while the link is idle (battery): an idle LAN
- * socket may be killed by the OS in the background and the repository reconnects when that happens.
- *
- * API 35+ caps `dataSync` at 6 h per 24 h; [onTimeout] cancels the sync and stops cleanly.
- * `connectedDevice` has no such cap.
+ * Mirrors interactive collection progress. PROCESS leases own its lifetime, including preparation,
+ * retry waiting and finalization. Stop ends each controller; loss informs just its generation.
+ * The connectedDevice type has no daily cap; dataSync is the permission fallback.
  */
 @AndroidEntryPoint
 class SyncForegroundService : Service() {
@@ -58,38 +43,37 @@ class SyncForegroundService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var watchJob: Job? = null
     private var inForeground = false
+    private val ownership = SyncServiceOwnership()
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
-            ACTION_STOP -> {
-                manager.cancelInteractive()
-                // The watcher sees foregroundNeeded=false and stops the service; if nothing is
-                // running any more (race), stop right away.
-                if (!needed()) finish()
+        when (ownership.command(startId, intent?.getLongExtra(EXTRA_GENERATION, -1L), keepAlive.generation, intent?.action == ACTION_STOP, inForeground)) {
+            SyncServiceOwnership.Decision.STOP_COLLECTIONS -> {
+                manager.cancelInteractive(StopSource.USER)
+                startWatching()
+                finishIfIdle()
                 return START_NOT_STICKY
             }
-            else -> {
-                if (!inForeground) {
-                    val initial = notifications.progress("opensensor.space", collectionProgress(manager.snapshots.value.filter { it.backgroundOwner == null && it.foregroundNeeded }), stopIntent())
-                    try {
-                        startForegroundTyped(initial)
-                        inForeground = true
-                    } catch (e: Exception) {
-                        // ForegroundServiceStartNotAllowedException (API 31+) or a type/permission
-                        // problem: the sync itself keeps running in the repository; we just cannot
-                        // protect it. Log and go away.
-                        Log.w(TAG, "startForeground refused: ${e::class.simpleName}: ${e.message}")
-                        keepAlive.onServiceStopped()
-                        stopSelf(startId)
-                        return START_NOT_STICKY
-                    }
-                }
-                startWatching()
+            SyncServiceOwnership.Decision.STOP_IDLE -> { finish(); return START_NOT_STICKY }
+            SyncServiceOwnership.Decision.IGNORE -> return START_NOT_STICKY
+            SyncServiceOwnership.Decision.ACCEPT_START -> Unit
+        }
+        if (!inForeground) {
+            val initial = notifications.progress("opensensor.space", collectionProgress(manager.snapshots.value.filter { it.backgroundOwner == null && it.foregroundNeeded }), stopIntent())
+            try {
+                startForegroundTyped(initial)
+                inForeground = true
+            } catch (e: Exception) {
+                Log.w(TAG, "startForeground refused (${e::class.simpleName})")
+                keepAlive.onServiceStopped(ownership.generation, AndroidKeepAlive.ServiceLoss.REFUSED)
+                stopSelf(startId)
                 return START_NOT_STICKY
             }
         }
+        startWatching()
+        finishIfIdle()
+        return START_NOT_STICKY
     }
 
     private fun startWatching() {
@@ -99,7 +83,7 @@ class SyncForegroundService : Service() {
             combine(manager.snapshots, keepAlive.processHeld) { all, leased ->
                 val active = all.filter { it.backgroundOwner == null && it.foregroundNeeded }
                 Snapshot(
-                    leased || active.isNotEmpty(),
+                    leased,
                     collectionProgress(active),
                     active.singleOrNull()?.reconnect,
                     active.singleOrNull()?.name ?: if (active.isEmpty()) "opensensor.space" else "${active.size} devices"
@@ -110,10 +94,7 @@ class SyncForegroundService : Service() {
                 // only while the screen is on. The stop decision is final and always goes through.
                 .postPaced(NOTIFY_INTERVAL_MS, screenInteractive(this@SyncForegroundService), isFinal = { !it.needed }) { snap ->
                     if (!snap.needed) {
-                        // A sync that just aborted because the link dropped flips `running` a moment
-                        // before the reconnect state appears; give it that moment before stopping.
-                        delay(STOP_GRACE_MS)
-                        if (!needed()) finish()
+                        finishIfIdle()
                         return@postPaced
                     }
                     if (inForeground) {
@@ -125,8 +106,6 @@ class SyncForegroundService : Service() {
                 }
         }
     }
-
-    private fun needed() = keepAlive.processHeld.value || manager.snapshots.value.any { it.foregroundNeeded && it.backgroundOwner == null }
 
     /**
      * `connectedDevice` first, it has no daily cap. Android 14+ refuses it with a
@@ -141,26 +120,38 @@ class SyncForegroundService : Service() {
         }
     }
 
+    private fun finishIfIdle() {
+        // A retained Stop PendingIntent can recreate a service after its leases ended.
+        if (ownership.isUnleasedIdle(inForeground, keepAlive.generation)) {
+            finish()
+            return
+        }
+        if (!keepAlive.finishIfIdle(ownership.generation)) return
+        finish()
+    }
+
     private fun finish() {
-        keepAlive.onServiceStopped()
         watchJob?.cancel()
         watchJob = null
         if (inForeground) {
             ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
             inForeground = false
         }
-        stopSelf()
+        stopSelf(ownership.lastStartId)
     }
 
-    /** API 35+: the system's `dataSync` time budget ran out. Stop the transfer; partials resume later. */
+    /** Stop immediately on the OS deadline. Generation-targeted callbacks preserve newer intents. */
     override fun onTimeout(startId: Int, fgsType: Int) {
-        Log.w(TAG, "dataSync foreground service timed out (type $fgsType); stopping the sync")
-        manager.cancelInteractive()
+        // Android may queue the timeout with the startId present when it was scheduled.
+        // Later Stop or stale start commands in this generation do not invalidate that deadline.
+        if (!ownership.acceptsTimeout(startId)) return
+        Log.w(TAG, "foreground service timed out (type $fgsType)")
+        keepAlive.onServiceStopped(ownership.generation, AndroidKeepAlive.ServiceLoss.TIMEOUT)
         finish()
     }
 
     override fun onDestroy() {
-        keepAlive.onServiceStopped()
+        keepAlive.onServiceStopped(ownership.generation, AndroidKeepAlive.ServiceLoss.DESTROYED)
         watchJob?.cancel()
         scope.cancel()
         super.onDestroy()
@@ -175,26 +166,22 @@ class SyncForegroundService : Service() {
         private const val TAG = "SyncFgs"
         const val ACTION_STOP = "earth.walkthru.aqsync.action.STOP_SYNC"
         private const val REQ_STOP = 11
-        private const val STOP_GRACE_MS = 1_500L
+        private const val EXTRA_GENERATION = "collection_generation"
 
-        /**
-         * Start the service for a sync that is about to run / has just started. Must be called while
-         * the app is in the foreground (a user tap); otherwise Android 12+ refuses and we log it —
-         * the sync then runs unprotected rather than not at all.
-         */
-        fun start(context: Context): Boolean {
-            val intent = Intent(context, SyncForegroundService::class.java)
+        /** Start from the interactive tap before collection can suspend; refusal fails that run. */
+        fun start(context: Context, generation: Long): Boolean {
+            val intent = Intent(context, SyncForegroundService::class.java).putExtra(EXTRA_GENERATION, generation)
             return try {
                 context.startForegroundService(intent)
                 true
             } catch (e: ForegroundServiceStartNotAllowedException) {
-                Log.w(TAG, "cannot start the sync foreground service from the background: ${e.message}")
+                Log.w(TAG, "cannot start the sync foreground service from the background: ${e::class.simpleName}")
                 false
             } catch (e: IllegalStateException) {
-                Log.w(TAG, "cannot start the sync foreground service: ${e.message}")
+                Log.w(TAG, "cannot start the sync foreground service: ${e::class.simpleName}")
                 false
             } catch (e: SecurityException) {
-                Log.w(TAG, "cannot start the sync foreground service: ${e.message}")
+                Log.w(TAG, "cannot start the sync foreground service: ${e::class.simpleName}")
                 false
             }
         }

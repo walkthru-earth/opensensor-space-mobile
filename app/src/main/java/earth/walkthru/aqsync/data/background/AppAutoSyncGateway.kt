@@ -7,6 +7,8 @@ import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
+import earth.walkthru.aqsync.collection.KeepAlive
+import earth.walkthru.aqsync.collection.StopSource
 import earth.walkthru.aqsync.data.BackgroundSyncResult
 import earth.walkthru.aqsync.data.DeviceConnectionManager
 import earth.walkthru.aqsync.data.TransportFactory
@@ -22,9 +24,9 @@ import javax.inject.Singleton
 
 /**
  * [AutoSyncGateway] backed by the real app: Room for the device list, [LanDiscovery] for the mDNS
- * browse, the Bluetooth adapter for the bond check and [DeviceConnectionRepository.syncInBackground]
- * for the transfer itself — so the worker shares every rule of an interactive sync (LAN-then-BLE,
- * verification, never delete, token never logged).
+ * browse, the Bluetooth adapter for the bond check and the per-device collection facade for the
+ * transfer itself. A run must supply its WorkManager PROCESS protection; this adapter never starts
+ * an unmanaged foreground service for background work.
  */
 @Singleton
 class AppAutoSyncGateway @Inject constructor(
@@ -43,10 +45,10 @@ class AppAutoSyncGateway @Inject constructor(
 
     override fun interactiveSessionAddress(): String? = manager.snapshots.value.firstOrNull { manager.isOwned(it.address) }?.address
 
-    override fun isDeviceOwned(address: String): Boolean = manager.isOwned(address)
+    override fun isDeviceOwned(address: String): Boolean = manager.hasInteractiveCollection() || manager.isOwned(address)
 
-    fun forRun(owner: String): AutoSyncGateway = object : AutoSyncGateway by this {
-        override suspend fun sync(device: KnownDevice, link: AutoSyncLink): BackgroundSyncResult = syncOwned(device, link, owner)
+    fun forRun(owner: String, protection: KeepAlive, stopSource: () -> StopSource = { StopSource.SYSTEM }): AutoSyncGateway = object : AutoSyncGateway by this {
+        override suspend fun sync(device: KnownDevice, link: AutoSyncLink): BackgroundSyncResult = syncOwned(device, link, owner, protection, stopSource)
     }
 
     override suspend fun browseLan(stations: Set<String>, timeoutMs: Long): Map<String, LanDevice> {
@@ -116,11 +118,19 @@ class AppAutoSyncGateway @Inject constructor(
 
     override fun isBonded(address: String): Boolean = transportFactory.isBonded(address)
 
-    override suspend fun sync(device: KnownDevice, link: AutoSyncLink): BackgroundSyncResult = syncOwned(device, link, "background")
+    override suspend fun sync(device: KnownDevice, link: AutoSyncLink): BackgroundSyncResult =
+        BackgroundSyncResult(device.address, device.name, null, 0, 0, 0, skipped = "worker protection unavailable")
 
-    private suspend fun syncOwned(device: KnownDevice, link: AutoSyncLink, owner: String): BackgroundSyncResult = when (link) {
-        is BackgroundSyncLink.Lan -> manager.controller(device.address).syncInBackground(device.address, link.target, owner = owner)
-        BackgroundSyncLink.Ble -> manager.controller(device.address).syncInBackground(device.address, null, owner = owner)
+    private suspend fun syncOwned(device: KnownDevice, link: AutoSyncLink, owner: String, protection: KeepAlive, stopSource: () -> StopSource): BackgroundSyncResult {
+        if (isDeviceOwned(device.address)) {
+            return BackgroundSyncResult(device.address, device.name, null, 0, 0, 0, skipped = "interactive collection active")
+        }
+        // The facade repeats admission atomically. The chosen LAN target or bonded BLE policy is
+        // attached to this request, so neither its first attempt nor a retry can scan or pair.
+        return when (link) {
+            is BackgroundSyncLink.Lan -> manager.controller(device.address).syncInBackground(device.address, link.target, owner = owner, protection = protection, stopSource = stopSource)
+            BackgroundSyncLink.Ble -> manager.controller(device.address).syncInBackground(device.address, null, owner = owner, protection = protection, stopSource = stopSource)
+        }
     }
 
     private companion object {

@@ -3,13 +3,13 @@ package earth.walkthru.aqsync.collection
 import earth.walkthru.aqsync.data.ble.AuthFailedException
 import earth.walkthru.aqsync.data.ble.DeviceBusyException
 import earth.walkthru.aqsync.data.ble.DeviceErrorException
-import earth.walkthru.aqsync.data.ble.DeviceSession
 import earth.walkthru.aqsync.data.ble.ProtocolViolationException
 import earth.walkthru.aqsync.data.ble.TransportException
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.sync.ArchiveCollector
 import earth.walkthru.aqsync.data.sync.CollectionSummary
+import earth.walkthru.aqsync.data.sync.FileOutcome
 import earth.walkthru.aqsync.data.sync.InsufficientSpaceException
 import earth.walkthru.aqsync.data.sync.PlannedCollection
 import earth.walkthru.aqsync.link.AuthKind
@@ -89,6 +89,18 @@ class CollectionController(
     private val time: TimeSource.WithComparableMarks = TimeSource.Monotonic,
     private val clock: () -> Long = ::nowEpochMs,
     private val log: (String) -> Unit = {},
+    /** Runs before Done with the link and leases held. Optional refresh faults belong to the adapter. */
+    private val onFinalizing: suspend (CollectionLink, CollectionSummary) -> Unit = { _, _ -> },
+    /** Delivers each fresh listing before planning, including when archive planning later fails. */
+    private val onListed: (CollectionLink, List<Frame.File>, Frame.ListEnd) -> Unit = { _, _, _ -> },
+    /** Delivers each settled file even if a later session failure prevents a terminal summary. */
+    private val onOutcome: (CollectionIntent, FileOutcome) -> Unit = { _, _ -> },
+    /** One terminal notification per request, independent of StateFlow conflation. Faults are isolated. */
+    private val onTerminal: (CollectionState) -> Unit = {},
+    /** Persists the actual clock acknowledgement against this exact link before any LIST. */
+    private val onClockSet: suspend (CollectionLink, Frame.TimeSet) -> Unit = { _, _ -> },
+    /** Awaits platform-owned link cleanup after return, while permit and PROCESS are still held. */
+    private val onCleanup: suspend (CollectionIntent) -> Unit = {},
 ) {
     private val _state = MutableStateFlow<CollectionState>(CollectionState.Idle)
 
@@ -160,19 +172,43 @@ class CollectionController(
      * End the running request, or only request [intentId] when given. False when nothing matched.
      * The state is `Stopped` when this returns. Leases go once the job reaches its finally.
      */
-    fun stop(by: StopSource, intentId: Long? = null): Boolean {
-        var stopped: CollectionState.Stopped? = null
+    fun stop(by: StopSource, intentId: Long? = null): Boolean = endActive(intentId) { CollectionState.Stopped(it, by) }
+
+    /**
+     * An acquired lease was subsequently refused by the OS, such as a foreground-service start
+     * rejection. Only the named active request fails; a delayed refusal cannot cancel a restart.
+     */
+    fun keepAliveRefused(kind: KeepAliveKind, intentId: Long): Boolean =
+        endActive(intentId) { CollectionState.Failed(it, CollectionFailure.KeepAliveRefused(kind)) }
+
+    private fun endActive(intentId: Long?, terminalFor: (Long) -> CollectionState): Boolean {
+        var terminal: CollectionState? = null
         val job = lock.withLock {
             val now = _state.value
             if (!now.active || (intentId != null && now.intentId != intentId)) return@withLock null
-            stopped = CollectionState.Stopped(now.intentId!!, by)
-            _state.value = stopped!!
+            terminal = terminalFor(now.intentId!!)
+            _state.value = terminal!!
             current?.takeIf { it.ownedBy(now) }?.job
         }
-        val terminal = stopped ?: return false
+        val endedState = terminal ?: return false
         job?.cancel()
-        ended(terminal)
+        ended(endedState)
         return true
+    }
+
+    /**
+     * Wait until request [intentId] has handed back its link, permit and leases. A terminal state
+     * precedes cleanup, so an adapter must await this before releasing its own reservation or
+     * process protection. Waiting is cancellable; cancellation cleanup may call it from a
+     * `NonCancellable` context. A newer request is never waited for by accident.
+     */
+    suspend fun awaitCleanup(intentId: Long) {
+        val done = lock.withLock {
+            var run = current
+            while (run != null && run.intent.id != intentId) run = run.previous
+            run?.done
+        }
+        done?.join()
     }
 
     private fun busy(): StartResult = _state.value.let { s ->
@@ -189,7 +225,7 @@ class CollectionController(
             // The stopped run before this one still holds its link and permit until its finally.
             // A cancelled wait ends only after it, so a chain of quick restarts keeps the order.
             withContext(NonCancellable) { run.previous?.done?.join() }
-            run.previous = null
+            lock.withLock { run.previous = null }
             // ATOMIC ran this body although a Stop or the scope may have ended it. Do not connect.
             currentCoroutineContext().ensureActive()
             permits?.let {
@@ -201,6 +237,8 @@ class CollectionController(
                 val end = try {
                     val summary = attemptOnce(run, attempt) { progressed = true }
                     advance(run, CollectionState.Finalizing(intent, FinalizeStep.SUMMARY), run.link?.kind)
+                    currentCoroutineContext().ensureActive()
+                    onFinalizing(checkNotNull(run.link), summary)
                     AttemptEnd.Finished(summary)
                 } catch (e: CancellationException) {
                     throw e
@@ -229,6 +267,13 @@ class CollectionController(
             letGo("outcome") { finish(run, CollectionState.Stopped(intent.id, StopSource.SYSTEM)) }
             letGo("wifi") { run.wifi?.also { run.wifi = null }?.close() }
             letGo("link") { run.link?.also { run.link = null }?.release() }
+            withContext(NonCancellable) {
+                try {
+                    onCleanup(intent)
+                } catch (e: Exception) {
+                    note("collection cleanup adapter failed, ${e::class.simpleName}")
+                }
+            }
             if (permitted) letGo("permit") { permits?.release() }
             letGo("process") { run.process.close() }
             lock.withLock { if (current === run) current = null }
@@ -240,19 +285,33 @@ class CollectionController(
     private suspend fun attemptOnce(run: Run, attempt: Int, progressed: () -> Unit): CollectionSummary {
         val intent = run.intent
         advance(run, CollectionState.Preparing(intent, PrepareStep.CONNECT, attempt), null)
-        val link = run.link ?: links.connect(device, LinkPreference.ANY).also { run.link = it }
+        val link = run.link ?: links.connect(device, intent.linkPreference).also { run.link = it }
         advance(run, CollectionState.Preparing(intent, PrepareStep.CLOCK, attempt), link.kind)
-        if (intent.clockConfirmed) setClock(intent, link.session)
+        if (intent.clockConfirmed) setClock(intent, link)
         advance(run, CollectionState.Preparing(intent, PrepareStep.LIST, attempt), link.kind)
-        val (files, _) = link.session.list()
+        val (files, end) = link.session.list()
+        currentCoroutineContext().ensureActive()
+        onListed(link, files, end)
         advance(run, CollectionState.Preparing(intent, PrepareStep.PLAN, attempt), link.kind)
         val onlyName = (intent.scope as? CollectionScope.One)?.name
         val planned = planFrom(link.station, files, onlyName)
         note("collection ${intent.id} planned ${planned.plan.missingCount} of ${planned.plan.entries.size} file(s)")
-        return collector.transfer(link.session, planned, link.station, device, link.maxRead) { p ->
+        val summary = collector.transfer(link.session, planned, link.station, device, link.maxRead, onOutcome = { outcome ->
+            val previous = run.outcomes[outcome.name]
+            // Repaired receipts may re-plan a committed file. Reuse must not erase this run's
+            // earlier new success when adapters derive partial-run counts from these outcomes.
+            val retainNew = previous is FileOutcome.Synced && !previous.alreadyArchived && outcome is FileOutcome.Synced && outcome.alreadyArchived
+            if (!retainNew) run.outcomes[outcome.name] = outcome
+            if (outcome is FileOutcome.Synced && !outcome.alreadyArchived) {
+                run.newFiles++
+                run.newBytes += outcome.bytes
+            }
+            onOutcome(intent, outcome)
+        }) { p ->
             if (p.receivedBytes > 0) progressed()
             advance(run, CollectionState.Transferring(intent, p, link.kind), link.kind)
         }
+        return summary.copy(newFiles = run.newFiles, newBytes = run.newBytes, outcomes = run.outcomes.values.toList())
     }
 
     /** The plan touches only this phone's archive, so a fault there is a storage fault. */
@@ -266,13 +325,19 @@ class CollectionController(
         throw StorageException("archive index unavailable", e)
     }
 
-    /** The user allowed the phone time. A refused `SET_TIME` keeps the original files flowing. */
-    private suspend fun setClock(intent: CollectionIntent, session: DeviceSession) {
-        try {
-            session.synchronizeClockIfNeeded(clock)
+    /** Only an actual acknowledgement is recorded. A refused clock keeps the original files flowing. */
+    private suspend fun setClock(intent: CollectionIntent, link: CollectionLink) {
+        val accepted = try {
+            link.session.synchronizeClockIfNeeded(clock)
         } catch (e: DeviceErrorException) {
-            if (e is AuthFailedException || e is DeviceBusyException) throw e
+            if (e is AuthFailedException || e is DeviceBusyException || e.frame.op == 0) throw e
             note("collection ${intent.id} clock not set, ERROR ${e.frame.code}")
+            null
+        }
+        if (accepted != null) {
+            // TIME_SET already happened. Persist only its receipt despite Stop, then normal
+            // cancellation/ownership checks prevent LIST. No wire request inherits this context.
+            withContext(NonCancellable) { onClockSet(link, accepted) }
         }
     }
 
@@ -312,6 +377,11 @@ class CollectionController(
     }
 
     private fun ended(terminal: CollectionState) {
+        try {
+            onTerminal(terminal)
+        } catch (_: Exception) {
+            // A host notification cannot change the outcome or delay resource cleanup.
+        }
         note("collection ${terminal.intentId} ${label(terminal)}")
         _events.trySend(terminal)
     }
@@ -339,7 +409,7 @@ class CollectionController(
     private fun classify(e: Exception): AttemptEnd = when (e) {
         is LinkClosedException -> AttemptEnd.Lost(e.disconnectCause)
         is LinkTimeoutException -> AttemptEnd.Lost(e.timeout)
-        is InsufficientSpaceException -> AttemptEnd.Fail(CollectionFailure.Storage(StorageFailure.NO_SPACE))
+        is InsufficientSpaceException -> AttemptEnd.Fail(CollectionFailure.Storage(StorageFailure.NO_SPACE, (e.needed - e.available).coerceAtLeast(0)))
         is StorageException -> AttemptEnd.Fail(CollectionFailure.Storage(StorageFailure.IO))
         is AuthFailedException -> AttemptEnd.Lost(DisconnectCause.Auth(AuthKind.TOKEN_REJECTED))
         is DeviceBusyException -> AttemptEnd.Lost(DisconnectCause.Busy)
@@ -371,6 +441,9 @@ class CollectionController(
         var link: CollectionLink? = null
         var wifi: Lease? = null
         var wifiRefused = false
+        var newFiles = 0
+        var newBytes = 0L
+        val outcomes = linkedMapOf<String, FileOutcome>()
 
         /** The intent is this run's own copy, so no other run's state ever matches it. */
         fun ownedBy(state: CollectionState): Boolean = state.active && state.intentOrNull() === intent

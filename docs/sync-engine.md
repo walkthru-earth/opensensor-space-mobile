@@ -208,9 +208,10 @@ drivers land (#57, #58) `TransportLinkDriver` runs it over an `AqTransport`.
 `CollectionController` is one device's collection as a single state machine, from the tap to its
 outcome. Preparation is part of the collection, so a lost link during `LIST` is retried like a
 lost link during a `READ`. One controller per device, so two devices run independent machines.
-Android (#57) and iOS (#58) wire it in. Until then both phones still call
-`ArchiveCollector.collect`, which now runs the same `plan` and `transfer` steps the controller
-calls separately.
+Android `DeviceFacade` (#74) creates one controller per address. `DeviceLinkOwner` lends links
+and handles idle connections and commands. Collection retry has one owner, the shared controller.
+Workers pass an explicit LAN or BLE policy, a fresh mDNS target or a bounded bonded BLE connect,
+and PROCESS protection from their WorkManager job. They never use interactive BLE or pairing.
 
 ```mermaid
 stateDiagram-v2
@@ -261,13 +262,20 @@ stateDiagram-v2
 - **Logs** carry the intent id, state names, causes and counts, never names of networks, tokens or
   a PIN.
 
-`SyncResumePolicy` stays until the app adopts the controller (#57).
+`SyncResumePolicy` remains a compatibility helper for old progress consumers. Android collection
+retry is owned exclusively by `CollectionController`. `StopSource.FGS_TIMEOUT` distinguishes
+the Android service deadline from a user Stop. A generation-specific refused foreground start
+ends only its protected intents as `Failed(KeepAliveRefused)`.
+
+`CollectionSummary.files` is the scoped listing total. `newFiles` and `newBytes` count only
+`Synced` outcomes with `alreadyArchived == false`, including outcomes from earlier retry
+attempts. Worker summaries use those new totals.
 
 ## Sync run state
 
 ```mermaid
 stateDiagram-v2
-  [*] --> Running: startSync(plan) — foreground service + WifiLock (LAN only)
+  [*] --> Running: CollectionController.start(intent), PROCESS + shared permit
   Running --> Relisting: last file done — post-sync LIST, still `running`, still protected
   Relisting --> COMPLETED
   Running --> STOPPED: user Stop / cancelSync
@@ -301,16 +309,12 @@ that file and goes on. A directory at a final path used to be a per-file `Mismat
 destination is not a file") and is now a per-file storage failure. Host test
 `ArchiveCollectorTest`, `SensorSyncTest` on the simulator.
 
-**The post-sync `LIST` runs inside the run.** A `FLUSH` or a rotation may have finalized a file
-while we were pulling, so a completed run re-lists — *before* `running` turns false, because the
-foreground service stops 1.5 s after that and a phone that spent the whole transfer in the
-background has no network grace period left: the LAN socket is destroyed the moment the service
-goes. Seen on the phone as "LIST failed: link lost while waiting for a response" right after
-"Synced n of n" — the link was fine for the files and killed for the listing. A failure of that
-`LIST` is the refresh's, never the sync's (the files are verified and stored). The worker skips
-the re-list (it closes the session next). `STOPPED` and `FAILURE` still refresh from the `finally`
-when the link is up; `TRANSPORT_FAILURE` has no link to ask — `watchLink`'s reconnect issues the
-fresh `LIST`.
+**The post-sync `LIST` runs inside finalization.** Android interactive collection refreshes the
+manifest and history before publishing Done, while PROCESS and the LAN WIFI lease remain held.
+A failed refresh preserves verified files and the previous listing. The worker skips the second
+LIST because its owned link closes after collection. Stop cancels finalization and retains its
+own terminal reason. Service lifetime follows PROCESS leases, with no flag inference or grace
+period.
 
 **A refresh never blanks the listing** (`ManifestState`, `data/ManifestState.kt`). `Loading` and
 `Error` carry the last `Loaded` in `last`; `plan` derives from `last`, and the Files screen keeps
@@ -324,7 +328,7 @@ either — "link lost" fires on the transport's state change, not on `FRAME_TIME
 Sync reserve the same operation gate before launching, issue `LIST`, and plan directly from the
 returned snapshot and current archive. They never execute a retained `plan` flow from an earlier
 listing, even when that plan has zero missing files. A failed refresh keeps known files visible
-but reports `FileListNotReady`, starts no download, and cannot emit `UpToDate`. The Files screen
+but reports a typed collection failure, starts no download, and cannot emit `UpToDate`. The Files screen
 suppresses its all-synced message while the latest refresh is loading or failed. Stop and disconnect
 also cancel preparation before the first OPEN; the command slot hands off atomically to the transfer.
 Host regressions: `DeviceConnectionRepositoryTest`. The shared `DeviceSession.list` rejects a
@@ -357,7 +361,11 @@ RTC-restored UTC automatically; phone and network anchors (`clk == 1` or `clk ==
 without a second clock update. Legacy Ask/Never preferences cannot disable this behavior.
 
 The accepted UTC/monotonic acknowledgement is bound to the full station and boot identity,
-allowing the local archive to reconcile earlier untimed rows from that boot immediately.
+allowing the local archive to reconcile earlier untimed rows from that boot. Android collection
+persists the exact accepted receipt before LIST, retaining its verified session identity even if
+the link then closes. Persistence completes independently of cancellation; reconciliation and
+touched-day derivation stay cancellable within the collection or worker run. Platform link cleanup
+also completes before the controller releases its shared permit and PROCESS lease.
 Original archive files remain immutable. Clock rejection leaves time unconfirmed but does not
 prevent collecting original files over a healthy transport. Future connections retry.
 `FLUSH` remains a separate confirmed action. Firmware may finalize short files automatically

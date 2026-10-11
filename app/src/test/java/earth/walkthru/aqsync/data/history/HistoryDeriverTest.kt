@@ -383,6 +383,45 @@ class HistoryDeriverTest {
         assertEquals("", HistoryDeriver.hex(ByteArray(0)))
     }
 
+    @Test
+    fun `collection clock receipt persists without reconciling or deriving history`() = runBlocking {
+        val tmp = java.nio.file.Files.createTempDirectory("aq-clock-persist").toFile()
+        try {
+            val archive = FileArchive(tmp)
+            val files = InMemoryFiles()
+            val buckets = InMemoryBuckets()
+            val days = InMemoryDays()
+            val indexer = HistoryIndexer(archive, files)
+            val store = DerivedStore(tmp)
+            val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp))
+            val name = "station=$station/unsynced/boot=00000000000000000000000000000000/raw.parquet"
+            val raw = archive.fileFor(station, name).apply {
+                parentFile!!.mkdirs()
+                writeBytes(bytes("device/v1-none-64rows-unsynced.parquet"))
+            }
+            files.rows += indexer.indexed(ArchivedFile(station = station, name = name, bytes = raw.length(), crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), raw)
+            val before = files.rows.single()
+            val utcNs = 1_788_912_000_123_456_000L
+            deriver.persistClockAnchor(station, before.bootId!!, utcNs, before.lastMonoUs!!)
+
+            // Restart reads the exact durable acknowledgement, while the older archive row and
+            // derived caches stay untouched until a cancellable pass explicitly reconciles them.
+            val restarted = HistoryIndexer(archive, files)
+            val anchor = restarted.clockAnchors.anchors(station).single()
+            assertEquals(before.bootId, anchor.boot)
+            assertEquals(utcNs, anchor.utcNs)
+            assertEquals(before.lastMonoUs, anchor.monoUs)
+            assertEquals(before, files.rows.single())
+            assertTrue(days.rows.isEmpty())
+            assertTrue(buckets.rows.isEmpty())
+            assertEquals(1, restarted.estimateTimes())
+            assertEquals(utcNs, files.rows.single().estLastUtcNs)
+            assertTrue(days.rows.isEmpty())
+        } finally {
+            tmp.deleteRecursively()
+        }
+    }
+
     /** The derived quota over [tmp]'s derived root, with the default budget. */
     private fun derivedQuota(tmp: File) = DerivedQuota(
         QuotaEnforcer(StorageRoots(mapOf(StorageRole.Derived to File(tmp, "derived/v1").absolutePath)), JvmStorageTree()),

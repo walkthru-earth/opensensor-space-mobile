@@ -140,26 +140,28 @@ the simulator. `app/src/androidTest` is in neither gate.
 ```mermaid
 flowchart LR
   UI["ui/* Compose screens + address-bound ViewModels"] --> MANAGER["DeviceConnectionManager<br/>process-scoped controller registry + snapshots"]
-  MANAGER --> REPO["DeviceConnectionRepository per address<br/>session, sync, reconnect, activeTransport"]
-  REPO --> SESS["data/ble/DeviceSession<br/>one request at a time"]
+  MANAGER --> REPO["DeviceFacade per address<br/>CollectionController state + UI flows"]
+  REPO --> OWNER["DeviceLinkOwner<br/>connect, identity, commands, idle watch"]
+  OWNER --> SESS["data/ble/DeviceSession<br/>one request at a time"]
   SESS --> TR{{"AqTransport"}}
   TR --> BLE["data/ble/BleLinkDriver"]
   TR --> LAN["data/lan/TcpLinkDriver"]
   TR --> FAKE["data/fake/FakeTransport (debug)"]
-  REPO --> SYNC["data/sync/SyncEngine → FileArchive"]
+  REPO --> COLLECT["core CollectionController<br/>PROCESS, retry, ArchiveCollector"]
+  COLLECT --> SYNC["data/sync/SyncEngine → FileArchive"]
   SYNC --> ROOM[("Room + filesDir")]
   ROOM --> HIST["data/history/* (Indexer, Deriver, Repository)"]
   HIST --> UI
   WORK["data/background/SyncWorker<br/>run-owned foreground progress"] --> MANAGER
-  REPO --> CLAIM["DeviceIdentityClaims<br/>one owner per full hardware ID"]
-  REPO --> BUDGET["CollectionBudget<br/>two active transfers process-wide"]
+  OWNER --> CLAIM["DeviceIdentityClaims<br/>one owner per full hardware ID"]
+  COLLECT --> BUDGET["CollectionBudget<br/>two active transfers process-wide"]
 ```
 
 ## Package map
 
 | Path (under `app/src/main/java/earth/walkthru/aqsync/`) | Holds | Android-only? |
 | --- | --- | --- |
-| `data/DeviceConnectionManager.kt`, `data/DeviceConnectionRepository.kt`, `data/TransportFactory.kt` | Process-owned registry; one bound controller per public BLE address owns its transport, session, state and reconnect; factory creates the pipes | yes |
+| `data/DeviceConnectionManager.kt`, `data/DeviceFacade.kt`, `data/DeviceLinkOwner.kt`, `data/TransportFactory.kt` | Process-owned registry; one facade and shared collection controller per address. The link owner owns transport, identity, commands and idle reconnect. The repository name is a compatibility typealias | yes |
 | `data/DeviceIdentityClaims.kt`, `data/DeviceContinuityPolicy.kt` | Shared two-transfer budget; full hardware identity claims and authenticated continuity policy | no (JVM logic with DI bindings) |
 | `data/ble/` | `BleScanner`, `BleLinkDriver` (GATT, serialized ops, `LinkDriver`), `BleDisconnectCauses` (pure status table), `DeviceSession` (every request), `FrameRecorder` (last 200 frames, redacts) | yes |
 | `data/lan/` | `TcpLinkDriver` (`LinkDriver`), `SocketErrors` (pure errno table), `LanDiscovery` (NsdManager, shared legacy resolver), `LanDiscoveryState` (foreground browse), `LanWifiLock` (transfer leases), `LanTokenPolicy` (pure) | yes (policy/lease accounting: no) |
