@@ -150,4 +150,33 @@ class DiscoverControllerTest {
         assertEquals(3, c.state.value.selectedWindows.size)
         assertEquals(30.0, c.state.value.selectedSummary(pm25)?.value)
     }
+
+    @Test
+    fun aCellTappedBeforeTheNewWindowLoadsNeverShowsTheOldWindowsValue() = runTest {
+        val c = controller(FakeFeed())
+        c.selectWindow(FeedWindow.WEEK)
+        // The rows on screen are still the 24 hour ones, now filed under the 7 day window.
+        c.selectCell(H3Index.toHex(cellA))
+        assertTrue(c.state.value.selectedWindows.isEmpty())
+        assertNull(c.state.value.selectedSummary(pm25)?.value)
+        settle()
+        assertEquals(30.0, c.state.value.selectedSummary(pm25)?.value)
+        assertEquals(10.0, c.state.value.selectedWindows[FeedWindow.WEEK]?.mean("pm25"))
+        assertEquals(3, c.state.value.selectedWindows.size)
+    }
+
+    @Test
+    fun aPanAtTheSameCellWindowAndResolutionDoesNotRereadTheWindows() = runTest {
+        val feed = FakeFeed()
+        val c = controller(feed)
+        c.selectCell(H3Index.toHex(cellA))
+        settle()
+        feed.calls.clear()
+        c.onCamera(CameraRest(GeoBounds(-122.02, 36.98, -121.98, 37.02), zoom = 6.25, lat = 37.0, lng = -122.0))
+        settle()
+        assertTrue(feed.calls.isNotEmpty(), "the pan reads the viewport")
+        assertTrue(feed.calls.none { it.second == listOf(cellA..cellA) }, "reread ${feed.calls}")
+        assertEquals(3, c.state.value.selectedWindows.size)
+        assertEquals(30.0, c.state.value.selectedSummary(pm25)?.value)
+    }
 }

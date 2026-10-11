@@ -126,6 +126,9 @@ class DiscoverController(
     /** The cell, window and resolution [windowsJob] read for, so a pan does not read them again. */
     private var windowsFor: Triple<Long, FeedWindow, Int>? = null
 
+    /** The window the rows on screen were read for. It lags `state.window` until the reload lands. */
+    private var rowsWindow: FeedWindow? = null
+
     init {
         // A feed that caches bytes in memory gives them back under memory pressure (#61).
         if (feed is MemoryTrimmable) scope.trimOnMemoryPressure(feed)
@@ -165,9 +168,11 @@ class DiscoverController(
     fun selectCell(hex: String?) {
         val row = hex?.let { h -> _state.value.rows.firstOrNull { H3Index.toHex(it.h3) == h } }
         if (row?.h3 == _state.value.selected?.h3) return
+        // Rows still from the previous window are not this window's values. The reload fills them.
+        val current = row != null && rowsWindow == _state.value.window
         // The selected outline is a filter on its own layer, so the GeoJSON is not rebuilt.
-        _state.update { s -> s.copy(selected = row, selectedWindows = if (row == null) emptyMap() else mapOf(s.window to row)) }
-        readWindows(row)
+        _state.update { s -> s.copy(selected = row, selectedWindows = if (row != null && current) mapOf(s.window to row) else emptyMap()) }
+        readWindows(row.takeIf { current })
     }
 
     fun dismissFirstRun() {
@@ -206,6 +211,7 @@ class DiscoverController(
         val property = ranked.firstOrNull { it.id == wanted } ?: dictionary.firstOrNull { it.id == wanted && ranked.isEmpty() } ?: ranked.firstOrNull()
         val selected = current.selected?.let { s -> rows.firstOrNull { it.h3 == s.h3 } }
         val sameWindows = selected != null && windowsFor == Triple(selected.h3, window, res)
+        rowsWindow = window
         _state.update {
             it.copy(
                 loading = false,
