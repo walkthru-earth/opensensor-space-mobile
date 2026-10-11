@@ -19,21 +19,21 @@ metric registry, sensor validity/mood rules and monotonic-time estimates.
 The firmware protocol and all existing wire values are preserved.
 
 Every `:core` module (`protocol`, `parquet`, `history`, `publicfeed`, `units`, `airquality`,
-`archive`, and the empty `sync` and `settings` skeletons) has a Java 17 JVM target for Android and
+`archive`, `storage`, `net`, `sync` and `settings`) has a Java 17 JVM target for Android and
 host consumers, plus `iosArm64` and `iosSimulatorArm64`. Portable source lives in `commonMain`,
 platform adapters in `jvmMain` and `iosMain`. The W2 source move is complete. No module maps
 `src/main/kotlin` any more.
-`core:parquet` reads mapped `NSData` and inflates GZIP with the system zlib on iOS (W8,
-2026-10-08), and its oracle tests decode the real fixtures on the simulator. Discover reads its
-bundled sample through this reader on iOS. The iOS archive does not use the reader or the index
-yet. The `test` compatibility tasks run `jvmTest`.
+`core:parquet` uses positional `pread` on iOS and inflates GZIP with the system zlib.
+Its oracle tests decode the real fixtures on the simulator. Discover reads its
+bundled sample through this reader on iOS. `IosArchive` uses the shared reader, indexer,
+`DayPass` and persistent file tiers for archive history. The `test` compatibility tasks run `jvmTest`.
 
 The iOS app uses Compose Multiplatform 1.12.1 (Material 3 1.9.0), the existing
-Kotlin 2.4.20 and Xcode direct framework integration. `ios:shared` targets iOS only. Its
+Kotlin 2.4.21 and Xcode direct framework integration. `ios:shared` targets iOS only. Its
 presentation-state tests run on the simulator in `verifyIos`, and its `commonMain` depends on
 `:feature:discover` and `:ui:designsystem`. The Android app continues to use its existing screens.
-Shared Android and iOS screens beyond Discover are planned in
-[platform-parity-plan.md](platform-parity-plan.md).
+Settings, My devices, Today, History, Files, device configuration and Debug use shared
+feature modules. Remaining platform differences are described below.
 
 The iOS live screen can discover AQ Sync service advertisements, connect one
 sensor, read INFO/STATUS/LIVE and subscribe to live/status updates. Missing,
@@ -41,7 +41,7 @@ invalid, disconnected and expired readings remain unavailable. Ambiguous
 board temperature and humidity are shown only for reviewed schema/dictionary
 profiles. Core Bluetooth owns pairing prompts. Operations are serialized and
 scan/connection timers bound attempts. The app sends no firmware-changing
-commands and has no accounts, analytics or cloud connection. Location is planned as approximate
+commands without their explicit UI paths and has no accounts or analytics. Location is planned as approximate
 only, asked on a "Near me" tap (`NSLocationDefaultAccuracyReduced`). The
 discover map adds only anonymous, read-only feed and basemap GETs, and uploads stay a per-device
 opt-in ([devices-and-discovery.md](devices-and-discovery.md#network-boundary)).
@@ -100,10 +100,11 @@ sensors can collect files concurrently on one phone. Each `LanSession` is an act
 executor is the session's own serial dispatch queue. Network callbacks, timers and framing run
 on that queue, so they enter actor state in delivery order without a task per callback. The
 session keeps one receive of up to 64 KiB outstanding and splits `len` u16 frames from an
-accumulating buffer, with bounded reply buffering (32 frames) and push demultiplexing. STATUS
-and LIVE pushes and the final close reason reach `LanDiscovery` through one ordered
-`AsyncStream` per session. A keepalive is measured from outgoing phone traffic, and request,
-connect and 180 s idle waits are bounded. LAN sockets prohibit cellular interfaces and use a
+accumulating buffer, forwarding replies to the shared `LinkSession` byte-budget inbox.
+STATUS and LIVE remain bounded push streams. Pushes and the final close reason reach `LanDiscovery` through one ordered
+`AsyncStream` per session. Native LAN keepalive is measured from outgoing phone traffic,
+with a separate 180 s receive deadline. It does not interleave with a Kotlin lease.
+Connect and shared request waits are bounded. LAN sockets prohibit cellular interfaces and use a
 10 s TCP connection timeout. Cancellation closes the socket and fails pending waits; old task
 callbacks cannot update a newer session. Alias services cannot open two controllers for the
 same hardware on this phone.
@@ -114,7 +115,13 @@ handshake takes the token as `Data` and zeroes the Kotlin copies after building 
 
 File sync on iOS runs the shared engine, the same `SyncEngine` and `ArchiveCollector` from
 `:core:sync` that Android runs. Each connection holds one `IosLink` (`ios/shared` iosMain) over `LinkSession`, and each sync,
-command or request takes a lease of it.
+command or request takes a lease of it. Files LIST and inspector requests borrow that same
+connection link. `IosLink` owns request routing, drain and owed CLOSE through `LinkSession`.
+iOS collection intent and retry remain in native adapters, pending
+[#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81). Core Bluetooth
+remains `@MainActor`, pending the physical link queue split in
+[#80](https://github.com/walkthru-earth/opensensor-space-mobile/issues/80). The Swift 6 actor,
+callback and synchronous `RunSlot.cancel` rules are in [iOS AGENTS](../ios/AGENTS.md#concurrency-model).
 `LanSession` passes LAN frame bodies through it, and `BluetoothCompanion` passes the `control`
 writes and `response` notifications. `SensorSync` owns the `IosArchiveStore` and
 `ReceiptArchiveIndex` from `:core:archive` iosMain, runs off the main thread, reports progress at
@@ -127,7 +134,8 @@ Collections mirror immutable files under Application Support as
 `SensorArchive/<station>/<relative path>`, the same place earlier builds used. Partials live
 under `Application Support/archive-partial/<station>/`, written with `pwrite` and `fsync`.
 Partials and receipts left by the old Swift engine are adopted when their size and CRC match.
-A final filename appears only after size, CRC-32, `PAR1` head/tail and SHA-256 pass in one pass.
+A final filename appears only after size, CRC-32 and `PAR1` head/tail pass. SHA-256 is
+calculated in the same pass and recorded for later local verification.
 Existing finalized files are verified and preserved, and a conflicting file is reported rather
 than replaced. Names use the shared safe-name rule, which is stricter than the old Swift
 whitelist. The archive root is created with
@@ -262,12 +270,17 @@ accuracy, stale/background handling or authenticated Wi-Fi connections. See
 
 1. Done in code (#18, 2026-10-09), not yet seen on an iPhone. The shared reader, indexer and
    aggregator run over the iOS archive through the receipt index (`IosArchive`), with index repair
-   at launch. A Room KMP store would replace the receipts and the in-memory tiers later.
+   at launch. iOS now persists rebuildable tiers with `IosFileTierStore`. Room KMP backing
+   remains planned. Both phones derive a grouped day once through `DayPass`. Android uses
+   derive version 5; iOS keeps its versioned daily manifests and tier sidecars.
+   iOS enforces the derived quota after building. Collection separately checks Durable
+   free space before OPEN through the shared collector.
 2. Done in code (#18), not yet seen on an iPhone. History is the shared `:feature:history`
    screen, opened from History buttons on My devices and the device page, with Day, Week, Month and Year, the ring,
    the calendar and station chips for every archived station. Check on an iPhone that a fresh sync
    shows in History without a relaunch, that index repair fills an archive synced by an older build,
-   and how long Week, Month and Year take on a large archive (tiers are computed in memory).
+   and how long Week, Month and Year take on a large archive. The
+   [host benchmark](perf/history-2026-10-11.md) does not establish phone cold-open latency.
 3. Share existing Android screens, resources and navigation incrementally. My devices is shared
    in code (#16, 2026-10-09), not yet seen on an iPhone. Check on an iPhone that the list scans
    only after access is allowed, that a known sensor opens from the list when it is not
@@ -284,10 +297,9 @@ accuracy, stale/background handling or authenticated Wi-Fi connections. See
    a build that used the Swift engine, keeping its receipts and partials.
 8. Drop the unused write path in `SensorArchive.swift`, with its English error descriptions. The
    link status lines moved into `:ui:strings` in #47.
-9. Give `ByteReader` (`core/parquet`) a `close`, so `ArchiveStore.reader` callers release
-   what they open. No descriptor leaks today. The JVM reader closes its file after mapping, and
-   the iOS reader is a mapped `NSData` freed with the object. A reader over a plain file handle
-   would need it.
+9. Done in code. `ByteReader` and `ParquetFile` are `AutoCloseable`. Keep archive readers
+   scoped with `use` so mapped files and descriptors are released deterministically.
+
 10. Debug (`:feature:debug`) can borrow a short authenticated LAN or Bluetooth link for raw
     commands, `LOG_TAIL`, `GET_CONFIG` and `STATUS`. iOS still needs the Smart Sync trace card.
     Qualify on an iPhone that a raw command, log, config read and Refresh status work over each
@@ -355,7 +367,7 @@ in [status.md](status.md). A simulator build does not establish real iPhone LAN 
 ## KMP and Apple contributor guidance
 
 - Keep platform entry points separate. `:core:protocol`, `:core:parquet` and `:core:history`
-  share rules through `commonMain`. Their JVM and iOS adapters (file mapping, gzip, streams)
+  share rules through `commonMain`. Their JVM and iOS adapters (positional file reads, gzip, streams)
   remain platform-specific. Android services stay
   in `:app`; Apple services stay in `ios/App/` or the existing iOS source sets.
 - Prefer small shared interfaces instantiated by the app entry point for substantial

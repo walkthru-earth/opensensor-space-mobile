@@ -41,7 +41,7 @@ is in place. Both phones run `SyncEngine` and `ArchiveCollector` from `:core:syn
 `ArchiveStore` and `ArchiveIndex` ports from `:core:archive`. Android adapts them in
 `app/.../data/archive/`. iOS uses `IosArchiveStore` and `ReceiptArchiveIndex` in `:core:archive`
 iosMain. The frame link exists on iOS as `IosLink` in `ios/shared` iosMain, one per connection over
-`LinkSession`, fed by Swift `LanSession` and `BluetoothCompanion`. It is not yet a common `FrameLink` port, and
+`LinkSession`, fed by Swift `LanSession` and `BluetoothCompanion`. The shared `LinkDriver` and `FrameSink` boundary feeds each `LinkSession`. A separate
 `CredentialStore` does not exist yet, so Keychain and Keystore stay platform code. The Swift
 transfer engine was removed. `SensorArchive.swift` remains only for Files export. See
 [sync-engine.md](sync-engine.md#where-ios-still-differs-from-android) for the behaviour that still
@@ -56,7 +56,7 @@ flowchart LR
     P[Policies<br/>backoff, liveness, claims, budget]
   end
   subgraph ports["Ports (Kotlin interfaces)"]
-    FL[FrameLink]
+    FL[LinkDriver and FrameSink]
     AS[ArchiveStore]
     AI[ArchiveIndex]
     CS[CredentialStore]
@@ -83,6 +83,12 @@ flowchart LR
   IK -.implements.-> CS
 ```
 
+Android adopts the per-device `CollectionController` through `DeviceFacade` and
+`DeviceLinkOwner`. iOS uses the link and engine, with native intent and retry ownership
+until [#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81). Its BLE
+physical link remains on MainActor until [#80](https://github.com/walkthru-earth/opensensor-space-mobile/issues/80).
+The diagram includes the planned credential port.
+
 ### Rules
 
 1. **The contract first.** A frame layout, opcode, error code, name rule or retry rule comes from
@@ -91,7 +97,7 @@ flowchart LR
 2. **One engine.** The download loop (list, open, read windows, retry a failed window from the
    phone's own offset, close, verify, commit) runs in shared Kotlin on both phones. Platform code
    never decides whether a file is synced. A sync fix lands once, in `:core:sync`.
-3. **Ports are small and byte based.** `FrameLink` sends and receives `ByteArray`. No hex strings,
+3. **Ports are small and byte based.** `LinkDriver` writes request frames and feeds reply bytes through `FrameSink` to `LinkSession`. No hex strings,
    no JSON for binary data, no per-byte callbacks across the Swift boundary. Convert `ByteArray`
    to `NSData` once in `iosMain` with pinned memory.
 4. **One archive layout.** Hive paths, partial names and receipt format are defined once in
@@ -115,7 +121,7 @@ flowchart LR
 ### Adding a transport (example, L2CAP or USB)
 
 1. Confirm the firmware contract supports it (`../aq-parquet/docs/shared/`).
-2. Implement `FrameLink` (planned port, see above) on each platform that needs it. Declare
+2. Implement `LinkDriver` on each platform that needs it and feed the connection's `LinkSession` through `FrameSink`. Declare
    `payloadMax` and capabilities.
 3. Add the transport choice to the shared transport selection policy and its tests.
 4. No change to the engine, verify or archive code should be needed. If one is, the port is wrong.

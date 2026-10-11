@@ -14,8 +14,11 @@ records and the `ArchiveStore` and `ArchiveIndex` ports. `storage/` owns `Storag
 writer goes through `AtomicFiles`, and the `StorageJanitor` (in `sync/`, it needs the archive ports)
 sweeps Scratch at start, enforces the derived quota and never deletes Durable data. `ParquetFile` and
 `ByteReader` are `AutoCloseable`, open them with `use`. `sync/` holds the link session, the sync
-engine and, in `collection/`, the per-device `CollectionController` (docs/sync-engine.md).
-`settings/` is an empty skeleton. See `docs/README.md` in the repo
+engine and, in `collection/`, the per-device `CollectionController` ([sync guide](../docs/sync-engine.md)). Android adopts the controller
+through `DeviceFacade`; iOS uses `IosLink` and `SensorSync` for link and engine adoption,
+with controller wiring still tracked in [#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81).
+`settings/` owns shared DataStore preferences, keys, units and detail level, with the
+iOS Application Support path and one-time UserDefaults migration. See `docs/README.md` in the repo
 root for the relevant concern. No Android, Hilt, Room, `Context` or
 `android.util.Log` in any `:core:*` module.
 
@@ -40,7 +43,7 @@ root for the relevant concern. No Android, Hilt, Room, `Context` or
   integration belongs in `ios/` adapters.
 - Every `:core` module is Kotlin Multiplatform with the standard layout.
   `src/commonMain` compiles for JVM and iOS, and `src/jvmMain` / `src/iosMain` keep the platform
-  edges (files, streams, SHA-256, `FileChannel` and `NSData` mapping, gzip, H3). Calendar math uses
+  edges (files, streams, SHA-256, positional `FileChannel` and `pread` reads, gzip, H3). Calendar math uses
   kotlinx-datetime (`TimeZone`, `LocalDate`), never `java.time`, in common code. Parquet bytes come
   through `ByteReader` (blocking, `ParquetFile`) or `RangeSource` (suspending, `ParquetReader`)
   (docs/parquet.md), so a new source (a cache, another transport) implements `RangeSource`
@@ -54,6 +57,11 @@ root for the relevant concern. No Android, Hilt, Room, `Context` or
   and `SafeName` is the firmware name rule (charset, no `..` or `//`, 399-byte cap) plus the phone's
   241-byte segment cap, so `<segment>.verified.json` fits a 255-byte file name. Platform code
   measures and calls them, it does not re-implement them.
+- History derives each grouped day once with `DayPass`, producing tiers and daily Parquet
+  together. Android uses derive version 5 and plans from projected station archive identities.
+  iOS persists rebuildable tiers and enforces the derived quota after building.
+  Preserve these paths and immutable raw archives. See [history pipeline](../docs/history-pipeline.md)
+  and the [host benchmark](../docs/perf/history-2026-10-11.md), which does not qualify phone latency.
 - Shared tests live in `commonTest` with `kotlin.test` and run on JVM through `verify` and on the
   iOS simulator through `verifyIos` (macOS, and part of `verify` on a Mac). The convention plugin
   adds every module to both gates. Keep a test in `jvmTest` only when it needs a JVM API.

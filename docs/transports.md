@@ -15,7 +15,7 @@ flowchart TD
   L -- ERROR 7 / timeout / bad HELLO --> B[BleLinkDriver]
   Q -- no --> B
   B --> R2[Ready · chip Bluetooth]
-  R2 --> T{proto ≥ 2 AND no token<br/>or stale?}
+  R2 --> T{proto ≥ 3 AND no token<br/>or stale?}
   T -- yes --> G[GET_TOKEN once → known_device.lanToken]
 ```
 
@@ -44,17 +44,11 @@ shared `LanWifiLock`; the last transfer releases it.
 
 ## Concurrent Wi-Fi collection
 
-Android's TCP reply queue is bounded to 64 frames. A full queue suspends the
-reader and applies TCP backpressure; it never drops archive frames. STATUS and
-LIVE remain separate bounded snapshot streams. A large-list regression waits
-for a 257-frame burst before consuming replies, and disconnect is also checked
-while the reader is backpressured.
-
-Readiness is published before reader and keepalive jobs start. Previously an
-eager keepalive could see `Authenticating` and exit permanently, or an early
-reader failure could be overwritten by `Ready`. The eager-start regression
-checks an actual STATUS heartbeat against a local protocol server. This is a
-host-tested startup fix, separate from the reproduced SD memory failure.
+Android `TcpLinkDriver` forwards frame bodies directly to the connection's `LinkSession`.
+The socket reader never suspends on a reply consumer. The shared byte-budget inbox and
+router bound response memory and close on overflow, while STATUS and LIVE are snapshot
+streams. `TcpLinkDriverTest` and `LinkSessionTest` cover routing, startup and closure on the
+host. Those tests do not qualify radio throughput.
 
 The shared firmware supports up to three LAN clients per sensor alongside its
 single BLE connection. Each phone has an independent file handle and offsets;
@@ -193,7 +187,7 @@ other boards need their own records.
 ```mermaid
 stateDiagram-v2
   [*] --> None
-  None --> Stored: BLE session Ready, proto ≥ 2 → GET_TOKEN
+  None --> Stored: BLE session Ready, proto ≥ 3 → GET_TOKEN
   Stored --> Stored: LAN HELLO ok
   Stored --> Stale: LAN ERROR 14 (rotated elsewhere) → lanToken cleared
   Stale --> Stored: next BLE session refetches, snackbar LanTokenRenewed
@@ -223,14 +217,18 @@ The LAN probe in `tryLan` is removed from the session slot and its transport is 
 failure path, including an unexpected exception and cancellation, and an unexpected exception falls
 back to BLE like a connect failure.
 
-## Lost link → automatic reconnect (repository)
+## Lost link and reconnect
 
-`Failed`, or `Disconnected` without a `disconnect()` call (`closeSessionLocked` clears the slot
-first, so deliberate closes are never mistaken) → **3 attempts, 5 s apart**
-(`RECONNECT_ATTEMPTS`, `RECONNECT_DELAY_MS`) with the normal transport rule, then an error snackbar.
-Banners say "Link lost (…). Reconnecting automatically, attempt n of 3…"; Stop on the notification
-cancels. The foreground service stays up (`foregroundNeeded = sync.running || reconnecting != null`).
-Whether the sync resumes is `SyncResumePolicy` ([sync-engine.md](sync-engine.md#resume-after-a-lost-link)).
+`DeviceLinkOwner` owns idle UI reconnect, three attempts five seconds apart under the
+normal transport rule. It checks the connection claim and collection reservation before
+starting, so it cannot race a new collection or deliberate disconnect. `cancelReconnect`
+invalidates even an idle retry decided by the watcher but not yet launched.
+
+An active collection suppresses that idle watcher. `CollectionController` owns its typed
+loss handling and retries from CONNECT and a fresh LIST, including loss during preparation.
+PROCESS stays held through retry waiting and finalization. The foreground service follows
+those leases, not the old `sync.running || reconnecting != null` inference.
+See [collection retry](sync-engine.md#resume-after-a-lost-link).
 
 ## `REBOOT` reconnect
 
@@ -244,8 +242,8 @@ After `REBOOTING(delay_ms)`: wait `delay_ms`, drop the session, wait `REBOOT_REC
 own. It is in the NEARBY_DEVICES group with the Bluetooth permissions so it is *usually* granted with
 them — but a runtime permission can be missing while its group is granted, and below API 37 the
 constant does not exist. `LanPermission` returns "granted" below 37 and asks above; a denial hides
-LAN with an explanation while BLE keeps working. Today `INTERNET` exists only for these sockets.
-The planned discover feed adds anonymous, read-only GETs of the public feed and basemap behind
+LAN with an explanation while BLE keeps working. `INTERNET` covers these local sockets
+and anonymous, read-only public feed and basemap GETs behind
 the "Show public sensors" switch, and per-device opt-in uploads later
 ([devices-and-discovery.md](devices-and-discovery.md#network-boundary)).
 
@@ -276,7 +274,7 @@ API 34+: `registerServiceInfoCallback` (continuous, `getHostAddresses`). API 31�
 | `DeviceContinuityPolicy` / `DeviceIdentityClaims` | INFO acceptance, station epochs, credential renewal and prevention of duplicate physical-device owners |
 | `DeviceConnectionManager` | per-device ownership and snapshots; selection must not close another controller |
 | `LanDiscovery` TXT parsing | `AutoSyncPolicy.linksFor` (station match), Device screen LAN card |
-| `DeviceConnectionRepository.activeTransport` | the top-bar chip on four screens |
+| `DeviceFacade.activeTransport` | the top-bar chip on four screens |
 
 ## Automatic UTC on connection
 

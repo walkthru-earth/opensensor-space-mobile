@@ -24,7 +24,8 @@ concern you are changing in `docs/README.md`.
 ## Boundaries
 
 - The wire and telemetry contracts belong to `../aq-parquet/docs/shared/`. Resolve
-  ambiguity there before changing this app's mirror. Preserve frame layouts,
+  ambiguity there before changing this app's mirror. `ble-sync-protocol.md` owns
+  the wire contract. Mobile requires `proto >= 3`. Preserve frame layouts,
   opcodes, UUIDs, JSON keys and Hive archive paths across both repositories.
 - The phone archive is local and works without internet. BLE is always available;
   LAN connects only to devices found through `_aqsync._tcp` mDNS, using a token
@@ -46,8 +47,8 @@ concern you are changing in `docs/README.md`.
   actions; reboot, token rotation, forgetting bonds and pairing mode `none`
   require confirmation. Debug raw commands cannot invoke `REBOOT` or `SET_CONFIG`.
 - `:core:*` stays reusable without Android, Hilt or Room. Every `:core` module
-  (`protocol`, `parquet`, `history`, `publicfeed`, `units`, `airquality`, `archive`, and the
-  empty `sync`, `settings`) compiles for JVM and iOS from `commonMain`.
+  (`protocol`, `parquet`, `history`, `publicfeed`, `units`, `airquality`, `archive`,
+  `storage`, `net`, `sync`, `settings`) compiles for JVM and iOS from `commonMain`.
   Platform adapters stay in `jvmMain` and `iosMain` (streams, file mapping, zlib,
   H3). `:ui:designsystem`, `:ui:permissions` and `:feature:discover` are Compose
   for Android and iOS.
@@ -55,6 +56,13 @@ concern you are changing in `docs/README.md`.
   source sets may depend on common code, never the reverse.
   Transport and storage work stays out of composables. Sensor semantics come
   from the metric registry, never fabricated defaults.
+- `:core:sync` owns one `LinkSession` per physical connection, the shared `SyncEngine`,
+  `ArchiveCollector` and per-device `CollectionController`. Android `DeviceFacade` routes
+  collection and UI through that controller. `DeviceLinkOwner` owns connections, manual
+  commands and idle reconnect. `DeviceConnectionRepository` is a compatibility typealias.
+  iOS adopts the link and engine through `IosLink` and `SensorSync`. Its controller adoption
+  and BLE queue split remain [#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81)
+  and [#80](https://github.com/walkthru-earth/opensensor-space-mobile/issues/80).
 - Platform entry points own their UI and OS services. Android Compose and Android
   framework APIs stay in `app/`; iOS app code and Apple frameworks stay in `ios/`.
   The current iOS screen uses Compose Multiplatform; native Swift files are adapters.
