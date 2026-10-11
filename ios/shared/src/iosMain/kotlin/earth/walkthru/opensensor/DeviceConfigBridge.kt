@@ -306,7 +306,7 @@ internal class IosDeviceConfigSource(
     private suspend fun <T> borrow(block: suspend (DeviceSession) -> T): T? = lent.withLock {
         val link = lend() ?: return@withLock null
         try {
-            block(DeviceSession(link.transport, debugFrames.recorderFor(link.transport.address)))
+            block(link.session(debugFrames.recorderFor(link.transport.address)))
         } finally {
             link.linkClosed()
         }

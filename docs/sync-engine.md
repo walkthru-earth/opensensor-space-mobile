@@ -1,8 +1,8 @@
 # Sync engine — pull, verify, archive
 
 **Scope:** the file transfer: planner → engine → archive; integrity; lost windows; stale-frame drain; resume; the state-changing requests.
-**Code:** Shared in `core/sync` commonMain: `data/sync/SyncEngine.kt`, `ArchiveCollector.kt`, `data/sync/SyncPlanner.kt`, `ReadWindow.kt`, `WindowRetryPolicy.kt`, `SyncResumePolicy.kt`, `FileProgress.kt`, `FileProgressReporter.kt`, `RateMeter.kt`, `data/ManifestState.kt`, `data/SyncProgress.kt`, `data/ble/DeviceSession.kt` (`read`, `drainStale`, `reboot`). `core/protocol/…/ParquetVerify.kt`, `Sha256.kt`. Android adapters `data/archive/FileArchiveStore.kt`, `SyncEngineModule.kt`, `data/sync/FileArchive.kt`. iOS adapters `core/archive` iosMain `IosArchiveStore.kt`, `ReceiptArchiveIndex.kt`, and `ios/shared` iosMain `SensorSync.kt`, `SensorLink.kt`.
-**Tests:** `:core:sync` commonTest `SyncEngineTest`, `ArchiveCollectorTest`, `SyncPlannerTest`, `DeviceSessionPollingTest`, `WindowRetryPolicyTest`, `RateMeterTest`, `SyncResumePolicyTest` (fake `FakeArchiveDevice` with `dropLeadingChunks` / `closedDelayMs`). App `ConcurrentArchiveTest` over the Android adapters. iOS simulator `SensorSyncTest`. `:core:protocol` `ParquetVerifyTest`, `Sha256Test`.
+**Code:** Shared in `core/sync` commonMain: `data/sync/SyncEngine.kt`, `ArchiveCollector.kt`, `data/sync/SyncPlanner.kt`, `ReadWindow.kt`, `WindowRetryPolicy.kt`, `SyncResumePolicy.kt`, `FileProgress.kt`, `FileProgressReporter.kt`, `RateMeter.kt`, `data/ManifestState.kt`, `data/SyncProgress.kt`, `ArchiveWriter.kt`, `ArchiveRoom.kt`, `data/ble/DeviceSession.kt` (`read`, `reboot`), `link/LinkSession.kt`. `core/protocol/…/ParquetVerify.kt`, `Sha256.kt`. Android adapters `data/archive/FileArchiveStore.kt`, `SyncEngineModule.kt`, `data/sync/FileArchive.kt`. iOS adapters `core/archive` iosMain `IosArchiveStore.kt`, `ReceiptArchiveIndex.kt`, and `ios/shared` iosMain `SensorSync.kt`, `SensorLink.kt`.
+**Tests:** `:core:sync` commonTest `SyncEngineTest`, `ArchiveCollectorTest`, `SyncPlannerTest`, `StopAndBackpressureTest`, `DeviceSessionTest`, `LinkSessionTest`, `LinkOweCloseTest`, `WindowRetryPolicyTest`, `RateMeterTest`, `SyncResumePolicyTest` (fake `FakeArchiveDevice` with `dropLeadingChunks` / `closedDelayMs`). App `ConcurrentArchiveTest` over the Android adapters. iOS simulator `SensorSyncTest`. `:core:protocol` `ParquetVerifyTest`, `Sha256Test`.
 **Related:** [transports.md](transports.md) (the pipe underneath), [data-model.md](data-model.md) (what is recorded), [history-pipeline.md](history-pipeline.md) (what runs after).
 
 ## One engine on both phones
@@ -60,7 +60,7 @@ sequenceDiagram
     E->>E: on loss: re-READ from own offset (≤ 5×, 300 ms × attempt)
   end
   E->>E: verify size + CRC-32 + PAR1 → rename .partial → archive/
-  E->>S: CLOSE handle
+  E->>S: CLOSE handle (or oweClose on Stop, sent by the link after the drain)
   D-->>S: CLOSED
 ```
 
@@ -80,17 +80,27 @@ written atomically (temp + rename) under the **verbatim Hive path**, SHA-256'd, 
 with its history index in the same upsert. `OPENED.name` ≠ requested name → `Mismatch`, not
 silently accepted. Nothing incomplete is ever presented as data.
 
-## Response polling under concurrent load
+## Disk writes and Stop (#55)
 
-A poll slice must not cancel a receive that has already extracted the next response frame.
-Kotlin channels document [prompt cancellation and undelivered elements](https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-core/kotlinx.coroutines.channels/-channel/):
-a timed receive can change channel state and then throw cancellation. The session therefore
-selects atomically between `onReceiveCatching` and `onTimeout`, retaining the same polling and
-request timeouts. This closes a potential response-loss race found while investigating a repeated
-host-test timeout; deterministic boundary regressions demonstrate frame loss in the original
-wait, raw-command quiet wait and stale drain. The observed runner timeout alone does not identify
-which response was lost.
-Actual request cancellation still propagates and marks the response stream for normal stale drain.
+The engine reads frames on the link and writes chunks through `ArchiveWriter`, one coroutine per
+file on the injected `io` dispatcher. Its queue holds 2 chunks. When it is full the `READ`
+callback suspends, so the next window is not requested until the disk caught up. The window is
+the credit. A write failure is kept, the rest of the queue is dropped, and the file ends as
+`Failed(storage = true)` with its partial kept for resume.
+
+A file that settled (synced, mismatch, device `ERROR`) gets a normal `CLOSE`. A file that was
+cancelled or failed mid-`READ` calls `oweClose(handle)` and returns. The link aborts the `READ`,
+drains it, then sends the `CLOSE` and consumes `CLOSED` before the next request. There is no
+`NonCancellable` close and no 3 s wait.
+
+## Free space (#55)
+
+Before any `OPEN`, a run needs the plan's missing bytes plus 32 MiB headroom in the Durable
+class of `StorageBudget` (#60), through `requireRoom` in `ArchiveRoom.kt`. When they fit, it
+reserves them. If not, it ends with `InsufficientSpaceException` and nothing is opened or
+removed. After a file fails to store, the check runs again for what is left, so a disk that
+filled mid-run ends the run with its partial kept. Android uses `AndroidStorageBudget` and shows
+"Not enough space on this phone". iOS uses `IosStorageBudget` and ends as `STORAGE_FAILED`.
 
 ## Concurrent archive safety (2026-09-29)
 
@@ -146,22 +156,26 @@ is reserved for malformed streams (wrong handle, undecodable frame). `READ` wind
 (the 2026-09-17 loss was 514-byte frames > 512, a firmware bug, not the radio). `info.max_read`
 missing → `DEFAULT_MAX_READ` 4096 (dead guard; firmware always sends 16384).
 
-## Stale-frame drain (`DeviceSession.drainStale`)
+## Requests over the link (#55)
 
-A request that failed or was cancelled before its terminal frame (timeout, stray frame, `READ`
-stopped mid-stream, `CLOSED` missing its budget) leaves stragglers. Before the next request the
-session consumes frames until the failed request's own terminal frame (`READ_END`, `CLOSED`,
-`LIST_END`, … or an `ERROR` for it), a **2 s quiet period** (`DRAIN_QUIET_MS`), or **15 s**
-(`FRAME_TIMEOUT_MS`) — whichever first. "unexpected Closed frame in response to LIST" was seen on a
-phone before this. `WindowLostException` and device `ERROR`s leave the channel clean.
+`DeviceSession` is a typed view over one `LinkSession`. It holds no lock, no drain and no poll.
+Every request goes through the link's FIFO queue, and a request that failed or was cancelled
+before its terminal frame is drained by the link's router before the next one is written (see
+below). Views are cheap, so any number of them may share one link. `rawCommand` uses
+`exchangeRaw` and returns the bytes as received until the terminal or 1.5 s of quiet.
+
+`READ` keeps continuity. A gap marks the window lost, later chunks of that window are dropped
+until `READ_END`, and only then `WindowLostException` is thrown, so a late window never reaches
+the next `READ`. `LIST` checks the count in `LIST_END` and throws `ProtocolViolationException` on
+a mismatch, with the link still Ready.
 
 Session timeouts: `FRAME_TIMEOUT_MS` 15 s per frame, `OPEN_TIMEOUT_MS` 60 s (the device may be
 finalizing), `WIFI_SCAN_TIMEOUT_MS` 20 s; "no response from device within N s" is a `TransportException`.
 
 ## Link session (`core/sync` `link/`, proto 3, #54)
 
-`LinkSession` replaces the per-request drain above once #55 moves `DeviceSession`, `SyncEngine`
-and `ArchiveCollector` onto it. Until then `TransportLinkDriver` runs it over an `AqTransport`.
+`DeviceSession`, `SyncEngine` and `ArchiveCollector` run on it since #55. Until the native
+drivers land (#57, #58) `TransportLinkDriver` runs it over an `AqTransport`.
 
 - One session per physical connection. A single router coroutine owns every reply frame. A
   request is registered before its write, owns the link until its terminal frame
@@ -174,6 +188,9 @@ and `ArchiveCollector` onto it. Until then `TransportLinkDriver` runs it over an
   reply ends in `ABORTED` naming the op plus `ERROR` 16 in either order, and a late `ERROR` 16
   never ends a later request. `ABORTED` op 0 with no reply frame yet ends the drain, because
   the device runs commands in order.
+- `oweClose(handle)` queues a `CLOSE` without waiting. The router sends it once the request in
+  flight and its drain have ended, consumes the `CLOSED`, and only then admits the next request.
+  A stopped transfer uses it, so Stop returns at once and never waits behind the abandoned `READ`.
 - A close from the driver first forwards frames already received, so a reply just before EOF
   (`REBOOTING`, `BYE`, close) still reaches its caller.
 - Reply timeouts measure progress, 20 s between frames per the proto 3 contract. A timeout
@@ -251,7 +268,7 @@ suppresses its all-synced message while the latest refresh is loading or failed.
 also cancel preparation before the first OPEN; the command slot hands off atomically to the transfer.
 Host regressions: `DeviceConnectionRepositoryTest`. The shared `DeviceSession.list` rejects a
 FILE-frame count that differs from LIST_END on both phone platforms without delaying the next
-request to drain a terminal that has already arrived (`DeviceSessionPollingTest`). These checks
+request and with the link still Ready (`DeviceSessionTest`). These checks
 cannot detect a firmware scan that silently skips card entries and reports its own smaller count;
 the firmware must report scan failure instead of LIST_END in that case.
 
@@ -323,5 +340,5 @@ a sync; raw box accepting `0b`) were closed anyway.
 | `WINDOW_RETRIES` / backoff | `SyncEngineTest`, "recovered N" copy, worst-case file time |
 | `FileArchive` paths | Export zips (byte-exact mirror), `HistoryIndexer` file lookup, `data_extraction_rules.xml` (`archive/` in device transfer) |
 | `SyncEngine` post-verify upsert | `archived_file` row + index columns ([data-model.md](data-model.md)); `HistoryDeriver` signature (`name:crc32`) |
-| `DeviceSession` request/terminal mapping | `drainStale` `isTerminal`, `FakeTransport` |
+| `DeviceSession` request/terminal mapping | `TerminalRules`, `FakeTransport`, `FakeArchiveDevice` |
 | `SyncEndCause` | `SyncResumePolicy`, `SyncForegroundService` copy, `SyncWorker.transientFailure` |
