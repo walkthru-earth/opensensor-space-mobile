@@ -297,7 +297,7 @@ Parquet reader. Design reassessed 2026-10-08 in
   `LinkSession` (#66), `DeviceSession` and `SyncEngine` on it (#69), `CollectionController` (#70),
   Android drivers and wiring (#72, #79), the shared iOS link (#73), durable commits (#68),
   storage quotas (#71), the Parquet core (#67), history and UI cost (#77), energy (#76) and
-  Swift 6 mode (#78). iOS controller adoption and the BLE queue split are #81 and #80. The exit
+  Swift 6 mode (#78). The iOS BLE queue split (#80) is in code. For #81 the iOS controller exists in `SensorCollections`, and routing the Swift app through it remains. The exit
   criteria still need green CI and the phone runs listed in the epic.
 
 ## Docs that follow the new direction after Wave 1 merges
