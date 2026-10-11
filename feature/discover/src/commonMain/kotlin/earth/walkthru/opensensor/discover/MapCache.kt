@@ -4,8 +4,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
 import org.maplibre.compose.map.DefaultMapRuntime
-import org.maplibre.compose.map.MapRuntimeOptions
-import org.maplibre.compose.offline.OfflineManagerState
+import org.maplibre.compose.offline.OfflineStorageState
+import org.maplibre.compose.offline.offlineStorage
+import org.maplibre.compose.util.ExperimentalMaplibreComposeApi
 
 /**
  * The basemap tile cache of the map renderer (#61). Rebuildable, so it lives in the OS cache
@@ -21,11 +22,16 @@ object MapCache {
      * Sets the cache file in [cacheDirectory] and its cap. Call once at process start, before the
      * first map. A runtime that already exists keeps its settings, so a late call only records the path.
      */
+    // cacheFile is experimental in maplibre-compose 0.20 because it exposes kotlinx-io Path.
+    @OptIn(ExperimentalMaplibreComposeApi::class)
     fun configure(cacheDirectory: String, maxBytes: Long) {
         val path = Path(cacheDirectory.trimEnd('/'), FILE_NAME)
         file = path
         try {
-            DefaultMapRuntime.configure(MapRuntimeOptions(cacheFile = path, maximumCacheSizeBytes = maxBytes))
+            DefaultMapRuntime.configure {
+                cacheFile = path
+                maximumCacheSizeBytes = maxBytes
+            }
         } catch (e: IllegalStateException) {
             // The map already ran in this process. The cap applies from the next start.
         }
@@ -41,9 +47,9 @@ object MapCache {
 
     /** Drops every cached tile. The map downloads what it shows again, when public data is on. */
     suspend fun clear() {
-        val offline = DefaultMapRuntime.instance.offlineManager
-        val state = offline.state.first { it !is OfflineManagerState.Loading }
-        if (state is OfflineManagerState.Failed) throw state.cause
+        val offline = DefaultMapRuntime.instance.offlineStorage
+        val state = offline.state.first { it !is OfflineStorageState.Loading }
+        if (state is OfflineStorageState.Failed) throw state.cause
         offline.clearAmbientCache()
     }
 }

@@ -227,7 +227,7 @@ private fun DiscoverContent(
                     onPlace = { place ->
                         scope.launch {
                             runCatching {
-                                mapState.animateCamera(CameraUpdate(target = Position(longitude = place.lng, latitude = place.lat), zoom = 9.0))
+                                mapState.animateCamera(CameraUpdate(center = Position(longitude = place.lng, latitude = place.lat), zoom = 9.0))
                             }
                         }
                     },

@@ -60,9 +60,9 @@ internal fun rememberDiscoverMapState(
     onCellClick: (String?) -> Unit,
 ): MapState {
     val initial = when (start) {
-        is StartView.Camera -> CameraPosition(target = Position(longitude = start.camera.lng, latitude = start.camera.lat), zoom = start.camera.zoom)
+        is StartView.Camera -> CameraPosition(center = Position(longitude = start.camera.lng, latitude = start.camera.lat), zoom = start.camera.zoom)
         is StartView.Region -> CameraPosition(
-            target = Position(longitude = (start.bounds.west + start.bounds.east) / 2, latitude = (start.bounds.south + start.bounds.north) / 2),
+            center = Position(longitude = (start.bounds.west + start.bounds.east) / 2, latitude = (start.bounds.south + start.bounds.north) / 2),
             zoom = 3.0,
         )
     }
@@ -139,8 +139,8 @@ internal fun DiscoverMap(
         var first = true
         snapshotFlow { state.viewport }.filterNotNull().collectLatest { vp ->
             val bounds = vp.visibleBounds
-            val target = vp.cameraPosition.target
-            onCamera(CameraRest(GeoBounds(bounds.west, bounds.south, bounds.east, bounds.north), vp.cameraPosition.zoom, target.latitude, target.longitude))
+            val center = vp.cameraPosition.center
+            onCamera(CameraRest(GeoBounds(bounds.west, bounds.south, bounds.east, bounds.north), vp.cameraPosition.zoom, center.latitude, center.longitude))
             if (!first) onFirstMove()
             first = false
         }
@@ -152,7 +152,7 @@ internal fun DiscoverMap(
         interactions = MapInteractions {
             camera {
                 rotate { enabled = false }
-                tilt { enabled = false }
+                pitch { enabled = false }
             }
             callbacks {
                 click {
