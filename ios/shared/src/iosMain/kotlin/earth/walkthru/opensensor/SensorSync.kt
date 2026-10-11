@@ -83,6 +83,9 @@ class SensorSync internal constructor(
     private val lock = NSLock()
     private val active = HashSet<String>()
 
+    /** The one [collections] instance. Guarded by [lock]. */
+    private var shared: SensorCollections? = null
+
     /**
      * Collects every file of [station] that this phone lacks over [link]. [device] is the hardware
      * id recorded with each file. [maxRead] is the sensor's advertised read window.
@@ -259,10 +262,21 @@ class SensorSync internal constructor(
     /**
      * The shared collection controllers over this runner's archive (#81). [linkFor] returns the
      * open link Swift holds for a device, on the main thread. [dial] asks Swift to open one when a
-     * retry finds none. A station claimed here or there syncs over one link at a time.
+     * retry finds none, and Swift calls its `done` once with whether the link opened and identified
+     * (see [IosLinkProvider]). A station claimed here or there syncs over one link at a time.
+     *
+     * The first call creates the controllers and every later call returns the same instance, so the
+     * per-device busy guard and the run permits hold app wide. Later closures are ignored.
      */
-    fun collections(linkFor: (String) -> IosLink?, dial: (String, LinkPreference) -> Unit): SensorCollections =
-        SensorCollections(this, IosLinkProvider(linkFor, dial), recordClockAnchor, work, callbacks, progressInterval = progressInterval)
+    fun collections(linkFor: (String) -> IosLink?, dial: (String, LinkPreference, (Boolean) -> Unit) -> Unit): SensorCollections {
+        lock.lock()
+        try {
+            return shared ?: SensorCollections(this, IosLinkProvider(linkFor, dial), recordClockAnchor, work, callbacks, progressInterval = progressInterval)
+                .also { shared = it }
+        } finally {
+            lock.unlock()
+        }
+    }
 
     internal fun claim(station: String): Boolean {
         lock.lock()
