@@ -996,9 +996,15 @@ class DeviceLinkOwner @Inject constructor(
                     // A newer session appeared meanwhile (user action): stop.
                     val cur = _session.value
                     if (cur != null && cur.isUsable) return@withLock true
+                    lastOpenFailure = null
                     val opened = connectLocked(address, name, fake, preference, claim, listAfter = true)
                     if (!connectionIntent.owns(claim)) {
                         closeSessionLocked()
+                        null
+                    } else if (!opened && BleDisconnectCauses.needsPairingRepair(lastOpenFailure)) {
+                        // The bond keys failed. Every later attempt fails the same way and would
+                        // clear the repair banner it just set, so stop until the user pairs again.
+                        Log.w(TAG, "reconnect stopped, pairing needs repair")
                         null
                     } else {
                         opened

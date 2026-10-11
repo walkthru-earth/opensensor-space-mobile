@@ -336,6 +336,7 @@ class BleLinkDriver(
             linkFailure.throwIfFailed()
             if (g != BluetoothGatt.GATT_SUCCESS) throw TransportException(BleConnectionFailure.message(g), g)
             val gattRef = gatt ?: throw TransportException("no GATT after connect")
+            if (device.bondState != BluetoothDevice.BOND_BONDED) staleBond.onUnbondedLink(device.address)
 
             _state.value = ConnectionState.DiscoveringServices
             // A short settle avoids the well-known 133 on some stacks when discovery starts instantly.
