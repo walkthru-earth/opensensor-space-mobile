@@ -120,7 +120,7 @@ command or request takes a lease of it. Files LIST and inspector requests borrow
 connection link. `IosLink` owns request routing, drain and owed CLOSE through `LinkSession`.
 `SensorCollections` holds one shared `CollectionController` per device. Its `IosLinkProvider`
 lends the open link Swift holds, or asks Swift to dial one through `dial` and waits for it, so
-the controller owns retries, fresh LIST planning and the clock receipt of the exact link. A run
+once Swift routes into it the controller owns retries, fresh LIST planning and the clock receipt of the exact link. Only tests build it today. A run
 that ends early still reports the files it saved. The Swift entry points (interactive sync,
 Collect all, background) still start `SensorSync` and keep native resume state, pending
 [#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81). Core Bluetooth

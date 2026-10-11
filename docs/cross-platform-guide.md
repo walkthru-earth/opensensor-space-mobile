@@ -85,7 +85,7 @@ flowchart LR
 
 Android adopts the per-device `CollectionController` through `DeviceFacade` and
 `DeviceLinkOwner`. iOS uses the link and engine, and `SensorCollections` holds one controller
-per device over `IosLinkProvider`. Native intent and retry ownership stay in the Swift adapters
+per device over `IosLinkProvider`, built only by tests so far. Native intent and retry ownership stay in the Swift adapters
 until they route into it in [#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81). Its BLE
 physical link (`BlePhysicalLink`) runs Core Bluetooth on one serial queue, off the main actor.
 The diagram includes the planned credential port.
