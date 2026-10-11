@@ -16,6 +16,7 @@ import earth.walkthru.aqsync.collection.StartResult
 import earth.walkthru.aqsync.collection.StopSource
 import earth.walkthru.aqsync.collection.StorageFailure
 import earth.walkthru.aqsync.data.background.AndroidKeepAlive
+import earth.walkthru.aqsync.data.ble.BleDisconnectCauses
 import earth.walkthru.aqsync.data.ble.DeviceSession
 import earth.walkthru.aqsync.data.coroutines.ApplicationScope
 import earth.walkthru.aqsync.data.coroutines.IoDispatcher
@@ -28,8 +29,6 @@ import earth.walkthru.aqsync.data.sync.ClockSyncMode
 import earth.walkthru.aqsync.data.sync.FileOutcome
 import earth.walkthru.aqsync.data.sync.FileProblem
 import earth.walkthru.aqsync.data.sync.SyncEndCause
-import earth.walkthru.aqsync.link.AuthKind
-import earth.walkthru.aqsync.link.DisconnectCause
 import earth.walkthru.aqsync.link.retryable
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -309,7 +308,7 @@ class DeviceFacade internal constructor(
                 is CollectionState.Failed -> {
                     val failure = state.failure
                     val shortBytes = (failure as? CollectionFailure.Storage)?.shortBytes
-                    if (failure == CollectionFailure.Link(DisconnectCause.Auth(AuthKind.BOND_MISSING))) {
+                    if (failure is CollectionFailure.Link && BleDisconnectCauses.needsPairingRepair(failure.cause)) {
                         // Retrying cannot help, the user pairs again. The banner says how.
                         linkOwner.collectionNeedsPairingRepair()
                         return@withLock
