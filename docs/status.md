@@ -11,8 +11,8 @@ iPad run yet.
 
 - iOS. Core Bluetooth runs on one serial queue in `BlePhysicalLink`, with `BleGattQueue`
   allowing one GATT operation at a time (#80). `BleBondFailure` treats CBError
-  `peerRemovedPairingInformation` and `encryptionTimedOut`, and CBATTError insufficient
-  encryption or authentication, as a removed pairing. The link ends without resume or retry
+  `peerRemovedPairingInformation` as a removed pairing, and `encryptionTimedOut` or CBATTError
+  insufficient encryption or authentication only for a sensor that read INFO before. The link ends without resume or retry
   and `CompanionNotice.PAIRING_REMOVED` asks the owner to forget the sensor in iOS Settings
   and pair again. If iPadOS reports this board's refusal as a plain disconnect, the check
   does not catch it. A re-pair run on the iPad must confirm the real error.
