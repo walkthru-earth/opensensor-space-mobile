@@ -122,10 +122,12 @@ import earth.walkthru.opensensor.today.resources.readings_title
 import earth.walkthru.opensensor.today.resources.row_groups
 import earth.walkthru.opensensor.today.resources.storage_buffered
 import earth.walkthru.opensensor.today.resources.storage_codec
+import earth.walkthru.opensensor.today.resources.storage_degraded
 import earth.walkthru.opensensor.today.resources.storage_dropped
 import earth.walkthru.opensensor.today.resources.storage_errors
 import earth.walkthru.opensensor.today.resources.storage_failed
 import earth.walkthru.opensensor.today.resources.storage_files_this_boot
+import earth.walkthru.opensensor.today.resources.storage_full
 import earth.walkthru.opensensor.today.resources.storage_heap
 import earth.walkthru.opensensor.today.resources.storage_microsd
 import earth.walkthru.opensensor.today.resources.storage_minutes
@@ -717,6 +719,10 @@ internal fun StorageCard(status: DeviceStatus?, receivedAtEpochMs: Long?, level:
         if (status.storageFailed) {
             Spacer(Modifier.height(8.dp))
             WarningNote(stringResource(Res.string.storage_failed))
+        }
+        if (status.sdFull || status.sdDegraded) {
+            Spacer(Modifier.height(8.dp))
+            WarningNote(stringResource(if (status.sdFull) Res.string.storage_full else Res.string.storage_degraded))
         }
     }
 }

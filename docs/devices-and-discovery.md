@@ -483,7 +483,7 @@ Reading on the phone.
 2. The viewport is covered with H3 cells at that resolution, coarsening until the cover is at
    most 1,024 cells, then turned into merged INT64 descendant ranges (pure bit arithmetic on the
    index, in `commonMain`).
-3. The reader fetches the footer once per URL, keeps row groups (and later pages) whose
+3. The reader fetches the footer once per URL, keeps row groups and pages whose
    `h3_index` min and max overlap a range, and range reads only `h3_index` and the chosen
    metric's `__mean` column. Rows are then filtered exactly.
 4. A tap is an `h3_index` lookup in the rows already loaded, then one more range read of that
@@ -491,11 +491,15 @@ Reading on the phone.
    file for the same cell.
 
 The reader is the repository's own `:core:parquet`, made portable in W8 (`ByteReader`, common
-LZ4 and Snappy). W12 adds a suspend range source backed by Ktor and an LRU cache of footers and
-byte ranges on disk (proposed 32 MiB). It does not set `Accept-Encoding` on range requests, so
-byte offsets stay true. It reads row group statistics today and gains column and offset index
-support as a follow-up. No third-party Parquet or DuckDB library exists for iOS that would do
-this better.
+LZ4 and Snappy). Issue #62 added `ParquetReader` over a `RangeSource`, an in-memory LRU
+`FooterCache` of footers and page indexes, coalesced range requests (`RangePolicy` `LOCAL`,
+`CELLULAR`, `WIFI`) and pruning of row groups by footer statistics and of pages by the column and
+offset indexes. `:core:net` adds `HttpRangeSource` over OkHttp 5.5.0 on Android and
+`NSURLSession` on iOS. It sends `Accept-Encoding: identity`, so byte offsets stay true, and checks
+`If-Range` against the ETag, so a replaced file is read again from its new footer. Host and
+simulator tests only, and not yet wired to the live feed. A byte block cache on disk waits for
+issues #60 and #61. No third-party Parquet or DuckDB library exists for iOS that would do this
+better.
 
 Paths under `date=` and `hour=` never change, so footers and ranges are cached until the
 newest hour moves on. The last complete hour stays on disk for offline use.
@@ -597,10 +601,11 @@ starts with the target layout from the producer guidance.
 | Module | Owns |
 | --- | --- |
 | `:core:model` | `Device`, `DeviceFamily`, `Capability`, `ObservedProperty`, `Scale`, registry |
-| `:core:publicfeed` | `PublicFeed` and `FeedReader` ports, `ParquetFeedReader` (common, over the W8 reader), `BundledSampleFeed`, the `H3Grid` interface (`com.uber:h3` 4.5.0 on Android and JVM, the vendored H3 C 4.5.0 through cinterop on iOS), `H3Index` bit arithmetic and descendant ranges, `ViewportCover`, `CellScale` (WHO steps from `:core:airquality` for PM2.5 and PM10, else `PercentileScale`), `HealthAxis`, `PropertyRanking`, `CellGeoJson`, `TimeZoneRegions`. Built 2026-10-08. Planned here: S3 listing, Ktor range source, footer and range cache |
-| `:core:parquet` | The portable reader from W8, with `SuspendByteReader`, the footer-first `SuspendParquetFile` and row group pruning by INT64 statistics. Page indexes come later |
+| `:core:publicfeed` | `PublicFeed` and `FeedReader` ports, `ParquetFeedReader` (common, one `ParquetReader.scan` filtered on `h3_index` with page pruning, `CellsTable` reports pages read of total), `BundledSampleFeed`, the `H3Grid` interface (`com.uber:h3` 4.5.0 on Android and JVM, the vendored H3 C 4.5.0 through cinterop on iOS), `H3Index` bit arithmetic and descendant ranges, `ViewportCover`, `CellScale` (WHO steps from `:core:airquality` for PM2.5 and PM10, else `PercentileScale`), `HealthAxis`, `PropertyRanking`, `CellGeoJson`, `TimeZoneRegions`. Built 2026-10-08. Planned here: S3 listing, the live feed over `:core:net`, a disk block cache (issues #60 and #61) |
+| `:core:net` | `HttpRangeSource` and the `HttpRangeEngine` port, `OkHttpRangeEngine` (OkHttp 5.5.0, Android and JVM), `UrlSessionRangeEngine` (`NSURLSession`, iOS). Built with issue #62, not yet used by the apps |
+| `:core:parquet` | The portable reader from W8, with `RangeSource`, `ParquetReader` (footer cache, coalesced reads, one-pass decoding), row group pruning by INT64 statistics and page pruning by the column and offset indexes |
 | `:feature:discover` | CMP `commonMain` map screen (`DiscoverScreen`), `DiscoverController` state holder, `DiscoverStrings` read from its Compose resources, one copy for both apps, the bundled sample and basemap styles as Compose resources. Targets Android (`com.android.kotlin.multiplatform.library`) and iOS, not the JVM, because the maplibre-compose desktop variant needs Java 25. Planned here: the public device page |
-| `tools/discover-fixture/` | `make_discover_sample.py` writes the sample feed in the live layout (Python `h3` 4.5.0, PyArrow 25.0.1, SNAPPY, 24-row groups, page indexes, about 300 KB for 18 files). `make_basemap_style.mjs` writes the light and dark styles from `@protomaps/basemaps` 5.7.2, each with a `-latin` variant for iOS. Output committed under `feature/discover/src/commonMain/composeResources/files/` |
+| `tools/discover-fixture/` | `make_discover_sample.py` writes the sample feed in the live layout (Python `h3` 4.5.0, PyArrow 25.0.1, SNAPPY, one row group per file sorted by `h3_index`, 16-row pages with page indexes, about 250 KB for 18 files). `make_basemap_style.mjs` writes the light and dark styles from `@protomaps/basemaps` 5.7.2, each with a `-latin` variant for iOS. Output committed under `feature/discover/src/commonMain/composeResources/files/` |
 
 `:feature:discover` is shared Compose, so Android and iOS show the same screens. Platform code
 provides only the strings, the saved state (`DiscoverPrefs`, DataStore on Android, NSUserDefaults on
@@ -608,7 +613,7 @@ iOS), the H3 binding and later the HTTP engine and the cache directory.
 
 **What the first slice does (W12, 2026-10-08, host, Android emulator and iOS simulator only, no
 phone run).** Discover opens on the last camera or the time zone region, reads the bundled sample
-through the common Parquet reader with row group pruning, covers the viewport with at most 1,024
+through the common Parquet reader with row group and page pruning, covers the viewport with at most 1,024
 cells at `round(zoom * 0.8)` clamped to 2..7, and redraws one GeoJSON source after 400 ms of camera
 rest. Chips rank properties by visible cells (three, then More), a vertical time slider on the left
 snaps between Last hour, 24 hours and 7 days, the legend shows fixed WHO 2021 steps for PM2.5 and PM10 (added 2026-10-09, host tests and builds only) and the 5th to 95th percentile of the cells in view on a viridis
@@ -620,8 +625,8 @@ emulator and the iOS simulator), "© OpenStreetMap" shows at launch and collapse
 leaves the phone. Not built yet. Near me, the GeoNames place list, the offline map download (TODO),
 the half sheet height, stale outline dashes, the device list and device page, the live feed, the
 peacock on the first-run card and recolouring the basemap to the sensing palette. The basemap
-still points at the Protomaps build on source.coop, not at our own extract. Ktor 3.6.0 is the latest client. Its
-use with Kotlin 2.4.20 still has to pass `verify` and `verifyIos` before it is pinned.
+still points at the Protomaps build on source.coop, not at our own extract. HTTP range reads use
+OkHttp and `NSURLSession` behind `:core:net` (issue #62) instead of Ktor.
 
 ### Owner decisions and open questions
 

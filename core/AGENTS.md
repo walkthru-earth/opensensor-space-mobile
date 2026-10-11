@@ -5,7 +5,8 @@
 implements the reader/writer and codec SPI; `history/` owns metrics, indexing,
 aggregation and presentation-ready analysis; `publicfeed/` owns the Discover feed
 port, H3 and the viewport cover; `units/` owns display units; `airquality/` owns
-the WHO 2021 scales and palette. `archive/` owns the archive layout, verifier,
+the WHO 2021 scales and palette. `net/` owns HTTP range reads (`HttpRangeSource`, OkHttp
+on Android and the JVM, `NSURLSession` on iOS). `archive/` owns the archive layout, verifier,
 records and the `ArchiveStore` and `ArchiveIndex` ports. `storage/` owns `StorageClass`,
 `StorageRoots`, `AtomicFiles` (no-replace commit, F_FULLFSYNC on iOS, directory sync),
 `StorageBudget` and `StorageTree`. Every file writer goes through `AtomicFiles`, and the
@@ -38,8 +39,9 @@ root for the relevant concern. No Android, Hilt, Room, `Context` or
   `src/commonMain` compiles for JVM and iOS, and `src/jvmMain` / `src/iosMain` keep the platform
   edges (files, streams, SHA-256, `FileChannel` and `NSData` mapping, gzip, H3). Calendar math uses
   kotlinx-datetime (`TimeZone`, `LocalDate`), never `java.time`, in common code. Parquet bytes come
-  through `ByteReader` / `SuspendByteReader` (docs/parquet.md), so a new source (an HTTP range
-  reader, a cache) implements that interface instead of touching the decoder.
+  through `ByteReader` (blocking, `ParquetFile`) or `RangeSource` (suspending, `ParquetReader`)
+  (docs/parquet.md), so a new source (a cache, another transport) implements `RangeSource`
+  instead of touching the decoder. The decoder reads `ByteView`s in place and never copies them.
 - Module build files apply a convention plugin from `../build-logic/` (`opensensor.kmp.library`,
   `opensensor.kmp.compose-feature`, `opensensor.kmp.ios-framework`, `opensensor.jvm.library`).
   Change targets, bytecode level, test wiring or gate membership there, once, not in a module.

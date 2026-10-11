@@ -158,6 +158,33 @@ phone before this. `WindowLostException` and device `ERROR`s leave the channel c
 Session timeouts: `FRAME_TIMEOUT_MS` 15 s per frame, `OPEN_TIMEOUT_MS` 60 s (the device may be
 finalizing), `WIFI_SCAN_TIMEOUT_MS` 20 s; "no response from device within N s" is a `TransportException`.
 
+## Link session (`core/sync` `link/`, proto 3, #54)
+
+`LinkSession` replaces the per-request drain above once #55 moves `DeviceSession`, `SyncEngine`
+and `ArchiveCollector` onto it. Until then `TransportLinkDriver` runs it over an `AqTransport`.
+
+- One session per physical connection. A single router coroutine owns every reply frame. A
+  request is registered before its write, owns the link until its terminal frame
+  (`TerminalRules`, the only opcode to terminal table), and callers queue in FIFO order.
+- The driver's reader never waits. Unconsumed reply bytes count against a budget (1 MiB LAN,
+  256 KiB BLE) and passing it closes the link with `ResponseOverflow`.
+- A cancelled, timed out or early-finished request is drained by the router at once, not by
+  the next request. On a proto 3 peer it sends `ABORT` and waits for `ABORTED` too. Past its
+  `DrainBound` (4096 frames, 4 MiB, 30 s) the link closes with `DrainExceeded`. A stopped
+  reply ends in `ABORTED` naming the op plus `ERROR` 16 in either order, and a late `ERROR` 16
+  never ends a later request. `ABORTED` op 0 with no reply frame yet ends the drain, because
+  the device runs commands in order.
+- A close from the driver first forwards frames already received, so a reply just before EOF
+  (`REBOOTING`, `BYE`, close) still reaches its caller.
+- Reply timeouts measure progress, 20 s between frames per the proto 3 contract. A timeout
+  fails the request and keeps the link.
+- The optional `Heartbeat` (LAN 120 s ping, 180 s deadline) reads only reader RX marks from an
+  injected `TimeSource`. Nothing polls.
+- Loss is a typed `DisconnectCause`. `retryable` is false for `Auth`, `Deliberate`,
+  `FramingViolation` and `UpdateFirmware`. A `BYE` refuses new requests and attaches its reason
+  to the close.
+- `open` applies `requireProto3`, so firmware below proto 3 ends as `UpdateFirmware`.
+
 ## Sync run state
 
 ```mermaid

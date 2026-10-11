@@ -17,10 +17,23 @@ internal object Lz4Block {
     fun decompress(src: ByteArray, dstLength: Int, srcOffset: Int = 0, srcLength: Int = src.size - srcOffset): ByteArray {
         if (dstLength < 0) throw ParquetFormatException("LZ4 negative output size")
         val out = ByteArray(dstLength)
-        var op = 0
-        var ip = srcOffset
+        decompressInto(src, srcOffset, srcLength, out, 0, dstLength)
+        return out
+    }
+
+    /**
+     * Decompresses `src[srcOffset, srcOffset + srcLength)` into exactly `dst[dstOffset, dstOffset + dstLength)`.
+     * @return [dstLength].
+     * @throws ParquetFormatException on a malformed block or a size mismatch.
+     */
+    fun decompressInto(src: ByteArray, srcOffset: Int, srcLength: Int, dst: ByteArray, dstOffset: Int, dstLength: Int): Int {
+        if (dstLength < 0) throw ParquetFormatException("LZ4 negative output size")
         val end = srcOffset + srcLength
         if (srcOffset < 0 || srcLength < 0 || end > src.size) throw ParquetFormatException("LZ4 input window outside the buffer")
+        if (dstOffset < 0 || dstOffset.toLong() + dstLength > dst.size) throw ParquetFormatException("LZ4 output window outside the buffer")
+        val dstEnd = dstOffset + dstLength
+        var op = dstOffset
+        var ip = srcOffset
         fun byteAt(i: Int): Int {
             if (i >= end) throw ParquetFormatException("LZ4 block truncated")
             return src[i].toInt() and 0xFF
@@ -40,22 +53,22 @@ internal object Lz4Block {
         while (ip < end) {
             val token = byteAt(ip++)
             val literalLength = readLength(token ushr 4)
-            if (ip + literalLength > end || op + literalLength > dstLength) throw ParquetFormatException("LZ4 literals exceed bounds")
-            src.copyInto(out, op, ip, ip + literalLength)
+            if (ip + literalLength > end || op + literalLength > dstEnd) throw ParquetFormatException("LZ4 literals exceed bounds")
+            src.copyInto(dst, op, ip, ip + literalLength)
             ip += literalLength
             op += literalLength
             if (ip >= end) break // last sequence carries only literals
             val offset = byteAt(ip) or (byteAt(ip + 1) shl 8)
             ip += 2
-            if (offset == 0 || offset > op) throw ParquetFormatException("LZ4 match offset $offset out of range at $op")
+            if (offset == 0 || offset > op - dstOffset) throw ParquetFormatException("LZ4 match offset $offset out of range at ${op - dstOffset}")
             val matchLength = readLength(token and 0x0F) + 4
-            if (op + matchLength > dstLength) throw ParquetFormatException("LZ4 match exceeds output")
+            if (op + matchLength > dstEnd) throw ParquetFormatException("LZ4 match exceeds output")
             var from = op - offset
             // Byte-by-byte on purpose: overlapping matches (offset < length) must replicate.
-            repeat(matchLength) { out[op++] = out[from++] }
+            repeat(matchLength) { dst[op++] = dst[from++] }
         }
-        if (op != dstLength) throw ParquetFormatException("LZ4 block produced $op of $dstLength bytes")
-        return out
+        if (op != dstEnd) throw ParquetFormatException("LZ4 block produced ${op - dstOffset} of $dstLength bytes")
+        return dstLength
     }
 
     /**

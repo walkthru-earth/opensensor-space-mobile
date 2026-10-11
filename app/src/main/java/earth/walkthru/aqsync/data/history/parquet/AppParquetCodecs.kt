@@ -1,6 +1,6 @@
 package earth.walkthru.aqsync.data.history.parquet
 
-import com.github.luben.zstd.Zstd
+import com.github.luben.zstd.ZstdDecompressCtx
 
 /**
  * The codec registry the app hands to [ParquetFile.open] for files that may come from *other* writers
@@ -13,7 +13,12 @@ import com.github.luben.zstd.Zstd
  * (docs/devices-and-discovery.md).
  */
 object AppParquetCodecs {
+    /** One native ZSTD context per thread, reused for every page instead of one per call. */
+    private val zstd = ThreadLocal.withInitial { ZstdDecompressCtx() }
+
     val all: ParquetCodecs by lazy {
-        ParquetCodecs.builtIn.with(ParquetCodec.ZSTD) { input, size -> Zstd.decompress(input, size) }
+        ParquetCodecs.builtIn.with(ParquetCodec.ZSTD) { src, srcOffset, srcLength, dst, dstOffset, dstLength ->
+            zstd.get().decompressByteArray(dst, dstOffset, dstLength, src, srcOffset, srcLength)
+        }
     }
 }

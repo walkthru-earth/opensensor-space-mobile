@@ -10,11 +10,15 @@ import earth.walkthru.aqsync.data.protocol.DeviceStatus
 import earth.walkthru.aqsync.data.protocol.LanProtocol
 import earth.walkthru.aqsync.data.protocol.LiveProfiles
 import earth.walkthru.aqsync.data.protocol.LiveSample
+import earth.walkthru.aqsync.data.protocol.ProtoGate
+import earth.walkthru.aqsync.data.protocol.requireProto3
 import earth.walkthru.opensensor.permissions.AccessStatus
 import earth.walkthru.opensensor.permissions.IosAuthorization
 import earth.walkthru.opensensor.strings.UiText
 import earth.walkthru.opensensor.strings.resources.Res
 import earth.walkthru.opensensor.strings.resources.companion_connecting_pin
+import earth.walkthru.opensensor.strings.resources.companion_firmware_update
+import earth.walkthru.opensensor.strings.resources.companion_firmware_update_unknown
 import earth.walkthru.opensensor.strings.resources.companion_info_invalid
 import earth.walkthru.opensensor.strings.resources.companion_lan_denied
 import earth.walkthru.opensensor.strings.resources.companion_lan_found
@@ -265,7 +269,7 @@ class CompanionState {
     fun lanInfoReceived(name: String, json: String) {
         if (lanSessions[name]?.connected != true) return
         val parsed = runCatching { DeviceInfo.parse(json) }.getOrNull() ?: return
-        if (parsed.proto != 2 || parsed.dev.isNullOrBlank() || parsed.station.isNullOrBlank()) return
+        if (requireProto3(parsed) !is ProtoGate.Accepted || parsed.dev.isNullOrBlank() || parsed.station.isNullOrBlank()) return
         lanInfo = lanInfo + (name to parsed)
     }
 
@@ -408,8 +412,16 @@ class CompanionState {
     /** Returns false for malformed or unsupported INFO; the adapter must close that connection. */
     fun receiveInfo(json: String): Boolean {
         val decoded = runCatching { DeviceInfo.parse(json) }.getOrNull()
-        if (decoded == null || decoded.proto !in 1..AqGatt.PROTOCOL_VERSION || decoded.dev.isNullOrBlank()) {
+        if (decoded == null || decoded.dev.isNullOrBlank()) {
             close(UiText.of(Res.string.companion_info_invalid))
+            return false
+        }
+        val gate = requireProto3(decoded)
+        if (gate is ProtoGate.UpdateFirmware) {
+            close(
+                gate.reported?.let { UiText.of(Res.string.companion_firmware_update, it, gate.required) }
+                    ?: UiText.of(Res.string.companion_firmware_update_unknown, gate.required),
+            )
             return false
         }
         info = decoded

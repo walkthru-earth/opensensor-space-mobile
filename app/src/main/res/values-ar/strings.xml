@@ -218,6 +218,8 @@
     <string name="msg_lan_busy">هاتف آخر متصل عبر Wi-Fi. جارٍ استخدام Bluetooth.</string>
     <string name="msg_lan_failed">فشل الاتصال عبر Wi-Fi. جارٍ استخدام Bluetooth.</string>
     <string name="msg_newer_protocol">بروتوكول المستشعر v%1$d، وبروتوكول التطبيق v%2$d. تُتجاهل الميزات الأحدث.</string>
+    <string name="msg_firmware_update_required">حدّث برنامج المستشعر للاتصال. يستخدم البروتوكول %1$d، ويحتاج هذا التطبيق إلى %2$d.</string>
+    <string name="msg_firmware_update_required_unknown">حدّث برنامج المستشعر للاتصال. يحتاج هذا التطبيق إلى البروتوكول %1$d.</string>
     <string name="msg_hardware_in_use">هذا المستشعر متصل بالفعل بطريقة أخرى.</string>
     <string name="msg_verification_failed">تعذّر التحقق من المستشعر. حاول مرة أخرى.</string>
     <string name="msg_station_changed">أُعيد ضبط المستشعر. يُحتفظ بالسجل السابق ويتجدد الوصول عبر Wi-Fi من خلال Bluetooth.</string>

@@ -5,9 +5,11 @@ import org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeSimulatorTes
 // projection, primitive arrays; PLAIN + dictionary encodings, Data Page V1/V2, UNCOMPRESSED/LZ4_RAW/SNAPPY/
 // GZIP built in, ZSTD through the codec SPI), writer (statistics, TIMESTAMP, GEOMETRY, LZ4_RAW), Thrift
 // compact codec, LZ4 block codec, Snappy decoder, WKB. `commonMain` compiles for Android's JVM and for iOS
-// and reads bytes through `ByteReader` / `SuspendByteReader`; `jvmMain` maps files with `FileChannel`,
-// inflates GZIP with java.util.zip and adapts `OutputStream`; `iosMain` maps files as `NSData` and inflates
-// with the system zlib. kotlinx.serialization only (for the `geo` key).
+// and reads bytes through `ByteReader` (blocking, `ParquetFile`) or `RangeSource` (suspending, planned and
+// coalesced ranges, `ParquetReader` with a footer cache and page index pruning). `jvmMain` maps files with
+// `FileChannel`, reads `LocalRangeSource` through it, inflates GZIP with java.util.zip and adapts
+// `OutputStream`. `iosMain` maps files as `NSData`, reads `LocalRangeSource` with POSIX calls and inflates
+// with the system zlib. The HTTP `RangeSource` lives in `:core:net`. kotlinx.serialization only (for the `geo` key).
 plugins {
     id("opensensor.kmp.library")
     alias(libs.plugins.kotlin.serialization)
@@ -17,6 +19,8 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(libs.kotlinx.serialization.json)
+            // RangeSource is suspending, and CoalescingRangeSource bounds its parallel requests.
+            api(libs.kotlinx.coroutines.core)
         }
         commonTest.dependencies {
             implementation(libs.kotlinx.serialization.json)

@@ -1,5 +1,11 @@
 package earth.walkthru.aqsync.publicfeed
 
+import earth.walkthru.aqsync.data.history.parquet.ByteView
+import earth.walkthru.aqsync.data.history.parquet.MemoryRangeSource
+import earth.walkthru.aqsync.data.history.parquet.ParquetFile
+import earth.walkthru.aqsync.data.history.parquet.ParquetLogicalType
+import earth.walkthru.aqsync.data.history.parquet.RangeSource
+import earth.walkthru.aqsync.data.history.parquet.SourceId
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -54,14 +60,17 @@ class SampleFeedTest {
     }
 
     @Test
-    fun `a city viewport prunes row groups and keeps only its cells`() = runTest {
+    fun `a city viewport prunes pages and keeps only its cells`() = runTest {
         val partition = feed.latest()!!
         val berlin = GeoBounds(13.2, 52.4, 13.6, 52.65)
         val cover = ViewportCover.cover(h3, berlin, dataRes = 7)
         assertTrue(cover.coverCells in 1..ViewportCover.MAX_CELLS)
         val all = feed.cells(partition, FeedWindow.DAY, 7, ranges = null)
         val view = feed.cells(partition, FeedWindow.DAY, 7, cover.ranges)
-        assertTrue(view.rowGroupsRead < view.rowGroupsTotal, "pruned ${view.rowGroupsRead} of ${view.rowGroupsTotal}")
+        // One sorted row group per file: the page index, not the row group statistics, does the pruning.
+        assertEquals(1, view.rowGroupsTotal)
+        assertTrue(view.pagesRead < view.pagesTotal, "pruned to ${view.pagesRead} of ${view.pagesTotal} pages")
+        assertEquals(all.pagesTotal, all.pagesRead)
         assertTrue(view.rows.isNotEmpty())
         assertTrue(view.rows.size < all.rows.size)
         val berlinCell = h3.latLngToCell(52.52, 13.405, 7)
@@ -94,5 +103,51 @@ class SampleFeedTest {
         assertTrue(json.startsWith("{\"type\":\"FeatureCollection\""))
         assertEquals(rows.size, Regex("\"type\":\"Feature\"").findAll(json).count())
         assertEquals(rows.count { it.mean("pm25") != null }, Regex("\"color\":\"#").findAll(json).count())
+    }
+
+    @Test
+    fun `the range reader returns the rows of the whole-file reader with at most one request per file`() = runTest {
+        val partition = feed.latest()!!
+        val berlin = ViewportCover.cover(h3, GeoBounds(13.2, 52.4, 13.6, 52.65), dataRes = 7).ranges
+        for (window in FeedWindow.entries) {
+            for (res in 2..7) {
+                val path = "v1/${FeedPaths.cells(partition, window, res)}"
+                val bytes = sampleBytes(path)
+                for (ranges in listOf(null, berlin)) {
+                    val counting = CountingSource(MemoryRangeSource(bytes, path))
+                    val table = ParquetFeedReader().readCells(counting, ranges)
+                    assertEquals(referenceRows(bytes, ranges), table.rows, "$path ranges=${ranges?.size}")
+                    assertTrue(counting.requests <= 1, "$path made ${counting.requests} requests")
+                }
+            }
+        }
+    }
+
+    /** Counts every request: a tail read and each range handed to the source. */
+    private class CountingSource(private val inner: RangeSource) : RangeSource {
+        var requests = 0
+        override suspend fun id(): SourceId = inner.id()
+        override suspend fun readTail(n: Int): ByteView = inner.readTail(n).also { requests++ }
+        override suspend fun readRanges(ranges: List<LongRange>): List<ByteView> = inner.readRanges(ranges).also { requests += ranges.size }
+    }
+
+    /** The rows as the earlier reader built them: every column whole, then filtered row by row. */
+    private fun referenceRows(bytes: ByteArray, ranges: List<LongRange>?): List<CellRow> {
+        val file = ParquetFile.wrap(bytes)
+        val properties = FeedPaths.parseDictionary(file.metadata.keyValueMetadata["dictionary"])
+        val h3 = file.readColumn("h3_index")
+        val devices = file.readColumn("devices")
+        val updated = file.readColumn("updated")
+        val unit = (file.leaf("updated").logicalType as ParquetLogicalType.Timestamp).unit
+        assertEquals(ParquetLogicalType.TimeUnit.MILLIS, unit)
+        val stats = properties.associate { p -> p.id to listOf("n", "mean", "min", "max").map { file.readColumn("${p.id}__$it") } }
+        return (0 until h3.size).filter { i -> !h3.isNull(i) && (ranges == null || H3Index.inRanges(h3.asLong(i)!!, ranges)) }.map { i ->
+            val cell = LinkedHashMap<String, CellStat>()
+            for ((id, cols) in stats) {
+                val stat = CellStat(n = cols[0].asLong(i)?.toInt(), mean = cols[1].asDouble(i), min = cols[2].asDouble(i), max = cols[3].asDouble(i))
+                if (stat.mean != null || stat.n != null) cell[id] = stat
+            }
+            CellRow(h3 = h3.asLong(i)!!, devices = devices.asLong(i)!!.toInt(), updatedEpochMs = updated.asLong(i)!!, stats = cell)
+        }
     }
 }

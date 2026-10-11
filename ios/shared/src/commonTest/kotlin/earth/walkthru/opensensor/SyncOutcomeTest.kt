@@ -59,7 +59,7 @@ class SyncOutcomeTest {
         state.bluetoothSyncAvailable(true)
         assertFalse(state.syncAvailable)
         state.connectionStarted("device")
-        assertTrue(state.receiveInfo("{\"proto\":1,\"dev\":\"112233445566\"}"))
+        assertTrue(state.receiveInfo("{\"proto\":3,\"dev\":\"112233445566\"}"))
         state.bluetoothSyncAvailable(true)
         assertTrue(state.syncAvailable)
 
@@ -78,7 +78,7 @@ class SyncOutcomeTest {
     @Test fun aLostBluetoothSyncClosesTheConnectionWithItsOutcome() {
         val state = CompanionState()
         state.connectionStarted("device")
-        assertTrue(state.receiveInfo("{\"proto\":1,\"dev\":\"112233445566\"}"))
+        assertTrue(state.receiveInfo("{\"proto\":3,\"dev\":\"112233445566\"}"))
         state.bluetoothSyncAvailable(true)
         state.bluetoothSyncStarted()
         state.bluetoothSyncClosed(SyncResult(SyncEnd.LINK_LOST, 3, 0, 0))

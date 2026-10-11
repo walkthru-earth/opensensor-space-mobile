@@ -80,7 +80,7 @@ class SensorSyncTest {
             Opcode.SET_TIME -> link.reply(Frame.TimeSet(1_789_581_931L, 12_345_678L, 123_000))
             Opcode.LIST -> {
                 files.forEach { (name, bytes) -> link.reply(Frame.File(bytes.size.toLong(), name)) }
-                link.reply(Frame.ListEnd(files.size, 0, 0, 0))
+                link.reply(Frame.ListEnd(files.size.toLong(), 0, 0, 0))
             }
             Opcode.OPEN -> {
                 val name = req.copyOfRange(1, req.size).decodeToString()

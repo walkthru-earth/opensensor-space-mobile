@@ -230,8 +230,12 @@ data class ColumnChunkMeta(
     val chunkFileOffset: Long,
     /** parquet-format 2.11 `geospatial_statistics`, present on GEOMETRY/GEOGRAPHY chunks from writers that compute it. */
     val geospatialStatistics: GeospatialStatistics? = null,
+    /** File bytes of this chunk's `OffsetIndex` (ColumnChunk fields 4 and 5), null when the writer wrote no page index. */
+    val offsetIndex: LongRange? = null,
+    /** File bytes of this chunk's `ColumnIndex` (ColumnChunk fields 6 and 7), null when absent. */
+    val columnIndex: LongRange? = null,
 ) {
-    val name: String get() = pathInSchema.joinToString(".")
+    val name: String get() = if (pathInSchema.size == 1) pathInSchema[0] else pathInSchema.joinToString(".")
 
     /** Where the first page header starts: the dictionary page, if any, comes before the data pages. */
     val firstPageOffset: Long get() = dictionaryPageOffset?.takeIf { it > 0 && it < dataPageOffset } ?: dataPageOffset
@@ -275,7 +279,14 @@ data class ParquetFileMetadata(
         )
     }
 
-    fun leaf(name: String): LeafColumn? = leaves.firstOrNull { it.name == name }
+    private val leafByName: Map<String, LeafColumn> by lazy {
+        val map = HashMap<String, LeafColumn>(leaves.size * 2)
+        for (leaf in leaves) if (leaf.name !in map) map[leaf.name] = leaf
+        map
+    }
+
+    /** The first leaf called [name], from a map built once per footer. */
+    fun leaf(name: String): LeafColumn? = leafByName[name]
 
     /**
      * The footer min and max of an INT64 (or INT32) column in every row group, without reading a page.
@@ -304,8 +315,8 @@ data class ParquetFileMetadata(
     /**
      * The row groups whose [column] values may fall inside one of [ranges] (inclusive), judged by the footer
      * statistics alone. A row group without statistics is kept (it cannot be ruled out); one whose values
-     * are all null is dropped. The caller still filters the decoded rows exactly. Page-index pruning is a
-     * later step (docs/parquet.md).
+     * are all null is dropped. The caller still filters the decoded rows exactly. [ParquetReader.scan]
+     * applies the same rule and then prunes pages by the column index (docs/parquet.md).
      */
     fun rowGroupsOverlapping(column: String, ranges: List<LongRange>): List<Int> {
         val stats = longStatistics(column)

@@ -22,7 +22,7 @@ import earth.walkthru.opensensor.today.TodayUiState
 /** Fake state for previews only. No transport, no Room, no ViewModel. */
 internal object PreviewFakes {
     val info = DeviceInfo(
-        proto = 2,
+        proto = 3,
         fw = "waveshare-0.9.0",
         schema = "waveshare-sim7670g-telemetry-v2",
         cols = 42,

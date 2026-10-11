@@ -10,7 +10,8 @@
 flowchart TB
   subgraph core["Kotlin core, JVM and iOS, no Android, Hilt, Room or Log"]
     PR[":core:protocol<br/>common wire rules + JVM adapters"]
-    PQ[":core:parquet<br/>reader + writer, ByteReader, Thrift compact, LZ4/Snappy/GZIP, codec SPI, WKB"]
+    PQ[":core:parquet<br/>reader + writer, ByteReader, RangeSource, page index, Thrift compact, LZ4/Snappy/GZIP, codec SPI, WKB"]
+    NT[":core:net<br/>HTTP range source, OkHttp and NSURLSession"]
     AQ[":core:airquality<br/>WHO 2021 scales and palette"]
     HI[":core:history<br/>sensor rules, file index, aggregation, calendar windows"]
     PF[":core:publicfeed<br/>Discover feed port, H3, viewport cover, sample"]
@@ -31,6 +32,7 @@ flowchart TB
   IS[":ios:shared (iOS only)<br/>AppRoot, DevicesBridge, the device page, static OpenSensorShared framework"]
   HI --> PQ & PR & AQ
   PF --> PQ & AQ
+  NT --> PQ
   DI --> PF & UN & DS & PM
   SE --> UN
   FS --> SE & DS
@@ -41,10 +43,12 @@ flowchart TB
 ```
 
 `:core:history` exposes `:core:parquet`, `:core:protocol` and `:core:airquality` as `api`, and
-`:core:publicfeed` exposes `:core:parquet` and `:core:airquality`. A `:core` class cannot import
+`:core:publicfeed` exposes `:core:parquet` and `:core:airquality`. `:core:net` exposes
+`:core:parquet` and is not yet used by either app. A `:core` class cannot import
 `android.*`, and the build enforces it. Every `:core` module compiles for JVM and iOS from
 `src/commonMain`. Platform edges live in `src/jvmMain` (Java files, streams, `FileChannel` mapping,
-`java.util.zip`, `com.uber:h3`) and `src/iosMain` (`NSData` mapping, system zlib, H3 C cinterop).
+`java.util.zip`, `com.uber:h3`, OkHttp) and `src/iosMain` (`NSData` mapping, system zlib, H3 C
+cinterop, `NSURLSession`).
 Tests live in `src/commonTest` (JVM and iOS simulator) or `src/jvmTest` / `src/iosTest`. Calendar
 windows use kotlinx-datetime. Android passes its `ZoneId` through `toKotlinTimeZone()`.
 
@@ -174,7 +178,8 @@ for iOS-specific guidance. SwiftUI review rules apply only if native SwiftUI vie
 | `:core` module (`core/<m>/src/<set>/kotlin/earth/walkthru/aqsync/`) | Files |
 | --- | --- |
 | `protocol` → `data/protocol/` | `commonMain`: `AqGatt`, `Frames`, `WireBuffer`, `DeviceConfig`, `ConfigChunkAccumulator`, `JsonModels`, `LanProtocol`, `Advertisement`, `LiveProfile`, `PlantowerBatchCandidate`, `Crc32` (`expect`), `ParquetVerify`, `SafeName`. `jvmMain`: `AqUuids`, `LanFraming`, `Crc32` (`java.util.zip`), `ParquetVerifyJvm` (file, stream and SHA-256 extensions). `iosMain`: `Crc32` (portable table) |
-| `parquet` → `data/history/parquet/` | `commonMain`: `ParquetFile`, `SuspendParquetFile`, `ByteReader`, `SuspendByteReader`, `LocalFile` (`expect`), `ParquetFooterParser`, `ParquetMetadata`, `ColumnValues`, `ParquetWriter`, `ParquetSink`, `ThriftCompact(+Writer)`, `Lz4Block`, `ParquetCodecs`, `Geometry`, `GeoParquetMetadata`. `jvmMain`: `MappedFileReader`, gzip, `ParquetWriter(OutputStream, …)`, `OutputStreamSink`. `iosMain`: `MappedDataReader`, gzip (zlib) |
+| `parquet` → `data/history/parquet/` | `commonMain`: `ParquetFile`, `ParquetReader` (`ScanRequest`, `FooterCache`), `ColumnDecoder`, `PrimitiveColumn` (`ColumnBatch`), `PageIndex`, `ByteReader`, `RangeSource` (`ByteView`, `SourceId`, `RangePolicy`, `MemoryRangeSource`), `RangePlanner` (`CoalescingRangeSource`), `LocalFile` and `LocalRangeSource` (`expect`), `ParquetFooterParser`, `ParquetMetadata`, `ColumnValues`, `ParquetWriter`, `ParquetSink`, `ThriftCompact(+Writer)`, `Lz4Block`, `ParquetCodecs`, `Geometry`, `GeoParquetMetadata`. `jvmMain`: `MappedFileReader`, `LocalRangeSource` (`FileChannel`), gzip, `ParquetWriter(OutputStream, …)`, `OutputStreamSink`. `iosMain`: `MappedDataReader`, `LocalRangeSource` (`pread`), gzip (zlib) |
+| `net` → `net/` | `commonMain`: `HttpRangeSource`, `HttpRangeEngine`. `jvmMain`: `OkHttpRangeEngine` (OkHttp 5.5.0). `iosMain`: `UrlSessionRangeEngine` (`NSURLSession`) |
 | `history` → `data/history/` | `commonMain`: `Metrics`, `AirMood`, `TimeEstimate`, `Aggregation`, `ChartAxis`, `Columns`, `HistoryModel`, `HistoryWindow`, `FileSummary`, `ParquetIndexer` |
 | `publicfeed` → `publicfeed/` | `commonMain`: `Feed`, `ParquetFeedReader`, `H3`, `CellMap`, `CellScale`, `ViewportCover`, `TimeZoneRegions`. `jvmMain`: `UberH3Grid`. `iosMain`: `IosH3Grid` (vendored H3 C through cinterop) |
 | `units` → `units/` | `commonMain`: `Units`, `AxisTicks`. `jvmMain` and `iosMain`: `SystemUnits` (locale default) |

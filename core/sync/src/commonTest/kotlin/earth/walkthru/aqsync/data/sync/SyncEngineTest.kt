@@ -121,7 +121,7 @@ class SyncEngineTest {
 
         val (files, end) = session.list()
         assertEquals(fake.files.size, files.size)
-        assertEquals(fake.files.size, end.count)
+        assertEquals(fake.files.size.toLong(), end.count)
         assertEquals(1, staleLog.size)
         assertTrue(staleLog[0].contains("after failed CLOSE") && staleLog[0].contains("terminal frame seen"), staleLog[0])
     }

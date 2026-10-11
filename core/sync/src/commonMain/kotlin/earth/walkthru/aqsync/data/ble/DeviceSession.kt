@@ -158,7 +158,7 @@ class DeviceSession(val transport: AqTransport, val frames: FrameRecorder = Fram
         error("unreachable")
     }.also { (files, end) ->
         // Validate after request consumes LIST_END: the response is clean even when its count is wrong.
-        if (files.size != end.count) throw ProtocolViolationException("LIST count ${end.count} differs from ${files.size} FILE frames")
+        if (files.size.toLong() != end.count) throw ProtocolViolationException("LIST count ${end.count} differs from ${files.size} FILE frames")
     }
 
     /**

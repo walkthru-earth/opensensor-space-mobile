@@ -40,7 +40,7 @@ import kotlin.coroutines.CoroutineContext
  */
 class TcpTransportTest {
     private val token = ByteArray(32) { (it * 11 + 3).toByte() }
-    private val info = """{"proto":2,"fw":"cores3-parquet-v5","station":"53315f5f-cb85-4d8d-b623-d56266084189","dev":"441bf6e26b40","max_read":16384}"""
+    private val info = """{"proto":3,"fw":"cores3-parquet-v5","station":"53315f5f-cb85-4d8d-b623-d56266084189","dev":"441bf6e26b40","max_read":16384}"""
 
     /** A one-client fake device: [onRequest] answers each request body with frames to send. */
     private class FakeLanDevice(
@@ -88,7 +88,7 @@ class TcpTransportTest {
         }
     }
 
-    private fun hello(payloadMax: Int = 1024) = FrameCodec.encode(Frame.Hello(2, payloadMax, info))
+    private fun hello(payloadMax: Int = 1024) = FrameCodec.encode(Frame.Hello(3, payloadMax, info))
 
     @Test
     fun `keepalive started eagerly after handshake still sends STATUS`() = runBlocking {
@@ -126,7 +126,7 @@ class TcpTransportTest {
         val sent = CountDownLatch(1)
         FakeLanDevice(token, hello(), afterResponses = { sent.countDown() }) { req ->
             if (req[0].toInt() == Opcode.LIST) {
-                (0 until count).map { FrameCodec.encode(Frame.File(100, "file_$it.parquet")) } + FrameCodec.encode(Frame.ListEnd(count, 0, 1, 1))
+                (0 until count).map { FrameCodec.encode(Frame.File(100, "file_$it.parquet")) } + FrameCodec.encode(Frame.ListEnd(count.toLong(), 0, 1, 1))
             } else {
                 emptyList()
             }
@@ -142,7 +142,7 @@ class TcpTransportTest {
                 val frames = withTimeout(5_000) { (0..count).map { FrameCodec.decode(transport.responseFrames.receive()) } }
                 val files = frames.dropLast(1).map { it as Frame.File }
                 val end = frames.last() as Frame.ListEnd
-                assertEquals(count, end.count)
+                assertEquals(count.toLong(), end.count)
                 assertEquals((0 until count).map { "file_$it.parquet" }, files.map { it.name })
             } finally {
                 transport.close()
@@ -205,11 +205,11 @@ class TcpTransportTest {
             assertEquals(1024, session.payloadMax)
             assertArrayEquals(LanFraming.handshake(token), it.receivedHandshake)
             assertEquals("53315f5f-cb85-4d8d-b623-d56266084189", session.readInfo().station)
-            assertEquals(2, DeviceInfo.parse(t.hello!!.infoJson).proto)
+            assertEquals(3, DeviceInfo.parse(t.hello!!.infoJson).proto)
 
             val (files, end) = withTimeout(5_000) { session.list() }
             assertEquals(listOf("a.parquet", "b.parquet"), files.map { f -> f.name })
-            assertEquals(2, end.count)
+            assertEquals(2L, end.count)
             val live: LiveSample = liveSeen.await()
             assertEquals(9.0, live.pm25)
 

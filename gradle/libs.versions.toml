@@ -36,6 +36,8 @@ googleCodeScanner = "16.1.0"
 # Discover map (docs/devices-and-discovery.md). maplibre-compose pins Kotlin 2.4.20 and CMP 1.12.1.
 maplibreCompose = "0.19.0"
 h3 = "4.5.0"
+# HTTP range reads on Android and the JVM (:core:net, issue #62). Latest stable 5.x on Maven Central.
+okhttp = "5.5.0"
 
 [libraries]
 compose-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "composeMultiplatform" }
@@ -98,6 +100,10 @@ androidx-hilt-work = { module = "androidx.hilt:hilt-work", version.ref = "androi
 zstd-jni = { module = "com.github.luben:zstd-jni", version.ref = "zstdJni" }
 # H3 on Android and the JVM (JNI, native libraries inside the jar).
 h3 = { module = "com.uber:h3", version.ref = "h3" }
+# Gradle metadata picks okhttp-jvm for a JVM target and okhttp-android for an Android one.
+okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
+# The 5.x MockWebServer core. Tests start and close it by hand, so no JUnit integration artifact.
+okhttp-mockwebserver3 = { module = "com.squareup.okhttp3:mockwebserver3", version.ref = "okhttp" }
 maplibre-compose = { module = "org.maplibre.compose:maplibre-compose", version.ref = "maplibreCompose" }
 maplibre-compose-runtime-opengl-android = { module = "org.maplibre.compose:maplibre-compose-runtime-opengl-android", version.ref = "maplibreCompose" }
 compose-components-resources = { module = "org.jetbrains.compose.components:components-resources", version.ref = "composeMultiplatform" }

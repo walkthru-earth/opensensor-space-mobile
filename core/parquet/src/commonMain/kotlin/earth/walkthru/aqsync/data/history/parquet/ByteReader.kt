@@ -17,22 +17,12 @@ interface ByteReader {
      * @throws IndexOutOfBoundsException when `[offset, offset + length)` is not inside `[0, size)`.
      */
     fun read(offset: Long, length: Int): ByteArray
+
+    /** The same bytes as a [ByteView]. Readers over memory return a view of it without copying. */
+    fun view(offset: Long, length: Int): ByteView = ByteView(read(offset, length))
 }
 
-/**
- * The suspending twin of [ByteReader], for sources where a read is a round trip (an HTTP Range request,
- * a cache on disk). [SuspendParquetFile] reads the footer first, from the tail, then only the column
- * chunks a caller asks for, so a remote file costs one footer request plus one request per chunk.
- */
-interface SuspendByteReader {
-    /** Total length of the file in bytes (an HTTP source learns it from `Content-Range` or `HEAD`). */
-    suspend fun size(): Long
-
-    /** Exactly [length] bytes starting at [offset]. Same contract as [ByteReader.read]. */
-    suspend fun read(offset: Long, length: Int): ByteArray
-}
-
-/** A [ByteReader] over bytes already in memory. [read] copies the requested range. */
+/** A [ByteReader] over bytes already in memory. [read] copies the requested range, [view] shares it. */
 class ByteArrayReader(private val bytes: ByteArray) : ByteReader {
     override val size: Long get() = bytes.size.toLong()
 
@@ -41,12 +31,11 @@ class ByteArrayReader(private val bytes: ByteArray) : ByteReader {
         val from = offset.toInt()
         return bytes.copyOfRange(from, from + length)
     }
-}
 
-/** Any blocking [ByteReader] seen through the suspending interface (local files, bundled samples, tests). */
-fun ByteReader.asSuspend(): SuspendByteReader = object : SuspendByteReader {
-    override suspend fun size(): Long = this@asSuspend.size
-    override suspend fun read(offset: Long, length: Int): ByteArray = this@asSuspend.read(offset, length)
+    override fun view(offset: Long, length: Int): ByteView {
+        checkRange(offset, length, size)
+        return ByteView(bytes, offset.toInt(), length)
+    }
 }
 
 /** Bounds check shared by the readers: throws [IndexOutOfBoundsException] for a range outside `[0, size)`. */

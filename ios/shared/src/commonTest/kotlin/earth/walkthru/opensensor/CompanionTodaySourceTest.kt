@@ -50,7 +50,7 @@ class CompanionTodaySourceTest {
     private fun connected(status: String? = null): CompanionState = CompanionState().also {
         it.deviceFound("device", "AQ-kitchen", -60)
         it.connectionStarted("device")
-        assertTrue(it.receiveInfo("{\"proto\":2,\"dev\":\"112233445566\",\"station\":\"st\"}"))
+        assertTrue(it.receiveInfo("{\"proto\":3,\"dev\":\"112233445566\",\"station\":\"st\"}"))
         if (status != null) it.receiveStatus(status)
     }
 
@@ -87,7 +87,7 @@ class CompanionTodaySourceTest {
         val calls = Calls()
         val source = source(state, calls, mutableListOf(), stationFor = { "st" })
         state.lanSessionNoticed("AQ-kitchen", true, false, CompanionNotice.LAN_CONNECTED, 0, 0, 0, 0.0)
-        state.lanInfoReceived("AQ-kitchen", "{\"proto\":2,\"dev\":\"112233445566\",\"station\":\"st\"}")
+        state.lanInfoReceived("AQ-kitchen", "{\"proto\":3,\"dev\":\"112233445566\",\"station\":\"st\"}")
         state.lanStatusReceived("AQ-kitchen", "{\"utc\":1,\"clk\":1}")
         state.lanReadingReceived("AQ-kitchen", "{\"pms\":4,\"pm25\":12.0}")
         settle(this)
@@ -108,7 +108,7 @@ class CompanionTodaySourceTest {
         val state = CompanionState()
         val source = source(state, Calls(), mutableListOf(), stationFor = { "st" })
         state.lanSessionNoticed("AQ-kitchen", true, true, CompanionNotice.LAN_CONNECTING, 0, 0, 0, 0.0)
-        state.lanInfoReceived("AQ-kitchen", "{\"proto\":2,\"dev\":\"112233445566\",\"station\":\"st\"}")
+        state.lanInfoReceived("AQ-kitchen", "{\"proto\":3,\"dev\":\"112233445566\",\"station\":\"st\"}")
         settle(this)
         assertFalse(source.snapshot.value.sync.running, "a busy handshake is not file collection")
 
@@ -130,7 +130,7 @@ class CompanionTodaySourceTest {
         val state = CompanionState()
         val source = source(state, Calls(), mutableListOf(), stationFor = { "st" })
         state.lanSessionNoticed("AQ-kitchen", true, false, CompanionNotice.LAN_CONNECTED, 0, 0, 0, 0.0)
-        state.lanInfoReceived("AQ-kitchen", "{\"proto\":2,\"dev\":\"112233445566\",\"station\":\"st\"}")
+        state.lanInfoReceived("AQ-kitchen", "{\"proto\":3,\"dev\":\"112233445566\",\"station\":\"st\"}")
         state.lanSyncStarted("AQ-kitchen")
         settle(this)
         state.lanSyncStopped("AQ-kitchen")
@@ -227,7 +227,7 @@ class CompanionTodaySourceTest {
         // The other sensor's day, as a station flow that is not guarded would read it.
         val source = source(state, calls, mutableListOf(), flowOf(TodaySoFar(30f, 12, 0.5f)))
         state.connectionStarted("other")
-        assertTrue(state.receiveInfo("{\"proto\":2,\"dev\":\"665544332211\",\"station\":\"st2\"}"))
+        assertTrue(state.receiveInfo("{\"proto\":3,\"dev\":\"665544332211\",\"station\":\"st2\"}"))
         state.receiveLive("{\"pms\":4,\"pm25\":30.0}")
         settle(this)
         val snapshot = source.snapshot.value

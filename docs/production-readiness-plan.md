@@ -208,14 +208,15 @@ in place of `java.time`, typed non-boxing column accessors. kotlinx-io stays at 
 only, because its API is still alpha and has no random access.
 - Done 2026-10-08 (branch work, simulator and host evidence only). `:core:parquet` and all of
   `:core:history` are `commonMain`. `ByteReader` with `MappedFileReader` (JVM) and
-  `MappedDataReader` (iOS), `SuspendByteReader` with the footer-first `SuspendParquetFile` for
-  W12's range source, `longStatistics` and `rowGroupsOverlapping` for row group pruning,
-  `longValues` / `doubleValues`, gzip through `java.util.zip` and the system zlib. kotlinx-datetime
+  `MappedDataReader` (iOS), a suspending footer-first reader for W12's range source (replaced by
+  `RangeSource` and `ParquetReader` in issue #62), `longStatistics` and `rowGroupsOverlapping` for
+  row group pruning, `longValues` / `doubleValues`, gzip through `java.util.zip` and the system zlib. kotlinx-datetime
   0.8.0 replaces `java.time` in `HistoryWindow` and `Columns`. kotlinx-io is not used at all.
 - Oracle fixture tests run on the JVM and the iOS simulator (ZSTD fixtures JVM only). Details and
   the changed caller API are in [parquet.md](parquet.md#portability-and-storage-w8-2026-10-08).
-- Not done. Page and offset index pruning. History tests that need the fixtures still run on the
-  JVM only. The iOS app does not call the reader or the history index yet.
+- Page and offset index pruning landed with issue #62 (host JVM and iOS simulator only), see
+  [parquet.md](parquet.md#portability-and-storage-w8-2026-10-08).
+- Not done. History tests that need the fixtures still run on the JVM only. The iOS app does not call the reader or the history index yet.
 
 **W9 Shared design system and iOS restyle.** Extract tokens, theme and shared components (mood
 face, now card, band chart drawn with `drawText` and `drawWithCache`) to a Compose Multiplatform
@@ -245,8 +246,9 @@ Parquet reader. Design reassessed 2026-10-08 in
   INT64 sorted `h3_index`, `date=`/`hour=` partitions, S3 listing as manifest). The sample feed
   is bundled Parquet in that exact layout, written by a committed Python `h3` and PyArrow
   script, read through the same `:core:parquet` reader. The map labels it "Sample data".
-- A suspend HTTP range `ByteReader` (Ktor) with row group pruning by H3 descendant ranges and a
-  footer and range cache. An H3 interface with `com.uber:h3` on Android and H3 C through
+- A suspend HTTP range source with row group and page pruning by H3 descendant ranges and a
+  footer and range cache. Issue #62 built `:core:net` (OkHttp and `NSURLSession`, not Ktor) and the
+  in-memory footer cache. The disk block cache waits for issues #60 and #61. An H3 interface with `com.uber:h3` on Android and H3 C through
   cinterop on iOS, because the files carry no geometry.
 - A map with H3 cells coloured by the chosen metric and window (hourly values only), a
   non-modal sheet with peek, half and full heights, avg, min and max per metric, the device
@@ -264,7 +266,7 @@ Parquet reader. Design reassessed 2026-10-08 in
   legend, sample pill, first-run card, cell sheet, local city search and the "Show public sensors"
   switch, on Android and iOS. Both read the sample through W8's common reader. H3 is `com.uber:h3`
   on Android (JNI copied into `jniLibs`, arm64 and arm only) and the vendored H3 C through cinterop
-  on iOS. Still open. Ktor range source and cache, S3 listing, Near me, GeoNames search, device list
+  on iOS. Still open. Wiring the `:core:net` range source to the live feed, the disk cache, S3 listing, Near me, GeoNames search, device list
   and page, offline map download, half sheet height, our own basemap extract, phone runs.
 
 ### Wave 3 (after Wave 2)

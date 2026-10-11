@@ -131,9 +131,9 @@ class FrameCodecV2Test {
 
     @Test
     fun `HELLO STATUS LIVE decode`() {
-        val info = """{"proto":2,"fw":"cores3-parquet-v5","station":"53315f5f-cb85-4d8d-b623-d56266084189","max_read":16384}"""
-        val hello = FrameCodec.decode(("47" + "02" + "0004" + info.encodeToByteArray().toHex()).hexToBytes()) as Frame.Hello
-        assertEquals(2, hello.proto)
+        val info = """{"proto":3,"fw":"cores3-parquet-v5","station":"53315f5f-cb85-4d8d-b623-d56266084189","max_read":16384}"""
+        val hello = FrameCodec.decode(("47" + "03" + "0004" + info.encodeToByteArray().toHex()).hexToBytes()) as Frame.Hello
+        assertEquals(3, hello.proto)
         assertEquals(1024, hello.payloadMax)
         assertEquals(16384, DeviceInfo.parse(hello.infoJson).maxRead)
 
@@ -162,7 +162,7 @@ class FrameCodecV2Test {
             Frame.WifiScanEnd(3, 0),
             Frame.Rebooting(500),
             Frame.LogEnd(1234L, 77),
-            Frame.Hello(2, 1024, """{"proto":2}"""),
+            Frame.Hello(3, 1024, """{"proto":3}"""),
             Frame.StatusPush("""{"up_s":1}"""),
             Frame.LivePush("""{"seq":1}"""),
         )

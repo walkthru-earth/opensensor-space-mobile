@@ -335,11 +335,12 @@ fun FilesScreen(
                 item(key = "summary") {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
                         val count = listing.end.count
+                        val quantity = count.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
                         Text(
                             if (level.developer) {
-                                pluralStringResource(Res.plurals.files_dev_summary, count, count, listing.end.partials, formatBytes(listing.end.sdUsedKib * 1024), formatBytes(listing.end.sdKib * 1024))
+                                pluralStringResource(Res.plurals.files_dev_summary, quantity, count, listing.end.partials, formatBytes(listing.end.sdUsedKib * 1024), formatBytes(listing.end.sdKib * 1024))
                             } else {
-                                pluralStringResource(Res.plurals.scan_files, count, count)
+                                pluralStringResource(Res.plurals.scan_files, quantity, count)
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -372,10 +373,10 @@ fun FilesScreen(
                             color = MaterialTheme.colorScheme.error,
                         )
                     }
-                    if (level.developer && listing.files.size != listing.end.count) {
+                    if (level.developer && listing.files.size.toLong() != listing.end.count) {
                         val count = listing.end.count
                         Text(
-                            pluralStringResource(Res.plurals.files_frame_mismatch, count, count, listing.files.size),
+                            pluralStringResource(Res.plurals.files_frame_mismatch, count.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(), count, listing.files.size),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error,
                         )
