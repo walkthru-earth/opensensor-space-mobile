@@ -72,6 +72,15 @@ final class AutoSync {
     private var lease: UIBackgroundTaskIdentifier = .invalid
     /// The progress of a continued task, which iOS shows with a Cancel button.
     private var progress: Progress?
+    /// A Collect all pass, from its first step until its last one ended.
+    private var collectRunning = false
+    /// Steps ended and steps planned in the pass going now.
+    private var collectCounts = (done: 0, total: 0)
+    /// The continued task iOS took for this pass and its progress, once it launched.
+    private var collectTask: BGTask?
+    private var collectProgress: Progress?
+    /// True once iOS took a continued task for the pass going now, so it may run off screen.
+    private(set) var collectAllContinues = false
     private var retryAttempt: Int {
         get { UserDefaults.standard.integer(forKey: "autosync.retry.v1") }
         set { UserDefaults.standard.set(newValue, forKey: "autosync.retry.v1") }
@@ -122,6 +131,9 @@ final class AutoSync {
         bluetooth.onWake = { [weak self] id in self?.wake(id) }
         bluetooth.onBackgroundProgress = { [weak self] done, total in self?.progressed(done: done, total: total) }
         lan.onBackgroundProgress = { [weak self] done, total in self?.progressed(done: done, total: total) }
+        devices.collectAllChanged = { [weak self] done, total in
+            self?.collectAllChanged(done: Int(truncating: done), total: Int(truncating: total))
+        }
     }
 
     /// Called from `application(_:didFinishLaunchingWithOptions:)`, before launch ends, as iOS requires.
@@ -338,6 +350,92 @@ final class AutoSync {
         guard let progress else { return }
         progress.totalUnitCount = Int64(max(total, 1))
         progress.completedUnitCount = Int64(min(done, max(total, 1)))
+    }
+
+    // MARK: Collect all
+
+    /// A Collect all pass started, moved on or ended. On iOS 26 the user's pass submits one continued
+    /// task, so it goes on off screen with the system progress and Cancel. Earlier releases keep the
+    /// foreground pass, which ends when the app leaves.
+    private func collectAllChanged(done: Int, total: Int) {
+        guard total > 0 else {
+            collectRunning = false
+            collectCounts = (0, 0)
+            setCollectOffScreen(false)
+            if let task = collectTask {
+                collectTask = nil
+                collectProgress = nil
+                task.setTaskCompleted(success: true)
+            }
+            return
+        }
+        collectCounts = (done, total)
+        if !collectRunning {
+            collectRunning = true
+            var continues = false
+            if #available(iOS 26, *) { continues = submitCollect() }
+            setCollectOffScreen(continues)
+        }
+        collectProgress?.totalUnitCount = Int64(total)
+        collectProgress?.completedUnitCount = Int64(min(done, total))
+    }
+
+    private func setCollectOffScreen(_ on: Bool) {
+        collectAllContinues = on
+        bluetooth.collectOffScreen = on
+        lan.collectOffScreen = on
+    }
+
+    /// Registers a fresh identifier for this pass and submits it, as for one sensor.
+    @available(iOS 26, *)
+    private func submitCollect() -> Bool {
+        let identifier = "\(Self.continuedPrefix).\(UUID().uuidString)"
+        let registered = BGTaskScheduler.shared.register(forTaskWithIdentifier: identifier, using: .main) {
+            [weak self] task in
+            MainActor.assumeIsolated {
+                guard let self, let continued = task as? BGContinuedProcessingTask else {
+                    return task.setTaskCompleted(success: false)
+                }
+                self.runCollect(continued)
+            }
+        }
+        guard registered else { return false }
+        let request = BGContinuedProcessingTaskRequest(identifier: identifier, title: progressTitle, subtitle: "")
+        request.strategy = .fail
+        do {
+            try BGTaskScheduler.shared.submit(request)
+            return true
+        } catch {
+            logger.error("continued collect not started: \(error.localizedDescription, privacy: .public)")
+            return false
+        }
+    }
+
+    @available(iOS 26, *)
+    private func runCollect(_ task: BGContinuedProcessingTask) {
+        // The pass may have ended before iOS launched its task.
+        guard collectRunning, collectTask == nil else { return task.setTaskCompleted(success: !collectRunning) }
+        collectTask = task
+        collectProgress = task.progress
+        task.progress.totalUnitCount = Int64(max(collectCounts.total, 1))
+        task.progress.completedUnitCount = Int64(collectCounts.done)
+        let id = ObjectIdentifier(task)
+        // Cancel in the system UI, or expiry. The pass and the step in flight end at once.
+        task.expirationHandler = {
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated { [weak self] in self?.collectExpired(id) }
+            }
+        }
+    }
+
+    private func collectExpired(_ id: ObjectIdentifier) {
+        guard let task = collectTask, ObjectIdentifier(task) == id else { return }
+        collectTask = nil
+        collectProgress = nil
+        devices.cancelCollectAll()
+        bluetooth.cancelCollect()
+        lan.cancelCollect()
+        task.setTaskCompleted(success: false)
     }
 
     // MARK: Shared pieces

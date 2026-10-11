@@ -40,8 +40,8 @@ This is the target shape from [platform-parity-plan.md](platform-parity-plan.md)
 is in place. Both phones run `SyncEngine` and `ArchiveCollector` from `:core:sync`, with the
 `ArchiveStore` and `ArchiveIndex` ports from `:core:archive`. Android adapts them in
 `app/.../data/archive/`. iOS uses `IosArchiveStore` and `ReceiptArchiveIndex` in `:core:archive`
-iosMain. The frame link exists on iOS as `SensorLink` in `ios/shared` iosMain, fed by Swift
-`LanSession` and `BluetoothCompanion`. It is not yet a common `FrameLink` port, and
+iosMain. The frame link exists on iOS as `IosLink` in `ios/shared` iosMain, one per connection over
+`LinkSession`, fed by Swift `LanSession` and `BluetoothCompanion`. It is not yet a common `FrameLink` port, and
 `CredentialStore` does not exist yet, so Keychain and Keystore stay platform code. The Swift
 transfer engine was removed. `SensorArchive.swift` remains only for Files export. See
 [sync-engine.md](sync-engine.md#where-ios-still-differs-from-android) for the behaviour that still

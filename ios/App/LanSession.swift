@@ -39,10 +39,42 @@ struct CollectTarget: Sendable {
     let mtu: Int32
 }
 
-/// Carries the shared engine's link into a transport queue. `SensorLink` accepts frames from any thread.
+/// Carries the shared link across a continuation. `IosLink` accepts calls from any thread.
 final class FrameSink: @unchecked Sendable {
-    let link: SensorLink
-    init(_ link: SensorLink) { self.link = link }
+    let link: IosLink
+    init(_ link: IosLink) { self.link = link }
+}
+
+/// Kotlin's write callback, called once from the socket or Bluetooth write completion.
+final class WriteDone: @unchecked Sendable {
+    private let done: (KotlinBoolean) -> Void
+    init(_ done: @escaping (KotlinBoolean) -> Void) { self.done = done }
+    func call(_ ok: Bool) { done(KotlinBoolean(bool: ok)) }
+}
+
+/// How the shared link writes to and paces this socket. Kotlin calls it from any thread, and each
+/// call hops onto the session queue, so writes and pauses keep their call order.
+private final class LanPort: NSObject, IosLinkPort, @unchecked Sendable {
+    private weak var session: LanSession?
+    let mtu: Int32
+
+    init(session: LanSession, mtu: Int32) {
+        self.session = session
+        self.mtu = mtu
+    }
+
+    func send(frame: Data, done: @escaping (KotlinBoolean) -> Void) {
+        guard let session else {
+            done(KotlinBoolean(bool: false))
+            return
+        }
+        let reply = WriteDone(done)
+        session.send(frame) { reply.call($0) }
+    }
+
+    func setReadPaused(paused: Bool) {
+        session?.pauseReads(paused)
+    }
 }
 
 /// One serialized consumer per socket. The actor's executor is the session's own serial queue,
@@ -50,8 +82,8 @@ final class FrameSink: @unchecked Sendable {
 /// through `assumeIsolated` without spawning a task each. Framing parses an accumulating buffer
 /// fed by receives of up to 64 KiB. Unsolicited STATUS and LIVE never enter file replies. They
 /// reach the owner through `events` in arrival order, followed by `closed` when the socket ends.
-/// While a collection runs, file replies go to the shared engine through its `SensorLink`, and the
-/// engine owns the file protocol and its timeouts.
+/// After HELLO the session makes one `IosLink`, and every file reply goes to it. Kotlin leases that
+/// link for sync, commands, Debug and Device settings, and owns the file protocol and its timeouts.
 actor LanSession {
     enum Event: Sendable {
         case push(kind: String, json: String)
@@ -75,11 +107,14 @@ actor LanSession {
     private var heartbeat: DispatchSourceTimer?
     private var lastReceived = ProcessInfo.processInfo.systemUptime
     private var liveness = LanLiveness(lastSent: ProcessInfo.processInfo.systemUptime)
+    /// True while Kotlin holds a lease, so the keepalive never interleaves with its requests.
     private var collecting = false
+    /// True while the shared link's inbox is past its high mark. No receive is outstanding then.
+    private var readPaused = false
     private var identity: SyncIdentity?
     private var verifiedInfo: String?
     private var payloadMax = 0
-    /// While set, file replies go to the shared engine as raw frame bodies.
+    /// Set once after HELLO. From then on file replies go to the shared link as raw frame bodies.
     private var sink: FrameSink?
 
     private struct Waiter<T> {
@@ -147,39 +182,57 @@ actor LanSession {
             boot: identity.boot, station: identity.station, device: identity.device, maxRead: identity.maxRead, mtu: Int32(payloadMax + 3))
     }
 
-    /// Routes file replies to `sink` until `endCollect`. STATUS and LIVE still reach `events`.
-    /// False when the socket has closed or another collection holds the session.
-    func beginCollect(_ sink: FrameSink) -> Bool {
-        guard identity != nil, !closed, self.sink == nil else { return false }
+    /// The shared link for this socket, made once after HELLO and kept until the socket closes. Nil
+    /// before HELLO or after the socket closed.
+    func link() -> FrameSink? {
+        if let sink { return sink }
+        guard let identity, !closed else { return nil }
+        let link = IosLink(port: LanPort(session: self, mtu: Int32(payloadMax + 3)), overWifi: true, address: identity.device)
+        link.identify(station: identity.station, boot: identity.boot, maxRead: identity.maxRead)
+        let queue = self.queue
+        link.onLeaseChange { [weak self] leased in
+            let held = leased.boolValue
+            guard let session = self else { return }
+            queue.async { session.assumeIsolated { $0.collecting = held } }
+        }
+        let sink = FrameSink(link)
         self.sink = sink
-        collecting = true
         replies.removeAll()
-        return true
+        return sink
     }
 
-    func endCollect() {
-        let ended = sink
-        sink = nil
-        collecting = false
-        // The ended link stops with its collection, so its scope never writes over the next one.
-        ended?.link.linkClosed()
+    /// One request body from the shared link. [done] hears whether the socket took it.
+    nonisolated func send(_ body: Data, done: @escaping @Sendable (Bool) -> Void) {
+        queue.async { [self] in assumeIsolated { $0.write(body, done: done) } }
     }
 
-    /// Releases a borrowed config/debug link only if it still owns the response sink.
-    func endCollect(_ expected: FrameSink) {
-        guard sink === expected else { return }
-        endCollect()
+    /// The shared link's inbox crossed a mark. Calls arrive in order on the session queue.
+    nonisolated func pauseReads(_ paused: Bool) {
+        queue.async { [self] in
+            assumeIsolated {
+                $0.readPaused = paused
+                if !paused { $0.pump() }
+            }
+        }
     }
 
-    /// Sends one request body from the shared engine. Safe from any thread. Bodies go out in call
-    /// order on the session queue. A failed send closes the session, which ends the engine's link.
-    nonisolated func enqueue(_ body: Data) {
-        queue.async { [self] in assumeIsolated { $0.write(body) } }
+    /// The shared link closed itself (a failed write, an inbox overflow). The socket ends as disconnected,
+    /// so its owner reconnects with a fresh link. Safe from any thread.
+    nonisolated func linkFailed() {
+        queue.async { [self] in assumeIsolated { $0.shutdown(reason: .disconnected) } }
     }
 
     /// Safe from any thread. Closing is enqueued on the session queue; pending waits end as disconnected.
     nonisolated func close() {
         queue.async { [self] in assumeIsolated { $0.shutdown(reason: nil) } }
+    }
+
+    private static func linkReason(_ reason: LanFailure?) -> Int32 {
+        switch reason {
+        case .none: return IosLink.companion.REASON_APP
+        case .some(.disconnected): return IosLink.companion.REASON_PEER_CLOSED
+        case .some: return IosLink.companion.REASON_LOCAL
+        }
     }
 
     /// Session ERROR frames (handshake, a full session pool, authentication) end the connection.
@@ -192,12 +245,16 @@ actor LanSession {
 
     // MARK: Requests and replies
 
-    private func write(_ body: Data) {
-        guard !closed else { return }
+    private func write(_ body: Data, done: (@Sendable (Bool) -> Void)? = nil) {
+        guard !closed else {
+            done?(false)
+            return
+        }
         liveness.sent(now: ProcessInfo.processInfo.systemUptime)
         connection.send(
             content: wire.envelope(body: body),
             completion: .contentProcessed { [weak self] error in
+                done?(error == nil)
                 guard error != nil else { return }
                 self?.assumeIsolated { $0.shutdown(reason: .disconnected) }
             })
@@ -255,7 +312,7 @@ actor LanSession {
     /// Parses buffered frames while the reply queue has room, then keeps one receive outstanding.
     private func pump() {
         parse()
-        guard !closed, !receiving, replies.count < Self.maxQueuedReplies, connection.state == .ready else { return }
+        guard !closed, !receiving, !readPaused, replies.count < Self.maxQueuedReplies, connection.state == .ready else { return }
         receiving = true
         connection.receive(minimumIncompleteLength: 1, maximumLength: Self.receiveChunk) {
             [weak self] data, _, complete, error in
@@ -266,11 +323,12 @@ actor LanSession {
     private func parse() {
         guard !closed else { return }
         do {
-            while replies.count < Self.maxQueuedReplies, let body = try frames.next() {
+            while !readPaused, replies.count < Self.maxQueuedReplies, let body = try frames.next() {
                 guard let reply = decode(body) else { throw LanFailure.invalidReply }
-                if reply.kind == "status" { sink?.link.deliverStatus(json: reply.json) }
+                if reply.kind == "status" { sink?.link.offerStatus(json: reply.json) }
                 if let sink, reply.kind != "status", reply.kind != "live" {
-                    sink.link.deliver(frame: body)
+                    // False past the high mark. The link's resume call clears it again.
+                    if !sink.link.offer(frame: body) { readPaused = true }
                 } else {
                     route(reply)
                 }
@@ -396,8 +454,8 @@ actor LanSession {
         }
         connection.stateUpdateHandler = nil
         connection.cancel()
-        // The engine sees the link end at once instead of waiting out its frame timeout.
-        sink?.link.linkClosed()
+        // Kotlin sees the link end at once, after every frame already offered.
+        sink?.link.linkLost(reason: Self.linkReason(reason))
         sink = nil
         if let reason { eventSink.yield(.closed(reason)) }
         eventSink.finish()

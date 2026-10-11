@@ -1,7 +1,7 @@
 # Sync engine — pull, verify, archive
 
 **Scope:** the file transfer: planner → engine → archive; integrity; lost windows; stale-frame drain; resume; the state-changing requests.
-**Code:** Shared in `core/sync` commonMain: `data/sync/SyncEngine.kt`, `ArchiveCollector.kt`, `data/sync/SyncPlanner.kt`, `ReadWindow.kt`, `WindowRetryPolicy.kt`, `SyncResumePolicy.kt`, `FileProgress.kt`, `FileProgressReporter.kt`, `RateMeter.kt`, `data/ManifestState.kt`, `data/SyncProgress.kt`, `ArchiveWriter.kt`, `ArchiveRoom.kt`, `data/ble/DeviceSession.kt` (`read`, `reboot`), `link/LinkSession.kt`, `collection/` (`CollectionController`, #56). `core/protocol/…/ParquetVerify.kt`, `Sha256.kt`. Android adapters `data/archive/FileArchiveStore.kt`, `SyncEngineModule.kt`, `data/sync/FileArchive.kt`. iOS adapters `core/archive` iosMain `IosArchiveStore.kt`, `ReceiptArchiveIndex.kt`, and `ios/shared` iosMain `SensorSync.kt`, `SensorLink.kt`.
+**Code:** Shared in `core/sync` commonMain: `data/sync/SyncEngine.kt`, `ArchiveCollector.kt`, `data/sync/SyncPlanner.kt`, `ReadWindow.kt`, `WindowRetryPolicy.kt`, `SyncResumePolicy.kt`, `FileProgress.kt`, `FileProgressReporter.kt`, `RateMeter.kt`, `data/ManifestState.kt`, `data/SyncProgress.kt`, `ArchiveWriter.kt`, `ArchiveRoom.kt`, `data/ble/DeviceSession.kt` (`read`, `reboot`), `link/LinkSession.kt`, `collection/` (`CollectionController`, #56). `core/protocol/…/ParquetVerify.kt`, `Sha256.kt`. Android adapters `data/archive/FileArchiveStore.kt`, `SyncEngineModule.kt`, `data/sync/FileArchive.kt`. iOS adapters `core/archive` iosMain `IosArchiveStore.kt`, `ReceiptArchiveIndex.kt`, and `ios/shared` iosMain `SensorSync.kt`, `IosLink.kt`.
 **Tests:** `:core:sync` commonTest `SyncEngineTest`, `ArchiveCollectorTest`, `SyncPlannerTest`, `StopAndBackpressureTest`, `DeviceSessionTest`, `LinkSessionTest`, `LinkOweCloseTest`, `WindowRetryPolicyTest`, `RateMeterTest`, `SyncResumePolicyTest`, `CollectionControllerTest` (fake `FakeArchiveDevice` with `dropLeadingChunks` / `closedDelayMs`). App `ConcurrentArchiveTest` over the Android adapters. iOS simulator `SensorSyncTest`. `:core:protocol` `ParquetVerifyTest`, `Sha256Test`.
 **Related:** [transports.md](transports.md) (the pipe underneath), [data-model.md](data-model.md) (what is recorded), [history-pipeline.md](history-pipeline.md) (what runs after).
 
@@ -9,7 +9,7 @@
 
 Android and iOS run the same `SyncEngine` and `ArchiveCollector` from `:core:sync`. Each
 platform supplies only an `ArchiveStore`, an `ArchiveIndex` and a byte pipe. On iOS the pipe is
-`SensorLink`. Swift owns the `NWConnection` or the Core Bluetooth peripheral, sends each whole
+`IosLink`, one per connection over `LinkSession`. Swift owns the `NWConnection` or the Core Bluetooth peripheral, sends each whole
 request frame and hands back each reply frame. `SensorSync` runs one collection per link off the
 main thread and reports progress (at most four times a second) and one `SyncResult` on the main
 thread. The engine only lists, opens, reads and closes files. It never asks the sensor to delete,

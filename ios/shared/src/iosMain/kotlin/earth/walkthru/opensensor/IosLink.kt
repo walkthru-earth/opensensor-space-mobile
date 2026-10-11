@@ -115,10 +115,15 @@ class IosLink internal constructor(
     internal var boot: String? = null
         private set
 
+    /** The sensor's advertised read window, for [IosLinkProvider]. */
+    internal var maxRead = 0
+        private set
+
     /** Bind the full boot identity from authenticated INFO or HELLO before anchoring time. */
-    fun identify(station: String, boot: String?) {
+    fun identify(station: String, boot: String?, maxRead: Int) {
         this.station = station
         this.boot = boot
+        this.maxRead = maxRead
     }
 
     /** Whether the automatic clock check already ran on this connection. Read and set under a lease. */
