@@ -724,3 +724,12 @@ CoreDevice initially refused the launch check because the iPhone was locked.
 Real-phone selected-file retry, deliberate radio interruption/recovery, two-sensor
 Collect all, and throughput remain to be observed on hardware. An install or launch
 check alone does not qualify these flows.
+
+## 2026-10-11, maplibre-compose 0.20.0 and Arabic map labels on iOS (#53)
+
+maplibre-compose 0.20.0 (maplibre-native-ffi 0.202610.0) links ICU on Apple, so iOS loads the
+same basemap styles as Android and the Latin-only styles are gone. `./gradlew --no-daemon verify`
+passed on a Mac, and an unsigned Debug Xcode build for the iPhone 17 simulator succeeded. On that
+simulator, launched in Arabic with the Cairo time zone, Discover drew القاهرة, الإسكندرية and
+الأقصر joined and right to left. Simulator only. Arabic labels on an iPhone set to Arabic, and
+Discover Back returning an open sheet to peek, still need a phone check.
