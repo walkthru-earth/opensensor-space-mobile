@@ -13,7 +13,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.conflate
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -137,11 +136,11 @@ class ArchiveIndexRepair(
     /**
      * Repairs whenever [index] holds a record that was never indexed, until cancelled. iOS runs it for
      * the life of the process, because its engine adds records without index columns. Changes that
-     * arrive during a pass are conflated into one more check after it, never dropped.
+     * arrive during a pass are conflated into one more check after it, never dropped. It watches
+     * [ArchiveIndex.observeNeverIndexed], not every record.
      */
     suspend fun repairWhenWaiting() {
-        index.observeAll()
-            .map { records -> records.any { it.indexedAtEpochMs == null } }
+        index.observeNeverIndexed()
             .conflate()
             .collect { waiting -> if (waiting) backfillUntilSettled() }
     }

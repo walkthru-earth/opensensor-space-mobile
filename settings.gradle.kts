@@ -17,6 +17,9 @@ dependencyResolutionManagement {
 }
 rootProject.name = "opensensor-space-mobile"
 
+// Opt-in host history benchmark, no device archive or hardware access.
+include(":tools:history-benchmark")
+
 include(":app")
 // Protocol, Parquet and history are Kotlin Multiplatform, shared with iOS.
 include(":core:protocol")

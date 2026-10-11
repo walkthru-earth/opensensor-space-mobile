@@ -1,31 +1,188 @@
 package earth.walkthru.aqsync.data.history
 
+import earth.walkthru.aqsync.data.archive.toRecord
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
-import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
+import earth.walkthru.aqsync.data.local.database.DerivedArchivedFileQueries
 import earth.walkthru.aqsync.data.local.database.DerivedDay
 import earth.walkthru.aqsync.data.local.database.DerivedDayDao
 import earth.walkthru.aqsync.data.local.database.MetricBucket
 import earth.walkthru.aqsync.data.local.database.MetricBucketDao
 import earth.walkthru.aqsync.data.sync.FileArchive
+import earth.walkthru.aqsync.storage.AtomicFiles
 import earth.walkthru.aqsync.storage.DerivedQuota
+import earth.walkthru.aqsync.storage.JvmAtomicFiles
 import earth.walkthru.aqsync.storage.JvmStorageTree
 import earth.walkthru.aqsync.storage.QuotaEnforcer
+import earth.walkthru.aqsync.storage.StorageClass
 import earth.walkthru.aqsync.storage.StorageRole
 import earth.walkthru.aqsync.storage.StorageRoots
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import java.io.IOException
+import java.security.MessageDigest
 
 /** The deriver over in-memory DAOs and a temp archive: staleness by source signature, tiers and daily files together. */
 class HistoryDeriverTest {
 
     private fun bytes(path: String) = checkNotNull(javaClass.classLoader?.getResourceAsStream("parquet/$path")).readBytes()
     private val station = "53315f5f-cb85-4d8d-b623-d56266084189"
+
+    @Test
+    fun `version four tiers and daily cache rebuild without a source change`() = runBlocking {
+        val tmp = java.nio.file.Files.createTempDirectory("aq-derive-upgrade").toFile()
+        try {
+            val archive = FileArchive(tmp)
+            val files = InMemoryFiles()
+            val buckets = InMemoryBuckets()
+            val days = InMemoryDays()
+            val indexer = HistoryIndexer(archive, files)
+            val store = DerivedStore(tmp)
+            val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp))
+            val name = "station=$station/day=2026-09-17/raw.parquet"
+            val raw = archive.fileFor(station, name).apply {
+                parentFile!!.mkdirs()
+                writeBytes(bytes("device/v3-board-2rg-105rows.parquet"))
+            }
+            val originalBytes = raw.readBytes()
+            files.rows += indexer.indexed(ArchivedFile(station = station, name = name, bytes = raw.length(), crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), raw)
+            assertEquals(1, deriver.deriveStale().daysRebuilt)
+            val expectedTiers = buckets.rows.toList()
+            val originalSources = files.rows.toList()
+            val current = days.rows.single()
+            val oldDigest = MessageDigest.getInstance("SHA-256").apply {
+                update("derive-v4\n".toByteArray())
+                update("$name:1\n".toByteArray())
+            }
+            val oldSignature = HistoryDeriver.hex(oldDigest.digest())
+            assertFalse(oldSignature == current.sourceSignature)
+            // Model an installed version 4 cache. Its pointer and unchanged source set are present,
+            // but the old tier values and daily payload need the new duplicate preference.
+            days.upsert(current.copy(sourceSignature = oldSignature))
+            buckets.rows.clear()
+            buckets.rows += expectedTiers.map { it.copy(rows = 777, validRows = 777, mean = 999f, min = 999f, max = 999f) }
+            val daily = store.dayFile(station, current.epochDay)
+            assertTrue(daily.isFile)
+            assertTrue(days.rows.single().dailyFile != null)
+            daily.writeText("obsolete version 4 daily bytes")
+            val manifest = store.manifestFile(station, current.epochDay)
+            manifest.writeText(Json.encodeToString(Json.decodeFromString<DailyManifest>(manifest.readText()).copy(sourceSignature = oldSignature)))
+
+            val upgraded = deriver.deriveStale()
+            assertEquals(1, upgraded.daysChecked)
+            assertEquals(1, upgraded.daysRebuilt)
+            assertEquals(expectedTiers, buckets.rows)
+            assertEquals(HistoryDeriver.signatureOf(originalSources.map { it.toRecord() }), days.rows.single().sourceSignature)
+            assertEquals(days.rows.single().sourceSignature, Json.decodeFromString<DailyManifest>(manifest.readText()).sourceSignature)
+            earth.walkthru.aqsync.data.history.parquet.ParquetFile.open(daily).use { assertEquals(105L, it.numRows) }
+            assertEquals(originalSources, files.rows)
+            assertTrue(originalBytes.contentEquals(raw.readBytes()))
+            assertEquals(0, deriver.deriveStale().daysRebuilt)
+        } finally {
+            tmp.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `derived reads require a matching receipt and keep opened bytes across replacement`() = runBlocking {
+        val tmp = java.nio.file.Files.createTempDirectory("aq-derived-read").toFile()
+        try {
+            val archive = FileArchive(tmp)
+            val files = InMemoryFiles()
+            val days = InMemoryDays()
+            val indexer = HistoryIndexer(archive, files)
+            val store = DerivedStore(tmp)
+            val deriver = HistoryDeriver(archive, files, InMemoryBuckets(), days, store, indexer, derivedQuota(tmp))
+            val name = "station=$station/day=2026-09-17/raw.parquet"
+            val raw = archive.fileFor(station, name).apply {
+                parentFile!!.mkdirs()
+                writeBytes(bytes("device/v3-board-2rg-105rows.parquet"))
+            }
+            files.rows += indexer.indexed(ArchivedFile(station = station, name = name, bytes = raw.length(), crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), raw)
+            deriver.deriveStale()
+            val reader = RoomDerivedDayFiles(store, days)
+            val sources = files.rows.map { it.toRecord() }
+            val manifest = store.manifestFile(station, 20713)
+            val validReceipt = manifest.readText()
+            reader.open(station, 20713, sources, emptyMap())!!.close()
+
+            // Room still carries the old signature through file replacement. The manifest is the
+            // receipt for the bytes at the path, so a missing or changed receipt forces raw reads.
+            assertTrue(manifest.delete())
+            assertEquals(null, reader.open(station, 20713, sources, emptyMap()))
+            manifest.writeText(Json.encodeToString(Json.decodeFromString<DailyManifest>(validReceipt).copy(sourceSignature = "another-build")))
+            assertEquals(null, reader.open(station, 20713, sources, emptyMap()))
+            manifest.writeText("broken receipt")
+            assertEquals(null, reader.open(station, 20713, sources, emptyMap()))
+            manifest.writeText(validReceipt)
+            val opened = reader.open(station, 20713, sources, emptyMap())!!
+            opened.use {
+                val tail = it.readTail(4).toByteArray()
+                store.atomic.writeAtomically(store.dayFile(station, 20713).path, ByteArray(32), StorageClass.Rebuildable)
+                assertTrue(tail.contentEquals(it.readTail(4).toByteArray()))
+            }
+        } finally {
+            tmp.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `cache setup and commit failures keep tiers and retry the daily file`() = runBlocking {
+        for (failureStage in listOf("temp", "commit", "manifest")) {
+            val tmp = java.nio.file.Files.createTempDirectory("aq-cache-failure").toFile()
+            try {
+                var failing = true
+                val delegate = JvmAtomicFiles(File(tmp, AtomicFiles.TEMP_DIR))
+                val atomic = object : AtomicFiles by delegate {
+                    override fun createTemp(suffix: String): String {
+                        if (failing && failureStage == "temp") throw IOException("temp unavailable")
+                        return delegate.createTemp(suffix)
+                    }
+                    override fun commitReplace(from: String, to: String, cls: StorageClass) {
+                        if (failing && failureStage == "commit") throw IOException("commit unavailable")
+                        delegate.commitReplace(from, to, cls)
+                    }
+                    override fun writeAtomically(target: String, bytes: ByteArray, cls: StorageClass) {
+                        if (failing && failureStage == "manifest") throw IOException("manifest unavailable")
+                        delegate.writeAtomically(target, bytes, cls)
+                    }
+                }
+                val archive = FileArchive(tmp)
+                val files = InMemoryFiles()
+                val buckets = InMemoryBuckets()
+                val days = InMemoryDays()
+                val indexer = HistoryIndexer(archive, files)
+                val store = DerivedStore(tmp, atomic)
+                val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp))
+                val name = "station=$station/day=2026-09-17/raw.parquet"
+                val raw = archive.fileFor(station, name).apply {
+                    parentFile!!.mkdirs()
+                    writeBytes(bytes("device/v3-board-2rg-105rows.parquet"))
+                }
+                files.rows += indexer.indexed(ArchivedFile(station = station, name = name, bytes = raw.length(), crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), raw)
+
+                assertEquals(1, deriver.deriveStale().daysRebuilt)
+                assertEquals(105, buckets.rows.first { it.metricId == "pm25" && it.resolution == 86_400L }.rows)
+                assertEquals(null, days.rows.single().dailyFile)
+                assertTrue(days.rows.single().sourceSignature.endsWith(":no-daily-file"))
+                failing = false
+                assertEquals(1, deriver.deriveStale().daysRebuilt)
+                assertTrue(store.dayFile(station, 20713).isFile)
+                assertTrue(days.rows.single().dailyFile != null)
+                assertEquals(0, deriver.deriveStale().daysRebuilt)
+            } finally {
+                tmp.deleteRecursively()
+            }
+        }
+    }
 
     @Test
     fun `deriver rebuilds a day only when its source set changes`() = runBlocking {
@@ -64,7 +221,7 @@ class HistoryDeriverTest {
         assertTrue(daily.leaf("event_time_utc_ns").isTimestampNanosUtc)
         assertEquals("telemetry-derived-day", daily.metadata.keyValueMetadata["purpose"])
         assertTrue(daily.metadata.keyValueMetadata["complete"] in setOf("true", "false"))
-        assertTrue(store.manifestFile(station, 20713).readText().contains("\"rows_used\": 105"))
+        assertTrue(store.manifestFile(station, 20713).readText().contains("\"rows_used\":105"))
         assertEquals("day=2026-09-17.parquet", days.rows.single().dailyFile?.substringAfter('/'))
         // For tools/validate_parquet_samples.py (PyArrow + DuckDB): a real derived day built from the board's file.
         File("build/parquet-samples").apply { mkdirs() }.let { dir ->
@@ -95,7 +252,7 @@ class HistoryDeriverTest {
         assertEquals(2, days.rows.single().sourceFiles)
         // Same rows under two names: the daily file de-duplicates on (boot, sequence) — 105 rows, 2 sources in the manifest.
         assertEquals(105L, earth.walkthru.aqsync.data.history.parquet.ParquetFile.open(store.dayFile(station, 20713)).numRows)
-        assertTrue(store.manifestFile(station, 20713).readText().contains("\"rows_used\": 0"))
+        assertTrue(store.manifestFile(station, 20713).readText().contains("\"rows_used\":0"))
 
         // A second real v6 file (the full 10:00–10:29Z window, 180 rows) joins the day: 285 rows, two UTC hours → two row groups.
         put("station=$station/year=2026/month=09/day=17/data_1000_495ccef9f3eb8c5917070c921c9baec8_107-286-3.parquet", "device/v3-board-2rg-180rows.parquet", 4)
@@ -219,12 +376,19 @@ class HistoryDeriverTest {
         }
     }
 
+    @Test
+    fun `the signature hex is the lower-case two digits per byte it always was`() {
+        val bytes = ByteArray(256) { it.toByte() }
+        assertEquals(bytes.joinToString("") { "%02x".format(java.util.Locale.ROOT, it) }, HistoryDeriver.hex(bytes))
+        assertEquals("", HistoryDeriver.hex(ByteArray(0)))
+    }
+
     /** The derived quota over [tmp]'s derived root, with the default budget. */
     private fun derivedQuota(tmp: File) = DerivedQuota(
         QuotaEnforcer(StorageRoots(mapOf(StorageRole.Derived to File(tmp, "derived/v1").absolutePath)), JvmStorageTree()),
     )
 
-    private class InMemoryFiles : ArchivedFileDao {
+    private class InMemoryFiles : DerivedArchivedFileQueries {
         val rows = mutableListOf<ArchivedFile>()
         override fun observeAll(): Flow<List<ArchivedFile>> = flowOf(rows.toList())
         override fun observeForStation(station: String): Flow<List<ArchivedFile>> = flowOf(rows)
@@ -246,9 +410,9 @@ class HistoryDeriverTest {
         }
         override suspend fun unindexed(limit: Int) = rows.filter { it.indexedAtEpochMs == null || it.indexError != null }.take(limit)
         override fun observeUnindexedCount(): Flow<Int> = flowOf(0)
-        override suspend fun withUtcBetween(station: String, fromNs: Long, toNs: Long) =
-            rows.filter { it.station == station && it.indexError == null && (it.purpose == null || it.purpose == "telemetry") && (it.timelineLastNs ?: Long.MIN_VALUE) >= fromNs && (it.timelineFirstNs ?: Long.MAX_VALUE) < toNs }
-                .sortedBy { it.firstUtcNs }
+
+        // The deriver lists a station once and splits it by day (#63), a time query per day is a regression.
+        override suspend fun withUtcBetween(station: String, fromNs: Long, toNs: Long): List<ArchivedFile> = error("the deriver must not query per day")
         override suspend fun indexedForStation(station: String) = rows.filter { it.station == station && it.indexed }
         override suspend fun stations() = rows.map { it.station }.distinct()
     }

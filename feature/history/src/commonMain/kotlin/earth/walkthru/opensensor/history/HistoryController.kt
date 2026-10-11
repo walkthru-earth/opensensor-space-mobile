@@ -85,8 +85,8 @@ class HistoryController(
 
     private val stationList = stations.distinctUntilChanged()
 
-    private val station: Flow<String?> = combine(currentStation, stationList, index.observeAll(), selectedStation) { current, list, files, selected ->
-        preferredHistoryStation(current, list, files, selected)
+    private val station: Flow<String?> = combine(currentStation, stationList, index.observeLatestTimed(), selectedStation) { current, list, latest, selected ->
+        preferredHistoryStation(current, list, latest, selected)
     }.distinctUntilChanged()
 
     init {

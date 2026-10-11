@@ -6,6 +6,7 @@ import earth.walkthru.aqsync.data.history.parquet.ByteReader
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 import earth.walkthru.aqsync.data.history.parquet.ParquetFormatException
 import earth.walkthru.aqsync.data.history.parquet.ParquetSink
+import kotlinx.coroutines.CancellationException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -70,6 +71,40 @@ private class OpenSources {
 }
 
 class DailyParquetBuilderTest {
+    @Test
+    fun aCancelledSinkCancelsThePass() {
+        val (source, anchor) = dailyFixture()
+        val sink = object : ParquetSink {
+            override fun write(bytes: ByteArray): Unit = throw CancellationException("cancelled")
+        }
+        assertFailsWith<CancellationException> {
+            DayPass.run(source.record.station, StationDays.dayOf(anchor.utcNs), listOf(source), sink, mapOf(anchor.boot to anchor), 0)
+        }
+    }
+
+    @Test
+    fun aFailedDailySinkKeepsTiersWithoutDecodingAgain() {
+        val (fixture, anchor) = dailyFixture()
+        val day = StationDays.dayOf(anchor.utcNs)
+        val anchors = mapOf(anchor.boot to anchor)
+        val expected = DayPass.run(fixture.record.station, day, listOf(fixture), null, anchors, 0).buckets
+        for (failOnFlush in listOf(false, true)) {
+            val counter = OpenSources()
+            val (source, _) = dailyFixture { ParquetFile.open(counter.reader(it), "raw.parquet") }
+            val failure = IllegalStateException("cache unavailable")
+            val sink = object : ParquetSink {
+                override fun write(bytes: ByteArray) { if (!failOnFlush) throw failure }
+                override fun flush(): Unit = throw failure
+            }
+            val pass = DayPass.run(source.record.station, day, listOf(source), sink, anchors, 0)
+            assertEquals(expected, pass.buckets)
+            assertNull(pass.daily)
+            assertEquals(failure, pass.dailyError)
+            assertEquals(1, counter.opened, "sink failure must keep the original decode")
+            assertEquals(1, counter.closed)
+        }
+    }
+
     @Test
     fun aDayOfManySourcesHoldsOneSourceOpenAtATimeAndClosesEach() {
         val counter = OpenSources()

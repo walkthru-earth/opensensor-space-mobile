@@ -62,15 +62,16 @@ class ScanViewModel @Inject constructor(
     settings: AppSettings,
 ) : ViewModel() {
 
-    private val summaries: Flow<Map<String, ArchiveGlance>> = combine(archivedFileDao.observeAll(), bucketDao.observeAllDays(Metrics.primary.id)) { files, days ->
+    /** Per-station totals come from one grouped query, so the list never loads every archived row (#63). */
+    private val summaries: Flow<Map<String, ArchiveGlance>> = combine(archivedFileDao.observeStationGlances(), bucketDao.observeAllDays(Metrics.primary.id)) { glances, days ->
         val latestDay = HashMap<String, earth.walkthru.aqsync.data.local.database.MetricBucket>()
         for (b in days) if (!latestDay.containsKey(b.station)) latestDay[b.station] = b // newest first
-        files.groupBy { it.station }.mapValues { (station, list) ->
-            val day = latestDay[station]
-            ArchiveGlance(
-                files = list.size,
-                lastSyncedMs = list.maxOfOrNull { it.syncedAtEpochMs },
-                lastDataUtcNs = list.mapNotNull { it.lastUtcNs }.maxOrNull(),
+        glances.associate { g ->
+            val day = latestDay[g.station]
+            g.station to ArchiveGlance(
+                files = g.files,
+                lastSyncedMs = g.lastSyncedMs,
+                lastDataUtcNs = g.lastDataUtcNs,
                 lastDayStartS = day?.startEpochS,
                 lastDayPm25Mean = day?.mean,
                 lastDayCoverage = day?.let { (it.validRows.toFloat() / Resolution.DAY.expectedRows).coerceIn(0f, 1f) },

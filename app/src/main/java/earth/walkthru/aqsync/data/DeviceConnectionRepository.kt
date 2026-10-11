@@ -44,7 +44,6 @@ import earth.walkthru.aqsync.data.protocol.DeviceStatus
 import earth.walkthru.aqsync.data.protocol.LiveSample
 import earth.walkthru.aqsync.data.protocol.hexToBytes
 import earth.walkthru.aqsync.data.protocol.toHex
-import earth.walkthru.aqsync.data.sync.ArchivedIdentity
 import earth.walkthru.aqsync.data.sync.ClockSyncMode
 import earth.walkthru.aqsync.data.sync.FileArchive
 import earth.walkthru.aqsync.data.sync.FileOutcome
@@ -291,7 +290,7 @@ class DeviceConnectionRepository @Inject constructor(
     val isFake: Boolean get() = _session.value?.transport?.let(transportFactory::isFake) == true
 
     /** Manifest joined with the archive, see [planWithProgress]. */
-    val plan: StateFlow<SyncPlan?> = planWithProgress(_manifest, _info, archivedFileDao.observeAll(), _sync, archive::partialLengths)
+    val plan: StateFlow<SyncPlan?> = planWithProgress(_manifest, _info, archivedFileDao::observeIdentitiesForStation, _sync, archive::partialLengths)
         .stateIn(scope, SharingStarted.Eagerly, null)
 
     private var notificationJob: Job? = null
@@ -978,7 +977,7 @@ class DeviceConnectionRepository @Inject constructor(
     private suspend fun planFor(session: DeviceSession, loaded: ManifestState.Loaded): SyncPlan? {
         if (_session.value !== session) return null
         val station = _info.value?.station ?: return null
-        val archived = archivedFileDao.forStation(station).map { ArchivedIdentity(it.station, it.name, it.bytes, it.crc32) }
+        val archived = archivedFileDao.identitiesForStation(station).map { it.toIdentity() }
         val plan = SyncPlanner.plan(station, loaded.files, archived, archive.partialLengths(station))
         return plan.takeIf { _session.value === session }
     }

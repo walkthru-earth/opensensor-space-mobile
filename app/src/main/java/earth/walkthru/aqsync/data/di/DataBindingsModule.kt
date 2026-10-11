@@ -12,8 +12,10 @@ import earth.walkthru.aqsync.data.background.AutoSyncScheduler
 import earth.walkthru.aqsync.data.background.CompanionPresence
 import earth.walkthru.aqsync.data.background.CompanionUnlinker
 import earth.walkthru.aqsync.data.history.DeriveBackfill
+import earth.walkthru.aqsync.data.history.DerivedDayFiles
 import earth.walkthru.aqsync.data.history.HistoryDeriver
 import earth.walkthru.aqsync.data.history.HistoryRefresher
+import earth.walkthru.aqsync.data.history.RoomDerivedDayFiles
 import earth.walkthru.aqsync.data.lan.LanDiscoveryState
 import earth.walkthru.aqsync.data.lan.LanTargets
 import earth.walkthru.aqsync.data.lan.LanWifiLock
@@ -43,4 +45,7 @@ abstract class DataBindingsModule {
 
     @Binds
     abstract fun bindHistoryRefresher(deriver: HistoryDeriver): HistoryRefresher
+
+    @Binds
+    abstract fun bindDerivedDayFiles(files: RoomDerivedDayFiles): DerivedDayFiles
 }

@@ -34,4 +34,24 @@ class StationDaysTest {
         )
         assertEquals(emptyMap(), days)
     }
+
+    @Test
+    fun `sources by day match the time query predicate for every day`() {
+        val files = listOf(
+            record("a", "late.parquet", first = 20714 * day + 10, last = 20714 * day + 20),
+            record("a", "span.parquet", first = 20713 * day + 5, last = 20715 * day),
+            record("a", "est.parquet", utcRows = 0, estFirst = 20714 * day - 1, estLast = 20714 * day),
+            record("a", "edge.parquet", first = 20716 * day - 1, last = 20716 * day - 1),
+            record("a", "untimed.parquet", utcRows = 0),
+            record("a", "broken.parquet", first = 20714 * day, last = 20714 * day).copy(indexError = "bad"),
+            record("a", "other.parquet", first = 20714 * day, last = 20714 * day, purpose = "codec-comparison-duplicate-rows"),
+            record("a", "backwards.parquet", first = 20715 * day + 9, last = 20714 * day),
+        )
+        val byDay = StationDays.sourcesByDay(files) { it }
+        for (d in 20712L..20717L) {
+            val expected = files.filter { it.onTimeline(d * day, (d + 1) * day) }.sortedWith(ArchiveRecord.TIMELINE_ORDER)
+            assertEquals(expected.map { it.name }, byDay[d].orEmpty().map { it.name }, "day $d")
+        }
+        assertEquals(listOf("span.parquet", "est.parquet", "late.parquet"), byDay[20714]!!.map { it.name })
+    }
 }

@@ -1,5 +1,6 @@
 package earth.walkthru.opensensor.history
 
+import earth.walkthru.aqsync.archive.ArchiveIndex
 import earth.walkthru.aqsync.archive.ArchiveRecord
 import earth.walkthru.aqsync.data.history.ArchiveIndexRepair
 import earth.walkthru.aqsync.data.history.localDateOf
@@ -38,14 +39,14 @@ fun countHistoryFiles(files: List<ArchiveRecord>): HistoryFileCounts {
 
 /**
  * The station History opens on. An explicit chip choice wins. Otherwise [current], unless it has no
- * timed readings yet while another of [stations] has, then the one with the latest reading.
+ * timed readings yet while another of [stations] has, then the one with the latest reading. [latest]
+ * is [ArchiveIndex.latestTimedEnds], per station the end of its latest timed reading.
  */
-fun preferredHistoryStation(current: String?, stations: List<String>, files: List<ArchiveRecord>, selected: String?): String? {
+fun preferredHistoryStation(current: String?, stations: List<String>, latest: Map<String, Long>, selected: String?): String? {
     if (selected != null && selected in stations) return selected
     if (current == null || current !in stations) return current
-    val timed = files.filter { it.station in stations && it.indexed && (it.hasUtc || it.hasEstimatedUtc) && it.isTelemetry }
-    if (timed.any { it.station == current }) return current
-    return timed.maxByOrNull { it.timelineLastNs ?: Long.MIN_VALUE }?.station ?: current
+    if (current in latest) return current
+    return stations.filter { it in latest }.maxByOrNull { latest.getValue(it) } ?: current
 }
 
 /** End of the local calendar day containing the station's most recent archived reading. */

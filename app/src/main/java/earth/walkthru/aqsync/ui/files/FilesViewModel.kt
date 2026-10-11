@@ -1,6 +1,7 @@
 package earth.walkthru.aqsync.ui.files
 
 import android.content.Context
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.assisted.Assisted
@@ -34,11 +35,12 @@ import earth.walkthru.aqsync.data.local.database.KnownDevice
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
 import earth.walkthru.aqsync.data.settings.AppSettings
 import earth.walkthru.aqsync.data.settings.DetailLevel
-import earth.walkthru.aqsync.data.sync.SyncPlan
 import earth.walkthru.aqsync.storage.DerivedQuota
 import earth.walkthru.aqsync.ui.components.ScreenMessage
+import earth.walkthru.opensensor.files.DeviceFiles
 import earth.walkthru.opensensor.files.FileMetricsController
 import earth.walkthru.opensensor.files.FilesController
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -46,6 +48,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -55,12 +58,16 @@ import kotlinx.coroutines.launch
 import java.io.File
 import javax.inject.Inject
 
-/** The device side of the Files screen. The archive list and every export live in the shared [FilesController]. */
+/**
+ * The device side of the Files screen. The archive list and every export live in the shared
+ * [FilesController]. The listing, plan and transfer progress are in [FilesViewModel.deviceFiles], so a
+ * progress tick never rebuilds this state (#63).
+ */
+@Immutable
 data class FilesUiState(
     val connection: ConnectionState = ConnectionState.Disconnected,
-    val manifest: ManifestState = ManifestState.Idle,
-    val plan: SyncPlan? = null,
-    val sync: SyncProgress = SyncProgress(),
+    /** A transfer is running, for the background sync menu item. */
+    val syncRunning: Boolean = false,
     val reconnecting: ReconnectState? = null,
     /** Auto-sync switch of the connected device (null: no session / unknown device). */
     val autoSync: Boolean? = null,
@@ -75,6 +82,7 @@ data class FilesUiState(
 )
 
 /** The strip of per-file columns: the window shown, of how many files, for which metric. */
+@Immutable
 data class FileChartState(
     val metric: MetricSpec,
     /** Every telemetry file of the station, oldest first (timed by first row, then untimed by name). */
@@ -168,9 +176,15 @@ class FilesViewModel @AssistedInject constructor(
      * is on, the missing files are read (cached per `(name, crc32)` in the repository, so a new sync
      * costs only its new files).
      */
-    private val fileSummaryRequest: StateFlow<FileSummaryRequest?> = combine(fileChartOn, archiveStation, archivedFileDao.observeAll()) { on, station, files ->
-        if (!on || station == null) null else FileSummaryRequest(station, files.filter { it.station == station })
-    }.distinctUntilChanged().stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val fileSummaryRequest: StateFlow<FileSummaryRequest?> = combine(fileChartOn, archiveStation) { on, station -> station.takeIf { on } }
+        .distinctUntilChanged()
+        .flatMapLatest { station ->
+            // Only while the chart is on, and only the connected station's rows.
+            if (station == null) flowOf(null) else archivedFileDao.observeForStation(station).map { FileSummaryRequest(station, it) }
+        }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     private val fileSummaries: StateFlow<ArchiveQueryResult<FileSummaryRequest?, List<FileSummary>>> = fileSummaryRequest.archiveQueryResults { request ->
         if (request == null) {
@@ -185,22 +199,36 @@ class FilesViewModel @AssistedInject constructor(
     }
 
     val uiState: StateFlow<FilesUiState> = combine(
-        repository.connectionState, repository.manifest, repository.plan, repository.sync, repository.reconnecting,
-        repository.currentKnownDevice, autoSyncScheduler.observeActive(), repository.activeTransport, settings.detailLevel, fileChart,
+        repository.connectionState,
+        repository.sync.map { it.running }.distinctUntilChanged(),
+        repository.reconnecting,
+        repository.currentKnownDevice,
+        autoSyncScheduler.observeActive(),
+        repository.activeTransport,
+        settings.detailLevel,
+        fileChart,
     ) { values ->
         FilesUiState(
             connection = values[0] as ConnectionState,
-            manifest = values[1] as ManifestState,
-            plan = values[2] as SyncPlan?,
-            sync = values[3] as SyncProgress,
-            reconnecting = values[4] as ReconnectState?,
-            autoSync = (values[5] as KnownDevice?)?.autoSync,
-            backgroundSyncActive = values[6] as Boolean,
-            transport = values[7] as TransportKind?,
-            detailLevel = values[8] as DetailLevel,
-            fileChart = values[9] as FileChartState?,
+            syncRunning = values[1] as Boolean,
+            reconnecting = values[2] as ReconnectState?,
+            autoSync = (values[3] as KnownDevice?)?.autoSync,
+            backgroundSyncActive = values[4] as Boolean,
+            transport = values[5] as TransportKind?,
+            detailLevel = values[6] as DetailLevel,
+            fileChart = values[7] as FileChartState?,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FilesUiState())
+
+    /** Transfer bytes are collected inside the shared progress card, without invalidating the screen. */
+    val syncProgress: StateFlow<SyncProgress> = repository.sync
+
+    private val syncControls = repository.sync.map { SyncProgress(running = it.running, outcomes = it.outcomes) }.distinctUntilChanged()
+
+    /** The listing, sampled plan and sync control flags, read by the shared device file list. */
+    val deviceFiles: StateFlow<DeviceFiles> = combine(repository.connectionState, repository.manifest, repository.plan, syncControls) { connection, manifest, plan, sync ->
+        DeviceFiles(ready = connection.isReady, manifest = manifest, plan = plan, sync = sync)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DeviceFiles(ready = false, manifest = ManifestState.Idle, plan = null, sync = SyncProgress()))
 
     fun setFileChart(on: Boolean) {
         fileChartOn.value = on

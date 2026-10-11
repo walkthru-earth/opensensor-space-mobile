@@ -2,6 +2,7 @@ package earth.walkthru.aqsync.archive
 
 import earth.walkthru.aqsync.data.protocol.ParquetVerify
 import earth.walkthru.aqsync.storage.AlreadyCommitted
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -103,6 +104,26 @@ abstract class ArchiveStoreContract {
         assertEquals(3L, after?.rows)
         index.update(ArchiveKey(station, "missing.parquet")) { error("no record to transform") }
         assertNull(index.get(ArchiveKey(station, "missing.parquet")))
+    }
+
+    @Test
+    fun `observers see records by name and per station and the narrow views`() = runTest {
+        val index = newIndex()
+        val other = "11111111-2222-3333-4444-555555555555"
+        val b = ArchiveRecord(station, "b.parquet", 1, 1, "s", 1, "d")
+        val a = ArchiveRecord(other, "a.parquet", 1, 1, "s", 1, "d", indexedAtEpochMs = 5, utcRows = 1, lastUtcNs = 20)
+        val c = ArchiveRecord(station, "c.parquet", 1, 1, "s", 1, "d", indexedAtEpochMs = 5, utcRows = 1, lastUtcNs = 10)
+        val failed = ArchiveRecord(station, "d.parquet", 1, 1, "s", 1, "d", indexedAtEpochMs = 5, indexError = "bad", utcRows = 1, lastUtcNs = 30)
+        for (r in listOf(c, failed, a, b)) index.put(r)
+        assertEquals(listOf("a.parquet", "b.parquet", "c.parquet", "d.parquet"), index.observeAll().first().map { it.name })
+        assertEquals(listOf("b.parquet", "c.parquet", "d.parquet"), index.observeStation(station).first().map { it.name })
+        assertTrue(index.observeNeverIndexed().first())
+        // A failed file has no place on the timeline, however late its rows.
+        assertEquals(mapOf(station to 10L, other to 20L), index.observeLatestTimed().first())
+        index.update(b.key) { it.copy(indexedAtEpochMs = 6) }
+        assertFalse(index.observeNeverIndexed().first())
+        index.remove(c.key)
+        assertEquals(mapOf(other to 20L), index.observeLatestTimed().first())
     }
 }
 

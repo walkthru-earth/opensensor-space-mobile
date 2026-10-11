@@ -9,6 +9,7 @@ import earth.walkthru.aqsync.data.local.database.AppDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -16,7 +17,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** [RoomArchiveIndex.update] and [RoomArchiveIndex.putIfAbsent] on a real in-memory Room database over the bundled SQLite driver. */
+/** [RoomArchiveIndex.update], [RoomArchiveIndex.putIfAbsent] and the narrow views on a real in-memory Room database over the bundled SQLite driver. */
 class RoomArchiveIndexTest {
     private val db = Room.inMemoryDatabaseBuilder(ContextWrapper(null), AppDatabase::class.java)
         .setDriver(BundledSQLiteDriver())
@@ -49,5 +50,19 @@ class RoomArchiveIndexTest {
         assertEquals("device", index.get(engine.key)!!.sourceDevice)
         assertEquals(5L, index.get(engine.key)!!.syncedAtEpochMs)
         assertEquals("adopted", index.get(ArchiveKey(engine.station, "year=2026/month=10/day=02/data.parquet"))!!.sourceDevice)
+    }
+
+    @Test
+    fun `the narrow views follow the table`() = runBlocking {
+        val station = "11111111-2222-3333-4444-555555555555"
+        val pending = ArchiveRecord(station, "year=2026/month=10/day=01/data.parquet", 10L, 1L, "ab", 5L, "device")
+        index.put(pending)
+        assertTrue(index.observeNeverIndexed().first())
+        assertEquals(emptyMap<String, Long>(), index.observeLatestTimed().first())
+
+        index.update(pending.key) { it.copy(indexedAtEpochMs = 9L, utcRows = 3L, lastUtcNs = 42L) }
+
+        assertFalse(index.observeNeverIndexed().first())
+        assertEquals(mapOf(station to 42L), index.observeLatestTimed().first())
     }
 }

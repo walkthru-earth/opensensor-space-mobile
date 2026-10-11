@@ -64,7 +64,12 @@ internal class ThriftCompactWriter {
 
     /** Elements inside a list (no field header). */
     fun listI32(value: Int) = writeZigZag32(value)
+    fun listI64(value: Long) = writeZigZag64(value)
+    fun listBinary(value: ByteArray) = writeBinary(value)
     fun listString(value: String) = writeBinary(value.encodeToByteArray())
+
+    /** A bool list element is one byte, 1 true or 2 false, in a list of element type [ThriftCompactReader.Type.BOOLEAN_TRUE]. */
+    fun listBool(value: Boolean) = out.write(if (value) ThriftCompactReader.Type.BOOLEAN_TRUE else ThriftCompactReader.Type.BOOLEAN_FALSE)
     inline fun listStruct(body: () -> Unit) { structBegin(); body(); structEnd() }
 
     private fun writeBinary(bytes: ByteArray) { writeVarint(bytes.size.toLong()); out.write(bytes) }

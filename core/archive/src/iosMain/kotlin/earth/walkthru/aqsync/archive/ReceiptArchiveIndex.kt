@@ -10,6 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flow
@@ -42,11 +43,19 @@ class ReceiptArchiveIndex(
     private val atomic: AtomicFiles = IosAtomicFiles(IosArchiveStore.tempDirBeside(finalRoot)),
 ) : ArchiveIndex {
     private val mutex = Mutex()
-    private val rows = MutableStateFlow<List<ArchiveRecord>?>(null)
 
-    private suspend fun loaded(): List<ArchiveRecord> = rows.value ?: mutex.withLock { loadLocked() }
+    /** Authoritative keyed records, read and changed only under [mutex]. */
+    private val records = LinkedHashMap<ArchiveKey, ArchiveRecord>()
 
-    private suspend fun loadLocked(): List<ArchiveRecord> = rows.value ?: withContext(io) { load() }.also { rows.value = it }
+    /** Replaced only under [mutex]. Readers take the current value without the lock. */
+    private val rows = MutableStateFlow<Snapshot?>(null)
+
+    private suspend fun loaded(): Snapshot = rows.value ?: mutex.withLock { loadLocked() }
+
+    private suspend fun loadLocked(): Snapshot = rows.value ?: withContext(io) { load() }.let { loaded ->
+        loaded.forEach { records[it.key] = it }
+        Snapshot.of(records.values.toList()).also { rows.value = it }
+    }
 
     private fun load(): List<ArchiveRecord> = IosFiles.walk(finalRoot).mapNotNull { relative ->
         if (!relative.endsWith(ArchiveLayout.LEGACY_RECEIPT_SUFFIX)) return@mapNotNull null
@@ -61,14 +70,26 @@ class ReceiptArchiveIndex(
     private fun receiptPath(key: ArchiveKey): String =
         "$finalRoot/${key.station}/${key.name}${ArchiveLayout.LEGACY_RECEIPT_SUFFIX}".also { IosFiles.checkNoLinks(it, finalRoot) }
 
-    override fun observeAll(): Flow<List<ArchiveRecord>> = flow {
+    private fun <T> observe(select: (Snapshot) -> T): Flow<T> = flow {
         loaded()
-        emitAll(rows.filterNotNull().map { list -> list.sortedBy { it.name } })
+        emitAll(rows.filterNotNull().map(select))
     }
 
-    override fun observeStation(station: String): Flow<List<ArchiveRecord>> = observeAll().map { list -> list.filter { it.station == station } }
+    /** Already sorted, so an emission costs no sort. */
+    override fun observeAll(): Flow<List<ArchiveRecord>> = observe { it.all }
 
-    override suspend fun get(key: ArchiveKey): ArchiveRecord? = loaded().firstOrNull { it.station == key.station && it.name == key.name }
+    override fun observeStation(station: String): Flow<List<ArchiveRecord>> = observe { snapshot -> snapshot.all.filter { it.station == station } }
+
+    /** From a count kept with each snapshot, so no record is read. */
+    override fun observeNeverIndexed(): Flow<Boolean> = observe { it.neverIndexed > 0 }
+
+    override fun observeLatestTimed(): Flow<Map<String, Long>> = observe { it.latestTimed }.distinctUntilChanged()
+
+    /** Expected O(1) keyed lookup. The lock prevents observing an unfinished durable receipt write. */
+    override suspend fun get(key: ArchiveKey): ArchiveRecord? = mutex.withLock {
+        loadLocked()
+        records[key]
+    }
 
     override suspend fun put(record: ArchiveRecord) {
         mutex.withLock { putLocked(loadLocked(), record) }
@@ -77,7 +98,7 @@ class ReceiptArchiveIndex(
     /** Writes the receipt with [AtomicFiles.createNoReplace] under the lock, so an existing receipt always wins. */
     override suspend fun putIfAbsent(record: ArchiveRecord): Boolean = mutex.withLock {
         val current = loadLocked()
-        if (current.any { it.station == record.station && it.name == record.name }) return@withLock false
+        if (records.containsKey(record.key)) return@withLock false
         val written = withContext(io) {
             try {
                 atomic.createNoReplace(receiptPath(record.key), encode(record).encodeToByteArray(), StorageClass.Durable)
@@ -86,7 +107,10 @@ class ReceiptArchiveIndex(
                 false
             }
         }
-        if (written) rows.value = current + record
+        if (written) {
+            records[record.key] = record
+            rows.value = current.with(record)
+        }
         written
     }
 
@@ -94,12 +118,12 @@ class ReceiptArchiveIndex(
     override suspend fun update(key: ArchiveKey, transform: (ArchiveRecord) -> ArchiveRecord) {
         mutex.withLock {
             val current = loadLocked()
-            val latest = current.firstOrNull { it.station == key.station && it.name == key.name } ?: return@withLock
+            val latest = records[key] ?: return@withLock
             putLocked(current, transform(latest))
         }
     }
 
-    private suspend fun putLocked(current: List<ArchiveRecord>, record: ArchiveRecord) {
+    private suspend fun putLocked(current: Snapshot, record: ArchiveRecord) {
         withContext(io) {
             val path = receiptPath(record.key)
             val kind = IosFiles.kind(path)
@@ -107,7 +131,8 @@ class ReceiptArchiveIndex(
             // AtomicFiles creates any new directory and syncs it into its parent.
             atomic.writeAtomically(path, encode(record).encodeToByteArray(), StorageClass.Durable)
         }
-        rows.value = current.filterNot { it.station == record.station && it.name == record.name } + record
+        records[record.key] = record
+        rows.value = current.with(record)
     }
 
     /** Forgets the receipt only. The verified copy stays in the archive. */
@@ -118,21 +143,94 @@ class ReceiptArchiveIndex(
                 val path = receiptPath(key)
                 if (IosFiles.kind(path) == Kind.FILE) IosFiles.remove(path)
             }
-            rows.value = current.filterNot { it.station == key.station && it.name == key.name }
+            records.remove(key)
+            rows.value = current.without(key)
         }
     }
 
-    override suspend fun unindexed(limit: Int): List<ArchiveRecord> = loaded()
+    override suspend fun unindexed(limit: Int): List<ArchiveRecord> = loaded().all
         .filter { it.indexedAtEpochMs == null || it.indexError != null }
         .sortedWith(compareBy<ArchiveRecord> { it.indexedAtEpochMs != null }.thenBy { it.name })
         .take(limit)
 
     override suspend fun timeline(station: String, fromNs: Long, toNs: Long): List<ArchiveRecord> =
-        loaded().filter { it.station == station && it.onTimeline(fromNs, toNs) }.sortedWith(ArchiveRecord.TIMELINE_ORDER)
+        loaded().all.filter { it.station == station && it.onTimeline(fromNs, toNs) }.sortedWith(ArchiveRecord.TIMELINE_ORDER)
 
-    override suspend fun indexedForStation(station: String): List<ArchiveRecord> = loaded().filter { it.station == station && it.indexed }
+    override suspend fun indexedForStation(station: String): List<ArchiveRecord> = loaded().all.filter { it.station == station && it.indexed }
 
-    override suspend fun stations(): List<String> = loaded().map { it.station }.distinct()
+    override suspend fun stations(): List<String> = loaded().all.map { it.station }.distinct()
+
+    /**
+     * One immutable view of the receipts, sorted by name, then station, and never changed once
+     * published, so flow readers need no lock. Keyed API reads use [records]. Publishing a changed
+     * sorted snapshot needs one binary search and an O(N) array copy, without sorting every emission.
+     * That publication cost is separate from the expected O(1) keyed map mutation.
+     */
+    internal class Snapshot private constructor(private val sorted: Array<ArchiveRecord>, val neverIndexed: Int) {
+        val all: List<ArchiveRecord> = sorted.asList()
+
+        /** Computed once per snapshot, and only when observed. */
+        val latestTimed: Map<String, Long> by lazy { ArchiveIndex.latestTimedEnds(all) }
+
+        operator fun get(key: ArchiveKey): ArchiveRecord? = indexOf(key.name, key.station).let { if (it >= 0) sorted[it] else null }
+
+        /** [record] inserted at its place, or replacing the record of its key. */
+        fun with(record: ArchiveRecord): Snapshot {
+            val at = indexOf(record.name, record.station)
+            val gained = pending(record)
+            if (at >= 0) {
+                val next = sorted.copyOf()
+                next[at] = record
+                return Snapshot(next, neverIndexed - pending(sorted[at]) + gained)
+            }
+            val insert = -at - 1
+            val next = arrayOfNulls<ArchiveRecord>(sorted.size + 1)
+            sorted.copyInto(next, 0, 0, insert)
+            next[insert] = record
+            sorted.copyInto(next, insert + 1, insert)
+            @Suppress("UNCHECKED_CAST")
+            return Snapshot(next as Array<ArchiveRecord>, neverIndexed + gained)
+        }
+
+        fun without(key: ArchiveKey): Snapshot {
+            val at = indexOf(key.name, key.station)
+            if (at < 0) return this
+            val next = arrayOfNulls<ArchiveRecord>(sorted.size - 1)
+            sorted.copyInto(next, 0, 0, at)
+            sorted.copyInto(next, at, at + 1)
+            @Suppress("UNCHECKED_CAST")
+            return Snapshot(next as Array<ArchiveRecord>, neverIndexed - pending(sorted[at]))
+        }
+
+        /** The index of (name, station), or `-(insertion point) - 1` when absent, as `binarySearch` returns. */
+        private fun indexOf(name: String, station: String): Int {
+            var low = 0
+            var high = sorted.size - 1
+            while (low <= high) {
+                val mid = (low + high) ushr 1
+                val r = sorted[mid]
+                val c = r.name.compareTo(name).takeIf { it != 0 } ?: r.station.compareTo(station)
+                when {
+                    c < 0 -> low = mid + 1
+                    c > 0 -> high = mid - 1
+                    else -> return mid
+                }
+            }
+            return -(low + 1)
+        }
+
+        companion object {
+            private val ORDER: Comparator<ArchiveRecord> = compareBy<ArchiveRecord> { it.name }.thenBy { it.station }
+
+            private fun pending(r: ArchiveRecord): Int = if (r.indexedAtEpochMs == null) 1 else 0
+
+            /** One sort at load. [records] has one record per key, as one receipt per file gives. */
+            fun of(records: List<ArchiveRecord>): Snapshot {
+                val sorted = records.sortedWith(ORDER).toTypedArray()
+                return Snapshot(sorted, sorted.count { it.indexedAtEpochMs == null })
+            }
+        }
+    }
 
     internal companion object {
         private const val RECEIPT_MAX_BYTES = 16_384L

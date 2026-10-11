@@ -4,6 +4,7 @@ import earth.walkthru.aqsync.data.history.parquet.ByteReader
 import earth.walkthru.aqsync.storage.AlreadyCommitted
 import earth.walkthru.aqsync.storage.AtomicFiles
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 
 /**
  * The bytes of the phone archive, laid out as [ArchiveLayout] says. Adapters do file I/O only,
@@ -68,6 +69,19 @@ interface ArchiveIndex {
     /** The records of one station, ordered by name. */
     fun observeStation(station: String): Flow<List<ArchiveRecord>>
 
+    /**
+     * True while some record was never indexed, for the repair watcher. It may repeat a value after
+     * any change of the index, so a watcher whose pass stopped early is asked again. The default reads
+     * every record. An adapter with a cheaper count or `EXISTS` overrides it.
+     */
+    fun observeNeverIndexed(): Flow<Boolean> = observeAll().map { rows -> rows.any { it.indexedAtEpochMs == null } }
+
+    /**
+     * [latestTimedEnds] of every record, which History uses to pick the station it opens on. The
+     * default reads every record. An adapter with a grouped query overrides it.
+     */
+    fun observeLatestTimed(): Flow<Map<String, Long>> = observeAll().map(::latestTimedEnds)
+
     suspend fun get(key: ArchiveKey): ArchiveRecord?
 
     /** Inserts or replaces the record of (station, name). */
@@ -106,4 +120,22 @@ interface ArchiveIndex {
     suspend fun indexedForStation(station: String): List<ArchiveRecord>
 
     suspend fun stations(): List<String>
+
+    companion object {
+        /**
+         * Per station, the latest real or estimated end among its indexed telemetry files that have a
+         * time ([ArchiveRecord.hasHistoryTime]). A station without one is absent, and a file with a time
+         * but no end counts as [Long.MIN_VALUE].
+         */
+        fun latestTimedEnds(records: Iterable<ArchiveRecord>): Map<String, Long> {
+            val latest = LinkedHashMap<String, Long>()
+            for (r in records) {
+                if (!r.hasHistoryTime) continue
+                val end = r.timelineLastNs ?: Long.MIN_VALUE
+                val seen = latest[r.station]
+                if (seen == null || end > seen) latest[r.station] = end
+            }
+            return latest
+        }
+    }
 }

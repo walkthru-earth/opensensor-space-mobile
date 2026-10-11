@@ -54,6 +54,9 @@ data class ArchiveRecord(
     /** The file is placed on the timeline by an estimate only. */
     val hasEstimatedUtc: Boolean get() = !hasUtc && estFirstUtcNs != null && estLastUtcNs != null
 
+    /** Indexed station data with a real or estimated time, so History can place it. */
+    val hasHistoryTime: Boolean get() = indexed && isTelemetry && (hasUtc || hasEstimatedUtc)
+
     /** Real or estimated span start and end, whichever the file has. */
     val timelineFirstNs: Long? get() = if (hasUtc) firstUtcNs else estFirstUtcNs
     val timelineLastNs: Long? get() = if (hasUtc) lastUtcNs else estLastUtcNs

@@ -1,7 +1,7 @@
 package earth.walkthru.aqsync.data.history
 
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
-import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
+import earth.walkthru.aqsync.data.local.database.DerivedArchivedFileQueries
 import earth.walkthru.aqsync.data.local.database.MetricBucket
 import earth.walkthru.aqsync.data.local.database.MetricBucketDao
 import earth.walkthru.aqsync.data.sync.FileArchive
@@ -40,7 +40,7 @@ class HistoryRepositoryTest {
             rows += MetricBucket(station = station, metricId = Metrics.PM25.id, resolution = Resolution.HOUR.seconds, startEpochS = secondOne, rows = 360, validRows = 360, estimatedRows = 0, mean = 20f, min = 20f, max = 20f)
         }
         val tmp = File.createTempFile("aq-hist-dst", "").apply { delete(); mkdirs(); deleteOnExit() }
-        val repo = HistoryRepository(FileArchive(tmp), Files(), buckets)
+        val repo = HistoryRepository(FileArchive(tmp), Files(), buckets, DerivedDayFiles.NONE)
         val result = repo.observeHourlyDay(station, Metrics.PM25, fall).first()
         assertEquals(25 * 360L, result.expectedRows)
         assertEquals(720L, result.validRows)
@@ -70,7 +70,7 @@ class HistoryRepositoryTest {
         val buckets = Buckets().apply {
             rows += MetricBucket(station = station, metricId = Metrics.PM25.id, resolution = Resolution.HOUR.seconds, startEpochS = utcBucketStart, rows = 360, validRows = 360, estimatedRows = 0, mean = 999f, min = 999f, max = 999f)
         }
-        val result = HistoryRepository(archive, files, buckets).observeHourlyDay(station, Metrics.PM25, day).first()
+        val result = HistoryRepository(archive, files, buckets, DerivedDayFiles.NONE).observeHourlyDay(station, Metrics.PM25, day).first()
         assertEquals(1L, result.validRows)
         assertEquals(31f, result.mean!!, 1e-6f)
         assertEquals(1, result.points.size)
@@ -89,7 +89,7 @@ class HistoryRepositoryTest {
         val agg = Aggregator(station).also { it.add(earth.walkthru.aqsync.data.history.parquet.ParquetFile.wrap(bytes("device/v3-board-2rg-105rows.parquet"))) }
         buckets.rows += agg.buckets().flatMap { b -> b.metrics.map { (id, a) -> MetricBucket(station = station, metricId = id, resolution = b.resolution.seconds, startEpochS = b.startEpochS, rows = b.rows, validRows = a.n, estimatedRows = b.estimatedRows, mean = a.mean, min = a.min, max = a.max) } }
 
-        val repo = HistoryRepository(archive, files, buckets)
+        val repo = HistoryRepository(archive, files, buckets, DerivedDayFiles.NONE)
 
         // Day: 24 h ending at midnight after the data → 105 raw points (below the binning cap).
         val day = repo.observe(station, Metrics.PM25, HistoryRange.DAY, window(HistoryRange.DAY, dayStart + 86_400)).first()
@@ -135,7 +135,7 @@ class HistoryRepositoryTest {
             )
         }
 
-        val day = HistoryRepository(archive, files, Buckets())
+        val day = HistoryRepository(archive, files, Buckets(), DerivedDayFiles.NONE)
             .observe(station, Metrics.PM25, HistoryRange.DAY, window(HistoryRange.DAY, dayStart + 86_400)).first()
         assertEquals(105, day.points.size)
         assertEquals(105L, day.validRows)
@@ -143,7 +143,7 @@ class HistoryRepositoryTest {
         assertEquals(105f / 8640f, day.coverage, 1e-6f)
     }
 
-    private class Files : ArchivedFileDao {
+    private class Files : DerivedArchivedFileQueries {
         val rows = mutableListOf<ArchivedFile>()
         override fun observeAll(): Flow<List<ArchivedFile>> = flowOf(rows.toList())
         override fun observeForStation(station: String): Flow<List<ArchivedFile>> = flowOf(rows.toList())

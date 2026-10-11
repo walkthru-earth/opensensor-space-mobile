@@ -15,6 +15,7 @@ import earth.walkthru.aqsync.storage.StorageException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.BufferOverflow
@@ -26,6 +27,9 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -50,7 +54,7 @@ interface ExportPresenter {
 enum class FilesMessage { NO_DAILY, EXPORT_FAILED, NO_SPACE }
 
 data class FilesState(
-    /** Every verified file on this phone, of every station. */
+    /** The verified files of [owner] when known, else of every station. */
     val records: List<ArchiveRecord> = emptyList(),
     /** The connected sensor's station, from its INFO or enrolment. Null when there is none. */
     val owner: String? = null,
@@ -85,7 +89,13 @@ class FilesController(
 ) {
     private val exporting = MutableStateFlow(false)
 
-    val state: StateFlow<FilesState> = combine(index.observeAll(), owner, exporting) { records, o, busy ->
+    /** The owner's records only when there is an owner, so another station's write does not reach the list. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val listed: Flow<Pair<String?, List<ArchiveRecord>>> = owner.distinctUntilChanged().flatMapLatest { o ->
+        (if (o == null) index.observeAll() else index.observeStation(o)).map { records -> o to records }
+    }
+
+    val state: StateFlow<FilesState> = combine(listed, exporting) { (o, records), busy ->
         FilesState(records, o, busy, daily != null)
     }.stateIn(scope, SharingStarted.Eagerly, FilesState(dailyAvailable = daily != null))
 

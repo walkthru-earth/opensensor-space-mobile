@@ -1,7 +1,7 @@
 package earth.walkthru.aqsync.data.history
 
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
-import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
+import earth.walkthru.aqsync.data.local.database.DerivedArchivedFileQueries
 import earth.walkthru.aqsync.data.sync.FileArchive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -98,7 +98,7 @@ class HistoryIndexerTest {
         }
     }
 
-    private class InMemoryDao : ArchivedFileDao {
+    private class InMemoryDao : DerivedArchivedFileQueries {
         val rows = mutableListOf<ArchivedFile>()
         override fun observeAll(): Flow<List<ArchivedFile>> = flowOf(rows)
         override fun observeForStation(station: String): Flow<List<ArchivedFile>> = flowOf(rows)

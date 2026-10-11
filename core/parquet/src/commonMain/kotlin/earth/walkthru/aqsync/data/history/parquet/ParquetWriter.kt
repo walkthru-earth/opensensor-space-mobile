@@ -26,7 +26,7 @@ interface ParquetSink {
  *
  * Streaming: `begin` → `rowGroup(…)`… → `finish`. Each row group is one page per column. Used by the
  * derived daily files; validated in tests by the app's own reader and, via `tools/`, by PyArrow and
- * DuckDB.
+ * DuckDB. With [pageIndex] the file also carries a Parquet page index, so a range read can skip pages.
  */
 class ParquetWriter(
     private val out: ParquetSink,
@@ -36,6 +36,11 @@ class ParquetWriter(
     private val createdBy: String = "AQ Sync Android derived-v1",
     /** Leaf index the rows are sorted by (ascending, nulls last), or null. */
     private val sortedBy: Int? = null,
+    /**
+     * Writes the page index (every ColumnIndex, then every OffsetIndex) between the last row group and
+     * the footer. A chunk with values but no min or max (all NaN, GEOMETRY) gets only an OffsetIndex.
+     */
+    private val pageIndex: Boolean = false,
 ) {
     /**
      * A leaf column: name, physical type, and its annotation — `event_time_utc_ns`-like (TIMESTAMP NANOS
@@ -277,10 +282,62 @@ class ParquetWriter(
         return out.toByteArray()
     }
 
-    /** Writes the footer and the trailing magic. */
+    /** Where one chunk's ColumnIndex and OffsetIndex landed, in file bytes; a null offset is not written. */
+    private class IndexRef(var columnOffset: Long? = null, var columnLength: Int = 0, var offsetOffset: Long = 0, var offsetLength: Int = 0)
+
+    /**
+     * The page index in spec order, every ColumnIndex then every OffsetIndex. Each chunk is one page, so
+     * each list has one element. Only the [sortedBy] column is ASCENDING, a single page is trivially so.
+     */
+    private fun writePageIndex(): List<List<IndexRef>> {
+        val refs = groups.map { g -> List(g.chunks.size) { IndexRef() } }
+        for ((gi, g) in groups.withIndex()) {
+            for ((ci, ch) in g.chunks.withIndex()) {
+                val allNull = ch.nullCount == ch.numValues
+                if (!allNull && (ch.min == null || ch.max == null)) continue
+                val bytes = ThriftCompactWriter().apply {
+                    structBegin()
+                    listBegin(1, Type.BOOLEAN_TRUE, 1)
+                    listBool(allNull)
+                    listBegin(2, Type.BINARY, 1)
+                    listBinary(if (allNull) ByteArray(0) else ch.min!!)
+                    listBegin(3, Type.BINARY, 1)
+                    listBinary(if (allNull) ByteArray(0) else ch.max!!)
+                    i32(4, if (ci == sortedBy) 1 else 0) // boundary_order ASCENDING or UNORDERED
+                    listBegin(5, Type.I64, 1)
+                    listI64(ch.nullCount)
+                    structEnd()
+                }.toByteArray()
+                refs[gi][ci].columnOffset = position
+                refs[gi][ci].columnLength = bytes.size
+                write(bytes)
+            }
+        }
+        for ((gi, g) in groups.withIndex()) {
+            for ((ci, ch) in g.chunks.withIndex()) {
+                val bytes = ThriftCompactWriter().apply {
+                    structBegin()
+                    listBegin(1, Type.STRUCT, 1)
+                    listStruct {
+                        i64(1, ch.pageOffset)
+                        i32(2, ch.compressedSize.toInt()) // header plus compressed body
+                        i64(3, 0L) // first_row_index
+                    }
+                    structEnd()
+                }.toByteArray()
+                refs[gi][ci].offsetOffset = position
+                refs[gi][ci].offsetLength = bytes.size
+                write(bytes)
+            }
+        }
+        return refs
+    }
+
+    /** Writes the page index when asked, then the footer and the trailing magic. */
     fun finish() {
         check(begun && !finished)
         finished = true
+        val indexRefs = if (pageIndex) writePageIndex() else null
         val footer = ThriftCompactWriter().apply {
             structBegin()
             i32(1, 2) // version
@@ -320,7 +377,7 @@ class ParquetWriter(
             for ((ordinal, g) in groups.withIndex()) {
                 listStruct {
                     listBegin(1, Type.STRUCT, g.chunks.size)
-                    for (ch in g.chunks) {
+                    for ((ci, ch) in g.chunks.withIndex()) {
                         listStruct {
                             i64(2, ch.pageOffset) // file_offset (deprecated, still written by everyone)
                             struct(3) {
@@ -361,6 +418,11 @@ class ParquetWriter(
                                         geo.geospatialTypes.forEach { listI32(it) }
                                     }
                                 }
+                            }
+                            indexRefs?.get(ordinal)?.get(ci)?.let { ref ->
+                                i64(4, ref.offsetOffset)
+                                i32(5, ref.offsetLength)
+                                ref.columnOffset?.let { i64(6, it); i32(7, ref.columnLength) }
                             }
                         }
                     }

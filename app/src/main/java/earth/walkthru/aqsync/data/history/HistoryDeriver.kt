@@ -1,9 +1,8 @@
 package earth.walkthru.aqsync.data.history
 
 import android.util.Log
+import earth.walkthru.aqsync.archive.ArchiveRecord
 import earth.walkthru.aqsync.data.archive.toRecord
-import earth.walkthru.aqsync.data.history.parquet.ParquetFile
-import earth.walkthru.aqsync.data.history.parquet.ParquetFormatException
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.local.database.DerivedDay
@@ -68,13 +67,8 @@ class HistoryDeriver @Inject constructor(
     /** Which station-days a set of indexed files touches, by real UTC or by the estimated span (§4.6). */
     fun daysOf(files: List<ArchivedFile>): Map<String, Set<Long>> = StationDays.of(files.map { it.toRecord() })
 
-    /** Deterministic identity of a day's source set: sorted `name:crc32[:est<anchor>]` lines, SHA-256 (a new anchor re-dates a file, so it is part of the identity). */
-    fun signature(files: List<ArchivedFile>): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        digest.update("derive-v$DERIVE_VERSION\n".toByteArray())
-        files.map { "${it.name}:${it.crc32}" + (if (it.hasEstimatedUtc) ":est${it.estAnchorFile}:${it.estFirstUtcNs}" else "") }.sorted().forEach { digest.update(it.toByteArray()); digest.update('\n'.code.toByte()) }
-        return digest.digest().joinToString("") { "%02x".format(java.util.Locale.ROOT, it) }
-    }
+    /** [signatureOf] for Room rows. */
+    fun signature(files: List<ArchivedFile>): String = signatureOf(files.map { it.toRecord() })
 
     /**
      * Rebuilds every stale station-day. Cheap when nothing changed; a full first pass over a year of one
@@ -110,7 +104,8 @@ class HistoryDeriver @Inject constructor(
             indexer.estimateTimes()
             val all = archivedFileDao.observeAll().first()
             val wanted = daysOf(all)
-            val anchorsByStation = all.groupBy { it.station }.mapValues { (_, files) -> TimeEstimate.anchors(files.map { it.info() }, indexer.clockAnchors.anchors(files.first().station)) }
+            val byStation = all.groupBy { it.station }
+            val anchorsByStation = byStation.mapValues { (_, files) -> TimeEstimate.anchors(files.map { it.info() }, indexer.clockAnchors.anchors(files.first().station)) }
             // Stations that only have derived days left (every dated file gone) must be visited too, to drop them.
             // Read after the re-dating above, so a file that just got its time counts on its real days.
             val touched = touchedSinceEpochMs?.let { since -> daysOf(all.filter { it.syncedAtEpochMs >= since }) }
@@ -118,10 +113,11 @@ class HistoryDeriver @Inject constructor(
             for (station in allStations) {
                 val days = wanted[station] ?: emptySet()
                 val known = dayDao.forStation(station).associateBy { it.epochDay }
+                // One listing for every day of the station, not a time query per day (#63).
+                val sourcesByDay = sourcesByDay(byStation[station].orEmpty())
                 for (day in days.sorted()) {
                     checked++
-                    val dayStartNs = day * DAY_NS
-                    val sources = archivedFileDao.withUtcBetween(station, dayStartNs, dayStartNs + DAY_NS)
+                    val sources = sourcesByDay[day].orEmpty()
                     val sig = signature(sources)
                     val cached = known[day]
                     // A missing day file with a current signature was evicted by the quota or the OS. It is a
@@ -167,19 +163,19 @@ class HistoryDeriver @Inject constructor(
                 if (missing.isEmpty()) continue
                 val files = archivedFileDao.forStation(s)
                 val anchors = TimeEstimate.anchors(files.map { it.info() }, indexer.clockAnchors.anchors(s))
+                val sourcesByDay = sourcesByDay(files)
                 for (day in missing) {
-                    val dayStartNs = day.epochDay * DAY_NS
-                    val sources = archivedFileDao.withUtcBetween(s, dayStartNs, dayStartNs + DAY_NS)
+                    val sources = sourcesByDay[day.epochDay].orEmpty()
                     val sig = signature(sources)
                     try {
                         // The signature check keeps a stale day for the next derive pass, which rebuilds its tiers too.
                         if (day.sourceSignature != sig) continue
-                        dailyBuilder.build(s, day.epochDay, sources, sig, anchors) ?: continue
+                        withContext(cpu) { dailyBuilder.build(s, day.epochDay, sources, sig, anchors) } ?: continue
                         rebuilt++
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        Log.w(TAG, "daily file for a derived day: ${e.message}")
+                        Log.w(TAG, "daily file retry needed (${e::class.simpleName})")
                     }
                 }
             }
@@ -195,42 +191,27 @@ class HistoryDeriver @Inject constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.w(TAG, "derived quota: ${e.message}")
+            Log.w(TAG, "derived quota retry needed (${e::class.simpleName})")
         }
     }
 
-    /** Aggregates one station-day from [sources] and replaces its tiers. Returns rows aggregated. */
+    /**
+     * Aggregates one station-day from [sources], replaces its tiers and writes its daily file, from one
+     * decode of each source (#63). Returns rows aggregated.
+     */
     suspend fun buildDay(station: String, epochDay: Long, sources: List<ArchivedFile>, anchors: Map<String, TimeEstimate.Anchor> = emptyMap()): Long {
         val dayStartS = epochDay * 86_400
-        val agg = Aggregator(station)
-        var rows = 0L
-        for (src in sources) {
-            val file = archive.fileFor(src.station, src.name)
-            if (!file.isFile) continue
-            try {
-                ParquetFile.open(file).use { pf ->
-                    // Estimated time only for files that have no UTC of their own and whose boot has an anchor.
-                    agg.add(pf, if (src.hasEstimatedUtc) anchors[src.bootId] else null)
-                    rows += pf.numRows
-                }
-            } catch (e: ParquetFormatException) {
-                Log.w(TAG, "${src.name}: ${e.message}")
-            }
-        }
-        // Keep only buckets that start inside this day: a file straddling midnight contributes its other
-        // rows when the neighbouring day is built (it is in that day's source set too).
-        val dayBuckets = agg.buckets().filter { it.startEpochS >= dayStartS && it.startEpochS < dayStartS + 86_400 }
-        bucketDao.replaceDay(station, dayStartS, dayBuckets.flatMap { it.toEntities() })
         val sig = signature(sources)
-        // The derived daily Parquet file: same sources, same moment. A failure here keeps the tiers and
-        // leaves `dailyFile` null; the next derive pass tries again because the signature is then unchanged
-        // only if the write also succeeded (see below).
-        val daily = try {
-            dailyBuilder.build(station, epochDay, sources, sig, anchors)
-        } catch (e: Exception) {
-            Log.w(TAG, "daily file for $station ${DerivedStore.dayLabel(epochDay)}: ${e.message}")
-            null
-        }
+        val run = withContext(cpu) { dailyBuilder.pass(station, epochDay, sources, sig, anchors) }
+        val pass = run.pass
+        if (pass.failedSources.isNotEmpty()) Log.w(TAG, "${pass.failedSources.size} source reads failed")
+        // The pass keeps only buckets that start inside this day: a file straddling midnight contributes
+        // its other rows when the neighbouring day is built (it is in that day's source set too).
+        val dayBuckets = pass.buckets
+        bucketDao.replaceDay(station, dayStartS, dayBuckets.flatMap { it.toEntities() })
+        // A failed daily file keeps the tiers and leaves `dailyFile` null, the next derive pass retries it.
+        val daily = run.daily
+        pass.dailyError?.let { Log.w(TAG, "daily file retry needed (${it::class.simpleName})") }
         dayDao.upsert(
             DerivedDay(
                 station = station,
@@ -243,7 +224,7 @@ class HistoryDeriver @Inject constructor(
                 dailyFile = daily?.file?.relativeTo(store.root)?.path,
             )
         )
-        return rows
+        return pass.rowsRead
     }
 
     /** One row per metric that had values in the bucket. */
@@ -265,8 +246,39 @@ class HistoryDeriver @Inject constructor(
     companion object {
         private const val TAG = "HistoryDeriver"
 
-        /** Part of every day's signature: bump when the tiers' meaning changes so every day is rebuilt. 2 = per-metric rows, 3 = one shared RowKey (D12). */
-        const val DERIVE_VERSION = 4
+        /** Decode and aggregation are CPU work, two at most so a derive never takes every core from the UI. */
+        private val cpu = Dispatchers.Default.limitedParallelism(2)
+
+        /**
+         * Deterministic identity of a day's source set: sorted `name:crc32[:est<anchor>]` lines, SHA-256
+         * (a new anchor re-dates a file, so it is part of the identity). The Day view compares it to the
+         * recorded one before it reads a daily file ([RoomDerivedDayFiles]).
+         */
+        fun signatureOf(files: List<ArchiveRecord>): String {
+            val digest = MessageDigest.getInstance("SHA-256")
+            digest.update("derive-v$DERIVE_VERSION\n".toByteArray())
+            files.map { "${it.name}:${it.crc32}" + (if (it.hasEstimatedUtc) ":est${it.estAnchorFile}:${it.estFirstUtcNs}" else "") }.sorted().forEach { digest.update(it.toByteArray()); digest.update('\n'.code.toByte()) }
+            return hex(digest.digest())
+        }
+
+        private val HEX = "0123456789abcdef".toCharArray()
+
+        /** Lower-case hex, a table lookup per nibble instead of a format call per byte. */
+        fun hex(bytes: ByteArray): String {
+            val out = CharArray(bytes.size * 2)
+            for (i in bytes.indices) {
+                val b = bytes[i].toInt()
+                out[2 * i] = HEX[(b ushr 4) and 0xF]
+                out[2 * i + 1] = HEX[b and 0xF]
+            }
+            return out.concatToString()
+        }
+
+        /** Each day's sources from one station listing, the same files and order as `withUtcBetween`. */
+        fun sourcesByDay(files: List<ArchivedFile>): Map<Long, List<ArchivedFile>> = StationDays.sourcesByDay(files) { it.toRecord() }
+
+        /** Part of every day's signature. 2 = per-metric rows, 3 = shared RowKey, 4 = single pass, 5 = canonical duplicate source order. */
+        const val DERIVE_VERSION = 5
         const val DAY_NS = StationDays.DAY_NS
     }
 }

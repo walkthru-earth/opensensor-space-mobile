@@ -82,6 +82,24 @@ data class ArchivedFile(
     val timelineLastNs: Long? get() = if (hasUtc) lastUtcNs else estLastUtcNs
 }
 
+/**
+ * The identity columns of one archived file, all the sync planner compares against a listing. A
+ * projection, so a planner input never loads the history index columns (#63).
+ */
+data class ArchivedFileIdentity(val station: String, val name: String, val bytes: Long, val crc32: Long)
+
+/** Per-station archive totals for the device list, computed in SQL instead of over every row. */
+/** A station's newest timed end, null when its timed files carry no end. */
+data class StationTimedEnd(val station: String, val lastNs: Long?)
+
+data class StationArchiveGlance(
+    val station: String,
+    val files: Int,
+    val lastSyncedMs: Long?,
+    /** Newest `lastUtcNs` of the station, null when no file has UTC rows. */
+    val lastDataUtcNs: Long?,
+)
+
 @Dao
 interface ArchivedFileDao {
     @Query("SELECT * FROM archived_file ORDER BY name")
@@ -92,6 +110,38 @@ interface ArchivedFileDao {
 
     @Query("SELECT * FROM archived_file WHERE station = :station")
     suspend fun forStation(station: String): List<ArchivedFile>
+
+    /** Identity columns of one station's files. Room re-runs it only when `archived_file` changes. */
+    @Query("SELECT station, name, bytes, crc32 FROM archived_file WHERE station = :station ORDER BY name")
+    fun observeIdentitiesForStation(station: String): Flow<List<ArchivedFileIdentity>>
+
+    @Query("SELECT station, name, bytes, crc32 FROM archived_file WHERE station = :station ORDER BY name")
+    suspend fun identitiesForStation(station: String): List<ArchivedFileIdentity>
+
+    @Query("SELECT COUNT(*) FROM archived_file WHERE station = :station")
+    fun observeCountForStation(station: String): Flow<Int>
+
+    @Query("SELECT EXISTS(SELECT 1 FROM archived_file WHERE station = :station)")
+    fun observeAnyForStation(station: String): Flow<Boolean>
+
+    /** One row per station with files, for the device list (count, last sync, newest data). */
+    @Query(
+        "SELECT station, COUNT(*) AS files, MAX(syncedAtEpochMs) AS lastSyncedMs, MAX(lastUtcNs) AS lastDataUtcNs " +
+            "FROM archived_file GROUP BY station"
+    )
+    fun observeStationGlances(): Flow<List<StationArchiveGlance>>
+
+    /** True while any file waits for its first index pass, without reading the rows. */
+    @Query("SELECT EXISTS(SELECT 1 FROM archived_file WHERE indexedAtEpochMs IS NULL)")
+    fun observeAnyNeverIndexed(): Flow<Boolean>
+
+    /** The newest real or estimated end per station over files History can place, as `ArchiveIndex.latestTimedEnds`. */
+    @Query(
+        "SELECT station, MAX(CASE WHEN utcRows > 0 THEN lastUtcNs ELSE estLastUtcNs END) AS lastNs FROM archived_file " +
+            "WHERE indexedAtEpochMs IS NOT NULL AND indexError IS NULL AND (purpose IS NULL OR purpose = 'telemetry') " +
+            "AND (utcRows > 0 OR (estFirstUtcNs IS NOT NULL AND estLastUtcNs IS NOT NULL)) GROUP BY station"
+    )
+    fun observeLatestTimed(): Flow<List<StationTimedEnd>>
 
     @Query("SELECT * FROM archived_file WHERE station = :station AND name = :name")
     suspend fun get(station: String, name: String): ArchivedFile?
@@ -130,6 +180,9 @@ interface ArchivedFileDao {
 
     @Query("SELECT COUNT(*) FROM archived_file WHERE indexedAtEpochMs IS NULL OR indexError IS NOT NULL")
     fun observeUnindexedCount(): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM archived_file WHERE station = :station AND (indexedAtEpochMs IS NULL OR indexError IS NOT NULL)")
+    fun observeUnindexedCountForStation(station: String): Flow<Int>
 
     /**
      * Telemetry files of one station on the timeline between [fromNs, toNs): real UTC rows, or an

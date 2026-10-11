@@ -6,7 +6,7 @@ import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.fake.FakeTransport
 import earth.walkthru.aqsync.data.lan.LanDevice
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
-import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
+import earth.walkthru.aqsync.data.local.database.DerivedArchivedFileQueries
 import earth.walkthru.aqsync.data.local.database.KnownDevice
 import earth.walkthru.aqsync.data.protocol.LanFraming
 import earth.walkthru.aqsync.data.sync.ArchivedIdentity
@@ -467,7 +467,7 @@ class AutoSyncRunnerTest {
         fun close() { fake.close(); peers.values.forEach { it.close() } }
     }
 
-    private class InMemoryDao : ArchivedFileDao {
+    private class InMemoryDao : DerivedArchivedFileQueries {
         val rows = java.util.concurrent.CopyOnWriteArrayList<ArchivedFile>()
         override fun observeAll(): Flow<List<ArchivedFile>> = flowOf(rows)
         override fun observeForStation(station: String): Flow<List<ArchivedFile>> = flowOf(rows)
