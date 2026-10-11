@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.mutablePreferencesOf
 import earth.walkthru.aqsync.units.UnitSystem
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -27,7 +28,7 @@ class SettingsRepositoryTest {
     fun keysAreAndroidsNames() {
         // Golden list. Renaming any of these drops every Android user's saved choice.
         assertEquals(
-            listOf("detail_level", "advanced_mode", "clock_sync_mode", "show_public_sensors", "unit_system"),
+            listOf("detail_level", "advanced_mode", "clock_sync_mode", "show_public_sensors", "unit_system", "discover_source"),
             SettingsKeys.ALL.map { it.name },
         )
         assertEquals("datastore/settings.preferences_pb", SettingsKeys.RELATIVE_PATH)
@@ -76,7 +77,33 @@ class SettingsRepositoryTest {
             SettingsKeys.DETAIL_LEVEL to "EXPERT",
             SettingsKeys.CLOCK_SYNC_MODE to "SOMETIMES",
             SettingsKeys.UNIT_SYSTEM to "furlongs",
+            SettingsKeys.DISCOVER_SOURCE to "MARS",
         )
         assertEquals(AppPrefs(), SettingsRepository(MemoryStore(prefs)).current())
+    }
+
+    @Test
+    fun discoverSourceDefaultsToSampleAndRoundTrips() = runTest {
+        val store = MemoryStore()
+        val repo = SettingsRepository(store)
+        assertEquals(DiscoverSource.SAMPLE, repo.current().discoverSource)
+        repo.setDiscoverSource(DiscoverSource.OPENAQ)
+        assertEquals(DiscoverSource.OPENAQ, repo.current().discoverSource)
+        assertEquals(DiscoverSource.OPENAQ, repo.discoverSource.first())
+        assertEquals("OPENAQ", store.state.value[SettingsKeys.DISCOVER_SOURCE])
+    }
+
+    @Test
+    fun unknownDiscoverSourceReadsSample() = runTest {
+        val prefs = mutablePreferencesOf(SettingsKeys.DISCOVER_SOURCE to "openaq-v9")
+        assertEquals(DiscoverSource.SAMPLE, SettingsRepository(MemoryStore(prefs)).current().discoverSource)
+    }
+
+    @Test
+    fun effectiveSourceIsSampleWhenPublicSensorsAreOff() {
+        assertEquals(DiscoverSource.SAMPLE, effectiveDiscoverSource(DiscoverSource.OPENAQ, showPublicSensors = false))
+        assertEquals(DiscoverSource.OPENAQ, effectiveDiscoverSource(DiscoverSource.OPENAQ, showPublicSensors = true))
+        assertEquals(DiscoverSource.SAMPLE, effectiveDiscoverSource(DiscoverSource.SAMPLE, showPublicSensors = true))
+        assertEquals(DiscoverSource.SAMPLE, effectiveDiscoverSource(DiscoverSource.SAMPLE, showPublicSensors = false))
     }
 }

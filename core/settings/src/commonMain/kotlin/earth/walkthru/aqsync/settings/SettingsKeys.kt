@@ -32,5 +32,9 @@ object SettingsKeys {
     /** The `UnitSystem` name. Missing or unknown reads as Automatic. */
     val UNIT_SYSTEM: Preferences.Key<String> = stringPreferencesKey("unit_system")
 
-    val ALL: List<Preferences.Key<*>> = listOf(DETAIL_LEVEL, ADVANCED_MODE, CLOCK_SYNC_MODE, SHOW_PUBLIC_SENSORS, UNIT_SYSTEM)
+    /** The [DiscoverSource] name. Missing or unknown reads as [DiscoverSource.SAMPLE]. */
+    val DISCOVER_SOURCE: Preferences.Key<String> = stringPreferencesKey("discover_source")
+
+    val ALL: List<Preferences.Key<*>> =
+        listOf(DETAIL_LEVEL, ADVANCED_MODE, CLOCK_SYNC_MODE, SHOW_PUBLIC_SENSORS, UNIT_SYSTEM, DISCOVER_SOURCE)
 }

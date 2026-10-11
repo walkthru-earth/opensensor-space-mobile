@@ -33,6 +33,11 @@ class AppSettings @Inject constructor(private val repository: SettingsRepository
 
     suspend fun setShowPublicSensors(on: Boolean) = repository.setShowPublicSensors(on)
 
+    /** Which public feed Discover reads. Combine with [showPublicSensors] through `effectiveDiscoverSource`. */
+    val discoverSource: Flow<earth.walkthru.aqsync.settings.DiscoverSource> = repository.discoverSource
+
+    suspend fun setDiscoverSource(source: earth.walkthru.aqsync.settings.DiscoverSource) = repository.setDiscoverSource(source)
+
     /** Display units, Automatic by default. Display only, the archive and exports stay SI. */
     val unitSystem: Flow<UnitSystem> = repository.unitSystem
 
