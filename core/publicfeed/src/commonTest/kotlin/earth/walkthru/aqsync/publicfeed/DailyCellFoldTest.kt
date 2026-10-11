@@ -37,7 +37,7 @@ class DailyCellFoldTest {
     }
 
     @Test
-    fun `week averages daily means, takes extremes and the largest n, skipping gap days`() {
+    fun `week averages daily means and takes extremes and the largest n skipping gap days`() {
         val rows = listOf(
             row(a, day(2), 1, "pm25" to stat(18, 10.0, 2.0, 30.0)),
             // A gap on the 3rd to the 5th: those days are absent, never counted as zero.
@@ -131,7 +131,7 @@ class DailyCellFoldTest {
     }
 
     @Test
-    fun `cells stay sorted, rows without a date and the last hour are ignored`() {
+    fun `cells stay sorted while rows without a date and the last hour are ignored`() {
         val rows = listOf(
             row(b, day(8), 1, "pm25" to stat(1, 1.0)),
             row(a, day(8), 1, "pm25" to stat(1, 2.0)),
