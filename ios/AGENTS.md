@@ -74,7 +74,8 @@ The iOS app entry point is the Xcode project in this directory. Read the root
 - Two unchecked conformances remain, each with a one-line invariant at its declaration in
   `LanSession.swift`. `IosLink` is `@retroactive @unchecked Sendable` because its entry points are
   thread safe in Kotlin and the ObjC header cannot say so. `IosLink.make` binds the identity
-  before the link is shared. `WriteDone` wraps Kotlin's write callback, which runs once from any
+  before the link is shared, and Kotlin checks the one-time atomic binding in every build.
+  `WriteDone` wraps Kotlin's write callback, which runs once from any
   thread, and debug builds trap a second call. The ports (`LanPort`, `BlePort`) are checked
   `Sendable` through `weak let` (SE-0481), and `BlePort.link` is a `@MainActor` property.
 - Default MainActor isolation (`SWIFT_DEFAULT_ACTOR_ISOLATION`, SE-0466) stays off. It would move

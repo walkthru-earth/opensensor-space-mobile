@@ -116,20 +116,18 @@ class IosLink internal constructor(
     /** [IosLinkPort.mtu], for the Debug link line. */
     val mtu: Int get() = port.mtu
 
-    internal var station: String? = null
-        private set
-    internal var boot: String? = null
-        private set
+    private data class Identity(val station: String, val boot: String?, val maxRead: Int)
+
+    private val identity = AtomicReference<Identity?>(null)
+    internal val station: String? get() = identity.load()?.station
+    internal val boot: String? get() = identity.load()?.boot
 
     /** The sensor's advertised read window, for [IosLinkProvider]. */
-    internal var maxRead = 0
-        private set
+    internal val maxRead: Int get() = identity.load()?.maxRead ?: 0
 
-    /** Bind the full boot identity from authenticated INFO or HELLO before anchoring time. */
+    /** Bind the full boot identity once before sharing the link. A second binding fails. */
     fun identify(station: String, boot: String?, maxRead: Int) {
-        this.station = station
-        this.boot = boot
-        this.maxRead = maxRead
+        check(identity.compareAndSet(null, Identity(station, boot, maxRead))) { "link identity is already bound" }
     }
 
     /** Whether the automatic clock check already ran on this connection. Read and set under a lease. */

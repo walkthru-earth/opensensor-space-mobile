@@ -40,7 +40,7 @@ struct CollectTarget: Sendable {
     let mtu: Int32
 }
 
-/// Invariant: every `IosLink` entry point is thread safe in Kotlin, except `identify`, which only `make` calls.
+/// Invariant. Every `IosLink` entry point is thread safe in Kotlin, and `identify` checks its one-time atomic bind.
 extension IosLink: @retroactive @unchecked Sendable {
     /// The only way Swift makes a link. Its identity is bound before any other domain can see it.
     static func make(port: any IosLinkPort, overWifi: Bool, identity: SyncIdentity) -> IosLink {
@@ -50,7 +50,7 @@ extension IosLink: @retroactive @unchecked Sendable {
     }
 }
 
-/// Invariant: Kotlin's write callback is safe from any thread and runs once. Debug builds trap a second call.
+/// Invariant. Kotlin's write callback is safe from any thread and runs once. Debug builds trap a second call.
 final class WriteDone: @unchecked Sendable {
     private let done: (KotlinBoolean) -> Void
     private let called = Atomic<Bool>(false)
