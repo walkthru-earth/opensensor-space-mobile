@@ -57,9 +57,10 @@ Bytes reach the decoder through two narrow seams, a blocking `ByteReader` and a 
 - `:core:net` gives `HttpRangeSource`, a `RangeSource` over one URL through an `HttpRangeEngine` (OkHttp
   5.5.0 on Android and the JVM, `NSURLSession` on iOS). The tail is a suffix range, later ranges carry
   `If-Range` with a strong ETag, and a 200 for a changed object raises `SourceChangedException`. It
-  sends `Accept-Encoding: identity`, skips the local HTTP cache and logs nothing. Host and simulator tests
-  only, not yet wired to the live feed. A byte block cache on disk (`BlockCache`) waits for issues #60
-  and #61.
+  sends `Accept-Encoding: identity`, skips the local HTTP cache and logs nothing. Issues #60 and #61
+  are closed, but nothing outside `:core:net` tests constructs `HttpRangeSource` or an engine yet. The
+  Discover map still reads the bundled sample, and wiring the live feed is open work. No disk byte
+  block cache (`BlockCache`) exists in code, it is planned with the live feed.
 - `ParquetFileMetadata.longStatistics(column)` returns the footer min, max and null count of an INT32
   or INT64 column per row group without reading a page. `rowGroupsOverlapping(column, ranges)` keeps the
   row groups whose `[min, max]` meets any inclusive `LongRange` (H3 descendant ranges in W12). A chunk
