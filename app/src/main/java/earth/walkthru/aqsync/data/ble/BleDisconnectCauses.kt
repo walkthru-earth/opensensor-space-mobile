@@ -2,6 +2,7 @@ package earth.walkthru.aqsync.data.ble
 
 import earth.walkthru.aqsync.link.AuthKind
 import earth.walkthru.aqsync.link.DisconnectCause
+import earth.walkthru.aqsync.link.TimeoutPhase
 
 /**
  * Maps Android GATT statuses to a [DisconnectCause]. Pure, so the table is tested on the host.
@@ -37,6 +38,7 @@ object BleDisconnectCauses {
         return when {
             bond?.missing == true -> DisconnectCause.Auth(AuthKind.BOND_MISSING)
             bond != null -> DisconnectCause.Auth(AuthKind.BOND_FAILED)
+            e is BleLinkDriver.ConnectTimeoutException -> DisconnectCause.Timeout(TimeoutPhase.OPEN, 0)
             else -> e.gattStatus?.let(::ofStatus) ?: DisconnectCause.LocalAbort()
         }
     }

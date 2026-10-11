@@ -82,6 +82,7 @@ class SyncForegroundService : Service() {
                         // problem: the sync itself keeps running in the repository; we just cannot
                         // protect it. Log and go away.
                         Log.w(TAG, "startForeground refused: ${e::class.simpleName}: ${e.message}")
+                        keepAlive.onServiceStopped()
                         stopSelf(startId)
                         return START_NOT_STICKY
                     }
@@ -144,6 +145,7 @@ class SyncForegroundService : Service() {
     }
 
     private fun finish() {
+        keepAlive.onServiceStopped()
         watchJob?.cancel()
         watchJob = null
         if (inForeground) {
@@ -161,6 +163,7 @@ class SyncForegroundService : Service() {
     }
 
     override fun onDestroy() {
+        keepAlive.onServiceStopped()
         watchJob?.cancel()
         scope.cancel()
         super.onDestroy()

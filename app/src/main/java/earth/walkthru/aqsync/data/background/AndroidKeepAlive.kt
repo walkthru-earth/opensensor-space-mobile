@@ -6,7 +6,6 @@ import earth.walkthru.aqsync.collection.CollectionIntent
 import earth.walkthru.aqsync.collection.KeepAlive
 import earth.walkthru.aqsync.collection.KeepAliveKind
 import earth.walkthru.aqsync.collection.Lease
-import earth.walkthru.aqsync.data.lan.LanTransferLeases
 import earth.walkthru.aqsync.data.lan.WifiLeases
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -35,17 +34,41 @@ class AndroidKeepAlive internal constructor(
     /** True while a PROCESS lease is open. [SyncForegroundService] stays up while it is. */
     val processHeld: StateFlow<Boolean> = held.asStateFlow()
 
-    private val process = LanTransferLeases(
-        acquireResource = {
+    private var owners = 0
+    private var serviceStarted = false
+
+    /**
+     * The service went away, refused by the OS after the start was accepted or out of `dataSync`
+     * time. The next PROCESS lease starts it again instead of trusting a dead service.
+     */
+    @Synchronized
+    fun onServiceStopped() {
+        serviceStarted = false
+    }
+
+    @Synchronized
+    private fun acquireProcess(): AutoCloseable? {
+        if (!serviceStarted) {
             held.value = true
-            startProcess().also { if (!it) held.value = false }
-        },
-        releaseResource = { held.value = false },
-    )
+            if (!startProcess()) {
+                held.value = owners > 0
+                return null
+            }
+            serviceStarted = true
+        }
+        owners++
+        held.value = true
+        return AutoCloseable {
+            synchronized(this) {
+                owners--
+                if (owners == 0) held.value = false
+            }
+        }
+    }
 
     override fun acquire(kind: KeepAliveKind, intent: CollectionIntent): Lease? {
         val lease = when (kind) {
-            KeepAliveKind.PROCESS -> process.acquire()
+            KeepAliveKind.PROCESS -> acquireProcess()
             KeepAliveKind.WIFI -> wifi.acquireLease()
         } ?: return null
         val closed = AtomicBoolean(false)

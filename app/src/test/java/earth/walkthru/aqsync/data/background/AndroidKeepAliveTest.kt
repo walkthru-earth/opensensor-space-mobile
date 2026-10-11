@@ -30,6 +30,33 @@ class AndroidKeepAliveTest {
     }
 
     @Test
+    fun `a lease after the service stopped starts it again`() {
+        var starts = 0
+        val keepAlive = AndroidKeepAlive({ starts++; true }, { null })
+        val first = requireNotNull(keepAlive.acquire(KeepAliveKind.PROCESS, intent))
+        keepAlive.onServiceStopped()
+        val second = requireNotNull(keepAlive.acquire(KeepAliveKind.PROCESS, intent))
+        assertEquals(2, starts)
+        first.close()
+        assertTrue(keepAlive.processHeld.value)
+        second.close()
+        assertFalse(keepAlive.processHeld.value)
+    }
+
+    @Test
+    fun `a refused restart keeps the open lease held`() {
+        var allow = true
+        val keepAlive = AndroidKeepAlive({ allow }, { null })
+        val first = requireNotNull(keepAlive.acquire(KeepAliveKind.PROCESS, intent))
+        keepAlive.onServiceStopped()
+        allow = false
+        assertNull(keepAlive.acquire(KeepAliveKind.PROCESS, intent))
+        assertTrue(keepAlive.processHeld.value)
+        first.close()
+        assertFalse(keepAlive.processHeld.value)
+    }
+
+    @Test
     fun `a refused start returns no lease and holds nothing`() {
         val keepAlive = AndroidKeepAlive({ false }, { null })
         assertNull(keepAlive.acquire(KeepAliveKind.PROCESS, intent))

@@ -290,42 +290,9 @@ class DeviceConnectionRepository @Inject constructor(
     val currentDisplayName: String? get() = _session.value?.transport?.displayName
     val isFake: Boolean get() = _session.value?.transport?.let(transportFactory::isFake) == true
 
-    /**
-     * Manifest joined with the archive: what is synced, what is missing, what is mid-transfer.
-     * Recomputed whenever the manifest, the archive table or the running transfer changes.
-     */
-    val plan: StateFlow<SyncPlan?> = combine(_manifest, _info, archivedFileDao.observeAll(), _sync) { m, info, archived, sync ->
-        val station = info?.station ?: return@combine null
-        // The last successful listing, kept through a refresh or its failure (see ManifestState).
-        val loaded = m.last ?: return@combine null
-        val ids = archived.map { ArchivedIdentity(it.station, it.name, it.bytes, it.crc32) }
-        val base = SyncPlanner.plan(station, loaded.files, ids, archive.partialLengths(station))
-        overlayProgress(base, sync)
-    }.stateIn(scope, SharingStarted.Eagerly, null)
-
-    private fun overlayProgress(plan: SyncPlan, sync: SyncProgress): SyncPlan {
-        if (!sync.running && sync.outcomes.isEmpty()) return plan
-        val failures = sync.failures.associateBy { it.name }
-        val entries = plan.entries.map { e ->
-            val cur = sync.current
-            when {
-                sync.running && cur != null && cur.name == e.name && e.state != FileSyncState.SYNCED ->
-                    e.copy(state = FileSyncState.SYNCING, partialBytes = cur.bytesDone)
-                e.state != FileSyncState.SYNCED && failures[e.name] != null -> {
-                    val f = failures.getValue(e.name)
-                    val msg = when (f) {
-                        is FileOutcome.Mismatch -> f.reason
-                        is FileOutcome.DeviceError -> f.message
-                        is FileOutcome.Failed -> f.message
-                        is FileOutcome.Synced -> null
-                    }
-                    e.copy(state = if (f is FileOutcome.Mismatch) FileSyncState.MISMATCH else e.state, detail = msg)
-                }
-                else -> e
-            }
-        }
-        return plan.copy(entries = entries)
-    }
+    /** Manifest joined with the archive, see [planWithProgress]. */
+    val plan: StateFlow<SyncPlan?> = planWithProgress(_manifest, _info, archivedFileDao.observeAll(), _sync, archive::partialLengths)
+        .stateIn(scope, SharingStarted.Eagerly, null)
 
     private var notificationJob: Job? = null
     private var syncJob: Job? = null
@@ -799,6 +766,9 @@ class DeviceConnectionRepository @Inject constructor(
     private suspend fun lendLocked(address: String, prefer: LinkPreference): CollectionLink {
         if (backgroundOwner.value != null || _reconnecting.value != null) throw LinkClosedException(DisconnectCause.Busy)
         val current = _session.value
+        // The watcher keeps a link closed by Auth in the slot with no reconnect. Report that cause,
+        // so the collection stops and asks to pair again instead of retrying Busy.
+        current?.takeIf { it.address == address }?.closedByAuth()?.let { throw LinkClosedException(it) }
         val session = when {
             current == null -> openForLend(address, prefer)
             current.address == address && current.isUsable -> current
@@ -815,6 +785,8 @@ class DeviceConnectionRepository @Inject constructor(
             if (returned.compareAndSet(false, true)) returnLend(session)
         }
     }
+
+    private fun DeviceSession.closedByAuth(): DisconnectCause.Auth? = (link.state.value as? LinkState.Closed)?.cause as? DisconnectCause.Auth
 
     /** Opens a session for a collection. Caller holds [connectMutex] and the slot is empty. */
     private suspend fun openForLend(address: String, prefer: LinkPreference): DeviceSession {

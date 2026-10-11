@@ -2,6 +2,7 @@ package earth.walkthru.aqsync.data.ble
 
 import earth.walkthru.aqsync.link.AuthKind
 import earth.walkthru.aqsync.link.DisconnectCause
+import earth.walkthru.aqsync.link.TimeoutPhase
 import earth.walkthru.aqsync.link.retryable
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -34,6 +35,7 @@ class BleDisconnectCausesTest {
         assertEquals(DisconnectCause.Auth(AuthKind.BOND_MISSING), BleDisconnectCauses.ofOpenFailure(TransportException("connect", cause = missing)))
         assertEquals(DisconnectCause.Auth(AuthKind.BOND_FAILED), BleDisconnectCauses.ofOpenFailure(BleLinkDriver.BondException("pairing timed out")))
         assertEquals(DisconnectCause.LocalAbort(gattStatus = 133), BleDisconnectCauses.ofOpenFailure(TransportException("gatt", gattStatus = 133)))
+        assertEquals(DisconnectCause.Timeout(TimeoutPhase.OPEN, 0), BleDisconnectCauses.ofOpenFailure(BleLinkDriver.ConnectTimeoutException()))
         assertEquals(DisconnectCause.LocalAbort(), BleDisconnectCauses.ofOpenFailure(TransportException("no adapter")))
     }
 }

@@ -313,7 +313,8 @@ class BleLinkDriver(
             linkFailure.reset()
             _state.value = ConnectionState.Connecting
             acceptConnectionCallbacks = true
-            val g = withTimeout(connectTimeoutMs) {
+            // withTimeoutOrNull, so a radio timeout is a typed failure and not a cancellation.
+            val g = withTimeoutOrNull(connectTimeoutMs) {
                 suspendCancellableCoroutine<Int> { cont ->
                     pendingConnect.set(cont)
                     cont.invokeOnCancellation { pendingConnect.compareAndSet(cont, null) }
@@ -322,7 +323,7 @@ class BleLinkDriver(
                         if (pendingConnect.compareAndSet(cont, null)) cont.resumeWithException(TransportException("connectGatt returned null"))
                     }
                 }
-            }
+            } ?: throw ConnectTimeoutException()
             linkFailure.throwIfFailed()
             if (g != BluetoothGatt.GATT_SUCCESS) throw TransportException(BleConnectionFailure.message(g), g)
             val gattRef = gatt ?: throw TransportException("no GATT after connect")
@@ -366,7 +367,6 @@ class BleLinkDriver(
                 BleConnectionFailure.PAIRING_REPAIR_MESSAGE
             } else {
                 when (failure) {
-                    is TimeoutCancellationException -> "timed out while connecting"
                     is TransportException -> failure.message ?: "connection failed"
                     else -> failure.message ?: failure::class.simpleName ?: "connection failed"
                 }
@@ -392,6 +392,9 @@ class BleLinkDriver(
 
     /** Pairing could not finish. [missing] when the phone holds no bond and may not ask for one. */
     class BondException(message: String, val missing: Boolean = false, cause: Throwable? = null) : TransportException(message, cause = cause)
+
+    /** The GATT connect did not answer in time, the sensor is out of range or off. */
+    class ConnectTimeoutException : TransportException("timed out while connecting")
 
     private suspend fun ensureBonded() {
         // Refresh after an owner forgets a stale bond in Settings; the constructor snapshot may
