@@ -75,7 +75,8 @@ The iOS app entry point is the Xcode project in this directory. Read the root
 - `LanSession` is an actor whose executor is its own serial queue. `NWConnection` callbacks and
   `DispatchSourceTimer` handlers run on that queue and enter with `assumeIsolated`. Owners learn
   about pushes and closure through the ordered `events` stream. `close()` is nonisolated.
-- File sync runs in the shared Kotlin engine (`SensorSync`). Swift only moves bytes through the
+- File sync runs in the shared Kotlin engine (`SensorSync`, and `SensorCollections` for the shared
+  per-device controller, whose `IosLinkProvider` dials through Swift). Swift only moves bytes through the
   connection's one `IosLink` and receives progress and the typed result on the main thread. Values that cross
   domains (`LanReply`, `LanFailure`, `LanCredential`) are Sendable Swift values. Kotlin framework
   objects are not Sendable. Keep each one inside a single isolation domain. A main-actor
@@ -111,7 +112,7 @@ nor the Kotlin framework. Run it
 with `xcodebuild ... -destination 'platform=iOS Simulator,name=<installed iPhone>'
 CODE_SIGNING_ALLOWED=NO test`. `tests/verify-native.sh` runs the same checks on the Mac host.
 Add new socket or archive cases to the shared check files so both runners exercise them. File
-sync cases belong in `shared/src/iosTest` (`SensorSyncTest`) and `core/sync` tests.
+sync cases belong in `shared/src/iosTest` (`SensorSyncTest`, `SensorCollectionsTest`) and `core/sync` tests.
 Code that imports `OpenSensorShared` cannot join the hostless bundle and still needs
 simulator builds and iPhone runs.
 

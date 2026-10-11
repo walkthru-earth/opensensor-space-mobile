@@ -4,6 +4,7 @@ import earth.walkthru.aqsync.archive.ArchiveIndex
 import earth.walkthru.aqsync.archive.ArchiveStore
 import earth.walkthru.aqsync.archive.IosArchiveStore
 import earth.walkthru.aqsync.archive.ReceiptArchiveIndex
+import earth.walkthru.aqsync.collection.LinkPreference
 import earth.walkthru.aqsync.data.ble.AuthFailedException
 import earth.walkthru.aqsync.data.ble.DeviceBusyException
 import earth.walkthru.aqsync.data.ble.DeviceErrorException
@@ -12,6 +13,7 @@ import earth.walkthru.aqsync.data.ble.TransportException
 import earth.walkthru.aqsync.data.sync.ArchiveCollector
 import earth.walkthru.aqsync.data.sync.CollectionProgress
 import earth.walkthru.aqsync.data.sync.CollectionSummary
+import earth.walkthru.aqsync.data.sync.FileOutcome
 import earth.walkthru.aqsync.data.sync.FileProblem
 import earth.walkthru.aqsync.data.sync.InsufficientSpaceException
 import earth.walkthru.aqsync.data.sync.SyncEngine
@@ -40,9 +42,11 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.TimeSource
 
 /** Stops one sync. Safe from any thread and more than once. */
-class SyncHandle internal constructor(private val job: Job?) {
+class SyncHandle internal constructor(private val stop: () -> Unit) {
+    internal constructor(job: Job?) : this({ job?.cancel() })
+
     fun cancel() {
-        job?.cancel()
+        stop()
     }
 }
 
@@ -74,7 +78,7 @@ class SensorSync internal constructor(
     private constructor(store: IosArchiveStore, work: CoroutineContext, callbacks: CoroutineContext) :
         this(store, ReceiptArchiveIndex(store.finalRoot), work, callbacks, budget = IosStorageBudget(StorageRoots(mapOf(StorageRole.Archive to store.finalRoot))))
 
-    private val collector = ArchiveCollector(store, index, SyncEngine(store, index, leases = leases, log = ::syncLog), budget)
+    internal val collector = ArchiveCollector(store, index, SyncEngine(store, index, leases = leases, log = ::syncLog), budget)
     private val scope = CoroutineScope(SupervisorJob())
     private val lock = NSLock()
     private val active = HashSet<String>()
@@ -115,6 +119,8 @@ class SensorSync internal constructor(
             var listed = 0
             var initial = -1
             var done = 0
+            // Settled files by name, so a run that ends early still reports what it saved.
+            val outcomes = linkedMapOf<String, FileOutcome>()
             // Throttled ticks, newest first, handed to the main thread one at a time and before `finished`.
             val ticks = Channel<SyncProgress>(Channel.CONFLATED)
             val reporter = launch { for (update in ticks) withContext(callbacks) { progress(update) } }
@@ -131,7 +137,9 @@ class SensorSync internal constructor(
                         // A broken pipe will still fail the normal LIST/transfer checks.
                         syncLog("automatic UTC unavailable, ${e::class.simpleName}; collecting original files")
                     }
-                    val summary = collector.collect(session, station, device, maxRead, onlyName) { p: CollectionProgress ->
+                    val (files, _) = session.list()
+                    val planned = collector.plan(station, files, onlyName)
+                    val summary = collector.transfer(session, planned, station, device, maxRead, onOutcome = { outcomes.record(it) }) { p: CollectionProgress ->
                         listed = p.filesTotal
                         if (initial < 0) initial = p.filesDone
                         done = p.filesDone
@@ -146,23 +154,23 @@ class SensorSync internal constructor(
                     resultOf(summary, (done - initial.coerceAtLeast(0)))
                 }
             } catch (e: CancellationException) {
-                SyncResult(SyncEnd.STOPPED, listed, 0, 0)
+                partialResult(SyncEnd.STOPPED, listed, outcomes)
             } catch (e: LeaseRefusedException) {
-                SyncResult(if (e.syncRunning) SyncEnd.IN_USE else SyncEnd.LINK_LOST, listed, 0, 0)
+                partialResult(if (e.syncRunning) SyncEnd.IN_USE else SyncEnd.LINK_LOST, listed, outcomes)
             } catch (e: AuthFailedException) {
-                SyncResult(SyncEnd.AUTH_FAILED, listed, 0, 0)
+                partialResult(SyncEnd.AUTH_FAILED, listed, outcomes)
             } catch (e: DeviceBusyException) {
-                SyncResult(SyncEnd.BUSY, listed, 0, 0)
+                partialResult(SyncEnd.BUSY, listed, outcomes)
             } catch (e: InsufficientSpaceException) {
                 // Refused before any OPEN, or a full disk mid-run. Partials stay for resume.
                 syncLog("sync refused, ${e.available} bytes free of ${e.needed}")
-                SyncResult(SyncEnd.STORAGE_FAILED, listed, 0, 0)
+                partialResult(SyncEnd.STORAGE_FAILED, listed, outcomes)
             } catch (e: TransportException) {
-                SyncResult(SyncEnd.LINK_LOST, listed, 0, 0)
+                partialResult(SyncEnd.LINK_LOST, listed, outcomes)
             } catch (e: Exception) {
                 // A protocol fault, or the archive failing outside one file. The class and message only.
                 syncLog("sync ended, ${e::class.simpleName}: ${e.message}")
-                SyncResult(SyncEnd.FAILED, listed, 0, 0)
+                partialResult(SyncEnd.FAILED, listed, outcomes)
             }
             ticks.close()
             withContext(NonCancellable) { if (result.end == SyncEnd.STOPPED) reporter.cancel() else reporter.join() }
@@ -248,7 +256,15 @@ class SensorSync internal constructor(
         return SyncResult(end, summary.files, saved, failed, summary.notSaved)
     }
 
-    private fun claim(station: String): Boolean {
+    /**
+     * The shared collection controllers over this runner's archive (#81). [linkFor] returns the
+     * open link Swift holds for a device, on the main thread. [dial] asks Swift to open one when a
+     * retry finds none. A station claimed here or there syncs over one link at a time.
+     */
+    fun collections(linkFor: (String) -> IosLink?, dial: (String, LinkPreference) -> Unit): SensorCollections =
+        SensorCollections(this, IosLinkProvider(linkFor, dial), recordClockAnchor, work, callbacks, progressInterval = progressInterval)
+
+    internal fun claim(station: String): Boolean {
         lock.lock()
         try {
             return active.add(station)
@@ -257,7 +273,7 @@ class SensorSync internal constructor(
         }
     }
 
-    private fun release(station: String) {
+    internal fun release(station: String) {
         lock.lock()
         try {
             active.remove(station)
@@ -272,9 +288,26 @@ class SensorSync internal constructor(
 }
 
 /** One line to the device log. Callers pass file names and error classes, never bytes or secrets. */
-private fun syncLog(line: String) {
+internal fun syncLog(line: String) {
     // No format arguments, a variadic call from Kotlin is not safe here. Escape the format marker instead.
     NSLog("SensorSync $line".replace("%", "%%"))
+}
+
+/**
+ * Keeps the latest outcome of each file. A file this run copied stays copied when a later attempt
+ * finds it already archived, as in the shared controller.
+ */
+internal fun MutableMap<String, FileOutcome>.record(outcome: FileOutcome) {
+    val previous = this[outcome.name]
+    val keepNew = previous is FileOutcome.Synced && !previous.alreadyArchived && outcome is FileOutcome.Synced && outcome.alreadyArchived
+    if (!keepNew) this[outcome.name] = outcome
+}
+
+/** A run that ended before its summary. [listed] files were listed and the outcomes are real. */
+internal fun partialResult(end: SyncEnd, listed: Int, outcomes: Map<String, FileOutcome>): SyncResult {
+    val saved = outcomes.values.count { it is FileOutcome.Synced && !it.alreadyArchived }
+    val failed = outcomes.values.count { it !is FileOutcome.Synced }
+    return SyncResult(end, listed, saved, failed)
 }
 
 /** Unsafe names and local conflicts are decided by the plan and never downloaded. */
