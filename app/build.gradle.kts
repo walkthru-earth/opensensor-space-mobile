@@ -119,7 +119,7 @@ android {
     }
 
     testOptions {
-        // Lets JVM tests exercise classes that call android.util.Log (TcpTransport loopback test).
+        // Lets JVM tests exercise classes that call android.util.Log (TcpLinkDriver loopback test).
         unitTests.isReturnDefaultValues = true
     }
 

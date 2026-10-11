@@ -35,7 +35,7 @@ State as of 2026-10-09. Re-check the linked store pages before each submission. 
 | Encryption in transit | Answer "No" for data in transit, since no user data is sent to a developer server. BLE links are encrypted by pairing. The LAN stream is not encrypted and stays on the local network | `docs/transports.md` |
 | Data deletion | Not applicable, no account. Uninstall or Forget removes local data | |
 | Account deletion | Not applicable, no account | |
-| Foreground service | `dataSync` for a user-started or Auto-sync file transfer. Fill the Play Console foreground service declaration with this use and a short video of a sync with its notification. Android 15+ limits `dataSync` to 6 hours a day, far above one transfer | Manifest comment, `SyncForegroundService` |
+| Foreground service | `connectedDevice` for a transfer from the user's own sensor, `dataSync` when Android refuses it and for Auto-sync. Fill the Play Console foreground service declaration with this use and a short video of a sync with its notification. Android 15+ limits `dataSync` to 6 hours a day, far above one transfer | Manifest comment, `SyncForegroundService` |
 | `POST_NOTIFICATIONS` | Asked when the user starts a sync or turns on Auto-sync or wake when nearby. A denial only hides the progress notification | `TodayRoute`, `FilesScreen`, `DeviceRoute`, `ScanScreen` |
 | `ACCESS_LOCAL_NETWORK` (API 37) | Asked from My devices Scan or a Wi-Fi action on the Device screen. A denial leaves Bluetooth available | `ScanScreen`, `DeviceRoute` |
 | Companion device permissions | Normal permissions, effective only while an associated sensor is near, after the user approves the system dialog | Manifest comment |
@@ -100,7 +100,7 @@ Have counsel read the privacy policy before the first public release.
 6. **Children.** Target audience 13 and over in Play's target audience form, and no claims of
    being made for children, so the Families policy and COPPA rules for child-directed apps do not
    apply.
-7. **Play foreground service declaration.** Type `dataSync`. Description to paste: "Copies air
+7. **Play foreground service declaration.** Types `connectedDevice` and `dataSync`, same use. Description to paste: "Copies air
    quality data files from the user's own Bluetooth or Wi-Fi sensor to the phone when the user
    starts a sync, or on the schedule the user turned on per device. The transfer must finish
    while the screen is off. A progress notification with a Stop action is shown." The screen

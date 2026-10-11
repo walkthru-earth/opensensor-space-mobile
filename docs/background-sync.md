@@ -97,7 +97,7 @@ work in the scope.
 | Notifications | Channels `sync_progress`, `sync_summary`; interactive `FOREGROUND_ID` 1001, distinct worker IDs allocated from 10001, `SUMMARY_ID` 1003. The old `WORKER_ID` constant is no longer used by workers. Summary: "Synced 23 new files from AQ-6b40 · 1.1 MiB" (several sources → "from 2 devices"), only when something arrived or failed. `POST_NOTIFICATIONS` is requested on the first Sync tap / Auto-sync switch-on (API 33+); denial hides ordinary progress/summary notifications. |
 
 Why the service exists (measured 2026-09-17): ~2 min after screen-off, `ConnectivityService`
-logged "Destroyed live tcp sockets for uids={ours}" and `TcpTransport` saw "Software caused
+logged "Destroyed live tcp sockets for uids={ours}" and the LAN socket (then `TcpTransport`) saw "Software caused
 connection abort" 6 ms later — the background network restriction, not the link. The companion
 exemption (above) addresses the same restriction from the other side, for the whole time the logger
 is present rather than only during a transfer; the service stays until a phone run shows it is

@@ -75,7 +75,7 @@ anything else is a `ProtocolViolationException`.
 | Frame | `len` u16 LE + frame; `PAYLOAD_MAX` 1024 device→phone, `REQUEST_MAX` 512 phone→device |
 | Idle | `DEVICE_IDLE_LIMIT_MS` 300 s; phone sends `STATUS` after `KEEPALIVE_AFTER_IDLE_MS` 120 s |
 
-`HELLO.payload_max` is trusted if ≥ 64 (`TcpTransport.MIN_PAYLOAD_MAX`); `mtu` reports
+`HELLO.payload_max` is trusted if ≥ 64 (`TcpLinkDriver.MIN_PAYLOAD_MAX`); `mtu` reports
 `payload_max + 3` so the same `MTU − 3` arithmetic yields it.
 
 ## CONFIG keys (`DeviceConfig`)

@@ -3,9 +3,11 @@ package earth.walkthru.aqsync.data
 import android.content.Context
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
+import earth.walkthru.aqsync.collection.CollectionLink
+import earth.walkthru.aqsync.collection.LinkPreference
 import earth.walkthru.aqsync.data.background.CompanionUnlinker
 import earth.walkthru.aqsync.data.background.SyncForegroundService
-import earth.walkthru.aqsync.data.ble.AqTransport
+import earth.walkthru.aqsync.data.ble.BleConnectionFailure
 import earth.walkthru.aqsync.data.ble.ConfigSnapshot
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.DeviceErrorException
@@ -21,9 +23,11 @@ import earth.walkthru.aqsync.data.coroutines.IoDispatcher
 import earth.walkthru.aqsync.data.coroutines.MonotonicTime
 import earth.walkthru.aqsync.data.coroutines.WallClock
 import earth.walkthru.aqsync.data.coroutines.suspendRunCatching
+import earth.walkthru.aqsync.data.fake.FakeTransport
 import earth.walkthru.aqsync.data.history.HistoryRefresher
 import earth.walkthru.aqsync.data.lan.LanConnectException
 import earth.walkthru.aqsync.data.lan.LanDevice
+import earth.walkthru.aqsync.data.lan.LanFailure
 import earth.walkthru.aqsync.data.lan.LanTargets
 import earth.walkthru.aqsync.data.lan.LanTokenPolicy
 import earth.walkthru.aqsync.data.lan.WifiLeases
@@ -55,10 +59,12 @@ import earth.walkthru.aqsync.data.sync.SyncPlan
 import earth.walkthru.aqsync.data.sync.SyncPlanner
 import earth.walkthru.aqsync.data.sync.SyncResumePolicy
 import earth.walkthru.aqsync.data.sync.requireRoom
+import earth.walkthru.aqsync.link.AuthKind
 import earth.walkthru.aqsync.link.DisconnectCause
 import earth.walkthru.aqsync.link.LinkClosedException
 import earth.walkthru.aqsync.link.LinkLog
 import earth.walkthru.aqsync.link.LinkState
+import earth.walkthru.aqsync.link.TimeoutPhase
 import earth.walkthru.aqsync.link.describe
 import earth.walkthru.aqsync.storage.StorageBudget
 import kotlinx.coroutines.CancellationException
@@ -95,7 +101,11 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 /** A `live` sample with the wall-clock instant it arrived, for the freshness indicator. */
 data class TimedLive(val sample: LiveSample, val receivedAtEpochMs: Long)
@@ -280,48 +290,24 @@ class DeviceConnectionRepository @Inject constructor(
     val currentDisplayName: String? get() = _session.value?.transport?.displayName
     val isFake: Boolean get() = _session.value?.transport?.let(transportFactory::isFake) == true
 
-    /**
-     * Manifest joined with the archive: what is synced, what is missing, what is mid-transfer.
-     * Recomputed whenever the manifest, the archive table or the running transfer changes.
-     */
-    val plan: StateFlow<SyncPlan?> = combine(_manifest, _info, archivedFileDao.observeAll(), _sync) { m, info, archived, sync ->
-        val station = info?.station ?: return@combine null
-        // The last successful listing, kept through a refresh or its failure (see ManifestState).
-        val loaded = m.last ?: return@combine null
-        val ids = archived.map { ArchivedIdentity(it.station, it.name, it.bytes, it.crc32) }
-        val base = SyncPlanner.plan(station, loaded.files, ids, archive.partialLengths(station))
-        overlayProgress(base, sync)
-    }.stateIn(scope, SharingStarted.Eagerly, null)
-
-    private fun overlayProgress(plan: SyncPlan, sync: SyncProgress): SyncPlan {
-        if (!sync.running && sync.outcomes.isEmpty()) return plan
-        val failures = sync.failures.associateBy { it.name }
-        val entries = plan.entries.map { e ->
-            val cur = sync.current
-            when {
-                sync.running && cur != null && cur.name == e.name && e.state != FileSyncState.SYNCED ->
-                    e.copy(state = FileSyncState.SYNCING, partialBytes = cur.bytesDone)
-                e.state != FileSyncState.SYNCED && failures[e.name] != null -> {
-                    val f = failures.getValue(e.name)
-                    val msg = when (f) {
-                        is FileOutcome.Mismatch -> f.reason
-                        is FileOutcome.DeviceError -> f.message
-                        is FileOutcome.Failed -> f.message
-                        is FileOutcome.Synced -> null
-                    }
-                    e.copy(state = if (f is FileOutcome.Mismatch) FileSyncState.MISMATCH else e.state, detail = msg)
-                }
-                else -> e
-            }
-        }
-        return plan.copy(entries = entries)
-    }
+    /** Manifest joined with the archive, see [planWithProgress]. */
+    val plan: StateFlow<SyncPlan?> = planWithProgress(_manifest, _info, archivedFileDao.observeAll(), _sync, archive::partialLengths)
+        .stateIn(scope, SharingStarted.Eagerly, null)
 
     private var notificationJob: Job? = null
     private var syncJob: Job? = null
     private var connectJob: Job? = null
     private val connectMutex = Mutex()
     private val connectionIntent = ConnectionIntent()
+
+    /** Links lent to collections and not yet returned. Changed only under [connectMutex] when it grows. */
+    private val lends = AtomicInteger(0)
+
+    /** The session [lendLink] opened itself. Closed when its last lend returns, unless the UI took it. */
+    private var lendOwned: DeviceSession? = null
+
+    /** Why the last [openSession] failed, for [lendLink]. Written under [connectMutex]. */
+    private var lastOpenFailure: DisconnectCause? = null
 
     // ------------------------------------------------------------------ connect
 
@@ -372,7 +358,9 @@ class DeviceConnectionRepository @Inject constructor(
         val existing = _session.value
         if (existing != null && existing.address == address && existing.isUsable) {
             // A repeated Connect is a new explicit intent even when it can reuse the pipe. Give
-            // the existing link watcher the new claim so future loss still reconnects it.
+            // the existing link watcher the new claim so future loss still reconnects it. A link a
+            // collection opened now belongs to the UI too and stays open after the collection.
+            lendOwned = null
             watchLink(existing, address, name, fake, claim, preference)
             return true
         }
@@ -384,11 +372,15 @@ class DeviceConnectionRepository @Inject constructor(
         )
         val known = knownDeviceDao.get(address)
 
-        var transport: AqTransport? = null
+        var transport: AndroidLink? = null
         if (fake) {
             transport = transportFactory.fake(address)
         } else if (preference != TransportPreference.BLE_ONLY) {
-            transport = tryLan(address, name ?: known?.name, known, fallbackToBle = preference == TransportPreference.AUTO)
+            when (val lan = tryLan(address, name ?: known?.name, known, fallbackToBle = preference == TransportPreference.AUTO)) {
+                is LanAttempt.Opened -> transport = lan.link
+                LanAttempt.Refused -> return false
+                LanAttempt.Skipped -> Unit
+            }
         }
         if (transport == null) {
             if (preference == TransportPreference.LAN_ONLY) {
@@ -411,48 +403,66 @@ class DeviceConnectionRepository @Inject constructor(
         return true
     }
 
+    private sealed interface LanAttempt {
+        /** The probe session's link is open, [openSession] continues on it. */
+        data class Opened(val link: AndroidLink) : LanAttempt
+
+        /** No LAN this time. The caller may fall back to Bluetooth. */
+        data object Skipped : LanAttempt
+
+        /** The device answered and refused this app (old firmware). Bluetooth would refuse too. */
+        data object Refused : LanAttempt
+    }
+
     /**
-     * Attempt a LAN session; null when not applicable or when it failed. The caller may fall back
-     * to BLE if its preference allows it. The probe session is removed and its transport closed on every failure
+     * Attempt a LAN session. The caller may fall back to BLE after [LanAttempt.Skipped] if its
+     * preference allows it. The probe session is removed and its link closed on every failure
      * path, including an unexpected exception and cancellation.
      */
-    private suspend fun tryLan(address: String, name: String?, known: KnownDevice?, fallbackToBle: Boolean = true): AqTransport? {
-        val station = known?.station ?: return null
-        val seen = lanDevices.value[station] ?: return null
-        val host = seen.host ?: return null
-        val port = TransportSelector.lanPort(known.hasLanToken, known.deviceId, seen.dev, seen.port, known.lanPort) ?: return null
-        val token = lanTokenBytes(address) ?: return null
-        val transport = transportFactory.lan(address, name, host, port, token)
+    private suspend fun tryLan(address: String, name: String?, known: KnownDevice?, fallbackToBle: Boolean = true): LanAttempt {
+        val station = known?.station ?: return LanAttempt.Skipped
+        val seen = lanDevices.value[station] ?: return LanAttempt.Skipped
+        val host = seen.host ?: return LanAttempt.Skipped
+        val port = TransportSelector.lanPort(known.hasLanToken, known.deviceId, seen.dev, seen.port, known.lanPort) ?: return LanAttempt.Skipped
+        val token = lanTokenBytes(address) ?: return LanAttempt.Skipped
+        val transport = try {
+            transportFactory.lan(address, name, host, port, token)
+        } finally {
+            token.fill(0)
+        }
         // Put the LAN attempt in the session slot so the UI shows "Authenticating on the LAN…".
         val probe = newSession(transport)
         _session.value = probe
         var connected = false
         try {
-            transport.connect()
+            probe.link.open()
             connected = true
-            return transport
-        } catch (e: LanConnectException) {
-            Log.w(TAG, "LAN connect failed (${e.failure})")
-            if (tokenPolicy.invalidatesToken(e.failure)) {
+            return LanAttempt.Opened(transport)
+        } catch (e: LinkClosedException) {
+            val cause = e.disconnectCause
+            if (cause is DisconnectCause.UpdateFirmware) {
+                reportOpenFailure(e)
+                return LanAttempt.Refused
+            }
+            val failure = (e.cause as? LanConnectException)?.failure
+                ?: if (cause == DisconnectCause.Auth(AuthKind.TOKEN_REJECTED)) LanFailure.AUTH_FAILED else null
+            Log.w(TAG, "LAN connect failed (${cause.describe()})")
+            // A LAN-only lend reports this instead of Unreachable, so a rejected token is not retried.
+            lastOpenFailure = if (failure == LanFailure.AUTH_FAILED) DisconnectCause.Auth(AuthKind.TOKEN_REJECTED) else cause
+            if (failure != null && tokenPolicy.invalidatesToken(failure)) {
                 // The device rotated its token (ERROR 14 at the handshake). The stored copy is dead:
                 // drop it so the Bluetooth session we are about to open fetches a fresh one.
                 knownDeviceDao.setLanToken(address, null, null)
                 tokenPolicy.markStale(address)
-                if (fallbackToBle) _events.tryEmit(DeviceEvent.Info(DeviceMessage.LanFallback(e.failure)))
-            } else {
-                if (fallbackToBle) _events.tryEmit(DeviceEvent.Info(DeviceMessage.LanFallback(e.failure)))
             }
-            return null
-        } catch (e: TransportException) {
-            Log.w(TAG, "LAN connect failed (${e.message})")
-            if (fallbackToBle) _events.tryEmit(DeviceEvent.Info(DeviceMessage.LanFallback(null)))
-            return null
+            if (fallbackToBle) _events.tryEmit(DeviceEvent.Info(DeviceMessage.LanFallback(failure)))
+            return LanAttempt.Skipped
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             Log.w(TAG, "LAN connect failed unexpectedly (${e::class.simpleName})")
             if (fallbackToBle) _events.tryEmit(DeviceEvent.Info(DeviceMessage.LanFallback(null)))
-            return null
+            return LanAttempt.Skipped
         } finally {
             if (!connected) {
                 if (_session.value === probe) _session.value = null
@@ -463,13 +473,41 @@ class DeviceConnectionRepository @Inject constructor(
         }
     }
 
+    private fun reportOpenFailure(e: LinkClosedException) {
+        lastOpenFailure = e.disconnectCause
+        when (val cause = e.disconnectCause) {
+            is DisconnectCause.UpdateFirmware -> {
+                Log.w(TAG, "firmware update required (proto ${cause.reported})")
+                connectionFailure.value = "firmware update required"
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.FirmwareUpdateRequired(cause.reported, cause.required)))
+            }
+            is DisconnectCause.FramingViolation -> {
+                // Connected, but the info reply was missing or malformed.
+                Log.w(TAG, "device verification failed (${cause.describe()})")
+                connectionFailure.value = "verification failed"
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.VerificationFailed))
+            }
+            DisconnectCause.Auth(AuthKind.BOND_MISSING) -> {
+                // The phone lost its keys. Reconnecting cannot help until the user pairs again.
+                Log.w(TAG, "connect failed (${cause.describe()})")
+                connectionFailure.value = BleConnectionFailure.PAIRING_REPAIR_MESSAGE
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.ConnectFailed))
+            }
+            else -> {
+                Log.w(TAG, "connect failed (${cause.describe()})")
+                connectionFailure.value = e.message ?: "connection failed"
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.ConnectFailed))
+            }
+        }
+    }
+
     /** Ready on the transport and on the link. A link that closed itself is not reused. */
     private val DeviceSession.isUsable: Boolean
         get() = connectionState.value.isReady && link.state.value is LinkState.Ready
 
     /** A session whose link is opened by [openSession]. Link events carry no frame bodies. */
-    private fun newSession(transport: AqTransport): DeviceSession =
-        DeviceSession.over(transport, scope, log = LinkLog { Log.d(TAG, it.describe()) })
+    private fun newSession(link: AndroidLink): DeviceSession =
+        link.openableSession(scope, log = LinkLog { Log.d(TAG, it.describe()) })
 
     /**
      * The stored LAN token as bytes, decrypted only here, at the moment a LAN transport is built.
@@ -513,34 +551,21 @@ class DeviceConnectionRepository @Inject constructor(
      * [watch] = false (background sync) skips the lost-link auto-reconnect: the worker has no user
      * to keep informed and simply tries again at its next period.
      */
-    private suspend fun openSession(transport: AqTransport, address: String, name: String?, fake: Boolean, watch: Boolean = true, claim: Long? = null, preference: TransportPreference = TransportPreference.AUTO): Boolean {
-        // Reuse the LAN probe only while its link has not opened yet, a link opens once.
-        val session = _session.value?.takeIf { it.transport === transport && it.link.state.value == LinkState.Idle }
+    private suspend fun openSession(transport: AndroidLink, address: String, name: String?, fake: Boolean, watch: Boolean = true, claim: Long? = null, preference: TransportPreference = TransportPreference.AUTO): Boolean {
+        // The LAN probe arrives already open on this link. A link opens once.
+        val session = _session.value?.takeIf { it.transport === transport && it.link.state.value !is LinkState.Closed }
             ?: newSession(transport)
         _session.value = session
         val info = try {
-            session.link.open().info
+            ((session.link.state.value as? LinkState.Ready)?.info ?: session.link.open()).info
         } catch (e: LinkClosedException) {
-            val cause = e.disconnectCause
-            if (cause is DisconnectCause.UpdateFirmware) {
-                Log.w(TAG, "firmware update required (proto ${cause.reported})")
-                connectionFailure.value = "firmware update required"
-                _events.tryEmit(DeviceEvent.Error(DeviceMessage.FirmwareUpdateRequired(cause.reported, cause.required)))
-            } else if (cause is DisconnectCause.FramingViolation) {
-                // Connected, but the info reply was missing or malformed.
-                Log.w(TAG, "device verification failed (${cause.describe()})")
-                connectionFailure.value = "verification failed"
-                _events.tryEmit(DeviceEvent.Error(DeviceMessage.VerificationFailed))
-            } else {
-                Log.w(TAG, "connect failed (${cause.describe()})")
-                connectionFailure.value = e.message ?: "connection failed"
-                _events.tryEmit(DeviceEvent.Error(DeviceMessage.ConnectFailed))
-            }
+            reportOpenFailure(e)
             return false
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             Log.w(TAG, "device verification failed (${e.message})")
+            lastOpenFailure = DisconnectCause.FramingViolation("info unreadable")
             connectionFailure.value = "verification failed (${e.message})"
             _events.tryEmit(DeviceEvent.Error(DeviceMessage.VerificationFailed))
             return false
@@ -558,6 +583,7 @@ class DeviceConnectionRepository @Inject constructor(
             val continuity = DeviceContinuityPolicy.evaluate(expected, DeviceContinuityPolicy.Identity(address, info.dev, info.station), authenticatedBle)
             if (continuity is DeviceContinuityPolicy.Decision.Reject) {
                 Log.w(TAG, "identity rejected (${continuity.reason})")
+                lastOpenFailure = DisconnectCause.Rejected("identity ${continuity.reason.name}")
                 connectionFailure.value = continuity.reason.name
                 _events.tryEmit(DeviceEvent.Error(DeviceMessage.IdentityRejected(continuity.reason)))
                 return false
@@ -566,6 +592,7 @@ class DeviceConnectionRepository @Inject constructor(
             if (identityLease == null && info.dev != null) {
                 identityLease = identityClaims.claim(info.dev!!, this)
                 if (identityLease == null) {
+                    lastOpenFailure = DisconnectCause.Rejected("hardware in use")
                     connectionFailure.value = "hardware already connected through another endpoint"
                     _events.tryEmit(DeviceEvent.Error(DeviceMessage.HardwareInUse))
                     return false
@@ -595,7 +622,10 @@ class DeviceConnectionRepository @Inject constructor(
             )
             _info.value = info
             setTimeFromPhoneNow(session, quiet = true, automatic = true)
-            if (_session.value !== session) return false
+            if (_session.value !== session) {
+                lastOpenFailure = DisconnectCause.Rejected("session replaced")
+                return false
+            }
             identityReady.value = true
             suspendRunCatching { transport.readStatus().decodeToString() }.onSuccess { raw ->
                 _statusRaw.value = raw
@@ -621,6 +651,8 @@ class DeviceConnectionRepository @Inject constructor(
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             Log.w(TAG, "device verification failed (${e.message})")
+            // A link lost during setup keeps its own, possibly retryable, cause.
+            lastOpenFailure = (e as? LinkClosedException)?.disconnectCause ?: DisconnectCause.Rejected("setup failed")
             connectionFailure.value = "verification failed (${e.message})"
             _events.tryEmit(DeviceEvent.Error(DeviceMessage.VerificationFailed))
             return false
@@ -696,6 +728,7 @@ class DeviceConnectionRepository @Inject constructor(
         // mistakes this deliberate close for a lost link.
         val s = _session.value
         _session.value = null
+        lendOwned = null
         identityReady.value = false
         if (s != null) {
             s.link.close("disconnect")
@@ -706,6 +739,126 @@ class DeviceConnectionRepository @Inject constructor(
         identityLease = null
         _sync.update { it.copy(running = false, current = null) }
         synchronized(this@DeviceConnectionRepository) { closing = false }
+    }
+
+    // ------------------------------------------------------------- collection links
+
+    /**
+     * Lend a ready link to [address] to a `CollectionController`. Reuses the UI's session when it
+     * is Ready, otherwise opens one per [prefer] without the auto reconnect, since the controller
+     * retries itself. Throws [LinkClosedException] with a typed cause when no link can be had.
+     *
+     * Every returned link must be released once, [CollectionLink.release] is idempotent. A session
+     * this call opened closes when its last lend returns.
+     *
+     * Bounded and cancellable. The controller joins the previous run before connecting, so a
+     * connect that hung would park every later Stop then Sync. The whole call, waiting for the
+     * slot included, ends after [LEND_TIMEOUT] with `Timeout(OPEN)`, and a cancel ends it at the
+     * next suspension. A lend taken by a call that is cancelled or timed out is returned here.
+     */
+    suspend fun lendLink(address: String, prefer: LinkPreference): CollectionLink {
+        check(boundAddress == null || boundAddress == address) { "controller belongs to another device" }
+        var lent: CollectionLink? = null
+        try {
+            withTimeoutOrNull(LEND_TIMEOUT) {
+                connectMutex.withLock { lent = lendLocked(address, prefer) }
+            }
+            currentCoroutineContext().ensureActive()
+            val link = lent ?: throw LinkClosedException(DisconnectCause.Timeout(TimeoutPhase.OPEN, 0))
+            lent = null
+            return link
+        } finally {
+            // Set only when the lend did not reach the caller: cancelled, or the timeout raced it.
+            lent?.release()
+        }
+    }
+
+    private suspend fun lendLocked(address: String, prefer: LinkPreference): CollectionLink {
+        if (backgroundOwner.value != null || _reconnecting.value != null || repositorySyncRunning()) {
+            throw LinkClosedException(DisconnectCause.Busy)
+        }
+        var current = _session.value
+        // A link a lend opened that dropped after its lends came back is ours to clear, not Busy.
+        if (current != null && current === lendOwned && lends.get() == 0 && current.link.state.value !is LinkState.Ready) {
+            closeSessionLocked()
+            current = null
+        }
+        // The watcher keeps a link closed by Auth in the slot with no reconnect. Report that cause,
+        // so the collection stops and asks to pair again instead of retrying Busy.
+        current?.takeIf { it.address == address }?.closedByAuth()?.let { throw LinkClosedException(it) }
+        val session = when {
+            current == null -> openForLend(address, prefer)
+            current.address == address && current.isUsable -> current
+            else -> throw LinkClosedException(DisconnectCause.Busy)
+        }
+        val maxRead: Int
+        val station: String
+        try {
+            // openSession swallows reads after verification, so the link may already be gone.
+            val info = (session.link.state.value as? LinkState.Ready)?.info?.info
+                ?: throw LinkClosedException((session.link.state.value as? LinkState.Closed)?.cause ?: DisconnectCause.Unreachable)
+            station = info.station ?: throw LinkClosedException(DisconnectCause.FramingViolation("info without station"))
+            maxRead = ReadWindow.forTransport(session.transport, info.maxRead)
+        } catch (e: Throwable) {
+            // Never counted, so no release will close it. Close a link this call opened now.
+            if (current == null) closeSessionLocked()
+            throw e
+        }
+        // Nothing below suspends, so a lend counted here always reaches the caller's finally.
+        lends.incrementAndGet()
+        val returned = AtomicBoolean(false)
+        return CollectionLink(session, station, maxRead) {
+            if (returned.compareAndSet(false, true)) returnLend(session)
+        }
+    }
+
+    private fun repositorySyncRunning(): Boolean = _sync.value.running || synchronized(this) { syncJob?.isActive == true }
+
+    private fun DeviceSession.closedByAuth(): DisconnectCause.Auth? = (link.state.value as? LinkState.Closed)?.cause as? DisconnectCause.Auth
+
+    /** Opens a session for a collection. Caller holds [connectMutex] and the slot is empty. */
+    private suspend fun openForLend(address: String, prefer: LinkPreference): DeviceSession {
+        resetDerivedState()
+        lastOpenFailure = null
+        val known = knownDeviceDao.get(address)
+        val name = known?.name
+        val fake = address == FakeTransport.FAKE_ADDRESS || address == FakeTransport.FAKE_LAN_ADDRESS
+        var link: AndroidLink? = if (fake) transportFactory.fake(address) else null
+        if (link == null && prefer != LinkPreference.BLE) {
+            when (val lan = tryLan(address, name, known, fallbackToBle = prefer == LinkPreference.ANY)) {
+                is LanAttempt.Opened -> link = lan.link
+                LanAttempt.Refused -> throw LinkClosedException(lastOpenFailure ?: DisconnectCause.UpdateFirmware(null, AqUuids.PROTOCOL_VERSION))
+                LanAttempt.Skipped -> Unit
+            }
+        }
+        if (link == null) {
+            if (prefer == LinkPreference.LAN) throw LinkClosedException(lastOpenFailure ?: DisconnectCause.Unreachable)
+            link = transportFactory.ble(address)
+        }
+        val opened = try {
+            openSession(link, address, name, fake = transportFactory.isFake(link), watch = false)
+        } catch (e: CancellationException) {
+            withContext(NonCancellable) { closeSessionLocked() }
+            throw e
+        }
+        val session = _session.value
+        if (!opened || session == null) {
+            closeSessionLocked()
+            throw LinkClosedException(lastOpenFailure ?: DisconnectCause.Rejected("verification failed"))
+        }
+        lendOwned = session
+        return session
+    }
+
+    /** One lend came back. The last one closes a session that only collections used. */
+    private fun returnLend(session: DeviceSession) {
+        if (lends.decrementAndGet() > 0) return
+        scope.launch(NonCancellable) {
+            connectMutex.withLock {
+                // A new lend taken meanwhile holds the mutex to count itself, so this sees it.
+                if (lends.get() == 0 && lendOwned === session && _session.value === session) closeSessionLocked()
+            }
+        }
     }
 
     // ------------------------------------------------------------- link watch
@@ -737,6 +890,13 @@ class DeviceConnectionRepository @Inject constructor(
             val generation = synchronized(this@DeviceConnectionRepository) { reconnectGeneration }
             if (_session.value !== session || !connectionIntent.owns(claim)) return@launch
             val reason = (lost as? ConnectionState.Failed)?.reason ?: "device closed the connection"
+            val linkCause = (session.link.state.value as? LinkState.Closed)?.cause
+            if (linkCause is DisconnectCause.Auth) {
+                // A refused or missing credential repeats on every attempt. The user pairs again.
+                Log.w(TAG, "link lost (${linkCause.describe()}); no auto-reconnect")
+                connectionFailure.value = BleConnectionFailure.PAIRING_REPAIR_MESSAGE.takeIf { linkCause.kind != AuthKind.TOKEN_REJECTED } ?: reason
+                return@launch
+            }
             val sync = _sync.value
             val resume = SyncResumePolicy.shouldResume(sync.running, sync.endCause, sync.finishedAtEpochMs, clock.nowEpochMs())
             Log.w(TAG, "link lost ($reason); auto-reconnect starts, resumeSync=$resume (running=${sync.running}, lastEnd=${sync.endCause})")
@@ -1134,14 +1294,18 @@ class DeviceConnectionRepository @Inject constructor(
                 return if (cur.address == address) skip("the app has an interactive session with this device") else skip("another session is active (${cur.address})")
             }
             if (_reconnecting.value != null) return skip("a reconnect is in progress")
-            val transport: AqTransport = try {
+            val transport: AndroidLink = try {
                 if (lanTarget != null) {
                     val host = lanTarget.host
                     if (known?.hasLanToken != true || host == null) return skip("no token or address for the LAN link")
                     if (known.deviceId != null && !known.deviceId.equals(lanTarget.dev, ignoreCase = true)) return skip("LAN discovery identity disagrees with the enrolled device")
                     val port = lanTarget.port.takeIf { it in 1..65535 } ?: known.lanPort ?: return skip("no LAN port")
                     val token = lanTokenBytes(address) ?: return skip("LAN token unavailable")
-                    transportFactory.lan(address, name, host, port, token)
+                    try {
+                        transportFactory.lan(address, name, host, port, token)
+                    } finally {
+                        token.fill(0)
+                    }
                 } else {
                     transportFactory.bleUnattended(address, bleConnectTimeoutMs)
                 }
@@ -1616,6 +1780,12 @@ class DeviceConnectionRepository @Inject constructor(
 
     companion object {
         private const val TAG = "DeviceConnection"
+
+        /**
+         * Bound on one [lendLink]. The link open (with a passkey typed on the phone) has
+         * [LINK_OPEN_TIMEOUT], the rest covers verification and waiting for a UI connect to finish.
+         */
+        val LEND_TIMEOUT: Duration = LINK_OPEN_TIMEOUT + 60.seconds
 
         /** Boot + BLE stack start + advertising on the CoreS3; generous. */
         const val REBOOT_RECONNECT_DELAY_MS = 6_000L

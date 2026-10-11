@@ -1,7 +1,7 @@
 # Transports — BLE, LAN, pairing, the token, reconnect
 
 **Scope:** the two byte pipes behind `AqTransport`, how the repository picks one, pairing, the LAN token lifecycle, link loss.
-**Code:** Android `data/ble/BleTransport.kt`, `BleScanner.kt`; `data/lan/TcpTransport.kt`, `LanDiscovery.kt`, `LanWifiLock.kt`; `data/TransportFactory.kt`; `data/DeviceConnectionManager.kt`, `DeviceConnectionRepository.kt` (`connect`, `tryLan`, `reconnectLoop`, `activeTransport`), `DeviceIdentityClaims.kt`; `ui/permissions/LanPermission.kt`. Shared in `core/sync` commonMain: `data/ble/AqTransport.kt`, `DeviceSession.kt`, `FrameRecorder.kt`; `data/lan/LanTokenPolicy.kt`, `LanFailure.kt`; `data/DeviceContinuityPolicy.kt`, `TransportSelector.kt`, `ConnectionIntent.kt`. `core/protocol` `LanFrameSplitter.kt` (socket slices to frames).
+**Code:** Android `data/ble/BleLinkDriver.kt`, `BleScanner.kt`; `data/lan/TcpLinkDriver.kt`, `LanDiscovery.kt`, `LanWifiLock.kt`; `data/TransportFactory.kt`; `data/DeviceConnectionManager.kt`, `DeviceConnectionRepository.kt` (`connect`, `tryLan`, `reconnectLoop`, `activeTransport`), `DeviceIdentityClaims.kt`; `ui/permissions/LanPermission.kt`. Shared in `core/sync` commonMain: `data/ble/AqTransport.kt`, `DeviceSession.kt`, `FrameRecorder.kt`; `data/lan/LanTokenPolicy.kt`, `LanFailure.kt`; `data/DeviceContinuityPolicy.kt`, `TransportSelector.kt`, `ConnectionIntent.kt`. `core/protocol` `LanFrameSplitter.kt` (socket slices to frames).
 **Related:** [protocol-quickref.md](protocol-quickref.md), [sync-engine.md](sync-engine.md) (what runs on top), [background-sync.md](background-sync.md) (unattended links, WifiLock).
 
 ## Choosing a link
@@ -9,10 +9,10 @@
 ```mermaid
 flowchart TD
   C[connect address] --> Q{station discovered on mDNS<br/>AND token stored?}
-  Q -- yes --> L[TcpTransport AQS1 handshake]
+  Q -- yes --> L[TcpLinkDriver AQS1 handshake]
   L -- HELLO --> R[Ready · chip Wi-Fi LAN]
   L -- ERROR 14 --> X[clear token, mark stale] --> B
-  L -- ERROR 7 / timeout / bad HELLO --> B[BleTransport]
+  L -- ERROR 7 / timeout / bad HELLO --> B[BleLinkDriver]
   Q -- no --> B
   B --> R2[Ready · chip Bluetooth]
   R2 --> T{proto ≥ 2 AND no token<br/>or stale?}
@@ -129,7 +129,7 @@ See the [dated board result](../../aq-parquet/docs/boards/m5stack-cores3/bench-v
 for image/backup hashes, client-count differences and limits. These short host
 measurements do not establish Android/iPhone throughput after the upgrade.
 
-| | Bluetooth LE (`BleTransport`) | LAN (`TcpTransport`) |
+| | Bluetooth LE (`BleLinkDriver`) | LAN (`TcpLinkDriver`) |
 | --- | --- | --- |
 | Discovery | GATT scan for the service UUID (`BleScanner`) | mDNS `_aqsync._tcp` via `NsdManager` (`LanDiscovery`), TXT `station`/`dev`/`fw`/`proto`; browsed only while the app is started and the permission is held |
 | Auth | LE Secure Connections bond; passkey/PIN modes require encrypted, authenticated access; explicit lab `none` mode uses encrypted Just Works without MITM authentication | `"AQS1"` + 32-byte token, obtainable **only** over BLE; the socket itself is unencrypted by contract and does not authenticate server identity |
@@ -263,15 +263,15 @@ API 34+: `registerServiceInfoCallback` (continuous, `getHostAddresses`). API 31�
 | `WIFI_SCAN_END.status` ≠ 0 | The scan's error (15 → "Wi-Fi unavailable"), not partial success; APs received before it are discarded. |
 | `LOG` slices | Kept as bytes, decoded after concatenation (a boundary may split UTF-8). `LOG_END.returned` ≠ bytes received → "a slice may be missing" but the text is shown (for humans, not data). |
 | `SET_CONFIG` recording | Recorded as opcode only (PSK is a secret); `Frame.Token` redacted. |
-| Fake "LAN" | `FakeTransport(simulateLan = true)` is not a socket: `payload_max` 1024 and `GET_TOKEN` → `ERROR` 13. The real pipe is unit-tested over loopback (`TcpTransportTest`) and otherwise only on hardware. |
+| Fake "LAN" | `FakeTransport(simulateLan = true)` is not a socket: `payload_max` 1024 and `GET_TOKEN` → `ERROR` 13. The real pipe is unit-tested over loopback (`TcpLinkDriverTest`) and otherwise only on hardware. |
 
 ## Uses → affects
 
 | Edit… | Affects… |
 | --- | --- |
 | `AqTransport` interface | all three transports, `DeviceSession`, repository, `TransportFactory` |
-| `TcpTransport` reader loop | push demux (`LIVE` between `CHUNK`s) — `TcpTransportTest` asserts it |
-| `BleTransport.allowBonding` / timeouts | `AutoSyncRunner` path (`bleUnattended`) — a passkey dialog in the background is a bug |
+| `TcpLinkDriver` reader loop | push demux (`LIVE` between `CHUNK`s) — `TcpLinkDriverTest` asserts it |
+| `BleLinkDriver.allowBonding` / timeouts | `AutoSyncRunner` path (`bleUnattended`) — a passkey dialog in the background is a bug |
 | `LanTokenPolicy` | repository `tryLan`, token refetch after Ready, snackbar copy |
 | `DeviceContinuityPolicy` / `DeviceIdentityClaims` | INFO acceptance, station epochs, credential renewal and prevention of duplicate physical-device owners |
 | `DeviceConnectionManager` | per-device ownership and snapshots; selection must not close another controller |
