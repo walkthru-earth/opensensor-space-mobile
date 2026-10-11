@@ -18,6 +18,7 @@ import earth.walkthru.aqsync.publicfeed.TimeZoneRegions
 import earth.walkthru.aqsync.publicfeed.ViewportCover
 import earth.walkthru.aqsync.storage.MemoryTrimmable
 import earth.walkthru.aqsync.storage.trimOnMemoryPressure
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -105,18 +106,49 @@ fun DiscoverUiState.selectedSummary(property: FeedProperty): StationSummary? {
  * The row of the window on screen can still be the previous window's during a switch, so it is
  * never read for values. Null [devices] and [updatedEpochMs] until the 24 hour row lands.
  */
-internal data class SimpleCellFacts(val devices: Int?, val updatedEpochMs: Long?, val others: List<Pair<FeedProperty, Double?>>)
+internal data class SimpleCellFacts(
+    val devices: Int?,
+    val updatedEpochMs: Long?,
+    val others: List<Pair<FeedProperty, Double?>>,
+    /** True until the 24 hour row is read. The sheet then shows a neutral loading line, no values. */
+    val loading: Boolean,
+)
+
+/** What the Simple cell sheet leads with. */
+internal enum class SimpleHeadline {
+    /** The 24 hour row is not read yet. No mood, no "No reading", no "Not measured". */
+    LOADING,
+
+    /** Read, and no window read so far reports the property. */
+    NOT_MEASURED,
+
+    /** Read. The headline shows the 24 hour mean, or "n/a" when that row lacks it. */
+    SHOWN,
+}
+
+/**
+ * A window key that is absent was not read yet (or its read failed and waits for a retry). A key
+ * that is present was read, its row null when the cell has nothing in that window.
+ */
+internal fun DiscoverUiState.simpleHeadline(): SimpleHeadline {
+    val p = property ?: return SimpleHeadline.NOT_MEASURED
+    if (selected == null) return SimpleHeadline.NOT_MEASURED
+    if (FeedWindow.DAY !in selectedWindows) return SimpleHeadline.LOADING
+    val measured = selectedWindows.values.any { it?.stats?.containsKey(p.id) == true }
+    return if (measured) SimpleHeadline.SHOWN else SimpleHeadline.NOT_MEASURED
+}
 
 /**
  * The selected cell's 24 hour facts. [SimpleCellFacts.others] lists every other measurement the
  * cell reports, its 24 hour mean or null ("n/a") while that row is missing or lacks it.
  */
 internal fun DiscoverUiState.simpleCellFacts(): SimpleCellFacts {
+    if (selected != null && FeedWindow.DAY !in selectedWindows) return SimpleCellFacts(null, null, emptyList(), loading = true)
     val day = if (selected == null) null else selectedWindows[FeedWindow.DAY]
     val others = dictionary
         .filter { p -> p.id != property?.id && (day?.mean(p.id) != null || selected?.mean(p.id) != null) }
         .map { p -> p to day?.mean(p.id) }
-    return SimpleCellFacts(day?.devices, day?.updatedEpochMs, others)
+    return SimpleCellFacts(day?.devices, day?.updatedEpochMs, others, loading = false)
 }
 
 /**
@@ -152,10 +184,10 @@ class DiscoverController(
         // A feed that caches bytes in memory gives them back under memory pressure (#61).
         if (feed is MemoryTrimmable) scope.trimOnMemoryPressure(feed)
         scope.launch {
-            saved = runCatching { prefs.load() }.getOrDefault(DiscoverSaved())
+            saved = catching { prefs.load() }.getOrDefault(DiscoverSaved())
             val start = saved.camera?.let { StartView.Camera(it) } ?: StartView.Region(TimeZoneRegions.regionFor(timeZoneId))
             _state.update { it.copy(start = start, window = saved.window, firstRun = !saved.firstRunDone) }
-            partition = withContext(io) { runCatching { feed.latest() }.getOrNull() }
+            partition = withContext(io) { catching { feed.latest() }.getOrNull() }
             // One loader. A newer camera rest or a chip change cancels the read in flight.
             combine(rest.filterNotNull(), reload) { r, _ -> r }.collectLatest { r ->
                 delay(REST_MS)
@@ -203,7 +235,7 @@ class DiscoverController(
 
     private fun persist() {
         val snapshot = saved
-        scope.launch { runCatching { prefs.save(snapshot) } }
+        scope.launch { catching { prefs.save(snapshot) } }
     }
 
     private suspend fun load(r: CameraRest) {
@@ -218,7 +250,7 @@ class DiscoverController(
         }
         val window = current.window
         val table = withContext(io) {
-            runCatching {
+            catching {
                 val cover = ViewportCover.cover(h3, r.bounds, res)
                 feed.cells(p, window, res, cover.ranges)
             }.getOrNull()
@@ -249,16 +281,23 @@ class DiscoverController(
                 newestUpdateEpochMs = rows.maxOfOrNull { row -> row.updatedEpochMs },
             )
         }
-        if (!sameWindows) readWindows(selected)
+        if (!sameWindows) {
+            readWindows(selected)
+        } else if (windowsJob?.isActive != true) {
+            // A window whose read failed has no key. The pan reads it again, only that one.
+            val missing = FeedWindow.entries.filter { it !in _state.value.selectedWindows }
+            if (missing.isNotEmpty()) readWindows(selected, missing)
+        }
         restyle(property?.id)
     }
 
     /**
      * Reads [row]'s cell in the two windows not on screen, one small read each, the same anonymous
      * feed the map uses. A newer selection cancels it, and a result for an older cell, window or
-     * resolution is dropped, so it never lands on the cell selected since.
+     * resolution is dropped, so it never lands on the cell selected since. A read that fails leaves
+     * its window out of the map, so it reads as "not loaded" and the next pan reads [only] it again.
      */
-    private fun readWindows(row: CellRow?) {
+    private fun readWindows(row: CellRow?, only: List<FeedWindow>? = null) {
         windowsJob?.cancel()
         windowsJob = null
         windowsFor = null
@@ -269,9 +308,13 @@ class DiscoverController(
         val res = current.res
         windowsFor = Triple(row.h3, window, res)
         windowsJob = scope.launch {
+            val wanted = only ?: FeedWindow.entries.filter { it != window }
             val read = withContext(io) {
-                FeedWindow.entries.filter { it != window }.associateWith { w ->
-                    runCatching { feed.cells(p, w, res, listOf(row.h3..row.h3)).rows.firstOrNull { it.h3 == row.h3 } }.getOrNull()
+                buildMap {
+                    wanted.forEach { w ->
+                        catching { feed.cells(p, w, res, listOf(row.h3..row.h3)).rows.firstOrNull { it.h3 == row.h3 } }
+                            .onSuccess { put(w, it) }
+                    }
                 }
             }
             ensureActive()
@@ -315,5 +358,14 @@ class DiscoverController(
 
     private companion object {
         const val REST_MS = 400L
+
+        /** [runCatching] that lets cancellation through, so a cancelled read stops instead of reading on. */
+        inline fun <T> catching(block: () -> T): Result<T> = try {
+            Result.success(block())
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            Result.failure(e)
+        }
     }
 }

@@ -77,6 +77,7 @@ import androidx.navigationevent.compose.NavigationBackHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
 import earth.walkthru.aqsync.airquality.HealthScale
 import earth.walkthru.aqsync.airquality.WhoStep
+import earth.walkthru.aqsync.publicfeed.CellFreshness
 import earth.walkthru.aqsync.publicfeed.CellRow
 import earth.walkthru.aqsync.publicfeed.CellScale
 import earth.walkthru.aqsync.publicfeed.FeedProperty
@@ -93,10 +94,12 @@ import earth.walkthru.opensensor.designsystem.MoodStrip
 import earth.walkthru.opensensor.designsystem.Peacock
 import earth.walkthru.opensensor.designsystem.PeacockExpression
 import earth.walkthru.opensensor.designsystem.PeacockIcon
+import earth.walkthru.opensensor.designsystem.listSeparator
 import earth.walkthru.opensensor.designsystem.moodLine
 import earth.walkthru.opensensor.designsystem.moodWord
 import earth.walkthru.opensensor.designsystem.notAvailableText
 import earth.walkthru.opensensor.designsystem.peacockExpressionFor
+import earth.walkthru.opensensor.designsystem.spokenList
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.maplibre.compose.camera.CameraPosition
@@ -212,7 +215,7 @@ private fun DiscoverContent(
                 val shownAt = remember { nowEpochMillis() }
                 // Screen readers name the map and the measurement it colours. Its gestures stay as
                 // they are, the sheet's list reads each area.
-                val mapLabel = listOfNotNull(strings.mapLabel, state.property?.label).joinToString(", ")
+                val mapLabel = spokenList(listOfNotNull(strings.mapLabel, state.property?.label), listSeparator())
                 DiscoverMap(
                     modifier = Modifier.semantics { contentDescription = mapLabel },
                     state = mapState,
@@ -718,7 +721,7 @@ private fun CellDetail(
         } else {
             Text(strings.notMeasured, style = MaterialTheme.typography.titleMedium)
         }
-        val stale = reference - row.updatedEpochMs >= earth.walkthru.aqsync.publicfeed.CellFreshness.STALE_AFTER_MS
+        val stale = reference - row.updatedEpochMs >= CellFreshness.STALE_AFTER_MS
         val parts = listOfNotNull(strings.sensors(row.devices), if (stale) strings.stale else freshness(strings, row.updatedEpochMs, reference))
         Text(parts.joinToString("  "), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (property != null && headline != null) {
@@ -766,14 +769,14 @@ private fun SimpleCellDetail(
         val property = state.property
         val units = LocalDiscoverUnits.current
         val summary = property?.let { state.selectedSummary(it) }
-        // A cell that does not measure the property says so, as Detailed does, not "No reading".
-        val unmeasured = property != null && state.selectedWindows.values.none { it?.stats?.containsKey(property.id) == true }
-        if (property != null && summary != null && !unmeasured) {
+        val headline = state.simpleHeadline()
+        val separator = listSeparator()
+        if (headline == SimpleHeadline.SHOWN && property != null && summary != null) {
             val unit = unitLabel(property, units)
             val value = summary.value?.let { formatValue(it, property, units) }
             val shown = value ?: notAvailableText()
             val word = if (summary.scaled) moodWord(summary.step) else null
-            val spoken = listOfNotNull(word, property.label, if (value != null) "$value $unit" else shown).joinToString(", ")
+            val spoken = spokenList(listOfNotNull(word, property.label, if (value != null) "$value $unit" else shown), separator)
             Row(
                 Modifier.clearAndSetSemantics {
                     contentDescription = spoken
@@ -804,6 +807,9 @@ private fun SimpleCellDetail(
                 Spacer(Modifier.height(12.dp))
                 MoodStrip(summary.blocks, captions = listOf(strings.window7Days, strings.window24Hours, strings.windowLastHour))
             }
+        } else if (headline == SimpleHeadline.LOADING) {
+            // The 24 hour row is still on its way. Neutral, no mood and no verdict yet.
+            Text(strings.loading, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
             Text(strings.notMeasured, style = MaterialTheme.typography.titleMedium)
         }
@@ -811,7 +817,7 @@ private fun SimpleCellDetail(
         // Sensors, freshness and the other values come from the 24 hour row, like the headline.
         val facts = state.simpleCellFacts()
         val updated = facts.updatedEpochMs
-        val stale = updated != null && reference - updated >= earth.walkthru.aqsync.publicfeed.CellFreshness.STALE_AFTER_MS
+        val stale = updated != null && reference - updated >= CellFreshness.STALE_AFTER_MS
         val parts = listOfNotNull(facts.devices?.let { strings.sensors(it) }, if (stale) strings.stale else freshness(strings, updated, reference))
         if (parts.isNotEmpty()) Text(parts.joinToString("  "), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         val others = facts.others

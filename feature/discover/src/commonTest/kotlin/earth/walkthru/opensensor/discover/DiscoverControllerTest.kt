@@ -42,17 +42,27 @@ class DiscoverControllerTest {
         override val isSample = true
         override val available = true
         val calls = mutableListOf<Pair<FeedWindow, List<LongRange>?>>()
+
+        /** Holds the single-cell reads of one cell, the window reads of a selection. */
         val gates = mutableMapOf<Long, CompletableDeferred<Unit>>()
 
-        /** Holds the next viewport reads, the ones that are not for a single cell. */
+        /** Holds the next viewport reads, the ones that are not for a single cell. Never a single-cell read. */
         var viewportGate: CompletableDeferred<Unit>? = null
+
+        /** Single-cell reads that throw once, then succeed. */
+        val failOnce = mutableSetOf<Pair<Long, FeedWindow>>()
 
         override suspend fun latest() = FeedPartition("2026-10-12", 10)
 
         override suspend fun cells(partition: FeedPartition, window: FeedWindow, res: Int, ranges: List<LongRange>?): CellsTable {
             calls += window to ranges
-            ranges?.singleOrNull()?.takeIf { it.first == it.last }?.let { gates[it.first]?.await() }
-                ?: viewportGate?.await()
+            val single = ranges?.singleOrNull()?.takeIf { it.first == it.last }?.first
+            if (single != null) {
+                gates[single]?.await()
+                if (failOnce.remove(single to window)) throw IllegalStateException("read failed")
+            } else {
+                viewportGate?.await()
+            }
             val rows = listOf(cellA, cellB)
                 .filter { c -> ranges == null || ranges.any { c in it } }
                 .map { c -> CellRow(c, devices = 3, updatedEpochMs = 1_000L, stats = mapOf("pm25" to CellStat(3, value(c, window), null, null))) }
@@ -196,5 +206,38 @@ class DiscoverControllerTest {
         gate.complete(Unit)
         settle()
         assertEquals(cellA, c.state.value.selected?.h3)
+    }
+
+    @Test
+    fun aFailedWindowReadLeavesItsKeyOutAndThePanReadsItAgain() = runTest {
+        val feed = FakeFeed()
+        val c = controller(feed)
+        feed.failOnce += cellA to FeedWindow.WEEK
+        c.selectCell(H3Index.toHex(cellA))
+        settle()
+        // A failed read is not "read, no value". Its key stays out, so the sheet does not say n/a.
+        assertEquals(setOf(FeedWindow.DAY, FeedWindow.LAST_HOUR), c.state.value.selectedWindows.keys)
+        feed.calls.clear()
+        c.onCamera(CameraRest(GeoBounds(-122.02, 36.98, -121.98, 37.02), zoom = 6.25, lat = 37.0, lng = -122.0))
+        settle()
+        assertEquals(listOf(FeedWindow.WEEK), feed.calls.filter { it.second == listOf(cellA..cellA) }.map { it.first })
+        assertEquals(10.0, c.state.value.selectedWindows[FeedWindow.WEEK]?.mean("pm25"))
+        assertEquals(3, c.state.value.selectedWindows.size)
+    }
+
+    @Test
+    fun aCancelledWindowReadStopsInsteadOfReadingTheNextWindow() = runTest {
+        val feed = FakeFeed()
+        val c = controller(feed)
+        feed.gates[cellA] = CompletableDeferred()
+        c.selectCell(H3Index.toHex(cellA))
+        settle()
+        assertEquals(1, feed.calls.count { it.second == listOf(cellA..cellA) })
+        // Selecting B cancels A's reads. The cancelled read must not go on to A's next window.
+        c.selectCell(H3Index.toHex(cellB))
+        settle()
+        assertEquals(1, feed.calls.count { it.second == listOf(cellA..cellA) }, "reads ${feed.calls}")
+        assertEquals(cellB, c.state.value.selected?.h3)
+        assertEquals(3, c.state.value.selectedWindows.size)
     }
 }

@@ -6,7 +6,9 @@ import earth.walkthru.aqsync.publicfeed.FeedProperty
 import earth.walkthru.aqsync.publicfeed.FeedWindow
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /** The Simple cell sheet reads the 24 hour row only, never the row of the window on screen. */
 class SimpleCellFactsTest {
@@ -34,7 +36,7 @@ class SimpleCellFactsTest {
     }
 
     @Test
-    fun noDayRowYetGivesNotAvailableValuesAndNoFreshness() {
+    fun beforeTheDayRowIsReadTheSheetIsLoadingNotNotAvailable() {
         val old = row(9, 2_000L, "pm25" to 80.0, "temp" to 30.0)
         val state = DiscoverUiState(
             dictionary = listOf(pm, temp, noise),
@@ -42,9 +44,49 @@ class SimpleCellFactsTest {
             selected = old,
             selectedWindows = mapOf(FeedWindow.LAST_HOUR to old),
         )
+        assertEquals(SimpleHeadline.LOADING, state.simpleHeadline())
         val facts = state.simpleCellFacts()
+        assertTrue(facts.loading)
         assertNull(facts.devices)
         assertNull(facts.updatedEpochMs)
+        assertTrue(facts.others.isEmpty())
+    }
+
+    @Test
+    fun noWindowReadYetIsLoadingNotNotMeasured() {
+        val state = DiscoverUiState(dictionary = listOf(pm), property = pm, selected = row(1, 1L), selectedWindows = emptyMap())
+        assertEquals(SimpleHeadline.LOADING, state.simpleHeadline())
+    }
+
+    @Test
+    fun aDayRowReadWithoutTheStatShowsTheHeadlineAsNotAvailable() {
+        val hour = row(9, 2_000L, "pm25" to 80.0, "temp" to 30.0)
+        val day = row(4, 1_000L, "noise" to 40.0)
+        val state = DiscoverUiState(
+            dictionary = listOf(pm, temp, noise),
+            property = pm,
+            selected = hour,
+            selectedWindows = mapOf(FeedWindow.LAST_HOUR to hour, FeedWindow.DAY to day),
+        )
+        assertEquals(SimpleHeadline.SHOWN, state.simpleHeadline())
+        val facts = state.simpleCellFacts()
+        assertFalse(facts.loading)
+        assertEquals(listOf<Pair<FeedProperty, Double?>>(temp to null, noise to 40.0), facts.others)
+    }
+
+    @Test
+    fun aDayReadWithNoRowAndNoStatAnywhereIsNotMeasured() {
+        val hour = row(9, 2_000L, "temp" to 30.0)
+        val state = DiscoverUiState(
+            dictionary = listOf(pm, temp, noise),
+            property = pm,
+            selected = hour,
+            selectedWindows = mapOf(FeedWindow.LAST_HOUR to hour, FeedWindow.DAY to null),
+        )
+        assertEquals(SimpleHeadline.NOT_MEASURED, state.simpleHeadline())
+        val facts = state.simpleCellFacts()
+        assertFalse(facts.loading)
+        assertNull(facts.devices)
         assertEquals(listOf<Pair<FeedProperty, Double?>>(temp to null), facts.others)
     }
 }

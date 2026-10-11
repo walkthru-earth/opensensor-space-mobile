@@ -141,8 +141,10 @@ internal fun metricRanges(row: CellRow, rows: List<CellRow>, dictionary: List<Fe
  * that step. Non finite values are not counted. A block of zero areas is not drawn.
  */
 internal fun stepBlocks(values: List<Double>, health: HealthScale): List<MoodBlock> {
-    val finite = values.filter { it.isFinite() }
-    return WhoStep.entries.map { step -> MoodBlock(step, finite.count { health.stepOf(it) == step }.toFloat()) }
+    // One pass. Each finite value adds to its step's count.
+    val counts = IntArray(WhoStep.entries.size)
+    values.forEach { v -> if (v.isFinite()) health.stepOf(v)?.let { counts[it.ordinal]++ } }
+    return WhoStep.entries.map { step -> MoodBlock(step, counts[step.ordinal].toFloat()) }
 }
 
 /**

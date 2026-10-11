@@ -170,8 +170,9 @@ an info button.
   when that window has no value, one plain line, then a three block mood strip for 7 days, 24
   hours and the last hour, with a visible caption under each block. Selecting a cell reads the
   other two windows for that one cell from the same feed the map uses, bundled today
-  (`DiscoverUiState.selectedWindows`). A future network feed must sit behind the Show public
-  sensors switch. Then sensors,
+  (`DiscoverUiState.selectedWindows`). Until the 24 hour row is read the sheet says "Loading",
+  with no mood and no value. A window whose read failed stays unread and the next pan reads it
+  again. A future network feed must sit behind the Show public sensors switch. Then sensors,
   freshness and the other measurements as plain value rows, all from the 24 hour row. A property
   without a health scale shows only its number. Detailed and Developer are unchanged. The mood
   words live only in `:ui:designsystem`.
