@@ -522,6 +522,25 @@ class CollectionControllerTest {
     }
 
     @Test
+    fun aThrowingLogNeverChangesTheOutcome() = runTest {
+        val keepAlive = CountingKeepAlive()
+        val links = FakeLinks(backgroundScope).apply { refuse = { n -> if (n == 1) DisconnectCause.PeerReset else null } }
+        val controller = controller(links, keepAlive) { throw IllegalStateException("log sink broke") }
+
+        assertIs<StartResult.Started>(controller.start(intent()))
+        settle(controller)
+
+        assertIs<CollectionState.Done>(controller.state.value)
+        assertEquals(2, links.connects, "the loss was retried")
+        assertTrue(logs.any { it.contains("start user_tap") }, logs.toString())
+        assertTrue(keepAlive.allClosedOnce())
+        assertIs<StartResult.Started>(controller.start(intent()))
+        settle(controller)
+        assertIs<CollectionState.Done>(controller.state.value)
+        assertTrue(keepAlive.allClosedOnce())
+    }
+
+    @Test
     fun aCredentialRejectedMidTransferFailsWithoutRetry() = runTest {
         val keepAlive = CountingKeepAlive()
         var opens = 0

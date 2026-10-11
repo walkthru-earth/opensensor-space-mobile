@@ -134,17 +134,18 @@ class CollectionController(
         val run = Run(intent, process)
         val taken = lock.withLock {
             if (_state.value.active) return@withLock false
-            _state.value = CollectionState.Preparing(intent, PrepareStep.CONNECT, 1)
-            // Stored before the launch, so a job that ends at once still finds itself here.
+            // Stored before the state and the launch, so an observer that stops and starts again,
+            // or a job that ends at once, already finds this run here.
             run.previous = current
             current = run
+            _state.value = CollectionState.Preparing(intent, PrepareStep.CONNECT, 1)
             true
         }
         if (!taken) {
             process.close()
             return busy()
         }
-        log("collection ${intent.id} start ${intent.origin.name.lowercase()} ${if (intent.scope is CollectionScope.One) "one" else "all"}")
+        note("collection ${intent.id} start ${intent.origin.name.lowercase()} ${if (intent.scope is CollectionScope.One) "one" else "all"}")
         // ATOMIC runs the body even when Stop lands first, so its finally always lets go.
         val job = scope.launch(start = CoroutineStart.ATOMIC) { execute(run) }
         val orphan = lock.withLock {
@@ -214,7 +215,7 @@ class CollectionController(
                         if (end.cause is DisconnectCause.Deliberate) return finish(run, CollectionState.Stopped(intent.id, StopSource.APP))
                         barren = if (progressed) 2 else barren + 1
                         val wait = retry.backoff(end.cause, barren, started.elapsedNow())
-                        log("collection ${intent.id} lost in attempt $attempt, ${end.cause.describe()}")
+                        note("collection ${intent.id} lost in attempt $attempt, ${end.cause.describe()}")
                         if (wait == null) return finish(run, CollectionState.Failed(intent.id, CollectionFailure.Link(end.cause)))
                         attempt++
                         advance(run, CollectionState.Waiting(intent, end.cause, attempt, clock() + wait.inWholeMilliseconds), null)
@@ -247,7 +248,7 @@ class CollectionController(
         advance(run, CollectionState.Preparing(intent, PrepareStep.PLAN, attempt), link.kind)
         val onlyName = (intent.scope as? CollectionScope.One)?.name
         val planned = planFrom(link.station, files, onlyName)
-        log("collection ${intent.id} planned ${planned.plan.missingCount} of ${planned.plan.entries.size} file(s)")
+        note("collection ${intent.id} planned ${planned.plan.missingCount} of ${planned.plan.entries.size} file(s)")
         return collector.transfer(link.session, planned, link.station, device, link.maxRead) { p ->
             if (p.receivedBytes > 0) progressed()
             advance(run, CollectionState.Transferring(intent, p, link.kind), link.kind)
@@ -271,7 +272,7 @@ class CollectionController(
             session.synchronizeClockIfNeeded(clock)
         } catch (e: DeviceErrorException) {
             if (e is AuthFailedException || e is DeviceBusyException) throw e
-            log("collection ${intent.id} clock not set, ERROR ${e.frame.code}")
+            note("collection ${intent.id} clock not set, ERROR ${e.frame.code}")
         }
     }
 
@@ -279,7 +280,7 @@ class CollectionController(
     private fun advance(run: Run, next: CollectionState, kind: TransportKind?) {
         if (!publish(run, next)) throw CancellationException("collection ${run.intent.id} no longer owns the state")
         syncLeases(run, next, kind)
-        if (next !is CollectionState.Transferring) log("collection ${run.intent.id} ${label(next)}")
+        if (next !is CollectionState.Transferring) note("collection ${run.intent.id} ${label(next)}")
     }
 
     /** Publish a terminal state when [run] still owns it. A Stop that won keeps its own. */
@@ -297,12 +298,21 @@ class CollectionController(
         try {
             step()
         } catch (e: Exception) {
-            runCatching { log("collection cleanup $what failed, ${e::class.simpleName}") }
+            note("collection cleanup $what failed, ${e::class.simpleName}")
+        }
+    }
+
+    /** [log] is the host's callback. A throw there never changes what the controller does. */
+    private fun note(line: String) {
+        try {
+            log(line)
+        } catch (_: Exception) {
+            // Nothing to report it to.
         }
     }
 
     private fun ended(terminal: CollectionState) {
-        log("collection ${terminal.intentId} ${label(terminal)}")
+        note("collection ${terminal.intentId} ${label(terminal)}")
         _events.trySend(terminal)
     }
 
@@ -318,7 +328,7 @@ class CollectionController(
             // asked again only once the link stops carrying data, not on every progress update.
             run.wifi = keepAlive.acquire(KeepAliveKind.WIFI, run.intent)?.let(::OnceLease)
             run.wifiRefused = run.wifi == null
-            if (run.wifiRefused) log("collection ${run.intent.id} wifi lease refused")
+            if (run.wifiRefused) note("collection ${run.intent.id} wifi lease refused")
         } else if (!wanted) {
             run.wifi?.close()
             run.wifi = null

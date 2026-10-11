@@ -20,6 +20,10 @@ fun interface LinkProvider {
      * A connect cancelled after the provider lent a link, but before it returned, must release
      * that lend itself. The controller never saw the [CollectionLink] and cannot hand it back.
      * The controller calls it only once the previous run of [device] let go of its link.
+     *
+     * It must honour cancellation or end within a bounded time, for example through a connect
+     * timeout. A later run of [device] waits, holding its PROCESS lease, until the stopped run's
+     * connect returns, so a connect that hangs keeps every later request in `Preparing(CONNECT)`.
      */
     suspend fun connect(device: String, prefer: LinkPreference): CollectionLink
 }

@@ -235,7 +235,9 @@ stateDiagram-v2
 - **One lender.** A run started right after a Stop waits, before its permit and connect, until
   the stopped run let go of its link. A run stopped while it waits still ends after the one
   before it, so quick restarts keep the order. `LinkProvider.connect` that is cancelled after it
-  lent a link releases that lend itself, since the controller never saw it.
+  lent a link releases that lend itself, since the controller never saw it. A connect must
+  honour cancellation or end within a bounded time, or every later request of that device waits.
+- **Logs never decide.** A `log` callback that throws is ignored, so it never changes an outcome.
 - **PROCESS** is taken inside `start`, before the job is launched, and held in every non-terminal
   state, `Waiting` included. A refused PROCESS lease ends as `Failed(KeepAliveRefused)` with no
   connect.
