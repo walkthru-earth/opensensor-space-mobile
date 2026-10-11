@@ -261,8 +261,10 @@ of map tiles. Durable data has no cap. `QuotaEnforcer` deletes only derived `.pa
 oldest written first, until the total is under the cap, and keeps the manifests. A missing day file
 with a matching manifest is rebuilt when something reads it. On Android the daily export calls
 `HistoryDeriver.ensureDailyFiles()` first, and lists and zips the day files inside
-`DerivedQuota.holding`, so no eviction runs until the zip is staged. iOS has no derived reader yet.
-The quota runs after each derive pass and in the janitor. The map cap is set once per process through MapLibre
+`DerivedQuota.holding`, so no eviction runs until the zip is staged. When the last hold ends, after
+success, failure or cancellation, the quota is applied at once, and a Clear History cache tapped during
+the hold runs then. iOS has no derived reader yet. The quota also runs after a derive pass that rebuilt
+a day and in the janitor. The map cap is set once per process through MapLibre
 `MapRuntimeOptions.maximumCacheSizeBytes`, before the first map. Settings shows the bytes per class
 and clears the History cache or the map cache. Sensor files have no clear button.
 

@@ -90,7 +90,7 @@ object StorageModule {
     ): DerivedQuota {
         val storage = context.getSystemService(StorageManager::class.java)
         val cache = context.cacheDir.absoluteFile
-        return DerivedQuota(QuotaEnforcer(roots, tree)) {
+        return DerivedQuota(QuotaEnforcer(roots, tree), io) {
             withContext(io) {
                 try {
                     policy.derivedQuotaWithin(storage.getCacheQuotaBytes(storage.getUuidForPath(cache)))

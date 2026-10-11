@@ -1,5 +1,8 @@
 package earth.walkthru.aqsync.storage
 
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -68,11 +71,13 @@ class QuotaEnforcer(
 /**
  * The derived quota as each platform computes it, with its [enforcer]. The derive pass, the janitor
  * and the Settings storage card share one instance. [enforce] blocks on disk I/O like [QuotaEnforcer.enforce].
- * While a reader [holding] the day files runs, [enforce] evicts nothing, so an export never loses a
- * file it listed.
+ * While a reader [holding] the day files runs, nothing is evicted, so an export never loses a file it
+ * listed. When the last hold ends the quota is applied at once, whatever the reader's outcome.
  */
 class DerivedQuota(
     private val enforcer: QuotaEnforcer,
+    /** Where the trim at the end of a hold runs, since a hold may end on the main thread. */
+    private val io: CoroutineDispatcher = Dispatchers.IO,
     private val quotaBytes: suspend () -> Long = { RetentionPolicy.DEFAULT_DERIVED_QUOTA_BYTES },
 ) {
     suspend fun bytes(): Long = quotaBytes()
@@ -80,25 +85,42 @@ class DerivedQuota(
     private val lock = Mutex()
     private var holders = 0
 
-    suspend fun enforce(): QuotaEnforcer.Report = evict { quotaBytes() }
+    /** A [clear] that arrived during a hold, applied when the hold ends. */
+    private var clearDeferred = false
+
+    suspend fun enforce(): QuotaEnforcer.Report = evict(clearing = false)
 
     /** Evicts every derived day file, the Settings clear action. Manifests stay, so a read rebuilds. */
-    suspend fun clear(): QuotaEnforcer.Report = evict { 0 }
+    suspend fun clear(): QuotaEnforcer.Report = evict(clearing = true)
 
     /**
-     * Runs [block] with eviction paused. It waits for an eviction already running, and the next
-     * derive pass or janitor run trims again.
+     * Runs [block] with eviction paused. It waits for an eviction already running. When the last
+     * hold ends, normally, by an exception or by cancellation, the quota is enforced (or a [clear]
+     * that came in meanwhile runs), so a pass that rebuilt nothing cannot leave the cache above
+     * quota (#61). A failed trim then is not the reader's error, the next one retries it.
      */
     suspend fun <T> holding(block: suspend () -> T): T {
         lock.withLock { holders++ }
         try {
             return block()
         } finally {
-            withContext(NonCancellable) { lock.withLock { holders-- } }
+            withContext(NonCancellable + io) {
+                lock.withLock {
+                    if (--holders == 0) {
+                        val quota = if (clearDeferred) 0 else runCatching { quotaBytes() }.getOrNull()
+                        clearDeferred = false
+                        if (quota != null) runCatching { enforcer.enforce(quota) }
+                    }
+                }
+            }
         }
     }
 
-    private suspend fun evict(quota: suspend () -> Long): QuotaEnforcer.Report = lock.withLock {
-        if (holders > 0) QuotaEnforcer.Report() else enforcer.enforce(quota())
+    private suspend fun evict(clearing: Boolean): QuotaEnforcer.Report = lock.withLock {
+        when {
+            holders == 0 -> enforcer.enforce(if (clearing) 0 else quotaBytes())
+            clearing -> QuotaEnforcer.Report().also { clearDeferred = true }
+            else -> QuotaEnforcer.Report()
+        }
     }
 }

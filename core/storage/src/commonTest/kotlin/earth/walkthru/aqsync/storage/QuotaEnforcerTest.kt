@@ -1,5 +1,9 @@
 package earth.walkthru.aqsync.storage
 
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -169,32 +173,99 @@ class QuotaEnforcerTest {
         assertEquals(RetentionPolicy.DEFAULT_DERIVED_QUOTA_BYTES, DerivedQuota(QuotaEnforcer(roots, FakeTree())).bytes())
     }
 
+    /** Two day files of 100 bytes and a manifest, with a quota that keeps only the newer day. */
+    private fun FakeTree.twoDays() {
+        file("$derived/s1/2026-10-01.parquet", 100, 10)
+        file("$derived/s1/2026-10-02.parquet", 100, 20)
+        file("$derived/s1/manifest.json", 10, 0)
+    }
+
     @Test
     fun nothingIsEvictedWhileAReaderHoldsTheDayFiles() = runTest {
         val tree = FakeTree()
-        tree.file("$derived/s1/2026-10-01.parquet", 100, 10)
-        tree.file("$derived/s1/2026-10-02.parquet", 100, 20)
+        tree.twoDays()
         val quota = DerivedQuota(QuotaEnforcer(roots, tree)) { 0 }
 
         val held = quota.holding {
             quota.holding { assertEquals(0, quota.clear().evicted) }
+            assertTrue(tree.deleted.isEmpty(), "an inner hold ending evicts nothing while the outer one reads")
             assertEquals(0, quota.enforce().evicted)
             tree.files.size
         }
 
-        assertEquals(2, held)
-        assertTrue(tree.deleted.isEmpty())
-        assertEquals(2, quota.enforce().evicted)
+        assertEquals(3, held)
     }
 
     @Test
-    fun aFailedReaderStillReleasesTheHold() = runTest {
+    fun theLastHoldEndingTrimsToQuotaWithNoFurtherCall() = runTest {
         val tree = FakeTree()
-        tree.file("$derived/s1/2026-10-01.parquet", 100, 10)
-        val quota = DerivedQuota(QuotaEnforcer(roots, tree)) { 0 }
+        val untouchable = tree.untouchable()
+        tree.twoDays()
+        val quota = DerivedQuota(QuotaEnforcer(roots, tree)) { 150 }
+
+        assertEquals("zip", quota.holding { quota.holding { "zip" } })
+
+        assertEquals(listOf("$derived/s1/2026-10-01.parquet"), tree.deleted)
+        assertTrue("$derived/s1/manifest.json" in tree.files)
+        for (path in untouchable) assertTrue(path in tree.files, "kept $path")
+    }
+
+    @Test
+    fun aFailedReaderStillTrimsWhenItsHoldEnds() = runTest {
+        val tree = FakeTree()
+        val untouchable = tree.untouchable()
+        tree.twoDays()
+        val quota = DerivedQuota(QuotaEnforcer(roots, tree)) { 150 }
 
         assertFailsWith<IllegalStateException> { quota.holding { error("read failed") } }
 
-        assertEquals(1, quota.enforce().evicted)
+        assertEquals(listOf("$derived/s1/2026-10-01.parquet"), tree.deleted)
+        for (path in untouchable) assertTrue(path in tree.files, "kept $path")
+    }
+
+    @Test
+    fun aCancelledReaderStillTrimsWhenItsHoldEnds() = runTest {
+        val tree = FakeTree()
+        val untouchable = tree.untouchable()
+        tree.twoDays()
+        val quota = DerivedQuota(QuotaEnforcer(roots, tree)) { 150 }
+
+        val export = launch { quota.holding { awaitCancellation() } }
+        runCurrent()
+        assertEquals(0, quota.enforce().evicted)
+        export.cancelAndJoin()
+
+        assertEquals(listOf("$derived/s1/2026-10-01.parquet"), tree.deleted)
+        for (path in untouchable) assertTrue(path in tree.files, "kept $path")
+    }
+
+    @Test
+    fun aClearDuringAHoldRunsWhenTheHoldEnds() = runTest {
+        val tree = FakeTree()
+        val untouchable = tree.untouchable()
+        tree.twoDays()
+        val quota = DerivedQuota(QuotaEnforcer(roots, tree)) { 1L shl 40 }
+
+        quota.holding {
+            assertEquals(0, quota.clear().evicted)
+            assertTrue(tree.deleted.isEmpty())
+        }
+
+        assertEquals(listOf("$derived/s1/manifest.json"), tree.list(derived).map { "$derived/${it.path}" })
+        for (path in untouchable) assertTrue(path in tree.files, "kept $path")
+        // The deferred clear is spent, the next hold trims to the quota only.
+        tree.file("$derived/s1/2026-10-03.parquet", 100, 30)
+        quota.holding { }
+        assertTrue("$derived/s1/2026-10-03.parquet" in tree.files)
+    }
+
+    @Test
+    fun aTrimThatFailsAtReleaseLeavesTheReaderResult() = runTest {
+        val tree = FakeTree()
+        tree.twoDays()
+        val quota = DerivedQuota(QuotaEnforcer(roots, tree)) { error("settings unreadable") }
+
+        assertEquals(7, quota.holding { 7 })
+        assertTrue(tree.deleted.isEmpty())
     }
 }
