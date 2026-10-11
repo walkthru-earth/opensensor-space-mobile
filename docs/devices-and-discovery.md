@@ -144,7 +144,7 @@ an info button.
   Tap a stop to pick it. It folds back about two seconds after the last touch. Screen readers get
   one control named Time window, its state is the full window name, and its actions pick the
   others. The chip row holds metrics only.
-- **Legend (WHO, 2026-10-09).** Bottom left, just above the sheet, a floating card with the
+- **Legend (WHO, Detailed and Developer, 2026-10-09).** Bottom left, just above the sheet, a floating card with the
   label and unit. PM2.5 and PM10 show six discrete, equal swatches (not a gradient) with the
   WHO edges under the borders (PM2.5 15, 25, 37.5, 50, 75, PM10 45, 50, 75, 100, 150, µg/m³,
   never converted), the guideline border marked "WHO" with an ink tick, and a caption naming
@@ -156,6 +156,24 @@ an info button.
   and says "No health scale published". Practice followed, Mazama Science "Qualitative display
   of air quality data", the South Coast AQMD accessible AQI scale, and the EPA Fire and Smoke
   map (`CellScale` in `:core:publicfeed`).
+- **Legend (Simple, 2026-10-12).** For PM2.5 and PM10 the floating card shows the six mood
+  words with their colours, titled with the property, and no numbers. Its info sheet explains
+  the moods without naming the guideline body and points to Detailed in Settings. A property
+  without a health scale keeps the gradient legend. The card is one accessibility node that
+  reads the title and the six words.
+- **In view at Simple (2026-10-12).** The spread chart becomes a mood strip, one block per mood
+  as wide as its number of areas, no axis. Tapping a block filters the map and the list to that
+  mood, tapping it again or tapping the map lets go, and changing the property clears it too.
+  A property without a health scale shows no chart at Simple. List rows name the mood word.
+  The strip is one accessibility node, and its touch targets are 48 dp when tappable.
+- **Cell sheet at Simple (2026-10-12).** Peacock and mood word beside the 24 hour mean, or "n/a"
+  when that window has no value, one plain line, then a three block mood strip for 7 days, 24
+  hours and the last hour, with a visible caption under each block. Selecting a cell reads the
+  other two windows for that one cell from the same anonymous feed
+  (`DiscoverController.selectedWindows`), so Show public sensors gates them too. Then sensors,
+  freshness and the other measurements as plain value rows, all from the 24 hour row. A property
+  without a health scale shows only its number. Detailed and Developer are unchanged. The mood
+  words live only in `:ui:designsystem`.
 - **Cell styles.** Filled with the scale colour, the fixed WHO step colour of the cell mean
   (`HealthScale.colorOf`) for PM, the percentile ramp for the rest. A stale cell (no hourly value for 3 hours) is
   drawn at 40 percent opacity with a dashed outline. A cell that does not measure the chosen
@@ -168,8 +186,9 @@ an info button.
   button after the first pan or after 5 seconds, as the OSMF guidelines allow.
 - **First run.** The peek area holds one card instead of the summary. A 48 dp peacock, one line
   "Public sensors near you, shown as areas", and two actions "Add your sensor" and "Explore".
-  Either action dismisses it for good. The card carries no numbers, so the mascot rule (never
-  beside charts or numbers) holds.
+  Either action dismisses it for good. The card carries no numbers. The mascot stays away from
+  charts and numbers at Detailed and Developer. At Simple the cell sheet places it beside the
+  mood word and its one value, the only exception.
 
 Sheet heights.
 
