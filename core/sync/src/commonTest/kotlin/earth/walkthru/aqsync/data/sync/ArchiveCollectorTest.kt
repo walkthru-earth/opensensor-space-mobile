@@ -1,5 +1,6 @@
 package earth.walkthru.aqsync.data.sync
 
+import earth.walkthru.aqsync.archive.ArchiveIndex
 import earth.walkthru.aqsync.archive.ArchiveKey
 import earth.walkthru.aqsync.archive.ArchiveLayout
 import earth.walkthru.aqsync.archive.ArchiveRecord
@@ -19,6 +20,7 @@ import earth.walkthru.aqsync.storage.FakeStorageBudget
 import earth.walkthru.aqsync.storage.StorageBudget
 import earth.walkthru.aqsync.storage.StorageClass
 import earth.walkthru.aqsync.storage.StorageException
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
@@ -55,17 +57,62 @@ class ArchiveCollectorTest {
     private fun finalBytes(station: String, name: String): ByteArray? = store.files[ArchiveLayout.finalPath(ArchiveKey(station, name))]
 
     @Test
+    fun projectedIdentitiesPlanWithoutLoadingFullRecordsAndKeepResumeAndConflictRules() = runTest {
+        val fake = FakeArchiveDevice(backgroundScope)
+        val saved = fake.files[0]
+        val conflict = fake.files[1]
+        val missing = fake.files[2]
+        val budget = plenty
+        val projectionOnly = object : ArchiveIndex by index {
+            override fun observeStation(station: String): Flow<List<ArchiveRecord>> = error("planning must use the projection")
+        }
+        val requestedStations = ArrayList<String>()
+        store.files[ArchiveLayout.partialPath(ArchiveKey(fake.station, missing.name))] = ByteArray(128)
+        val collector = ArchiveCollector(
+            store,
+            projectionOnly,
+            engine(),
+            budget,
+            testTimeSource,
+            archivedIdentities = { station ->
+                requestedStations += station
+                listOf(
+                    ArchivedIdentity(fake.station, saved.name, saved.bytes.size.toLong(), saved.crc32),
+                    ArchivedIdentity(fake.station, conflict.name, conflict.bytes.size.toLong() + 1, conflict.crc32),
+                    ArchivedIdentity("another-station", missing.name, missing.bytes.size.toLong(), missing.crc32),
+                )
+            },
+        )
+
+        val planned = collector.plan(fake.station, fake.files.map { Frame.File(it.bytes.size.toLong(), it.name) })
+
+        assertEquals(listOf(fake.station), requestedStations)
+        assertEquals(listOf(FileSyncState.SYNCED, FileSyncState.MISMATCH, FileSyncState.PARTIAL), planned.plan.entries.map { it.state })
+        assertEquals(listOf(missing.name), planned.plan.toDownload.map { it.name }, "another station's receipt cannot satisfy this listing")
+        assertEquals(listOf(FileNotSaved(conflict.name, FileProblem.LOCAL_CONFLICT)), planned.notSaved)
+        assertEquals(missing.bytes.size.toLong() - 128, planned.plan.missingBytes)
+        assertEquals(listOf(StorageClass.Durable to planned.plan.missingBytes + ARCHIVE_HEADROOM_BYTES), budget.reservations)
+        assertEquals(128, store.files.getValue(ArchiveLayout.partialPath(ArchiveKey(fake.station, missing.name))).size)
+    }
+
+    @Test
     fun everyListedFileIsSavedAndCounted() = runTest {
         val fake = FakeArchiveDevice(backgroundScope)
         val progress = ArrayList<CollectionProgress>()
 
         val summary = collect(fake, progress)
 
-        assertEquals(CollectionSummary(3, emptyList()), summary)
+        assertEquals(3, summary.files)
+        assertTrue(summary.complete)
+        assertEquals(3, summary.newFiles)
+        assertEquals(fake.files.sumOf { it.bytes.size.toLong() }, summary.newBytes)
         fake.files.forEach { assertContentEquals(it.bytes, finalBytes(fake.station, it.name)) }
         assertEquals(3, index.records.size)
         assertEquals(CollectionProgress(0, 3, 0, 0, 0.0, fake.files.sumOf { it.bytes.size }.toLong()), progress.first())
         assertEquals(3, progress.last().filesDone)
+        assertEquals(fake.files.map { it.name }.toSet(), progress.mapNotNull { it.current?.name }.toSet())
+        assertTrue(progress.filter { it.current != null }.all { it.fileBytes == it.current!!.bytesDone })
+        assertEquals(null, progress.last().current)
         assertEquals(fake.files.sumOf { it.bytes.size }.toLong(), progress.last().receivedBytes)
         assertEquals(progress.last().receivedBytes, progress.last().bytesTotal)
         assertTrue(progress.zipWithNext().all { (a, b) -> b.receivedBytes >= a.receivedBytes }, "received bytes never go back")
@@ -81,8 +128,69 @@ class ArchiveCollectorTest {
         val summary = collect(fake, progress)
 
         assertTrue(summary.complete)
+        assertEquals(3, summary.files)
+        assertEquals(0, summary.newFiles)
+        assertEquals(0L, summary.newBytes)
+        assertTrue(summary.outcomes.isEmpty())
         assertEquals(reads, fake.readCount)
         assertEquals(CollectionProgress(3, 3, 0, 0, 0.0), progress.single())
+    }
+
+    @Test
+    fun aDestinationCommittedAfterPlanningIsExcludedFromNewCounts() = runTest {
+        val fake = FakeArchiveDevice(backgroundScope)
+        val collector = collector()
+        val (files, _) = session(fake).list()
+        val planned = collector.plan(fake.station, files)
+        val existing = fake.files.first()
+        // Another writer wins after LIST and PLAN but before this collection reaches OPEN.
+        store.files[ArchiveLayout.finalPath(ArchiveKey(fake.station, existing.name))] = existing.bytes.copyOf()
+
+        val summary = collector.transfer(session(fake), planned, fake.station, fake.address, fake.maxRead) {}
+
+        assertEquals(3, summary.files)
+        assertEquals(2, summary.newFiles)
+        assertEquals(fake.files.drop(1).sumOf { it.bytes.size.toLong() }, summary.newBytes)
+        assertTrue((summary.outcomes.first() as FileOutcome.Synced).alreadyArchived)
+        assertContentEquals(existing.bytes, finalBytes(fake.station, existing.name))
+        assertTrue(summary.complete)
+    }
+
+    @Test
+    fun onlyVerifiedSuccessfulFilesContributeToNewBytes() = runTest {
+        val fake = FakeArchiveDevice(backgroundScope)
+        store.failCommit = { key -> if (key.name == fake.files.first().name) IllegalStateException("commit refused") else null }
+
+        val summary = collect(fake)
+
+        assertEquals(2, summary.newFiles)
+        assertEquals(fake.files.drop(1).sumOf { it.bytes.size.toLong() }, summary.newBytes)
+        assertEquals(3, summary.outcomes.size)
+        assertEquals(listOf(FileNotSaved(fake.files.first().name, FileProblem.STORAGE)), summary.notSaved)
+    }
+
+    @Test
+    fun aResumedVerifiedFileCountsItsActualFullArchiveBytes() = runTest {
+        val fake = FakeArchiveDevice(backgroundScope)
+        val file = fake.files.first()
+        val key = ArchiveKey(fake.station, file.name)
+        val held = 1_000
+        store.openPartial(key, PartialMeta(file.bytes.size.toLong(), ParquetVerify.crc32(file.bytes))).use {
+            it.writeAt(0, file.bytes.copyOf(held))
+        }
+        val progress = ArrayList<CollectionProgress>()
+
+        val summary = collect(fake, progress)
+
+        assertEquals(3, summary.newFiles)
+        assertEquals(fake.files.sumOf { it.bytes.size.toLong() }, summary.newBytes)
+        assertEquals(summary.newBytes - held, progress.last().receivedBytes)
+        assertEquals(held.toLong(), fake.readOffsets.first())
+        val active = progress.mapNotNull { it.current }.first()
+        assertEquals(file.name, active.name)
+        assertEquals(held.toLong(), active.resumedFrom)
+        assertEquals(file.bytes.size.toLong(), active.bytesTotal)
+        assertEquals(null, progress.last().current, "the settled file is no longer in transfer")
     }
 
     @Test
@@ -95,7 +203,10 @@ class ArchiveCollectorTest {
             progress += it
         }
 
-        assertEquals(CollectionSummary(1, emptyList()), summary)
+        assertEquals(1, summary.files)
+        assertTrue(summary.complete)
+        assertEquals(1, summary.newFiles)
+        assertEquals(chosen.bytes.size.toLong(), summary.newBytes)
         assertContentEquals(chosen.bytes, finalBytes(fake.station, chosen.name))
         assertEquals(1, index.records.size)
         assertEquals(chosen.bytes.size.toLong(), progress.last().bytesTotal)
@@ -236,11 +347,14 @@ class ArchiveCollectorTest {
         val fake = FakeArchiveDevice(backgroundScope)
         val budget = budget(1L shl 30)
         val full = FillingStore(store, limit = 3_000) { budget.free[StorageClass.Durable] = 1_000 }
+        val failedProgress = ArrayList<CollectionProgress>()
 
         val e = assertFailsWith<InsufficientSpaceException> {
             ArchiveCollector(store = full, index, engine(full), budget, testTimeSource)
-                .collect(session(fake), fake.station, fake.address, fake.maxRead) {}
+                .collect(session(fake), fake.station, fake.address, fake.maxRead) { failedProgress += it }
         }
+        assertEquals(null, failedProgress.last().current, "even a storage failure settles the active file before the room check")
+        assertEquals(1, failedProgress.last().filesDone)
         assertEquals(1_000L, e.available)
         assertEquals(1, fake.requests.count { it == Opcode.OPEN }, "the run ended with the first file")
         val (name, held) = store.partialLengths(fake.station).entries.single()
@@ -252,7 +366,10 @@ class ArchiveCollectorTest {
         val readsBefore = fake.readOffsets.size
         val summary = collect(fake, budget = budget)
 
-        assertEquals(CollectionSummary(3, emptyList()), summary)
+        assertEquals(3, summary.files)
+        assertTrue(summary.complete)
+        assertEquals(3, summary.newFiles)
+        assertEquals(fake.files.sumOf { it.bytes.size.toLong() }, summary.newBytes)
         assertEquals(held, fake.readOffsets[readsBefore], "the first READ of the next run starts at the partial, reads ${fake.readOffsets}")
         assertContentEquals(fake.files.single { it.name == name }.bytes, finalBytes(fake.station, name))
         assertTrue(store.partialLengths(fake.station).isEmpty())

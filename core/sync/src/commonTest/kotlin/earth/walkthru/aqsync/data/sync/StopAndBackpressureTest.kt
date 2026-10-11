@@ -113,7 +113,10 @@ class StopAndBackpressureTest {
         val startB = currentTime
         val summary = collector.collect(second, fake.station, fake.address, fake.maxRead) {}
 
-        assertEquals(CollectionSummary(3, emptyList()), summary)
+        assertEquals(3, summary.files)
+        assertTrue(summary.complete)
+        assertEquals(3, summary.newFiles)
+        assertEquals(fake.files.sumOf { it.bytes.size.toLong() }, summary.newBytes)
         fake.files.forEach { assertContentEquals(it.bytes, finalBytes(fake.station, it.name)) }
         // Run B's LIST queued behind the owed CLOSE, whose CLOSED came 1.5 s later.
         assertTrue(currentTime - startB >= 1_500, "run B waited ${currentTime - startB} ms")

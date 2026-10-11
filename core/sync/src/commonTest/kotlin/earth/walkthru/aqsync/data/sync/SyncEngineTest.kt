@@ -69,6 +69,31 @@ class SyncEngineTest {
     private fun hasPartials(): Boolean = store.files.keys.any { it.startsWith(ArchiveLayout.PARTIAL + "/") }
 
     @Test
+    fun settledCallbacksReportNewAndReusedArchivesOnceBeforeEachClose() = runTest {
+        val d = device(backgroundScope)
+        val fake = d.first
+        val file = fake.files.first()
+        val outcomes = ArrayList<FileOutcome>()
+        val closesAtSettlement = ArrayList<Int>()
+        val settle: (FileOutcome) -> Unit = { outcome ->
+            outcomes += outcome
+            closesAtSettlement += fake.requests.count { it == Opcode.CLOSE }
+            assertContentEquals(file.bytes, finalBytes(fake.station, file.name))
+            assertEquals(file.name, index.records.single().name, "verified bytes and their receipt exist before callback")
+        }
+
+        val first = engine().download(d.second, fake.station, fake.address, file.name, file.bytes.size.toLong(), fake.maxRead, onSettled = settle) {}
+        val second = engine().download(d.second, fake.station, fake.address, file.name, file.bytes.size.toLong(), fake.maxRead, onSettled = settle) {}
+
+        assertEquals(listOf(first, second), outcomes)
+        assertEquals(listOf(0, 1), closesAtSettlement)
+        assertFalse(assertIs<FileOutcome.Synced>(first).alreadyArchived)
+        assertTrue(assertIs<FileOutcome.Synced>(second).alreadyArchived)
+        assertEquals(1, index.puts, "reuse preserves the existing receipt and provenance")
+        assertEquals(0, leases.activeCount())
+    }
+
+    @Test
     fun aFailedReadStillClosesThePartialWriter() = runTest {
         val d = device(backgroundScope)
         // Every window loses every CHUNK, so the engine gives up and returns from inside the writer block.

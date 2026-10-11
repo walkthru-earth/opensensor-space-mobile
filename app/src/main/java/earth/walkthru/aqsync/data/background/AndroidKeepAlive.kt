@@ -3,6 +3,7 @@ package earth.walkthru.aqsync.data.background
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
 import earth.walkthru.aqsync.collection.CollectionIntent
+import earth.walkthru.aqsync.collection.CollectionOrigin
 import earth.walkthru.aqsync.collection.KeepAlive
 import earth.walkthru.aqsync.collection.KeepAliveKind
 import earth.walkthru.aqsync.collection.Lease
@@ -11,67 +12,90 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.locks.ReentrantLock
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.concurrent.withLock
 
-/**
- * Android [KeepAlive]. PROCESS holds [SyncForegroundService] up while any lease is open, WIFI
- * takes the LAN Wi-Fi lock. The first PROCESS lease starts the service synchronously, so a tap
- * must call [acquire] while the app is in the foreground. A refused start returns null.
- */
+/** Interactive PROCESS leases own a generation of the app service. Workers supply their own. */
 @Singleton
 class AndroidKeepAlive internal constructor(
-    private val startProcess: () -> Boolean,
+    private val startGeneration: (Long) -> Boolean,
     private val wifi: WifiLeases,
 ) : KeepAlive {
 
     @Inject
     constructor(@ApplicationContext context: Context, wifi: WifiLeases) :
-        this({ SyncForegroundService.start(context) }, wifi)
+        this({ generation: Long -> SyncForegroundService.start(context, generation) }, wifi)
 
+    enum class ServiceLoss { REFUSED, TIMEOUT, DESTROYED }
+
+    private val lock = ReentrantLock()
     private val held = MutableStateFlow(false)
-
-    /** True while a PROCESS lease is open. [SyncForegroundService] stays up while it is. */
     val processHeld: StateFlow<Boolean> = held.asStateFlow()
+    private var nextGeneration = 0L
+    private var activeGeneration: Long? = null
+    private val owners = mutableMapOf<Any, Owner>()
+    val generation: Long? get() = lock.withLock { activeGeneration }
 
-    private var owners = 0
-    private var serviceStarted = false
-
-    /**
-     * The service went away, refused by the OS after the start was accepted or out of `dataSync`
-     * time. The next PROCESS lease starts it again instead of trusting a dead service.
-     */
-    @Synchronized
-    fun onServiceStopped() {
-        serviceStarted = false
-    }
-
-    @Synchronized
-    private fun acquireProcess(): AutoCloseable? {
-        if (!serviceStarted) {
+    /** Takes the lease before Android start, then invokes OS code outside the accounting lock. */
+    fun acquireProcess(intent: CollectionIntent, onLost: (ServiceLoss) -> Unit): Lease? {
+        if (intent.origin != CollectionOrigin.USER_TAP) return null
+        val key = Any()
+        val (generation, mustStart) = lock.withLock {
+            val start = activeGeneration == null
+            val generation = activeGeneration ?: (++nextGeneration).also { activeGeneration = it }
+            owners[key] = Owner(generation, onLost)
             held.value = true
-            if (!startProcess()) {
-                held.value = owners > 0
-                return null
-            }
-            serviceStarted = true
+            generation to start
         }
-        owners++
-        held.value = true
-        return AutoCloseable {
-            synchronized(this) {
-                owners--
-                if (owners == 0) held.value = false
+        if (mustStart && !startGeneration(generation)) {
+            onServiceStopped(generation, ServiceLoss.REFUSED)
+            return null
+        }
+        val alive = lock.withLock { owners.containsKey(key) }
+        if (!alive) return null
+        val closed = AtomicBoolean(false)
+        return Lease {
+            if (closed.compareAndSet(false, true)) {
+                lock.withLock {
+                    owners.remove(key)
+                    held.value = owners.isNotEmpty()
+                }
             }
         }
     }
 
-    override fun acquire(kind: KeepAliveKind, intent: CollectionIntent): Lease? {
-        val lease = when (kind) {
-            KeepAliveKind.PROCESS -> acquireProcess()
-            KeepAliveKind.WIFI -> wifi.acquireLease()
-        } ?: return null
-        val closed = AtomicBoolean(false)
-        return Lease { if (closed.compareAndSet(false, true)) runCatching { lease.close() } }
+    /** Ignore stale callbacks. Notify just that generation's requests, always outside the lock. */
+    fun onServiceStopped(generation: Long, loss: ServiceLoss = ServiceLoss.DESTROYED) {
+        val callbacks = lock.withLock {
+            if (activeGeneration != generation) return
+            activeGeneration = null
+            val affected = owners.filterValues { it.generation == generation }
+            affected.keys.forEach(owners::remove)
+            held.value = owners.isNotEmpty()
+            affected.values.map { it.onLost }
+        }
+        callbacks.forEach { runCatching { it(loss) } }
     }
+
+    /** A lease-only idle check and service shutdown claim share the same generation lock. */
+    fun finishIfIdle(generation: Long): Boolean = lock.withLock {
+        if (activeGeneration != generation || owners.isNotEmpty()) {
+            false
+        } else {
+            activeGeneration = null
+            true
+        }
+    }
+
+    override fun acquire(kind: KeepAliveKind, intent: CollectionIntent): Lease? = when (kind) {
+        KeepAliveKind.PROCESS -> acquireProcess(intent) {}
+        KeepAliveKind.WIFI -> wifi.acquireLease()?.let { lease ->
+            val closed = AtomicBoolean(false)
+            Lease { if (closed.compareAndSet(false, true)) runCatching { lease.close() } }
+        }
+    }
+
+    private class Owner(val generation: Long, val onLost: (ServiceLoss) -> Unit)
 }

@@ -34,6 +34,7 @@ class FakeLinks(
     /** Every fake opened, in order. */
     val devices: MutableList<FakeArchiveDevice> = mutableListOf()
     val links: MutableList<CollectionLink> = mutableListOf()
+    val preferences: MutableList<LinkPreference> = mutableListOf()
     var connects: Int = 0
         private set
     var releases: Int = 0
@@ -60,6 +61,7 @@ class FakeLinks(
     private var last: Pair<FakeArchiveDevice, DeviceSession>? = null
 
     override suspend fun connect(device: String, prefer: LinkPreference): CollectionLink {
+        preferences += prefer
         val n = ++connects
         refuse(n)?.let { throw LinkClosedException(it) }
         val (fake, session) = last?.takeIf { share && it.second.link.state.value is LinkState.Ready } ?: run {

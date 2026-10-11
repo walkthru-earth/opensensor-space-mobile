@@ -28,6 +28,9 @@ fun interface HistoryRefresher {
     /** After a sync, rebuilds only the days that files archived since [sinceEpochMs] touch. */
     suspend fun deriveAfterSync(sinceEpochMs: Long): HistoryDeriver.Result = deriveStale()
 
+    /** Persist an accepted collection clock receipt without starting a history pass. */
+    suspend fun persistClockAnchor(station: String, boot: String, utcNs: Long, monotonicUs: Long) {}
+
     suspend fun recordClockAnchor(station: String, boot: String, utcNs: Long, monotonicUs: Long) {}
 }
 
@@ -70,10 +73,11 @@ class HistoryDeriver @Inject constructor(
     /** [signatureOf] for Room rows. */
     fun signature(files: List<ArchivedFile>): String = signatureOf(files.map { it.toRecord() })
 
-    /**
-     * Rebuilds every stale station-day. Cheap when nothing changed; a full first pass over a year of one
-     * station is ~365 day rebuilds of ≤ 96 files each. Safe to call from any screen or worker; idempotent.
-     */
+    /** Only the accepted receipt; collection reconciliation runs in its cancellable finalization. */
+    override suspend fun persistClockAnchor(station: String, boot: String, utcNs: Long, monotonicUs: Long) {
+        indexer.persistClockAnchor(station, boot, utcNs, monotonicUs)
+    }
+
     override suspend fun recordClockAnchor(station: String, boot: String, utcNs: Long, monotonicUs: Long) {
         indexer.recordClockAnchor(station, boot, utcNs, monotonicUs)
         deriveStale(listOf(station))

@@ -4,6 +4,7 @@ import earth.walkthru.aqsync.collection.CollectionIntent
 import earth.walkthru.aqsync.collection.CollectionOrigin
 import earth.walkthru.aqsync.collection.CollectionScope
 import earth.walkthru.aqsync.collection.KeepAliveKind
+import earth.walkthru.aqsync.data.background.AndroidKeepAlive.ServiceLoss
 import earth.walkthru.aqsync.data.lan.WifiLeases
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -15,60 +16,79 @@ class AndroidKeepAliveTest {
     private val intent = CollectionIntent(1, "dev", CollectionScope.All, CollectionOrigin.USER_TAP)
 
     @Test
-    fun `process starts the service once and holds until the last lease closes`() {
+    fun `service lease holds through all owners and duplicate close`() {
         var starts = 0
         val keepAlive = AndroidKeepAlive({ starts++; true }, { null })
         val first = requireNotNull(keepAlive.acquire(KeepAliveKind.PROCESS, intent))
-        val second = requireNotNull(keepAlive.acquire(KeepAliveKind.PROCESS, intent))
+        val second = requireNotNull(keepAlive.acquire(KeepAliveKind.PROCESS, intent.copy(id = 2)))
         assertEquals(1, starts)
         assertTrue(keepAlive.processHeld.value)
         first.close()
         first.close()
         assertTrue(keepAlive.processHeld.value)
+        assertFalse(keepAlive.finishIfIdle(requireNotNull(keepAlive.generation)))
         second.close()
         assertFalse(keepAlive.processHeld.value)
+        assertTrue(keepAlive.finishIfIdle(requireNotNull(keepAlive.generation)))
     }
 
     @Test
-    fun `a lease after the service stopped starts it again`() {
-        var starts = 0
-        val keepAlive = AndroidKeepAlive({ starts++; true }, { null })
-        val first = requireNotNull(keepAlive.acquire(KeepAliveKind.PROCESS, intent))
-        keepAlive.onServiceStopped()
-        val second = requireNotNull(keepAlive.acquire(KeepAliveKind.PROCESS, intent))
-        assertEquals(2, starts)
-        first.close()
+    fun `loss names every protected intent and old leases cannot release a newer generation`() {
+        val losses = mutableListOf<Pair<Long, ServiceLoss>>()
+        val keepAlive = AndroidKeepAlive({ true }, { null })
+        val old = requireNotNull(keepAlive.acquireProcess(intent) { losses += intent.id to it })
+        val generation = requireNotNull(keepAlive.generation)
+        keepAlive.onServiceStopped(generation, ServiceLoss.TIMEOUT)
+        assertEquals(listOf(1L to ServiceLoss.TIMEOUT), losses)
+        val new = requireNotNull(keepAlive.acquireProcess(intent.copy(id = 2)) { losses += 2L to it })
+        old.close()
+        keepAlive.onServiceStopped(generation, ServiceLoss.REFUSED)
         assertTrue(keepAlive.processHeld.value)
-        second.close()
+        assertEquals(1, losses.size)
+        new.close()
         assertFalse(keepAlive.processHeld.value)
     }
 
     @Test
-    fun `a refused restart keeps the open lease held`() {
-        var allow = true
-        val keepAlive = AndroidKeepAlive({ allow }, { null })
-        val first = requireNotNull(keepAlive.acquire(KeepAliveKind.PROCESS, intent))
-        keepAlive.onServiceStopped()
-        allow = false
-        assertNull(keepAlive.acquire(KeepAliveKind.PROCESS, intent))
+    fun `refusal and destruction callbacks run outside lock and restart safely`() {
+        lateinit var keepAlive: AndroidKeepAlive
+        keepAlive = AndroidKeepAlive({ true }, { null })
+        var observed: ServiceLoss? = null
+        requireNotNull(
+            keepAlive.acquireProcess(intent) { loss ->
+                observed = loss
+                // Reentrant acquisition models a new intent started by an outcome observer.
+                assertNull(keepAlive.generation)
+                requireNotNull(keepAlive.acquireProcess(intent.copy(id = 2)) {})
+            }
+        )
+        keepAlive.onServiceStopped(requireNotNull(keepAlive.generation), ServiceLoss.DESTROYED)
+        assertEquals(ServiceLoss.DESTROYED, observed)
         assertTrue(keepAlive.processHeld.value)
-        first.close()
-        assertFalse(keepAlive.processHeld.value)
     }
 
     @Test
-    fun `a refused start returns no lease and holds nothing`() {
+    fun `refused start informs request and holds nothing`() {
+        var loss: ServiceLoss? = null
         val keepAlive = AndroidKeepAlive({ false }, { null })
-        assertNull(keepAlive.acquire(KeepAliveKind.PROCESS, intent))
+        assertNull(keepAlive.acquireProcess(intent) { loss = it })
+        assertEquals(ServiceLoss.REFUSED, loss)
         assertFalse(keepAlive.processHeld.value)
     }
 
     @Test
-    fun `wifi maps to the lan lock and a failing close does not throw`() {
+    fun `worker process protection never starts the interactive service`() {
+        val keepAlive = AndroidKeepAlive({ error("worker started service") }, { null })
+        assertNull(keepAlive.acquire(KeepAliveKind.PROCESS, intent.copy(origin = CollectionOrigin.WORKER)))
+        assertFalse(keepAlive.processHeld.value)
+    }
+
+    @Test
+    fun `wifi maps to lock and duplicate or failing close does not throw`() {
         var closes = 0
-        val wifi = WifiLeases { AutoCloseable { closes++; error("release failed") } }
-        val keepAlive = AndroidKeepAlive({ error("no service for wifi") }, wifi)
+        val keepAlive = AndroidKeepAlive({ error("no service for wifi") }, WifiLeases { AutoCloseable { closes++; error("release failed") } })
         val lease = requireNotNull(keepAlive.acquire(KeepAliveKind.WIFI, intent))
+        lease.close()
         lease.close()
         assertEquals(1, closes)
         assertFalse(keepAlive.processHeld.value)

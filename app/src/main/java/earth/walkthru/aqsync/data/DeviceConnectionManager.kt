@@ -1,5 +1,6 @@
 package earth.walkthru.aqsync.data
 
+import earth.walkthru.aqsync.collection.StopSource
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.lan.LanDiscoveryState
 import kotlinx.coroutines.CoroutineScope
@@ -13,9 +14,11 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
+import java.util.concurrent.locks.ReentrantLock
 import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
+import kotlin.concurrent.withLock
 
 /** One process-owned controller per stable public BLE endpoint; UI selection never closes another. */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -23,14 +26,18 @@ import javax.inject.Singleton
 class DeviceConnectionManager @Inject constructor(
     private val factory: Provider<DeviceConnectionRepository>,
     private val discovery: LanDiscoveryState,
+    private val admission: CollectionAdmission,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val controllers = MutableStateFlow<Map<String, DeviceConnectionRepository>>(emptyMap())
 
-    @Synchronized
-    fun controller(address: String): DeviceConnectionRepository = controllers.value[address] ?: factory.get().also {
-        it.bind(address)
-        controllers.value = controllers.value + (address to it)
+    private val lock = ReentrantLock()
+
+    fun controller(address: String): DeviceConnectionRepository = lock.withLock {
+        controllers.value[address] ?: factory.get().also {
+            it.bind(address)
+            controllers.value = controllers.value + (address to it)
+        }
     }
 
     val lanDevices get() = discovery.devices
@@ -53,11 +60,12 @@ class DeviceConnectionManager @Inject constructor(
 
     fun isOwned(address: String): Boolean = controllers.value[address]?.interactiveSessionAddress != null
 
+    fun hasInteractiveCollection(): Boolean = admission.hasInteractive
+
     /** Notification Stop targets interactive transfers only; workers retain their own cancel action. */
-    fun cancelInteractive() {
+    fun cancelInteractive(by: StopSource = StopSource.USER) {
         controllers.value.values.filter { it.backgroundOwner.value == null }.forEach {
-            it.cancelSync()
-            it.cancelReconnect()
+            it.stop(by)
         }
     }
 }

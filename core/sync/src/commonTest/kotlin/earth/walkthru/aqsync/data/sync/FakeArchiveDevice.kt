@@ -13,6 +13,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.emptyFlow
@@ -61,6 +62,12 @@ class FakeArchiveDevice(
     /** Delay before CLOSED, so a caller's timeout fires first. */
     var closedDelayMs: Long = 0
 
+    /** Optional accepted clock evidence. Null retains the fake's default SET_TIME refusal. */
+    var clockAck: Frame.TimeSet? = null
+
+    /** Optional SET_TIME error, including a global error for op 0. Takes precedence over an ack. */
+    var clockError: Frame.Error? = null
+
     /** Delay between CHUNKs, so concurrent transfers interleave. */
     var chunkDelayMs: Long = 0
 
@@ -74,6 +81,7 @@ class FakeArchiveDevice(
     var beforeList: () -> Unit = {}
 
     private val responses = Channel<ByteArray>(Channel.UNLIMITED)
+    private val statusUpdates = MutableSharedFlow<ByteArray>(extraBufferCapacity = 1)
     private val state = MutableStateFlow<ConnectionState>(ConnectionState.Ready(mtu))
     private var openFile: FakeFile? = null
     private var openHandle = 0
@@ -89,7 +97,7 @@ class FakeArchiveDevice(
     override val displayName: String = "AQ-fake"
     override val endpoint: String = "in-process fake"
     override val connectionState: StateFlow<ConnectionState> = state
-    override val statusNotifications: Flow<ByteArray> = emptyFlow()
+    override val statusNotifications: Flow<ByteArray> = statusUpdates
     override val liveNotifications: Flow<ByteArray> = emptyFlow()
     override val responseFrames: ReceiveChannel<ByteArray> get() = responses
 
@@ -118,6 +126,8 @@ class FakeArchiveDevice(
         requests += op
         when (op) {
             Opcode.ABORT -> if (streaming != 0) abortRequested = true else send(Frame.Aborted(0))
+            Opcode.SET_TIME -> clockError?.let(::send) ?: clockAck?.let(::send) ?: send(Frame.Error(op, ProtocolError.MALFORMED_REQUEST.code, ""))
+            Opcode.STATUS -> statusUpdates.emit("{}".encodeToByteArray())
             Opcode.LIST -> {
                 beforeList()
                 if (listDelayMs > 0) {
