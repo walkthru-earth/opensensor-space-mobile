@@ -76,7 +76,7 @@ The iOS app entry point is the Xcode project in this directory. Read the root
   thread safe in Kotlin and the ObjC header cannot say so. `IosLink.make` binds the identity
   before the link is shared. `WriteDone` wraps Kotlin's write callback, which runs once from any
   thread, and debug builds trap a second call. The ports (`LanPort`, `BlePort`) are checked
-  `Sendable` through `weak let` (SE-0481).
+  `Sendable` through `weak let` (SE-0481), and `BlePort.link` is a `@MainActor` property.
 - Default MainActor isolation (`SWIFT_DEFAULT_ACTOR_ISOLATION`, SE-0466) stays off. It would move
   `SensorArchive`, `LanFrameBuffer` and `LanPolicy` onto the main actor, and socket framing would
   return to the UI thread.
