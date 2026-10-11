@@ -1,10 +1,13 @@
 import CoreBluetooth
 import Foundation
 import OpenSensorShared
+import UIKit
 
 /// BLE reader. Core Bluetooth owns pairing; no firmware-changing requests are sent. User actions run
 /// in the foreground. Off screen only a sync or Debug request already running, and an Auto-sync step
-/// for a known sensor (#23), keep a link.
+/// for a known sensor (#23), keep a link. Each connection gets one shared [IosLink] once INFO named the
+/// sensor. Sync, commands, Debug, Device settings and Files take leases of it, so a reply left over
+/// from one run is drained before the next run's first request (#58).
 @MainActor
 final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelegate, @preconcurrency CBPeripheralDelegate
 {
@@ -17,11 +20,11 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     private var identity: SyncIdentity?
     private var tokenTimer: Timer?
     private var requestingToken = false
-    /// The sensor whose last page closed while a write or read was still queued, or while Device
-    /// settings held its link for one request. Settling closes it.
+    /// The sensor whose last page closed while a write or read was still queued, or while a lease
+    /// held its link. Settling closes it.
     private var closeWhenIdle: String?
-    /// The link lent to Device settings for one request, while it is out.
-    private var configLink: SensorLink?
+    /// Held while this side writes `GET_TOKEN` itself, so no Kotlin request shares the link.
+    private var nativeLease: IosNativeLease?
     var onCredentialSaved: (() -> Void)?
     /// INFO named the sensor the user opened: peripheral id, advertised name, station and hardware id.
     var onSensorOpened: ((String, String?, String, String) -> SensorOpenResult)?
@@ -36,9 +39,13 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     private var openRequested: String?
     /// The sensor Collect all is copying now. It is closed again when the sync ends.
     private var collectId: String?
+    /// Collect all runs as an iOS 26 continued task, so its steps go on off screen (#58).
+    var collectOffScreen = false
+    /// The Collect all step was cancelled, so it ends instead of starting its sync.
+    private var collectCancelled = false
     /// Whether this Collect all step opened the link, so it closes only what it opened.
     private var collectOpened = false
-    /// Ends a Collect all step that never started its sync, for example a Debug link never handed back.
+    /// Ends a Collect all step that never started its sync, for example behind a Debug lease that never ended.
     private var collectTimer: Timer?
     private var discovered: [String: CBPeripheral] = [:]
     private var advertisedNames: [String: String] = [:]
@@ -50,9 +57,12 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     private var pending: Operation?
     private var foreground = true
     private let engine: SensorSync
-    /// The shared engine's link while a Bluetooth sync runs. RESPONSE notifications go to it.
-    private var link: SensorLink?
+    /// This connection's shared link, made once INFO named the sensor. RESPONSE notifications go to it.
+    private var ioLink: IosLink?
+    /// The sync or command this side started, while it runs.
     private var syncHandle: SyncHandle?
+    /// Keeps a sync the user started running for a short while after the app leaves the screen.
+    private var syncTask: UIBackgroundTaskIdentifier = .invalid
     private var interactiveFileName: String?
     private var interactiveSyncId: String?
     private var resumePeripheral: CBPeripheral?
@@ -82,7 +92,12 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     static let restoreId = "earth.walkthru.opensensor.central"
 
     /// Links keep working off screen only for work already under way.
-    private var active: Bool { foreground || link != nil || backgroundId != nil }
+    private var active: Bool {
+        foreground || syncHandle != nil || ioLink?.leased == true || backgroundId != nil || collectId != nil
+    }
+
+    /// A run, a lease or Wi-Fi access setup holds the link.
+    private var linkBusy: Bool { syncHandle != nil || ioLink?.leased == true || requestingToken }
 
     init(engine: SensorSync) {
         self.engine = engine
@@ -110,10 +125,11 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     private enum Operation {
         case read(CBCharacteristic)
         case subscribe(CBCharacteristic)
-        case write(CBCharacteristic, Data)
+        /// A request body. Kotlin's writes carry [done], which hears whether the sensor took it.
+        case write(CBCharacteristic, Data, done: ((Bool) -> Void)?)
         var characteristic: CBCharacteristic {
             switch self {
-            case .read(let characteristic), .subscribe(let characteristic), .write(let characteristic, _):
+            case .read(let characteristic), .subscribe(let characteristic), .write(let characteristic, _, _):
                 return characteristic
             }
         }
@@ -154,11 +170,11 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     /// cancels Collect all first. A sync or Debug request the user started keeps its link, and the
     /// open is refused instead.
     func open(id: String) {
-        guard foreground else { return }
+        guard foreground || collectOffScreen else { return }
         if resumeWaiting { clearInteractiveResume() }
         closeWhenIdle = nil
         if let current, current.identifier.uuidString == id { return }
-        if current != nil, link != nil, collectId == nil { return }
+        if current != nil, syncHandle != nil || ioLink?.leased == true, collectId == nil { return }
         guard let central, central.state == .poweredOn else {
             openRequested = id
             return
@@ -176,7 +192,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     /// A link the user holds stays untouched. A link to another sensor, or a sync or Debug request
     /// on this one, fails the step. An idle link to this sensor is synced and left open.
     func collect(id: String) {
-        guard foreground, !resumeWaiting, link == nil, collectId == nil, backgroundId == nil,
+        guard foreground || collectOffScreen, !resumeWaiting, !linkBusy, collectId == nil, backgroundId == nil,
             let central, central.state == .poweredOn
         else {
             onCollectFinished?(id, false)
@@ -197,6 +213,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
             collectOpened = true
         }
         collectId = id
+        collectCancelled = false
         collectTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated { self?.failCollect() }
         }
@@ -207,21 +224,32 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     /// An active sync, command, configuration request or token operation retains its owner.
     func releaseIdleForCollect(next id: String) {
         guard let current, current.identifier.uuidString.caseInsensitiveCompare(id) != .orderedSame,
-            !resumeWaiting, link == nil, collectId == nil, backgroundId == nil, pending == nil,
-            operations.isEmpty, !requestingToken
+            !resumeWaiting, !linkBusy, collectId == nil, backgroundId == nil, pending == nil,
+            operations.isEmpty
         else { return }
         disconnect()
     }
 
     private func collectWhenReady() {
-        guard collectId != nil, link == nil, pending == nil, operations.isEmpty, !requestingToken else { return }
+        guard collectId != nil else { return }
+        // A step cancelled during the automatic clock command ends when that command hands back.
+        if collectCancelled { return failCollect() }
+        guard !linkBusy, pending == nil, operations.isEmpty else { return }
         // Discovery has settled once the connect timer is gone. A sensor without the sync characteristics
         // or a readable identity cannot be collected, so the step ends instead of waiting.
-        if identity == nil || control == nil || response == nil {
+        if identity == nil || ioLink == nil {
             if connectionTimer == nil, current != nil { failCollect() }
             return
         }
         startSync()
+    }
+
+    /// Ends the Collect all step now, as when its continued task was cancelled or expired. A running
+    /// sync stops and reports the step, otherwise the step fails at once.
+    func cancelCollect() {
+        guard collectId != nil else { return }
+        collectCancelled = true
+        if let syncHandle { syncHandle.cancel() } else { failCollect() }
     }
 
     /// Ends the Collect all step that has not started its sync. A link the step opened closes, which
@@ -315,12 +343,14 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     private func teardown() {
         openRequested = nil
         closeWhenIdle = nil
-        configLink = nil
         // The engine sees the link end at once. Its result for this link is then ignored.
         syncHandle?.cancel()
         syncHandle = nil
-        link?.linkClosed()
-        link = nil
+        nativeLease?.end()
+        nativeLease = nil
+        ioLink?.close()
+        ioLink = nil
+        endSyncTask()
         responseSubscribed = false
         connectionTimer?.invalidate()
         freshnessTimer?.invalidate()
@@ -334,8 +364,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         control = nil
         response = nil
         state.wifiAccessReset()
-        operations.removeAll()
-        pending = nil
+        failWrites()
         // A command outcome held for its last write reaches Today now that the connection is gone.
         state.today.linkIdle()
         if let peripheral = current {
@@ -393,26 +422,23 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     /// idle waiters, so a refusal there stays quiet and the step waits for the next idle link.
     @discardableResult
     private func startSync(onlyName: String? = nil) -> Bool {
-        guard active, clockAttempted, let peripheral = current, control != nil, let response, let identity, link == nil,
-            pending == nil, operations.isEmpty, !requestingToken
+        // A lease still held by Debug or Device settings queues the sync behind it on the shared link.
+        guard active, clockAttempted, current != nil, let link = ioLink, link.isOpen, let identity, syncHandle == nil,
+            !requestingToken
         else { return false }
-        let mtu = Int32(peripheral.maximumWriteValueLength(for: .withoutResponse) + 3)
-        let link = newLink(device: identity.device, mtu: mtu)
-        link.identify(station: identity.station, boot: identity.boot)
-        self.link = link
-        if !responseSubscribed { operations.append(.subscribe(response)) }
         // The engine ends a stalled sync itself, so the step timers are no longer needed.
         collectTimer?.invalidate()
         collectTimer = nil
         backgroundTimer?.invalidate()
         backgroundTimer = nil
         state.bluetoothSyncStarted()
+        if foreground, collectId == nil, backgroundId == nil { beginSyncTask() }
         syncHandle = engine.startSelected(
             link: link, station: identity.station, device: identity.device, maxRead: identity.maxRead,
             onlyName: onlyName,
             progress: { [weak self] update in
                 MainActor.assumeIsolated {
-                    guard let self, self.link === link else { return }
+                    guard let self, self.ioLink === link else { return }
                     self.state.bluetoothSyncProgressed(progress: update)
                     if self.backgroundId != nil {
                         self.backgroundBytes = update.receivedBytes
@@ -423,48 +449,42 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
             finished: { [weak self] result in
                 MainActor.assumeIsolated { self?.syncEnded(result, link: link) }
             })
-        performNext()
         return true
     }
 
     /// Sends automatic UTC synchronization or a confirmed flush through the shared session.
     func command(_ command: SensorCommand, automatic: Bool = false) {
-        guard (foreground || automatic), let peripheral = current, control != nil, let response, let identity, link == nil,
-            pending == nil, operations.isEmpty, !requestingToken
+        guard (foreground || automatic), current != nil, let link = ioLink, link.isOpen, syncHandle == nil,
+            !requestingToken
         else {
             state.today.commandRefused()
             return
         }
-        let mtu = Int32(peripheral.maximumWriteValueLength(for: .withoutResponse) + 3)
-        let link = newLink(device: identity.device, mtu: mtu)
-        link.identify(station: identity.station, boot: identity.boot)
-        self.link = link
-        if !responseSubscribed { operations.append(.subscribe(response)) }
         if !automatic { state.today.commandStarted() }
         syncHandle = engine.command(link: link, command: command, automatic: automatic) { [weak self] result in
             MainActor.assumeIsolated { self?.commandEnded(result, link: link, automatic: automatic) }
         }
-        performNext()
     }
 
-    private func commandEnded(_ result: CommandResult, link: SensorLink, automatic: Bool) {
-        guard self.link === link else { return }
-        // Every command takes a fresh link. The ended one stops here, so a drain or an ABORT it still
-        // holds never writes over the next session. Writes it already queued in `operations` still go out.
-        link.linkClosed()
-        self.link = nil
+    private func commandEnded(_ result: CommandResult, link: IosLink, automatic: Bool) {
+        guard ioLink === link else { return }
         syncHandle = nil
-        // A final STATUS write may still be queued. Today hears an explicit command outcome
-        // after that write completes; automatic maintenance remains silent.
+        // Today hears an explicit command outcome once the link settles; automatic maintenance
+        // remains silent.
         if !automatic { state.today.commandEnded(result: result) }
+        // A failed write poisoned the link, so the next request needs a fresh connection.
+        guard link.isOpen else {
+            disconnect(notice: .sensorDisconnected)
+            return
+        }
         settle()
     }
 
     /// Runs what waits for an idle link once no write or read is queued or in flight. First the
     /// outcome of a command for Today, then a Collect all step or an Auto-sync step waiting for the link.
     private func settle() {
-        guard link == nil, pending == nil, operations.isEmpty, !requestingToken else { return }
-        if identity != nil, control != nil, response != nil, !clockAttempted {
+        guard !linkBusy, pending == nil, operations.isEmpty else { return }
+        if ioLink != nil, !clockAttempted {
             clockAttempted = true
             command(.setTime, automatic: true)
             return
@@ -485,36 +505,31 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         }
     }
 
-    /// A link whose sends reach the sensor only while it is the current link. An ended link's late
-    /// ABORT or CLOSE is dropped, so it never lands in the next session.
-    private func newLink(device: String, mtu: Int32) -> SensorLink {
-        final class Sender { weak var link: SensorLink? }
-        let sender = Sender()
-        let link = SensorLink(overWifi: false, address: device, mtu: mtu) { [weak self] body in
-            // Kotlin sends on the main thread, in request order.
-            MainActor.assumeIsolated {
-                guard let self, let from = sender.link, self.link === from else { return }
-                self.write(body)
-            }
+    /// One Kotlin request body. It joins the GATT queue behind discovery reads and subscriptions,
+    /// and [done] hears whether the sensor took it. A closed link's late write, such as its ABORT or
+    /// owed CLOSE, fails here instead of reaching the next connection's link.
+    fileprivate func send(_ body: Data, from link: IosLink?, done: @escaping (Bool) -> Void) {
+        guard let control, let link, ioLink === link, current != nil else {
+            done(false)
+            return
         }
-        sender.link = link
-        return link
-    }
-
-    private func write(_ body: Data) {
-        guard let control, link != nil, current != nil else { return }
-        operations.append(.write(control, body))
+        operations.append(.write(control, body, done: done))
         performNext()
     }
 
-    private func syncEnded(_ result: SyncResult, link: SensorLink) {
-        guard self.link === link else { return }
+    /// Fails every queued or in-flight Kotlin write and empties the GATT queue.
+    private func failWrites() {
+        let queued = (pending.map { [$0] } ?? []) + operations
+        pending = nil
+        operations.removeAll()
+        for case .write(_, _, let done?) in queued { done(false) }
+    }
+
+    private func syncEnded(_ result: SyncResult, link: IosLink) {
+        guard ioLink === link else { return }
+        endSyncTask()
         if result.resumable, scheduleInteractiveResume(notice: .syncAborted, result: result) { return }
         clearInteractiveResume()
-        // Every sync takes a fresh link. The ended one stops here, so a drain or an owed CLOSE it
-        // still holds never writes over the next one. The device closes a stale handle on the next OPEN.
-        link.linkClosed()
-        self.link = nil
         syncHandle = nil
         let collected = collectId
         let opened = collectOpened
@@ -524,7 +539,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         let backgroundOwned = backgroundOpened
         let bytes = backgroundBytes
         clearBackground()
-        if result.keepsLink {
+        if result.keepsLink, link.isOpen {
             state.bluetoothSyncFinished(result: result)
             // Collect all and Auto-sync close what they opened, so the next sensor can take the one
             // link. Off screen nothing stays open once its work ended.
@@ -546,7 +561,8 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         scanRequested = false
         stopScan()
         openRequested = nil
-        guard link == nil, backgroundId == nil else { return }
+        guard syncHandle == nil, ioLink?.leased != true, backgroundId == nil, !(collectOffScreen && collectId != nil)
+        else { return }
         disconnect(notice: .resumeLive)
     }
 
@@ -564,9 +580,8 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     }
 
     /// Closes an idle link to this sensor once its last Today, Device or Device settings page is gone
-    /// (#16). A sync, a command, a Debug request, Wi-Fi access setup, Collect all or an Auto-sync step
-    /// keeps it. A command's last write still queued, or a Device settings request still out, delays
-    /// the close until the link settles.
+    /// (#16). A sync, Wi-Fi access setup, Collect all or an Auto-sync step keeps it. A command, a
+    /// Debug or Device settings lease, or a write still queued delays the close until the link settles.
     func closeIdle(id: String) {
         if resumeWaiting, interactiveSyncId?.caseInsensitiveCompare(id) == .orderedSame {
             clearInteractiveResume()
@@ -574,9 +589,9 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
             return
         }
         guard let current, current.identifier.uuidString.caseInsensitiveCompare(id) == .orderedSame,
-            link == nil || link === configLink, collectId == nil, backgroundId == nil, !requestingToken
+            ioLink?.syncRunning != true, collectId == nil, backgroundId == nil, !requestingToken
         else { return }
-        guard link == nil, pending == nil, operations.isEmpty else {
+        guard !linkBusy, pending == nil, operations.isEmpty else {
             closeWhenIdle = id
             return
         }
@@ -589,7 +604,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         guard let current, current.identifier.uuidString.caseInsensitiveCompare(id) == .orderedSame else {
             return false
         }
-        return link != nil || requestingToken || collectId != nil
+        return linkBusy || collectId != nil
     }
 
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
@@ -679,6 +694,8 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         if current !== peripheral { waiting[peripheral.identifier.uuidString] = nil }
         guard current === peripheral else { return }
+        // Replies already offered still reach their callers, then the run sees the peer go.
+        ioLink?.linkLost(reason: IosLink.companion.REASON_PEER_CLOSED)
         unexpectedLoss(notice: .sensorDisconnected)
     }
 
@@ -721,39 +738,53 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         performNext()
     }
 
+    /// Asks the sensor for its LAN token. The request takes a native lease of the shared link, so it
+    /// waits for any Kotlin request and its reply stays on this side.
     func saveWifiAccess() {
-        guard foreground, let peripheral = current, let control, let response, identity != nil, link == nil,
-            pending == nil, operations.isEmpty, !requestingToken,
-            peripheral.maximumWriteValueLength(for: .withResponse) >= 1
+        guard foreground, let peripheral = current, identity != nil, let link = ioLink, syncHandle == nil,
+            !requestingToken, peripheral.maximumWriteValueLength(for: .withResponse) >= 1
         else { return }
         requestingToken = true
         state.wifiAccessSaving()
-        operations = [.subscribe(response), .write(control, wire.tokenRequest())]
         tokenTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.disconnect(notice: .wifiAccessTimedOut)
             }
         }
-        performNext()
+        link.leaseForNative { [weak self] lease in
+            MainActor.assumeIsolated {
+                guard let self, let lease, self.requestingToken, self.ioLink === link, let control = self.control else {
+                    lease?.end()
+                    // A sync took the link first, or it closed. The user can ask again.
+                    if let self, self.requestingToken, self.ioLink === link { self.finishTokenRequest(.saveWifiAccess) }
+                    return
+                }
+                self.nativeLease = lease
+                self.operations.append(.write(control, self.wire.tokenRequest(), done: nil))
+                self.performNext()
+            }
+        }
     }
 
     private func finishTokenRequest(_ notice: CompanionNotice) {
         requestingToken = false
         tokenTimer?.invalidate()
         tokenTimer = nil
+        nativeLease?.end()
+        nativeLease = nil
         state.wifiAccessNoticed(available: true, busy: false, notice: notice)
         settle()
     }
 
     func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
-        guard current === peripheral, case .write(let expected, _) = pending, expected === characteristic else {
-            return
-        }
-        if error != nil, let link {
-            // The engine ends this sync as a lost link, then the connection closes.
-            operations.removeAll()
+        guard current === peripheral, case .write(let expected, _, let done) = pending, expected === characteristic
+        else { return }
+        if error != nil, let done {
+            // The request state on the sensor is unknown, so the shared link is poisoned. The run
+            // ends as a lost link, and the connection closes with it.
             pending = nil
-            link.linkClosed()
+            done(false)
+            failWrites()
             return
         }
         if error != nil {
@@ -761,6 +792,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
             return
         }
         pending = nil
+        done?(true)
         performNext()
         settle()
     }
@@ -772,7 +804,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
         switch operation {
         case .read(let characteristic): peripheral.readValue(for: characteristic)
         case .subscribe(let characteristic): peripheral.setNotifyValue(true, for: characteristic)
-        case .write(let characteristic, let data): peripheral.writeValue(data, for: characteristic, type: .withResponse)
+        case .write(let characteristic, let data, _): peripheral.writeValue(data, for: characteristic, type: .withResponse)
         }
     }
 
@@ -795,13 +827,14 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
         guard current === peripheral, active else { return }
         if characteristic.uuid == CBUUID(string: wire.responseUuid) {
-            if let link {
-                if error == nil, let data = characteristic.value { link.deliver(frame: data) }
+            guard error == nil, let data = characteristic.value else { return }
+            // Only the token reply stays here. Every other frame goes to the shared link, which
+            // drains replies a cancelled run left behind. Bluetooth cannot pause notifications, and
+            // the read window bounds them, so a full inbox is left to poison the link.
+            guard nativeLease != nil, let reply = wire.decode(data: data), reply.answersToken else {
+                _ = ioLink?.offer(frame: data)
                 return
             }
-            guard requestingToken, error == nil, let data = characteristic.value,
-                let reply = wire.decode(data: data)
-            else { return }
             if reply.kind == "token", let identity {
                 do {
                     try credentials.save(
@@ -840,6 +873,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
                 return
             }
             identity = observed
+            openLink(peripheral, identity: observed)
             state.wifiAccessNoticed(
                 available: identity != nil && control != nil && response != nil, busy: false,
                 notice: .saveWifiAccess)
@@ -852,7 +886,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
             }
         case CBUUID(string: state.statusUuid):
             state.receiveStatus(json: json)
-            link?.deliverStatus(json: json)
+            ioLink?.offerStatus(json: json)
         default: return
         }
         if case .read(let expected) = pending, expected === characteristic {
@@ -868,66 +902,103 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
 }
 
 extension BluetoothCompanion {
-    /// Lends the shared Debug screen a link to the connected sensor for one request, under the same
-    /// rules as a sync. Nil when another sensor is connected, or a sync, a request or Wi-Fi access
-    /// setup holds the link. The link is handed back when Kotlin closes it, or ends with the connection.
-    func openDebugLink(device: String) -> SensorLink? {
-        guard foreground, let peripheral = current, control != nil, let response, let identity,
-            identity.device == device, link == nil, pending == nil, operations.isEmpty, !requestingToken
-        else { return nil }
-        let mtu = Int32(peripheral.maximumWriteValueLength(for: .withoutResponse) + 3)
-        let link = newLink(device: identity.device, mtu: mtu)
-        self.link = link
-        link.whenClosed { [weak self] in
-            // A Collect all step waiting for the link starts once Debug hands it back.
-            let release = {
-                guard let self, self.link === link else { return }
-                self.link = nil
-                self.collectWhenReady()
-                self.backgroundWhenReady()
-                // Off screen the lent link closes once Debug hands it back.
-                if !self.foreground, self.backgroundId == nil, self.collectId == nil { self.disconnect() }
-            }
-            if Thread.isMainThread { MainActor.assumeIsolated { release() } } else { Task { @MainActor in release() } }
+    /// The connected sensor's shared link for Debug, Device settings and Files. Each takes a lease,
+    /// so its requests queue behind a command on the same session, and a running sync refuses them.
+    /// Nil when another sensor is connected or the link is not up.
+    func link(device: String) -> IosLink? {
+        guard foreground, current != nil, let identity, identity.device == device, let ioLink, ioLink.isOpen else {
+            return nil
         }
-        if !responseSubscribed {
-            operations.append(.subscribe(response))
-            performNext()
-        }
-        return link
+        return ioLink
     }
 
-    /// Lends the shared Device settings a link for one config request (SET_CONFIG, GET_CONFIG,
-    /// WIFI_SCAN or REBOOT), under the same guards as a Today command. Nil when another sensor is
-    /// connected or anything holds the link. Handing it back settles the link as a command's end does,
-    /// so Today's queued outcome, a waiting Collect all or Auto-sync step, or an idle close that
-    /// waited for the request runs afterwards. Off screen the link then closes, as after Debug.
-    func openConfigLink(device: String) -> SensorLink? {
-        guard foreground, let peripheral = current, control != nil, let response, let identity,
-            identity.device == device, link == nil, pending == nil, operations.isEmpty, !requestingToken
-        else { return nil }
-        let mtu = Int32(peripheral.maximumWriteValueLength(for: .withoutResponse) + 3)
-        let link = newLink(device: identity.device, mtu: mtu)
-        self.link = link
-        configLink = link
-        link.whenClosed { [weak self] in
-            let release = {
-                guard let self, self.link === link else { return }
-                self.link = nil
-                self.configLink = nil
-                self.settle()
-                if !self.foreground, self.current != nil, self.backgroundId == nil, self.collectId == nil {
-                    self.disconnect()
-                }
+    /// Makes this connection's shared link once INFO named the sensor, and subscribes to RESPONSE
+    /// before its first write.
+    fileprivate func openLink(_ peripheral: CBPeripheral, identity: SyncIdentity) {
+        guard ioLink == nil, control != nil, let response else { return }
+        let mtu = Int32(peripheral.maximumWriteValueLength(for: .withResponse) + 3)
+        let port = BlePort(companion: self, mtu: mtu)
+        let link = IosLink(port: port, overWifi: false, address: identity.device)
+        // Set on main before any write, which hops to main before it reads this.
+        port.link = link
+        link.identify(station: identity.station, boot: identity.boot, maxRead: identity.maxRead)
+        link.onLeaseChange { [weak self] leased in
+            // Kotlin calls this on the main thread.
+            MainActor.assumeIsolated {
+                guard let self, self.ioLink === link, !leased.boolValue else { return }
+                self.leaseEnded()
             }
-            if Thread.isMainThread { MainActor.assumeIsolated { release() } } else { Task { @MainActor in release() } }
         }
+        let id = ObjectIdentifier(link)
+        link.whenClosed { [weak self] in
+            Task { @MainActor in self?.linkClosed(id) }
+        }
+        ioLink = link
         if !responseSubscribed {
             operations.append(.subscribe(response))
             performNext()
         }
-        return link
     }
+
+    /// A lease ended. Work waiting for an idle link runs, and off screen an idle link closes.
+    private func leaseEnded() {
+        settle()
+        if !foreground, current != nil, !linkBusy, backgroundId == nil, collectId == nil { disconnect() }
+    }
+
+    /// The shared link closed or was poisoned while the connection is still up. A running sync ends
+    /// with it and closes the connection itself. Otherwise the connection closes now.
+    private func linkClosed(_ id: ObjectIdentifier) {
+        guard let ioLink, ObjectIdentifier(ioLink) == id, syncHandle == nil else { return }
+        disconnect(notice: .sensorDisconnected)
+    }
+
+    /// A short background task for a sync the user started, so leaving the screen does not cut it.
+    fileprivate func beginSyncTask() {
+        guard syncTask == .invalid else { return }
+        syncTask = UIApplication.shared.beginBackgroundTask(withName: "Bluetooth sync") { [weak self] in
+            MainActor.assumeIsolated {
+                self?.syncHandle?.cancel()
+                self?.endSyncTask()
+            }
+        }
+    }
+
+    fileprivate func endSyncTask() {
+        guard syncTask != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(syncTask)
+        syncTask = .invalid
+    }
+}
+
+/// The Bluetooth side of one [IosLink]. Kotlin calls it from any thread, so each write hops to the
+/// main queue, where Core Bluetooth runs, and joins the GATT queue in call order.
+private final class BlePort: NSObject, IosLinkPort, @unchecked Sendable {
+    private weak var companion: BluetoothCompanion?
+    /// The link this port belongs to. Written and read on the main thread only.
+    weak var link: IosLink?
+    let mtu: Int32
+
+    init(companion: BluetoothCompanion, mtu: Int32) {
+        self.companion = companion
+        self.mtu = mtu
+    }
+
+    func send(frame: Data, done: @escaping (KotlinBoolean) -> Void) {
+        let reply = WriteDone(done)
+        DispatchQueue.main.async { [weak companion, weak self] in
+            MainActor.assumeIsolated {
+                guard let companion else {
+                    reply.call(false)
+                    return
+                }
+                companion.send(frame, from: self?.link) { reply.call($0) }
+            }
+        }
+    }
+
+    /// Notifications cannot be paused. The read window the engine asks for bounds them.
+    func setReadPaused(paused: Bool) {}
 }
 
 /// Auto-sync over Bluetooth (#23). Only sensors this phone already read over an encrypted link are
@@ -955,9 +1026,7 @@ extension BluetoothCompanion {
         }
         if let current {
             // The one link is in use for another sensor, or for work the user started.
-            guard current.identifier.uuidString.caseInsensitiveCompare(id) == .orderedSame, link == nil,
-                !requestingToken
-            else {
+            guard current.identifier.uuidString.caseInsensitiveCompare(id) == .orderedSame, !linkBusy else {
                 done(BackgroundStepResult.skipped("in use"))
                 return
             }
@@ -998,8 +1067,8 @@ extension BluetoothCompanion {
     }
 
     fileprivate func backgroundWhenReady() {
-        guard backgroundId != nil, link == nil, pending == nil, operations.isEmpty, !requestingToken else { return }
-        if identity == nil || control == nil || response == nil {
+        guard backgroundId != nil, !linkBusy, pending == nil, operations.isEmpty else { return }
+        if identity == nil || ioLink == nil {
             if connectionTimer == nil, current != nil { failBackground() }
             return
         }

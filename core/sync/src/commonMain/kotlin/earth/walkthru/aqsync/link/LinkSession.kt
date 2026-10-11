@@ -71,12 +71,22 @@ data class Heartbeat(val pingAfterIdle: Duration, val deadline: Duration) {
 }
 
 /**
+ * Sees the undelivered reply bytes after every change, from the reader's thread or the router's.
+ * A driver uses it to stop reading at a high mark and resume below it (iOS `IosLink`). It must not
+ * block or call back into the session.
+ */
+fun interface InboxWatch {
+    fun onInboxLevel(bytes: Long)
+}
+
+/**
  * One session per physical connection. A single router coroutine owns every reply frame, so a
  * caller that goes away never leaves frames for the next request. Callers queue for the link in
  * FIFO order and each request owns it until its terminal frame (see [TerminalRules]).
  *
  * The driver's reader never waits on a consumer. Frames that are not yet consumed count against
- * [inboxBudget], and passing it closes the link with [DisconnectCause.ResponseOverflow].
+ * [inboxBudget], and passing it closes the link with [DisconnectCause.ResponseOverflow]. A driver
+ * that can stop reading watches the same count through [inboxWatch] and pauses well before that.
  * A cancelled or timed out request is drained to its terminal within its [DrainBound], with an
  * `ABORT` sent first on a proto 3 peer. A `CLOSE` the caller could not wait for is owed to the
  * link ([oweClose]) and goes out once that drain ends, before any later request.
@@ -91,6 +101,7 @@ class LinkSession(
     private val openTimeout: Duration = 60.seconds,
     private val byeGrace: Duration = 5.seconds,
     private val log: LinkLog = LinkLog.NONE,
+    private val inboxWatch: InboxWatch? = null,
 ) {
     private val job = SupervisorJob(scope.coroutineContext[Job])
     private val own = CoroutineScope(scope.coroutineContext + job)
@@ -233,7 +244,7 @@ class LinkSession(
                 FrameType.LIVE -> _live.value = raw.copyOfRange(1, raw.size)
                 FrameType.BYE -> onBye(raw)
                 else -> {
-                    val queued = queuedBytes.addAndFetch(raw.size.toLong())
+                    val queued = queue(raw.size.toLong())
                     if (queued > inboxBudget) {
                         terminate(DisconnectCause.ResponseOverflow(queued, inboxBudget))
                     } else {
@@ -266,6 +277,9 @@ class LinkSession(
     }
 
     private fun markRx() = lastRx.store(timeSource.markNow())
+
+    /** Moves the undelivered byte count and reports it to [inboxWatch]. */
+    private fun queue(delta: Long): Long = queuedBytes.addAndFetch(delta).also { inboxWatch?.onInboxLevel(it) }
 
     private fun onBye(raw: ByteArray) {
         val frame = try {
@@ -308,6 +322,24 @@ class LinkSession(
         check(_state.value is LinkState.Ready) { "LinkSession is not open" }
     }
 
+    /** Undelivered reply bytes now. A watcher re-reads it under its own lock, since reports can land out of order. */
+    val inboxBytes: Long get() = queuedBytes.load()
+
+    /**
+     * Waits until no request, drain (an `ABORT` and the abandoned reply) or owed `CLOSE` is left. For
+     * native work that writes past the session, such as the iOS Bluetooth `GET_TOKEN`. Its caller
+     * keeps new requests away meanwhile, so the wait is bounded by the drain deadlines.
+     */
+    suspend fun awaitQuiet() {
+        ensureUsable()
+        val done = CompletableDeferred<Unit>()
+        if (events.trySend(Event.Quiet(done)).isFailure) throw LinkClosedException(_closed.getCompleted())
+        select<Unit> {
+            _closed.onAwait { throw LinkClosedException(it) }
+            done.onAwait { }
+        }
+    }
+
     // ---- caller side ----
 
     private suspend fun <T> withSlot(spec: RequestSpec, oweCloseIfUnsent: Int? = null, block: suspend (Owner) -> T): T {
@@ -344,7 +376,7 @@ class LinkSession(
                 }
                 onTimeoutOrNever(if (frames == 0) spec.firstFrameTimeout else spec.interFrameTimeout) { null }
             } ?: throw LinkTimeoutException(DisconnectCause.Timeout(phase, spec.op))
-            queuedBytes.addAndFetch(-delivery.raw.size.toLong())
+            queue(-delivery.raw.size.toLong())
             frames++
             val terminal = delivery.routing == Routing.TERMINAL
             if (terminal) owner.complete = true
@@ -360,6 +392,7 @@ class LinkSession(
     private var current: Owner? = null
     private var drain: Drain? = null
     private val owed = ArrayDeque<Int>()
+    private val quiet = ArrayList<CompletableDeferred<Unit>>()
 
     private suspend fun route() {
         try {
@@ -386,6 +419,10 @@ class LinkSession(
                         finishDrainIfDone(event.drain)
                     }
                     Event.DrainTimeout -> drain?.let { exceed(it) }
+                    is Event.Quiet -> {
+                        quiet += event.done
+                        admitNext()
+                    }
                 }
             }
         } catch (e: CancellationException) {
@@ -404,7 +441,7 @@ class LinkSession(
         val frame = try {
             FrameCodec.decode(raw)
         } catch (_: FrameDecodeException) {
-            queuedBytes.addAndFetch(-size)
+            queue(-size)
             if (type in KNOWN_TYPES) {
                 terminate(DisconnectCause.FramingViolation("bad ${FrameType.name(type)} frame"))
             } else {
@@ -413,14 +450,14 @@ class LinkSession(
             return
         }
         drain?.let { d ->
-            queuedBytes.addAndFetch(-size)
+            queue(-size)
             take(d, frame, size)
             return
         }
         val owner = current
         val routing = owner?.let { TerminalRules.classify(it.spec.op, frame) } ?: Routing.FOREIGN
         if (owner == null || routing == Routing.FOREIGN) {
-            queuedBytes.addAndFetch(-size)
+            queue(-size)
             // ABORTED with op 0 while idle is the normal answer to a late ABORT.
             if (!(frame is Frame.Aborted && frame.op == 0)) log.event(LinkEvent.ForeignDropped(type, owner?.spec?.op ?: 0))
             return
@@ -479,12 +516,14 @@ class LinkSession(
                 return
             }
         }
+        quiet.forEach { it.complete(Unit) }
+        quiet.clear()
     }
 
     private fun discardInbox(owner: Owner) {
         while (true) {
             val left = owner.inbox.tryReceive().getOrNull() ?: break
-            queuedBytes.addAndFetch(-left.raw.size.toLong())
+            queue(-left.raw.size.toLong())
         }
     }
 
@@ -634,6 +673,7 @@ class LinkSession(
         data object ByeSeen : Event
         class AbortFailed(val drain: Drain) : Event
         data object DrainTimeout : Event
+        class Quiet(val done: CompletableDeferred<Unit>) : Event
     }
 
     companion object {

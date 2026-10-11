@@ -1252,9 +1252,10 @@ class DeviceConnectionRepository @Inject constructor(
                     refreshManifest()
                 }
                 // Bring the history tiers up to date with whatever arrived; cheap when nothing did.
+                // Only the days this run touched, older stale days wait for the charging backfill.
                 scope.launch {
                     suspendRunCatching {
-                        historyDeriver.deriveStale()
+                        historyDeriver.deriveAfterSync(started)
                         if (_session.value === session) updateArchiveTimeSummary(station)
                     }.onFailure {
                         recordDiagnostic("derive", "failed: ${it.message ?: it::class.simpleName}")

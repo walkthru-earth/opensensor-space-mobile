@@ -27,6 +27,10 @@ final class LanDiscovery {
     private var selectedFiles: [String: String] = [:]
     private var retryTimers: [String: Timer] = [:]
     private var isBackground = false
+    /// Collect all runs as an iOS 26 continued task, so its steps go on off screen (#58).
+    var collectOffScreen = false
+    /// Off screen, Collect all steps wait unless iOS keeps the pass running.
+    private var stepsHeld: Bool { isBackground && !collectOffScreen }
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
     private var progressCounts: [String: (done: Int, total: Int, bytes: Int64, totalBytes: Int64)] = [:]
     private struct Device {
@@ -39,9 +43,8 @@ final class LanDiscovery {
     private var commands: [String: (UUID, SensorCommand)] = [:]
     /// The current foreground open may fall back to Bluetooth if this handshake fails.
     private var connectFailures: [String: () -> Void] = [:]
-    private var configPreparing = Set<String>()
-    private var configLinks: [String: SensorLink] = [:]
-    private var configLeaseIds: [String: UUID] = [:]
+    /// Each open session's shared link, leased by sync, commands, Debug and Device settings.
+    private var links: [String: IosLink] = [:]
     /// Collect all steps by service name: the sensor id to report, and the sync outcome once known.
     private var collectSteps: [String: String] = [:]
     private var collectOutcome: [String: Bool] = [:]
@@ -73,65 +76,33 @@ final class LanDiscovery {
     /// The connected Wi-Fi session for this hardware id, if any. Bluetooth sync prefers it.
     func connectedSession(device: String) -> String? {
         sessions.keys.first { name in
-            sessionDevices[name] == device.lowercased() && tasks[name] == nil && !configPreparing.contains(name)
+            sessionDevices[name] == device.lowercased() && tasks[name] == nil
         }
     }
 
-    /// Kotlin polls while suspending between tries. The first call prepares a one-request link
-    /// on the session actor; a later poll takes that link without blocking the main thread.
-    func openConfigLink(device: String) -> SensorLink? {
+    /// The open Wi-Fi link for this hardware id, for Debug and Device settings. Kotlin takes a lease
+    /// on it, which waits behind any other lease and is refused while a sync runs.
+    func link(device: String) -> IosLink? {
         guard let name = sessions.keys.first(where: { sessionDevices[$0] == device.lowercased() }),
-            let session = sessions[name], tasks[name] == nil
+            let link = links[name], link.isOpen
         else { return nil }
-        if let ready = configLinks.removeValue(forKey: name) { return ready }
-        guard !configPreparing.contains(name) else { return nil }
-        configPreparing.insert(name)
-        Task { [weak self] in
-            guard let self else { return }
-            guard let target = await session.target(), self.sessions[name] === session else {
-                self.configPreparing.remove(name)
-                return
-            }
-            let link = SensorLink(overWifi: true, address: target.device, mtu: target.mtu) { body in
-                session.enqueue(body)
-            }
-            link.identify(station: target.station, boot: target.boot)
-            let sink = FrameSink(link)
-            guard await session.beginCollect(sink) else {
-                self.configPreparing.remove(name)
-                return
-            }
-            guard self.sessions[name] === session else {
-                link.linkClosed()
-                await session.endCollect(sink)
-                self.configPreparing.remove(name)
-                return
-            }
-            let leaseId = UUID()
-            self.configLeaseIds[name] = leaseId
-            link.whenClosed { [weak self] in
-                let release = {
-                    guard let self else { return }
-                    if self.configLinks[name] === link { self.configLinks[name] = nil }
-                    if self.configLeaseIds[name] == leaseId {
-                        self.configLeaseIds[name] = nil
-                        self.configPreparing.remove(name)
-                    }
-                    Task { await session.endCollect(sink) }
-                }
-                if Thread.isMainThread { MainActor.assumeIsolated { release() } }
-                else { Task { @MainActor in release() } }
-            }
-            self.configLinks[name] = link
-            // A cancelled request can stop Kotlin's retry before it takes this prepared link.
-            Timer.scheduledTimer(withTimeInterval: 2, repeats: false) { [weak self] _ in
-                MainActor.assumeIsolated {
-                    guard let self, self.configLeaseIds[name] == leaseId else { return }
-                    self.configLinks[name]?.linkClosed()
-                }
+        return link
+    }
+
+    /// Keeps the session's shared link. A link that Kotlin closed (a failed write, an inbox overflow)
+    /// ends the socket too, so the next open starts on a fresh link.
+    private func adopt(_ sink: FrameSink, name: String, session: LanSession) {
+        guard sessions[name] === session, links[name] !== sink.link else { return }
+        let link = sink.link
+        let id = ObjectIdentifier(link)
+        links[name] = link
+        link.whenClosed { [weak self, weak session] in
+            session?.linkFailed()
+            Task { @MainActor [weak self] in
+                guard let self, let current = self.links[name], ObjectIdentifier(current) == id else { return }
+                self.links[name] = nil
             }
         }
-        return nil
     }
 
     /// A known sensor may use Wi-Fi immediately after the combined scan. Match both the saved
@@ -267,6 +238,7 @@ final class LanDiscovery {
                 }
                 self.state.lanInfoReceived(name: name, json: info)
                 self.connectFailures[name] = nil
+                if let sink = await session.link() { self.adopt(sink, name: name, session: session) }
                 await session.requestStatus()
             } catch {
                 session.close()
@@ -305,9 +277,7 @@ final class LanDiscovery {
         state.lanSyncStopped(name: name)
         sessions[name] = nil
         sessionDevices[name] = nil
-        configLinks.removeValue(forKey: name)?.linkClosed()
-        configLeaseIds[name] = nil
-        configPreparing.remove(name)
+        links[name] = nil
         if let (_, command) = commands.removeValue(forKey: name) {
             state.today.commandInterrupted(command: command)
         }
@@ -327,7 +297,7 @@ final class LanDiscovery {
     }
 
     func sync(name: String, onlyName: String? = nil) {
-        guard tasks[name] == nil, !configPreparing.contains(name), let session = sessions[name] else { return }
+        guard tasks[name] == nil, let session = sessions[name] else { return }
         guard activeTransfers < 2 else {
             if pendingResume.contains(name) {
                 report(name, connected: true, notice: .lanSyncQueued)
@@ -403,8 +373,8 @@ final class LanDiscovery {
     }
 
     /// Sends a Today command over the authenticated, idle Wi-Fi session for this hardware id.
-    /// The same shared DeviceSession command path is used for Bluetooth. A temporary link borrows
-    /// the session's reply demultiplexer, so a simultaneous file sync cannot take its replies.
+    /// The same shared DeviceSession command path is used for Bluetooth. The command takes a lease of
+    /// the session's link, so it never interleaves with a Debug or Device settings request.
     @discardableResult
     func command(device: String, command: SensorCommand) -> Bool {
         guard let name = connectedSession(device: device.lowercased()), tasks[name] == nil,
@@ -421,31 +391,27 @@ final class LanDiscovery {
                 if self.commands[name]?.0 == attempt { self.commands[name] = nil }
                 self.finishTask(name, id: attempt)
             }
-            guard let target = await session.target() else {
+            guard let sink = await session.link() else {
                 if self.commands[name]?.0 == attempt { self.state.today.commandRefused() }
                 return
             }
             guard self.commands[name]?.0 == attempt, self.sessions[name] === session else { return }
-            let link = SensorLink(overWifi: true, address: target.device, mtu: target.mtu) { body in
-                session.enqueue(body)
-            }
-            link.identify(station: target.station, boot: target.boot)
-            guard await session.beginCollect(FrameSink(link)) else {
-                if self.commands[name]?.0 == attempt { self.state.today.commandRefused() }
-                return
-            }
-            guard self.commands[name]?.0 == attempt, self.sessions[name] === session else {
-                await session.endCollect()
-                return
-            }
+            self.adopt(sink, name: name, session: session)
+            let link = sink.link
             self.state.today.commandStarted()
-            let ended = await withCheckedContinuation { (continuation: CheckedContinuation<CommandEnded, Never>) in
-                self.handles[name] = self.engine.command(link: link, command: command, automatic: false) { result in
-                    continuation.resume(returning: CommandEnded(result: result))
+            let box = HandleBox()
+            let ended = await withTaskCancellationHandler {
+                await withCheckedContinuation { (continuation: CheckedContinuation<CommandEnded, Never>) in
+                    let handle = self.engine.command(link: link, command: command, automatic: false) { result in
+                        continuation.resume(returning: CommandEnded(result: result))
+                    }
+                    self.handles[name] = handle
+                    box.set(handle)
                 }
+            } onCancel: {
+                box.cancel()
             }
             self.handles[name] = nil
-            await session.endCollect()
             guard self.commands[name]?.0 == attempt else { return }
             self.state.today.commandFinished(result: ended.result)
         }
@@ -456,33 +422,36 @@ final class LanDiscovery {
     /// main thread, and only throttled progress and the result reach the main actor.
     /// Nil when the session ended before the sync began.
     private func collect(name: String, session: LanSession, attempt: UUID, onlyName: String? = nil) async -> SyncResult? {
-        guard let target = await session.target() else { return nil }
-        let link = SensorLink(overWifi: true, address: target.device, mtu: target.mtu) { body in
-            session.enqueue(body)
-        }
-        link.identify(station: target.station, boot: target.boot)
-        guard await session.beginCollect(FrameSink(link)) else { return nil }
-        let ended = await withCheckedContinuation { (continuation: CheckedContinuation<SyncEnded, Never>) in
-            handles[name] = engine.startSelected(
-                link: link, station: target.station, device: target.device, maxRead: target.maxRead,
-                onlyName: onlyName,
-                progress: { [weak self] update in
-                    MainActor.assumeIsolated {
-                        guard let self, self.attempts[name] == attempt, self.sessions[name] === session else { return }
-                        if self.backgroundRuns[name] != nil {
-                            self.backgroundBytes[name] = update.receivedBytes
-                            self.onBackgroundProgress?(Int(update.filesDone), Int(update.filesTotal))
+        guard let target = await session.target(), let sink = await session.link() else { return nil }
+        adopt(sink, name: name, session: session)
+        let link = sink.link
+        let box = HandleBox()
+        let ended = await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<SyncEnded, Never>) in
+                let handle = self.engine.startSelected(
+                    link: link, station: target.station, device: target.device, maxRead: target.maxRead,
+                    onlyName: onlyName,
+                    progress: { [weak self] update in
+                        MainActor.assumeIsolated {
+                            guard let self, self.attempts[name] == attempt, self.sessions[name] === session else { return }
+                            if self.backgroundRuns[name] != nil {
+                                self.backgroundBytes[name] = update.receivedBytes
+                                self.onBackgroundProgress?(Int(update.filesDone), Int(update.filesTotal))
+                            }
+                            self.report(
+                                name, connected: true, busy: true, notice: .lanSyncing, done: Int(update.filesDone),
+                                total: Int(update.filesTotal), bytes: update.receivedBytes, rate: update.bytesPerSecond,
+                                bytesTotal: update.bytesTotal)
                         }
-                        self.report(
-                            name, connected: true, busy: true, notice: .lanSyncing, done: Int(update.filesDone),
-                            total: Int(update.filesTotal), bytes: update.receivedBytes, rate: update.bytesPerSecond,
-                            bytesTotal: update.bytesTotal)
-                    }
-                },
-                finished: { continuation.resume(returning: SyncEnded(result: $0)) })
+                    },
+                    finished: { continuation.resume(returning: SyncEnded(result: $0)) })
+                self.handles[name] = handle
+                box.set(handle)
+            }
+        } onCancel: {
+            box.cancel()
         }
         handles[name] = nil
-        await session.endCollect()
         return ended.result
     }
 
@@ -490,7 +459,7 @@ final class LanDiscovery {
     /// A session the user opened is left alone, so the step fails at once instead, as does a step
     /// that cannot start.
     func collect(name: String, id: String) {
-        guard !isBackground, collectSteps[name] == nil, tasks[name] == nil, sessions[name] == nil else {
+        guard !stepsHeld, collectSteps[name] == nil, tasks[name] == nil, sessions[name] == nil else {
             onCollectFinished?(id, false)
             return
         }
@@ -512,7 +481,7 @@ final class LanDiscovery {
             onCollectFinished?(id, ok)
             return
         }
-        if sessions[name] != nil, !isBackground {
+        if sessions[name] != nil, !stepsHeld {
             sync(name: name)
             if tasks[name] != nil { return }
             if opened { disconnect(name: name) }
@@ -555,13 +524,12 @@ final class LanDiscovery {
         state.lanSyncStopped(name: name)
         attempts[name] = UUID()
         connectFailures[name] = nil
-        configLinks.removeValue(forKey: name)?.linkClosed()
-        configLeaseIds[name] = nil
-        configPreparing.remove(name)
+        links[name] = nil
         if let (_, command) = commands.removeValue(forKey: name) {
             state.today.commandInterrupted(command: command)
         }
-        // Swift task cancellation does not reach Kotlin. The handle stops the engine's coroutine.
+        // The handle stops the engine's coroutine at once, and closing the socket below ends the
+        // link, which ends any lease still on it. The task cancel reaches the same handle.
         handles[name]?.cancel()
         tasks[name]?.cancel()
         claims.closeSession(name: name)
@@ -587,7 +555,8 @@ final class LanDiscovery {
     func enterBackground() {
         isBackground = true
         stop()
-        for name in Array(sessions.keys) where !collecting.contains(name) && backgroundRuns[name] == nil {
+        for name in Array(sessions.keys)
+        where !collecting.contains(name) && backgroundRuns[name] == nil && !continuesOffScreen(name) {
             if pendingResume.contains(name) { close(name: name, notice: .lanPaused) }
             else { disconnect(name: name) }
         }
@@ -635,9 +604,20 @@ final class LanDiscovery {
     }
 
     private func pauseCollections() {
-        for name in collecting where !cancelledCollections.contains(name) {
+        for name in collecting where !cancelledCollections.contains(name) && !continuesOffScreen(name) {
             queueResume(name)
             close(name: name, notice: .lanPaused)
+        }
+    }
+
+    /// A Collect all step that iOS keeps running off screen as part of a continued task.
+    private func continuesOffScreen(_ name: String) -> Bool { collectOffScreen && collectSteps[name] != nil }
+
+    /// Ends every Collect all step now, as when its continued task was cancelled or expired.
+    func cancelCollect() {
+        for name in Array(collectSteps.keys) {
+            cancelledCollections.insert(name)
+            if handles[name] != nil { handles[name]?.cancel() } else { disconnect(name: name) }
         }
     }
 
@@ -872,4 +852,28 @@ private final class SyncEnded: @unchecked Sendable {
 private final class CommandEnded: @unchecked Sendable {
     let result: CommandResult
     init(result: CommandResult) { self.result = result }
+}
+
+/// Carries a Kotlin run handle into a Swift Task cancel. The cancel can run before the handle exists,
+/// so the box keeps it and cancels the handle as soon as it is set.
+private final class HandleBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var handle: SyncHandle?
+    private var cancelled = false
+
+    func set(_ handle: SyncHandle) {
+        lock.lock()
+        self.handle = handle
+        let cancel = cancelled
+        lock.unlock()
+        if cancel { handle.cancel() }
+    }
+
+    func cancel() {
+        lock.lock()
+        cancelled = true
+        let handle = self.handle
+        lock.unlock()
+        handle?.cancel()
+    }
 }

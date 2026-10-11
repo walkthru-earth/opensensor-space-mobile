@@ -264,7 +264,7 @@ no mood or standards band.
 
 The Debug screen is one shared Compose screen in `:feature:debug` (`DebugScreen`, `DebugController`)
 for both apps. A platform lends it a `DebugSource`. Android adapts the connection repository and its
-long-lived session (`RepositoryDebugSource`). iOS borrows a short `SensorLink` from Swift for each
+long-lived session (`RepositoryDebugSource`). iOS takes a lease of the connection's `IosLink` for each
 request (`IosDebugSource`) and keeps one frame recorder per sensor (`FrameRecorderRegistry`), so the
 frame history covers Bluetooth and Wi-Fi syncs and debug requests alike. The denylist
 (`RawCommandPolicy`, `REBOOT` and `SET_CONFIG`) and the redaction (`FrameRedaction`) live in

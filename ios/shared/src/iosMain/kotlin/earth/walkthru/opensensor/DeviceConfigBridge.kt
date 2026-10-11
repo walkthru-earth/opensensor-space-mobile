@@ -39,9 +39,12 @@ import kotlin.time.Clock
 
 /** The Swift verbs Device settings uses. Only ids cross, the token stays in the Keychain. */
 internal class DeviceConfigLinks(
-    /** A fresh link to the sensor with this hardware id, under Today's command guards, or null while busy. */
-    val openConfigLink: (String) -> SensorLink?,
-    /** Reads the Wi-Fi access token over Bluetooth into the Keychain, the companion page's Save Wi-Fi access. */
+    /** The open connection's link to the sensor with this hardware id, or null when it is not connected. */
+    val openConfigLink: (String) -> IosLink?,
+    /**
+     * Reads the Wi-Fi access token over Bluetooth into the Keychain, the companion page's Save Wi-Fi
+     * access. Swift marks Wi-Fi access busy before returning when it started.
+     */
     val saveWifiAccess: () -> Unit,
     /** Drops the Keychain token and any Wi-Fi session of this hardware id, after a rotation. */
     val forgetWifiAccess: (String) -> Unit,
@@ -60,9 +63,10 @@ internal class DeviceConfigLinks(
 
 /**
  * The iOS side of the shared Device settings (`:feature:device`) for one Bluetooth peripheral.
- * Swift owns the peripheral, so every config request borrows a fresh [SensorLink] through
- * [DeviceConfigLinks.openConfigLink], under the same guards as a Today command, and closing it runs
- * the companion's settle step, so a queued Collect all, Auto-sync or idle close goes on afterwards.
+ * Swift owns the peripheral and hands out the connection's [IosLink] through
+ * [DeviceConfigLinks.openConfigLink]. Every config request runs on a config lease of it, refused at
+ * once while a sync holds the link, and ending the lease runs the companion's settle step, so a
+ * queued Collect all, Auto-sync or idle close goes on afterwards.
  * Frames go through the redacting recorder Debug shows. The Wi-Fi access token is read and stored
  * by Swift, so it never reaches Kotlin.
  */
@@ -290,36 +294,25 @@ internal class IosDeviceConfigSource(
      */
     private suspend fun readToken(): Boolean? {
         val started = lent.withLock {
-            repeat(LEND_ATTEMPTS) { attempt ->
-                withContext(Dispatchers.Main) { links.saveWifiAccess() }
-                if (state.wifiAccessBusy) return@withLock true
-                if (attempt < LEND_ATTEMPTS - 1) delay(LEND_RETRY_MS)
+            withContext(Dispatchers.Main) {
+                links.saveWifiAccess()
+                state.wifiAccessBusy
             }
-            false
         }
         if (!started) return null
         val done = withTimeoutOrNull(TOKEN_TIMEOUT_MS) { snapshotFlow { state.wifiAccessBusy }.first { !it } }
         return done != null && state.wifiAccessNotice == CompanionNotice.TOKEN_STORED
     }
 
-    /** Runs [block] over a lent link, closed afterwards so Swift settles. Null when no link was lent. */
+    /** Runs [block] on a config lease of the connection's link. Null when not connected or a sync holds it. */
     private suspend fun <T> borrow(block: suspend (DeviceSession) -> T): T? = lent.withLock {
-        val link = lend() ?: return@withLock null
+        val id = device() ?: return@withLock null
+        val link = withContext(Dispatchers.Main) { links.openConfigLink(id) } ?: return@withLock null
         try {
-            block(link.session(debugFrames.recorderFor(link.transport.address)))
-        } finally {
-            link.linkClosed()
+            link.leased(LeaseKind.CONFIG, block)
+        } catch (_: LeaseRefusedException) {
+            null
         }
-    }
-
-    /** Swift may still be taking back the previous request's link, so a refusal is retried for about a second. */
-    private suspend fun lend(): SensorLink? {
-        repeat(LEND_ATTEMPTS) { attempt ->
-            val id = device() ?: return null
-            withContext(Dispatchers.Main) { links.openConfigLink(id) }?.let { return it }
-            if (attempt < LEND_ATTEMPTS - 1) delay(LEND_RETRY_MS)
-        }
-        return null
     }
 
     private fun now(): Long = Clock.System.now().toEpochMilliseconds()
@@ -334,8 +327,6 @@ internal class IosDeviceConfigSource(
     )
 
     private companion object {
-        const val LEND_ATTEMPTS = 8
-        const val LEND_RETRY_MS = 125L
         const val REBOOT_MIN_MS = 100L
         const val REBOOT_MAX_MS = 5_000L
 

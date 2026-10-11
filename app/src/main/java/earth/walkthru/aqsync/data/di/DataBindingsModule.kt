@@ -8,8 +8,10 @@ import earth.walkthru.aqsync.collection.KeepAlive
 import earth.walkthru.aqsync.data.TransportFactory
 import earth.walkthru.aqsync.data.TransportSource
 import earth.walkthru.aqsync.data.background.AndroidKeepAlive
+import earth.walkthru.aqsync.data.background.AutoSyncScheduler
 import earth.walkthru.aqsync.data.background.CompanionPresence
 import earth.walkthru.aqsync.data.background.CompanionUnlinker
+import earth.walkthru.aqsync.data.history.DeriveBackfill
 import earth.walkthru.aqsync.data.history.DerivedDayFiles
 import earth.walkthru.aqsync.data.history.HistoryDeriver
 import earth.walkthru.aqsync.data.history.HistoryRefresher
@@ -37,6 +39,9 @@ abstract class DataBindingsModule {
 
     @Binds
     abstract fun bindCompanionUnlinker(presence: CompanionPresence): CompanionUnlinker
+
+    @Binds
+    abstract fun bindDeriveBackfill(scheduler: AutoSyncScheduler): DeriveBackfill
 
     @Binds
     abstract fun bindHistoryRefresher(deriver: HistoryDeriver): HistoryRefresher

@@ -6,6 +6,7 @@ import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequest
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.OutOfQuotaPolicy
 import androidx.work.PeriodicWorkRequestBuilder
@@ -13,6 +14,7 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import dagger.hilt.android.qualifiers.ApplicationContext
+import earth.walkthru.aqsync.data.history.DeriveBackfill
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
@@ -42,13 +44,23 @@ import javax.inject.Singleton
  *
  * Retry backoff (a transfer that broke off, see [SyncWorker]): exponential from 5 min, so a flaky
  * link is retried a couple of times inside the period without hammering the radio.
+ *
+ * - **Derive backfill**: one unique [DeriveWorker] request while the phone charges, for stale
+ *   history days that a post-sync derive left alone ([DeriveBackfill]).
  */
 @Singleton
 class AutoSyncScheduler @Inject constructor(
     @ApplicationContext private val context: Context,
     private val knownDeviceDao: KnownDeviceDao,
-) {
+) : DeriveBackfill {
     private val workManager: WorkManager get() = WorkManager.getInstance(context)
+
+    /** `KEEP`, so many syncs before the next charge queue one backfill. */
+    override fun schedule() = scheduleDeriveBackfill()
+
+    fun scheduleDeriveBackfill() {
+        workManager.enqueueUniqueWork(DERIVE_NAME, ExistingWorkPolicy.KEEP, deriveBackfillRequest())
+    }
 
     /** Keep the periodic registration in step with the `autoSync` rows for the life of [scope]. */
     fun start(scope: CoroutineScope) {
@@ -129,6 +141,13 @@ class AutoSyncScheduler @Inject constructor(
 
     companion object {
         private const val TAG = "AutoSyncScheduler"
+        const val DERIVE_NAME = "history-derive-backfill"
+
+        /** Charging only. A backfill can rebuild months of days and is never urgent. */
+        internal fun deriveBackfillRequest(): OneTimeWorkRequest = OneTimeWorkRequestBuilder<DeriveWorker>()
+            .setConstraints(Constraints.Builder().setRequiresCharging(true).build())
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_MINUTES, TimeUnit.MINUTES)
+            .build()
         const val PERIODIC_NAME = "auto-sync-periodic"
         const val MANUAL_NAME = "auto-sync-now"
         const val TRIGGER_NAME = "auto-sync-trigger"

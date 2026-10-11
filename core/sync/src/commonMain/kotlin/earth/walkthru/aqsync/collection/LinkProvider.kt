@@ -10,7 +10,7 @@ enum class LinkPreference { ANY, LAN, BLE }
 
 /**
  * Opens or reuses a device's link for a collection. Android implements it over its connection
- * repository (#57) and iOS over `SensorLink` (#58).
+ * repository (#57) and iOS over `IosLink` (#58).
  */
 fun interface LinkProvider {
     /**

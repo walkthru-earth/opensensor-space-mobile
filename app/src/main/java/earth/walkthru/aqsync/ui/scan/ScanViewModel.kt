@@ -45,13 +45,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.takeWhile
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -85,7 +81,8 @@ class ScanViewModel @Inject constructor(
 
     private val scanning = MutableStateFlow(false)
     private val scanProblem = MutableStateFlow<ScanProblem?>(null)
-    private val seen = MutableStateFlow<Map<String, ScannedDevice>>(emptyMap())
+    private val adverts = NearbyAdverts(touch = { knownDeviceDao.touch(it.address, it.name, it.lastSeenEpochMs) })
+    private val seen: StateFlow<Map<String, ScannedDevice>> = adverts.seen
 
     val detailLevel: StateFlow<DetailLevel> = settings.detailLevel.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DetailLevel.SIMPLE)
 
@@ -131,7 +128,6 @@ class ScanViewModel @Inject constructor(
 
     private var scanJob: Job? = null
     private var lanScanJob: Job? = null
-    private var pruneJob: Job? = null
     private var scanGeneration = 0
 
     init {
@@ -150,32 +146,12 @@ class ScanViewModel @Inject constructor(
         val generation = ++scanGeneration
         scanProblem.value = null
         scanning.value = true
-        pruneJob?.cancel()
-        pruneJob = viewModelScope.launch {
-            while (isActive) {
-                delay(3_000)
-                val cutoff = System.currentTimeMillis() - STALE_MS
-                seen.update { m -> m.filterValues { it.lastSeenEpochMs >= cutoff } }
-            }
-        }
         scanJob = viewModelScope.launch {
             try {
-                BleScanner.scan(context).takeWhile { ev ->
-                    when (ev) {
-                        is BleScanner.Event.Seen -> {
-                            seen.update { it + (ev.device.address to ev.device) }
-                            // Only an explicit connection enrolls a device; a passive scan must
-                            // not recreate a row that the user chose to forget.
-                            knownDeviceDao.touch(ev.device.address, ev.device.name, ev.device.lastSeenEpochMs)
-                            true
-                        }
-                        is BleScanner.Event.Failed -> {
-                            Log.w("ScanViewModel", "scan failed (${ev.errorCode}: ${ev.message})")
-                            scanProblem.value = if (ev.errorCode == BleScanner.BLUETOOTH_OFF) ScanProblem.BLUETOOTH_OFF else ScanProblem.FAILED
-                            false
-                        }
-                    }
-                }.collect()
+                adverts.collect(BleScanner.scan(context))?.let { ev ->
+                    Log.w("ScanViewModel", "scan failed (${ev.errorCode}: ${ev.message})")
+                    scanProblem.value = if (ev.errorCode == BleScanner.BLUETOOTH_OFF) ScanProblem.BLUETOOTH_OFF else ScanProblem.FAILED
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -183,11 +159,10 @@ class ScanViewModel @Inject constructor(
                 scanProblem.value = ScanProblem.FAILED
             } finally {
                 // A stopped run can finish after a new run starts. Only its own generation may
-                // clear the current button state or cancel the current pruning loop.
+                // clear the current button state. The timebox ends a run here too, and the Scan
+                // button then starts a fresh one.
                 if (scanGeneration == generation) {
                     scanning.value = lanScanJob?.isActive == true
-                    pruneJob?.cancel()
-                    pruneJob = null
                     scanJob = null
                 }
             }
@@ -200,8 +175,6 @@ class ScanViewModel @Inject constructor(
         scanJob = null
         lanScanJob?.cancel()
         lanScanJob = null
-        pruneJob?.cancel()
-        pruneJob = null
         scanning.value = false
     }
 
@@ -264,7 +237,6 @@ class ScanViewModel @Inject constructor(
     }
 
     companion object {
-        const val STALE_MS = 15_000L
         const val LAN_SCAN_WINDOW_MS = 40_000L
     }
 }

@@ -12,6 +12,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.ParcelUuid
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
@@ -19,6 +20,7 @@ import androidx.core.content.edit
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.qualifiers.ApplicationContext
 import earth.walkthru.aqsync.data.TransportFactory
+import earth.walkthru.aqsync.data.ble.ScanStartBudget
 import earth.walkthru.aqsync.data.coroutines.ApplicationScope
 import earth.walkthru.aqsync.data.coroutines.IoDispatcher
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
@@ -27,6 +29,8 @@ import earth.walkthru.aqsync.data.protocol.AqUuids
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -57,6 +61,7 @@ class AdvertFlagScan @Inject constructor(
     private val scheduler: AutoSyncScheduler,
 ) {
     private val prefs get() = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    private val registration = Mutex()
 
     /** Register (or re-register) the scan for every bonded Auto-sync device; unregister when there is none. */
     fun ensureRegistered(scope: CoroutineScope) {
@@ -64,6 +69,10 @@ class AdvertFlagScan @Inject constructor(
     }
 
     suspend fun ensureRegisteredNow() {
+        registration.withLock { registerNow() }
+    }
+
+    private suspend fun registerNow() {
         val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter ?: return
         val scanner: BluetoothLeScanner = adapter.bluetoothLeScanner ?: return
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
@@ -72,16 +81,13 @@ class AdvertFlagScan @Inject constructor(
         }
         val devices = knownDeviceDao.autoSyncDevices().filter { transportFactory.isBonded(it.address) }
         val intent = pendingIntent()
-        try {
-            scanner.stopScan(intent)
-        } catch (e: Exception) {
-            Log.d(TAG, "stopScan: ${e::class.simpleName}")
-        }
         if (devices.isEmpty()) {
+            stop(scanner, intent)
             Log.i(TAG, "no bonded Auto-sync device; flag scan not registered")
             return
         }
         if (!adapter.isOffloadedFilteringSupported) {
+            stop(scanner, intent)
             Log.w(TAG, "controller has no offloaded filtering; flag scan unavailable on this phone")
             return
         }
@@ -98,6 +104,13 @@ class AdvertFlagScan @Inject constructor(
             .setMatchMode(ScanSettings.MATCH_MODE_STICKY)
             .setNumOfMatches(ScanSettings.MATCH_NUM_ONE_ADVERTISEMENT)
             .build()
+        // PendingIntent starts are recorded in the same UID scan history. Keep the existing
+        // registration when admission is denied, and leave one slot for foreground discovery.
+        if (!ScanStartBudget.shared.tryAcquire(SystemClock.elapsedRealtime(), reserveStarts = 1)) {
+            Log.i(TAG, "scan start budget exhausted; retaining the current flag scan")
+            return
+        }
+        stop(scanner, intent)
         try {
             val rc = scanner.startScan(filters, settings, intent)
             if (rc == 0) {
@@ -107,6 +120,16 @@ class AdvertFlagScan @Inject constructor(
             }
         } catch (e: Exception) {
             Log.w(TAG, "flag scan not registered: ${e::class.simpleName}: ${e.message}")
+        }
+    }
+
+    private fun stop(scanner: BluetoothLeScanner, intent: PendingIntent) {
+        try {
+            scanner.stopScan(intent)
+        } catch (e: SecurityException) {
+            Log.d(TAG, "stopScan: ${e::class.simpleName}")
+        } catch (e: Exception) {
+            Log.d(TAG, "stopScan: ${e::class.simpleName}")
         }
     }
 

@@ -280,6 +280,53 @@ class HistoryDeriverTest {
     }
 
     @Test
+    fun `a post-sync pass rebuilds only touched days and hands older stale days to the backfill`() = runBlocking {
+        val tmp = java.nio.file.Files.createTempDirectory("aq-derive-touched").toFile()
+        try {
+            val archive = FileArchive(tmp)
+            val files = InMemoryFiles()
+            val buckets = InMemoryBuckets()
+            val days = InMemoryDays()
+            val indexer = HistoryIndexer(archive, files)
+            val store = DerivedStore(tmp)
+            var backfills = 0
+            val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp)) { backfills++ }
+
+            fun put(name: String, resource: String, crc: Long, syncedAt: Long) {
+                archive.fileFor(station, name).apply { parentFile!!.mkdirs(); writeBytes(bytes(resource)) }
+                files.rows += indexer.indexed(ArchivedFile(station = station, name = name, bytes = 1, crc32 = crc, sha256 = "s", syncedAtEpochMs = syncedAt, sourceDevice = "fake"), archive.fileFor(station, name))
+            }
+            put("station=$station/year=2026/month=09/day=08/data_2015_763038f2396a5d68927ac324c4a744a2_3-6-1.parquet", "device/v2-lz4-4rows-dated.parquet", 1, syncedAt = 1)
+            put("station=$station/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet", "device/v3-board-2rg-105rows.parquet", 2, syncedAt = 1)
+            assertEquals(2, deriver.deriveStale().daysRebuilt)
+
+            // The 09-08 tiers go stale without a sync (an older derive version), then a sync adds a 09-17 file.
+            days.upsert(days.rows.single { it.epochDay == 20704L }.copy(sourceSignature = "old"))
+            put("station=$station/year=2026/month=09/day=17/data_1000_a_107-211-3.parquet", "device/v3-board-2rg-105rows.parquet", 3, syncedAt = 100)
+
+            val afterSync = deriver.deriveAfterSync(sinceEpochMs = 100)
+            assertEquals(1, afterSync.daysRebuilt)
+            assertEquals(1, afterSync.daysDeferred)
+            assertEquals(1, backfills)
+            assertEquals(2, days.rows.single { it.epochDay == 20713L }.sourceFiles)
+            assertEquals("old", days.rows.single { it.epochDay == 20704L }.sourceSignature)
+
+            // Nothing arrived since: no work and no backfill request.
+            val idle = deriver.deriveAfterSync(sinceEpochMs = 200)
+            assertEquals(0, idle.daysChecked)
+            assertEquals(1, backfills)
+
+            // The backfill pass picks up the deferred day.
+            val backfill = deriver.deriveStale()
+            assertEquals(1, backfill.daysRebuilt)
+            assertEquals(0, backfill.daysDeferred)
+            assertTrue(days.rows.single { it.epochDay == 20704L }.sourceSignature != "old")
+        } finally {
+            tmp.deleteRecursively()
+        }
+    }
+
+    @Test
     fun `clock receipt partitions unknown UTC across midnight and survives a new indexer`() = runBlocking {
         val tmp = java.nio.file.Files.createTempDirectory("aq-clock-derive").toFile()
         try {

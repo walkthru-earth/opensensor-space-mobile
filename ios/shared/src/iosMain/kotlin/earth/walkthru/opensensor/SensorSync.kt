@@ -30,6 +30,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import platform.Foundation.NSLock
@@ -49,10 +50,12 @@ class SyncHandle internal constructor(private val job: Job?) {
  * The Swift-facing runner for the shared engine. It owns the archive store, the receipt index and
  * the [ArchiveCollector], so LAN and Bluetooth save into the same archive under the same rules.
  *
- * Make one per app and call [start] on the main thread. Work runs off the main thread. Every
- * callback arrives on the main thread, `progress` at most four times a second and `finished`
- * exactly once, last. A station syncs over one link at a time. The runner maintains UTC if needed,
- * then lists, opens, reads and closes files. It never asks the sensor to delete, rename or rewrite one.
+ * Make one per app and call [start] on the main thread. Work runs off the main thread on a lease of
+ * the [IosLink]. Every callback arrives on the main thread, `progress` at most four times a second
+ * and in order, `finished` exactly once, last. A station syncs over one link at a time, so a second
+ * physical link to the same station (Bluetooth and Wi-Fi) waits its turn. The runner maintains UTC
+ * if needed, then lists, opens, reads and closes files. It never asks the sensor to delete, rename
+ * or rewrite one.
  */
 class SensorSync internal constructor(
     store: ArchiveStore,
@@ -82,7 +85,7 @@ class SensorSync internal constructor(
      */
     @OptIn(DelicateCoroutinesApi::class)
     fun start(
-        link: SensorLink,
+        link: IosLink,
         station: String,
         device: String,
         maxRead: Int,
@@ -93,7 +96,7 @@ class SensorSync internal constructor(
     /** One exact listed file for Files retry, with the same verification and station writer lock. */
     @OptIn(DelicateCoroutinesApi::class)
     fun startSelected(
-        link: SensorLink,
+        link: IosLink,
         station: String,
         device: String,
         maxRead: Int,
@@ -101,7 +104,7 @@ class SensorSync internal constructor(
         progress: (SyncProgress) -> Unit,
         finished: (SyncResult) -> Unit,
     ): SyncHandle {
-        IosSyncDiagnostics.record(device, "sync", "${link.transport.kind.name.lowercase()} ${if (onlyName == null) "all files" else "one file"}")
+        IosSyncDiagnostics.record(device, "sync", "${link.kind.name.lowercase()} ${if (onlyName == null) "all files" else "one file"}")
         if (!claim(station)) {
             scope.launch(callbacks) { finished(SyncResult(SyncEnd.IN_USE, 0, 0, 0)) }
             return SyncHandle(null)
@@ -112,35 +115,40 @@ class SensorSync internal constructor(
             var listed = 0
             var initial = -1
             var done = 0
+            // Throttled ticks, newest first, handed to the main thread one at a time and before `finished`.
+            val ticks = Channel<SyncProgress>(Channel.CONFLATED)
+            val reporter = launch { for (update in ticks) withContext(callbacks) { progress(update) } }
             val result = try {
                 var last: TimeSource.Monotonic.ValueTimeMark? = null
                 var lastDone = -1
-                val session = link.session(debugFrames.recorderFor(link.transport.address))
-                try {
-                    synchronizeClock(session, link, automatic = true)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    // Preserve immutable unsynced files even when UTC could not be refreshed.
-                    // A broken pipe will still fail the normal LIST/transfer checks.
-                    syncLog("automatic UTC unavailable, ${e::class.simpleName}; collecting original files")
-                }
-                val summary = collector.collect(session, station, device, maxRead, onlyName) { p: CollectionProgress ->
-                    listed = p.filesTotal
-                    if (initial < 0) initial = p.filesDone
-                    done = p.filesDone
-                    val now = TimeSource.Monotonic.markNow()
-                    val due = last?.let { (now - it) >= progressInterval.milliseconds } ?: true
-                    if (due || p.filesDone != lastDone) {
-                        last = now
-                        lastDone = p.filesDone
-                        val update = SyncProgress(p.filesDone, p.filesTotal, p.fileBytes, p.receivedBytes, p.bytesPerSecond, p.bytesTotal)
-                        scope.launch(callbacks) { progress(update) }
+                link.leased(LeaseKind.SYNC) { session ->
+                    try {
+                        synchronizeClock(session, link, automatic = true)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        // Preserve immutable unsynced files even when UTC could not be refreshed.
+                        // A broken pipe will still fail the normal LIST/transfer checks.
+                        syncLog("automatic UTC unavailable, ${e::class.simpleName}; collecting original files")
                     }
+                    val summary = collector.collect(session, station, device, maxRead, onlyName) { p: CollectionProgress ->
+                        listed = p.filesTotal
+                        if (initial < 0) initial = p.filesDone
+                        done = p.filesDone
+                        val now = TimeSource.Monotonic.markNow()
+                        val due = last?.let { (now - it) >= progressInterval.milliseconds } ?: true
+                        if (due || p.filesDone != lastDone) {
+                            last = now
+                            lastDone = p.filesDone
+                            ticks.trySend(SyncProgress(p.filesDone, p.filesTotal, p.fileBytes, p.receivedBytes, p.bytesPerSecond, p.bytesTotal))
+                        }
+                    }
+                    resultOf(summary, (done - initial.coerceAtLeast(0)))
                 }
-                resultOf(summary, (done - initial.coerceAtLeast(0)))
             } catch (e: CancellationException) {
                 SyncResult(SyncEnd.STOPPED, listed, 0, 0)
+            } catch (e: LeaseRefusedException) {
+                SyncResult(if (e.syncRunning) SyncEnd.IN_USE else SyncEnd.LINK_LOST, listed, 0, 0)
             } catch (e: AuthFailedException) {
                 SyncResult(SyncEnd.AUTH_FAILED, listed, 0, 0)
             } catch (e: DeviceBusyException) {
@@ -156,6 +164,8 @@ class SensorSync internal constructor(
                 syncLog("sync ended, ${e::class.simpleName}: ${e.message}")
                 SyncResult(SyncEnd.FAILED, listed, 0, 0)
             }
+            ticks.close()
+            withContext(NonCancellable) { if (result.end == SyncEnd.STOPPED) reporter.cancel() else reporter.join() }
             withContext(NonCancellable + callbacks) {
                 release(station)
                 IosSyncDiagnostics.record(device, "result", "${result.end.name.lowercase()} · ${result.saved}/${result.files} saved")
@@ -165,10 +175,16 @@ class SensorSync internal constructor(
         return SyncHandle(job)
     }
 
-    private suspend fun synchronizeClock(session: DeviceSession, link: SensorLink, automatic: Boolean = false) {
+    /**
+     * The one clock owner on iOS. The automatic check runs once per connection, whichever of the
+     * connect step and the first sync gets the link first. Called under a lease.
+     */
+    private suspend fun synchronizeClock(session: DeviceSession, link: IosLink, automatic: Boolean = false) {
+        if (automatic && link.clockChecked) return
         val station = link.station
         val boot = link.boot
         val anchor = if (automatic) session.synchronizeClockIfNeeded(::nowEpochMillis) else session.synchronizeClock(::nowEpochMillis)
+        link.clockChecked = true
         if (anchor == null) return
         if (station != null && boot != null) {
             recordClockAnchor(station, boot, anchor.epochNanos, anchor.monotonicMicros)
@@ -179,30 +195,34 @@ class SensorSync internal constructor(
      * Sends automatic UTC or a confirmed flush over [link] through [DeviceSession]. `SET_TIME` carries
      * this phone's clock and then asks for a fresh `status` push, so Today shows the anchored clock.
      * `FLUSH` finalizes the buffered rows. Neither touches the archive files. `finished` fires
-     * exactly once on the main thread, also when the link closes or [SyncHandle.cancel] lands.
+     * exactly once on the main thread, also when the link closes or [SyncHandle.cancel] lands, which
+     * ends it stopped with no notice.
      */
     @OptIn(DelicateCoroutinesApi::class)
-    fun command(link: SensorLink, command: SensorCommand, automatic: Boolean = false, finished: (CommandResult) -> Unit): SyncHandle {
+    fun command(link: IosLink, command: SensorCommand, automatic: Boolean = false, finished: (CommandResult) -> Unit): SyncHandle {
         val job = scope.launch(work, CoroutineStart.ATOMIC) {
             val notice = try {
-                val session = link.session(debugFrames.recorderFor(link.transport.address))
-                when (command) {
-                    SensorCommand.SET_TIME -> {
-                        synchronizeClock(session, link, automatic)
-                        try {
-                            session.requestStatus()
-                        } catch (e: TransportException) {
-                            // The clock is set. The next status push shows it.
+                link.leased(LeaseKind.COMMAND) { session ->
+                    when (command) {
+                        SensorCommand.SET_TIME -> {
+                            synchronizeClock(session, link, automatic)
+                            try {
+                                session.requestStatus()
+                            } catch (e: TransportException) {
+                                // The clock is set. The next status push shows it.
+                            }
+                            TodayNotice.ClockSet
                         }
-                        TodayNotice.ClockSet
-                    }
-                    SensorCommand.FLUSH -> {
-                        val flushed = session.flush()
-                        TodayNotice.Finalized(flushed.rows, flushed.filesFinalized.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+                        SensorCommand.FLUSH -> {
+                            val flushed = session.flush()
+                            TodayNotice.Finalized(flushed.rows, flushed.filesFinalized.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+                        }
                     }
                 }
             } catch (e: CancellationException) {
-                TodayNotice.Failed(command.today)
+                null
+            } catch (e: LeaseRefusedException) {
+                TodayNotice.Busy
             } catch (e: DeviceBusyException) {
                 TodayNotice.Busy
             } catch (e: DeviceErrorException) {
