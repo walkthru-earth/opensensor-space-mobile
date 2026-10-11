@@ -30,6 +30,7 @@ class FakeArchiveDevice(
     val station: String = "53315f5f-cb85-4d8d-b623-d56266084189",
     val maxRead: Int = 16_384,
     override val mtu: Int = 517,
+    override val kind: TransportKind = TransportKind.FAKE,
 ) : AqTransport {
     class FakeFile(val name: String, val bytes: ByteArray) {
         val crc32: Long = ParquetVerify.crc32(bytes)
@@ -63,6 +64,15 @@ class FakeArchiveDevice(
     /** Delay between CHUNKs, so concurrent transfers interleave. */
     var chunkDelayMs: Long = 0
 
+    /** Delay before the first LIST frame. An `ABORT` meanwhile ends the LIST as firmware does. */
+    var listDelayMs: Long = 0
+
+    /** Runs before the k-th READ (1-based) is answered, so a test can drop the link mid-transfer. */
+    var beforeRead: (readIndex: Int) -> Unit = {}
+
+    /** Runs before a LIST is answered, so a test can drop the link mid-preparation. */
+    var beforeList: () -> Unit = {}
+
     private val responses = Channel<ByteArray>(Channel.UNLIMITED)
     private val state = MutableStateFlow<ConnectionState>(ConnectionState.Ready(mtu))
     private var openFile: FakeFile? = null
@@ -77,7 +87,6 @@ class FakeArchiveDevice(
     val requests: MutableList<Int> = mutableListOf()
 
     override val displayName: String = "AQ-fake"
-    override val kind: TransportKind = TransportKind.FAKE
     override val endpoint: String = "in-process fake"
     override val connectionState: StateFlow<ConnectionState> = state
     override val statusNotifications: Flow<ByteArray> = emptyFlow()
@@ -110,6 +119,17 @@ class FakeArchiveDevice(
         when (op) {
             Opcode.ABORT -> if (streaming != 0) abortRequested = true else send(Frame.Aborted(0))
             Opcode.LIST -> {
+                beforeList()
+                if (listDelayMs > 0) {
+                    streaming = op
+                    delay(listDelayMs)
+                    streaming = 0
+                    if (abortRequested) {
+                        abortRequested = false
+                        send(Frame.Error(op, ProtocolError.ABORTED.code, ""))
+                        return send(Frame.Aborted(op))
+                    }
+                }
                 files.forEach { send(Frame.File(it.bytes.size.toLong(), it.name)) }
                 send(Frame.ListEnd(files.size.toLong(), 0, 0, 0))
             }
@@ -129,6 +149,7 @@ class FakeArchiveDevice(
                 val f = openFile
                 if (f == null || handle != openHandle) return send(Frame.Error(op, ProtocolError.BAD_HANDLE.code, ""))
                 readOffsets += offset
+                beforeRead(readCount + 1)
                 val end = minOf(f.bytes.size.toLong(), offset + minOf(length, maxRead.toLong()))
                 val chunkMax = mtu - 10
                 var toDrop = dropLeadingChunks(++readCount)
