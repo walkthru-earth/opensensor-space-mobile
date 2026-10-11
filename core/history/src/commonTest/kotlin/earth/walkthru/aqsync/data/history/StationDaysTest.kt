@@ -55,4 +55,3 @@ class StationDaysTest {
         assertEquals(listOf("span.parquet", "est.parquet", "late.parquet"), byDay[20714]!!.map { it.name })
     }
 }
-
