@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
+import earth.walkthru.aqsync.storage.RetentionPolicy
 import earth.walkthru.aqsync.units.UnitSystem
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -26,6 +27,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     val clockSyncMode: Flow<ClockSyncMode> = prefs.map { it.clockSyncMode }.distinctUntilChanged()
     val showPublicSensors: Flow<Boolean> = prefs.map { it.showPublicSensors }.distinctUntilChanged()
     val unitSystem: Flow<UnitSystem> = prefs.map { it.unitSystem }.distinctUntilChanged()
+    val retention: Flow<RetentionPolicy> = prefs.map { it.retention }.distinctUntilChanged()
 
     /** The stored values once, for callers outside a flow. */
     suspend fun current(): AppPrefs = prefs.first()
@@ -49,6 +51,13 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     suspend fun setUnitSystem(system: UnitSystem) {
         store.edit { it[SettingsKeys.UNIT_SYSTEM] = system.name }
     }
+
+    suspend fun setRetention(policy: RetentionPolicy) {
+        store.edit {
+            it[SettingsKeys.DERIVED_QUOTA_BYTES] = policy.derivedQuotaBytes
+            it[SettingsKeys.MAP_CACHE_BYTES] = policy.mapCacheBytes
+        }
+    }
 }
 
 /** Reads [AppPrefs] with the defaults and the legacy `advanced_mode` rule. Unknown names read as the default. */
@@ -62,6 +71,10 @@ fun Preferences.toAppPrefs(): AppPrefs {
             ?: defaults.clockSyncMode,
         showPublicSensors = this[SettingsKeys.SHOW_PUBLIC_SENSORS] ?: defaults.showPublicSensors,
         unitSystem = UnitSystem.parse(this[SettingsKeys.UNIT_SYSTEM]),
+        retention = RetentionPolicy(
+            derivedQuotaBytes = this[SettingsKeys.DERIVED_QUOTA_BYTES]?.takeIf { it >= 0 } ?: defaults.retention.derivedQuotaBytes,
+            mapCacheBytes = this[SettingsKeys.MAP_CACHE_BYTES]?.takeIf { it >= 0 } ?: defaults.retention.mapCacheBytes,
+        ),
     )
 }
 
