@@ -17,6 +17,9 @@ class BleDisconnectCausesTest {
         assertEquals(DisconnectCause.Auth(AuthKind.BOND_FAILED), BleDisconnectCauses.ofStatus(5))
         assertEquals(DisconnectCause.Auth(AuthKind.ENCRYPTION_FAILED), BleDisconnectCauses.ofStatus(15))
         assertEquals(DisconnectCause.Auth(AuthKind.BOND_MISSING), BleDisconnectCauses.ofStatus(BleDisconnectCauses.KEY_MISSING))
+        assertEquals(DisconnectCause.Auth(AuthKind.BOND_MISSING), BleDisconnectCauses.ofStatus(6))
+        assertEquals(DisconnectCause.Auth(AuthKind.BOND_MISSING), BleDisconnectCauses.ofStatus(61))
+        assertEquals(DisconnectCause.LocalAbort(gattStatus = 22), BleDisconnectCauses.ofStatus(BleDisconnectCauses.LOCAL_HOST))
         assertEquals(DisconnectCause.LocalAbort(gattStatus = 8), BleDisconnectCauses.ofStatus(BleDisconnectCauses.CONNECTION_TIMEOUT))
         assertEquals(DisconnectCause.LocalAbort(gattStatus = 133), BleDisconnectCauses.ofStatus(133))
     }
@@ -25,6 +28,8 @@ class BleDisconnectCausesTest {
     fun `credential failures stop retries and radio failures do not`() {
         assertFalse(BleDisconnectCauses.ofStatus(BleDisconnectCauses.KEY_MISSING).retryable)
         assertFalse(BleDisconnectCauses.ofStatus(5).retryable)
+        assertFalse(BleDisconnectCauses.ofStatus(BleDisconnectCauses.HCI_KEY_MISSING).retryable)
+        assertFalse(BleDisconnectCauses.ofStatus(BleDisconnectCauses.HCI_MIC_FAILURE).retryable)
         assertTrue(BleDisconnectCauses.ofStatus(133).retryable)
         assertTrue(BleDisconnectCauses.ofStatus(BleDisconnectCauses.PEER_USER).retryable)
     }
@@ -35,6 +40,9 @@ class BleDisconnectCausesTest {
         assertEquals(DisconnectCause.Auth(AuthKind.BOND_MISSING), BleDisconnectCauses.ofOpenFailure(TransportException("connect", cause = missing)))
         assertEquals(DisconnectCause.Auth(AuthKind.BOND_FAILED), BleDisconnectCauses.ofOpenFailure(BleLinkDriver.BondException("pairing timed out")))
         assertEquals(DisconnectCause.LocalAbort(gattStatus = 133), BleDisconnectCauses.ofOpenFailure(TransportException("gatt", gattStatus = 133)))
+        assertEquals(DisconnectCause.Auth(AuthKind.BOND_MISSING), BleDisconnectCauses.ofOpenFailure(TransportException("stale bond", gattStatus = 61)))
+        // The stale bond detector fails the open with the key missing marker.
+        assertEquals(DisconnectCause.Auth(AuthKind.BOND_MISSING), BleDisconnectCauses.ofOpenFailure(TransportException(BleConnectionFailure.PAIRING_REPAIR_MESSAGE, BleDisconnectCauses.KEY_MISSING)))
         assertEquals(DisconnectCause.Timeout(TimeoutPhase.OPEN, 0), BleDisconnectCauses.ofOpenFailure(BleLinkDriver.ConnectTimeoutException()))
         assertEquals(DisconnectCause.LocalAbort(), BleDisconnectCauses.ofOpenFailure(TransportException("no adapter")))
     }

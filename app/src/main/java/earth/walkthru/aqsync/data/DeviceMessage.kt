@@ -33,6 +33,9 @@ sealed interface DeviceMessage {
     /** The LAN attempt failed and Bluetooth is used. [failure] is null for an untyped error. */
     data class LanFallback(val failure: LanFailure?) : DeviceMessage
     data object ConnectFailed : DeviceMessage
+
+    /** The sensor refused this phone's bond keys, for example after a reset. Pair again in Settings. */
+    data object PairingRepair : DeviceMessage
     data class NewerProtocol(val device: Int, val app: Int) : DeviceMessage
 
     /** The sensor reports protocol [device] (null when absent), below the [app] minimum. */

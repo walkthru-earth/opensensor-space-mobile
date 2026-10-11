@@ -74,6 +74,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -495,7 +496,7 @@ class DeviceLinkOwner @Inject constructor(
                 // The phone lost its keys. Reconnecting cannot help until the user pairs again.
                 Log.w(TAG, "connect failed (${cause.describe()})")
                 connectionFailure.value = BleConnectionFailure.PAIRING_REPAIR_MESSAGE
-                _events.tryEmit(DeviceEvent.Error(DeviceMessage.ConnectFailed))
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.PairingRepair))
             }
             else -> {
                 Log.w(TAG, "connect failed (${cause.describe()})")
@@ -1185,6 +1186,15 @@ class DeviceLinkOwner @Inject constructor(
 
     internal fun collectionListed(session: DeviceSession, files: List<Frame.File>, end: Frame.ListEnd) {
         if (_session.value === session) _manifest.value = ManifestState.Loaded(files, end, clock.nowEpochMs())
+    }
+
+    /**
+     * A collection ended on a missing bond. Keeps the repair banner after its session closed and
+     * says so once, an open failure that already reported it is not repeated.
+     */
+    internal fun collectionNeedsPairingRepair() {
+        if (connectionFailure.getAndUpdate { BleConnectionFailure.PAIRING_REPAIR_MESSAGE } == BleConnectionFailure.PAIRING_REPAIR_MESSAGE) return
+        _events.tryEmit(DeviceEvent.Error(DeviceMessage.PairingRepair))
     }
 
     internal fun collectionListFailed() {

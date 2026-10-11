@@ -28,6 +28,8 @@ import earth.walkthru.aqsync.data.sync.ClockSyncMode
 import earth.walkthru.aqsync.data.sync.FileOutcome
 import earth.walkthru.aqsync.data.sync.FileProblem
 import earth.walkthru.aqsync.data.sync.SyncEndCause
+import earth.walkthru.aqsync.link.AuthKind
+import earth.walkthru.aqsync.link.DisconnectCause
 import earth.walkthru.aqsync.link.retryable
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -307,6 +309,11 @@ class DeviceFacade internal constructor(
                 is CollectionState.Failed -> {
                     val failure = state.failure
                     val shortBytes = (failure as? CollectionFailure.Storage)?.shortBytes
+                    if (failure == CollectionFailure.Link(DisconnectCause.Auth(AuthKind.BOND_MISSING))) {
+                        // Retrying cannot help, the user pairs again. The banner says how.
+                        linkOwner.collectionNeedsPairingRepair()
+                        return@withLock
+                    }
                     val message = when {
                         failure is CollectionFailure.Storage && failure.kind == StorageFailure.NO_SPACE && shortBytes != null -> DeviceMessage.NotEnoughSpace(shortBytes)
                         lastStep == PrepareStep.LIST -> DeviceMessage.FileListNotReady
