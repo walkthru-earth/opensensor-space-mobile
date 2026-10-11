@@ -4,6 +4,20 @@
 **Code:** `./gradlew verify` (the gate), `.github/workflows/verify.yml`.
 **Related:** measured device behaviour is recorded in the board-specific `../aq-parquet/docs/boards/*/bench-verified.md`; anything not recorded there is unverified.
 
+## 2026-10-11, iPad Smart Sync over Bluetooth fails on a stale bond
+
+The owner reported that Smart Sync on the iPad Air M2 (iPadOS 27.0.1, main `5604fb3e`)
+disconnects, reconnects, starts and then stops. A CoreS3 `AQ-6b40` serial capture from 14:39
+to 14:49 local (UTC+03:00) showed three cycles of `BLE CONNECT mtu=23`,
+`BLE AUTH result=failed action=disconnect` and `BLE DISCONNECT reason=peer-closed hci=0x13`.
+The firmware ends the link when encryption fails (`ble_sync.cpp`, `BLE_GAP_EVENT_ENC_CHANGE`).
+The board's bonds were reset by an earlier reflash, so the iPad most likely still holds the
+old pairing key. The same window shows clock sets over LAN (`PARQUET CLOCK transport=lan`), so
+Wi-Fi was still reachable. The iOS app ignored the disconnect error and treated each failure as an
+ordinary loss. The iPad log was not collected (`log collect` reported the device not configured),
+so the CoreBluetooth error code is unconfirmed. The workaround is to forget `AQ-6b40` in iPadOS Settings,
+Bluetooth, then pair again with the PIN. No firmware change is implied.
+
 ## 2026-10-11, maplibre-compose 0.20.0 and Arabic map labels on iOS (#53)
 
 maplibre-compose 0.20.0 (maplibre-native-ffi 0.202610.0) links ICU on Apple, so iOS loads the
