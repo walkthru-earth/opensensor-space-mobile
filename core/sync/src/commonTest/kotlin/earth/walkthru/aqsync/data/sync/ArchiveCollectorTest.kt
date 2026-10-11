@@ -3,14 +3,23 @@ package earth.walkthru.aqsync.data.sync
 import earth.walkthru.aqsync.archive.ArchiveKey
 import earth.walkthru.aqsync.archive.ArchiveLayout
 import earth.walkthru.aqsync.archive.ArchiveRecord
+import earth.walkthru.aqsync.archive.ArchiveStore
+import earth.walkthru.aqsync.archive.PartialMeta
+import earth.walkthru.aqsync.archive.PartialWriter
 import earth.walkthru.aqsync.data.ble.AuthFailedException
 import earth.walkthru.aqsync.data.ble.DeviceBusyException
 import earth.walkthru.aqsync.data.ble.DeviceErrorException
 import earth.walkthru.aqsync.data.ble.DeviceSession
+import earth.walkthru.aqsync.data.ble.openSession
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.protocol.Opcode
 import earth.walkthru.aqsync.data.protocol.ParquetVerify
 import earth.walkthru.aqsync.data.protocol.ProtocolError
+import earth.walkthru.aqsync.storage.FakeStorageBudget
+import earth.walkthru.aqsync.storage.StorageBudget
+import earth.walkthru.aqsync.storage.StorageClass
+import earth.walkthru.aqsync.storage.StorageException
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.testTimeSource
@@ -24,12 +33,24 @@ import kotlin.test.assertTrue
 class ArchiveCollectorTest {
     private val store = MemoryArchiveStore()
     private val index = MemoryArchiveIndex()
-    private val engine = SyncEngine(store, index, windowRetryBackoffMs = 5, clock = { 1_000L })
 
-    private fun TestScope.collector() = ArchiveCollector(store, index, engine, testTimeSource)
+    private fun TestScope.engine() = SyncEngine(store, index, windowRetryBackoffMs = 5, clock = { 1_000L }, io = StandardTestDispatcher(testScheduler))
 
-    private suspend fun TestScope.collect(fake: FakeArchiveDevice, progress: MutableList<CollectionProgress> = ArrayList()) =
-        collector().collect(DeviceSession(fake), fake.station, fake.address, fake.maxRead) { progress += it }
+    /** One link per fake, as one phone keeps one session per connection. Each run takes a fresh view. */
+    private val links = HashMap<FakeArchiveDevice, DeviceSession>()
+
+    private suspend fun TestScope.session(fake: FakeArchiveDevice): DeviceSession {
+        val link = links.getOrPut(fake) { openSession(fake, backgroundScope) }
+        return DeviceSession(link.link, link.transport)
+    }
+
+    private fun TestScope.collector(budget: StorageBudget = FakeStorageBudget()) = ArchiveCollector(store, index, engine(), budget, testTimeSource)
+
+    private suspend fun TestScope.collect(
+        fake: FakeArchiveDevice,
+        progress: MutableList<CollectionProgress> = ArrayList(),
+        budget: StorageBudget = FakeStorageBudget(),
+    ) = collector(budget).collect(session(fake), fake.station, fake.address, fake.maxRead) { progress += it }
 
     private fun finalBytes(station: String, name: String): ByteArray? = store.files[ArchiveLayout.finalPath(ArchiveKey(station, name))]
 
@@ -70,7 +91,7 @@ class ArchiveCollectorTest {
         val chosen = fake.files[1]
         val progress = ArrayList<CollectionProgress>()
 
-        val summary = collector().collect(DeviceSession(fake), fake.station, fake.address, fake.maxRead, chosen.name) {
+        val summary = collector().collect(session(fake), fake.station, fake.address, fake.maxRead, chosen.name) {
             progress += it
         }
 
@@ -161,5 +182,115 @@ class ArchiveCollectorTest {
         assertContentEquals(fake.files[2].bytes, finalBytes(fake.station, fake.files[2].name))
         assertEquals(1, index.records.size, "no receipt for a file that was not stored")
         assertTrue(store.files.keys.any { it == ArchiveLayout.partialPath(ArchiveKey(fake.station, stuck)) }, "verified bytes stay for the next run")
+    }
+
+    private fun budget(free: Long) = FakeStorageBudget(mapOf(StorageClass.Durable to free))
+
+    private val plenty get() = budget(1L shl 30)
+
+    @Test
+    fun aRunThatFitsReservesItsBytesBeforeTheFirstOpen() = runTest {
+        val fake = FakeArchiveDevice(backgroundScope)
+        val budget = plenty
+
+        collect(fake, budget = budget)
+
+        val missing = fake.files.sumOf { it.bytes.size.toLong() }
+        assertEquals(StorageClass.Durable to missing + ARCHIVE_HEADROOM_BYTES, budget.reservations.first())
+    }
+
+    @Test
+    fun aRunThatDoesNotFitOpensNothingAndRemovesNothing() = runTest {
+        val fake = FakeArchiveDevice(backgroundScope)
+        val kept = fake.files[0]
+        assertTrue(collector().collect(session(fake), fake.station, fake.address, fake.maxRead, kept.name) {}.complete)
+        val opensBefore = fake.requests.count { it == Opcode.OPEN }
+
+        val e = assertFailsWith<InsufficientSpaceException> { collect(fake, budget = budget(1_000)) }
+
+        val missing = fake.files.drop(1).sumOf { it.bytes.size.toLong() }
+        assertEquals(missing + ARCHIVE_HEADROOM_BYTES, e.needed)
+        assertEquals(1_000L, e.available)
+        assertEquals(opensBefore, fake.requests.count { it == Opcode.OPEN }, "no OPEN for a run that does not fit")
+        assertEquals(Opcode.LIST, fake.requests.last())
+        assertContentEquals(kept.bytes, finalBytes(fake.station, kept.name))
+        assertEquals(kept.name, index.records.single().name)
+    }
+
+    @Test
+    fun freeSpaceThatCannotBeReadOpensNothing() = runTest {
+        val fake = FakeArchiveDevice(backgroundScope)
+        val unreadable = object : StorageBudget by FakeStorageBudget() {
+            override suspend fun freeBytes(cls: StorageClass): Long = throw StorageException("statfs failed")
+        }
+
+        val e = assertFailsWith<InsufficientSpaceException> { collect(fake, budget = unreadable) }
+
+        assertEquals(0L, e.available)
+        assertTrue(fake.requests.none { it == Opcode.OPEN }, "no OPEN when the free space is unknown")
+        assertTrue(index.records.isEmpty())
+    }
+
+    @Test
+    fun aDiskThatFillsMidFileEndsTheRunAndTheNextRunResumesTheKeptPartial() = runTest {
+        val fake = FakeArchiveDevice(backgroundScope)
+        val budget = budget(1L shl 30)
+        val full = FillingStore(store, limit = 3_000) { budget.free[StorageClass.Durable] = 1_000 }
+
+        val e = assertFailsWith<InsufficientSpaceException> {
+            ArchiveCollector(store = full, index, engine(full), budget, testTimeSource)
+                .collect(session(fake), fake.station, fake.address, fake.maxRead) {}
+        }
+        assertEquals(1_000L, e.available)
+        assertEquals(1, fake.requests.count { it == Opcode.OPEN }, "the run ended with the first file")
+        val (name, held) = store.partialLengths(fake.station).entries.single()
+        assertTrue(held > 0, "the partial keeps the bytes written before the disk filled")
+        assertTrue(index.records.isEmpty())
+
+        budget.free[StorageClass.Durable] = 1L shl 30
+        full.armed = false
+        val readsBefore = fake.readOffsets.size
+        val summary = collect(fake, budget = budget)
+
+        assertEquals(CollectionSummary(3, emptyList()), summary)
+        assertEquals(held, fake.readOffsets[readsBefore], "the first READ of the next run starts at the partial, reads ${fake.readOffsets}")
+        assertContentEquals(fake.files.single { it.name == name }.bytes, finalBytes(fake.station, name))
+        assertTrue(store.partialLengths(fake.station).isEmpty())
+    }
+
+    @Test
+    fun aStorageFaultWithRoomLeftFailsOnlyItsFile() = runTest {
+        val fake = FakeArchiveDevice(backgroundScope)
+        val refused = fake.files[1].name
+        store.failWrite = { key -> if (key.name == refused) IllegalStateException("permission denied") else null }
+
+        val summary = collect(fake, budget = plenty)
+
+        assertEquals(listOf(FileNotSaved(refused, FileProblem.STORAGE)), summary.notSaved)
+        fake.files.filter { it.name != refused }.forEach { assertContentEquals(it.bytes, finalBytes(fake.station, it.name)) }
+        assertEquals(2, index.records.size)
+    }
+
+    private fun TestScope.engine(archive: ArchiveStore) =
+        SyncEngine(archive, index, windowRetryBackoffMs = 5, clock = { 1_000L }, io = StandardTestDispatcher(testScheduler))
+
+    /** Fails a write that would pass [limit] bytes in all, as a disk that fills does, and calls [onFull] first. */
+    private class FillingStore(private val inner: ArchiveStore, private val limit: Long, private val onFull: () -> Unit) : ArchiveStore by inner {
+        var armed = true
+        private var written = 0L
+
+        override suspend fun openPartial(key: ArchiveKey, meta: PartialMeta): PartialWriter {
+            val writer = inner.openPartial(key, meta)
+            return object : PartialWriter by writer {
+                override fun writeAt(offset: Long, payload: ByteArray) {
+                    if (armed && written + payload.size > limit) {
+                        onFull()
+                        throw IllegalStateException("No space left on device")
+                    }
+                    writer.writeAt(offset, payload)
+                    written += payload.size
+                }
+            }
+        }
     }
 }

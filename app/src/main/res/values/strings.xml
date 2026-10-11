@@ -233,6 +233,7 @@
     </plurals>
     <string name="msg_sync_stopped">Sync stopped. Partial files resume next time.</string>
     <string name="msg_sync_aborted">Sync stopped early. It resumes on the next sync.</string>
+    <string name="msg_not_enough_space">Not enough space on this phone. Free %1$s, then sync again.</string>
     <plurals name="msg_unplaced">
         <item quantity="one">%1$d reading is archived but has no time yet, so it is not on the calendar.</item>
         <item quantity="other">%1$d readings are archived but have no time yet, so they are not on the calendar.</item>

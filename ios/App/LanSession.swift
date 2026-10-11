@@ -158,8 +158,11 @@ actor LanSession {
     }
 
     func endCollect() {
+        let ended = sink
         sink = nil
         collecting = false
+        // The ended link stops with its collection, so its scope never writes over the next one.
+        ended?.link.linkClosed()
     }
 
     /// Releases a borrowed config/debug link only if it still owns the response sink.

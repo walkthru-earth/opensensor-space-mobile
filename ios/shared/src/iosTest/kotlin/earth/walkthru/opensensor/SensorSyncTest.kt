@@ -9,11 +9,14 @@ import earth.walkthru.aqsync.data.protocol.FrameCodec
 import earth.walkthru.aqsync.data.protocol.Opcode
 import earth.walkthru.aqsync.data.protocol.ParquetVerify
 import earth.walkthru.aqsync.data.protocol.ProtocolError
+import earth.walkthru.aqsync.storage.FakeStorageBudget
+import earth.walkthru.opensensor.today.TodayNotice
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Runnable
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
@@ -22,6 +25,7 @@ import platform.Foundation.NSFileManager
 import platform.Foundation.NSTemporaryDirectory
 import platform.Foundation.NSUUID
 import kotlin.concurrent.AtomicInt
+import kotlin.concurrent.AtomicReference
 import kotlin.coroutines.CoroutineContext
 import kotlin.random.Random
 import kotlin.test.AfterTest
@@ -29,6 +33,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 /** The Swift-facing runner and byte pipe over a scripted sensor, on the iOS archive. */
@@ -36,7 +41,7 @@ class SensorSyncTest {
     private val base = NSTemporaryDirectory().trimEnd('/') + "/sensor-sync-" + NSUUID().UUIDString()
     private val finals = "$base/SensorArchive"
     private val store = IosArchiveStore(finals, "$base/archive-partial", Dispatchers.Default)
-    private val sync = SensorSync(store, ReceiptArchiveIndex(finals, Dispatchers.Default), Dispatchers.Default, Dispatchers.Default, progressInterval = 0)
+    private val sync = SensorSync(store, ReceiptArchiveIndex(finals, Dispatchers.Default), Dispatchers.Default, Dispatchers.Default, progressInterval = 0, budget = FakeStorageBudget())
     private val station = "53315f5f-cb85-4d8d-b623-d56266084189"
 
     @AfterTest
@@ -54,15 +59,24 @@ class SensorSyncTest {
         "station=$station/year=2026/month=09/day=15/data_1015_b41d_15090-15179-90.parquet" to parquet(2, 3_000),
     )
 
-    /** Requests seen by the sensor, by opcode. */
-    private val requests = ArrayList<Int>()
+    /** Requests seen by the sensor, by opcode. The sensor records them off the test thread. */
+    private val seen = AtomicReference<List<Int>>(emptyList())
+    private val requests: List<Int> get() = seen.value
+
+    private fun clearRequests() {
+        seen.value = emptyList()
+    }
 
     /** A link whose sensor answers each request like the firmware, through [SensorLink.deliver]. */
     private fun sensor(answer: (SensorLink, ByteArray) -> Boolean = { _, _ -> false }): SensorLink {
         lateinit var link: SensorLink
         link = SensorLink(overWifi = true, address = "a1b2c3d4e5f6", mtu = 517, send = { data: NSData ->
             val req = data.toByteArray()
-            requests += req[0].toInt() and 0xFF
+            val op = req[0].toInt() and 0xFF
+            while (true) {
+                val before = seen.value
+                if (seen.compareAndSet(before, before + op)) break
+            }
             if (!answer(link, req)) respond(link, req)
         }, sendContext = Dispatchers.Default)
         return link
@@ -132,7 +146,7 @@ class SensorSyncTest {
     @Test
     fun aSecondSyncOnlyLists() {
         run(sensor())
-        requests.clear()
+        clearRequests()
 
         val result = run(sensor())
 
@@ -161,7 +175,7 @@ class SensorSyncTest {
             }
         }
         assertEquals(SyncEnd.COMPLETE, run(healthy()).end)
-        requests.clear()
+        clearRequests()
         assertEquals(SyncEnd.COMPLETE, run(healthy()).end)
         assertEquals(listOf(Opcode.STATUS, Opcode.LIST), requests)
     }
@@ -174,7 +188,8 @@ class SensorSyncTest {
             ReceiptArchiveIndex(finals, Dispatchers.Default),
             Dispatchers.Default,
             Dispatchers.Default,
-            recordClockAnchor = { _, _, _, _ -> anchorCount++ }
+            recordClockAnchor = { _, _, _, _ -> anchorCount++ },
+            budget = FakeStorageBudget(),
         )
         val link = sensor { link, req ->
             (req[0].toInt() and 0xFF == Opcode.STATUS).also {
@@ -197,7 +212,8 @@ class SensorSyncTest {
             ReceiptArchiveIndex(finals, Dispatchers.Default),
             Dispatchers.Default,
             Dispatchers.Default,
-            recordClockAnchor = { st, boot, utc, mono -> anchors += Anchor(st, boot, utc, mono) }
+            recordClockAnchor = { st, boot, utc, mono -> anchors += Anchor(st, boot, utc, mono) },
+            budget = FakeStorageBudget(),
         )
         val link = sensor().also { it.identify(station, "full-boot-identity") }
         val done = CompletableDeferred<SyncResult>()
@@ -273,7 +289,7 @@ class SensorSyncTest {
                 queue.trySend(block)
             }
         }
-        val gated = SensorSync(store, ReceiptArchiveIndex(finals, Dispatchers.Default), held, Dispatchers.Default, progressInterval = 0)
+        val gated = SensorSync(store, ReceiptArchiveIndex(finals, Dispatchers.Default), held, Dispatchers.Default, progressInterval = 0, budget = FakeStorageBudget())
         suspend fun pumpUntil(done: CompletableDeferred<*>) = withTimeout(20_000) {
             while (!done.isCompleted) {
                 queue.tryReceive().getOrNull()?.run() ?: yield()
@@ -323,5 +339,81 @@ class SensorSyncTest {
 
         assertEquals(SyncEnd.FAILED, result.end)
         assertTrue(result.keepsLink)
+    }
+
+    @Test
+    fun aFailedSyncWithAnUnansweredCloseStopsWithItsLinkAndTheNextLinkStartsClean() = runBlocking {
+        // The READ reply carries a foreign handle and never ends, so the CLOSE waits behind its drain.
+        val endedSends = AtomicInt(0)
+        val ended = sensor { link, req ->
+            endedSends.incrementAndGet()
+            when (req[0].toInt() and 0xFF) {
+                Opcode.READ -> true.also { link.reply(Frame.Chunk(9, 0, ByteArray(16))) }
+                Opcode.CLOSE -> true
+                else -> false
+            }
+        }
+        assertEquals(SyncEnd.FAILED, run(ended).end)
+        assertFalse(Opcode.CLOSE in requests, "the CLOSE is still owed")
+        val session = ended.session()
+        assertFalse(session.link.closed.isCompleted)
+
+        // What the Swift owner does on syncEnded. The ended link stops with its drain.
+        ended.linkClosed()
+        withTimeout(10_000) { session.link.closed.await() }
+        val sent = endedSends.value
+
+        clearRequests()
+        assertEquals(SyncEnd.COMPLETE, run(sensor()).end)
+        assertEquals(listOf(Opcode.STATUS, Opcode.SET_TIME, Opcode.LIST), requests.take(3))
+        assertEquals(sent, endedSends.value, "the ended link wrote nothing after it closed")
+    }
+
+    private fun command(link: SensorLink, command: SensorCommand): TodayNotice = runBlocking {
+        val done = CompletableDeferred<CommandResult>()
+        sync.command(link, command) { done.complete(it) }
+        withTimeout(40_000) { done.await() }.notice
+    }
+
+    /** What `BluetoothCompanion.commandEnded` does. Then the next sync on a fresh link starts clean. */
+    private fun closeAndSyncNext(ended: SensorLink, endedSends: AtomicInt) = runBlocking {
+        val session = ended.session()
+        ended.linkClosed()
+        withTimeout(10_000) { session.link.closed.await() }
+        val sent = endedSends.value
+
+        clearRequests()
+        assertEquals(SyncEnd.COMPLETE, run(sensor()).end)
+        assertEquals(listOf(Opcode.STATUS, Opcode.SET_TIME, Opcode.LIST), requests.take(3))
+        assertEquals(sent, endedSends.value, "the ended command link wrote nothing after it closed")
+    }
+
+    @Test
+    fun aCompletedCommandClosesItsLinkAndTheNextSyncStartsClean() {
+        val endedSends = AtomicInt(0)
+        val ended = sensor { _, _ -> false.also { endedSends.incrementAndGet() } }
+
+        assertEquals(TodayNotice.ClockSet, command(ended, SensorCommand.SET_TIME))
+        assertTrue(Opcode.SET_TIME in requests)
+
+        closeAndSyncNext(ended, endedSends)
+    }
+
+    @Test
+    fun aTimedOutCommandClosesItsDrainWithItsLinkAndTheNextSyncStartsClean() {
+        // SET_TIME and the ABORT that follows its timeout are never answered, so the drain stays open.
+        val endedSends = AtomicInt(0)
+        val ended = sensor { _, req ->
+            endedSends.incrementAndGet()
+            val op = req[0].toInt() and 0xFF
+            op == Opcode.SET_TIME || op == Opcode.ABORT
+        }
+
+        assertIs<TodayNotice.Failed>(command(ended, SensorCommand.SET_TIME))
+        // The router sends the ABORT after the command has its result.
+        runBlocking { withTimeout(5_000) { while (Opcode.ABORT !in requests) delay(10) } }
+        assertFalse(runBlocking { ended.session() }.link.closed.isCompleted, "the drain is still open")
+
+        closeAndSyncNext(ended, endedSends)
     }
 }

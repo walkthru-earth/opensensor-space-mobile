@@ -254,6 +254,7 @@
     </plurals>
     <string name="msg_sync_stopped">توقفت المزامنة. تُستأنف الملفات الجزئية في المرة القادمة.</string>
     <string name="msg_sync_aborted">توقفت المزامنة مبكرًا. تُستأنف في المزامنة التالية.</string>
+    <string name="msg_not_enough_space">لا توجد مساحة كافية على هذا الهاتف. حرّر %1$s ثم زامن مرة أخرى.</string>
     <plurals name="msg_unplaced">
         <item quantity="zero">%1$d قراءة مؤرشفة لكن بلا وقت بعد، لذا لا تظهر في التقويم.</item>
         <item quantity="one">قراءة واحدة (%1$d) مؤرشفة لكن بلا وقت بعد، لذا لا تظهر في التقويم.</item>

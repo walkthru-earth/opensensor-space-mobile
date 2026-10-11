@@ -3,6 +3,7 @@ package earth.walkthru.aqsync.data.sync
 import earth.walkthru.aqsync.archive.ArchiveIndex
 import earth.walkthru.aqsync.archive.ArchiveStore
 import earth.walkthru.aqsync.data.ble.DeviceSession
+import earth.walkthru.aqsync.storage.StorageBudget
 import kotlinx.coroutines.flow.first
 import kotlin.time.TimeSource
 
@@ -61,10 +62,15 @@ data class CollectionSummary(val files: Int, val notSaved: List<FileNotSaved>) {
 
 /**
  * One full collection over an open [DeviceSession]: `LIST`, plan against the archive, then every
- * missing file through the [SyncEngine], oldest dated partition first. A file that cannot be saved,
- * including one this phone's storage refused, fails alone and is reported in the summary. A link,
+ * missing file through the [SyncEngine], oldest dated partition first. The session is a view on
+ * its link and holds no protocol state, so a view made per run shares the link's drain and owed
+ * `CLOSE`. A file that cannot be saved fails alone and is reported in the summary. A link,
  * protocol or session fault (a refused token, a busy sensor) ends the run by throwing, and the
  * partials written so far resume on the next run.
+ *
+ * Before the first `OPEN` the planned bytes are asked of [budget] ([requireRoom]). A run that
+ * does not fit throws [InsufficientSpaceException] and opens nothing. A file that fails to store checks the
+ * room again, and when it ran out the run ends the same way, keeping the partial for resume.
  *
  * The collector never asks the device to delete, rename or rewrite a file.
  */
@@ -72,6 +78,7 @@ class ArchiveCollector(
     private val store: ArchiveStore,
     private val index: ArchiveIndex,
     private val engine: SyncEngine,
+    private val budget: StorageBudget,
     private val time: TimeSource.WithComparableMarks = TimeSource.Monotonic,
 ) {
     suspend fun collect(
@@ -96,6 +103,7 @@ class ArchiveCollector(
                 else -> null
             }
         }
+        budget.requireRoom(plan.missingBytes)
         val total = plan.entries.size
         val bytesTotal = plan.missingBytes
         var done = total - plan.toDownload.size
@@ -103,14 +111,20 @@ class ArchiveCollector(
         var fileBytes = 0L
         val meter = RateMeter(time)
         onProgress(CollectionProgress(done, total, 0, 0, 0.0, bytesTotal))
-        for (entry in plan.toDownload) {
+        for ((at, entry) in plan.toDownload.withIndex()) {
             val before = received
             val outcome = engine.download(session, station, sourceDevice, entry.name, entry.bytes, maxRead) { p ->
                 received = before + (p.bytesDone - p.resumedFrom).coerceAtLeast(0)
                 fileBytes = p.bytesDone
                 onProgress(CollectionProgress(done, total, fileBytes, received, meter.update(received), bytesTotal))
             }
-            FileProblem.of(outcome)?.let { notSaved += FileNotSaved(entry.name, it) }
+            val problem = FileProblem.of(outcome)
+            problem?.let { notSaved += FileNotSaved(entry.name, it) }
+            if (problem == FileProblem.STORAGE) {
+                // A full disk fails every later file the same way, so it ends the run here. The
+                // failed file counts from its planned resume point, as on Android.
+                budget.requireRoom(plan.toDownload.drop(at).sumOf { it.bytes - it.partialBytes })
+            }
             done++
             onProgress(CollectionProgress(done, total, fileBytes, received, meter.update(received), bytesTotal))
         }

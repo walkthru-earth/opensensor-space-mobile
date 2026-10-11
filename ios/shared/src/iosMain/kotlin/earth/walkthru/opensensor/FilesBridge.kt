@@ -4,7 +4,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import earth.walkthru.aqsync.data.ManifestState
-import earth.walkthru.aqsync.data.ble.DeviceSession
 import earth.walkthru.aqsync.data.sync.ArchivedIdentity
 import earth.walkthru.aqsync.data.sync.FileOutcome
 import earth.walkthru.aqsync.data.sync.SyncPlanner
@@ -134,7 +133,7 @@ internal class IosDeviceFiles(
                         return@launch
                     }
                 try {
-                    val (files, end) = DeviceSession(lent.transport, debugFrames.recorderFor(lent.transport.address)).list()
+                    val (files, end) = lent.session(debugFrames.recorderFor(lent.transport.address)).list()
                     if (selected.first().station == station) {
                         listing.value = listing.value.loaded(files, end, Clock.System.now().toEpochMilliseconds())
                     }

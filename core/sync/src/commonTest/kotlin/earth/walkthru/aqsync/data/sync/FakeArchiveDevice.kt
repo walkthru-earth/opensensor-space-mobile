@@ -41,6 +41,9 @@ class FakeArchiveDevice(
         FakeFile("station=$station/unsynced/boot=b41d/data_0000_b41d_1-60-60.parquet", fakeParquet(3, 9_800)),
     )
 
+    /** The offset of every `READ` handled, in order, so a test can see where a resume started. */
+    val readOffsets: MutableList<Long> = mutableListOf()
+
     /** `READ` requests handled so far. The hooks below are keyed on it (1-based). */
     var readCount: Int = 0
         private set
@@ -65,6 +68,13 @@ class FakeArchiveDevice(
     private var openFile: FakeFile? = null
     private var openHandle = 0
     private var nextHandle = 1
+
+    /** The op whose reply is streaming, so `ABORT` can stop it like proto 3 firmware does. */
+    private var streaming = 0
+    private var abortRequested = false
+
+    /** Requests received, by opcode, in order. */
+    val requests: MutableList<Int> = mutableListOf()
 
     override val displayName: String = "AQ-fake"
     override val kind: TransportKind = TransportKind.FAKE
@@ -96,7 +106,9 @@ class FakeArchiveDevice(
 
     private suspend fun handle(req: ByteArray) {
         val op = req[0].toInt() and 0xFF
+        requests += op
         when (op) {
+            Opcode.ABORT -> if (streaming != 0) abortRequested = true else send(Frame.Aborted(0))
             Opcode.LIST -> {
                 files.forEach { send(Frame.File(it.bytes.size.toLong(), it.name)) }
                 send(Frame.ListEnd(files.size.toLong(), 0, 0, 0))
@@ -116,16 +128,25 @@ class FakeArchiveDevice(
                 val length = u32(req, 7)
                 val f = openFile
                 if (f == null || handle != openHandle) return send(Frame.Error(op, ProtocolError.BAD_HANDLE.code, ""))
+                readOffsets += offset
                 val end = minOf(f.bytes.size.toLong(), offset + minOf(length, maxRead.toLong()))
                 val chunkMax = mtu - 10
                 var toDrop = dropLeadingChunks(++readCount)
                 var pos = offset
+                streaming = op
                 while (pos < end) {
+                    if (abortRequested) {
+                        abortRequested = false
+                        streaming = 0
+                        send(Frame.Error(op, ProtocolError.ABORTED.code, ""))
+                        return send(Frame.Aborted(op))
+                    }
                     val n = minOf(chunkMax.toLong(), end - pos).toInt()
                     if (toDrop > 0) toDrop-- else send(Frame.Chunk(handle, pos, f.bytes.copyOfRange(pos.toInt(), pos.toInt() + n)))
                     pos += n
                     if (chunkDelayMs > 0) delay(chunkDelayMs)
                 }
+                streaming = 0
                 send(Frame.ReadEnd(handle, pos, 0))
             }
             Opcode.CLOSE -> {

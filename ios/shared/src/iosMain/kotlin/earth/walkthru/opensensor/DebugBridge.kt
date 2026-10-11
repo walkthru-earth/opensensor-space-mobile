@@ -124,7 +124,7 @@ internal class IosDebugSource(
         val link = lend() ?: throw DebugBlockedException(DebugBlock.LINK_BUSY)
         try {
             lastKind.value = link.transport.kind to link.transport.mtu
-            block(DeviceSession(link.transport, recorder))
+            block(link.session(recorder))
         } finally {
             link.linkClosed()
         }

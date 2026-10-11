@@ -7,13 +7,13 @@ import earth.walkthru.aqsync.archive.ArchiveRecord
 import earth.walkthru.aqsync.archive.ArchiveStore
 import earth.walkthru.aqsync.archive.ArchiveVerifier
 import earth.walkthru.aqsync.archive.PartialMeta
-import earth.walkthru.aqsync.archive.PartialWriter
 import earth.walkthru.aqsync.data.ble.AuthFailedException
 import earth.walkthru.aqsync.data.ble.DeviceBusyException
 import earth.walkthru.aqsync.data.ble.DeviceErrorException
 import earth.walkthru.aqsync.data.ble.DeviceSession
 import earth.walkthru.aqsync.data.ble.WindowLostException
 import earth.walkthru.aqsync.data.history.parquet.ByteReader
+import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.protocol.ParquetVerify
 import earth.walkthru.aqsync.data.protocol.ProtocolError
 import earth.walkthru.aqsync.data.protocol.Sha256
@@ -22,12 +22,13 @@ import earth.walkthru.aqsync.storage.AlreadyCommitted
 import earth.walkthru.aqsync.storage.StorageException
 import earth.walkthru.aqsync.sync.nowEpochMs
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 
 class SyncAbortedException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
@@ -74,6 +75,8 @@ class SyncEngine(
     private val leases: WriterLeases = WriterLeases(),
     /** One line per file this phone failed to store, file name and error class and message only. */
     private val log: (String) -> Unit = {},
+    /** Where partial files are written, one file at a time. Tests pass their virtual-time dispatcher. */
+    private val io: CoroutineDispatcher = Dispatchers.IO,
 ) {
     suspend fun download(
         session: DeviceSession,
@@ -106,157 +109,208 @@ class SyncEngine(
             return FileOutcome.DeviceError(name, e.protocolError, e.message ?: "OPEN failed")
         }
         val handle = opened.handle
+        if (opened.size != expectedBytes || (opened.name.isNotEmpty() && opened.name != name)) {
+            // Nothing was read, so the handle is closed like any finished file.
+            val outcome = if (opened.size != expectedBytes) {
+                FileOutcome.Mismatch(name, "LIST said $expectedBytes bytes but OPENED says ${opened.size}; the file is supposed to be immutable")
+            } else {
+                FileOutcome.Mismatch(name, "OPENED echoed a different name: ${opened.name}")
+            }
+            closeHandle(session, handle)
+            return outcome
+        }
+        // Set once the file reached an outcome with the link still usable. Anything else (Stop, a
+        // lost link, a session error) leaves the CLOSE to the link, so nothing waits for it here.
+        var settled = false
         try {
-            if (opened.size != expectedBytes) {
-                return FileOutcome.Mismatch(
-                    name,
-                    "LIST said $expectedBytes bytes but OPENED says ${opened.size}; the file is supposed to be immutable"
-                )
+            val outcome = try {
+                transfer(session, key, opened, sourceDevice, maxRead, onProgress)
+            } catch (e: StorageFault) {
+                // This phone's archive failed for this file. The link and the session are fine, so the
+                // collector decides whether the next file runs. Only a StorageException message is known
+                // to be free of paths and station ids, so any other cause reports its class alone.
+                val cause = e.cause ?: e
+                val reason = if (cause is StorageException) "storage ${cause::class.simpleName}: ${cause.message}" else "storage ${cause::class.simpleName}"
+                log("$name not saved, $reason")
+                FileOutcome.Failed(name, reason, storage = true)
+            } catch (e: DeviceErrorException) {
+                if (e.endsSession) throw e
+                FileOutcome.DeviceError(name, e.protocolError, e.message ?: "device error")
             }
-            if (opened.name.isNotEmpty() && opened.name != name) {
-                return FileOutcome.Mismatch(name, "OPENED echoed a different name: ${opened.name}")
+            settled = true
+            return outcome
+        } finally {
+            if (settled) closeHandle(session, handle) else session.oweClose(handle)
+        }
+    }
+
+    /**
+     * `CLOSE` as a regular request. Cancelled before it was written, the link owes it. Once written,
+     * the link drains its reply. The device also closes on the next `OPEN` or on disconnect.
+     */
+    private suspend fun closeHandle(session: DeviceSession, handle: Int) {
+        try {
+            session.close(handle)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log("CLOSE $handle not confirmed, ${e::class.simpleName}")
+        }
+    }
+
+    private suspend fun transfer(
+        session: DeviceSession,
+        key: ArchiveKey,
+        opened: Frame.Opened,
+        sourceDevice: String,
+        maxRead: Int,
+        onProgress: (FileProgress) -> Unit,
+    ): FileOutcome {
+        val name = key.name
+        val handle = opened.handle
+        val meta = PartialMeta(opened.size, opened.crc32)
+
+        // Another collector may have committed while this caller waited for its writer lease.
+        // Verify again against OPENED, and never replace immutable history with different bytes.
+        if (storage { store.exists(key) }) return storage { adoptExisting(key, meta, sourceDevice, onProgress) }
+
+        var windowsRecovered = 0
+        var retriedWithoutPartial = false
+        while (true) {
+            val partial = storage { store.openPartial(key, meta) }
+            val resumeFrom = partial.resumeFrom
+            val progress = FileProgressReporter(name, opened.size, resumeFrom, onProgress)
+            progress.report(resumeFrom, windowsRecovered)
+            val failed = coroutineScope {
+                val writer = ArchiveWriter(partial, this, io)
+                try {
+                    readAll(session, name, handle, opened.size, maxRead, writer, progress, windowsRecovered) { windowsRecovered = it }
+                        ?.let { return@coroutineScope it }
+                    storage { writer.finish() }
+                    null
+                } finally {
+                    writer.abandon()
+                    // On Stop or failure, show the bytes actually on disk, which is where resume starts.
+                    progress.report(writer.written, windowsRecovered, force = true)
+                }
             }
-            val meta = PartialMeta(opened.size, opened.crc32)
+            if (failed != null) return failed
 
-            // Another collector may have committed while this caller waited for its writer lease.
-            // Verify again against OPENED, and never replace immutable history with different bytes.
-            if (storage { store.exists(key) }) return storage { adoptExisting(key, meta, sourceDevice, onProgress) }
+            val (verdict, sha256) = storage { verifyAndHash(store.reader(key, partial = true), meta) }
+            if (!verdict.ok) {
+                storage { store.discardPartial(key) }
+                // The meta records only the device's size and CRC, not a checksum of the partial
+                // prefix. A corrupted prefix can therefore survive resume and fail the final check.
+                // Re-read once from zero while this handle is still open, rather than making the
+                // owner wait for another scheduled or manual sync.
+                if (resumeFrom > 0 && !retriedWithoutPartial) {
+                    retriedWithoutPartial = true
+                    continue
+                }
+                return FileOutcome.Mismatch(name, verdict.describe())
+            }
+            // A final that appeared since the check above (another process, or a crash after an
+            // earlier commit) is never replaced. The waiter's path re-checks it against OPENED.
+            val committed = storage {
+                try {
+                    store.commit(key)
+                    true
+                } catch (_: AlreadyCommitted) {
+                    false
+                }
+            }
+            if (!committed) return storage { adoptExisting(key, meta, sourceDevice, onProgress) }
+            val record = ArchiveRecord(
+                station = key.station,
+                name = name,
+                bytes = opened.size,
+                crc32 = opened.crc32,
+                sha256 = sha256,
+                syncedAtEpochMs = clock(),
+                sourceDevice = sourceDevice,
+            )
+            // Index the verified bytes now (rows, time span, …) so History never has to re-open the file.
+            // A file the reader refuses keeps its record with `indexError`. The archive copy is untouched.
+            storage { index.put(indexer.indexed(record)) }
+            return FileOutcome.Synced(name, opened.size, sha256)
+        }
+    }
 
-            var windowsRecovered = 0
-            var retriedWithoutPartial = false
-            while (true) {
-                val writer = storage { store.openPartial(key, meta) }
-                val resumeFrom = writer.resumeFrom
-                var offset = resumeFrom
-                val progress = FileProgressReporter(name, opened.size, resumeFrom, onProgress)
-                progress.report(offset, windowsRecovered)
-                writer.useInStorage { w ->
-                    val readLength = maxRead.coerceAtLeast(1).toLong()
-                    var attempt = 0
-                    try {
-                        while (offset < opened.size) {
-                            currentCoroutineContext().ensureActive()
-                            val before = offset
-                            val end = try {
-                                session.read(handle, offset, readLength) { chunk ->
-                                    when {
-                                        chunk.offset == offset -> {
-                                            storage { w.writeAt(chunk.offset, chunk.payload) }
-                                            offset += chunk.payload.size
-                                        }
-                                        // Duplicate or overlapping chunk: the bytes are identical (immutable file), keep going.
-                                        chunk.offset < offset -> {
-                                            val overlap = (offset - chunk.offset).toInt()
-                                            if (overlap < chunk.payload.size) {
-                                                storage { w.writeAt(offset, chunk.payload.copyOfRange(overlap, chunk.payload.size)) }
-                                                offset = chunk.offset + chunk.payload.size
-                                            }
-                                        }
-                                        // The session checks continuity before calling us. This is a safety net.
-                                        else -> throw WindowLostException(offset, "gap in stream: expected offset $offset, got CHUNK at ${chunk.offset}")
-                                    }
-                                    progress.report(offset, windowsRecovered)
-                                }
-                            } catch (e: WindowLostException) {
-                                attempt++
-                                // Bytes written before the gap are good (absolute offsets). The next READ starts
-                                // at our own `offset`, which is what is actually stored (the contract says never
-                                // trust the device's count over ours. e.receivedUpTo is the session's view of it).
-                                if (WindowRetryPolicy.givesUp(attempt)) {
-                                    return FileOutcome.Failed(
-                                        name,
-                                        "window at $offset lost $attempt× in a row (last: ${e.message}); " +
-                                            "notifications keep getting lost on this link, move closer and retry"
-                                    )
-                                }
-                                delay(WindowRetryPolicy.backoffMs(attempt, windowRetryBackoffMs))
-                                continue
-                            }
-                            if (!end.ok) {
-                                return FileOutcome.DeviceError(
-                                    name,
-                                    ProtocolError.fromCode(end.status),
-                                    "READ ended with status ${end.status}: ${ProtocolError.describe(end.status)}"
-                                )
-                            }
-                            if (offset == before && offset < opened.size) {
-                                return FileOutcome.Failed(name, "READ at $offset returned no data before end of file")
-                            }
-                            if (attempt > 0) {
-                                windowsRecovered++
-                                attempt = 0
-                                progress.report(offset, windowsRecovered)
+    /**
+     * `READ` windows from the writer's resume point to [size]. Each chunk is only queued for
+     * [writer], so the frames keep flowing while the disk works. Null when every byte was queued,
+     * or the outcome that ends this file.
+     */
+    private suspend fun readAll(
+        session: DeviceSession,
+        name: String,
+        handle: Int,
+        size: Long,
+        maxRead: Int,
+        writer: ArchiveWriter,
+        progress: FileProgressReporter,
+        recoveredBefore: Int,
+        recovered: (Int) -> Unit,
+    ): FileOutcome? {
+        var offset = writer.written
+        var windowsRecovered = recoveredBefore
+        val readLength = maxRead.coerceAtLeast(1).toLong()
+        var attempt = 0
+        while (offset < size) {
+            currentCoroutineContext().ensureActive()
+            val before = offset
+            val end = try {
+                session.read(handle, offset, readLength) { chunk ->
+                    when {
+                        chunk.offset == offset -> {
+                            writer.write(chunk.offset, chunk.payload)
+                            offset += chunk.payload.size
+                        }
+                        // Duplicate or overlapping chunk: the bytes are identical (immutable file), keep going.
+                        chunk.offset < offset -> {
+                            val overlap = (offset - chunk.offset).toInt()
+                            if (overlap < chunk.payload.size) {
+                                writer.write(offset, chunk.payload.copyOfRange(overlap, chunk.payload.size))
+                                offset = chunk.offset + chunk.payload.size
                             }
                         }
-                        storage { w.sync() }
-                    } finally {
-                        // On cancellation or failure, expose the last bytes actually written.
-                        progress.report(offset, windowsRecovered, force = true)
+                        // The session checks continuity before calling us. This is a safety net.
+                        else -> throw WindowLostException(offset, "gap in stream: expected offset $offset, got CHUNK at ${chunk.offset}")
                     }
+                    progress.report(offset, windowsRecovered)
                 }
-
-                val (verdict, sha256) = storage { verifyAndHash(store.reader(key, partial = true), meta) }
-                if (!verdict.ok) {
-                    storage { store.discardPartial(key) }
-                    // The meta records only the device's size and CRC, not a checksum of the partial
-                    // prefix. A corrupted prefix can therefore survive resume and fail the final check.
-                    // Re-read once from zero while this handle is still open, rather than making the
-                    // owner wait for another scheduled or manual sync.
-                    if (resumeFrom > 0 && !retriedWithoutPartial) {
-                        retriedWithoutPartial = true
-                        continue
-                    }
-                    return FileOutcome.Mismatch(name, verdict.describe())
+            } catch (e: WindowLostException) {
+                attempt++
+                // Bytes queued before the gap are good (absolute offsets). The next READ starts at
+                // our own `offset`, never the device's count (e.receivedUpTo is the session's view of it).
+                if (WindowRetryPolicy.givesUp(attempt)) {
+                    return FileOutcome.Failed(
+                        name,
+                        "window at $offset lost $attempt× in a row (last: ${e.message}); " +
+                            "notifications keep getting lost on this link, move closer and retry"
+                    )
                 }
-                // A final that appeared since the check above (another process, or a crash after an
-                // earlier commit) is never replaced. The waiter's path re-checks it against OPENED.
-                val committed = storage {
-                    try {
-                        store.commit(key)
-                        true
-                    } catch (_: AlreadyCommitted) {
-                        false
-                    }
-                }
-                if (!committed) return storage { adoptExisting(key, meta, sourceDevice, onProgress) }
-                val record = ArchiveRecord(
-                    station = key.station,
-                    name = name,
-                    bytes = opened.size,
-                    crc32 = opened.crc32,
-                    sha256 = sha256,
-                    syncedAtEpochMs = clock(),
-                    sourceDevice = sourceDevice,
-                )
-                // Index the verified bytes now (rows, time span, …) so History never has to re-open the file.
-                // A file the reader refuses keeps its record with `indexError`. The archive copy is untouched.
-                storage { index.put(indexer.indexed(record)) }
-                return FileOutcome.Synced(name, opened.size, sha256)
+                delay(WindowRetryPolicy.backoffMs(attempt, windowRetryBackoffMs))
+                continue
             }
-        } catch (e: StorageFault) {
-            // This phone's archive failed for this file. The link and the session are fine, so the
-            // next file runs. Only a StorageException message is known to be free of paths and
-            // station ids, so any other cause reports its class alone.
-            val cause = e.cause ?: e
-            val reason = if (cause is StorageException) "storage ${cause::class.simpleName}: ${cause.message}" else "storage ${cause::class.simpleName}"
-            log("$name not saved, $reason")
-            return FileOutcome.Failed(name, reason, storage = true)
-        } catch (e: DeviceErrorException) {
-            if (e.endsSession) throw e
-            return FileOutcome.DeviceError(name, e.protocolError, e.message ?: "device error")
-        } finally {
-            // Best effort, even when we are being cancelled: the device closes implicitly on the
-            // next OPEN or on disconnect anyway, so a failure here is not an error.
-            withContext(NonCancellable) {
-                try {
-                    withTimeoutOrNull(CLOSE_TIMEOUT_MS) { session.close(handle) }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (_: Throwable) {
-                    // Ignored, see above.
-                }
+            if (!end.ok) {
+                return FileOutcome.DeviceError(
+                    name,
+                    ProtocolError.fromCode(end.status),
+                    "READ ended with status ${end.status}: ${ProtocolError.describe(end.status)}"
+                )
+            }
+            if (offset == before && offset < size) {
+                return FileOutcome.Failed(name, "READ at $offset returned no data before end of file")
+            }
+            if (attempt > 0) {
+                windowsRecovered++
+                recovered(windowsRecovered)
+                attempt = 0
+                progress.report(offset, windowsRecovered)
             }
         }
+        return null
     }
 
     /** The waiter's path: the file was committed while it waited. Rechecks the bytes and the record. */
@@ -319,39 +373,6 @@ class SyncEngine(
         throw StorageFault(e)
     }
 
-    /** Like `use`, but a failed close after a good transfer (the partial's final sync) is a [StorageFault]. */
-    private inline fun <R> PartialWriter.useInStorage(block: (PartialWriter) -> R): R {
-        var closed = false
-        try {
-            val result = block(this)
-            closed = true
-            storage { close() }
-            return result
-        } catch (e: Throwable) {
-            if (!closed) {
-                closed = true
-                try {
-                    close()
-                } catch (closing: Throwable) {
-                    e.addSuppressed(closing)
-                }
-            }
-            throw e
-        } finally {
-            // A `return` from inside [block] (a device error, a window given up, a short READ) skips
-            // both paths above. The outcome is already a failure, so a close error here is dropped.
-            if (!closed) {
-                try {
-                    close()
-                } catch (_: Exception) {
-                }
-            }
-        }
-    }
-
-    /** This phone's archive failed (disk full, a refused path, a failed move or receipt). */
-    private class StorageFault(cause: Exception) : Exception(cause.message, cause)
-
     /**
      * An error about the session, not the file: the LAN token was refused, the sensor is busy, or an
      * `ERROR` for op 0. Every later file would fail the same way, so the run ends with it instead.
@@ -365,8 +386,5 @@ class SyncEngine(
 
         /** Base of the linear backoff between re-reads ([WindowRetryPolicy.BACKOFF_MS]). */
         const val WINDOW_RETRY_BACKOFF_MS = WindowRetryPolicy.BACKOFF_MS
-
-        /** Best-effort `CLOSE` budget. The device closes implicitly on the next `OPEN` anyway. */
-        const val CLOSE_TIMEOUT_MS = 3_000L
     }
 }

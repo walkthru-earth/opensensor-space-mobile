@@ -2,9 +2,16 @@ package earth.walkthru.opensensor
 
 import earth.walkthru.aqsync.data.ble.AqTransport
 import earth.walkthru.aqsync.data.ble.ConnectionState
+import earth.walkthru.aqsync.data.ble.DeviceSession
+import earth.walkthru.aqsync.data.ble.FrameRecorder
 import earth.walkthru.aqsync.data.ble.TransportException
 import earth.walkthru.aqsync.data.ble.TransportKind
+import earth.walkthru.aqsync.data.protocol.AqGatt
+import earth.walkthru.aqsync.data.protocol.DeviceInfo
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.flow.Flow
@@ -12,10 +19,15 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import platform.Foundation.NSData
 import platform.Foundation.NSLock
 import kotlin.coroutines.CoroutineContext
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * The byte pipe one Swift transport lends to the shared engine for one sync. Swift owns the socket
@@ -70,10 +82,38 @@ class SensorLink internal constructor(
     private var closed = false
     private val onClose = mutableListOf<() -> Unit>()
 
+    private val sessionScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val sessionLock = Mutex()
+    private var session: DeviceSession? = null
+
+    /**
+     * The one [DeviceSession] over this link, opened on first use. Its link owns every reply frame,
+     * so a request one caller abandons is drained before the next caller's goes out. [frames]
+     * records for Debug and is fixed by the first caller. Swift already refused a sensor below
+     * proto 3 (`SyncWire.identity`), so the link is opened without reading `info` again.
+     */
+    internal suspend fun session(frames: FrameRecorder = FrameRecorder()): DeviceSession = sessionLock.withLock {
+        session ?: DeviceSession.over(
+            transport,
+            sessionScope,
+            frames,
+            info = { DeviceInfo(proto = AqGatt.PROTOCOL_VERSION, station = station, boot = boot) },
+        ).also {
+            it.link.open()
+            session = it
+        }
+    }
+
     /** The pipe is gone. Safe from any thread and more than once. */
     fun linkClosed() {
-        state.value = ConnectionState.Disconnected
+        // Frames first, so replies queued before the close still reach their callers.
         frames.close()
+        state.value = ConnectionState.Disconnected
+        // The link ends itself once its reader drained, then its scope goes. Bounded for safety.
+        sessionScope.launch {
+            withTimeoutOrNull(SESSION_DRAIN) { sessionLock.withLock { session }?.link?.closed?.await() }
+            sessionScope.cancel()
+        }
         closeLock.lock()
         val callbacks = if (closed) emptyList() else onClose.toList()
         closed = true
@@ -124,3 +164,6 @@ class SensorLink internal constructor(
         override fun close() = linkClosed()
     }
 }
+
+/** How long a closed link may take to hand its queued replies over before its scope ends. */
+private val SESSION_DRAIN = 5.seconds

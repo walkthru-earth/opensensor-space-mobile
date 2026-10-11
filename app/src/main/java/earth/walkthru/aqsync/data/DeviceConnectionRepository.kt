@@ -38,15 +38,14 @@ import earth.walkthru.aqsync.data.protocol.ConfigPatch
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.protocol.DeviceStatus
 import earth.walkthru.aqsync.data.protocol.LiveSample
-import earth.walkthru.aqsync.data.protocol.ProtoGate
 import earth.walkthru.aqsync.data.protocol.hexToBytes
-import earth.walkthru.aqsync.data.protocol.requireProto3
 import earth.walkthru.aqsync.data.protocol.toHex
 import earth.walkthru.aqsync.data.sync.ArchivedIdentity
 import earth.walkthru.aqsync.data.sync.ClockSyncMode
 import earth.walkthru.aqsync.data.sync.FileArchive
 import earth.walkthru.aqsync.data.sync.FileOutcome
 import earth.walkthru.aqsync.data.sync.FileSyncState
+import earth.walkthru.aqsync.data.sync.InsufficientSpaceException
 import earth.walkthru.aqsync.data.sync.ManifestEntry
 import earth.walkthru.aqsync.data.sync.RateMeter
 import earth.walkthru.aqsync.data.sync.ReadWindow
@@ -55,6 +54,13 @@ import earth.walkthru.aqsync.data.sync.SyncEngine
 import earth.walkthru.aqsync.data.sync.SyncPlan
 import earth.walkthru.aqsync.data.sync.SyncPlanner
 import earth.walkthru.aqsync.data.sync.SyncResumePolicy
+import earth.walkthru.aqsync.data.sync.requireRoom
+import earth.walkthru.aqsync.link.DisconnectCause
+import earth.walkthru.aqsync.link.LinkClosedException
+import earth.walkthru.aqsync.link.LinkLog
+import earth.walkthru.aqsync.link.LinkState
+import earth.walkthru.aqsync.link.describe
+import earth.walkthru.aqsync.storage.StorageBudget
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -147,6 +153,7 @@ class DeviceConnectionRepository @Inject constructor(
     private val historyDeriver: HistoryRefresher,
     private val companionPresence: CompanionUnlinker,
     private val collectionBudget: CollectionBudget,
+    private val storageBudget: StorageBudget,
     private val identityClaims: DeviceIdentityClaims,
     private val stationEpochDao: StationEpochDao,
     @ApplicationScope applicationScope: CoroutineScope,
@@ -363,7 +370,7 @@ class DeviceConnectionRepository @Inject constructor(
             return false
         }
         val existing = _session.value
-        if (existing != null && existing.address == address && existing.connectionState.value.isReady) {
+        if (existing != null && existing.address == address && existing.isUsable) {
             // A repeated Connect is a new explicit intent even when it can reuse the pipe. Give
             // the existing link watcher the new claim so future loss still reconnects it.
             watchLink(existing, address, name, fake, claim, preference)
@@ -417,7 +424,7 @@ class DeviceConnectionRepository @Inject constructor(
         val token = lanTokenBytes(address) ?: return null
         val transport = transportFactory.lan(address, name, host, port, token)
         // Put the LAN attempt in the session slot so the UI shows "Authenticating on the LAN…".
-        val probe = DeviceSession(transport).also { it.staleFrameLogger = { m -> Log.w(TAG, m) } }
+        val probe = newSession(transport)
         _session.value = probe
         var connected = false
         try {
@@ -449,10 +456,20 @@ class DeviceConnectionRepository @Inject constructor(
         } finally {
             if (!connected) {
                 if (_session.value === probe) _session.value = null
+                // The probe's link never opened, closing it ends its jobs.
+                probe.link.close("LAN probe failed")
                 transport.close()
             }
         }
     }
+
+    /** Ready on the transport and on the link. A link that closed itself is not reused. */
+    private val DeviceSession.isUsable: Boolean
+        get() = connectionState.value.isReady && link.state.value is LinkState.Ready
+
+    /** A session whose link is opened by [openSession]. Link events carry no frame bodies. */
+    private fun newSession(transport: AqTransport): DeviceSession =
+        DeviceSession.over(transport, scope, log = LinkLog { Log.d(TAG, it.describe()) })
 
     /**
      * The stored LAN token as bytes, decrypted only here, at the moment a LAN transport is built.
@@ -497,28 +514,40 @@ class DeviceConnectionRepository @Inject constructor(
      * to keep informed and simply tries again at its next period.
      */
     private suspend fun openSession(transport: AqTransport, address: String, name: String?, fake: Boolean, watch: Boolean = true, claim: Long? = null, preference: TransportPreference = TransportPreference.AUTO): Boolean {
-        val session = (_session.value?.takeIf { it.transport === transport } ?: DeviceSession(transport))
-            .also { it.staleFrameLogger = { m -> Log.w(TAG, m) } }
+        // Reuse the LAN probe only while its link has not opened yet, a link opens once.
+        val session = _session.value?.takeIf { it.transport === transport && it.link.state.value == LinkState.Idle }
+            ?: newSession(transport)
         _session.value = session
-        try {
-            transport.connect()
-        } catch (e: TransportException) {
-            Log.w(TAG, "connect failed (${e.message})")
-            connectionFailure.value = e.message ?: "connection failed"
-            _events.tryEmit(DeviceEvent.Error(DeviceMessage.ConnectFailed))
+        val info = try {
+            session.link.open().info
+        } catch (e: LinkClosedException) {
+            val cause = e.disconnectCause
+            if (cause is DisconnectCause.UpdateFirmware) {
+                Log.w(TAG, "firmware update required (proto ${cause.reported})")
+                connectionFailure.value = "firmware update required"
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.FirmwareUpdateRequired(cause.reported, cause.required)))
+            } else if (cause is DisconnectCause.FramingViolation) {
+                // Connected, but the info reply was missing or malformed.
+                Log.w(TAG, "device verification failed (${cause.describe()})")
+                connectionFailure.value = "verification failed"
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.VerificationFailed))
+            } else {
+                Log.w(TAG, "connect failed (${cause.describe()})")
+                connectionFailure.value = e.message ?: "connection failed"
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.ConnectFailed))
+            }
+            return false
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "device verification failed (${e.message})")
+            connectionFailure.value = "verification failed (${e.message})"
+            _events.tryEmit(DeviceEvent.Error(DeviceMessage.VerificationFailed))
             return false
         }
         startNotificationCollection(session)
         try {
-            val info = session.readInfo()
             val proto = info.proto
-            val gate = requireProto3(info)
-            if (gate is ProtoGate.UpdateFirmware) {
-                Log.w(TAG, "firmware update required (proto ${gate.reported})")
-                connectionFailure.value = "firmware update required"
-                _events.tryEmit(DeviceEvent.Error(DeviceMessage.FirmwareUpdateRequired(gate.reported, gate.required)))
-                return false
-            }
             if (proto != null && proto > AqUuids.PROTOCOL_VERSION) {
                 _events.tryEmit(DeviceEvent.Info(DeviceMessage.NewerProtocol(proto, AqUuids.PROTOCOL_VERSION)))
             }
@@ -669,6 +698,7 @@ class DeviceConnectionRepository @Inject constructor(
         _session.value = null
         identityReady.value = false
         if (s != null) {
+            s.link.close("disconnect")
             suspendRunCatching { s.transport.disconnect() }
             s.transport.close()
         }
@@ -700,7 +730,10 @@ class DeviceConnectionRepository @Inject constructor(
      */
     private fun watchLink(session: DeviceSession, address: String, name: String?, fake: Boolean, claim: Long, preference: TransportPreference = TransportPreference.AUTO) {
         val watch = scope.launch(start = CoroutineStart.LAZY) {
-            val lost = session.connectionState.first { !it.isReady && it !is ConnectionState.Connecting && !it.isBusy }
+            // A link that closed on its own counts as lost even while the transport still says Ready.
+            val lost = combine(session.connectionState, session.link.state) { transport, link ->
+                if (link is LinkState.Closed && transport.isReady) ConnectionState.Failed(link.cause.describe()) else transport
+            }.first { !it.isReady && it !is ConnectionState.Connecting && !it.isBusy }
             val generation = synchronized(this@DeviceConnectionRepository) { reconnectGeneration }
             if (_session.value !== session || !connectionIntent.owns(claim)) return@launch
             val reason = (lost as? ConnectionState.Failed)?.reason ?: "device closed the connection"
@@ -741,7 +774,7 @@ class DeviceConnectionRepository @Inject constructor(
                     if (!connectionIntent.owns(claim)) return@withLock null
                     // A newer session appeared meanwhile (user action): stop.
                     val cur = _session.value
-                    if (cur != null && cur.connectionState.value.isReady) return@withLock true
+                    if (cur != null && cur.isUsable) return@withLock true
                     // No LIST here when a resume follows: the resume issues its own and waits for it.
                     val opened = connectLocked(address, name, fake, preference, claim, listAfter = !resumeSync)
                     if (!connectionIntent.owns(claim)) {
@@ -802,7 +835,7 @@ class DeviceConnectionRepository @Inject constructor(
      * refresh that dies — link lost, timeout — must not blank the Files screen or null the plan.
      * There is no retry on the same session: a lost link is re-established by [watchLink], whose
      * [connectLocked] issues a fresh `LIST`; a timeout means the device is not answering and a
-     * second request would only queue behind the stale reply ([DeviceSession] drains it first).
+     * second request would only queue behind the stale reply (the link drains it first).
      */
     private suspend fun refreshManifestNow(session: DeviceSession): ManifestState.Loaded? = manifestMutex.withLock {
         if (_session.value !== session) return@withLock null
@@ -979,7 +1012,9 @@ class DeviceConnectionRepository @Inject constructor(
                 collectionBudget.acquire()
                 permit = true
                 wifiLease = if (holdWifi) lanWifiLock.acquireLease() else null
-                for (entry in entries) {
+                // Refuse before any OPEN when the plan cannot fit. Nothing is removed to make room.
+                storageBudget.requireRoom(total)
+                for ((at, entry) in entries.withIndex()) {
                     val fileBase = bytesBefore
                     val windowsBase = windowsBefore
                     var requiredBytes = entry.bytes - entry.partialBytes
@@ -1016,13 +1051,18 @@ class DeviceConnectionRepository @Inject constructor(
                         Log.w(TAG, "${entry.name} not synced (${describe(outcome)})")
                         _events.tryEmit(DeviceEvent.Error(DeviceMessage.FileNotSynced(entry.name.substringAfterLast('/'), problemOf(outcome))))
                     }
+                    if (outcome is FileOutcome.Failed && outcome.storage) {
+                        // A full disk fails every later file the same way, so it ends the run here.
+                        // The failed file counts from its planned resume point, as in ArchiveCollector.
+                        storageBudget.requireRoom(entries.drop(at).sumOf { it.bytes - it.partialBytes })
+                    }
                 }
                 val synced = outcomes.count { it is FileOutcome.Synced }
                 endCause = SyncEndCause.COMPLETED
                 _events.tryEmit(DeviceEvent.Info(DeviceMessage.SyncFinished(synced, entries.size)))
                 // Still under the foreground service and the WifiLock (see the KDoc): re-LIST now.
                 // A failure here is the refresh's, not the sync's — the files are verified and stored.
-                if (refreshAfter && session.connectionState.value.isReady) {
+                if (refreshAfter && session.isUsable) {
                     _sync.update { it.copy(current = null) }
                     refreshManifestNow(session)
                 }
@@ -1030,6 +1070,9 @@ class DeviceConnectionRepository @Inject constructor(
                 endCause = SyncEndCause.STOPPED
                 _events.tryEmit(DeviceEvent.Info(DeviceMessage.SyncStopped))
                 throw e
+            } catch (e: InsufficientSpaceException) {
+                Log.w(TAG, "sync refused, ${e.available} bytes free of ${e.needed}")
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.NotEnoughSpace(e.needed - e.available)))
             } catch (e: TransportException) {
                 // The pipe failed under us (no response, link lost, socket error): if the link watcher
                 // sees the loss shortly and gets the device back, it resumes this sync (SyncResumePolicy).
@@ -1046,7 +1089,7 @@ class DeviceConnectionRepository @Inject constructor(
                 // A run that ended early for a non-transport reason (a Stop, a local I/O error) still
                 // has a live link: refresh so the plan reflects what did arrive. COMPLETED refreshed
                 // above; TRANSPORT_FAILURE has no link to ask (watchLink re-LISTs after reconnecting).
-                if (refreshAfter && endCause != SyncEndCause.COMPLETED && endCause != SyncEndCause.TRANSPORT_FAILURE && session.connectionState.value.isReady) {
+                if (refreshAfter && endCause != SyncEndCause.COMPLETED && endCause != SyncEndCause.TRANSPORT_FAILURE && session.isUsable) {
                     refreshManifest()
                 }
                 // Bring the history tiers up to date with whatever arrived; cheap when nothing did.
@@ -1160,7 +1203,7 @@ class DeviceConnectionRepository @Inject constructor(
     }
 
     /** True when a session to [address] is Ready right now. */
-    fun isConnectedTo(address: String): Boolean = _session.value?.let { it.address == address && it.connectionState.value.isReady } == true
+    fun isConnectedTo(address: String): Boolean = _session.value?.let { it.address == address && it.isUsable } == true
 
     /** Address of the session the app holds right now (Ready or still connecting), or null. */
     val interactiveSessionAddress: String? get() = _session.value?.address

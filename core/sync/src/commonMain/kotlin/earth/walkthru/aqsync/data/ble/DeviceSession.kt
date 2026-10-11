@@ -6,8 +6,6 @@ import earth.walkthru.aqsync.data.protocol.DeviceConfig
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.protocol.DeviceStatus
 import earth.walkthru.aqsync.data.protocol.Frame
-import earth.walkthru.aqsync.data.protocol.FrameCodec
-import earth.walkthru.aqsync.data.protocol.FrameDecodeException
 import earth.walkthru.aqsync.data.protocol.LiveSample
 import earth.walkthru.aqsync.data.protocol.Opcode
 import earth.walkthru.aqsync.data.protocol.ProtocolError
@@ -15,22 +13,24 @@ import earth.walkthru.aqsync.data.protocol.Request
 import earth.walkthru.aqsync.data.sync.ClockSyncAction
 import earth.walkthru.aqsync.data.sync.ClockSyncMode
 import earth.walkthru.aqsync.data.sync.SmartSyncPolicy
-import earth.walkthru.aqsync.sync.monotonicMs
+import earth.walkthru.aqsync.link.LinkLog
+import earth.walkthru.aqsync.link.LinkSession
+import earth.walkthru.aqsync.link.LinkTimeoutException
+import earth.walkthru.aqsync.link.RequestSpec
+import earth.walkthru.aqsync.link.TransportLinkDriver
 import earth.walkthru.aqsync.sync.nowEpochMs
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
-import kotlinx.coroutines.selects.onTimeout
-import kotlinx.coroutines.selects.select
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 
 /** The device answered a request with an `ERROR` frame. Subclasses type the v2 codes callers branch on. */
@@ -88,12 +88,12 @@ data class LogTail(val text: String, val totalBytesSinceBoot: Long, val returned
 /** A debug raw command named an opcode in [DeviceSession.RAW_COMMAND_DENYLIST]; nothing was sent. */
 class RawCommandRefusedException(val op: Int) : IllegalArgumentException("${Opcode.name(op)} is not sent from the raw command; use the Device screen, which asks for confirmation")
 
-/** The device sent a frame that does not belong to the request in flight, or one that cannot be decoded. */
+/** The device sent a reply that breaks the contract, for example a LIST whose count does not match. */
 class ProtocolViolationException(message: String) : Exception(message)
 
 /**
  * A `READ` window arrived incomplete: a `CHUNK` skipped ahead of the expected offset, or
- * `READ_END.next_offset` did not match the bytes received. The window's `READ_END` *has* been
+ * `READ_END.next_offset` did not match the bytes received. The window's `READ_END` has been
  * consumed, so the caller may immediately re-issue `READ` from [receivedUpTo] — offsets are absolute
  * and file bytes are immutable, so the retry is idempotent. Seen 2026-09-17 on a OnePlus 7 Pro
  * (Android 16): 16–18 consecutive `CHUNK`s missing at the start of every window. Root cause was a
@@ -103,19 +103,15 @@ class ProtocolViolationException(message: String) : Exception(message)
 class WindowLostException(val receivedUpTo: Long, reason: String) : Exception(reason)
 
 /**
- * One request at a time over a single `response` characteristic.
+ * The typed device API, a thin view over one [LinkSession]. The session owns the reply routing,
+ * the drain of abandoned replies and any owed `CLOSE`, so this class holds no protocol state and
+ * any number of views on one session share it. Making a view per run is harmless.
  *
- * The protocol has no request ids: "All `response` traffic for one request is emitted in order on
- * the single `response` characteristic". We therefore serialize requests with a [Mutex] and
- * consume frames from the transport's ordered channel until the request's terminal frame arrives.
- *
- * [frames] records raw frames in both directions for Advanced → Debug, with secrets redacted at
- * record time. iOS passes a recorder that outlives one session so the Debug screen keeps the
- * history across short-lived links.
+ * [transport] still supplies identity, connection state, the GATT reads and the push flows until
+ * the Android and iOS drivers land (#57, #58). It is never read for replies. [frames] records raw
+ * frames for Advanced, Debug, filled by the driver ([TransportLinkDriver]) with secrets redacted.
  */
-class DeviceSession(val transport: AqTransport, val frames: FrameRecorder = FrameRecorder()) {
-    private val requestMutex = Mutex()
-
+class DeviceSession(val link: LinkSession, val transport: AqTransport, val frames: FrameRecorder = FrameRecorder()) {
     val address: String get() = transport.address
     val connectionState get() = transport.connectionState
 
@@ -137,66 +133,55 @@ class DeviceSession(val transport: AqTransport, val frames: FrameRecorder = Fram
     suspend fun readStatus(): DeviceStatus = DeviceStatus.parse(transport.readStatus().decodeToString())
     suspend fun readLive(): LiveSample = LiveSample.parse(transport.readLive().decodeToString())
 
-    private suspend fun write(request: Request) {
-        val bytes = request.encode()
-        frames.tx(bytes)
-        transport.writeControl(bytes)
-    }
-
-    /** `LIST` → `FILE` × n, then `LIST_END`. An incomplete listing is never a successful snapshot. */
-    suspend fun list(): Pair<List<Frame.File>, Frame.ListEnd> = request<Pair<List<Frame.File>, Frame.ListEnd>>(Opcode.LIST) {
-        write(Request.List)
+    /**
+     * `LIST` → `FILE` × n, then `LIST_END`. An incomplete listing is never a successful snapshot.
+     * The count is checked after `LIST_END` was consumed, so a wrong count leaves the link ready.
+     */
+    suspend fun list(): Pair<List<Frame.File>, Frame.ListEnd> {
         val files = ArrayList<Frame.File>()
-        while (true) {
-            when (val frame = nextFrame(Opcode.LIST, FRAME_TIMEOUT_MS)) {
-                is Frame.File -> files += frame
-                is Frame.ListEnd -> return@request files to frame
+        val end = request(Request.List) { frame ->
+            when (frame) {
+                is Frame.File -> {
+                    files += frame
+                    null
+                }
+                is Frame.ListEnd -> frame
                 else -> throw unexpected("LIST", frame)
             }
         }
-        @Suppress("UNREACHABLE_CODE")
-        error("unreachable")
-    }.also { (files, end) ->
-        // Validate after request consumes LIST_END: the response is clean even when its count is wrong.
         if (files.size.toLong() != end.count) throw ProtocolViolationException("LIST count ${end.count} differs from ${files.size} FILE frames")
+        return files to end
     }
 
     /**
      * `OPEN name` → `OPENED` or `ERROR`. The device computes the CRC-32 over the whole file before
-     * answering, so the timeout is generous.
+     * answering, so the first frame may take up to [RequestSpec.SLOW_FIRST_FRAME].
      */
-    suspend fun open(name: String): Frame.Opened = request(Opcode.OPEN) {
-        write(Request.Open(name))
-        when (val frame = nextFrame(Opcode.OPEN, OPEN_TIMEOUT_MS)) {
-            is Frame.Opened -> frame
-            else -> throw unexpected("OPEN", frame)
-        }
-    }
+    suspend fun open(name: String): Frame.Opened = single(Request.Open(name), "OPEN")
 
     /**
      * `READ handle offset length` → `CHUNK` × n, then `READ_END`. Chunks are handed to [onChunk]
-     * as they arrive so a large file never has to sit in memory twice.
+     * as they arrive, so a large file never has to sit in memory twice. A suspending [onChunk]
+     * holds the reply, so the caller's next `READ` waits until it accepted this window.
      *
-     * Continuity is checked here, against the absolute offsets the contract puts in every `CHUNK`.
-     * A chunk that skips ahead, or a `READ_END.next_offset` that does not equal the bytes received,
-     * means notifications were lost on the way to the phone. The window is then *not* abandoned
-     * mid-stream: the remaining frames of this request are consumed (and discarded) until its
-     * `READ_END`, so the channel is clean, and only then is [WindowLostException] thrown. The caller
-     * re-issues `READ` from [WindowLostException.receivedUpTo]. A `CHUNK` for another handle or an
-     * undecodable frame is still a [ProtocolViolationException]: that stream is malformed, not lossy.
+     * Continuity is checked against the absolute offsets the contract puts in every `CHUNK`. A
+     * chunk that skips ahead, or a `READ_END.next_offset` that does not equal the bytes received,
+     * means notifications were lost on the way to the phone. The rest of the window is consumed
+     * and discarded until its `READ_END`, and only then is [WindowLostException] thrown. The caller
+     * re-issues `READ` from [WindowLostException.receivedUpTo]. A `CHUNK` for another handle is a
+     * [ProtocolViolationException]: that stream is malformed, not lossy.
      */
     suspend fun read(
         handle: Int,
         offset: Long,
         length: Long,
         onChunk: suspend (Frame.Chunk) -> Unit,
-    ): Frame.ReadEnd = request(Opcode.READ) {
-        write(Request.Read(handle, offset, length))
+    ): Frame.ReadEnd {
         var expected = offset
         var lost: String? = null
         var discarded = 0
-        while (true) {
-            when (val frame = nextFrame(Opcode.READ, FRAME_TIMEOUT_MS)) {
+        val end = request(Request.Read(handle, offset, length)) { frame ->
+            when (frame) {
                 is Frame.Chunk -> {
                     if (frame.handle != handle) {
                         throw ProtocolViolationException("CHUNK for handle ${frame.handle}, expected $handle")
@@ -213,43 +198,31 @@ class DeviceSession(val transport: AqTransport, val frames: FrameRecorder = Fram
                             expected = maxOf(expected, frame.offset + frame.payload.size)
                         }
                     }
+                    null
                 }
-                is Frame.ReadEnd -> {
-                    lost?.let {
-                        throw WindowLostException(expected, "$it; $discarded later CHUNK(s) of the window discarded")
-                    }
-                    if (frame.ok && frame.nextOffset != expected) {
-                        throw WindowLostException(
-                            expected,
-                            "READ_END next_offset=${frame.nextOffset} but $expected is where the received bytes end"
-                        )
-                    }
-                    return frame
-                }
+                is Frame.ReadEnd -> frame
                 else -> throw unexpected("READ", frame)
             }
         }
-        @Suppress("UNREACHABLE_CODE")
-        error("unreachable")
+        lost?.let { throw WindowLostException(expected, "$it; $discarded later CHUNK(s) of the window discarded") }
+        if (end.ok && end.nextOffset != expected) {
+            throw WindowLostException(expected, "READ_END next_offset=${end.nextOffset} but $expected is where the received bytes end")
+        }
+        return end
     }
 
     /** `CLOSE handle` → `CLOSED`. */
-    suspend fun close(handle: Int): Frame.Closed = request(Opcode.CLOSE) {
-        write(Request.Close(handle))
-        when (val frame = nextFrame(Opcode.CLOSE, FRAME_TIMEOUT_MS)) {
-            is Frame.Closed -> frame
-            else -> throw unexpected("CLOSE", frame)
-        }
-    }
+    suspend fun close(handle: Int): Frame.Closed = single(Request.Close(handle), "CLOSE", oweCloseIfUnsent = handle)
+
+    /**
+     * Leave `CLOSE handle` to the link without waiting. Used when a transfer is cancelled or
+     * failed, so Stop never waits behind the abandoned `READ` ([LinkSession.oweClose]).
+     */
+    fun oweClose(handle: Int) = link.oweClose(handle)
 
     /** `SET_TIME` → `TIME_SET` or `ERROR` 9. The acknowledged anchor also reconciles earlier boot rows. */
-    suspend fun setTime(epochSeconds: Long, subsecondMicros: Int? = null): Frame.TimeSet = request(Opcode.SET_TIME) {
-        write(Request.SetTime(epochSeconds, subsecondMicros))
-        when (val frame = nextFrame(Opcode.SET_TIME, FRAME_TIMEOUT_MS)) {
-            is Frame.TimeSet -> frame
-            else -> throw unexpected("SET_TIME", frame)
-        }
-    }
+    suspend fun setTime(epochSeconds: Long, subsecondMicros: Int? = null): Frame.TimeSet =
+        single(Request.SetTime(epochSeconds, subsecondMicros), "SET_TIME")
 
     /** Automatic UTC anchor. Retry legacy seconds only when old firmware rejects the extension. */
     suspend fun synchronizeClock(nowMillis: () -> Long = ::nowEpochMs): Frame.TimeSet {
@@ -297,33 +270,19 @@ class DeviceSession(val transport: AqTransport, val frames: FrameRecorder = Fram
     }
 
     /** `FLUSH` → `FLUSHED` or `ERROR` 10. Finalizes the RAM batch into a short file. */
-    suspend fun flush(): Frame.Flushed = request(Opcode.FLUSH) {
-        write(Request.Flush)
-        when (val frame = nextFrame(Opcode.FLUSH, OPEN_TIMEOUT_MS)) {
-            is Frame.Flushed -> frame
-            else -> throw unexpected("FLUSH", frame)
-        }
-    }
+    suspend fun flush(): Frame.Flushed = single(Request.Flush, "FLUSH")
 
     /** `STATUS` → a `status` notification only; no `response` frame is defined. */
-    suspend fun requestStatus() = requestMutex.withLock {
-        write(Request.Status)
-    }
+    suspend fun requestStatus() = link.send(RequestSpec.of(Request.Status))
 
     // ------------------------------------------------------------------------ v2
 
     /** `GET_CONFIG` → `CONFIG`. */
-    suspend fun getConfig(): ConfigSnapshot = request(Opcode.GET_CONFIG) {
-        write(Request.GetConfig)
-        configFrom("GET_CONFIG", Opcode.GET_CONFIG, nextFrame(Opcode.GET_CONFIG, FRAME_TIMEOUT_MS))
-    }
+    suspend fun getConfig(): ConfigSnapshot = config(Request.GetConfig, "GET_CONFIG")
 
     /** Null on firmware which ignores the page selector; malformed-request also means unsupported. */
     suspend fun getLocation(): earth.walkthru.aqsync.data.protocol.LocationConfig? = try {
-        request(Opcode.GET_CONFIG) {
-            write(Request.GetLocation)
-            configFrom("GET_CONFIG location", Opcode.GET_CONFIG, nextFrame(Opcode.GET_CONFIG, FRAME_TIMEOUT_MS)).config.location
-        }
+        config(Request.GetLocation, "GET_CONFIG location").config.location
     } catch (e: DeviceErrorException) {
         if (e.protocolError == ProtocolError.MALFORMED_REQUEST || e.protocolError == ProtocolError.UNKNOWN_OPCODE) null else throw e
     }
@@ -332,31 +291,24 @@ class DeviceSession(val transport: AqTransport, val frames: FrameRecorder = Fram
      * `SET_CONFIG key=value…` → `CONFIG` (the new state) or `ERROR` 12 ([InvalidConfigException]
      * with the offending key; nothing changed). Values are validated by [ConfigPatch] before send.
      */
-    suspend fun setConfig(patch: ConfigPatch): ConfigSnapshot = request(Opcode.SET_CONFIG) {
+    suspend fun setConfig(patch: ConfigPatch): ConfigSnapshot {
         require(!patch.isEmpty) { "empty config patch" }
-        write(Request.SetConfig(patch))
-        configFrom("SET_CONFIG", Opcode.SET_CONFIG, nextFrame(Opcode.SET_CONFIG, FRAME_TIMEOUT_MS))
+        return config(Request.SetConfig(patch), "SET_CONFIG")
     }
 
-    private suspend fun configFrom(request: String, opcode: Int, first: Frame): ConfigSnapshot {
-        val frame = when (first) {
-            is Frame.Config -> first
-            is Frame.ConfigChunk -> {
-                val accumulator = ConfigChunkAccumulator()
-                var next: Frame = first
-                var complete: Frame.Config? = null
-                while (complete == null) {
-                    if (next !is Frame.ConfigChunk) throw unexpected(request, next)
-                    complete = try {
-                        accumulator.add(next)
-                    } catch (e: Exception) {
-                        throw ProtocolViolationException("CONFIG_CHUNK invalid: ${e.message}")
-                    }
-                    if (complete == null) next = nextFrame(opcode, FRAME_TIMEOUT_MS)
+    /** One `CONFIG`, or `CONFIG_CHUNK` slices that end the reply once they add up. */
+    private suspend fun config(request: Request, label: String): ConfigSnapshot {
+        val accumulator = ConfigChunkAccumulator()
+        val frame = request(request) { frame ->
+            when (frame) {
+                is Frame.Config -> frame
+                is Frame.ConfigChunk -> try {
+                    accumulator.add(frame)
+                } catch (e: Exception) {
+                    throw ProtocolViolationException("CONFIG_CHUNK invalid: ${e.message}")
                 }
-                complete
+                else -> throw unexpected(label, frame)
             }
-            else -> throw unexpected(request, first)
         }
         val parsed = try {
             DeviceConfig.parse(frame.json)
@@ -370,229 +322,98 @@ class DeviceSession(val transport: AqTransport, val frames: FrameRecorder = Fram
      * `WIFI_SCAN` → `WIFI_AP` × n, then `WIFI_SCAN_END`. Takes 2–4 s on the device. `ERROR` 15 (or a
      * non-zero end status) surfaces as [WifiUnavailableException].
      */
-    suspend fun wifiScan(): WifiScanResult = request(Opcode.WIFI_SCAN) {
-        write(Request.WifiScan)
+    suspend fun wifiScan(): WifiScanResult {
         val aps = ArrayList<Frame.WifiAp>()
-        while (true) {
-            when (val frame = nextFrame(Opcode.WIFI_SCAN, WIFI_SCAN_TIMEOUT_MS)) {
-                is Frame.WifiAp -> aps += frame
-                is Frame.WifiScanEnd -> {
-                    if (!frame.ok) {
-                        throw DeviceErrorException.of(Frame.Error(Opcode.WIFI_SCAN, frame.status, "WIFI_SCAN_END status"))
-                    }
-                    return WifiScanResult(aps, frame)
+        val end = request(Request.WifiScan) { frame ->
+            when (frame) {
+                is Frame.WifiAp -> {
+                    aps += frame
+                    null
                 }
+                is Frame.WifiScanEnd -> frame
                 else -> throw unexpected("WIFI_SCAN", frame)
             }
         }
-        @Suppress("UNREACHABLE_CODE")
-        error("unreachable")
+        if (!end.ok) throw DeviceErrorException.of(Frame.Error(Opcode.WIFI_SCAN, end.status, "WIFI_SCAN_END status"))
+        return WifiScanResult(aps, end)
     }
 
     /**
      * `REBOOT` → `REBOOTING delay_ms`; the device finalizes its RAM batch and restarts. The caller
      * should disconnect within `delayMs` and reconnect afterwards.
      */
-    suspend fun reboot(): Frame.Rebooting = request(Opcode.REBOOT) {
-        write(Request.Reboot)
-        when (val frame = nextFrame(Opcode.REBOOT, OPEN_TIMEOUT_MS)) {
-            is Frame.Rebooting -> frame
-            else -> throw unexpected("REBOOT", frame)
-        }
-    }
+    suspend fun reboot(): Frame.Rebooting = single(Request.Reboot, "REBOOT")
 
     /** `LOG_TAIL max_bytes` → `LOG` × n, then `LOG_END`. Text for humans, not an API. */
-    suspend fun logTail(maxBytes: Int = LOG_RING_BYTES): LogTail = request(Opcode.LOG_TAIL) {
-        write(Request.LogTail(maxBytes.coerceIn(0, 0xFFFF)))
+    suspend fun logTail(maxBytes: Int = LOG_RING_BYTES): LogTail {
         val slices = ArrayList<ByteArray>()
-        while (true) {
-            when (val frame = nextFrame(Opcode.LOG_TAIL, FRAME_TIMEOUT_MS)) {
-                is Frame.Log -> slices += frame.bytes
-                is Frame.LogEnd -> {
-                    val bytes = concat(slices)
-                    return LogTail(bytes.decodeToString(), frame.total, frame.returned, bytes.size)
+        val end = request(Request.LogTail(maxBytes.coerceIn(0, 0xFFFF))) { frame ->
+            when (frame) {
+                is Frame.Log -> {
+                    slices += frame.bytes
+                    null
                 }
+                is Frame.LogEnd -> frame
                 else -> throw unexpected("LOG_TAIL", frame)
             }
         }
-        @Suppress("UNREACHABLE_CODE")
-        error("unreachable")
+        val bytes = concat(slices)
+        return LogTail(bytes.decodeToString(), end.total, end.returned, bytes.size)
     }
 
     /**
      * `GET_TOKEN` → `TOKEN port, token`. BLE only: over LAN the device answers `ERROR` 13
      * ([NotAllowedOnLinkException]). The token is a bearer secret — store it, never log it.
      */
-    suspend fun getToken(): Frame.Token = request(Opcode.GET_TOKEN) {
-        write(Request.GetToken)
-        when (val frame = nextFrame(Opcode.GET_TOKEN, FRAME_TIMEOUT_MS)) {
-            is Frame.Token -> frame
-            else -> throw unexpected("GET_TOKEN", frame)
-        }
-    }
+    suspend fun getToken(): Frame.Token = single(Request.GetToken, "GET_TOKEN")
 
     /**
-     * Advanced → Debug "raw command": write arbitrary bytes and collect whatever comes back until
-     * the device has been quiet for [quietMs] (there is no generic terminal frame). Undecodable
-     * frames are returned as [Frame.Error] placeholders with code −1 rather than thrown, so the user
-     * sees exactly what arrived.
+     * Advanced → Debug "raw command": write arbitrary bytes and return the reply frames the link
+     * routes to that opcode, through its terminal frame. An unknown opcode ends with the device's
+     * `ERROR`. Without a terminal within [quiet] the frames so far are returned, and the link
+     * drains the rest within its [earth.walkthru.aqsync.link.DrainBound] (with `ABORT` on proto 3).
+     * Frames the link cannot decode are dropped there and never reach this list.
      */
-    suspend fun rawCommand(request: ByteArray, quietMs: Long = 1_500L, maxTotalMs: Long = FRAME_TIMEOUT_MS): List<Pair<ByteArray, Frame?>> {
+    suspend fun rawCommand(request: ByteArray, quiet: Duration = RAW_QUIET): List<Pair<ByteArray, Frame?>> {
         require(request.isNotEmpty() && request.size <= RawCommandPolicy.MAX_BYTES) { "request must be 1..512 bytes" }
         // The data layer enforces the denylist itself, so a UI path that forgets its own guard
         // still cannot reboot the device or change its configuration without a confirmation.
         val op = request[0].toInt() and 0xFF
         if (RawCommandPolicy.isRefused(request)) throw RawCommandRefusedException(op)
-        return request(NO_TERMINAL) {
-            frames.tx(request)
-            transport.writeControl(request)
-            val got = ArrayList<Pair<ByteArray, Frame?>>()
-            val started = TimeSource.Monotonic.markNow()
-            while (started.elapsedNow().inWholeMilliseconds < maxTotalMs) {
-                val raw = receiveWithin(quietMs) ?: break
-                frames.rx(raw)
-                got += raw to runCatching { FrameCodec.decode(raw) }.getOrNull()
-            }
-            got
-        }
-    }
-
-    /**
-     * Wait for the next frame of the request in flight. An `ERROR` frame whose `op` matches is the
-     * request's own failure; an `ERROR` for another op is a protocol violation.
-     */
-    private suspend fun nextFrame(op: Int, timeoutMs: Long): Frame {
-        val raw = receiveOrFail(timeoutMs)
-        val frame = try {
-            FrameCodec.decode(raw)
-        } catch (e: FrameDecodeException) {
-            throw ProtocolViolationException("undecodable response frame during ${Opcode.name(op)}: ${e.message}")
-        }
-        if (frame is Frame.Error) {
-            if (frame.op == op || frame.op == 0) throw DeviceErrorException.of(frame)
-            throw ProtocolViolationException("ERROR for ${Opcode.name(frame.op)} while waiting on ${Opcode.name(op)}: ${frame.describe()}")
-        }
-        return frame
-    }
-
-    /**
-     * Receive the next raw frame, but give up early if the link drops: a lost connection would
-     * otherwise only surface as a slow timeout.
-     */
-    private suspend fun receiveOrFail(timeoutMs: Long): ByteArray {
-        var waited = 0L
-        while (waited < timeoutMs) {
-            val slice = minOf(POLL_MS, timeoutMs - waited)
-            receiveWithin(slice)
-                ?.let { frames.rx(it); return it }
-            waited += slice
-            val st = transport.connectionState.value
-            if (st is ConnectionState.Disconnected || st is ConnectionState.Failed) {
-                throw TransportException("link lost while waiting for a response")
-            }
-            if (transport.responseFrames.isClosedForReceive) {
-                throw TransportException("transport closed")
-            }
-        }
-        throw TransportException("no response from device within ${timeoutMs / 1000} s")
-    }
-
-    /** Poll expiry must not cancel a receive that already extracted a protocol frame. */
-    @OptIn(ExperimentalCoroutinesApi::class)
-    private suspend fun receiveWithin(timeoutMs: Long): ByteArray? = select {
-        transport.responseFrames.onReceiveCatching { it.getOrNull() }
-        onTimeout(timeoutMs) { null }
-    }
-
-    /**
-     * Serialize one request and remember whether it left the channel dirty.
-     *
-     * Any failure or cancellation *before* the request's terminal frame arrived (timeout, link
-     * hiccup, a stray frame, a cancelled READ) leaves the rest of the reply in flight; the next
-     * request must not mistake it for its own. [drainStale] then waits for exactly that terminal
-     * frame. A [DeviceErrorException] (the `ERROR` *is* the terminal frame) and a
-     * [WindowLostException] (thrown only after `READ_END` was consumed) leave the channel clean.
-     */
-    private suspend inline fun <T> request(op: Int, block: () -> T): T = requestMutex.withLock {
-        drainStale()
+        val got = ArrayList<Pair<ByteArray, Frame?>>()
+        val spec = RequestSpec(op, request, firstFrameTimeout = quiet, interFrameTimeout = quiet, expectsResponse = op != Opcode.STATUS)
         try {
-            block()
-        } catch (e: WindowLostException) {
-            throw e
-        } catch (e: DeviceErrorException) {
-            throw e
-        } catch (e: Throwable) {
-            pendingDrain = op
-            throw e
+            if (!spec.expectsResponse) {
+                link.send(spec)
+                return got
+            }
+            link.exchangeRaw(spec) { raw, frame, terminal ->
+                got += raw to frame
+                if (terminal) Unit else null
+            }
+        } catch (_: LinkTimeoutException) {
+            // Quiet: what arrived is the answer. The link drains the rest.
         } finally {
             frames.flush()
         }
+        return got
     }
-
-    /** Opcode of the last request that failed before its terminal frame; [NO_TERMINAL] for a raw command. */
-    private var pendingDrain: Int? = null
 
     /**
-     * Frames left over from an aborted earlier request (e.g. a READ cancelled mid-stream, or a
-     * `CLOSED` that arrived after its 3 s budget) would otherwise be mistaken for the new request's
-     * response — "unexpected Closed frame in response to LIST" was seen on a real phone. Drop
-     * whatever is already queued and, if the previous request failed before its terminal frame,
-     * keep consuming until that frame shows up, the device has been quiet for [DRAIN_QUIET_MS], or
-     * [FRAME_TIMEOUT_MS] has elapsed.
+     * Run one request on the link. An `ERROR` routed to it ends the reply, and becomes the typed
+     * [DeviceErrorException]. [onFrame] returns the result on the terminal frame, null before it.
      */
-    private suspend fun drainStale() {
-        val pending = pendingDrain
-        pendingDrain = null
-        var dropped = 0
-        var terminalSeen = false
-        val deadline = monotonicMs() + FRAME_TIMEOUT_MS
-        while (true) {
-            val raw = if (pending == null) {
-                transport.responseFrames.tryReceive().getOrNull() ?: break
-            } else {
-                val remaining = deadline - monotonicMs()
-                if (remaining <= 0) break
-                receiveWithin(minOf(DRAIN_QUIET_MS, remaining)) ?: break
-            }
-            dropped++
-            if (pending != null && isTerminal(pending, raw)) {
-                terminalSeen = true
-                break
-            }
+    private suspend fun <R : Any> request(request: Request, oweCloseIfUnsent: Int? = null, onFrame: suspend (Frame) -> R?): R = try {
+        link.exchange(RequestSpec.of(request), oweCloseIfUnsent) { frame, _ ->
+            if (frame is Frame.Error) throw DeviceErrorException.of(frame)
+            onFrame(frame)
         }
-        if (dropped > 0 || pending != null) {
-            staleFrameLogger(
-                "dropped $dropped stale response frame(s)" +
-                    (pending?.let { " after failed ${Opcode.name(it)}" + if (terminalSeen) " (terminal frame seen)" else " (quiet)" } ?: "")
-            )
-        }
+    } finally {
+        frames.flush()
     }
 
-    /** Whether [raw] ends the reply to [op]: its terminal frame, or an `ERROR` addressed to it. */
-    private fun isTerminal(op: Int, raw: ByteArray): Boolean {
-        if (op == NO_TERMINAL) return false
-        val frame = runCatching { FrameCodec.decode(raw) }.getOrNull() ?: return false
-        if (frame is Frame.Error) return frame.op == op || frame.op == 0
-        return when (op) {
-            Opcode.LIST -> frame is Frame.ListEnd
-            Opcode.OPEN -> frame is Frame.Opened
-            Opcode.READ -> frame is Frame.ReadEnd
-            Opcode.CLOSE -> frame is Frame.Closed
-            Opcode.SET_TIME -> frame is Frame.TimeSet
-            Opcode.FLUSH -> frame is Frame.Flushed
-            Opcode.GET_CONFIG, Opcode.SET_CONFIG ->
-                frame is Frame.Config ||
-                    (frame is Frame.ConfigChunk && frame.offset + frame.bytes.size == frame.total)
-            Opcode.WIFI_SCAN -> frame is Frame.WifiScanEnd
-            Opcode.REBOOT -> frame is Frame.Rebooting
-            Opcode.LOG_TAIL -> frame is Frame.LogEnd
-            Opcode.GET_TOKEN -> frame is Frame.Token
-            else -> false
-        }
-    }
-
-    /** Overridable so unit tests stay free of android.util.Log. */
-    var staleFrameLogger: (String) -> Unit = {}
+    private suspend inline fun <reified F : Frame> single(request: Request, label: String, oweCloseIfUnsent: Int? = null): F =
+        request(request, oweCloseIfUnsent) { frame -> frame as? F ?: throw unexpected(label, frame) }
 
     private fun concat(slices: List<ByteArray>): ByteArray {
         val out = ByteArray(slices.sumOf { it.size })
@@ -610,28 +431,11 @@ class DeviceSession(val transport: AqTransport, val frames: FrameRecorder = Fram
     companion object {
         private const val STATUS_CLOCK_TIMEOUT_MS = 5_000L
 
-        /** Gap between two frames of one response, including LIST on a large card. */
-        const val FRAME_TIMEOUT_MS = 15_000L
-
-        /** OPEN reads the whole file for CRC-32 on the device; FLUSH writes a file. */
-        const val OPEN_TIMEOUT_MS = 60_000L
-
-        /** WIFI_SCAN takes 2–4 s on the Wi-Fi task; allow for a busy radio. */
-        const val WIFI_SCAN_TIMEOUT_MS = 20_000L
-
         /** The device's serial log ring. */
         const val LOG_RING_BYTES = 8192
 
-        /**
-         * After a failed request, how long the device may stay silent before the channel is
-         * considered clean when its terminal frame never showed up.
-         */
-        const val DRAIN_QUIET_MS = 2_000L
-
-        private const val POLL_MS = 250L
-
-        /** Pseudo-opcode for requests without a terminal frame (raw commands): drain on quiet only. */
-        private const val NO_TERMINAL = -1
+        /** How long a raw command waits for a first or next frame before it shows what came. */
+        val RAW_QUIET: Duration = 1.5.seconds
 
         /**
          * Opcodes the debug raw command never sends: `REBOOT` restarts the logger and `SET_CONFIG`
@@ -639,6 +443,28 @@ class DeviceSession(val transport: AqTransport, val frames: FrameRecorder = Fram
          * confirmation (root `AGENTS.md`).
          */
         val RAW_COMMAND_DENYLIST: Set<Int> get() = RawCommandPolicy.DENYLIST
+
+        /**
+         * A view over [transport] with its own unopened [LinkSession], until the platform drivers
+         * land (#57, #58). Call [LinkSession.open] once the transport may connect. [info] stands in
+         * for the `info` read on a transport that cannot read it. The link runs in [scope] until it
+         * closes, and [LinkSession.close] disconnects the transport. [openTimeout] covers a Bluetooth
+         * connect plus the bond, where the user types the PIN, so it outlasts the transport's own.
+         */
+        fun over(
+            transport: AqTransport,
+            scope: CoroutineScope,
+            frames: FrameRecorder = FrameRecorder(),
+            log: LinkLog = LinkLog.NONE,
+            info: (suspend () -> DeviceInfo)? = null,
+            openTimeout: Duration = OPEN_TIMEOUT,
+        ): DeviceSession {
+            val driver = TransportLinkDriver(transport, scope, frames, info)
+            return DeviceSession(LinkSession(driver, scope, openTimeout = openTimeout, log = log), transport, frames)
+        }
+
+        /** Above a Bluetooth connect (30 s) plus a bond (120 s), so the transport's typed timeout wins. */
+        val OPEN_TIMEOUT: Duration = 180.seconds
     }
 }
 
