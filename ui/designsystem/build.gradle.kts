@@ -14,6 +14,8 @@ kotlin {
         commonMain.dependencies {
             // Feature modules style their screens with the Material 3 types this module themes.
             api(libs.compose.material3)
+            // MoodStrip and the mood words take WhoStep and MoodBlock in their public API.
+            api(project(":core:airquality"))
             implementation(project(":core:history"))
         }
         // Semantics tests render the shared components headless on the iOS simulator (verifyIos).

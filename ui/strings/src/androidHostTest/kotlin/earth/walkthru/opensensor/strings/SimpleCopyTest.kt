@@ -1,0 +1,47 @@
+package earth.walkthru.opensensor.strings
+
+import java.io.File
+import kotlin.test.Test
+import kotlin.test.assertTrue
+import kotlin.test.fail
+
+/**
+ * Simple speaks in moods. Its copy never names the guideline body, in any language, even though
+ * the colours and moods still come from the WHO steps (docs/superpowers/specs/2026-10-12-stations-ux-design.md).
+ */
+class SimpleCopyTest {
+    private val banned = listOf(Regex("""\bWHO\b"""), Regex("منظمة الصحة"))
+
+    private val designsystem = listOf("values", "values-ar").map { File(Catalogues.root, "ui/designsystem/src/commonMain/composeResources/$it/strings.xml") }
+    private val discover = listOf("values", "values-ar").map { File(Catalogues.root, "feature/discover/src/commonMain/composeResources/$it/strings.xml") }
+
+    private fun simpleKeys(): Map<String, String> {
+        val out = LinkedHashMap<String, String>()
+        designsystem.forEach { file ->
+            Catalogues.parse(file).filterKeys { it.startsWith("mood_") || it.startsWith("value_") }.forEach { (k, v) -> out["${file.parentFile!!.name}/$k"] = v }
+        }
+        discover.forEach { file ->
+            Catalogues.parse(file).filterKeys { it.startsWith("discover_mood_") }.forEach { (k, v) -> out["discover/${file.parentFile!!.name}/$k"] = v }
+        }
+        return out
+    }
+
+    @Test
+    fun theMoodVocabularyIsComplete() {
+        val words = listOf("fresh", "fair", "hazy", "poor", "smoky", "thick", "none")
+        designsystem.forEach { file ->
+            val keys = Catalogues.parse(file).keys
+            words.forEach { w ->
+                assertTrue("mood_$w" in keys, "${file.parentFile!!.name} lacks mood_$w")
+                assertTrue("mood_${w}_line" in keys, "${file.parentFile!!.name} lacks mood_${w}_line")
+            }
+            assertTrue("value_not_available" in keys, "${file.parentFile!!.name} lacks value_not_available")
+        }
+    }
+
+    @Test
+    fun simpleCopyNeverNamesTheGuidelineBody() {
+        val found = simpleKeys().filter { (_, text) -> banned.any { it.containsMatchIn(text) } }
+        if (found.isNotEmpty()) fail("Simple copy names the guideline body $found")
+    }
+}

@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import earth.walkthru.aqsync.airquality.WhoStep
 import earth.walkthru.aqsync.data.history.AirMood
 import earth.walkthru.opensensor.designsystem.resources.Res
 import earth.walkthru.opensensor.designsystem.resources.peacock
@@ -54,14 +55,17 @@ enum class PeacockExpression {
 }
 
 /** Visual mapping only. The metric registry continues to own the scale, labels and thresholds. */
-fun peacockExpressionFor(mood: AirMood?): PeacockExpression = when (mood) {
-    AirMood.FRESH -> PeacockExpression.HAPPY
-    AirMood.FAIR -> PeacockExpression.CALM
-    AirMood.HAZY -> PeacockExpression.CONCERNED
-    AirMood.POOR, AirMood.SMOKY -> PeacockExpression.MASKED
-    AirMood.THICK -> PeacockExpression.FEATHER_SHIELD
+fun peacockExpressionFor(step: WhoStep?): PeacockExpression = when (step) {
+    WhoStep.GUIDELINE -> PeacockExpression.HAPPY
+    WhoStep.IT4 -> PeacockExpression.CALM
+    WhoStep.IT3 -> PeacockExpression.CONCERNED
+    WhoStep.IT2, WhoStep.IT1 -> PeacockExpression.MASKED
+    WhoStep.ABOVE_IT1 -> PeacockExpression.FEATHER_SHIELD
     null -> PeacockExpression.CONFUSED
 }
+
+/** The same mapping for a sensor's mood, through its step. */
+fun peacockExpressionFor(mood: AirMood?): PeacockExpression = peacockExpressionFor(mood?.step)
 
 /** Static full-colour icon. Give small portraits at least 48 dp and retain the adjacent state text. */
 @Composable

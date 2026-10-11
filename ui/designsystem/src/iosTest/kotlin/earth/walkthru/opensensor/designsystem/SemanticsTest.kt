@@ -7,19 +7,24 @@ import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onChildren
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.unit.dp
+import earth.walkthru.aqsync.airquality.MoodBlock
+import earth.walkthru.aqsync.airquality.WhoStep
 import kotlin.test.Test
 
 /**
@@ -89,5 +94,42 @@ class SemanticsTest {
         }
         onNodeWithText("Today").assert(hasRole(Role.Tab)).assertIsSelected()
         onNodeWithText("Map").assert(hasRole(Role.Tab)).assertIsNotSelected()
+    }
+
+    @Test
+    fun aMoodStripIsOneSpokenNodeWithAnActionPerBlock() = runComposeUiTest {
+        var tapped = -1
+        setContent {
+            MaterialTheme {
+                MoodStripLayout(
+                    blocks = listOf(MoodBlock(WhoStep.GUIDELINE), MoodBlock(null), MoodBlock(WhoStep.IT2), MoodBlock(WhoStep.IT1, weight = 0f)),
+                    words = listOf("Fresh air", "n/a", "Poor", "Smoky"),
+                    captions = listOf("7 days", "24 hours", "1 hour", "never shown"),
+                    selected = null,
+                    onBlock = { tapped = it },
+                    modifier = Modifier.testTag("strip"),
+                )
+            }
+        }
+        val threeActions = SemanticsMatcher("three custom actions") { SemanticsActions.CustomActions in it.config && it.config[SemanticsActions.CustomActions].count() == 3 }
+        onNodeWithTag("strip").assert(hasContentDescription("Fresh air 7 days, n/a 24 hours, Poor 1 hour")).assert(threeActions)
+        onNodeWithTag("strip").onChildren().assertCountEquals(0)
+        onNodeWithTag("strip").fetchSemanticsNode().config[SemanticsActions.CustomActions][2].action()
+        kotlin.test.assertEquals(2, tapped)
+    }
+
+    @Test
+    fun aMoodLegendIsOneSpokenNode() = runComposeUiTest {
+        setContent {
+            MaterialTheme {
+                MoodLegendLayout(
+                    words = listOf("Fresh air", "Fair", "Getting hazy", "Poor", "Smoky", "Thick smoke"),
+                    title = "PM2.5",
+                    modifier = Modifier.testTag("legend"),
+                )
+            }
+        }
+        onNodeWithTag("legend").assert(hasContentDescription("PM2.5. Fresh air, Fair, Getting hazy, Poor, Smoky, Thick smoke"))
+        onNodeWithTag("legend").onChildren().assertCountEquals(0)
     }
 }
