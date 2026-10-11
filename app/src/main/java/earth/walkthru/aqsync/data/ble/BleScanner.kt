@@ -51,31 +51,6 @@ internal interface ScanRadio {
 }
 
 /**
- * Android refuses more than five scan starts per app in 30 s, silently on recent releases. The
- * step down is skipped when it would use the last start, so the next user tap still scans.
- */
-internal class ScanStartBudget(private val windowMs: Long = 30_000, private val maxStarts: Int = 5) {
-    private val starts = ArrayDeque<Long>()
-
-    @Synchronized
-    fun record(nowMs: Long) {
-        trim(nowMs)
-        starts.addLast(nowMs)
-    }
-
-    /** True when one more start still leaves one in the window. */
-    @Synchronized
-    fun allowsRestart(nowMs: Long): Boolean {
-        trim(nowMs)
-        return starts.size + 1 < maxStarts
-    }
-
-    private fun trim(nowMs: Long) {
-        while (starts.isNotEmpty() && nowMs - starts.first() >= windowMs) starts.removeFirst()
-    }
-}
-
-/**
  * `BluetoothLeScanner` filtered on the AQ Sync service UUID, exposed as a flow of results. The scan
  * follows a [ScanPlan] and the flow completes when the plan stops it. Cancelling stops it sooner.
  *
@@ -88,7 +63,8 @@ object BleScanner {
     /** [Event.Failed.errorCode] when the adapter is missing or off. */
     const val BLUETOOTH_OFF = -1
 
-    private val budget = ScanStartBudget()
+    /** Admission failure, matching Android's code 6 (named by ScanCallback only from API 33). */
+    const val SCANNING_TOO_FREQUENTLY = 6
 
     sealed interface Event {
         data class Seen(val device: ScannedDevice) : Event
@@ -104,7 +80,7 @@ object BleScanner {
             emit(Event.Failed(BLUETOOTH_OFF, "Bluetooth is off"))
             return@flow
         }
-        val events = planned(plan, budget, SystemClock::elapsedRealtime) { send ->
+        val events = planned(plan, ScanStartBudget.shared, SystemClock::elapsedRealtime) { send ->
             val callback = object : ScanCallback() {
                 override fun onScanResult(callbackType: Int, result: ScanResult) = emit(result)
                 override fun onBatchScanResults(results: MutableList<ScanResult>) = results.forEach(::emit)
@@ -153,29 +129,49 @@ object BleScanner {
      * [nowMs] is a monotonic clock for [budget].
      */
     internal fun planned(plan: ScanPlan, budget: ScanStartBudget, nowMs: () -> Long, open: (send: (Event) -> Unit) -> ScanRadio): Flow<Event> = callbackFlow {
+        if (!budget.tryAcquire(nowMs())) {
+            val code = SCANNING_TOO_FREQUENTLY
+            trySend(Event.Failed(code, describe(code)))
+            close()
+            return@callbackFlow
+        }
         val firstSeen = CompletableDeferred<Unit>()
         val radio = open { ev ->
             if (ev is Event.Seen) firstSeen.complete(Unit)
             trySend(ev)
         }
-        budget.record(nowMs())
-        radio.start(ScanMode.LOW_LATENCY)
-        launch {
+        val radioLock = Any()
+        var closed = false
+        try {
+            radio.start(ScanMode.LOW_LATENCY)
+        } catch (e: Exception) {
+            radio.stop()
+            throw e
+        }
+        val stepDown = launch {
             withTimeoutOrNull(plan.lowLatencyMs) {
                 firstSeen.await()
                 delay(plan.settleMs)
             }
-            if (budget.allowsRestart(nowMs())) {
-                radio.stop()
-                budget.record(nowMs())
-                radio.start(ScanMode.BALANCED)
+            synchronized(radioLock) {
+                if (!closed && budget.tryAcquire(nowMs(), reserveStarts = 1)) {
+                    radio.stop()
+                    radio.start(ScanMode.BALANCED)
+                }
             }
         }
-        launch {
+        val timeout = launch {
             delay(plan.totalMs)
             channel.close()
         }
-        awaitClose { radio.stop() }
+        awaitClose {
+            stepDown.cancel()
+            timeout.cancel()
+            synchronized(radioLock) {
+                closed = true
+                radio.stop()
+            }
+        }
     }
 
     private fun describe(code: Int) = when (code) {
@@ -184,7 +180,7 @@ object BleScanner {
         ScanCallback.SCAN_FAILED_FEATURE_UNSUPPORTED -> "BLE scanning unsupported on this phone"
         ScanCallback.SCAN_FAILED_INTERNAL_ERROR -> "internal Bluetooth error"
         ScanCallback.SCAN_FAILED_OUT_OF_HARDWARE_RESOURCES -> "out of Bluetooth hardware resources"
-        ScanCallback.SCAN_FAILED_SCANNING_TOO_FREQUENTLY -> "scanning too frequently; wait a moment"
+        SCANNING_TOO_FREQUENTLY -> "scanning too frequently; wait a moment"
         else -> "scan failed ($code)"
     }
 }
