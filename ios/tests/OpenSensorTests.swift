@@ -19,4 +19,9 @@ struct OpenSensorTests {
     func cancellation() async {
         await CancellationChecks.run()
     }
+
+    @Test("Bluetooth GATT order, late callbacks, stale senders, write failure, cancellation and broken bonds")
+    func bluetoothGatt() {
+        BleGattChecks.run()
+    }
 }

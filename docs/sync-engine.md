@@ -75,8 +75,9 @@ Android `DeviceFacade` owns one collection controller per address and routes Syn
 Smart Sync, one-file sync and worker requests into it. `DeviceLinkOwner` lends connections
 and owns manual commands and idle reconnect. `DeviceConnectionRepository` is the
 compatibility typealias for the facade. iOS uses the shared link, collector and engine through
-`SensorSync`. Shared controller adoption remains
-[#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81).
+`SensorSync`, and `SensorCollections` holds one controller per device over `IosLinkProvider`,
+which dials through Swift when a retry finds no open link. Routing the Swift entry points into
+it remains [#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81).
 
 ## Planner (`SyncPlanner`)
 

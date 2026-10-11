@@ -86,6 +86,7 @@
     <string name="companion_ble_characteristics_missing">This sensor is missing the required live-reading characteristics.</string>
     <string name="companion_ble_notify_failed">Notifications could not be enabled. Check the pairing PIN and try again.</string>
     <string name="companion_ble_read_failed">The sensor could not be read. Check the pairing PIN and try again.</string>
+    <string name="companion_ble_pairing_removed">The sensor reset its pairing. Forget it in iOS Settings, Bluetooth, then pair again.</string>
     <string name="companion_wifi_access_saving_message">Saving Wi-Fi access…</string>
     <string name="companion_wifi_access_timed_out">Wi-Fi access timed out. Reconnect over Bluetooth and try again.</string>
     <string name="companion_lan_gone">This Wi-Fi sensor is no longer available. Find Wi-Fi sensors again.</string>

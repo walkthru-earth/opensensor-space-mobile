@@ -54,11 +54,20 @@ The iOS app entry point is the Xcode project in this directory. Read the root
   `assumeIsolated` checks trap at run time, so keep every delegate, browser and timer on the queue
   that matches its isolation.
 - UI-facing adapters (`BluetoothCompanion`, `LanDiscovery`, scene delegates) are `@MainActor`.
-  `BluetoothCompanion` conforms to the Core Bluetooth delegates as isolated conformances
-  (`@MainActor CBCentralManagerDelegate`, SE-0470), which holds because the central runs on the
-  main queue. `NWBrowser` and `Timer` callbacks are delivered on the main queue and enter with
+  `NWBrowser` and `Timer` callbacks are delivered on the main queue and enter with
   `MainActor.assumeIsolated`. Do not wrap each callback in `Task { @MainActor in }`, which gives up
   delivery order.
+- `BlePhysicalLink` is an actor whose executor is its own serial queue. The central manager runs
+  on that queue, and a private `NSObject` proxy forwards each delegate callback with
+  `assumeIsolated`, which traps on any other queue. The pure `BleGattQueue` runs one GATT
+  operation at a time, refuses writes from a stale sender and completes each write once. RESPONSE
+  frames and STATUS go straight to the connection's `IosLink`. Main-side events reach
+  `BluetoothCompanion` in order, tagged with a connection number that drops stale ones.
+- `BleBondFailure` reads Core Bluetooth's error. `peerRemovedPairingInformation`,
+  `encryptionTimedOut` and the ATT `insufficientEncryption` and `insufficientAuthentication` mean
+  the sensor refused this phone's pairing keys, as after its bonds were reset. The link then ends as
+  `Auth(BOND_MISSING)`, which no run retries, and the notice asks to forget the sensor in iOS
+  Settings and pair again (P15, P30).
 - A closure formed in an isolated method and handed to a Kotlin or Apple API that is not
   concurrency annotated inherits that isolation, and Swift 6 checks it on entry. Mark such a
   closure `@Sendable` when it can run on another thread (`IosLink.whenClosed`,
@@ -66,20 +75,23 @@ The iOS app entry point is the Xcode project in this directory. Read the root
 - `LanSession` is an actor whose executor is its own serial queue. `NWConnection` callbacks and
   `DispatchSourceTimer` handlers run on that queue and enter with `assumeIsolated`. Owners learn
   about pushes and closure through the ordered `events` stream. `close()` is nonisolated.
-- File sync runs in the shared Kotlin engine (`SensorSync`). Swift only moves bytes through the
+- File sync runs in the shared Kotlin engine (`SensorSync`, and `SensorCollections` for the shared
+  per-device controller, whose `IosLinkProvider` dials through Swift). Swift only moves bytes through the
   connection's one `IosLink` and receives progress and the typed result on the main thread. Values that cross
   domains (`LanReply`, `LanFailure`, `LanCredential`) are Sendable Swift values. Kotlin framework
   objects are not Sendable. Keep each one inside a single isolation domain. A main-actor
   `RunSlot` keeps the engine result, so it never crosses a continuation.
   `RunSlot.cancel` records an atomic cancellation marker synchronously before hopping to main.
   `set` checks that marker before returning, so an already cancelled caller cancels its new handle.
-- Two unchecked conformances remain, each with a one-line invariant at its declaration in
-  `LanSession.swift`. `IosLink` is `@retroactive @unchecked Sendable` because its entry points are
+- Two unchecked conformances remain in `LanSession.swift`, each with a one-line invariant at its
+  declaration. `IosLink` is `@retroactive @unchecked Sendable` because its entry points are
   thread safe in Kotlin and the ObjC header cannot say so. `IosLink.make` binds the identity
   before the link is shared, and Kotlin checks the one-time atomic binding in every build.
   `WriteDone` wraps Kotlin's write callback, which runs once from any
   thread, and debug builds trap a second call. The ports (`LanPort`, `BlePort`) are checked
-  `Sendable` through `weak let` (SE-0481), and `BlePort.link` is a `@MainActor` property.
+  `Sendable` through `weak let` (SE-0481). `BlePort` holds the physical link and its sender id.
+  The private `Delivered` box in `BlePhysicalLink.swift` is unchecked too. It carries Core
+  Bluetooth objects into `assumeIsolated` on the queue that delivered them.
 - Default MainActor isolation (`SWIFT_DEFAULT_ACTOR_ISOLATION`, SE-0466) stays off. It would move
   `SensorArchive`, `LanFrameBuffer` and `LanPolicy` onto the main actor, and socket framing would
   return to the UI thread.
@@ -93,13 +105,14 @@ The iOS app entry point is the Xcode project in this directory. Read the root
 ## Tests
 
 `OpenSensorTests` is a hostless Swift Testing bundle. It compiles `App/SensorArchive.swift`,
-`App/LanFraming.swift`, `App/LanPolicy.swift` and `App/RunSlot.swift` with `tests/ArchiveChecks.swift`,
-`tests/TransferChecks.swift` and `tests/CancellationChecks.swift`, so it needs neither the app host
+`App/LanFraming.swift`, `App/LanPolicy.swift`, `App/RunSlot.swift` and `App/BleGattQueue.swift` with
+`tests/ArchiveChecks.swift`, `tests/TransferChecks.swift`, `tests/CancellationChecks.swift` and
+`tests/BleGattChecks.swift`, so it needs neither the app host
 nor the Kotlin framework. Run it
 with `xcodebuild ... -destination 'platform=iOS Simulator,name=<installed iPhone>'
 CODE_SIGNING_ALLOWED=NO test`. `tests/verify-native.sh` runs the same checks on the Mac host.
 Add new socket or archive cases to the shared check files so both runners exercise them. File
-sync cases belong in `shared/src/iosTest` (`SensorSyncTest`) and `core/sync` tests.
+sync cases belong in `shared/src/iosTest` (`SensorSyncTest`, `SensorCollectionsTest`) and `core/sync` tests.
 Code that imports `OpenSensorShared` cannot join the hostless bundle and still needs
 simulator builds and iPhone runs.
 

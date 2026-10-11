@@ -118,10 +118,16 @@ File sync on iOS runs the shared engine, the same `SyncEngine` and `ArchiveColle
 `:core:sync` that Android runs. Each connection holds one `IosLink` (`ios/shared` iosMain) over `LinkSession`, and each sync,
 command or request takes a lease of it. Files LIST and inspector requests borrow that same
 connection link. `IosLink` owns request routing, drain and owed CLOSE through `LinkSession`.
-iOS collection intent and retry remain in native adapters, pending
+`SensorCollections` holds one shared `CollectionController` per device. Its `IosLinkProvider`
+lends the open link Swift holds, or asks Swift to dial one through `dial` and waits for it, so
+the controller owns retries, fresh LIST planning and the clock receipt of the exact link. A run
+that ends early still reports the files it saved. The Swift entry points (interactive sync,
+Collect all, background) still start `SensorSync` and keep native resume state, pending
 [#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81). Core Bluetooth
-remains `@MainActor`, pending the physical link queue split in
-[#80](https://github.com/walkthru-earth/opensensor-space-mobile/issues/80). The Swift 6 actor,
+runs in `BlePhysicalLink`, an actor whose executor is one serial queue. Discovery, GATT
+operations, notifications and write completions stay on that queue, and `BluetoothCompanion`
+keeps UI state and coordination on the main actor. A refused bond ends the connection without a
+retry and asks to pair again from iOS Settings. The Swift 6 actor,
 callback and synchronous `RunSlot.cancel` rules are in [iOS AGENTS](../ios/AGENTS.md#concurrency-model).
 `LanSession` passes LAN frame bodies through it, and `BluetoothCompanion` passes the `control`
 writes and `response` notifications. `SensorSync` owns the `IosArchiveStore` and
@@ -229,8 +235,9 @@ Xcode on Linux. On a Mac it also runs `verifyIos` (skip with `-Popensensor.skipI
 presentation tests, and links the shared framework. It needs an installed simulator runtime. The Xcode build compiles the Swift BLE
 adapter and app too, in the Swift 6 language mode with `SWIFT_STRICT_CONCURRENCY = complete` and no warnings. The native
 checks cover LAN claims, framing, Local Network denial detection, policy and outbound keepalive
-timing, plus early cancellation, immediate completion and background cancellation of the main-actor
-run slot. Resume, verification, conflicts, names and window retry are tested once in `:core:sync`
+timing, early cancellation, immediate completion and background cancellation of the main-actor
+run slot, plus the Bluetooth GATT queue order, late callbacks, stale senders, write failure and
+cancellation. Resume, verification, conflicts, names and window retry are tested once in `:core:sync`
 and `:core:archive` `commonTest`, and the iOS runner and notices in `ios/shared`
 (`SensorSyncTest`, `SyncOutcomeTest`, `CompanionNoticeTest`), all inside `verifyIos`. `verify-native.sh` compiles them on the Mac host in the Swift 6 language mode with complete concurrency checking and
 warnings as errors. The hostless `OpenSensorTests` Swift Testing target runs the same checks on an

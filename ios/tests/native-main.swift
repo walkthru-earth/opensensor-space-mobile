@@ -4,5 +4,6 @@
         try ArchiveChecks.run()
         try await TransferChecks.run()
         await CancellationChecks.run()
+        BleGattChecks.run()
     }
 }
