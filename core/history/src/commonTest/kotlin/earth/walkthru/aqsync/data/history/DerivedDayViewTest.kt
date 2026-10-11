@@ -11,6 +11,7 @@ import earth.walkthru.aqsync.archive.PartialWriter
 import earth.walkthru.aqsync.data.history.parquet.ByteArrayReader
 import earth.walkthru.aqsync.data.history.parquet.ByteReader
 import earth.walkthru.aqsync.data.history.parquet.ColumnValues
+import earth.walkthru.aqsync.data.history.parquet.FooterCache
 import earth.walkthru.aqsync.data.history.parquet.MemoryRangeSource
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 import earth.walkthru.aqsync.data.history.parquet.ParquetType
@@ -339,5 +340,56 @@ class DerivedDayViewTest {
         val recovered = HistorySeriesReader(store, index, tiers, derived = failsAfterReading).observe(station, Metrics.PM25, HistoryRange.DAY, window).first()
         assertTrue(failedCloses > 0)
         assertEquals(expected, recovered)
+    }
+
+    @Test
+    fun aSecondReadOfADerivedDayReusesItsFooter() = runTest {
+        val bytes = respread()
+        val station = ParquetFile.wrap(bytes).metadata.stationId ?: "derived-station"
+        val store = Store()
+        val index = Index()
+        val r = ArchiveRecord(station, "station=$station/day/part.parquet", bytes.size.toLong(), 1, "s", 1, "fake")
+        store.files[r.key] = bytes
+        index.put(r)
+        ArchiveIndexRepair(store, index, nowEpochMs = { 42L }).backfillAll()
+        val tiers = ArchiveHistoryTiers(store, index)
+        val days = HashMap<Long, ByteArray>()
+        for (epochDay in listOf(day, day + 1)) {
+            val sink = MemorySink()
+            DayPass.run(station, epochDay, index.rows.value.map { s -> DailyParquetSource(s) { ParquetFile.wrap(store.files.getValue(s.key)) } }, sink, emptyMap(), 0, tiers = false)
+            days[epochDay] = sink.toByteArray()
+        }
+        // The same identity as the good file, but the footer in its tail is garbage. Only a reader
+        // that already holds the parsed footer can read it.
+        var corrupt = false
+        val derived = DerivedDayFiles { _, epochDay, _, _ ->
+            val good = days[epochDay] ?: return@DerivedDayFiles null
+            val source = MemoryRangeSource(good, "derived/$epochDay", "v1")
+            if (!corrupt) return@DerivedDayFiles source
+            val footerLength = (good[good.size - 8].toInt() and 0xff) or ((good[good.size - 7].toInt() and 0xff) shl 8) or
+                ((good[good.size - 6].toInt() and 0xff) shl 16) or ((good[good.size - 5].toInt() and 0xff) shl 24)
+            val damaged = good.copyOf().also { it.fill(0x7f, it.size - 8 - footerLength, it.size - 8) }
+            object : RangeSource by source {
+                override suspend fun readTail(n: Int) = MemoryRangeSource(damaged, "derived/$epochDay", "v1").readTail(n)
+            }
+        }
+        // Both sides of midnight, so the window reads two derived days.
+        val window = HistoryWindow(day * 86_400 + 9 * 3_600, (day + 1) * 86_400 + 9 * 3_600, TimeZone.UTC)
+        val footers = FooterCache(4)
+        val reader = HistorySeriesReader(store, index, tiers, derived = derived, footers = footers)
+        store.reads = 0
+        val expected = reader.observe(station, Metrics.PM25, HistoryRange.DAY, window).first()
+        assertTrue(expected.points.isNotEmpty())
+        assertEquals(2, footers.size)
+
+        corrupt = true
+        store.reads = 0
+        val cold = HistorySeriesReader(store, index, tiers, derived = derived).observe(station, Metrics.BOARD_TEMP, HistoryRange.DAY, window).first()
+        assertTrue(store.reads > 0, "without the footer the damaged tail falls back to the raw file")
+        store.reads = 0
+        val warm = reader.observe(station, Metrics.BOARD_TEMP, HistoryRange.DAY, window).first()
+        assertEquals(0, store.reads, "the cached footer serves the second read")
+        assertEquals(cold, warm)
+        assertEquals(2, footers.size)
     }
 }

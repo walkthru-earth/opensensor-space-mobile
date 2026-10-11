@@ -41,7 +41,9 @@ Bytes reach the decoder through two narrow seams, a blocking `ByteReader` and a 
   (64 KiB `LOCAL`, 128 KiB `CELLULAR`, 256 KiB `WIFI`), which holds the footer and the page index, and
   one more read only when the footer is longer. A file under `wholeFileBelowBytes` is read whole the
   first time a scan needs bytes outside the tail. The `FooterCache` (LRU, 256 entries by default, keyed
-  by `SourceId`) keeps parsed footers and page indexes, so reopening a file parses nothing.
+  by `SourceId`) keeps parsed footers and page indexes, so reopening a file parses nothing. The Discover
+  feed and the History Day view's derived day files (32 entries, [history pipeline](history-pipeline.md))
+  use one.
 - `scan(ScanRequest(columns, rowGroups, filterColumn, filterRanges))` prunes row groups by footer
   statistics, then pages by the `ColumnIndex` min and max of the INT32 or INT64 filter column, mapped
   to byte ranges through each column's `OffsetIndex`. Only the surviving pages are fetched and decoded,
