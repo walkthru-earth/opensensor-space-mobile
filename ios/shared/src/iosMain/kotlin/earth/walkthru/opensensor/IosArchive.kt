@@ -121,8 +121,13 @@ internal object IosArchive {
     /** Free space per class, asked before a sync opens any file (#55). */
     val budget: StorageBudget by lazy { IosStorageBudget(roots) }
 
-    /** iOS has no per app cache quota call, so the derived quota is the policy's. */
-    val derivedQuota: DerivedQuota by lazy { DerivedQuota(QuotaEnforcer(roots, IosStorageTree(), log = ::println)) }
+    /**
+     * iOS has no per app cache quota call, so the derived quota is the stored policy's, read at each
+     * enforcement.
+     */
+    val derivedQuota: DerivedQuota by lazy {
+        DerivedQuota(QuotaEnforcer(roots, IosStorageTree(), log = ::println)) { settingsRepository.current().retention.derivedQuotaBytes }
+    }
 
     /** The Settings Storage card. Clearing touches the derived day files and the map tiles only (#61). */
     val storageControls: StorageControls by lazy {

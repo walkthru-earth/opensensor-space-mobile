@@ -17,7 +17,7 @@ flowchart TB
     PF[":core:publicfeed<br/>Discover feed port, H3, viewport cover, sample"]
     UN[":core:units<br/>display units, axis ticks"]
     AR1[":core:archive<br/>layout, verifier, records, store ports"]
-    SE[":core:settings<br/>app preferences on DataStore, detail level"]
+    SE[":core:settings<br/>app preferences on DataStore, detail level, cache quotas"]
     ST[":core:storage<br/>atomic files, storage budget, quotas, memory caches"]
     SY1[":core:sync<br/>LinkSession, SyncEngine, ArchiveCollector, CollectionController"]
   end
@@ -37,7 +37,7 @@ flowchart TB
   PF --> PQ & AQ
   NT --> PQ
   DI --> PF & UN & DS & PM
-  SE --> UN
+  SE --> UN & ST
   FS --> SE & DS
   SH --> DS
   APP --> SY1 & ST & HI & PF & UN & DI & DS & SE & FS & PM & SH

@@ -98,7 +98,7 @@ import platform.Foundation.timeIntervalSince1970
  * The one settings store for the process. DataStore allows one instance per file, so it lives
  * outside composition. The first read imports the two settings older builds kept in UserDefaults.
  */
-private val settingsRepository: SettingsRepository by lazy { iosSettingsRepository() }
+internal val settingsRepository: SettingsRepository by lazy { iosSettingsRepository() }
 
 /**
  * Holds the Discover controller for the Discover entry, so it survives tab switches and is cleared
