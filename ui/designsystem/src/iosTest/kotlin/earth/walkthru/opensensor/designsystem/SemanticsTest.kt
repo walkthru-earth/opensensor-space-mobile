@@ -155,6 +155,28 @@ class SemanticsTest {
     }
 
     @Test
+    fun visibleCaptionsKeepTheStripOneNode() = runComposeUiTest {
+        setContent {
+            MaterialTheme {
+                Column {
+                    MoodStripLayout(
+                        blocks = listOf(MoodBlock(WhoStep.GUIDELINE), MoodBlock(null), MoodBlock(WhoStep.IT2)),
+                        words = listOf("Fresh air", "n/a", "Poor"),
+                        captions = listOf("7 days", "24 hours", "Last hour"),
+                        selected = null,
+                        selectedSpoken = null,
+                        onBlock = null,
+                        modifier = Modifier.testTag("captioned"),
+                    )
+                }
+            }
+        }
+        onNodeWithTag("captioned").onChildren().assertCountEquals(0)
+        // The caption row sits under the 28 dp bar.
+        onNodeWithTag("captioned").assertHeightIsAtLeast(40.dp)
+    }
+
+    @Test
     fun aMoodLegendIsOneSpokenNode() = runComposeUiTest {
         setContent {
             MaterialTheme {

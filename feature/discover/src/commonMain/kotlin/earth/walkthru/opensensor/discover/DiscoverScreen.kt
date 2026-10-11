@@ -504,7 +504,7 @@ private fun SheetContent(
         when {
             !state.available -> DiscoverStateMessage(strings.unavailable, PeacockExpression.CONCERNED)
             showAll -> AllProperties(state, strings, onPickProperty)
-            state.selected != null && simple -> SimpleCellDetail(state.selected, state, strings, infoButton, reference, onShowProperty)
+            state.selected != null && simple -> SimpleCellDetail(state, strings, infoButton, reference, onShowProperty)
             state.selected != null -> CellDetail(state.selected, state, strings, infoButton, reference, clearSignal, onHighlight, onShowProperty)
             state.firstRun -> FirstRunCard(strings, onAddSensor, onExplore)
             else -> InView(state, strings, networkAllowed, simple, reference, highlight, clearSignal, onHighlight, onPickCell)
@@ -750,7 +750,6 @@ private fun CellDetail(
  */
 @Composable
 private fun SimpleCellDetail(
-    row: CellRow,
     state: DiscoverUiState,
     strings: DiscoverStrings,
     infoButton: @Composable (InfoText, Modifier) -> Unit,
@@ -807,10 +806,13 @@ private fun SimpleCellDetail(
             Text(strings.notMeasured, style = MaterialTheme.typography.titleMedium)
         }
         Spacer(Modifier.height(8.dp))
-        val stale = reference - row.updatedEpochMs >= earth.walkthru.aqsync.publicfeed.CellFreshness.STALE_AFTER_MS
-        val parts = listOfNotNull(strings.sensors(row.devices), if (stale) strings.stale else freshness(strings, row.updatedEpochMs, reference))
-        Text(parts.joinToString("  "), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        val others = state.dictionary.filter { it.id != property?.id }.mapNotNull { p -> row.mean(p.id)?.let { p to it } }
+        // Sensors, freshness and the other values come from the 24 hour row, like the headline.
+        val facts = state.simpleCellFacts()
+        val updated = facts.updatedEpochMs
+        val stale = updated != null && reference - updated >= earth.walkthru.aqsync.publicfeed.CellFreshness.STALE_AFTER_MS
+        val parts = listOfNotNull(facts.devices?.let { strings.sensors(it) }, if (stale) strings.stale else freshness(strings, updated, reference))
+        if (parts.isNotEmpty()) Text(parts.joinToString("  "), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        val others = facts.others
         if (others.isNotEmpty()) {
             Spacer(Modifier.height(16.dp))
             HorizontalDivider()
@@ -820,7 +822,7 @@ private fun SimpleCellDetail(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(p.label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-                    Text("${formatValue(mean, p, units)} ${unitLabel(p, units)}", style = MaterialTheme.typography.bodyLarge)
+                    Text(mean?.let { "${formatValue(it, p, units)} ${unitLabel(p, units)}" } ?: notAvailableText(), style = MaterialTheme.typography.bodyLarge)
                 }
             }
         }

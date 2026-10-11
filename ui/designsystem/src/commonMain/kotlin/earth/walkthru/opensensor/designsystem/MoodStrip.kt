@@ -5,12 +5,14 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,6 +31,8 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import earth.walkthru.aqsync.airquality.MoodBlock
 import earth.walkthru.aqsync.airquality.WhoStep
@@ -132,11 +136,13 @@ internal fun MoodStripLayout(
 ) {
     val shown = blocks.indices.filter { blocks[it].weight > 0f }
     val summary = moodSummary(shown.map { words[it] }, shown.map { captions.getOrNull(it) })
+    val captioned = shown.any { captions.getOrNull(it) != null }
     val outline = MaterialTheme.colorScheme.onSurface
     val hatch = MaterialTheme.colorScheme.outline
     val track = MaterialTheme.colorScheme.surfaceContainerHighest
-    Row(
-        modifier.fillMaxWidth().height(if (onBlock != null) 48.dp else 28.dp).clearAndSetSemantics {
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    BoxWithConstraints(
+        modifier.fillMaxWidth().clearAndSetSemantics {
             contentDescription = summary
             if (selectedSpoken != null) stateDescription = selectedSpoken
             if (onBlock != null) {
@@ -148,31 +154,69 @@ internal fun MoodStripLayout(
                 }
             }
         },
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
     ) {
-        shown.forEach { i ->
-            val block = blocks[i]
-            val shape = RoundedCornerShape(6.dp)
-            // The bar is 28 dp. A tappable strip is taller, each block's full height is its target.
-            var m = Modifier.fillMaxWidth().height(28.dp).clip(shape)
-            val step = block.step
-            m = if (step != null) {
-                m.background(Color(step.color))
-            } else {
-                m.background(track).drawBehind {
-                    val gap = 6.dp.toPx()
-                    var x = -size.height
-                    while (x < size.width) {
-                        drawLine(hatch, Offset(x, size.height), Offset(x + size.height, 0f), strokeWidth = 1.dp.toPx())
-                        x += gap
+        // A tappable block is at least 48 dp wide and tall. The rest keep their weights.
+        val available = maxWidth.value - GAP.value * (shown.size - 1).coerceAtLeast(0)
+        val widths = blockWidths(shown.map { blocks[it].weight }, available, if (onBlock != null) 48f else 0f)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(GAP)) {
+            shown.forEachIndexed { k, i ->
+                val block = blocks[i]
+                val shape = RoundedCornerShape(6.dp)
+                var bar = Modifier.fillMaxWidth().height(28.dp).clip(shape)
+                val step = block.step
+                bar = if (step != null) {
+                    bar.background(Color(step.color))
+                } else {
+                    bar.background(track).drawBehind {
+                        val gap = 6.dp.toPx()
+                        var x = -size.height
+                        while (x < size.width) {
+                            drawLine(hatch, Offset(x, size.height), Offset(x + size.height, 0f), strokeWidth = 1.dp.toPx())
+                            x += gap
+                        }
+                    }
+                }
+                if (i == selected) bar = bar.border(2.dp, outline, shape)
+                // The bar and its caption are one target, the whole column takes the tap.
+                var target = Modifier.width(widths[k].dp)
+                if (onBlock != null) target = target.heightIn(min = 48.dp).clickable(role = Role.Button) { onBlock(i) }
+                Column(target, verticalArrangement = Arrangement.Center) {
+                    Box(bar)
+                    if (captioned) {
+                        Text(
+                            captions.getOrNull(i).orEmpty(),
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = muted,
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
                 }
             }
-            if (i == selected) m = m.border(2.dp, outline, shape)
-            var target = Modifier.weight(block.weight).fillMaxHeight()
-            if (onBlock != null) target = target.clickable(role = Role.Button) { onBlock(i) }
-            Box(target, contentAlignment = Alignment.Center) { Box(m) }
         }
+    }
+}
+
+private val GAP = 3.dp
+
+/**
+ * Block widths in [available], proportional to [weights], each at least [min]. A block whose share
+ * falls under [min] is lifted to it and the others share what is left. When [min] cannot fit for
+ * every block, they share the width equally.
+ */
+internal fun blockWidths(weights: List<Float>, available: Float, min: Float): List<Float> {
+    val n = weights.size
+    if (n == 0) return emptyList()
+    if (min * n >= available) return List(n) { available / n }
+    val fixed = BooleanArray(n)
+    while (true) {
+        val freeWeight = weights.indices.filter { !fixed[it] }.sumOf { weights[it].toDouble() }.toFloat()
+        val freeSpace = available - min * fixed.count { it }
+        val lifted = weights.indices.filter { !fixed[it] && weights[it] * freeSpace / freeWeight < min }
+        if (lifted.isEmpty()) return weights.indices.map { if (fixed[it]) min else weights[it] * freeSpace / freeWeight }
+        lifted.forEach { fixed[it] = true }
     }
 }
 

@@ -51,4 +51,24 @@ class MoodCopyTest {
         assertEquals("PM2.5. Fresh air, Fair", legendSummary(listOf("Fresh air", "Fair"), "PM2.5"))
         assertEquals("Fresh air, Fair", legendSummary(listOf("Fresh air", "Fair"), null))
     }
+
+    @Test
+    fun blockWidthsFollowWeightsWithoutAMinimum() {
+        assertEquals(listOf(100f, 200f), blockWidths(listOf(1f, 2f), available = 300f, min = 0f))
+    }
+
+    @Test
+    fun aSmallBlockStillGetsItsMinimumTouchWidth() {
+        val widths = blockWidths(listOf(1f, 99f), available = 300f, min = 48f)
+        assertEquals(48f, widths[0])
+        assertEquals(252f, widths[1])
+        // A second small block is lifted too, the rest keep their proportion.
+        val three = blockWidths(listOf(1f, 2f, 97f), available = 300f, min = 48f)
+        assertEquals(listOf(48f, 48f, 204f), three)
+    }
+
+    @Test
+    fun tooManyBlocksForTheMinimumShareTheWidthEqually() {
+        assertEquals(listOf(50f, 50f, 50f), blockWidths(listOf(1f, 5f, 9f), available = 150f, min = 48f * 2))
+    }
 }

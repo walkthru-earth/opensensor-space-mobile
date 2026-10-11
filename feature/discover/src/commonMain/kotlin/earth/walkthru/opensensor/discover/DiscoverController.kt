@@ -101,6 +101,25 @@ fun DiscoverUiState.selectedSummary(property: FeedProperty): StationSummary? {
 }
 
 /**
+ * What the Simple cell sheet shows under the headline, all from the 24 hour row like the headline.
+ * The row of the window on screen can still be the previous window's during a switch, so it is
+ * never read for values. Null [devices] and [updatedEpochMs] until the 24 hour row lands.
+ */
+internal data class SimpleCellFacts(val devices: Int?, val updatedEpochMs: Long?, val others: List<Pair<FeedProperty, Double?>>)
+
+/**
+ * The selected cell's 24 hour facts. [SimpleCellFacts.others] lists every other measurement the
+ * cell reports, its 24 hour mean or null ("n/a") while that row is missing or lacks it.
+ */
+internal fun DiscoverUiState.simpleCellFacts(): SimpleCellFacts {
+    val day = if (selected == null) null else selectedWindows[FeedWindow.DAY]
+    val others = dictionary
+        .filter { p -> p.id != property?.id && (day?.mean(p.id) != null || selected?.mean(p.id) != null) }
+        .map { p -> p to day?.mean(p.id) }
+    return SimpleCellFacts(day?.devices, day?.updatedEpochMs, others)
+}
+
+/**
  * State holder of the Discover screen. Android keeps it in a ViewModel, iOS in the composition.
  * Reads run on [io], never on the main thread, and only after the camera rests for 400 ms.
  */
