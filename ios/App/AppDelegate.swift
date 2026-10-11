@@ -88,11 +88,11 @@ final class AppServices {
         bluetooth.onCollectFinished = { [weak self] id, ok in self?.devices.collectFinished(id: id, ok: ok) }
         lan.onCollectFinished = { [weak self] id, ok in
             guard let self else { return }
-            if ok {
-                self.devices.collectFinished(id: id, ok: true)
+            if ok || !self.devices.collectRetries(id: id) {
+                self.devices.collectFinished(id: id, ok: ok)
             } else {
-                // A partial LAN attempt can continue over the bonded BLE link. The shared
-                // collector will skip verified files and resume any retained partial bytes.
+                // A partial LAN attempt can continue over the bonded BLE link, unless the pass was
+                // cancelled. The shared collector skips verified files and resumes retained bytes.
                 self.bluetooth.releaseIdleForCollect(next: id)
                 self.bluetooth.collect(id: id)
             }
@@ -252,15 +252,10 @@ final class AppServices {
         if bluetooth.deviceId == device { bluetooth.cancelInteractiveSync() }
     }
 
-    func openConfigLink(device: String) -> SensorLink? {
-        if bluetooth.deviceId == device, let link = bluetooth.openConfigLink(device: device) { return link }
-        if lan.holds(device: device) { return lan.openConfigLink(device: device) }
-        return bluetooth.openConfigLink(device: device)
-    }
-
-    func openDebugLink(device: String) -> SensorLink? {
-        if lan.holds(device: device) { return lan.openConfigLink(device: device) }
-        return bluetooth.openDebugLink(device: device)
+    /// The open connection's shared link to this sensor, Wi-Fi first. Debug, Device settings and
+    /// Files take leases of it.
+    func linkFor(device: String) -> IosLink? {
+        lan.link(device: device) ?? bluetooth.link(device: device)
     }
 }
 
@@ -299,9 +294,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             syncBluetooth: { [weak services] id in services?.syncSensor(id: id) },
             syncInBackground: { [weak services] id in KotlinBoolean(value: services?.autoSync.syncInBackground(id) ?? false) },
             closeIdle: { [weak services] id in services?.closeIdle(id: id) },
-            openDebugLink: { [weak services] device in services?.openDebugLink(device: device) },
+            linkFor: { [weak services] device in services?.linkFor(device: device) },
             command: { [weak services] id, command in services?.commandSensor(id: id, command: command) },
-            openConfigLink: { [weak services] device in services?.openConfigLink(device: device) },
             syncOneFile: { [weak services] id, name in services?.syncOneFile(id: id, name: name) },
             cancelSync: { [weak services] id in services?.cancelSync(id: id) },
             forgetWifiAccess: { [weak services] device in services?.forgetWifiAccess(device: device) },
@@ -327,8 +321,9 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     func sceneDidEnterBackground(_ scene: UIScene) {
         guard let services else { return }
         services.cancelPendingOpen()
-        // Collect all is a foreground pass. The step in flight ends with the link below.
-        services.devices.cancelCollectAll()
+        // Collect all is a foreground pass, unless iOS 26 took it as a continued task. Otherwise the
+        // step in flight ends with the link below.
+        if !services.autoSync.collectAllContinues { services.devices.cancelCollectAll() }
         services.bluetooth.suspend()
         services.lan.enterBackground()
         services.autoSync.enteredBackground()
@@ -342,7 +337,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     func sceneDidDisconnect(_ scene: UIScene) {
         guard let services else { return }
         services.cancelPendingOpen()
-        services.devices.cancelCollectAll()
+        if !services.autoSync.collectAllContinues { services.devices.cancelCollectAll() }
         services.bluetooth.suspend()
         services.lan.suspend()
     }

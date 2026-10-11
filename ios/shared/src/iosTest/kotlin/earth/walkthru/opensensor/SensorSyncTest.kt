@@ -4,11 +4,15 @@ package earth.walkthru.opensensor
 
 import earth.walkthru.aqsync.archive.IosArchiveStore
 import earth.walkthru.aqsync.archive.ReceiptArchiveIndex
+import earth.walkthru.aqsync.collection.LinkPreference
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.protocol.FrameCodec
 import earth.walkthru.aqsync.data.protocol.Opcode
 import earth.walkthru.aqsync.data.protocol.ParquetVerify
 import earth.walkthru.aqsync.data.protocol.ProtocolError
+import earth.walkthru.aqsync.link.DisconnectCause
+import earth.walkthru.aqsync.link.LinkClosedException
+import earth.walkthru.aqsync.link.TimeoutPhase
 import earth.walkthru.aqsync.storage.FakeStorageBudget
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
@@ -36,6 +40,8 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 /** The Swift-facing runner and the [IosLink] leases over a scripted sensor, on the iOS archive. */
 class SensorSyncTest {
@@ -204,7 +210,7 @@ class SensorSyncTest {
             (req[0].toInt() and 0xFF == Opcode.STATUS).also {
                 if (it) link.offerStatus("{\"utc\":1,\"clk\":1,\"clk_age_s\":60}")
             }
-        }.also { it.identify(station, "same-boot") }
+        }.also { it.identify(station, "same-boot", 1024) }
         val done = CompletableDeferred<SyncResult>()
         runner.start(link, station, "a1b2c3d4e5f6", 4096, {}) { done.complete(it) }
         assertEquals(SyncEnd.COMPLETE, withTimeout(20_000) { done.await() }.end)
@@ -224,7 +230,7 @@ class SensorSyncTest {
             recordClockAnchor = { st, boot, utc, mono -> anchors += Anchor(st, boot, utc, mono) },
             budget = FakeStorageBudget(),
         )
-        val link = sensor().also { it.identify(station, "full-boot-identity") }
+        val link = sensor().also { it.identify(station, "full-boot-identity", 1024) }
         val done = CompletableDeferred<SyncResult>()
         runner.start(link, station, "a1b2c3d4e5f6", 4096, {}) { done.complete(it) }
         assertEquals(SyncEnd.COMPLETE, withTimeout(20_000) { done.await() }.end)
@@ -494,5 +500,36 @@ class SensorSyncTest {
         assertFalse(assertFailsWith<LeaseRefusedException> { link.acquire(LeaseKind.DEBUG) }.syncRunning)
         link.whenClosed { calls.incrementAndGet() }
         assertEquals(2, calls.value)
+    }
+
+    @Test
+    fun theProviderLendsASyncLeaseAndReleaseGivesItBackOnce() = runBlocking {
+        val link = sensor().also { it.identify(station, "boot", 1024) }
+        val provider = IosLinkProvider({ link }, 5.seconds, Dispatchers.Default)
+        val lent = provider.connect("a1b2c3d4e5f6", LinkPreference.ANY)
+        assertEquals(station, lent.station)
+        assertEquals(1024, lent.maxRead)
+        assertTrue(link.syncRunning)
+        lent.release()
+        lent.release()
+        assertFalse(link.leased)
+        assertEquals(DisconnectCause.Unreachable, assertFailsWith<LinkClosedException> { provider.connect("a1b2c3d4e5f6", LinkPreference.BLE) }.disconnectCause)
+    }
+
+    @Test
+    fun aProviderConnectTimesOutOrCancelsAndLendsNothing() = runBlocking {
+        val link = sensor().also { it.identify(station, "boot", 1024) }
+        val held = link.acquire(LeaseKind.DEBUG)
+        val provider = IosLinkProvider({ link }, 200.milliseconds, Dispatchers.Default)
+        val timedOut = assertFailsWith<LinkClosedException> { provider.connect("a1b2c3d4e5f6", LinkPreference.ANY) }
+        assertEquals(DisconnectCause.Timeout(TimeoutPhase.OPEN, 0), timedOut.disconnectCause)
+
+        val waiting = launch(Dispatchers.Default) { IosLinkProvider({ link }, 5.seconds, Dispatchers.Default).connect("a1b2c3d4e5f6", LinkPreference.ANY) }
+        yield()
+        waiting.cancel()
+        waiting.join()
+        held.end()
+        assertFalse(link.leased)
+        withTimeout(5_000) { link.leased(LeaseKind.DEBUG) { } }
     }
 }

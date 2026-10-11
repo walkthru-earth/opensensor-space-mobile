@@ -113,7 +113,8 @@ copies with `usePinned` and `memcpy`; no hex strings remain on the transfer path
 handshake takes the token as `Data` and zeroes the Kotlin copies after building the frame.
 
 File sync on iOS runs the shared engine, the same `SyncEngine` and `ArchiveCollector` from
-`:core:sync` that Android runs. Swift lends each sync a `SensorLink` (`ios/shared` iosMain).
+`:core:sync` that Android runs. Each connection holds one `IosLink` (`ios/shared` iosMain) over `LinkSession`, and each sync,
+command or request takes a lease of it.
 `LanSession` passes LAN frame bodies through it, and `BluetoothCompanion` passes the `control`
 writes and `response` notifications. `SensorSync` owns the `IosArchiveStore` and
 `ReceiptArchiveIndex` from `:core:archive` iosMain, runs off the main thread, reports progress at
@@ -341,9 +342,9 @@ accuracy, stale/background handling or authenticated Wi-Fi connections. See
 
 LAN and Bluetooth file sync use the shared Kotlin engine. Swift keeps the sockets, Core
 Bluetooth, LAN framing, the HELLO check, keepalive, the BLE token request and Keychain.
-The shared Debug and Device settings screens borrow a short `SensorLink` over authenticated LAN
-when available or Bluetooth, one per request. Closing the link (`SensorLink.whenClosed`) hands it
-back to Swift. Token acquisition and replacement still need bonded Bluetooth.
+The shared Debug and Device settings screens take a lease of the connection's `IosLink`, over
+authenticated LAN when available or Bluetooth, one per request. Ending the lease hands the link
+back to Swift, which keeps it open while the connection lives. Token acquisition and replacement still need bonded Bluetooth.
 `SensorArchive.swift` remains only for Files export. Android's Room index, WorkManager and
 foreground service stay Android code.
 

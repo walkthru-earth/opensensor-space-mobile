@@ -23,7 +23,7 @@ import kotlin.time.Duration
  * queue never fills. The session must be the transport's only reader.
  *
  * [recorder] keeps the raw frames for Advanced, Debug. [info] stands in for the `info` read on a
- * transport that cannot read it. The iOS [AqTransport] lent by `SensorLink` is one, and the native
+ * transport that cannot read it. The iOS `IosLink` transport is one, and the native
  * side has already refused proto below 3 before lending it (`SyncWire.identity`).
  */
 @OptIn(ExperimentalAtomicApi::class)

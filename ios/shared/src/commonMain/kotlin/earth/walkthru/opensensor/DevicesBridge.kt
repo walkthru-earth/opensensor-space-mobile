@@ -180,7 +180,16 @@ class DevicesBridge internal constructor(
     private val collecting = MutableStateFlow(false)
     private var queue: CollectAllQueue? = null
 
+    /** The pass going now was cancelled, so a failed step takes no fallback attempt. */
+    private var collectCancelled = false
+
     internal val known: StateFlow<List<KnownRecord>> get() = records.asStateFlow()
+
+    /**
+     * Hears each Collect all change on the main thread, steps ended and steps planned, then (0, 0)
+     * once the pass ended. iOS 26 shows a running pass as a continued task (#58).
+     */
+    var collectAllChanged: ((done: Int, total: Int) -> Unit)? = null
 
     /** True while a Collect all pass owns the Bluetooth link between its steps. */
     internal val collectAllRunning: Boolean get() = collecting.value
@@ -230,9 +239,16 @@ class DevicesBridge internal constructor(
         settle(q)
     }
 
+    /** Whether a failed Wi-Fi step of the pass going now may try again over Bluetooth. */
+    fun collectRetries(id: String): Boolean {
+        val q = queue ?: return false
+        return !collectCancelled && id in q.runningIds
+    }
+
     /** Leaving the foreground ends Collect all. A running step finishes or fails on its own. */
     fun cancelCollectAll() {
         val q = queue ?: return
+        collectCancelled = true
         q.cancel()
         settle(q)
     }
@@ -306,15 +322,20 @@ class DevicesBridge internal constructor(
         if (plan.isEmpty()) return
         val q = CollectAllQueue(plan)
         queue = q
+        collectCancelled = false
         collecting.value = true
         q.start().forEach { collect(it.id, it.wifiName) }
         settle(q)
     }
 
     private fun settle(q: CollectAllQueue) {
-        if (queue === q && !q.active) {
+        if (queue !== q) return
+        if (q.active) {
+            collectAllChanged?.invoke(q.succeeded + q.failed, q.total)
+        } else {
             queue = null
             collecting.value = false
+            collectAllChanged?.invoke(0, 0)
         }
     }
 

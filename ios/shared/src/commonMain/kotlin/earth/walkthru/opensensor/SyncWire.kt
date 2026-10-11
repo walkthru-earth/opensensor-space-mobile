@@ -5,6 +5,7 @@ import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.protocol.FrameCodec
 import earth.walkthru.aqsync.data.protocol.LanProtocol
+import earth.walkthru.aqsync.data.protocol.Opcode
 import earth.walkthru.aqsync.data.protocol.ProtoGate
 import earth.walkthru.aqsync.data.protocol.Request
 import earth.walkthru.aqsync.data.protocol.requireProto3
@@ -88,6 +89,9 @@ class SyncReply(
     val json: String = "",
     internal val bytes: ByteArray = EMPTY,
 ) {
+    /** A TOKEN, or the ERROR that answers `GET_TOKEN`. Swift keeps these, the link takes the rest. */
+    val answersToken: Boolean get() = kind == "token" || (kind == "error" && op == Opcode.GET_TOKEN)
+
     override fun toString(): String = "SyncReply($kind)"
 
     private companion object {
