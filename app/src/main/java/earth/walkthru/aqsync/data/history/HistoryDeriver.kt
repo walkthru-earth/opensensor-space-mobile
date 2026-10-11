@@ -26,7 +26,15 @@ import javax.inject.Singleton
 fun interface HistoryRefresher {
     suspend fun deriveStale(): HistoryDeriver.Result
 
+    /** After a sync, rebuilds only the days that files archived since [sinceEpochMs] touch. */
+    suspend fun deriveAfterSync(sinceEpochMs: Long): HistoryDeriver.Result = deriveStale()
+
     suspend fun recordClockAnchor(station: String, boot: String, utcNs: Long, monotonicUs: Long) {}
+}
+
+/** Queues the stale days a post-sync pass skipped for a full pass under a charging constraint. */
+fun interface DeriveBackfill {
+    fun schedule()
 }
 
 /**
@@ -47,8 +55,10 @@ class HistoryDeriver @Inject constructor(
     private val store: DerivedStore,
     private val indexer: HistoryIndexer,
     private val quota: DerivedQuota,
+    private val backfill: DeriveBackfill = DeriveBackfill {},
 ) : HistoryRefresher {
-    data class Result(val daysChecked: Int, val daysRebuilt: Int, val rowsAggregated: Long)
+    /** [daysDeferred] counts stale days a post-sync pass left to [DeriveBackfill]. */
+    data class Result(val daysChecked: Int, val daysRebuilt: Int, val rowsAggregated: Long, val daysDeferred: Int = 0)
 
     private val dailyBuilder = DailyDerivedBuilder(store) { station, name -> archive.fileFor(station, name) }
 
@@ -77,18 +87,34 @@ class HistoryDeriver @Inject constructor(
 
     override suspend fun deriveStale(): Result = deriveStale(null)
 
-    suspend fun deriveStale(stations: Collection<String>? = null): Result = mutex.withLock {
+    /**
+     * Rebuilds the days that files synced since [sinceEpochMs] touch, so a sync never pays for a
+     * backfill. Any other stale day of those stations goes to [backfill].
+     */
+    override suspend fun deriveAfterSync(sinceEpochMs: Long): Result {
+        val result = deriveStale(null, touchedSinceEpochMs = sinceEpochMs)
+        if (result.daysDeferred > 0) {
+            Log.i(TAG, "deferred ${result.daysDeferred} stale station-days to the charging backfill")
+            backfill.schedule()
+        }
+        return result
+    }
+
+    suspend fun deriveStale(stations: Collection<String>? = null, touchedSinceEpochMs: Long? = null): Result = mutex.withLock {
         withContext(Dispatchers.IO) {
             var checked = 0
             var rebuilt = 0
             var rows = 0L
+            var deferred = 0
             // A file that just arrived may be the first timed file of a boot: re-date that boot's unsynced files first.
             indexer.estimateTimes()
             val all = archivedFileDao.observeAll().first()
             val wanted = daysOf(all)
             val anchorsByStation = all.groupBy { it.station }.mapValues { (_, files) -> TimeEstimate.anchors(files.map { it.info() }, indexer.clockAnchors.anchors(files.first().station)) }
             // Stations that only have derived days left (every dated file gone) must be visited too, to drop them.
-            val allStations = (wanted.keys + dayDao.stations()).filter { stations == null || it in stations }
+            // Read after the re-dating above, so a file that just got its time counts on its real days.
+            val touched = touchedSinceEpochMs?.let { since -> daysOf(all.filter { it.syncedAtEpochMs >= since }) }
+            val allStations = (wanted.keys + dayDao.stations()).filter { (stations == null || it in stations) && (touched == null || it in touched) }
             for (station in allStations) {
                 val days = wanted[station] ?: emptySet()
                 val known = dayDao.forStation(station).associateBy { it.epochDay }
@@ -101,6 +127,10 @@ class HistoryDeriver @Inject constructor(
                     // A missing day file with a current signature was evicted by the quota or the OS. It is a
                     // cache miss, rebuilt when the export reads it, not here, so eviction never churns.
                     if (cached?.sourceSignature == sig && cached.dailyFile != null) continue
+                    if (touched != null && day !in touched.getValue(station)) {
+                        deferred++
+                        continue
+                    }
                     val built = buildDay(station, day, sources, anchorsByStation[station] ?: emptyMap())
                     rebuilt++
                     rows += built
@@ -118,7 +148,7 @@ class HistoryDeriver @Inject constructor(
             // every pass was the symptom of the @Upsert bug (README decisions, 2026-09-18).
             if (rebuilt > 0) Log.i(TAG, "derived $rebuilt of $checked station-days ($rows rows)") else Log.d(TAG, "derived 0 of $checked station-days (nothing changed)")
             if (rebuilt > 0) enforceQuota()
-            Result(checked, rebuilt, rows)
+            Result(checked, rebuilt, rows, deferred)
         }
     }
 

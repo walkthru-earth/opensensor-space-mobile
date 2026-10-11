@@ -18,9 +18,7 @@ import earth.walkthru.aqsync.data.coroutines.suspendRunCatching
 import earth.walkthru.aqsync.data.history.HistoryDeriver
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
@@ -79,6 +77,7 @@ class SyncWorker @AssistedInject constructor(
             Log.w(TAG, "foreground refused (${e::class.simpleName}); running as a plain job")
         }
         val notificationManager = applicationContext.getSystemService(NotificationManager::class.java)
+        val startedMs = System.currentTimeMillis()
         val report = try {
             coroutineScope {
                 val mirror = launch {
@@ -88,13 +87,12 @@ class SyncWorker @AssistedInject constructor(
                     }
                         .distinctUntilChanged()
                         .filter { (_, p) -> p.running }
-                        // Progress arrives per CHUNK; NotificationManager sheds posts above ~5/s.
-                        .conflate()
-                        .collect { (name, progress) ->
+                        // Progress arrives per CHUNK. Post at reading speed and only while the screen
+                        // is on. The run's outcome is the summary posted after it.
+                        .postPaced(NOTIFY_INTERVAL_MS, screenInteractive(applicationContext)) { (name, progress) ->
                             if (foreground || notifications.canPost) {
                                 runCatching { notificationManager.notify(notificationId, notifications.progress(name, progress, WorkManager.getInstance(applicationContext).createCancelPendingIntent(id))) }
                             }
-                            delay(NOTIFY_INTERVAL_MS)
                         }
                 }
                 try {
@@ -125,8 +123,9 @@ class SyncWorker @AssistedInject constructor(
             suspendRunCatching { advertScan.ensureRegisteredNow() }.onFailure { Log.w(TAG, "flag scan re-register failed: ${it.message}") }
         }
         if (report.newFiles > 0) {
-            // Still inside the worker's run: the tiers for the days that just gained files.
-            suspendRunCatching { historyDeriver.deriveStale() }.onFailure { Log.w(TAG, "derive failed: ${it.message}") }
+            // Still inside the worker's run: the tiers for the days that just gained files. Older
+            // stale days wait for the charging backfill.
+            suspendRunCatching { historyDeriver.deriveAfterSync(startedMs) }.onFailure { Log.w(TAG, "derive failed: ${it.message}") }
         }
         if (report.shouldNotify) {
             notifications.postSummary(report.summaryDeviceName, report.newFiles, report.newBytes, report.failures)
@@ -147,7 +146,6 @@ class SyncWorker @AssistedInject constructor(
             NOTIFICATION_ID_BASE + ((workId.mostSignificantBits xor workId.leastSignificantBits).hashCode() and 0x0FFF_FFFF)
 
         private const val TAG = "SyncWorker"
-        private const val NOTIFY_INTERVAL_MS = 500L
 
         /** Retries (with the request's exponential backoff) within one period before waiting for the next. */
         const val MAX_RETRIES = BackgroundSyncPolicy.MAX_RETRIES
