@@ -242,7 +242,12 @@ actor BlePhysicalLink {
         current = peripheral
         peripheral.delegate = callbacks
         if cancelling.contains(peripheral.identifier) {
-            // An earlier cancel is still in flight. Its disconnect callback connects this one.
+            // An earlier cancel is still in flight. Its disconnect callback connects this one. If iOS
+            // never answers a cancelled pending connect, connect anyway after a short wait.
+            let id = peripheral.identifier
+            queue.asyncAfter(deadline: .now() + Self.cancelAnswerWait) { [self] in
+                assumeIsolated { $0.connectAfterCancel(id, number: number) }
+            }
             return
         }
         if peripheral.state == .connected {
@@ -262,6 +267,15 @@ actor BlePhysicalLink {
         }
         central.cancelPeripheralConnection(peripheral)
     }
+
+    private func connectAfterCancel(_ id: UUID, number: UInt64) {
+        guard connection == number, let peripheral = current, peripheral.identifier == id,
+            cancelling.remove(id) != nil, peripheral.state != .connected
+        else { return }
+        central?.connect(peripheral)
+    }
+
+    private static let cancelAnswerWait: DispatchTimeInterval = .seconds(2)
 
     /// True when this callback answers an earlier cancel. A connection opened since then connects now.
     private func answersCancel(_ peripheral: CBPeripheral) -> Bool {
