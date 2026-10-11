@@ -3,14 +3,17 @@
 Read only the matching concern in repository-root `docs/README.md` before
 editing. Core codec and analysis
 logic belongs in `:core:*`; this layer adapts Android BLE, LAN, files, Room and
-WorkManager. One `AqTransport` and one `DeviceSession` serve both foreground and
-background sync; do not fork transfer logic.
+WorkManager. Each physical connection has one shared `LinkSession`; `DeviceSession` is
+a typed view. `DeviceFacade` routes interactive and worker collection through one
+`CollectionController` per address. `DeviceLinkOwner` owns connections, identity, manual
+commands and idle reconnect. `DeviceConnectionRepository` is a compatibility typealias.
+The shared `ArchiveCollector` plans and the shared `SyncEngine` downloads through archive ports.
 
 | Change | Owner | Contract / test |
 | --- | --- | --- |
-| GATT, pairing, frames | `ble/`, `DeviceConnectionRepository.kt` | `docs/transports.md`, `docs/protocol-quickref.md`, fake transport tests |
+| GATT, pairing, frames | `ble/`, `DeviceLinkOwner.kt` | `docs/transports.md`, `docs/protocol-quickref.md`, fake transport tests |
 | TCP, discovery, token, WifiLock | `lan/` | `docs/transports.md`; mDNS addresses only, token from bonded BLE |
-| Plan, read windows, resume, archive | `sync/` | `docs/sync-engine.md`; fake faults and CRC/PAR1 verification |
+| Plan, read windows, resume, archive | `DeviceFacade.kt`, `core/sync/` | `docs/sync-engine.md`; fake faults and CRC/PAR1 verification |
 | Worker, foreground lifetime, triggers | `background/` | `docs/background-sync.md`; all triggers enqueue the same worker |
 | Index, derived history, Room | `history/`, `local/` | `docs/history-pipeline.md`, `docs/data-model.md` |
 
@@ -27,11 +30,18 @@ background sync; do not fork transfer logic.
   `LanCredentialStore` decrypts, when a LAN transport is built.
 - Coroutines: wrap suspend calls in `suspendRunCatching`, never `runCatching`.
   Inject dispatchers, `@ApplicationScope`, `WallClock` and `MonotonicTime`
-  (`data/coroutines/`, `data/di/CoroutinesModule.kt`). Commands and background
-  runs take the repository's operation gate; job handles change under its lock.
-- Work that outlives a screen uses WorkManager and its `dataSync` foreground
-  notification. The worker does not pair or scan. A LAN WifiLock is held only
-  during an active LAN transfer and released in `finally`.
+  (`data/coroutines/`, `data/di/CoroutinesModule.kt`). Commands and collection reservations
+  check and set under the link owner's lock. `CollectionAdmission` atomically excludes
+  interactive and worker collections process-wide. `CollectionBudget` shares two transfer
+  permits across both. Ownership remains held through cleanup.
+- Interactive PROCESS leases start the `connectedDevice` foreground service from the tap,
+  with `dataSync` as the permission fallback. They cover preparation, retry waiting and
+  finalization. Active retries belong to `CollectionController`, idle reconnect to the link owner.
+  Workers use their own `dataSync` foreground notification or bounded ordinary job, never
+  a second app service. Each attempt has an eight-minute deadline including preparation and
+  finalization. `SyncWorker.notificationIdFor` derives a stable ID from the WorkRequest.
+  Workers do not pair or scan. LAN WIFI leases cover LIST/PLAN, transfer and finalization
+  after a permit is acquired, and are released in `finally`.
 - Network use outside BLE and LAN is limited to the planned anonymous, read-only
   discover feed and basemap GETs, and per-device opt-in uploads
   (`docs/devices-and-discovery.md`). No other remote call belongs in this layer.

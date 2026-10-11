@@ -7,7 +7,18 @@ that removes it by moving decisions, data and screens into shared Kotlin. **Code
 raw audits in [parity-audit/](parity-audit/) (A screens, B transport and sync, C storage and
 history, D settings, background and permissions, E build, tests and docs).
 
-## Where we are
+## Current status
+
+The 2026-10-09 baseline and wave tables below are historical planning, not current ownership.
+Both platforms now use shared `LinkSession`, `SyncEngine` and `ArchiveCollector`. Android
+also adopts `CollectionController` through `DeviceFacade`. iOS controller adoption remains
+[#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81), and its BLE physical
+queue split remains [#80](https://github.com/walkthru-earth/opensensor-space-mobile/issues/80).
+Settings and the feature screens are shared, and iOS persists history tiers. Room KMP
+backing and `core/model` remain planned. Read [architecture](architecture.md) and
+[iOS migration](ios-migration.md) for current code and qualification limits.
+
+## Baseline on 2026-10-09
 
 Android is about 19k lines with 9 destinations, a full sync engine, Room, history and background
 sync. iOS is about 3k lines: one Compose screen (`CompanionScreen.kt`), Discover, and Swift adapters

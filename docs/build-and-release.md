@@ -51,14 +51,20 @@ the audits even when `:ui:strings` compiled classes have not changed, so a previ
 cannot hide new untranslated copy or missing semantics. The release workflow runs the same host
 audits through `verify`; release-only APK optimization and signer checks remain additional steps.
 
+GitHub Actions currently does not run because of account billing. The workflow descriptions
+below describe configured jobs, not completed CI. Local gates are the acceptance evidence.
+Mobile CodeRabbit provides summaries only, so use a scoped source review before opening a PR.
+Run `./ios/tests/verify-native.sh` for the native host checks. No host or simulator gate qualifies
+phone radio, screen-off collection or board behavior.
+
 ## Stack (verified building 2026-10-09; kotlinx-datetime 0.8.0 added for W8)
 
 | | |
 | --- | --- |
 | Language / UI | Kotlin 2.4.21, Jetpack Compose (BOM 2026.09.00, material3 1.4.0), the shared `:ui:designsystem` theme and vendored icons (no dynamic color, no `material-icons-extended`), Navigation 3 (1.1.7) |
 | DI / data | Hilt 2.60.1, Room 2.8.5 (**schema v10**), DataStore Preferences 1.2.1, WorkManager 2.12.0 + `androidx.hilt:hilt-work` 1.4.0, kotlinx.serialization 1.11.0, kotlinx-datetime 0.8.0 (shared calendar math, added 2026-10-08), coroutines 1.11.0 |
-| Native | `zstd-jni` 1.5.7-20 (`@aar`). Discover (W12, 2026-10-08) adds `maplibre-compose` 0.19.0 with its OpenGL Android runtime (MapLibre Native through `maplibre-native-ffi`, armeabi-v7a, arm64-v8a, x86_64) and `com.uber:h3` 4.5.0 (JNI). `app/build.gradle.kts` (`ExtractH3Jni`) copies the h3 arm64 and arm libraries out of the jar into `jniLibs` and excludes the jar copies. The jar has no x86_64 build, so Discover shows its empty state there. iOS compiles the vendored H3 C 4.5.0 (`core/publicfeed/src/nativeInterop/h3c`) with `xcrun clang` and binds it through cinterop |
-| Build | AGP 9.4.1, Gradle 9.8.0 (configuration cache on), KSP 2.3.12, version catalog, R8 for release. Every `:core` module (protocol, parquet, history, publicfeed, units, airquality, archive, and the empty sync and settings) targets JVM (Java 17) and iOS. `:ui:designsystem` and `:feature:discover` use `opensensor.kmp.compose-feature`, Compose Multiplatform 1.12.1 for Android (`com.android.kotlin.multiplatform.library`) and iOS, not the JVM, because the maplibre-compose desktop variant needs Java 25. `:ios:shared` targets iOS only |
+| Native | `zstd-jni` 1.5.7-20 (`@aar`). Discover (W12, 2026-10-08) adds `maplibre-compose` 0.19.0 with its OpenGL Android runtime (MapLibre Native through `maplibre-native-ffi`, armeabi-v7a, arm64-v8a, x86_64) and `com.uber:h3` 4.5.0 (JNI). `app/build.gradle.kts` (`ExtractH3Jni`) copies the h3 arm64 and arm libraries out of the jar into `jniLibs` and excludes the jar copies. The APK packages only arm64-v8a and armeabi-v7a because H3 lacks x86 builds. `tools/check_apk_abis.py` checks that set. iOS compiles the vendored H3 C 4.5.0 (`core/publicfeed/src/nativeInterop/h3c`) with `xcrun clang` and binds it through cinterop |
+| Build | AGP 9.4.1, Gradle 9.8.0 (configuration cache on), KSP 2.3.12, version catalog, R8 for release. Every `:core` module (protocol, parquet, history, publicfeed, units, airquality, archive, storage, net, sync and settings) targets JVM (Java 17) and iOS. `:ui:designsystem` and `:feature:discover` use `opensensor.kmp.compose-feature`, Compose Multiplatform 1.12.1 for Android (`com.android.kotlin.multiplatform.library`) and iOS, not the JVM, because the maplibre-compose desktop variant needs Java 25. `:ios:shared` targets iOS only |
 | SDK | `compileSdk`/`targetSdk` **37**, `minSdk` **31** (modern Bluetooth permission model; no legacy branches) |
 | Style | ktlint `intellij_idea`, `max_line_length = off`, house rules off (`{ a; b }` one-liners, compact `when`, one-line enums, `_x` backing fields, `function-signature`) |
 
@@ -100,7 +106,7 @@ and the [Xcode 27 image inventory](https://github.com/actions/runner-images/blob
 | `setup-gradle` with `cache-provider: basic` | Owns Gradle caching and wrapper validation, using standard GitHub caching. Do not also enable Gradle caching in `setup-java`. |
 | Separate `~/.konan` cache | Reuses the native compiler/dependencies, keyed by architecture, Xcode and dependency/build definitions. No DerivedData cache. |
 | Two Gradle workers | Limits simultaneous native compilation on the standard runner's 7 GB RAM. |
-| `ios/tests/verify-native.sh` | Compiles the production Swift archive/transfer engine into a host harness; checks resume, CRC/PAR1, immutable conflicts, peer handles, concurrent stations and keepalive policy. No radio or UI qualification. |
+| `ios/tests/verify-native.sh` | Compiles native archive export, LAN framing/policy and RunSlot cancellation checks in Swift 6 with complete concurrency checking and warnings as errors. Shared transfer checks run in Kotlin tests. No radio or UI qualification. |
 | `verifyIos` | Runs the simulator tests of every shared module (each `:core` module, `:ui:designsystem`, `:feature:discover`, `:ios:shared`) and links the Debug framework. |
 | Xcode Debug simulator build | Compiles Swift adapters, app entry point and the Compose framework through the existing direct-integration build phase. |
 | Xcode Release device build, signing disabled | Checks optimized Kotlin and Swift for device ARM64. Catches failures hidden by Debug/simulator builds; produces no distributable IPA. |
@@ -364,7 +370,7 @@ validated certificate. A fresh main run must pass this corrected check before pu
 
 ## Fake device (debug builds, `FakeTransport`)
 
-Menu → *Debug: fake device* (`FA:KE:00:00:00:01`) speaks protocol v2 in-process: three small
+Menu → *Debug: fake device* (`FA:KE:00:00:00:01`) speaks proto 3 in-process, three small
 `PAR1…PAR1` files + one **1 MiB** benchmark file (≈ 8 s at the fake's chunk pace, enough to watch
 the notification, Stop, and a `.partial` resume), correct CRCs, `live` JSON every **10 s**, a fake
 configuration (pairing, Wi-Fi, LAN), a Wi-Fi scan list (`home` / `walkthru-field` / `CoffeeShop

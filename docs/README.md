@@ -12,9 +12,9 @@ then pairs and collects their own devices over BLE or LAN into a verified local 
 screens explain readings in plain words. Technical detail lives behind the Detailed and
 Developer levels. Android and iOS share rules, sync and design. Read
 [devices-and-discovery.md](devices-and-discovery.md), [cross-platform-guide.md](cross-platform-guide.md)
-and [production-readiness-plan.md](production-readiness-plan.md) before planning new work. Older
-files describe the current Android-first, air-quality-first implementation and stay accurate for
-that code until the plan's workstreams replace it.
+and [production-readiness-plan.md](production-readiness-plan.md) before planning new work. Use [architecture.md](architecture.md), [sync-engine.md](sync-engine.md) and
+[ios-migration.md](ios-migration.md) for current source ownership. Dated audits and plan
+wave tables describe their original revision, not current implementation status.
 
 ## Routing table
 
@@ -26,17 +26,18 @@ that code until the plan's workstreams replace it.
 | See the Android and iOS drift audit and the parity plan | [platform-parity-plan.md](platform-parity-plan.md), [parity-audit/](parity-audit/) | every module |
 | See what still differs between Android and iOS, and why | [platform-differences.md](platform-differences.md), [parity-decisions.md](parity-decisions.md) | `app/`, `ios/App/` |
 | See the production refactor plan and its workstreams | [production-readiness-plan.md](production-readiness-plan.md) | every module |
-| Understand the opensensor.space rebrand, concurrent multi-device collection and reset/reflash recovery | [opensensor-space.md](opensensor-space.md) (implementation and remaining qualification) | `data/DeviceConnectionRepository.kt`, `data/background/`, `data/sync/`, `ui/`; new firmware owner `../aq-parquet/docs/shared/` |
+| Understand the opensensor.space rebrand, concurrent multi-device collection and reset/reflash recovery | [opensensor-space.md](opensensor-space.md) (implementation and remaining qualification) | `data/DeviceFacade.kt`, `data/DeviceLinkOwner.kt`, `data/background/`, `core/sync/`, `ui/`; new firmware owner `../aq-parquet/docs/shared/` |
 | Build or extend the iOS app and shared Kotlin core | [ios-migration.md](ios-migration.md), `../ios/AGENTS.md` | `core/*/src/commonMain/`, `ios/` |
 | Understand modules, layers, who depends on whom, "what a change touches" | [architecture.md](architecture.md) | `core/*/build.gradle.kts`, `app/build.gradle.kts` |
 | Change a screen, the nav graph, detail levels | [screens.md](screens.md) | `app/…/ui/`, `data/settings/AppSettings.kt` |
 | Permissions, privacy manifest, Play Data safety and App Store label | [store-compliance.md](store-compliance.md) | `app/src/main/AndroidManifest.xml`, `ui/permissions/`, `ios/App/` |
 | Look up an opcode, frame type, error code, UUID, LAN framing constant | [protocol-quickref.md](protocol-quickref.md) | `core/protocol/…/Frames.kt`, `AqUuids.kt`, `LanFraming.kt` |
-| Touch BLE / LAN pipes, pairing, the LAN token, mDNS, reconnect | [transports.md](transports.md) | `data/ble/`, `data/lan/`, `data/DeviceConnectionRepository.kt` |
-| Touch file download, verification, lost windows, resume, archive paths | [sync-engine.md](sync-engine.md) | `data/sync/`, `data/ble/DeviceSession.kt` |
+| Touch BLE / LAN pipes, pairing, the LAN token, mDNS, reconnect | [transports.md](transports.md) | `data/ble/`, `data/lan/`, `data/DeviceLinkOwner.kt`, `core/sync/link/` |
+| Touch file download, verification, lost windows, resume, archive paths | [sync-engine.md](sync-engine.md) | `core/sync/`, `data/archive/`, `data/DeviceFacade.kt`, `ios/shared/` |
 | Touch auto-sync, WorkManager, the foreground notification, WifiLock, or the triggers that start a run early (companion presence, advertising flags, Wi-Fi arrival) | [background-sync.md](background-sync.md) | `data/background/`, `data/lan/LanWifiLock.kt`, `core/protocol/.../Advertisement.kt` |
 | Touch Room tables, migrations, DataStore keys, on-disk layout, backup | [data-model.md](data-model.md) | `data/local/database/`, `app/schemas/`, `res/xml/data_extraction_rules.xml` |
 | Touch the index → tiers → derived-day → chart pipeline, metrics, moods, time estimate | [history-pipeline.md](history-pipeline.md) | `core/history/`, `data/history/`, `ui/history/` |
+| Reproduce history host benchmarks and understand their limits | [perf/history-2026-10-11.md](perf/history-2026-10-11.md) | `tools/history-benchmark/` |
 | Recover UTC after reboot, automatic clock sync, corrected day partitions | [time-reconciliation.md](time-reconciliation.md) | `core/archive/`, `core/history/`, `data/history/`, `ios/` |
 | Touch the Parquet reader/writer, GeoParquet, codecs, fixtures, oracles | [parquet.md](parquet.md) | `core/parquet/`, `tools/*.py` |
 | Build, sign, release, run hooks/CI, use the fake device | [build-and-release.md](build-and-release.md) | `tools/`, `.github/workflows/`, `data/fake/` |

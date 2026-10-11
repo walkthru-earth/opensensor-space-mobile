@@ -1,8 +1,13 @@
 # Sync engine — pull, verify, archive
 
 **Scope:** the file transfer: planner → engine → archive; integrity; lost windows; stale-frame drain; resume; the state-changing requests.
-**Code:** Shared in `core/sync` commonMain: `data/sync/SyncEngine.kt`, `ArchiveCollector.kt`, `data/sync/SyncPlanner.kt`, `ReadWindow.kt`, `WindowRetryPolicy.kt`, `SyncResumePolicy.kt`, `FileProgress.kt`, `FileProgressReporter.kt`, `RateMeter.kt`, `data/ManifestState.kt`, `data/SyncProgress.kt`, `ArchiveWriter.kt`, `ArchiveRoom.kt`, `data/ble/DeviceSession.kt` (`read`, `reboot`), `link/LinkSession.kt`, `collection/` (`CollectionController`, #56). `core/protocol/…/ParquetVerify.kt`, `Sha256.kt`. Android adapters `data/archive/FileArchiveStore.kt`, `SyncEngineModule.kt`, `data/sync/FileArchive.kt`. iOS adapters `core/archive` iosMain `IosArchiveStore.kt`, `ReceiptArchiveIndex.kt`, and `ios/shared` iosMain `SensorSync.kt`, `IosLink.kt`.
-**Tests:** `:core:sync` commonTest `SyncEngineTest`, `ArchiveCollectorTest`, `SyncPlannerTest`, `StopAndBackpressureTest`, `DeviceSessionTest`, `LinkSessionTest`, `LinkOweCloseTest`, `WindowRetryPolicyTest`, `RateMeterTest`, `SyncResumePolicyTest`, `CollectionControllerTest` (fake `FakeArchiveDevice` with `dropLeadingChunks` / `closedDelayMs`). App `ConcurrentArchiveTest` over the Android adapters. iOS simulator `SensorSyncTest`. `:core:protocol` `ParquetVerifyTest`, `Sha256Test`.
+**Code:** `core/sync` commonMain `link/`, `collection/`, `data/ble/DeviceSession.kt`,
+`data/sync/SyncEngine.kt` and `ArchiveCollector.kt`. Android `data/DeviceFacade.kt`,
+`DeviceLinkOwner.kt`, `data/archive/` and `data/sync/FileArchive.kt`. iOS `core/archive`
+iosMain and `ios/shared` iosMain `SensorSync.kt`, `IosLink.kt` and `FilesBridge.kt`.
+**Tests:** Shared `LinkSessionTest`, `DeviceSessionTest`, `SyncEngineTest`,
+`ArchiveCollectorTest`, `CollectionControllerTest`, drain, owed CLOSE and window recovery
+regressions. Android facade and `ConcurrentArchiveTest`. iOS simulator `SensorSyncTest`.
 **Related:** [transports.md](transports.md) (the pipe underneath), [data-model.md](data-model.md) (what is recorded), [history-pipeline.md](history-pipeline.md) (what runs after).
 
 ## One engine on both phones
@@ -36,7 +41,7 @@ sentence for them.
 | HELLO mismatch | `msg_identity_*` | Same keys. A different hardware ID and a different station now give different notices |
 | Today Smart Sync | Syncs over the link the router picked | Routes to Wi-Fi when an idle LAN session for the same sensor is open; the shared Today card shows its progress and result |
 | Phone storage fault | `msg_file_failed` for that file, the run goes on | The run goes on and ends with `companion_sync_storage_failed`. The link stays |
-| Lost foreground sync | Handled by the sync service and `SyncResumePolicy` | BLE and LAN each retry a transient link loss twice, then leave retained partial bytes for an explicit retry. Stop and disconnect cancel pending attempts |
+| Lost foreground sync | Shared `CollectionController` retries preparation and transfer while PROCESS remains held | BLE and LAN each retry a transient link loss twice, then leave retained partial bytes for an explicit retry. Stop and disconnect cancel pending attempts |
 | BLE writes | With response | `control` with response, payload sized from the without-response length |
 | Background | `SyncWorker` on WorkManager | A UIKit background-task lease for LAN collections only. Expiry pauses, and foreground return resumes |
 
@@ -66,18 +71,28 @@ sequenceDiagram
 
 Sync is a **pull of immutable files**. The device is never asked to delete, rename or rewrite.
 
+Android `DeviceFacade` owns one collection controller per address and routes Sync all,
+Smart Sync, one-file sync and worker requests into it. `DeviceLinkOwner` lends connections
+and owns manual commands and idle reconnect. `DeviceConnectionRepository` is the
+compatibility typealias for the facade. iOS uses the shared link, collector and engine through
+`SensorSync`. Shared controller adoption remains
+[#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81).
+
 ## Planner (`SyncPlanner`)
 
 Groups the manifest by `HivePartition` (`Dated` / `Unsynced` boot / `Benchmarks` / `Other`),
 validates names, and diffs against `archived_file` + partials → `SyncPlan.toDownload` and
-`missingBytes`. Verified files are skipped, so a resume only pulls what is missing.
+`missingBytes`. Android supplies projected `station`, `name`, `bytes` and `crc32` archive
+identities, not full history rows. Verified files are skipped, so a resume only pulls what
+is missing. Each controller attempt takes a fresh LIST and archive snapshot.
 `FileSyncState`: `NOT_SYNCED · PARTIAL · SYNCING · SYNCED · MISMATCH · INVALID_NAME`.
 
 ## Integrity (`ParquetVerify`)
 
 Synced ⇔ exactly `size` bytes **and** own CRC-32 == `OPENED.crc32` **and** head/tail `PAR1`. Then
-written atomically (temp + rename) under the **verbatim Hive path**, SHA-256'd, recorded in Room
-with its history index in the same upsert. `OPENED.name` ≠ requested name → `Mismatch`, not
+committed without replacement through `AtomicFiles` under the **verbatim Hive path**,
+SHA-256 calculated and recorded, then indexed. Android records archive and history index in one Room
+transaction. iOS persists a verification receipt. `OPENED.name` ≠ requested name → `Mismatch`, not
 silently accepted. Nothing incomplete is ever presented as data.
 
 ## Disk writes and Stop (#55)
@@ -117,7 +132,8 @@ the commit and the index record is repaired by `StorageJanitor` at the next star
 physical concurrent transfers remain unverified.
 
 The per-address controller reserves interactive/background ownership and the manager rejects
-competing full hardware IDs; a physical board still has one file handle across BLE and LAN.
+competing full hardware IDs. Current proto 3 firmware has independent logical handles
+per BLE connection and LAN peer. Phone ownership policy remains per physical device.
 Raw Hive paths and outer INFO-station namespaces remain unchanged. After station regeneration,
 a retained inner Hive station mismatch is archived/exportable but excluded from the new station's
 history. Earlier epochs remain separately selectable. Richer producer provenance and duplicate
@@ -169,13 +185,16 @@ until `READ_END`, and only then `WindowLostException` is thrown, so a late windo
 the next `READ`. `LIST` checks the count in `LIST_END` and throws `ProtocolViolationException` on
 a mismatch, with the link still Ready.
 
-Session timeouts: `FRAME_TIMEOUT_MS` 15 s per frame, `OPEN_TIMEOUT_MS` 60 s (the device may be
-finalizing), `WIFI_SCAN_TIMEOUT_MS` 20 s; "no response from device within N s" is a `TransportException`.
+`RequestSpec` allows 20 s between reply frames and normally 15 s for the first frame.
+WIFI_SCAN allows 20 s. OPEN, FLUSH and REBOOT allow 60 s for the first frame. The connection-open deadline is
+separate, 180 s through `DeviceSession.over` to cover Bluetooth connect and bonding.
+Timeouts carry `DisconnectCause.Timeout` with the failed phase.
 
 ## Link session (`core/sync` `link/`, proto 3, #54)
 
-`DeviceSession`, `SyncEngine` and `ArchiveCollector` run on it since #55. Until the native
-drivers land (#57, #58) `TransportLinkDriver` runs it over an `AqTransport`.
+`DeviceSession`, `SyncEngine` and `ArchiveCollector` run on it. Android native
+`TcpLinkDriver` and `BleLinkDriver` feed its `FrameSink`. `TransportLinkDriver` adapts the
+fake and compatibility `AqTransport` paths. iOS uses the connection's `IosLink`.
 
 - One session per physical connection. A single router coroutine owns every reply frame. A
   request is registered before its write, owns the link until its terminal frame
@@ -262,7 +281,7 @@ stateDiagram-v2
 - **Logs** carry the intent id, state names, causes and counts, never names of networks, tokens or
   a PIN.
 
-`SyncResumePolicy` remains a compatibility helper for old progress consumers. Android collection
+`SyncResumePolicy` remains a compatibility helper with tests, with no production callers. Android collection
 retry is owned exclusively by `CollectionController`. `StopSource.FGS_TIMEOUT` distinguishes
 the Android service deadline from a user Stop. A generation-specific refused foreground start
 ends only its protected intents as `Failed(KeepAliveRefused)`.
@@ -271,22 +290,13 @@ ends only its protected intents as `Failed(KeepAliveRefused)`.
 `Synced` outcomes with `alreadyArchived == false`, including outcomes from earlier retry
 attempts. Worker summaries use those new totals.
 
-## Sync run state
+## UI progress and terminal state
 
-```mermaid
-stateDiagram-v2
-  [*] --> Running: CollectionController.start(intent), PROCESS + shared permit
-  Running --> Relisting: last file done — post-sync LIST, still `running`, still protected
-  Relisting --> COMPLETED
-  Running --> STOPPED: user Stop / cancelSync
-  Running --> TRANSPORT_FAILURE: no response · link lost · socket error · transport closed
-  Running --> FAILURE: anything else
-  COMPLETED --> [*]: finally → release WifiLock, deriveStale()
-```
-
-`SyncProgress.endCause` (`SyncEndCause`) records how a run ended; the Files card, the notification
-and the resume policy read it. Per-file outcomes (`Synced` / `Mismatch` / `DeviceError` / `Failed`)
-are **outcomes**, not a broken pipe.
+`CollectionState` is the authoritative Android lifecycle. `DeviceFacade` projects it to
+`SyncProgress` for Files and notifications, keeping `running` true through preparation,
+retry waiting and finalization. Done maps to COMPLETED, Failed to FAILURE and Stopped to
+STOPPED. PROCESS lease ownership determines service lifetime, even during terminal cleanup.
+Per-file outcomes remain separate from controller failure. iOS receives typed `SyncResult`.
 
 **Session errors end the run (2026-10-09).** An `ERROR` about the session, not the file, is not a
 per-file `DeviceError`. `AUTH_FAILED`, `BUSY` and any `ERROR` with op 0 during `OPEN` or `READ`
@@ -339,17 +349,18 @@ the firmware must report scan failure instead of LIST_END in that case.
 
 ## Resume after a lost link
 
-`SyncResumePolicy.shouldResume` (pure).
+Android active collection retry belongs exclusively to `CollectionController`. A retryable
+`DisconnectCause` enters Waiting with PROCESS held, then restarts CONNECT, clock setup, LIST
+and PLAN. Partial bytes resume only after a new OPENED confirms size and CRC. The controller
+uses its bounded `RetryPolicy`, not the old five-minute `SyncResumePolicy.shouldResume`
+progress heuristic. `SyncResumePolicy` remains in core for compatibility tests only.
 
-The resume never reads the shared `plan` flow, which can still hold the previous session's plan for a
-moment after a reconnect. The reconnect issues its own `LIST` on the new session, waits for it, and
-plans from that listing (`resumeAfterReconnect`, `planFor`). The background run plans the same way
-after its `LIST`. A `cancelReconnect` (the notification's Stop) also cancels a reconnect that a link
-watcher has decided on but not yet started.
+Idle reconnect belongs to `DeviceLinkOwner`, which suppresses its watcher while collection
+is reserved. A user Stop, deliberate disconnect, service timeout or refused protection
+ends the relevant intent. Workers additionally remain bounded by their eight-minute attempt.
+iOS adapters retain their native retry and foreground-resume intent until issue 81.
 
-Resume when the sync was `running` **or** ended with `TRANSPORT_FAILURE` within the last
-**5 min** (`RESUME_WINDOW_MS` = the LAN heartbeat's 180 s receive deadline plus margin). A user Stop,
-a completed run, or any other failure is left alone. Seen on the phone: the sync died of the pipe a
+Historical observation motivating the old compatibility policy. Seen on the phone: the sync died of the pipe a
 moment before the link was declared lost, the reconnect succeeded with `resumeSync=false`, and the
 user had to press Sync all again — hence the policy.
 
@@ -376,23 +387,28 @@ remain explicit actions. Reboot, rotate token, forget bonds and pairing mode `no
 confirmation dialog. Automatic `SET_TIME` requires no user action.
 
 `REBOOT` (0x0B) has exactly **one** call path: `DeviceSession.reboot()` ←
-`DeviceConnectionRepository.rebootAndReconnect()` ← the Device screen's confirmation dialog. It is
+`DeviceFacade.rebootAndReconnect()` through `DeviceLinkOwner` ← the Device screen's confirmation dialog. It is
 refused while `sync.running`, takes the operation gate synchronously so a re-fired confirm cannot
 send a second one, and the dialog checks its own flag too. `DeviceSession.rawCommand` itself refuses
 `REBOOT`, `SET_CONFIG` and manual `SET_TIME` (`RAW_COMMAND_DENYLIST`, `RawCommandRefusedException`) before anything is
 written, and the Debug raw-command box keeps its own check as a second guard.
 
-**One operation gate.** Config writes, sensor provisioning, token fetch and rotation, and reboot take
-the command slot through `tryBeginCommand`, and a worker takes the device through
-`tryBeginBackground`. Both check and set under one lock, so a second command is refused with "Wait
-for the current device task to finish" instead of running alongside and clearing the first one's
-`busy`. An interactive sync is refused while a command holds the slot. Job handles (`syncJob`,
-`linkWatchJob`, `reconnectJob`, `notificationJob`) change only under the same lock, so a Stop from
-the notification cannot miss a job that is starting. Audited 2026-09-17 after a `REBOOT` of uncertain origin reached the board;
+**Atomic command and collection admission.** `DeviceLinkOwner.tryBeginCommand` and
+`reserveCollection` check and record ownership under one lock. Config, provisioning, token
+fetch/rotation and reboot cannot run alongside a collection. `CollectionAdmission` excludes
+interactive and worker collections process-wide, and the shared `CollectionBudget` caps
+active transfers at two. A worker also supplies its run ID and bounded PROCESS protection.
+Stop targets the controller intent and cleanup completes before ownership is released.
+
+Audited 2026-09-17 after a `REBOOT` of uncertain origin reached the board;
 no phone-side cause of an unsolicited reboot was found, and these two gaps (buttons enabled during
 a sync; raw box accepting `0b`) were closed anyway.
 
-## Decisions (v1, mirrored into the firmware contract 2026-09-16)
+## Historical decisions (v1, mirrored into the firmware contract 2026-09-16)
+
+The table records the original implementation. Current finalization derives touched days
+through `deriveAfterSync`; charging `DeriveWorker` handles deferred stale history. Current
+request routing and terminal matching belong to `LinkSession` and `TerminalRules`.
 
 | Question | Decision |
 | --- | --- |
@@ -410,4 +426,4 @@ a sync; raw box accepting `0b`) were closed anyway.
 | `FileArchive` paths | Export zips (byte-exact mirror), `HistoryIndexer` file lookup, `data_extraction_rules.xml` (`archive/` in device transfer) |
 | `SyncEngine` post-verify upsert | `archived_file` row + index columns ([data-model.md](data-model.md)); `HistoryDeriver` signature (`name:crc32`) |
 | `DeviceSession` request/terminal mapping | `TerminalRules`, `FakeTransport`, `FakeArchiveDevice` |
-| `SyncEndCause` | `SyncResumePolicy`, `SyncForegroundService` copy, `SyncWorker.transientFailure` |
+| `CollectionState` and typed disconnect causes | facade progress, active retry, service loss and worker result mapping |
