@@ -54,8 +54,9 @@ vendored H3 C library through cinterop. The Xcode target links `-lc++ -lz` and C
 CoreGraphics, CoreText, Foundation, ImageIO, Metal and QuartzCore for maplibre-compose. Checked in
 the iPhone 18 Pro simulator (PMTiles basemap and sample cells drawn) and, on 2026-10-08, on an
 iPhone 16 Pro, which opened on Discover with no prompt. On that iPhone, Arabic place names drew
-unjoined, because the Apple maplibre-native-ffi build has no bidi or Arabic shaping. iOS now uses
-the English or Latin label styles (`devices-and-discovery.md`, "Right-to-left labels on iOS").
+unjoined, because the Apple maplibre-native-ffi build has no bidi or Arabic shaping. maplibre-compose
+0.20.0 fixes this, and iOS loads the same label styles as Android again
+(`devices-and-discovery.md`, "Right-to-left labels on iOS"). Not yet rechecked on an iPhone.
 
 Since #16 (2026-10-09) the My devices tab is the shared `:feature:devices` screen, the same as
 Android. `DevicesBridge` (`ios/shared`) feeds its three ports from `CompanionState`, the known

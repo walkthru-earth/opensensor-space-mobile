@@ -84,7 +84,7 @@ below was checked on that date. Items marked "verify on phone" are not yet prove
 | 4 | The crowd rule of three applies to every published number, not only the device list, with a differencing guard on parents | Privacy rules |
 | 5 | Only outdoor devices can be published. No accounts, no passkeys. Each shared device gets its own anonymous key made on the phone, and its public ID and generated name come from that key, never free text | Privacy rules |
 | 6 | The phone reads the same Parquet files as the website `/indices` explorer, one plain file per H3 resolution, through HTTP range reads and the repo's own portable Parquet reader. No JSON side feed | Feed contract |
-| 7 | `maplibre-compose` 0.19.0 is the renderer. Its pins match ours (Kotlin 2.4.20, CMP 1.12.1) | Map technology |
+| 7 | `maplibre-compose` 0.20.0 is the renderer. Its pins match ours (Kotlin 2.4.20, CMP 1.12.1) | Map technology |
 | 8 | H3 runs on the phone (files carry no geometry). Viewport cover of at most 1,024 cells, one GeoJSON source, redrawn after 400 ms of camera rest | Map technology |
 | 9 | An online Protomaps PMTiles basemap, an optional "Offline map" download in the app Settings (nothing bundled), and "© OpenStreetMap" always reachable | Map technology, Compliance |
 | 10 | A "Near me" button asks for approximate location only when tapped. Precise location is never requested | Centring |
@@ -358,7 +358,7 @@ allow it cleanly. Precise location is never requested on either platform.
   is not "collected" under either store's privacy rules.
 - Built (2026-10-09, host builds only). A tonal my-location button sits bottom right above the
   attribution. One shared implementation in `feature/discover` `NearMe.kt` uses maplibre-compose
-  0.19.0 location (`rememberDefaultLocationProvider`, `rememberLocationState` with
+  location (0.19.0 when built, 0.20.0 now) (`rememberDefaultLocationProvider`, `rememberLocationState` with
   `LocationAccuracy.Low`, `LocationIndicatorLayer` for the puck). Only the prompt is per platform
   (`NearMe.android.kt` asks for `ACCESS_COARSE_LOCATION` alone, `NearMe.ios.kt` calls
   `requestWhenInUseAuthorization`). No provider exists before the tap. After a grant the camera
@@ -516,7 +516,8 @@ starts with the target layout from the producer guidance.
 
 ### Map technology
 
-- **Renderer.** `org.maplibre.compose:maplibre-compose` **0.19.0** (2026-10-01). Its own
+- **Renderer.** `org.maplibre.compose:maplibre-compose` **0.20.0** (2026-10-10), on
+  `maplibre-native-ffi` 0.202610.0. Its own
   catalogue pins Kotlin 2.4.20 and Compose Multiplatform 1.12.1, the same as ours, so the
   `expect`/`actual` fallback is not needed now. Since 0.15.0 it renders through
   `maplibre-native-ffi` instead of the platform SDKs. Android needs minSdk 24 and one runtime
@@ -542,12 +543,13 @@ starts with the target layout from the producer guidance.
   and the FFI build enables it, but `maplibre-compose` documents no PMTiles API, so it is
   "verify on phone" on both platforms. Style from `@protomaps/basemaps` 5.7.2, the `white` or
   `grayscale` flavour recoloured to the sensing palette, light and dark.
-- **Right-to-left labels on iOS.** The Apple build of `maplibre-native-ffi` (0.202609.5, used by
-  maplibre-compose 0.19.0) compiles the Qt bidi stub `platform/qt/src/mln/bidi.cpp`, so it neither
-  reorders right-to-left text nor joins Arabic letters. Android links ICU and draws Arabic
-  correctly. Until the Apple build links ICU bidi, iOS loads the `light-latin` and `dark-latin`
-  styles, which label with `name:en`, else a Latin `name`, else nothing. Pinned by
-  `BasemapStyleTest`. Seen on an iPhone 16 Pro on 2026-10-08.
+- **Right-to-left labels on iOS (#53).** Up to maplibre-compose 0.19.0 the Apple build of
+  `maplibre-native-ffi` compiled a bidi stub, so Arabic names drew unjoined and in the wrong order
+  (seen on an iPhone 16 Pro on 2026-10-08), and iOS loaded Latin-only label styles. ffi 0.202610.0
+  links ICU on Apple and fixes Arabic shaping and right-to-left order (maplibre-native-ffi #799),
+  and maplibre-compose 0.20.0 ships it. Android and iOS now load the same `light` and `dark`
+  styles. Built and simulator tested only. Arabic labels on an iPhone still need a dated check in
+  `docs/status.md`.
 - **Basemap offline (owner decision 2026-10-08).** Nothing is bundled. The app Settings (not a
   device's settings) offer an optional "Offline map" download, a small world extract
   (`pmtiles extract --maxzoom` 3 or 4, a few MB, measured before release) with its glyphs and
@@ -605,7 +607,7 @@ starts with the target layout from the producer guidance.
 | `:core:net` | `HttpRangeSource` and the `HttpRangeEngine` port, `OkHttpRangeEngine` (OkHttp 5.5.0, Android and JVM), `UrlSessionRangeEngine` (`NSURLSession`, iOS). Built with issue #62, not yet used by the apps |
 | `:core:parquet` | The portable reader from W8, with `RangeSource`, `ParquetReader` (footer cache, coalesced reads, one-pass decoding), row group pruning by INT64 statistics and page pruning by the column and offset indexes |
 | `:feature:discover` | CMP `commonMain` map screen (`DiscoverScreen`), `DiscoverController` state holder, `DiscoverStrings` read from its Compose resources, one copy for both apps, the bundled sample and basemap styles as Compose resources. Targets Android (`com.android.kotlin.multiplatform.library`) and iOS, not the JVM, because the maplibre-compose desktop variant needs Java 25. Planned here: the public device page |
-| `tools/discover-fixture/` | `make_discover_sample.py` writes the sample feed in the live layout (Python `h3` 4.5.0, PyArrow 25.0.1, SNAPPY, one row group per file sorted by `h3_index`, 16-row pages with page indexes, about 250 KB for 18 files). `make_basemap_style.mjs` writes the light and dark styles from `@protomaps/basemaps` 5.7.2, each with a `-latin` variant for iOS. Output committed under `feature/discover/src/commonMain/composeResources/files/` |
+| `tools/discover-fixture/` | `make_discover_sample.py` writes the sample feed in the live layout (Python `h3` 4.5.0, PyArrow 25.0.1, SNAPPY, one row group per file sorted by `h3_index`, 16-row pages with page indexes, about 250 KB for 18 files). `make_basemap_style.mjs` writes the light and dark styles from `@protomaps/basemaps` 5.7.2, the same on Android and iOS. Output committed under `feature/discover/src/commonMain/composeResources/files/` |
 
 `:feature:discover` is shared Compose, so Android and iOS show the same screens. Platform code
 provides only the strings, the saved state (`DiscoverPrefs`, DataStore on Android, NSUserDefaults on

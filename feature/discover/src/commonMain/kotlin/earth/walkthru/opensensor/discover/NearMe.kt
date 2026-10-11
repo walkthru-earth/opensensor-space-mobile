@@ -44,7 +44,11 @@ internal class NearMe(val location: LocationState?, val recenter: Int, val acces
 
 // Low maps to Core Location's kilometre accuracy and Android's low-power fused request, which is
 // enough for a resolution 7 cell and works with a coarse grant.
-private val NEAR_ME_REQUEST = LocationRequest(accuracy = LocationAccuracy.Low, minimumInterval = 30.seconds, minimumDistance = 200.meters)
+private val NEAR_ME_REQUEST = LocationRequest {
+    accuracy = LocationAccuracy.Low
+    minimumInterval = 30.seconds
+    minimumDistance = 200.meters
+}
 
 @Composable
 internal fun rememberNearMe(): NearMe {
@@ -74,7 +78,7 @@ internal fun NearMeButton(nearMe: NearMe, mapState: MapState, label: String, acc
     LaunchedEffect(nearMe.recenter, location) {
         if (nearMe.recenter == 0 || location == null) return@LaunchedEffect
         val fix = snapshotFlow { location.lastLocation }.filterNotNull().first()
-        runCatching { mapState.animateCamera(CameraUpdate(target = fix.position, zoom = NEAR_ME_ZOOM)) }
+        runCatching { mapState.animateCamera(CameraUpdate(center = fix.position, zoom = NEAR_ME_ZOOM)) }
     }
     FloatingIconButton(onClick = nearMe.onTap, contentDescription = label, modifier = modifier) {
         Icon(DiscoverIcons.MyLocation, contentDescription = null)
