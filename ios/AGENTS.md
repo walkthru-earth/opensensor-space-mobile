@@ -63,6 +63,11 @@ The iOS app entry point is the Xcode project in this directory. Read the root
   operation at a time, refuses writes from a stale sender and completes each write once. RESPONSE
   frames and STATUS go straight to the connection's `IosLink`. Main-side events reach
   `BluetoothCompanion` in order, tagged with a connection number that drops stale ones.
+- `BleBondFailure` reads Core Bluetooth's error. `peerRemovedPairingInformation`,
+  `encryptionTimedOut` and the ATT `insufficientEncryption` and `insufficientAuthentication` mean
+  the sensor refused this phone's pairing keys, as after its bonds were reset. The link then ends as
+  `Auth(BOND_MISSING)`, which no run retries, and the notice asks to forget the sensor in iOS
+  Settings and pair again (P15, P30).
 - A closure formed in an isolated method and handed to a Kotlin or Apple API that is not
   concurrency annotated inherits that isolation, and Swift 6 checks it on entry. Mark such a
   closure `@Sendable` when it can run on another thread (`IosLink.whenClosed`,

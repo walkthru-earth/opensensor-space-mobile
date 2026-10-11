@@ -6,6 +6,8 @@ import OpenSensorShared
 enum BleLoss: Sendable {
     case unknownSensor, connectFailed, disconnected, serviceMissing, characteristicsMissing, notifyFailed, readFailed,
         tokenFailed
+    /// The sensor refused this phone's pairing keys. Pairing again from iOS Settings fixes it, so no retry.
+    case pairingRemoved
 }
 
 /// What the Bluetooth queue tells the main actor, in arrival order. Connection events carry the
@@ -257,6 +259,13 @@ actor BlePhysicalLink {
         connection = 0
     }
 
+    /// The bond is broken. The shared link ends with the typed auth cause before any write
+    /// completion can report it as a local fault, so no run retries it.
+    private func loseBond() {
+        sink?.linkLost(reason: IosLink.companion.REASON_BOND_MISSING)
+        lose(.pairingRemoved)
+    }
+
     /// The connection failed here. It ends at once, then the main actor hears why.
     private func lose(_ loss: BleLoss) {
         let number = connection
@@ -331,26 +340,29 @@ actor BlePhysicalLink {
         peripheral.discoverServices([CBUUID(string: uuids.service)])
     }
 
-    fileprivate func failedToConnect(_ peripheral: CBPeripheral) {
+    fileprivate func failedToConnect(_ peripheral: CBPeripheral, bond: Bool) {
         guard current === peripheral else {
             waiting[peripheral.identifier.uuidString] = nil
             return
         }
+        if bond { return loseBond() }
         lose(.connectFailed)
     }
 
-    fileprivate func disconnected(_ peripheral: CBPeripheral) {
+    fileprivate func disconnected(_ peripheral: CBPeripheral, bond: Bool) {
         guard current === peripheral else {
             waiting[peripheral.identifier.uuidString] = nil
             return
         }
+        if bond { return loseBond() }
         // Replies already offered still reach their callers, then the run sees the peer go.
         sink?.linkLost(reason: IosLink.companion.REASON_PEER_CLOSED)
         lose(.disconnected)
     }
 
-    fileprivate func discoveredServices(_ peripheral: CBPeripheral, failed: Bool) {
+    fileprivate func discoveredServices(_ peripheral: CBPeripheral, failed: Bool, bond: Bool) {
         guard current === peripheral else { return }
+        if bond { return loseBond() }
         guard !failed, let service = peripheral.services?.first(where: { $0.uuid == CBUUID(string: uuids.service) })
         else { return lose(.serviceMissing) }
         peripheral.discoverCharacteristics(
@@ -360,8 +372,9 @@ actor BlePhysicalLink {
             ], for: service)
     }
 
-    fileprivate func discoveredCharacteristics(_ peripheral: CBPeripheral, service: CBService, failed: Bool) {
+    fileprivate func discoveredCharacteristics(_ peripheral: CBPeripheral, service: CBService, failed: Bool, bond: Bool) {
         guard current === peripheral else { return }
+        if bond { return loseBond() }
         let characteristics = service.characteristics ?? []
         guard !failed,
             let info = characteristics.first(where: { $0.uuid == CBUUID(string: uuids.info) }),
@@ -382,8 +395,9 @@ actor BlePhysicalLink {
         performNext()
     }
 
-    fileprivate func wrote(_ peripheral: CBPeripheral, characteristic: CBCharacteristic, failed: Bool) {
+    fileprivate func wrote(_ peripheral: CBPeripheral, characteristic: CBCharacteristic, failed: Bool, bond: Bool) {
         guard current === peripheral else { return }
+        if bond { return loseBond() }
         switch gatt.finish(write: characteristic, ok: !failed) {
         case .stale: return
         // The request state on the sensor is unknown, so the shared link is poisoned. The run ends
@@ -394,15 +408,17 @@ actor BlePhysicalLink {
         }
     }
 
-    fileprivate func notifying(_ peripheral: CBPeripheral, characteristic: CBCharacteristic, failed: Bool) {
+    fileprivate func notifying(_ peripheral: CBPeripheral, characteristic: CBCharacteristic, failed: Bool, bond: Bool) {
         guard current === peripheral else { return }
+        if bond { return loseBond() }
         guard !failed, characteristic.isNotifying else { return lose(.notifyFailed) }
         if characteristic.uuid == CBUUID(string: uuids.response) { responseSubscribed = true }
         if gatt.finish(subscribe: characteristic) { performNext() }
     }
 
-    fileprivate func updated(_ peripheral: CBPeripheral, characteristic: CBCharacteristic, failed: Bool) {
+    fileprivate func updated(_ peripheral: CBPeripheral, characteristic: CBCharacteristic, failed: Bool, bond: Bool) {
         guard current === peripheral else { return }
+        if bond { return loseBond() }
         if characteristic.uuid == CBUUID(string: uuids.response) {
             guard !failed, let data = characteristic.value else { return }
             // Only the token reply stays native. Every other frame goes to the shared link, which
@@ -488,45 +504,55 @@ private final class Callbacks: NSObject, CBCentralManagerDelegate, CBPeripheralD
     }
 
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
+        let bond = BleBondFailure.matches(error)
         let peripheral = Delivered(peripheral)
-        link?.assumeIsolated { $0.failedToConnect(peripheral.value) }
+        link?.assumeIsolated { $0.failedToConnect(peripheral.value, bond: bond) }
     }
 
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+        let bond = BleBondFailure.matches(error)
         let peripheral = Delivered(peripheral)
-        link?.assumeIsolated { $0.disconnected(peripheral.value) }
+        link?.assumeIsolated { $0.disconnected(peripheral.value, bond: bond) }
     }
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
-        let failed = error != nil
+        let failed = error != nil, bond = BleBondFailure.matches(error)
         let peripheral = Delivered(peripheral)
-        link?.assumeIsolated { $0.discoveredServices(peripheral.value, failed: failed) }
+        link?.assumeIsolated { $0.discoveredServices(peripheral.value, failed: failed, bond: bond) }
     }
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
-        let failed = error != nil
+        let failed = error != nil, bond = BleBondFailure.matches(error)
         let objects = Delivered((peripheral, service))
-        link?.assumeIsolated { $0.discoveredCharacteristics(objects.value.0, service: objects.value.1, failed: failed) }
+        link?.assumeIsolated {
+            $0.discoveredCharacteristics(objects.value.0, service: objects.value.1, failed: failed, bond: bond)
+        }
     }
 
     func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
-        let failed = error != nil
+        let failed = error != nil, bond = BleBondFailure.matches(error)
         let objects = Delivered((peripheral, characteristic))
-        link?.assumeIsolated { $0.wrote(objects.value.0, characteristic: objects.value.1, failed: failed) }
+        link?.assumeIsolated {
+            $0.wrote(objects.value.0, characteristic: objects.value.1, failed: failed, bond: bond)
+        }
     }
 
     func peripheral(
         _ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?
     ) {
-        let failed = error != nil
+        let failed = error != nil, bond = BleBondFailure.matches(error)
         let objects = Delivered((peripheral, characteristic))
-        link?.assumeIsolated { $0.notifying(objects.value.0, characteristic: objects.value.1, failed: failed) }
+        link?.assumeIsolated {
+            $0.notifying(objects.value.0, characteristic: objects.value.1, failed: failed, bond: bond)
+        }
     }
 
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
-        let failed = error != nil
+        let failed = error != nil, bond = BleBondFailure.matches(error)
         let objects = Delivered((peripheral, characteristic))
-        link?.assumeIsolated { $0.updated(objects.value.0, characteristic: objects.value.1, failed: failed) }
+        link?.assumeIsolated {
+            $0.updated(objects.value.0, characteristic: objects.value.1, failed: failed, bond: bond)
+        }
     }
 }
 

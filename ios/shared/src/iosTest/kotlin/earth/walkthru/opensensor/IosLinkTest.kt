@@ -2,12 +2,17 @@
 
 package earth.walkthru.opensensor
 
+import earth.walkthru.aqsync.link.AuthKind
+import earth.walkthru.aqsync.link.DisconnectCause
+import earth.walkthru.aqsync.link.retryable
 import kotlinx.coroutines.test.runTest
 import platform.Foundation.NSData
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /** Identity is bound once before Swift shares the connection across isolation domains. */
 class IosLinkTest {
@@ -58,5 +63,13 @@ class IosLinkTest {
         assertEquals("original-station", link.station)
         assertNull(link.boot)
         assertEquals(1024, link.maxRead)
+    }
+
+    @Test
+    fun aRemovedPairingIsAnAuthFailureThatNeverRetries() {
+        val cause = IosLink.causeOf(IosLink.REASON_BOND_MISSING)
+        assertEquals(DisconnectCause.Auth(AuthKind.BOND_MISSING), cause)
+        assertFalse(cause.retryable)
+        assertTrue(IosLink.causeOf(IosLink.REASON_PEER_CLOSED).retryable)
     }
 }

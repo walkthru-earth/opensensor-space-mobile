@@ -9,6 +9,7 @@ swiftc -module-cache-path "$test_dir/module-cache" -swift-version 6 -strict-conc
   "$repo_root/ios/App/LanPolicy.swift" \
   "$repo_root/ios/App/RunSlot.swift" \
   "$repo_root/ios/App/BleGattQueue.swift" \
+  "$repo_root/ios/App/BleBondFailure.swift" \
   "$repo_root/ios/tests/TransferChecks.swift" \
   "$repo_root/ios/tests/ArchiveChecks.swift" \
   "$repo_root/ios/tests/CancellationChecks.swift" \
