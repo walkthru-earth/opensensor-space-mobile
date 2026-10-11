@@ -14,6 +14,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
@@ -170,6 +171,40 @@ class LinkOweCloseTest {
         assertEquals(listOf("a.parquet"), list.await())
         assertEquals(listOf(Opcode.LIST, Opcode.CLOSE), driver.sent)
         assertTrue(events.any { it == LinkEvent.CloseSent(5) })
+    }
+
+    @Test
+    fun awaitQuietWaitsForTheDrainAndTheOwedClose() = runTest {
+        val driver = ScriptedLinkDriver(respond = listReply)
+        val s = session(driver)
+        s.open()
+        s.awaitQuiet()
+        val read = launch { s.collect(Request.Read(7, 0, 4096)) }
+        runCurrent()
+        read.cancelAndJoin()
+        s.oweClose(7)
+        val quiet = async { s.awaitQuiet() }
+        runCurrent()
+        assertFalse(quiet.isCompleted, "the READ drain is still open")
+
+        driver.emit(Frame.ReadEnd(7, 0, 0), Frame.Aborted(Opcode.READ))
+        runCurrent()
+        assertEquals(listOf(Opcode.READ, Opcode.ABORT, Opcode.CLOSE), driver.sent)
+        assertFalse(quiet.isCompleted, "the owed CLOSE waits for CLOSED")
+
+        driver.emit(Frame.Closed(7))
+        runCurrent()
+        assertTrue(quiet.isCompleted)
+        quiet.await()
+    }
+
+    @Test
+    fun awaitQuietOnAClosedLinkThrows() = runTest {
+        val s = session(ScriptedLinkDriver())
+        s.open()
+        s.close("test")
+        runCurrent()
+        assertFailsWith<LinkClosedException> { s.awaitQuiet() }
     }
 
     private suspend fun LinkSession.closeOwing(handle: Int): Frame =

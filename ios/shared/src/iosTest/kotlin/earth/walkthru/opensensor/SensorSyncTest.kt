@@ -17,10 +17,14 @@ import earth.walkthru.aqsync.storage.FakeStorageBudget
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Runnable
+import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -31,6 +35,7 @@ import platform.Foundation.NSTemporaryDirectory
 import platform.Foundation.NSUUID
 import kotlin.concurrent.AtomicInt
 import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.random.Random
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -438,12 +443,39 @@ class SensorSyncTest {
             }
         }
         val link = IosLink(port, true, "a1b2c3d4e5f6", Dispatchers.Default, Dispatchers.Default, inboxBudget = 4_000)
-        link.onInboxLevel(1_000)
-        link.onInboxLevel(2_000)
-        link.onInboxLevel(2_500)
-        link.onInboxLevel(1_500)
-        link.onInboxLevel(999)
+        var level = 0L
+        link.inboxLevel = { level }
+        listOf(1_000L, 2_000L, 2_500L, 1_500L, 999L, 10L).forEach {
+            level = it
+            link.onInboxLevel(it)
+        }
+        assertEquals(listOf(true, false), pauses)
+        link.close()
+    }
+
+    @Test
+    fun aStaleInboxReportNeitherPausesNorResumesReading() {
+        val pauses = ArrayList<Boolean>()
+        val port = object : IosLinkPort {
+            override val mtu = 517
+            override fun send(frame: NSData, done: (Boolean) -> Unit) = done(true)
+            override fun setReadPaused(paused: Boolean) {
+                pauses += paused
+            }
+        }
+        val link = IosLink(port, true, "a1b2c3d4e5f6", Dispatchers.Default, Dispatchers.Default, inboxBudget = 4_000)
+        var level = 0L
+        link.inboxLevel = { level }
+        // A high report that lost the race to the read that emptied the inbox.
+        link.onInboxLevel(3_000)
+        assertEquals(emptyList(), pauses)
+        level = 3_000
+        link.onInboxLevel(3_000)
+        // A low report that lost the race to frames that filled it again.
         link.onInboxLevel(10)
+        assertEquals(listOf(true), pauses)
+        level = 0
+        link.onInboxLevel(0)
         assertEquals(listOf(true, false), pauses)
         link.close()
     }
@@ -469,8 +501,8 @@ class SensorSyncTest {
     fun aCancelledLeaseTakesNothingAndGivesBackWhatItHeld() = runBlocking {
         val link = sensor()
         val held = link.acquire(LeaseKind.DEBUG)
-        val waiting = launch(Dispatchers.Default) { link.leased(LeaseKind.CONFIG) { error("never granted") } }
-        yield()
+        // Undispatched, so the waiter is parked on the lock before the cancel.
+        val waiting = launch(start = CoroutineStart.UNDISPATCHED) { link.leased(LeaseKind.CONFIG) { error("never granted") } }
         waiting.cancel()
         waiting.join()
         held.end()
@@ -524,12 +556,47 @@ class SensorSyncTest {
         val timedOut = assertFailsWith<LinkClosedException> { provider.connect("a1b2c3d4e5f6", LinkPreference.ANY) }
         assertEquals(DisconnectCause.Timeout(TimeoutPhase.OPEN, 0), timedOut.disconnectCause)
 
-        val waiting = launch(Dispatchers.Default) { IosLinkProvider({ link }, 5.seconds, Dispatchers.Default).connect("a1b2c3d4e5f6", LinkPreference.ANY) }
-        yield()
+        val waiting = launch(start = CoroutineStart.UNDISPATCHED) {
+            IosLinkProvider({ link }, 5.seconds, EmptyCoroutineContext).connect("a1b2c3d4e5f6", LinkPreference.ANY)
+        }
         waiting.cancel()
         waiting.join()
         held.end()
         assertFalse(link.leased)
         withTimeout(5_000) { link.leased(LeaseKind.DEBUG) { } }
+    }
+
+    @Test
+    fun aCancelRightAfterTheProviderTookTheLeaseGivesItBack() = runBlocking {
+        val link = sensor().also { it.identify(station, "boot", 1024) }
+        val took = CompletableDeferred<Unit>()
+        val provider = IosLinkProvider({ link }, 5.seconds, EmptyCoroutineContext) {
+            took.complete(Unit)
+            currentCoroutineContext().job.cancel()
+        }
+        val connecting = launch(Dispatchers.Default) { provider.connect("a1b2c3d4e5f6", LinkPreference.ANY) }
+        connecting.join()
+        assertTrue(took.isCompleted)
+        assertTrue(connecting.isCancelled)
+        assertFalse(link.leased)
+        withTimeout(5_000) { link.leased(LeaseKind.DEBUG) { } }
+    }
+
+    @Test
+    fun aLeaseQueuedBehindASyncIsRefusedWhenTheSyncStarts() = runBlocking {
+        val link = sensor()
+        val debug = link.acquire(LeaseKind.DEBUG)
+        val sync = async(start = CoroutineStart.UNDISPATCHED) { link.acquire(LeaseKind.SYNC) }
+        val config = async(start = CoroutineStart.UNDISPATCHED) { runCatching { link.acquire(LeaseKind.CONFIG) } }
+        val command = async(start = CoroutineStart.UNDISPATCHED) { link.acquire(LeaseKind.COMMAND) }
+        debug.end()
+        val refused = withTimeout(5_000) { config.await() }.exceptionOrNull()
+        assertTrue(refused is LeaseRefusedException && refused.syncRunning, "config was $refused")
+        val held = withTimeout(5_000) { sync.await() }
+        assertTrue(link.syncRunning)
+        assertFalse(command.isCompleted, "a command still waits its turn behind the sync")
+        held.end()
+        withTimeout(5_000) { command.await() }.end()
+        assertFalse(link.leased)
     }
 }

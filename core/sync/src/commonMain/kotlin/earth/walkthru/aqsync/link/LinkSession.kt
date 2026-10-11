@@ -322,6 +322,24 @@ class LinkSession(
         check(_state.value is LinkState.Ready) { "LinkSession is not open" }
     }
 
+    /** Undelivered reply bytes now. A watcher re-reads it under its own lock, since reports can land out of order. */
+    val inboxBytes: Long get() = queuedBytes.load()
+
+    /**
+     * Waits until no request, drain (an `ABORT` and the abandoned reply) or owed `CLOSE` is left. For
+     * native work that writes past the session, such as the iOS Bluetooth `GET_TOKEN`. Its caller
+     * keeps new requests away meanwhile, so the wait is bounded by the drain deadlines.
+     */
+    suspend fun awaitQuiet() {
+        ensureUsable()
+        val done = CompletableDeferred<Unit>()
+        if (events.trySend(Event.Quiet(done)).isFailure) throw LinkClosedException(_closed.getCompleted())
+        select<Unit> {
+            _closed.onAwait { throw LinkClosedException(it) }
+            done.onAwait { }
+        }
+    }
+
     // ---- caller side ----
 
     private suspend fun <T> withSlot(spec: RequestSpec, oweCloseIfUnsent: Int? = null, block: suspend (Owner) -> T): T {
@@ -374,6 +392,7 @@ class LinkSession(
     private var current: Owner? = null
     private var drain: Drain? = null
     private val owed = ArrayDeque<Int>()
+    private val quiet = ArrayList<CompletableDeferred<Unit>>()
 
     private suspend fun route() {
         try {
@@ -400,6 +419,10 @@ class LinkSession(
                         finishDrainIfDone(event.drain)
                     }
                     Event.DrainTimeout -> drain?.let { exceed(it) }
+                    is Event.Quiet -> {
+                        quiet += event.done
+                        admitNext()
+                    }
                 }
             }
         } catch (e: CancellationException) {
@@ -493,6 +516,8 @@ class LinkSession(
                 return
             }
         }
+        quiet.forEach { it.complete(Unit) }
+        quiet.clear()
     }
 
     private fun discardInbox(owner: Owner) {
@@ -648,6 +673,7 @@ class LinkSession(
         data object ByeSeen : Event
         class AbortFailed(val drain: Drain) : Event
         data object DrainTimeout : Event
+        class Quiet(val done: CompletableDeferred<Unit>) : Event
     }
 
     companion object {

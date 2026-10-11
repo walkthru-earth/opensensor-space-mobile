@@ -25,16 +25,22 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
@@ -138,6 +144,9 @@ class IosLink internal constructor(
     private val pauseLock = NSLock()
     private var paused = false
 
+    /** The undelivered reply bytes now. A test seam, the session counter otherwise. */
+    internal var inboxLevel: () -> Long = { link.inboxBytes }
+
     // Declared before [session], whose constructor already collects it.
     private val statusPushes = MutableSharedFlow<ByteArray>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
@@ -147,6 +156,9 @@ class IosLink internal constructor(
     private val opened = CompletableDeferred<Unit>()
     private val leaseLock = Mutex()
     private val holder = AtomicReference<LeaseKind?>(null)
+
+    /** Counts syncs that took the lock, so a lease queued behind one is refused instead of waiting it out. */
+    private val syncsStarted = MutableStateFlow(0)
 
     private val closeLock = NSLock()
     private var closedFired = false
@@ -223,7 +235,8 @@ class IosLink internal constructor(
     /**
      * Native work that writes its own request, today only the Bluetooth `GET_TOKEN` whose reply Swift
      * keeps, so the token never reaches Kotlin. [granted] runs on the main thread with a lease once
-     * the link is free, or with null when a sync holds it or it closed. Swift must call
+     * the link is free and every abort, drain and owed `CLOSE` left by earlier work has ended, or with
+     * null when a sync holds it or it closed. Swift must call
      * [IosNativeLease.end] once its reply arrived or failed.
      */
     fun leaseForNative(granted: (IosNativeLease?) -> Unit) {
@@ -269,25 +282,58 @@ class IosLink internal constructor(
     // ---- leases ----
 
     /**
-     * Waits for the link, behind the lease before it and any owed work, then hands it out. A second
-     * sync is refused at once, so is anything but a command while a sync runs. A cancel while waiting
-     * takes nothing, a cancel after the lock was taken gives it back.
+     * Waits for the link, behind the lease before it, then hands it out. A second sync is refused at
+     * once, so is anything but a command while a sync runs or once a sync queued ahead of it starts.
+     * A native lease also waits for the abort, drain and owed `CLOSE` left by earlier work, since it
+     * writes past the session. A cancel while waiting takes nothing, a cancel after the lock was taken
+     * gives it back.
      */
     internal suspend fun acquire(kind: LeaseKind): Lease {
         if (!isOpen) throw LeaseRefusedException(syncRunning = false)
-        if (holder.load() == LeaseKind.SYNC && kind != LeaseKind.COMMAND) throw LeaseRefusedException(syncRunning = true)
-        leaseLock.lock()
+        if (kind == LeaseKind.COMMAND) {
+            leaseLock.lock()
+        } else {
+            val seen = syncsStarted.value
+            if (holder.load() == LeaseKind.SYNC) throw LeaseRefusedException(syncRunning = true)
+            if (!lockUnlessASyncStarts(seen)) throw LeaseRefusedException(syncRunning = true)
+        }
         val lease = Lease(kind)
         holder.store(kind)
+        if (kind == LeaseKind.SYNC) syncsStarted.update { it + 1 }
         leaseChanged()
         try {
             opened.await()
             if (!isOpen) throw LinkClosedException(link.closed.getCompleted())
+            if (kind == LeaseKind.NATIVE) link.awaitQuiet()
         } catch (e: Throwable) {
             lease.end()
             throw e
         }
         return lease
+    }
+
+    /** Takes [leaseLock], or returns false without it once a sync takes the lock after [seen]. */
+    private suspend fun lockUnlessASyncStarts(seen: Int): Boolean = coroutineScope {
+        val waiter = async(start = CoroutineStart.UNDISPATCHED) { leaseLock.lock() }
+        val syncStarted = async(start = CoroutineStart.UNDISPATCHED) { syncsStarted.first { it != seen } }
+        try {
+            val locked = select {
+                waiter.onAwait { true }
+                syncStarted.onAwait { false }
+            }
+            syncStarted.cancel()
+            if (locked) return@coroutineScope true
+            waiter.cancel()
+            waiter.join()
+            // The lock may have been granted before the cancel landed. Then it is ours, as if it won.
+            !waiter.isCancelled
+        } catch (e: Throwable) {
+            syncStarted.cancel()
+            waiter.cancel()
+            withContext(NonCancellable) { waiter.join() }
+            if (!waiter.isCancelled) leaseLock.unlock()
+            throw e
+        }
     }
 
     /** Runs [block] on a lease and always gives it back. */
@@ -314,9 +360,15 @@ class IosLink internal constructor(
 
     // ---- backpressure ----
 
-    internal fun onInboxLevel(bytes: Long) {
+    /**
+     * Reports can arrive out of order, so a stale high one could pause reads with nothing left to
+     * deliver and no later report to resume them. Decide from the live count under the lock instead.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    internal fun onInboxLevel(reported: Long) {
         pauseLock.lock()
         try {
+            val bytes = inboxLevel()
             val change = when {
                 !paused && bytes >= pauseAt -> true
                 paused && bytes < pauseAt / 2 -> false

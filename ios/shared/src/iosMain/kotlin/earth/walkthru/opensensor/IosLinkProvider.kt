@@ -27,6 +27,8 @@ class IosLinkProvider internal constructor(
     private val linkFor: (String) -> IosLink?,
     private val timeout: Duration,
     private val main: CoroutineContext,
+    /** Runs once the lease is taken, before it is lent. A test hook for a cancel landing there. */
+    private val granted: suspend () -> Unit = {},
 ) : LinkProvider {
     constructor(linkFor: (String) -> IosLink?) : this(linkFor, 20.seconds, Dispatchers.Main)
 
@@ -38,6 +40,7 @@ class IosLinkProvider internal constructor(
         var lease: IosLink.Lease? = null
         try {
             withTimeout(timeout) { lease = link.acquire(LeaseKind.SYNC) }
+            granted()
             currentCoroutineContext().ensureActive()
         } catch (e: TimeoutCancellationException) {
             lease?.end()

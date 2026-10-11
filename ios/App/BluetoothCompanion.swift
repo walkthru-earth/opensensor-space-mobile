@@ -506,9 +506,10 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
     }
 
     /// One Kotlin request body. It joins the GATT queue behind discovery reads and subscriptions,
-    /// and [done] hears whether the sensor took it.
-    fileprivate func send(_ body: Data, done: @escaping (Bool) -> Void) {
-        guard let control, ioLink != nil, current != nil else {
+    /// and [done] hears whether the sensor took it. A closed link's late write, such as its ABORT or
+    /// owed CLOSE, fails here instead of reaching the next connection's link.
+    fileprivate func send(_ body: Data, from link: IosLink?, done: @escaping (Bool) -> Void) {
+        guard let control, let link, ioLink === link, current != nil else {
             done(false)
             return
         }
@@ -916,7 +917,10 @@ extension BluetoothCompanion {
     fileprivate func openLink(_ peripheral: CBPeripheral, identity: SyncIdentity) {
         guard ioLink == nil, control != nil, let response else { return }
         let mtu = Int32(peripheral.maximumWriteValueLength(for: .withResponse) + 3)
-        let link = IosLink(port: BlePort(companion: self, mtu: mtu), overWifi: false, address: identity.device)
+        let port = BlePort(companion: self, mtu: mtu)
+        let link = IosLink(port: port, overWifi: false, address: identity.device)
+        // Set on main before any write, which hops to main before it reads this.
+        port.link = link
         link.identify(station: identity.station, boot: identity.boot, maxRead: identity.maxRead)
         link.onLeaseChange { [weak self] leased in
             // Kotlin calls this on the main thread.
@@ -971,6 +975,8 @@ extension BluetoothCompanion {
 /// main queue, where Core Bluetooth runs, and joins the GATT queue in call order.
 private final class BlePort: NSObject, IosLinkPort, @unchecked Sendable {
     private weak var companion: BluetoothCompanion?
+    /// The link this port belongs to. Written and read on the main thread only.
+    weak var link: IosLink?
     let mtu: Int32
 
     init(companion: BluetoothCompanion, mtu: Int32) {
@@ -980,13 +986,13 @@ private final class BlePort: NSObject, IosLinkPort, @unchecked Sendable {
 
     func send(frame: Data, done: @escaping (KotlinBoolean) -> Void) {
         let reply = WriteDone(done)
-        DispatchQueue.main.async { [weak companion] in
+        DispatchQueue.main.async { [weak companion, weak self] in
             MainActor.assumeIsolated {
                 guard let companion else {
                     reply.call(false)
                     return
                 }
-                companion.send(frame) { reply.call($0) }
+                companion.send(frame, from: self?.link) { reply.call($0) }
             }
         }
     }
