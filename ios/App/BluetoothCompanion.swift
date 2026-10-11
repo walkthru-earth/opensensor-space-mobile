@@ -7,15 +7,27 @@ import UIKit
 /// in the foreground. Off screen only a sync or Debug request already running, and an Auto-sync step
 /// for a known sensor (#23), keep a link. Each connection gets one shared [IosLink] once INFO named the
 /// sensor. Sync, commands, Debug, Device settings and Files take leases of it, so a reply left over
-/// from one run is drained before the next run's first request (#58).
+/// from one run is drained before the next run's first request (#58). Core Bluetooth itself runs on
+/// [BlePhysicalLink]'s serial queue (#80). This class keeps UI and coordination on the main actor,
+/// names the connection by its peripheral id and a connection number, and hears [BleEvent]s in order.
 @MainActor
-final class BluetoothCompanion: NSObject, @MainActor CBCentralManagerDelegate, @MainActor CBPeripheralDelegate
-{
-    let state = CompanionState()
-    private let wire = SyncWire()
+final class BluetoothCompanion {
+    let state: CompanionState
+    private let wire: SyncWire
     private let credentials = LanCredentials()
-    private var control: CBCharacteristic?
-    private var response: CBCharacteristic?
+    private let physical: BlePhysicalLink
+    /// Numbers each connection. Events from an earlier connection are ignored.
+    private var connection: UInt64 = 0
+    /// Numbers each port, so a write from an earlier link fails on the Bluetooth queue.
+    private var nextSender: UInt64 = 0
+    /// The central manager's last reported state. Nil before its first report.
+    private var centralState: CBManagerState?
+    /// True when the GATT queue has nothing queued or in flight, as the Bluetooth queue last reported.
+    private var gattIdle = true
+    /// INFO showed the control and response characteristics, so the shared link can exist.
+    private var canSync = false
+    /// The write size INFO reported, plus the ATT header.
+    private var mtu: Int32 = 0
     private var clockAttempted = false
     private var identity: SyncIdentity?
     private var tokenTimer: Timer?
@@ -30,9 +42,9 @@ final class BluetoothCompanion: NSObject, @MainActor CBCentralManagerDelegate, @
     var onSensorOpened: ((String, String?, String, String) -> SensorOpenResult)?
     /// A Collect all step ended: the sensor id and whether every listed file is on this phone.
     var onCollectFinished: ((String, Bool) -> Void)?
-    /// Created when access is already allowed, or when the user asks for it from My devices.
+    /// Set when access is already allowed, or when the user asks for it from My devices.
     /// Creating a central manager before that shows the Bluetooth permission prompt.
-    private var central: CBCentralManager?
+    private var hasCentral = false
     /// A scan the user asked for before the central manager reported its first state.
     private var scanRequested = false
     /// A sensor the user opened before the central manager reported its first state.
@@ -47,14 +59,11 @@ final class BluetoothCompanion: NSObject, @MainActor CBCentralManagerDelegate, @
     private var collectOpened = false
     /// Ends a Collect all step that never started its sync, for example behind a Debug lease that never ended.
     private var collectTimer: Timer?
-    private var discovered: [String: CBPeripheral] = [:]
-    private var advertisedNames: [String: String] = [:]
-    private var current: CBPeripheral?
+    /// The connected or connecting peripheral's id.
+    private var current: String?
     private var scanTimer: Timer?
     private var connectionTimer: Timer?
     private var freshnessTimer: Timer?
-    private var operations: [Operation] = []
-    private var pending: Operation?
     private var foreground = true
     private let engine: SensorSync
     /// This connection's shared link, made once INFO named the sensor. RESPONSE notifications go to it.
@@ -65,14 +74,13 @@ final class BluetoothCompanion: NSObject, @MainActor CBCentralManagerDelegate, @
     private var syncTask: UIBackgroundTaskIdentifier = .invalid
     private var interactiveFileName: String?
     private var interactiveSyncId: String?
-    private var resumePeripheral: CBPeripheral?
+    private var resumePeripheral: String?
     private var resumeTimer: Timer?
     private var resumeWaiting = false
     private var resumeAttempts = 0
     private var resumeStartedAt: Date?
     private let maxForegroundResumeAttempts = 2
     private let foregroundResumeWindow: TimeInterval = 75
-    private var responseSubscribed = false
     /// The sensor an Auto-sync step is copying now (#23), and whether that step opened the link.
     private var backgroundId: String?
     private var backgroundOpened = false
@@ -81,9 +89,6 @@ final class BluetoothCompanion: NSObject, @MainActor CBCentralManagerDelegate, @
     private var backgroundTimer: Timer?
     /// A step asked for before the central manager reported its first state, as after a background launch.
     private var backgroundRequested: (id: String, done: (BackgroundStepResult) -> Void)?
-    /// Pending connects to Auto-sync sensors, armed while the app is off screen. iOS completes one
-    /// when the sensor comes into range, even with the app suspended or relaunched.
-    private var waiting: [String: CBPeripheral] = [:]
     /// An armed pending connect completed. The shared run decides whether that sensor is due.
     var onWake: ((String) -> Void)?
     /// An Auto-sync step's progress, files done and files listed.
@@ -99,9 +104,25 @@ final class BluetoothCompanion: NSObject, @MainActor CBCentralManagerDelegate, @
     /// A run, a lease or Wi-Fi access setup holds the link.
     private var linkBusy: Bool { syncHandle != nil || ioLink?.leased == true || requestingToken }
 
+    private var poweredOn: Bool { centralState == .poweredOn }
+
     init(engine: SensorSync) {
         self.engine = engine
-        super.init()
+        let state = CompanionState()
+        let wire = SyncWire()
+        self.state = state
+        self.wire = wire
+        let uuids = BlePhysicalLink.Uuids(
+            service: state.serviceUuid, info: state.infoUuid, live: state.liveUuid, status: state.statusUuid,
+            control: wire.controlUuid, response: wire.responseUuid)
+        let sink = EventSink()
+        physical = BlePhysicalLink(uuids: uuids) { number, event in
+            // The main queue is FIFO, so events keep the Bluetooth queue's order.
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated { sink.companion?.handle(event, connection: number) }
+            }
+        }
+        sink.companion = self
         let authorization = CBManager.authorization
         state.bluetoothAuthorizationChanged(raw: Int64(authorization.rawValue))
         // Already allowed, so creating the manager shows no prompt and My devices can scan at once.
@@ -110,38 +131,21 @@ final class BluetoothCompanion: NSObject, @MainActor CBCentralManagerDelegate, @
 
     /// Creates the central manager. The first time, iOS asks for Bluetooth access.
     func requestAccess() {
-        guard central == nil else { return }
-        central = CBCentralManager(
-            delegate: self, queue: .main,
-            options: [
-                CBCentralManagerOptionShowPowerAlertKey: false,
-                CBCentralManagerOptionRestoreIdentifierKey: Self.restoreId,
-            ])
+        guard !hasCentral else { return }
+        hasCentral = true
+        physical.start(restoreId: Self.restoreId)
     }
 
     /// The connected sensor's hardware id once INFO named it.
     var deviceId: String? { identity?.device }
 
-    private enum Operation {
-        case read(CBCharacteristic)
-        case subscribe(CBCharacteristic)
-        /// A request body. Kotlin's writes carry [done], which hears whether the sensor took it.
-        case write(CBCharacteristic, Data, done: ((Bool) -> Void)?)
-        var characteristic: CBCharacteristic {
-            switch self {
-            case .read(let characteristic), .subscribe(let characteristic), .write(let characteristic, _, _):
-                return characteristic
-            }
-        }
-    }
-
     func scan() {
         guard foreground else { return }
-        guard let central, central.state == .poweredOn else {
+        guard poweredOn else {
             // My devices scans only once access is allowed. Scanning waits for poweredOn.
             scanRequested = true
-            if let existing = self.central {
-                centralManagerDidUpdateState(existing)
+            if let centralState {
+                powerChanged(centralState)
             } else {
                 requestAccess()
             }
@@ -149,9 +153,8 @@ final class BluetoothCompanion: NSObject, @MainActor CBCentralManagerDelegate, @
         }
         scanRequested = false
         stopScan()
-        discovered.removeAll()
         state.scanStarted()
-        central.scanForPeripherals(withServices: [CBUUID(string: state.serviceUuid)])
+        physical.scan()
         scanTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated { self?.stopScan() }
         }
@@ -161,7 +164,7 @@ final class BluetoothCompanion: NSObject, @MainActor CBCentralManagerDelegate, @
         scanRequested = false
         scanTimer?.invalidate()
         scanTimer = nil
-        if let central, central.state == .poweredOn { central.stopScan() }
+        if poweredOn { physical.stopScan() }
         state.scanStopped()
     }
 
@@ -173,19 +176,15 @@ final class BluetoothCompanion: NSObject, @MainActor CBCentralManagerDelegate, @
         guard foreground || collectOffScreen else { return }
         if resumeWaiting { clearInteractiveResume() }
         closeWhenIdle = nil
-        if let current, current.identifier.uuidString == id { return }
+        if current == id { return }
         if current != nil, syncHandle != nil || ioLink?.leased == true, collectId == nil { return }
-        guard let central, central.state == .poweredOn else {
+        guard poweredOn else {
             openRequested = id
             return
         }
         openRequested = nil
-        let peripheral =
-            discovered[id]
-            ?? UUID(uuidString: id).flatMap { central.retrievePeripherals(withIdentifiers: [$0]).first }
-        guard let peripheral else { return }
         if current != nil { disconnect() }
-        connect(peripheral)
+        connect(id)
     }
 
     /// One Collect all step over Bluetooth. Opens the sensor, syncs once it is ready, then closes it.
@@ -193,20 +192,20 @@ final class BluetoothCompanion: NSObject, @MainActor CBCentralManagerDelegate, @
     /// on this one, fails the step. An idle link to this sensor is synced and left open.
     func collect(id: String) {
         guard foreground || collectOffScreen, !resumeWaiting, !linkBusy, collectId == nil, backgroundId == nil,
-            let central, central.state == .poweredOn
+            poweredOn
         else {
             onCollectFinished?(id, false)
             return
         }
         if let current {
-            guard current.identifier.uuidString.caseInsensitiveCompare(id) == .orderedSame else {
+            guard current.caseInsensitiveCompare(id) == .orderedSame else {
                 onCollectFinished?(id, false)
                 return
             }
             collectOpened = false
         } else {
             open(id: id)
-            guard current?.identifier.uuidString == id else {
+            guard current == id else {
                 onCollectFinished?(id, false)
                 return
             }
@@ -223,9 +222,8 @@ final class BluetoothCompanion: NSObject, @MainActor CBCentralManagerDelegate, @
     /// Give the next Collect all sensor the one BLE slot when the current link is idle.
     /// An active sync, command, configuration request or token operation retains its owner.
     func releaseIdleForCollect(next id: String) {
-        guard let current, current.identifier.uuidString.caseInsensitiveCompare(id) != .orderedSame,
-            !resumeWaiting, !linkBusy, collectId == nil, backgroundId == nil, pending == nil,
-            operations.isEmpty
+        guard let current, current.caseInsensitiveCompare(id) != .orderedSame,
+            !resumeWaiting, !linkBusy, collectId == nil, backgroundId == nil, gattIdle
         else { return }
         disconnect()
     }
@@ -234,7 +232,7 @@ final class BluetoothCompanion: NSObject, @MainActor CBCentralManagerDelegate, @
         guard collectId != nil else { return }
         // A step cancelled during the automatic clock command ends when that command hands back.
         if collectCancelled { return failCollect() }
-        guard !linkBusy, pending == nil, operations.isEmpty else { return }
+        guard !linkBusy, gattIdle else { return }
         // Discovery has settled once the connect timer is gone. A sensor without the sync characteristics
         // or a readable identity cannot be collected, so the step ends instead of waiting.
         if identity == nil || ioLink == nil {
@@ -266,19 +264,21 @@ final class BluetoothCompanion: NSObject, @MainActor CBCentralManagerDelegate, @
         }
     }
 
-    private func connect(_ peripheral: CBPeripheral) {
-        guard let central else { return }
+    /// Opens this sensor on the Bluetooth queue. A pending connect that already reached it is
+    /// adopted there, and discovery starts as after a fresh connect.
+    private func connect(_ id: String) {
+        guard hasCentral else { return }
         stopScan()
-        let id = peripheral.identifier.uuidString
-        current = peripheral
-        peripheral.delegate = self
+        connection &+= 1
+        current = id
+        gattIdle = false
         state.connectionStarted(id: id)
         connectionTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.unexpectedLoss(notice: .connectTimedOut)
             }
         }
-        central.connect(peripheral)
+        physical.connect(id: id, as: connection)
     }
 
     /// Ends the connection for a typed reason. The shared state picks the words.
@@ -304,8 +304,8 @@ final class BluetoothCompanion: NSObject, @MainActor CBCentralManagerDelegate, @
     @discardableResult
     private func scheduleInteractiveResume(notice: CompanionNotice, result: SyncResult? = nil) -> Bool {
         guard foreground, collectId == nil, backgroundId == nil, let peripheral = current,
-            let id = interactiveSyncId, peripheral.identifier.uuidString.caseInsensitiveCompare(id) == .orderedSame,
-            let central, central.state == .poweredOn, resumeAttempts < maxForegroundResumeAttempts,
+            let id = interactiveSyncId, peripheral.caseInsensitiveCompare(id) == .orderedSame,
+            poweredOn, resumeAttempts < maxForegroundResumeAttempts,
             Date().timeIntervalSince(resumeStartedAt ?? Date()) < foregroundResumeWindow
         else { return false }
         if resumeStartedAt == nil { resumeStartedAt = Date() }
@@ -326,7 +326,7 @@ final class BluetoothCompanion: NSObject, @MainActor CBCentralManagerDelegate, @
         resumeTimer = nil
         guard resumeWaiting, foreground, interactiveSyncId != nil,
             let started = resumeStartedAt, Date().timeIntervalSince(started) < foregroundResumeWindow,
-            let peripheral = resumePeripheral, let central, central.state == .poweredOn,
+            let peripheral = resumePeripheral, poweredOn,
             collectId == nil, backgroundId == nil, current == nil
         else {
             clearInteractiveResume()
@@ -351,7 +351,6 @@ final class BluetoothCompanion: NSObject, @MainActor CBCentralManagerDelegate, @
         ioLink?.close()
         ioLink = nil
         endSyncTask()
-        responseSubscribed = false
         connectionTimer?.invalidate()
         freshnessTimer?.invalidate()
         connectionTimer = nil
@@ -361,17 +360,17 @@ final class BluetoothCompanion: NSObject, @MainActor CBCentralManagerDelegate, @
         requestingToken = false
         identity = nil
         clockAttempted = false
-        control = nil
-        response = nil
+        canSync = false
+        mtu = 0
         state.wifiAccessReset()
-        failWrites()
+        // Queued writes fail on the Bluetooth queue, and no port of this connection writes again.
+        if current != nil {
+            current = nil
+            physical.disconnect(connection)
+        }
+        gattIdle = true
         // A command outcome held for its last write reaches Today now that the connection is gone.
         state.today.linkIdle()
-        if let peripheral = current {
-            current = nil
-            peripheral.delegate = nil
-            if let central, central.state == .poweredOn { central.cancelPeripheralConnection(peripheral) }
-        }
         collectTimer?.invalidate()
         collectTimer = nil
         collectOpened = false
@@ -392,7 +391,7 @@ final class BluetoothCompanion: NSObject, @MainActor CBCentralManagerDelegate, @
     func close(id: String) {
         if interactiveSyncId?.caseInsensitiveCompare(id) == .orderedSame { clearInteractiveResume() }
         if openRequested == id { openRequested = nil }
-        guard let current, current.identifier.uuidString.caseInsensitiveCompare(id) == .orderedSame else { return }
+        guard let current, current.caseInsensitiveCompare(id) == .orderedSame else { return }
         disconnect()
     }
 
@@ -401,7 +400,7 @@ final class BluetoothCompanion: NSObject, @MainActor CBCentralManagerDelegate, @
     func sync(fileName: String? = nil) {
         // Today's Smart Sync and the Sync button say the link is busy instead of doing nothing.
         if startSync(onlyName: fileName) {
-            interactiveSyncId = current?.identifier.uuidString
+            interactiveSyncId = current
             interactiveFileName = fileName
             resumeStartedAt = nil
             resumeAttempts = 0
@@ -483,13 +482,13 @@ final class BluetoothCompanion: NSObject, @MainActor CBCentralManagerDelegate, @
     /// Runs what waits for an idle link once no write or read is queued or in flight. First the
     /// outcome of a command for Today, then a Collect all step or an Auto-sync step waiting for the link.
     private func settle() {
-        guard !linkBusy, pending == nil, operations.isEmpty else { return }
+        guard !linkBusy, gattIdle else { return }
         if ioLink != nil, !clockAttempted {
             clockAttempted = true
             command(.setTime, automatic: true)
             return
         }
-        if resumeWaiting, current?.identifier.uuidString.caseInsensitiveCompare(interactiveSyncId ?? "") == .orderedSame,
+        if resumeWaiting, current?.caseInsensitiveCompare(interactiveSyncId ?? "") == .orderedSame,
             startSync(onlyName: interactiveFileName)
         {
             resumeWaiting = false
@@ -503,26 +502,6 @@ final class BluetoothCompanion: NSObject, @MainActor CBCentralManagerDelegate, @
             closeWhenIdle = nil
             closeIdle(id: id)
         }
-    }
-
-    /// One Kotlin request body. It joins the GATT queue behind discovery reads and subscriptions,
-    /// and [done] hears whether the sensor took it. A closed link's late write, such as its ABORT or
-    /// owed CLOSE, fails here instead of reaching the next connection's link.
-    fileprivate func send(_ body: Data, from link: IosLink?, done: @escaping (Bool) -> Void) {
-        guard let control, let link, ioLink === link, current != nil else {
-            done(false)
-            return
-        }
-        operations.append(.write(control, body, done: done))
-        performNext()
-    }
-
-    /// Fails every queued or in-flight Kotlin write and empties the GATT queue.
-    private func failWrites() {
-        let queued = (pending.map { [$0] } ?? []) + operations
-        pending = nil
-        operations.removeAll()
-        for case .write(_, _, let done?) in queued { done(false) }
     }
 
     private func syncEnded(_ result: SyncResult, link: IosLink) {
@@ -573,10 +552,7 @@ final class BluetoothCompanion: NSObject, @MainActor CBCentralManagerDelegate, @
     /// Back on screen. Pending connects end, because the user drives the link again.
     func resume() {
         foreground = true
-        for (id, peripheral) in waiting where peripheral !== current {
-            waiting[id] = nil
-            central?.cancelPeripheralConnection(peripheral)
-        }
+        physical.releaseWaiting(id: nil)
     }
 
     /// Closes an idle link to this sensor once its last Today, Device or Device settings page is gone
@@ -588,10 +564,10 @@ final class BluetoothCompanion: NSObject, @MainActor CBCentralManagerDelegate, @
             if current != nil { disconnect() }
             return
         }
-        guard let current, current.identifier.uuidString.caseInsensitiveCompare(id) == .orderedSame,
+        guard let current, current.caseInsensitiveCompare(id) == .orderedSame,
             ioLink?.syncRunning != true, collectId == nil, backgroundId == nil, !requestingToken
         else { return }
-        guard !linkBusy, pending == nil, operations.isEmpty else {
+        guard !linkBusy, gattIdle else {
             closeWhenIdle = id
             return
         }
@@ -601,148 +577,17 @@ final class BluetoothCompanion: NSObject, @MainActor CBCentralManagerDelegate, @
     /// True while the user's work holds the link to this sensor. An idle open link is not held.
     func isBusy(id: String) -> Bool {
         if resumeWaiting, interactiveSyncId?.caseInsensitiveCompare(id) == .orderedSame { return true }
-        guard let current, current.identifier.uuidString.caseInsensitiveCompare(id) == .orderedSame else {
+        guard let current, current.caseInsensitiveCompare(id) == .orderedSame else {
             return false
         }
         return linkBusy || collectId != nil
     }
 
-    func centralManagerDidUpdateState(_ central: CBCentralManager) {
-        let notice: CompanionNotice?
-        switch central.state {
-        case .poweredOn: notice = nil
-        case .poweredOff: notice = .bluetoothOff
-        case .unauthorized: notice = .bluetoothDenied
-        case .unsupported: notice = .bluetoothUnsupported
-        default: notice = .bluetoothStarting
-        }
-        switch central.state {
-        case .poweredOn, .unknown, .resetting: break
-        default:
-            scanRequested = false
-            openRequested = nil
-        }
-        if central.state != .poweredOn, let notice {
-            stopScan()
-            disconnect(notice: notice)
-        }
-        switch central.state {
-        case .poweredOn, .unknown, .resetting: break
-        default: waiting.removeAll()
-        }
-        // The shared policy maps this to its status and offers Settings only after a denial.
-        state.bluetoothAuthorizationChanged(raw: Int64(CBManager.authorization.rawValue))
-        state.bluetoothNoticed(available: central.state == .poweredOn, notice: notice)
-        state.bluetoothPowerChanged(poweredOff: central.state == .poweredOff)
-        if central.state == .poweredOn, let id = openRequested { open(id: id) }
-        if central.state == .poweredOn, scanRequested { scan() }
-        if central.state == .poweredOn {
-            // A restored pending connect that completed while the app was not running.
-            for (id, peripheral) in waiting where peripheral.state == .connected && peripheral !== current {
-                onWake?(id)
-            }
-        }
-        if let request = backgroundRequested, central.state != .unknown, central.state != .resetting {
-            backgroundRequested = nil
-            backgroundSync(id: request.id, done: request.done)
-        }
-    }
-
-    func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {
-        // iOS relaunched the app for a pending connect. Keep the peripherals so the run can use them.
-        let peripherals = dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral] ?? []
-        for peripheral in peripherals { waiting[peripheral.identifier.uuidString] = peripheral }
-    }
-
-    func centralManager(
-        _ central: CBCentralManager, didDiscover peripheral: CBPeripheral,
-        advertisementData: [String: Any], rssi RSSI: NSNumber
-    ) {
-        guard foreground else { return }
-        let id = peripheral.identifier.uuidString
-        discovered[id] = peripheral
-        let name = advertisementData[CBAdvertisementDataLocalNameKey] as? String ?? peripheral.name ?? "AQ sensor"
-        advertisedNames[id] = name
-        state.deviceFound(id: id, name: name, rssi: RSSI.int32Value)
-    }
-
-    func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
-        let id = peripheral.identifier.uuidString
-        if current !== peripheral, waiting[id] != nil {
-            // An armed pending connect completed. On screen the user drives the link, so it ends.
-            // Off screen it stays until the run takes it or releases it.
-            if foreground {
-                releaseWaiting(id: id)
-            } else {
-                onWake?(id)
-            }
-            return
-        }
-        guard current === peripheral, active else {
-            central.cancelPeripheralConnection(peripheral)
-            return
-        }
-        peripheral.discoverServices([CBUUID(string: state.serviceUuid)])
-    }
-
-    func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
-        if current !== peripheral { waiting[peripheral.identifier.uuidString] = nil }
-        guard current === peripheral else { return }
-        unexpectedLoss(notice: .connectFailed)
-    }
-
-    func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
-        if current !== peripheral { waiting[peripheral.identifier.uuidString] = nil }
-        guard current === peripheral else { return }
-        // Replies already offered still reach their callers, then the run sees the peer go.
-        ioLink?.linkLost(reason: IosLink.companion.REASON_PEER_CLOSED)
-        unexpectedLoss(notice: .sensorDisconnected)
-    }
-
-    func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
-        guard current === peripheral else { return }
-        guard error == nil,
-            let service = peripheral.services?.first(where: { $0.uuid == CBUUID(string: state.serviceUuid) })
-        else {
-            disconnect(notice: .serviceMissing)
-            return
-        }
-        peripheral.discoverCharacteristics(
-            [
-                CBUUID(string: state.infoUuid), CBUUID(string: state.liveUuid), CBUUID(string: state.statusUuid),
-                CBUUID(string: wire.controlUuid), CBUUID(string: wire.responseUuid),
-            ], for: service)
-    }
-
-    func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
-        guard current === peripheral else { return }
-        let characteristics = service.characteristics ?? []
-        guard error == nil,
-            let info = characteristics.first(where: { $0.uuid == CBUUID(string: state.infoUuid) }),
-            let live = characteristics.first(where: { $0.uuid == CBUUID(string: state.liveUuid) }),
-            let status = characteristics.first(where: { $0.uuid == CBUUID(string: state.statusUuid) }),
-            info.properties.contains(.read), live.properties.contains([.read, .notify]),
-            status.properties.contains([.read, .notify])
-        else {
-            disconnect(notice: .characteristicsMissing)
-            return
-        }
-        control = characteristics.first(where: {
-            $0.uuid == CBUUID(string: wire.controlUuid) && $0.properties.contains(.write)
-        })
-        response = characteristics.first(where: {
-            $0.uuid == CBUUID(string: wire.responseUuid) && $0.properties.contains(.notify)
-        })
-        // Serialize discovery follow-up, encrypted subscription and reads through their delegate callbacks.
-        operations = [.read(info), .subscribe(live), .read(live), .subscribe(status), .read(status)]
-        performNext()
-    }
-
     /// Asks the sensor for its LAN token. The request takes a native lease of the shared link, so it
     /// waits for any Kotlin request and its reply stays on this side.
     func saveWifiAccess() {
-        guard foreground, let peripheral = current, identity != nil, let link = ioLink, syncHandle == nil,
-            !requestingToken, peripheral.maximumWriteValueLength(for: .withResponse) >= 1
+        guard foreground, current != nil, identity != nil, let link = ioLink, syncHandle == nil,
+            !requestingToken, mtu >= 4
         else { return }
         requestingToken = true
         state.wifiAccessSaving()
@@ -751,17 +596,18 @@ final class BluetoothCompanion: NSObject, @MainActor CBCentralManagerDelegate, @
                 self?.disconnect(notice: .wifiAccessTimedOut)
             }
         }
+        let number = connection
         link.leaseForNative { [weak self] lease in
             MainActor.assumeIsolated {
-                guard let self, let lease, self.requestingToken, self.ioLink === link, let control = self.control else {
+                guard let self, let lease, self.requestingToken, self.ioLink === link, self.connection == number else {
                     lease?.end()
                     // A sync took the link first, or it closed. The user can ask again.
                     if let self, self.requestingToken, self.ioLink === link { self.finishTokenRequest(.saveWifiAccess) }
                     return
                 }
                 self.nativeLease = lease
-                self.operations.append(.write(control, self.wire.tokenRequest(), done: nil))
-                self.performNext()
+                self.gattIdle = false
+                self.physical.requestToken(number)
             }
         }
     }
@@ -772,132 +618,148 @@ final class BluetoothCompanion: NSObject, @MainActor CBCentralManagerDelegate, @
         tokenTimer = nil
         nativeLease?.end()
         nativeLease = nil
+        physical.endTokenRequest(connection)
         state.wifiAccessNoticed(available: true, busy: false, notice: notice)
         settle()
     }
+}
 
-    func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
-        guard current === peripheral, case .write(let expected, _, let done) = pending, expected === characteristic
-        else { return }
-        if error != nil, let done {
-            // The request state on the sensor is unknown, so the shared link is poisoned. The run
-            // ends as a lost link, and the connection closes with it.
-            pending = nil
-            done(false)
-            failWrites()
+/// Holds the companion weakly for the physical link's event closure, which is made before `self` is.
+@MainActor
+private final class EventSink: Sendable {
+    weak var companion: BluetoothCompanion?
+}
+
+/// Events from the Bluetooth queue, in arrival order on the main actor.
+extension BluetoothCompanion {
+    fileprivate func handle(_ event: BleEvent, connection number: UInt64) {
+        switch event {
+        case .power(let state): return powerChanged(state)
+        case .found(let id, let name, let rssi):
+            guard foreground else { return }
+            state.deviceFound(id: id, name: name, rssi: rssi)
             return
-        }
-        if error != nil {
-            disconnect(notice: .tokenFailed)
-            return
-        }
-        pending = nil
-        done?(true)
-        performNext()
-        settle()
-    }
-
-    private func performNext() {
-        guard pending == nil, let peripheral = current, !operations.isEmpty else { return }
-        let operation = operations.removeFirst()
-        pending = operation
-        switch operation {
-        case .read(let characteristic): peripheral.readValue(for: characteristic)
-        case .subscribe(let characteristic): peripheral.setNotifyValue(true, for: characteristic)
-        case .write(let characteristic, let data, _): peripheral.writeValue(data, for: characteristic, type: .withResponse)
-        }
-    }
-
-    func peripheral(
-        _ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?
-    ) {
-        guard current === peripheral else { return }
-        guard error == nil, characteristic.isNotifying else {
-            disconnect(notice: .notifyFailed)
-            return
-        }
-        if characteristic.uuid == CBUUID(string: wire.responseUuid) { responseSubscribed = true }
-        if case .subscribe(let expected) = pending, expected === characteristic {
-            pending = nil
-            performNext()
-            settle()
-        }
-    }
-
-    func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
-        guard current === peripheral, active else { return }
-        if characteristic.uuid == CBUUID(string: wire.responseUuid) {
-            guard error == nil, let data = characteristic.value else { return }
-            // Only the token reply stays here. Every other frame goes to the shared link, which
-            // drains replies a cancelled run left behind. Bluetooth cannot pause notifications, and
-            // the read window bounds them, so a full inbox is left to poison the link.
-            guard nativeLease != nil, let reply = wire.decode(data: data), reply.answersToken else {
-                _ = ioLink?.offer(frame: data)
-                return
-            }
-            if reply.kind == "token", let identity {
-                do {
-                    try credentials.save(
-                        LanCredential(
-                            station: identity.station, device: identity.device,
-                            peripheral: peripheral.identifier.uuidString, token: reply.payload, port: Int(reply.port)))
-                    finishTokenRequest(.tokenStored)
-                    onCredentialSaved?()
-                } catch { finishTokenRequest(LanFailure.credentialsUnavailable.notice) }
+        case .wake(let id, let restored):
+            // An armed pending connect completed. On screen the user drives the link, so it ends.
+            // Off screen it stays until the run takes it or releases it. A restored one waits for the run.
+            if restored || !foreground {
+                onWake?(id)
             } else {
-                finishTokenRequest(.tokenRefused)
+                releaseWaiting(id: id)
             }
             return
+        default: break
         }
-        guard error == nil, let data = characteristic.value, let json = String(data: data, encoding: .utf8) else {
-            disconnect(notice: .readFailed)
-            return
-        }
-        switch characteristic.uuid {
-        case CBUUID(string: state.infoUuid):
-            guard let observed = wire.identity(json: json) else {
-                disconnect(notice: .infoInvalid)
-                return
-            }
-            let id = peripheral.identifier.uuidString
-            guard let result = onSensorOpened?(id, advertisedNames[id] ?? peripheral.name, observed.station, observed.device) else {
-                disconnect(notice: .infoInvalid)
-                return
-            }
-            guard result.accepted else {
-                disconnect(notice: result.notice ?? .infoInvalid)
-                return
-            }
-            guard state.receiveInfo(json: json) else {
-                disconnect(notice: .infoInvalid)
-                return
-            }
-            identity = observed
-            openLink(peripheral, identity: observed)
-            state.wifiAccessNoticed(
-                available: identity != nil && control != nil && response != nil, busy: false,
-                notice: .saveWifiAccess)
-            state.bluetoothSyncAvailable(available: identity != nil && control != nil && response != nil)
-        case CBUUID(string: state.liveUuid):
+        // A late event from a connection that already ended answers nothing now.
+        guard number == connection, current != nil else { return }
+        switch event {
+        case .connected:
+            if !active { disconnect() }
+        case .info(let json, let name, let mtu, let canSync):
+            sensorOpened(json: json, name: name, mtu: mtu, canSync: canSync)
+        case .ready:
+            connectionTimer?.invalidate()
+            connectionTimer = nil
+            settle()
+        case .live(let json):
+            guard active else { return }
             state.receiveLive(json: json)
             freshnessTimer?.invalidate()
             freshnessTimer = Timer.scheduledTimer(withTimeInterval: 35, repeats: false) { [weak self] _ in
                 MainActor.assumeIsolated { self?.state.readingExpired() }
             }
-        case CBUUID(string: state.statusUuid):
+        case .status(let json):
+            guard active else { return }
             state.receiveStatus(json: json)
-            ioLink?.offerStatus(json: json)
-        default: return
-        }
-        if case .read(let expected) = pending, expected === characteristic {
-            pending = nil
-            if operations.isEmpty {
-                connectionTimer?.invalidate()
-                connectionTimer = nil
+        case .gatt(let idle):
+            gattIdle = idle
+            if idle { settle() }
+        case .token(let kind, let payload, let port):
+            tokenReplied(kind: kind, payload: payload, port: port)
+        case .lost(let loss):
+            // The Bluetooth queue already ended the connection.
+            switch loss {
+            case .unknownSensor, .connectFailed: unexpectedLoss(notice: .connectFailed)
+            case .disconnected: unexpectedLoss(notice: .sensorDisconnected)
+            case .serviceMissing: disconnect(notice: .serviceMissing)
+            case .characteristicsMissing: disconnect(notice: .characteristicsMissing)
+            case .notifyFailed: disconnect(notice: .notifyFailed)
+            case .readFailed: disconnect(notice: .readFailed)
+            case .tokenFailed: disconnect(notice: .tokenFailed)
             }
-            performNext()
-            settle()
+        case .power, .found, .wake: break
         }
+    }
+
+    fileprivate func powerChanged(_ newState: CBManagerState) {
+        centralState = newState
+        let notice: CompanionNotice?
+        switch newState {
+        case .poweredOn: notice = nil
+        case .poweredOff: notice = .bluetoothOff
+        case .unauthorized: notice = .bluetoothDenied
+        case .unsupported: notice = .bluetoothUnsupported
+        default: notice = .bluetoothStarting
+        }
+        switch newState {
+        case .poweredOn, .unknown, .resetting: break
+        default:
+            scanRequested = false
+            openRequested = nil
+        }
+        if newState != .poweredOn, let notice {
+            stopScan()
+            disconnect(notice: notice)
+        }
+        // The shared policy maps this to its status and offers Settings only after a denial.
+        state.bluetoothAuthorizationChanged(raw: Int64(CBManager.authorization.rawValue))
+        state.bluetoothNoticed(available: newState == .poweredOn, notice: notice)
+        state.bluetoothPowerChanged(poweredOff: newState == .poweredOff)
+        if newState == .poweredOn, let id = openRequested { open(id: id) }
+        if newState == .poweredOn, scanRequested { scan() }
+        if let request = backgroundRequested, newState != .unknown, newState != .resetting {
+            backgroundRequested = nil
+            backgroundSync(id: request.id, done: request.done)
+        }
+    }
+
+    private func sensorOpened(json: String, name: String?, mtu: Int32, canSync: Bool) {
+        guard let id = current, let observed = wire.identity(json: json) else {
+            disconnect(notice: .infoInvalid)
+            return
+        }
+        guard let result = onSensorOpened?(id, name, observed.station, observed.device) else {
+            disconnect(notice: .infoInvalid)
+            return
+        }
+        guard result.accepted else {
+            disconnect(notice: result.notice ?? .infoInvalid)
+            return
+        }
+        guard state.receiveInfo(json: json) else {
+            disconnect(notice: .infoInvalid)
+            return
+        }
+        identity = observed
+        self.mtu = mtu
+        self.canSync = canSync
+        openLink(identity: observed)
+        state.wifiAccessNoticed(available: canSync, busy: false, notice: .saveWifiAccess)
+        state.bluetoothSyncAvailable(available: canSync)
+    }
+
+    private func tokenReplied(kind: String, payload: Data, port: Int) {
+        guard nativeLease != nil, requestingToken else { return }
+        guard kind == "token", let identity, let id = current else {
+            finishTokenRequest(.tokenRefused)
+            return
+        }
+        do {
+            try credentials.save(
+                LanCredential(station: identity.station, device: identity.device, peripheral: id, token: payload, port: port))
+            finishTokenRequest(.tokenStored)
+            onCredentialSaved?()
+        } catch { finishTokenRequest(LanFailure.credentialsUnavailable.notice) }
     }
 }
 
@@ -912,15 +774,14 @@ extension BluetoothCompanion {
         return ioLink
     }
 
-    /// Makes this connection's shared link once INFO named the sensor, and subscribes to RESPONSE
-    /// before its first write.
-    fileprivate func openLink(_ peripheral: CBPeripheral, identity: SyncIdentity) {
-        guard ioLink == nil, control != nil, let response else { return }
-        let mtu = Int32(peripheral.maximumWriteValueLength(for: .withResponse) + 3)
-        let port = BlePort(companion: self, mtu: mtu)
+    /// Makes this connection's shared link once INFO named the sensor. The Bluetooth queue hears of
+    /// it before Kotlin can write, and subscribes to RESPONSE before the first write.
+    fileprivate func openLink(identity: SyncIdentity) {
+        guard ioLink == nil, canSync else { return }
+        nextSender &+= 1
+        let port = BlePort(physical: physical, sender: nextSender, mtu: mtu)
         let link = IosLink.make(port: port, overWifi: false, identity: identity)
-        // Set on main before any write, which hops to main before it reads this.
-        port.link = link
+        physical.attach(link, sender: port.sender, to: connection)
         link.onLeaseChange { @Sendable [weak self] leased in
             // Kotlin calls this on the main thread.
             MainActor.assumeIsolated {
@@ -933,10 +794,6 @@ extension BluetoothCompanion {
             Task { @MainActor in self?.linkClosed(id) }
         }
         ioLink = link
-        if !responseSubscribed {
-            operations.append(.subscribe(response))
-            performNext()
-        }
     }
 
     /// A lease ended. Work waiting for an idle link runs, and off screen an idle link closes.
@@ -970,36 +827,6 @@ extension BluetoothCompanion {
     }
 }
 
-/// The Bluetooth side of one [IosLink]. Kotlin calls it from any thread, so each write hops to the
-/// main queue, where Core Bluetooth runs, and joins the GATT queue in call order.
-private final class BlePort: NSObject, IosLinkPort, Sendable {
-    private weak let companion: BluetoothCompanion?
-    /// The link this port belongs to, set once the link exists.
-    @MainActor weak var link: IosLink?
-    let mtu: Int32
-
-    init(companion: BluetoothCompanion, mtu: Int32) {
-        self.companion = companion
-        self.mtu = mtu
-    }
-
-    func send(frame: Data, done: @escaping (KotlinBoolean) -> Void) {
-        let reply = WriteDone(done)
-        DispatchQueue.main.async { [weak companion, weak self] in
-            MainActor.assumeIsolated {
-                guard let companion else {
-                    reply.call(false)
-                    return
-                }
-                companion.send(frame, from: self?.link) { reply.call($0) }
-            }
-        }
-    }
-
-    /// Notifications cannot be paused. The read window the engine asks for bounds them.
-    func setReadPaused(paused: Bool) {}
-}
-
 /// Auto-sync over Bluetooth (#23). Only sensors this phone already read over an encrypted link are
 /// opened, by their saved peripheral identifier. iOS shows no pairing prompt off screen, so a sensor
 /// whose bond is gone fails the step instead of asking.
@@ -1011,39 +838,33 @@ extension BluetoothCompanion {
             done(BackgroundStepResult.skipped("busy"))
             return
         }
-        guard let central else {
+        guard hasCentral else {
             done(BackgroundStepResult.skipped("bluetooth not allowed"))
             return
         }
-        if central.state == .unknown || central.state == .resetting {
+        let reported = centralState ?? .unknown
+        if reported == .unknown || reported == .resetting {
             backgroundRequested = (id, done)
             return
         }
-        guard central.state == .poweredOn else {
+        guard reported == .poweredOn else {
             done(BackgroundStepResult.skipped("bluetooth off"))
             return
         }
         if let current {
             // The one link is in use for another sensor, or for work the user started.
-            guard current.identifier.uuidString.caseInsensitiveCompare(id) == .orderedSame, !linkBusy else {
+            guard current.caseInsensitiveCompare(id) == .orderedSame, !linkBusy else {
                 done(BackgroundStepResult.skipped("in use"))
                 return
             }
             backgroundOpened = false
         } else {
-            let peripheral =
-                waiting.removeValue(forKey: id)
-                ?? UUID(uuidString: id).flatMap { central.retrievePeripherals(withIdentifiers: [$0]).first }
-            guard let peripheral else {
+            guard UUID(uuidString: id) != nil else {
                 done(BackgroundStepResult.skipped("unknown sensor"))
                 return
             }
             backgroundOpened = true
-            if peripheral.state == .connected {
-                adopt(peripheral)
-            } else {
-                connect(peripheral)
-            }
+            connect(id)
         }
         backgroundId = id
         backgroundDone = done
@@ -1054,19 +875,8 @@ extension BluetoothCompanion {
         backgroundWhenReady()
     }
 
-    /// A pending connect already reached the sensor. Discovery starts as after a fresh connect.
-    private func adopt(_ peripheral: CBPeripheral) {
-        current = peripheral
-        peripheral.delegate = self
-        state.connectionStarted(id: peripheral.identifier.uuidString)
-        connectionTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: false) { [weak self] _ in
-            MainActor.assumeIsolated { self?.disconnect() }
-        }
-        peripheral.discoverServices([CBUUID(string: state.serviceUuid)])
-    }
-
     fileprivate func backgroundWhenReady() {
-        guard backgroundId != nil, !linkBusy, pending == nil, operations.isEmpty else { return }
+        guard backgroundId != nil, !linkBusy, gattIdle else { return }
         if identity == nil || ioLink == nil {
             if connectionTimer == nil, current != nil { failBackground() }
             return
@@ -1104,19 +914,13 @@ extension BluetoothCompanion {
     /// Arms pending connects to these sensors while the app is off screen. They never time out. iOS
     /// completes one when the sensor is in range, then [onWake] runs.
     func armPendingConnects(ids: [String]) {
-        guard !foreground, let central, central.state == .poweredOn else { return }
-        let uuids = ids.compactMap { UUID(uuidString: $0) }
-        for peripheral in central.retrievePeripherals(withIdentifiers: uuids) {
-            let id = peripheral.identifier.uuidString
-            guard peripheral !== current, waiting[id] == nil else { continue }
-            waiting[id] = peripheral
-            central.connect(peripheral)
-        }
+        guard !foreground, poweredOn else { return }
+        physical.arm(ids: ids.filter { $0 != current })
     }
 
     /// The run did not take this pending connect, so it ends and the sensor is free again.
     func releaseWaiting(id: String) {
-        guard let peripheral = waiting.removeValue(forKey: id), peripheral !== current else { return }
-        central?.cancelPeripheralConnection(peripheral)
+        guard id != current else { return }
+        physical.releaseWaiting(id: id)
     }
 }
