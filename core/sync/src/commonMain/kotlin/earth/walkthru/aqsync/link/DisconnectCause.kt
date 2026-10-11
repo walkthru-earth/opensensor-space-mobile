@@ -49,6 +49,12 @@ sealed interface DisconnectCause {
     /** The device speaks an older protocol than this app requires. */
     data class UpdateFirmware(val reported: Int?, val required: Int) : DisconnectCause
 
+    /**
+     * The peer answered, but the app refused the session: another identity, hardware held through
+     * another endpoint, a failed setup step or a replaced session. [reason] is a fixed developer label.
+     */
+    data class Rejected(val reason: String) : DisconnectCause
+
     /** The app closed the link on purpose. [reason] is a fixed developer label. */
     data class Deliberate(val reason: String) : DisconnectCause
 }
@@ -75,6 +81,7 @@ val DisconnectCause.retryable: Boolean
         is DisconnectCause.Auth,
         is DisconnectCause.Deliberate,
         is DisconnectCause.FramingViolation,
+        is DisconnectCause.Rejected,
         is DisconnectCause.UpdateFirmware -> false
         else -> true
     }
@@ -94,5 +101,6 @@ fun DisconnectCause.describe(): String = when (this) {
     DisconnectCause.Unreachable -> "unreachable"
     is DisconnectCause.RadioLost -> "${radio.name.lowercase()} lost"
     is DisconnectCause.UpdateFirmware -> "firmware proto $reported, app needs $required"
+    is DisconnectCause.Rejected -> "rejected ($reason)"
     is DisconnectCause.Deliberate -> "closed ($reason)"
 }

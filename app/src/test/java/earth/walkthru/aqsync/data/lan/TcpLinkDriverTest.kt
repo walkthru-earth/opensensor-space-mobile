@@ -23,6 +23,7 @@ import earth.walkthru.aqsync.link.TimeoutPhase
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
@@ -252,6 +253,42 @@ class TcpLinkDriverTest {
             val expected = DisconnectCause.Timeout(TimeoutPhase.SEND, Opcode.SET_TIME)
             assertEquals(expected, e?.timeout)
             assertEquals(expected, withTimeout(1_000) { sink.closed.await() })
+        } finally {
+            release.countDown()
+            server.close()
+            exec.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `cancelling a blocked write closes the link instead of finishing the frame`() = runBlocking {
+        val server = ServerSocket().apply {
+            receiveBufferSize = 4096
+            bind(InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 1)
+        }
+        val exec = Executors.newSingleThreadExecutor()
+        val release = CountDownLatch(1)
+        exec.submit {
+            runCatching {
+                server.accept().use { s ->
+                    DataInputStream(s.getInputStream()).readFully(ByteArray(36))
+                    LanFraming.write(s.getOutputStream(), hello())
+                    release.await(30, TimeUnit.SECONDS) // never reads again
+                }
+            }
+        }
+        try {
+            val sink = RecordingSink()
+            val t = driver(server.localPort) { Socket().apply { sendBufferSize = 4096 } }
+            withTimeout(5_000) { t.open(sink) }
+            val body = ByteArray(500) { Opcode.SET_TIME.toByte() }
+            val sender = launch(Dispatchers.IO) { repeat(100_000) { t.send(body, 60.seconds) } }
+            // Wait until the socket buffers are full and a write is blocked.
+            delay(1_500)
+            assertTrue("the write should be blocked", sender.isActive)
+            sender.cancelAndJoin()
+            assertEquals(DisconnectCause.LocalAbort(), withTimeout(1_000) { sink.closed.await() })
+            assertTrue(runCatching { t.send(body, 1.seconds) }.exceptionOrNull() is LinkClosedException)
         } finally {
             release.countDown()
             server.close()

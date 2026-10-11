@@ -34,13 +34,13 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -246,8 +246,16 @@ class TcpLinkDriver(
             val done = try {
                 withTimeoutOrNull(deadline) { write.await() }
             } catch (e: CancellationException) {
-                // The link closed under the write. The caller's own cancellation rethrows as is.
-                currentCoroutineContext().ensureActive()
+                if (!currentCoroutineContext().isActive) {
+                    // The caller cancelled while bytes may still be going out. A half sent frame
+                    // cannot be followed by the CLOSE the session owes, so end the link as on a timeout.
+                    if (!write.isCompleted) {
+                        fail(DisconnectCause.LocalAbort())
+                        write.cancel()
+                    }
+                    throw e
+                }
+                // The link closed under the write.
                 throw LinkClosedException(DisconnectCause.LocalAbort(), null)
             } catch (e: IOException) {
                 val cause = SocketErrors.cause(e)

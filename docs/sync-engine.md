@@ -198,7 +198,8 @@ drivers land (#57, #58) `TransportLinkDriver` runs it over an `AqTransport`.
 - The optional `Heartbeat` (LAN 120 s ping, 180 s deadline) reads only reader RX marks from an
   injected `TimeSource`. Nothing polls.
 - Loss is a typed `DisconnectCause`. `retryable` is false for `Auth`, `Deliberate`,
-  `FramingViolation` and `UpdateFirmware`. A `BYE` refuses new requests and attaches its reason
+  `FramingViolation`, `Rejected` and `UpdateFirmware`. `Rejected` is a peer the app refused after
+  it answered (another identity, hardware held elsewhere, a failed setup step). A `BYE` refuses new requests and attaches its reason
   to the close.
 - `open` applies `requireProto3`, so firmware below proto 3 ends as `UpdateFirmware`.
 

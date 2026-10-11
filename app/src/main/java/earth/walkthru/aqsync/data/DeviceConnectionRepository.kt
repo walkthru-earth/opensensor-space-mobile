@@ -447,6 +447,8 @@ class DeviceConnectionRepository @Inject constructor(
             val failure = (e.cause as? LanConnectException)?.failure
                 ?: if (cause == DisconnectCause.Auth(AuthKind.TOKEN_REJECTED)) LanFailure.AUTH_FAILED else null
             Log.w(TAG, "LAN connect failed (${cause.describe()})")
+            // A LAN-only lend reports this instead of Unreachable, so a rejected token is not retried.
+            lastOpenFailure = if (failure == LanFailure.AUTH_FAILED) DisconnectCause.Auth(AuthKind.TOKEN_REJECTED) else cause
             if (failure != null && tokenPolicy.invalidatesToken(failure)) {
                 // The device rotated its token (ERROR 14 at the handshake). The stored copy is dead:
                 // drop it so the Bluetooth session we are about to open fetches a fresh one.
@@ -563,6 +565,7 @@ class DeviceConnectionRepository @Inject constructor(
             throw e
         } catch (e: Exception) {
             Log.w(TAG, "device verification failed (${e.message})")
+            lastOpenFailure = DisconnectCause.FramingViolation("info unreadable")
             connectionFailure.value = "verification failed (${e.message})"
             _events.tryEmit(DeviceEvent.Error(DeviceMessage.VerificationFailed))
             return false
@@ -580,6 +583,7 @@ class DeviceConnectionRepository @Inject constructor(
             val continuity = DeviceContinuityPolicy.evaluate(expected, DeviceContinuityPolicy.Identity(address, info.dev, info.station), authenticatedBle)
             if (continuity is DeviceContinuityPolicy.Decision.Reject) {
                 Log.w(TAG, "identity rejected (${continuity.reason})")
+                lastOpenFailure = DisconnectCause.Rejected("identity ${continuity.reason.name}")
                 connectionFailure.value = continuity.reason.name
                 _events.tryEmit(DeviceEvent.Error(DeviceMessage.IdentityRejected(continuity.reason)))
                 return false
@@ -588,6 +592,7 @@ class DeviceConnectionRepository @Inject constructor(
             if (identityLease == null && info.dev != null) {
                 identityLease = identityClaims.claim(info.dev!!, this)
                 if (identityLease == null) {
+                    lastOpenFailure = DisconnectCause.Rejected("hardware in use")
                     connectionFailure.value = "hardware already connected through another endpoint"
                     _events.tryEmit(DeviceEvent.Error(DeviceMessage.HardwareInUse))
                     return false
@@ -617,7 +622,10 @@ class DeviceConnectionRepository @Inject constructor(
             )
             _info.value = info
             setTimeFromPhoneNow(session, quiet = true, automatic = true)
-            if (_session.value !== session) return false
+            if (_session.value !== session) {
+                lastOpenFailure = DisconnectCause.Rejected("session replaced")
+                return false
+            }
             identityReady.value = true
             suspendRunCatching { transport.readStatus().decodeToString() }.onSuccess { raw ->
                 _statusRaw.value = raw
@@ -643,6 +651,8 @@ class DeviceConnectionRepository @Inject constructor(
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             Log.w(TAG, "device verification failed (${e.message})")
+            // A link lost during setup keeps its own, possibly retryable, cause.
+            lastOpenFailure = (e as? LinkClosedException)?.disconnectCause ?: DisconnectCause.Rejected("setup failed")
             connectionFailure.value = "verification failed (${e.message})"
             _events.tryEmit(DeviceEvent.Error(DeviceMessage.VerificationFailed))
             return false
@@ -764,8 +774,15 @@ class DeviceConnectionRepository @Inject constructor(
     }
 
     private suspend fun lendLocked(address: String, prefer: LinkPreference): CollectionLink {
-        if (backgroundOwner.value != null || _reconnecting.value != null) throw LinkClosedException(DisconnectCause.Busy)
-        val current = _session.value
+        if (backgroundOwner.value != null || _reconnecting.value != null || repositorySyncRunning()) {
+            throw LinkClosedException(DisconnectCause.Busy)
+        }
+        var current = _session.value
+        // A link a lend opened that dropped after its lends came back is ours to clear, not Busy.
+        if (current != null && current === lendOwned && lends.get() == 0 && current.link.state.value !is LinkState.Ready) {
+            closeSessionLocked()
+            current = null
+        }
         // The watcher keeps a link closed by Auth in the slot with no reconnect. Report that cause,
         // so the collection stops and asks to pair again instead of retrying Busy.
         current?.takeIf { it.address == address }?.closedByAuth()?.let { throw LinkClosedException(it) }
@@ -774,10 +791,19 @@ class DeviceConnectionRepository @Inject constructor(
             current.address == address && current.isUsable -> current
             else -> throw LinkClosedException(DisconnectCause.Busy)
         }
-        val info = (session.link.state.value as? LinkState.Ready)?.info?.info
-            ?: throw LinkClosedException(DisconnectCause.Unreachable)
-        val station = info.station ?: throw LinkClosedException(DisconnectCause.FramingViolation("info without station"))
-        val maxRead = ReadWindow.forTransport(session.transport, info.maxRead)
+        val maxRead: Int
+        val station: String
+        try {
+            // openSession swallows reads after verification, so the link may already be gone.
+            val info = (session.link.state.value as? LinkState.Ready)?.info?.info
+                ?: throw LinkClosedException((session.link.state.value as? LinkState.Closed)?.cause ?: DisconnectCause.Unreachable)
+            station = info.station ?: throw LinkClosedException(DisconnectCause.FramingViolation("info without station"))
+            maxRead = ReadWindow.forTransport(session.transport, info.maxRead)
+        } catch (e: Throwable) {
+            // Never counted, so no release will close it. Close a link this call opened now.
+            if (current == null) closeSessionLocked()
+            throw e
+        }
         // Nothing below suspends, so a lend counted here always reaches the caller's finally.
         lends.incrementAndGet()
         val returned = AtomicBoolean(false)
@@ -785,6 +811,8 @@ class DeviceConnectionRepository @Inject constructor(
             if (returned.compareAndSet(false, true)) returnLend(session)
         }
     }
+
+    private fun repositorySyncRunning(): Boolean = _sync.value.running || synchronized(this) { syncJob?.isActive == true }
 
     private fun DeviceSession.closedByAuth(): DisconnectCause.Auth? = (link.state.value as? LinkState.Closed)?.cause as? DisconnectCause.Auth
 
@@ -804,7 +832,7 @@ class DeviceConnectionRepository @Inject constructor(
             }
         }
         if (link == null) {
-            if (prefer == LinkPreference.LAN) throw LinkClosedException(DisconnectCause.Unreachable)
+            if (prefer == LinkPreference.LAN) throw LinkClosedException(lastOpenFailure ?: DisconnectCause.Unreachable)
             link = transportFactory.ble(address)
         }
         val opened = try {
@@ -816,7 +844,7 @@ class DeviceConnectionRepository @Inject constructor(
         val session = _session.value
         if (!opened || session == null) {
             closeSessionLocked()
-            throw LinkClosedException(lastOpenFailure ?: DisconnectCause.Deliberate("verification failed"))
+            throw LinkClosedException(lastOpenFailure ?: DisconnectCause.Rejected("verification failed"))
         }
         lendOwned = session
         return session
