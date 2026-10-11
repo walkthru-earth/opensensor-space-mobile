@@ -47,18 +47,18 @@ apps is [platform-parity-plan.md](platform-parity-plan.md).
 
 ## P0 defects (fix first, all confirmed in code)
 
-Line numbers are from 2026-10-08. Status checked 2026-10-09 where stated, otherwise not rechecked.
+Line numbers are from 2026-10-08 and may no longer exist. Every row was rechecked on 2026-10-11 against main `5604fb3e`.
 
 | ID | Defect | Evidence | Status |
 | --- | --- | --- | --- |
 | P0-1 | iOS aborts on a short `READ_END` or an overlapping chunk instead of retrying the window | `ios/App/SensorTransfer.swift:90-103` versus contract `ble-sync-protocol.md` "a failed window is retried" | Fixed (W5, `TransferChecks`) |
 | P0-2 | Name limit 512 on Android, contract says at most 399 | `data/sync/SyncPlanner.kt:56` | Fixed, `SyncPlanner` calls `SafeName.isValid` |
-| P0-3 | `CancellationException` swallowed by `runCatching` around suspend calls | `DeviceConnectionRepository.kt:561-565`, `SyncWorker.kt:121,125`, `TcpTransport.kt:256` | Not rechecked |
-| P0-4 | Unguarded job handles and a non-atomic busy flag, so a Stop can be lost and overlapping commands clear busy early | `DeviceConnectionRepository.kt:801-810, 1181, 1208-1209, 1315, 1332` | Not rechecked |
-| P0-5 | GATT callbacks resume whichever operation is pending, so a late write callback can complete the next read | `ble/BleTransport.kt:148-172` | Not rechecked |
+| P0-3 | `CancellationException` swallowed by `runCatching` around suspend calls | `DeviceConnectionRepository.kt:561-565`, `SyncWorker.kt:121,125`, `TcpTransport.kt:256` | Fixed. The named files were replaced by `DeviceLinkOwner`, `CollectionController` and `TcpLinkDriver`. The last suspend `runCatching` (`AqSyncApplication.kt`, token migration) now uses `suspendRunCatching` |
+| P0-4 | Unguarded job handles and a non-atomic busy flag, so a Stop can be lost and overlapping commands clear busy early | `DeviceConnectionRepository.kt:801-810, 1181, 1208-1209, 1315, 1332` | Fixed by design. `DeviceConnectionRepository` is now a typealias. Runs go through one `CollectionController` per device with one admission lease (#70, #79) |
+| P0-5 | GATT callbacks resume whichever operation is pending, so a late write callback can complete the next read | `ble/BleTransport.kt:148-172` | Fixed. `PendingGattOperation` completes only the operation whose callback kind and characteristic match, and drops late callbacks |
 | P0-6 | Broadcast receivers launch on an unscoped `CoroutineScope(Dispatchers.IO)` with no handler or timeout | `background/SyncTriggers.kt:139`, `background/AdvertFlagScan.kt:185` | Fixed, no unscoped scope left in `app/src/main` |
-| P0-7 | Docs say the database goes to cloud backup, the rules exclude it (the token lives there) | `docs/lessons-learned.md:49` versus `res/xml/data_extraction_rules.xml` | Not rechecked |
-| P0-8 | `setup-signing.sh` would upload signing secrets to the old repository name | `tools/setup-signing.sh:16` | Not rechecked |
+| P0-7 | Docs say the database goes to cloud backup, the rules exclude it (the token lives there) | `docs/lessons-learned.md:49` versus `res/xml/data_extraction_rules.xml` | Fixed. Both now say cloud backup carries settings only and the database stays out |
+| P0-8 | `setup-signing.sh` would upload signing secrets to the old repository name | `tools/setup-signing.sh:16` | Fixed. The default repository is `walkthru-earth/opensensor-space-mobile` |
 
 ## Target architecture
 
@@ -292,6 +292,13 @@ Parquet reader. Design reassessed 2026-10-08 in
 - **W14 String resources, typed device messages and copy rules** (merge `509d203`). Android
   strings moved to `strings.xml`. A shared string catalogue for both apps is still planned in
   [platform-parity-plan.md](platform-parity-plan.md).
+- **Sync stability, storage safety and performance for proto 3** (epic
+  [#59](https://github.com/walkthru-earth/opensensor-space-mobile/issues/59)). Shared
+  `LinkSession` (#66), `DeviceSession` and `SyncEngine` on it (#69), `CollectionController` (#70),
+  Android drivers and wiring (#72, #79), the shared iOS link (#73), durable commits (#68),
+  storage quotas (#71), the Parquet core (#67), history and UI cost (#77), energy (#76) and
+  Swift 6 mode (#78). iOS controller adoption and the BLE queue split are #81 and #80. The exit
+  criteria still need green CI and the phone runs listed in the epic.
 
 ## Docs that follow the new direction after Wave 1 merges
 
