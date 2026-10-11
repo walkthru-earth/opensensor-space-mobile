@@ -40,6 +40,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.rememberBottomSheetScaffoldState
@@ -187,6 +188,7 @@ private fun DiscoverContent(
                 onExplore = { controller.dismissFirstRun() },
                 onPickProperty = { id -> controller.selectProperty(id); showAll = false; peek() },
                 onShowProperty = controller::selectProperty,
+                onRetry = controller::retryWindows,
                 onPickCell = { hex -> controller.selectCell(hex) },
                 highlight = highlight,
                 clearSignal = clearSignal,
@@ -495,6 +497,7 @@ private fun SheetContent(
     onExplore: () -> Unit,
     onPickProperty: (String) -> Unit,
     onShowProperty: (String) -> Unit,
+    onRetry: () -> Unit,
     onPickCell: (String) -> Unit,
     highlight: ValueBand?,
     clearSignal: Int,
@@ -507,7 +510,7 @@ private fun SheetContent(
         when {
             !state.available -> DiscoverStateMessage(strings.unavailable, PeacockExpression.CONCERNED)
             showAll -> AllProperties(state, strings, onPickProperty)
-            state.selected != null && simple -> SimpleCellDetail(state, strings, infoButton, reference, onShowProperty)
+            state.selected != null && simple -> SimpleCellDetail(state, strings, infoButton, reference, onShowProperty, onRetry)
             state.selected != null -> CellDetail(state.selected, state, strings, infoButton, reference, clearSignal, onHighlight, onShowProperty)
             state.firstRun -> FirstRunCard(strings, onAddSensor, onExplore)
             else -> InView(state, strings, networkAllowed, simple, reference, highlight, clearSignal, onHighlight, onPickCell)
@@ -758,6 +761,7 @@ private fun SimpleCellDetail(
     infoButton: @Composable (InfoText, Modifier) -> Unit,
     reference: Long,
     onShowProperty: (String) -> Unit,
+    onRetry: () -> Unit,
 ) {
     Column(Modifier.verticalScroll(rememberScrollState())) {
         if (state.isSample) {
@@ -809,7 +813,24 @@ private fun SimpleCellDetail(
             }
         } else if (headline == SimpleHeadline.LOADING) {
             // The 24 hour row is still on its way. Neutral, no mood and no verdict yet.
-            Text(strings.loading, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                strings.loading,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            )
+        } else if (headline == SimpleHeadline.FAILED) {
+            // A read failed after its retries. Never "Not measured", since nothing says so.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    strings.readFailed,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f, fill = false).semantics { liveRegion = LiveRegionMode.Polite },
+                )
+                Spacer(Modifier.width(8.dp))
+                TextButton(onClick = onRetry) { Text(strings.retry) }
+            }
         } else {
             Text(strings.notMeasured, style = MaterialTheme.typography.titleMedium)
         }

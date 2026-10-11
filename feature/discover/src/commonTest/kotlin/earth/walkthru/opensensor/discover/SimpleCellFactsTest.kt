@@ -89,4 +89,31 @@ class SimpleCellFactsTest {
         assertNull(facts.devices)
         assertEquals(listOf<Pair<FeedProperty, Double?>>(temp to null), facts.others)
     }
+
+    @Test
+    fun aDayReadThatFailedIsFailedNotLoading() {
+        val hour = row(9, 2_000L, "pm25" to 80.0)
+        val state = DiscoverUiState(
+            dictionary = listOf(pm),
+            property = pm,
+            selected = hour,
+            selectedWindows = mapOf(FeedWindow.LAST_HOUR to hour),
+            failedWindows = setOf(FeedWindow.DAY),
+        )
+        assertEquals(SimpleHeadline.FAILED, state.simpleHeadline())
+        assertTrue(state.simpleCellFacts().loading)
+    }
+
+    @Test
+    fun aFailedWindowIsNeverTakenAsNotMeasured() {
+        val hour = row(9, 2_000L, "temp" to 30.0)
+        val state = DiscoverUiState(
+            dictionary = listOf(pm, temp),
+            property = pm,
+            selected = hour,
+            selectedWindows = mapOf(FeedWindow.LAST_HOUR to hour, FeedWindow.DAY to null),
+            failedWindows = setOf(FeedWindow.WEEK),
+        )
+        assertEquals(SimpleHeadline.FAILED, state.simpleHeadline())
+    }
 }

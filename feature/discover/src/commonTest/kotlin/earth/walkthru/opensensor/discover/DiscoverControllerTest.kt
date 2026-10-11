@@ -49,8 +49,8 @@ class DiscoverControllerTest {
         /** Holds the next viewport reads, the ones that are not for a single cell. Never a single-cell read. */
         var viewportGate: CompletableDeferred<Unit>? = null
 
-        /** Single-cell reads that throw once, then succeed. */
-        val failOnce = mutableSetOf<Pair<Long, FeedWindow>>()
+        /** How many more times a single-cell read throws before it succeeds. */
+        val failures = mutableMapOf<Pair<Long, FeedWindow>, Int>()
 
         override suspend fun latest() = FeedPartition("2026-10-12", 10)
 
@@ -59,7 +59,11 @@ class DiscoverControllerTest {
             val single = ranges?.singleOrNull()?.takeIf { it.first == it.last }?.first
             if (single != null) {
                 gates[single]?.await()
-                if (failOnce.remove(single to window)) throw IllegalStateException("read failed")
+                val left = failures[single to window] ?: 0
+                if (left > 0) {
+                    failures[single to window] = left - 1
+                    throw IllegalStateException("read failed")
+                }
             } else {
                 viewportGate?.await()
             }
@@ -93,6 +97,13 @@ class DiscoverControllerTest {
     @OptIn(ExperimentalCoroutinesApi::class)
     private fun TestScope.settle() {
         advanceTimeBy(1_000)
+        runCurrent()
+    }
+
+    /** Past every retry of a failed window read, 1 s then 2 s. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun TestScope.retriesDone() {
+        advanceTimeBy(5_000)
         runCurrent()
     }
 
@@ -209,20 +220,86 @@ class DiscoverControllerTest {
     }
 
     @Test
-    fun aFailedWindowReadLeavesItsKeyOutAndThePanReadsItAgain() = runTest {
+    fun aWindowReadThatFailsEveryRetryLeavesItsKeyOutAndThePanReadsItAgain() = runTest {
         val feed = FakeFeed()
         val c = controller(feed)
-        feed.failOnce += cellA to FeedWindow.WEEK
+        feed.failures[cellA to FeedWindow.WEEK] = 3
         c.selectCell(H3Index.toHex(cellA))
-        settle()
+        retriesDone()
         // A failed read is not "read, no value". Its key stays out, so the sheet does not say n/a.
         assertEquals(setOf(FeedWindow.DAY, FeedWindow.LAST_HOUR), c.state.value.selectedWindows.keys)
+        assertEquals(setOf(FeedWindow.WEEK), c.state.value.failedWindows)
+        assertEquals(3, feed.calls.count { it.first == FeedWindow.WEEK && it.second == listOf(cellA..cellA) })
         feed.calls.clear()
         c.onCamera(CameraRest(GeoBounds(-122.02, 36.98, -121.98, 37.02), zoom = 6.25, lat = 37.0, lng = -122.0))
         settle()
         assertEquals(listOf(FeedWindow.WEEK), feed.calls.filter { it.second == listOf(cellA..cellA) }.map { it.first })
         assertEquals(10.0, c.state.value.selectedWindows[FeedWindow.WEEK]?.mean("pm25"))
         assertEquals(3, c.state.value.selectedWindows.size)
+        assertTrue(c.state.value.failedWindows.isEmpty())
+    }
+
+    /** The map on the last hour, so the 24 hour row of a selected cell comes from its own read. */
+    private fun TestScope.onTheLastHour(feed: FakeFeed): DiscoverController {
+        val c = controller(feed)
+        c.selectWindow(FeedWindow.LAST_HOUR)
+        settle()
+        return c
+    }
+
+    @Test
+    fun aDayReadThatFailsEveryRetryEndsFailedNeverNotMeasured() = runTest {
+        val feed = FakeFeed()
+        val c = onTheLastHour(feed)
+        feed.failures[cellA to FeedWindow.DAY] = 3
+        c.selectCell(H3Index.toHex(cellA))
+        settle()
+        assertEquals(SimpleHeadline.LOADING, c.state.value.simpleHeadline(), "still retrying")
+        retriesDone()
+        assertEquals(3, feed.calls.count { it.first == FeedWindow.DAY && it.second == listOf(cellA..cellA) })
+        assertEquals(setOf(FeedWindow.DAY), c.state.value.failedWindows)
+        assertEquals(SimpleHeadline.FAILED, c.state.value.simpleHeadline())
+    }
+
+    @Test
+    fun aDayReadThatFailsOnceLandsAfterTheRetry() = runTest {
+        val feed = FakeFeed()
+        val c = onTheLastHour(feed)
+        feed.failures[cellA to FeedWindow.DAY] = 1
+        c.selectCell(H3Index.toHex(cellA))
+        retriesDone()
+        assertEquals(2, feed.calls.count { it.first == FeedWindow.DAY && it.second == listOf(cellA..cellA) })
+        assertTrue(c.state.value.failedWindows.isEmpty())
+        assertEquals(SimpleHeadline.SHOWN, c.state.value.simpleHeadline())
+        assertEquals(30.0, c.state.value.selectedSummary(pm25)?.value)
+    }
+
+    @Test
+    fun retryFromTheSheetReadsTheFailedWindowAgain() = runTest {
+        val feed = FakeFeed()
+        val c = onTheLastHour(feed)
+        feed.failures[cellA to FeedWindow.DAY] = 3
+        c.selectCell(H3Index.toHex(cellA))
+        retriesDone()
+        assertEquals(SimpleHeadline.FAILED, c.state.value.simpleHeadline())
+        feed.calls.clear()
+        c.retryWindows()
+        assertEquals(SimpleHeadline.LOADING, c.state.value.simpleHeadline(), "a retry shows loading again")
+        settle()
+        assertEquals(listOf(FeedWindow.DAY), feed.calls.filter { it.second == listOf(cellA..cellA) }.map { it.first })
+        assertTrue(c.state.value.failedWindows.isEmpty())
+        assertEquals(30.0, c.state.value.selectedSummary(pm25)?.value)
+    }
+
+    @Test
+    fun aNewSelectionClearsTheFailedWindows() = runTest {
+        val feed = FakeFeed()
+        val c = onTheLastHour(feed)
+        feed.failures[cellA to FeedWindow.DAY] = 3
+        c.selectCell(H3Index.toHex(cellA))
+        retriesDone()
+        c.selectCell(H3Index.toHex(cellB))
+        assertTrue(c.state.value.failedWindows.isEmpty())
     }
 
     @Test
