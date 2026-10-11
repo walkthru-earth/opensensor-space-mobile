@@ -109,7 +109,7 @@ class HistoryMemoryTest {
         return store to index
     }
 
-    // Decoding 400 days is CPU bound and can pass the default minute while the full gate runs in parallel.
+    // Decoding 200 days is CPU bound and can pass the default minute while the full gate runs in parallel.
     @Test
     fun tiersStayWithinTheirBudgetAndGiveItBackOnMemoryPressure() = runTest(timeout = 5.minutes) {
         // A day of this fixture estimates about 63 KB, so 8 MiB holds about 133 days and 200 overflow it.

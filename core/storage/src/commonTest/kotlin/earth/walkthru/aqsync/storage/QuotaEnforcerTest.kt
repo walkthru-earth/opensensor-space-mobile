@@ -31,12 +31,18 @@ class QuotaEnforcerTest {
         /** A delete of a matching path throws, like a file the OS holds open. */
         var failOn: (String) -> Boolean = { false }
 
+        /** Listing throws while set, like a directory the OS cannot read for a moment. */
+        var listFails = false
+
         fun file(path: String, bytes: Long, modified: Long) {
             files[path] = bytes to modified
         }
 
-        override fun list(dir: String): List<StorageEntry> = files.filterKeys { it.startsWith("$dir/") }.map { (path, f) ->
-            StorageEntry(path.removePrefix("$dir/"), false, f.first, f.second)
+        override fun list(dir: String): List<StorageEntry> {
+            if (listFails) throw IllegalStateException("unreadable")
+            return files.filterKeys { it.startsWith("$dir/") }.map { (path, f) ->
+                StorageEntry(path.removePrefix("$dir/"), false, f.first, f.second)
+            }
         }
 
         override fun delete(path: String) {
@@ -256,6 +262,46 @@ class QuotaEnforcerTest {
         // The deferred clear is spent, the next hold trims to the quota only.
         tree.file("$derived/s1/2026-10-03.parquet", 100, 30)
         quota.holding { }
+        assertTrue("$derived/s1/2026-10-03.parquet" in tree.files)
+    }
+
+    @Test
+    fun aDeferredClearSurvivesATrimThatFailsAtRelease() = runTest {
+        val tree = FakeTree()
+        val untouchable = tree.untouchable()
+        tree.twoDays()
+        val quota = DerivedQuota(QuotaEnforcer(roots, tree)) { 1L shl 40 }
+
+        quota.holding {
+            quota.clear()
+            tree.listFails = true
+        }
+        assertTrue(tree.deleted.isEmpty())
+
+        // The clear is still owed, so the next hold that can list the folder clears instead of trimming to quota.
+        tree.listFails = false
+        quota.holding { }
+        assertEquals(listOf("$derived/s1/manifest.json"), tree.list(derived).map { "$derived/${it.path}" })
+        for (path in untouchable) assertTrue(path in tree.files, "kept $path")
+    }
+
+    @Test
+    fun aDeferredClearSurvivingAFailedReleaseRunsOnTheNextEnforce() = runTest {
+        val tree = FakeTree()
+        tree.twoDays()
+        val quota = DerivedQuota(QuotaEnforcer(roots, tree)) { 1L shl 40 }
+
+        quota.holding {
+            quota.clear()
+            tree.listFails = true
+        }
+        tree.listFails = false
+        quota.enforce()
+
+        assertEquals(listOf("$derived/s1/manifest.json"), tree.list(derived).map { "$derived/${it.path}" })
+        // Spent now, so the next enforce trims to the quota only.
+        tree.file("$derived/s1/2026-10-03.parquet", 100, 30)
+        quota.enforce()
         assertTrue("$derived/s1/2026-10-03.parquet" in tree.files)
     }
 

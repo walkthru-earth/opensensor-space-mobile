@@ -97,7 +97,8 @@ class DerivedQuota(
      * Runs [block] with eviction paused. It waits for an eviction already running. When the last
      * hold ends, normally, by an exception or by cancellation, the quota is enforced (or a [clear]
      * that came in meanwhile runs), so a pass that rebuilt nothing cannot leave the cache above
-     * quota (#61). A failed trim then is not the reader's error, the next one retries it.
+     * quota (#61). A failed trim then is not the reader's error, the next one retries it, and a
+     * deferred clear stays pending until a trim succeeds.
      */
     suspend fun <T> holding(block: suspend () -> T): T {
         lock.withLock { holders++ }
@@ -108,8 +109,7 @@ class DerivedQuota(
                 lock.withLock {
                     if (--holders == 0) {
                         val quota = if (clearDeferred) 0 else runCatching { quotaBytes() }.getOrNull()
-                        clearDeferred = false
-                        if (quota != null) runCatching { enforcer.enforce(quota) }
+                        if (quota != null) runCatching { enforcer.enforce(quota) }.onSuccess { clearDeferred = false }
                     }
                 }
             }
@@ -118,7 +118,7 @@ class DerivedQuota(
 
     private suspend fun evict(clearing: Boolean): QuotaEnforcer.Report = lock.withLock {
         when {
-            holders == 0 -> enforcer.enforce(if (clearing) 0 else quotaBytes())
+            holders == 0 -> enforcer.enforce(if (clearing || clearDeferred) 0 else quotaBytes()).also { clearDeferred = false }
             clearing -> QuotaEnforcer.Report().also { clearDeferred = true }
             else -> QuotaEnforcer.Report()
         }
