@@ -9,6 +9,7 @@ import earth.walkthru.aqsync.data.protocol.FrameCodec
 import earth.walkthru.aqsync.data.protocol.Opcode
 import earth.walkthru.aqsync.data.protocol.ParquetVerify
 import earth.walkthru.aqsync.data.protocol.ProtocolError
+import earth.walkthru.aqsync.storage.FakeStorageBudget
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -36,7 +37,7 @@ class SensorSyncTest {
     private val base = NSTemporaryDirectory().trimEnd('/') + "/sensor-sync-" + NSUUID().UUIDString()
     private val finals = "$base/SensorArchive"
     private val store = IosArchiveStore(finals, "$base/archive-partial", Dispatchers.Default)
-    private val sync = SensorSync(store, ReceiptArchiveIndex(finals, Dispatchers.Default), Dispatchers.Default, Dispatchers.Default, progressInterval = 0)
+    private val sync = SensorSync(store, ReceiptArchiveIndex(finals, Dispatchers.Default), Dispatchers.Default, Dispatchers.Default, progressInterval = 0, budget = FakeStorageBudget())
     private val station = "53315f5f-cb85-4d8d-b623-d56266084189"
 
     @AfterTest
@@ -174,7 +175,8 @@ class SensorSyncTest {
             ReceiptArchiveIndex(finals, Dispatchers.Default),
             Dispatchers.Default,
             Dispatchers.Default,
-            recordClockAnchor = { _, _, _, _ -> anchorCount++ }
+            recordClockAnchor = { _, _, _, _ -> anchorCount++ },
+            budget = FakeStorageBudget(),
         )
         val link = sensor { link, req ->
             (req[0].toInt() and 0xFF == Opcode.STATUS).also {
@@ -197,7 +199,8 @@ class SensorSyncTest {
             ReceiptArchiveIndex(finals, Dispatchers.Default),
             Dispatchers.Default,
             Dispatchers.Default,
-            recordClockAnchor = { st, boot, utc, mono -> anchors += Anchor(st, boot, utc, mono) }
+            recordClockAnchor = { st, boot, utc, mono -> anchors += Anchor(st, boot, utc, mono) },
+            budget = FakeStorageBudget(),
         )
         val link = sensor().also { it.identify(station, "full-boot-identity") }
         val done = CompletableDeferred<SyncResult>()
@@ -273,7 +276,7 @@ class SensorSyncTest {
                 queue.trySend(block)
             }
         }
-        val gated = SensorSync(store, ReceiptArchiveIndex(finals, Dispatchers.Default), held, Dispatchers.Default, progressInterval = 0)
+        val gated = SensorSync(store, ReceiptArchiveIndex(finals, Dispatchers.Default), held, Dispatchers.Default, progressInterval = 0, budget = FakeStorageBudget())
         suspend fun pumpUntil(done: CompletableDeferred<*>) = withTimeout(20_000) {
             while (!done.isCompleted) {
                 queue.tryReceive().getOrNull()?.run() ?: yield()

@@ -29,6 +29,7 @@ import earth.walkthru.aqsync.data.sync.ClockSyncMode
 import earth.walkthru.aqsync.data.sync.FileArchive
 import earth.walkthru.aqsync.data.sync.FileOutcome
 import earth.walkthru.aqsync.data.sync.androidSyncEngine
+import earth.walkthru.aqsync.storage.FakeStorageBudget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
@@ -379,9 +380,9 @@ class DeviceConnectionRepositoryTest {
     @Test
     fun `raw command refuses REBOOT and SET_CONFIG in the data layer`() = runTest {
         val device = FakeTransport(chunkDelayMs = 0, liveIntervalMs = 3_600_000, dispatcher = StandardTestDispatcher(testScheduler))
-        device.connect()
+        val session = DeviceSession.over(device, backgroundScope)
+        session.link.open()
         try {
-            val session = DeviceSession(device)
             for (op in listOf(Opcode.REBOOT, Opcode.SET_CONFIG)) {
                 try {
                     session.rawCommand(byteArrayOf(op.toByte()))
@@ -438,12 +439,13 @@ class DeviceConnectionRepositoryTest {
                 lanCredentials = knownDao,
                 archivedFileDao = archived,
                 archive = fileArchive,
-                syncEngine = androidSyncEngine(fileArchive, archived, windowRetryBackoffMs = 1) { test.testScheduler.currentTime },
+                syncEngine = androidSyncEngine(fileArchive, archived, windowRetryBackoffMs = 1, clock = { test.testScheduler.currentTime }, io = StandardTestDispatcher(test.testScheduler)),
                 lanDiscoveryState = lan,
                 lanWifiLock = { null },
                 historyDeriver = { HistoryDeriver.Result(0, 0, 0) },
                 companionPresence = { _, _ -> },
                 collectionBudget = CollectionBudget(),
+                storageBudget = FakeStorageBudget(),
                 identityClaims = DeviceIdentityClaims(),
                 stationEpochDao = InMemoryStationEpochDao(),
                 applicationScope = appScope,

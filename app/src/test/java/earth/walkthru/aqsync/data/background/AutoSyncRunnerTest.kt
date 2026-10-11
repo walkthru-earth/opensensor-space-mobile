@@ -17,7 +17,9 @@ import earth.walkthru.aqsync.data.sync.SyncPlanner
 import earth.walkthru.aqsync.data.sync.androidSyncEngine
 import earth.walkthru.aqsync.data.sync.stationParquetFixture
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -389,10 +391,11 @@ class AutoSyncRunnerTest {
     private class TestGateway(tmp: File) : AutoSyncGateway {
         val dispatcher = StandardTestDispatcher(TestCoroutineScheduler())
         val fake = FakeTransport(chunkDelayMs = 0, liveIntervalMs = 3_600_000, dispatcher = dispatcher)
+        private val scope = CoroutineScope(SupervisorJob() + dispatcher)
         val peers = java.util.concurrent.ConcurrentHashMap<String, FakeTransport>()
         var beforeSync: suspend (KnownDevice) -> Unit = {}
         val dao = InMemoryDao()
-        private val engine = androidSyncEngine(FileArchive(tmp), dao, windowRetryBackoffMs = 1)
+        private val engine = androidSyncEngine(FileArchive(tmp), dao, windowRetryBackoffMs = 1, io = dispatcher)
 
         val devices = ArrayList<KnownDevice>()
         var session: String? = null
@@ -434,8 +437,8 @@ class AutoSyncRunnerTest {
 
             val fake = peers[device.address] ?: this.fake
             beforeSync(device)
-            fake.connect()
-            val s = DeviceSession(fake)
+            val s = DeviceSession.over(fake, scope)
+            s.link.open()
             try {
                 val (files, _) = s.list()
                 val archived = dao.rows.map { ArchivedIdentity(it.station, it.name, it.bytes, it.crc32) }
@@ -456,6 +459,7 @@ class AutoSyncRunnerTest {
                     incomplete = outcomes.size < plan.toDownload.size,
                 )
             } finally {
+                s.link.close("done")
                 fake.disconnect()
             }
         }

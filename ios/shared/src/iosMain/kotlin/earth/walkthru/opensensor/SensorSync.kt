@@ -13,7 +13,12 @@ import earth.walkthru.aqsync.data.sync.ArchiveCollector
 import earth.walkthru.aqsync.data.sync.CollectionProgress
 import earth.walkthru.aqsync.data.sync.CollectionSummary
 import earth.walkthru.aqsync.data.sync.FileProblem
+import earth.walkthru.aqsync.data.sync.InsufficientSpaceException
 import earth.walkthru.aqsync.data.sync.SyncEngine
+import earth.walkthru.aqsync.storage.IosStorageBudget
+import earth.walkthru.aqsync.storage.StorageBudget
+import earth.walkthru.aqsync.storage.StorageRole
+import earth.walkthru.aqsync.storage.StorageRoots
 import earth.walkthru.opensensor.designsystem.nowEpochMillis
 import earth.walkthru.opensensor.today.TodayNotice
 import kotlinx.coroutines.CancellationException
@@ -56,13 +61,14 @@ class SensorSync internal constructor(
     private val callbacks: CoroutineContext,
     private val progressInterval: Long = PROGRESS_INTERVAL_MS,
     private val recordClockAnchor: suspend (String, String, Long, Long) -> Unit = { _, _, _, _ -> },
+    budget: StorageBudget,
 ) {
     constructor() : this(IosArchiveStore.inApplicationSupport(), Dispatchers.Default, Dispatchers.Main)
 
     private constructor(store: IosArchiveStore, work: CoroutineContext, callbacks: CoroutineContext) :
-        this(store, ReceiptArchiveIndex(store.finalRoot), work, callbacks)
+        this(store, ReceiptArchiveIndex(store.finalRoot), work, callbacks, budget = IosStorageBudget(StorageRoots(mapOf(StorageRole.Archive to store.finalRoot))))
 
-    private val collector = ArchiveCollector(store, index, SyncEngine(store, index, log = ::syncLog))
+    private val collector = ArchiveCollector(store, index, SyncEngine(store, index, log = ::syncLog), budget)
     private val scope = CoroutineScope(SupervisorJob())
     private val lock = NSLock()
     private val active = HashSet<String>()
@@ -106,7 +112,7 @@ class SensorSync internal constructor(
             val result = try {
                 var last: TimeSource.Monotonic.ValueTimeMark? = null
                 var lastDone = -1
-                val session = DeviceSession(link.transport, debugFrames.recorderFor(link.transport.address))
+                val session = link.session(debugFrames.recorderFor(link.transport.address))
                 try {
                     synchronizeClock(session, link, automatic = true)
                 } catch (e: CancellationException) {
@@ -136,6 +142,10 @@ class SensorSync internal constructor(
                 SyncResult(SyncEnd.AUTH_FAILED, listed, 0, 0)
             } catch (e: DeviceBusyException) {
                 SyncResult(SyncEnd.BUSY, listed, 0, 0)
+            } catch (e: InsufficientSpaceException) {
+                // Refused before any OPEN, or a full disk mid-run. Partials stay for resume.
+                syncLog("sync refused, ${e.available} bytes free of ${e.needed}")
+                SyncResult(SyncEnd.STORAGE_FAILED, listed, 0, 0)
             } catch (e: TransportException) {
                 SyncResult(SyncEnd.LINK_LOST, listed, 0, 0)
             } catch (e: Exception) {
@@ -171,8 +181,8 @@ class SensorSync internal constructor(
     @OptIn(DelicateCoroutinesApi::class)
     fun command(link: SensorLink, command: SensorCommand, automatic: Boolean = false, finished: (CommandResult) -> Unit): SyncHandle {
         val job = scope.launch(work, CoroutineStart.ATOMIC) {
-            val session = DeviceSession(link.transport)
             val notice = try {
+                val session = link.session(debugFrames.recorderFor(link.transport.address))
                 when (command) {
                     SensorCommand.SET_TIME -> {
                         synchronizeClock(session, link, automatic)

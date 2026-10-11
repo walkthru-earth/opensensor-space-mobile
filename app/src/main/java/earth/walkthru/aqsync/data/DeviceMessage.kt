@@ -58,6 +58,9 @@ sealed interface DeviceMessage {
     data class SyncFinished(val synced: Int, val total: Int) : DeviceMessage
     data object SyncStopped : DeviceMessage
     data object SyncAborted : DeviceMessage
+
+    /** The planned files do not fit, [shortBytes] more must be freed. Nothing was opened. */
+    data class NotEnoughSpace(val shortBytes: Long) : DeviceMessage
     data class UnplacedReadings(val rows: Long) : DeviceMessage
 
     // Device commands

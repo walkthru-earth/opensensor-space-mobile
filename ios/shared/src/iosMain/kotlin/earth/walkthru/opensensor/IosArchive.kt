@@ -14,7 +14,9 @@ import earth.walkthru.aqsync.data.history.IosDailyDerivedStore
 import earth.walkthru.aqsync.data.history.TimeEstimate
 import earth.walkthru.aqsync.data.history.info
 import earth.walkthru.aqsync.storage.AtomicFiles
+import earth.walkthru.aqsync.storage.IosStorageBudget
 import earth.walkthru.aqsync.storage.IosStorageTree
+import earth.walkthru.aqsync.storage.StorageBudget
 import earth.walkthru.aqsync.storage.StorageJanitor
 import earth.walkthru.aqsync.storage.StorageRole
 import earth.walkthru.aqsync.storage.StorageRoots
@@ -46,9 +48,9 @@ internal object IosArchive {
     private val derivedMutex = Mutex()
     private val derived by lazy { IosDailyDerivedStore(store.finalRoot.substringBeforeLast('/')) }
     private val repair by lazy { ArchiveIndexRepair(store, index, clockAnchors = clockAnchors) }
-    private val janitor by lazy {
+    private val roots by lazy {
         val base = store.finalRoot.substringBeforeLast('/')
-        val roots = StorageRoots(
+        StorageRoots(
             mapOf(
                 StorageRole.Archive to store.finalRoot,
                 StorageRole.Partials to store.partialRoot,
@@ -58,8 +60,11 @@ internal object IosArchive {
                 StorageRole.Exports to IosExportSpace.temporaryRoot(),
             ),
         )
-        StorageJanitor(roots, IosStorageTree(), store, index, Dispatchers.IO, log = ::println)
     }
+
+    /** Free space per class, asked before a sync opens any file (#55). */
+    val budget: StorageBudget by lazy { IosStorageBudget(roots) }
+    private val janitor by lazy { StorageJanitor(roots, IosStorageTree(), store, index, Dispatchers.IO, log = ::println) }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var started = false
 
@@ -118,5 +123,5 @@ internal object IosArchive {
  */
 fun sharedSensorSync(): SensorSync {
     IosArchive.startIndexRepair()
-    return SensorSync(IosArchive.store, IosArchive.index, Dispatchers.Default, Dispatchers.Main, recordClockAnchor = IosArchive::recordClockAnchor)
+    return SensorSync(IosArchive.store, IosArchive.index, Dispatchers.Default, Dispatchers.Main, recordClockAnchor = IosArchive::recordClockAnchor, budget = IosArchive.budget)
 }
