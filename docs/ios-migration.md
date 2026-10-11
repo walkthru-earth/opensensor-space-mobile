@@ -151,8 +151,9 @@ discovery. Other waiting reasons keep the neutral message.
 
 User-started BLE and LAN collection requests a UIKit background-task lease. Switching apps
 stops discovery and idle connections, but active collections continue while iOS grants time.
-Expiration cancels the sockets and retains partial bytes/progress; returning reconnects the
-paused sensors and resumes collection after old task/archive ownership is released. Recoverable
+LAN lease expiration closes sockets and retains partial bytes/progress. Returning reconnects
+paused LAN sensors after old task/archive ownership is released. BLE lease expiration cancels
+the transfer and retains partial bytes for an explicit retry. Recoverable
 LAN failures while backgrounded also queue resume. Explicit Cancel removes that intent, and
 queued sensors wait for one of the two collection slots. This lease is bounded execution. Periodic
 Auto-sync is separate, see [background-sync.md](background-sync.md#ios-auto-sync). Force-quitting/relaunching
