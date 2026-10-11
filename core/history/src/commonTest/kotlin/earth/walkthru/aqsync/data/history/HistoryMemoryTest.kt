@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.TimeZone
 import kotlin.test.Test
+import kotlin.time.Duration.Companion.minutes
 
 /**
  * The memory side of #61 in History: the in-memory tiers stay within their byte budget and give it
@@ -108,8 +109,9 @@ class HistoryMemoryTest {
         return store to index
     }
 
+    // Decoding 400 days is CPU bound and can pass the default minute while the full gate runs in parallel.
     @Test
-    fun tiersStayWithinTheirBudgetAndGiveItBackOnMemoryPressure() = runTest {
+    fun tiersStayWithinTheirBudgetAndGiveItBackOnMemoryPressure() = runTest(timeout = 5.minutes) {
         // A day of this fixture estimates about 63 KB, so 8 MiB holds about 133 days and 200 overflow it.
         val days = 200
         val (store, index) = archive(days)
