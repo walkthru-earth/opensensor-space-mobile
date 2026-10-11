@@ -18,22 +18,27 @@ import earth.walkthru.aqsync.link.LinkClosedException
 import earth.walkthru.aqsync.link.LinkTimeoutException
 import earth.walkthru.aqsync.link.describe
 import earth.walkthru.aqsync.storage.StorageException
+import earth.walkthru.aqsync.sync.SyncLock
 import earth.walkthru.aqsync.sync.nowEpochMs
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableJob
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.withContext
 import kotlin.concurrent.atomics.AtomicBoolean
-import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.time.TimeSource
 
@@ -62,8 +67,12 @@ sealed interface StartResult {
  * from a fresh `LIST`. A cached plan never decides what is missing. Partial files resume by
  * offset through the [ArchiveCollector].
  *
- * Stop. [stop] moves the state to `Stopped` with a compare and set, then cancels the job. Every
- * later transition of that request checks that it still owns the state, so Stop always wins.
+ * Stop. [stop] moves the state to `Stopped`, then cancels the job. Every transition takes one lock
+ * and checks by identity that its run still owns the state, so Stop always wins and an old run
+ * never writes over a newer one.
+ *
+ * One lender. A request started right after a Stop waits for the stopped job to let go of its
+ * link and permit before it connects, so a provider never lends one link to two runs.
  *
  * [log] gets state names, causes and counts only, never names of networks, tokens or a PIN.
  */
@@ -94,7 +103,11 @@ class CollectionController(
      */
     val events: ReceiveChannel<CollectionState> get() = _events
 
-    private val current = AtomicReference<Run?>(null)
+    /** Guards every write of [_state] and [current]. Held only for a few reads and writes. */
+    private val lock = SyncLock()
+
+    /** The run started last, until its job ends. Guarded by [lock]. */
+    private var current: Run? = null
 
     /**
      * Start [intent] unless a request is running. Takes the PROCESS lease before it returns, so a
@@ -105,25 +118,40 @@ class CollectionController(
         // A copy only this run holds. Ownership compares it by identity, so a caller that passes
         // the same intent again after a Stop never lets the old job write over the new run.
         val intent = request.copy()
-        val before = _state.value
-        if (before.active) return StartResult.Busy(before.intentId!!)
+        _state.value.let { if (it.active) return StartResult.Busy(it.intentId!!) }
         val process = keepAlive.acquire(KeepAliveKind.PROCESS, intent)?.let(::OnceLease)
         if (process == null) {
             val refused = CollectionState.Failed(intent.id, CollectionFailure.KeepAliveRefused(KeepAliveKind.PROCESS))
-            if (!_state.compareAndSet(before, refused)) return busy()
+            val published = lock.withLock {
+                val free = !_state.value.active
+                if (free) _state.value = refused
+                free
+            }
+            if (!published) return busy()
             ended(refused)
             return StartResult.Refused(KeepAliveKind.PROCESS)
         }
-        if (!_state.compareAndSet(before, CollectionState.Preparing(intent, PrepareStep.CONNECT, 1))) {
+        val run = Run(intent, process)
+        val taken = lock.withLock {
+            if (_state.value.active) return@withLock false
+            _state.value = CollectionState.Preparing(intent, PrepareStep.CONNECT, 1)
+            // Stored before the launch, so a job that ends at once still finds itself here.
+            run.previous = current
+            current = run
+            true
+        }
+        if (!taken) {
             process.close()
             return busy()
         }
         log("collection ${intent.id} start ${intent.origin.name.lowercase()} ${if (intent.scope is CollectionScope.One) "one" else "all"}")
-        val run = Run(intent, process)
         // ATOMIC runs the body even when Stop lands first, so its finally always lets go.
-        run.job = scope.launch(start = CoroutineStart.ATOMIC) { execute(run) }
-        current.store(run)
-        if (!owns(run)) run.job?.cancel()
+        val job = scope.launch(start = CoroutineStart.ATOMIC) { execute(run) }
+        val orphan = lock.withLock {
+            run.job = job
+            !run.ownedBy(_state.value)
+        }
+        if (orphan) job.cancel()
         return StartResult.Started(intent.id)
     }
 
@@ -132,16 +160,18 @@ class CollectionController(
      * The state is `Stopped` when this returns. Leases go once the job reaches its finally.
      */
     fun stop(by: StopSource, intentId: Long? = null): Boolean {
-        while (true) {
+        var stopped: CollectionState.Stopped? = null
+        val job = lock.withLock {
             val now = _state.value
-            if (!now.active || (intentId != null && now.intentId != intentId)) return false
-            val stopped = CollectionState.Stopped(now.intentId!!, by)
-            if (_state.compareAndSet(now, stopped)) {
-                current.load()?.takeIf { it.intent.id == stopped.intentId }?.job?.cancel()
-                ended(stopped)
-                return true
-            }
+            if (!now.active || (intentId != null && now.intentId != intentId)) return@withLock null
+            stopped = CollectionState.Stopped(now.intentId!!, by)
+            _state.value = stopped!!
+            current?.takeIf { it.ownedBy(now) }?.job
         }
+        val terminal = stopped ?: return false
+        job?.cancel()
+        ended(terminal)
+        return true
     }
 
     private fun busy(): StartResult = _state.value.let { s ->
@@ -155,6 +185,12 @@ class CollectionController(
         var attempt = 1
         var barren = 1
         try {
+            // The stopped run before this one still holds its link and permit until its finally.
+            // A cancelled wait ends only after it, so a chain of quick restarts keeps the order.
+            withContext(NonCancellable) { run.previous?.done?.join() }
+            run.previous = null
+            // ATOMIC ran this body although a Stop or the scope may have ended it. Do not connect.
+            currentCoroutineContext().ensureActive()
             permits?.let {
                 it.acquire()
                 permitted = true
@@ -174,8 +210,7 @@ class CollectionController(
                     is AttemptEnd.Finished -> return finish(run, CollectionState.Done(intent.id, end.summary))
                     is AttemptEnd.Fail -> return finish(run, CollectionState.Failed(intent.id, end.failure))
                     is AttemptEnd.Lost -> {
-                        run.link?.release()
-                        run.link = null
+                        letGo("link") { run.link?.also { run.link = null }?.release() }
                         if (end.cause is DisconnectCause.Deliberate) return finish(run, CollectionState.Stopped(intent.id, StopSource.APP))
                         barren = if (progressed) 2 else barren + 1
                         val wait = retry.backoff(end.cause, barren, started.elapsedNow())
@@ -188,15 +223,15 @@ class CollectionController(
                 }
             }
         } finally {
-            // Cancelled by its scope, not by stop(). The request still needs an outcome.
-            finish(run, CollectionState.Stopped(intent.id, StopSource.SYSTEM))
-            run.wifi?.close()
-            run.wifi = null
-            run.link?.release()
-            run.link = null
-            if (permitted) permits?.release()
-            run.process.close()
-            current.compareAndSet(run, null)
+            // Cancelled by its scope, not by stop(). The request still needs an outcome. Each step
+            // runs on its own, so an adapter that throws never keeps the permit or PROCESS held.
+            letGo("outcome") { finish(run, CollectionState.Stopped(intent.id, StopSource.SYSTEM)) }
+            letGo("wifi") { run.wifi?.also { run.wifi = null }?.close() }
+            letGo("link") { run.link?.also { run.link = null }?.release() }
+            if (permitted) letGo("permit") { permits?.release() }
+            letGo("process") { run.process.close() }
+            lock.withLock { if (current === run) current = null }
+            run.done.complete()
         }
     }
 
@@ -242,23 +277,28 @@ class CollectionController(
 
     /** Publish [next] for [run], or end the job when a Stop already took the state. */
     private fun advance(run: Run, next: CollectionState, kind: TransportKind?) {
-        while (true) {
-            val now = _state.value
-            if (!run.ownedBy(now)) throw CancellationException("collection ${run.intent.id} no longer owns the state")
-            if (_state.compareAndSet(now, next)) break
-        }
+        if (!publish(run, next)) throw CancellationException("collection ${run.intent.id} no longer owns the state")
         syncLeases(run, next, kind)
         if (next !is CollectionState.Transferring) log("collection ${run.intent.id} ${label(next)}")
     }
 
     /** Publish a terminal state when [run] still owns it. A Stop that won keeps its own. */
     private fun finish(run: Run, terminal: CollectionState) {
-        while (true) {
-            val now = _state.value
-            if (!run.ownedBy(now)) return
-            if (_state.compareAndSet(now, terminal)) break
+        if (publish(run, terminal)) ended(terminal)
+    }
+
+    /** Write [next] when [run] owns the state. The check and the write hold [lock] together. */
+    private fun publish(run: Run, next: CollectionState): Boolean = lock.withLock {
+        run.ownedBy(_state.value).also { if (it) _state.value = next }
+    }
+
+    /** One cleanup step. A throw is logged by its class and the next step still runs. */
+    private inline fun letGo(what: String, step: () -> Unit) {
+        try {
+            step()
+        } catch (e: Exception) {
+            runCatching { log("collection cleanup $what failed, ${e::class.simpleName}") }
         }
-        ended(terminal)
     }
 
     private fun ended(terminal: CollectionState) {
@@ -310,9 +350,14 @@ class CollectionController(
         is CollectionState.Stopped -> "stopped by ${state.by.name.lowercase()}"
     }
 
-    /** One request's job and what it holds. Touched by its own job only, after [start]. */
+    /**
+     * One request's job and what it holds. [job] and [previous] are set under [lock] in [start],
+     * and the rest is touched by the job only. [done] completes once the finally let go of all.
+     */
     private class Run(val intent: CollectionIntent, val process: Lease) {
+        val done: CompletableJob = Job()
         var job: Job? = null
+        var previous: Run? = null
         var link: CollectionLink? = null
         var wifi: Lease? = null
         var wifiRefused = false
@@ -335,8 +380,6 @@ class CollectionController(
             if (closed.compareAndSet(false, true)) delegate.close()
         }
     }
-
-    private fun owns(run: Run): Boolean = run.ownedBy(_state.value)
 
     companion object {
         /** Terminal states kept for a slow toast consumer. */

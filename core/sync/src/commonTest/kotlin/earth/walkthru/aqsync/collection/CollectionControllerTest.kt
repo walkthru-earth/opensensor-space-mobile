@@ -4,7 +4,9 @@ import earth.walkthru.aqsync.archive.ArchiveKey
 import earth.walkthru.aqsync.archive.ArchiveLayout
 import earth.walkthru.aqsync.data.ble.DeviceSession
 import earth.walkthru.aqsync.data.ble.TransportKind
+import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.protocol.Opcode
+import earth.walkthru.aqsync.data.protocol.ProtocolError
 import earth.walkthru.aqsync.data.sync.ArchiveCollector
 import earth.walkthru.aqsync.data.sync.FakeArchiveDevice
 import earth.walkthru.aqsync.data.sync.MemoryArchiveIndex
@@ -17,7 +19,9 @@ import earth.walkthru.aqsync.storage.FakeStorageBudget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -28,6 +32,7 @@ import kotlinx.coroutines.test.testTimeSource
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
@@ -416,6 +421,184 @@ class CollectionControllerTest {
     }
 
     @Test
+    fun aRestartAfterStopWaitsForTheOldLendOnAKeptLink() = runTest { restartOnASharedLink(keepOpen = true) }
+
+    @Test
+    fun aRestartAfterStopWaitsForTheOldLendOnAClosingLink() = runTest { restartOnASharedLink(keepOpen = false) }
+
+    /**
+     * One link per device. The stopped run is still in a handshake it cannot leave, so it holds
+     * its lend after Stop. The next run must not borrow the link until that run handed it back.
+     */
+    private suspend fun TestScope.restartOnASharedLink(keepOpen: Boolean) {
+        val keepAlive = CountingKeepAlive()
+        val links = FakeLinks(backgroundScope, keepOpen = keepOpen, share = true).apply {
+            connectDelayMs = { n -> if (n == 1) 5_000 else 0 }
+            uninterruptible = true
+        }
+        val controller = controller(links, keepAlive)
+
+        controller.start(intent())
+        advanceTimeBy(1_000)
+        assertTrue(controller.stop(StopSource.USER))
+        val second = intent()
+        assertIs<StartResult.Started>(controller.start(second))
+        settle(controller)
+
+        val done = assertIs<CollectionState.Done>(controller.state.value)
+        assertEquals(second.id, done.intentId)
+        assertAllArchived(links)
+        assertEquals(1, links.maxLent, "one lender at a time")
+        assertEquals(0, links.lent)
+        assertEquals(if (keepOpen) 1 else 2, links.devices.size)
+        assertTrue(keepAlive.allClosedOnce())
+    }
+
+    @Test
+    fun aRunStoppedWhileWaitingForTheOldLendStillKeepsTheOrder() = runTest {
+        val keepAlive = CountingKeepAlive()
+        val links = FakeLinks(backgroundScope, share = true).apply {
+            connectDelayMs = { n -> if (n == 1) 5_000 else 0 }
+            uninterruptible = true
+        }
+        val controller = controller(links, keepAlive)
+
+        controller.start(intent())
+        advanceTimeBy(1_000)
+        assertTrue(controller.stop(StopSource.USER))
+        controller.start(intent())
+        runCurrent()
+        assertTrue(controller.stop(StopSource.USER))
+        val third = intent()
+        controller.start(third)
+        settle(controller)
+
+        assertEquals(third.id, assertIs<CollectionState.Done>(controller.state.value).intentId)
+        assertEquals(1, links.maxLent, "one lender at a time")
+        assertEquals(2, links.connects, "the run stopped while waiting never connected")
+        assertEquals(0, links.lent)
+        assertTrue(keepAlive.allClosedOnce())
+    }
+
+    @Test
+    fun stopDuringConnectLeavesNoLendOutstanding() = runTest {
+        val keepAlive = CountingKeepAlive()
+        val links = FakeLinks(backgroundScope, keepOpen = true).apply { connectDelayMs = { 5_000 } }
+        val controller = controller(links, keepAlive)
+        val request = intent()
+
+        controller.start(request)
+        advanceTimeBy(1_000)
+        assertEquals(1, links.lent)
+        assertTrue(controller.stop(StopSource.USER))
+        settle(controller)
+
+        assertEquals(CollectionState.Stopped(request.id, StopSource.USER), controller.state.value)
+        assertEquals(1, links.connects)
+        assertEquals(1, links.releases)
+        assertEquals(0, links.lent)
+        assertTrue(keepAlive.allClosedOnce())
+    }
+
+    @Test
+    fun aThrowingReleaseStillFreesThePermitAndProcess() = runTest {
+        val keepAlive = CountingKeepAlive()
+        val links = FakeLinks(backgroundScope).apply { failRelease = true }
+        val permits = Semaphore(1)
+        val controller = controller(links, keepAlive, permits = permits)
+
+        controller.start(intent())
+        settle(controller)
+
+        assertIs<CollectionState.Done>(controller.state.value)
+        assertEquals(1, permits.availablePermits)
+        assertTrue(keepAlive.allClosedOnce())
+        assertTrue(logs.any { it.endsWith("cleanup link failed, IllegalStateException") }, logs.toString())
+        links.failRelease = false
+        assertIs<StartResult.Started>(controller.start(intent()))
+        settle(controller)
+        assertIs<CollectionState.Done>(controller.state.value)
+        assertEquals(1, permits.availablePermits)
+    }
+
+    @Test
+    fun aCredentialRejectedMidTransferFailsWithoutRetry() = runTest {
+        val keepAlive = CountingKeepAlive()
+        var opens = 0
+        val links = FakeLinks(backgroundScope) {
+            refuseOpen = { if (++opens == 2) Frame.Error(0, ProtocolError.AUTH_FAILED.code, "") else null }
+        }
+        val controller = controller(links, keepAlive)
+        val request = intent()
+
+        controller.start(request)
+        settle(controller)
+
+        assertEquals(CollectionState.Failed(request.id, CollectionFailure.Link(DisconnectCause.Auth(AuthKind.TOKEN_REJECTED))), controller.state.value)
+        assertEquals(1, links.connects)
+        assertFalse(logs.any { it.contains("waiting") }, logs.toString())
+        assertEquals(1, links.releases)
+        assertTrue(keepAlive.allClosedOnce())
+    }
+
+    @Test
+    fun aDeliberateCloseMidTransferStopsWithoutRetry() = runTest {
+        val keepAlive = CountingKeepAlive()
+        lateinit var links: FakeLinks
+        links = FakeLinks(backgroundScope, keepOpen = true) { n ->
+            if (n == 1) beforeRead = { k -> if (k == 2) links.links.last().session.link.close("user disconnect") }
+        }
+        val controller = controller(links, keepAlive)
+        val request = intent()
+
+        controller.start(request)
+        settle(controller)
+
+        assertEquals(CollectionState.Stopped(request.id, StopSource.APP), controller.state.value)
+        assertEquals(1, links.connects)
+        assertFalse(logs.any { it.contains("waiting") }, logs.toString())
+        assertTrue(keepAlive.allClosedOnce())
+    }
+
+    @Test
+    fun progressEveryAttemptRetriesUntilTheCeiling() = runTest {
+        val keepAlive = CountingKeepAlive()
+        // Each attempt lists for 10 s, gets a chunk or two of a large file, then loses the link.
+        val links = FakeLinks(backgroundScope) {
+            listDelayMs = 10_000
+            chunkDelayMs = 1_000
+            beforeRead = { k ->
+                if (k == 1) {
+                    backgroundScope.launch {
+                        delay(1_500)
+                        close()
+                    }
+                }
+            }
+        }
+        links.files.clear()
+        links.files += FakeArchiveDevice.FakeFile(
+            "station=${links.station}/year=2026/month=09/day=15/data_1000_b41d_15000-15089-90.parquet",
+            FakeArchiveDevice.fakeParquet(7, 4_000_000),
+        )
+        val controller = controller(links, keepAlive)
+        val request = intent()
+
+        controller.start(request)
+        settle(controller)
+
+        val failed = assertIs<CollectionState.Failed>(controller.state.value)
+        assertEquals(request.id, failed.intentId)
+        assertIs<CollectionFailure.Link>(failed.failure)
+        // Progress resets the attempt bound, so only the 30 min ceiling ends it.
+        assertTrue(links.connects > RetryPolicy().attempts, "${links.connects} connects")
+        // No retry starts past 30 min. The attempt already running ends within its own 15 s.
+        assertTrue(testScheduler.currentTime in 29 * 60_000L..30 * 60_000L + 15_000L, "${testScheduler.currentTime} ms")
+        assertEquals(1, keepAlive.acquired(KeepAliveKind.PROCESS))
+        assertTrue(keepAlive.allClosedOnce())
+    }
+
+    @Test
     fun stopWhileWaitingEndsStoppedWithoutAnotherConnect() = runTest {
         val keepAlive = CountingKeepAlive()
         val links = FakeLinks(backgroundScope).apply { refuse = { DisconnectCause.PeerReset } }
@@ -447,6 +630,26 @@ class CollectionControllerTest {
         runCurrent()
 
         assertEquals(CollectionState.Stopped(request.id, StopSource.SYSTEM), controller.state.value)
+        assertTrue(keepAlive.allClosedOnce())
+    }
+
+    @Test
+    fun aStartOnAnEndedScopeStillLetsGoAndAllowsTheNext() = runTest {
+        val keepAlive = CountingKeepAlive()
+        val links = FakeLinks(backgroundScope)
+        val owner = CoroutineScope(backgroundScope.coroutineContext + Job(backgroundScope.coroutineContext[Job]))
+        owner.cancel()
+        val controller = controller(links, keepAlive, scope = owner)
+        val request = intent()
+
+        assertIs<StartResult.Started>(controller.start(request))
+        runCurrent()
+
+        assertEquals(CollectionState.Stopped(request.id, StopSource.SYSTEM), controller.state.value)
+        assertEquals(0, links.connects)
+        assertTrue(keepAlive.allClosedOnce())
+        assertIs<StartResult.Started>(controller.start(intent()))
+        runCurrent()
         assertTrue(keepAlive.allClosedOnce())
     }
 
@@ -630,5 +833,14 @@ class CollectionControllerTest {
         assertEquals(null, policy.backoff(DisconnectCause.PeerReset, 6, 0.seconds))
         assertEquals(null, policy.backoff(DisconnectCause.PeerReset, 2, 19.seconds))
         assertEquals(null, policy.backoff(DisconnectCause.Auth(AuthKind.BOND_FAILED), 2, 0.seconds))
+    }
+
+    @Test
+    fun aRetryPolicyRejectsBoundsThatCannotWait() {
+        assertFailsWith<IllegalArgumentException> { RetryPolicy(attempts = 0) }
+        assertFailsWith<IllegalArgumentException> { RetryPolicy(firstBackoff = 0.seconds) }
+        assertFailsWith<IllegalArgumentException> { RetryPolicy(firstBackoff = (-1).seconds) }
+        assertFailsWith<IllegalArgumentException> { RetryPolicy(firstBackoff = 10.seconds, maxBackoff = 5.seconds) }
+        assertFailsWith<IllegalArgumentException> { RetryPolicy(ceiling = 0.seconds) }
     }
 }

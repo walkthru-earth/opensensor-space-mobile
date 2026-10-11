@@ -230,7 +230,12 @@ stateDiagram-v2
 
 - **Ownership.** The controller job alone owns the PROCESS lease, the WIFI lease, the shared
   `Semaphore` permit and the lent `CollectionLink`. One outermost `finally` lets them go in reverse
-  order. Every lease is wrapped so it closes once, whoever calls it.
+  order, each step on its own, so an adapter that throws is logged by class and never keeps the
+  permit or PROCESS held. Every lease is wrapped so it closes once, whoever calls it.
+- **One lender.** A run started right after a Stop waits, before its permit and connect, until
+  the stopped run let go of its link. A run stopped while it waits still ends after the one
+  before it, so quick restarts keep the order. `LinkProvider.connect` that is cancelled after it
+  lent a link releases that lend itself, since the controller never saw it.
 - **PROCESS** is taken inside `start`, before the job is launched, and held in every non-terminal
   state, `Waiting` included. A refused PROCESS lease ends as `Failed(KeepAliveRefused)` with no
   connect.
@@ -238,13 +243,13 @@ stateDiagram-v2
   `Transferring` or `Finalizing`. One `syncLeases` call runs on every transition. A refused WIFI
   lease is logged once and the collection goes on, since the lock only keeps the radio fast. It
   is asked again only after the link stops carrying data.
-- **Stop** moves the state to `Stopped` with a compare and set, then cancels the job. Every later
-  transition of that request checks that it still owns the state, so Stop always wins. Stop never
+- **Stop** moves the state to `Stopped`, then cancels the job. Every transition holds one lock
+  and checks by identity that its run still owns the state, so Stop always wins. Stop never
   closes the link. The abandoned request drains behind its `ABORT` and the link stays Ready.
   Each run owns a private copy of its intent, so a restart with the same intent object never
   lets the old job write. A job cancelled by its scope, not by `stop`, ends `Stopped(SYSTEM)`.
 - **Retry.** A retryable `DisconnectCause` publishes `Waiting(attempt, retryAtEpochMs)`, waits per
-  `RetryPolicy` (2 s doubling to 60 s, 5 attempts, 30 min ceiling) and starts again at
+  `RetryPolicy` (2 s doubling to 60 s, 5 attempts, no retry starts after 30 min) and starts again at
   `Preparing(CONNECT)` with a fresh `LIST`. An attempt that received bytes resets the count.
   `Auth` fails at once, `Deliberate` ends `Stopped(APP)`. Spent retries end
   `Failed(Link(lastCause))`. Partial files resume by offset through the collector.

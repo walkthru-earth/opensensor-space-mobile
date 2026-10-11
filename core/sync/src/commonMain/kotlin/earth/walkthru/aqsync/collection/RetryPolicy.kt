@@ -8,8 +8,8 @@ import kotlin.time.Duration.Companion.seconds
 
 /**
  * When a lost collection tries again. Only [DisconnectCause.retryable] causes retry. [attempts]
- * bounds attempts in a row that saved no byte, and [ceiling] bounds the whole request from its
- * start, so a link that keeps dropping after some progress still ends.
+ * bounds attempts in a row that saved no byte. No retry starts later than [ceiling] after the
+ * request started, so a link that keeps dropping after some progress still ends.
  */
 data class RetryPolicy(
     val attempts: Int = 5,
@@ -19,6 +19,8 @@ data class RetryPolicy(
 ) {
     init {
         require(attempts >= 1) { "at least one attempt" }
+        require(firstBackoff.isPositive()) { "first backoff not positive" }
+        require(ceiling.isPositive()) { "ceiling not positive" }
         require(firstBackoff <= maxBackoff) { "first backoff above the max" }
     }
 
