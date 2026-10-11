@@ -20,4 +20,5 @@
     <string name="mood_thick_line">ابقَ في الداخل والنوافذ مغلقة.</string>
     <string name="mood_none_line">لا توجد قراءة هنا بعد.</string>
     <string name="value_not_available">غير متاح</string>
+    <string name="mood_strip_selected">تم اختيار %1$s</string>
 </resources>

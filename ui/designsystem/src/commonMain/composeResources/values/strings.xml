@@ -23,4 +23,6 @@
     <string name="mood_none_line">No reading here yet.</string>
     <!-- A missing value. Never zero, never a dash. -->
     <string name="value_not_available">n/a</string>
+    <!-- MoodStrip state when a block is chosen, the argument is the block word and caption. -->
+    <string name="mood_strip_selected">%1$s selected</string>
 </resources>

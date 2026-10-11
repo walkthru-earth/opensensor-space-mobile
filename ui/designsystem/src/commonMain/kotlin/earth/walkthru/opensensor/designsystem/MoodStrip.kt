@@ -28,6 +28,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import earth.walkthru.aqsync.airquality.MoodBlock
 import earth.walkthru.aqsync.airquality.WhoStep
@@ -44,6 +45,7 @@ import earth.walkthru.opensensor.designsystem.resources.mood_poor
 import earth.walkthru.opensensor.designsystem.resources.mood_poor_line
 import earth.walkthru.opensensor.designsystem.resources.mood_smoky
 import earth.walkthru.opensensor.designsystem.resources.mood_smoky_line
+import earth.walkthru.opensensor.designsystem.resources.mood_strip_selected
 import earth.walkthru.opensensor.designsystem.resources.mood_thick
 import earth.walkthru.opensensor.designsystem.resources.mood_thick_line
 import earth.walkthru.opensensor.designsystem.resources.value_not_available
@@ -84,7 +86,10 @@ fun notAvailableText(): String = stringResource(Res.string.value_not_available)
 
 /** "word caption" per block, joined with commas. Captions are optional per block. */
 internal fun moodSummary(words: List<String>, captions: List<String?>): String =
-    words.indices.joinToString(", ") { i -> listOfNotNull(words[i], captions.getOrNull(i)).joinToString(" ") }
+    words.indices.joinToString(", ") { i -> blockLabel(words[i], captions.getOrNull(i)) }
+
+/** One block read aloud, its word then its caption. */
+internal fun blockLabel(word: String, caption: String?): String = listOfNotNull(word, caption).joinToString(" ")
 
 /** The legend read as one sentence, the title then the six words. */
 internal fun legendSummary(words: List<String>, title: String?): String =
@@ -94,7 +99,8 @@ internal fun legendSummary(words: List<String>, title: String?): String =
  * Mood blocks side by side, widths by [MoodBlock.weight], no axis. A null step is hatched and read
  * "n/a". The row follows the layout direction, so it mirrors in right to left. It is one
  * accessibility node that reads every block with its caption. With [onBlock], each block is also a
- * button and a custom action, and [selected] gets an outline.
+ * button and a custom action, [selected] gets an outline and is announced as the strip's state,
+ * and the strip is at least 48 dp tall to touch while the bar stays 28 dp.
  */
 @Composable
 fun MoodStrip(
@@ -109,7 +115,9 @@ fun MoodStrip(
         val step = b.step
         if (step == null) na else moodWord(step)
     }
-    MoodStripLayout(blocks, words, captions, selected, onBlock, modifier)
+    val chosen = selected?.takeIf { it in blocks.indices && blocks[it].weight > 0f }
+    val selectedSpoken = chosen?.let { stringResource(Res.string.mood_strip_selected, blockLabel(words[it], captions.getOrNull(it))) }
+    MoodStripLayout(blocks, words, captions, selected, selectedSpoken, onBlock, modifier)
 }
 
 @Composable
@@ -118,6 +126,7 @@ internal fun MoodStripLayout(
     words: List<String>,
     captions: List<String?>,
     selected: Int?,
+    selectedSpoken: String?,
     onBlock: ((Int) -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
@@ -127,11 +136,12 @@ internal fun MoodStripLayout(
     val hatch = MaterialTheme.colorScheme.outline
     val track = MaterialTheme.colorScheme.surfaceContainerHighest
     Row(
-        modifier.fillMaxWidth().height(28.dp).clearAndSetSemantics {
+        modifier.fillMaxWidth().height(if (onBlock != null) 48.dp else 28.dp).clearAndSetSemantics {
             contentDescription = summary
+            if (selectedSpoken != null) stateDescription = selectedSpoken
             if (onBlock != null) {
                 customActions = shown.map { i ->
-                    CustomAccessibilityAction(listOfNotNull(words[i], captions.getOrNull(i)).joinToString(" ")) {
+                    CustomAccessibilityAction(blockLabel(words[i], captions.getOrNull(i))) {
                         onBlock(i)
                         true
                     }
@@ -143,7 +153,8 @@ internal fun MoodStripLayout(
         shown.forEach { i ->
             val block = blocks[i]
             val shape = RoundedCornerShape(6.dp)
-            var m = Modifier.weight(block.weight).fillMaxHeight().clip(shape)
+            // The bar is 28 dp. A tappable strip is taller, each block's full height is its target.
+            var m = Modifier.fillMaxWidth().height(28.dp).clip(shape)
             val step = block.step
             m = if (step != null) {
                 m.background(Color(step.color))
@@ -158,8 +169,9 @@ internal fun MoodStripLayout(
                 }
             }
             if (i == selected) m = m.border(2.dp, outline, shape)
-            if (onBlock != null) m = m.clickable(role = Role.Button) { onBlock(i) }
-            Box(m)
+            var target = Modifier.weight(block.weight).fillMaxHeight()
+            if (onBlock != null) target = target.clickable(role = Role.Button) { onBlock(i) }
+            Box(target, contentAlignment = Alignment.Center) { Box(m) }
         }
     }
 }

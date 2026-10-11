@@ -13,6 +13,8 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertHeightIsAtLeast
+import androidx.compose.ui.test.assertHeightIsEqualTo
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasContentDescription
@@ -106,6 +108,7 @@ class SemanticsTest {
                     words = listOf("Fresh air", "n/a", "Poor", "Smoky"),
                     captions = listOf("7 days", "24 hours", "1 hour", "never shown"),
                     selected = null,
+                    selectedSpoken = null,
                     onBlock = { tapped = it },
                     modifier = Modifier.testTag("strip"),
                 )
@@ -116,6 +119,39 @@ class SemanticsTest {
         onNodeWithTag("strip").onChildren().assertCountEquals(0)
         onNodeWithTag("strip").fetchSemanticsNode().config[SemanticsActions.CustomActions][2].action()
         kotlin.test.assertEquals(2, tapped)
+    }
+
+    @Test
+    fun aChosenMoodBlockIsAnnouncedAndTheStripIsATouchTarget() = runComposeUiTest {
+        setContent {
+            MaterialTheme {
+                Column {
+                    MoodStripLayout(
+                        blocks = listOf(MoodBlock(WhoStep.GUIDELINE, weight = 2f), MoodBlock(WhoStep.IT2)),
+                        words = listOf("Fresh air", "Poor"),
+                        captions = listOf("2 areas", "1 area"),
+                        selected = 1,
+                        selectedSpoken = "Poor 1 area selected",
+                        onBlock = {},
+                        modifier = Modifier.testTag("tappable"),
+                    )
+                    MoodStripLayout(
+                        blocks = listOf(MoodBlock(WhoStep.GUIDELINE)),
+                        words = listOf("Fresh air"),
+                        captions = emptyList(),
+                        selected = null,
+                        selectedSpoken = null,
+                        onBlock = null,
+                        modifier = Modifier.testTag("plain"),
+                    )
+                }
+            }
+        }
+        onNodeWithTag("tappable").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Poor 1 area selected"))
+        onNodeWithTag("tappable").onChildren().assertCountEquals(0)
+        onNodeWithTag("tappable").assertHeightIsAtLeast(48.dp)
+        onNodeWithTag("plain").assert(!SemanticsMatcher.keyIsDefined(SemanticsProperties.StateDescription))
+        onNodeWithTag("plain").assertHeightIsEqualTo(28.dp)
     }
 
     @Test
