@@ -321,18 +321,32 @@ class SyncEngine(
 
     /** Like `use`, but a failed close after a good transfer (the partial's final sync) is a [StorageFault]. */
     private inline fun <R> PartialWriter.useInStorage(block: (PartialWriter) -> R): R {
-        val result = try {
-            block(this)
+        var closed = false
+        try {
+            val result = block(this)
+            closed = true
+            storage { close() }
+            return result
         } catch (e: Throwable) {
-            try {
-                close()
-            } catch (closing: Throwable) {
-                e.addSuppressed(closing)
+            if (!closed) {
+                closed = true
+                try {
+                    close()
+                } catch (closing: Throwable) {
+                    e.addSuppressed(closing)
+                }
             }
             throw e
+        } finally {
+            // A `return` from inside [block] (a device error, a window given up, a short READ) skips
+            // both paths above. The outcome is already a failure, so a close error here is dropped.
+            if (!closed) {
+                try {
+                    close()
+                } catch (_: Exception) {
+                }
+            }
         }
-        storage { close() }
-        return result
     }
 
     /** This phone's archive failed (disk full, a refused path, a failed move or receipt). */

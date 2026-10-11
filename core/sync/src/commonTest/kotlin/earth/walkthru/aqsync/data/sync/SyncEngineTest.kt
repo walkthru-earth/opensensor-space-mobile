@@ -55,6 +55,19 @@ class SyncEngineTest {
     private fun hasPartials(): Boolean = store.files.keys.any { it.startsWith(ArchiveLayout.PARTIAL + "/") }
 
     @Test
+    fun aFailedReadStillClosesThePartialWriter() = runTest {
+        val d = device(backgroundScope)
+        // Every window loses every CHUNK, so the engine gives up and returns from inside the writer block.
+        d.first.dropLeadingChunks = { 99 }
+
+        val outcome = engine.pull(d, 0)
+
+        assertIs<FileOutcome.Failed>(outcome)
+        assertEquals(0, store.openWriters, "the partial writer is closed on an early return")
+        assertTrue(hasPartials(), "the partial is kept for resume")
+    }
+
+    @Test
     fun lostWindowsAreReReadFromThePhoneOffsetAndCounted() = runTest {
         val d = device(backgroundScope)
         // File 0 is 24 000 bytes, so two 16 KiB windows of 507-byte chunks.
