@@ -73,7 +73,7 @@ Forget, after confirmation, drops the record and the Keychain Wi-Fi access and c
 link. The system bond stays until the user removes it in iOS Settings, which the dialog says.
 A forgotten sensor comes back only when the user opens it again. Collect all runs one sensor at a
 time while the app is open, over Wi-Fi when the sensor was found there with access, else over
-Bluetooth, and stops when the app leaves the foreground. A step never takes over a link the user
+Bluetooth. It stops on leaving the foreground unless iOS 26 accepts its continued task. A step never takes over a link the user
 holds. It skips a sensor the user has open on Bluetooth or Wi-Fi (a Wi-Fi session maps to its
 known sensor through the TXT station), fails while another sensor holds the Bluetooth link, closes
 only what it opened, and fails when its sync has not started within a minute. Opening a sensor
@@ -149,8 +149,8 @@ Bonjour discovery reports a Local Network denial only when `NWBrowser` waits wit
 The screen then shows a Settings hint, and the browse continues so that allowing access resumes
 discovery. Other waiting reasons keep the neutral message.
 
-User-started LAN collection requests a UIKit background-task lease. Switching apps stops
-discovery and BLE/idle LAN connections, but active collections continue while iOS grants time.
+User-started BLE and LAN collection requests a UIKit background-task lease. Switching apps
+stops discovery and idle connections, but active collections continue while iOS grants time.
 Expiration cancels the sockets and retains partial bytes/progress; returning reconnects the
 paused sensors and resumes collection after old task/archive ownership is released. Recoverable
 LAN failures while backgrounded also queue resume. Explicit Cancel removes that intent, and

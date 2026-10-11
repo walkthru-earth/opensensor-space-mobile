@@ -42,8 +42,8 @@ sentence for them.
 | Today Smart Sync | Syncs over the link the router picked | Routes to Wi-Fi when an idle LAN session for the same sensor is open; the shared Today card shows its progress and result |
 | Phone storage fault | `msg_file_failed` for that file, the run goes on | The run goes on and ends with `companion_sync_storage_failed`. The link stays |
 | Lost foreground sync | Shared `CollectionController` retries preparation and transfer while PROCESS remains held | BLE and LAN each retry a transient link loss twice, then leave retained partial bytes for an explicit retry. Stop and disconnect cancel pending attempts |
-| BLE writes | With response | `control` with response, payload sized from the without-response length |
-| Background | `SyncWorker` on WorkManager | A UIKit background-task lease for LAN collections only. Expiry pauses, and foreground return resumes |
+| BLE writes | With response | `control` with response, payload sized from `maximumWriteValueLength(for: .withResponse)` |
+| Background | `SyncWorker` on WorkManager | UIKit background-task leases for active BLE and LAN transfers. iOS 26 continued tasks support eligible collection, with bounded lease fallback |
 
 The keepalive rules are unchanged on both phones. See [ios-migration.md](ios-migration.md) for
 bounded execution and phone qualification.
