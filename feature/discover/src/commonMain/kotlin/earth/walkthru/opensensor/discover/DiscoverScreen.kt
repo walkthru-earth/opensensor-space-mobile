@@ -132,13 +132,6 @@ private fun DiscoverContent(
     infoButton: @Composable (InfoText, Modifier) -> Unit,
 ) {
     val state by controller.state.collectAsState()
-    // Back, the Android predictive back or the iOS edge swipe, first returns an open sheet to peek.
-    // Navigation Event runs the newest handler first, so this wins over the shell's NavDisplay.
-    NavigationBackHandler(
-        state = rememberNavigationEventState(NavigationEventInfo.None),
-        isBackEnabled = state.selected != null,
-        onBackCompleted = { controller.selectCell(null) },
-    )
     val dark = isSystemInDarkTheme()
     val paper = MaterialTheme.colorScheme.surfaceContainerLow
     val ink = MaterialTheme.colorScheme.onSurface
@@ -154,6 +147,17 @@ private fun DiscoverContent(
     var clearSignal by remember { mutableStateOf(0) }
     fun expand() = scope.launch { runCatching { sheet.bottomSheetState.expand() } }
     fun peek() = scope.launch { runCatching { sheet.bottomSheetState.partialExpand() } }
+
+    // Back, the Android predictive back or the iOS edge swipe, first returns an open sheet to peek.
+    // Navigation Event runs the newest handler first, so this wins over the shell's NavDisplay.
+    NavigationBackHandler(
+        state = rememberNavigationEventState(NavigationEventInfo.None),
+        isBackEnabled = state.selected != null,
+        onBackCompleted = {
+            controller.selectCell(null)
+            peek()
+        },
+    )
 
     BottomSheetScaffold(
         modifier = modifier,
@@ -223,7 +227,7 @@ private fun DiscoverContent(
                     onPlace = { place ->
                         scope.launch {
                             runCatching {
-                                mapState.animateCamera(CameraUpdate(target = Position(longitude = place.lng, latitude = place.lat), zoom = 9.0))
+                                mapState.animateCamera(CameraUpdate(center = Position(longitude = place.lng, latitude = place.lat), zoom = 9.0))
                             }
                         }
                     },

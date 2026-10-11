@@ -254,7 +254,7 @@ Parquet reader. Design reassessed 2026-10-08 in
   non-modal sheet with peek, half and full heights, avg, min and max per metric, the device
   list (crowd rule of three applied by the publisher), and a public device page with range,
   aggregation and metric filters.
-- `maplibre-compose` 0.19.0, which pins our Kotlin and CMP versions. One GeoJSON source, a
+- `maplibre-compose` 0.20.0, which pins our Kotlin and CMP versions. One GeoJSON source, a
   cover of at most 1,024 cells, redrawn after 400 ms of camera rest. No bundled basemap, an
   optional "Offline map" download in the app Settings, and "© OpenStreetMap" always reachable.
 - No location prompt at launch. Centre on the last viewed area, the own device cell or the time

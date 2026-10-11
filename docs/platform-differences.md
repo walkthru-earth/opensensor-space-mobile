@@ -31,4 +31,3 @@ parity work, and why. Everything not listed here is shared Kotlin and behaves th
 | LAN token at rest (F80) | Encrypted with an Android Keystore key | Keychain, `AfterFirstUnlockThisDeviceOnly` |
 | Backup (F79) | Settings to cloud, archive device-to-device only | Settings backed up, archive excluded from backup |
 | Sticker barcode scan (F52) | Google Code Scanner, no camera permission | VisionKit `DataScannerViewController`, camera asked on the Scan tap |
-| Arabic place names on the Discover map | Shaped by MapLibre Android | The Apple MapLibre build has no Arabic shaping, so iOS uses Latin label styles |
