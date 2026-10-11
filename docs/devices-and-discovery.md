@@ -362,8 +362,9 @@ allow it cleanly. Precise location is never requested on either platform.
   `LocationAccuracy.Low`, `LocationIndicatorLayer` for the puck). Only the prompt is per platform
   (`NearMe.android.kt` asks for `ACCESS_COARSE_LOCATION` alone, `NearMe.ios.kt` calls
   `requestWhenInUseAuthorization`). No provider exists before the tap. After a grant the camera
-  moves to the first fix at zoom 10.5 and the puck follows the fix while the map is open.
-  `DiscoverPrefs` saves only the camera, never the fix.
+  moves to the centre of the resolution 6 cell holding the first fix (`nearMeTarget`), at zoom
+  10.5, and the puck follows the fix while the map is open. `DiscoverPrefs` saves only the
+  camera, and the camera never holds the fix, so the saved view is at most a coarse cell centre.
 
 - Decline. The map stays where it is and search remains. Asking again happens only on the next
   tap, never on launch.

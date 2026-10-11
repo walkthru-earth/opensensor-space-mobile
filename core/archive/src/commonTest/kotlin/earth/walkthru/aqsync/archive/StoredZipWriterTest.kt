@@ -296,6 +296,37 @@ class ArchiveExportTest {
     }
 
     @Test
+    fun aCheckpointStopsTheZipBetweenSlicesAndRemovesTheRun() {
+        class Stop : RuntimeException()
+        val entries = listOf(entry("A/x.parquet", ByteArray(200_000)), entry("B/y.parquet"))
+        var calls = 0
+        assertFailsWith<Stop> { ArchiveExport.writeZip(MemorySink(), entries) { if (++calls == 3) throw Stop() } }
+        assertEquals(3, calls)
+        val space = MemoryExportSpace()
+        assertFailsWith<Stop> { ArchiveExport.stageZip(space, entries, "z.zip") { throw Stop() } }
+        assertTrue(space.runs.single().deleted)
+    }
+
+    @Test
+    fun aFullDiskIsAStorageFailure() {
+        val full = object : ExportSink {
+            override fun write(bytes: ByteArray, offset: Int, length: Int) = throw IllegalStateException("write failed: ENOSPC (No space left on device)")
+            override fun close() = Unit
+        }
+        val failure = assertFailsWith<StorageException> { ArchiveExport.writeZip(full, listOf(entry("A/x.parquet"))) }
+        assertTrue(failure.cause?.message.orEmpty().contains("ENOSPC"))
+        assertFailsWith<IllegalStateException> {
+            ArchiveExport.writeZip(
+                object : ExportSink {
+                    override fun write(bytes: ByteArray, offset: Int, length: Int) = throw IllegalStateException("broken pipe")
+                    override fun close() = Unit
+                },
+                listOf(entry("A/x.parquet"))
+            )
+        }
+    }
+
+    @Test
     fun everyExportClosesTheReadersItOpened() {
         val opened = ArrayList<ClosingReader>()
         val entries = listOf("A/x.parquet", "B/y.parquet").map { path ->

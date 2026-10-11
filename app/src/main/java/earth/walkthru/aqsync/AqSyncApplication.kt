@@ -14,6 +14,7 @@ import earth.walkthru.aqsync.data.history.HistoryDeriver
 import earth.walkthru.aqsync.data.history.HistoryIndexer
 import earth.walkthru.aqsync.data.local.security.LanTokenMigration
 import earth.walkthru.aqsync.data.storage.StorageJanitorWorker
+import earth.walkthru.aqsync.settings.SettingsRepository
 import earth.walkthru.aqsync.storage.MemoryPressure
 import earth.walkthru.aqsync.storage.RetentionPolicy
 import earth.walkthru.opensensor.discover.MapCache
@@ -22,6 +23,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import android.content.res.Configuration as ResConfiguration
 
@@ -55,7 +57,7 @@ class AqSyncApplication :
     lateinit var historyDeriver: HistoryDeriver
 
     @Inject
-    lateinit var retention: RetentionPolicy
+    lateinit var settings: SettingsRepository
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -67,7 +69,15 @@ class AqSyncApplication :
         // Shared Compose screens read the first default locale. Make it the language `res/` chose.
         AppLanguage.alignDefault(this)
         // The basemap tile cache stays in cacheDir under its cap, set before any map runs (#61).
-        MapCache.configure(cacheDir.absolutePath, retention.mapCacheBytes)
+        // The default cap is set at once, then the stored cap replaces it without blocking the main
+        // thread. A map that already started keeps the default until the next start.
+        MapCache.configure(cacheDir.absolutePath, RetentionPolicy.DEFAULT_MAP_CACHE_BYTES)
+        appScope.launch {
+            val stored = suspendRunCatching { settings.current().retention.mapCacheBytes }.getOrNull()
+            if (stored != null && stored != RetentionPolicy.DEFAULT_MAP_CACHE_BYTES) {
+                withContext(Dispatchers.Main) { MapCache.configure(cacheDir.absolutePath, stored) }
+            }
+        }
         // Sweep temps and stale partials and index orphan finals once per process (#60).
         StorageJanitorWorker.enqueue(WorkManager.getInstance(this))
         appScope.launch {

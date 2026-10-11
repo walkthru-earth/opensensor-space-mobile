@@ -10,6 +10,7 @@ import earth.walkthru.aqsync.publicfeed.FeedWindow
 import earth.walkthru.aqsync.publicfeed.GeoBounds
 import earth.walkthru.aqsync.publicfeed.H3Grid
 import earth.walkthru.aqsync.publicfeed.H3Index
+import earth.walkthru.aqsync.publicfeed.LatLng
 import earth.walkthru.aqsync.publicfeed.PropertyRanking
 import earth.walkthru.aqsync.publicfeed.PublicFeed
 import earth.walkthru.aqsync.publicfeed.TimeZoneRegions
@@ -128,6 +129,9 @@ class DiscoverController(
     fun onCamera(rest: CameraRest) {
         this.rest.value = rest
     }
+
+    /** The coarse cell centre "Near me" moves the camera to, so the saved camera never holds the fix. */
+    fun nearMeTarget(lat: Double, lng: Double): LatLng? = nearMeTarget(h3, lat, lng)
 
     fun selectProperty(id: String) {
         if (_state.value.property?.id == id) return
