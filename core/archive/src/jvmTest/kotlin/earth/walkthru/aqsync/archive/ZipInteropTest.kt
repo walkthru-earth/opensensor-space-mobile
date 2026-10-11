@@ -88,4 +88,27 @@ class ZipInteropTest {
         val entries = ArchiveExport.dailyEntries(directoryEntries(derived, "derived/v1"))!!
         assertEquals(listOf("derived/v1/station=A/d.manifest.json", "derived/v1/station=A/d.parquet"), entries.map { it.path })
     }
+
+    @Test
+    fun writeZipStreamsIntoAForwardOnlyStream() {
+        // A Storage Access Framework document is a plain OutputStream with no seek, as here.
+        val out = java.io.ByteArrayOutputStream()
+        val sink = object : ExportSink {
+            override fun write(bytes: ByteArray, offset: Int, length: Int) = out.write(bytes, offset, length)
+            override fun close() = Unit
+        }
+        val entries = listOf(ExportEntry("A/x.parquet", 0) { ByteArrayReader(a) }, ExportEntry("B/y.parquet", 0) { ByteArrayReader(b) })
+        ArchiveExport.writeZip(sink, entries)
+        assertTrue(out.size() <= ArchiveExport.plannedZipBytes(entries))
+        ZipInputStream(out.toByteArray().inputStream()).use { zin ->
+            val seen = LinkedHashMap<String, ByteArray>()
+            while (true) {
+                val e = zin.nextEntry ?: break
+                seen[e.name] = zin.readBytes()
+            }
+            assertEquals(listOf("A/x.parquet", "B/y.parquet"), seen.keys.toList())
+            assertContentEquals(a, seen["A/x.parquet"])
+            assertContentEquals(b, seen["B/y.parquet"])
+        }
+    }
 }

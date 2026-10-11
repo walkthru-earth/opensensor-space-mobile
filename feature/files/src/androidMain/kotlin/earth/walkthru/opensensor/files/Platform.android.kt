@@ -14,6 +14,7 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import earth.walkthru.aqsync.archive.ArchiveExport
+import earth.walkthru.aqsync.archive.ExportSink
 import earth.walkthru.aqsync.archive.StagedFile
 import earth.walkthru.opensensor.files.resources.Res
 import earth.walkthru.opensensor.files.resources.share_archive
@@ -27,6 +28,7 @@ import kotlinx.datetime.toJavaLocalDate
 import org.jetbrains.compose.resources.getPluralString
 import org.jetbrains.compose.resources.getString
 import java.io.File
+import java.io.OutputStream
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -50,7 +52,8 @@ internal class PendingSave : ViewModel() {
  * Shares through a chooser over the app's `FileProvider` (`<applicationId>.files`, which serves only
  * `cacheDir/export`, the [earth.walkthru.aqsync.archive.FileExportSpace] root) and saves through the
  * Storage Access Framework. The chooser gives no close signal, so [ExportPresenter.share] returns false
- * and the next export removes the run.
+ * and the next export removes the run. A zip save streams into the picked document with no staged copy,
+ * a share stays staged since its targets read a finished file by URI after the chooser returns.
  */
 @Composable
 actual fun rememberExportPresenter(): ExportPresenter {
@@ -88,19 +91,37 @@ actual fun rememberExportPresenter(): ExportPresenter {
                 return false
             }
 
+            // True even when dismissed, nothing reads the staged copy once the picker closed.
             override suspend fun save(file: StagedFile): Boolean {
+                pickAndWrite(file.name) { out -> File(file.path).inputStream().use { it.copyTo(out) } }
+                return true
+            }
+
+            override suspend fun saveStreaming(name: String, write: suspend (ExportSink) -> Unit): Boolean =
+                pickAndWrite(name) { out ->
+                    val sink = object : ExportSink {
+                        override fun write(bytes: ByteArray, offset: Int, length: Int) = out.write(bytes, offset, length)
+                        override fun close() = Unit
+                    }
+                    write(sink)
+                }
+
+            /**
+             * Opens the picker for [name] and runs [write] on the picked document. Returns false when
+             * the picker was dismissed. A failed write removes the document, so no half zip is left.
+             */
+            private suspend fun pickAndWrite(name: String, write: suspend (OutputStream) -> Unit): Boolean {
                 val result = CompletableDeferred<Uri?>()
                 pending.answer(null)
                 pending.result = result
-                createDocument.launch(file.name)
-                val uri = result.await() ?: return true
+                createDocument.launch(name)
+                val uri = result.await() ?: return false
                 val resolver = app.contentResolver
                 withContext(Dispatchers.IO) {
                     try {
                         val out = resolver.openOutputStream(uri, "wt") ?: error("no output stream")
-                        out.use { o -> File(file.path).inputStream().use { it.copyTo(o) } }
+                        out.buffered(64 * 1024).use { write(it) }
                     } catch (e: Throwable) {
-                        // The picker made an empty document. Remove it so no half zip is left behind.
                         runCatching { DocumentsContract.deleteDocument(resolver, uri) }
                         throw e
                     }
