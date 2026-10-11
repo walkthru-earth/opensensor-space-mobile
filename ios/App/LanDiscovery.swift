@@ -91,12 +91,11 @@ final class LanDiscovery {
 
     /// Keeps the session's shared link. A link that Kotlin closed (a failed write, an inbox overflow)
     /// ends the socket too, so the next open starts on a fresh link.
-    private func adopt(_ sink: FrameSink, name: String, session: LanSession) {
-        guard sessions[name] === session, links[name] !== sink.link else { return }
-        let link = sink.link
+    private func adopt(_ link: IosLink, name: String, session: LanSession) {
+        guard sessions[name] === session, links[name] !== link else { return }
         let id = ObjectIdentifier(link)
         links[name] = link
-        link.whenClosed { [weak self, weak session] in
+        link.whenClosed { @Sendable [weak self, weak session] in
             session?.linkFailed()
             Task { @MainActor [weak self] in
                 guard let self, let current = self.links[name], ObjectIdentifier(current) == id else { return }
@@ -391,29 +390,29 @@ final class LanDiscovery {
                 if self.commands[name]?.0 == attempt { self.commands[name] = nil }
                 self.finishTask(name, id: attempt)
             }
-            guard let sink = await session.link() else {
+            guard let link = await session.link() else {
                 if self.commands[name]?.0 == attempt { self.state.today.commandRefused() }
                 return
             }
             guard self.commands[name]?.0 == attempt, self.sessions[name] === session else { return }
-            self.adopt(sink, name: name, session: session)
-            let link = sink.link
+            self.adopt(link, name: name, session: session)
             self.state.today.commandStarted()
-            let box = HandleBox()
-            let ended = await withTaskCancellationHandler {
-                await withCheckedContinuation { (continuation: CheckedContinuation<CommandEnded, Never>) in
+            let slot = RunSlot<CommandResult>()
+            await withTaskCancellationHandler {
+                await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
                     let handle = self.engine.command(link: link, command: command, automatic: false) { result in
-                        continuation.resume(returning: CommandEnded(result: result))
+                        slot.result = result
+                        continuation.resume()
                     }
                     self.handles[name] = handle
-                    box.set(handle)
+                    slot.set(handle)
                 }
             } onCancel: {
-                box.cancel()
+                Task { @MainActor in slot.cancel() }
             }
             self.handles[name] = nil
-            guard self.commands[name]?.0 == attempt else { return }
-            self.state.today.commandFinished(result: ended.result)
+            guard self.commands[name]?.0 == attempt, let ended = slot.result else { return }
+            self.state.today.commandFinished(result: ended)
         }
         return true
     }
@@ -422,12 +421,11 @@ final class LanDiscovery {
     /// main thread, and only throttled progress and the result reach the main actor.
     /// Nil when the session ended before the sync began.
     private func collect(name: String, session: LanSession, attempt: UUID, onlyName: String? = nil) async -> SyncResult? {
-        guard let target = await session.target(), let sink = await session.link() else { return nil }
-        adopt(sink, name: name, session: session)
-        let link = sink.link
-        let box = HandleBox()
-        let ended = await withTaskCancellationHandler {
-            await withCheckedContinuation { (continuation: CheckedContinuation<SyncEnded, Never>) in
+        guard let target = await session.target(), let link = await session.link() else { return nil }
+        adopt(link, name: name, session: session)
+        let slot = RunSlot<SyncResult>()
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
                 let handle = self.engine.startSelected(
                     link: link, station: target.station, device: target.device, maxRead: target.maxRead,
                     onlyName: onlyName,
@@ -444,15 +442,18 @@ final class LanDiscovery {
                                 bytesTotal: update.bytesTotal)
                         }
                     },
-                    finished: { continuation.resume(returning: SyncEnded(result: $0)) })
+                    finished: { result in
+                        slot.result = result
+                        continuation.resume()
+                    })
                 self.handles[name] = handle
-                box.set(handle)
+                slot.set(handle)
             }
         } onCancel: {
-            box.cancel()
+            Task { @MainActor in slot.cancel() }
         }
         handles[name] = nil
-        return ended.result
+        return slot.result
     }
 
     /// One Collect all step over Wi-Fi. Opens its own session, syncs, then closes it and reports [id].
@@ -843,37 +844,22 @@ extension LanDiscovery {
     }
 }
 
-/// Carries the engine's result out of its main-thread callback. The result is immutable.
-private final class SyncEnded: @unchecked Sendable {
-    let result: SyncResult
-    init(result: SyncResult) { self.result = result }
-}
-
-private final class CommandEnded: @unchecked Sendable {
-    let result: CommandResult
-    init(result: CommandResult) { self.result = result }
-}
-
-/// Carries a Kotlin run handle into a Swift Task cancel. The cancel can run before the handle exists,
-/// so the box keeps it and cancels the handle as soon as it is set.
-private final class HandleBox: @unchecked Sendable {
-    private let lock = NSLock()
+/// One engine run on the main actor, where the engine calls back. It keeps the Kotlin result, so the
+/// result never crosses a continuation, and the run handle for a Swift Task cancel. The cancel can
+/// arrive before the handle exists, so the slot cancels the handle as soon as it is set.
+@MainActor
+private final class RunSlot<Result: AnyObject> {
+    var result: Result?
     private var handle: SyncHandle?
     private var cancelled = false
 
     func set(_ handle: SyncHandle) {
-        lock.lock()
         self.handle = handle
-        let cancel = cancelled
-        lock.unlock()
-        if cancel { handle.cancel() }
+        if cancelled { handle.cancel() }
     }
 
     func cancel() {
-        lock.lock()
         cancelled = true
-        let handle = self.handle
-        lock.unlock()
         handle?.cancel()
     }
 }

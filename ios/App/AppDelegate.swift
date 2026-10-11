@@ -4,7 +4,7 @@ import UIKit
 import UserNotifications
 
 @main
-final class AppDelegate: UIResponder, UIApplicationDelegate, @preconcurrency UNUserNotificationCenterDelegate {
+final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     /// The adapters live with the app, not the scene, because iOS can launch the app for a
     /// background task or a Bluetooth restoration without showing a screen.
     let services = AppServices()
@@ -31,8 +31,9 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, @preconcurrency UNU
         return configuration
     }
 
-    /// A summary posted while the app is on screen still shows as a banner.
-    func userNotificationCenter(
+    /// A summary posted while the app is on screen still shows as a banner. The notification center
+    /// does not promise the main thread, so both callbacks are nonisolated.
+    nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter, willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
@@ -40,12 +41,12 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, @preconcurrency UNU
     }
 
     /// Tapping an Auto-sync summary opens My devices.
-    func userNotificationCenter(
+    nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         if response.notification.request.content.threadIdentifier == AutoSync.notificationThread {
-            services.devices.openMyDevices()
+            Task { @MainActor in self.services.devices.openMyDevices() }
         }
         completionHandler()
     }

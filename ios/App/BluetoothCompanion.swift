@@ -9,7 +9,7 @@ import UIKit
 /// sensor. Sync, commands, Debug, Device settings and Files take leases of it, so a reply left over
 /// from one run is drained before the next run's first request (#58).
 @MainActor
-final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelegate, @preconcurrency CBPeripheralDelegate
+final class BluetoothCompanion: NSObject, @MainActor CBCentralManagerDelegate, @MainActor CBPeripheralDelegate
 {
     let state = CompanionState()
     private let wire = SyncWire()
@@ -918,11 +918,10 @@ extension BluetoothCompanion {
         guard ioLink == nil, control != nil, let response else { return }
         let mtu = Int32(peripheral.maximumWriteValueLength(for: .withResponse) + 3)
         let port = BlePort(companion: self, mtu: mtu)
-        let link = IosLink(port: port, overWifi: false, address: identity.device)
+        let link = IosLink.make(port: port, overWifi: false, identity: identity)
         // Set on main before any write, which hops to main before it reads this.
         port.link = link
-        link.identify(station: identity.station, boot: identity.boot, maxRead: identity.maxRead)
-        link.onLeaseChange { [weak self] leased in
+        link.onLeaseChange { @Sendable [weak self] leased in
             // Kotlin calls this on the main thread.
             MainActor.assumeIsolated {
                 guard let self, self.ioLink === link, !leased.boolValue else { return }
@@ -930,7 +929,7 @@ extension BluetoothCompanion {
             }
         }
         let id = ObjectIdentifier(link)
-        link.whenClosed { [weak self] in
+        link.whenClosed { @Sendable [weak self] in
             Task { @MainActor in self?.linkClosed(id) }
         }
         ioLink = link
@@ -973,10 +972,10 @@ extension BluetoothCompanion {
 
 /// The Bluetooth side of one [IosLink]. Kotlin calls it from any thread, so each write hops to the
 /// main queue, where Core Bluetooth runs, and joins the GATT queue in call order.
-private final class BlePort: NSObject, IosLinkPort, @unchecked Sendable {
-    private weak var companion: BluetoothCompanion?
-    /// The link this port belongs to. Written and read on the main thread only.
-    weak var link: IosLink?
+private final class BlePort: NSObject, IosLinkPort, Sendable {
+    private weak let companion: BluetoothCompanion?
+    /// The link this port belongs to, set once the link exists.
+    @MainActor weak var link: IosLink?
     let mtu: Int32
 
     init(companion: BluetoothCompanion, mtu: Int32) {

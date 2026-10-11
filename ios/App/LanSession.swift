@@ -1,6 +1,7 @@
 import Foundation
 import Network
 import OpenSensorShared
+import Synchronization
 
 enum LanFailure: Error {
     case invalidReply, credentialsUnavailable, enrollmentRequired, stationChanged, hardwareChanged, authentication,
@@ -39,23 +40,33 @@ struct CollectTarget: Sendable {
     let mtu: Int32
 }
 
-/// Carries the shared link across a continuation. `IosLink` accepts calls from any thread.
-final class FrameSink: @unchecked Sendable {
-    let link: IosLink
-    init(_ link: IosLink) { self.link = link }
+/// Invariant: every `IosLink` entry point is thread safe in Kotlin, except `identify`, which only `make` calls.
+extension IosLink: @retroactive @unchecked Sendable {
+    /// The only way Swift makes a link. Its identity is bound before any other domain can see it.
+    static func make(port: any IosLinkPort, overWifi: Bool, identity: SyncIdentity) -> IosLink {
+        let link = IosLink(port: port, overWifi: overWifi, address: identity.device)
+        link.identify(station: identity.station, boot: identity.boot, maxRead: identity.maxRead)
+        return link
+    }
 }
 
-/// Kotlin's write callback, called once from the socket or Bluetooth write completion.
+/// Invariant: Kotlin's write callback is safe from any thread and runs once. Debug builds trap a second call.
 final class WriteDone: @unchecked Sendable {
     private let done: (KotlinBoolean) -> Void
+    private let called = Atomic<Bool>(false)
     init(_ done: @escaping (KotlinBoolean) -> Void) { self.done = done }
-    func call(_ ok: Bool) { done(KotlinBoolean(bool: ok)) }
+    func call(_ ok: Bool) {
+        let first = !called.exchange(true, ordering: .relaxed)
+        assert(first, "a write completion ran twice")
+        guard first else { return }
+        done(KotlinBoolean(bool: ok))
+    }
 }
 
 /// How the shared link writes to and paces this socket. Kotlin calls it from any thread, and each
 /// call hops onto the session queue, so writes and pauses keep their call order.
-private final class LanPort: NSObject, IosLinkPort, @unchecked Sendable {
-    private weak var session: LanSession?
+private final class LanPort: NSObject, IosLinkPort, Sendable {
+    private weak let session: LanSession?
     let mtu: Int32
 
     init(session: LanSession, mtu: Int32) {
@@ -115,7 +126,7 @@ actor LanSession {
     private var verifiedInfo: String?
     private var payloadMax = 0
     /// Set once after HELLO. From then on file replies go to the shared link as raw frame bodies.
-    private var sink: FrameSink?
+    private var sink: IosLink?
 
     private struct Waiter<T> {
         let continuation: CheckedContinuation<T, Error>
@@ -184,21 +195,19 @@ actor LanSession {
 
     /// The shared link for this socket, made once after HELLO and kept until the socket closes. Nil
     /// before HELLO or after the socket closed.
-    func link() -> FrameSink? {
+    func link() -> IosLink? {
         if let sink { return sink }
         guard let identity, !closed else { return nil }
-        let link = IosLink(port: LanPort(session: self, mtu: Int32(payloadMax + 3)), overWifi: true, address: identity.device)
-        link.identify(station: identity.station, boot: identity.boot, maxRead: identity.maxRead)
+        let link = IosLink.make(port: LanPort(session: self, mtu: Int32(payloadMax + 3)), overWifi: true, identity: identity)
         let queue = self.queue
-        link.onLeaseChange { [weak self] leased in
+        link.onLeaseChange { @Sendable [weak self] leased in
             let held = leased.boolValue
             guard let session = self else { return }
             queue.async { session.assumeIsolated { $0.collecting = held } }
         }
-        let sink = FrameSink(link)
-        self.sink = sink
+        sink = link
         replies.removeAll()
-        return sink
+        return link
     }
 
     /// One request body from the shared link. [done] hears whether the socket took it.
@@ -327,10 +336,10 @@ actor LanSession {
         do {
             while !readPaused, replies.count < Self.maxQueuedReplies, let body = try frames.next() {
                 guard let reply = decode(body) else { throw LanFailure.invalidReply }
-                if reply.kind == "status" { sink?.link.offerStatus(json: reply.json) }
+                if reply.kind == "status" { sink?.offerStatus(json: reply.json) }
                 if let sink, reply.kind != "status", reply.kind != "live" {
                     // False past the high mark. The link's resume call clears it again.
-                    if !sink.link.offer(frame: body) { readPaused = true }
+                    if !sink.offer(frame: body) { readPaused = true }
                 } else {
                     route(reply)
                 }
@@ -458,7 +467,7 @@ actor LanSession {
         connection.stateUpdateHandler = nil
         connection.cancel()
         // Kotlin sees the link end at once, after every frame already offered.
-        sink?.link.linkLost(reason: Self.linkReason(reason, local: local))
+        sink?.linkLost(reason: Self.linkReason(reason, local: local))
         sink = nil
         if let reason { eventSink.yield(.closed(reason)) }
         eventSink.finish()

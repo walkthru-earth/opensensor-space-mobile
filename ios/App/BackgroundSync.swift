@@ -19,13 +19,6 @@ private final class Ref<Value: AnyObject> {
     var value: Value?
 }
 
-/// Carries a value Apple hands over without a Sendable promise to the main actor. Used only to
-/// move a background task or a Kotlin callback from a system queue back to the main thread.
-private final class MainHop<Value>: @unchecked Sendable {
-    let value: Value
-    init(_ value: Value) { self.value = value }
-}
-
 /// Ends one background task exactly once. The expiration handler and the run's own completion
 /// can both reach it, and only the first ends the task. [handle] is the run this task started, so
 /// an expiry cancels that run and never a later one.
@@ -59,7 +52,7 @@ final class AutoSync {
     /// which Info.plist permits as `earth.walkthru.opensensor.sync.*`.
     static let continuedPrefix = "earth.walkthru.opensensor.sync"
     /// The summary notification. A new one replaces the last, and a tap opens My devices.
-    static let notificationThread = "autosync"
+    nonisolated static let notificationThread = "autosync"
 
     private let bluetooth: BluetoothCompanion
     private let lan: LanDiscovery
@@ -176,7 +169,7 @@ final class AutoSync {
         }
         let attempt = Int(retryAttempt)
         let finish = TaskFinish(task)
-        task.expirationHandler = {
+        task.expirationHandler = { @Sendable in
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     guard !finish.isFinished else { return }
@@ -321,9 +314,8 @@ final class AutoSync {
         task.progress.completedUnitCount = 0
         progress = task.progress
         let finish = TaskFinish(task)
-        let box = MainHop(task)
         // Cancel in the system UI, or expiry. The step ends and a link it opened closes.
-        task.expirationHandler = {
+        task.expirationHandler = { @Sendable in
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     guard !finish.isFinished else { return }
@@ -337,7 +329,7 @@ final class AutoSync {
                 guard let self else { return finish.complete(success: false) }
                 guard !finish.isFinished else { return }
                 self.clearRun(finish.handle)
-                box.value.progress.completedUnitCount = box.value.progress.totalUnitCount
+                task.progress.completedUnitCount = task.progress.totalUnitCount
                 self.post(summary)
                 finish.complete(success: summary.failures == 0)
             }
@@ -421,7 +413,7 @@ final class AutoSync {
         task.progress.completedUnitCount = Int64(collectCounts.done)
         let id = ObjectIdentifier(task)
         // Cancel in the system UI, or expiry. The pass and the step in flight end at once.
-        task.expirationHandler = {
+        task.expirationHandler = { @Sendable in
             DispatchQueue.main.async {
                 MainActor.assumeIsolated { [weak self] in self?.collectExpired(id) }
             }
@@ -491,27 +483,23 @@ final class AutoSync {
         UNUserNotificationCenter.current().add(request, withCompletionHandler: nil)
     }
 
-    private func refreshNotificationStatus(then done: (() -> Void)? = nil) {
-        let callback = MainHop(done)
+    private func refreshNotificationStatus(then done: (@MainActor () -> Void)? = nil) {
         UNUserNotificationCenter.current().getNotificationSettings { current in
             let raw = current.authorizationStatus.rawValue
             DispatchQueue.main.async {
-                MainActor.assumeIsolated {
-                    self.notificationStatus = raw
-                    callback.value?()
-                }
+                self.notificationStatus = raw
+                done?()
             }
         }
     }
 
     /// The system prompt, shown only from the tap that turns a switch on. [done] runs on the main thread.
     private func askNotifications(done: @escaping () -> KotlinUnit) {
-        let callback = MainHop(done)
+        // Made on the main actor, so Kotlin's callback stays there.
+        let callback: @MainActor () -> Void = { _ = done() }
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in
             DispatchQueue.main.async {
-                MainActor.assumeIsolated {
-                    self.refreshNotificationStatus { _ = callback.value() }
-                }
+                self.refreshNotificationStatus(then: callback)
             }
         }
     }
