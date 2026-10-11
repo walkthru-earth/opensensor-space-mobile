@@ -105,7 +105,12 @@ class FilesControllerTest {
         val fail: Boolean = false,
         val waitForever: Boolean = false,
         val streams: Boolean = false,
+        /** Runs on each streamed write, to fail or cancel the save part way. */
+        val onWrite: (() -> Unit)? = null,
+        /** Thrown after the zip was written, as a document that fails to flush or close. */
+        val closeFailure: String? = null,
     ) : ExportPresenter {
+        var writes = 0
         val shared = mutableListOf<Pair<List<StagedFile>, ShareKind>>()
         val saved = mutableListOf<StagedFile>()
 
@@ -117,11 +122,14 @@ class FilesControllerTest {
             write(
                 object : ExportSink {
                     override fun write(bytes: ByteArray, offset: Int, length: Int) {
+                        writes++
+                        onWrite?.invoke()
                         for (i in offset until offset + length) out += bytes[i]
                     }
                     override fun close() = Unit
                 },
             )
+            closeFailure?.let { throw IllegalStateException(it) }
             streamed += name to out.toByteArray()
             return true
         }
@@ -260,6 +268,36 @@ class FilesControllerTest {
         assertTrue(f.space.runs.single().deleted)
         assertTrue(f.space.runs.single().files.isEmpty())
         assertFalse(f.controller.state.value.exporting)
+    }
+
+    @Test
+    fun aFullDiskDuringAStreamingSaveSaysNoSpace() = runTest {
+        val f = fixture()
+        val messages = mutableListOf<FilesMessage>()
+        collectMessages(f.controller, messages)
+        advanceUntilIdle()
+        f.controller.saveZip(Presenter(streams = true, onWrite = { throw IllegalStateException("write failed: ENOSPC (No space left on device)") }))
+        advanceUntilIdle()
+        f.controller.saveZip(Presenter(streams = true, closeFailure = "close failed: No space left on device"))
+        advanceUntilIdle()
+        assertEquals(listOf(FilesMessage.NO_SPACE, FilesMessage.NO_SPACE), messages)
+        assertFalse(f.controller.state.value.exporting)
+    }
+
+    @Test
+    fun aCancelledStreamingSaveStopsWriting() = runTest {
+        val f = fixture()
+        val messages = mutableListOf<FilesMessage>()
+        collectMessages(f.controller, messages)
+        advanceUntilIdle()
+        lateinit var p: Presenter
+        p = Presenter(streams = true, onWrite = { if (p.writes == 1) f.job.cancel() })
+        f.controller.saveZip(p)
+        advanceUntilIdle()
+        // The local header goes out in a few small writes before the first slice checkpoint.
+        assertTrue(p.writes < 20, "wrote ${p.writes} times after cancel")
+        assertTrue(p.streamed.isEmpty())
+        assertTrue(messages.isEmpty())
     }
 
     @Test

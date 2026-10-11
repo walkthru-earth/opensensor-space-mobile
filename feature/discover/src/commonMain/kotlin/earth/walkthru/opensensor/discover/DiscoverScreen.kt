@@ -150,11 +150,14 @@ private fun DiscoverContent(
 
     // Back, the Android predictive back or the iOS edge swipe, first returns an open sheet to peek.
     // Navigation Event runs the newest handler first, so this wins over the shell's NavDisplay.
+    // A sheet dragged up or showing the full list also counts as open, even with nothing selected.
+    val sheetOpen = sheet.bottomSheetState.targetValue == SheetValue.Expanded
     NavigationBackHandler(
         state = rememberNavigationEventState(NavigationEventInfo.None),
-        isBackEnabled = state.selected != null,
+        isBackEnabled = state.selected != null || showAll || sheetOpen,
         onBackCompleted = {
             controller.selectCell(null)
+            showAll = false
             peek()
         },
     )
@@ -252,7 +255,7 @@ private fun DiscoverContent(
                     }
                     Spacer(Modifier.weight(1f))
                     Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        NearMeButton(nearMe, mapState, strings.nearMe, strings.nearMeAccess, Modifier.padding(end = 8.dp))
+                        NearMeButton(nearMe, mapState, controller::nearMeTarget, strings.nearMe, strings.nearMeAccess, Modifier.padding(end = 8.dp))
                         if (networkAllowed) Attribution(strings, attributionOpen, infoButton)
                     }
                 }

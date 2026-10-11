@@ -2,6 +2,7 @@ package earth.walkthru.aqsync.archive
 
 import earth.walkthru.aqsync.data.history.parquet.ByteReader
 import earth.walkthru.aqsync.storage.StorageException
+import earth.walkthru.aqsync.storage.isOutOfSpace
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Instant
@@ -94,11 +95,26 @@ object ArchiveExport {
     /**
      * Writes [entries] as one STORED zip into [sink], the writer every zip export shares (#61). Each
      * entry is opened once and closed after its copy. The sink stays open for the caller to close.
+     * [checkpoint] runs before each entry and each 64 KiB slice, so a caller can stop a long write
+     * (a coroutine passes `ensureActive`). A full disk fails with [StorageException].
      */
-    fun writeZip(sink: ExportSink, entries: List<ExportEntry>) {
-        val zip = StoredZipWriter(sink)
-        for (e in entries) e.open().use { zip.add(e.path, it, e.modifiedEpochMs) }
+    fun writeZip(sink: ExportSink, entries: List<ExportEntry>, checkpoint: () -> Unit = {}) = mappingNoSpace {
+        val zip = StoredZipWriter(sink, checkpoint = checkpoint)
+        for (e in entries) {
+            checkpoint()
+            e.open().use { zip.add(e.path, it, e.modifiedEpochMs) }
+        }
         zip.finish()
+    }
+
+    /** Rethrows an out of space failure as [StorageException], so the screen says the disk is full. */
+    private inline fun <T> mappingNoSpace(block: () -> T): T = try {
+        block()
+    } catch (e: StorageException) {
+        throw e
+    } catch (e: Exception) {
+        if (isOutOfSpace(e)) throw StorageException("not enough free space for the export", e)
+        throw e
     }
 
     /**
@@ -113,16 +129,16 @@ object ArchiveExport {
     /**
      * Writes [entries] as one STORED zip named [name] into a new run. A space that reports fewer free
      * bytes than [plannedZipBytes] fails with [StorageException] before a run exists. The run is
-     * deleted on failure.
+     * deleted on failure. [checkpoint] is passed to [writeZip].
      */
-    fun stageZip(space: ExportSpace, entries: List<ExportEntry>, name: String): StagedFile {
+    fun stageZip(space: ExportSpace, entries: List<ExportEntry>, name: String, checkpoint: () -> Unit = {}): StagedFile {
         require(entries.isNotEmpty()) { "nothing to export" }
         // A new run first deletes the runs before it, so their bytes count as free.
         val run = space.newRun()
         try {
             val free = space.freeBytes()
             if (free != null && plannedZipBytes(entries) > free) throw StorageException("not enough free space for the export")
-            run.create(name).use { sink -> writeZip(sink, entries) }
+            run.create(name).use { sink -> writeZip(sink, entries, checkpoint) }
             return StagedFile(run.path(name), name, ZIP_MIME, run)
         } catch (t: Throwable) {
             run.delete()
@@ -145,7 +161,7 @@ object ArchiveExport {
                 var name = base
                 var n = 1
                 while (!used.add(name)) name = "${n++}-$base"
-                run.create(name).use { sink -> e.open().use { copy(it, sink) } }
+                mappingNoSpace { run.create(name).use { sink -> e.open().use { copy(it, sink) } } }
                 StagedFile(run.path(name), name, PARQUET_MIME, run)
             }
         } catch (t: Throwable) {

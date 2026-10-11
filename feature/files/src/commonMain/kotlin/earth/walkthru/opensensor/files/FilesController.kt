@@ -13,6 +13,7 @@ import earth.walkthru.aqsync.data.sync.FileSyncState
 import earth.walkthru.aqsync.data.sync.HivePartition
 import earth.walkthru.aqsync.data.sync.ManifestEntry
 import earth.walkthru.aqsync.storage.StorageException
+import earth.walkthru.aqsync.storage.isOutOfSpace
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -20,6 +21,8 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -143,9 +146,9 @@ class FilesController(
         val entries = withContext(io) { ArchiveExport.archiveEntries(store, state.value.shown, now()) }
         if (entries.isEmpty()) return@run null
         val name = ArchiveExport.archiveZipName(now())
-        val streamed = p.saveStreaming(name) { sink -> withContext(io) { ArchiveExport.writeZip(sink, entries) } }
+        val streamed = p.saveStreaming(name) { sink -> withContext(io) { ArchiveExport.writeZip(sink, entries, cancelCheck()) } }
         if (streamed != null) return@run streamed
-        val zip = withContext(io) { ArchiveExport.stageZip(space, entries, name) }
+        val zip = withContext(io) { ArchiveExport.stageZip(space, entries, name, cancelCheck()) }
         removingRun(zip.run) { p.save(zip) }
     }
 
@@ -154,7 +157,7 @@ class FilesController(
         var zip: StagedFile? = null
         holdDaily {
             val entries = withContext(io) { ArchiveExport.dailyEntries(list()) }
-            if (entries != null) zip = withContext(io) { ArchiveExport.stageZip(space, entries, ArchiveExport.dailyZipName(now())) }
+            if (entries != null) zip = withContext(io) { ArchiveExport.stageZip(space, entries, ArchiveExport.dailyZipName(now()), cancelCheck()) }
         }
         val staged = zip
         if (staged == null) {
@@ -166,9 +169,15 @@ class FilesController(
 
     private suspend fun <T> stage(block: suspend () -> T): T = withContext(io) { block() }
 
+    /** A zip write checkpoint that stops the blocking copy once this export is cancelled. */
+    private suspend fun cancelCheck(): () -> Unit {
+        val context = currentCoroutineContext()
+        return { context.ensureActive() }
+    }
+
     private suspend fun archiveZip(): StagedFile? = withContext(io) {
         val entries = ArchiveExport.archiveEntries(store, state.value.shown, now())
-        if (entries.isEmpty()) null else ArchiveExport.stageZip(space, entries, ArchiveExport.archiveZipName(now()))
+        if (entries.isEmpty()) null else ArchiveExport.stageZip(space, entries, ArchiveExport.archiveZipName(now()), cancelCheck())
     }
 
     /**
@@ -185,8 +194,9 @@ class FilesController(
                 throw e
             } catch (_: StorageException) {
                 _messages.tryEmit(FilesMessage.NO_SPACE)
-            } catch (_: Exception) {
-                _messages.tryEmit(FilesMessage.EXPORT_FAILED)
+            } catch (e: Exception) {
+                // A full disk while the platform flushes or closes the document is a plain I/O error.
+                _messages.tryEmit(if (isOutOfSpace(e)) FilesMessage.NO_SPACE else FilesMessage.EXPORT_FAILED)
             } finally {
                 exporting.value = false
             }

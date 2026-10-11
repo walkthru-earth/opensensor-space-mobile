@@ -10,6 +10,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import earth.walkthru.aqsync.publicfeed.H3Grid
+import earth.walkthru.aqsync.publicfeed.LatLng
 import earth.walkthru.opensensor.designsystem.FloatingIconButton
 import earth.walkthru.opensensor.permissions.AccessDialogTexts
 import earth.walkthru.opensensor.permissions.AccessDialogs
@@ -23,6 +25,7 @@ import org.maplibre.compose.location.LocationState
 import org.maplibre.compose.location.rememberDefaultLocationProvider
 import org.maplibre.compose.location.rememberLocationState
 import org.maplibre.compose.map.MapState
+import org.maplibre.spatialk.geojson.Position
 import org.maplibre.spatialk.units.extensions.meters
 import kotlin.time.Duration.Companion.seconds
 
@@ -37,7 +40,8 @@ internal expect fun rememberApproximateLocationAccess(): RuntimeAccess
 
 /**
  * "Near me" for one map session. [location] stays null until the user taps and grants, so no
- * location provider exists before that. The fix only moves the camera and draws the puck. It is
+ * location provider exists before that. The fix only draws the puck. The camera moves to the centre
+ * of the fix's coarse cell ([nearMeTarget]), so the saved camera never holds the fix. The fix is
  * never stored or sent.
  */
 internal class NearMe(val location: LocationState?, val recenter: Int, val access: RuntimeAccess, val onTap: () -> Unit)
@@ -70,15 +74,34 @@ internal fun rememberNearMe(): NearMe {
     }
 }
 
-/** The map button. After each granted tap, the camera moves to the next fix at about cell scale. */
+/**
+ * Where "Near me" points the camera. The centre of the resolution [NEAR_ME_RES] cell holding the
+ * fix, never the fix itself, because the resting camera is saved in `DiscoverPrefs`. Null when the
+ * platform has no H3 binding or the fix has no cell, and the map then stays where it is.
+ */
+internal fun nearMeTarget(h3: H3Grid, lat: Double, lng: Double): LatLng? {
+    if (!h3.available) return null
+    val cell = runCatching { h3.latLngToCell(lat, lng, NEAR_ME_RES) }.getOrNull()?.takeIf { it != 0L } ?: return null
+    return runCatching { h3.cellToLatLng(cell) }.getOrNull()
+}
+
+/** The map button. After each granted tap, the camera moves to the coarse cell of the next fix. */
 @Composable
-internal fun NearMeButton(nearMe: NearMe, mapState: MapState, label: String, accessTexts: AccessDialogTexts, modifier: Modifier = Modifier) {
+internal fun NearMeButton(
+    nearMe: NearMe,
+    mapState: MapState,
+    target: (lat: Double, lng: Double) -> LatLng?,
+    label: String,
+    accessTexts: AccessDialogTexts,
+    modifier: Modifier = Modifier,
+) {
     AccessDialogs(nearMe.access, accessTexts)
     val location = nearMe.location
     LaunchedEffect(nearMe.recenter, location) {
         if (nearMe.recenter == 0 || location == null) return@LaunchedEffect
         val fix = snapshotFlow { location.lastLocation }.filterNotNull().first()
-        runCatching { mapState.animateCamera(CameraUpdate(center = fix.position, zoom = NEAR_ME_ZOOM)) }
+        val centre = target(fix.position.latitude, fix.position.longitude) ?: return@LaunchedEffect
+        runCatching { mapState.animateCamera(CameraUpdate(center = Position(longitude = centre.lng, latitude = centre.lat), zoom = NEAR_ME_ZOOM)) }
     }
     FloatingIconButton(onClick = nearMe.onTap, contentDescription = label, modifier = modifier) {
         Icon(DiscoverIcons.MyLocation, contentDescription = null)
@@ -87,3 +110,7 @@ internal fun NearMeButton(nearMe: NearMe, mapState: MapState, label: String, acc
 
 // About a resolution 7 cell (edge about 1.4 km) across a few hundred pixels.
 private const val NEAR_ME_ZOOM = 10.5
+
+// Edge about 3.2 km. Coarse enough that the saved camera does not locate the user, fine enough
+// that the puck stays in view at NEAR_ME_ZOOM.
+internal const val NEAR_ME_RES = 6
