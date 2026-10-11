@@ -43,7 +43,7 @@ class FileClockAnchorStore(
     override suspend fun put(anchor: ClockAnchor) = withContext(Dispatchers.IO) {
         mutex.withLock {
             val receipt = checked(File(root, "${anchor.station}/${ClockAnchorReceipt.relativePath(anchor)}"))
-            check(receipt.parentFile.isDirectory || receipt.parentFile.mkdirs()) { "cannot create clock receipt directory" }
+            // AtomicFiles creates the station and boot directories and syncs each new level.
             val bytes = ClockAnchorReceipt.encode(anchor)
             try {
                 atomic.createNoReplace(receipt.path, bytes, StorageClass.Durable)

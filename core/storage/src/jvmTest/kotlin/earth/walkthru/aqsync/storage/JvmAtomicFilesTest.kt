@@ -13,6 +13,7 @@ class JvmAtomicFilesTest : AtomicFilesContract() {
 
     override fun newFiles(tempDir: String): AtomicFiles = JvmAtomicFiles(File(tempDir))
     override fun newTree(): StorageTree = JvmStorageTree()
+    override fun newRecordingFiles(tempDir: String, synced: MutableList<String>): AtomicFiles = JvmAtomicFiles(File(tempDir)) { synced += it }
 
     override fun writeRaw(path: String, bytes: ByteArray) {
         File(path).apply { parentFile.mkdirs() }.writeBytes(bytes)

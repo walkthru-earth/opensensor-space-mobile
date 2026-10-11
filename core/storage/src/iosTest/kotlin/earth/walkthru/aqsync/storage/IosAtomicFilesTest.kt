@@ -12,6 +12,8 @@ import platform.Foundation.create
 import platform.Foundation.dataWithContentsOfFile
 import platform.posix.EIO
 import platform.posix.ENOTSUP
+import platform.posix.O_ACCMODE
+import platform.posix.O_RDONLY
 import platform.posix.memcpy
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -24,6 +26,18 @@ class IosAtomicFilesTest : AtomicFilesContract() {
 
     override fun newFiles(tempDir: String): AtomicFiles = IosAtomicFiles(tempDir)
     override fun newTree(): StorageTree = IosStorageTree()
+
+    /** Records every read-only open, which is how a file or a directory is opened to sync it. */
+    override fun newRecordingFiles(tempDir: String, synced: MutableList<String>): AtomicFiles =
+        IosAtomicFiles(
+            tempDir,
+            object : PosixCalls by PosixCalls.System {
+                override fun open(path: String, flags: Int, mode: Int): Int {
+                    if (flags and O_ACCMODE == O_RDONLY) synced += path
+                    return PosixCalls.System.open(path, flags, mode)
+                }
+            },
+        )
 
     override fun writeRaw(path: String, bytes: ByteArray) {
         val fm = NSFileManager.defaultManager

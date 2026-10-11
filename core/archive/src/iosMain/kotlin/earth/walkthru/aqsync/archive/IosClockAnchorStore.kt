@@ -39,7 +39,7 @@ class IosClockAnchorStore(
         mutex.withLock {
             val path = checked("$root/${anchor.station}/${ClockAnchorReceipt.relativePath(anchor)}")
             IosFiles.prepareRoot(root)
-            IosFiles.mkdirs(path.substringBeforeLast('/'))
+            // AtomicFiles creates the station and boot directories and syncs each new level.
             val bytes = ClockAnchorReceipt.encode(anchor)
             try {
                 atomic.createNoReplace(path, bytes, StorageClass.Durable)

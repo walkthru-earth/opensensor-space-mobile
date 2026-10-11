@@ -164,7 +164,7 @@ class IosArchiveStore(
         val final = finalFile(key)
         val partial = partialFile(key)
         check(IosFiles.kind(partial) == Kind.FILE) { "no partial to commit" }
-        IosFiles.mkdirs(final.substringBeforeLast('/'))
+        // AtomicFiles creates the station and day directories and syncs each new level into its parent.
         // Throws AlreadyCommitted when the final is there, whatever it is. Nothing is replaced.
         atomic.commitNoReplace(partial, final, StorageClass.Durable)
         IosFiles.remove(metaFile(key))

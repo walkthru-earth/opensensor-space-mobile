@@ -14,6 +14,9 @@ abstract class AtomicFilesContract {
     abstract fun newFiles(tempDir: String): AtomicFiles
     abstract fun newTree(): StorageTree
 
+    /** Files whose directory syncs are appended to [synced], at least every directory sync. */
+    abstract fun newRecordingFiles(tempDir: String, synced: MutableList<String>): AtomicFiles
+
     /** Writes [bytes] at [path] outside the protocol, as another writer would. */
     abstract fun writeRaw(path: String, bytes: ByteArray)
 
@@ -48,6 +51,29 @@ abstract class AtomicFilesContract {
 
         assertContentEquals("bytes".encodeToByteArray(), read(final))
         assertNull(read(partial))
+    }
+
+    @Test
+    fun aCommitSyncsEveryDirectoryItCreatesUpToTheFirstThatExisted() {
+        writeRaw("$root/archive/other", ByteArray(0))
+        val synced = mutableListOf<String>()
+        val files = newRecordingFiles(temp, synced)
+        val partial = files.createTemp()
+        writeRaw(partial, "bytes".encodeToByteArray())
+
+        files.commitNoReplace(partial, "$root/archive/station-a/year=2026/month=10/day.parquet", StorageClass.Durable)
+        files.createNoReplace("$root/archive/station-b/boot/1.anchor", "receipt".encodeToByteArray(), StorageClass.Durable)
+
+        val expected = listOf(
+            "$root/archive/station-a/year=2026/month=10",
+            "$root/archive/station-a/year=2026",
+            "$root/archive/station-a",
+            "$root/archive/station-b/boot",
+            "$root/archive/station-b",
+            "$root/archive",
+        )
+        for (dir in expected) assertTrue(dir in synced, "$dir was not synced, synced $synced")
+        assertTrue(root !in synced, "sync stops at the first directory that already existed")
     }
 
     @Test

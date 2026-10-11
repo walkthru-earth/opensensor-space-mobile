@@ -19,7 +19,13 @@ import java.util.UUID
  *
  * @param tempDir the [StorageRole.Temp] directory, on the same volume as every target.
  */
-class JvmAtomicFiles(private val tempDir: File) : AtomicFiles {
+class JvmAtomicFiles internal constructor(
+    private val tempDir: File,
+    /** Test seam, told each directory after it is synced. */
+    private val dirSynced: (String) -> Unit,
+) : AtomicFiles {
+    constructor(tempDir: File) : this(tempDir, {})
+
     override fun writeAtomically(target: String, bytes: ByteArray, cls: StorageClass) = writeThenCommit(target, bytes, cls, replace = true)
 
     override fun createNoReplace(target: String, bytes: ByteArray, cls: StorageClass) = writeThenCommit(target, bytes, cls, replace = false)
@@ -54,6 +60,7 @@ class JvmAtomicFiles(private val tempDir: File) : AtomicFiles {
 
     override fun syncDir(dir: String) = io("cannot sync directory") {
         FileChannel.open(File(dir).toPath(), StandardOpenOption.READ).use { it.force(true) }
+        dirSynced(dir)
     }
 
     private fun commit(from: String, to: String, cls: StorageClass, replace: Boolean) {
