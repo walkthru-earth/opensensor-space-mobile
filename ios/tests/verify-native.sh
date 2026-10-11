@@ -7,8 +7,10 @@ swiftc -module-cache-path "$test_dir/module-cache" -swift-version 6 -strict-conc
   "$repo_root/ios/App/SensorArchive.swift" \
   "$repo_root/ios/App/LanFraming.swift" \
   "$repo_root/ios/App/LanPolicy.swift" \
+  "$repo_root/ios/App/RunSlot.swift" \
   "$repo_root/ios/tests/TransferChecks.swift" \
   "$repo_root/ios/tests/ArchiveChecks.swift" \
+  "$repo_root/ios/tests/CancellationChecks.swift" \
   "$repo_root/ios/tests/native-main.swift" \
   -o "$test_dir/archive-checks"
 "$test_dir/archive-checks"

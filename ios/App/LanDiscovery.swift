@@ -397,7 +397,7 @@ final class LanDiscovery {
             guard self.commands[name]?.0 == attempt, self.sessions[name] === session else { return }
             self.adopt(link, name: name, session: session)
             self.state.today.commandStarted()
-            let slot = RunSlot<CommandResult>()
+            let slot = RunSlot<CommandResult, SyncHandle>(cancelHandle: { $0.cancel() })
             await withTaskCancellationHandler {
                 await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
                     let handle = self.engine.command(link: link, command: command, automatic: false) { result in
@@ -408,7 +408,7 @@ final class LanDiscovery {
                     slot.set(handle)
                 }
             } onCancel: {
-                Task { @MainActor in slot.cancel() }
+                slot.cancel()
             }
             self.handles[name] = nil
             guard self.commands[name]?.0 == attempt, let ended = slot.result else { return }
@@ -423,7 +423,7 @@ final class LanDiscovery {
     private func collect(name: String, session: LanSession, attempt: UUID, onlyName: String? = nil) async -> SyncResult? {
         guard let target = await session.target(), let link = await session.link() else { return nil }
         adopt(link, name: name, session: session)
-        let slot = RunSlot<SyncResult>()
+        let slot = RunSlot<SyncResult, SyncHandle>(cancelHandle: { $0.cancel() })
         await withTaskCancellationHandler {
             await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
                 let handle = self.engine.startSelected(
@@ -450,7 +450,7 @@ final class LanDiscovery {
                 slot.set(handle)
             }
         } onCancel: {
-            Task { @MainActor in slot.cancel() }
+            slot.cancel()
         }
         handles[name] = nil
         return slot.result
@@ -841,25 +841,5 @@ extension LanDiscovery {
     func holds(device: String) -> Bool {
         let names = Set(sessions.keys).union(tasks.keys).union(pendingResume)
         return names.contains { (sessionDevices[$0] ?? devices[$0]?.device) == device.lowercased() && backgroundRuns[$0] == nil }
-    }
-}
-
-/// One engine run on the main actor, where the engine calls back. It keeps the Kotlin result, so the
-/// result never crosses a continuation, and the run handle for a Swift Task cancel. The cancel can
-/// arrive before the handle exists, so the slot cancels the handle as soon as it is set.
-@MainActor
-private final class RunSlot<Result: AnyObject> {
-    var result: Result?
-    private var handle: SyncHandle?
-    private var cancelled = false
-
-    func set(_ handle: SyncHandle) {
-        self.handle = handle
-        if cancelled { handle.cancel() }
-    }
-
-    func cancel() {
-        cancelled = true
-        handle?.cancel()
     }
 }
