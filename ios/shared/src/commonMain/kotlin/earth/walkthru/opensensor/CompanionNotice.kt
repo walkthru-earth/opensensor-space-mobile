@@ -8,6 +8,7 @@ import earth.walkthru.opensensor.strings.resources.companion_ble_denied
 import earth.walkthru.opensensor.strings.resources.companion_ble_disconnected
 import earth.walkthru.opensensor.strings.resources.companion_ble_notify_failed
 import earth.walkthru.opensensor.strings.resources.companion_ble_off
+import earth.walkthru.opensensor.strings.resources.companion_ble_pairing_removed
 import earth.walkthru.opensensor.strings.resources.companion_ble_read_failed
 import earth.walkthru.opensensor.strings.resources.companion_ble_resume_live
 import earth.walkthru.opensensor.strings.resources.companion_ble_sensor_gone
@@ -126,6 +127,9 @@ enum class CompanionNotice {
     /** A characteristic read failed, usually a pairing problem. */
     READ_FAILED,
 
+    /** The sensor refused this phone's pairing keys. Forget it in iOS Settings and pair again. */
+    PAIRING_REMOVED,
+
     /** Wi-Fi access is being requested over Bluetooth. */
     SAVING_WIFI_ACCESS,
 
@@ -187,6 +191,7 @@ enum class CompanionNotice {
                 CHARACTERISTICS_MISSING -> Res.string.companion_ble_characteristics_missing
                 NOTIFY_FAILED -> Res.string.companion_ble_notify_failed
                 READ_FAILED -> Res.string.companion_ble_read_failed
+                PAIRING_REMOVED -> Res.string.companion_ble_pairing_removed
                 SAVING_WIFI_ACCESS -> Res.string.companion_wifi_access_saving_message
                 WIFI_ACCESS_TIMED_OUT -> Res.string.companion_wifi_access_timed_out
                 LAN_SENSOR_GONE -> Res.string.companion_lan_gone

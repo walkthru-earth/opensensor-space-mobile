@@ -686,9 +686,20 @@ extension BluetoothCompanion {
             case .notifyFailed: disconnect(notice: .notifyFailed)
             case .readFailed: disconnect(notice: .readFailed)
             case .tokenFailed: disconnect(notice: .tokenFailed)
+            case .pairingRemoved: pairingRemoved()
             }
         case .power, .found, .wake: break
         }
+    }
+
+    /// The sensor refused this phone's pairing keys. Nothing retries, because only removing the
+    /// pairing in iOS Settings and pairing again fixes it. An Auto-sync step is skipped, not lost.
+    private func pairingRemoved() {
+        if let done = backgroundDone {
+            clearBackground()
+            done(BackgroundStepResult.skipped("pairing removed"))
+        }
+        disconnect(notice: .pairingRemoved)
     }
 
     fileprivate func powerChanged(_ newState: CBManagerState) {

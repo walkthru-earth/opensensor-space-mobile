@@ -1,3 +1,4 @@
+import CoreBluetooth
 import Foundation
 import Synchronization
 
@@ -19,6 +20,7 @@ enum BleGattChecks {
         writeFailureFailsEveryQueuedWriteOnce()
         cancellationFailsInFlightWriteOnce()
         nativeWriteFailureIsReported()
+        brokenBondIsTold()
         print("iOS Bluetooth GATT checks passed")
     }
 
@@ -127,5 +129,24 @@ enum BleGattChecks {
         queue.append(.write(control, Data([9]), done: nil))
         _ = queue.next()
         precondition(queue.finish(write: control, ok: false) == .nativeFailed, "a failed token write closes the connection")
+    }
+
+    private static func brokenBondIsTold() {
+        let bond: [NSError] = [
+            NSError(domain: CBErrorDomain, code: CBError.Code.peerRemovedPairingInformation.rawValue),
+            NSError(domain: CBErrorDomain, code: CBError.Code.encryptionTimedOut.rawValue),
+            NSError(domain: CBATTErrorDomain, code: CBATTError.Code.insufficientEncryption.rawValue),
+            NSError(domain: CBATTErrorDomain, code: CBATTError.Code.insufficientAuthentication.rawValue),
+        ]
+        for error in bond { precondition(BleBondFailure.matches(error), "a broken bond is told apart") }
+        let ordinary: [NSError?] = [
+            nil,
+            NSError(domain: CBErrorDomain, code: CBError.Code.peripheralDisconnected.rawValue),
+            NSError(domain: CBErrorDomain, code: CBError.Code.connectionTimeout.rawValue),
+            NSError(domain: CBATTErrorDomain, code: CBATTError.Code.readNotPermitted.rawValue),
+            // The same number in another domain is not a Bluetooth bond failure.
+            NSError(domain: NSPOSIXErrorDomain, code: CBError.Code.peerRemovedPairingInformation.rawValue),
+        ]
+        for error in ordinary { precondition(!BleBondFailure.matches(error), "an ordinary loss still retries") }
     }
 }

@@ -8,6 +8,7 @@ import earth.walkthru.aqsync.data.ble.TransportException
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.protocol.AqGatt
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
+import earth.walkthru.aqsync.link.AuthKind
 import earth.walkthru.aqsync.link.DisconnectCause
 import earth.walkthru.aqsync.link.FrameSink
 import earth.walkthru.aqsync.link.InboxWatch
@@ -468,12 +469,16 @@ class IosLink internal constructor(
         /** The app closed it, for example on suspend. */
         const val REASON_APP = 5
 
+        /** The sensor refused this phone's Bluetooth pairing keys. Pairing again fixes it, so no run retries. */
+        const val REASON_BOND_MISSING = 6
+
         internal fun causeOf(reason: Int): DisconnectCause = when (reason) {
             REASON_PEER_CLOSED -> DisconnectCause.PeerClosed()
             REASON_RESET -> DisconnectCause.PeerReset
             REASON_RADIO_BLUETOOTH -> DisconnectCause.RadioLost(Radio.BLUETOOTH)
             REASON_RADIO_WIFI -> DisconnectCause.RadioLost(Radio.WIFI)
             REASON_APP -> DisconnectCause.Deliberate("native close")
+            REASON_BOND_MISSING -> DisconnectCause.Auth(AuthKind.BOND_MISSING)
             else -> DisconnectCause.LocalAbort()
         }
     }

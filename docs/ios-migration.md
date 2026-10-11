@@ -121,7 +121,8 @@ iOS collection intent and retry remain in native adapters, pending
 [#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81). Core Bluetooth
 runs in `BlePhysicalLink`, an actor whose executor is one serial queue. Discovery, GATT
 operations, notifications and write completions stay on that queue, and `BluetoothCompanion`
-keeps UI state and coordination on the main actor. The Swift 6 actor,
+keeps UI state and coordination on the main actor. A refused bond ends the connection without a
+retry and asks to pair again from iOS Settings. The Swift 6 actor,
 callback and synchronous `RunSlot.cancel` rules are in [iOS AGENTS](../ios/AGENTS.md#concurrency-model).
 `LanSession` passes LAN frame bodies through it, and `BluetoothCompanion` passes the `control`
 writes and `response` notifications. `SensorSync` owns the `IosArchiveStore` and
