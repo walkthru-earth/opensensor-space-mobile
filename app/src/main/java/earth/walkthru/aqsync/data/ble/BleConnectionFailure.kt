@@ -25,12 +25,12 @@ internal class BleConnectionFailure {
         fun disconnectedResult(status: Int): Int = if (status == 0) -1 else status
 
         fun message(status: Int): String = when (status) {
-            5, 15 -> PAIRING_REPAIR_MESSAGE
+            5, 15, BleDisconnectCauses.KEY_MISSING -> PAIRING_REPAIR_MESSAGE
             -1 -> "Bluetooth link disconnected"
             else -> "link lost (GATT status $status)"
         }
 
         fun needsPairingRepair(state: ConnectionState): Boolean = state is ConnectionState.Failed &&
-            (state.gattStatus == 5 || state.gattStatus == 15 || state.reason.startsWith("Bluetooth pairing needs repair."))
+            (state.gattStatus == 5 || state.gattStatus == 15 || state.gattStatus == BleDisconnectCauses.KEY_MISSING || state.reason.startsWith("Bluetooth pairing needs repair."))
     }
 }

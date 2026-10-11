@@ -5,7 +5,7 @@ import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import earth.walkthru.aqsync.data.background.CompanionUnlinker
 import earth.walkthru.aqsync.data.background.SyncForegroundService
-import earth.walkthru.aqsync.data.ble.AqTransport
+import earth.walkthru.aqsync.data.ble.BleConnectionFailure
 import earth.walkthru.aqsync.data.ble.ConfigSnapshot
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.DeviceErrorException
@@ -24,6 +24,7 @@ import earth.walkthru.aqsync.data.coroutines.suspendRunCatching
 import earth.walkthru.aqsync.data.history.HistoryRefresher
 import earth.walkthru.aqsync.data.lan.LanConnectException
 import earth.walkthru.aqsync.data.lan.LanDevice
+import earth.walkthru.aqsync.data.lan.LanFailure
 import earth.walkthru.aqsync.data.lan.LanTargets
 import earth.walkthru.aqsync.data.lan.LanTokenPolicy
 import earth.walkthru.aqsync.data.lan.WifiLeases
@@ -55,6 +56,7 @@ import earth.walkthru.aqsync.data.sync.SyncPlan
 import earth.walkthru.aqsync.data.sync.SyncPlanner
 import earth.walkthru.aqsync.data.sync.SyncResumePolicy
 import earth.walkthru.aqsync.data.sync.requireRoom
+import earth.walkthru.aqsync.link.AuthKind
 import earth.walkthru.aqsync.link.DisconnectCause
 import earth.walkthru.aqsync.link.LinkClosedException
 import earth.walkthru.aqsync.link.LinkLog
@@ -384,11 +386,15 @@ class DeviceConnectionRepository @Inject constructor(
         )
         val known = knownDeviceDao.get(address)
 
-        var transport: AqTransport? = null
+        var transport: AndroidLink? = null
         if (fake) {
             transport = transportFactory.fake(address)
         } else if (preference != TransportPreference.BLE_ONLY) {
-            transport = tryLan(address, name ?: known?.name, known, fallbackToBle = preference == TransportPreference.AUTO)
+            when (val lan = tryLan(address, name ?: known?.name, known, fallbackToBle = preference == TransportPreference.AUTO)) {
+                is LanAttempt.Opened -> transport = lan.link
+                LanAttempt.Refused -> return false
+                LanAttempt.Skipped -> Unit
+            }
         }
         if (transport == null) {
             if (preference == TransportPreference.LAN_ONLY) {
@@ -411,48 +417,64 @@ class DeviceConnectionRepository @Inject constructor(
         return true
     }
 
+    private sealed interface LanAttempt {
+        /** The probe session's link is open, [openSession] continues on it. */
+        data class Opened(val link: AndroidLink) : LanAttempt
+
+        /** No LAN this time. The caller may fall back to Bluetooth. */
+        data object Skipped : LanAttempt
+
+        /** The device answered and refused this app (old firmware). Bluetooth would refuse too. */
+        data object Refused : LanAttempt
+    }
+
     /**
-     * Attempt a LAN session; null when not applicable or when it failed. The caller may fall back
-     * to BLE if its preference allows it. The probe session is removed and its transport closed on every failure
+     * Attempt a LAN session. The caller may fall back to BLE after [LanAttempt.Skipped] if its
+     * preference allows it. The probe session is removed and its link closed on every failure
      * path, including an unexpected exception and cancellation.
      */
-    private suspend fun tryLan(address: String, name: String?, known: KnownDevice?, fallbackToBle: Boolean = true): AqTransport? {
-        val station = known?.station ?: return null
-        val seen = lanDevices.value[station] ?: return null
-        val host = seen.host ?: return null
-        val port = TransportSelector.lanPort(known.hasLanToken, known.deviceId, seen.dev, seen.port, known.lanPort) ?: return null
-        val token = lanTokenBytes(address) ?: return null
-        val transport = transportFactory.lan(address, name, host, port, token)
+    private suspend fun tryLan(address: String, name: String?, known: KnownDevice?, fallbackToBle: Boolean = true): LanAttempt {
+        val station = known?.station ?: return LanAttempt.Skipped
+        val seen = lanDevices.value[station] ?: return LanAttempt.Skipped
+        val host = seen.host ?: return LanAttempt.Skipped
+        val port = TransportSelector.lanPort(known.hasLanToken, known.deviceId, seen.dev, seen.port, known.lanPort) ?: return LanAttempt.Skipped
+        val token = lanTokenBytes(address) ?: return LanAttempt.Skipped
+        val transport = try {
+            transportFactory.lan(address, name, host, port, token)
+        } finally {
+            token.fill(0)
+        }
         // Put the LAN attempt in the session slot so the UI shows "Authenticating on the LAN…".
         val probe = newSession(transport)
         _session.value = probe
         var connected = false
         try {
-            transport.connect()
+            probe.link.open()
             connected = true
-            return transport
-        } catch (e: LanConnectException) {
-            Log.w(TAG, "LAN connect failed (${e.failure})")
-            if (tokenPolicy.invalidatesToken(e.failure)) {
+            return LanAttempt.Opened(transport)
+        } catch (e: LinkClosedException) {
+            val cause = e.disconnectCause
+            if (cause is DisconnectCause.UpdateFirmware) {
+                reportOpenFailure(e)
+                return LanAttempt.Refused
+            }
+            val failure = (e.cause as? LanConnectException)?.failure
+                ?: if (cause == DisconnectCause.Auth(AuthKind.TOKEN_REJECTED)) LanFailure.AUTH_FAILED else null
+            Log.w(TAG, "LAN connect failed (${cause.describe()})")
+            if (failure != null && tokenPolicy.invalidatesToken(failure)) {
                 // The device rotated its token (ERROR 14 at the handshake). The stored copy is dead:
                 // drop it so the Bluetooth session we are about to open fetches a fresh one.
                 knownDeviceDao.setLanToken(address, null, null)
                 tokenPolicy.markStale(address)
-                if (fallbackToBle) _events.tryEmit(DeviceEvent.Info(DeviceMessage.LanFallback(e.failure)))
-            } else {
-                if (fallbackToBle) _events.tryEmit(DeviceEvent.Info(DeviceMessage.LanFallback(e.failure)))
             }
-            return null
-        } catch (e: TransportException) {
-            Log.w(TAG, "LAN connect failed (${e.message})")
-            if (fallbackToBle) _events.tryEmit(DeviceEvent.Info(DeviceMessage.LanFallback(null)))
-            return null
+            if (fallbackToBle) _events.tryEmit(DeviceEvent.Info(DeviceMessage.LanFallback(failure)))
+            return LanAttempt.Skipped
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             Log.w(TAG, "LAN connect failed unexpectedly (${e::class.simpleName})")
             if (fallbackToBle) _events.tryEmit(DeviceEvent.Info(DeviceMessage.LanFallback(null)))
-            return null
+            return LanAttempt.Skipped
         } finally {
             if (!connected) {
                 if (_session.value === probe) _session.value = null
@@ -463,13 +485,40 @@ class DeviceConnectionRepository @Inject constructor(
         }
     }
 
+    private fun reportOpenFailure(e: LinkClosedException) {
+        when (val cause = e.disconnectCause) {
+            is DisconnectCause.UpdateFirmware -> {
+                Log.w(TAG, "firmware update required (proto ${cause.reported})")
+                connectionFailure.value = "firmware update required"
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.FirmwareUpdateRequired(cause.reported, cause.required)))
+            }
+            is DisconnectCause.FramingViolation -> {
+                // Connected, but the info reply was missing or malformed.
+                Log.w(TAG, "device verification failed (${cause.describe()})")
+                connectionFailure.value = "verification failed"
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.VerificationFailed))
+            }
+            DisconnectCause.Auth(AuthKind.BOND_MISSING) -> {
+                // The phone lost its keys. Reconnecting cannot help until the user pairs again.
+                Log.w(TAG, "connect failed (${cause.describe()})")
+                connectionFailure.value = BleConnectionFailure.PAIRING_REPAIR_MESSAGE
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.ConnectFailed))
+            }
+            else -> {
+                Log.w(TAG, "connect failed (${cause.describe()})")
+                connectionFailure.value = e.message ?: "connection failed"
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.ConnectFailed))
+            }
+        }
+    }
+
     /** Ready on the transport and on the link. A link that closed itself is not reused. */
     private val DeviceSession.isUsable: Boolean
         get() = connectionState.value.isReady && link.state.value is LinkState.Ready
 
     /** A session whose link is opened by [openSession]. Link events carry no frame bodies. */
-    private fun newSession(transport: AqTransport): DeviceSession =
-        DeviceSession.over(transport, scope, log = LinkLog { Log.d(TAG, it.describe()) })
+    private fun newSession(link: AndroidLink): DeviceSession =
+        link.openableSession(scope, log = LinkLog { Log.d(TAG, it.describe()) })
 
     /**
      * The stored LAN token as bytes, decrypted only here, at the moment a LAN transport is built.
@@ -513,29 +562,15 @@ class DeviceConnectionRepository @Inject constructor(
      * [watch] = false (background sync) skips the lost-link auto-reconnect: the worker has no user
      * to keep informed and simply tries again at its next period.
      */
-    private suspend fun openSession(transport: AqTransport, address: String, name: String?, fake: Boolean, watch: Boolean = true, claim: Long? = null, preference: TransportPreference = TransportPreference.AUTO): Boolean {
-        // Reuse the LAN probe only while its link has not opened yet, a link opens once.
-        val session = _session.value?.takeIf { it.transport === transport && it.link.state.value == LinkState.Idle }
+    private suspend fun openSession(transport: AndroidLink, address: String, name: String?, fake: Boolean, watch: Boolean = true, claim: Long? = null, preference: TransportPreference = TransportPreference.AUTO): Boolean {
+        // The LAN probe arrives already open on this link. A link opens once.
+        val session = _session.value?.takeIf { it.transport === transport && it.link.state.value !is LinkState.Closed }
             ?: newSession(transport)
         _session.value = session
         val info = try {
-            session.link.open().info
+            ((session.link.state.value as? LinkState.Ready)?.info ?: session.link.open()).info
         } catch (e: LinkClosedException) {
-            val cause = e.disconnectCause
-            if (cause is DisconnectCause.UpdateFirmware) {
-                Log.w(TAG, "firmware update required (proto ${cause.reported})")
-                connectionFailure.value = "firmware update required"
-                _events.tryEmit(DeviceEvent.Error(DeviceMessage.FirmwareUpdateRequired(cause.reported, cause.required)))
-            } else if (cause is DisconnectCause.FramingViolation) {
-                // Connected, but the info reply was missing or malformed.
-                Log.w(TAG, "device verification failed (${cause.describe()})")
-                connectionFailure.value = "verification failed"
-                _events.tryEmit(DeviceEvent.Error(DeviceMessage.VerificationFailed))
-            } else {
-                Log.w(TAG, "connect failed (${cause.describe()})")
-                connectionFailure.value = e.message ?: "connection failed"
-                _events.tryEmit(DeviceEvent.Error(DeviceMessage.ConnectFailed))
-            }
+            reportOpenFailure(e)
             return false
         } catch (e: CancellationException) {
             throw e
@@ -737,6 +772,13 @@ class DeviceConnectionRepository @Inject constructor(
             val generation = synchronized(this@DeviceConnectionRepository) { reconnectGeneration }
             if (_session.value !== session || !connectionIntent.owns(claim)) return@launch
             val reason = (lost as? ConnectionState.Failed)?.reason ?: "device closed the connection"
+            val linkCause = (session.link.state.value as? LinkState.Closed)?.cause
+            if (linkCause is DisconnectCause.Auth) {
+                // A refused or missing credential repeats on every attempt. The user pairs again.
+                Log.w(TAG, "link lost (${linkCause.describe()}); no auto-reconnect")
+                connectionFailure.value = BleConnectionFailure.PAIRING_REPAIR_MESSAGE.takeIf { linkCause.kind != AuthKind.TOKEN_REJECTED } ?: reason
+                return@launch
+            }
             val sync = _sync.value
             val resume = SyncResumePolicy.shouldResume(sync.running, sync.endCause, sync.finishedAtEpochMs, clock.nowEpochMs())
             Log.w(TAG, "link lost ($reason); auto-reconnect starts, resumeSync=$resume (running=${sync.running}, lastEnd=${sync.endCause})")
@@ -1134,14 +1176,18 @@ class DeviceConnectionRepository @Inject constructor(
                 return if (cur.address == address) skip("the app has an interactive session with this device") else skip("another session is active (${cur.address})")
             }
             if (_reconnecting.value != null) return skip("a reconnect is in progress")
-            val transport: AqTransport = try {
+            val transport: AndroidLink = try {
                 if (lanTarget != null) {
                     val host = lanTarget.host
                     if (known?.hasLanToken != true || host == null) return skip("no token or address for the LAN link")
                     if (known.deviceId != null && !known.deviceId.equals(lanTarget.dev, ignoreCase = true)) return skip("LAN discovery identity disagrees with the enrolled device")
                     val port = lanTarget.port.takeIf { it in 1..65535 } ?: known.lanPort ?: return skip("no LAN port")
                     val token = lanTokenBytes(address) ?: return skip("LAN token unavailable")
-                    transportFactory.lan(address, name, host, port, token)
+                    try {
+                        transportFactory.lan(address, name, host, port, token)
+                    } finally {
+                        token.fill(0)
+                    }
                 } else {
                     transportFactory.bleUnattended(address, bleConnectTimeoutMs)
                 }

@@ -14,7 +14,18 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
 import android.util.Log
+import earth.walkthru.aqsync.data.AndroidLink
 import earth.walkthru.aqsync.data.protocol.AqUuids
+import earth.walkthru.aqsync.data.protocol.DeviceInfo
+import earth.walkthru.aqsync.link.AuthKind
+import earth.walkthru.aqsync.link.DisconnectCause
+import earth.walkthru.aqsync.link.FrameSink
+import earth.walkthru.aqsync.link.LinkClosedException
+import earth.walkthru.aqsync.link.LinkInfo
+import earth.walkthru.aqsync.link.LinkTimeoutException
+import earth.walkthru.aqsync.link.OnceSink
+import earth.walkthru.aqsync.link.PushChannel
+import earth.walkthru.aqsync.link.TimeoutPhase
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.channels.BufferOverflow
@@ -32,13 +43,16 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
- * [AqTransport] over Android's [BluetoothGatt].
+ * One GATT connection as an [AndroidLink].
  *
  * The GATT API allows exactly one outstanding operation per connection and reports results through
  * callbacks on a binder thread. This class serializes operations with a [Mutex] and turns every
@@ -49,11 +63,17 @@ import kotlin.coroutines.resumeWithException
  * connect (TRANSPORT_LE) → discover services → requestMtu(517) → bond if not bonded (passkey shown
  * on the device screen) → enable notifications on status, live, response → Ready.
  *
+ * [open] runs that sequence and reads `info`. From then on every `response` notification goes
+ * straight to the session's sink, `status` and `live` go to its push path and to the read only
+ * flows. Nothing is queued here, the session's budget bounds what a slow consumer may hold. A
+ * link that drops after Ready reports one typed cause ([BleDisconnectCauses]). Android 16 reports
+ * lost bond keys as `ACTION_KEY_MISSING`, which ends the link as `Auth(BOND_MISSING)`.
+ *
  * Permissions: every call here needs BLUETOOTH_CONNECT. The UI gates on it before any transport is
  * created ([earth.walkthru.aqsync.ui.permissions]); lint cannot see that, hence the suppression.
  */
 @SuppressLint("MissingPermission")
-class BleTransport(
+class BleLinkDriver(
     private val context: Context,
     private val device: BluetoothDevice,
     /**
@@ -63,7 +83,15 @@ class BleTransport(
     private val connectTimeoutMs: Long = CONNECT_TIMEOUT_MS,
     /** False for unattended connects: a device that would need the passkey dialog is a failure, not a prompt. */
     private val allowBonding: Boolean = true,
-) : AqTransport {
+) : AndroidLink {
+
+    override val frames = FrameRecorder()
+
+    @Volatile
+    private var sink: OnceSink? = null
+
+    @Volatile
+    private var opened = false
 
     override val address: String = device.address
     override val displayName: String? get() = runCatching { device.name }.getOrNull()
@@ -82,8 +110,8 @@ class BleTransport(
     override val statusNotifications: Flow<ByteArray> = _status
     override val liveNotifications: Flow<ByteArray> = _live
 
-    private val _responses = Channel<ByteArray>(Channel.UNLIMITED)
-    override val responseFrames: ReceiveChannel<ByteArray> = _responses
+    /** Not the frame path. Replies go to the session's sink. Closed and empty. */
+    override val responseFrames: ReceiveChannel<ByteArray> = Channel<ByteArray>().also { it.close() }
 
     /** Bond state mirrored from [BluetoothDevice.ACTION_BOND_STATE_CHANGED]. */
     private val bondState = BleBondAwaiter(device.bondState.toBondState())
@@ -119,6 +147,12 @@ class BleTransport(
                 intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
             }
             if (dev?.address != device.address) return
+            if (intent.action == ACTION_KEY_MISSING) {
+                Log.w(TAG, "bond keys missing for this device")
+                linkFailure.recordDisconnected(BleDisconnectCauses.KEY_MISSING)
+                fail(DisconnectCause.Auth(AuthKind.BOND_MISSING))
+                return
+            }
             val newState = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.BOND_NONE)
             val previousState = intent.getIntExtra(BluetoothDevice.EXTRA_PREVIOUS_BOND_STATE, -1)
             Log.i(TAG, "bond state ${bondState.current.state} -> $newState")
@@ -137,6 +171,7 @@ class BleTransport(
                 val failureStatus = linkFailure.recordDisconnected(status)
                 pendingConnect.getAndSet(null)?.resume(failureStatus)
                 pendingOp.failAny(GattResult(failureStatus))
+                if (opened) sink?.onClosed(BleDisconnectCauses.ofStatus(failureStatus))
                 _state.value = if (failureStatus == GATT_DISCONNECTED || failureStatus == GATT_CONN_TERMINATE_PEER_USER) {
                     ConnectionState.Disconnected
                 } else {
@@ -188,16 +223,90 @@ class BleTransport(
     }
 
     private fun dispatchNotification(uuid: UUID, value: ByteArray) {
+        val out = sink ?: return
         when (uuid) {
-            AqUuids.RESPONSE -> _responses.trySend(value.copyOf())
-            AqUuids.STATUS -> _status.tryEmit(value.copyOf())
-            AqUuids.LIVE -> _live.tryEmit(value.copyOf())
+            AqUuids.RESPONSE -> value.copyOf().let {
+                frames.rx(it)
+                out.onFrame(it)
+            }
+            AqUuids.STATUS -> value.copyOf().let {
+                _status.tryEmit(it)
+                out.onPush(PushChannel.STATUS, it)
+            }
+            AqUuids.LIVE -> value.copyOf().let {
+                _live.tryEmit(it)
+                out.onPush(PushChannel.LIVE, it)
+            }
+        }
+    }
+
+    // ------------------------------------------------------------ LinkDriver
+
+    override suspend fun open(sink: FrameSink): LinkInfo {
+        check(this.sink == null) { "a BleLinkDriver opens once" }
+        val once = OnceSink(sink)
+        this.sink = once
+        try {
+            establish()
+        } catch (e: TransportException) {
+            val cause = BleDisconnectCauses.ofOpenFailure(e)
+            once.onClosed(cause)
+            throw LinkClosedException(cause, e)
+        } catch (e: CancellationException) {
+            once.onClosed(DisconnectCause.Deliberate("open cancelled"))
+            throw e
+        }
+        val info = try {
+            DeviceInfo.parse(readInfo().decodeToString())
+        } catch (e: TransportException) {
+            val cause = BleDisconnectCauses.ofOpenFailure(e)
+            fail(cause)
+            throw LinkClosedException(cause, e)
+        } catch (e: CancellationException) {
+            fail(DisconnectCause.Deliberate("open cancelled"))
+            throw e
+        } catch (e: Exception) {
+            fail(DisconnectCause.FramingViolation("bad device info"))
+            throw LinkClosedException(DisconnectCause.FramingViolation("bad device info"), null)
+        }
+        opened = true
+        // A drop between Ready and here was not reported by the callback, report it now.
+        if (!_state.value.isReady) fail(BleDisconnectCauses.ofStatus(GATT_DISCONNECTED))
+        return LinkInfo(kind, payloadMax = mtu - 3, info = info)
+    }
+
+    override suspend fun send(body: ByteArray, deadline: Duration) {
+        val op = body.firstOrNull()?.toInt()?.and(0xFF) ?: 0
+        val done = try {
+            withTimeoutOrNull(deadline) { writeRequest(body) }
+        } catch (e: TransportException) {
+            throw LinkClosedException(e.gattStatus?.let(BleDisconnectCauses::ofStatus) ?: DisconnectCause.LocalAbort(), e)
+        }
+        done ?: throw LinkTimeoutException(DisconnectCause.Timeout(TimeoutPhase.SEND, op))
+        frames.tx(body)
+    }
+
+    override fun abort(cause: DisconnectCause) = fail(cause)
+
+    /** Reports [cause] once and releases the GATT client and the receiver. Any thread. */
+    private fun fail(cause: DisconnectCause) {
+        sink?.onClosed(cause)
+        teardown()
+        unregisterBondReceiver()
+        _state.value = when (cause) {
+            is DisconnectCause.Deliberate, is DisconnectCause.PeerClosed -> ConnectionState.Disconnected
+            is DisconnectCause.Auth -> ConnectionState.Failed(BleConnectionFailure.PAIRING_REPAIR_MESSAGE, BleDisconnectCauses.KEY_MISSING.takeIf { cause.kind == AuthKind.BOND_MISSING })
+            else -> ConnectionState.Failed(cause::class.simpleName ?: "closed", (cause as? DisconnectCause.LocalAbort)?.gattStatus)
         }
     }
 
     // ---------------------------------------------------------------- connect
 
-    override suspend fun connect(): Unit = connectMutex.withLock {
+    override suspend fun connect() {
+        if (!_state.value.isReady) throw TransportException("open the link session, not the transport")
+    }
+
+    private suspend fun establish(): Unit = connectMutex.withLock {
         if (_state.value.isReady) return
         registerBondReceiver()
         try {
@@ -281,12 +390,15 @@ class BleTransport(
     private fun missing(name: String): Nothing =
         throw TransportException("characteristic `$name` missing from the AQ Sync service")
 
+    /** Pairing could not finish. [missing] when the phone holds no bond and may not ask for one. */
+    class BondException(message: String, val missing: Boolean = false, cause: Throwable? = null) : TransportException(message, cause = cause)
+
     private suspend fun ensureBonded() {
         // Refresh after an owner forgets a stale bond in Settings; the constructor snapshot may
         // belong to the old pairing. Capture before createBond so fast failure events are retained.
         val beforeRequest = bondState.update(device.bondState.toBondState())
         if (beforeRequest.state == BleBondAwaiter.State.BONDED) return
-        if (!allowBonding) throw TransportException("device is not bonded; pairing needs the app open")
+        if (!allowBonding) throw BondException("device is not bonded; pairing needs the app open", missing = true)
         _state.value = ConnectionState.Bonding
         if (beforeRequest.state != BleBondAwaiter.State.BONDING) {
             if (!device.createBond()) throw TransportException("could not start pairing")
@@ -300,10 +412,10 @@ class BleTransport(
             bondState.awaitResult(beforeRequest, BOND_TIMEOUT_MS)
         } catch (e: TimeoutCancellationException) {
             currentCoroutineContext().ensureActive()
-            throw TransportException("Pairing timed out. Reconnect and enter this sensor's six-digit PIN when Android asks. Keep this app open while pairing.", cause = e)
+            throw BondException("Pairing timed out. Reconnect and enter this sensor's six-digit PIN when Android asks. Keep this app open while pairing.", cause = e)
         }
         if (!bonded) {
-            throw TransportException("pairing was cancelled or the passkey was wrong")
+            throw BondException("pairing was cancelled or the passkey was wrong")
         }
         // Give the stack a moment to raise the link to authenticated before the next ATT request.
         delay(500)
@@ -371,7 +483,7 @@ class BleTransport(
                 val before = _state.value
                 val beforeRequest = bondState.update(device.bondState.toBondState())
                 if (!allowBonding && beforeRequest.state == BleBondAwaiter.State.NONE) {
-                    throw TransportException("device lost its bond; pairing needs the app open")
+                    throw BondException("device lost its bond; pairing needs the app open", missing = true)
                 }
                 _state.value = ConnectionState.Bonding
                 if (beforeRequest.state == BleBondAwaiter.State.NONE && !device.createBond()) {
@@ -407,7 +519,9 @@ class BleTransport(
     override suspend fun readStatus(): ByteArray = readCharacteristic(status, "status")
     override suspend fun readLive(): ByteArray = readCharacteristic(live, "live")
 
-    override suspend fun writeControl(request: ByteArray) {
+    override suspend fun writeControl(request: ByteArray) = send(request, OP_TIMEOUT_MS.milliseconds)
+
+    private suspend fun writeRequest(request: ByteArray) {
         require(request.size <= 512) { "control request is ${request.size} bytes; max 512" }
         val g = requireReady()
         val ch = control ?: missing("control")
@@ -442,10 +556,7 @@ class BleTransport(
 
     // ------------------------------------------------------------- lifecycle
 
-    override suspend fun disconnect() {
-        teardown()
-        _state.value = ConnectionState.Disconnected
-    }
+    override suspend fun disconnect() = fail(DisconnectCause.Deliberate("disconnect"))
 
     private fun teardown() {
         acceptConnectionCallbacks = false
@@ -459,16 +570,12 @@ class BleTransport(
         mtu = 23
     }
 
-    override fun close() {
-        teardown()
-        _responses.close()
-        unregisterBondReceiver()
-        _state.value = ConnectionState.Disconnected
-    }
+    override fun close() = fail(DisconnectCause.Deliberate("close"))
 
     private fun registerBondReceiver() {
         if (bondReceiverRegistered) return
         val filter = IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
+        if (Build.VERSION.SDK_INT >= 36) filter.addAction(ACTION_KEY_MISSING)
         if (Build.VERSION.SDK_INT >= 33) {
             // EXPORTED on purpose. ACTION_BOND_STATE_CHANGED is sent by the Bluetooth app, a
             // privileged app that does not run as the system UID, and developer.android.com
@@ -495,7 +602,10 @@ class BleTransport(
     }
 
     companion object {
-        private const val TAG = "BleTransport"
+        private const val TAG = "BleLinkDriver"
+
+        /** `BluetoothDevice.ACTION_KEY_MISSING`, API 36. Protected, sent by the Bluetooth app. */
+        const val ACTION_KEY_MISSING = "android.bluetooth.device.action.KEY_MISSING"
         const val GATT_DISCONNECTED = -1
 
         /** HCI 0x13 as surfaced by `onConnectionStateChange`: the device closed the link on purpose. */

@@ -22,7 +22,7 @@ class SyncResumePolicyTest {
     fun aSyncThatJustDiedOfTheTransportIsResumed() {
         // "no response from device within 60 s", then the link is declared lost a moment later.
         assertTrue(SyncResumePolicy.shouldResume(false, SyncEndCause.TRANSPORT_FAILURE, now - 2_000, now))
-        // TcpTransport declares the link dead after 180 s without a byte: still inside the window.
+        // The LAN heartbeat declares the link dead after 180 s without a byte: still inside the window.
         assertTrue(SyncResumePolicy.shouldResume(false, SyncEndCause.TRANSPORT_FAILURE, now - 180_000, now))
         assertTrue(SyncResumePolicy.shouldResume(false, SyncEndCause.TRANSPORT_FAILURE, now - SyncResumePolicy.RESUME_WINDOW_MS, now))
     }

@@ -419,13 +419,13 @@ class DeviceConnectionRepositoryTest {
             // The 1 MiB benchmark file only slows the tests down.
             it.files.removeAll { f -> f.name.startsWith("benchmarks/") }
         }
-        val factory = TestTransports(device)
         val rawKnown = InMemoryKnownDeviceDao()
         val knownDao = SecureKnownDeviceDao(rawKnown, PrefixCipher())
         val archived = InMemoryArchivedFileDao()
         val lan = TestLanTargets()
         val events = CopyOnWriteArrayList<DeviceEvent>()
         val appScope = CoroutineScope(SupervisorJob() + dispatcher)
+        val factory = TestTransports(device, appScope)
 
         var clockEpochOffset = 0L
         val repo: DeviceConnectionRepository
@@ -504,8 +504,11 @@ class DeviceConnectionRepositoryTest {
         }
     }
 
-    /** BLE and fake requests get the one [FakeTransport]; LAN requests get a transport that fails. */
-    private class TestTransports(private val device: FakeTransport) : TransportSource {
+    /**
+     * BLE and fake requests get a new [TransportLink] over the one [FakeTransport], as the debug
+     * fake does. LAN requests get a link whose open fails.
+     */
+    private class TestTransports(private val device: FakeTransport, private val scope: CoroutineScope) : TransportSource {
         var lanFailure: Exception = LanConnectException(LanFailure.UNREACHABLE)
         val lanTransports = CopyOnWriteArrayList<FailingLanTransport>()
         var fakeConnects = 0
@@ -524,16 +527,16 @@ class DeviceConnectionRepositoryTest {
             }
         }
 
-        override fun ble(address: String): AqTransport = counted()
-        override fun bleUnattended(address: String, connectTimeoutMs: Long): AqTransport = counted()
-        override fun lan(address: String, name: String?, host: InetAddress, port: Int, token: ByteArray): AqTransport =
-            FailingLanTransport(address, lanFailure).also { lanTransports += it }
-        override fun fake(address: String): AqTransport = counted()
-        override fun isFake(transport: AqTransport): Boolean = transport === observedDevice
+        override fun ble(address: String): AndroidLink = counted()
+        override fun bleUnattended(address: String, connectTimeoutMs: Long): AndroidLink = counted()
+        override fun lan(address: String, name: String?, host: InetAddress, port: Int, token: ByteArray): AndroidLink =
+            FailingLanTransport(address, lanFailure).also { lanTransports += it }.let { TransportLink(it, scope) }
+        override fun fake(address: String): AndroidLink = counted()
+        override fun isFake(transport: AqTransport): Boolean = (transport as? TransportLink)?.wrapped === observedDevice
 
-        private fun counted(): AqTransport {
+        private fun counted(): AndroidLink {
             fakeConnects++
-            return observedDevice
+            return TransportLink(observedDevice, scope)
         }
     }
 

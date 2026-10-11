@@ -30,7 +30,7 @@ enum class SyncEndCause {
 object SyncResumePolicy {
     /**
      * A transport-level failure older than this is not tied to the link loss we are now seeing:
-     * the user may have done other things since. Covers `TcpTransport`'s 180 s dead-link deadline
+     * the user may have done other things since. Covers the LAN heartbeat's 180 s receive deadline
      * with margin.
      */
     const val RESUME_WINDOW_MS = 5 * 60_000L

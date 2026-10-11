@@ -33,7 +33,7 @@ enum class TransportKind { BLE, LAN, FAKE }
 
 /**
  * The five GATT attributes of the AQ Sync service, abstracted so the same protocol/sync code runs
- * over a real Bluetooth GATT link (`BleTransport` in `app/`), a LAN TCP socket (`TcpTransport` in
+ * over a real Bluetooth GATT link (`BleLinkDriver` in `app/`), a LAN TCP socket (`TcpLinkDriver` in
  * `app/`) or an in-process fake device.
  *
  * Byte-level only: framing and JSON live one layer up in [DeviceSession].

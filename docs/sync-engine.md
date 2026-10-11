@@ -343,7 +343,7 @@ after its `LIST`. A `cancelReconnect` (the notification's Stop) also cancels a r
 watcher has decided on but not yet started.
 
 Resume when the sync was `running` **or** ended with `TRANSPORT_FAILURE` within the last
-**5 min** (`RESUME_WINDOW_MS` = `TcpTransport`'s 180 s dead-link deadline plus margin). A user Stop,
+**5 min** (`RESUME_WINDOW_MS` = the LAN heartbeat's 180 s receive deadline plus margin). A user Stop,
 a completed run, or any other failure is left alone. Seen on the phone: the sync died of the pipe a
 moment before the link was declared lost, the reconnect succeeded with `resumeSync=false`, and the
 user had to press Sync all again — hence the policy.

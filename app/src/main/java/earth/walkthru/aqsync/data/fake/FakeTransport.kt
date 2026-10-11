@@ -41,7 +41,7 @@ import kotlin.random.Random
  *
  * [simulateLan] makes the fake *behave* like the LAN pipe: `payload_max` 1024 and `GET_TOKEN`
  * answered with `ERROR` 13, so the LAN-specific UI paths can be seen without a network. It is not
- * a socket; the real [earth.walkthru.aqsync.data.lan.TcpTransport] is only testable on hardware.
+ * a socket; the real [earth.walkthru.aqsync.data.lan.TcpLinkDriver] is only testable on hardware.
  */
 class FakeTransport(
     override val address: String = FAKE_ADDRESS,

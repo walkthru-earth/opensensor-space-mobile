@@ -55,7 +55,14 @@ sealed interface DisconnectCause {
 
 enum class TimeoutPhase { OPEN, HANDSHAKE, SEND, FIRST_FRAME, INTER_FRAME }
 
-enum class AuthKind { TOKEN_REJECTED, BOND_FAILED, ENCRYPTION_FAILED }
+enum class AuthKind {
+    TOKEN_REJECTED,
+    BOND_FAILED,
+    ENCRYPTION_FAILED,
+
+    /** The phone lost its bond keys for the peer (Android `ACTION_KEY_MISSING`). Pair again. */
+    BOND_MISSING,
+}
 
 enum class Radio { BLUETOOTH, WIFI }
 

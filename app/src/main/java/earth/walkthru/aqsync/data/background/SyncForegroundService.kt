@@ -29,7 +29,7 @@ import javax.inject.Inject
  * `dataSync` foreground service that runs for exactly as long as a user-started sync.
  *
  * Why: on Android 16 (OnePlus 7 Pro, 2026-09) a LAN sync died ~2 min after the screen went off —
- * `ConnectivityService` logged "Destroyed live tcp sockets for uids={<ours>}" and `TcpTransport`
+ * `ConnectivityService` logged "Destroyed live tcp sockets for uids={<ours>}" and `TcpLinkDriver`
  * saw "Software caused connection abort" 6 ms later. That is the background network restriction:
  * once the app is no longer foreground and the grace period ends, its sockets are killed. A
  * foreground service keeps the uid eligible for network for the duration of the transfer.
