@@ -139,7 +139,7 @@ private class DevicesHolder(bridge: DevicesBridge) : ViewModel() {
 private val IosDevices = DevicesPlatform(collectInBackground = false, explainSystemBond = true)
 
 /** Holds the Debug controller for one Debug entry, cleared when the entry leaves the back stack. */
-private class DebugHolder(address: String, state: CompanionState, openLink: (String) -> SensorLink?) : ViewModel() {
+private class DebugHolder(address: String, state: CompanionState, openLink: (String) -> IosLink?) : ViewModel() {
     val controller = DebugController(viewModelScope, IosDebugSource(address, state, openLink, viewModelScope))
 }
 
@@ -162,11 +162,11 @@ private class DeviceSettingsHolder(address: String, devices: DevicesBridge, link
  * then) and pushes its [devicePage], which receives the resolved display units (METRIC or IMPERIAL)
  * and the detail level from the shared Settings (`:feature:settings`, `:core:settings`). At the
  * Developer level the device page also gets an open Debug action, and the shared Debug screen
- * (`:feature:debug`) borrows short links from Swift through [openDebugLink]. A Bluetooth sensor
+ * (`:feature:debug`) takes leases of the connection's link from Swift through [openDebugLink]. A Bluetooth sensor
  * opens on the shared Today over [today], and its Device section is the [devicePage]. Today and
  * Device each hold a lease on that sensor, and popping the last of them calls [closeIdle] once.
  * The companion page of a Bluetooth sensor opens the shared Device settings (`:feature:device`),
- * which borrow short links through [configLinks] and hold the same lease.
+ * which take leases of the connection's link through [configLinks] and hold the same lease.
  */
 @Composable
 internal fun AppRoot(
@@ -175,7 +175,7 @@ internal fun AppRoot(
     requestBluetooth: () -> Unit,
     openSensor: (String) -> Unit,
     openLanOnly: (String) -> Unit,
-    openDebugLink: (String) -> SensorLink?,
+    openDebugLink: (String) -> IosLink?,
     closeIdle: (String) -> Unit,
     configLinks: DeviceConfigLinks,
     filesActions: DeviceFilesActions,

@@ -12,7 +12,6 @@ import earth.walkthru.opensensor.files.DeviceFilesAction
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
@@ -26,9 +25,10 @@ import kotlinx.coroutines.withContext
 import kotlin.time.Clock
 import earth.walkthru.aqsync.data.SyncProgress as ScreenSyncProgress
 
-/** Native ownership stays in Swift. Kotlin borrows a guarded link only for a LIST request. */
+/** Native ownership stays in Swift. Kotlin takes a lease of the connection's link only for a LIST request. */
 internal class DeviceFilesActions(
-    val openLink: (device: String) -> SensorLink?,
+    /** The open connection's link to this hardware id, or null when it is not connected. */
+    val openLink: (device: String) -> IosLink?,
     val syncAll: (peripheral: String) -> Unit,
     val syncOne: (peripheral: String, name: String) -> Unit,
     val cancelSync: (peripheral: String) -> Unit,
@@ -96,13 +96,8 @@ internal class IosDeviceFiles(
                     priorReady = false
                 }
                 if (link.connected && !priorReady && link.station != null) refresh()
-                if (link.connected && priorRunning && !link.running) {
-                    // Swift releases its sync lend at the task boundary; let it settle before LIST.
-                    scope.launch {
-                        delay(300)
-                        refresh()
-                    }
-                }
+                // The sync's lease ended before Swift heard its result, so LIST can go at once.
+                if (link.connected && priorRunning && !link.running) refresh()
                 priorReady = link.connected
                 priorRunning = link.running
             }
@@ -127,21 +122,19 @@ internal class IosDeviceFiles(
                 val hardware = linkState.device ?: return@launch
                 if (!linkState.connected || linkState.running) return@launch
                 listing.value = listing.value.refreshing()
-                val lent = withContext(Dispatchers.Main) { actions.openLink(hardware) }
+                val link = withContext(Dispatchers.Main) { actions.openLink(hardware) }
                     ?: run {
                         listing.value = listing.value.failed("LINK_BUSY")
                         return@launch
                     }
-                try {
-                    val (files, end) = lent.session(debugFrames.recorderFor(lent.transport.address)).list()
-                    if (selected.first().station == station) {
-                        listing.value = listing.value.loaded(files, end, Clock.System.now().toEpochMilliseconds())
-                    }
-                } finally {
-                    lent.linkClosed()
+                val (files, end) = link.leased(LeaseKind.FILES) { it.list() }
+                if (selected.first().station == station) {
+                    listing.value = listing.value.loaded(files, end, Clock.System.now().toEpochMilliseconds())
                 }
             } catch (e: CancellationException) {
                 throw e
+            } catch (_: LeaseRefusedException) {
+                listing.value = listing.value.failed("LINK_BUSY")
             } catch (e: Exception) {
                 listing.value = listing.value.failed(e.message ?: "LIST_FAILED")
             } finally {

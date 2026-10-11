@@ -17,7 +17,6 @@ import earth.walkthru.opensensor.debug.DebugSyncTrace
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
@@ -34,15 +33,16 @@ import kotlin.time.Clock
 internal val debugFrames = FrameRecorderRegistry()
 
 /**
- * The iOS side of the shared Debug screen. Swift owns the socket and the peripheral, so each
- * request borrows a fresh [SensorLink] through [openLink] (null while a sync holds the link) and
- * closes it when done, which hands the link back to Swift. Status comes from the Bluetooth status
- * notifications [CompanionState] already receives. The config and the log are read on request.
+ * The iOS side of the shared Debug screen. Swift owns the socket and the peripheral and hands out the
+ * connection's [IosLink] through [openLink] (null when the sensor is not connected). Each request
+ * runs on a Debug lease of it, refused at once while a sync holds the link. Status comes from the
+ * Bluetooth status notifications [CompanionState] already receives. The config and the log are read
+ * on request.
  */
 internal class IosDebugSource(
     private val address: String,
     private val state: CompanionState,
-    private val openLink: (String) -> SensorLink?,
+    private val openLink: (String) -> IosLink?,
     private val scope: CoroutineScope,
 ) : DebugSource {
     private val recorder = debugFrames.recorderFor(address)
@@ -119,33 +119,16 @@ internal class IosDebugSource(
 
     override fun clearFrames() = recorder.clear()
 
-    /** One request at a time over a lent link, closed afterwards so Swift gets it back. */
+    /** One request at a time, on a Debug lease of the connection's link. */
     private suspend fun <T> borrow(block: suspend (DeviceSession) -> T): T = lent.withLock {
-        val link = lend() ?: throw DebugBlockedException(DebugBlock.LINK_BUSY)
+        val link = withContext(Dispatchers.Main) { openLink(address) } ?: throw DebugBlockedException(DebugBlock.LINK_BUSY)
+        lastKind.value = link.kind to link.mtu
         try {
-            lastKind.value = link.transport.kind to link.transport.mtu
-            block(link.session(recorder))
-        } finally {
-            link.linkClosed()
+            link.leased(LeaseKind.DEBUG, block)
+        } catch (_: LeaseRefusedException) {
+            throw DebugBlockedException(DebugBlock.LINK_BUSY)
         }
-    }
-
-    /**
-     * Swift may still be taking back the previous request's link, or finishing a queued write, so a
-     * refusal is retried for about a second before the screen says the link is busy.
-     */
-    private suspend fun lend(): SensorLink? {
-        repeat(LEND_ATTEMPTS) { attempt ->
-            withContext(Dispatchers.Main) { openLink(address) }?.let { return it }
-            if (attempt < LEND_ATTEMPTS - 1) delay(LEND_RETRY_MS)
-        }
-        return null
     }
 
     private fun now(): Long = Clock.System.now().toEpochMilliseconds()
-
-    private companion object {
-        const val LEND_ATTEMPTS = 8
-        const val LEND_RETRY_MS = 125L
-    }
 }
