@@ -157,6 +157,9 @@ class IosLink internal constructor(
     private val leaseLock = Mutex()
     private val holder = AtomicReference<LeaseKind?>(null)
 
+    /** Test seam after lock returns, before the async waiter completes. */
+    internal var afterLeaseLock: suspend () -> Unit = {}
+
     /** Counts syncs that took the lock, so a lease queued behind one is refused instead of waiting it out. */
     private val syncsStarted = MutableStateFlow(0)
 
@@ -290,50 +293,57 @@ class IosLink internal constructor(
      */
     internal suspend fun acquire(kind: LeaseKind): Lease {
         if (!isOpen) throw LeaseRefusedException(syncRunning = false)
-        if (kind == LeaseKind.COMMAND) {
-            leaseLock.lock()
-        } else {
-            val seen = syncsStarted.value
-            if (holder.load() == LeaseKind.SYNC) throw LeaseRefusedException(syncRunning = true)
-            if (!lockUnlessASyncStarts(seen)) throw LeaseRefusedException(syncRunning = true)
-        }
-        val lease = Lease(kind)
-        holder.store(kind)
-        if (kind == LeaseKind.SYNC) syncsStarted.update { it + 1 }
-        leaseChanged()
+        val owner = Any()
+        var lease: Lease? = null
         try {
+            if (kind == LeaseKind.COMMAND) {
+                leaseLock.lock(owner)
+            } else {
+                val seen = syncsStarted.value
+                if (holder.load() == LeaseKind.SYNC) throw LeaseRefusedException(syncRunning = true)
+                if (!lockUnlessASyncStarts(seen, owner)) throw LeaseRefusedException(syncRunning = true)
+            }
+            lease = Lease(kind, owner)
+            holder.store(kind)
+            if (kind == LeaseKind.SYNC) syncsStarted.update { it + 1 }
+            leaseChanged()
             opened.await()
             if (!isOpen) throw LinkClosedException(link.closed.getCompleted())
             if (kind == LeaseKind.NATIVE) link.awaitQuiet()
+            return lease
         } catch (e: Throwable) {
-            lease.end()
+            // coroutineScope can throw on exit after the waiter acquired the lock.
+            if (lease != null) {
+                lease.end()
+            } else if (leaseLock.holdsLock(owner)) {
+                leaseLock.unlock(owner)
+            }
             throw e
         }
-        return lease
     }
 
-    /** Takes [leaseLock], or returns false without it once a sync takes the lock after [seen]. */
-    private suspend fun lockUnlessASyncStarts(seen: Int): Boolean = coroutineScope {
-        val waiter = async(start = CoroutineStart.UNDISPATCHED) { leaseLock.lock() }
+    /** Waits for [leaseLock] or a new sync. [acquire] releases any raced grant when returning false. */
+    private suspend fun lockUnlessASyncStarts(seen: Int, owner: Any): Boolean = coroutineScope {
+        val waiter = async(start = CoroutineStart.UNDISPATCHED) {
+            leaseLock.lock(owner)
+            afterLeaseLock()
+        }
         val syncStarted = async(start = CoroutineStart.UNDISPATCHED) { syncsStarted.first { it != seen } }
         try {
-            val locked = select {
-                waiter.onAwait { true }
-                syncStarted.onAwait { false }
+            select<Unit> {
+                waiter.onAwait { }
+                syncStarted.onAwait { }
             }
-            syncStarted.cancel()
-            if (locked) return@coroutineScope true
-            waiter.cancel()
-            waiter.join()
-            // The lock may have been granted before the cancel landed. Then it is ours, as if it won.
-            !waiter.isCancelled
-        } catch (e: Throwable) {
+        } finally {
             syncStarted.cancel()
             waiter.cancel()
-            withContext(NonCancellable) { waiter.join() }
-            if (!waiter.isCancelled) leaseLock.unlock()
-            throw e
+            withContext(NonCancellable) {
+                waiter.join()
+                syncStarted.join()
+            }
         }
+        // Cancellation after lock returns does not unlock it, even if the Deferred is cancelled.
+        syncsStarted.value == seen && leaseLock.holdsLock(owner)
     }
 
     /** Runs [block] on a lease and always gives it back. */
@@ -347,13 +357,13 @@ class IosLink internal constructor(
     }
 
     /** A held lease. [end] gives it back once, later calls do nothing. */
-    internal inner class Lease(val kind: LeaseKind) {
+    internal inner class Lease(val kind: LeaseKind, private val owner: Any) {
         private val ended = AtomicBoolean(false)
 
         fun end() {
             if (!ended.compareAndSet(false, true)) return
             holder.compareAndSet(kind, null)
-            leaseLock.unlock()
+            leaseLock.unlock(owner)
             leaseChanged()
         }
     }
