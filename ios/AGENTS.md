@@ -70,7 +70,9 @@ The iOS app entry point is the Xcode project in this directory. Read the root
   connection's one `IosLink` and receives progress and the typed result on the main thread. Values that cross
   domains (`LanReply`, `LanFailure`, `LanCredential`) are Sendable Swift values. Kotlin framework
   objects are not Sendable. Keep each one inside a single isolation domain. A main-actor
-  `RunSlot` in `LanDiscovery` keeps the engine result, so it never crosses a continuation.
+  `RunSlot` keeps the engine result, so it never crosses a continuation.
+  `RunSlot.cancel` records an atomic cancellation marker synchronously before hopping to main.
+  `set` checks that marker before returning, so an already cancelled caller cancels its new handle.
 - Two unchecked conformances remain, each with a one-line invariant at its declaration in
   `LanSession.swift`. `IosLink` is `@retroactive @unchecked Sendable` because its entry points are
   thread safe in Kotlin and the ObjC header cannot say so. `IosLink.make` binds the identity
@@ -91,8 +93,9 @@ The iOS app entry point is the Xcode project in this directory. Read the root
 ## Tests
 
 `OpenSensorTests` is a hostless Swift Testing bundle. It compiles `App/SensorArchive.swift`,
-`App/LanFraming.swift` and `App/LanPolicy.swift` with `tests/ArchiveChecks.swift` and
-`tests/TransferChecks.swift`, so it needs neither the app host nor the Kotlin framework. Run it
+`App/LanFraming.swift`, `App/LanPolicy.swift` and `App/RunSlot.swift` with `tests/ArchiveChecks.swift`,
+`tests/TransferChecks.swift` and `tests/CancellationChecks.swift`, so it needs neither the app host
+nor the Kotlin framework. Run it
 with `xcodebuild ... -destination 'platform=iOS Simulator,name=<installed iPhone>'
 CODE_SIGNING_ALLOWED=NO test`. `tests/verify-native.sh` runs the same checks on the Mac host.
 Add new socket or archive cases to the shared check files so both runners exercise them. File
