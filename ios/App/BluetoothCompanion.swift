@@ -397,10 +397,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
             pending == nil, operations.isEmpty, !requestingToken
         else { return false }
         let mtu = Int32(peripheral.maximumWriteValueLength(for: .withoutResponse) + 3)
-        let link = SensorLink(overWifi: false, address: identity.device, mtu: mtu) { [weak self] body in
-            // Kotlin sends on the main thread, in request order.
-            MainActor.assumeIsolated { self?.write(body) }
-        }
+        let link = newLink(device: identity.device, mtu: mtu)
         link.identify(station: identity.station, boot: identity.boot)
         self.link = link
         if !responseSubscribed { operations.append(.subscribe(response)) }
@@ -439,9 +436,7 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
             return
         }
         let mtu = Int32(peripheral.maximumWriteValueLength(for: .withoutResponse) + 3)
-        let link = SensorLink(overWifi: false, address: identity.device, mtu: mtu) { [weak self] body in
-            MainActor.assumeIsolated { self?.write(body) }
-        }
+        let link = newLink(device: identity.device, mtu: mtu)
         link.identify(station: identity.station, boot: identity.boot)
         self.link = link
         if !responseSubscribed { operations.append(.subscribe(response)) }
@@ -454,10 +449,11 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
 
     private func commandEnded(_ result: CommandResult, link: SensorLink, automatic: Bool) {
         guard self.link === link else { return }
-        if self.link === link {
-            self.link = nil
-            syncHandle = nil
-        }
+        // Every command takes a fresh link. The ended one stops here, so a drain or an ABORT it still
+        // holds never writes over the next session. Writes it already queued in `operations` still go out.
+        link.linkClosed()
+        self.link = nil
+        syncHandle = nil
         // A final STATUS write may still be queued. Today hears an explicit command outcome
         // after that write completes; automatic maintenance remains silent.
         if !automatic { state.today.commandEnded(result: result) }
@@ -487,6 +483,22 @@ final class BluetoothCompanion: NSObject, @preconcurrency CBCentralManagerDelega
             closeWhenIdle = nil
             closeIdle(id: id)
         }
+    }
+
+    /// A link whose sends reach the sensor only while it is the current link. An ended link's late
+    /// ABORT or CLOSE is dropped, so it never lands in the next session.
+    private func newLink(device: String, mtu: Int32) -> SensorLink {
+        final class Sender { weak var link: SensorLink? }
+        let sender = Sender()
+        let link = SensorLink(overWifi: false, address: device, mtu: mtu) { [weak self] body in
+            // Kotlin sends on the main thread, in request order.
+            MainActor.assumeIsolated {
+                guard let self, let from = sender.link, self.link === from else { return }
+                self.write(body)
+            }
+        }
+        sender.link = link
+        return link
     }
 
     private func write(_ body: Data) {
@@ -864,10 +876,7 @@ extension BluetoothCompanion {
             identity.device == device, link == nil, pending == nil, operations.isEmpty, !requestingToken
         else { return nil }
         let mtu = Int32(peripheral.maximumWriteValueLength(for: .withoutResponse) + 3)
-        let link = SensorLink(overWifi: false, address: identity.device, mtu: mtu) { [weak self] body in
-            // Kotlin sends on the main thread, in request order.
-            MainActor.assumeIsolated { self?.write(body) }
-        }
+        let link = newLink(device: identity.device, mtu: mtu)
         self.link = link
         link.whenClosed { [weak self] in
             // A Collect all step waiting for the link starts once Debug hands it back.
@@ -898,9 +907,7 @@ extension BluetoothCompanion {
             identity.device == device, link == nil, pending == nil, operations.isEmpty, !requestingToken
         else { return nil }
         let mtu = Int32(peripheral.maximumWriteValueLength(for: .withoutResponse) + 3)
-        let link = SensorLink(overWifi: false, address: identity.device, mtu: mtu) { [weak self] body in
-            MainActor.assumeIsolated { self?.write(body) }
-        }
+        let link = newLink(device: identity.device, mtu: mtu)
         self.link = link
         configLink = link
         link.whenClosed { [weak self] in
