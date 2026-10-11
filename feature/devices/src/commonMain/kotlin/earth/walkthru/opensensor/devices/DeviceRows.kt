@@ -42,6 +42,7 @@ import earth.walkthru.opensensor.designsystem.InfoContent
 import earth.walkthru.opensensor.designsystem.SignalBars
 import earth.walkthru.opensensor.designsystem.StatusDot
 import earth.walkthru.opensensor.designsystem.TickingText
+import earth.walkthru.opensensor.designsystem.moodWord
 import earth.walkthru.opensensor.devices.resources.Res
 import earth.walkthru.opensensor.devices.resources.ago_days
 import earth.walkthru.opensensor.devices.resources.ago_hours
@@ -65,12 +66,6 @@ import earth.walkthru.opensensor.devices.resources.month_6
 import earth.walkthru.opensensor.devices.resources.month_7
 import earth.walkthru.opensensor.devices.resources.month_8
 import earth.walkthru.opensensor.devices.resources.month_9
-import earth.walkthru.opensensor.devices.resources.mood_fair_title
-import earth.walkthru.opensensor.devices.resources.mood_fresh_title
-import earth.walkthru.opensensor.devices.resources.mood_hazy_title
-import earth.walkthru.opensensor.devices.resources.mood_poor_title
-import earth.walkthru.opensensor.devices.resources.mood_smoky_title
-import earth.walkthru.opensensor.devices.resources.mood_thick_title
 import earth.walkthru.opensensor.devices.resources.scan_archive_coverage
 import earth.walkthru.opensensor.devices.resources.scan_archive_day
 import earth.walkthru.opensensor.devices.resources.scan_background
@@ -88,7 +83,6 @@ import earth.walkthru.opensensor.devices.resources.scan_tag_paired
 import earth.walkthru.opensensor.devices.resources.scan_unnamed
 import earth.walkthru.opensensor.strings.resources.conn_connecting
 import earth.walkthru.opensensor.strings.resources.conn_ready
-import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import earth.walkthru.opensensor.strings.resources.Res as SharedRes
@@ -235,7 +229,7 @@ private fun ArchiveLine(glance: ArchiveGlance?, level: DetailLevel) {
         val (day, month) = DeviceText.utcDayMonth(dayStart)
         val base = stringResource(
             Res.string.scan_archive_day,
-            stringResource(moodTitle(mood)),
+            moodWord(mood.step),
             metric.label,
             formatFixed(mean.toDouble(), 0),
             metric.unit,
@@ -284,15 +278,6 @@ private val MONTHS = listOf(
     Res.string.month_5, Res.string.month_6, Res.string.month_7, Res.string.month_8,
     Res.string.month_9, Res.string.month_10, Res.string.month_11, Res.string.month_12,
 )
-
-private fun moodTitle(mood: AirMood): StringResource = when (mood) {
-    AirMood.FRESH -> Res.string.mood_fresh_title
-    AirMood.FAIR -> Res.string.mood_fair_title
-    AirMood.HAZY -> Res.string.mood_hazy_title
-    AirMood.POOR -> Res.string.mood_poor_title
-    AirMood.SMOKY -> Res.string.mood_smoky_title
-    AirMood.THICK -> Res.string.mood_thick_title
-}
 
 /** "N ago" from the shared catalogue, for leaf `TickingText` lambdas. */
 @Composable

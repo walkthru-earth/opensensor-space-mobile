@@ -61,6 +61,7 @@ import earth.walkthru.opensensor.designsystem.StatLine
 import earth.walkthru.opensensor.designsystem.StatusDot
 import earth.walkthru.opensensor.designsystem.TickingText
 import earth.walkthru.opensensor.designsystem.WarningNote
+import earth.walkthru.opensensor.designsystem.moodWord
 import earth.walkthru.opensensor.designsystem.nowEpochMillis
 import earth.walkthru.opensensor.designsystem.peacockExpressionFor
 import earth.walkthru.opensensor.designsystem.rememberNowMillis
@@ -109,7 +110,6 @@ import earth.walkthru.opensensor.today.resources.fresh_none
 import earth.walkthru.opensensor.today.resources.fresh_stale
 import earth.walkthru.opensensor.today.resources.fresh_updated
 import earth.walkthru.opensensor.today.resources.info_now_body
-import earth.walkthru.opensensor.today.resources.mood_none
 import earth.walkthru.opensensor.today.resources.now_last_reading
 import earth.walkthru.opensensor.today.resources.now_right_now
 import earth.walkthru.opensensor.today.resources.now_sample_number
@@ -792,4 +792,4 @@ internal fun DeviceInfoCard(
 
 /** The mood face's accessible name when there is no reading. */
 @Composable
-internal fun noMoodText(): String = stringResource(Res.string.mood_none)
+internal fun noMoodText(): String = moodWord(null)

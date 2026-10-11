@@ -69,12 +69,6 @@
     <string name="now_no_reading">No reading yet</string>
     <string name="now_waiting">Waiting for a reading…</string>
     <string name="now_sample_number">sample %1$d</string>
-    <string name="mood_fresh_title">Fresh air</string>
-    <string name="mood_fair_title">Fair</string>
-    <string name="mood_hazy_title">Getting hazy</string>
-    <string name="mood_poor_title">Poor</string>
-    <string name="mood_smoky_title">Smoky</string>
-    <string name="mood_thick_title">Thick smoke</string>
     <string name="mood_fresh_advice">Within the WHO guideline. Enjoy it.</string>
     <string name="mood_fair_advice">A little above the WHO guideline. Fine for most people.</string>
     <string name="mood_hazy_advice">Sensitive people may notice it. Open windows when it drops.</string>
@@ -87,7 +81,6 @@
     <string name="mood_poor_like">Like a city on a smoggy day</string>
     <string name="mood_smoky_like">Like standing downwind of a barbecue</string>
     <string name="mood_thick_like">Like a room where someone is smoking</string>
-    <string name="mood_none">No reading</string>
     <string name="pms_absent_title">No particle sensor</string>
     <string name="pms_warming_title">Warming up</string>
     <string name="pms_stale_title">Reading is old</string>

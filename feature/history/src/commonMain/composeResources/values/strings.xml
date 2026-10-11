@@ -66,13 +66,6 @@
     <string name="chart_mean_daily">Bars are daily means.</string>
     <string name="chart_mean_weekly">Bars are weekly means.</string>
     <string name="chart_guideline_note">The dashed line is the WHO 24 hour guideline.</string>
-    <string name="mood_fresh_title">Fresh air</string>
-    <string name="mood_fair_title">Fair</string>
-    <string name="mood_hazy_title">Getting hazy</string>
-    <string name="mood_poor_title">Poor</string>
-    <string name="mood_smoky_title">Smoky</string>
-    <string name="mood_thick_title">Thick smoke</string>
-    <string name="mood_none">No reading</string>
     <string name="who_step_guideline">Within the WHO guideline</string>
     <string name="who_step_it4">Within WHO interim target 4</string>
     <string name="who_step_it3">Within WHO interim target 3</string>

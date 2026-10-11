@@ -44,4 +44,14 @@ class SimpleCopyTest {
         val found = simpleKeys().filter { (_, text) -> banned.any { it.containsMatchIn(text) } }
         if (found.isNotEmpty()) fail("Simple copy names the guideline body $found")
     }
+
+    /** The mood words live once, in the design system. A copy elsewhere drifts, as iOS once did. */
+    @Test
+    fun moodWordsLiveOnlyInTheDesignSystem() {
+        val duplicate = Regex("""mood_\w+_title|mood_none""")
+        val found = Catalogues.all()
+            .filter { !Catalogues.relative(it).startsWith("ui/designsystem/") }
+            .flatMap { file -> Catalogues.parse(file).keys.filter { duplicate.matches(it) }.map { "${Catalogues.relative(file)} $it" } }
+        if (found.isNotEmpty()) fail("Mood words duplicated outside the design system $found")
+    }
 }

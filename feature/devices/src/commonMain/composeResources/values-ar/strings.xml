@@ -74,13 +74,6 @@
     <string name="ago_hours">قبل %1$d س</string>
     <string name="ago_days">قبل %1$d يوم</string>
 
-    <string name="mood_fresh_title">هواء نقي</string>
-    <string name="mood_fair_title">مقبول</string>
-    <string name="mood_hazy_title">يميل إلى الضبابية</string>
-    <string name="mood_poor_title">سيئ</string>
-    <string name="mood_smoky_title">دخاني</string>
-    <string name="mood_thick_title">دخان كثيف</string>
-
     <string name="month_1">يناير</string>
     <string name="month_2">فبراير</string>
     <string name="month_3">مارس</string>

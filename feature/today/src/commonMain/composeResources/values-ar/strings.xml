@@ -73,12 +73,6 @@
     <string name="now_no_reading">لا قراءة بعد</string>
     <string name="now_waiting">في انتظار قراءة…</string>
     <string name="now_sample_number">العيّنة %1$d</string>
-    <string name="mood_fresh_title">هواء نقي</string>
-    <string name="mood_fair_title">مقبول</string>
-    <string name="mood_hazy_title">يميل إلى الضبابية</string>
-    <string name="mood_poor_title">سيئ</string>
-    <string name="mood_smoky_title">دخاني</string>
-    <string name="mood_thick_title">دخان كثيف</string>
     <string name="mood_fresh_advice">ضمن إرشاد منظمة الصحة العالمية. استمتع به.</string>
     <string name="mood_fair_advice">أعلى قليلًا من إرشاد منظمة الصحة العالمية. مناسب لمعظم الناس.</string>
     <string name="mood_hazy_advice">قد يلاحظه الأشخاص الحساسون. افتح النوافذ عندما ينخفض.</string>
@@ -91,7 +85,6 @@
     <string name="mood_poor_like">مثل مدينة في يوم مليء بالضباب الدخاني</string>
     <string name="mood_smoky_like">مثل الوقوف في اتجاه دخان الشواء</string>
     <string name="mood_thick_like">مثل غرفة يدخّن فيها أحدهم</string>
-    <string name="mood_none">لا توجد قراءة</string>
     <string name="pms_absent_title">لا يوجد مستشعر جسيمات</string>
     <string name="pms_warming_title">جارٍ الإحماء</string>
     <string name="pms_stale_title">القراءة قديمة</string>

@@ -45,6 +45,7 @@ import earth.walkthru.aqsync.units.formatFixed
 import earth.walkthru.aqsync.units.formatPm
 import earth.walkthru.opensensor.designsystem.AppIcons
 import earth.walkthru.opensensor.designsystem.CardShape
+import earth.walkthru.opensensor.designsystem.moodWord
 import earth.walkthru.opensensor.device.deviceSettingsLabel
 import earth.walkthru.opensensor.permissions.PermissionFlow
 import earth.walkthru.opensensor.permissions.SettingsLink
@@ -137,7 +138,7 @@ internal fun CompanionScreen(state: CompanionState, title: String?, onBack: () -
                                     // The value and its mood read as one element, with the card's 12 dp gap kept.
                                     is NowReading.Reading -> Column(Modifier.semantics(mergeDescendants = true) {}, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                         Text(stringResource(Res.string.batch_value, formatPm(reading.pm25)), style = MaterialTheme.typography.displaySmall)
-                                        Text(stringResource(Res.string.companion_pm25_mood, reading.mood.title))
+                                        Text(stringResource(Res.string.companion_pm25_mood, moodWord(reading.mood.step)))
                                     }
                                     is NowReading.SensorNotReady -> Text(reading.hint)
                                     NowReading.Waiting -> Text(stringResource(Res.string.now_waiting))
@@ -269,7 +270,7 @@ internal fun CompanionScreen(state: CompanionState, title: String?, onBack: () -
                             when (val reading = state.lanReadings[name] ?: NowReading.Waiting) {
                                 is NowReading.Reading -> {
                                     Text(stringResource(Res.string.batch_value, formatPm(reading.pm25)), style = MaterialTheme.typography.headlineMedium)
-                                    Text(stringResource(Res.string.companion_pm25_mood, reading.mood.title))
+                                    Text(stringResource(Res.string.companion_pm25_mood, moodWord(reading.mood.step)))
                                 }
                                 is NowReading.SensorNotReady -> Text(reading.hint)
                                 NowReading.Waiting -> Text(stringResource(Res.string.now_waiting))

@@ -78,13 +78,6 @@
     <string name="chart_mean_daily">الأعمدة متوسطات يومية.</string>
     <string name="chart_mean_weekly">الأعمدة متوسطات أسبوعية.</string>
     <string name="chart_guideline_note">الخط المتقطع هو إرشاد منظمة الصحة العالمية لمدة 24 ساعة.</string>
-    <string name="mood_fresh_title">هواء نقي</string>
-    <string name="mood_fair_title">مقبول</string>
-    <string name="mood_hazy_title">يميل إلى الضبابية</string>
-    <string name="mood_poor_title">سيئ</string>
-    <string name="mood_smoky_title">دخاني</string>
-    <string name="mood_thick_title">دخان كثيف</string>
-    <string name="mood_none">لا توجد قراءة</string>
     <string name="who_step_guideline">ضمن إرشاد منظمة الصحة العالمية</string>
     <string name="who_step_it4">ضمن الهدف المرحلي 4 لمنظمة الصحة العالمية</string>
     <string name="who_step_it3">ضمن الهدف المرحلي 3 لمنظمة الصحة العالمية</string>
