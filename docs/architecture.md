@@ -76,7 +76,7 @@ The graph above is today's code. [platform-parity-plan.md](platform-parity-plan.
 the graph below, where every rule that must give the same answer on both phones is shared and
 platform code only adapts OS services. `:core:sync`, `:core:archive`, `:core:settings` and
 `:feature:settings` exist. The shared sync engine is adopted on both platforms. Room KMP backing remains planned.
-Android uses the shared collection controller. iOS has it in `SensorCollections`, and routing
+Android uses the shared collection controller. iOS has it in `SensorCollections`, built only by tests so far, and routing
 the native entry points into it remains
 [#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81). iOS Core Bluetooth
 runs on the `BlePhysicalLink` serial queue. `:core:model` (device families and metrics

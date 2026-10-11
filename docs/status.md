@@ -49,7 +49,7 @@ simulator, launched in Arabic with the Cairo time zone, Discover drew القاه
 الأقصر joined and right to left. Simulator only. Arabic labels on an iPhone set to Arabic, and
 Discover Back returning an open sheet to peek, still need a phone check.
 
-## 2026-10-11 — latest main installed on iPad and Android
+## 2026-10-11, latest main installed on iPad and Android
 
 Fetched `walkthru-earth/opensensor-space-mobile` main at `5604fb3e` and built
 from a detached worktree, preserving the existing checkout and its local notes.
@@ -73,7 +73,7 @@ Build/install/launch evidence is retained under ignored
 installation and launch only; BLE, LAN and file transfer were not exercised.
 No source changes or commit were made, and the full `verify` gate was not rerun.
 
-## 2026-10-10 — latest checkout installed and launched on iPhone
+## 2026-10-10, latest checkout installed and launched on iPhone
 
 Xcode 27.0 built the signed Debug device app from mobile `bed7949`, which includes
 the fresh archive snapshot fix. Strict/deep signature verification passed. The
@@ -85,7 +85,7 @@ Build, install and launch evidence is retained under ignored
 `ios/build/DeviceInstall/evidence-bed7949/`. This confirms device installation
 and launch; BLE, LAN and file transfer behavior were not exercised in this run.
 
-## 2026-10-10 — sync stability investigation and Android follow-up
+## 2026-10-10, sync stability investigation and Android follow-up
 
 Read-only review of mobile `bed7949` and firmware `a53d18e` identified Android
 preparation protection/resume gaps and a canceled large-LIST reader starvation

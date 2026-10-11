@@ -76,14 +76,14 @@ The iOS app entry point is the Xcode project in this directory. Read the root
   `DispatchSourceTimer` handlers run on that queue and enter with `assumeIsolated`. Owners learn
   about pushes and closure through the ordered `events` stream. `close()` is nonisolated.
 - File sync runs in the shared Kotlin engine (`SensorSync`, and `SensorCollections` for the shared
-  per-device controller, whose `IosLinkProvider` dials through Swift). Swift only moves bytes through the
+  per-device controller over `IosLinkProvider`, built only by tests until #81 routes Swift into it). Swift only moves bytes through the
   connection's one `IosLink` and receives progress and the typed result on the main thread. Values that cross
   domains (`LanReply`, `LanFailure`, `LanCredential`) are Sendable Swift values. Kotlin framework
   objects are not Sendable. Keep each one inside a single isolation domain. A main-actor
   `RunSlot` keeps the engine result, so it never crosses a continuation.
   `RunSlot.cancel` records an atomic cancellation marker synchronously before hopping to main.
   `set` checks that marker before returning, so an already cancelled caller cancels its new handle.
-- Two unchecked conformances remain in `LanSession.swift`, each with a one-line invariant at its
+- Three unchecked conformances remain, two in `LanSession.swift` and one in `BlePhysicalLink.swift`, each with a one-line invariant at its
   declaration. `IosLink` is `@retroactive @unchecked Sendable` because its entry points are
   thread safe in Kotlin and the ObjC header cannot say so. `IosLink.make` binds the identity
   before the link is shared, and Kotlin checks the one-time atomic binding in every build.

@@ -12,7 +12,7 @@ history, D settings, background and permissions, E build, tests and docs).
 The 2026-10-09 baseline and wave tables below are historical planning, not current ownership.
 Both platforms now use shared `LinkSession`, `SyncEngine` and `ArchiveCollector`. Android
 also adopts `CollectionController` through `DeviceFacade`. iOS has it in `SensorCollections`,
-and routing the native entry points into it remains
+built only by tests so far, and routing the native entry points into it remains
 [#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81). iOS Core Bluetooth
 runs on the `BlePhysicalLink` serial queue.
 Settings and the feature screens are shared, and iOS persists history tiers. Room KMP
