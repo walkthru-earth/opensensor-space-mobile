@@ -6,6 +6,7 @@ import earth.walkthru.aqsync.archive.ArchiveRecord
 import earth.walkthru.aqsync.archive.ArchiveStore
 import earth.walkthru.aqsync.archive.ExportEntry
 import earth.walkthru.aqsync.archive.ExportRun
+import earth.walkthru.aqsync.archive.ExportSink
 import earth.walkthru.aqsync.archive.ExportSpace
 import earth.walkthru.aqsync.archive.StagedFile
 import earth.walkthru.aqsync.data.sync.FileSyncState
@@ -48,6 +49,13 @@ interface ExportPresenter {
     suspend fun share(files: List<StagedFile>, kind: ShareKind): Boolean
 
     suspend fun save(file: StagedFile): Boolean
+
+    /**
+     * Saves a zip named [name] by handing [write] the picked document as a sink, so nothing is staged
+     * first. Returns false when the picker was dismissed, true once written. Null, the default, means
+     * the platform saves a staged copy through [save] instead (iOS exports an existing file URL).
+     */
+    suspend fun saveStreaming(name: String, write: suspend (ExportSink) -> Unit): Boolean? = null
 }
 
 /** One-off notices for the snackbar. */
@@ -70,9 +78,9 @@ data class FilesState(
 
 /**
  * The archive side of the Files screen, the same on Android and iOS. Lists the verified files and
- * stages every export through `:core:archive` ([ArchiveExport]) into a fresh run of [space]. Exports
- * only read the archive, a staged copy is the only thing they write, and the run is removed once the
- * sheet closed (B7).
+ * stages every share through `:core:archive` ([ArchiveExport]) into a fresh run of [space]. A zip save
+ * streams into the picked document when the platform allows ([ExportPresenter.saveStreaming]), else it
+ * is staged too. Exports only read the archive, and a staged run is removed once the sheet closed (B7).
  */
 class FilesController(
     private val scope: CoroutineScope,
@@ -127,9 +135,18 @@ class FilesController(
         present(it, listOf(zip), ShareKind.ARCHIVE)
     }
 
-    fun saveZip(presenter: ExportPresenter) = run(presenter) {
-        val zip = archiveZip() ?: return@run null
-        removingRun(zip.run) { it.save(zip) }
+    /**
+     * Streams the zip straight into the picked document where the platform can, so a save needs no
+     * cache copy as large as the archive. Otherwise stages it and saves the copy.
+     */
+    fun saveZip(presenter: ExportPresenter) = run(presenter) { p ->
+        val entries = withContext(io) { ArchiveExport.archiveEntries(store, state.value.shown, now()) }
+        if (entries.isEmpty()) return@run null
+        val name = ArchiveExport.archiveZipName(now())
+        val streamed = p.saveStreaming(name) { sink -> withContext(io) { ArchiveExport.writeZip(sink, entries) } }
+        if (streamed != null) return@run streamed
+        val zip = withContext(io) { ArchiveExport.stageZip(space, entries, name) }
+        removingRun(zip.run) { p.save(zip) }
     }
 
     fun shareDaily(presenter: ExportPresenter) = run(presenter) {
