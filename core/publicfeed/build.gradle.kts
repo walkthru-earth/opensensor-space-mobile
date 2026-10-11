@@ -75,11 +75,17 @@ kotlin {
 // the app ships are the files the tests check. `SIMCTL_CHILD_` variables reach the simulator process
 // without the prefix.
 val sampleRoot = rootProject.file("feature/discover/src/commonMain/composeResources/files/discover-sample")
+// Test only fixtures of this module (tools/discover-fixture/make_openaq_fixture.py), read the same way.
+val fixtureRoot = layout.projectDirectory.dir("src/commonTest/fixtures").asFile
 tasks.withType<Test>().configureEach {
     systemProperty("discover.sample.root", sampleRoot.absolutePath)
+    systemProperty("publicfeed.fixture.root", fixtureRoot.absolutePath)
     inputs.dir(sampleRoot).withPropertyName("discoverSample")
+    inputs.dir(fixtureRoot).withPropertyName("publicfeedFixtures")
 }
 tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeSimulatorTest>().configureEach {
     environment("SIMCTL_CHILD_DISCOVER_SAMPLE_ROOT", sampleRoot.absolutePath)
+    environment("SIMCTL_CHILD_PUBLICFEED_FIXTURE_ROOT", fixtureRoot.absolutePath)
     inputs.dir(sampleRoot).withPropertyName("discoverSample")
+    inputs.dir(fixtureRoot).withPropertyName("publicfeedFixtures")
 }
