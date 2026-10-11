@@ -9,7 +9,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
- * Keeps the `derived/v1` day files under a byte quota (#61). It runs after each derive pass and at
+ * Keeps the `derived/v1` day files and persisted tiers under a byte quota (#61). It runs after each derive pass and at
  * janitor time, and evicts day files least recently written first until the derived root is under
  * the quota. Manifests stay, so a derive pass can tell an evicted day from a stale one and does not
  * rebuild it. The day is rebuilt when something reads it.
@@ -41,7 +41,7 @@ class QuotaEnforcer(
         var report = Report(bytesBefore = before, bytesAfter = before)
         if (before <= quotaBytes) return report
         // Least recently written first. The path breaks ties so the order is stable.
-        val candidates = files.filter { it.path.endsWith(DAY_SUFFIX) }.sortedWith(compareBy({ it.modifiedEpochMs }, { it.path }))
+        val candidates = files.filter { it.path.endsWith(DAY_SUFFIX) || it.path.endsWith(TIER_SUFFIX) }.sortedWith(compareBy({ it.modifiedEpochMs }, { it.path }))
         var current = before
         for (entry in candidates) {
             if (current <= quotaBytes) break
@@ -65,6 +65,7 @@ class QuotaEnforcer(
 
     private companion object {
         const val DAY_SUFFIX = ".parquet"
+        const val TIER_SUFFIX = ".tiers"
     }
 }
 
@@ -90,7 +91,7 @@ class DerivedQuota(
 
     suspend fun enforce(): QuotaEnforcer.Report = evict(clearing = false)
 
-    /** Evicts every derived day file, the Settings clear action. Manifests stay, so a read rebuilds. */
+    /** Evicts every derived day file and persisted tier, the Settings clear action. Manifests stay, so a read rebuilds. */
     suspend fun clear(): QuotaEnforcer.Report = evict(clearing = true)
 
     /**

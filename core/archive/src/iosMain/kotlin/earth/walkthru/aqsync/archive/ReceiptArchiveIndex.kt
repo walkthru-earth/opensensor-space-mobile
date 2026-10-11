@@ -44,12 +44,18 @@ class ReceiptArchiveIndex(
 ) : ArchiveIndex {
     private val mutex = Mutex()
 
+    /** Authoritative keyed records, read and changed only under [mutex]. */
+    private val records = LinkedHashMap<ArchiveKey, ArchiveRecord>()
+
     /** Replaced only under [mutex]. Readers take the current value without the lock. */
     private val rows = MutableStateFlow<Snapshot?>(null)
 
     private suspend fun loaded(): Snapshot = rows.value ?: mutex.withLock { loadLocked() }
 
-    private suspend fun loadLocked(): Snapshot = rows.value ?: withContext(io) { Snapshot.of(load()) }.also { rows.value = it }
+    private suspend fun loadLocked(): Snapshot = rows.value ?: withContext(io) { load() }.let { loaded ->
+        loaded.forEach { records[it.key] = it }
+        Snapshot.of(records.values.toList()).also { rows.value = it }
+    }
 
     private fun load(): List<ArchiveRecord> = IosFiles.walk(finalRoot).mapNotNull { relative ->
         if (!relative.endsWith(ArchiveLayout.LEGACY_RECEIPT_SUFFIX)) return@mapNotNull null
@@ -79,8 +85,11 @@ class ReceiptArchiveIndex(
 
     override fun observeLatestTimed(): Flow<Map<String, Long>> = observe { it.latestTimed }.distinctUntilChanged()
 
-    /** A binary search of the published snapshot, without the lock, so a read never waits for a receipt write. */
-    override suspend fun get(key: ArchiveKey): ArchiveRecord? = loaded()[key]
+    /** Expected O(1) keyed lookup. The lock prevents observing an unfinished durable receipt write. */
+    override suspend fun get(key: ArchiveKey): ArchiveRecord? = mutex.withLock {
+        loadLocked()
+        records[key]
+    }
 
     override suspend fun put(record: ArchiveRecord) {
         mutex.withLock { putLocked(loadLocked(), record) }
@@ -89,7 +98,7 @@ class ReceiptArchiveIndex(
     /** Writes the receipt with [AtomicFiles.createNoReplace] under the lock, so an existing receipt always wins. */
     override suspend fun putIfAbsent(record: ArchiveRecord): Boolean = mutex.withLock {
         val current = loadLocked()
-        if (current[record.key] != null) return@withLock false
+        if (records.containsKey(record.key)) return@withLock false
         val written = withContext(io) {
             try {
                 atomic.createNoReplace(receiptPath(record.key), encode(record).encodeToByteArray(), StorageClass.Durable)
@@ -98,7 +107,10 @@ class ReceiptArchiveIndex(
                 false
             }
         }
-        if (written) rows.value = current.with(record)
+        if (written) {
+            records[record.key] = record
+            rows.value = current.with(record)
+        }
         written
     }
 
@@ -106,7 +118,7 @@ class ReceiptArchiveIndex(
     override suspend fun update(key: ArchiveKey, transform: (ArchiveRecord) -> ArchiveRecord) {
         mutex.withLock {
             val current = loadLocked()
-            val latest = current[key] ?: return@withLock
+            val latest = records[key] ?: return@withLock
             putLocked(current, transform(latest))
         }
     }
@@ -119,6 +131,7 @@ class ReceiptArchiveIndex(
             // AtomicFiles creates any new directory and syncs it into its parent.
             atomic.writeAtomically(path, encode(record).encodeToByteArray(), StorageClass.Durable)
         }
+        records[record.key] = record
         rows.value = current.with(record)
     }
 
@@ -130,6 +143,7 @@ class ReceiptArchiveIndex(
                 val path = receiptPath(key)
                 if (IosFiles.kind(path) == Kind.FILE) IosFiles.remove(path)
             }
+            records.remove(key)
             rows.value = current.without(key)
         }
     }
@@ -148,10 +162,9 @@ class ReceiptArchiveIndex(
 
     /**
      * One immutable view of the receipts, sorted by name, then station, and never changed once
-     * published, so readers need no lock. A lookup is a binary search, O(log N). A write publishes a
-     * new snapshot with one O(log N) search and one array copy, no sort and no filter. A hash map
-     * would make lookups O(1), but a lock-free read then needs a copy of the whole map per write (no
-     * concurrent map in common Kotlin/Native), which costs more time and garbage than the array copy.
+     * published, so flow readers need no lock. Keyed API reads use [records]. Publishing a changed
+     * sorted snapshot needs one binary search and an O(N) array copy, without sorting every emission.
+     * That publication cost is separate from the expected O(1) keyed map mutation.
      */
     internal class Snapshot private constructor(private val sorted: Array<ArchiveRecord>, val neverIndexed: Int) {
         val all: List<ArchiveRecord> = sorted.asList()

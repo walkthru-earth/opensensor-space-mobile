@@ -121,6 +121,11 @@ class PlanFlowTest {
             h.info.value = DeviceInfo(station = "station-b")
             assertEquals(FileSyncState.SYNCED, awaitItem()!!.entries.single().state)
             assertEquals(listOf(station, "station-b"), h.observed)
+            val plans = h.plans
+            h.archive(station).value = listOf(ArchivedFileIdentity(station, name, size, 8))
+            runCurrent()
+            expectNoEvents()
+            assertEquals(plans, h.plans)
             h.info.value = null
             assertNull(awaitItem())
             cancelAndIgnoreRemainingEvents()
@@ -174,6 +179,33 @@ class PlanFlowTest {
             assertEquals(1L, awaitItem().bytesDone)
             assertEquals(10L, awaitItem().bytesDone)
             awaitComplete()
+        }
+    }
+
+    @Test
+    fun `moving to a new file emits immediately and cancels the old pending tick`() = runTest {
+        val progress = MutableStateFlow(SyncProgress(running = true))
+        progress.sampleTicks(PROGRESS_SAMPLE_MS).test {
+            awaitItem()
+            progress.value = progress.value.copy(current = FileProgress(name, 10, size, 0), bytesDone = 10)
+            assertEquals(name, awaitItem().current!!.name)
+            progress.value = progress.value.copy(current = FileProgress(name, 20, size, 0), bytesDone = 20)
+            runCurrent()
+            expectNoEvents()
+
+            progress.value = progress.value.copy(current = FileProgress(second, 5, size, 0), bytesDone = 25)
+            val next = awaitItem()
+            assertEquals(second, next.current!!.name)
+            assertEquals(5L, next.current!!.bytesDone)
+            advanceTimeBy(PROGRESS_SAMPLE_MS + 1)
+            expectNoEvents()
+
+            progress.value = progress.value.copy(current = FileProgress(second, 15, size, 0), bytesDone = 35)
+            advanceTimeBy(PROGRESS_SAMPLE_MS - 1)
+            expectNoEvents()
+            advanceTimeBy(2)
+            assertEquals(15L, awaitItem().current!!.bytesDone)
+            cancelAndIgnoreRemainingEvents()
         }
     }
 

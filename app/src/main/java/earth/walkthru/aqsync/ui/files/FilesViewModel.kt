@@ -220,8 +220,13 @@ class FilesViewModel @AssistedInject constructor(
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FilesUiState())
 
-    /** The listing, its plan and the running transfer, read only by the shared device file list. */
-    val deviceFiles: StateFlow<DeviceFiles> = combine(repository.connectionState, repository.manifest, repository.plan, repository.sync) { connection, manifest, plan, sync ->
+    /** Transfer bytes are collected inside the shared progress card, without invalidating the screen. */
+    val syncProgress: StateFlow<SyncProgress> = repository.sync
+
+    private val syncControls = repository.sync.map { SyncProgress(running = it.running, outcomes = it.outcomes) }.distinctUntilChanged()
+
+    /** The listing, sampled plan and sync control flags, read by the shared device file list. */
+    val deviceFiles: StateFlow<DeviceFiles> = combine(repository.connectionState, repository.manifest, repository.plan, syncControls) { connection, manifest, plan, sync ->
         DeviceFiles(ready = connection.isReady, manifest = manifest, plan = plan, sync = sync)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DeviceFiles(ready = false, manifest = ManifestState.Idle, plan = null, sync = SyncProgress()))
 

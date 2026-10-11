@@ -86,9 +86,10 @@ Means over a span are weighted by valid rows — never averages of averages.
 
 `derived/v1/<station>/day=YYYY-MM-DD.parquet` + `.manifest.json` on both platforms, in the OS cache
 directory under the derived quota (`docs/data-model.md`, Quotas and memory pressure), written by the shared
-`ParquetWriter`. The builder opens one source at a time, decodes what the day needs and closes it before
-the next, so a day never holds two source files open (#61). Rows: every UTC row of the day from the verified files, time-ordered,
-de-duplicated; **one row group per UTC hour**. Columns: union of sources (v1 files leave the four v2
+`ParquetWriter`. One shared `DayPass` opens each source once, feeds primitive decoded columns to the tiers and
+daily builder, and closes it before the next. Row keys use a 64-bit hash with exact comparison
+of the identity fields on collisions. Primitive timeline arrays preserve source order on ties. Every UTC row of the day from the verified files is time-ordered and de-duplicated, with
+**one row group per UTC hour**. Columns: union of sources (v1 files leave the four v2
 columns null) + `source_file_index` (INT32 into the manifest's `sources`) +
 `event_time_utc_estimated_ns` for estimated rows (with `event_time_utc_ns` null). **No `station_id`
 string column** (deviation from the evaluation) — stays flat numeric so our reader reads it back;
@@ -99,9 +100,10 @@ station is in the path and metadata. Metadata: invariant device keys + `derived_
 PyArrow 25 + DuckDB 1.5.5 (`TIMESTAMPTZ`, range pruning, `time_bucket`).
 
 Android commits through `DailyDerivedBuilder`; iOS uses `IosDailyDerivedStore`. Both use the
-same row-selection, deduplication and UTC partition algorithm. Temporary output is flushed,
-the footer is read back, and the old cache manifest is invalidated before replacement. A
-missing manifest after interruption causes a rebuild from immutable raw files. iOS rebuilds
+same row-selection, deduplication and UTC partition algorithm. The writer provides row and column metadata directly. Temporary output is flushed,
+and the old cache manifest is invalidated before replacement. A matching manifest and an
+opened file descriptor are acquired under the same short lock as replacement. A missing or
+stale manifest sends chart reads to immutable raw files. iOS rebuilds
 at startup, after index changes and after new clock receipts, without a History screen visit.
 
 ### When a day is rebuilt
@@ -160,7 +162,7 @@ show neutral metric cards unless their dictionary names a published scale. See
 
 | Range | Source | Slot | Points |
 | --- | --- | --- | --- |
-| Day | rows via `withUtcBetween` + reader (3 columns), binned to minutes above `RAW_POINT_CAP` 3 000 | 1 elapsed h → **23/24/25 columns** + matching ring on daylight saving transitions | re-read keyed on `(name, crc32, timeline start)` list, not every Room write |
+| Day | current derived UTC-day files through a pruned scan, raw files on a cache miss, binned to minutes above `RAW_POINT_CAP` 3 000 | 1 elapsed h → **23/24/25 columns** + matching ring on daylight saving transitions | re-read keyed on `(name, crc32, timeline start)` list, not every Room write |
 | Week | `MIN15` tier | 1 h | |
 | Month | `HOUR` tier | 1 day | + calendar heatmap |
 | Year | `HOUR` tier | 7 local days | + local-day calendar heatmap |
@@ -209,7 +211,7 @@ the user pages back, and opens on the last local day with readings.
 | --- | --- | --- |
 | Host | `HistoryViewModel` (Hilt, assisted by address) | `HistoryHolder` ViewModel in `AppRoot` |
 | Index | Room `archived_file` (`RoomArchiveIndex`) | `.verified.json` receipts (`ReceiptArchiveIndex`), one instance shared with the sync runner (`IosArchive`) |
-| Tiers | Room `metric_bucket` (`RoomHistoryTiers`) | computed in memory from the archive (`ArchiveHistoryTiers`) |
+| Tiers | Room `metric_bucket` (`RoomHistoryTiers`) | persisted signature-gated sidecars from the shared day pass (`ArchiveHistoryTiers`) |
 | Current station | the known device's station | the archived station with the latest reading |
 | Chips | the device's authenticated station epochs | every archived station, oldest latest reading first |
 | Index repair | `HistoryIndexer.backfillAll` once per process from `AqSyncApplication`, and after each sync | `ArchiveIndexRepair.repairWhenWaiting` from `IosArchive.startIndexRepair`, at launch and whenever a receipt waits for its index. Changes during a pass are conflated, and passes repeat until no record is waiting |
@@ -237,3 +239,27 @@ controller over a fake archive. It runs as the Android host test and on the iOS 
 | `HistoryRepository.observe` | History and Today (local-day fold), `HistoryRepositoryTest` |
 | `:feature:history` (`HistoryController`, charts, strings) | History on both apps, the Files chart by file on Android, `feature/history/src/commonTest` |
 | `ParquetWriter` (in parquet.md) | daily file layout → re-run `tools/validate_parquet_samples.py` |
+
+## Incremental history and flow inputs
+
+Android plans observe only name, size and CRC for the connected station. History index updates
+and another station cannot rebuild a plan. Byte progress updates only the sampled overlay,
+and the Files progress card collects its own flow. Charts collect station rows while visible.
+Scan summaries and index repair use aggregate queries instead of materializing every receipt.
+
+Android groups one archive listing into UTC station-days and moves decoding to
+`Dispatchers.Default.limitedParallelism(2)`. Daily cache write failures keep valid tiers and
+leave the day eligible for retry. Sources are chosen by real first UTC and name consistently
+in tiers, daily output and raw chart fallback, including fractional chart windows. This fixes
+previous disagreement when duplicate identities carried conflicting payloads.
+
+iOS persists versioned tier sidecars beside daily files. Its three tier observers share a
+station snapshot containing summaries, while full buckets stay in the bounded LRU or disk
+store. Idle replay expires after five seconds. Critical memory pressure drops cached buckets.
+Sidecars participate in quota eviction and Clear History. A failed source pass is retried
+rather than persisted under a complete source signature. Receipt lookups and mutations use a
+keyed map. Publishing a pre-sorted immutable snapshot still requires an O(N) array copy.
+
+The host benchmark and its fixed synthetic corpus are documented in
+[`tools/history-benchmark`](../tools/history-benchmark/README.md). Its timing and allocation
+results are host evidence. Real phone traces and cold-open latency require separate runs.

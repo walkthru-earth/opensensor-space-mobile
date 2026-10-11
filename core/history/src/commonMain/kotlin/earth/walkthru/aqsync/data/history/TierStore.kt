@@ -18,6 +18,13 @@ interface TierStore {
     suspend fun retain(station: String, days: Set<Long>)
 
     companion object {
+        /** The shared pass's buckets in the form used on disk and in the tier reader. */
+        fun fromBuckets(buckets: List<Bucket>): DayTiers = buckets.groupBy { it.resolution }.mapValues { (_, list) ->
+            val perMetric = HashMap<String, MutableList<TierBucket>>()
+            for (b in list) for ((id, t) in b.tierBuckets()) perMetric.getOrPut(id) { ArrayList() } += t
+            perMetric
+        }
+
         /** Keeps nothing, every process rebuilds its tiers from the archive. */
         val NONE: TierStore = object : TierStore {
             override suspend fun load(station: String, epochDay: Long, signature: String): DayTiers? = null
@@ -32,7 +39,7 @@ interface TierStore {
  * buckets as fixed width fields, little endian. About 40 bytes a bucket.
  */
 object TierCodec {
-    private const val VERSION = 1
+    private const val VERSION = 2
 
     fun encode(signature: String, tiers: DayTiers): ByteArray {
         val out = Out()
@@ -67,12 +74,12 @@ object TierCodec {
         } else {
             val resolutions = Resolution.entries
             val tiers = LinkedHashMap<Resolution, Map<String, List<TierBucket>>>()
-            repeat(inp.count()) {
+            repeat(inp.count(8)) {
                 val resolution = resolutions[inp.int()]
                 val perMetric = LinkedHashMap<String, List<TierBucket>>()
-                repeat(inp.count()) {
+                repeat(inp.count(8)) {
                     val metric = inp.string()
-                    perMetric[metric] = List(inp.count()) {
+                    perMetric[metric] = List(inp.count(32)) {
                         TierBucket(inp.long(), inp.int(), inp.int(), inp.int(), Float.fromBits(inp.int()), Float.fromBits(inp.int()), Float.fromBits(inp.int()))
                     }
                 }
@@ -134,7 +141,7 @@ object TierCodec {
         }
 
         /** A non-negative count no larger than the bytes left, so a damaged file cannot ask for a huge list. */
-        fun count(): Int = int().also { require(it in 0..remaining) }
+        fun count(bytesPerItem: Int = 1): Int = int().also { require(it in 0..remaining / bytesPerItem) }
 
         fun string(): String {
             val n = count()

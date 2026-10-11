@@ -65,6 +65,7 @@ import kotlin.time.Instant
 class IosDailyDerivedStore(
     root: String,
     private val atomic: AtomicFiles = IosAtomicFiles("${root.trimEnd('/')}/${AtomicFiles.TEMP_DIR}"),
+    private val tierStore: TierStore = TierStore.NONE,
 ) : DerivedDayFiles {
     private val root = root.trimEnd('/')
     private val mutex = Mutex()
@@ -104,11 +105,16 @@ class IosDailyDerivedStore(
                     // The builder opens and closes one source at a time (#61).
                     val daily = sources.map { source -> DailyParquetSource(source) { ParquetFile.open(archive.reader(source.key)) } }
                     val sink = FileSink(temporary)
-                    val result = try {
-                        DailyParquetBuilder.build(station, day, daily, sink, anchors, nowEpochS)
+                    val pass = try {
+                        DayPass.run(station, day, daily, sink, anchors, nowEpochS)
                     } finally {
                         sink.close()
                     }
+                    val result = pass.daily
+                    if (pass.failedSources.isEmpty()) {
+                        tierStore.save(station, day, ArchiveHistoryTiers.signature(sources), TierStore.fromBuckets(pass.buckets))
+                    }
+                    pass.dailyError?.let { throw it }
                     if (result == null) {
                         remove(manifest)
                         remove(target)
@@ -142,17 +148,20 @@ class IosDailyDerivedStore(
 
     override suspend fun open(station: String, epochDay: Long, sources: List<ArchiveRecord>, anchors: Map<String, TimeEstimate.Anchor>): LocalRangeSource? =
         withContext(Dispatchers.IO) {
-            val target = checked("$root/${ArchiveLayout.derivedDayPath(station, epochDay)}")
-            val cached = cachedSignature(checked("$root/${ArchiveLayout.derivedManifestPath(station, epochDay)}")) ?: return@withContext null
-            // Completeness changes the receipt, not the rows, either one is current.
-            if (cached != signature(sources, anchors, true) && cached != signature(sources, anchors, false)) return@withContext null
-            if (isFile(target)) LocalRangeSource(LocalFile(target)) else null
+            mutex.withLock {
+                val target = checked("$root/${ArchiveLayout.derivedDayPath(station, epochDay)}")
+                val cached = cachedSignature(checked("$root/${ArchiveLayout.derivedManifestPath(station, epochDay)}")) ?: return@withLock null
+                // Completeness changes the receipt, not the rows, either one is current.
+                if (cached != signature(sources, anchors, true) && cached != signature(sources, anchors, false)) return@withLock null
+                // The constructor opens its descriptor here, before a rebuild can replace the path.
+                if (isFile(target)) LocalRangeSource(LocalFile(target)) else null
+            }
         }
 
     /** The identity of a day's build: the builder, completeness, and every source with the anchor that dates it. */
     private fun signature(sources: List<ArchiveRecord>, anchors: Map<String, TimeEstimate.Anchor>, complete: Boolean): String {
         val text = buildString {
-            append("${DailyParquetBuilder.BUILDER}:$complete\n")
+            append("derive-cache-v3:${DailyParquetBuilder.BUILDER}:$complete\n")
             for (source in sources.sortedBy { it.name }) {
                 append("${source.name}:${source.bytes}:${source.crc32}:${source.sha256}")
                 if (source.hasEstimatedUtc) {
@@ -243,6 +252,7 @@ class IosDailyDerivedStore(
                 }
             }
         }
+
         // fsync alone leaves the bytes in the drive cache on Apple hardware. Volumes without F_FULLFSYNC fall back to it.
         override fun flush() {
             if (fcntl(descriptor, F_FULLFSYNC) == 0) return

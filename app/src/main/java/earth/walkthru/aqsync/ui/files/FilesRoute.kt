@@ -66,6 +66,7 @@ fun FilesRoute(
         level = level,
         onOpenFileMetrics = onOpenFileMetrics,
         device = device,
+        progress = viewModel.syncProgress,
         onDeviceAction = { action ->
             when (action) {
                 DeviceFilesAction.Refresh -> viewModel.refresh()

@@ -101,8 +101,8 @@ class HistoryGoldenTest {
             for (day in StationDays.of(entries.map { it.record })[station].orEmpty().sorted()) {
                 val from = day * StationDays.DAY_NS
                 val dayEntries = entries.filter { it.record.onTimeline(from, from + StationDays.DAY_NS) }
-                // The daily builder's order, which the pass uses for both outputs.
-                val ordered = dayEntries.sortedWith(compareBy({ it.record.firstUtcNs ?: Long.MAX_VALUE }, { it.record.name }))
+                // The old tier pipeline read timeline order. Keep its actual order in the oracle.
+                val ordered = dayEntries.sortedWith(compareBy(ArchiveRecord.TIMELINE_ORDER) { it.record })
                 val now = (day + 2) * 86_400
 
                 val legacy = LegacyAggregator(station)

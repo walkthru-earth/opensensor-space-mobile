@@ -84,6 +84,22 @@ class QuotaEnforcerTest {
     }
 
     @Test
+    fun tiersShareTheQuotaAndClearRemovesThem() = runTest {
+        val tree = FakeTree()
+        val untouchable = tree.untouchable()
+        tree.file("$derived/s1/day=2026-10-01.tiers", 100, 10)
+        tree.file("$derived/s1/day=2026-10-02.tiers", 100, 20)
+        tree.file("$derived/s1/day=2026-10-02.parquet", 100, 30)
+        tree.file("$derived/s1/day=2026-10-02.manifest.json", 10, 0)
+        val quota = DerivedQuota(QuotaEnforcer(roots, tree)) { 250 }
+        assertEquals(1, quota.enforce().evicted)
+        assertEquals(listOf("$derived/s1/day=2026-10-01.tiers"), tree.deleted)
+        assertEquals(2, quota.clear().evicted)
+        assertEquals(listOf("$derived/s1/day=2026-10-02.manifest.json"), tree.files.keys.filter { it.startsWith(derived) })
+        for (path in untouchable) assertTrue(path in tree.files)
+    }
+
+    @Test
     fun aDerivedRootUnderTheQuotaIsLeftAlone() {
         val tree = FakeTree()
         tree.file("$derived/s1/2026-10-01.parquet", 100, 10)

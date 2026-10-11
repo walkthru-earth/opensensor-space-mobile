@@ -145,7 +145,7 @@ class HistoryDeriver @Inject constructor(
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        Log.w(TAG, "daily file for a derived day: ${e.message}")
+                        Log.w(TAG, "daily file retry needed (${e::class.simpleName})")
                     }
                 }
             }
@@ -161,7 +161,7 @@ class HistoryDeriver @Inject constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.w(TAG, "derived quota: ${e.message}")
+            Log.w(TAG, "derived quota retry needed (${e::class.simpleName})")
         }
     }
 
@@ -174,14 +174,14 @@ class HistoryDeriver @Inject constructor(
         val sig = signature(sources)
         val run = withContext(cpu) { dailyBuilder.pass(station, epochDay, sources, sig, anchors) }
         val pass = run.pass
-        for (failed in pass.failedSources) Log.w(TAG, "${failed.name}: left out of the tiers")
+        if (pass.failedSources.isNotEmpty()) Log.w(TAG, "${pass.failedSources.size} source reads failed")
         // The pass keeps only buckets that start inside this day: a file straddling midnight contributes
         // its other rows when the neighbouring day is built (it is in that day's source set too).
         val dayBuckets = pass.buckets
         bucketDao.replaceDay(station, dayStartS, dayBuckets.flatMap { it.toEntities() })
         // A failed daily file keeps the tiers and leaves `dailyFile` null, the next derive pass retries it.
         val daily = run.daily
-        pass.dailyError?.let { Log.w(TAG, "daily file for $station ${DerivedStore.dayLabel(epochDay)}: ${it.message}") }
+        pass.dailyError?.let { Log.w(TAG, "daily file retry needed (${it::class.simpleName})") }
         dayDao.upsert(
             DerivedDay(
                 station = station,
@@ -247,8 +247,8 @@ class HistoryDeriver @Inject constructor(
         /** Each day's sources from one station listing, the same files and order as `withUtcBetween`. */
         fun sourcesByDay(files: List<ArchivedFile>): Map<Long, List<ArchivedFile>> = StationDays.sourcesByDay(files) { it.toRecord() }
 
-        /** Part of every day's signature: bump when the tiers' meaning changes so every day is rebuilt. 2 = per-metric rows, 3 = one shared RowKey (D12). */
-        const val DERIVE_VERSION = 4
+        /** Part of every day's signature. 2 = per-metric rows, 3 = shared RowKey, 4 = single pass, 5 = canonical duplicate source order. */
+        const val DERIVE_VERSION = 5
         const val DAY_NS = StationDays.DAY_NS
     }
 }

@@ -121,6 +121,7 @@ import earth.walkthru.opensensor.files.resources.files_syncing
 import earth.walkthru.opensensor.files.resources.files_title
 import earth.walkthru.opensensor.files.resources.scan_files
 import earth.walkthru.opensensor.strings.resources.sync_some_failed
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.datetime.TimeZone
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.pluralStringResource
@@ -171,6 +172,8 @@ fun FilesScreen(
     idleHint: String? = null,
     menuLead: MenuItems? = null,
     menuTail: MenuItems? = null,
+    /** Live transfer bytes collected only by the progress card. Without it, [device] supplies the snapshot. */
+    progress: StateFlow<SyncProgress>? = null,
 ) {
     val state by controller.state.collectAsState()
     val presenter = rememberExportPresenter()
@@ -294,7 +297,9 @@ fun FilesScreen(
         ) {
             if (banner != null) item(key = "banner") { banner() }
             if (sync.running || sync.outcomes.isNotEmpty()) {
-                item(key = "sync") { SyncProgressCard(sync, level) }
+                item(key = "sync") {
+                    if (progress == null) SyncProgressCard(sync, level) else SyncProgressCard(progress, level)
+                }
             }
             if (chart != null && level.detailed) item(key = "file-chart") { chart() }
             // The last successful listing stays on screen through a refresh and through its failure
@@ -460,6 +465,12 @@ private fun GroupHeader(group: PartitionGroup, level: DetailLevel) {
             }
         }
     }
+}
+
+@Composable
+private fun SyncProgressCard(progress: StateFlow<SyncProgress>, level: DetailLevel) {
+    val sync by progress.collectAsState()
+    SyncProgressCard(sync, level)
 }
 
 @Composable

@@ -6,6 +6,7 @@ import earth.walkthru.aqsync.archive.ArchiveLayout
 import earth.walkthru.aqsync.data.history.parquet.LocalFileReader
 import earth.walkthru.aqsync.storage.AtomicFiles
 import earth.walkthru.aqsync.storage.StorageClass
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.withContext
@@ -14,18 +15,19 @@ import platform.Foundation.NSFileProtectionCompleteUntilFirstUserAuthentication
 import platform.Foundation.NSFileProtectionKey
 import platform.Foundation.NSFileType
 import platform.Foundation.NSFileTypeRegular
+import platform.Foundation.NSFileTypeSymbolicLink
 
 /**
  * [TierStore] for iOS (#63): one small binary file per station-day next to the derived day file,
  * `derived/v1/<station>/day=YYYY-MM-DD.tiers` under `Library/Caches`, which iOS may purge. The quota
- * evicts only `.parquet` day files, a purge or a Clear makes the next pass rebuild the tiers.
+ * evicts day files and tiers, a purge or a Clear makes the next pass rebuild the tiers.
  */
 class IosFileTierStore(root: String, private val atomic: AtomicFiles) : TierStore {
     private val root = root.trimEnd('/')
     private val fm get() = NSFileManager.defaultManager
     private val protection = mapOf<Any?, Any?>(NSFileProtectionKey to NSFileProtectionCompleteUntilFirstUserAuthentication)
 
-    private fun path(station: String, epochDay: Long) = "$root/${ArchiveLayout.derivedDayPath(station, epochDay).removeSuffix(".parquet")}$SUFFIX"
+    private fun path(station: String, epochDay: Long) = checked("$root/${ArchiveLayout.derivedDayPath(station, epochDay).removeSuffix(".parquet")}$SUFFIX")
 
     override suspend fun load(station: String, epochDay: Long, signature: String): DayTiers? = withContext(Dispatchers.IO) {
         val path = path(station, epochDay)
@@ -35,6 +37,8 @@ class IosFileTierStore(root: String, private val atomic: AtomicFiles) : TierStor
                 if (reader.size > MAX_BYTES) return@use null
                 TierCodec.decode(reader.read(0, reader.size.toInt()), signature)
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             null
         }
@@ -46,6 +50,8 @@ class IosFileTierStore(root: String, private val atomic: AtomicFiles) : TierStor
             val directory = path.substringBeforeLast('/')
             check(fm.createDirectoryAtPath(directory, true, protection, null)) { "cannot create tier directory" }
             atomic.writeAtomically(path, TierCodec.encode(signature, tiers), StorageClass.Rebuildable)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             // A cache write that fails costs a rebuild next time, never the tiers in memory.
             println("tier cache write failed: ${e::class.simpleName}")
@@ -53,11 +59,22 @@ class IosFileTierStore(root: String, private val atomic: AtomicFiles) : TierStor
     }
 
     override suspend fun retain(station: String, days: Set<Long>) = withContext(Dispatchers.IO) {
-        val directory = "$root/${ArchiveLayout.derivedStationDir(station)}"
+        val directory = checked("$root/${ArchiveLayout.derivedStationDir(station)}")
         val keep = days.mapTo(HashSet()) { path(station, it).substringAfterLast('/') }
         for (name in fm.contentsOfDirectoryAtPath(directory, null).orEmpty().filterIsInstance<String>()) {
-            if (name.startsWith("day=") && name.endsWith(SUFFIX) && name !in keep) fm.removeItemAtPath("$directory/$name", null)
+            if (name.startsWith("day=") && name.endsWith(SUFFIX) && name !in keep) fm.removeItemAtPath(checked("$directory/$name"), null)
         }
+    }
+
+    /** Refuses a symlink at the file or any parent, before Foundation or POSIX follows it. */
+    private fun checked(path: String): String {
+        var current = path
+        while (current == root || current.startsWith("$root/")) {
+            check(fm.attributesOfItemAtPath(current, null)?.get(NSFileType) != NSFileTypeSymbolicLink) { "refusing a symbolic link in tier files" }
+            if (current == root) break
+            current = current.substringBeforeLast('/')
+        }
+        return path
     }
 
     private companion object {

@@ -9,6 +9,7 @@ import earth.walkthru.aqsync.archive.PartialWriter
 import earth.walkthru.aqsync.data.history.parquet.ByteArrayReader
 import earth.walkthru.aqsync.data.history.parquet.ByteReader
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
+import earth.walkthru.aqsync.storage.MemoryPressure
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -16,6 +17,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -29,12 +31,17 @@ class TierStoreTest {
     private class Store : ArchiveStore {
         val files = HashMap<ArchiveKey, ByteArray>()
         var reads = 0
+        var failures = 0
         override suspend fun partialLengths(station: String): Map<String, Long> = emptyMap()
         override suspend fun openPartial(key: ArchiveKey, meta: PartialMeta): PartialWriter = error("read only")
         override suspend fun discardPartial(key: ArchiveKey) = Unit
         override suspend fun exists(key: ArchiveKey): Boolean = key in files
         override fun reader(key: ArchiveKey, partial: Boolean): ByteReader {
             reads++
+            if (failures > 0) {
+                failures--
+                throw IllegalStateException("temporarily unavailable")
+            }
             return ByteArrayReader(files[key] ?: throw NoSuchElementException(key.name))
         }
         override suspend fun commit(key: ArchiveKey) = Unit
@@ -80,9 +87,9 @@ class TierStoreTest {
     }
 
     private val sample: DayTiers = mapOf(
-        Resolution.MIN_15 to mapOf(
-            Metrics.PM25 to listOf(TierBucket(1_728_000_000, 4, 3, 1, 12.5f, 1f, Float.NaN), TierBucket(1_728_000_900, 0, 0, 0, Float.NaN, Float.NaN, Float.NaN)),
-            Metrics.BOARD_TEMP to emptyList(),
+        Resolution.MIN15 to mapOf(
+            Metrics.PM25.id to listOf(TierBucket(1_728_000_000, 4, 3, 1, 12.5f, 1f, Float.NaN), TierBucket(1_728_000_900, 0, 0, 0, Float.NaN, Float.NaN, Float.NaN)),
+            Metrics.BOARD_TEMP.id to emptyList(),
         ),
         Resolution.DAY to emptyMap(),
     )
@@ -133,14 +140,14 @@ class TierStoreTest {
         val (store, index, station) = archive()
         val tierStore = MemoryTierStore()
         val first = ArchiveHistoryTiers(store, index, tierStore = tierStore)
-        val expected = first.observe(station, Metrics.PM25, Resolution.MIN_15, 0, Long.MAX_VALUE).first()
+        val expected = first.observe(station, Metrics.PM25.id, Resolution.MIN15, 0, Long.MAX_VALUE).first()
         assertTrue(expected.isNotEmpty())
         assertTrue(first.decodedDays > 0)
         assertEquals(first.decodedDays, tierStore.saves)
 
         store.reads = 0
         val second = ArchiveHistoryTiers(store, index, tierStore = tierStore)
-        val actual = second.observe(station, Metrics.PM25, Resolution.MIN_15, 0, Long.MAX_VALUE).first()
+        val actual = second.observe(station, Metrics.PM25.id, Resolution.MIN15, 0, Long.MAX_VALUE).first()
         assertEquals(0, second.decodedDays)
         assertEquals(0, store.reads)
         assertEquals(expected.map { it.startEpochS to it.validRows }, actual.map { it.startEpochS to it.validRows })
@@ -165,7 +172,7 @@ class TierStoreTest {
         val tiers = ArchiveHistoryTiers(store, index, io = StandardTestDispatcher(testScheduler), shareScope = backgroundScope)
         index.stationObservers = 0
         val jobs = listOf(
-            backgroundScope.launch { tiers.observe(station, Metrics.PM25, Resolution.MIN_15, 0, Long.MAX_VALUE).collect {} },
+            backgroundScope.launch { tiers.observe(station, Metrics.PM25.id, Resolution.MIN15, 0, Long.MAX_VALUE).collect {} },
             backgroundScope.launch { tiers.observeDays(station).collect {} },
             backgroundScope.launch { tiers.observeMetricsWithData(station).collect {} },
         )
@@ -173,5 +180,53 @@ class TierStoreTest {
         assertEquals(1, index.stationObservers)
         assertTrue(tiers.decodedDays > 0)
         jobs.forEach { it.cancel() }
+    }
+
+    @Test
+    fun sharedReplayDoesNotKeepBucketsAfterMemoryTrim() = runTest {
+        val (store, index, station) = archive()
+        val tierStore = MemoryTierStore()
+        val tiers = ArchiveHistoryTiers(store, index, io = StandardTestDispatcher(testScheduler), tierStore = tierStore, shareScope = backgroundScope)
+        val summary = backgroundScope.launch { tiers.observeDays(station).collect {} }
+        runCurrent()
+        val expected = tiers.observe(station, Metrics.PM25.id, Resolution.MIN15, 0, Long.MAX_VALUE).first()
+        assertTrue(expected.isNotEmpty())
+        tiers.trim(MemoryPressure.Level.Critical)
+        assertEquals(0, tiers.cachedDays())
+        val loads = tierStore.loads
+        val decodes = tiers.decodedDays
+        val actual = tiers.observe(station, Metrics.PM25.id, Resolution.MIN15, 0, Long.MAX_VALUE).first()
+        assertEquals(expected, actual)
+        assertTrue(tierStore.loads > loads, "replayed summaries reload released buckets from disk")
+        assertEquals(decodes, tiers.decodedDays)
+        summary.cancel()
+    }
+
+    @Test
+    fun idleSharedReplayExpiresBeforeReturningToHistory() = runTest {
+        val (store, index, station) = archive()
+        val tiers = ArchiveHistoryTiers(store, index, io = StandardTestDispatcher(testScheduler), shareScope = backgroundScope)
+        assertTrue(tiers.observeDays(station).first().count > 0)
+        runCurrent()
+        advanceTimeBy(5_001)
+        runCurrent()
+        index.rows.value = emptyList()
+        assertEquals(0, tiers.observeDays(station).first().count)
+    }
+
+    @Test
+    fun failedSourcesDoNotPersistPartialTiersAcrossRestart() = runTest {
+        val (store, index, station) = archive()
+        val tierStore = MemoryTierStore()
+        val first = ArchiveHistoryTiers(store, index, tierStore = tierStore)
+        store.failures = 1
+        assertEquals(0, first.observeDays(station).first().count)
+        assertEquals(0, first.cachedDays())
+        assertEquals(0, tierStore.saves)
+        assertTrue(tierStore.saved.isEmpty())
+        val restarted = ArchiveHistoryTiers(store, index, tierStore = tierStore)
+        assertTrue(restarted.observeDays(station).first().count > 0)
+        assertTrue(restarted.decodedDays > 0)
+        assertTrue(tierStore.saves > 0)
     }
 }

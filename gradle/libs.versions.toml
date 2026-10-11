@@ -40,8 +40,11 @@ h3 = "4.5.0"
 okhttp = "5.5.0"
 # Flow assertions in :app host tests (#63). Latest stable on Maven Central (maven-metadata.xml, 2025-06-11).
 turbine = "1.2.1"
+# Latest stable on Maven Central, checked 2026-10-11. Host-only history measurements.
+kotlinxBenchmark = "0.5.0"
 
 [libraries]
+kotlinx-benchmark-runtime = { module = "org.jetbrains.kotlinx:kotlinx-benchmark-runtime", version.ref = "kotlinxBenchmark" }
 compose-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "composeMultiplatform" }
 compose-foundation = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "composeMultiplatform" }
 compose-material3 = { module = "org.jetbrains.compose.material3:material3", version.ref = "composeMultiplatformMaterial3" }
@@ -117,6 +120,7 @@ google-code-scanner = { module = "com.google.android.gms:play-services-code-scan
 androidx-hilt-compiler = { module = "androidx.hilt:hilt-compiler", version.ref = "androidxHilt" }
 
 [plugins]
+kotlinx-benchmark = { id = "org.jetbrains.kotlinx.benchmark", version.ref = "kotlinxBenchmark" }
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 compose-multiplatform = { id = "org.jetbrains.compose", version.ref = "composeMultiplatform" }
 android-application = { id = "com.android.application", version.ref = "androidGradlePlugin" }

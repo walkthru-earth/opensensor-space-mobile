@@ -35,7 +35,11 @@ class DayPassResult(
     val daily: DailyParquetResult?,
     /** Rows of the sources that opened, read or not, what the Android derive reports as aggregated. */
     val rowsRead: Long,
-    /** Sources that failed to open or decode. The tiers leave them out, the daily file is not written. */
+    /**
+     * Sources that failed to open, decode or close. A failure before accumulation leaves no tiers for
+     * that source. A later all-column decode or close failure can retain contributions already added
+     * to the tiers. The daily file is not written, and these partial tiers must not be cached as current.
+     */
     val failedSources: List<ArchiveRecord>,
     /** Why the daily file was not written although the sink was given, logged by the caller. */
     val dailyError: Exception?,
@@ -125,7 +129,7 @@ object DailyParquetBuilder {
         var keptRow = IntArray(256)
         var kept = 0
         val starts = ArrayList<Int>()
-        for (source in sources.sortedWith(compareBy({ it.record.firstUtcNs ?: Long.MAX_VALUE }, { it.record.name }))) {
+        for (source in sources.sortedWith(compareBy(SOURCE_ORDER) { it.record })) {
             val src = source.record
             val first = kept
             val one = try {
@@ -242,23 +246,35 @@ object DailyParquetBuilder {
 
         // Keep the partition's timeline order. With estimates interleaved, raw UTC is not sorted.
         val writer = ParquetWriter(
-            sink!!, columns, ParquetCodec.LZ4_RAW, meta, BUILDER,
+            sink!!,
+            columns,
+            ParquetCodec.LZ4_RAW,
+            meta,
+            BUILDER,
             sortedBy = utcIndex.takeIf { it >= 0 && !anyEstimated },
             pageIndex = true,
         )
-        writer.begin()
         var groups = 0
-        var start = 0
-        val rows = Rows(order, keptRow, startsArray)
-        while (start < kept) {
-            val hour = keptUtc[order[start]].floorDiv(HOUR_NS)
-            var end = start
-            while (end < kept && keptUtc[order[end]].floorDiv(HOUR_NS) == hour) end++
-            writer.rowGroup(gather(columns, opened, rows, start, end))
-            groups++
-            start = end
+        try {
+            writer.begin()
+            var start = 0
+            val rows = Rows(order, keptRow, startsArray)
+            while (start < kept) {
+                val hour = keptUtc[order[start]].floorDiv(HOUR_NS)
+                var end = start
+                while (end < kept && keptUtc[order[end]].floorDiv(HOUR_NS) == hour) end++
+                writer.rowGroup(gather(columns, opened, rows, start, end))
+                groups++
+                start = end
+            }
+            writer.finish()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            if (strict) throw e
+            // The daily output is rebuildable. A failed sink must not discard the already decoded tiers.
+            return DayPassResult(buckets, null, rowsRead, failed, e)
         }
-        writer.finish()
         val daily = DailyParquetResult(
             kept,
             columns.map { it.name },
@@ -378,5 +394,8 @@ object DailyParquetBuilder {
     const val ESTIMATED_UTC = "event_time_utc_estimated_ns"
     const val HOUR_NS = 3_600L * 1_000_000_000L
     const val COMPLETE_GRACE_S = 30 * 60L
+
+    /** The daily builder's established duplicate preference, real UTC first, then source name. */
+    val SOURCE_ORDER: Comparator<ArchiveRecord> = compareBy({ it.firstUtcNs ?: Long.MAX_VALUE }, { it.name })
     private val COPIED_METADATA = setOf("board", "dictionary_version", "dictionary_uri", "dictionary_sha256", "device_id", "pms_status", "light_status", "proximity_status", "magnetic_units", "unavailable", "sample_interval_ms", "clock", "time_semantics")
 }

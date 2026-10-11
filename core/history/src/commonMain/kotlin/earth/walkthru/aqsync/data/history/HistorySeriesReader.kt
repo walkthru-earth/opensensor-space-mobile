@@ -138,7 +138,13 @@ class HistorySeriesReader(
                 val dayFrom = maxOf(fromNs, day * StationDays.DAY_NS)
                 val dayTo = minOf(toNs, (day + 1) * StationDays.DAY_NS)
                 if (readDerived(station, day, sources, anchors, metric, dayFrom, dayTo, seen, rows)) continue
-                for (f in sources) if (f.onTimeline(dayFrom, dayTo)) readRaw(f, anchors, metric, dayFrom, dayTo, seen, rows)
+                val daySeen = RowKeys()
+                // Choose duplicates over the whole day before applying the chart window, exactly as
+                // the daily builder does. A duplicate with another timestamp must not win just because
+                // the builder's preferred row falls outside a fractional edge window.
+                for (f in sources.sortedWith(DailyParquetBuilder.SOURCE_ORDER)) {
+                    readRaw(f, anchors, metric, day * StationDays.DAY_NS, (day + 1) * StationDays.DAY_NS, dayFrom, dayTo, daySeen, seen, rows)
+                }
             }
         }
         // Files come ordered by first UTC and rows inside are ordered, a FLUSH file can still interleave.
@@ -215,7 +221,7 @@ class HistorySeriesReader(
     }
 
     /** The rows of one raw file inside `[fromNs, toNs)`, timed by UTC or by the boot's anchor. */
-    private fun readRaw(f: ArchiveRecord, anchors: Map<String, TimeEstimate.Anchor>, metric: MetricSpec, fromNs: Long, toNs: Long, seen: RowKeys, rows: Rows) {
+    private fun readRaw(f: ArchiveRecord, anchors: Map<String, TimeEstimate.Anchor>, metric: MetricSpec, dayFromNs: Long, dayToNs: Long, fromNs: Long, toNs: Long, daySeen: RowKeys, seen: RowKeys, rows: Rows) {
         open(f)?.use { pf ->
             val md = pf.metadata
             fun long(name: String) = md.leaf(name)?.let { LongColumn.of(pf.readColumn(it)) }
@@ -236,8 +242,12 @@ class HistorySeriesReader(
                     est = true
                     anchor?.estimateNsOrNull(mono.values[i]) ?: continue
                 }
+                if (ns < dayFromNs || ns >= dayToNs) continue
+                val bySeq = seq != null && seq.has(i)
+                val key = if (bySeq) seq!!.values[i] else ns
+                if (!daySeen.firstSight(bootHi.at(i), bootLo.at(i), bySeq, key)) continue
                 if (ns < fromNs || ns >= toNs) continue
-                if (!seen.firstSight(bootHi.at(i), bootLo.at(i), seq != null && seq.has(i), if (seq != null && seq.has(i)) seq.values[i] else ns)) continue
+                if (!seen.firstSight(bootHi.at(i), bootLo.at(i), bySeq, key)) continue
                 val ok = metric.accepts(if (gate != null && gate.has(i)) gate.values[i] else null)
                 val v = if (ok && col != null && col.has(i)) col.values[i].toFloat().takeIf { it.isFinite() } else null
                 rows.add(ns.floorDiv(NS), v ?: Float.NaN, est)
@@ -260,11 +270,9 @@ class HistorySeriesReader(
         seen: RowKeys,
         rows: Rows,
     ): Boolean {
-        val mark = rows.size
-        val marked = rows.estimatedValid
         return try {
             val source = derived.open(station, day, sources, anchors) ?: return false
-            ParquetReader.open(source).use { reader ->
+            val staged = ParquetReader.open(source).use { reader ->
                 val names = reader.leaves.mapTo(HashSet()) { it.name }
                 val estimated = DailyParquetBuilder.ESTIMATED_UTC in names
                 val wanted = listOfNotNull(ParquetIndexer.UTC, DailyParquetBuilder.ESTIMATED_UTC, "boot_id_hi", "boot_id_lo", ParquetIndexer.SEQ, metric.gate?.column, metric.column).filter { it in names }
@@ -272,30 +280,47 @@ class HistorySeriesReader(
                 val batch = reader.scan(
                     if (estimated) ScanRequest(wanted) else ScanRequest(wanted, filterColumn = ParquetIndexer.UTC, filterRanges = listOf(fromNs until toNs)),
                 )
-                val utc = batch[ParquetIndexer.UTC] ?: return@use false
+                val utc = batch[ParquetIndexer.UTC] ?: return@use null
                 val est = batch[DailyParquetBuilder.ESTIMATED_UTC]
                 val bootHi = batch["boot_id_hi"]
                 val bootLo = batch["boot_id_lo"]
                 val seq = batch[ParquetIndexer.SEQ]
                 val gate = metric.gate?.let { batch[it.column] }
                 val col = batch[metric.column]
+                val staged = DerivedRows(batch.rowCount)
                 for (i in 0 until batch.rowCount) {
                     val real = !utc.isNull(i)
-                    val ns = if (real) utc.long(i) else if (est != null && !est.isNull(i)) est.long(i) else continue
+                    val ns = if (real) {
+                        utc.long(i)
+                    } else if (est != null && !est.isNull(i)) {
+                        est.long(i)
+                    } else {
+                        continue
+                    }
                     if (ns < fromNs || ns >= toNs) continue
                     val bySeq = seq != null && !seq.isNull(i)
-                    if (!seen.firstSight(bootHi.longOrZero(i), bootLo.longOrZero(i), bySeq, if (bySeq) seq!!.long(i) else ns)) continue
                     val ok = metric.accepts(gate?.asLong(i))
                     val v = if (ok) col?.asDouble(i)?.toFloat()?.takeIf { it.isFinite() } else null
-                    rows.add(ns.floorDiv(NS), v ?: Float.NaN, !real)
+                    val at = staged.rows.size
+                    staged.hi[at] = bootHi.longOrZero(i)
+                    staged.lo[at] = bootLo.longOrZero(i)
+                    staged.bySequence[at] = bySeq
+                    staged.key[at] = if (bySeq) seq!!.long(i) else ns
+                    staged.rows.add(ns.floorDiv(NS), v ?: Float.NaN, !real)
                 }
-                true
+                staged
+            } ?: return false
+            // Commit only after every row was extracted and the source closed. A cache failure must
+            // leave neither points nor row keys behind, otherwise the raw fallback loses those rows.
+            for (i in 0 until staged.rows.size) {
+                if (!seen.firstSight(staged.hi[i], staged.lo[i], staged.bySequence[i], staged.key[i])) continue
+                rows.add(staged.rows.times[i], staged.rows.values[i], staged.rows.estimated[i])
             }
+            true
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            // A derived file is a cache. One that fails to read gives way to the raw files, its rows go.
-            rows.truncate(mark, marked)
+            // A derived file is a cache. One that fails to read gives way to the raw files.
             false
         }
     }
@@ -316,6 +341,15 @@ class HistorySeriesReader(
 
     /** The [RowKey] rule, a missing column or cell counts as 0. */
     private fun PrimitiveColumn?.longOrZero(i: Int): Long = if (this == null || isNull(i)) 0L else long(i)
+
+    /** A derived read staged until both extraction and closing succeeded. */
+    private class DerivedRows(capacity: Int) {
+        val rows = Rows()
+        val hi = LongArray(capacity)
+        val lo = LongArray(capacity)
+        val key = LongArray(capacity)
+        val bySequence = BooleanArray(capacity)
+    }
 
     /** Day view rows in primitive arrays: second, value (NaN for invalid or null) and estimate flag. */
     private class Rows {
@@ -338,11 +372,6 @@ class HistorySeriesReader(
             estimated[size] = isEstimate
             size++
             if (isEstimate && !value.isNaN()) estimatedValid++
-        }
-
-        fun truncate(size: Int, estimatedValid: Long) {
-            this.size = size
-            this.estimatedValid = estimatedValid
         }
     }
 

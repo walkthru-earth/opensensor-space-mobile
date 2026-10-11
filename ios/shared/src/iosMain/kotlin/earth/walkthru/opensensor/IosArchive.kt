@@ -58,9 +58,39 @@ internal object IosArchive {
     val index: ArchiveIndex by lazy { ReceiptArchiveIndex(store.finalRoot) }
     private val clockAnchorsRoot get() = store.finalRoot + "-clock-anchors"
     val clockAnchors by lazy { IosClockAnchorStore(clockAnchorsRoot) }
+
     // Tiers persist beside the derived day files, so a cold History open decodes only new days (#63).
     val tiers: ArchiveHistoryTiers by lazy {
-        ArchiveHistoryTiers(store, index, clockAnchors = clockAnchors, tierStore = IosFileTierStore(cachesDirectory(), derivedAtomic), shareScope = scope)
+        ArchiveHistoryTiers(
+            store,
+            index,
+            clockAnchors = clockAnchors,
+            tierStore = tierStore,
+            shareScope = scope,
+            beforeBuild = { station, files, anchors ->
+                derivedMutex.withLock {
+                    try {
+                        derived.rebuild(station, files, store, anchors, Clock.System.now().epochSeconds)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        // The pass may have saved tiers even when the daily cache could not commit.
+                        println("derived history retry needed: ${e::class.simpleName}")
+                    }
+                }
+            },
+            afterBuild = {
+                derivedMutex.withLock {
+                    try {
+                        withContext(Dispatchers.IO) { derivedQuota.enforce() }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        println("derived quota retry needed: ${e::class.simpleName}")
+                    }
+                }
+            },
+        )
     }
     val reader: HistorySeriesReader by lazy { HistorySeriesReader(store, index, tiers, clockAnchors = clockAnchors, derived = derived) }
 
@@ -117,7 +147,8 @@ internal object IosArchive {
 
     // Temps stay in Application Support, on the same volume as Library/Caches, where the janitor sweeps them.
     private val derivedAtomic by lazy { IosAtomicFiles("$base/${AtomicFiles.TEMP_DIR}") }
-    private val derived by lazy { IosDailyDerivedStore(cachesDirectory(), derivedAtomic) }
+    private val tierStore by lazy { IosFileTierStore(cachesDirectory(), derivedAtomic) }
+    private val derived by lazy { IosDailyDerivedStore(cachesDirectory(), derivedAtomic, tierStore) }
     private val repair by lazy { ArchiveIndexRepair(store, index, clockAnchors = clockAnchors) }
     private val janitor by lazy {
         StorageJanitor(roots, IosStorageTree(), store, index, Dispatchers.IO, log = ::println, quota = derivedQuota, leases = leases)
