@@ -32,6 +32,8 @@ class StoredZipWriter(
     private val sink: ExportSink,
     private val zip64Limit: Long = 0xFFFFFFFFL,
     private val entryLimit: Int = 0xFFFF,
+    /** Runs before each slice is read, so a caller can stop a long write (see [ArchiveExport.writeZip]). */
+    private val checkpoint: () -> Unit = {},
 ) {
     private class Central(val name: ByteArray, val crc: Long, val size: Long, val offset: Long, val time: Int, val date: Int)
 
@@ -167,6 +169,7 @@ class StoredZipWriter(
         val size = reader.size
         var at = 0L
         while (at < size) {
+            checkpoint()
             val n = minOf(SLICE.toLong(), size - at).toInt()
             block(reader.read(at, n))
             at += n

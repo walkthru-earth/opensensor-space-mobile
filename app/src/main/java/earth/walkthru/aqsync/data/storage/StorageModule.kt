@@ -23,14 +23,12 @@ import earth.walkthru.aqsync.storage.DerivedQuota
 import earth.walkthru.aqsync.storage.JvmAtomicFiles
 import earth.walkthru.aqsync.storage.JvmStorageTree
 import earth.walkthru.aqsync.storage.QuotaEnforcer
-import earth.walkthru.aqsync.storage.RetentionPolicy
 import earth.walkthru.aqsync.storage.StorageBudget
 import earth.walkthru.aqsync.storage.StorageJanitor
 import earth.walkthru.aqsync.storage.StorageRole
 import earth.walkthru.aqsync.storage.StorageRoots
 import earth.walkthru.aqsync.storage.StorageTree
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
@@ -71,15 +69,6 @@ object StorageModule {
     @Singleton
     fun provideStorageBudget(@ApplicationContext context: Context, roots: StorageRoots, @IoDispatcher io: CoroutineDispatcher): StorageBudget =
         AndroidStorageBudget(context.getSystemService(StorageManager::class.java), roots, io)
-
-    /**
-     * The stored policy at process start, for the map cache cap that is fixed once the map runtime
-     * exists. One small DataStore read, blocking because `MapCache.configure` runs in `onCreate`.
-     */
-    @Provides
-    @Singleton
-    fun provideRetentionPolicy(settings: SettingsRepository, @IoDispatcher io: CoroutineDispatcher): RetentionPolicy =
-        runBlocking(io) { settings.current().retention }
 
     /**
      * The derived quota is the stored policy's, read at each enforcement so a saved change applies
