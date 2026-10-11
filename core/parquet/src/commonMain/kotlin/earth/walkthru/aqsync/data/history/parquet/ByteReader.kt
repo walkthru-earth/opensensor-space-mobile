@@ -3,14 +3,14 @@ package earth.walkthru.aqsync.data.history.parquet
 /**
  * Random access to the bytes of one Parquet file: the only thing [ParquetFile] needs from storage.
  *
- * Implementations: [ByteArrayReader] (bytes already in memory), the memory-mapped file of each platform
- * behind [ParquetFile.open] (`FileChannel.map` on the JVM, mapped `NSData` on iOS), and anything a caller
- * writes over another store. Reads are absolute, so one instance serves concurrent readers when the
+ * Implementations: [ByteArrayReader] (bytes already in memory), the positional `LocalFileReader` of each
+ * platform behind [ParquetFile.open] (`FileChannel.read(dst, position)` on the JVM, `pread` on iOS), and
+ * anything a caller writes over another store. Reads are absolute, so one instance serves concurrent readers when the
  * implementation is thread-safe; the built-in ones are.
  *
- * [close] releases what the reader holds (a mapping, a file) as soon as the caller is done, instead
- * of when the garbage collector gets to it (#61). That matters on 32-bit armeabi-v7a, where address
- * space runs out before memory. Reading after [close] throws [IllegalStateException]. Closing twice
+ * [close] releases what the reader holds (a file descriptor) as soon as the caller is done, instead
+ * of when the garbage collector gets to it (#61). The local readers never map, so no address space is
+ * held, which matters on 32-bit armeabi-v7a where address space runs out before memory. Reading after [close] throws [IllegalStateException]. Closing twice
  * is a no-op.
  */
 interface ByteReader : AutoCloseable {

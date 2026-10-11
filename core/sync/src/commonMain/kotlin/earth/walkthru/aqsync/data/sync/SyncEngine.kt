@@ -196,7 +196,7 @@ class SyncEngine(
             }
             if (failed != null) return failed
 
-            val (verdict, sha256) = storage { verifyAndHash(store.reader(key, partial = true), meta) }
+            val (verdict, sha256) = storage { store.reader(key, partial = true).use { verifyAndHash(it, meta) } }
             if (!verdict.ok) {
                 storage { store.discardPartial(key) }
                 // The meta records only the device's size and CRC, not a checksum of the partial
@@ -323,8 +323,7 @@ class SyncEngine(
         val name = key.name
         // A destination that cannot be opened (a directory, say) is this phone's storage fault, not a
         // conflict with the device: the caller's storage wrapper fails this file and keeps the partial.
-        val reader = store.reader(key)
-        val (verdict, sha256) = verifyAndHash(reader, meta)
+        val (verdict, sha256) = store.reader(key).use { verifyAndHash(it, meta) }
         if (!verdict.ok) return FileOutcome.Mismatch(name, "existing archive conflicts with device: ${verdict.describe()}")
         val row = index.get(key)
         // An older iOS receipt holds size and CRC only. Its empty fingerprint is filled, never compared.

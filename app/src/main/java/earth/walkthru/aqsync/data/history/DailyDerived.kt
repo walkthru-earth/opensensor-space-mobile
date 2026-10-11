@@ -92,20 +92,15 @@ class DailyDerivedBuilder(private val store: DerivedStore, private val fileFor: 
         anchors: Map<String, TimeEstimate.Anchor> = emptyMap(),
         nowEpochS: Long = System.currentTimeMillis() / 1000,
     ): DailyBuildResult? {
-        val opened = ArrayList<DailyParquetSource>(sources.size)
-        try {
-            for (source in sources) opened += DailyParquetSource(source.toRecord(), ParquetFile.open(fileFor(source.station, source.name)))
-            return write(station, epochDay, opened, sourceSignature, anchors, nowEpochS)
-        } finally {
-            // Release every mapping now, not when the next GC runs (#61).
-            opened.forEach { it.file.close() }
-        }
+        // The builder opens and closes one source at a time (#61).
+        val daily = sources.map { source -> DailyParquetSource(source.toRecord()) { ParquetFile.open(fileFor(source.station, source.name)) } }
+        return write(station, epochDay, daily, sourceSignature, anchors, nowEpochS)
     }
 
     private fun write(
         station: String,
         epochDay: Long,
-        opened: List<DailyParquetSource>,
+        sources: List<DailyParquetSource>,
         sourceSignature: String,
         anchors: Map<String, TimeEstimate.Anchor>,
         nowEpochS: Long,
@@ -122,7 +117,7 @@ class DailyDerivedBuilder(private val store: DerivedStore, private val fileFor: 
                     override fun write(bytes: ByteArray) { buffered.write(bytes) }
                     override fun flush() { buffered.flush(); output.fd.sync() }
                 }
-                DailyParquetBuilder.build(station, epochDay, opened, sink, anchors, nowEpochS)
+                DailyParquetBuilder.build(station, epochDay, sources, sink, anchors, nowEpochS)
             } ?: return null
             check(ParquetFile.open(tmp).use { it.numRows } == result.rows.toLong()) { "derived row count mismatch" }
             val manifest = DailyManifest(

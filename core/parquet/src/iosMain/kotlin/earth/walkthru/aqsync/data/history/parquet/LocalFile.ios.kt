@@ -1,64 +1,127 @@
-@file:OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
+@file:OptIn(ExperimentalForeignApi::class)
 
 package earth.walkthru.aqsync.data.history.parquet
 
-import kotlinx.cinterop.BetaInteropApi
-import kotlinx.cinterop.ByteVar
 import kotlinx.cinterop.ExperimentalForeignApi
-import kotlinx.cinterop.ObjCObjectVar
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.alloc
 import kotlinx.cinterop.convert
 import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.plus
 import kotlinx.cinterop.ptr
-import kotlinx.cinterop.reinterpret
+import kotlinx.cinterop.toKString
 import kotlinx.cinterop.usePinned
-import kotlinx.cinterop.value
-import platform.Foundation.NSData
-import platform.Foundation.NSDataReadingMappedIfSafe
-import platform.Foundation.NSError
-import platform.Foundation.dataWithContentsOfFile
-import platform.posix.memcpy
+import platform.posix.EINTR
+import platform.posix.O_RDONLY
+import platform.posix.S_IFMT
+import platform.posix.S_IFREG
+import platform.posix.errno
+import platform.posix.fstat
+import platform.posix.open
+import platform.posix.pread
+import platform.posix.stat
+import platform.posix.strerror
+import kotlin.concurrent.AtomicInt
 
 /** A file on iOS, by absolute [path] (for example inside the app's Application Support archive). */
 actual class LocalFile(val path: String)
 
-internal actual fun LocalFile.mapReadOnly(): ByteReader = MappedDataReader(path)
+internal actual fun LocalFile.openReader(): ByteReader = LocalFileReader(path)
 
 internal actual val LocalFile.displayName: String get() = path.substringAfterLast('/')
 
 /**
- * A [ByteReader] over `NSData` read with `NSDataReadingMappedIfSafe`: Foundation maps the file when it
- * can (local volumes) and reads it otherwise. Reads copy only the requested range. Thread-safe: the
- * data object is immutable. [close] drops the reader's reference, and Foundation unmaps the file when
- * the last reference goes.
+ * A [ByteReader] with `pread` on one descriptor, no mapping. Each read copies exactly its range into a
+ * new array. Thread-safe. [close] may race reads on other threads, so the descriptor is reference
+ * counted: each read holds it, and the last of [close] and the reads in flight closes it. A read can
+ * therefore never reach a descriptor number the process has reused for another file, and the
+ * descriptor is gone once [close] and those reads return, not when a collector runs (#61).
+ * [LocalRangeSource] reads through the same path.
  *
  * @throws ParquetFormatException when the file cannot be opened.
  */
-class MappedDataReader(path: String) : ByteReader {
-    private var data: NSData? = memScoped {
-        val error = alloc<ObjCObjectVar<NSError?>>()
-        NSData.dataWithContentsOfFile(path, NSDataReadingMappedIfSafe, error.ptr)
-            ?: throw ParquetFormatException("cannot open $path: ${error.value?.localizedDescription ?: "unknown error"}")
+class LocalFileReader(private val path: String) : ByteReader {
+    private val fd: Int = open(path, O_RDONLY).also { if (it < 0) throw ParquetFormatException("cannot open $path: ${strerror(errno)?.toKString()}") }
+
+    /** Reads in flight, plus [CLOSED] once [close] ran. */
+    private val state = AtomicInt(0)
+
+    override val size: Long
+
+    /** Modification time in nanoseconds, from the same `fstat` as [size]. */
+    internal val modifiedNs: Long
+
+    init {
+        val (length, mtime) = memScoped {
+            val st = alloc<stat>()
+            if (fstat(fd, st.ptr) != 0) {
+                platform.posix.close(fd)
+                throw ParquetFormatException("cannot stat $path: ${strerror(errno)?.toKString()}")
+            }
+            // `open` accepts a directory read-only, so refuse it here, not at the first read.
+            if ((st.st_mode.toInt() and S_IFMT) != S_IFREG) {
+                platform.posix.close(fd)
+                throw ParquetFormatException("cannot open $path: not a regular file")
+            }
+            st.st_size to (st.st_mtimespec.tv_sec * 1_000_000_000L + st.st_mtimespec.tv_nsec)
+        }
+        size = length
+        modifiedNs = mtime
     }
 
-    override val size: Long = data!!.length.toLong()
-
-    /** Whether [close] released the data. */
-    val isClosed: Boolean get() = data == null
-
     override fun read(offset: Long, length: Int): ByteArray {
-        val bytes = checkNotNull(data) { "reader is closed" }
-        checkRange(offset, length, size)
+        acquire()
+        try {
+            checkRange(offset, length, size)
+            return readOpen(offset, length)
+        } finally {
+            release()
+        }
+    }
+
+    private fun readOpen(offset: Long, length: Int): ByteArray {
         val out = ByteArray(length)
         if (length == 0) return out
-        val base = bytes.bytes?.reinterpret<ByteVar>() ?: throw ParquetFormatException("mapped file has no bytes")
-        out.usePinned { pinned -> memcpy(pinned.addressOf(0), base + offset, length.convert()) }
+        out.usePinned { pin ->
+            var done = 0
+            while (done < length) {
+                val n = pread(fd, pin.addressOf(0) + done, (length - done).convert(), offset + done)
+                when {
+                    n > 0 -> done += n.toInt()
+                    n == 0L -> throw ParquetFormatException("$path ended at ${offset + done} of $size bytes")
+                    errno == EINTR -> Unit
+                    else -> throw ParquetFormatException("cannot read $path: ${strerror(errno)?.toKString()}")
+                }
+            }
+        }
         return out
     }
 
+    private fun acquire() {
+        while (true) {
+            val s = state.value
+            if (s and CLOSED != 0) throw IllegalStateException("$path is closed")
+            if (state.compareAndSet(s, s + 1)) return
+        }
+    }
+
+    /** The read that leaves a closed reader with no other read closes the descriptor. */
+    private fun release() {
+        if (state.decrementAndGet() == CLOSED) platform.posix.close(fd)
+    }
+
     override fun close() {
-        data = null
+        while (true) {
+            val s = state.value
+            if (s and CLOSED != 0) return
+            if (state.compareAndSet(s, s or CLOSED)) {
+                if (s == 0) platform.posix.close(fd)
+                return
+            }
+        }
+    }
+
+    private companion object {
+        const val CLOSED = 1 shl 30
     }
 }

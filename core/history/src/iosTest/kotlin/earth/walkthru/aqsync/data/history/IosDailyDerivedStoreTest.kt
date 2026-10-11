@@ -8,7 +8,7 @@ import earth.walkthru.aqsync.archive.PartialMeta
 import earth.walkthru.aqsync.archive.PartialWriter
 import earth.walkthru.aqsync.data.history.parquet.ByteArrayReader
 import earth.walkthru.aqsync.data.history.parquet.ByteReader
-import earth.walkthru.aqsync.data.history.parquet.MappedDataReader
+import earth.walkthru.aqsync.data.history.parquet.LocalFileReader
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 import kotlinx.coroutines.test.runTest
 import platform.Foundation.NSFileManager
@@ -43,12 +43,9 @@ class IosDailyDerivedStoreTest {
         val now = anchor.utcNs / 1_000_000_000L + 200_000L
         val paths = IosDailyDerivedStore(root).rebuild(record.station, listOf(record), archive, mapOf(anchor.boot to anchor), now)
         assertEquals(2, paths.size)
-        assertEquals(64L, paths.sumOf { ParquetFile.open(MappedDataReader(it)).numRows })
+        assertEquals(64L, paths.sumOf { ParquetFile.open(LocalFileReader(it)).use { f -> f.numRows } })
         val manifest = paths.first().removeSuffix(".parquet") + ".manifest.json"
-        fun manifestText(): String {
-            val reader = MappedDataReader(manifest)
-            return reader.read(0, reader.size.toInt()).decodeToString()
-        }
+        fun manifestText(): String = LocalFileReader(manifest).use { reader -> reader.read(0, reader.size.toInt()).decodeToString() }
         val firstManifest = manifestText()
         assertTrue(firstManifest.contains("time_anchor"))
         assertEquals(paths, IosDailyDerivedStore(root).rebuild(record.station, listOf(record), archive, mapOf(anchor.boot to anchor), now + 1))
@@ -57,7 +54,7 @@ class IosDailyDerivedStoreTest {
         val changed = record.copy(estFirstUtcNs = record.estFirstUtcNs!! + 2 * StationDays.DAY_NS, estLastUtcNs = shifted.utcNs)
         val corrected = IosDailyDerivedStore(root).rebuild(record.station, listOf(changed), archive, mapOf(shifted.boot to shifted), now + 200_000L)
         assertEquals(2, corrected.size)
-        assertEquals(64L, corrected.sumOf { ParquetFile.open(MappedDataReader(it)).numRows })
+        assertEquals(64L, corrected.sumOf { ParquetFile.open(LocalFileReader(it)).use { f -> f.numRows } })
         assertTrue(paths.none { it in corrected })
         paths.forEach { assertFalse(NSFileManager.defaultManager.fileExistsAtPath(it)) }
     }

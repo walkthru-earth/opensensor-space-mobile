@@ -7,7 +7,7 @@ import earth.walkthru.aqsync.data.archive.FileArchiveStore
 import earth.walkthru.aqsync.data.archive.RoomArchiveIndex
 import earth.walkthru.aqsync.data.archive.toEntity
 import earth.walkthru.aqsync.data.archive.toRecord
-import earth.walkthru.aqsync.data.history.parquet.MappedFileReader
+import earth.walkthru.aqsync.data.history.parquet.LocalFileReader
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.sync.FileArchive
@@ -44,7 +44,7 @@ class HistoryIndexer @Inject constructor(
 
     /** [row] with the index columns filled from [file] (already verified). Never throws. */
     fun indexed(row: ArchivedFile, file: File, nowEpochMs: Long = System.currentTimeMillis()): ArchivedFile =
-        repair.indexed(row.toRecord(), { MappedFileReader(file) }, nowEpochMs).toEntity()
+        repair.indexed(row.toRecord(), { LocalFileReader(file) }, nowEpochMs).toEntity()
 
     /** Indexes up to [limit] rows that need it. Returns how many rows were updated (0 means nothing is left). */
     suspend fun backfill(limit: Int = 100): Int = repair.backfill(limit)

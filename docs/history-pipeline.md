@@ -86,7 +86,8 @@ Means over a span are weighted by valid rows — never averages of averages.
 
 `derived/v1/<station>/day=YYYY-MM-DD.parquet` + `.manifest.json` on both platforms, in the OS cache
 directory under the derived quota (`docs/data-model.md`, Quotas and memory pressure), written by the shared
-`ParquetWriter`. Rows: every UTC row of the day from the verified files, time-ordered,
+`ParquetWriter`. The builder opens one source at a time, decodes what the day needs and closes it before
+the next, so a day never holds two source files open (#61). Rows: every UTC row of the day from the verified files, time-ordered,
 de-duplicated; **one row group per UTC hour**. Columns: union of sources (v1 files leave the four v2
 columns null) + `source_file_index` (INT32 into the manifest's `sources`) +
 `event_time_utc_estimated_ns` for estimated rows (with `event_time_utc_ns` null). **No `station_id`

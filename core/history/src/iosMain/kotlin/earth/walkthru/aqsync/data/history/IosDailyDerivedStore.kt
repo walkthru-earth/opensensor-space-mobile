@@ -5,7 +5,7 @@ package earth.walkthru.aqsync.data.history
 import earth.walkthru.aqsync.archive.ArchiveLayout
 import earth.walkthru.aqsync.archive.ArchiveRecord
 import earth.walkthru.aqsync.archive.ArchiveStore
-import earth.walkthru.aqsync.data.history.parquet.MappedDataReader
+import earth.walkthru.aqsync.data.history.parquet.LocalFileReader
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 import earth.walkthru.aqsync.data.history.parquet.ParquetSink
 import earth.walkthru.aqsync.data.protocol.ParquetVerify
@@ -101,18 +101,13 @@ class IosDailyDerivedStore(
                 }
                 val temporary = atomic.createTemp(".parquet")
                 try {
-                    val opened = ArrayList<DailyParquetSource>(sources.size)
+                    // The builder opens and closes one source at a time (#61).
+                    val daily = sources.map { source -> DailyParquetSource(source) { ParquetFile.open(archive.reader(source.key)) } }
+                    val sink = FileSink(temporary)
                     val result = try {
-                        for (source in sources) opened += DailyParquetSource(source, ParquetFile.open(archive.reader(source.key)))
-                        val sink = FileSink(temporary)
-                        try {
-                            DailyParquetBuilder.build(station, day, opened, sink, anchors, nowEpochS)
-                        } finally {
-                            sink.close()
-                        }
+                        DailyParquetBuilder.build(station, day, daily, sink, anchors, nowEpochS)
                     } finally {
-                        // Release every mapping now, not when the next GC runs (#61).
-                        opened.forEach { it.file.close() }
+                        sink.close()
                     }
                     if (result == null) {
                         remove(manifest)
@@ -120,7 +115,7 @@ class IosDailyDerivedStore(
                         continue
                     }
                     // Parse the footer before replacing a previously good cache entry.
-                    check(ParquetFile.open(MappedDataReader(temporary)).use { it.numRows } == result.rows.toLong()) { "derived row count mismatch" }
+                    check(ParquetFile.open(LocalFileReader(temporary)).use { it.numRows } == result.rows.toLong()) { "derived row count mismatch" }
                     // A crash between the two commits must leave no receipt claiming older bytes.
                     remove(manifest)
                     atomic.commitReplace(temporary, target, StorageClass.Rebuildable)
@@ -148,9 +143,10 @@ class IosDailyDerivedStore(
     private fun cachedSignature(path: String): String? {
         if (!isFile(path)) return null
         return try {
-            val reader = MappedDataReader(path)
-            if (reader.size > 1_048_576) return null
-            Json.parseToJsonElement(reader.read(0, reader.size.toInt()).decodeToString()).jsonObject["source_signature"]?.jsonPrimitive?.content
+            LocalFileReader(path).use { reader ->
+                if (reader.size > 1_048_576) return null
+                Json.parseToJsonElement(reader.read(0, reader.size.toInt()).decodeToString()).jsonObject["source_signature"]?.jsonPrimitive?.content
+            }
         } catch (_: Exception) {
             null
         }

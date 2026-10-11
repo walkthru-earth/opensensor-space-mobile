@@ -186,12 +186,13 @@ class StorageJanitor(
 
     private suspend fun adopt(key: ArchiveKey) {
         val hashed = withContext(io) {
-            val reader = store.reader(key)
-            val sha = Sha256()
-            val crc = ArchiveVerifier.crc32(reader) { bytes, n -> sha.update(bytes, 0, n) }
-            val n = ParquetVerify.MAGIC.size
-            val magic = reader.size >= 2L * n && ParquetVerify.hasMagic(reader.read(0, n), reader.read(reader.size - n, n))
-            if (magic) Triple(reader.size, crc, sha.digest().toHex()) else null
+            store.reader(key).use { reader ->
+                val sha = Sha256()
+                val crc = ArchiveVerifier.crc32(reader) { bytes, n -> sha.update(bytes, 0, n) }
+                val n = ParquetVerify.MAGIC.size
+                val magic = reader.size >= 2L * n && ParquetVerify.hasMagic(reader.read(0, n), reader.read(reader.size - n, n))
+                if (magic) Triple(reader.size, crc, sha.digest().toHex()) else null
+            }
         }
         if (hashed == null) {
             report = report.copy(unverifiable = report.unverifiable + 1)

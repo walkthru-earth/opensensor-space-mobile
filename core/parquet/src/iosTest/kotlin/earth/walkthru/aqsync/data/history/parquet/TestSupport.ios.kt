@@ -21,10 +21,7 @@ internal val fixtureRoot: String
     get() = NSProcessInfo.processInfo.environment["PARQUET_FIXTURES"] as? String
         ?: error("PARQUET_FIXTURES is not set: run through ./gradlew :core:parquet:iosSimulatorArm64Test")
 
-actual fun fixtureBytes(path: String): ByteArray {
-    val reader = MappedDataReader("$fixtureRoot/$path")
-    return reader.read(0, reader.size.toInt())
-}
+actual fun fixtureBytes(path: String): ByteArray = LocalFileReader("$fixtureRoot/$path").use { reader -> reader.read(0, reader.size.toInt()) }
 
 /** iOS has no ZSTD (Apple's Compression framework lacks it; docs/parquet.md): ZSTD fixtures are skipped. */
 actual val testCodecs: ParquetCodecs = ParquetCodecs.builtIn
