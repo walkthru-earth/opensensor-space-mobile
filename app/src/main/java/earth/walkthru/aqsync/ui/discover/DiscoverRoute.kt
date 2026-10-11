@@ -10,6 +10,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import earth.walkthru.aqsync.data.settings.AppSettings
+import earth.walkthru.aqsync.data.settings.DetailLevel
 import earth.walkthru.aqsync.data.settings.DiscoverStore
 import earth.walkthru.aqsync.publicfeed.platformH3Grid
 import earth.walkthru.aqsync.ui.components.LocalUnits
@@ -38,6 +39,9 @@ class DiscoverViewModel @Inject constructor(store: DiscoverStore, settings: AppS
 
     /** Starts false, so no request leaves the phone before the saved switch is read. */
     val showPublicSensors: StateFlow<Boolean> = settings.showPublicSensors.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    /** Simple until the saved level is read, so nothing more technical flashes first. */
+    val level: StateFlow<DetailLevel> = settings.detailLevel.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DetailLevel.SIMPLE)
 }
 
 /**
@@ -48,9 +52,11 @@ class DiscoverViewModel @Inject constructor(store: DiscoverStore, settings: AppS
 @Composable
 fun DiscoverRoute(onAddSensor: () -> Unit, viewModel: DiscoverViewModel = hiltViewModel()) {
     val showPublic by viewModel.showPublicSensors.collectAsStateWithLifecycle()
+    val level by viewModel.level.collectAsStateWithLifecycle()
     DiscoverScreen(
         controller = viewModel.controller,
         networkAllowed = showPublic,
+        level = level,
         onAddSensor = onAddSensor,
         modifier = Modifier.fillMaxSize(),
         infoButton = { info, modifier -> InfoButton(InfoContent(info.title, info.body), modifier) },

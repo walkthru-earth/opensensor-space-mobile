@@ -197,7 +197,7 @@ internal fun AppRoot(
         AppShell(
             entries = { nav ->
                 entry<DiscoverKey> {
-                    DiscoverEntry(networkAllowed = showPublic, units = units, onAddSensor = { nav.toMyDevicesRoot() })
+                    DiscoverEntry(networkAllowed = showPublic, level = level, units = units, onAddSensor = { nav.toMyDevicesRoot() })
                 }
                 entry<ScanKey> {
                     MyDevicesEntry(
@@ -389,11 +389,12 @@ private fun MyDevicesEntry(
 
 /** Discover with its controller kept per entry. The shared screen takes Back, or the edge swipe, while a sheet is open. */
 @Composable
-private fun DiscoverEntry(networkAllowed: Boolean, units: UnitSystem, onAddSensor: () -> Unit) {
+private fun DiscoverEntry(networkAllowed: Boolean, level: DetailLevel, units: UnitSystem, onAddSensor: () -> Unit) {
     val controller = viewModel { DiscoverHolder() }.controller
     DiscoverScreen(
         controller = controller,
         networkAllowed = networkAllowed,
+        level = level,
         onAddSensor = onAddSensor,
         units = units,
     )

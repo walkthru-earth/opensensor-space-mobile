@@ -80,6 +80,7 @@ import earth.walkthru.aqsync.publicfeed.FeedProperty
 import earth.walkthru.aqsync.publicfeed.FeedWindow
 import earth.walkthru.aqsync.publicfeed.H3Index
 import earth.walkthru.aqsync.publicfeed.SequentialRamp
+import earth.walkthru.aqsync.settings.DetailLevel
 import earth.walkthru.aqsync.units.UnitFormatter
 import earth.walkthru.aqsync.units.UnitSystem
 import earth.walkthru.opensensor.designsystem.FloatingControl
@@ -104,11 +105,13 @@ private val PEEK_HEIGHT = 200.dp
  * [networkAllowed] is the Settings switch. Off, the basemap is a plain paper background and no
  * request leaves the phone. The copy comes from this module's Compose resources. [infoButton] lets the host reuse its own info affordance. [units] is
  * the host's resolved Settings choice (METRIC or IMPERIAL). It changes labels only, never the scale.
+ * [level] is the host's Settings detail level. Simple speaks in moods, Detailed and Developer show the WHO scale.
  */
 @Composable
 fun DiscoverScreen(
     controller: DiscoverController,
     networkAllowed: Boolean,
+    level: DetailLevel,
     onAddSensor: () -> Unit,
     modifier: Modifier = Modifier,
     infoButton: @Composable (InfoText, Modifier) -> Unit = { info, m -> DefaultInfoButton(info, m) },
@@ -118,7 +121,7 @@ fun DiscoverScreen(
     val strings = discoverStrings()
     val formatter = remember(units) { UnitFormatter(units) }
     CompositionLocalProvider(LocalDiscoverUnits provides formatter) {
-        DiscoverContent(controller, strings, networkAllowed, onAddSensor, modifier, infoButton)
+        DiscoverContent(controller, strings, networkAllowed, level == DetailLevel.SIMPLE, onAddSensor, modifier, infoButton)
     }
 }
 
@@ -127,6 +130,7 @@ private fun DiscoverContent(
     controller: DiscoverController,
     strings: DiscoverStrings,
     networkAllowed: Boolean,
+    simple: Boolean,
     onAddSensor: () -> Unit,
     modifier: Modifier,
     infoButton: @Composable (InfoText, Modifier) -> Unit,
