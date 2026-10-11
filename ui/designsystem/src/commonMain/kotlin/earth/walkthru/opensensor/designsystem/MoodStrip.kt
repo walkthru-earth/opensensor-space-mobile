@@ -66,7 +66,8 @@ internal fun moodWordRes(step: WhoStep?): StringResource = when (step) {
     null -> Res.string.mood_none
 }
 
-internal fun moodLineRes(step: WhoStep?): StringResource = when (step) {
+/** The one-line meaning of [step], for screens that pick a resource by rule. Null is "No reading". */
+fun moodLineRes(step: WhoStep?): StringResource = when (step) {
     WhoStep.GUIDELINE -> Res.string.mood_fresh_line
     WhoStep.IT4 -> Res.string.mood_fair_line
     WhoStep.IT3 -> Res.string.mood_hazy_line

@@ -66,6 +66,7 @@
     <string name="now_last_reading">Last reading</string>
     <string name="now_snapshot_note">A 10 second snapshot, not a daily average.</string>
     <string name="info_now_body">A 10 second snapshot from the sensor. It is not an AQI and not a 24 hour mean, so read it as a hint. The face, the word and the colour all show the same WHO step.</string>
+    <string name="info_now_body_simple">A 10 second snapshot from the sensor, not a daily average, so read it as a hint. The face, the word and the colour all show the same air mood.</string>
     <string name="now_no_reading">No reading yet</string>
     <string name="now_waiting">Waiting for a reading…</string>
     <string name="now_sample_number">sample %1$d</string>

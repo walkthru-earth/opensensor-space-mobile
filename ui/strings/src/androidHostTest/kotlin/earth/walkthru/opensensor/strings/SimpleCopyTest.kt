@@ -65,11 +65,16 @@ class SimpleCopyTest {
         if (found.isNotEmpty()) fail("Mood words duplicated outside the design system $found")
     }
 
-    /** The Today hero's advice names the guideline body, so only the detailed levels may show it. */
+    /**
+     * The Today hero's Simple info sheet. Which key each level reads is a behavior test in
+     * feature/today (TodayHeroCopyTest), this checks the Simple text itself.
+     */
     @Test
-    fun todayAdviceIsNeverShownAtSimple() {
-        val src = File(Catalogues.root, "feature/today/src/commonMain/kotlin/earth/walkthru/opensensor/today/TodayCards.kt").readLines()
-        val unguarded = src.withIndex().filter { (_, l) -> "adviceText()" in l && "level.detailed" !in l }
-        if (unguarded.isNotEmpty()) fail("adviceText() must sit on a level.detailed branch, lines ${unguarded.map { it.index + 1 }}")
+    fun todaySimpleInfoNeverNamesTheGuidelineBody() {
+        listOf("values", "values-ar").forEach { dir ->
+            val file = File(Catalogues.root, "feature/today/src/commonMain/composeResources/$dir/strings.xml")
+            val text = Catalogues.parse(file)["info_now_body_simple"] ?: fail("$dir lacks info_now_body_simple")
+            if (banned.any { it.containsMatchIn(text) }) fail("$dir info_now_body_simple names the guideline body")
+        }
     }
 }

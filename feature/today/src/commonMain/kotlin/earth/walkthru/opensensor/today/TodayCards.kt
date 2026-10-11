@@ -61,7 +61,6 @@ import earth.walkthru.opensensor.designsystem.StatLine
 import earth.walkthru.opensensor.designsystem.StatusDot
 import earth.walkthru.opensensor.designsystem.TickingText
 import earth.walkthru.opensensor.designsystem.WarningNote
-import earth.walkthru.opensensor.designsystem.moodLine
 import earth.walkthru.opensensor.designsystem.moodWord
 import earth.walkthru.opensensor.designsystem.nowEpochMillis
 import earth.walkthru.opensensor.designsystem.peacockExpressionFor
@@ -110,7 +109,6 @@ import earth.walkthru.opensensor.today.resources.flush
 import earth.walkthru.opensensor.today.resources.fresh_none
 import earth.walkthru.opensensor.today.resources.fresh_stale
 import earth.walkthru.opensensor.today.resources.fresh_updated
-import earth.walkthru.opensensor.today.resources.info_now_body
 import earth.walkthru.opensensor.today.resources.now_last_reading
 import earth.walkthru.opensensor.today.resources.now_right_now
 import earth.walkthru.opensensor.today.resources.now_sample_number
@@ -248,7 +246,7 @@ internal fun MetricHeroCard(
                 CardHeader(
                     title,
                     modifier = Modifier.weight(1f),
-                    info = InfoContent(title, stringResource(Res.string.now_snapshot_note), stringResource(Res.string.info_now_body)),
+                    info = InfoContent(title, stringResource(Res.string.now_snapshot_note), stringResource(nowInfoBodyRes(level))),
                     color = quiet,
                 )
                 FreshnessLabel(receivedAtEpochMs, color = quiet)
@@ -304,7 +302,7 @@ internal fun MetricHeroCard(
                     Text(reading.mood.comparisonText(), style = MaterialTheme.typography.bodySmall, color = quiet, modifier = Modifier.weight(1f))
                 }
                 Spacer(Modifier.height(12.dp))
-                Text(if (level.detailed) reading.mood.adviceText() else moodLine(reading.mood.step), style = MaterialTheme.typography.bodyLarge)
+                Text(stringResource(heroLineRes(reading.mood, level)), style = MaterialTheme.typography.bodyLarge)
             }
             if (level.developer) {
                 live?.seq?.let {

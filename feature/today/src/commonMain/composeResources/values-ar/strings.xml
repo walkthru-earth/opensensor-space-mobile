@@ -70,6 +70,7 @@
     <string name="now_last_reading">آخر قراءة</string>
     <string name="now_snapshot_note">لقطة لمدة 10 ثوانٍ، وليست متوسطًا يوميًا.</string>
     <string name="info_now_body">لقطة مدتها 10 ثوانٍ من المستشعر. ليست مؤشر جودة الهواء ولا متوسط 24 ساعة، فاعتبرها إشارة تقريبية. الوجه والكلمة واللون كلها تُظهر درجة منظمة الصحة العالمية نفسها.</string>
+    <string name="info_now_body_simple">لقطة مدتها 10 ثوانٍ من المستشعر وليست متوسطًا يوميًا، فاعتبرها إشارة تقريبية. الوجه والكلمة واللون كلها تُظهر حالة الهواء نفسها.</string>
     <string name="now_no_reading">لا قراءة بعد</string>
     <string name="now_waiting">في انتظار قراءة…</string>
     <string name="now_sample_number">العيّنة %1$d</string>
