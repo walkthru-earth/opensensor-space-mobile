@@ -86,7 +86,7 @@ flowchart LR
 Android adopts the per-device `CollectionController` through `DeviceFacade` and
 `DeviceLinkOwner`. iOS uses the link and engine, with native intent and retry ownership
 until [#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81). Its BLE
-physical link remains on MainActor until [#80](https://github.com/walkthru-earth/opensensor-space-mobile/issues/80).
+physical link (`BlePhysicalLink`) runs Core Bluetooth on one serial queue, off the main actor.
 The diagram includes the planned credential port.
 
 ### Rules

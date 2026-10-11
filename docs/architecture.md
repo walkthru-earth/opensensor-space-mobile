@@ -77,8 +77,8 @@ the graph below, where every rule that must give the same answer on both phones 
 platform code only adapts OS services. `:core:sync`, `:core:archive`, `:core:settings` and
 `:feature:settings` exist. The shared sync engine is adopted on both platforms. Room KMP backing remains planned.
 Android uses the shared collection controller; iOS controller adoption remains
-[#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81), and its BLE physical
-queue split remains [#80](https://github.com/walkthru-earth/opensensor-space-mobile/issues/80). `:core:model` (device families and metrics
+[#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81). iOS Core Bluetooth
+runs on the `BlePhysicalLink` serial queue. `:core:model` (device families and metrics
 as data) is planned in [production-readiness-plan.md](production-readiness-plan.md) W11 and
 [devices-and-discovery.md](devices-and-discovery.md).
 

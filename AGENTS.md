@@ -60,9 +60,9 @@ concern you are changing in `docs/README.md`.
   `ArchiveCollector` and per-device `CollectionController`. Android `DeviceFacade` routes
   collection and UI through that controller. `DeviceLinkOwner` owns connections, manual
   commands and idle reconnect. `DeviceConnectionRepository` is a compatibility typealias.
-  iOS adopts the link and engine through `IosLink` and `SensorSync`. Its controller adoption
-  and BLE queue split remain [#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81)
-  and [#80](https://github.com/walkthru-earth/opensensor-space-mobile/issues/80).
+  iOS adopts the link and engine through `IosLink` and `SensorSync`, and Core Bluetooth runs
+  on the `BlePhysicalLink` serial queue. Its controller adoption remains
+  [#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81).
 - Platform entry points own their UI and OS services. Android Compose and Android
   framework APIs stay in `app/`; iOS app code and Apple frameworks stay in `ios/`.
   The current iOS screen uses Compose Multiplatform; native Swift files are adapters.
