@@ -46,4 +46,14 @@ class BleDisconnectCausesTest {
         assertEquals(DisconnectCause.Timeout(TimeoutPhase.OPEN, 0), BleDisconnectCauses.ofOpenFailure(BleLinkDriver.ConnectTimeoutException()))
         assertEquals(DisconnectCause.LocalAbort(), BleDisconnectCauses.ofOpenFailure(TransportException("no adapter")))
     }
+
+    @Test
+    fun `only failed or missing keys ask for pairing again`() {
+        assertTrue(BleDisconnectCauses.needsPairingRepair(DisconnectCause.Auth(AuthKind.BOND_MISSING)))
+        assertTrue(BleDisconnectCauses.needsPairingRepair(DisconnectCause.Auth(AuthKind.ENCRYPTION_FAILED)))
+        assertFalse(BleDisconnectCauses.needsPairingRepair(DisconnectCause.Auth(AuthKind.BOND_FAILED)))
+        assertFalse(BleDisconnectCauses.needsPairingRepair(DisconnectCause.Auth(AuthKind.TOKEN_REJECTED)))
+        assertFalse(BleDisconnectCauses.needsPairingRepair(DisconnectCause.PeerClosed()))
+        assertFalse(BleDisconnectCauses.needsPairingRepair(null))
+    }
 }

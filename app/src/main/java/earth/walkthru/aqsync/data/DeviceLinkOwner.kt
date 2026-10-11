@@ -5,6 +5,7 @@ import earth.walkthru.aqsync.collection.CollectionLink
 import earth.walkthru.aqsync.collection.LinkPreference
 import earth.walkthru.aqsync.data.background.CompanionUnlinker
 import earth.walkthru.aqsync.data.ble.BleConnectionFailure
+import earth.walkthru.aqsync.data.ble.BleDisconnectCauses
 import earth.walkthru.aqsync.data.ble.ConfigSnapshot
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.DeviceErrorException
@@ -492,8 +493,8 @@ class DeviceLinkOwner @Inject constructor(
                 connectionFailure.value = "verification failed"
                 _events.tryEmit(DeviceEvent.Error(DeviceMessage.VerificationFailed))
             }
-            DisconnectCause.Auth(AuthKind.BOND_MISSING) -> {
-                // The phone lost its keys. Reconnecting cannot help until the user pairs again.
+            is DisconnectCause.Auth if BleDisconnectCauses.needsPairingRepair(cause) -> {
+                // The bond keys failed. Reconnecting cannot help until the user pairs again.
                 Log.w(TAG, "connect failed (${cause.describe()})")
                 connectionFailure.value = BleConnectionFailure.PAIRING_REPAIR_MESSAGE
                 _events.tryEmit(DeviceEvent.Error(DeviceMessage.PairingRepair))

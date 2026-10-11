@@ -45,6 +45,13 @@ object BleDisconnectCauses {
         else -> DisconnectCause.LocalAbort(gattStatus = status)
     }
 
+    /**
+     * The bond keys exist but failed, or are gone. Pairing again fixes it. A pairing that was never
+     * finished ([AuthKind.BOND_FAILED], for example a PIN prompt that timed out) is not one.
+     */
+    fun needsPairingRepair(cause: DisconnectCause?): Boolean =
+        cause == DisconnectCause.Auth(AuthKind.BOND_MISSING) || cause == DisconnectCause.Auth(AuthKind.ENCRYPTION_FAILED)
+
     /** Why [BleLinkDriver.open] failed. Pairing failures are credentials, the rest is the link. */
     fun ofOpenFailure(e: TransportException): DisconnectCause {
         val bond = generateSequence<Throwable>(e) { it.cause }.filterIsInstance<BleLinkDriver.BondException>().firstOrNull()
