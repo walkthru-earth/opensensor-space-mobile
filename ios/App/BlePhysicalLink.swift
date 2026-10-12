@@ -50,6 +50,8 @@ actor BlePhysicalLink {
     private var advertisedNames: [String: String] = [:]
     /// Pending connects armed off screen, or restored by iOS. They complete when the sensor is in range.
     private var waiting: [String: CBPeripheral] = [:]
+    /// What [arm] asked for, kept across a radio off and on.
+    private var armed = ArmedConnects()
     private var current: CBPeripheral?
     /// Peripherals whose cancel was issued and whose disconnect callback has not arrived yet. That late
     /// callback belongs to the ended connection, so it never ends a newer one to the same sensor.
@@ -197,15 +199,21 @@ actor BlePhysicalLink {
     nonisolated func arm(ids: [String]) {
         queue.async { [self] in
             assumeIsolated {
-                guard let central = $0.central, central.state == .poweredOn else { return }
-                let uuids = ids.compactMap { UUID(uuidString: $0) }
-                for peripheral in central.retrievePeripherals(withIdentifiers: uuids) {
-                    let id = peripheral.identifier.uuidString
-                    guard peripheral !== $0.current, $0.waiting[id] == nil else { continue }
-                    $0.waiting[id] = peripheral
-                    central.connect(peripheral)
-                }
+                $0.armed.arm(ids)
+                $0.connectWaiting(ids)
             }
+        }
+    }
+
+    /// Connects these sensors as pending connects while the radio is on. Off, they wait in [armed].
+    private func connectWaiting(_ ids: [String]) {
+        guard let central, central.state == .poweredOn else { return }
+        let uuids = ids.compactMap { UUID(uuidString: $0) }
+        for peripheral in central.retrievePeripherals(withIdentifiers: uuids) {
+            let id = peripheral.identifier.uuidString
+            guard peripheral !== current, waiting[id] == nil else { continue }
+            waiting[id] = peripheral
+            central.connect(peripheral)
         }
     }
 
@@ -213,6 +221,7 @@ actor BlePhysicalLink {
     nonisolated func releaseWaiting(id: String?) {
         queue.async { [self] in
             assumeIsolated { link in
+                link.armed.release(id)
                 let ids = id.map { [$0] } ?? Array(link.waiting.keys)
                 for id in ids {
                     guard let peripheral = link.waiting[id], peripheral !== link.current else { continue }
@@ -231,6 +240,7 @@ actor BlePhysicalLink {
             deliver(number, .lost(.connectFailed))
             return
         }
+        armed.adopted(id)
         let peripheral =
             waiting.removeValue(forKey: id) ?? discovered[id]
             ?? UUID(uuidString: id).flatMap { central.retrievePeripherals(withIdentifiers: [$0]).first }
@@ -367,12 +377,15 @@ actor BlePhysicalLink {
             for (id, peripheral) in waiting where peripheral.state == .connected && peripheral !== current {
                 deliver(0, .wake(id: id, restored: true))
             }
+            // Pending connects the radio dropped when it turned off wait again.
+            connectWaiting(armed.rearm(waiting: Set(waiting.keys), current: current?.identifier.uuidString))
         }
     }
 
     fileprivate func restore(_ peripherals: [CBPeripheral]) {
         // iOS relaunched the app for a pending connect. Keep the peripherals so the run can use them.
         for peripheral in peripherals { waiting[peripheral.identifier.uuidString] = peripheral }
+        armed.arm(peripherals.map { $0.identifier.uuidString })
     }
 
     fileprivate func found(_ peripheral: CBPeripheral, name: String?, rssi: Int32) {

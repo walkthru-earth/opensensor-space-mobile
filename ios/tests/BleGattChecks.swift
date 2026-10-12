@@ -21,7 +21,20 @@ enum BleGattChecks {
         cancellationFailsInFlightWriteOnce()
         nativeWriteFailureIsReported()
         brokenBondIsTold()
+        pendingConnectsWaitAgainAfterTheRadioReturns()
         print("iOS Bluetooth GATT checks passed")
+    }
+
+    private static func pendingConnectsWaitAgainAfterTheRadioReturns() {
+        var armed = ArmedConnects()
+        armed.arm(["A", "B", "C"])
+        precondition(armed.rearm(waiting: [], current: nil) == ["A", "B", "C"], "the radio dropped every pending connect")
+        precondition(armed.rearm(waiting: ["A"], current: "B") == ["C"], "one still waiting and the current one are skipped")
+        armed.adopted("C")
+        armed.release("A")
+        precondition(armed.rearm(waiting: [], current: nil) == ["B"], "an adopted or released sensor stays off")
+        armed.release(nil)
+        precondition(armed.rearm(waiting: [], current: nil).isEmpty, "back on screen ends every pending connect")
     }
 
     private static func operationsRunOneAtATimeInOrder() {

@@ -155,7 +155,21 @@ final class AutoSync {
         bridge.progressTitle { [weak self] title in
             MainActor.assumeIsolated { self?.progressTitle = title }
         }
-        schedule(after: AutoSyncSchedule.shared.periodSeconds)
+        scheduleUnlessPending()
+    }
+
+    /// A launch keeps a request already waiting, so opening the app never pushes its start back.
+    private func scheduleUnlessPending() {
+        let id = Self.processingId
+        BGTaskScheduler.shared.getPendingTaskRequests { [weak self] requests in
+            let pending = requests.contains { $0.identifier == id }
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard let self, !pending || !self.hasSensors else { return }
+                    self.schedule(after: AutoSyncSchedule.shared.periodSeconds)
+                }
+            }
+        }
     }
 
     /// True when any switch is on, so launch may create the central manager for state restoration.

@@ -101,3 +101,24 @@ struct LivePage: Equatable {
     /// The user ended the live link from the open page.
     mutating func disconnected() { page = nil }
 }
+
+/// The sensors the app asked Core Bluetooth to wait for. Core Bluetooth drops pending connects when
+/// the radio turns off, so they are kept here and armed again once it is on.
+struct ArmedConnects {
+    private(set) var ids = Set<String>()
+
+    mutating func arm(_ more: [String]) { ids.formUnion(more) }
+
+    /// The app ended one pending connect, or every one when [id] is nil.
+    mutating func release(_ id: String?) {
+        if let id { ids.remove(id) } else { ids.removeAll() }
+    }
+
+    /// A connection took the sensor, so it no longer waits.
+    mutating func adopted(_ id: String) { ids.remove(id) }
+
+    /// The ids to connect again after the radio came on, skipping those still waiting and the current one.
+    func rearm(waiting: Set<String>, current: String?) -> [String] {
+        ids.filter { !waiting.contains($0) && $0 != current }.sorted()
+    }
+}
