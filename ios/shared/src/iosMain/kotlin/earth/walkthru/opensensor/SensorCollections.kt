@@ -13,6 +13,7 @@ import earth.walkthru.aqsync.collection.LinkProvider
 import earth.walkthru.aqsync.collection.RetryPolicy
 import earth.walkthru.aqsync.collection.StartResult
 import earth.walkthru.aqsync.collection.StopSource
+import earth.walkthru.aqsync.collection.endReason
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.sync.CollectionSummary
 import earth.walkthru.aqsync.data.sync.FileOutcome
@@ -215,7 +216,7 @@ class SensorCollections internal constructor(
     private fun resultOf(terminal: CollectionState, request: Request): SyncResult = when (terminal) {
         is CollectionState.Done -> resultOf(terminal.summary)
         is CollectionState.Stopped -> partialResult(SyncEnd.STOPPED, request.listed, request.outcomes)
-        is CollectionState.Failed -> partialResult(endOf(terminal.failure), request.listed, request.outcomes)
+        is CollectionState.Failed -> partialResult(terminal.failure.syncEnd(), request.listed, request.outcomes, terminal.failure.endReason())
         else -> partialResult(SyncEnd.FAILED, request.listed, request.outcomes)
     }
 
@@ -226,16 +227,6 @@ class SensorCollections internal constructor(
             else -> SyncEnd.FILES_NOT_SAVED
         }
         return SyncResult(end, summary.files, summary.newFiles, summary.notSaved.size, summary.notSaved)
-    }
-
-    private fun endOf(failure: CollectionFailure): SyncEnd = when (failure) {
-        is CollectionFailure.Link -> when (failure.cause) {
-            is DisconnectCause.Auth -> SyncEnd.AUTH_FAILED
-            DisconnectCause.Busy -> SyncEnd.BUSY
-            else -> SyncEnd.LINK_LOST
-        }
-        is CollectionFailure.Storage -> SyncEnd.STORAGE_FAILED
-        is CollectionFailure.Device, is CollectionFailure.KeepAliveRefused, is CollectionFailure.Unexpected -> SyncEnd.FAILED
     }
 
     private inline fun <T> locked(block: () -> T): T {

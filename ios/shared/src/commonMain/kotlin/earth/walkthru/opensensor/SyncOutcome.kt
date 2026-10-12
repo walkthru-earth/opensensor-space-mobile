@@ -1,8 +1,10 @@
 package earth.walkthru.opensensor
 
+import earth.walkthru.aqsync.collection.SyncEndReason
 import earth.walkthru.aqsync.data.sync.FileNotSaved
 import earth.walkthru.opensensor.strings.UiText
 import earth.walkthru.opensensor.strings.resources.Res
+import earth.walkthru.opensensor.strings.resources.companion_lan_sync_paused
 import earth.walkthru.opensensor.strings.resources.companion_sync_storage_failed
 import earth.walkthru.opensensor.strings.resources.msg_busy
 import earth.walkthru.opensensor.strings.resources.msg_hardware_in_use
@@ -54,6 +56,11 @@ class SyncResult internal constructor(
     val notSaved: Int,
     /** Per-file failures for retry and diagnostics; never includes file contents. */
     val failures: List<FileNotSaved> = emptyList(),
+    /**
+     * Why the run ended in the shared terms Android uses, from the typed cause when one is known.
+     * [end] stays the coarse class the native adapters branch on.
+     */
+    val endReason: SyncEndReason = end.reason,
 ) {
     /** The link is still usable afterwards, so the session can stay open. */
     val keepsLink: Boolean get() = when (end) {
@@ -62,26 +69,42 @@ class SyncResult internal constructor(
     }
 
     /** Worth resuming automatically when the link returns. */
-    val resumable: Boolean get() = end == SyncEnd.LINK_LOST
+    val resumable: Boolean get() = end == SyncEnd.LINK_LOST || endReason == SyncEndReason.INTERRUPTED
 
     /** The words for this outcome, Android's keys and wording. */
     internal val message: UiText
-        get() = when (end) {
-            SyncEnd.COMPLETE, SyncEnd.FILES_NOT_SAVED -> when {
-                notSaved > 0 -> UiText.plural(Res.plurals.sync_some_failed, notSaved, notSaved)
-                saved == 0 -> UiText.of(Res.string.msg_up_to_date)
-                else -> UiText.plural(Res.plurals.msg_sync_finished, saved, saved, saved)
+        get() = if (endReason == SyncEndReason.INTERRUPTED) {
+            UiText.of(Res.string.companion_lan_sync_paused)
+        } else {
+            when (end) {
+                SyncEnd.COMPLETE, SyncEnd.FILES_NOT_SAVED -> when {
+                    notSaved > 0 -> UiText.plural(Res.plurals.sync_some_failed, notSaved, notSaved)
+                    saved == 0 -> UiText.of(Res.string.msg_up_to_date)
+                    else -> UiText.plural(Res.plurals.msg_sync_finished, saved, saved, saved)
+                }
+                SyncEnd.STORAGE_FAILED -> UiText.of(Res.string.companion_sync_storage_failed)
+                SyncEnd.STOPPED -> UiText.of(Res.string.msg_sync_stopped)
+                SyncEnd.AUTH_FAILED -> UiText.of(Res.string.msg_token_needs_ble)
+                SyncEnd.BUSY -> UiText.of(Res.string.msg_busy)
+                SyncEnd.IN_USE -> UiText.of(Res.string.msg_hardware_in_use)
+                SyncEnd.LINK_LOST, SyncEnd.FAILED -> UiText.of(Res.string.msg_sync_aborted)
             }
-            SyncEnd.STORAGE_FAILED -> UiText.of(Res.string.companion_sync_storage_failed)
-            SyncEnd.STOPPED -> UiText.of(Res.string.msg_sync_stopped)
-            SyncEnd.AUTH_FAILED -> UiText.of(Res.string.msg_token_needs_ble)
-            SyncEnd.BUSY -> UiText.of(Res.string.msg_busy)
-            SyncEnd.IN_USE -> UiText.of(Res.string.msg_hardware_in_use)
-            SyncEnd.LINK_LOST, SyncEnd.FAILED -> UiText.of(Res.string.msg_sync_aborted)
         }
 
-    override fun toString(): String = "SyncResult($end, files=$files, saved=$saved, notSaved=$notSaved)"
+    override fun toString(): String = "SyncResult($end, $endReason, files=$files, saved=$saved, notSaved=$notSaved)"
 }
+
+/** The shared reason for an ending when no typed cause is known. */
+internal val SyncEnd.reason: SyncEndReason
+    get() = when (this) {
+        SyncEnd.COMPLETE, SyncEnd.FILES_NOT_SAVED -> SyncEndReason.COMPLETED
+        SyncEnd.STORAGE_FAILED -> SyncEndReason.STORAGE_ERROR
+        SyncEnd.STOPPED -> SyncEndReason.STOPPED
+        SyncEnd.LINK_LOST -> SyncEndReason.LINK_LOST
+        SyncEnd.AUTH_FAILED -> SyncEndReason.TOKEN_REJECTED
+        SyncEnd.BUSY -> SyncEndReason.DEVICE_BUSY
+        SyncEnd.IN_USE, SyncEnd.FAILED -> SyncEndReason.OTHER
+    }
 
 /** Progress of one sync, throttled for the screen. */
 class SyncProgress internal constructor(

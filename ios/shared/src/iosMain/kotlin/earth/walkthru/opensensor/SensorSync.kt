@@ -4,12 +4,16 @@ import earth.walkthru.aqsync.archive.ArchiveIndex
 import earth.walkthru.aqsync.archive.ArchiveStore
 import earth.walkthru.aqsync.archive.IosArchiveStore
 import earth.walkthru.aqsync.archive.ReceiptArchiveIndex
+import earth.walkthru.aqsync.collection.CollectionFailure
 import earth.walkthru.aqsync.collection.LinkPreference
+import earth.walkthru.aqsync.collection.SyncEndReason
+import earth.walkthru.aqsync.collection.endReason
 import earth.walkthru.aqsync.data.ble.AuthFailedException
 import earth.walkthru.aqsync.data.ble.DeviceBusyException
 import earth.walkthru.aqsync.data.ble.DeviceErrorException
 import earth.walkthru.aqsync.data.ble.DeviceSession
 import earth.walkthru.aqsync.data.ble.TransportException
+import earth.walkthru.aqsync.data.ble.TransportUnavailableException
 import earth.walkthru.aqsync.data.sync.ArchiveCollector
 import earth.walkthru.aqsync.data.sync.CollectionProgress
 import earth.walkthru.aqsync.data.sync.CollectionSummary
@@ -18,6 +22,9 @@ import earth.walkthru.aqsync.data.sync.FileProblem
 import earth.walkthru.aqsync.data.sync.InsufficientSpaceException
 import earth.walkthru.aqsync.data.sync.SyncEngine
 import earth.walkthru.aqsync.data.sync.WriterLeases
+import earth.walkthru.aqsync.link.DisconnectCause
+import earth.walkthru.aqsync.link.LinkClosedException
+import earth.walkthru.aqsync.link.LinkTimeoutException
 import earth.walkthru.aqsync.storage.IosStorageBudget
 import earth.walkthru.aqsync.storage.StorageBudget
 import earth.walkthru.aqsync.storage.StorageRole
@@ -168,9 +175,11 @@ class SensorSync internal constructor(
             } catch (e: InsufficientSpaceException) {
                 // Refused before any OPEN, or a full disk mid-run. Partials stay for resume.
                 syncLog("sync refused, ${e.available} bytes free of ${e.needed}")
-                partialResult(SyncEnd.STORAGE_FAILED, listed, outcomes)
+                partialResult(SyncEnd.STORAGE_FAILED, listed, outcomes, SyncEndReason.NO_SPACE)
             } catch (e: TransportException) {
-                partialResult(SyncEnd.LINK_LOST, listed, outcomes)
+                // Keep the typed cause, so a radio that is off or a rotated token is not worded as a lost link.
+                val failure = CollectionFailure.Link(e.disconnectCause())
+                partialResult(failure.syncEnd(), listed, outcomes, failure.endReason())
             } catch (e: Exception) {
                 // A protocol fault, or the archive failing outside one file. The class only, a message could carry config text.
                 syncLog("sync ended, ${e::class.simpleName}")
@@ -348,10 +357,32 @@ internal fun MutableMap<String, FileOutcome>.record(outcome: FileOutcome) {
 }
 
 /** A run that ended before its summary. [listed] files were listed and the outcomes are real. */
-internal fun partialResult(end: SyncEnd, listed: Int, outcomes: Map<String, FileOutcome>): SyncResult {
+internal fun partialResult(end: SyncEnd, listed: Int, outcomes: Map<String, FileOutcome>, reason: SyncEndReason = end.reason): SyncResult {
     val saved = outcomes.values.count { it is FileOutcome.Synced && !it.alreadyArchived }
     val failed = outcomes.values.count { it !is FileOutcome.Synced }
-    return SyncResult(end, listed, saved, failed)
+    return SyncResult(end, listed, saved, failed, endReason = reason)
+}
+
+/** The typed cause a transport failure carries, as the shared controller classifies it. */
+internal fun TransportException.disconnectCause(): DisconnectCause = when (this) {
+    is LinkClosedException -> disconnectCause
+    is LinkTimeoutException -> timeout
+    is TransportUnavailableException -> DisconnectCause.Unavailable(kind)
+    else -> DisconnectCause.LocalAbort(gattStatus = gattStatus)
+}
+
+/** The coarse ending the native adapters branch on. The shared [endReason] carries the detail. */
+internal fun CollectionFailure.syncEnd(): SyncEnd = when (this) {
+    is CollectionFailure.Link -> when (cause) {
+        is DisconnectCause.Auth -> SyncEnd.AUTH_FAILED
+        DisconnectCause.Busy -> SyncEnd.BUSY
+        is DisconnectCause.Deliberate -> SyncEnd.STOPPED
+        else -> SyncEnd.LINK_LOST
+    }
+    is CollectionFailure.Storage -> SyncEnd.STORAGE_FAILED
+    // The OS ended the time off screen. Nothing is wrong with the link or the files, and the run resumes.
+    is CollectionFailure.KeepAliveRefused -> SyncEnd.STOPPED
+    is CollectionFailure.Device, is CollectionFailure.Unexpected -> SyncEnd.FAILED
 }
 
 /** Unsafe names and local conflicts are decided by the plan and never downloaded. */

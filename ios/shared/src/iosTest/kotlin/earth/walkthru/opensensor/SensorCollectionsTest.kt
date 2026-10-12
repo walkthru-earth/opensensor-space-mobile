@@ -7,6 +7,7 @@ import earth.walkthru.aqsync.archive.ReceiptArchiveIndex
 import earth.walkthru.aqsync.collection.KeepAlive
 import earth.walkthru.aqsync.collection.LinkPreference
 import earth.walkthru.aqsync.collection.RetryPolicy
+import earth.walkthru.aqsync.collection.SyncEndReason
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.protocol.FrameCodec
 import earth.walkthru.aqsync.data.protocol.Opcode
@@ -347,6 +348,7 @@ class SensorCollectionsTest {
         collections(board).collect(seen)
         val result = withTimeout(10_000) { seen.done.await() }
         assertEquals(SyncEnd.AUTH_FAILED, result.end)
+        assertEquals(SyncEndReason.PAIRING_REPAIR, result.endReason, "a broken bond is worded as pairing repair, not a lost link")
         assertEquals(2, result.files)
         assertEquals(1, result.saved)
         assertEquals(0, result.notSaved)
@@ -413,7 +415,9 @@ class SensorCollectionsTest {
         val seen = Seen()
         runs.collect(device, null, LinkPreference.ANY, true, seen::progress, seen::finished)
         val result = withTimeout(10_000) { seen.done.await() }
-        assertEquals(SyncEnd.FAILED, result.end)
+        assertEquals(SyncEnd.STOPPED, result.end)
+        assertEquals(SyncEndReason.INTERRUPTED, result.endReason)
+        assertTrue(result.resumable)
         assertEquals(listOf(true), asked, "an unattended run says so")
         assertEquals(0, board.lists.load(), "a refused run never lists")
         assertFalse(board.current!!.leased)
