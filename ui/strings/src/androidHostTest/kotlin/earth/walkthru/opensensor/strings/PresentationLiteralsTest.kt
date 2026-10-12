@@ -46,7 +46,7 @@ class PresentationLiteralsTest {
     @Test
     fun scansThePresentationSources() {
         val names = presentationFiles().map { it.name }
-        val expected = listOf("CompanionScreen.kt", "CompanionState.kt", "AccessDialogs.kt", "DiscoverScreen.kt")
+        val expected = listOf("AutoSyncSwitch.kt", "CompanionState.kt", "AccessDialogs.kt", "DiscoverScreen.kt")
         assertTrue(names.containsAll(expected), "files $names")
     }
 

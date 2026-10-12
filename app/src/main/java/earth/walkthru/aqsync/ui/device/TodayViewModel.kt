@@ -146,6 +146,8 @@ private class RepositoryTodaySource(
 
     override fun flush() = repository.flush()
 
+    override fun stopSync() = repository.cancelSync()
+
     override fun reconnect() = repository.connect(address, snapshot.value.name, fake = fakeEndpoint)
 
     override fun disconnect() = repository.disconnect()

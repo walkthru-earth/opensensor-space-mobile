@@ -4,7 +4,6 @@
     <string name="today_station_short">المعرّف %1$s…</string>
     <string name="nav_devices">الأجهزة</string>
     <string name="nav_debug">تصحيح الأخطاء</string>
-    <string name="nav_settings">الإعدادات</string>
     <string name="nav_disconnect">قطع الاتصال</string>
     <string name="action_reconnect">إعادة الاتصال</string>
     <string name="tab_today">اليوم</string>

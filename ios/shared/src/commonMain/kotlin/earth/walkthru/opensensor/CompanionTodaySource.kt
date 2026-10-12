@@ -35,6 +35,8 @@ class CompanionLinkActions(
     internal val command: (String, SensorCommand) -> Unit,
     internal val connect: (String) -> Unit,
     internal val disconnect: (String) -> Unit,
+    /** Stops this phone's running sync of the sensor. Verified files stay synced. */
+    internal val cancelSync: (String) -> Unit,
 )
 
 /**
@@ -192,6 +194,8 @@ internal class CompanionTodaySource(
         }
         actions.command(address, command)
     }
+
+    override fun stopSync() = actions.cancelSync(address)
 
     override fun reconnect() = actions.connect(address)
 

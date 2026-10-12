@@ -40,7 +40,7 @@ fun HistoryScreen(
             Column {
                 TopAppBar(
                     title = { Text(historyTitle()) },
-                    actions = { TransportChip(transport, Modifier.padding(end = 12.dp)) },
+                    actions = { if (level.detailed) TransportChip(transport, Modifier.padding(end = 12.dp)) },
                 )
                 DeviceSectionTabs(DeviceTab.HISTORY, containerColor = MaterialTheme.colorScheme.surface) {
                     when (it) {

@@ -434,14 +434,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             },
             scanLan: { lan.scan() },
             saveWifiAccess: { bluetooth.saveWifiAccess() },
-            connectLan: { name in lan.connect(name: name) },
-            syncLan: { name in lan.sync(name: name) },
-            disconnectLan: { [weak services] name in
-                services?.userDisconnected()
-                lan.disconnect(name: name)
-            },
             syncBluetooth: { [weak services] id in services?.syncSensor(id: id) },
-            syncInBackground: { [weak services] id in KotlinBoolean(value: services?.autoSync.syncInBackground(id) ?? false) },
             closeIdle: { [weak services] id in services?.closeIdle(id: id) },
             linkFor: { [weak services] device in services?.linkFor(device: device) },
             command: { [weak services] id, command in services?.commandSensor(id: id, command: command) },

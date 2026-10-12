@@ -7,22 +7,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import earth.walkthru.opensensor.permissions.AccessHooks
 import earth.walkthru.opensensor.permissions.AccessKind
@@ -32,22 +26,17 @@ import earth.walkthru.opensensor.permissions.RuntimeAccess
 import earth.walkthru.opensensor.permissions.UserAction
 import earth.walkthru.opensensor.strings.resources.Res
 import earth.walkthru.opensensor.strings.resources.autosync_ios_hint
-import earth.walkthru.opensensor.strings.resources.autosync_ios_keep_open
 import earth.walkthru.opensensor.strings.resources.autosync_title
-import earth.walkthru.opensensor.strings.resources.files_bg_event
-import earth.walkthru.opensensor.strings.resources.files_bg_sync
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * The Auto-sync switch and "Sync now in background" for one known sensor, a small block the device
- * page places where it likes. Notification permission is asked only from the tap that turns the
- * switch on, and only while iOS has never asked ([PermissionTriggers], AUTO_SYNC_ON makes it
- * optional). The switch turns on whatever the answer. A denial only hides the summary, so no
- * settings dialog follows. [syncInBackground] hands the sensor to the background run and answers
- * true only when iOS took it as a continued task, which keeps going after the user leaves the app.
+ * The Auto-sync switch for one known sensor, the first card of its Device page and the only place
+ * it lives on iOS. Notification permission is asked only from the tap that turns the switch on,
+ * and only while iOS has never asked ([PermissionTriggers], AUTO_SYNC_ON makes it optional). The
+ * switch turns on whatever the answer. A denial only hides the summary, so no settings dialog follows.
  */
 @Composable
-fun AutoSyncSwitch(settings: AutoSyncSettings, id: String, syncInBackground: (String) -> Boolean, modifier: Modifier = Modifier) {
+fun AutoSyncSwitch(settings: AutoSyncSettings, id: String, modifier: Modifier = Modifier) {
     val entries by settings.state.collectAsState()
     val on = entries.any { it.peripheral.equals(id, ignoreCase = true) }
     val access = remember { RuntimeAccess(AccessKind.NOTIFICATIONS) }
@@ -58,8 +47,6 @@ fun AutoSyncSwitch(settings: AutoSyncSettings, id: String, syncInBackground: (St
             openSettings = {},
         ),
     )
-    // Null until the button is tapped, then whether iOS took it as a continued task.
-    var continued by remember(id) { mutableStateOf<Boolean?>(null) }
     // One handler for the row and the switch, so a tap anywhere asks for notifications exactly as the switch did.
     val onToggle: (Boolean) -> Unit = { checked ->
         if (!checked) {
@@ -81,12 +68,6 @@ fun AutoSyncSwitch(settings: AutoSyncSettings, id: String, syncInBackground: (St
                 Text(stringResource(Res.string.autosync_ios_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Switch(checked = on, onCheckedChange = null)
-        }
-        OutlinedButton(onClick = { continued = syncInBackground(id) }) { Text(stringResource(Res.string.files_bg_sync)) }
-        continued?.let { taken ->
-            val hint = if (taken) Res.string.files_bg_event else Res.string.autosync_ios_keep_open
-            // Appears after the tap, so screen readers hear the outcome.
-            Text(stringResource(hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
         }
     }
 }

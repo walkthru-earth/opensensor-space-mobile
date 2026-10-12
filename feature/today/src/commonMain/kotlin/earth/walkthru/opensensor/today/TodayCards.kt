@@ -167,6 +167,7 @@ import earth.walkthru.opensensor.today.resources.sync_explain
 import earth.walkthru.opensensor.today.resources.sync_ready
 import earth.walkthru.opensensor.today.resources.sync_running
 import earth.walkthru.opensensor.today.resources.sync_some_failed
+import earth.walkthru.opensensor.today.resources.sync_stop
 import earth.walkthru.opensensor.today.resources.sync_title
 import earth.walkthru.opensensor.today.resources.sync_unplaced_detail
 import earth.walkthru.opensensor.today.resources.sync_unplaced_simple
@@ -404,7 +405,15 @@ internal fun TodaySoFarCard(today: TodaySoFar?, clockMissing: Boolean, level: De
  * character, so this card adds no repeated portrait. Detailed adds how earlier readings were placed.
  */
 @Composable
-internal fun SmartSyncCard(sync: SyncProgress, archive: TodayArchive, enabled: Boolean, level: DetailLevel, onSync: () -> Unit, modifier: Modifier = Modifier) {
+internal fun SmartSyncCard(
+    sync: SyncProgress,
+    archive: TodayArchive,
+    enabled: Boolean,
+    level: DetailLevel,
+    onSync: () -> Unit,
+    modifier: Modifier = Modifier,
+    onStop: (() -> Unit)? = null,
+) {
     val mood = syncMood(sync, archive)
     BrandCard(modifier = modifier, tone = CardTone.SOFT) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -454,12 +463,16 @@ internal fun SmartSyncCard(sync: SyncProgress, archive: TodayArchive, enabled: B
             )
         }
         Spacer(Modifier.height(14.dp))
-        PillButton(
-            text = stringResource(if (sync.running) Res.string.sync_button_running else Res.string.sync_button),
-            onClick = onSync,
-            enabled = enabled && !sync.running,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        // The one Sync of this station. Stop sits beside it while this phone's own run is going.
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            PillButton(
+                text = stringResource(if (sync.running) Res.string.sync_button_running else Res.string.sync_button),
+                onClick = onSync,
+                enabled = enabled && !sync.running,
+                modifier = Modifier.weight(1f),
+            )
+            if (onStop != null) OutlinePillButton(stringResource(Res.string.sync_stop), onClick = onStop)
+        }
     }
 }
 

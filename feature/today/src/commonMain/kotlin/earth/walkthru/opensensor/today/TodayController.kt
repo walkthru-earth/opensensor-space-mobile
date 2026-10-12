@@ -57,6 +57,12 @@ class TodayController(
         source.sync()
     }
 
+    /** Stop beside Sync. Only this phone's own run, never one that background work holds. */
+    fun stopSync() {
+        val snapshot = source.snapshot.value
+        if (snapshot.sync.running && !snapshot.heldInBackground) source.stopSync()
+    }
+
     /** The user confirmed the open dialog. Only now does the command go to the device. */
     fun confirm() {
         val open = _dialog.value ?: return

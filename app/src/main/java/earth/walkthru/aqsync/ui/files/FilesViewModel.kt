@@ -9,7 +9,6 @@ import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
-import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.archive.ArchiveIndex
 import earth.walkthru.aqsync.archive.ArchiveStore
 import earth.walkthru.aqsync.archive.FileExportSpace
@@ -19,7 +18,6 @@ import earth.walkthru.aqsync.data.DeviceOwnership
 import earth.walkthru.aqsync.data.ManifestState
 import earth.walkthru.aqsync.data.ReconnectState
 import earth.walkthru.aqsync.data.SyncProgress
-import earth.walkthru.aqsync.data.background.AutoSyncScheduler
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.StationStatus
 import earth.walkthru.aqsync.data.ble.TransportKind
@@ -33,7 +31,6 @@ import earth.walkthru.aqsync.data.history.Metrics
 import earth.walkthru.aqsync.data.history.archiveQueryResults
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
-import earth.walkthru.aqsync.data.local.database.KnownDevice
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
 import earth.walkthru.aqsync.data.settings.AppSettings
 import earth.walkthru.aqsync.data.settings.DetailLevel
@@ -44,7 +41,6 @@ import earth.walkthru.opensensor.files.FileMetricsController
 import earth.walkthru.opensensor.files.FilesController
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -54,9 +50,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
 import java.io.File
 import javax.inject.Inject
 
@@ -68,13 +62,9 @@ import javax.inject.Inject
 @Immutable
 data class FilesUiState(
     val connection: ConnectionState = ConnectionState.Disconnected,
-    /** A transfer is running, for the background sync menu item. */
+    /** A transfer is running. */
     val syncRunning: Boolean = false,
     val reconnecting: ReconnectState? = null,
-    /** Auto-sync switch of the connected device (null: no session / unknown device). */
-    val autoSync: Boolean? = null,
-    /** A background sync job is queued or running right now. */
-    val backgroundSyncActive: Boolean = false,
     /** A background worker or Collect all holds this device right now, see [StationStatus]. */
     val heldInBackground: Boolean = false,
     /** Active pipe, for the top-bar chip (same source as Today / Device). */
@@ -137,7 +127,6 @@ class FilesViewModel @AssistedInject constructor(
     derived: DerivedStore,
     deriver: HistoryDeriver,
     quota: DerivedQuota,
-    private val autoSyncScheduler: AutoSyncScheduler,
     settings: AppSettings,
 ) : ViewModel() {
     private val repository = manager.controller(deviceAddress)
@@ -169,8 +158,7 @@ class FilesViewModel @AssistedInject constructor(
         holdDaily = { block -> quota.holding { block() } },
     )
 
-    private val localEvents = MutableSharedFlow<ScreenMessage>(extraBufferCapacity = 4)
-    val events: Flow<ScreenMessage> = merge(repository.events.map(ScreenMessage::Device), localEvents)
+    val events: Flow<ScreenMessage> = repository.events.map(ScreenMessage::Device)
 
     private val fileChartOn = MutableStateFlow(false)
     private val fileChartMetric = MutableStateFlow(Metrics.primary)
@@ -209,8 +197,6 @@ class FilesViewModel @AssistedInject constructor(
         repository.connectionState,
         repository.sync.map { it.running }.distinctUntilChanged(),
         repository.reconnecting,
-        repository.currentKnownDevice,
-        backgroundActive(autoSyncScheduler.observeActive(deviceAddress), repository.ownership),
         repository.activeTransport,
         settings.detailLevel,
         fileChart,
@@ -220,12 +206,10 @@ class FilesViewModel @AssistedInject constructor(
             connection = values[0] as ConnectionState,
             syncRunning = values[1] as Boolean,
             reconnecting = values[2] as ReconnectState?,
-            autoSync = (values[3] as KnownDevice?)?.autoSync,
-            backgroundSyncActive = values[4] as Boolean,
-            transport = values[5] as TransportKind?,
-            detailLevel = values[6] as DetailLevel,
-            fileChart = values[7] as FileChartState?,
-            heldInBackground = values[8] == DeviceOwnership.BACKGROUND,
+            transport = values[3] as TransportKind?,
+            detailLevel = values[4] as DetailLevel,
+            fileChart = values[5] as FileChartState?,
+            heldInBackground = values[6] == DeviceOwnership.BACKGROUND,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FilesUiState())
 
@@ -257,32 +241,6 @@ class FilesViewModel @AssistedInject constructor(
     fun refresh() = repository.refreshManifest()
     fun syncAll() = repository.syncAll()
 
-    /** Quick toggle of the connected device's Auto-sync switch (same row the Device screen edits). */
-    fun setAutoSync(enabled: Boolean) {
-        val addr = repository.currentAddress ?: return
-        viewModelScope.launch {
-            repository.setAutoSync(addr, enabled)
-            localEvents.tryEmit(ScreenMessage.Text(if (enabled) context.getString(R.string.files_autosync_event_on, AutoSyncScheduler.PERIOD_MINUTES.toInt()) else context.getString(R.string.files_autosync_event_off)))
-        }
-    }
-
-    /**
-     * One expedited background run for the connected device, so the user can leave the app right
-     * away. The worker refuses to touch a device the app is connected to, so the current session is
-     * released first; the worker's own session then feeds the same progress state this screen shows.
-     * A sync started here already keeps running in the background, so it is never stopped for this.
-     */
-    fun syncNowInBackground() {
-        val addr = repository.currentAddress ?: return
-        viewModelScope.launch {
-            val message = backgroundSyncRequest(
-                ownership = repository.ownershipNow(),
-                release = repository::releaseForBackground,
-                enqueue = { autoSyncScheduler.syncNow(addr) },
-            )
-            localEvents.tryEmit(ScreenMessage.Text(context.getString(message)))
-        }
-    }
     fun syncOne(name: String) = repository.syncOne(name)
     fun cancelSync() = repository.cancelSync()
     fun disconnect() = repository.disconnect()
@@ -290,29 +248,6 @@ class FilesViewModel @AssistedInject constructor(
     companion object {
         /** Columns per page of the "chart by file" strip: a day of 15-min files, tappable at phone width. */
         const val FILE_CHART_PAGE = 96
-    }
-}
-
-/** Per-device background flag for the Files menu: a request for this device or a worker holding it. */
-internal fun backgroundActive(queued: Flow<Boolean>, ownership: Flow<DeviceOwnership>): Flow<Boolean> =
-    combine(queued, ownership) { waiting, owner -> waiting || owner == DeviceOwnership.BACKGROUND }.distinctUntilChanged()
-
-/**
- * "Sync now in background", decided in order. A running interactive sync keeps going under its
- * foreground service. A worker already holding the device counts as queued. Otherwise the session
- * is released first, and the request is only enqueued once that worked. Returns the string to show.
- */
-internal suspend fun backgroundSyncRequest(
-    ownership: DeviceOwnership,
-    release: suspend () -> Boolean,
-    enqueue: suspend () -> AutoSyncScheduler.Enqueue,
-): Int = when (ownership) {
-    DeviceOwnership.INTERACTIVE -> R.string.files_bg_keeps_running
-    DeviceOwnership.BACKGROUND -> R.string.files_bg_already
-    DeviceOwnership.IDLE -> when {
-        !release() -> R.string.msg_busy
-        enqueue() == AutoSyncScheduler.Enqueue.ALREADY_QUEUED -> R.string.files_bg_already
-        else -> R.string.files_bg_event
     }
 }
 

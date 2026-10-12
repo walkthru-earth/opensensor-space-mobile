@@ -3,9 +3,9 @@
     <string name="action_hide">Hide</string>
     <string name="bonds_confirm">The sensor forgets every phone, including this one. You will enter the code again.</string>
     <string name="bonds_count">phones paired with the device</string>
-    <string name="bonds_explain">The sensor remembers up to 3 phones and forgets the oldest. Forgetting all also forgets this phone, so the next Bluetooth connection asks for the code again.</string>
-    <string name="bonds_forget">Forget all paired phones</string>
-    <string name="bonds_forget_button">Forget</string>
+    <string name="bonds_explain">The sensor remembers up to 3 phones and forgets the oldest. Clearing them also forgets this phone, so the next Bluetooth connection asks for the code again.</string>
+    <string name="bonds_forget">Clear paired phones</string>
+    <string name="bonds_forget_button">Clear</string>
     <string name="bonds_title">Paired phones</string>
     <string name="config_not_read">Settings not read yet</string>
     <string name="info_pairing_body">How a phone proves it is allowed to connect.</string>
@@ -116,7 +116,6 @@
     <string name="wifi_psk_open">none, open network</string>
     <string name="wifi_psk_storage">The passphrase travels over the encrypted Bluetooth link. The sensor stores it without encryption and never shows it again. Hidden networks are not listed.</string>
     <string name="wifi_psk_stored">stored on the device, never shown</string>
-    <string name="wifi_refresh">Check again</string>
     <string name="wifi_rssi">signal</string>
     <string name="wifi_save_connect">Save and connect</string>
     <string name="wifi_scan">Find networks</string>
@@ -164,7 +163,6 @@
     <string name="config_problem_psk_long">The password is too long. The limit is 63 bytes.</string>
     <string name="config_problem_line_break">Line breaks are not allowed here.</string>
     <string name="device_back">Back</string>
-    <string name="device_settings_open">Sensor settings</string>
     <string name="device_not_ready">Connect to the sensor to read and change its settings.</string>
     <string name="location_title">Device location</string>
     <string name="location_info">Stand beside the sensor before using phone location. The phone converts the approximate fix to the chosen H3 cell. Only that cell is saved on the device. This does not enable uploads.</string>

@@ -34,6 +34,10 @@ private class FakeSource(connection: ConnectionState = ConnectionState.Ready(247
         calls += "flush"
     }
 
+    override fun stopSync() {
+        calls += "stopSync"
+    }
+
     override fun reconnect() {
         calls += "reconnect"
     }
@@ -141,6 +145,19 @@ class TodayControllerTest {
         c.smartSync()
         assertNull(c.dialog.value)
         assertEquals(emptyList(), source.calls)
+    }
+
+    @Test
+    fun stopReachesTheSourceOnlyForThisPhonesRunningSync() = runTest {
+        val source = FakeSource()
+        val c = controller(source)
+        c.stopSync()
+        source.snapshot.value = source.snapshot.value.copy(sync = SyncProgress(running = true), heldInBackground = true)
+        c.stopSync()
+        assertEquals(emptyList(), source.calls)
+        source.snapshot.value = source.snapshot.value.copy(heldInBackground = false)
+        c.stopSync()
+        assertEquals(listOf("stopSync"), source.calls)
     }
 
     @Test

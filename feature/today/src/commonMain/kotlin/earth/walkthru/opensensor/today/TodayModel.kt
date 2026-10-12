@@ -107,6 +107,9 @@ interface TodaySource {
     /** `FLUSH`, finalizing the buffered rows. Called only after the user confirmed it. */
     fun flush()
 
+    /** Stops this phone's running sync. Files already verified stay synced. */
+    fun stopSync()
+
     fun reconnect()
     fun disconnect()
 }

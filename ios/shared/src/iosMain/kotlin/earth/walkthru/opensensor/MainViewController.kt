@@ -1,7 +1,5 @@
 package earth.walkthru.opensensor
 
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.window.ComposeUIViewController
 import earth.walkthru.aqsync.settings.AppPrefs
@@ -19,8 +17,7 @@ import platform.UIKit.UIViewController
  * this hardware id, Wi-Fi first, or null when it is not connected. Debug, Device settings and Files
  * take leases of it. [command] sends a confirmed `SET_TIME` or `FLUSH` from Today over the
  * Bluetooth connection.
- * [autoSync] holds the per device Auto-sync switches, and [syncInBackground] hands one sensor to
- * the background run, answering true only when iOS took it as a continued task. [closeIdle] runs
+ * [autoSync] holds the per device Auto-sync switches, shown first on the Device section. [closeIdle] runs
  * when the last Today or Device page for a sensor leaves the back stack. Swift closes that
  * peripheral's link only when it is idle, never during a sync, a command, Collect all or a lease.
  * [forgetWifiAccess] drops the Keychain token and any
@@ -41,11 +38,7 @@ fun mainViewController(
     disconnect: () -> Unit,
     scanLan: () -> Unit,
     saveWifiAccess: () -> Unit,
-    connectLan: (String) -> Unit,
-    syncLan: (String) -> Unit,
-    disconnectLan: (String) -> Unit,
     syncBluetooth: (String) -> Unit,
-    syncInBackground: (String) -> Boolean,
     closeIdle: (String) -> Unit,
     linkFor: (String) -> IosLink?,
     command: (String, SensorCommand) -> Unit,
@@ -70,12 +63,10 @@ fun mainViewController(
     val userOpen = devices.userFirst(openSensor)
     val userOpenBluetooth = devices.userFirst(openBluetoothSensor)
     val userOpenLanOnly = devices.userFirst(openLanOnly)
-    val userConnectLan = devices.userFirst(connectLan)
-    val userSyncLan = devices.userFirst(syncLan)
     val userSyncBluetooth = devices.userFirst(syncBluetooth)
     val userSyncOneFile = devices.userFirst(syncOneFile)
     return ComposeUIViewController {
-        val today = remember { CompanionToday(state, CompanionLinkActions(syncFiles = userSyncBluetooth, command = command, connect = userOpen, disconnect = disconnectSensor)) }
+        val today = remember { CompanionToday(state, CompanionLinkActions(syncFiles = userSyncBluetooth, command = command, connect = userOpen, disconnect = disconnectSensor, cancelSync = cancelSync)) }
         val configLinks = remember {
             DeviceConfigLinks(
                 openConfigLink = linkFor,
@@ -92,40 +83,6 @@ fun mainViewController(
         val filesActions = remember {
             DeviceFilesActions(linkFor, userSyncBluetooth, userSyncOneFile, cancelSync)
         }
-        AppRoot(devices, today, requestBluetooth, userOpen, userOpenLanOnly, linkFor, closeIdle, configLinks, filesActions) { id, units, level, openDebug, openSettings, onBack ->
-            val peripheral = IosKnown.isPeripheral(id)
-            val records by devices.known.collectAsState()
-            val known = peripheral && records.any { it.peripheral.equals(id, ignoreCase = true) }
-            val selectedBluetooth = state.selectedId?.equals(id, ignoreCase = true) == true
-            val lanName = state.connectedLanForStation(devices.stationFor(id))
-            val selectedStation = devices.stationFor(id)
-                ?: id.takeIf { it.startsWith(IosKnown.WIFI_PREFIX) }?.removePrefix(IosKnown.WIFI_PREFIX)
-                    ?.let { name -> state.lanInfo[name]?.station ?: state.lanStations[name] }
-                ?: state.info?.station?.takeIf { selectedBluetooth }
-            val activeDevice = lanName?.let { state.lanInfo[it]?.dev }
-                ?: state.info?.dev?.takeIf { selectedBluetooth && state.connected }
-            // Detailed and Developer reveal the technical lines (signal, firmware, byte counters), as on Android.
-            CompanionScreen(
-                state = state,
-                title = devices.nameFor(id),
-                onBack = onBack,
-                reconnect = if (peripheral) ({ userOpen(id) }) else null,
-                disconnect = disconnect,
-                scanLan = scanLan,
-                saveWifiAccess = saveWifiAccess,
-                connectLan = userConnectLan,
-                syncLan = userSyncLan,
-                disconnectLan = disconnectLan,
-                syncBluetooth = { userSyncBluetooth(id) },
-                selectedBluetooth = selectedBluetooth,
-                selectedStation = selectedStation,
-                activeDevice = activeDevice,
-                units = units,
-                showTechnical = level.detailed,
-                onOpenDebug = openDebug,
-                onOpenSettings = openSettings,
-                autoSync = if (known) ({ AutoSyncSwitch(autoSync, id, syncInBackground) }) else null,
-            )
-        }
+        AppRoot(devices, today, requestBluetooth, userOpen, userOpenLanOnly, linkFor, closeIdle, configLinks, filesActions, autoSync)
     }
 }

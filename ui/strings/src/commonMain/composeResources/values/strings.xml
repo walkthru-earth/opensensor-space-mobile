@@ -29,18 +29,6 @@
 
     <!-- My devices on iOS, Bluetooth. -->
     <string name="companion_now">Now</string>
-    <string name="companion_pm25_mood">PM2.5 · %1$s</string>
-    <string name="companion_storage_error">The sensor reports a storage error.</string>
-    <string name="companion_storage_degraded">The sensor card is degraded. Replace it soon.</string>
-    <string name="companion_storage_full">The sensor card is full. New rows are not being saved.</string>
-    <plurals name="companion_files_finalized">
-        <item quantity="one">%1$s file finalized on the sensor</item>
-        <item quantity="other">%1$s files finalized on the sensor</item>
-    </plurals>
-    <string name="companion_firmware">Firmware %1$s</string>
-    <string name="companion_wifi_access_save">Save Wi-Fi access</string>
-    <string name="companion_wifi_access_saving">Saving access…</string>
-    <string name="companion_connect">Connect</string>
     <string name="companion_connecting_pin">Connecting… If asked, enter the pairing PIN shown by your sensor.</string>
     <string name="companion_info_invalid">This sensor has invalid or unsupported device information.</string>
     <string name="companion_firmware_update">Update the sensor firmware to connect. It speaks protocol %1$d, this app needs %2$d.</string>
@@ -50,27 +38,14 @@
     <string name="companion_live_unreadable">The sensor sent an unreadable reading.</string>
 
     <!-- My devices on iOS, Wi-Fi. -->
-    <string name="companion_lan_title">On your Wi-Fi</string>
-    <string name="companion_lan_find">Find Wi-Fi sensors</string>
-    <string name="companion_lan_finding">Looking on Wi-Fi…</string>
     <string name="companion_lan_looking">Looking on your Wi-Fi…</string>
     <string name="companion_lan_found">Sensors on your Wi-Fi</string>
     <string name="companion_lan_none">No Wi-Fi sensors found. Check Local Network in Settings.</string>
     <string name="companion_lan_waiting">Waiting for Wi-Fi or Local Network access.</string>
     <string name="companion_lan_denied">Turn on Local Network for opensensor.space in Settings.</string>
     <string name="companion_lan_unavailable">Wi-Fi search is not available. Check Wi-Fi and Local Network in Settings.</string>
-    <string name="companion_lan_connect_label">Connect to %1$s over Wi-Fi</string>
-    <string name="companion_lan_link">Wi-Fi · %1$s</string>
     <string name="companion_lan_paused">Sync paused</string>
-    <string name="companion_lan_discovered">Discovered</string>
     <string name="companion_lan_needs_access">Save Wi-Fi access over Bluetooth first.</string>
-    <plurals name="companion_lan_files">
-        <item quantity="one">%1$d of %2$d file</item>
-        <item quantity="other">%1$d of %2$d files</item>
-    </plurals>
-    <string name="companion_lan_bytes">%1$s bytes in current file</string>
-    <string name="companion_lan_rate">%1$s KiB/s average</string>
-    <string name="companion_sync">Sync</string>
 
     <!-- Bluetooth and Wi-Fi link states the iOS adapters report as notices. -->
     <string name="companion_ble_timed_out">Connection timed out. Keep the sensor nearby and try again.</string>
@@ -130,8 +105,6 @@
 
     <!-- Auto-sync and its summary notification (#23). Android keys keep the Android words. -->
     <string name="autosync_title">Auto-sync</string>
-    <string name="files_bg_sync">Sync now in background</string>
-    <string name="files_bg_event">Background sync queued. You can leave the app.</string>
     <string name="notif_device">sensor</string>
     <plurals name="notif_synced">
         <item quantity="one">Synced %1$d new file from %2$s · %3$s</item>
@@ -145,7 +118,6 @@
     <string name="notif_verified">Verified and stored in the archive on this phone.</string>
     <!-- iOS only. -->
     <string name="autosync_ios_hint">iOS picks when it runs.</string>
-    <string name="autosync_ios_keep_open">Keep the app open until it finishes.</string>
     <string name="autosync_progress_title">Collecting from sensors</string>
     <plurals name="autosync_sensors">
         <item quantity="one">%1$d sensor</item>

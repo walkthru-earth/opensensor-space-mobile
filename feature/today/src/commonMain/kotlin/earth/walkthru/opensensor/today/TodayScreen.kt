@@ -1,6 +1,7 @@
 package earth.walkthru.opensensor.today
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -69,7 +70,6 @@ import earth.walkthru.opensensor.today.resources.msg_rejected_set_time
 import earth.walkthru.opensensor.today.resources.nav_debug
 import earth.walkthru.opensensor.today.resources.nav_devices
 import earth.walkthru.opensensor.today.resources.nav_disconnect
-import earth.walkthru.opensensor.today.resources.nav_settings
 import earth.walkthru.opensensor.today.resources.tab_device
 import earth.walkthru.opensensor.today.resources.tab_files
 import earth.walkthru.opensensor.today.resources.tab_history
@@ -92,11 +92,13 @@ sealed interface TodayAction {
     data object OpenDevice : TodayAction
     data object OpenDebug : TodayAction
     data object OpenDevices : TodayAction
-    data object OpenSettings : TodayAction
     data object OpenBluetoothSettings : TodayAction
     data object Disconnect : TodayAction
     data object Reconnect : TodayAction
     data object SmartSync : TodayAction
+
+    /** Stops this phone's own run. A run that background work holds is never offered. */
+    data object StopSync : TodayAction
 }
 
 /**
@@ -198,7 +200,8 @@ fun TodayContent(
                                     modifier = Modifier.semantics { heading() },
                                 )
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    TransportChip(snapshot.transport)
+                                    // The pipe is a detail. Simple never names Bluetooth or Wi-Fi.
+                                    if (level.detailed) TransportChip(snapshot.transport)
                                     if (level.developer) {
                                         snapshot.info?.station?.let {
                                             Text(
@@ -218,8 +221,12 @@ fun TodayContent(
                             if (level.developer) {
                                 IconButton(onClick = { onAction(TodayAction.OpenDebug) }) { Icon(AppIcons.BugReport, contentDescription = stringResource(Res.string.nav_debug)) }
                             }
-                            IconButton(onClick = { onAction(TodayAction.OpenSettings) }) { Icon(AppIcons.Settings, contentDescription = stringResource(Res.string.nav_settings)) }
-                            IconButton(onClick = { onAction(TodayAction.Disconnect) }) { Icon(AppIcons.LinkOff, contentDescription = stringResource(Res.string.nav_disconnect)) }
+                            // Reconnect and Disconnect live only here, in the station header.
+                            if (snapshot.station.offersReconnect) {
+                                TextButton(onClick = { onAction(TodayAction.Reconnect) }) { Text(stringResource(Res.string.action_reconnect)) }
+                            } else {
+                                IconButton(onClick = { onAction(TodayAction.Disconnect) }) { Icon(AppIcons.LinkOff, contentDescription = stringResource(Res.string.nav_disconnect)) }
+                            }
                         },
                     )
                     DeviceSectionTabs(DeviceTab.TODAY) { tab ->
@@ -238,7 +245,7 @@ fun TodayContent(
                 // The banner lives outside the list, so no list index shifts when it comes and goes.
                 val station = snapshot.station
                 if (station.showsBanner) {
-                    Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                    Box(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
                         ConnectionBanner(
                             snapshot.connection,
                             reconnecting = snapshot.reconnecting,
@@ -247,10 +254,6 @@ fun TodayContent(
                             onOpenBluetoothSettings = { onAction(TodayAction.OpenBluetoothSettings) },
                             heldInBackground = station.heldInBackground,
                         )
-                        if (station.offersReconnect) {
-                            Spacer(Modifier.height(8.dp))
-                            PillButton(stringResource(Res.string.action_reconnect), onClick = { onAction(TodayAction.Reconnect) }, modifier = Modifier.fillMaxWidth())
-                        }
                     }
                 }
                 LazyColumn(
@@ -272,6 +275,7 @@ fun TodayContent(
                                     enabled = snapshot.station.canCommand,
                                     level = level,
                                     onSync = { onAction(TodayAction.SmartSync) },
+                                    onStop = { onAction(TodayAction.StopSync) }.takeIf { snapshot.sync.running && !snapshot.heldInBackground },
                                 )
                                 TodayCard.CLOCK -> ClockCard(
                                     status = snapshot.status,

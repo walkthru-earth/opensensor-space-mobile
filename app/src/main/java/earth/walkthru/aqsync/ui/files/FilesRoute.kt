@@ -1,11 +1,9 @@
 package earth.walkthru.aqsync.ui.files
 
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -16,7 +14,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import earth.walkthru.aqsync.R
-import earth.walkthru.aqsync.data.background.AutoSyncScheduler
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.ui.components.CollectEvents
 import earth.walkthru.aqsync.ui.components.ConnectionBanner
@@ -76,7 +73,7 @@ fun FilesRoute(
         },
         guard = { action -> notificationPermission.ensureThen(action) },
         snackbar = snackbar,
-        subtitleLead = { TransportChip(state.transport) },
+        subtitleLead = { if (state.detailLevel.detailed) TransportChip(state.transport) },
         tabs = {
             DeviceSectionTabs(DeviceTab.FILES, containerColor = MaterialTheme.colorScheme.surface) {
                 when (it) {
@@ -102,31 +99,6 @@ fun FilesRoute(
             )
         },
         idleHint = stringResource(R.string.files_connect_to_list),
-        menuLead = { close ->
-            // Background sync: a one-time WorkManager job (leave the app, watch the notification) and
-            // the per-device Auto-sync switch, both also on the Device screen.
-            DropdownMenuItem(
-                text = { Text(stringResource(if (state.backgroundSyncActive) R.string.files_bg_queued else R.string.files_bg_sync)) },
-                leadingIcon = { Icon(AppIcons.CloudSync, contentDescription = null) },
-                enabled = state.connection.isReady && !state.syncRunning && !state.backgroundSyncActive,
-                onClick = {
-                    close()
-                    notificationPermission.ensureThen { viewModel.syncNowInBackground() }
-                },
-            )
-            state.autoSync?.let { on ->
-                DropdownMenuItem(
-                    text = { Text(stringResource(if (on) R.string.files_autosync_on else R.string.files_autosync_off, AutoSyncScheduler.PERIOD_MINUTES.toInt())) },
-                    leadingIcon = { Icon(if (on) AppIcons.SyncLock else AppIcons.Sync, contentDescription = null) },
-                    trailingIcon = { Switch(checked = on, onCheckedChange = null) },
-                    onClick = {
-                        close()
-                        notificationPermission.ensureThen { viewModel.setAutoSync(!on) }
-                    },
-                )
-            }
-            HorizontalDivider()
-        },
         menuTail = { close ->
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.nav_disconnect)) },

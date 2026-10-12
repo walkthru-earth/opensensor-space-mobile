@@ -3,9 +3,9 @@
     <string name="action_hide">إخفاء</string>
     <string name="bonds_confirm">سينسى المستشعر كل الهواتف، ومنها هذا الهاتف. ستُدخل الرمز مرة أخرى.</string>
     <string name="bonds_count">الهواتف المقترنة بالجهاز</string>
-    <string name="bonds_explain">يتذكر المستشعر حتى 3 هواتف وينسى الأقدم. نسيان الكل ينسى هذا الهاتف أيضًا، لذا سيطلب اتصال Bluetooth التالي الرمز مرة أخرى.</string>
-    <string name="bonds_forget">انسَ كل الهواتف المقترنة</string>
-    <string name="bonds_forget_button">انسَ</string>
+    <string name="bonds_explain">يتذكر المستشعر حتى 3 هواتف وينسى الأقدم. مسحها ينسى هذا الهاتف أيضًا، لذا سيطلب اتصال Bluetooth التالي الرمز مرة أخرى.</string>
+    <string name="bonds_forget">امسح الهواتف المقترنة</string>
+    <string name="bonds_forget_button">امسح</string>
     <string name="bonds_title">الهواتف المقترنة</string>
     <string name="config_not_read">لم تُقرأ الإعدادات بعد</string>
     <string name="info_pairing_body">كيف يثبت الهاتف أنه مسموح له بالاتصال.</string>
@@ -120,7 +120,6 @@
     <string name="wifi_psk_open">لا يوجد، شبكة مفتوحة</string>
     <string name="wifi_psk_storage">تنتقل كلمة المرور عبر اتصال Bluetooth المشفّر. يحفظها المستشعر دون تشفير ولا يعرضها مرة أخرى أبدًا. الشبكات المخفية لا تظهر في القائمة.</string>
     <string name="wifi_psk_stored">محفوظة على الجهاز، ولا تُعرض أبدًا</string>
-    <string name="wifi_refresh">تحقّق مرة أخرى</string>
     <string name="wifi_rssi">الإشارة</string>
     <string name="wifi_save_connect">حفظ واتصال</string>
     <string name="wifi_scan">البحث عن الشبكات</string>
@@ -168,7 +167,6 @@
     <string name="config_problem_psk_long">كلمة المرور طويلة جدًا. الحد الأقصى 63 بايت.</string>
     <string name="config_problem_line_break">لا يُسمح بفواصل الأسطر هنا.</string>
     <string name="device_back">رجوع</string>
-    <string name="device_settings_open">إعدادات المستشعر</string>
     <string name="device_not_ready">اتصل بالمستشعر لقراءة إعداداته وتغييرها.</string>
     <string name="location_title">موقع الجهاز</string>
     <string name="location_info">قف بجانب المستشعر قبل استخدام موقع الهاتف. يحوّل الهاتف الموقع التقريبي إلى خلية H3 المختارة. تُحفظ الخلية فقط على الجهاز ولا يؤدي ذلك إلى تفعيل الرفع.</string>

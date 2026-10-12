@@ -70,7 +70,6 @@ import earth.walkthru.opensensor.today.resources.msg_rejected_set_time
 import earth.walkthru.opensensor.today.resources.nav_debug
 import earth.walkthru.opensensor.today.resources.nav_devices
 import earth.walkthru.opensensor.today.resources.nav_disconnect
-import earth.walkthru.opensensor.today.resources.nav_settings
 import earth.walkthru.opensensor.today.resources.tab_device
 import earth.walkthru.opensensor.today.resources.tab_files
 import earth.walkthru.opensensor.today.resources.tab_history

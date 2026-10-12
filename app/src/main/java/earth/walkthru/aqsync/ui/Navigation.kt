@@ -27,7 +27,6 @@ import earth.walkthru.opensensor.shell.ScanKey
 import earth.walkthru.opensensor.shell.SettingsKey
 import earth.walkthru.opensensor.shell.TabNavigator
 import earth.walkthru.opensensor.shell.TodayKey
-import earth.walkthru.opensensor.shell.TopTab
 
 /**
  * The Android host of the shared shell ([AppShell], `:feature:shell`). The shell owns the bottom
@@ -61,7 +60,6 @@ private fun EntryProviderScope<NavKey>.androidEntries(nav: TabNavigator, develop
             onOpenDevice = { nav.openSection(DeviceKey(key.address)) },
             // The shell checks the stored level itself, and the Debug screen pops when the level drops.
             onOpenDebug = { nav.openDebug(key.address, developer = developer()) },
-            onOpenSettings = { nav.select(TopTab.SETTINGS) },
             onDisconnected = { nav.toMyDevicesRoot() },
         )
     }
@@ -96,9 +94,6 @@ private fun EntryProviderScope<NavKey>.androidEntries(nav: TabNavigator, develop
             onOpenToday = { nav.openSection(TodayKey(key.address)) },
             onOpenHistory = { nav.openSection(HistoryKey(key.address)) },
             onOpenFiles = { nav.openSection(FilesKey(key.address)) },
-            // The shell checks the stored level itself, and the Debug screen pops when the level drops.
-            onOpenDebug = { nav.openDebug(key.address, developer = developer()) },
-            onOpenSettings = { nav.select(TopTab.SETTINGS) },
             onDisconnected = { nav.toMyDevicesRoot() },
         )
     }

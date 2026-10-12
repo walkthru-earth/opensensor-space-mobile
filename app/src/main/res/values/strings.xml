@@ -13,8 +13,6 @@
     <string name="action_cancel">Cancel</string>
     <string name="action_not_now">Not now</string>
     <string name="action_reconnect">Reconnect</string>
-    <string name="nav_debug">Debug</string>
-    <string name="nav_settings">Settings</string>
     <string name="nav_disconnect">Disconnect</string>
 
     <!-- Scan (Home) -->
@@ -119,17 +117,10 @@
     <!-- Bottom bar -->
 
     <!-- Files -->
-    <string name="files_bg_queued">Background sync queued…</string>
-    <string name="files_bg_sync">Sync now in background</string>
-    <string name="files_autosync_on">Auto-sync every %1$d min is on</string>
-    <string name="files_autosync_off">Auto-sync every %1$d min is off</string>
     <string name="files_stop">Stop</string>
     <string name="files_bytes_of">%1$s of %2$s</string>
     <string name="files_autosync_event_on">Auto-sync is on, about every %1$d min.</string>
     <string name="files_autosync_event_off">Auto-sync is off for this sensor.</string>
-    <string name="files_bg_event">Background sync queued. You can leave the app.</string>
-    <string name="files_bg_keeps_running">Sync keeps running in the background. You can leave the app.</string>
-    <string name="files_bg_already">A background sync is already queued.</string>
     <string name="chart_by_file">Chart by file</string>
     <plurals name="chart_by_file_summary">
         <item quantity="one">%1$d file, %2$s</item>

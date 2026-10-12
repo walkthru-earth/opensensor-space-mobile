@@ -34,6 +34,7 @@ class CompanionTodaySourceTest {
             command = { _, command -> list += command.name },
             connect = { list += "connect $it" },
             disconnect = { list += "disconnect" },
+            cancelSync = { list += "cancel $it" },
         )
     }
 

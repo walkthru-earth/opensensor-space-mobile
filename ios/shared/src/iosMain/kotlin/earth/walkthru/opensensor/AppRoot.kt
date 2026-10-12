@@ -1,11 +1,6 @@
 package earth.walkthru.opensensor
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
@@ -17,7 +12,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -36,8 +30,6 @@ import earth.walkthru.aqsync.units.systemUnitSystem
 import earth.walkthru.opensensor.debug.DebugController
 import earth.walkthru.opensensor.debug.DebugScreen
 import earth.walkthru.opensensor.designsystem.AppIcons
-import earth.walkthru.opensensor.designsystem.FloatingControl
-import earth.walkthru.opensensor.designsystem.FloatingIconButton
 import earth.walkthru.opensensor.designsystem.OpenSensorTheme
 import earth.walkthru.opensensor.device.DeviceConfigAction
 import earth.walkthru.opensensor.device.DeviceConfigController
@@ -81,9 +73,7 @@ import earth.walkthru.opensensor.shell.HistoryKey
 import earth.walkthru.opensensor.shell.ScanKey
 import earth.walkthru.opensensor.shell.SettingsKey
 import earth.walkthru.opensensor.shell.ShellBottomBar
-import earth.walkthru.opensensor.shell.TabNavigator
 import earth.walkthru.opensensor.shell.TodayKey
-import earth.walkthru.opensensor.shell.TopTab
 import earth.walkthru.opensensor.today.TodayAction
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
@@ -183,14 +173,14 @@ private class DeviceSettingsHolder(address: String, devices: DevicesBridge, link
  * back stacks and Back rules as Android. The start edge swipe is Back. Discover is always the start
  * tab (owner decision 2026-10-08). No other screen draws a bar. The My devices root is the shared
  * [MyDevicesScreen] over [devices]. Opening a sensor calls [openSensor] (Bluetooth is allowed by
- * then) and pushes its [devicePage], which receives the resolved display units (METRIC or IMPERIAL)
- * and the detail level from the shared Settings (`:feature:settings`, `:core:settings`). At the
- * Developer level the device page also gets an open Debug action, and the shared Debug screen
- * (`:feature:debug`) takes leases of the connection's link from Swift through [openDebugLink]. A Bluetooth sensor
- * opens on the shared Today over [today], and its Device section is the [devicePage]. Today and
- * Device each hold a lease on that sensor, and popping the last of them calls [closeIdle] once.
- * The companion page of a Bluetooth sensor opens the shared Device settings (`:feature:device`),
- * which take leases of the connection's link through [configLinks] and hold the same lease.
+ * then) and pushes the shared Today over [today], with the display units (METRIC or IMPERIAL) and the
+ * detail level from the shared Settings (`:feature:settings`, `:core:settings`). Today is the one
+ * home of Smart Sync, Stop, Reconnect, Files, History and, at the Developer level, Debug. The shared
+ * Debug screen (`:feature:debug`) takes leases of the connection's link from Swift through
+ * [openDebugLink]. Today's Device section is the shared Device settings (`:feature:device`), led by
+ * the Auto-sync switch over [autoSync] for an enrolled sensor. They take leases of the connection's
+ * link through [configLinks]. Today and Device each hold a lease on that sensor, and popping the
+ * last of them calls [closeIdle] once.
  */
 @Composable
 internal fun AppRoot(
@@ -203,7 +193,7 @@ internal fun AppRoot(
     closeIdle: (String) -> Unit,
     configLinks: DeviceConfigLinks,
     filesActions: DeviceFilesActions,
-    devicePage: DevicePageContent,
+    autoSync: AutoSyncSettings,
 ) {
     val scope = rememberCoroutineScope()
     val settings = remember { SettingsController(scope, settingsRepository, IosArchive.storageControls) }
@@ -260,22 +250,25 @@ internal fun AppRoot(
                                         ?: today.state.info?.dev?.takeIf { today.state.selectedId == key.address }
                                     device?.let { nav.openDebug(it, level.developer) }
                                 }
-                                TodayAction.OpenSettings -> nav.select(TopTab.SETTINGS)
                                 TodayAction.OpenBluetoothSettings -> openAppSettings()
                                 else -> nav.popIfTop { it == key }
                             }
                         }
                     } else {
-                        DevicePage(key.address, units, level, nav, devicePage)
+                        LaunchedEffect(key) { nav.popIfTop { it == key } }
                     }
                 }
                 entry<DeviceKey> { key ->
-                    if (IosKnown.isPeripheral(key.address)) LeasePeripheral(leases, key.address)
-                    DevicePage(key.address, units, level, nav, devicePage)
+                    if (IosKnown.isPeripheral(key.address)) {
+                        LeasePeripheral(leases, key.address)
+                        DeviceSettingsEntry(key.address, devices, configLinks, autoSync, onBack = { nav.popIfTop { it == key } })
+                    } else {
+                        LaunchedEffect(key) { nav.popIfTop { it == key } }
+                    }
                 }
                 entry<DeviceSettingsKey> { key ->
                     LeasePeripheral(leases, key.address)
-                    DeviceSettingsEntry(key.address, devices, configLinks, onBack = { nav.popIfTop { it == key } })
+                    DeviceSettingsEntry(key.address, devices, configLinks, autoSync, onBack = { nav.popIfTop { it == key } })
                 }
                 entry<HistoryKey> { key ->
                     HistoryEntry(address = key.address, devices = devices, units = units, level = level, onBack = { nav.pop() })
@@ -333,9 +326,11 @@ internal fun AppRoot(
  * has it (#21), asking for the camera on the Scan tap, and the sticker can always be typed.
  */
 @Composable
-private fun DeviceSettingsEntry(address: String, devices: DevicesBridge, links: DeviceConfigLinks, onBack: () -> Unit) {
+private fun DeviceSettingsEntry(address: String, devices: DevicesBridge, links: DeviceConfigLinks, autoSync: AutoSyncSettings, onBack: () -> Unit) {
     val controller = viewModel(key = "device-settings-$address") { DeviceSettingsHolder(address, devices, links) }.controller
     val sticker = rememberIosStickerScan(links.scanSticker)
+    val records by devices.known.collectAsState()
+    val known = records.any { it.peripheral.equals(address, ignoreCase = true) }
     DeviceConfigScreen(
         controller = controller,
         lanAccess = LanAccess(granted = !devices.state.lanAccessDenied, requestable = true),
@@ -349,6 +344,7 @@ private fun DeviceSettingsEntry(address: String, devices: DevicesBridge, links: 
         },
         scan = sticker.scan,
         canScan = sticker.available,
+        lead = if (known) ({ AutoSyncSwitch(autoSync, address) }) else null,
     )
 }
 
@@ -514,50 +510,6 @@ private fun FileMetricsEntry(station: String, name: String, level: DetailLevel, 
     LaunchedEffect(station, name) { controller.load(station, name) }
     val state by controller.state.collectAsState()
     FileMetricsScreen(state = state, level = level, name = name, onBack = onBack)
-}
-
-/**
- * The companion page of one sensor: the Wi-Fi session, Wi-Fi access and, at the Developer level,
- * Debug. Files and History stay one tap away.
- */
-@Composable
-private fun DevicePage(
-    address: String,
-    units: UnitSystem,
-    level: DetailLevel,
-    nav: TabNavigator,
-    devicePage: DevicePageContent,
-) {
-    Box(Modifier.fillMaxSize()) {
-        val openDebug: ((String) -> Unit)? = if (level.developer) { device -> nav.openDebug(device, level.developer) } else null
-        val openSettings: (() -> Unit)? = if (IosKnown.isPeripheral(address)) ({ nav.push(DeviceSettingsKey(address)) }) else null
-        devicePage(address, units, level, openDebug, openSettings) { nav.pop() }
-        ArchiveShortcuts(
-            onFiles = { nav.openSection(FilesKey(address)) },
-            onHistory = { nav.openSection(HistoryKey(address)) },
-            modifier = Modifier.align(Alignment.TopEnd),
-        )
-    }
-}
-
-/** The companion page body Swift's window supplies: the sensor id, display units, detail level, Debug, Device settings and Back. */
-internal typealias DevicePageContent =
-    @Composable (id: String, units: UnitSystem, level: DetailLevel, openDebug: ((String) -> Unit)?, openSettings: (() -> Unit)?, onBack: () -> Unit) -> Unit
-
-/** Compact Files and History buttons over the top end of the companion page, the iOS way into the phone archive. */
-@Composable
-private fun ArchiveShortcuts(onFiles: () -> Unit, onHistory: () -> Unit, modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier.statusBarsPadding().padding(FloatingControl.Margin),
-        horizontalArrangement = Arrangement.spacedBy(FloatingControl.Margin),
-    ) {
-        FloatingIconButton(onClick = onFiles, contentDescription = filesTitle()) {
-            Icon(AppIcons.Storage, contentDescription = null)
-        }
-        FloatingIconButton(onClick = onHistory, contentDescription = historyTitle()) {
-            Icon(AppIcons.Schedule, contentDescription = null)
-        }
-    }
 }
 
 /** The marketing version from Info.plist, as Android shows its version name. */

@@ -46,8 +46,6 @@ fun DeviceRoute(
     onOpenToday: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenFiles: () -> Unit,
-    onOpenDebug: () -> Unit,
-    onOpenSettings: () -> Unit,
     onDisconnected: () -> Unit,
     viewModel: DeviceViewModel = hiltViewModel<DeviceViewModel, DeviceViewModel.Factory>(key = address, creationCallback = { it.create(address) }),
 ) {
@@ -98,8 +96,6 @@ fun DeviceRoute(
                 DeviceAction.OpenToday -> onOpenToday()
                 DeviceAction.OpenHistory -> onOpenHistory()
                 DeviceAction.OpenFiles -> onOpenFiles()
-                DeviceAction.OpenDebug -> onOpenDebug()
-                DeviceAction.OpenSettings -> onOpenSettings()
                 DeviceAction.Disconnect -> { viewModel.disconnect(); onDisconnected() }
                 DeviceAction.Reconnect -> {
                     if (canReconnectLanOnly(bluetooth.ready, localNetwork.ready, lanReconnectAvailable)) {
