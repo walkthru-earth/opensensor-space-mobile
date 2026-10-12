@@ -964,6 +964,8 @@ class DeviceConnectionRepositoryTest {
         assertEquals(SyncEndReason.BLUETOOTH_OFF, h.repo.sync.value.endReason)
         assertEquals(0, h.factory.fakeConnects)
         assertEquals(1, h.events.count { it == DeviceEvent.Error(DeviceMessage.SyncEnded(SyncEndReason.BLUETOOTH_OFF)) })
+        // One message for one failure, the open does not add its own Bluetooth line.
+        assertEquals(listOf<DeviceEvent>(DeviceEvent.Error(DeviceMessage.SyncEnded(SyncEndReason.BLUETOOTH_OFF))), h.events.filterIsInstance<DeviceEvent.Error>())
     }
 
     @Test

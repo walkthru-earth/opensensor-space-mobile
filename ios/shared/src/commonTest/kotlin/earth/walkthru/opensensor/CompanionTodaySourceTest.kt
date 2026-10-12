@@ -1,10 +1,14 @@
 package earth.walkthru.opensensor
 
 import androidx.compose.runtime.snapshots.Snapshot
+import earth.walkthru.aqsync.collection.SyncEndReason
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.history.TodaySoFar
+import earth.walkthru.opensensor.today.SyncMood
+import earth.walkthru.opensensor.today.TodayArchive
 import earth.walkthru.opensensor.today.TodayNotice
+import earth.walkthru.opensensor.today.syncMood
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -137,11 +141,13 @@ class CompanionTodaySourceTest {
         state.lanSessionNoticed("AQ-kitchen", false, false, CompanionNotice.LAN_DISCONNECTED, 0, 0, 0, 0.0)
         settle(this)
         assertFalse(source.snapshot.value.sync.running)
-        assertTrue(source.snapshot.value.sync.failures.isNotEmpty(), "a closed socket cannot report All caught up")
+        assertEquals(SyncEndReason.LINK_LOST, source.snapshot.value.sync.endReason, "a closed socket cannot report All caught up")
+        assertEquals(SyncMood.FAILED, syncMood(source.snapshot.value.sync, TodayArchive()))
 
-        state.lanSyncFinished("AQ-kitchen", false, SyncResult(SyncEnd.LINK_LOST, 0, 0, 0))
+        state.lanSyncFinished("AQ-kitchen", false, SyncResult(SyncEnd.BUSY, 0, 0, 0))
         settle(this)
-        assertTrue(source.snapshot.value.sync.failures.isNotEmpty(), "the engine result remains after session cleanup")
+        assertEquals(SyncEndReason.DEVICE_BUSY, source.snapshot.value.sync.endReason, "the engine result remains after session cleanup")
+        assertTrue(source.snapshot.value.sync.failures.isEmpty(), "an early end is a reason, not a fake file failure")
     }
 
     @Test fun anAnchoredClockSyncsFilesOnly() = runTest {

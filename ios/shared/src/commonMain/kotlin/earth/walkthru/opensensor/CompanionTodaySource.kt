@@ -2,6 +2,7 @@ package earth.walkthru.opensensor
 
 import androidx.compose.runtime.snapshotFlow
 import earth.walkthru.aqsync.archive.ArchiveRecord
+import earth.walkthru.aqsync.collection.SyncEndReason
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.history.TodaySoFar
@@ -204,16 +205,17 @@ internal class CompanionTodaySource(
         bytesDone = session?.bytesDone ?: 0,
         bytesTotal = session?.bytesTotal ?: 0,
         bytesPerSecond = session?.bytesPerSecond ?: 0.0,
-        outcomes = fileFailures(run?.result, lanFailureCount(run)),
+        outcomes = fileFailures(run?.result, run?.result?.notSaved ?: 0),
         startedAtEpochMs = run?.startedAtEpochMs,
         finishedAtEpochMs = run?.finishedAtEpochMs,
+        endReason = when {
+            run == null || run.running -> null
+            run.result != null -> run.result.endReason
+            // The session closed under the run before it reported a result.
+            run.interrupted -> SyncEndReason.LINK_LOST
+            else -> null
+        },
     )
-
-    private fun lanFailureCount(run: LanRunState?): Int {
-        val result = run?.result ?: return if (run?.interrupted == true) 1 else 0
-        if (result.notSaved > 0) return result.notSaved
-        return if (result.end == SyncEnd.COMPLETE || result.end == SyncEnd.FILES_NOT_SAVED) 0 else 1
-    }
 
     private fun runProgress(seen: Seen): RunProgress {
         val progress = seen.progress
@@ -229,6 +231,7 @@ internal class CompanionTodaySource(
             outcomes = fileFailures(seen.result, notSaved),
             startedAtEpochMs = seen.startedAt,
             finishedAtEpochMs = seen.finishedAt.takeIf { !seen.syncBusy && seen.result != null },
+            endReason = seen.result?.endReason?.takeIf { !seen.syncBusy },
         )
     }
 

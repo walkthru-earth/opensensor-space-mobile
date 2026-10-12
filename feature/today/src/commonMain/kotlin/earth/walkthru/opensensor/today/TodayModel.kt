@@ -1,6 +1,7 @@
 package earth.walkthru.opensensor.today
 
 import earth.walkthru.aqsync.archive.ArchiveRecord
+import earth.walkthru.aqsync.collection.SyncEndReason
 import earth.walkthru.aqsync.data.SyncProgress
 import earth.walkthru.aqsync.data.ble.ConfigSnapshot
 import earth.walkthru.aqsync.data.ble.ConnectionState
@@ -163,13 +164,64 @@ fun todayCards(state: TodayUiState): List<TodayCard> = buildList {
     }
 }
 
-/** Plain-language sync state, derived only from what the platform reports. */
-enum class SyncMood { RUNNING, CAUGHT_UP, SOME_FAILED, READY, EMPTY }
+/**
+ * Plain-language sync state, derived only from what the platform reports. A run that ended early
+ * is [STOPPED] (the user, another action or the OS ended it) or [FAILED], never caught up.
+ */
+enum class SyncMood { RUNNING, CAUGHT_UP, SOME_FAILED, STOPPED, FAILED, READY, EMPTY }
 
-fun syncMood(sync: SyncProgress, archive: TodayArchive): SyncMood = when {
-    sync.running -> SyncMood.RUNNING
-    sync.finishedAtEpochMs != null && sync.failures.isNotEmpty() -> SyncMood.SOME_FAILED
-    sync.finishedAtEpochMs != null -> SyncMood.CAUGHT_UP
-    archive.files > 0 -> SyncMood.READY
-    else -> SyncMood.EMPTY
+fun syncMood(sync: SyncProgress, archive: TodayArchive): SyncMood {
+    val reason = sync.endReason
+    return when {
+        sync.running -> SyncMood.RUNNING
+        reason == SyncEndReason.STOPPED || reason == SyncEndReason.INTERRUPTED -> SyncMood.STOPPED
+        reason != null && reason != SyncEndReason.COMPLETED -> SyncMood.FAILED
+        sync.finishedAtEpochMs != null && sync.failures.isNotEmpty() -> SyncMood.SOME_FAILED
+        sync.finishedAtEpochMs != null -> SyncMood.CAUGHT_UP
+        archive.files > 0 -> SyncMood.READY
+        else -> SyncMood.EMPTY
+    }
+}
+
+/** The one line Today shows for a run that ended early. Each one says what to do next. */
+enum class SyncEndLine {
+    STOPPED,
+    INTERRUPTED,
+    BLUETOOTH_OFF,
+    PERMISSION_MISSING,
+    PAIRING_REPAIR,
+
+    /** Simple wording for both Wi-Fi token endings. Detailed names which one. */
+    WIFI_ACCESS,
+    TOKEN_ROTATED,
+    TOKEN_REJECTED,
+    DEVICE_BUSY,
+    OUT_OF_RANGE,
+    UPDATE_FIRMWARE,
+    NO_SPACE,
+    STORAGE_ERROR,
+    LINK_LOST,
+    OTHER,
+}
+
+/** The line for a [SyncMood.STOPPED] or [SyncMood.FAILED] ending, or null for any other mood. */
+fun syncEndLine(sync: SyncProgress, level: DetailLevel): SyncEndLine? {
+    if (sync.running) return null
+    return when (sync.endReason) {
+        null, SyncEndReason.COMPLETED -> null
+        SyncEndReason.STOPPED -> SyncEndLine.STOPPED
+        SyncEndReason.INTERRUPTED -> SyncEndLine.INTERRUPTED
+        SyncEndReason.BLUETOOTH_OFF -> SyncEndLine.BLUETOOTH_OFF
+        SyncEndReason.PERMISSION_MISSING -> SyncEndLine.PERMISSION_MISSING
+        SyncEndReason.PAIRING_REPAIR -> SyncEndLine.PAIRING_REPAIR
+        SyncEndReason.TOKEN_ROTATED -> if (level.detailed) SyncEndLine.TOKEN_ROTATED else SyncEndLine.WIFI_ACCESS
+        SyncEndReason.TOKEN_REJECTED -> if (level.detailed) SyncEndLine.TOKEN_REJECTED else SyncEndLine.WIFI_ACCESS
+        SyncEndReason.DEVICE_BUSY -> SyncEndLine.DEVICE_BUSY
+        SyncEndReason.OUT_OF_RANGE -> SyncEndLine.OUT_OF_RANGE
+        SyncEndReason.UPDATE_FIRMWARE -> SyncEndLine.UPDATE_FIRMWARE
+        SyncEndReason.NO_SPACE -> SyncEndLine.NO_SPACE
+        SyncEndReason.STORAGE_ERROR -> SyncEndLine.STORAGE_ERROR
+        SyncEndReason.LINK_LOST -> SyncEndLine.LINK_LOST
+        SyncEndReason.OTHER -> SyncEndLine.OTHER
+    }
 }

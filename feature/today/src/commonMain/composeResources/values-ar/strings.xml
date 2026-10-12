@@ -168,6 +168,22 @@
     </plurals>
     <string name="sync_button_running">جارٍ المزامنة…</string>
     <string name="sync_button">زامِن الآن</string>
+    <string name="sync_end_stopped">توقفت المزامنة. الملفات المنسوخة حتى الآن محفوظة.</string>
+    <string name="sync_end_interrupted">توقفت المزامنة مؤقتًا أثناء إغلاق التطبيق. ستكمل عند المزامنة مرة أخرى.</string>
+    <string name="sync_end_bluetooth_off">توقفت المزامنة. شغّل البلوتوث ثم زامن مرة أخرى.</string>
+    <string name="sync_end_permission">توقفت المزامنة. اسمح لهذا التطبيق بالوصول إلى المستشعر من إعدادات الهاتف ثم زامن مرة أخرى.</string>
+    <string name="sync_end_pairing">توقفت المزامنة. أقرن المستشعر مرة أخرى من إعدادات البلوتوث.</string>
+    <string name="sync_end_wifi_access">توقفت المزامنة. اتصل عبر البلوتوث مرة واحدة ثم زامن مرة أخرى.</string>
+    <string name="sync_end_token_rotated">توقفت المزامنة. تغيّر رمز Wi-Fi. اتصل عبر البلوتوث مرة واحدة لجلب الرمز الجديد.</string>
+    <string name="sync_end_token_rejected">توقفت المزامنة. رفض المستشعر رمز Wi-Fi. اتصل عبر البلوتوث مرة واحدة لتجديده.</string>
+    <string name="sync_end_busy">توقفت المزامنة. المستشعر مشغول. حاول مرة أخرى قريبًا.</string>
+    <string name="sync_end_out_of_range">توقفت المزامنة. المستشعر بعيد. اقترب منه ثم زامن مرة أخرى.</string>
+    <string name="sync_end_update_firmware">توقفت المزامنة. حدّث البرنامج الثابت للمستشعر ثم زامن مرة أخرى.</string>
+    <string name="sync_end_no_space">توقفت المزامنة. لا توجد مساحة كافية على هذا الهاتف. أفرغ بعض المساحة ثم زامن مرة أخرى.</string>
+    <string name="sync_end_storage">توقفت المزامنة. تعذّر حفظ ملف على هذا الهاتف. زامن مرة أخرى للمحاولة من جديد.</string>
+    <string name="sync_end_link_lost">توقفت المزامنة. انقطع الاتصال. ستكمل المزامنة التالية من حيث توقفت هذه.</string>
+    <string name="sync_end_other">توقفت المزامنة. حاول مرة أخرى.</string>
+    <string name="sync_stop">إيقاف</string>
     <string name="batch_title">تقدير الدفعة، غير متحقَّق منه</string>
     <string name="batch_explain">%1$s ضرب الجسيمات الأكبر من 0.3 µm في كل 0.1 لتر. تبقى القراءة الخام هي القيمة الأساسية. لا يزال يحتاج مقارنة بجهاز مرجعي.</string>
     <string name="batch_value">%1$s µg/m³</string>

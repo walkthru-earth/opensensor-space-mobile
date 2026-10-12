@@ -140,6 +140,22 @@
     </plurals>
     <string name="sync_button_running">Syncing…</string>
     <string name="sync_button">Sync now</string>
+    <string name="sync_end_stopped">Sync stopped. Files copied so far are kept.</string>
+    <string name="sync_end_interrupted">Sync paused while the app was closed. It resumes when you sync again.</string>
+    <string name="sync_end_bluetooth_off">Sync stopped. Turn on Bluetooth, then sync again.</string>
+    <string name="sync_end_permission">Sync stopped. Allow this app to reach the sensor in phone settings, then sync again.</string>
+    <string name="sync_end_pairing">Sync stopped. Pair the sensor again in Bluetooth settings.</string>
+    <string name="sync_end_wifi_access">Sync stopped. Connect over Bluetooth once, then sync again.</string>
+    <string name="sync_end_token_rotated">Sync stopped. The Wi-Fi token changed. Connect over Bluetooth once to fetch the new one.</string>
+    <string name="sync_end_token_rejected">Sync stopped. The sensor refused the Wi-Fi token. Connect over Bluetooth once to renew it.</string>
+    <string name="sync_end_busy">Sync stopped. The sensor is busy. Try again soon.</string>
+    <string name="sync_end_out_of_range">Sync stopped. The sensor is out of reach. Move closer and sync again.</string>
+    <string name="sync_end_update_firmware">Sync stopped. Update the sensor firmware, then sync again.</string>
+    <string name="sync_end_no_space">Sync stopped. This phone is out of space. Free some space, then sync again.</string>
+    <string name="sync_end_storage">Sync stopped. This phone could not save a file. Sync again to retry.</string>
+    <string name="sync_end_link_lost">Sync stopped. The connection dropped. The next sync resumes where this one stopped.</string>
+    <string name="sync_end_other">Sync stopped. Try again.</string>
+    <string name="sync_stop">Stop</string>
     <string name="batch_title">Batch estimate, unvalidated</string>
     <string name="batch_explain">%1$s times particles above 0.3 µm per 0.1 L. The raw reading stays the main value. It still needs a reference comparison.</string>
     <string name="batch_value">%1$s µg/m³</string>

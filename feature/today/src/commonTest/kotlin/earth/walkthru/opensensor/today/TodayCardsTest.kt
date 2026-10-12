@@ -1,5 +1,6 @@
 package earth.walkthru.opensensor.today
 
+import earth.walkthru.aqsync.collection.SyncEndReason
 import earth.walkthru.aqsync.data.SyncProgress
 import earth.walkthru.aqsync.data.ble.ConfigSnapshot
 import earth.walkthru.aqsync.data.protocol.DeviceConfig
@@ -24,6 +25,8 @@ import earth.walkthru.opensensor.today.TodayCard.TODAY_SO_FAR
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class TodayCardsTest {
@@ -122,5 +125,39 @@ class TodayCardsTest {
             SyncMood.SOME_FAILED,
             syncMood(SyncProgress(finishedAtEpochMs = 1, outcomes = listOf(FileOutcome.Failed("x.parquet", "crc"))), TodayArchive()),
         )
+    }
+
+    @Test
+    fun anEarlyEndIsNeverCaughtUp() {
+        val done = SyncProgress(finishedAtEpochMs = 1, endReason = SyncEndReason.COMPLETED)
+        assertEquals(SyncMood.CAUGHT_UP, syncMood(done, TodayArchive()))
+        assertEquals(SyncMood.STOPPED, syncMood(done.copy(endReason = SyncEndReason.STOPPED), TodayArchive()))
+        assertEquals(SyncMood.STOPPED, syncMood(done.copy(endReason = SyncEndReason.INTERRUPTED), TodayArchive()))
+        SyncEndReason.entries.filter { it !in setOf(SyncEndReason.COMPLETED, SyncEndReason.STOPPED, SyncEndReason.INTERRUPTED) }.forEach { reason ->
+            assertEquals(SyncMood.FAILED, syncMood(done.copy(endReason = reason), TodayArchive(files = 3)), reason.name)
+            // A failure without a finish instant is still a failure.
+            assertEquals(SyncMood.FAILED, syncMood(SyncProgress(endReason = reason), TodayArchive()), reason.name)
+        }
+        assertEquals(SyncMood.RUNNING, syncMood(done.copy(running = true, endReason = SyncEndReason.LINK_LOST), TodayArchive()))
+    }
+
+    @Test
+    fun everyEarlyEndHasItsOwnLineAndSimpleHidesTokenWording() {
+        val ended = SyncEndReason.entries.filter { it != SyncEndReason.COMPLETED }
+        ended.forEach { reason ->
+            assertNotNull(syncEndLine(SyncProgress(endReason = reason), DetailLevel.SIMPLE), reason.name)
+        }
+        assertNull(syncEndLine(SyncProgress(endReason = SyncEndReason.COMPLETED), DetailLevel.DETAILED))
+        assertNull(syncEndLine(SyncProgress(running = true, endReason = SyncEndReason.LINK_LOST), DetailLevel.DETAILED))
+        assertEquals(SyncEndLine.WIFI_ACCESS, syncEndLine(SyncProgress(endReason = SyncEndReason.TOKEN_ROTATED), DetailLevel.SIMPLE))
+        assertEquals(SyncEndLine.WIFI_ACCESS, syncEndLine(SyncProgress(endReason = SyncEndReason.TOKEN_REJECTED), DetailLevel.SIMPLE))
+        assertEquals(SyncEndLine.TOKEN_ROTATED, syncEndLine(SyncProgress(endReason = SyncEndReason.TOKEN_ROTATED), DetailLevel.DETAILED))
+        assertEquals(SyncEndLine.TOKEN_REJECTED, syncEndLine(SyncProgress(endReason = SyncEndReason.TOKEN_REJECTED), DetailLevel.DEVELOPER))
+        assertEquals(SyncEndLine.BLUETOOTH_OFF, syncEndLine(SyncProgress(endReason = SyncEndReason.BLUETOOTH_OFF), DetailLevel.SIMPLE))
+        assertEquals(SyncEndLine.PAIRING_REPAIR, syncEndLine(SyncProgress(endReason = SyncEndReason.PAIRING_REPAIR), DetailLevel.SIMPLE))
+        // Every reason but the two token ones reads the same at each level.
+        ended.filter { it != SyncEndReason.TOKEN_ROTATED && it != SyncEndReason.TOKEN_REJECTED }.forEach { reason ->
+            assertEquals(syncEndLine(SyncProgress(endReason = reason), DetailLevel.SIMPLE), syncEndLine(SyncProgress(endReason = reason), DetailLevel.DEVELOPER))
+        }
     }
 }
