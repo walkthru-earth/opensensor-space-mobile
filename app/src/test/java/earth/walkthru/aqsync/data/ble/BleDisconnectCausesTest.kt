@@ -44,6 +44,9 @@ class BleDisconnectCausesTest {
         // The stale bond detector fails the open with the key missing marker.
         assertEquals(DisconnectCause.Auth(AuthKind.BOND_MISSING), BleDisconnectCauses.ofOpenFailure(TransportException(BleConnectionFailure.PAIRING_REPAIR_MESSAGE, BleDisconnectCauses.KEY_MISSING)))
         assertEquals(DisconnectCause.Timeout(TimeoutPhase.OPEN, 0), BleDisconnectCauses.ofOpenFailure(BleLinkDriver.ConnectTimeoutException()))
+        // establish() rethrows every failure wrapped, with the reason and no GATT status.
+        val wrappedTimeout = TransportException("timed out while connecting", null, BleLinkDriver.ConnectTimeoutException())
+        assertEquals(DisconnectCause.Timeout(TimeoutPhase.OPEN, 0), BleDisconnectCauses.ofOpenFailure(wrappedTimeout))
         assertEquals(DisconnectCause.LocalAbort(), BleDisconnectCauses.ofOpenFailure(TransportException("no adapter")))
     }
 

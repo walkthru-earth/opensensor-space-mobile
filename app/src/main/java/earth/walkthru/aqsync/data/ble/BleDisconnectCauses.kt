@@ -59,11 +59,13 @@ object BleDisconnectCauses {
 
     /** Why [BleLinkDriver.open] failed. Pairing failures are credentials, the rest is the link. */
     fun ofOpenFailure(e: TransportException): DisconnectCause {
-        val bond = generateSequence<Throwable>(e) { it.cause }.filterIsInstance<BleLinkDriver.BondException>().firstOrNull()
+        // establish() wraps every failure, so the typed reason sits in the cause chain.
+        val chain = generateSequence<Throwable>(e) { it.cause }
+        val bond = chain.filterIsInstance<BleLinkDriver.BondException>().firstOrNull()
         return when {
             bond?.missing == true -> DisconnectCause.Auth(AuthKind.BOND_MISSING)
             bond != null -> DisconnectCause.Auth(AuthKind.BOND_FAILED)
-            e is BleLinkDriver.ConnectTimeoutException -> DisconnectCause.Timeout(TimeoutPhase.OPEN, 0)
+            chain.any { it is BleLinkDriver.ConnectTimeoutException } -> DisconnectCause.Timeout(TimeoutPhase.OPEN, 0)
             else -> e.gattStatus?.let(::ofStatus) ?: DisconnectCause.LocalAbort()
         }
     }
