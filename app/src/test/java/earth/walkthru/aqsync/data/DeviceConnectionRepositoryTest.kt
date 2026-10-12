@@ -1005,6 +1005,29 @@ class DeviceConnectionRepositoryTest {
         assertEquals(10L, h.repo.archiveTimeSummary.value.rows)
     }
 
+    @Test
+    fun `ownership names who holds the device and a background release never stops a sync`() = harnessTest(chunkDelayMs = 1) { h ->
+        h.repo.connect(ADDRESS, "AQ-6b40", fake = true)
+        h.until { h.repo.plan.value != null }
+        assertEquals(DeviceOwnership.IDLE, h.repo.ownershipNow())
+        h.repo.syncAll()
+        h.until { h.archived.rows.isNotEmpty() }
+        h.until { h.repo.ownership.value == DeviceOwnership.INTERACTIVE }
+        assertFalse(h.repo.releaseForBackground())
+        assertTrue(h.repo.sync.value.running)
+        assertNotNull(h.repo.session.value)
+        h.until { !h.repo.collectionState.value.active && !h.repo.busy.value && h.archived.rows.size == h.device.files.size }
+        h.until { h.repo.ownership.value == DeviceOwnership.IDLE }
+        assertEquals(SyncEndReason.COMPLETED, h.repo.sync.value.endReason)
+
+        assertTrue(h.repo.releaseForBackground())
+        assertNull(h.repo.session.value)
+        val work = async { h.repo.syncInBackground(ADDRESS, null, owner = "synthetic-worker", protection = KeepAlive.None) }
+        h.until { h.repo.ownership.value == DeviceOwnership.BACKGROUND || work.isCompleted }
+        h.until { work.isCompleted }
+        h.until { h.repo.ownership.value == DeviceOwnership.IDLE }
+    }
+
     private fun archivedRow(station: String, name: String, indexed: Boolean) = ArchivedFile(
         station = station,
         name = name,

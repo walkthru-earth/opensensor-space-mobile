@@ -91,6 +91,27 @@ class DeviceFacade internal constructor(
         if (reserved) collection else idle
     }.stateIn(scope, SharingStarted.Eagerly, null)
 
+    /**
+     * Who holds this device for a collection right now: nobody, an interactive run started from
+     * the app, or a background worker. Reserved from admission to cleanup, so it stays set while a
+     * run waits for its link to come back.
+     */
+    val ownership: StateFlow<DeviceOwnership> = combine(linkOwner.collectionActive, linkOwner.backgroundOwner, ::deviceOwnership)
+        .stateIn(scope, SharingStarted.Eagerly, DeviceOwnership.IDLE)
+
+    /** [ownership] read straight from the link owner, without the flow's dispatch delay. */
+    fun ownershipNow(): DeviceOwnership = deviceOwnership(linkOwner.collectionActive.value, linkOwner.backgroundOwner.value)
+
+    /**
+     * Free the device for a background worker. Never stops a collection: returns false and leaves
+     * everything as it is while any run holds the device. True once no session is open.
+     */
+    suspend fun releaseForBackground(): Boolean {
+        if (ownershipNow() != DeviceOwnership.IDLE) return false
+        linkOwner.disconnectNow()
+        return linkOwner.session.value == null && ownershipNow() == DeviceOwnership.IDLE
+    }
+
     internal fun bind(address: String) {
         check(this.address == null || this.address == address)
         if (this.address != null) return
@@ -422,4 +443,13 @@ class DeviceFacade internal constructor(
 internal fun StopSource.endReason(): SyncEndReason = when (this) {
     StopSource.USER, StopSource.APP -> SyncEndReason.STOPPED
     StopSource.SYSTEM, StopSource.FGS_TIMEOUT -> SyncEndReason.INTERRUPTED
+}
+
+/** Per-device collection holder, see [DeviceFacade.ownership]. */
+enum class DeviceOwnership { IDLE, INTERACTIVE, BACKGROUND }
+
+internal fun deviceOwnership(collectionActive: Boolean, backgroundOwner: String?): DeviceOwnership = when {
+    backgroundOwner != null -> DeviceOwnership.BACKGROUND
+    collectionActive -> DeviceOwnership.INTERACTIVE
+    else -> DeviceOwnership.IDLE
 }
