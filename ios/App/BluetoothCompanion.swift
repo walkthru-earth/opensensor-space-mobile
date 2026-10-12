@@ -62,7 +62,13 @@ final class BluetoothCompanion {
     /// The connected or connecting peripheral's id.
     private var current: String?
     private var scanTimer: Timer?
+    /// Covers the connect, then discovery and a first pairing. Nil once discovery settled.
     private var connectionTimer: Timer?
+    /// How long Core Bluetooth may take to reach the sensor.
+    private let connectTimeout: TimeInterval = 30
+    /// How long discovery may take once connected. The first encrypted read shows the iOS passkey
+    /// sheet, and the user reads six digits off the sensor, so this is far longer than the connect.
+    private let discoveryTimeout: TimeInterval = 90
     private var freshnessTimer: Timer?
     private var foreground = true
     private let engine: SensorSync
@@ -273,12 +279,18 @@ final class BluetoothCompanion {
         current = id
         gattIdle = false
         state.connectionStarted(id: id)
-        connectionTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: false) { [weak self] _ in
+        startConnectionTimer(connectTimeout)
+        physical.connect(id: id, as: connection)
+    }
+
+    /// Replaces the connection timer. When it fires, the connect or discovery took too long.
+    private func startConnectionTimer(_ seconds: TimeInterval) {
+        connectionTimer?.invalidate()
+        connectionTimer = Timer.scheduledTimer(withTimeInterval: seconds, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.unexpectedLoss(notice: .connectTimedOut)
             }
         }
-        physical.connect(id: id, as: connection)
     }
 
     /// Ends the connection for a typed reason. The shared state picks the words.
@@ -593,7 +605,16 @@ final class BluetoothCompanion {
         state.wifiAccessSaving()
         tokenTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated {
-                self?.disconnect(notice: .wifiAccessTimedOut)
+                guard let self, self.requestingToken else { return }
+                // GET_TOKEN was written and only its reply is late, so only the request ends. A late
+                // TOKEN then reaches the shared link, which drops a frame no request owns, and the
+                // recorder redacts it. A write still in flight has wedged the GATT queue, so the
+                // link closes as before.
+                if self.gattIdle {
+                    self.finishTokenRequest(.wifiAccessTimedOut)
+                } else {
+                    self.disconnect(notice: .wifiAccessTimedOut)
+                }
             }
         }
         let number = connection
@@ -654,7 +675,9 @@ extension BluetoothCompanion {
         guard number == connection, current != nil else { return }
         switch event {
         case .connected:
-            if !active { disconnect() }
+            if !active { return disconnect() }
+            // The connect timer stops here. Discovery, with a first pairing sheet, gets its own.
+            if connectionTimer != nil { startConnectionTimer(discoveryTimeout) }
         case .info(let json, let name, let mtu, let canSync):
             sensorOpened(json: json, name: name, mtu: mtu, canSync: canSync)
         case .ready:
@@ -719,8 +742,15 @@ extension BluetoothCompanion {
             openRequested = nil
         }
         if newState != .poweredOn, let notice {
+            // A stack reset is brief and not a power off. iOS drops the connection anyway, so the
+            // sensor open on screen is asked for again and opens once the radio is back on.
+            let reopen = newState == .resetting && foreground && collectId == nil && backgroundId == nil
+                ? current ?? openRequested : nil
+            let rescan = newState == .resetting && foreground && (scanRequested || scanTimer != nil)
             stopScan()
             disconnect(notice: notice)
+            if let reopen { openRequested = reopen }
+            if rescan { scanRequested = true }
         }
         // The shared policy maps this to its status and offers Settings only after a denial.
         state.bluetoothAuthorizationChanged(raw: Int64(CBManager.authorization.rawValue))

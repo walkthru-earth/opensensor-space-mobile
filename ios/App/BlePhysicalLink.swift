@@ -252,6 +252,7 @@ actor BlePhysicalLink {
         }
         if peripheral.state == .connected {
             // A pending connect already reached the sensor. Discovery starts as after a fresh connect.
+            deliver(number, .connected)
             peripheral.discoverServices([CBUUID(string: uuids.service)])
         } else {
             central.connect(peripheral)
@@ -276,6 +277,13 @@ actor BlePhysicalLink {
     }
 
     private static let cancelAnswerWait: DispatchTimeInterval = .seconds(2)
+
+    /// The negotiated ATT MTU. Core Bluetooth reports it as the write without response limit plus the
+    /// 3-byte header. The with response value is 512 on iOS (long writes), never the MTU. The shared
+    /// contract caps `payload_max = min(MTU - 3, 512)`, so the reported MTU never exceeds 515.
+    private static func attMtu(_ peripheral: CBPeripheral) -> Int {
+        min(peripheral.maximumWriteValueLength(for: .withoutResponse), 512) + 3
+    }
 
     /// True when this callback answers an earlier cancel. A connection opened since then connects now.
     private func answersCancel(_ peripheral: CBPeripheral) -> Bool {
@@ -484,8 +492,12 @@ actor BlePhysicalLink {
             deliver(connection, .token(kind: reply.kind, payload: reply.payload, port: Int(reply.port)))
             return
         }
-        guard !failed, let data = characteristic.value, let json = String(data: data, encoding: .utf8) else {
-            return lose(.readFailed)
+        guard !failed, let data = characteristic.value else { return lose(.readFailed) }
+        guard let json = String(data: data, encoding: .utf8) else {
+            // INFO identifies the sensor, so an unreadable one ends the link. One bad LIVE or STATUS
+            // value is dropped, and a discovery read of it still completes so the queue moves on.
+            if characteristic.uuid == CBUUID(string: uuids.info) { return lose(.readFailed) }
+            return readDone(characteristic)
         }
         switch characteristic.uuid {
         case CBUUID(string: uuids.info):
@@ -498,7 +510,7 @@ actor BlePhysicalLink {
                 connection,
                 .info(
                     json: json, name: advertisedNames[id] ?? peripheral.name,
-                    mtu: Int32(peripheral.maximumWriteValueLength(for: .withResponse) + 3),
+                    mtu: Int32(Self.attMtu(peripheral)),
                     canSync: control != nil && response != nil))
         case CBUUID(string: uuids.live):
             deliver(connection, .live(json))
@@ -507,6 +519,11 @@ actor BlePhysicalLink {
             deliver(connection, .status(json))
         default: return
         }
+        readDone(characteristic)
+    }
+
+    /// Ends a read in the GATT queue. A notification answers no read, so it changes nothing.
+    private func readDone(_ characteristic: CBCharacteristic) {
         guard gatt.finish(read: characteristic) else { return }
         if discovering, characteristic.uuid == CBUUID(string: uuids.status) {
             // STATUS is the last discovery read. A RESPONSE subscription may still follow it.
