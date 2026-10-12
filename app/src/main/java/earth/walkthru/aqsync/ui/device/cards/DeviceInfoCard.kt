@@ -21,6 +21,8 @@ import earth.walkthru.opensensor.designsystem.BrandCard
 import earth.walkthru.opensensor.designsystem.Eyebrow
 import earth.walkthru.opensensor.designsystem.StatLine
 import earth.walkthru.opensensor.designsystem.TickingText
+import earth.walkthru.opensensor.designsystem.listSeparator
+import earth.walkthru.opensensor.designsystem.spokenList
 
 /**
  * The device header card. Simple names the device and how it is connected, in words. Detailed adds
@@ -65,7 +67,7 @@ fun DeviceInfoCard(
                     transport?.labelText(),
                     endpoint,
                     (connection as? ConnectionState.Ready)?.let { stringResource(R.string.device_payload, it.mtu - 3) },
-                ).joinToString(", ").ifEmpty { NO_VALUE },
+                ).let { spokenList(it, listSeparator()) }.ifEmpty { NO_VALUE },
             )
             if (configReadAtEpochMs != null) {
                 val label = stringResource(R.string.device_config_read)

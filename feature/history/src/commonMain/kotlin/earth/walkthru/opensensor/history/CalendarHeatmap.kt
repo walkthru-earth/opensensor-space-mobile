@@ -36,6 +36,8 @@ import earth.walkthru.aqsync.data.history.MetricSpec
 import earth.walkthru.aqsync.data.history.localDateOf
 import earth.walkthru.aqsync.data.history.startOfDay
 import earth.walkthru.aqsync.units.UnitFormatter
+import earth.walkthru.opensensor.designsystem.listSeparator
+import earth.walkthru.opensensor.designsystem.spokenList
 import earth.walkthru.opensensor.history.resources.Res
 import earth.walkthru.opensensor.history.resources.chart_calendar_title
 import earth.walkthru.opensensor.history.resources.chart_days_with_readings
@@ -87,11 +89,12 @@ internal fun CalendarHeatmap(
     val heightDp = if (weeks > 10) 120.dp else 150.dp
     val shownDays = firstDay.daysUntil(lastDay) + 1
     val daysWithReadings = readable.size
+    val separator = listSeparator()
     val summary = listOfNotNull(
         stringResource(Res.string.chart_calendar_title, metric.label),
         stringResource(Res.string.chart_days_with_readings, daysWithReadings, shownDays),
         chartHighest(days.filter { it.startS >= fromS && it.startS < toS }, metric, units) { c -> formatEpoch(c.startS, zone, DAY_SPOKEN) },
-    ).joinToString(", ")
+    ).let { spokenList(it, separator) }
     val estimated = stringResource(Res.string.history_estimated_time)
     val moodTitles = AirMood.entries.associateWith { it.titleText() }
     val stepLabels = WhoStep.entries.associateWith { it.labelText() }
@@ -177,7 +180,7 @@ internal fun CalendarHeatmap(
                         mood?.let { moodTitles[it] },
                         metric.stepOf(m.toDouble())?.let { stepLabels[it] },
                         estimated.takeIf { col.estimated },
-                    ).joinToString(", ")
+                    ).let { spokenList(it, separator) }
                     val order = (week * 7 + dow).toFloat()
                     Box(
                         Modifier

@@ -60,7 +60,9 @@ import earth.walkthru.opensensor.designsystem.MascotGuide
 import earth.walkthru.opensensor.designsystem.Peacock
 import earth.walkthru.opensensor.designsystem.PeacockExpression
 import earth.walkthru.opensensor.designsystem.PeacockIcon
+import earth.walkthru.opensensor.designsystem.listSeparator
 import earth.walkthru.opensensor.designsystem.rememberNowMillis
+import earth.walkthru.opensensor.designsystem.spokenList
 import earth.walkthru.opensensor.files.resources.Res
 import earth.walkthru.opensensor.files.resources.action_back
 import earth.walkthru.opensensor.files.resources.ago_days
@@ -614,7 +616,7 @@ private fun groupTitle(title: GroupTitle): String = when (title) {
 @Composable
 private fun groupDetail(detail: GroupDetail): String? = listOfNotNull(
     detail.station?.let { stringResource(Res.string.files_group_station, it) },
-    detail.utcFolders.takeIf { it.isNotEmpty() }?.let { pluralStringResource(Res.plurals.files_group_utc_folders, it.size, it.joinToString(", ")) },
+    detail.utcFolders.takeIf { it.isNotEmpty() }?.let { pluralStringResource(Res.plurals.files_group_utc_folders, it.size, spokenList(it, listSeparator())) },
     detail.boot?.let { stringResource(Res.string.files_group_boot, it) },
     stringResource(Res.string.files_group_unrecognised).takeIf { detail.unrecognised },
 ).joinToString(" · ").ifEmpty { null }
