@@ -77,8 +77,9 @@ The iOS app entry point is the Xcode project in this directory. Read the root
 - `LanSession` is an actor whose executor is its own serial queue. `NWConnection` callbacks and
   `DispatchSourceTimer` handlers run on that queue and enter with `assumeIsolated`. Owners learn
   about pushes and closure through the ordered `events` stream. `close()` is nonisolated.
-- File sync runs in the shared Kotlin engine (`SensorSync`, and `SensorCollections` for the shared
-  per-device controller over `IosLinkProvider`, built only by tests until #81 routes Swift into it). Swift only moves bytes through the
+- File sync runs in the shared Kotlin engine (`SensorSync`, and `SensorCollections`, the one
+  app-wide per-device controller over `IosLinkProvider`). Every Swift sync entry point calls
+  `runs.collect` and supplies the dial for a retry (#81). Swift only moves bytes through the
   connection's one `IosLink` and receives progress and the typed result on the main thread. Values that cross
   domains (`LanReply`, `LanFailure`, `LanCredential`) are Sendable Swift values. Kotlin framework
   objects are not Sendable. Keep each one inside a single isolation domain. A main-actor

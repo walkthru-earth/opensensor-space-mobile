@@ -64,6 +64,14 @@ support and its validation scope are documented in [ios-migration.md](ios-migrat
 Real multi-phone/multi-sensor throughput and radio behavior require phone and
 board qualification; host tests alone do not establish these results.
 
+On iOS the one Bluetooth link and each Wi-Fi session close once nothing holds them. Leaving a
+sensor page asks for an idle close. While a run, a Collect all step, an Auto-sync step, a token
+request or a GATT exchange holds the link, the close waits and runs when that work ends. A
+Bluetooth link that drops under a run is dialled again by the shared controller, and My devices
+shows it reconnecting with the run's progress. A paused Wi-Fi run shows the same way. Each new
+Wi-Fi run counts its files from zero. Core Bluetooth reports no bonding step, so iOS never shows
+the pairing phase, and a lost bond shows as a failed link until the next connect or Forget.
+
 ## Side by side
 
 ### Investigating slow Wi-Fi collection (2026-10-08)

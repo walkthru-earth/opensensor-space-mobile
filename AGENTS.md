@@ -62,8 +62,8 @@ concern you are changing in `docs/README.md`.
   commands and idle reconnect. `DeviceConnectionRepository` is a compatibility typealias.
   iOS adopts the link and engine through `IosLink` and `SensorSync`, and Core Bluetooth runs
   on the `BlePhysicalLink` serial queue. `SensorCollections` holds one shared controller per
-  device over `IosLinkProvider`, built only by tests so far. Routing the native entry points into it remains
-  [#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81).
+  device over `IosLinkProvider`, and every native sync entry point runs through it
+  ([#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81)).
 - Platform entry points own their UI and OS services. Android Compose and Android
   framework APIs stay in `app/`; iOS app code and Apple frameworks stay in `ios/`.
   The current iOS screen uses Compose Multiplatform; native Swift files are adapters.
