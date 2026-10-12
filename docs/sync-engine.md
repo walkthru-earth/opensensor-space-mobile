@@ -296,7 +296,15 @@ attempts. Worker summaries use those new totals.
 `CollectionState` is the authoritative Android lifecycle. `DeviceFacade` projects it to
 `SyncProgress` for Files and notifications, keeping `running` true through preparation,
 retry waiting and finalization. Done maps to COMPLETED, Failed to FAILURE and Stopped to
-STOPPED. PROCESS lease ownership determines service lifetime, even during terminal cleanup.
+STOPPED. `SyncProgress.endReason` names why a run ended (2026-10-12). It is null while running,
+COMPLETED on Done, `CollectionFailure.endReason()` on Failed, STOPPED for a user or app stop and
+INTERRUPTED for a system stop or foreground timeout. Each reason has its own short message
+(`DeviceMessage.SyncEnded`), pairing repair and not enough space keep their own paths. The last
+`SyncProgress` and the archive summary survive a disconnect. The summary reads Room for the bound
+station and counts every archived row, like the Stations card. `DeviceFacade.ownership` says
+whether a device is idle, held by an interactive run or by a background worker. A restart during
+cleanup takes over the old reservation and hands it back only after that run let go. A collection
+that ends on a dead link clears it, so workers do not skip the device. PROCESS lease ownership determines service lifetime, even during terminal cleanup.
 Per-file outcomes remain separate from controller failure. iOS receives typed `SyncResult`.
 
 **Session errors end the run (2026-10-09).** An `ERROR` about the session, not the file, is not a
