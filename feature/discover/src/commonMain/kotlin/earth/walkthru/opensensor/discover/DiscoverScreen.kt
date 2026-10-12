@@ -78,6 +78,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationBackHandler
@@ -419,17 +420,18 @@ private fun SourceToggle(
     val realLabel = if (real && date != null) strings.realDataTo(date) else strings.sourceReal
     FloatingSurface(shape = FloatingControl.SmallShape) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = FloatingControl.Inset)) {
-            Row(Modifier.selectableGroup().semantics { contentDescription = strings.sourceLabel }) {
+            // On a narrow phone the longer Real label ends in an ellipsis, the info button keeps its place.
+            Row(Modifier.weight(1f, fill = false).selectableGroup().semantics { contentDescription = strings.sourceLabel }) {
                 SourceSegment(strings.sourceSample, selected = !real, enabled = enabled, disabledNote = null) { onSource(DiscoverSource.SAMPLE) }
-                SourceSegment(realLabel, selected = real, enabled = enabled, disabledNote = strings.sourceOff) { onSource(DiscoverSource.OPENAQ) }
+                SourceSegment(realLabel, selected = real, enabled = enabled, disabledNote = strings.sourceOff, Modifier.weight(1f, fill = false)) { onSource(DiscoverSource.OPENAQ) }
             }
-            infoButton(if (real) strings.realInfo else strings.sampleInfo, Modifier.size(40.dp))
+            infoButton(if (real) strings.realInfo else strings.sampleInfo, Modifier.minimumInteractiveComponentSize().size(40.dp))
         }
     }
 }
 
 @Composable
-private fun SourceSegment(label: String, selected: Boolean, enabled: Boolean, disabledNote: String?, onClick: () -> Unit) {
+private fun SourceSegment(label: String, selected: Boolean, enabled: Boolean, disabledNote: String?, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val shape = FloatingControl.BadgeShape
     val color = when {
         selected -> FloatingControl.OnSelected
@@ -438,7 +440,7 @@ private fun SourceSegment(label: String, selected: Boolean, enabled: Boolean, di
     }
     // The touch target is at least 48 dp. The drawn pill stays 36 dp inside it.
     Box(
-        Modifier.selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onClick)
+        modifier.selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onClick)
             .semantics { if (!enabled && disabledNote != null) stateDescription = disabledNote }
             .minimumInteractiveComponentSize(),
         contentAlignment = Alignment.Center,
@@ -450,7 +452,7 @@ private fun SourceSegment(label: String, selected: Boolean, enabled: Boolean, di
                 .padding(horizontal = 12.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Text(label, style = MaterialTheme.typography.labelLarge, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, color = color, maxLines = 1)
+            Text(label, style = MaterialTheme.typography.labelLarge, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -493,7 +495,7 @@ private fun Legend(
                         Spacer(Modifier.height(2.dp))
                         Text(caption, style = MaterialTheme.typography.labelSmall, color = muted)
                     }
-                    infoButton(if (daily) strings.whoInfoReal else strings.whoInfo, Modifier.size(40.dp))
+                    infoButton(if (daily) strings.whoInfoReal else strings.whoInfo, Modifier.minimumInteractiveComponentSize().size(40.dp))
                 }
                 is CellScale.Relative -> {
                     val low = scale.percentile.low
@@ -514,7 +516,7 @@ private fun Legend(
                         }
                         Text(strings.noHealthScale, style = MaterialTheme.typography.labelSmall, color = muted)
                     }
-                    infoButton(if (daily) strings.scaleInfoReal else strings.scaleInfo, Modifier.size(40.dp))
+                    infoButton(if (daily) strings.scaleInfoReal else strings.scaleInfo, Modifier.minimumInteractiveComponentSize().size(40.dp))
                 }
             }
         }
@@ -527,7 +529,7 @@ private fun SimpleLegend(property: FeedProperty, strings: DiscoverStrings, infoB
     FloatingSurface {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 10.dp)) {
             MoodLegend(Modifier.width(212.dp).padding(vertical = 8.dp), title = property.label)
-            infoButton(strings.moodInfo, Modifier.size(40.dp))
+            infoButton(strings.moodInfo, Modifier.minimumInteractiveComponentSize().size(40.dp))
         }
     }
 }
@@ -564,7 +566,7 @@ private fun Attribution(strings: DiscoverStrings, open: Boolean, real: Boolean, 
                         .wrapContentSize(),
                 )
             }
-            infoButton(strings.mapInfo, Modifier.size(36.dp))
+            infoButton(strings.mapInfo, Modifier.minimumInteractiveComponentSize().size(36.dp))
         }
     }
 }
@@ -795,7 +797,7 @@ private fun CellDetail(
         if (state.isSample) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(strings.sampleData, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.weight(1f))
-                infoButton(strings.sampleInfo, Modifier.size(40.dp))
+                infoButton(strings.sampleInfo, Modifier.minimumInteractiveComponentSize().size(40.dp))
             }
         }
         val property = state.property
@@ -883,7 +885,7 @@ private fun SimpleCellDetail(
         if (state.isSample) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(strings.sampleData, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.weight(1f))
-                infoButton(strings.sampleInfo, Modifier.size(40.dp))
+                infoButton(strings.sampleInfo, Modifier.minimumInteractiveComponentSize().size(40.dp))
             }
         }
         val property = state.property
