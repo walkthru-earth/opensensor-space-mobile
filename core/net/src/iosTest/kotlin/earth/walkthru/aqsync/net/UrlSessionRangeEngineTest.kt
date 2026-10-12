@@ -105,6 +105,13 @@ class UrlSessionRangeEngineTest {
     }
 
     @Test
+    fun `a stalled request gives up after 15 s and a whole read after 30 s`() {
+        val c = UrlSessionRangeEngine.configuration(allowsExpensive = true, allowsConstrained = true)
+        assertEquals(15.0, c.timeoutIntervalForRequest)
+        assertEquals(30.0, c.timeoutIntervalForResource)
+    }
+
+    @Test
     fun `206 ranges map Content-Range and ETag and send If-Range and identity encoding`() = runBlocking<Unit> {
         val source = HttpRangeSource(url, engine())
 

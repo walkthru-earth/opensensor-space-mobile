@@ -88,6 +88,14 @@ class OkHttpRangeEngineTest {
     private val roomy = BodyLimit(Int.MAX_VALUE.toLong(), Int.MAX_VALUE.toLong())
 
     @Test
+    fun `the shared client gives up on a stalled read and caps a whole call at 30 s`() {
+        val c = OkHttpRangeEngine.newClient()
+        assertEquals(10_000, c.connectTimeoutMillis)
+        assertEquals(15_000, c.readTimeoutMillis)
+        assertEquals(30_000, c.callTimeoutMillis)
+    }
+
+    @Test
     fun `206 partial reads go through the socket with If-Range and identity encoding`() = runBlocking<Unit> {
         val source = HttpRangeSource(url(), engine)
 

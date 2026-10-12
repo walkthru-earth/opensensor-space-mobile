@@ -77,4 +77,4 @@ fun DiscoverRoute(onAddSensor: () -> Unit, viewModel: DiscoverViewModel = hiltVi
 }
 
 /** One HTTP client for the public feed in the process, so connections are reused across entries. */
-private val publicFeedClient: OkHttpClient by lazy { OkHttpClient() }
+private val publicFeedClient: OkHttpClient by lazy { OkHttpRangeEngine.newClient() }

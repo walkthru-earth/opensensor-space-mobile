@@ -7,6 +7,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import java.io.IOException
+import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -63,7 +64,15 @@ class OkHttpRangeEngine(private val client: OkHttpClient) : HttpRangeEngine {
     }
 
     companion object {
-        /** A client for range reads. Build it once per process and share it. */
-        fun newClient(): OkHttpClient = OkHttpClient.Builder().build()
+        /**
+         * A client for range reads. Build it once per process and share it. A stalled read gives up
+         * after 15 s and a whole call after 30 s, like the iOS engine, so a dead network ends in an error
+         * with Retry instead of a long spinner.
+         */
+        fun newClient(): OkHttpClient = OkHttpClient.Builder()
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
+            .callTimeout(30, TimeUnit.SECONDS)
+            .build()
     }
 }
