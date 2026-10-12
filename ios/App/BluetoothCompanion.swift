@@ -32,8 +32,9 @@ final class BluetoothCompanion {
     private var identity: SyncIdentity?
     private var tokenTimer: Timer?
     private var requestingToken = false
-    /// The sensor whose last page closed while a write or read was still queued, or while a lease
-    /// held its link. Settling closes it.
+    /// The sensor whose last page closed while a sync, a Collect all or Auto-sync step, Wi-Fi access
+    /// setup, a queued write or a lease held its link. Settling closes it once that work ended.
+    /// Opening the sensor again keeps it.
     private var closeWhenIdle: String?
     /// Held while this side writes `GET_TOKEN` itself, so no Kotlin request shares the link.
     private var nativeLease: IosNativeLease?
@@ -539,14 +540,12 @@ final class BluetoothCompanion {
         physical.releaseWaiting(id: nil)
     }
 
-    /// Closes an idle link to this sensor once its last Today, Device or Device settings page is gone
-    /// (#16). A sync, Wi-Fi access setup, Collect all or an Auto-sync step keeps it. A command, a
-    /// Debug or Device settings lease, or a write still queued delays the close until the link settles.
+    /// Closes the link to this sensor once its last Today, Device or Device settings page is gone
+    /// (#16). A sync, Wi-Fi access setup, Collect all or an Auto-sync step, a command, a lease or a
+    /// write still queued delays the close until that work ends and the link settles.
     func closeIdle(id: String) {
-        guard let current, current.caseInsensitiveCompare(id) == .orderedSame,
-            run == nil, collectId == nil, backgroundId == nil, !requestingToken
-        else { return }
-        guard !linkBusy, gattIdle else {
+        guard let current, current.caseInsensitiveCompare(id) == .orderedSame else { return }
+        guard run == nil, collectId == nil, backgroundId == nil, !requestingToken, !linkBusy, gattIdle else {
             closeWhenIdle = id
             return
         }

@@ -227,9 +227,12 @@ final class AppServices {
         bluetooth.close(id: id)
     }
 
+    /// The last page of this sensor is gone. Its Bluetooth link and Wi-Fi session close now, or
+    /// once the sync, command or lease on them ends.
     func closeIdle(id: String) {
         cancelPendingOpen(id: id)
         bluetooth.closeIdle(id: id)
+        if let device = devices.deviceFor(peripheral: id) { lan.closeIdle(device: device) }
     }
 
     func cancelPendingOpen(id: String? = nil) {

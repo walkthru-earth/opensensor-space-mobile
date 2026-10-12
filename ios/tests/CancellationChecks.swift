@@ -20,7 +20,22 @@ enum CancellationChecks {
         await immediateCompletionKeepsResultAndCancellation()
         await installedHandleCanBeCancelledFromBackground()
         pendingLaunchHoldsUntilItsOwnLaunchOrTimeout()
+        idleCloseWaitsForTheWorkOnTheLink()
         print("iOS cancellation checks passed")
+    }
+
+    private static func idleCloseWaitsForTheWorkOnTheLink() {
+        var close = IdleClose<String>()
+        precondition(close.pageClosed("a", held: false), "an idle link closes with its last page")
+        precondition(!close.isWaiting("a"))
+        precondition(!close.pageClosed("b", held: true), "a sync keeps its link")
+        precondition(!close.settled("b", held: true), "a command after the sync still holds it")
+        precondition(close.settled("b", held: false), "the link closes once the work ended")
+        precondition(!close.settled("b", held: false), "it closes once")
+        _ = close.pageClosed("c", held: true)
+        close.forget("c")
+        precondition(!close.settled("c", held: false), "opening the sensor again keeps the link")
+        precondition(!close.settled("d", held: false), "a link no page let go of stays open")
     }
 
     private static func pendingLaunchHoldsUntilItsOwnLaunchOrTimeout() {

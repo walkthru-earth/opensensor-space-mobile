@@ -34,6 +34,9 @@ final class LanDiscovery {
     var collectOffScreen = false
     /// Off screen, Collect all steps wait unless iOS keeps the pass running.
     private var stepsHeld: Bool { isBackground && !collectOffScreen }
+    /// Sessions whose last sensor page closed while a run, a command or a lease held them. They
+    /// close once that work ends. Connecting again keeps them.
+    private var closeWhenIdle = IdleClose<String>()
     private var progressCounts: [String: (done: Int, total: Int, bytes: Int64, totalBytes: Int64)] = [:]
     private struct Device {
         let endpoint: NWEndpoint
@@ -176,6 +179,7 @@ final class LanDiscovery {
 
     @discardableResult
     func connect(name: String, onFailure: (() -> Void)? = nil) -> Bool {
+        closeWhenIdle.forget(name)
         if sessions[name] != nil {
             if state.isLanConnected(name: name) { return true }
             if tasks[name] != nil {
@@ -365,10 +369,30 @@ final class LanDiscovery {
             state.lanSyncFinished(name: name, connected: false, result: result)
         }
         advanceCollect(name)
+        closeIfUnheld(name)
+    }
+
+    /// Closes this hardware id's sessions once the last sensor page is gone. Work on a session
+    /// delays its close until it ends. A Collect all step closes what it opened by itself.
+    func closeIdle(device: String) {
+        for name in Array(sessions.keys) where sessionDevices[name] == device.lowercased() {
+            if closeWhenIdle.pageClosed(name, held: held(name)) { disconnect(name: name) }
+        }
+    }
+
+    private func closeIfUnheld(_ name: String) {
+        if closeWhenIdle.settled(name, held: held(name)) { disconnect(name: name) }
+    }
+
+    /// A run, a command, a Collect all or Auto-sync step, a dial or a lease is on this session.
+    private func held(_ name: String) -> Bool {
+        runTokens[name] != nil || tasks[name] != nil || handles[name] != nil || collectSteps[name] != nil
+            || backgroundRuns[name] != nil || dialWaiters[name] != nil || links[name]?.leased == true
     }
 
     /// Closes the socket without a notice. The caller reports the result.
     private func dropSession(_ name: String) {
+        closeWhenIdle.forget(name)
         freshness.removeValue(forKey: name)?.invalidate()
         links[name] = nil
         sessions.removeValue(forKey: name)?.close()
@@ -478,6 +502,7 @@ final class LanDiscovery {
     }
 
     private func close(name: String, notice: CompanionNotice) {
+        closeWhenIdle.forget(name)
         state.lanSyncStopped(name: name)
         attempts[name] = UUID()
         connectFailures[name] = nil
@@ -509,6 +534,7 @@ final class LanDiscovery {
         }
         resolveDial(name, links[name]?.isOpen == true)
         advanceCollect(name)
+        closeIfUnheld(name)
     }
 
     /// Answers the controller's dials of this service.

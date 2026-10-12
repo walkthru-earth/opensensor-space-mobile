@@ -54,3 +54,27 @@ struct PendingLaunch {
         if token == submit { token = nil }
     }
 }
+
+/// Links whose last sensor page closed. A link closes at once when nothing holds it, otherwise
+/// when the work holding it ends. Opening the sensor again keeps it.
+struct IdleClose<Key: Hashable> {
+    private var waiting = Set<Key>()
+
+    func isWaiting(_ key: Key) -> Bool { waiting.contains(key) }
+
+    /// The last page closed. True when the link should close now.
+    mutating func pageClosed(_ key: Key, held: Bool) -> Bool {
+        waiting.insert(key)
+        return settled(key, held: held)
+    }
+
+    /// Work on the link ended. True when a waiting close should happen now.
+    mutating func settled(_ key: Key, held: Bool) -> Bool {
+        guard waiting.contains(key), !held else { return false }
+        waiting.remove(key)
+        return true
+    }
+
+    /// The user opened it again, or the link closed for another reason.
+    mutating func forget(_ key: Key) { waiting.remove(key) }
+}
