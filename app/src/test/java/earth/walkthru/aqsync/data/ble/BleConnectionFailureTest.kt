@@ -1,5 +1,7 @@
 package earth.walkthru.aqsync.data.ble
 
+import earth.walkthru.aqsync.link.AuthKind
+import earth.walkthru.aqsync.link.DisconnectCause
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -7,6 +9,31 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BleConnectionFailureTest {
+    @Test
+    fun `only stale or failed keys close the link with the pairing repair message`() {
+        val missing = BleConnectionFailure.closedState(DisconnectCause.Auth(AuthKind.BOND_MISSING))
+        assertEquals(ConnectionState.Failed(BleConnectionFailure.PAIRING_REPAIR_MESSAGE, BleDisconnectCauses.KEY_MISSING), missing)
+        val failedKeys = BleConnectionFailure.closedState(DisconnectCause.Auth(AuthKind.ENCRYPTION_FAILED))
+        assertTrue(BleConnectionFailure.needsPairingRepair(failedKeys))
+        // A PIN prompt that timed out is an unfinished pairing, not a stale one.
+        for (kind in listOf(AuthKind.BOND_FAILED, AuthKind.TOKEN_REJECTED)) {
+            val state = BleConnectionFailure.closedState(DisconnectCause.Auth(kind))
+            assertTrue("$kind", state is ConnectionState.Failed)
+            assertFalse("$kind", BleConnectionFailure.needsPairingRepair(state))
+        }
+        assertEquals(ConnectionState.Disconnected, BleConnectionFailure.closedState(DisconnectCause.PeerClosed()))
+        assertEquals(ConnectionState.Failed("LocalAbort", 133), BleConnectionFailure.closedState(DisconnectCause.LocalAbort(gattStatus = 133)))
+    }
+
+    @Test
+    fun `a lost link asks for pairing again only for stale or failed keys`() {
+        val repair = BleConnectionFailure.PAIRING_REPAIR_MESSAGE
+        assertEquals(repair, BleConnectionFailure.authLossMessage(DisconnectCause.Auth(AuthKind.BOND_MISSING), "lost"))
+        assertEquals(repair, BleConnectionFailure.authLossMessage(DisconnectCause.Auth(AuthKind.ENCRYPTION_FAILED), "lost"))
+        assertEquals("lost", BleConnectionFailure.authLossMessage(DisconnectCause.Auth(AuthKind.BOND_FAILED), "lost"))
+        assertEquals("lost", BleConnectionFailure.authLossMessage(DisconnectCause.Auth(AuthKind.TOKEN_REJECTED), "lost"))
+    }
+
     @Test
     fun `auth disconnect during connect settle survives later teardown and stage failure`() {
         for (status in listOf(5, 15, 6, 61)) {
