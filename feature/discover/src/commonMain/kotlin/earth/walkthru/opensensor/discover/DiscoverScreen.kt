@@ -20,7 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -45,6 +45,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.material3.rememberStandardBottomSheetState
 import androidx.compose.runtime.Composable
@@ -426,16 +427,22 @@ private fun SourceSegment(label: String, selected: Boolean, enabled: Boolean, di
         enabled -> MaterialTheme.colorScheme.onSurfaceVariant
         else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
     }
+    // The touch target is at least 48 dp. The drawn pill stays 36 dp inside it.
     Box(
-        Modifier.heightIn(min = 36.dp)
-            .clip(shape)
-            .background(if (selected) FloatingControl.Selected else Color.Transparent, shape)
-            .selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onClick)
+        Modifier.selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onClick)
             .semantics { if (!enabled && disabledNote != null) stateDescription = disabledNote }
-            .padding(horizontal = 12.dp),
+            .minimumInteractiveComponentSize(),
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, style = MaterialTheme.typography.labelLarge, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, color = color, maxLines = 1)
+        Box(
+            Modifier.heightIn(min = 36.dp)
+                .clip(shape)
+                .background(if (selected) FloatingControl.Selected else Color.Transparent, shape)
+                .padding(horizontal = 12.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(label, style = MaterialTheme.typography.labelLarge, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, color = color, maxLines = 1)
+        }
     }
 }
 
@@ -541,7 +548,10 @@ private fun Attribution(strings: DiscoverStrings, open: Boolean, real: Boolean, 
                     strings.dataOpenAq,
                     style = MaterialTheme.typography.labelSmall,
                     textDecoration = TextDecoration.Underline,
-                    modifier = Modifier.heightIn(min = 36.dp).wrapContentHeight().clickable(role = Role.Button) { runCatching { uri.openUri(OPENAQ_LICENSES) } },
+                    // A 48 dp touch target around the small label.
+                    modifier = Modifier.clickable(role = Role.Button) { runCatching { uri.openUri(OPENAQ_LICENSES) } }
+                        .minimumInteractiveComponentSize()
+                        .wrapContentSize(),
                 )
             }
             infoButton(strings.mapInfo, Modifier.size(36.dp))
@@ -575,16 +585,32 @@ private fun SheetContent(
     // Sample data is a snapshot, so its freshness is read against its own newest hour.
     val reference = if (state.isSample) (state.newestUpdateEpochMs ?: now) else now
     Column(Modifier.fillMaxWidth().heightIn(min = PEEK_HEIGHT - 24.dp).padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
-        when {
-            !state.available -> DiscoverStateMessage(strings.unavailable, PeacockExpression.CONCERNED)
-            showAll -> AllProperties(state, strings, onPickProperty)
-            state.selected != null && simple -> SimpleCellDetail(state, strings, infoButton, reference, onShowProperty, onRetry)
-            state.selected != null -> CellDetail(state.selected, state, strings, infoButton, reference, clearSignal, onHighlight, onShowProperty)
-            state.firstRun -> FirstRunCard(strings, onAddSensor, onExplore)
-            state.loadFailed -> LoadFailed(strings, onRetryLoad)
-            else -> InView(state, strings, networkAllowed, simple, reference, highlight, clearSignal, onHighlight, onPickCell)
+        when (state.sheetBody(showAll, simple)) {
+            SheetBody.UNAVAILABLE -> DiscoverStateMessage(strings.unavailable, PeacockExpression.CONCERNED)
+            SheetBody.ALL_PROPERTIES -> AllProperties(state, strings, onPickProperty)
+            SheetBody.SIMPLE_CELL -> SimpleCellDetail(state, strings, infoButton, reference, onShowProperty, onRetry)
+            SheetBody.CELL -> CellDetail(state.selected!!, state, strings, infoButton, reference, clearSignal, onHighlight, onShowProperty)
+            SheetBody.LOAD_FAILED -> LoadFailed(strings, onRetryLoad)
+            SheetBody.FIRST_RUN -> FirstRunCard(strings, onAddSensor, onExplore)
+            SheetBody.IN_VIEW -> InView(state, strings, networkAllowed, simple, reference, highlight, clearSignal, onHighlight, onPickCell)
         }
     }
+}
+
+internal enum class SheetBody { UNAVAILABLE, ALL_PROPERTIES, SIMPLE_CELL, CELL, LOAD_FAILED, FIRST_RUN, IN_VIEW }
+
+/**
+ * What the sheet shows. A failed load comes before the first run card, so a user who picks Real
+ * before dismissing the card still sees the error and its Retry.
+ */
+internal fun DiscoverUiState.sheetBody(showAll: Boolean, simple: Boolean): SheetBody = when {
+    !available -> SheetBody.UNAVAILABLE
+    showAll -> SheetBody.ALL_PROPERTIES
+    selected != null && simple -> SheetBody.SIMPLE_CELL
+    selected != null -> SheetBody.CELL
+    loadFailed -> SheetBody.LOAD_FAILED
+    firstRun -> SheetBody.FIRST_RUN
+    else -> SheetBody.IN_VIEW
 }
 
 /** The real feed could not be read. An error with Retry, never the sample in its place. */
