@@ -2,6 +2,7 @@ package earth.walkthru.aqsync.link
 
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
+import earth.walkthru.aqsync.data.protocol.DisconnectReason
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.protocol.Opcode
 import earth.walkthru.aqsync.data.protocol.ProtocolError
@@ -31,6 +32,7 @@ import kotlin.coroutines.CoroutineContext
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -348,7 +350,7 @@ class LinkSessionTest {
         val driver = ScriptedLinkDriver()
         val s = session(driver)
         s.open()
-        val bye = Frame.Bye(reason = 4, generation = 7, err = -11, queued = 3, uptimeSeconds = 900)
+        val bye = Frame.Bye(reason = 1, generation = 7, err = -11, queued = 3, uptimeSeconds = 900)
         driver.emit(bye)
         runCurrent()
 
@@ -358,6 +360,34 @@ class LinkSessionTest {
 
         driver.eof()
         assertEquals(DisconnectCause.PeerClosed(bye), s.closed.await())
+    }
+
+    @Test
+    fun tokenRotatedByeClosesAsTokenRotatedAuth() = runTest {
+        val driver = ScriptedLinkDriver()
+        val s = session(driver)
+        s.open()
+        driver.emit(Frame.Bye(reason = DisconnectReason.TOKEN_ROTATED.code, generation = 3, err = 0, queued = 0, uptimeSeconds = 60))
+        runCurrent()
+
+        val rotated = DisconnectCause.Auth(AuthKind.TOKEN_ROTATED)
+        assertEquals(rotated, assertFailsWith<LinkClosedException> { s.collect(Request.List) }.disconnectCause)
+        driver.eof()
+        assertEquals(rotated, s.closed.await())
+        assertFalse(s.closed.await().retryable, "a rotated token never retries LAN")
+    }
+
+    @Test
+    fun byeReasonsWithATypedCauseKeepIt() {
+        fun bye(reason: DisconnectReason) = Frame.Bye(reason = reason.code, generation = 1, err = 0, queued = 0, uptimeSeconds = 1)
+        assertEquals(DisconnectCause.Auth(AuthKind.TOKEN_ROTATED), peerClosedCause(bye(DisconnectReason.TOKEN_ROTATED)))
+        assertEquals(DisconnectCause.Auth(AuthKind.TOKEN_REJECTED), peerClosedCause(bye(DisconnectReason.AUTH_FAILED)))
+        assertEquals(DisconnectCause.Busy, peerClosedCause(bye(DisconnectReason.SESSIONS_FULL)))
+        assertEquals(DisconnectCause.PeerClosed(null), peerClosedCause(null))
+        for (reason in DisconnectReason.entries - setOf(DisconnectReason.TOKEN_ROTATED, DisconnectReason.AUTH_FAILED, DisconnectReason.SESSIONS_FULL)) {
+            val b = bye(reason)
+            assertEquals(DisconnectCause.PeerClosed(b), peerClosedCause(b), reason.wireName)
+        }
     }
 
     @Test

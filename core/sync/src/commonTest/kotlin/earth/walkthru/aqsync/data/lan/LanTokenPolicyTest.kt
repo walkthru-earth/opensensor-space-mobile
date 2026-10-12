@@ -1,6 +1,8 @@
 package earth.walkthru.aqsync.data.lan
 
 import earth.walkthru.aqsync.data.ble.TransportKind
+import earth.walkthru.aqsync.link.AuthKind
+import earth.walkthru.aqsync.link.DisconnectCause
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -20,6 +22,16 @@ class LanTokenPolicyTest {
         for (f in LanFailure.entries.filter { it != LanFailure.AUTH_FAILED }) {
             assertFalse(p.invalidatesToken(f), "$f must not drop the token")
         }
+    }
+
+    @Test
+    fun aRejectedOrRotatedTokenCauseInvalidatesTheStoredToken() {
+        val p = LanTokenPolicy()
+        assertTrue(p.invalidatesToken(DisconnectCause.Auth(AuthKind.TOKEN_REJECTED)))
+        assertTrue(p.invalidatesToken(DisconnectCause.Auth(AuthKind.TOKEN_ROTATED)))
+        assertFalse(p.invalidatesToken(DisconnectCause.Auth(AuthKind.BOND_FAILED)))
+        assertFalse(p.invalidatesToken(DisconnectCause.Busy))
+        assertFalse(p.invalidatesToken(DisconnectCause.PeerClosed()))
     }
 
     @Test

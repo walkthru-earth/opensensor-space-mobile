@@ -1,5 +1,6 @@
 package earth.walkthru.aqsync.link
 
+import earth.walkthru.aqsync.data.protocol.DisconnectReason
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.protocol.Opcode
 import kotlin.time.Duration
@@ -98,6 +99,18 @@ val DisconnectCause.retryable: Boolean
         is DisconnectCause.UpdateFirmware -> false
         else -> true
     }
+
+/**
+ * Why the link ended when the peer closed it after [bye]. A BYE that names a credential or slot
+ * problem becomes its typed cause, so retry policy never reconnects with a rotated or refused LAN
+ * token and screens name the real reason. Any other BYE, or none, stays [DisconnectCause.PeerClosed].
+ */
+fun peerClosedCause(bye: Frame.Bye?): DisconnectCause = when (bye?.disconnectReason) {
+    DisconnectReason.TOKEN_ROTATED -> DisconnectCause.Auth(AuthKind.TOKEN_ROTATED)
+    DisconnectReason.AUTH_FAILED -> DisconnectCause.Auth(AuthKind.TOKEN_REJECTED)
+    DisconnectReason.SESSIONS_FULL -> DisconnectCause.Busy
+    else -> DisconnectCause.PeerClosed(bye)
+}
 
 /** Short label for logs. Contains codes and counts only. */
 fun DisconnectCause.describe(): String = when (this) {

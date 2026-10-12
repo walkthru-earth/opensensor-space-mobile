@@ -49,6 +49,9 @@ class FakeLinks(
     /** A cause to refuse the next connects with, as an unreachable or rejecting device does. */
     var refuse: ((connect: Int) -> DisconnectCause?) = { null }
 
+    /** An exception to fail the next connects with, as a platform transport that cannot open does. */
+    var fail: ((connect: Int) -> Exception?) = { null }
+
     /** Makes every release throw after it handed the link back, as a faulty adapter might. */
     var failRelease: Boolean = false
 
@@ -64,6 +67,7 @@ class FakeLinks(
         preferences += prefer
         val n = ++connects
         refuse(n)?.let { throw LinkClosedException(it) }
+        fail(n)?.let { throw it }
         val (fake, session) = last?.takeIf { share && it.second.link.state.value is LinkState.Ready } ?: run {
             val fake = FakeArchiveDevice(scope, address = device, station = station, kind = kind)
             fake.files.clear()

@@ -227,9 +227,11 @@ fake and compatibility `AqTransport` paths. iOS uses the connection's `IosLink`.
 - The optional `Heartbeat` (LAN 120 s ping, 180 s deadline) reads only reader RX marks from an
   injected `TimeSource`. Nothing polls.
 - Loss is a typed `DisconnectCause`. `retryable` is false for `Auth`, `Deliberate`,
-  `FramingViolation`, `Rejected` and `UpdateFirmware`. `Rejected` is a peer the app refused after
+  `FramingViolation`, `Rejected`, `Unavailable` and `UpdateFirmware`. `Rejected` is a peer the app refused after
   it answered (another identity, hardware held elsewhere, a failed setup step). A `BYE` refuses new requests and attaches its reason
-  to the close.
+  to the close. `peerClosedCause` types three reasons: `token-rotated` (10) is `Auth(TOKEN_ROTATED)`,
+  `auth-failed` (3) is `Auth(TOKEN_REJECTED)` and `sessions-full` (4) is `Busy`. Any other BYE stays
+  `PeerClosed(bye)`. `LanTokenPolicy.invalidatesToken(cause)` is true for both `Auth` token kinds.
 - `open` applies `requireProto3`, so firmware below proto 3 ends as `UpdateFirmware`.
 
 ## Collection controller (`core/sync` `collection/`, #56)
@@ -284,8 +286,13 @@ stateDiagram-v2
 - **Retry.** A retryable `DisconnectCause` publishes `Waiting(attempt, retryAtEpochMs)`, waits per
   `RetryPolicy` (2 s doubling to 60 s, 5 attempts, no retry starts after 30 min) and starts again at
   `Preparing(CONNECT)` with a fresh `LIST`. An attempt that received bytes resets the count.
-  `Auth` fails at once, `Deliberate` ends `Stopped(APP)`. Spent retries end
-  `Failed(Link(lastCause))`. Partial files resume by offset through the collector.
+  A connect that finds nothing (`Unreachable` or `Timeout(OPEN)`, see `connectPhase`) retries only
+  `RetryPolicy.connectRetries` times in a row (1), so an absent device ends fast. `Auth` and
+  `Unavailable` (a `TransportUnavailableException` for radio off, missing permission or no adapter)
+  fail at once with no wait, `Deliberate` ends `Stopped(APP)`. Spent retries end
+  `Failed(Link(lastCause))`. Partial files resume by offset through the collector. The shared
+  permit is handed back for the `Waiting` backoff and taken again before the next connect, so a
+  device that is away never blocks one in reach. PROCESS stays held.
 - **Outcomes** stay in `state`. `events` is a bounded channel of terminal states for one toast
   consumer and drops the oldest when nobody reads.
 - **Logs** carry the intent id, state names, causes and counts, never names of networks, tokens or
@@ -307,6 +314,9 @@ attempts. Worker summaries use those new totals.
 retry waiting and finalization. Done maps to COMPLETED, Failed to FAILURE and Stopped to
 STOPPED. PROCESS lease ownership determines service lifetime, even during terminal cleanup.
 Per-file outcomes remain separate from controller failure. iOS receives typed `SyncResult`.
+`CollectionState.endReason()` (in `SyncEndReason.kt`) gives the `SyncEndReason` for
+`SyncProgress.endReason`: Done is COMPLETED, Failed uses `CollectionFailure.endReason()`, Stopped by
+USER or APP is STOPPED and by SYSTEM or FGS_TIMEOUT is INTERRUPTED. Null while active or idle.
 
 **Session errors end the run (2026-10-09).** An `ERROR` about the session, not the file, is not a
 per-file `DeviceError`. `AUTH_FAILED`, `BUSY` and any `ERROR` with op 0 during `OPEN` or `READ`
