@@ -190,7 +190,7 @@ Code the redesign replaces is deleted inside slices 1 to 4. This slice removes t
 - Unused declarations with zero references (list in the inventory, including `MoodText.kt`,
   `LanFrameSplitter`, the unused `mood_*`, `who_step_*`, `pms_*`, `clock_*` strings). Test only
   helpers in `:core:parquet` stay, so the reader remains complete.
-- `ios/App/SensorArchive.swift` once Files export is confirmed not to use it.
+- `ios/App/SensorArchive.swift` write path. Done 2026-10-12, only the station ID check remains.
 - Stale docs. Done 2026-10-12, the parity audits and the long-form evaluation are deleted.
 
 **Keep (wire contract).** `legacy-parquet/` path and its grouping, GET_CONFIG page 0, 17 byte

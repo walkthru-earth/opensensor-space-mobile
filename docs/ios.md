@@ -59,7 +59,7 @@ A final name appears only after size, CRC-32 and `PAR1` pass, and the receipt al
 SHA-256. The root uses `completeUntilFirstUserAuthentication`, so collection keeps writing after
 the phone locks, and is excluded from backup. `IosArchive` builds History tiers through the shared
 indexer and `DayPass`, persists them with `IosFileTierStore` and repairs the index at launch.
-`SensorArchive.swift` is used in the app only for its station ID check.
+`SensorArchive.swift` holds only the station ID check Swift applies before saving a credential.
 
 Sync messages use `:ui:strings`. Link and Wi-Fi access events outside a run reach `CompanionState`
 as a typed `CompanionNotice`, so iOS shows Android's words in English and Arabic.

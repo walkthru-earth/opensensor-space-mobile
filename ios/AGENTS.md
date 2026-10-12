@@ -96,7 +96,7 @@ The iOS app entry point is the Xcode project in this directory. Read the root
   The private `Delivered` box in `BlePhysicalLink.swift` is unchecked too. It carries Core
   Bluetooth objects into `assumeIsolated` on the queue that delivered them.
 - Default MainActor isolation (`SWIFT_DEFAULT_ACTOR_ISOLATION`, SE-0466) stays off. It would move
-  `SensorArchive`, `LanFrameBuffer` and `LanPolicy` onto the main actor, and socket framing would
+  `LanFrameBuffer` and `LanPolicy` onto the main actor, and socket framing would
   return to the UI thread.
 - Approachable Concurrency (`SWIFT_APPROACHABLE_CONCURRENCY`) stays off. It enables
   `NonisolatedNonsendingByDefault` (SE-0461), so nonisolated async functions would run on the
