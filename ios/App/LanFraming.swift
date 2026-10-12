@@ -12,6 +12,14 @@ struct LanReply: Sendable {
     var code: Int32 = 0
     var count: Int32 = 0
     var json = ""
+    /// What this frame means in place of HELLO. The shared `SyncReply.refusal` rule decides it.
+    var refusal: LanRefusal = .none
+}
+
+/// A frame received in place of HELLO. Only `tokenRejected` (ERROR 14 or BYE auth-failed) drops the
+/// stored token. `peerClosed` is a BYE without an auth verdict and keeps it, like a bare close.
+enum LanRefusal: Sendable {
+    case none, tokenRejected, busy, peerClosed, invalid
 }
 
 /// Firmware's idle timer measures phone traffic, independently of unsolicited sensor pushes.
