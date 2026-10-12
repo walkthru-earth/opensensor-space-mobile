@@ -1218,11 +1218,16 @@ class DeviceLinkOwner @Inject constructor(
                 false
             }
         }
-        if (released && uiConnectionWanted.get()) {
+        if (released) {
             scope.launch {
                 connectMutex.withLock {
-                    val session = _session.value
-                    if (!collectionActive.value && session?.isUsable == true && connectionIntent.owns(uiClaim)) {
+                    val session = _session.value ?: return@withLock
+                    if (collectionActive.value || lends.get() != 0) return@withLock
+                    if (!session.isUsable) {
+                        // The run ended on a link that died, and nothing watches it now. Clear it,
+                        // or the device stays "owned" and every background worker skips it.
+                        closeSessionLocked()
+                    } else if (uiConnectionWanted.get() && connectionIntent.owns(uiClaim)) {
                         watchLink(session, session.address, session.transport.displayName, transportFactory.isFake(session.transport), uiClaim, uiPreference)
                     }
                 }

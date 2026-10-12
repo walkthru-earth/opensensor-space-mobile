@@ -1028,6 +1028,21 @@ class DeviceConnectionRepositoryTest {
         h.until { h.repo.ownership.value == DeviceOwnership.IDLE }
     }
 
+    @Test
+    fun `a link that died during a stopped sync does not stay in the slot`() = harnessTest(chunkDelayMs = 1) { h ->
+        h.repo.connect(ADDRESS, "AQ-6b40", fake = true)
+        h.until { h.repo.plan.value != null }
+        h.repo.syncAll()
+        h.until { h.archived.rows.isNotEmpty() }
+        h.device.disconnect()
+        h.until { h.repo.collectionState.value is CollectionState.Waiting }
+        h.repo.cancelSync()
+        h.until { !h.repo.collectionState.value.active && h.repo.ownership.value == DeviceOwnership.IDLE }
+        h.until { h.repo.session.value == null }
+        assertNull(h.repo.interactiveSessionAddress)
+        assertEquals(DeviceOwnership.IDLE, h.repo.ownershipNow())
+    }
+
     private fun archivedRow(station: String, name: String, indexed: Boolean) = ArchivedFile(
         station = station,
         name = name,
