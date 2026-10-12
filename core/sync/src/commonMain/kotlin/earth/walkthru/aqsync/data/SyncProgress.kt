@@ -1,5 +1,6 @@
 package earth.walkthru.aqsync.data
 
+import earth.walkthru.aqsync.collection.SyncEndReason
 import earth.walkthru.aqsync.data.sync.FileOutcome
 import earth.walkthru.aqsync.data.sync.FileProgress
 import earth.walkthru.aqsync.data.sync.SyncEndCause
@@ -21,6 +22,8 @@ data class SyncProgress(
     val finishedAtEpochMs: Long? = null,
     /** Why the last run ended (null while running or before the first run); see [SyncResumePolicy]. */
     val endCause: SyncEndCause? = null,
+    /** The person-facing reason for that ending, shared by every screen and notification. */
+    val endReason: SyncEndReason? = null,
 ) {
     val fraction: Float get() = if (bytesTotal == 0L) 0f else (bytesDone.toFloat() / bytesTotal).coerceIn(0f, 1f)
     val failures: List<FileOutcome> get() = outcomes.filter { it !is FileOutcome.Synced }
