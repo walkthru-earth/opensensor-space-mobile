@@ -35,6 +35,14 @@ class PublicSummaryTest {
     }
 
     @Test
+    fun aFeedWithoutTheLastHourHasTwoBlocks() {
+        val windows = mapOf(FeedWindow.WEEK to row(10.0, 100L), FeedWindow.DAY to row(30.0, 300L))
+        val s = PublicSummary.of("pm25", "µg/m³", windows, offered = listOf(FeedWindow.DAY, FeedWindow.WEEK))
+        assertEquals(listOf(WhoStep.GUIDELINE, WhoStep.IT3), s.blocks.map { it.step })
+        assertEquals(30.0, s.value)
+    }
+
+    @Test
     fun missingWindowsGiveNullBlocks() {
         val s = PublicSummary.of("pm25", "µg/m³", mapOf(FeedWindow.LAST_HOUR to row(12.0, 50L), FeedWindow.DAY to null))
         assertEquals(listOf(null, null, WhoStep.GUIDELINE), s.blocks.map { it.step })
