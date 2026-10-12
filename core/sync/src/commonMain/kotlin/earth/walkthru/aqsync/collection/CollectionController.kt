@@ -6,6 +6,7 @@ import earth.walkthru.aqsync.data.ble.DeviceErrorException
 import earth.walkthru.aqsync.data.ble.ProtocolViolationException
 import earth.walkthru.aqsync.data.ble.TransportException
 import earth.walkthru.aqsync.data.ble.TransportKind
+import earth.walkthru.aqsync.data.ble.TransportUnavailableException
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.sync.ArchiveCollector
 import earth.walkthru.aqsync.data.sync.CollectionSummary
@@ -60,11 +61,13 @@ sealed interface StartResult {
  * Ownership. The controller's job is the only owner of the PROCESS lease, the WIFI lease, the
  * shared [permits] slot and the lent [CollectionLink]. All are let go in one outermost finally, in
  * reverse order of taking. PROCESS is taken inside [start], before the job exists, and held in
- * every non-terminal state, `Waiting` included. WIFI is held only while a LAN link carries
+ * every non-terminal state, `Waiting` included. The permit is handed back for the `Waiting`
+ * backoff and taken again before the next connect, so an absent device never blocks another. WIFI is held only while a LAN link carries
  * `LIST`, the plan, the transfer or the summary.
  *
  * Retry. A retryable loss waits per [retry] and starts again at `Preparing(CONNECT)`, planning
- * from a fresh `LIST`. A cached plan never decides what is missing. Partial files resume by
+ * from a fresh `LIST`. A connect that finds nothing ([connectPhase]) retries at most
+ * [RetryPolicy.connectRetries] times in a row. A cached plan never decides what is missing. Partial files resume by
  * offset through the [ArchiveCollector].
  *
  * Stop. [stop] moves the state to `Stopped`, then cancels the job. Every transition takes one lock
@@ -221,6 +224,7 @@ class CollectionController(
         var permitted = false
         var attempt = 1
         var barren = 1
+        var connectFails = 0
         try {
             // The stopped run before this one still holds its link and permit until its finally.
             // A cancelled wait ends only after it, so a chain of quick restarts keeps the order.
@@ -252,12 +256,23 @@ class CollectionController(
                         letGo("link") { run.link?.also { run.link = null }?.release() }
                         if (end.cause is DisconnectCause.Deliberate) return finish(run, CollectionState.Stopped(intent.id, StopSource.APP))
                         barren = if (progressed) 2 else barren + 1
-                        val wait = retry.backoff(end.cause, barren, started.elapsedNow())
+                        connectFails = if (connectPhase(end.cause)) connectFails + 1 else 0
+                        val wait = retry.backoff(end.cause, barren, started.elapsedNow(), connectFails)
                         note("collection ${intent.id} lost in attempt $attempt, ${end.cause.describe()}")
                         if (wait == null) return finish(run, CollectionState.Failed(intent.id, CollectionFailure.Link(end.cause)))
                         attempt++
                         advance(run, CollectionState.Waiting(intent, end.cause, attempt, clock() + wait.inWholeMilliseconds, barren, retry.attempts), null)
+                        // A device that is away must not hold the shared slot from one in reach.
+                        // PROCESS stays held. The slot is taken again before the next connect.
+                        if (permitted) {
+                            permitted = false
+                            permits?.release()
+                        }
                         delay(wait)
+                        permits?.let {
+                            it.acquire()
+                            permitted = true
+                        }
                     }
                 }
             }
@@ -415,6 +430,8 @@ class CollectionController(
         is DeviceBusyException -> AttemptEnd.Lost(DisconnectCause.Busy)
         is DeviceErrorException -> AttemptEnd.Fail(CollectionFailure.Device(e.frame.code, e.frame.op))
         is ProtocolViolationException -> AttemptEnd.Lost(DisconnectCause.FramingViolation("reply broke the contract"))
+        // Radio off, a missing permission or no adapter. Not retryable, so the run fails at once.
+        is TransportUnavailableException -> AttemptEnd.Lost(DisconnectCause.Unavailable(e.kind))
         is TransportException -> AttemptEnd.Lost(DisconnectCause.LocalAbort(gattStatus = e.gattStatus))
         else -> AttemptEnd.Fail(CollectionFailure.Unexpected(e::class.simpleName ?: "unknown"))
     }

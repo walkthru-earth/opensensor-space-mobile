@@ -4,6 +4,7 @@ import earth.walkthru.aqsync.archive.ArchiveKey
 import earth.walkthru.aqsync.archive.ArchiveLayout
 import earth.walkthru.aqsync.data.ble.DeviceSession
 import earth.walkthru.aqsync.data.ble.TransportKind
+import earth.walkthru.aqsync.data.ble.TransportUnavailableException
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.protocol.Opcode
 import earth.walkthru.aqsync.data.protocol.ProtocolError
@@ -17,6 +18,8 @@ import earth.walkthru.aqsync.data.sync.SyncEngine
 import earth.walkthru.aqsync.link.AuthKind
 import earth.walkthru.aqsync.link.DisconnectCause
 import earth.walkthru.aqsync.link.LinkState
+import earth.walkthru.aqsync.link.TimeoutPhase
+import earth.walkthru.aqsync.link.UnavailableKind
 import earth.walkthru.aqsync.storage.FakeStorageBudget
 import earth.walkthru.aqsync.storage.StorageClass
 import kotlinx.coroutines.CompletableDeferred
@@ -1340,5 +1343,169 @@ class CollectionControllerTest {
         assertFailsWith<IllegalArgumentException> { RetryPolicy(firstBackoff = (-1).seconds) }
         assertFailsWith<IllegalArgumentException> { RetryPolicy(firstBackoff = 10.seconds, maxBackoff = 5.seconds) }
         assertFailsWith<IllegalArgumentException> { RetryPolicy(ceiling = 0.seconds) }
+    }
+
+    @Test
+    fun anUnavailableTransportFailsAtOnceWithoutBackoff() = runTest {
+        val keepAlive = CountingKeepAlive()
+        val permits = Semaphore(1)
+        val links = FakeLinks(backgroundScope).apply {
+            fail = { TransportUnavailableException(UnavailableKind.RADIO_OFF, "bluetooth off") }
+        }
+        val controller = controller(links, keepAlive, permits = permits)
+        val request = intent()
+
+        controller.start(request)
+        settle(controller)
+
+        val failed = CollectionState.Failed(request.id, CollectionFailure.Link(DisconnectCause.Unavailable(UnavailableKind.RADIO_OFF)))
+        assertEquals(failed, controller.state.value)
+        assertEquals(SyncEndReason.BLUETOOTH_OFF, controller.state.value.endReason())
+        assertEquals(1, links.connects)
+        assertEquals(0, testScheduler.currentTime, "no backoff wait")
+        assertEquals(1, permits.availablePermits)
+        assertTrue(keepAlive.allClosedOnce())
+    }
+
+    @Test
+    fun anUnreachableDeviceGetsOneConnectRetryThenFails() = runTest {
+        val keepAlive = CountingKeepAlive()
+        val links = FakeLinks(backgroundScope).apply { refuse = { DisconnectCause.Unreachable } }
+        val controller = controller(links, keepAlive)
+        val request = intent()
+
+        controller.start(request)
+        settle(controller)
+
+        assertEquals(CollectionState.Failed(request.id, CollectionFailure.Link(DisconnectCause.Unreachable)), controller.state.value)
+        assertEquals(SyncEndReason.OUT_OF_RANGE, controller.state.value.endReason())
+        assertEquals(2, links.connects)
+        assertEquals(2_000, testScheduler.currentTime, "one 2 s backoff")
+        assertTrue(keepAlive.allClosedOnce())
+    }
+
+    @Test
+    fun anOpenTimeoutGetsOneConnectRetryThenFails() = runTest {
+        val open = DisconnectCause.Timeout(TimeoutPhase.OPEN, 0)
+        val links = FakeLinks(backgroundScope).apply { refuse = { open } }
+        val controller = controller(links, CountingKeepAlive())
+        val request = intent()
+
+        controller.start(request)
+        settle(controller)
+
+        assertEquals(CollectionState.Failed(request.id, CollectionFailure.Link(open)), controller.state.value)
+        assertEquals(2, links.connects)
+    }
+
+    @Test
+    fun aConnectRetryThatReachesTheDeviceFinishes() = runTest {
+        val links = FakeLinks(backgroundScope).apply { refuse = { n -> if (n == 1) DisconnectCause.Timeout(TimeoutPhase.OPEN, 0) else null } }
+        val controller = controller(links, CountingKeepAlive())
+
+        controller.start(intent())
+        settle(controller)
+
+        assertIs<CollectionState.Done>(controller.state.value)
+        assertEquals(SyncEndReason.COMPLETED, controller.state.value.endReason())
+        assertAllArchived(links)
+    }
+
+    @Test
+    fun aLossAfterProgressThenOneMissedConnectStillFinishes() = runTest {
+        // Attempt 1 loses the link mid-run, attempt 2 cannot reach the device, attempt 3 finishes.
+        val links = FakeLinks(backgroundScope) { n ->
+            if (n == 1) beforeOpen = { name -> if (name == files[1].name) close() }
+        }.apply { refuse = { n -> if (n == 2) DisconnectCause.Unreachable else null } }
+        val controller = controller(links, CountingKeepAlive())
+
+        controller.start(intent())
+        settle(controller)
+
+        assertIs<CollectionState.Done>(controller.state.value)
+        assertEquals(3, links.connects)
+        assertAllArchived(links)
+    }
+
+    @Test
+    fun aWaitingDeviceLendsItsPermitToAReachableOne() = runTest {
+        val permits = Semaphore(1)
+        val keepAliveA = CountingKeepAlive()
+        val keepAliveB = CountingKeepAlive()
+        val linksA = FakeLinks(backgroundScope).apply { refuse = { n -> if (n == 1) DisconnectCause.Unreachable else null } }
+        val linksB = FakeLinks(backgroundScope, station = "00000000-0000-4000-8000-000000000002")
+        val a = controller(linksA, keepAliveA, device = "fake-a", permits = permits)
+        val b = controller(linksB, keepAliveB, device = "fake-b", permits = permits)
+
+        a.start(intent(device = "fake-a"))
+        b.start(intent(device = "fake-b"))
+        advanceTimeBy(1_000)
+
+        assertIs<CollectionState.Waiting>(a.state.value)
+        assertEquals(1, keepAliveA.held(KeepAliveKind.PROCESS), "PROCESS stays held while waiting")
+        assertEquals(1, linksB.connects, "B connects while A backs off")
+        settle(a)
+        settle(b)
+
+        assertIs<CollectionState.Done>(a.state.value)
+        assertIs<CollectionState.Done>(b.state.value)
+        assertEquals(2, linksA.connects)
+        assertEquals(1, permits.availablePermits)
+        assertTrue(keepAliveA.allClosedOnce() && keepAliveB.allClosedOnce())
+    }
+
+    @Test
+    fun aStopWhileWaitingForThePermitAgainReleasesNothingTwice() = runTest {
+        val permits = Semaphore(1)
+        val linksA = FakeLinks(backgroundScope).apply { refuse = { n -> if (n == 1) DisconnectCause.Unreachable else null } }
+        val linksB = FakeLinks(backgroundScope, station = "00000000-0000-4000-8000-000000000002") { listDelayMs = 10_000 }
+        val keepAliveA = CountingKeepAlive()
+        val a = controller(linksA, keepAliveA, device = "fake-a", permits = permits)
+        val b = controller(linksB, CountingKeepAlive(), device = "fake-b", permits = permits)
+        val requestA = intent(device = "fake-a")
+
+        a.start(requestA)
+        runCurrent()
+        b.start(intent(device = "fake-b"))
+        // A's backoff ends while B holds the slot, so A queues for it.
+        advanceTimeBy(2_500)
+        assertTrue(b.state.value.active)
+        assertTrue(a.stop(StopSource.USER))
+        settle(a)
+        settle(b)
+
+        assertEquals(CollectionState.Stopped(requestA.id, StopSource.USER), a.state.value)
+        assertEquals(SyncEndReason.STOPPED, a.state.value.endReason())
+        assertEquals(1, linksA.connects)
+        assertEquals(1, permits.availablePermits)
+        assertTrue(keepAliveA.allClosedOnce())
+    }
+
+    @Test
+    fun connectPhaseFailuresHaveTheirOwnBound() {
+        val policy = RetryPolicy(attempts = 5, connectRetries = 1)
+        val open = DisconnectCause.Timeout(TimeoutPhase.OPEN, 0)
+        assertEquals(2.seconds, policy.backoff(DisconnectCause.Unreachable, 2, 0.seconds, connectFailures = 1))
+        assertEquals(null, policy.backoff(DisconnectCause.Unreachable, 3, 0.seconds, connectFailures = 2))
+        assertEquals(null, policy.backoff(open, 3, 0.seconds, connectFailures = 2))
+        assertEquals(4.seconds, policy.backoff(DisconnectCause.PeerReset, 3, 0.seconds, connectFailures = 0))
+        assertTrue(connectPhase(open))
+        assertFalse(connectPhase(DisconnectCause.Timeout(TimeoutPhase.FIRST_FRAME, Opcode.LIST)))
+        assertFalse(connectPhase(DisconnectCause.PeerReset))
+        assertFailsWith<IllegalArgumentException> { RetryPolicy(connectRetries = -1) }
+    }
+
+    @Test
+    fun aTerminalStateNamesItsEndReason() {
+        assertEquals(null, CollectionState.Idle.endReason())
+        assertEquals(SyncEndReason.STOPPED, CollectionState.Stopped(1, StopSource.USER).endReason())
+        assertEquals(SyncEndReason.STOPPED, CollectionState.Stopped(1, StopSource.APP).endReason())
+        assertEquals(SyncEndReason.INTERRUPTED, CollectionState.Stopped(1, StopSource.SYSTEM).endReason())
+        assertEquals(SyncEndReason.INTERRUPTED, CollectionState.Stopped(1, StopSource.FGS_TIMEOUT).endReason())
+        assertEquals(
+            SyncEndReason.TOKEN_ROTATED,
+            CollectionState.Failed(1, CollectionFailure.Link(DisconnectCause.Auth(AuthKind.TOKEN_ROTATED))).endReason(),
+        )
+        assertEquals(SyncEndReason.NO_SPACE, CollectionState.Failed(1, CollectionFailure.Storage(StorageFailure.NO_SPACE)).endReason())
     }
 }
