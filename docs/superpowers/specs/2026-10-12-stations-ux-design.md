@@ -177,7 +177,7 @@ Auto-sync card and iOS `AutoSyncSwitch` merge into a shared `AutoSyncSection`.
 Code the redesign replaces is deleted inside slices 1 to 4. This slice removes the rest.
 
 **Remove.**
-- Shims. `DeviceConnectionRepository` typealias (rename uses to `DeviceFacade`), old
+- Shims. The `DeviceConnectionRepository` typealias (done 2026-10-12), old
   `AutoSyncRunner` names, `advancedMode`, `setAdvancedMode`, the `advanced_mode` key, the iOS
   `UserDefaultsSettingsMigration`, `RuntimeAccess` re-export.
 - Clock sync mode setting end to end, keeping only automatic UTC.
@@ -191,8 +191,7 @@ Code the redesign replaces is deleted inside slices 1 to 4. This slice removes t
   `LanFrameSplitter`, the unused `mood_*`, `who_step_*`, `pms_*`, `clock_*` strings). Test only
   helpers in `:core:parquet` stay, so the reader remains complete.
 - `ios/App/SensorArchive.swift` once Files export is confirmed not to use it.
-- Stale docs. `data-model.md` settings rows, line references in `opensensor-space.md`, parity
-  audit pages, `history-ux-and-data-layer.md` "Advanced mode".
+- Stale docs. Done 2026-10-12, the parity audits and the long-form evaluation are deleted.
 
 **Keep (wire contract).** `legacy-parquet/` path and its grouping, GET_CONFIG page 0, 17 byte
 TimeSet, JSON keys, reading old Parquet statistics, `ProtocolGate`, the iOS `SensorArchive` root
@@ -201,8 +200,8 @@ until iOS moves to the shared layout, Android application ID.
 ## Rule and doc changes
 
 - `AGENTS.md`. Near me may also be tapped on Stations when no sensor is owned, same conversion and
-  no storage. The owned sensor's retained H3 cell may be stored on the phone. Drop
-  `DeviceConnectionRepository` from the sync boundary.
+  no storage. The owned sensor's retained H3 cell may be stored on the phone. The
+  `DeviceConnectionRepository` mention is gone (done 2026-10-12).
 - `docs/devices-and-discovery.md`. The peacock may sit beside the number at Simple. The WHO legend
   text applies at Detailed.
 - `docs/screens.md`, `ui/AGENTS.md`. New navigation, Stations, Station page, wizard, settings

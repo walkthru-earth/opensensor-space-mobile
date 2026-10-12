@@ -121,7 +121,7 @@ matching incident lines were not extracted before the owner ended checks.
 The temporary Developer detail level was restored to Simple.
 
 The full ecosystem report, including source findings, evidence limits and ten
-Mermaid diagrams, is [in the parent directory](../../SYNC-STABILITY-INVESTIGATION-2026-10-10.md).
+Mermaid diagrams, is `SYNC-STABILITY-INVESTIGATION-2026-10-10.md` in the parent directory, outside this repository.
 Ignored app evidence is under `ios/build/DeviceInstall/evidence-bed7949/`.
 No current iPhone radio qualification was performed.
 
@@ -389,8 +389,8 @@ profiles; its latest recorded phone checks cover one-file BLE sync and navigatio
 multi-device, LAN and background qualifications outstanding. The iOS app shares protocol and
 sensor rules and has a dated iPhone BLE live-reading check plus Bonjour discovery observation.
 Authenticated foreground LAN collection, concurrent sensor sessions and verified local archives now
-have host/simulator/build checks; their real-phone qualification and background collection remain outstanding. See [opensensor-space.md](opensensor-space.md)
-and [ios-migration.md](ios-migration.md). Android, iOS simulator, and iPhone evidence are recorded
+have host/simulator/build checks; their real-phone qualification and background collection remain outstanding. See [opensensor-space.md](device-identity.md)
+and [ios-migration.md](ios.md). Android, iOS simulator, and iPhone evidence are recorded
 separately in the platform records and the relevant firmware board bench files.
 
 
@@ -594,7 +594,7 @@ estimate, `RealArchiveTest`). Debug APK 68.4 MiB unminified.
   stays archived/exportable and is excluded from the new station's charts. No board was flashed,
   rebooted or paired during the initial source audit. The later USB/foreground repair evidence
   is recorded above. Qualification and limitations are in
-  [opensensor-space.md](opensensor-space.md).
+  [opensensor-space.md](device-identity.md).
 
 - **2026-09-20** — LAN bearer tokens are encrypted at rest with Android Keystore AES-GCM. Startup
   completes plaintext migration before Auto-sync services can consume tokens. Missing keys, failed
@@ -624,7 +624,7 @@ estimate, `RealArchiveTest`). Debug APK 68.4 MiB unminified.
 3. **API 37 local-network permission** on a real Android 17 device (grant / deny / revoke while connected) and `NsdManager` across API 31–37.
 4. **Further transports** (LoRa relays) behind `AqTransport`; engine, archive, verification unchanged.
 5. **Opt-in cloud step after local sync** — off by default, own setting and review; `INTERNET` for LAN does not pre-approve it. Privacy boundaries: `../aq-parquet/product/mobile-architecture.md`.
-6. **Open decisions** D1–D10 (location/map, import UI, iOS parity) in [history-ux-and-data-layer.md](history-ux-and-data-layer.md) §6.
+6. **Open decisions** D1–D10 (location/map, import UI, iOS parity) in `history-ux-and-data-layer.md` §6, since deleted.
 
 ## Test phone
 
@@ -637,7 +637,7 @@ SyncEngine DeviceConnection TcpTransport BleTransport AutoSync SyncWorker SyncFg
 
 The Android app and first iOS app now compile the same portable protocol and
 sensor-domain implementations. JVM-only Parquet/file adapters and existing
-Android screens remain in place. [ios-migration.md](ios-migration.md) describes
+Android screens remain in place. [ios-migration.md](ios.md) describes
 the exact source-set split, build commands and remaining feature work.
 
 Host verification: `./gradlew --no-daemon verify` passed after formatting,
