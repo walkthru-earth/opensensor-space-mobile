@@ -117,6 +117,9 @@ object SyncPlanner {
                     FileSyncState.MISMATCH,
                     detail = "archived copy is ${local.bytes} bytes, device reports ${file.bytes}"
                 )
+                // FILE carries no CRC, so equal size counts as synced. That holds only because
+                // listed archive files are immutable (ble-sync-protocol.md). Firmware that rewrites
+                // a file in place at the same size would need a content check here.
                 else -> ManifestEntry(file.name, file.bytes, partition, FileSyncState.SYNCED)
             }
         }
