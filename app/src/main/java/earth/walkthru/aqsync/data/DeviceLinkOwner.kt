@@ -27,6 +27,7 @@ import earth.walkthru.aqsync.data.lan.LanDevice
 import earth.walkthru.aqsync.data.lan.LanFailure
 import earth.walkthru.aqsync.data.lan.LanTargets
 import earth.walkthru.aqsync.data.lan.LanTokenPolicy
+import earth.walkthru.aqsync.data.local.database.ArchivedFile
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.local.database.KnownDevice
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
@@ -108,6 +109,26 @@ data class ArchiveTimeSummary(
     val unplacedRows: Long = 0,
     val unplacedBoots: Int = 0,
 )
+
+/**
+ * [ArchiveTimeSummary] over one station's archive rows. [ArchiveTimeSummary.files] counts every
+ * row, as the Stations list does. The time figures cover indexed telemetry files only.
+ */
+internal fun summarizeArchive(rows: List<ArchivedFile>): ArchiveTimeSummary {
+    val timed = rows.filter { it.indexed && (it.purpose == null || it.purpose == "telemetry") }
+    val estimated = timed.filter { it.hasEstimatedUtc }
+    val unplaced = timed.filter { !it.hasUtc && !it.hasEstimatedUtc }
+    return ArchiveTimeSummary(
+        files = rows.size,
+        rows = timed.sumOf { it.rows ?: 0L },
+        realTimeRows = timed.sumOf { it.utcRows ?: 0L },
+        estimatedFiles = estimated.size,
+        estimatedRows = estimated.sumOf { it.rows ?: 0L },
+        unplacedFiles = unplaced.size,
+        unplacedRows = unplaced.sumOf { it.rows ?: 0L },
+        unplacedBoots = unplaced.mapNotNull { it.bootId }.distinct().size,
+    )
+}
 
 data class SyncDiagnostic(
     val atEpochMs: Long,
@@ -234,10 +255,12 @@ class DeviceLinkOwner @Inject constructor(
     val lanDiscoveryError get() = lanDiscoveryState.error
 
     private var boundAddress: String? = null
+    private val bound = MutableStateFlow<String?>(null)
     internal val address: String get() = checkNotNull(boundAddress) { "device endpoint is not bound" }
     internal fun bind(address: String) {
         check(boundAddress == null || boundAddress == address)
         boundAddress = address
+        bound.value = address
     }
 
     private val _info = MutableStateFlow<DeviceInfo?>(null)
@@ -257,11 +280,28 @@ class DeviceLinkOwner @Inject constructor(
     val manifest: StateFlow<ManifestState> = _manifest.asStateFlow()
     private val manifestMutex = Mutex()
 
+    /**
+     * The last collection's progress. Kept through a disconnect and a reconnect so the last
+     * ending stays visible; only the next run replaces it. One owner serves one device.
+     */
     private val _sync = MutableStateFlow(SyncProgress())
     val sync: StateFlow<SyncProgress> = _sync.asStateFlow()
 
-    private val _archiveTimeSummary = MutableStateFlow(ArchiveTimeSummary())
-    val archiveTimeSummary: StateFlow<ArchiveTimeSummary> = _archiveTimeSummary.asStateFlow()
+    /**
+     * The station this owner's device archives into: the connected `info`, else the enrolled row,
+     * so the archive summary survives a disconnect.
+     */
+    private val archiveStation: Flow<String?> = combine(_info, bound, knownDeviceDao.observeAll()) { info, address, known ->
+        info?.station ?: known.firstOrNull { it.address == address }?.station
+    }.distinctUntilChanged()
+
+    /**
+     * What is archived for this device, straight from Room. Counts the same rows as the
+     * Stations list, never resets on disconnect, and follows every commit and index pass.
+     */
+    val archiveTimeSummary: StateFlow<ArchiveTimeSummary> = archiveStation.flatMapLatest { station ->
+        if (station == null) flowOf(ArchiveTimeSummary()) else archivedFileDao.observeForStation(station).map(::summarizeArchive)
+    }.distinctUntilChanged().stateIn(scope, SharingStarted.Eagerly, ArchiveTimeSummary())
 
     private val _syncDiagnostics = MutableStateFlow<List<SyncDiagnostic>>(emptyList())
     val syncDiagnostics: StateFlow<List<SyncDiagnostic>> = _syncDiagnostics.asStateFlow()
@@ -557,8 +597,6 @@ class DeviceLinkOwner @Inject constructor(
         _statusRaw.value = null
         _live.value = null
         _manifest.value = ManifestState.Idle
-        if (!collectionActive.value) _sync.value = SyncProgress()
-        _archiveTimeSummary.value = ArchiveTimeSummary()
         _config.value = null
         _wifiScan.value = WifiScanState.Idle
         _logTail.value = LogTailState.Idle
@@ -659,7 +697,7 @@ class DeviceLinkOwner @Inject constructor(
                 runCatching { DeviceStatus.parse(raw) }.onSuccess { _status.value = TimedStatus(it, clock.nowEpochMs()) }
             }
             suspendRunCatching { session.readLive() }.onSuccess { _live.value = TimedLive(it, clock.nowEpochMs()) }
-            info.station?.let { station -> scope.launch { if (_session.value === session) updateArchiveTimeSummary(station) } }
+            info.station?.let { station -> scope.launch { if (_session.value === session) reportArchiveTimeline(station) } }
             recordDiagnostic("connect", "${transport.kind} ready")
 
             val v2 = (proto ?: 1) >= 2
@@ -1106,22 +1144,10 @@ class DeviceLinkOwner @Inject constructor(
         knownDeviceDao.setCompanionAssociation(address, associationId)
     }
 
-    private suspend fun updateArchiveTimeSummary(station: String) {
-        val files = archivedFileDao.forStation(station).filter { it.indexed && (it.purpose == null || it.purpose == "telemetry") }
-        val estimated = files.filter { it.hasEstimatedUtc }
-        val unplaced = files.filter { !it.hasUtc && !it.hasEstimatedUtc }
+    /** Log the archive's timeline once per connect or collection, and say when readings have no time. */
+    private suspend fun reportArchiveTimeline(station: String) {
+        val summary = summarizeArchive(archivedFileDao.forStation(station))
         if (_info.value?.station != station) return
-        _archiveTimeSummary.value = ArchiveTimeSummary(
-            files = files.size,
-            rows = files.sumOf { it.rows ?: 0L },
-            realTimeRows = files.sumOf { it.utcRows ?: 0L },
-            estimatedFiles = estimated.size,
-            estimatedRows = estimated.sumOf { it.rows ?: 0L },
-            unplacedFiles = unplaced.size,
-            unplacedRows = unplaced.sumOf { it.rows ?: 0L },
-            unplacedBoots = unplaced.mapNotNull { it.bootId }.distinct().size,
-        )
-        val summary = _archiveTimeSummary.value
         recordDiagnostic(
             "timeline",
             "${summary.files} file(s), ${summary.realTimeRows} UTC row(s), ${summary.estimatedRows} estimated row(s), ${summary.unplacedRows} unplaced row(s)",
@@ -1239,7 +1265,7 @@ class DeviceLinkOwner @Inject constructor(
         if (refresh && session?.isUsable == true) refreshManifestNow(session)
         suspendRunCatching {
             if (refresh) historyDeriver.deriveAfterSync(startedMs)
-            _info.value?.station?.let { updateArchiveTimeSummary(it) }
+            _info.value?.station?.let { reportArchiveTimeline(it) }
         }.onFailure { Log.w(TAG, "derive after collection failed (${it::class.simpleName})") }
     }
 

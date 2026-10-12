@@ -972,6 +972,52 @@ class DeviceConnectionRepositoryTest {
         assertTrue(h.events.contains(DeviceEvent.Info(DeviceMessage.SyncStopped)))
     }
 
+    @Test
+    fun `the last sync and the archive summary survive a disconnect and a reconnect`() = harnessTest { h ->
+        h.repo.connect(ADDRESS, "AQ-6b40", fake = true)
+        h.until { h.repo.plan.value != null }
+        h.repo.syncAll()
+        h.until { !h.repo.collectionState.value.active && !h.repo.busy.value && h.archived.rows.size == h.device.files.size }
+        h.until { h.repo.archiveTimeSummary.value.files == h.archived.rows.size }
+
+        h.repo.disconnectNow()
+        h.until { h.repo.session.value == null }
+        assertEquals(h.archived.rows.size, h.repo.archiveTimeSummary.value.files)
+        val last = h.owner.sync.value
+        assertEquals(SyncEndReason.COMPLETED, last.endReason)
+        assertEquals(h.device.files.size, last.outcomes.size)
+
+        h.repo.connect(ADDRESS, "AQ-6b40", fake = true)
+        h.until { h.repo.plan.value != null }
+        assertEquals(last, h.owner.sync.value)
+        assertEquals(h.archived.rows.size, h.repo.archiveTimeSummary.value.files)
+    }
+
+    @Test
+    fun `the archive summary counts every archived row before any connection`() = harnessTest { h ->
+        h.knownDao.upsert(h.enrolled(token = null))
+        val station = h.device.station
+        h.archived.upsert(archivedRow(station, "a.parquet", indexed = true))
+        h.archived.upsert(archivedRow(station, "b.parquet", indexed = false))
+        h.archived.upsert(archivedRow("other", "c.parquet", indexed = true))
+        h.until { h.repo.archiveTimeSummary.value.files == 2 }
+        assertNull(h.repo.session.value)
+        assertEquals(10L, h.repo.archiveTimeSummary.value.rows)
+    }
+
+    private fun archivedRow(station: String, name: String, indexed: Boolean) = ArchivedFile(
+        station = station,
+        name = name,
+        bytes = 100,
+        crc32 = 1,
+        sha256 = "",
+        syncedAtEpochMs = 1,
+        sourceDevice = ADDRESS,
+        rows = 10,
+        utcRows = 10,
+        indexedAtEpochMs = if (indexed) 1 else null,
+    )
+
     private fun harnessTest(chunkDelayMs: Long = 0, block: suspend TestScope.(Harness) -> Unit) = runTest {
         val h = Harness(this, chunkDelayMs)
         try {
@@ -1295,7 +1341,7 @@ class DeviceConnectionRepositoryTest {
         private val state = MutableStateFlow<List<ArchivedFile>>(emptyList())
         val rows: List<ArchivedFile> get() = state.value
         override fun observeAll(): Flow<List<ArchivedFile>> = state
-        override fun observeForStation(station: String): Flow<List<ArchivedFile>> = flowOf(rows.filter { it.station == station })
+        override fun observeForStation(station: String): Flow<List<ArchivedFile>> = state.map { all -> all.filter { it.station == station } }
         override suspend fun forStation(station: String) = rows.filter { it.station == station }
         override suspend fun get(station: String, name: String) = rows.firstOrNull { it.station == station && it.name == name }
         override fun observeCount(): Flow<Int> = flowOf(rows.size)
