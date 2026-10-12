@@ -87,7 +87,7 @@ internal fun DayRing(
             mood?.titleText(),
             if (showStep) mood?.step?.labelText() else null,
             if (mean != null) stringResource(Res.string.history_day_coverage, (coverage * 100).toInt()) else null,
-            chartHighest(columns, metric, units) { c -> slotLabel(c, HistoryRange.DAY, zone) },
+            chartHighest(columns, metric, units, stepNamed = showStep) { c -> slotLabel(c, HistoryRange.DAY, zone) },
         ),
         listSeparator(),
     )

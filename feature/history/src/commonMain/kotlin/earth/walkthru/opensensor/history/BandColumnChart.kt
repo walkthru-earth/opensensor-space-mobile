@@ -290,7 +290,7 @@ internal fun chartSummary(
     units: UnitFormatter,
     stepNamed: Boolean = true,
     slot: (@Composable (HistoryColumn) -> String)?,
-): String = title + ", " + (chartHighest(columns, metric, units, stepNamed, slot) ?: stringResource(Res.string.history_no_readings_short))
+): String = spokenList(listOf(title, chartHighest(columns, metric, units, stepNamed, slot) ?: stringResource(Res.string.history_no_readings_short)), listSeparator())
 
 /** The label on the guideline line. Simple never names WHO. */
 internal fun guidelineLabelRes(level: DetailLevel): StringResource = if (level.detailed) Res.string.chart_who_24h else Res.string.chart_guideline_24h

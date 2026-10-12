@@ -95,7 +95,7 @@ internal fun CalendarHeatmap(
     val summary = listOfNotNull(
         stringResource(Res.string.chart_calendar_title, metric.label),
         stringResource(Res.string.chart_days_with_readings, daysWithReadings, shownDays),
-        chartHighest(days.filter { it.startS >= fromS && it.startS < toS }, metric, units) { c -> formatEpoch(c.startS, zone, DAY_SPOKEN) },
+        chartHighest(days.filter { it.startS >= fromS && it.startS < toS }, metric, units, stepNamed = showStep) { c -> formatEpoch(c.startS, zone, DAY_SPOKEN) },
     ).let { spokenList(it, separator) }
     val estimated = stringResource(Res.string.history_estimated_time)
     val moodTitles = AirMood.entries.associateWith { it.titleText() }
