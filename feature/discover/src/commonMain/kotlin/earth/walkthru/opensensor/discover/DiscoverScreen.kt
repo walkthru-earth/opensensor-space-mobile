@@ -425,7 +425,13 @@ private fun SourceToggle(
                 SourceSegment(strings.sourceSample, selected = !real, enabled = enabled, disabledNote = null) { onSource(DiscoverSource.SAMPLE) }
                 SourceSegment(realLabel, selected = real, enabled = enabled, disabledNote = strings.sourceOff, Modifier.weight(1f, fill = false)) { onSource(DiscoverSource.OPENAQ) }
             }
-            infoButton(if (real) strings.realInfo else strings.sampleInfo, Modifier.minimumInteractiveComponentSize().size(40.dp))
+            // A sighted user sees Real greyed out, so the info sheet says why (public sensors are off).
+            val info = when {
+                real -> strings.realInfo
+                enabled -> strings.sampleInfo
+                else -> strings.sampleInfo.copy(body = strings.sampleInfo.body + strings.sourceOff)
+            }
+            infoButton(info, Modifier.minimumInteractiveComponentSize().size(40.dp))
         }
     }
 }
