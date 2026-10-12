@@ -140,7 +140,8 @@ private class RepositoryTodaySource(
         (event as? DeviceEvent.ClockConfirmationRequired)?.let { TodayNotice.ClockConfirmationRequired(it.quality) }
     }
 
-    override fun sync(mode: ClockSyncMode, clockConfirmed: Boolean) = repository.smartSync(mode, clockConfirmed)
+    /** The shared controller still passes a clock mode. Collection applies the automatic clock rule. */
+    override fun sync(mode: ClockSyncMode, clockConfirmed: Boolean) = repository.smartSync()
 
     override fun setTime() = repository.setTimeFromPhone()
 

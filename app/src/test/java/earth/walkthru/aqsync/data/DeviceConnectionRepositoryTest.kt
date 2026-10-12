@@ -47,7 +47,6 @@ import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.protocol.LanFraming
 import earth.walkthru.aqsync.data.protocol.Opcode
 import earth.walkthru.aqsync.data.sync.ArchiveCollector
-import earth.walkthru.aqsync.data.sync.ClockSyncMode
 import earth.walkthru.aqsync.data.sync.FileArchive
 import earth.walkthru.aqsync.data.sync.FileOutcome
 import earth.walkthru.aqsync.data.sync.SyncEngine
@@ -451,7 +450,7 @@ class DeviceConnectionRepositoryTest {
         val newer = h.newFile()
         h.device.files += newer
 
-        h.repo.smartSync(ClockSyncMode.AUTOMATIC)
+        h.repo.smartSync()
         h.until { h.archived.rows.size == h.device.files.size && !h.repo.sync.value.running }
 
         assertTrue(h.repo.sync.value.outcomes.any { it.name == newer.name })
@@ -487,7 +486,7 @@ class DeviceConnectionRepositoryTest {
         val before = h.factory.requests.count { it == Opcode.LIST }
 
         h.repo.syncAll()
-        h.repo.smartSync(ClockSyncMode.AUTOMATIC)
+        h.repo.smartSync()
         h.until { h.archived.rows.size == h.device.files.size && !h.repo.sync.value.running }
 
         assertTrue(h.events.any { it == DeviceEvent.Info(DeviceMessage.Busy) || it == DeviceEvent.Info(DeviceMessage.BusyBeforeSync) })

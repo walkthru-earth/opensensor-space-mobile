@@ -27,7 +27,6 @@ import earth.walkthru.aqsync.data.coroutines.WallClock
 import earth.walkthru.aqsync.data.lan.LanDevice
 import earth.walkthru.aqsync.data.protocol.ConfigPatch
 import earth.walkthru.aqsync.data.sync.ArchiveCollector
-import earth.walkthru.aqsync.data.sync.ClockSyncMode
 import earth.walkthru.aqsync.data.sync.FileOutcome
 import earth.walkthru.aqsync.data.sync.FileProblem
 import earth.walkthru.aqsync.data.sync.SyncEndCause
@@ -209,8 +208,11 @@ class DeviceFacade internal constructor(
         if (start(intent) == null) linkOwner.emitCollectionEvent(DeviceEvent.Info(DeviceMessage.BusyBeforeSync))
     }
 
-    /** Collection uses the automatic clock rule shared with connection setup. */
-    fun smartSync(mode: ClockSyncMode, clockConfirmed: Boolean = false) = interactive(CollectionScope.All, clockConfirmed = true)
+    /**
+     * Sync everything. The clock follows the automatic rule shared with connection setup, so
+     * there is no mode or confirmation to pass.
+     */
+    fun smartSync() = interactive(CollectionScope.All, clockConfirmed = true)
     fun syncAll() = interactive(CollectionScope.All, clockConfirmed = true)
     fun syncOne(name: String) = interactive(CollectionScope.One(name), clockConfirmed = true)
     fun cancelSync() { stop(StopSource.USER) }
