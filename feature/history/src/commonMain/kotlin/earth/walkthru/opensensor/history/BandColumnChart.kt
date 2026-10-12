@@ -45,6 +45,8 @@ import earth.walkthru.aqsync.units.UnitSystem
 import earth.walkthru.aqsync.units.displayAxisTicks
 import earth.walkthru.aqsync.units.formatFixed
 import earth.walkthru.aqsync.units.tickDecimals
+import earth.walkthru.opensensor.designsystem.listSeparator
+import earth.walkthru.opensensor.designsystem.spokenList
 import earth.walkthru.opensensor.history.resources.Res
 import earth.walkthru.opensensor.history.resources.chart_bars_title
 import earth.walkthru.opensensor.history.resources.chart_guideline_note
@@ -297,7 +299,7 @@ internal fun chartHighest(
     val unit = units.unit(metric.unit)
     val highest = if (slot != null) stringResource(Res.string.chart_highest_at, value, unit, slot(top)) else stringResource(Res.string.chart_highest, value, unit)
     val step = metric.stepOf(mean.toDouble())?.labelText()
-    return listOfNotNull(highest, step).joinToString(", ")
+    return spokenList(listOfNotNull(highest, step), listSeparator())
 }
 
 /** A column's time in words for a screen reader: the hour for a day, weekday and hour for a week, the date for a month, the week for a year. */

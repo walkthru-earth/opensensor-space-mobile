@@ -61,10 +61,12 @@ import earth.walkthru.opensensor.designsystem.StatLine
 import earth.walkthru.opensensor.designsystem.StatusDot
 import earth.walkthru.opensensor.designsystem.TickingText
 import earth.walkthru.opensensor.designsystem.WarningNote
+import earth.walkthru.opensensor.designsystem.listSeparator
 import earth.walkthru.opensensor.designsystem.moodWord
 import earth.walkthru.opensensor.designsystem.nowEpochMillis
 import earth.walkthru.opensensor.designsystem.peacockExpressionFor
 import earth.walkthru.opensensor.designsystem.rememberNowMillis
+import earth.walkthru.opensensor.designsystem.spokenList
 import earth.walkthru.opensensor.today.resources.Res
 import earth.walkthru.opensensor.today.resources.batch_explain
 import earth.walkthru.opensensor.today.resources.batch_title
@@ -652,7 +654,7 @@ internal fun BoardCard(live: LiveSample?, profile: LiveProfile?, level: DetailLe
                     }
                 }
                 if (detail.isNotEmpty()) {
-                    Text(detail.joinToString(", "), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(spokenList(detail, listSeparator()), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -778,7 +780,7 @@ internal fun DeviceInfoCard(
             val payload = (connection as? ConnectionState.Ready)?.mtu?.takeIf { it > 3 }?.let { stringResource(Res.string.device_payload, it - 3) }
             StatLine(
                 stringResource(Res.string.device_link),
-                listOfNotNull(transport?.labelText(), payload).joinToString(", ").ifEmpty { NO_VALUE },
+                spokenList(listOfNotNull(transport?.labelText(), payload), listSeparator()).ifEmpty { NO_VALUE },
             )
             if (configReadAtEpochMs != null) {
                 val label = stringResource(Res.string.device_config_read)
