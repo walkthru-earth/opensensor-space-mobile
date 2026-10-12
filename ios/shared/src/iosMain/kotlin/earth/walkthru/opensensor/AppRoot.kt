@@ -449,7 +449,7 @@ private const val PHONE_ARCHIVE = "archive"
 /** Offline History. Index repair runs from launch ([sharedSensorSync]) and is started here too. */
 @Composable
 private fun HistoryEntry(address: String, devices: DevicesBridge, units: UnitSystem, level: DetailLevel, onBack: () -> Unit) {
-    remember { IosArchive.startIndexRepair() }
+    LaunchedEffect(Unit) { IosArchive.startIndexRepair() }
     val controller = viewModel(key = "history-$address") { HistoryHolder(address, devices) }.controller
     HistoryScreen(
         controller = controller,
