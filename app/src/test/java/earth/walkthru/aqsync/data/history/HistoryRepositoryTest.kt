@@ -27,6 +27,9 @@ class HistoryRepositoryTest {
     private fun bytes(path: String) = checkNotNull(javaClass.classLoader?.getResourceAsStream("parquet/$path")).readBytes()
     private val station = "53315f5f-cb85-4d8d-b623-d56266084189"
     private val dayStart = 1_789_603_200L // 2026-09-17T00:00Z
+
+    // Every fixture window is complete, so coverage is not cut at the real clock.
+    private val afterFixtures: () -> Long = { 4_102_444_800L } // 2100-01-01T00:00Z
     private fun window(range: HistoryRange, toS: Long) = HistoryWindow.endingAt(toS, range, ZoneId.of("UTC").toKotlinTimeZone())
 
     @Test
@@ -40,7 +43,7 @@ class HistoryRepositoryTest {
             rows += MetricBucket(station = station, metricId = Metrics.PM25.id, resolution = Resolution.HOUR.seconds, startEpochS = secondOne, rows = 360, validRows = 360, estimatedRows = 0, mean = 20f, min = 20f, max = 20f)
         }
         val tmp = File.createTempFile("aq-hist-dst", "").apply { delete(); mkdirs(); deleteOnExit() }
-        val repo = HistoryRepository(FileArchive(tmp), Files(), buckets, DerivedDayFiles.NONE)
+        val repo = HistoryRepository(FileArchive(tmp), Files(), buckets, DerivedDayFiles.NONE, afterFixtures)
         val result = repo.observeHourlyDay(station, Metrics.PM25, fall).first()
         assertEquals(25 * 360L, result.expectedRows)
         assertEquals(720L, result.validRows)
@@ -70,7 +73,7 @@ class HistoryRepositoryTest {
         val buckets = Buckets().apply {
             rows += MetricBucket(station = station, metricId = Metrics.PM25.id, resolution = Resolution.HOUR.seconds, startEpochS = utcBucketStart, rows = 360, validRows = 360, estimatedRows = 0, mean = 999f, min = 999f, max = 999f)
         }
-        val result = HistoryRepository(archive, files, buckets, DerivedDayFiles.NONE).observeHourlyDay(station, Metrics.PM25, day).first()
+        val result = HistoryRepository(archive, files, buckets, DerivedDayFiles.NONE, afterFixtures).observeHourlyDay(station, Metrics.PM25, day).first()
         assertEquals(1L, result.validRows)
         assertEquals(31f, result.mean!!, 1e-6f)
         assertEquals(1, result.points.size)
@@ -89,7 +92,7 @@ class HistoryRepositoryTest {
         val agg = Aggregator(station).also { it.add(earth.walkthru.aqsync.data.history.parquet.ParquetFile.wrap(bytes("device/v3-board-2rg-105rows.parquet"))) }
         buckets.rows += agg.buckets().flatMap { b -> b.metrics.map { (id, a) -> MetricBucket(station = station, metricId = id, resolution = b.resolution.seconds, startEpochS = b.startEpochS, rows = b.rows, validRows = a.n, estimatedRows = b.estimatedRows, mean = a.mean, min = a.min, max = a.max) } }
 
-        val repo = HistoryRepository(archive, files, buckets, DerivedDayFiles.NONE)
+        val repo = HistoryRepository(archive, files, buckets, DerivedDayFiles.NONE, afterFixtures)
 
         // Day: 24 h ending at midnight after the data → 105 raw points (below the binning cap).
         val day = repo.observe(station, Metrics.PM25, HistoryRange.DAY, window(HistoryRange.DAY, dayStart + 86_400)).first()
@@ -135,7 +138,7 @@ class HistoryRepositoryTest {
             )
         }
 
-        val day = HistoryRepository(archive, files, Buckets(), DerivedDayFiles.NONE)
+        val day = HistoryRepository(archive, files, Buckets(), DerivedDayFiles.NONE, afterFixtures)
             .observe(station, Metrics.PM25, HistoryRange.DAY, window(HistoryRange.DAY, dayStart + 86_400)).first()
         assertEquals(105, day.points.size)
         assertEquals(105L, day.validRows)

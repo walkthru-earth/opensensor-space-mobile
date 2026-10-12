@@ -576,6 +576,14 @@ class DeviceLinkOwner @Inject constructor(
             _events.tryEmit(DeviceEvent.Error(DeviceMessage.VerificationFailed))
             return false
         }
+        // Identity, epochs and archive paths all key on the station, so info without one is unusable.
+        val station = info.station ?: run {
+            Log.w(TAG, "device verification failed (info has no station)")
+            lastOpenFailure = DisconnectCause.FramingViolation("info without station")
+            connectionFailure.value = "verification failed (info has no station)"
+            _events.tryEmit(DeviceEvent.Error(DeviceMessage.VerificationFailed))
+            return false
+        }
         startNotificationCollection(session)
         try {
             val proto = info.proto
@@ -605,7 +613,7 @@ class DeviceLinkOwner @Inject constructor(
                 }
             }
             previous?.station?.let { station -> stationEpochDao.recordIfAbsent(StationEpoch(address, station, previous.deviceId, previous.lastConnectedEpochMs ?: now, false)) }
-            stationEpochDao.recordIfAbsent(StationEpoch(address, info.station!!, info.dev, now, authenticatedBle))
+            stationEpochDao.recordIfAbsent(StationEpoch(address, station, info.dev, now, authenticatedBle))
             if (continuity.invalidateLanToken) {
                 knownDeviceDao.setLanToken(address, null, null)
                 tokenPolicy.markStale(address)
@@ -679,13 +687,13 @@ class DeviceLinkOwner @Inject constructor(
         if (!quiet) _events.tryEmit(DeviceEvent.Error(DeviceMessage.TokenNeedsBluetooth))
         false
     } catch (e: DeviceErrorException) {
-        Log.w(TAG, "GET_TOKEN rejected (${e.message})")
+        Log.w(TAG, "GET_TOKEN rejected (code ${e.frame.code})")
         if (!quiet) _events.tryEmit(DeviceEvent.Error(DeviceMessage.CommandRejected(DeviceMessage.Command.GET_TOKEN)))
         false
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
-        Log.w(TAG, "GET_TOKEN failed: ${e.message}")
+        Log.w(TAG, "GET_TOKEN failed (${e::class.simpleName})")
         if (!quiet) _events.tryEmit(DeviceEvent.Error(DeviceMessage.CommandFailed(DeviceMessage.Command.GET_TOKEN)))
         false
     }

@@ -102,7 +102,7 @@
     <string name="today_none">لا قراءات مؤرخة اليوم بعد.</string>
     <string name="today_none_clock">لا قراءات مؤرخة بعد. اضبط وقت المستشعر ثم زامِن.</string>
     <string name="today_average">المتوسط %1$s µg/m³</string>
-    <string name="today_of_the_day">من اليوم مغطّى</string>
+    <string name="today_of_the_day">مغطّى حتى الآن</string>
     <plurals name="today_readings_since_midnight">
         <item quantity="zero">%1$d قراءة منذ منتصف الليل</item>
         <item quantity="one">%1$d قراءة منذ منتصف الليل</item>

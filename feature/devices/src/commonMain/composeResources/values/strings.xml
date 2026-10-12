@@ -13,7 +13,7 @@
     <string name="scan_options">Device options</string>
     <string name="scan_forget">Forget</string>
     <string name="scan_forget_title">Forget %1$s?</string>
-    <string name="scan_forget_body">Removes it from this phone. Collected files stay.</string>
+    <string name="scan_forget_body">Removes it from this app. Collected files stay. To unpair it fully, also forget it in Bluetooth settings on your phone.</string>
     <string name="scan_forget_button">Forget device</string>
     <string name="scan_unnamed">Unnamed sensor</string>
     <string name="scan_tag_paired">paired</string>

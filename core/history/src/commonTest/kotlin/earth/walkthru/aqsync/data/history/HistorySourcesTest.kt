@@ -240,6 +240,31 @@ class HistorySourcesTest {
     }
 
     @Test
+    fun coverageOfAWindowThatContainsNowCountsOnlyElapsedTime() = runTest {
+        val (store, index) = archive("station=$station/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet")
+        val tiers = ArchiveHistoryTiers(store, index)
+        val noon = dayStart + 43_200
+        val reader = HistorySeriesReader(store, index, tiers, nowEpochS = { noon })
+
+        // The day ends at midnight, but only the twelve hours before noon could have readings.
+        val day = reader.observe(station, Metrics.PM25, HistoryRange.DAY, window(HistoryRange.DAY, dayStart + 86_400)).first()
+        assertEquals(105L, day.validRows)
+        assertEquals(105f / 4320f, day.coverage, 1e-6f)
+
+        // The hourly Today path and the tier windows use the same denominator.
+        val today = reader.observeHourlyDay(station, Metrics.PM25, window(HistoryRange.DAY, dayStart + 86_400)).first()
+        assertEquals(today.validRows.toFloat() / 4320f, today.coverage, 1e-6f)
+        val week = reader.observe(station, Metrics.PM25, HistoryRange.WEEK, window(HistoryRange.WEEK, dayStart + 86_400)).first()
+        assertEquals(week.validRows.toFloat() / ((noon - week.fromS) / 10), week.coverage, 1e-6f)
+
+        // A past window keeps its whole span, and a window not yet started covers nothing.
+        val past = HistorySeriesReader(store, index, tiers, nowEpochS = { dayStart + 10 * 86_400 })
+        assertEquals(105f / 8640f, past.observe(station, Metrics.PM25, HistoryRange.DAY, window(HistoryRange.DAY, dayStart + 86_400)).first().coverage, 1e-6f)
+        val before = HistorySeriesReader(store, index, tiers, nowEpochS = { dayStart - 1 })
+        assertEquals(0f, before.observe(station, Metrics.PM25, HistoryRange.DAY, window(HistoryRange.DAY, dayStart + 86_400)).first().coverage)
+    }
+
+    @Test
     fun weekViewReadsTheInMemoryTiers() = runTest {
         val (store, index) = archive("station=$station/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet")
         val tiers = ArchiveHistoryTiers(store, index)

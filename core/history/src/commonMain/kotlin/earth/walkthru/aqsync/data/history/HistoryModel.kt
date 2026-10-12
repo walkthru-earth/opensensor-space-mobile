@@ -24,7 +24,7 @@ data class HistorySeries(
     val fromS: Long,
     val toS: Long,
     val points: List<HistoryPoint>,
-    /** Rows behind the means, and how many the logger would have produced over the whole span. */
+    /** Rows behind the means, and how many the logger could have produced in the span up to now. */
     val validRows: Long,
     val expectedRows: Long,
     val mean: Float?,

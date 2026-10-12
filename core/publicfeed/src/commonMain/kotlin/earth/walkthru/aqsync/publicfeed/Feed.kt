@@ -5,6 +5,7 @@ import earth.walkthru.aqsync.data.history.parquet.RangeSource
 import earth.walkthru.aqsync.storage.ByteBudgetLru
 import earth.walkthru.aqsync.storage.MemoryPressure
 import earth.walkthru.aqsync.storage.MemoryTrimmable
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.datetime.LocalDate
@@ -154,9 +155,14 @@ class BundledSampleFeed(
     override val windows: List<FeedWindow> get() = FeedWindow.entries
     override val available: Boolean get() = reader.available
 
-    override suspend fun latest(): FeedPartition? = runCatching {
+    /** Null when the listing is missing or unreadable. Cancellation is never turned into "no feed". */
+    override suspend fun latest(): FeedPartition? = try {
         FeedPaths.json.decodeFromString<FeedPartition>(load("$root/latest.json").decodeToString())
-    }.getOrNull()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        null
+    }
 
     override suspend fun cells(partition: FeedPartition, window: FeedWindow, res: Int, ranges: List<LongRange>?): CellsTable {
         if (!reader.available) return CellsTable.EMPTY

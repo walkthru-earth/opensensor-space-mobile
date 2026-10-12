@@ -7,9 +7,12 @@ import earth.walkthru.aqsync.data.history.parquet.ParquetLogicalType
 import earth.walkthru.aqsync.data.history.parquet.RangeSource
 import earth.walkthru.aqsync.data.history.parquet.SourceId
 import earth.walkthru.aqsync.storage.MemoryPressure
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** The bytes of a bundled sample file, by its path under `discover-sample/`. */
@@ -23,6 +26,14 @@ expect fun sampleBytes(path: String): ByteArray
 class SampleFeedTest {
     private val feed = BundledSampleFeed(root = "v1") { path -> sampleBytes(path) }
     private val h3 = platformH3Grid()
+
+    @Test
+    fun `latest lets cancellation through and maps other failures to null`() = runTest {
+        val cancelled = BundledSampleFeed(root = "v1") { throw CancellationException("left Discover") }
+        assertFailsWith<CancellationException> { cancelled.latest() }
+        val broken = BundledSampleFeed(root = "v1") { "not json".encodeToByteArray() }
+        assertNull(broken.latest())
+    }
 
     @Test
     fun `h3 binding matches python vectors`() {

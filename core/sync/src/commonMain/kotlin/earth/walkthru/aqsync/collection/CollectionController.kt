@@ -256,7 +256,7 @@ class CollectionController(
                         note("collection ${intent.id} lost in attempt $attempt, ${end.cause.describe()}")
                         if (wait == null) return finish(run, CollectionState.Failed(intent.id, CollectionFailure.Link(end.cause)))
                         attempt++
-                        advance(run, CollectionState.Waiting(intent, end.cause, attempt, clock() + wait.inWholeMilliseconds), null)
+                        advance(run, CollectionState.Waiting(intent, end.cause, attempt, clock() + wait.inWholeMilliseconds, barren, retry.attempts), null)
                         delay(wait)
                     }
                 }

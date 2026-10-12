@@ -132,7 +132,7 @@ internal fun DiscoverMap(
     LaunchedEffect(state, start) {
         if (start is StartView.Region) {
             val b = start.bounds
-            runCatching { state.fitCameraToBounds(BoundingBox(west = b.west, south = b.south, east = b.east, north = b.north)) }
+            catchingNonCancel { state.fitCameraToBounds(BoundingBox(west = b.west, south = b.south, east = b.east, north = b.north)) }
         }
     }
     LaunchedEffect(state) {

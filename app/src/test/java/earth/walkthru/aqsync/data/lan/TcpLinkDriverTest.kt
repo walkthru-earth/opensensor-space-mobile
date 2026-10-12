@@ -3,6 +3,7 @@ package earth.walkthru.aqsync.data.lan
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.NotAllowedOnLinkException
 import earth.walkthru.aqsync.data.openableSession
+import earth.walkthru.aqsync.data.protocol.DisconnectReason
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.protocol.FrameCodec
 import earth.walkthru.aqsync.data.protocol.LanFraming
@@ -348,8 +349,11 @@ class TcpLinkDriverTest {
                     override fun getInputStream(): InputStream {
                         val real = super.getInputStream()
                         return object : InputStream() {
-                            override fun read(): Int = check().let { real.read() }
-                            override fun read(b: ByteArray, off: Int, len: Int): Int = check().let { real.read(b, off, len) }
+                            // The error surfaces after data arrives, never before. Where the reader
+                            // is when the test arms (parked in a read or not yet started) cannot
+                            // change the outcome, and nothing aborts before STATUS is written.
+                            override fun read(): Int = real.read().also { check() }
+                            override fun read(b: ByteArray, off: Int, len: Int): Int = real.read(b, off, len).also { check() }
                             private fun check() {
                                 if (armed.count == 0L) throw SocketException("recvfrom failed: ECONNABORTED (Software caused connection abort)")
                             }
@@ -359,9 +363,13 @@ class TcpLinkDriverTest {
             }
             withTimeout(5_000) { t.open(sink) }
             armed.countDown()
-            // The reader is parked in a read that predates the abort. The answer wakes it and its
-            // next read sees the error.
-            t.writeControl(byteArrayOf(Opcode.STATUS.toByte()))
+            // The answer to STATUS is the first data after arming, and reading it raises the abort.
+            // The answer can beat the write's own completion, so the write may already see the
+            // closed link. The cause the sink records is what this test checks.
+            try {
+                t.writeControl(byteArrayOf(Opcode.STATUS.toByte()))
+            } catch (_: LinkClosedException) {
+            }
             assertEquals(DisconnectCause.LocalAbort(errno = SocketErrors.ECONNABORTED), withTimeout(5_000) { sink.closed.await() })
         }
     }
@@ -428,10 +436,32 @@ class TcpLinkDriverTest {
     }
 
     @Test
-    fun `closing without HELLO is a rejected token not a hang`() = runBlocking {
+    fun `closing without HELLO is unreachable and keeps the token`() = runBlocking {
+        // A reboot or a Wi-Fi drop between the handshake and HELLO. Only ERROR 14 or BYE 3 rejects.
         FakeLanDevice(token, hello = null) { emptyList() }.use {
             val e = openFails(it, it.port)
+            assertEquals(DisconnectCause.PeerClosed(), e.disconnectCause)
+            assertEquals(LanFailure.UNREACHABLE, (e.cause as LanConnectException).failure)
+        }
+    }
+
+    @Test
+    fun `BYE auth-failed at the handshake is Auth TOKEN_REJECTED`() = runBlocking {
+        val bye = FrameCodec.encode(Frame.Bye(DisconnectReason.AUTH_FAILED.code, 2, -1, 0, 5))
+        FakeLanDevice(token, bye) { emptyList() }.use {
+            val e = openFails(it, it.port)
+            assertEquals(DisconnectCause.Auth(AuthKind.TOKEN_REJECTED), e.disconnectCause)
             assertEquals(LanFailure.AUTH_FAILED, (e.cause as LanConnectException).failure)
+        }
+    }
+
+    @Test
+    fun `another BYE at the handshake is PeerClosed and keeps the token`() = runBlocking {
+        val frame = Frame.Bye(DisconnectReason.HANDSHAKE_TIMEOUT.code, 2, -1, 0, 5)
+        FakeLanDevice(token, FrameCodec.encode(frame)) { emptyList() }.use {
+            val e = openFails(it, it.port)
+            assertEquals(DisconnectCause.PeerClosed(frame), e.disconnectCause)
+            assertEquals(LanFailure.UNREACHABLE, (e.cause as LanConnectException).failure)
         }
     }
 

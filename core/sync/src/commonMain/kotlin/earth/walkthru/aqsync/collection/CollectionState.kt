@@ -41,9 +41,18 @@ sealed interface CollectionState {
 
     /**
      * The link was lost for a [lost] cause that reconnecting can fix. [attempt] runs at
-     * [retryAtEpochMs] and starts again from a fresh `LIST`.
+     * [retryAtEpochMs] and starts again from a fresh `LIST`. [attempt] counts every attempt of the
+     * request. [retry] counts attempts without progress, the number the retry bound applies to, so
+     * `retry of retryLimit` never reads past its total.
      */
-    data class Waiting(val intent: CollectionIntent, val lost: DisconnectCause, val attempt: Int, val retryAtEpochMs: Long) : CollectionState {
+    data class Waiting(
+        val intent: CollectionIntent,
+        val lost: DisconnectCause,
+        val attempt: Int,
+        val retryAtEpochMs: Long,
+        val retry: Int,
+        val retryLimit: Int,
+    ) : CollectionState {
         override val intentId: Long get() = intent.id
         override val active: Boolean get() = true
     }

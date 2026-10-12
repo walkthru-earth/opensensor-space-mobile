@@ -1,6 +1,8 @@
 package earth.walkthru.aqsync.data.sync
 
 import earth.walkthru.aqsync.data.ble.AqTransport
+import earth.walkthru.aqsync.data.ble.TransportKind
+import earth.walkthru.aqsync.link.LinkSession
 
 /**
  * How many bytes one `READ` asks for. The single place this decision lives.
@@ -25,6 +27,14 @@ object ReadWindow {
      * for why BLE is *not* special-cased), [DEFAULT_MAX_READ] when it is missing. [transport] is
      * taken so a future per-link choice has exactly one place to go.
      */
-    @Suppress("UNUSED_PARAMETER")
-    fun forTransport(transport: AqTransport, maxRead: Int?): Int = maxRead?.takeIf { it > 0 } ?: DEFAULT_MAX_READ
+    fun forTransport(transport: AqTransport, maxRead: Int?): Int = forKind(transport.kind, maxRead)
+
+    /**
+     * The `READ` length on a [kind] link whose session holds at most [budget] unread bytes. A window
+     * above half of it would end every `READ` in `ResponseOverflow`, so it is clamped there.
+     */
+    fun forKind(kind: TransportKind, maxRead: Int?, budget: Long = LinkSession.defaultBudget(kind)): Int {
+        val asked = maxRead?.takeIf { it > 0 } ?: DEFAULT_MAX_READ
+        return asked.toLong().coerceAtMost(budget / 2).coerceAtLeast(1).toInt()
+    }
 }

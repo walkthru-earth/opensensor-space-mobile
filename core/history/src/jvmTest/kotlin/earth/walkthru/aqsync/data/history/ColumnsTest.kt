@@ -97,6 +97,28 @@ class ColumnsTest {
     }
 
     @Test
+    fun `a point straddling a half-hour local boundary gives its peak only to the larger share`() {
+        // Kolkata is UTC+5:30, so a UTC day splits 18.5 h into one local day and 5.5 h into the next.
+        val zone = ZoneId.of("Asia/Kolkata")
+        val fromS = LocalDate.of(2026, 1, 1).atStartOfDay(zone).toEpochSecond()
+        val toS = LocalDate.of(2026, 1, 3).atStartOfDay(zone).toEpochSecond()
+        val utcDay = LocalDate.of(2026, 1, 1).atStartOfDay(ZoneOffset.UTC).toEpochSecond()
+        val pts = listOf(HistoryPoint(utcDay, utcDay + 86_400, 10f, 5f, 300f, 1f))
+        val days = Columns.rebinLocalDays(series(pts, fromS, toS), zone.toKotlinTimeZone())
+        assertEquals(2, days.size)
+        assertEquals(300f, days[0].max)
+        // The smaller share still has the point's mean, but not a spike it may never have held.
+        assertEquals(10f, days[1].mean)
+        assertEquals(10f, days[1].max)
+
+        // An even split, as UTC hours make in a local hourly view, keeps the peak in the earlier bin.
+        val hourPts = listOf(HistoryPoint(fromS + 1_800, fromS + 5_400, 10f, 5f, 300f, 1f))
+        val hours = Columns.rebinHours(series(hourPts, fromS, fromS + 7_200))
+        assertEquals(300f, hours[0].max)
+        assertEquals(10f, hours[1].max)
+    }
+
+    @Test
     fun `axis follows the 95th percentile, not the spike`() {
         val cols = (0 until 96).map { i -> HistoryColumn(i * 900L, (i + 1) * 900L, if (i == 40) 379f else 12f + (i % 5), 12f, 1f, 0f) }
         val top = Columns.axisMax(cols, 60f)
