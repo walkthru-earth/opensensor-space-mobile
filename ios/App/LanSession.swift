@@ -245,12 +245,17 @@ actor LanSession {
         }
     }
 
-    /// Session ERROR frames (handshake, a full session pool, authentication) end the connection.
+    /// Session ERROR or BYE frames in place of HELLO end the connection. Only ERROR 14 or BYE
+    /// auth-failed is `.authentication`, which drops the Keychain token. Any other BYE, like a bare
+    /// close, is `.disconnected` and keeps it (Android `TcpLinkDriver` parity).
     private static func refuse(_ frame: LanReply) throws {
-        guard frame.kind == "error" else { return }
-        if frame.code == 14 { throw LanFailure.authentication }
-        if frame.code == 7 { throw LanFailure.busy }
-        throw LanFailure.invalidReply
+        switch frame.refusal {
+        case .tokenRejected: throw LanFailure.authentication
+        case .busy: throw LanFailure.busy
+        case .peerClosed: throw LanFailure.disconnected
+        case .invalid: throw LanFailure.invalidReply
+        default: return
+        }
     }
 
     // MARK: Requests and replies
@@ -367,7 +372,17 @@ actor LanSession {
 
     private func decode(_ body: Data) -> LanReply? {
         guard let reply = wire.decode(data: body) else { return nil }
-        return LanReply(kind: reply.kind, code: reply.code, count: reply.count, json: reply.json)
+        return LanReply(kind: reply.kind, code: reply.code, count: reply.count, json: reply.json, refusal: Self.refusal(reply.refusal))
+    }
+
+    private static func refusal(_ shared: HandshakeRefusal) -> LanRefusal {
+        switch shared {
+        case .tokenRejected: return .tokenRejected
+        case .busy: return .busy
+        case .peerClosed: return .peerClosed
+        case .invalid: return .invalid
+        default: return .none
+        }
     }
 
     private func route(_ reply: LanReply) {

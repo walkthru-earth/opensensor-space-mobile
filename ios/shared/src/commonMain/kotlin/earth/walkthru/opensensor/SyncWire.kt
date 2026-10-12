@@ -2,11 +2,13 @@ package earth.walkthru.opensensor
 
 import earth.walkthru.aqsync.data.protocol.AqGatt
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
+import earth.walkthru.aqsync.data.protocol.DisconnectReason
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.protocol.FrameCodec
 import earth.walkthru.aqsync.data.protocol.LanProtocol
 import earth.walkthru.aqsync.data.protocol.Opcode
 import earth.walkthru.aqsync.data.protocol.ProtoGate
+import earth.walkthru.aqsync.data.protocol.ProtocolError
 import earth.walkthru.aqsync.data.protocol.Request
 import earth.walkthru.aqsync.data.protocol.requireProto3
 
@@ -65,6 +67,7 @@ class SyncWire {
             is Frame.LivePush -> SyncReply("live", json = frame.json)
             is Frame.StatusPush -> SyncReply("status", json = frame.json)
             is Frame.Error -> SyncReply("error", code = frame.code, op = frame.op)
+            is Frame.Bye -> SyncReply("bye", code = frame.reason)
             // The native socket validates every frame before lending its original bytes to
             // SensorSync. TIME_SET, FLUSHED and config replies belong to that engine too.
             // Reject malformed bytes in FrameCodec, never a valid frame we do not inspect here.
@@ -89,6 +92,21 @@ class SyncReply(
     val json: String = "",
     internal val bytes: ByteArray = EMPTY,
 ) {
+    /**
+     * How this frame ends a LAN handshake, the same rule as Android `TcpLinkDriver`. Only ERROR 14 or
+     * BYE auth-failed is an auth verdict that rejects the stored token. Any other BYE is the sensor
+     * going away (a reboot, Wi-Fi lost), so the token stays, as it does for a bare socket close.
+     */
+    val refusal: HandshakeRefusal get() = when (kind) {
+        "error" -> when (code) {
+            ProtocolError.AUTH_FAILED.code -> HandshakeRefusal.TOKEN_REJECTED
+            ProtocolError.BUSY.code -> HandshakeRefusal.BUSY
+            else -> HandshakeRefusal.INVALID
+        }
+        "bye" -> if (code == DisconnectReason.AUTH_FAILED.code) HandshakeRefusal.TOKEN_REJECTED else HandshakeRefusal.PEER_CLOSED
+        else -> HandshakeRefusal.NONE
+    }
+
     /** A TOKEN, or the ERROR that answers `GET_TOKEN`. Swift keeps these, the link takes the rest. */
     val answersToken: Boolean get() = kind == "token" || (kind == "error" && op == Opcode.GET_TOKEN)
 
@@ -97,6 +115,24 @@ class SyncReply(
     private companion object {
         val EMPTY = ByteArray(0)
     }
+}
+
+/** What a frame received in place of HELLO means for the stored LAN token. */
+enum class HandshakeRefusal {
+    /** Not a refusal, such as HELLO. */
+    NONE,
+
+    /** ERROR 14 or BYE auth-failed. The stored token is wrong. */
+    TOKEN_REJECTED,
+
+    /** ERROR 7, every session slot is taken. */
+    BUSY,
+
+    /** A BYE without an auth verdict. The sensor is unreachable for now and the token stays. */
+    PEER_CLOSED,
+
+    /** Any other ERROR. */
+    INVALID,
 }
 
 /** Validated fields used by native storage and connection continuity. */

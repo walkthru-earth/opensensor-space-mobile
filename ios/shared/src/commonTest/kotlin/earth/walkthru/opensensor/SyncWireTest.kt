@@ -81,6 +81,20 @@ class SyncWireTest {
         assertEquals(2, error.op)
         assertEquals(4, error.code)
     }
+
+    /** Android TcpLinkDriver parity (ad7a747a). Only ERROR 14 or BYE auth-failed rejects the token. */
+    @Test fun handshakeRefusalRejectsTheTokenOnlyOnAnAuthVerdict() {
+        assertEquals(HandshakeRefusal.NONE, wire.decodeHex("47" + "03" + "0002" + "7b7d")!!.refusal)
+        assertEquals(HandshakeRefusal.TOKEN_REJECTED, wire.decodeHex("7f" + "00" + "0e")!!.refusal)
+        assertEquals(HandshakeRefusal.BUSY, wire.decodeHex("7f" + "00" + "07")!!.refusal)
+        assertEquals(HandshakeRefusal.INVALID, wire.decodeHex("7f" + "00" + "04")!!.refusal)
+        val authBye = wire.decodeHex("4b" + "03" + "04030201f5ff0300100e0000")!!
+        assertEquals("bye", authBye.kind)
+        assertEquals(HandshakeRefusal.TOKEN_REJECTED, authBye.refusal)
+        // A reboot or Wi-Fi drop says goodbye without an auth verdict, so the token stays.
+        assertEquals(HandshakeRefusal.PEER_CLOSED, wire.decodeHex("4b" + "0b" + "04030201f5ff0300100e0000")!!.refusal)
+        assertEquals(HandshakeRefusal.PEER_CLOSED, wire.decodeHex("4b" + "08" + "04030201f5ff0300100e0000")!!.refusal)
+    }
 }
 
 // Hex is a readable fixture notation for tests only. Production frames never pass through it.
