@@ -391,8 +391,23 @@ final class BluetoothCompanion {
     private func startSync(onlyName: String? = nil) -> Bool {
         // A lease still held by Debug or Device settings queues the sync behind it on the shared link.
         guard active, clockAttempted, current != nil, let link = ioLink, link.isOpen, let identity, run == nil,
-            commandHandle == nil, !requestingToken, let runs
+            commandHandle == nil, !requestingToken
         else { return false }
+        return beginRun(device: identity.device, onlyName: onlyName)
+    }
+
+    /// Starts a run iOS interrupted off screen, back on screen. With no open link to this sensor the
+    /// shared controller dials it through [dial], as on a retry. False while other work holds the link.
+    @discardableResult
+    func resumeSync(device: String, onlyName: String?) -> Bool {
+        guard foreground, run == nil, commandHandle == nil, ioLink?.leased != true, !requestingToken,
+            collectId == nil, backgroundId == nil
+        else { return false }
+        return beginRun(device: device, onlyName: onlyName)
+    }
+
+    private func beginRun(device: String, onlyName: String?) -> Bool {
+        guard let runs else { return false }
         // The controller ends a stalled sync itself, so the step timers are no longer needed.
         collectTimer?.invalidate()
         collectTimer = nil
@@ -402,7 +417,7 @@ final class BluetoothCompanion {
         runToken = token
         state.bluetoothSyncStarted()
         let handle = runs.collect(
-            device: identity.device, onlyName: onlyName, prefer: .ble, background: backgroundId != nil,
+            device: device, onlyName: onlyName, prefer: .ble, background: backgroundId != nil,
             progress: { [weak self] update in
                 MainActor.assumeIsolated {
                     guard let self, self.runToken == token else { return }

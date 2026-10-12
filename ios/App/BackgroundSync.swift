@@ -53,6 +53,7 @@ final class AutoSync {
     static let continuedPrefix = "earth.walkthru.opensensor.sync"
     /// The summary notification. A new one replaces the last, and a tap opens My devices.
     nonisolated static let notificationThread = "autosync"
+    nonisolated static let pausedThread = "sync.paused"
 
     private let bluetooth: BluetoothCompanion
     private let lan: LanDiscovery
@@ -484,6 +485,24 @@ final class AutoSync {
         content.threadIdentifier = Self.notificationThread
         let request = UNNotificationRequest(identifier: "autosync.summary", content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request, withCompletionHandler: nil)
+    }
+
+    /// Tells the user that iOS paused a sync off screen. Never asks for permission, and stays quiet
+    /// unless notifications are already allowed. One notice replaces the last.
+    func notifyPaused(title: String, body: String) {
+        let allowed: [UNAuthorizationStatus] = [.authorized, .provisional, .ephemeral]
+        guard allowed.contains(where: { $0.rawValue == notificationStatus }) else { return }
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.threadIdentifier = Self.pausedThread
+        let request = UNNotificationRequest(identifier: "sync.paused", content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request, withCompletionHandler: nil)
+    }
+
+    /// Back on screen, the paused notice has served its purpose.
+    func clearPaused() {
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ["sync.paused"])
     }
 
     private func refreshNotificationStatus(then done: (@MainActor () -> Void)? = nil) {

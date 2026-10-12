@@ -22,6 +22,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -388,6 +389,72 @@ class SensorCollectionsTest {
         assertEquals("finished", first.events.last())
         assertEquals(1, next.finishes.load())
         assertFalse(board.current!!.leased)
+    }
+
+    @Test
+    fun anInterruptedRunKeepsWhatItSavedAndResumesOnceWhenTheAppIsBack() = runBlocking {
+        val held = CompletableDeferred<Unit>()
+        val board = Board { _, name ->
+            // The second file never answers in the first run, as when iOS suspends the app.
+            (name == second && !held.isCompleted).also { if (it) held.complete(Unit) }
+        }
+        board.connect()
+        val runs = collections(board)
+        val first = Seen()
+        runs.collect(device, null, LinkPreference.LAN, false, first::progress, first::finished)
+        withTimeout(10_000) { held.await() }
+
+        assertTrue(runs.interrupt(device))
+        val interrupted = withTimeout(10_000) { first.done.await() }
+        assertEquals(SyncEnd.STOPPED, interrupted.end)
+        assertEquals(SyncEndReason.INTERRUPTED, interrupted.endReason)
+        assertEquals(1, interrupted.saved, "the file saved before the interruption stays")
+        assertFalse(runs.interrupt(device), "nothing left to interrupt")
+
+        val resumed = runs.takeInterrupted()
+        assertEquals(1, resumed.size)
+        assertEquals(device, resumed[0].device)
+        assertEquals(null, resumed[0].onlyName)
+        assertEquals(LinkPreference.LAN, resumed[0].prefer)
+        assertTrue(runs.takeInterrupted().isEmpty(), "a run resumes once")
+
+        val next = Seen()
+        runs.collect(resumed[0].device, resumed[0].onlyName, resumed[0].prefer, false, next::progress, next::finished)
+        val done = withTimeout(10_000) { next.done.await() }
+        assertEquals(SyncEnd.COMPLETE, done.end)
+        assertEquals(1, done.saved, "only the file the interrupted run lacked")
+        assertFalse(board.current!!.leased)
+    }
+
+    @Test
+    fun anUnattendedRunIsNeverRememberedAndANewRunReplacesAnInterruptedOne() = runBlocking {
+        val reads = Channel<Unit>(Channel.UNLIMITED)
+        // Every READ of the second file goes unanswered, so each run waits there until it ends.
+        val board = Board { _, name -> (name == second).also { if (it) reads.trySend(Unit) } }
+        board.connect()
+        val runs = collections(board)
+
+        val unattended = Seen()
+        val handle = runs.collect(device, null, LinkPreference.ANY, true, unattended::progress, unattended::finished)
+        withTimeout(10_000) { reads.receive() }
+        assertFalse(runs.interrupt(device), "a BGTask run ends through its own expiry")
+        handle.cancel()
+        assertEquals(SyncEnd.STOPPED, withTimeout(10_000) { unattended.done.await() }.end)
+
+        val user = Seen()
+        runs.collect(device, null, LinkPreference.ANY, false, user::progress, user::finished)
+        withTimeout(10_000) { reads.receive() }
+        assertTrue(runs.interrupt(device))
+        withTimeout(10_000) { user.done.await() }
+
+        val again = Seen()
+        val next = runs.collect(device, null, LinkPreference.ANY, false, again::progress, again::finished)
+        assertTrue(runs.takeInterrupted().isEmpty(), "the user's new run replaced the interrupted one")
+        withTimeout(10_000) { reads.receive() }
+        next.cancel()
+        withTimeout(10_000) { again.done.await() }
+        runs.interrupt(device)
+        assertTrue(runs.takeInterrupted().isEmpty())
     }
 
     @Test

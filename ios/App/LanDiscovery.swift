@@ -293,6 +293,14 @@ final class LanDiscovery {
         if !startRun(name, onlyName: onlyName) { report(name, connected: true, notice: .busyBeforeSync) }
     }
 
+    /// Starts a run iOS interrupted off screen, back on screen. With no open session the shared
+    /// controller dials it through [dial]. False when Bonjour has not found the sensor with access.
+    @discardableResult
+    func resumeSync(device: String, onlyName: String?) -> Bool {
+        guard let name = serviceName(device: device), tasks[name] == nil else { return false }
+        return startRun(name, onlyName: onlyName)
+    }
+
     /// Starts this service's collection on the shared controller. False while one already runs here.
     @discardableResult
     private func startRun(_ name: String, onlyName: String?) -> Bool {

@@ -95,6 +95,8 @@ final class AppServices {
     )
     /// UIKit background time by run, for runs the user started.
     private var protections: [Int64: UIBackgroundTaskIdentifier] = [:]
+    /// The paused notice in the app's language, read once at launch so the expiry handler never waits.
+    private var pausedWords: (title: String, body: String)?
 
     /// Before launch ends. Registers the background task, and creates the central manager when iOS
     /// restores Bluetooth or a switch is on and access was already given, so no prompt shows here.
@@ -102,6 +104,9 @@ final class AppServices {
         bluetooth.runs = runs
         lan.runs = runs
         autoSync.runs = runs
+        runs.pausedNotice { [weak self] title, body in
+            MainActor.assumeIsolated { self?.pausedWords = (title, body) }
+        }
         bluetooth.peripheralFor = { [weak self] device in self?.devices.peripheralFor(device: device) }
         bluetooth.onSensorOpened = { [weak self] peripheral, name, station, device in
             guard let self else { return SensorOpenResult(accepted: false, notice: .infoInvalid, credentialToRemove: nil) }
@@ -162,6 +167,7 @@ final class AppServices {
         bluetooth.close(id: peripheral)
         autoSync.forget(peripheral: peripheral)
         if let device {
+            runs.dropInterrupted(device: device)
             lan.disconnect(device: device)
             credentials.remove(device: device)
         }
@@ -321,9 +327,33 @@ final class AppServices {
         return true
     }
 
+    /// iOS ended the time off screen. The run ends as interrupted, keeps what it saved and starts
+    /// again when the scene is active. The notice shows only when notifications are already allowed.
     private func protectionExpired(device: String, id: Int64) {
-        runs.stop(device: device)
+        if runs.interrupt(device: device), let words = pausedWords {
+            autoSync.notifyPaused(title: words.title, body: words.body)
+        }
         unprotect(id)
+    }
+
+    /// Back on screen. Each run iOS interrupted starts again over its own transport, through the
+    /// entry point the screens follow. The shared controller skips the files already saved.
+    func resumeInterrupted() {
+        autoSync.clearPaused()
+        for interrupted in runs.takeInterrupted() {
+            let device = interrupted.device
+            let onlyName = interrupted.onlyName
+            switch RunTransport(interrupted.prefer) {
+            case .lan:
+                _ = lan.resumeSync(device: device, onlyName: onlyName)
+            case .ble:
+                _ = bluetooth.resumeSync(device: device, onlyName: onlyName)
+            case .any:
+                if !lan.resumeSync(device: device, onlyName: onlyName) {
+                    _ = bluetooth.resumeSync(device: device, onlyName: onlyName)
+                }
+            }
+        }
     }
 
     private func unprotect(_ id: Int64) {
@@ -421,6 +451,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         services.bluetooth.resume()
         services.lan.resume()
         services.autoSync.becameActive()
+        services.resumeInterrupted()
     }
     func sceneDidDisconnect(_ scene: UIScene) {
         guard let services else { return }
