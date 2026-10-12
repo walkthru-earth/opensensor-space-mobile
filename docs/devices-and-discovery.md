@@ -191,7 +191,10 @@ an info button.
   toggle is disabled and shows Sample, and screen readers hear how to turn it on. A switch of
   feed clears the rows, the selection and the window reads, then reloads. Real offers 24 hours
   and 7 days, so the cell sheet's mood strip shows two blocks. A failed Real read shows "Could not
-  load public sensors" with Retry in the sheet, never the sample in its place. "Sample data" still
+  load public sensors" with Retry in the sheet, ahead of the first-run card, never the sample in
+  its place. Each toggle half and the "Data OpenAQ" link keep their drawn size inside a 48 dp
+  touch target. Choosing 24 hours in Real saves it even while a saved last hour is shown as
+  24 hours. "Sample data" still
   heads every cell sheet while the feed on screen is the sample, and the info button explains the
   feed on screen. `DiscoverController.onSourceSettings`, `chooseSource` and `retry`.
 - **Attribution.** "© OpenStreetMap" bottom right, visible at launch. It collapses to an info
@@ -530,8 +533,9 @@ LZ4 and Snappy). Issue #62 added `ParquetReader` over a `RangeSource`, an in-mem
 offset indexes. `:core:net` adds `HttpRangeSource` over OkHttp 5.5.0 on Android and
 `NSURLSession` on iOS. It sends `Accept-Encoding: identity`, so byte offsets stay true, and checks
 `If-Range` against the ETag, so a replaced file is read again from its new footer. Host and
-simulator tests only. `OpenAqAggregatesFeed` reads the OpenAQ aggregates through it (below), and
-the apps do not build that feed yet. A byte block cache on disk waits for
+simulator tests only. `OpenAqAggregatesFeed` reads the OpenAQ aggregates through it (below).
+Android `DiscoverViewModel` and iOS `AppRoot` each build one per process, read only while Show
+public sensors is on and Real is chosen. A byte block cache on disk waits for
 issues #60 and #61. No third-party Parquet or DuckDB library exists for iOS that would do this
 better.
 

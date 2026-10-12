@@ -49,8 +49,9 @@ flowchart TB
 `:core:history` exposes `:core:parquet`, `:core:protocol` and `:core:airquality` as `api`, and
 `:core:publicfeed` exposes `:core:parquet`, `:core:airquality`, `:core:net` (its
 `OpenAqAggregatesFeed` takes an `HttpRangeEngine` and reads through `HttpRangeSource`) and
-kotlinx-datetime (daily rows carry a local date). `:core:net` exposes `:core:parquet`. Neither app
-builds an `OpenAqAggregatesFeed` yet. A `:core` class cannot import
+kotlinx-datetime (daily rows carry a local date). `:core:net` exposes `:core:parquet`. Android
+`DiscoverViewModel` (`OkHttpRangeEngine`) and iOS `AppRoot` (`UrlSessionRangeEngine`) each build one
+`OpenAqAggregatesFeed` per process for Discover's Real source. A `:core` class cannot import
 `android.*`, and the build enforces it. Every `:core` module compiles for JVM and iOS from
 `src/commonMain`. Platform edges live in `src/jvmMain` (Java files, streams, positional `FileChannel` reads,
 `java.util.zip`, `com.uber:h3`, OkHttp) and `src/iosMain` (`pread`, system zlib, H3 C
