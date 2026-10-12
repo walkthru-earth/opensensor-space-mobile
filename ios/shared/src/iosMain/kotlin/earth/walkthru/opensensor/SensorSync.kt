@@ -62,9 +62,10 @@ class SyncHandle internal constructor(private val stop: () -> Unit) {
  * The Swift-facing runner for the shared engine. It owns the archive store, the receipt index and
  * the [ArchiveCollector], so LAN and Bluetooth save into the same archive under the same rules.
  *
- * Make one per app and call [start] on the main thread. Work runs off the main thread on a lease of
- * the [IosLink]. Every callback arrives on the main thread, `progress` at most four times a second
- * and in order, `finished` exactly once, last. A station syncs over one link at a time, so a second
+ * Make one per app. Swift syncs through [collections] and sends commands through [command]. The
+ * direct single-link [start] is internal, for host tests of the runner. Work runs off the main
+ * thread on a lease of the [IosLink]. Every callback arrives on the main thread, `progress` at
+ * most four times a second and in order, `finished` exactly once, last. A station syncs over one link at a time, so a second
  * physical link to the same station (Bluetooth and Wi-Fi) waits its turn. The runner maintains UTC
  * if needed, then lists, opens, reads and closes files. It never asks the sensor to delete, rename
  * or rewrite one.
@@ -98,8 +99,7 @@ class SensorSync internal constructor(
      * Collects every file of [station] that this phone lacks over [link]. [device] is the hardware
      * id recorded with each file. [maxRead] is the sensor's advertised read window.
      */
-    @OptIn(DelicateCoroutinesApi::class)
-    fun start(
+    internal fun start(
         link: IosLink,
         station: String,
         device: String,
@@ -108,9 +108,9 @@ class SensorSync internal constructor(
         finished: (SyncResult) -> Unit,
     ): SyncHandle = startSelected(link, station, device, maxRead, null, progress, finished)
 
-    /** One exact listed file for Files retry, with the same verification and station writer lock. */
+    /** One exact listed file, with the same verification and station writer lock. */
     @OptIn(DelicateCoroutinesApi::class)
-    fun startSelected(
+    internal fun startSelected(
         link: IosLink,
         station: String,
         device: String,

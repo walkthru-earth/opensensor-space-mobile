@@ -33,28 +33,6 @@ final class RunSlot<Result, Handle: AnyObject> {
     }
 }
 
-/// A continued task submitted and not launched yet. A second request waits for it instead of
-/// starting work the launch would then refuse. Only the submit a timeout was armed for clears it.
-struct PendingLaunch {
-    private var token: UUID?
-
-    var isPending: Bool { token != nil }
-
-    /// Records a submit and returns the token its timeout clears.
-    mutating func submitted() -> UUID {
-        let next = UUID()
-        token = next
-        return next
-    }
-
-    mutating func launched() { token = nil }
-
-    /// The launch for [submit] never came. A newer submit stays pending.
-    mutating func expire(_ submit: UUID) {
-        if token == submit { token = nil }
-    }
-}
-
 /// Links whose last sensor page closed. A link closes at once when nothing holds it, otherwise
 /// when the work holding it ends. Opening the sensor again keeps it.
 struct IdleClose<Key: Hashable> {

@@ -25,6 +25,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
@@ -98,7 +99,7 @@ internal class LeaseRefusedException(val syncRunning: Boolean) : Exception(if (s
  * - A write that fails or never completes, an inbox overflow or a drain past its bound poisons the
  *   link. It refuses leases from then on, [whenClosed] fires and Swift reconnects with a new one.
  */
-@OptIn(ExperimentalAtomicApi::class)
+@OptIn(ExperimentalAtomicApi::class, ExperimentalCoroutinesApi::class)
 class IosLink internal constructor(
     private val port: IosLinkPort,
     overWifi: Boolean,

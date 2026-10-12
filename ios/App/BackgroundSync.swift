@@ -48,8 +48,8 @@ private final class TaskFinish {
 final class AutoSync {
     /// The scheduled run, a `BGProcessingTask` (Info.plist `BGTaskSchedulerPermittedIdentifiers`).
     static let processingId = "earth.walkthru.opensensor.autosync"
-    /// "Sync now in background" on iOS 26 and later. Each request adds a unique suffix to this prefix,
-    /// which Info.plist permits as `earth.walkthru.opensensor.sync.*`.
+    /// The Collect all continued task on iOS 26 and later. Each pass adds a unique suffix to this
+    /// prefix, which Info.plist permits as `earth.walkthru.opensensor.sync.*`.
     static let continuedPrefix = "earth.walkthru.opensensor.sync"
     /// The summary notification. A new one replaces the last, and a tap opens My devices.
     nonisolated static let notificationThread = "autosync"
@@ -66,8 +66,6 @@ final class AutoSync {
     private var progressTitle = "Syncing sensors"
     private var run: BackgroundRunHandle?
     private var lease: UIBackgroundTaskIdentifier = .invalid
-    /// The progress of a continued task, which iOS shows with a Cancel button.
-    private var progress: Progress?
     /// A Collect all pass, from its first step until its last one ended.
     private var collectRunning = false
     /// Steps ended and steps planned in the pass going now.
@@ -80,11 +78,8 @@ final class AutoSync {
     private(set) var collectAllContinues = false
     /// The pass submitted its continued task and iOS has not launched it yet.
     private var collectSubmitPending = false
-    /// A Sync now in background submitted its continued task and iOS has not launched it yet. A second
-    /// tap, a wake or the scheduled run waits instead of starting a run the task would then refuse.
-    private var continuedPending = PendingLaunch()
-    /// No run is going and none is about to start.
-    private var idle: Bool { run == nil && !continuedPending.isPending }
+    /// No run is going.
+    private var idle: Bool { run == nil }
     /// The user's Collect all pass keeps going when the app leaves, under its continued task or
     /// one about to launch. Otherwise the pass ends with the screen.
     var collectAllHeld: Bool { collectAllContinues || collectSubmitPending }
@@ -96,8 +91,7 @@ final class AutoSync {
     private(set) lazy var settings: AutoSyncSettings = AutoSyncIosKt.autoSyncSettings(
         notificationStatus: { [weak self] in KotlinLong(value: Int64(self?.notificationStatus ?? 0)) },
         requestNotifications: { [weak self] done in self?.askNotifications(done: done) },
-        changed: { [weak self] in self?.settingsChanged() },
-        continuedTask: AutoSync.continuedAvailable
+        changed: { [weak self] in self?.settingsChanged() }
     )
 
     private lazy var bridge: BackgroundSyncBridge = AutoSyncIosKt.backgroundSyncBridge(
@@ -126,18 +120,11 @@ final class AutoSync {
         log: { [weak self] line in self?.logger.info("\(line, privacy: .private)") }
     )
 
-    static var continuedAvailable: Bool {
-        if #available(iOS 26, *) { return true }
-        return false
-    }
-
     init(bluetooth: BluetoothCompanion, lan: LanDiscovery, devices: DevicesBridge) {
         self.bluetooth = bluetooth
         self.lan = lan
         self.devices = devices
         bluetooth.onWake = { [weak self] id in self?.wake(id) }
-        bluetooth.onBackgroundProgress = { [weak self] done, total in self?.progressed(done: done, total: total) }
-        lan.onBackgroundProgress = { [weak self] done, total in self?.progressed(done: done, total: total) }
         devices.collectAllChanged = { [weak self] done, total in
             self?.collectAllChanged(done: Int(truncating: done), total: Int(truncating: total))
         }
@@ -283,101 +270,6 @@ final class AutoSync {
         run = handle
     }
 
-    // MARK: Sync now in background
-
-    /// One sensor, switch on or off. iOS 26 and later show it as a continued task with a Cancel
-    /// button. Earlier releases, or a refused submit, run it under the background time lease the
-    /// app gets on leaving. True only when iOS took the continued task, so the screen can say the
-    /// user may leave. A run already going answers false and starts nothing.
-    func syncInBackground(_ id: String) -> Bool {
-        guard idle else { return false }
-        if #available(iOS 26, *), submitContinued(id) { return true }
-        beginLease()
-        let current = Ref<BackgroundRunHandle>()
-        let handle = bridge.runOne(id: id) { [weak self] summary in
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                self.clearRun(current.value)
-                self.post(summary)
-                self.endLease()
-            }
-        }
-        current.value = handle
-        run = handle
-        return false
-    }
-
-    /// Registers a handler for a fresh identifier, then submits it. Continued task registrations are
-    /// exempt from the launch time rule, and a unique suffix never registers the same id twice.
-    @available(iOS 26, *)
-    private func submitContinued(_ id: String) -> Bool {
-        let identifier = "\(Self.continuedPrefix).\(UUID().uuidString)"
-        let registered = BGTaskScheduler.shared.register(forTaskWithIdentifier: identifier, using: .main) {
-            [weak self] task in
-            MainActor.assumeIsolated {
-                guard let self, let continued = task as? BGContinuedProcessingTask else {
-                    return task.setTaskCompleted(success: false)
-                }
-                self.runContinued(continued, id: id)
-            }
-        }
-        guard registered else { return false }
-        let request = BGContinuedProcessingTaskRequest(
-            identifier: identifier, title: progressTitle, subtitle: bridge.sensorName(id: id))
-        // Start now or not at all. When iOS cannot start it, the lease takes over.
-        request.strategy = .fail
-        do {
-            try BGTaskScheduler.shared.submit(request)
-            let pending = continuedPending.submitted()
-            // `.fail` launches at once or never. A launch that never came frees the next request.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
-                MainActor.assumeIsolated { self?.continuedPending.expire(pending) }
-            }
-            return true
-        } catch {
-            logger.error("continued sync not started: \(error.localizedDescription, privacy: .public)")
-            return false
-        }
-    }
-
-    @available(iOS 26, *)
-    private func runContinued(_ task: BGContinuedProcessingTask, id: String) {
-        continuedPending.launched()
-        guard run == nil else { return task.setTaskCompleted(success: false) }
-        task.progress.totalUnitCount = 1
-        task.progress.completedUnitCount = 0
-        progress = task.progress
-        let finish = TaskFinish(task)
-        // Cancel in the system UI, or expiry. The step ends and a link it opened closes.
-        task.expirationHandler = { @Sendable in
-            DispatchQueue.main.async {
-                MainActor.assumeIsolated {
-                    guard !finish.isFinished else { return }
-                    self.cancelRun(finish.handle)
-                    finish.complete(success: false)
-                }
-            }
-        }
-        let handle = bridge.runOne(id: id) { [weak self] summary in
-            MainActor.assumeIsolated {
-                guard let self else { return finish.complete(success: false) }
-                guard !finish.isFinished else { return }
-                self.clearRun(finish.handle)
-                task.progress.completedUnitCount = task.progress.totalUnitCount
-                self.post(summary)
-                finish.complete(success: summary.failures == 0)
-            }
-        }
-        finish.handle = handle
-        run = handle
-    }
-
-    private func progressed(done: Int, total: Int) {
-        guard let progress else { return }
-        progress.totalUnitCount = Int64(max(total, 1))
-        progress.completedUnitCount = Int64(min(done, max(total, 1)))
-    }
-
     // MARK: Collect all
 
     /// A Collect all pass started, moved on or ended. On iOS 26 the user's pass submits one continued
@@ -414,7 +306,8 @@ final class AutoSync {
         lan.collectOffScreen = on
     }
 
-    /// Registers a fresh identifier for this pass and submits it, as for one sensor.
+    /// Registers a fresh identifier for this pass and submits it. Continued task registrations are
+    /// exempt from the launch time rule, and a unique suffix never registers the same id twice.
     @available(iOS 26, *)
     private func submitCollect() -> Bool {
         let identifier = "\(Self.continuedPrefix).\(UUID().uuidString)"
@@ -483,7 +376,6 @@ final class AutoSync {
         if let handle, run !== handle { return }
         run?.cancel()
         run = nil
-        progress = nil
         bluetooth.cancelBackground()
         lan.cancelBackground()
         endLease()
@@ -493,7 +385,6 @@ final class AutoSync {
     private func clearRun(_ handle: BackgroundRunHandle?) {
         guard let handle, run === handle else { return }
         run = nil
-        progress = nil
     }
 
     private func beginLease() {

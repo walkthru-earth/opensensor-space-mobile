@@ -103,8 +103,6 @@ final class BluetoothCompanion {
     private var backgroundRequested: (id: String, done: (BackgroundStepResult) -> Void)?
     /// An armed pending connect completed. The shared run decides whether that sensor is due.
     var onWake: ((String) -> Void)?
-    /// An Auto-sync step's progress, files done and files listed.
-    var onBackgroundProgress: ((Int, Int) -> Void)?
     /// Core Bluetooth state restoration, so pending connects survive the app being ended by iOS.
     static let restoreId = "earth.walkthru.opensensor.central"
 
@@ -436,10 +434,7 @@ final class BluetoothCompanion {
                 MainActor.assumeIsolated {
                     guard let self, self.runToken == token else { return }
                     self.state.bluetoothSyncProgressed(progress: update)
-                    if self.backgroundId != nil {
-                        self.backgroundBytes = update.receivedBytes
-                        self.onBackgroundProgress?(Int(update.filesDone), Int(update.filesTotal))
-                    }
+                    if self.backgroundId != nil { self.backgroundBytes = update.receivedBytes }
                 }
             },
             finished: { [weak self] result in

@@ -2,7 +2,7 @@
 
 **Scope:** navigation graph, every destination's behaviour, detail levels, the transport chip.
 **Code:** `feature/shell` (`AppKey.kt`, `TabNavigator.kt`, `AppShell.kt`), `ui/Navigation.kt` (Android entries), `ios/shared/.../AppRoot.kt` (iOS entries), `ui/<screen>/*Screen.kt` + `*ViewModel.kt`, `data/settings/AppSettings.kt`.
-**Related:** [history-pipeline.md](history-pipeline.md) (what History/Today read), [transports.md](transports.md) (what the Device screen writes), [background-sync.md](background-sync.md) (Auto-sync card, Sync in background).
+**Related:** [history-pipeline.md](history-pipeline.md) (what History/Today read), [transports.md](transports.md) (what the Device screen writes), [background-sync.md](background-sync.md) (Auto-sync card, background runs).
 
 ## Navigation (Navigation 3 keys)
 

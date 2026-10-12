@@ -74,8 +74,6 @@ final class LanDiscovery {
         }
     }
     private var backgroundBytes: [String: Int64] = [:]
-    /// An Auto-sync step's progress, files done and files listed.
-    var onBackgroundProgress: ((Int, Int) -> Void)?
     var onCredentialRemoved: (() -> Void)?
     init(state: CompanionState, engine: SensorSync) {
         self.state = state
@@ -340,10 +338,7 @@ final class LanDiscovery {
     private func runProgressed(_ name: String, token: UUID, _ update: SyncProgress) {
         guard runTokens[name] == token else { return }
         if paused.remove(name) != nil { state.lanCollectionPaused(name: name, paused: false) }
-        if backgroundRuns[name] != nil {
-            backgroundBytes[name] = update.receivedBytes
-            onBackgroundProgress?(Int(update.filesDone), Int(update.filesTotal))
-        }
+        if backgroundRuns[name] != nil { backgroundBytes[name] = update.receivedBytes }
         report(
             name, connected: sessions[name] != nil, busy: true, notice: .lanSyncing, done: Int(update.filesDone),
             total: Int(update.filesTotal), bytes: update.receivedBytes, rate: update.bytesPerSecond,

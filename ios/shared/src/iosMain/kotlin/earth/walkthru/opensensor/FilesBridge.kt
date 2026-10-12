@@ -10,6 +10,7 @@ import earth.walkthru.opensensor.files.DeviceFilesAction
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
@@ -33,6 +34,7 @@ internal class DeviceFilesActions(
 )
 
 /** One sensor's manifest and plan, independent of the whole-phone export controller. */
+@OptIn(ExperimentalCoroutinesApi::class)
 internal class IosDeviceFiles(
     private val address: String,
     private val devices: DevicesBridge,

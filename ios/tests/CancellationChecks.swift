@@ -19,7 +19,6 @@ enum CancellationChecks {
         await alreadyCancelledRunCancelsHandleBeforeSetReturns()
         await immediateCompletionKeepsResultAndCancellation()
         await installedHandleCanBeCancelledFromBackground()
-        pendingLaunchHoldsUntilItsOwnLaunchOrTimeout()
         idleCloseWaitsForTheWorkOnTheLink()
         livePageReopensUntilTheUserLeavesIt()
         aNewRunCountsFromZero()
@@ -69,21 +68,6 @@ enum CancellationChecks {
         close.forget("c")
         precondition(!close.settled("c", held: false), "opening the sensor again keeps the link")
         precondition(!close.settled("d", held: false), "a link no page let go of stays open")
-    }
-
-    private static func pendingLaunchHoldsUntilItsOwnLaunchOrTimeout() {
-        var gate = PendingLaunch()
-        precondition(!gate.isPending)
-        let first = gate.submitted()
-        precondition(gate.isPending, "a submitted task holds the next request")
-        gate.launched()
-        precondition(!gate.isPending, "a launched task frees it")
-        let stale = gate.submitted()
-        gate.expire(stale)
-        precondition(!gate.isPending, "a launch that never came frees it")
-        _ = gate.submitted()
-        gate.expire(first)
-        precondition(gate.isPending, "an older timeout never frees a newer submit")
     }
 
     private static func alreadyCancelledRunCancelsHandleBeforeSetReturns() async {

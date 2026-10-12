@@ -27,6 +27,7 @@ import earth.walkthru.opensensor.strings.resources.companion_lan_sync_paused
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
@@ -54,7 +55,7 @@ import kotlin.time.TimeSource
  * A station syncs over one link at a time, shared with [SensorSync]. The clock receipt of an
  * acknowledged `SET_TIME` is recorded against the exact link it was sent over.
  */
-@OptIn(ExperimentalAtomicApi::class)
+@OptIn(ExperimentalAtomicApi::class, DelicateCoroutinesApi::class)
 class SensorCollections internal constructor(
     private val sync: SensorSync,
     private val provider: IosLinkProvider,

@@ -21,20 +21,18 @@ private fun nowMs(): Long = (NSDate().timeIntervalSince1970 * 1000.0).toLong()
 /**
  * The Auto-sync switch store. [notificationStatus] returns the raw UNAuthorizationStatus.
  * [requestNotifications] shows the system prompt and calls back on the main thread. [changed]
- * reschedules the background task. [continuedTask] is true on iOS 26 and later.
+ * reschedules the background task.
  */
 fun autoSyncSettings(
     notificationStatus: () -> Long,
     requestNotifications: (done: () -> Unit) -> Unit,
     changed: () -> Unit,
-    continuedTask: Boolean,
 ): AutoSyncSettings = AutoSyncSettings(
     storage = UserDefaultsAutoSync(NSUserDefaults.standardUserDefaults),
     now = ::nowMs,
     notificationStatus = notificationStatus,
     requestNotifications = requestNotifications,
     changed = changed,
-    continuedTask = continuedTask,
 )
 
 /** The background run over the Swift adapters, on the main thread. See [BackgroundSyncBridge] for the ports. */
