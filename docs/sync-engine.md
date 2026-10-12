@@ -309,7 +309,7 @@ stateDiagram-v2
 - **Logs** carry the intent id, state names, causes and counts, never names of networks, tokens or
   a PIN.
 
-`SyncResumePolicy` remains a compatibility helper with tests, with no production callers. Android collection
+Android collection
 retry is owned exclusively by `CollectionController`. `StopSource.FGS_TIMEOUT` distinguishes
 the Android service deadline from a user Stop. A generation-specific refused foreground start
 ends only its protected intents as `Failed(KeepAliveRefused)`.
@@ -390,17 +390,12 @@ the firmware must report scan failure instead of LIST_END in that case.
 Android active collection retry belongs exclusively to `CollectionController`. A retryable
 `DisconnectCause` enters Waiting with PROCESS held, then restarts CONNECT, clock setup, LIST
 and PLAN. Partial bytes resume only after a new OPENED confirms size and CRC. The controller
-uses its bounded `RetryPolicy`, not the old five-minute `SyncResumePolicy.shouldResume`
-progress heuristic. `SyncResumePolicy` remains in core for compatibility tests only.
+uses its bounded `RetryPolicy`.
 
 Idle reconnect belongs to `DeviceLinkOwner`, which suppresses its watcher while collection
 is reserved. A user Stop, deliberate disconnect, service timeout or refused protection
 ends the relevant intent. Workers additionally remain bounded by their eight-minute attempt.
-iOS adapters retain their native retry and foreground-resume intent until issue 81.
-
-Historical observation motivating the old compatibility policy. Seen on the phone: the sync died of the pipe a
-moment before the link was declared lost, the reconnect succeeded with `resumeSync=false`, and the
-user had to press Sync all again — hence the policy.
+iOS runs the same controller retry through `SensorCollections`.
 
 ## Smart Sync and state-changing requests
 
