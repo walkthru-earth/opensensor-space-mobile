@@ -381,7 +381,27 @@ class DiscoverController(
         if (source !== active) return
         val table = read.getOrNull()
         if (real && table == null) {
-            _state.update { it.copy(loading = false, res = res, loadFailed = true, dataDate = partitionDate(p)) }
+            // An error with Retry. Rows of an earlier view are not left on the map as if current.
+            windowsJob?.cancel()
+            windowsFor = null
+            rowsWindow = null
+            _state.update {
+                it.copy(
+                    loading = false,
+                    res = res,
+                    loadFailed = true,
+                    dataDate = partitionDate(p),
+                    ranked = emptyList(),
+                    chips = emptyList(),
+                    scale = null,
+                    rows = emptyList(),
+                    geoJson = DiscoverUiState.EMPTY_GEOJSON,
+                    selected = null,
+                    selectedWindows = emptyMap(),
+                    failedWindows = emptySet(),
+                    newestUpdateEpochMs = null,
+                )
+            }
             return
         }
         val rows = table?.rows.orEmpty()

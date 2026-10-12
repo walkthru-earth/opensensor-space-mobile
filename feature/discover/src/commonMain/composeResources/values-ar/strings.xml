@@ -21,7 +21,7 @@
     <string name="discover_window_24_hours">24 ساعة</string>
     <string name="discover_window_7_days">7 أيام</string>
     <string name="discover_sample_data">بيانات تجريبية</string>
-    <string name="discover_sample_info">هذه الأرقام مختلَقة للمعاينة. ستظهر المستشعرات الحقيقية هنا عندما تبدأ الخدمة العامة.</string>
+    <string name="discover_sample_info">هذه الأرقام مختلَقة للمعاينة. اختر حقيقية لرؤية مستشعرات OpenAQ.</string>
     <string name="discover_scale_title">مقياس الألوان</string>
     <string name="discover_scale_info1">لا يوجد مقياس صحي منشور لهذا القياس. تمتد الألوان من الأدنى إلى الأعلى عبر المناطق الظاهرة، مع استبعاد أدنى 5 بالمئة وأعلى 5 بالمئة.</string>
     <string name="discover_scale_info2">تعرض كل منطقة متوسطات كل ساعة من ثلاثة مستشعرات أو أكثر. المنطقة الباهتة ليس لها قيمة جديدة منذ 3 ساعات. الحدود وحدها تعني أن المنطقة لا تقيس هذا.</string>
@@ -120,4 +120,34 @@
     <string name="discover_map_label">خريطة مناطق المستشعرات العامة</string>
     <!-- Spread chart's spoken summary, the bar that holds the most areas (CellCharts). -->
     <string name="discover_spread_peak">أغلب المناطق من %1$s إلى %2$s %3$s</string>
+    <!-- The Sample and Real toggle on the map (DiscoverScreen). Real reads OpenAQ, only with public sensors on. -->
+    <string name="discover_source_label">مصدر البيانات</string>
+    <string name="discover_source_sample">تجريبية</string>
+    <string name="discover_source_real">حقيقية</string>
+    <!-- The Real label, the local day the OpenAQ data runs to, as in "OpenAQ, data to 8 Oct". -->
+    <string name="discover_real_data_to">OpenAQ، بيانات حتى %1$s</string>
+    <!-- A short date, day then month, as in "8 Oct". -->
+    <string name="discover_day_month">%1$d %2$s</string>
+    <string-array name="discover_months_short">
+        <item>يناير</item>
+        <item>فبراير</item>
+        <item>مارس</item>
+        <item>أبريل</item>
+        <item>مايو</item>
+        <item>يونيو</item>
+        <item>يوليو</item>
+        <item>أغسطس</item>
+        <item>سبتمبر</item>
+        <item>أكتوبر</item>
+        <item>نوفمبر</item>
+        <item>ديسمبر</item>
+    </string-array>
+    <!-- Spoken on the disabled toggle. -->
+    <string name="discover_source_off">شغّل عرض المستشعرات العامة في الإعدادات لرؤية البيانات الحقيقية</string>
+    <!-- The attribution in Real mode, it opens the OpenAQ licenses. -->
+    <string name="discover_data_openaq">البيانات من OpenAQ</string>
+    <string name="discover_real_title">بيانات OpenAQ</string>
+    <string name="discover_real_info">البيانات الحقيقية من OpenAQ، متوسطات يومية لكل منطقة. يحتفظ كل مزوّد بيانات برخصته الخاصة.</string>
+    <!-- The real feed could not be read, with Retry beside it. -->
+    <string name="discover_load_failed">تعذّر تحميل المستشعرات العامة</string>
 </resources>

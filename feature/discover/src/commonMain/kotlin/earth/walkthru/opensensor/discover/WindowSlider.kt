@@ -52,10 +52,18 @@ private const val COLLAPSE_MS = 2200L
  * window. Touching it grows it into one snap stop per window, shortest at the top, with a tinted
  * thumb that follows a vertical drag. It folds back shortly after the last touch. Screen readers
  * get one control whose state is the window name and whose actions pick the other windows.
+ * [windows] are the ones the feed on screen offers, so the real feed shows no last hour stop.
  */
 @Composable
-internal fun WindowSlider(window: FeedWindow, strings: DiscoverStrings, onWindow: (FeedWindow) -> Unit, modifier: Modifier = Modifier) {
-    val windows = FeedWindow.entries
+internal fun WindowSlider(
+    window: FeedWindow,
+    windows: List<FeedWindow>,
+    strings: DiscoverStrings,
+    onWindow: (FeedWindow) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    // The stop of the chosen window. A window the feed does not offer is never chosen for long.
+    val index = windows.indexOf(window).coerceAtLeast(0)
     val haptics = LocalHapticFeedback.current
     val stopPx = with(LocalDensity.current) { STOP.toPx() }
     val current by rememberUpdatedState(window)
@@ -63,11 +71,11 @@ internal fun WindowSlider(window: FeedWindow, strings: DiscoverStrings, onWindow
     // While dragging, the thumb follows the finger. Otherwise it springs to the chosen stop.
     var drag by remember { mutableStateOf<Float?>(null) }
     val springy = spring<Float>(dampingRatio = 0.7f)
-    val settled by animateFloatAsState(window.ordinal.toFloat(), springy)
+    val settled by animateFloatAsState(index.toFloat(), springy)
     val thumb = drag ?: settled
     val height by animateDpAsState(if (expanded) STOP * windows.size else STOP, spring(dampingRatio = 0.8f))
     // Collapsed, the column scrolls so the chosen stop sits inside the pill.
-    val shift by animateFloatAsState(if (expanded) 0f else window.ordinal.toFloat(), spring(dampingRatio = 0.8f))
+    val shift by animateFloatAsState(if (expanded) 0f else index.toFloat(), spring(dampingRatio = 0.8f))
 
     LaunchedEffect(expanded, drag, window) {
         if (expanded && drag == null) {
@@ -95,7 +103,7 @@ internal fun WindowSlider(window: FeedWindow, strings: DiscoverStrings, onWindow
     ) {
         Box(
             Modifier.clipToBounds()
-                .pointerInput(windows.size) {
+                .pointerInput(windows) {
                     detectTapGestures { at ->
                         if (!expanded) {
                             expanded = true
@@ -104,11 +112,11 @@ internal fun WindowSlider(window: FeedWindow, strings: DiscoverStrings, onWindow
                         }
                     }
                 }
-                .pointerInput(windows.size) {
+                .pointerInput(windows) {
                     detectVerticalDragGestures(
                         onDragStart = {
                             expanded = true
-                            drag = current.ordinal.toFloat()
+                            drag = windows.indexOf(current).coerceAtLeast(0).toFloat()
                         },
                         onDragEnd = {
                             val stop = (drag ?: 0f).roundToInt().coerceIn(0, windows.lastIndex)
@@ -135,8 +143,8 @@ internal fun WindowSlider(window: FeedWindow, strings: DiscoverStrings, onWindow
                         .background(FloatingControl.Selected, FloatingControl.concentric()),
                 )
                 Column {
-                    windows.forEach { w ->
-                        val selected = if (drag != null) w.ordinal == thumb.roundToInt() else w == window
+                    windows.forEachIndexed { i, w ->
+                        val selected = if (drag != null) i == thumb.roundToInt() else w == window
                         Box(Modifier.size(STOP), contentAlignment = Alignment.Center) {
                             Text(
                                 strings.windowShort(w),
