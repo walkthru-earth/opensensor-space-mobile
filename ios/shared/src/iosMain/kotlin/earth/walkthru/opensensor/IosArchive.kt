@@ -33,6 +33,7 @@ import earth.walkthru.opensensor.discover.MapCache
 import earth.walkthru.opensensor.settings.StorageControls
 import earth.walkthru.opensensor.settings.StorageUsage
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
@@ -158,13 +159,32 @@ internal object IosArchive {
     private val janitor by lazy {
         StorageJanitor(roots, IosStorageTree(), store, index, Dispatchers.IO, log = ::println, quota = derivedQuota, leases = leases)
     }
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    /**
+     * A failure that escapes a launch here would end the process on Kotlin/Native, so the scope logs
+     * the class name only. Each loop catches its own errors first, and this is the last guard.
+     */
+    private val scope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Default +
+            CoroutineExceptionHandler { _, e -> println("archive task ended: ${e::class.simpleName}") },
+    )
     private var started = false
 
+    /**
+     * Estimating times opens every indexed footer and the rebuild touches every station, so both run
+     * here, never under the sync lease that recorded the anchor. A first sync starts downloading at once.
+     */
+    private val anchorFollowUp by lazy {
+        CoalescedWork(scope, "clock anchor estimate") {
+            repair.estimateTimes()
+            rebuildDerived()
+        }
+    }
+
+    /** Called under the SYNC or COMMAND lease. Only the anchor is saved there, the rest follows later. */
     suspend fun recordClockAnchor(station: String, boot: String, utcNs: Long, monotonicUs: Long) {
         clockAnchors.put(ClockAnchor(station, boot, utcNs, monotonicUs))
-        repair.estimateTimes()
-        rebuildDerived()
+        anchorFollowUp.request()
     }
 
     private suspend fun rebuildDerived() = derivedMutex.withLock {
@@ -197,7 +217,14 @@ internal object IosArchive {
                 println("storage janitor failed: ${e::class.simpleName}")
             }
             repair.backfillUntilSettled()
-            repair.repairWhenWaiting()
+            try {
+                repair.repairWhenWaiting()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // The index flow failed. The next process start repairs again.
+                println("index repair stopped: ${e::class.simpleName}")
+            }
         }
         scope.launch {
             index.observeAll().conflate().collect {
