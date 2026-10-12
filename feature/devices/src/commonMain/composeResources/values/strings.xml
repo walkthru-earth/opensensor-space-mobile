@@ -58,13 +58,6 @@
     <string name="ago_hours">%1$d h ago</string>
     <string name="ago_days">%1$d d ago</string>
 
-    <string name="mood_fresh_title">Fresh air</string>
-    <string name="mood_fair_title">Fair</string>
-    <string name="mood_hazy_title">Getting hazy</string>
-    <string name="mood_poor_title">Poor</string>
-    <string name="mood_smoky_title">Smoky</string>
-    <string name="mood_thick_title">Thick smoke</string>
-
     <string name="month_1">Jan</string>
     <string name="month_2">Feb</string>
     <string name="month_3">Mar</string>

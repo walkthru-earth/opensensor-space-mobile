@@ -7,8 +7,11 @@ import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.history.AirMood
 import earth.walkthru.aqsync.data.protocol.PmsStatus
 import earth.walkthru.aqsync.data.sync.ClockQuality
+import earth.walkthru.aqsync.settings.DetailLevel
 import earth.walkthru.aqsync.units.formatFixed
 import earth.walkthru.aqsync.units.formatPm
+import earth.walkthru.opensensor.designsystem.moodLineRes
+import earth.walkthru.opensensor.designsystem.moodWord
 import earth.walkthru.opensensor.today.resources.Res
 import earth.walkthru.opensensor.today.resources.ago_days
 import earth.walkthru.opensensor.today.resources.ago_hours
@@ -31,24 +34,20 @@ import earth.walkthru.opensensor.today.resources.conn_pairing_repair
 import earth.walkthru.opensensor.today.resources.conn_ready
 import earth.walkthru.opensensor.today.resources.conn_ready_mtu
 import earth.walkthru.opensensor.today.resources.conn_setting_up
+import earth.walkthru.opensensor.today.resources.info_now_body
+import earth.walkthru.opensensor.today.resources.info_now_body_simple
 import earth.walkthru.opensensor.today.resources.mood_fair_advice
 import earth.walkthru.opensensor.today.resources.mood_fair_like
-import earth.walkthru.opensensor.today.resources.mood_fair_title
 import earth.walkthru.opensensor.today.resources.mood_fresh_advice
 import earth.walkthru.opensensor.today.resources.mood_fresh_like
-import earth.walkthru.opensensor.today.resources.mood_fresh_title
 import earth.walkthru.opensensor.today.resources.mood_hazy_advice
 import earth.walkthru.opensensor.today.resources.mood_hazy_like
-import earth.walkthru.opensensor.today.resources.mood_hazy_title
 import earth.walkthru.opensensor.today.resources.mood_poor_advice
 import earth.walkthru.opensensor.today.resources.mood_poor_like
-import earth.walkthru.opensensor.today.resources.mood_poor_title
 import earth.walkthru.opensensor.today.resources.mood_smoky_advice
 import earth.walkthru.opensensor.today.resources.mood_smoky_like
-import earth.walkthru.opensensor.today.resources.mood_smoky_title
 import earth.walkthru.opensensor.today.resources.mood_thick_advice
 import earth.walkthru.opensensor.today.resources.mood_thick_like
-import earth.walkthru.opensensor.today.resources.mood_thick_title
 import earth.walkthru.opensensor.today.resources.pms_absent_hint
 import earth.walkthru.opensensor.today.resources.pms_absent_title
 import earth.walkthru.opensensor.today.resources.pms_error_hint
@@ -142,28 +141,27 @@ internal fun agoFormatter(): (Long) -> String {
 }
 
 @Composable
-internal fun AirMood.titleText(): String = stringResource(
-    when (this) {
-        AirMood.FRESH -> Res.string.mood_fresh_title
-        AirMood.FAIR -> Res.string.mood_fair_title
-        AirMood.HAZY -> Res.string.mood_hazy_title
-        AirMood.POOR -> Res.string.mood_poor_title
-        AirMood.SMOKY -> Res.string.mood_smoky_title
-        AirMood.THICK -> Res.string.mood_thick_title
-    },
-)
+internal fun AirMood.titleText(): String = moodWord(step)
 
-@Composable
-internal fun AirMood.adviceText(): String = stringResource(
-    when (this) {
-        AirMood.FRESH -> Res.string.mood_fresh_advice
-        AirMood.FAIR -> Res.string.mood_fair_advice
-        AirMood.HAZY -> Res.string.mood_hazy_advice
-        AirMood.POOR -> Res.string.mood_poor_advice
-        AirMood.SMOKY -> Res.string.mood_smoky_advice
-        AirMood.THICK -> Res.string.mood_thick_advice
-    },
-)
+/**
+ * The hero's line under the mood. Detailed reads advice that names the WHO guideline. Simple speaks
+ * in moods only, so it reads the shared mood line.
+ */
+internal fun heroLineRes(mood: AirMood, level: DetailLevel): StringResource =
+    if (level.detailed) mood.adviceRes() else moodLineRes(mood.step)
+
+/** The hero's info sheet body. Only the detailed levels name the WHO step. */
+internal fun nowInfoBodyRes(level: DetailLevel): StringResource =
+    if (level.detailed) Res.string.info_now_body else Res.string.info_now_body_simple
+
+private fun AirMood.adviceRes(): StringResource = when (this) {
+    AirMood.FRESH -> Res.string.mood_fresh_advice
+    AirMood.FAIR -> Res.string.mood_fair_advice
+    AirMood.HAZY -> Res.string.mood_hazy_advice
+    AirMood.POOR -> Res.string.mood_poor_advice
+    AirMood.SMOKY -> Res.string.mood_smoky_advice
+    AirMood.THICK -> Res.string.mood_thick_advice
+}
 
 @Composable
 internal fun AirMood.comparisonText(): String = stringResource(

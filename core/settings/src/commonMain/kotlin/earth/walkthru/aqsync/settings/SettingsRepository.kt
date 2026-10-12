@@ -28,6 +28,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     val showPublicSensors: Flow<Boolean> = prefs.map { it.showPublicSensors }.distinctUntilChanged()
     val unitSystem: Flow<UnitSystem> = prefs.map { it.unitSystem }.distinctUntilChanged()
     val retention: Flow<RetentionPolicy> = prefs.map { it.retention }.distinctUntilChanged()
+    val discoverSource: Flow<DiscoverSource> = prefs.map { it.discoverSource }.distinctUntilChanged()
 
     /** The stored values once, for callers outside a flow. */
     suspend fun current(): AppPrefs = prefs.first()
@@ -58,6 +59,10 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             it[SettingsKeys.MAP_CACHE_BYTES] = policy.mapCacheBytes
         }
     }
+
+    suspend fun setDiscoverSource(source: DiscoverSource) {
+        store.edit { it[SettingsKeys.DISCOVER_SOURCE] = source.name }
+    }
 }
 
 /** Reads [AppPrefs] with the defaults and the legacy `advanced_mode` rule. Unknown names read as the default. */
@@ -75,6 +80,8 @@ fun Preferences.toAppPrefs(): AppPrefs {
             derivedQuotaBytes = this[SettingsKeys.DERIVED_QUOTA_BYTES]?.takeIf { it >= 0 } ?: defaults.retention.derivedQuotaBytes,
             mapCacheBytes = this[SettingsKeys.MAP_CACHE_BYTES]?.takeIf { it >= 0 } ?: defaults.retention.mapCacheBytes,
         ),
+        discoverSource = this[SettingsKeys.DISCOVER_SOURCE]?.let { name -> DiscoverSource.entries.firstOrNull { it.name == name } }
+            ?: defaults.discoverSource,
     )
 }
 

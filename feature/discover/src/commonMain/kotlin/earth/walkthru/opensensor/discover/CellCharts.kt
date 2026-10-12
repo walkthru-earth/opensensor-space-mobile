@@ -58,6 +58,8 @@ import earth.walkthru.aqsync.publicfeed.CellScale
 import earth.walkthru.aqsync.publicfeed.FeedProperty
 import earth.walkthru.aqsync.publicfeed.FeedWindow
 import earth.walkthru.aqsync.publicfeed.SequentialRamp
+import earth.walkthru.opensensor.designsystem.listSeparator
+import earth.walkthru.opensensor.designsystem.spokenList
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -151,10 +153,11 @@ internal fun SpreadChart(
         }
         if (offScale != null) append(". ").append(offScale)
     }
+    val separator = listSeparator()
     val readout = active?.let { i ->
         val range = "${formatValue(binFrom(i), property, units)} ${strings.to} ${formatValue(binTo(i), property, units)} $unit"
         val step = health?.stepOf(binMid(i, domain, bins))?.let { strings.stepName(it) }
-        listOfNotNull(range, strings.areaCount(counts[i]), step).joinToString(", ")
+        spokenList(listOfNotNull(range, strings.areaCount(counts[i]), step), separator)
     }
     // The summary is the chart's name. A touched or pinned bar, which also filters the map and the
     // list, is read as its state.

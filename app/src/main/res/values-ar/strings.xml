@@ -27,13 +27,6 @@
     <!-- Today -->
     <string name="today_title">اليوم</string>
 
-    <!-- Moods, one per WHO 2021 step. The edges live in :core:airquality. Only the words are here. -->
-    <string name="mood_fresh_title">هواء نقي</string>
-    <string name="mood_fair_title">مقبول</string>
-    <string name="mood_hazy_title">يميل إلى الضبابية</string>
-    <string name="mood_poor_title">سيئ</string>
-    <string name="mood_smoky_title">دخاني</string>
-    <string name="mood_thick_title">دخان كثيف</string>
     <!-- WHO 2021 steps, named in text so colour is never the only carrier. One set for every screen,
          Discover included. Keep identical to feature/discover composeResources, CopyRulesTest checks. -->
     <string name="who_step_guideline">ضمن إرشاد منظمة الصحة العالمية</string>

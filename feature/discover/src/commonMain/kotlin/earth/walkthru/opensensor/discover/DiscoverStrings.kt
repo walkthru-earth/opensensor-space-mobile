@@ -15,9 +15,12 @@ import earth.walkthru.opensensor.discover.resources.discover_areas_in_view
 import earth.walkthru.opensensor.discover.resources.discover_average_summary
 import earth.walkthru.opensensor.discover.resources.discover_avg
 import earth.walkthru.opensensor.discover.resources.discover_clear_search
+import earth.walkthru.opensensor.discover.resources.discover_data_openaq
+import earth.walkthru.opensensor.discover.resources.discover_day_month
 import earth.walkthru.opensensor.discover.resources.discover_explore
 import earth.walkthru.opensensor.discover.resources.discover_first_run
 import earth.walkthru.opensensor.discover.resources.discover_higher_than
+import earth.walkthru.opensensor.discover.resources.discover_load_failed
 import earth.walkthru.opensensor.discover.resources.discover_loading
 import earth.walkthru.opensensor.discover.resources.discover_map_info1
 import earth.walkthru.opensensor.discover.resources.discover_map_info2
@@ -25,6 +28,10 @@ import earth.walkthru.opensensor.discover.resources.discover_map_label
 import earth.walkthru.opensensor.discover.resources.discover_map_title
 import earth.walkthru.opensensor.discover.resources.discover_max
 import earth.walkthru.opensensor.discover.resources.discover_min
+import earth.walkthru.opensensor.discover.resources.discover_months_short
+import earth.walkthru.opensensor.discover.resources.discover_mood_info1
+import earth.walkthru.opensensor.discover.resources.discover_mood_info2
+import earth.walkthru.opensensor.discover.resources.discover_mood_info_title
 import earth.walkthru.opensensor.discover.resources.discover_more
 import earth.walkthru.opensensor.discover.resources.discover_near_me
 import earth.walkthru.opensensor.discover.resources.discover_near_me_access_body
@@ -39,6 +46,11 @@ import earth.walkthru.opensensor.discover.resources.discover_off_scale
 import earth.walkthru.opensensor.discover.resources.discover_osm
 import earth.walkthru.opensensor.discover.resources.discover_range_summary
 import earth.walkthru.opensensor.discover.resources.discover_range_to
+import earth.walkthru.opensensor.discover.resources.discover_read_failed
+import earth.walkthru.opensensor.discover.resources.discover_real_data_to
+import earth.walkthru.opensensor.discover.resources.discover_real_info
+import earth.walkthru.opensensor.discover.resources.discover_real_title
+import earth.walkthru.opensensor.discover.resources.discover_retry
 import earth.walkthru.opensensor.discover.resources.discover_sample_data
 import earth.walkthru.opensensor.discover.resources.discover_sample_info
 import earth.walkthru.opensensor.discover.resources.discover_scale_info1
@@ -46,6 +58,10 @@ import earth.walkthru.opensensor.discover.resources.discover_scale_info2
 import earth.walkthru.opensensor.discover.resources.discover_scale_title
 import earth.walkthru.opensensor.discover.resources.discover_search_places
 import earth.walkthru.opensensor.discover.resources.discover_sensors
+import earth.walkthru.opensensor.discover.resources.discover_source_label
+import earth.walkthru.opensensor.discover.resources.discover_source_off
+import earth.walkthru.opensensor.discover.resources.discover_source_real
+import earth.walkthru.opensensor.discover.resources.discover_source_sample
 import earth.walkthru.opensensor.discover.resources.discover_spread_peak
 import earth.walkthru.opensensor.discover.resources.discover_spread_summary
 import earth.walkthru.opensensor.discover.resources.discover_stale
@@ -74,7 +90,9 @@ import earth.walkthru.opensensor.discover.resources.who_step_it2
 import earth.walkthru.opensensor.discover.resources.who_step_it3
 import earth.walkthru.opensensor.discover.resources.who_step_it4
 import earth.walkthru.opensensor.permissions.AccessDialogTexts
+import kotlinx.datetime.LocalDate
 import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringArrayResource
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -108,6 +126,9 @@ class DiscoverStrings internal constructor(
     val allMeasurements: String,
     val unavailable: String,
     val loading: String,
+    /** A cell's window read that failed after its retries, with [retry] beside it. */
+    val readFailed: String,
+    val retry: String,
     val noPlaces: String,
     val clearSearch: String,
     val updatedRecently: String,
@@ -136,11 +157,36 @@ class DiscoverStrings internal constructor(
     val noHealthScale: String,
     /** The legend info sheet for PM2.5 and PM10. */
     val whoInfo: InfoText,
+
+    /** The legend info sheet at the Simple level. No guideline body, no numbers. */
+    val moodInfo: InfoText,
     /** Joins two ends of a range, as in "15 to 25". */
     val to: String,
     /** The map's spoken name, followed by the chosen measurement. */
     val mapLabel: String,
+    /** The Sample and Real toggle, its spoken name and its two choices. */
+    val sourceLabel: String,
+    val sourceSample: String,
+    val sourceReal: String,
+    /** Spoken on the toggle while public sensors is off. */
+    val sourceOff: String,
+    /** The Real mode attribution, opening the OpenAQ licenses. */
+    val dataOpenAq: String,
+    val realInfo: InfoText,
+    /** The real feed could not be read, with [retry] beside it. */
+    val loadFailed: String,
+    /** Short month names, January first, for [dayMonth]. */
+    val monthsShort: List<String>,
 ) {
+    /** The Real label, as in "OpenAQ, data to 8 Oct". */
+    @Composable
+    fun realDataTo(date: LocalDate): String = stringResource(Res.string.discover_real_data_to, dayMonth(date))
+
+    /** A short local date, day then month. */
+    @Composable
+    fun dayMonth(date: LocalDate): String =
+        stringResource(Res.string.discover_day_month, date.day, monthsShort.getOrElse(date.month.ordinal) { date.month.name })
+
     /** The name of [step], from [whoSteps]. */
     fun stepName(step: WhoStep): String = whoSteps.getOrElse(step.ordinal) { step.name }
 
@@ -192,6 +238,14 @@ class DiscoverStrings internal constructor(
 /** Discover's copy in the phone's language, from the shared Compose resources. */
 @Composable
 fun discoverStrings(): DiscoverStrings = DiscoverStrings(
+    sourceLabel = stringResource(Res.string.discover_source_label),
+    sourceSample = stringResource(Res.string.discover_source_sample),
+    sourceReal = stringResource(Res.string.discover_source_real),
+    sourceOff = stringResource(Res.string.discover_source_off),
+    dataOpenAq = stringResource(Res.string.discover_data_openaq),
+    realInfo = InfoText(stringResource(Res.string.discover_real_title), listOf(stringResource(Res.string.discover_real_info))),
+    loadFailed = stringResource(Res.string.discover_load_failed),
+    monthsShort = stringArrayResource(Res.array.discover_months_short),
     searchPlaces = stringResource(Res.string.discover_search_places),
     addSensor = stringResource(Res.string.discover_add_sensor),
     more = stringResource(Res.string.discover_more),
@@ -220,6 +274,8 @@ fun discoverStrings(): DiscoverStrings = DiscoverStrings(
     allMeasurements = stringResource(Res.string.discover_all_measurements),
     unavailable = stringResource(Res.string.discover_unavailable),
     loading = stringResource(Res.string.discover_loading),
+    readFailed = stringResource(Res.string.discover_read_failed),
+    retry = stringResource(Res.string.discover_retry),
     noPlaces = stringResource(Res.string.discover_no_places),
     clearSearch = stringResource(Res.string.discover_clear_search),
     updatedRecently = stringResource(Res.string.discover_updated_recently),
@@ -259,6 +315,10 @@ fun discoverStrings(): DiscoverStrings = DiscoverStrings(
             stringResource(Res.string.discover_who_info3),
             stringResource(Res.string.discover_scale_info2),
         ),
+    ),
+    moodInfo = InfoText(
+        stringResource(Res.string.discover_mood_info_title),
+        listOf(stringResource(Res.string.discover_mood_info1), stringResource(Res.string.discover_mood_info2)),
     ),
     to = stringResource(Res.string.discover_range_to),
     mapLabel = stringResource(Res.string.discover_map_label),

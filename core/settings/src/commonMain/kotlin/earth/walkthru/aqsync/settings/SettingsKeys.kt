@@ -39,6 +39,9 @@ object SettingsKeys {
     /** `RetentionPolicy.mapCacheBytes`. Missing or negative reads as the default. */
     val MAP_CACHE_BYTES: Preferences.Key<Long> = longPreferencesKey("map_cache_bytes")
 
+    /** The [DiscoverSource] name. Missing or unknown reads as [DiscoverSource.SAMPLE]. */
+    val DISCOVER_SOURCE: Preferences.Key<String> = stringPreferencesKey("discover_source")
+
     val ALL: List<Preferences.Key<*>> =
-        listOf(DETAIL_LEVEL, ADVANCED_MODE, CLOCK_SYNC_MODE, SHOW_PUBLIC_SENSORS, UNIT_SYSTEM, DERIVED_QUOTA_BYTES, MAP_CACHE_BYTES)
+        listOf(DETAIL_LEVEL, ADVANCED_MODE, CLOCK_SYNC_MODE, SHOW_PUBLIC_SENSORS, UNIT_SYSTEM, DERIVED_QUOTA_BYTES, MAP_CACHE_BYTES, DISCOVER_SOURCE)
 }

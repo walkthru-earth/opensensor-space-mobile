@@ -1,25 +1,37 @@
 package earth.walkthru.opensensor.designsystem
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertHeightIsAtLeast
+import androidx.compose.ui.test.assertHeightIsEqualTo
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertWidthIsEqualTo
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onChildren
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.unit.dp
+import earth.walkthru.aqsync.airquality.MoodBlock
+import earth.walkthru.aqsync.airquality.WhoStep
 import kotlin.test.Test
 
 /**
@@ -89,5 +101,159 @@ class SemanticsTest {
         }
         onNodeWithText("Today").assert(hasRole(Role.Tab)).assertIsSelected()
         onNodeWithText("Map").assert(hasRole(Role.Tab)).assertIsNotSelected()
+    }
+
+    @Test
+    fun aMoodStripIsOneSpokenNodeWithAnActionPerBlock() = runComposeUiTest {
+        var tapped = -1
+        setContent {
+            MaterialTheme {
+                MoodStripLayout(
+                    blocks = listOf(MoodBlock(WhoStep.GUIDELINE), MoodBlock(null), MoodBlock(WhoStep.IT2), MoodBlock(WhoStep.IT1, weight = 0f)),
+                    words = listOf("Fresh air", "n/a", "Poor", "Smoky"),
+                    captions = listOf("7 days", "24 hours", "1 hour", "never shown"),
+                    selected = null,
+                    selectedSpoken = null,
+                    onBlock = { tapped = it },
+                    modifier = Modifier.testTag("strip"),
+                )
+            }
+        }
+        val threeActions = SemanticsMatcher("three custom actions") { SemanticsActions.CustomActions in it.config && it.config[SemanticsActions.CustomActions].count() == 3 }
+        onNodeWithTag("strip").assert(hasContentDescription("Fresh air 7 days, n/a 24 hours, Poor 1 hour")).assert(threeActions)
+        onNodeWithTag("strip").onChildren().assertCountEquals(0)
+        onNodeWithTag("strip").fetchSemanticsNode().config[SemanticsActions.CustomActions][2].action()
+        kotlin.test.assertEquals(2, tapped)
+    }
+
+    @Test
+    fun aChosenMoodBlockIsAnnouncedAndTheStripIsATouchTarget() = runComposeUiTest {
+        setContent {
+            MaterialTheme {
+                Column {
+                    MoodStripLayout(
+                        blocks = listOf(MoodBlock(WhoStep.GUIDELINE, weight = 2f), MoodBlock(WhoStep.IT2)),
+                        words = listOf("Fresh air", "Poor"),
+                        captions = listOf("2 areas", "1 area"),
+                        selected = 1,
+                        selectedSpoken = "Poor 1 area selected",
+                        onBlock = {},
+                        modifier = Modifier.testTag("tappable"),
+                    )
+                    MoodStripLayout(
+                        blocks = listOf(MoodBlock(WhoStep.GUIDELINE)),
+                        words = listOf("Fresh air"),
+                        captions = emptyList(),
+                        selected = null,
+                        selectedSpoken = null,
+                        onBlock = null,
+                        modifier = Modifier.testTag("plain"),
+                    )
+                }
+            }
+        }
+        onNodeWithTag("tappable").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Poor 1 area selected"))
+        onNodeWithTag("tappable").onChildren().assertCountEquals(0)
+        onNodeWithTag("tappable").assertHeightIsAtLeast(48.dp)
+        onNodeWithTag("plain").assert(!SemanticsMatcher.keyIsDefined(SemanticsProperties.StateDescription))
+        onNodeWithTag("plain").assertHeightIsEqualTo(28.dp)
+    }
+
+    @Test
+    fun visibleCaptionsKeepTheStripOneNode() = runComposeUiTest {
+        setContent {
+            MaterialTheme {
+                Column {
+                    MoodStripLayout(
+                        blocks = listOf(MoodBlock(WhoStep.GUIDELINE), MoodBlock(null), MoodBlock(WhoStep.IT2)),
+                        words = listOf("Fresh air", "n/a", "Poor"),
+                        captions = listOf("7 days", "24 hours", "Last hour"),
+                        selected = null,
+                        selectedSpoken = null,
+                        onBlock = null,
+                        modifier = Modifier.testTag("captioned"),
+                    )
+                }
+            }
+        }
+        onNodeWithTag("captioned").onChildren().assertCountEquals(0)
+        // The caption row sits under the 28 dp bar.
+        onNodeWithTag("captioned").assertHeightIsAtLeast(40.dp)
+    }
+
+    @Test
+    fun aMoodLegendIsOneSpokenNode() = runComposeUiTest {
+        setContent {
+            MaterialTheme {
+                MoodLegendLayout(
+                    words = listOf("Fresh air", "Fair", "Getting hazy", "Poor", "Smoky", "Thick smoke"),
+                    title = "PM2.5",
+                    modifier = Modifier.testTag("legend"),
+                )
+            }
+        }
+        onNodeWithTag("legend").assert(hasContentDescription("PM2.5. Fresh air, Fair, Getting hazy, Poor, Smoky, Thick smoke"))
+        onNodeWithTag("legend").onChildren().assertCountEquals(0)
+    }
+
+    /** The public strip builds the selected state from its `mood_strip_selected` resource. */
+    @Test
+    fun aMoodStripAnnouncesTheChosenBlockFromItsResource() = runComposeUiTest {
+        setContent {
+            MaterialTheme {
+                MoodStrip(
+                    blocks = listOf(MoodBlock(WhoStep.GUIDELINE), MoodBlock(WhoStep.IT2)),
+                    captions = listOf("2 areas", "1 area"),
+                    selected = 1,
+                    onBlock = {},
+                    modifier = Modifier.testTag("strip"),
+                )
+            }
+        }
+        onNodeWithTag("strip").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Poor 1 area selected"))
+    }
+
+    /** A narrow block's caption wraps to a second line instead of cutting "128 areas" short. */
+    @Test
+    fun aLongCaptionInANarrowBlockWrapsAndTheStripGrows() = runComposeUiTest {
+        setContent {
+            MaterialTheme {
+                Column(Modifier.width(300.dp)) {
+                    MoodStripLayout(
+                        blocks = listOf(MoodBlock(WhoStep.GUIDELINE, weight = 1f), MoodBlock(WhoStep.IT2, weight = 99f)),
+                        words = listOf("Fresh air", "Poor"),
+                        captions = listOf("128 areas", "4 areas"),
+                        selected = null,
+                        selectedSpoken = null,
+                        onBlock = {},
+                        modifier = Modifier.testTag("narrow"),
+                    )
+                }
+            }
+        }
+        // 28 dp bar, 4 dp gap, two caption lines.
+        onNodeWithTag("narrow").assertHeightIsAtLeast(56.dp)
+    }
+
+    /** Inside a horizontal scroll the strip has no width to share, so each block takes a fixed width. */
+    @Test
+    fun anUnboundedStripStillLaysOut() = runComposeUiTest {
+        setContent {
+            MaterialTheme {
+                Row(Modifier.horizontalScroll(rememberScrollState())) {
+                    MoodStripLayout(
+                        blocks = listOf(MoodBlock(WhoStep.GUIDELINE), MoodBlock(null), MoodBlock(WhoStep.IT2)),
+                        words = listOf("Fresh air", "n/a", "Poor"),
+                        captions = emptyList(),
+                        selected = null,
+                        selectedSpoken = null,
+                        onBlock = null,
+                        modifier = Modifier.testTag("unbounded"),
+                    )
+                }
+            }
+        }
+        // Three 64 dp blocks and two 3 dp gaps.
+        onNodeWithTag("unbounded").assertWidthIsEqualTo(198.dp)
     }
 }

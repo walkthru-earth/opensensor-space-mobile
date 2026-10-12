@@ -7,6 +7,7 @@ import earth.walkthru.aqsync.storage.MemoryPressure
 import earth.walkthru.aqsync.storage.MemoryTrimmable
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.datetime.LocalDate
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -40,13 +41,22 @@ internal data class FeedDictionary(val version: Int = 1, val properties: List<Fe
 /** Statistics of one property in one cell. Null fields stay null, never zero. */
 data class CellStat(val n: Int?, val mean: Double?, val min: Double?, val max: Double?)
 
-/** One published cell. [devices] is always 3 or more (the publisher applies the crowd rule). */
+/** One published cell, or one day of a cell in a daily file (then [date] is set). */
 data class CellRow(
     val h3: Long,
+    /**
+     * Stations or devices behind the row. 3 or more for opensensor cells (the publisher applies the
+     * crowd rule), 1 or more for public licensed stations such as OpenAQ, which carry no crowd rule.
+     */
     val devices: Int,
-    /** End of the newest hour that holds a value, epoch milliseconds UTC. */
+    /**
+     * End of the newest hour that holds a value, epoch milliseconds UTC. For a daily row, and for a
+     * cell folded from daily rows, the UTC midnight after the newest day used.
+     */
     val updatedEpochMs: Long,
     val stats: Map<String, CellStat>,
+    /** The station local day of a daily file row, null for an hourly cells file and for a folded cell. */
+    val date: LocalDate? = null,
 ) {
     fun mean(property: String): Double? = stats[property]?.mean
 }
@@ -90,10 +100,13 @@ interface FeedReader {
     suspend fun readCells(source: RangeSource, ranges: List<LongRange>?): CellsTable
 }
 
-/** The public feed port. The bundled sample and, later, the live source.coop feed implement it. */
+/** The public feed port. The bundled sample and the live OpenAQ aggregates feed implement it. */
 interface PublicFeed {
     /** True while the feed is the bundled sample. The map then shows the "Sample data" pill. */
     val isSample: Boolean
+
+    /** The windows this feed can answer, in [FeedWindow] order. Every window unless a feed says less. */
+    val windows: List<FeedWindow> get() = FeedWindow.entries
 
     /** False when this platform cannot read the feed at all yet. */
     val available: Boolean
@@ -138,6 +151,7 @@ class BundledSampleFeed(
     override suspend fun trim(level: MemoryPressure.Level) = mutex.withLock { bytes.trim(level) }
 
     override val isSample: Boolean get() = true
+    override val windows: List<FeedWindow> get() = FeedWindow.entries
     override val available: Boolean get() = reader.available
 
     override suspend fun latest(): FeedPartition? = runCatching {

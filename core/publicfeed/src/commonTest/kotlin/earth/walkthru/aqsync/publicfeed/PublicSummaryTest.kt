@@ -1,0 +1,85 @@
+package earth.walkthru.aqsync.publicfeed
+
+import earth.walkthru.aqsync.airquality.WhoStep
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+class PublicSummaryTest {
+    private val cell = 0x85283473fffffffL
+
+    private fun row(pm25: Double?, updated: Long, co2: Double? = null) = CellRow(
+        h3 = cell,
+        devices = 3,
+        updatedEpochMs = updated,
+        stats = buildMap {
+            put("pm25", CellStat(n = 3, mean = pm25, min = null, max = null))
+            if (co2 != null) put("co2", CellStat(n = 3, mean = co2, min = null, max = null))
+        },
+    )
+
+    @Test
+    fun threeWindowsOldestFirstWithTheDayMeanAsHeadline() {
+        val s = PublicSummary.of(
+            "pm25",
+            "µg/m³",
+            mapOf(FeedWindow.WEEK to row(10.0, 100L), FeedWindow.DAY to row(30.0, 300L), FeedWindow.LAST_HOUR to row(80.0, 200L)),
+        )
+        assertEquals(listOf(FeedWindow.WEEK, FeedWindow.DAY, FeedWindow.LAST_HOUR), PublicSummary.ORDER)
+        assertEquals(listOf(WhoStep.GUIDELINE, WhoStep.IT3, WhoStep.ABOVE_IT1), s.blocks.map { it.step })
+        assertEquals(30.0, s.value)
+        assertEquals(WhoStep.IT3, s.step)
+        assertEquals(300L, s.updatedEpochMs)
+    }
+
+    @Test
+    fun aFeedWithoutTheLastHourHasTwoBlocks() {
+        val windows = mapOf(FeedWindow.WEEK to row(10.0, 100L), FeedWindow.DAY to row(30.0, 300L))
+        val s = PublicSummary.of("pm25", "µg/m³", windows, offered = listOf(FeedWindow.DAY, FeedWindow.WEEK))
+        assertEquals(listOf(WhoStep.GUIDELINE, WhoStep.IT3), s.blocks.map { it.step })
+        assertEquals(30.0, s.value)
+    }
+
+    @Test
+    fun missingWindowsGiveNullBlocks() {
+        val s = PublicSummary.of("pm25", "µg/m³", mapOf(FeedWindow.LAST_HOUR to row(12.0, 50L), FeedWindow.DAY to null))
+        assertEquals(listOf(null, null, WhoStep.GUIDELINE), s.blocks.map { it.step })
+        assertNull(s.value)
+        assertNull(s.step)
+        // The time is the headline window's. A fresh hour never sits beside an n/a headline.
+        assertNull(s.updatedEpochMs)
+    }
+
+    @Test
+    fun theUpdateTimeIsTheDayWindowsEvenWhenAnotherIsNewer() {
+        val s = PublicSummary.of(
+            "pm25",
+            "µg/m³",
+            mapOf(FeedWindow.DAY to row(30.0, 300L), FeedWindow.LAST_HOUR to row(80.0, 900L)),
+        )
+        assertEquals(300L, s.updatedEpochMs)
+    }
+
+    @Test
+    fun aWindowWithoutTheStatIsNotAvailable() {
+        val s = PublicSummary.of("pm25", "µg/m³", mapOf(FeedWindow.DAY to row(null, 10L)))
+        assertNull(s.value)
+        assertEquals(listOf(null, null, null), s.blocks.map { it.step })
+    }
+
+    @Test
+    fun anUnscaledPropertyKeepsItsNumberOnly() {
+        val s = PublicSummary.of("co2", "ppm", mapOf(FeedWindow.DAY to row(5.0, 10L, co2 = 900.0)))
+        assertFalse(s.scaled)
+        assertEquals(900.0, s.value)
+        assertNull(s.step)
+        assertTrue(s.blocks.isEmpty())
+    }
+
+    @Test
+    fun noWindowsMeansNoUpdateTime() {
+        assertNull(PublicSummary.of("pm25", "µg/m³", emptyMap()).updatedEpochMs)
+    }
+}

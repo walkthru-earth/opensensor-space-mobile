@@ -127,8 +127,8 @@ sheets stacked on top of each other.
 
 ### First screen at the Simple level
 
-Zero taps shows the map, the metric chips, the time slider, the legend, the "Sample data" pill while
-the feed is a fixture, and the sheet at peek height. Nothing else. Every explanation sits behind
+Zero taps shows the map, the metric chips, the time slider, the legend, the Sample and Real
+toggle, and the sheet at peek height. Nothing else. Every explanation sits behind
 an info button.
 
 - **Top bar.** A search field ("Search places") and an "Add your sensor" icon button (`+`). The
@@ -139,12 +139,13 @@ an info button.
   property grouped by category from the metric registry (Air, Weather, Water, Soil, Noise,
   Energy). Choosing one from "More" moves it into the row. The last choice is remembered.
 - **Time slider.** A 44dp pill on the left edge of the map, not in the chip row. At rest it
-  shows only the chosen window. A touch grows it into one snap stop per window, 1h at the top,
-  then 24h and 7d, with a tinted thumb that follows a vertical drag (a haptic tick at each stop).
+  shows only the chosen window. A touch grows it into one snap stop per window the feed on
+  screen offers, 1h at the top, then 24h and 7d (Real has no 1h stop, and a 1h choice moves to
+  24h on screen while the saved window stays), with a tinted thumb that follows a vertical drag (a haptic tick at each stop).
   Tap a stop to pick it. It folds back about two seconds after the last touch. Screen readers get
   one control named Time window, its state is the full window name, and its actions pick the
   others. The chip row holds metrics only.
-- **Legend (WHO, 2026-10-09).** Bottom left, just above the sheet, a floating card with the
+- **Legend (WHO, Detailed and Developer, 2026-10-09).** Bottom left, just above the sheet, a floating card with the
   label and unit. PM2.5 and PM10 show six discrete, equal swatches (not a gradient) with the
   WHO edges under the borders (PM2.5 15, 25, 37.5, 50, 75, PM10 45, 50, 75, 100, 150, µg/m³,
   never converted), the guideline border marked "WHO" with an ink tick, and a caption naming
@@ -156,20 +157,55 @@ an info button.
   and says "No health scale published". Practice followed, Mazama Science "Qualitative display
   of air quality data", the South Coast AQMD accessible AQI scale, and the EPA Fire and Smoke
   map (`CellScale` in `:core:publicfeed`).
+- **Legend (Simple, 2026-10-12).** For PM2.5 and PM10 the floating card shows the six mood
+  words with their colours, titled with the property, and no numbers. Its info sheet explains
+  the moods without naming the guideline body and points to Detailed in Settings. A property
+  without a health scale keeps the gradient legend. The card is one accessibility node that
+  reads the title and the six words.
+- **In view at Simple (2026-10-12).** The spread chart becomes a mood strip, one block per mood
+  as wide as its number of areas, no axis. Tapping a block filters the map and the list to that
+  mood, tapping it again or tapping the map lets go, and changing the property clears it too.
+  A property without a health scale shows no chart at Simple. List rows name the mood word.
+  The strip is one accessibility node, and its touch targets are 48 dp when tappable.
+- **Cell sheet at Simple (2026-10-12).** Peacock and mood word beside the 24 hour mean, or "n/a"
+  when that window has no value, one plain line, then a three block mood strip for 7 days, 24
+  hours and the last hour, with a visible caption under each block. Selecting a cell reads the
+  other windows for that one cell from the same feed the map uses
+  (`DiscoverUiState.selectedWindows`). Real has two blocks, 7 days and 24 hours. Until the 24 hour row is read the sheet says "Loading",
+  with no mood and no value. A failed window read is tried again after 1 s and 2 s. If it still
+  fails it stays unread (`DiscoverUiState.failedWindows`), the sheet says "Not available right now"
+  with a Retry button, and the next pan or Retry reads it again. A failure never reads as "Not
+  measured". Loading and that line are polite live regions. The Real feed sits behind the Show public sensors switch. Then sensors,
+  freshness and the other measurements as plain value rows, all from the 24 hour row. A property
+  without a health scale shows only its number. Detailed and Developer are unchanged. The mood
+  words live only in `:ui:designsystem`.
 - **Cell styles.** Filled with the scale colour, the fixed WHO step colour of the cell mean
   (`HealthScale.colorOf`) for PM, the percentile ramp for the rest. A stale cell (no hourly value for 3 hours) is
   drawn at 40 percent opacity with a dashed outline. A cell that does not measure the chosen
   metric is outline only, no fill. Selected cell has a thick ink outline.
-- **Sample data.** A pill top right under the chips, "Sample data", in the `accent` tone. It also
-  appears as the first line of every cell sheet and device page. Its info button says the
-  numbers are made up for a preview and real sensors appear when the public feed goes live. It
-  disappears only when the newest files no longer carry `sample = true`.
+- **Sample and Real (2026-10-12).** A compact two-state toggle top right under the chips, a
+  floating control with the brand blue only on the chosen half. Sample is the bundled fixture,
+  Real is the OpenAQ aggregates feed, labelled with the day its data runs to in the phone's
+  language, as in "OpenAQ, data to 8 Oct". The choice is saved (`DiscoverSource`) and Real is
+  read only while Show public sensors is on (`effectiveDiscoverSource`). With the switch off the
+  toggle is disabled and shows Sample, and screen readers hear how to turn it on. A switch of
+  feed clears the rows, the selection and the window reads, then reloads. Real offers 24 hours
+  and 7 days, so the cell sheet's mood strip shows two blocks. A failed Real read shows "Could not
+  load public sensors" with Retry in the sheet, ahead of the first-run card, never the sample in
+  its place. Each toggle half and the "Data OpenAQ" link keep their drawn size inside a 48 dp
+  touch target. Choosing 24 hours in Real saves it even while a saved last hour is shown as
+  24 hours. "Sample data" still
+  heads every cell sheet while the feed on screen is the sample, and the info button explains the
+  feed on screen. `DiscoverController.onSourceSettings`, `chooseSource` and `retry`.
 - **Attribution.** "© OpenStreetMap" bottom right, visible at launch. It collapses to an info
-  button after the first pan or after 5 seconds, as the OSMF guidelines allow.
+  button after the first pan or after 5 seconds, as the OSMF guidelines allow. In Real mode it
+  also shows "Data OpenAQ", which stays while Real is on screen and opens
+  https://docs.openaq.org/resources/licenses.
 - **First run.** The peek area holds one card instead of the summary. A 48 dp peacock, one line
   "Public sensors near you, shown as areas", and two actions "Add your sensor" and "Explore".
-  Either action dismisses it for good. The card carries no numbers, so the mascot rule (never
-  beside charts or numbers) holds.
+  Either action dismisses it for good. The card carries no numbers. The mascot stays away from
+  charts and numbers at Detailed and Developer. At Simple the cell sheet places it beside the
+  mood word and its one value, the only exception.
 
 Sheet heights.
 
@@ -190,7 +226,7 @@ the medium and large detents.
 +--------------------------------------+
 | [Search places              ] [ + ]  |
 | (PM2.5) (Temp) (Humidity) (More)     |
-|                       (Sample data i)|
+|                    (Sample | Real i)|
 | .1h   __    __                       |
 | |    /  \__/  \__      map of hexes  |
 | o24h \__/  \__/  \                   |
@@ -497,9 +533,11 @@ LZ4 and Snappy). Issue #62 added `ParquetReader` over a `RangeSource`, an in-mem
 `CELLULAR`, `WIFI`) and pruning of row groups by footer statistics and of pages by the column and
 offset indexes. `:core:net` adds `HttpRangeSource` over OkHttp 5.5.0 on Android and
 `NSURLSession` on iOS. It sends `Accept-Encoding: identity`, so byte offsets stay true, and checks
-`If-Range` against the ETag, so a replaced file is read again from its new footer. Issues #60
-and #61 are closed, but only `:core:net` tests use it so far. The live feed is not wired, and the
-disk byte block cache is not built yet. No third-party Parquet or DuckDB library exists for iOS that would do this
+`If-Range` against the ETag, so a replaced file is read again from its new footer. Host and
+simulator tests only. `OpenAqAggregatesFeed` reads the OpenAQ aggregates through it (below).
+Android `DiscoverViewModel` and iOS `AppRoot` each build one per process, read only while Show
+public sensors is on and Real is chosen. Issues #60 and #61 are closed, but the disk byte
+block cache is not built yet. No third-party Parquet or DuckDB library exists for iOS that would do this
 better.
 
 Paths under `date=` and `hour=` never change, so footers and ranges are cached until the
@@ -508,7 +546,45 @@ newest hour moves on. The last complete hour stays on disk for offline use.
 **Sample data.** `tools/discover-fixture/` writes the same layout and schema with Python `h3`
 and PyArrow, including `sample = true` in the key value metadata, and the files ship in the app.
 The phone reads them through the same reader from a local file source, so the sample and the
-live feed share one code path. The pill shows while `sample` is true.
+live feed share one code path. The toggle shows Sample while `sample` is true.
+
+**Live feed, OpenAQ aggregates (current).** Until the opensensor publisher exists, the live feed
+is the OpenAQ aggregates collection on source.coop, read with the same reader. Design
+`docs/superpowers/specs/2026-10-12-openaq-live-feed-design.md`. Root
+`https://data.source.coop/walkthru-earth/opensensor-space/openaq-aggregates/`.
+
+- `manifest.json` carries `as_of` (`YYYY-MM-DD`, the newest complete PM2.5 day) and
+  `generation`, plus fields the phone ignores. `latest()` answers `FeedPartition(as_of, 0)` and
+  keeps it for 5 minutes. A failed read throws and is not cached.
+- `cells/h3_res=<1..9>/data.parquet`, one file per resolution holding every day since 2023,
+  written by DuckDB. Verified on 2026-10-12 against `h3_res=3` (250 KB, 3,131 rows, generation
+  `007d89a5...`): one row group, SNAPPY, dictionary encoded, min and max statistics, no page
+  index, every column optional. Columns `h3_index` INT64, `date` INT32 with the DATE converted
+  type (days since 1970-01-01, the station local day), `devices` INT32 (stations, 1 or more, no
+  crowd rule, key `crowd_rule = none, public licensed stations`), then `<id>__n` INT32 and
+  `<id>__mean`, `__min`, `__max` DOUBLE, null when not measured. Rows sort by `h3_index` then
+  `date`. Key value metadata `feed = openaq-aggregates`, `window = 1d`, `h3_res`, `generation`
+  and `dictionary` (`pm25`, `pm10`, `pm1`, `no2`, `temperature`, `humidity`, `um003`). Only
+  complete days (18 or more hours) are present, and data lags OpenAQ by about 72 hours.
+- `ParquetFeedReader` reads this daily schema when `updated` is absent and `date` is present.
+  Each row keeps its `CellRow.date`, its `updatedEpochMs` is the UTC midnight after that date,
+  and an optional day range drops other days before a row is built. The hourly schema is
+  unchanged.
+- `DailyCellFold` turns the daily rows of the 7 days ending at `as_of` into one cell each. 24
+  hours takes, per property, the newest day in range that has a mean, as it is. 7 days takes the
+  mean of the daily means, the min of the mins, the max of the maxes and the largest daily `n`,
+  skipping days without the property. `devices` is the largest daily count among the days used,
+  `updated` the end of the newest day used. A cell with nothing in range is dropped. Null stays
+  null.
+- The feed offers 24 hours and 7 days only. Last hour answers an empty table without a request.
+  Errors propagate, the screen decides what to show. Android builds it over `OkHttpRangeEngine`
+  in `DiscoverViewModel`, iOS over `UrlSessionRangeEngine` in `AppRoot`, one per process.
+- `DiscoverController` holds the sample and this feed. Real asks `latest()` on every load (the
+  manifest is cached for 5 minutes) and keeps the last partition when a later ask fails. A cell's
+  other windows are read 24 hours first, so a failing window never delays the headline. A pan
+  rereads a failed window without flipping the sheet back to loading. Tests use a 13 row fixture from
+  `tools/discover-fixture/make_openaq_fixture.py` served by a fake HTTP engine. The live URL is
+  not in the gate.
 
 **What we do not copy from the website.** The EOX Sentinel-2 cloudless basemap, whose licence
 restricts commercial use, and the deck.gl globe view. Some current website datasets also still
@@ -604,11 +680,11 @@ starts with the target layout from the producer guidance.
 | Module | Owns |
 | --- | --- |
 | `:core:model` | `Device`, `DeviceFamily`, `Capability`, `ObservedProperty`, `Scale`, registry |
-| `:core:publicfeed` | `PublicFeed` and `FeedReader` ports, `ParquetFeedReader` (common, one `ParquetReader.scan` filtered on `h3_index` with page pruning, `CellsTable` reports pages read of total), `BundledSampleFeed`, the `H3Grid` interface (`com.uber:h3` 4.5.0 on Android and JVM, the vendored H3 C 4.5.0 through cinterop on iOS), `H3Index` bit arithmetic and descendant ranges, `ViewportCover`, `CellScale` (WHO steps from `:core:airquality` for PM2.5 and PM10, else `PercentileScale`), `HealthAxis`, `PropertyRanking`, `CellGeoJson`, `TimeZoneRegions`. Built 2026-10-08. Planned here: S3 listing, the live feed over `:core:net`, a disk byte block cache |
-| `:core:net` | `HttpRangeSource` and the `HttpRangeEngine` port, `OkHttpRangeEngine` (OkHttp 5.5.0, Android and JVM), `UrlSessionRangeEngine` (`NSURLSession`, iOS). Built with issue #62, not yet used by the apps |
+| `:core:publicfeed` | `PublicFeed` and `FeedReader` ports, `ParquetFeedReader` (common, one `ParquetReader.scan` filtered on `h3_index` with page pruning, `CellsTable` reports pages read of total), `BundledSampleFeed`, the `H3Grid` interface (`com.uber:h3` 4.5.0 on Android and JVM, the vendored H3 C 4.5.0 through cinterop on iOS), `H3Index` bit arithmetic and descendant ranges, `ViewportCover`, `CellScale` (WHO steps from `:core:airquality` for PM2.5 and PM10, else `PercentileScale`), `HealthAxis`, `PropertyRanking`, `CellGeoJson`, `TimeZoneRegions`. Built 2026-10-08. `OpenAqAggregatesFeed` over `:core:net`, the daily schema in `ParquetFeedReader` and `DailyCellFold`, built 2026-10-12 (host and simulator tests only). Planned here: S3 listing for the opensensor feed, a disk byte block cache |
+| `:core:net` | `HttpRangeSource` and the `HttpRangeEngine` port, `OkHttpRangeEngine` (OkHttp 5.5.0, Android and JVM), `UrlSessionRangeEngine` (`NSURLSession`, iOS). Built with issue #62, used by `OpenAqAggregatesFeed` in both apps |
 | `:core:parquet` | The portable reader from W8, with `RangeSource`, `ParquetReader` (footer cache, coalesced reads, one-pass decoding), row group pruning by INT64 statistics and page pruning by the column and offset indexes |
 | `:feature:discover` | CMP `commonMain` map screen (`DiscoverScreen`), `DiscoverController` state holder, `DiscoverStrings` read from its Compose resources, one copy for both apps, the bundled sample and basemap styles as Compose resources. Targets Android (`com.android.kotlin.multiplatform.library`) and iOS, not the JVM, because the maplibre-compose desktop variant needs Java 25. Planned here: the public device page |
-| `tools/discover-fixture/` | `make_discover_sample.py` writes the sample feed in the live layout (Python `h3` 4.5.0, PyArrow 25.0.1, SNAPPY, one row group per file sorted by `h3_index`, 16-row pages with page indexes, about 250 KB for 18 files). `make_basemap_style.mjs` writes the light and dark styles from `@protomaps/basemaps` 5.7.2, the same on Android and iOS. Output committed under `feature/discover/src/commonMain/composeResources/files/` |
+| `tools/discover-fixture/` | `make_discover_sample.py` writes the sample feed in the live layout (Python `h3` 4.5.0, PyArrow 25.0.1, SNAPPY, one row group per file sorted by `h3_index`, 16-row pages with page indexes, about 270 KB for 18 files, made-up cells around Berlin, Cairo, Lisbon, Nairobi, New York, Jakarta and Accra). `make_basemap_style.mjs` writes the light and dark styles from `@protomaps/basemaps` 5.7.2, each with a `-latin` variant for iOS. Output committed under `feature/discover/src/commonMain/composeResources/files/` |
 
 `:feature:discover` is shared Compose, so Android and iOS show the same screens. Platform code
 provides only the strings, the saved state (`DiscoverPrefs`, DataStore on Android, NSUserDefaults on
@@ -626,7 +702,7 @@ the Protomaps OpenStreetMap PMTiles build on source.coop (`pmtiles://` rendered 
 emulator and the iOS simulator), "© OpenStreetMap" shows at launch and collapses to an info button.
 "Show public sensors" in Settings (both apps) swaps in a plain background style, so no request
 leaves the phone. Not built yet. Near me, the GeoNames place list, the offline map download (TODO),
-the half sheet height, stale outline dashes, the device list and device page, the live feed, the
+the half sheet height, stale outline dashes, the device list and device page, the live feed on screen, the
 peacock on the first-run card and recolouring the basemap to the sensing palette. The basemap
 still points at the Protomaps build on source.coop, not at our own extract. HTTP range reads use
 OkHttp and `NSURLSession` behind `:core:net` (issue #62) instead of Ktor.

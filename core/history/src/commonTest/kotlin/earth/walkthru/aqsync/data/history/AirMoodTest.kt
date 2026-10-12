@@ -28,8 +28,8 @@ class AirMoodTest {
         assertNull(AirMood.ofOrNull(Double.NaN))
         // Every mood carries its non-colour carriers, in plain copy.
         AirMood.entries.forEach {
-            assertTrue(it.title.isNotBlank() && it.advice.isNotBlank() && it.comparison.isNotBlank())
-            listOf(it.title, it.advice, it.comparison).forEach { text ->
+            assertTrue(it.advice.isNotBlank() && it.comparison.isNotBlank())
+            listOf(it.advice, it.comparison).forEach { text ->
                 assertTrue(text.none { c -> c == '\u2014' || c == '\u2013' || c == ':' || c == ';' }, text)
             }
         }

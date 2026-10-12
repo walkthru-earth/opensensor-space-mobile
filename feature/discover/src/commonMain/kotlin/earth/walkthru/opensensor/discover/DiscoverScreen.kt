@@ -20,9 +20,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -38,14 +41,16 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SheetValue
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.material3.rememberStandardBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -53,6 +58,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -61,6 +67,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -68,25 +75,40 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationBackHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
+import earth.walkthru.aqsync.airquality.HealthScale
 import earth.walkthru.aqsync.airquality.WhoStep
+import earth.walkthru.aqsync.publicfeed.CellFreshness
 import earth.walkthru.aqsync.publicfeed.CellRow
 import earth.walkthru.aqsync.publicfeed.CellScale
 import earth.walkthru.aqsync.publicfeed.FeedProperty
 import earth.walkthru.aqsync.publicfeed.FeedWindow
 import earth.walkthru.aqsync.publicfeed.H3Index
+import earth.walkthru.aqsync.publicfeed.PublicSummary
 import earth.walkthru.aqsync.publicfeed.SequentialRamp
+import earth.walkthru.aqsync.settings.DetailLevel
+import earth.walkthru.aqsync.settings.DiscoverSource
 import earth.walkthru.aqsync.units.UnitFormatter
 import earth.walkthru.aqsync.units.UnitSystem
 import earth.walkthru.opensensor.designsystem.FloatingControl
 import earth.walkthru.opensensor.designsystem.FloatingSurface
+import earth.walkthru.opensensor.designsystem.MoodLegend
+import earth.walkthru.opensensor.designsystem.MoodStrip
 import earth.walkthru.opensensor.designsystem.Peacock
 import earth.walkthru.opensensor.designsystem.PeacockExpression
 import earth.walkthru.opensensor.designsystem.PeacockIcon
+import earth.walkthru.opensensor.designsystem.listSeparator
+import earth.walkthru.opensensor.designsystem.moodLine
+import earth.walkthru.opensensor.designsystem.moodWord
+import earth.walkthru.opensensor.designsystem.notAvailableText
+import earth.walkthru.opensensor.designsystem.peacockExpressionFor
+import earth.walkthru.opensensor.designsystem.spokenList
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.maplibre.compose.camera.CameraPosition
@@ -104,21 +126,27 @@ private val PEEK_HEIGHT = 200.dp
  * [networkAllowed] is the Settings switch. Off, the basemap is a plain paper background and no
  * request leaves the phone. The copy comes from this module's Compose resources. [infoButton] lets the host reuse its own info affordance. [units] is
  * the host's resolved Settings choice (METRIC or IMPERIAL). It changes labels only, never the scale.
+ * [level] is the host's Settings detail level. Simple speaks in moods, Detailed and Developer show the WHO scale.
+ * [savedSource] is the host's saved Discover source. Real reads OpenAQ only while [networkAllowed].
  */
 @Composable
 fun DiscoverScreen(
     controller: DiscoverController,
     networkAllowed: Boolean,
+    level: DetailLevel,
     onAddSensor: () -> Unit,
     modifier: Modifier = Modifier,
     infoButton: @Composable (InfoText, Modifier) -> Unit = { info, m -> DefaultInfoButton(info, m) },
     units: UnitSystem = UnitSystem.METRIC,
+    savedSource: DiscoverSource = DiscoverSource.SAMPLE,
 ) {
+    // The feed on screen follows the saved source and the public sensors switch, on every change.
+    LaunchedEffect(controller, savedSource, networkAllowed) { controller.onSourceSettings(savedSource, networkAllowed) }
     // One catalogue for both apps (composeResources/values/strings.xml).
     val strings = discoverStrings()
     val formatter = remember(units) { UnitFormatter(units) }
     CompositionLocalProvider(LocalDiscoverUnits provides formatter) {
-        DiscoverContent(controller, strings, networkAllowed, onAddSensor, modifier, infoButton)
+        DiscoverContent(controller, strings, networkAllowed, level == DetailLevel.SIMPLE, onAddSensor, modifier, infoButton)
     }
 }
 
@@ -127,6 +155,7 @@ private fun DiscoverContent(
     controller: DiscoverController,
     strings: DiscoverStrings,
     networkAllowed: Boolean,
+    simple: Boolean,
     onAddSensor: () -> Unit,
     modifier: Modifier,
     infoButton: @Composable (InfoText, Modifier) -> Unit,
@@ -171,12 +200,15 @@ private fun DiscoverContent(
                 state = state,
                 strings = strings,
                 networkAllowed = networkAllowed,
+                simple = simple,
                 showAll = showAll,
                 infoButton = infoButton,
                 onAddSensor = { controller.dismissFirstRun(); onAddSensor() },
                 onExplore = { controller.dismissFirstRun() },
                 onPickProperty = { id -> controller.selectProperty(id); showAll = false; peek() },
                 onShowProperty = controller::selectProperty,
+                onRetry = controller::retryWindows,
+                onRetryLoad = controller::retry,
                 onPickCell = { hex -> controller.selectCell(hex) },
                 highlight = highlight,
                 clearSignal = clearSignal,
@@ -205,7 +237,7 @@ private fun DiscoverContent(
                 val shownAt = remember { nowEpochMillis() }
                 // Screen readers name the map and the measurement it colours. Its gestures stay as
                 // they are, the sheet's list reads each area.
-                val mapLabel = listOfNotNull(strings.mapLabel, state.property?.label).joinToString(", ")
+                val mapLabel = spokenList(listOfNotNull(strings.mapLabel, state.property?.label), listSeparator())
                 DiscoverMap(
                     modifier = Modifier.semantics { contentDescription = mapLabel },
                     state = mapState,
@@ -215,6 +247,7 @@ private fun DiscoverContent(
                     onMapClick = {
                         controller.selectCell(null)
                         clearSignal++
+                        highlight = null
                         showAll = false
                         peek()
                     },
@@ -235,11 +268,13 @@ private fun DiscoverContent(
                         }
                     },
                     onProperty = controller::selectProperty,
+                    onSource = controller::chooseSource,
                     onMore = { showAll = true; expand() },
                     modifier = Modifier.align(Alignment.TopStart),
                 )
                 WindowSlider(
                     window = state.window,
+                    windows = state.windows,
                     strings = strings,
                     onWindow = controller::selectWindow,
                     modifier = Modifier.align(Alignment.CenterStart).padding(start = FloatingControl.Margin),
@@ -251,12 +286,13 @@ private fun DiscoverContent(
                     val property = state.property
                     val scale = state.scale
                     if (property != null && scale != null) {
-                        Legend(property, scale, state.window, strings, infoButton)
+                        // Simple shows mood words for a health scale. A property without one keeps its gradient.
+                        if (simple && scale is CellScale.Health) SimpleLegend(property, strings, infoButton) else Legend(property, scale, state.window, strings, infoButton)
                     }
                     Spacer(Modifier.weight(1f))
                     Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         NearMeButton(nearMe, mapState, controller::nearMeTarget, strings.nearMe, strings.nearMeAccess, Modifier.padding(end = 8.dp))
-                        if (networkAllowed) Attribution(strings, attributionOpen, infoButton)
+                        if (networkAllowed) Attribution(strings, attributionOpen, real = !state.isSample, infoButton)
                     }
                 }
             }
@@ -277,6 +313,7 @@ private fun TopControls(
     onAddSensor: () -> Unit,
     onPlace: (Place) -> Unit,
     onProperty: (String) -> Unit,
+    onSource: (DiscoverSource) -> Unit,
     onMore: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -356,18 +393,62 @@ private fun TopControls(
                 FilterChip(selected = false, onClick = onMore, label = { Text(strings.more) }, colors = chipColors, shape = FloatingControl.SmallShape)
             }
         }
-        if (state.isSample && state.available) {
-            Row(Modifier.align(Alignment.End).padding(end = 12.dp)) { SamplePill(strings, infoButton) }
+        if (state.available) {
+            Row(Modifier.align(Alignment.End).padding(end = FloatingControl.Margin)) { SourceToggle(state, strings, infoButton, onSource) }
+        }
+    }
+}
+
+/**
+ * The Sample and Real toggle. Real reads OpenAQ and is labelled with the day its data runs to.
+ * While public sensors is off it is disabled and shows Sample. Only the chosen half takes the
+ * brand blue. The info button explains the feed on screen.
+ */
+@Composable
+private fun SourceToggle(
+    state: DiscoverUiState,
+    strings: DiscoverStrings,
+    infoButton: @Composable (InfoText, Modifier) -> Unit,
+    onSource: (DiscoverSource) -> Unit,
+) {
+    val real = state.source == DiscoverSource.OPENAQ
+    val enabled = state.sourceEnabled
+    val date = state.dataDate
+    val realLabel = if (real && date != null) strings.realDataTo(date) else strings.sourceReal
+    FloatingSurface(shape = FloatingControl.SmallShape) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = FloatingControl.Inset)) {
+            Row(Modifier.selectableGroup().semantics { contentDescription = strings.sourceLabel }) {
+                SourceSegment(strings.sourceSample, selected = !real, enabled = enabled, disabledNote = null) { onSource(DiscoverSource.SAMPLE) }
+                SourceSegment(realLabel, selected = real, enabled = enabled, disabledNote = strings.sourceOff) { onSource(DiscoverSource.OPENAQ) }
+            }
+            infoButton(if (real) strings.realInfo else strings.sampleInfo, Modifier.size(40.dp))
         }
     }
 }
 
 @Composable
-private fun SamplePill(strings: DiscoverStrings, infoButton: @Composable (InfoText, Modifier) -> Unit) {
-    Surface(color = MaterialTheme.colorScheme.tertiaryContainer, contentColor = MaterialTheme.colorScheme.onTertiaryContainer, shape = FloatingControl.SmallShape) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 14.dp)) {
-            Text(strings.sampleData, style = MaterialTheme.typography.labelLarge)
-            infoButton(strings.sampleInfo, Modifier.size(40.dp))
+private fun SourceSegment(label: String, selected: Boolean, enabled: Boolean, disabledNote: String?, onClick: () -> Unit) {
+    val shape = FloatingControl.BadgeShape
+    val color = when {
+        selected -> FloatingControl.OnSelected
+        enabled -> MaterialTheme.colorScheme.onSurfaceVariant
+        else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+    }
+    // The touch target is at least 48 dp. The drawn pill stays 36 dp inside it.
+    Box(
+        Modifier.selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onClick)
+            .semantics { if (!enabled && disabledNote != null) stateDescription = disabledNote }
+            .minimumInteractiveComponentSize(),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            Modifier.heightIn(min = 36.dp)
+                .clip(shape)
+                .background(if (selected) FloatingControl.Selected else Color.Transparent, shape)
+                .padding(horizontal = 12.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(label, style = MaterialTheme.typography.labelLarge, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, color = color, maxLines = 1)
         }
     }
 }
@@ -437,6 +518,17 @@ private fun Legend(
     }
 }
 
+/** The Simple legend. The six moods with their colours, the property as title, no numbers. */
+@Composable
+private fun SimpleLegend(property: FeedProperty, strings: DiscoverStrings, infoButton: @Composable (InfoText, Modifier) -> Unit) {
+    FloatingSurface {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 10.dp)) {
+            MoodLegend(Modifier.width(212.dp).padding(vertical = 8.dp), title = property.label)
+            infoButton(strings.moodInfo, Modifier.size(40.dp))
+        }
+    }
+}
+
 /** A small swatch in [step]'s colour and its name, so the step never rests on colour alone. */
 @Composable
 private fun StepLabel(step: WhoStep, strings: DiscoverStrings, modifier: Modifier = Modifier) {
@@ -451,26 +543,46 @@ private fun StepLabel(step: WhoStep, strings: DiscoverStrings, modifier: Modifie
 }
 
 @Composable
-private fun Attribution(strings: DiscoverStrings, open: Boolean, infoButton: @Composable (InfoText, Modifier) -> Unit) {
+private fun Attribution(strings: DiscoverStrings, open: Boolean, real: Boolean, infoButton: @Composable (InfoText, Modifier) -> Unit) {
+    val uri = LocalUriHandler.current
     FloatingSurface(shape = FloatingControl.SmallShape) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = if (open) 10.dp else 0.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = if (open || real) 10.dp else 0.dp)) {
             if (open) Text(strings.osm, style = MaterialTheme.typography.labelSmall)
+            if (open && real) Spacer(Modifier.width(8.dp))
+            // Real data stays credited while it is on screen, and opens the OpenAQ licenses.
+            if (real) {
+                Text(
+                    strings.dataOpenAq,
+                    style = MaterialTheme.typography.labelSmall,
+                    textDecoration = TextDecoration.Underline,
+                    // A 48 dp touch target around the small label.
+                    modifier = Modifier.clickable(role = Role.Button) { runCatching { uri.openUri(OPENAQ_LICENSES) } }
+                        .minimumInteractiveComponentSize()
+                        .wrapContentSize(),
+                )
+            }
             infoButton(strings.mapInfo, Modifier.size(36.dp))
         }
     }
 }
+
+/** Where the Real attribution leads, the licenses of the OpenAQ data. */
+private const val OPENAQ_LICENSES = "https://docs.openaq.org/resources/licenses"
 
 @Composable
 private fun SheetContent(
     state: DiscoverUiState,
     strings: DiscoverStrings,
     networkAllowed: Boolean,
+    simple: Boolean,
     showAll: Boolean,
     infoButton: @Composable (InfoText, Modifier) -> Unit,
     onAddSensor: () -> Unit,
     onExplore: () -> Unit,
     onPickProperty: (String) -> Unit,
     onShowProperty: (String) -> Unit,
+    onRetry: () -> Unit,
+    onRetryLoad: () -> Unit,
     onPickCell: (String) -> Unit,
     highlight: ValueBand?,
     clearSignal: Int,
@@ -480,13 +592,41 @@ private fun SheetContent(
     // Sample data is a snapshot, so its freshness is read against its own newest hour.
     val reference = if (state.isSample) (state.newestUpdateEpochMs ?: now) else now
     Column(Modifier.fillMaxWidth().heightIn(min = PEEK_HEIGHT - 24.dp).padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
-        when {
-            !state.available -> DiscoverStateMessage(strings.unavailable, PeacockExpression.CONCERNED)
-            showAll -> AllProperties(state, strings, onPickProperty)
-            state.selected != null -> CellDetail(state.selected, state, strings, infoButton, reference, clearSignal, onHighlight, onShowProperty)
-            state.firstRun -> FirstRunCard(strings, onAddSensor, onExplore)
-            else -> InView(state, strings, networkAllowed, reference, highlight, clearSignal, onHighlight, onPickCell)
+        when (state.sheetBody(showAll, simple)) {
+            SheetBody.UNAVAILABLE -> DiscoverStateMessage(strings.unavailable, PeacockExpression.CONCERNED)
+            SheetBody.ALL_PROPERTIES -> AllProperties(state, strings, onPickProperty)
+            SheetBody.SIMPLE_CELL -> SimpleCellDetail(state, strings, infoButton, reference, onShowProperty, onRetry)
+            SheetBody.CELL -> CellDetail(state.selected!!, state, strings, infoButton, reference, clearSignal, onHighlight, onShowProperty)
+            SheetBody.LOAD_FAILED -> LoadFailed(strings, onRetryLoad)
+            SheetBody.FIRST_RUN -> FirstRunCard(strings, onAddSensor, onExplore)
+            SheetBody.IN_VIEW -> InView(state, strings, networkAllowed, simple, reference, highlight, clearSignal, onHighlight, onPickCell)
         }
+    }
+}
+
+internal enum class SheetBody { UNAVAILABLE, ALL_PROPERTIES, SIMPLE_CELL, CELL, LOAD_FAILED, FIRST_RUN, IN_VIEW }
+
+/**
+ * What the sheet shows. A failed load comes before the first run card, so a user who picks Real
+ * before dismissing the card still sees the error and its Retry.
+ */
+internal fun DiscoverUiState.sheetBody(showAll: Boolean, simple: Boolean): SheetBody = when {
+    !available -> SheetBody.UNAVAILABLE
+    showAll -> SheetBody.ALL_PROPERTIES
+    selected != null && simple -> SheetBody.SIMPLE_CELL
+    selected != null -> SheetBody.CELL
+    loadFailed -> SheetBody.LOAD_FAILED
+    firstRun -> SheetBody.FIRST_RUN
+    else -> SheetBody.IN_VIEW
+}
+
+/** The real feed could not be read. An error with Retry, never the sample in its place. */
+@Composable
+private fun LoadFailed(strings: DiscoverStrings, onRetry: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        DiscoverStateMessage(strings.loadFailed, PeacockExpression.CONCERNED, Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite })
+        Spacer(Modifier.width(8.dp))
+        TextButton(onClick = onRetry) { Text(strings.retry) }
     }
 }
 
@@ -515,6 +655,7 @@ private fun InView(
     state: DiscoverUiState,
     strings: DiscoverStrings,
     networkAllowed: Boolean,
+    simple: Boolean,
     reference: Long,
     highlight: ValueBand?,
     clearSignal: Int,
@@ -538,11 +679,20 @@ private fun InView(
     val property = state.property
     val units = LocalDiscoverUnits.current
     val values = property?.let { p -> state.rows.mapNotNull { it.mean(p.id) } }.orEmpty()
+    val health = (state.scale as? CellScale.Health)?.scale
     if (property != null && values.size >= 2) {
-        ChartTitle(property, strings, state)
-        Spacer(Modifier.height(8.dp))
-        SpreadChart(values, property, state.scale, strings, clearSignal = clearSignal, onHighlight = onHighlight)
-        Spacer(Modifier.height(12.dp))
+        if (!simple) {
+            ChartTitle(property, strings, state)
+            Spacer(Modifier.height(8.dp))
+            SpreadChart(values, property, state.scale, strings, clearSignal = clearSignal, onHighlight = onHighlight)
+            Spacer(Modifier.height(12.dp))
+        } else if (health != null) {
+            // Simple. Areas per mood, no axis. A property without a health scale shows no chart, no mood is invented.
+            ChartTitle(property, strings, state)
+            Spacer(Modifier.height(8.dp))
+            SimpleSpread(values, health, strings, highlight, onHighlight)
+            Spacer(Modifier.height(12.dp))
+        }
     }
     Text(strings.areasInView(state.rows.size), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
     freshness(strings, state.newestUpdateEpochMs, reference)?.let {
@@ -567,12 +717,35 @@ private fun InView(
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text("${formatValue(value, property, units)} ${unitLabel(property, units)}", style = MaterialTheme.typography.bodyLarge)
-                    if (step != null) Text(strings.stepName(step), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (step != null) Text(if (simple) moodWord(step) else strings.stepName(step), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Text(strings.sensors(row.devices), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
+}
+
+/**
+ * Areas in view per mood, as wide as their count. Tapping a block filters the map and the list to
+ * that mood, tapping it again lets go. Leaving the list, another measurement, or a pan that empties
+ * the chosen mood lets go too, like the spread chart.
+ */
+@Composable
+private fun SimpleSpread(values: List<Double>, health: HealthScale, strings: DiscoverStrings, highlight: ValueBand?, onHighlight: (ValueBand?) -> Unit) {
+    val shown = stepBlocks(values, health).filter { it.weight > 0f }
+    val captions = shown.map { strings.areaCount(it.weight.toInt()) }
+    val bands = shown.map { b -> b.step?.let { stepBand(health, it) } }
+    val selected = spreadSelection(bands, highlight)
+    val release = rememberUpdatedState(onHighlight)
+    DisposableEffect(health) { onDispose { release.value(null) } }
+    // A chosen mood with no area left in view has no block to tap again, so it lets go by itself.
+    LaunchedEffect(highlight, selected) { if (highlight != null && selected == null) release.value(null) }
+    MoodStrip(
+        blocks = shown,
+        captions = captions,
+        selected = selected,
+        onBlock = { i -> onHighlight(spreadTap(bands, i, highlight)) },
+    )
 }
 
 @Composable
@@ -663,7 +836,7 @@ private fun CellDetail(
         } else {
             Text(strings.notMeasured, style = MaterialTheme.typography.titleMedium)
         }
-        val stale = reference - row.updatedEpochMs >= earth.walkthru.aqsync.publicfeed.CellFreshness.STALE_AFTER_MS
+        val stale = reference - row.updatedEpochMs >= CellFreshness.STALE_AFTER_MS
         val parts = listOfNotNull(strings.sensors(row.devices), if (stale) strings.stale else freshness(strings, row.updatedEpochMs, reference))
         Text(parts.joinToString("  "), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (property != null && headline != null) {
@@ -683,6 +856,116 @@ private fun CellDetail(
                     Text(category, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 12.dp, bottom = 2.dp).semantics { heading() })
                 }
                 ranges.forEach { r -> RangeRow(r, strings) { onShowProperty(r.property.id) } }
+            }
+        }
+    }
+}
+
+/**
+ * The cell at the Simple level. Peacock and mood word beside the 24 hour value, or "n/a", one plain
+ * line, then the mood of the last 7 days, 24 hours and hour. A property without a health scale
+ * shows its number only. Other measurements are plain value rows.
+ */
+@Composable
+private fun SimpleCellDetail(
+    state: DiscoverUiState,
+    strings: DiscoverStrings,
+    infoButton: @Composable (InfoText, Modifier) -> Unit,
+    reference: Long,
+    onShowProperty: (String) -> Unit,
+    onRetry: () -> Unit,
+) {
+    Column(Modifier.verticalScroll(rememberScrollState())) {
+        if (state.isSample) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(strings.sampleData, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.weight(1f))
+                infoButton(strings.sampleInfo, Modifier.size(40.dp))
+            }
+        }
+        val property = state.property
+        val units = LocalDiscoverUnits.current
+        val summary = property?.let { state.selectedSummary(it) }
+        val headline = state.simpleHeadline()
+        val separator = listSeparator()
+        if (headline == SimpleHeadline.SHOWN && property != null && summary != null) {
+            val unit = unitLabel(property, units)
+            val value = summary.value?.let { formatValue(it, property, units) }
+            val shown = value ?: notAvailableText()
+            val word = if (summary.scaled) moodWord(summary.step) else null
+            val spoken = spokenList(listOfNotNull(word, property.label, if (value != null) "$value $unit" else shown), separator)
+            Row(
+                Modifier.clearAndSetSemantics {
+                    contentDescription = spoken
+                    heading()
+                },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (summary.scaled) {
+                    PeacockIcon(peacockExpressionFor(summary.step), Modifier.size(56.dp))
+                    Spacer(Modifier.width(12.dp))
+                }
+                Column {
+                    if (word != null) Text(word, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+                    Row {
+                        Text(shown, style = MaterialTheme.typography.titleLarge, modifier = Modifier.alignByBaseline())
+                        if (value != null) {
+                            Spacer(Modifier.width(6.dp))
+                            Text(unit, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.alignByBaseline())
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Text(property.label, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.alignByBaseline())
+                    }
+                }
+            }
+            if (summary.scaled) {
+                Spacer(Modifier.height(4.dp))
+                Text(moodLine(summary.step), style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(12.dp))
+                // One block per window the feed offers, oldest first, so Real shows 7 days and 24 hours.
+                MoodStrip(summary.blocks, captions = PublicSummary.ORDER.filter { it in state.windows }.map { windowLabel(it, strings) })
+            }
+        } else if (headline == SimpleHeadline.LOADING) {
+            // The 24 hour row is still on its way. Neutral, no mood and no verdict yet.
+            Text(
+                strings.loading,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            )
+        } else if (headline == SimpleHeadline.FAILED) {
+            // A read failed after its retries. Never "Not measured", since nothing says so.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    strings.readFailed,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f, fill = false).semantics { liveRegion = LiveRegionMode.Polite },
+                )
+                Spacer(Modifier.width(8.dp))
+                TextButton(onClick = onRetry) { Text(strings.retry) }
+            }
+        } else {
+            Text(strings.notMeasured, style = MaterialTheme.typography.titleMedium)
+        }
+        Spacer(Modifier.height(8.dp))
+        // Sensors, freshness and the other values come from the 24 hour row, like the headline.
+        val facts = state.simpleCellFacts()
+        val updated = facts.updatedEpochMs
+        val stale = updated != null && reference - updated >= CellFreshness.STALE_AFTER_MS
+        val parts = listOfNotNull(facts.devices?.let { strings.sensors(it) }, if (stale) strings.stale else freshness(strings, updated, reference))
+        if (parts.isNotEmpty()) Text(parts.joinToString("  "), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        val others = facts.others
+        if (others.isNotEmpty()) {
+            Spacer(Modifier.height(16.dp))
+            HorizontalDivider()
+            others.forEach { (p, mean) ->
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(role = Role.Button) { onShowProperty(p.id) }.padding(vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(p.label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                    Text(mean?.let { "${formatValue(it, p, units)} ${unitLabel(p, units)}" } ?: notAvailableText(), style = MaterialTheme.typography.bodyLarge)
+                }
             }
         }
     }

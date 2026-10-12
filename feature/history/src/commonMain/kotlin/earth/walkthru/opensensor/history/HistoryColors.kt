@@ -6,13 +6,8 @@ import androidx.compose.ui.graphics.Color
 import earth.walkthru.aqsync.airquality.WhoStep
 import earth.walkthru.aqsync.data.history.AirMood
 import earth.walkthru.aqsync.data.history.MetricSpec
+import earth.walkthru.opensensor.designsystem.moodWord
 import earth.walkthru.opensensor.history.resources.Res
-import earth.walkthru.opensensor.history.resources.mood_fair_title
-import earth.walkthru.opensensor.history.resources.mood_fresh_title
-import earth.walkthru.opensensor.history.resources.mood_hazy_title
-import earth.walkthru.opensensor.history.resources.mood_poor_title
-import earth.walkthru.opensensor.history.resources.mood_smoky_title
-import earth.walkthru.opensensor.history.resources.mood_thick_title
 import earth.walkthru.opensensor.history.resources.who_step_above_it1
 import earth.walkthru.opensensor.history.resources.who_step_guideline
 import earth.walkthru.opensensor.history.resources.who_step_it1
@@ -67,16 +62,7 @@ internal fun contrastRatio(a: Color, b: Color): Double {
 }
 
 @Composable
-internal fun AirMood.titleText(): String = stringResource(
-    when (this) {
-        AirMood.FRESH -> Res.string.mood_fresh_title
-        AirMood.FAIR -> Res.string.mood_fair_title
-        AirMood.HAZY -> Res.string.mood_hazy_title
-        AirMood.POOR -> Res.string.mood_poor_title
-        AirMood.SMOKY -> Res.string.mood_smoky_title
-        AirMood.THICK -> Res.string.mood_thick_title
-    },
-)
+internal fun AirMood.titleText(): String = moodWord(step)
 
 @Composable
 internal fun WhoStep.labelText(): String = stringResource(

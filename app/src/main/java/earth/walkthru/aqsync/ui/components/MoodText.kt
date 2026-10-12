@@ -4,25 +4,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
 import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.airquality.WhoStep
-import earth.walkthru.aqsync.data.history.AirMood
 import earth.walkthru.aqsync.data.protocol.PmsStatus
 
 /**
- * App copy for the shared moods and sensor states. The WHO edges stay in `:core:airquality`, only the
- * words come from `strings.xml`, so they follow the app's copy rules and can be translated.
+ * App copy for sensor states and the WHO step names. The WHO edges stay in `:core:airquality`, only
+ * the words come from `strings.xml`, so they follow the app's copy rules and can be translated. The
+ * mood words and lines live in `:ui:designsystem`.
  */
-@Composable
-fun AirMood.titleText(): String = stringResource(
-    when (this) {
-        AirMood.FRESH -> R.string.mood_fresh_title
-        AirMood.FAIR -> R.string.mood_fair_title
-        AirMood.HAZY -> R.string.mood_hazy_title
-        AirMood.POOR -> R.string.mood_poor_title
-        AirMood.SMOKY -> R.string.mood_smoky_title
-        AirMood.THICK -> R.string.mood_thick_title
-    },
-)
-
 @Composable
 fun PmsStatus.titleText(): String = stringResource(
     when (this) {

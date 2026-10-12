@@ -5,4 +5,26 @@
     <string name="info_more">More about %1$s</string>
     <!-- SignalBars content description, the argument is 1 to 4. -->
     <string name="signal_bars">Signal %1$d of 4</string>
+    <!-- The six air moods, one per WHO step, cleanest first, and the word for no reading. -->
+    <string name="mood_fresh">Fresh air</string>
+    <string name="mood_fair">Fair</string>
+    <string name="mood_hazy">Getting hazy</string>
+    <string name="mood_poor">Poor</string>
+    <string name="mood_smoky">Smoky</string>
+    <string name="mood_thick">Thick smoke</string>
+    <string name="mood_none">No reading</string>
+    <!-- One plain sentence per mood. Simple shows it, so it never names the guideline body. -->
+    <string name="mood_fresh_line">Clean air. A good time to be outside.</string>
+    <string name="mood_fair_line">Fine for most people.</string>
+    <string name="mood_hazy_line">Sensitive people may notice it.</string>
+    <string name="mood_poor_line">Take long outdoor effort easy.</string>
+    <string name="mood_smoky_line">Stay inside if you can. A filter helps.</string>
+    <string name="mood_thick_line">Stay inside with windows shut.</string>
+    <string name="mood_none_line">No reading here yet.</string>
+    <!-- A missing value. Never zero, never a dash. -->
+    <string name="value_not_available">n/a</string>
+    <!-- MoodStrip state when a block is chosen, the argument is the block word and caption. -->
+    <string name="mood_strip_selected">%1$s selected</string>
+    <!-- The list comma, spoken lists join with it and one space. -->
+    <string name="list_separator">,</string>
 </resources>

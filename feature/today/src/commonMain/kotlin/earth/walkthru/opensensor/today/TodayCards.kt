@@ -61,9 +61,12 @@ import earth.walkthru.opensensor.designsystem.StatLine
 import earth.walkthru.opensensor.designsystem.StatusDot
 import earth.walkthru.opensensor.designsystem.TickingText
 import earth.walkthru.opensensor.designsystem.WarningNote
+import earth.walkthru.opensensor.designsystem.listSeparator
+import earth.walkthru.opensensor.designsystem.moodWord
 import earth.walkthru.opensensor.designsystem.nowEpochMillis
 import earth.walkthru.opensensor.designsystem.peacockExpressionFor
 import earth.walkthru.opensensor.designsystem.rememberNowMillis
+import earth.walkthru.opensensor.designsystem.spokenList
 import earth.walkthru.opensensor.today.resources.Res
 import earth.walkthru.opensensor.today.resources.batch_explain
 import earth.walkthru.opensensor.today.resources.batch_title
@@ -108,8 +111,6 @@ import earth.walkthru.opensensor.today.resources.flush
 import earth.walkthru.opensensor.today.resources.fresh_none
 import earth.walkthru.opensensor.today.resources.fresh_stale
 import earth.walkthru.opensensor.today.resources.fresh_updated
-import earth.walkthru.opensensor.today.resources.info_now_body
-import earth.walkthru.opensensor.today.resources.mood_none
 import earth.walkthru.opensensor.today.resources.now_last_reading
 import earth.walkthru.opensensor.today.resources.now_right_now
 import earth.walkthru.opensensor.today.resources.now_sample_number
@@ -247,7 +248,7 @@ internal fun MetricHeroCard(
                 CardHeader(
                     title,
                     modifier = Modifier.weight(1f),
-                    info = InfoContent(title, stringResource(Res.string.now_snapshot_note), stringResource(Res.string.info_now_body)),
+                    info = InfoContent(title, stringResource(Res.string.now_snapshot_note), stringResource(nowInfoBodyRes(level))),
                     color = quiet,
                 )
                 FreshnessLabel(receivedAtEpochMs, color = quiet)
@@ -303,7 +304,7 @@ internal fun MetricHeroCard(
                     Text(reading.mood.comparisonText(), style = MaterialTheme.typography.bodySmall, color = quiet, modifier = Modifier.weight(1f))
                 }
                 Spacer(Modifier.height(12.dp))
-                Text(reading.mood.adviceText(), style = MaterialTheme.typography.bodyLarge)
+                Text(stringResource(heroLineRes(reading.mood, level)), style = MaterialTheme.typography.bodyLarge)
             }
             if (level.developer) {
                 live?.seq?.let {
@@ -653,7 +654,7 @@ internal fun BoardCard(live: LiveSample?, profile: LiveProfile?, level: DetailLe
                     }
                 }
                 if (detail.isNotEmpty()) {
-                    Text(detail.joinToString(", "), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(spokenList(detail, listSeparator()), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -779,7 +780,7 @@ internal fun DeviceInfoCard(
             val payload = (connection as? ConnectionState.Ready)?.mtu?.takeIf { it > 3 }?.let { stringResource(Res.string.device_payload, it - 3) }
             StatLine(
                 stringResource(Res.string.device_link),
-                listOfNotNull(transport?.labelText(), payload).joinToString(", ").ifEmpty { NO_VALUE },
+                spokenList(listOfNotNull(transport?.labelText(), payload), listSeparator()).ifEmpty { NO_VALUE },
             )
             if (configReadAtEpochMs != null) {
                 val label = stringResource(Res.string.device_config_read)
@@ -792,4 +793,4 @@ internal fun DeviceInfoCard(
 
 /** The mood face's accessible name when there is no reading. */
 @Composable
-internal fun noMoodText(): String = stringResource(Res.string.mood_none)
+internal fun noMoodText(): String = moodWord(null)

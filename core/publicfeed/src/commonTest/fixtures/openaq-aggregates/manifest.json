@@ -1,0 +1,64 @@
+{
+  "generation": "fixture-0001",
+  "derive_version": "openaq-aggregates/v1",
+  "as_of": "2026-10-08",
+  "stations": 6,
+  "outputs": [
+    {
+      "file": "cells/h3_res=5/data.parquet",
+      "bytes": 10816,
+      "rows": 13
+    }
+  ],
+  "cell_properties": [
+    {
+      "id": "pm25",
+      "label": "PM2.5",
+      "unit": "µg/m³",
+      "category": "Air",
+      "precision": 0.1
+    },
+    {
+      "id": "pm10",
+      "label": "PM10",
+      "unit": "µg/m³",
+      "category": "Air",
+      "precision": 0.1
+    },
+    {
+      "id": "pm1",
+      "label": "PM1",
+      "unit": "µg/m³",
+      "category": "Air",
+      "precision": 0.1
+    },
+    {
+      "id": "no2",
+      "label": "NO2",
+      "unit": "ppm",
+      "category": "Air",
+      "precision": 0.001
+    },
+    {
+      "id": "temperature",
+      "label": "Temperature",
+      "unit": "°C",
+      "category": "Weather",
+      "precision": 0.1
+    },
+    {
+      "id": "humidity",
+      "label": "Humidity",
+      "unit": "%",
+      "category": "Weather",
+      "precision": 1
+    },
+    {
+      "id": "um003",
+      "label": "PM0.3 count",
+      "unit": "particles/cm³",
+      "category": "Air",
+      "precision": 1
+    }
+  ]
+}

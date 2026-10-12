@@ -21,7 +21,7 @@
     <string name="discover_window_24_hours">24 hours</string>
     <string name="discover_window_7_days">7 days</string>
     <string name="discover_sample_data">Sample data</string>
-    <string name="discover_sample_info">These numbers are made up for a preview. Real sensors appear here when the public feed goes live.</string>
+    <string name="discover_sample_info">These numbers are made up for a preview. Choose Real to see OpenAQ sensors.</string>
     <string name="discover_scale_title">Colour scale</string>
     <string name="discover_scale_info1">No health scale is published for this measurement. Colours stretch from low to high across the areas in view, leaving out the lowest and highest 5 percent.</string>
     <string name="discover_scale_info2">Each area shows hourly means from three or more sensors. A faded area has no new value for 3 hours. An outline only means the area does not measure this.</string>
@@ -40,6 +40,8 @@
     <string name="discover_all_measurements">All measurements</string>
     <string name="discover_unavailable">Public sensors are not available on this phone yet</string>
     <string name="discover_loading">Loading</string>
+    <string name="discover_read_failed">Not available right now</string>
+    <string name="discover_retry">Retry</string>
     <string name="discover_no_places">No matching places</string>
     <string name="discover_clear_search">Clear search</string>
     <string name="discover_updated_recently">Updated within the hour</string>
@@ -70,6 +72,10 @@
     <string name="discover_who_info3">The guideline and the targets are 24-hour means. In the last hour and 7 day views, those means are compared with the same values.</string>
     <string name="discover_off_scale">Some areas go past the chart, up to %1$s</string>
     <string name="discover_who_step_spoken">%1$s, up to %2$s %3$s</string>
+    <!-- The Simple legend info sheet. Simple never names the guideline body. -->
+    <string name="discover_mood_info_title">Air mood</string>
+    <string name="discover_mood_info1">Each colour is a mood of the air, from fresh air to thick smoke. A colour means the same in every place and every view.</string>
+    <string name="discover_mood_info2">Choose Detailed in Settings to see the health guideline and the numbers behind each colour.</string>
     <plurals name="discover_spread_summary">
         <item quantity="one">%1$s across %2$d area, from %3$s to %4$s %5$s</item>
         <item quantity="other">%1$s across %2$d areas, from %3$s to %4$s %5$s</item>
@@ -95,4 +101,34 @@
     <string name="discover_map_label">Map of public sensor areas</string>
     <!-- Spread chart's spoken summary, the bar that holds the most areas (CellCharts). -->
     <string name="discover_spread_peak">Most areas from %1$s to %2$s %3$s</string>
+    <!-- The Sample and Real toggle on the map (DiscoverScreen). Real reads OpenAQ, only with public sensors on. -->
+    <string name="discover_source_label">Data source</string>
+    <string name="discover_source_sample">Sample</string>
+    <string name="discover_source_real">Real</string>
+    <!-- The Real label, the local day the OpenAQ data runs to, as in "OpenAQ, data to 8 Oct". -->
+    <string name="discover_real_data_to">OpenAQ, data to %1$s</string>
+    <!-- A short date, day then month, as in "8 Oct". -->
+    <string name="discover_day_month">%1$d %2$s</string>
+    <string-array name="discover_months_short">
+        <item>Jan</item>
+        <item>Feb</item>
+        <item>Mar</item>
+        <item>Apr</item>
+        <item>May</item>
+        <item>Jun</item>
+        <item>Jul</item>
+        <item>Aug</item>
+        <item>Sep</item>
+        <item>Oct</item>
+        <item>Nov</item>
+        <item>Dec</item>
+    </string-array>
+    <!-- Spoken on the disabled toggle. -->
+    <string name="discover_source_off">Turn on Show public sensors in Settings to see real data</string>
+    <!-- The attribution in Real mode, it opens the OpenAQ licenses. -->
+    <string name="discover_data_openaq">Data OpenAQ</string>
+    <string name="discover_real_title">OpenAQ data</string>
+    <string name="discover_real_info">Real data comes from OpenAQ, as daily means per area. Each data provider keeps its own license.</string>
+    <!-- The real feed could not be read, with Retry beside it. -->
+    <string name="discover_load_failed">Could not load public sensors</string>
 </resources>

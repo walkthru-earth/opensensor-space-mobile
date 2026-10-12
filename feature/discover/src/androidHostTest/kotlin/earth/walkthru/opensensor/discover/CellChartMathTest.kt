@@ -1,5 +1,6 @@
 package earth.walkthru.opensensor.discover
 
+import earth.walkthru.aqsync.airquality.MoodBlock
 import earth.walkthru.aqsync.airquality.WhoGuidelines
 import earth.walkthru.aqsync.airquality.WhoStep
 import earth.walkthru.aqsync.publicfeed.CellRow
@@ -116,5 +117,47 @@ class CellChartMathTest {
                 assertEquals(counts[i], values.count { it in band }, "bar $i, upper inclusive $inclusive")
             }
         }
+    }
+
+    @Test
+    fun stepBlocksCountAreasPerStepAndSkipMissingValues() {
+        val blocks = stepBlocks(listOf(3.0, 15.0, 15.1, 40.0, 200.0, Double.NaN), WhoGuidelines.PM25)
+        assertEquals(WhoStep.entries.toList(), blocks.map { it.step })
+        assertEquals(listOf(2f, 1f, 0f, 1f, 0f, 1f), blocks.map { it.weight })
+    }
+
+    @Test
+    fun aStepBandHoldsExactlyTheValuesOfThatStep() {
+        val pm = WhoGuidelines.PM25
+        val guideline = stepBand(pm, WhoStep.GUIDELINE)
+        assertTrue(0.0 in guideline && 15.0 in guideline)
+        assertTrue(15.1 !in guideline)
+        val it4 = stepBand(pm, WhoStep.IT4)
+        assertTrue(15.1 in it4 && 25.0 in it4 && 15.0 !in it4 && 25.1 !in it4)
+        val top = stepBand(pm, WhoStep.ABOVE_IT1)
+        assertTrue(75.1 in top && 10_000.0 in top && 75.0 !in top)
+        listOf(0.0, 15.0, 15.1, 37.5, 50.0, 74.9, 75.0, 75.1, 500.0).forEach { v ->
+            assertEquals(pm.stepOf(v), WhoStep.entries.single { v in stepBand(pm, it) }, "value $v")
+        }
+    }
+
+    @Test
+    fun aMoodBlockTapPicksItsStepAndASecondTapLetsGo() {
+        val pm = WhoGuidelines.PM25
+        val bands = listOf(stepBand(pm, WhoStep.GUIDELINE), stepBand(pm, WhoStep.IT2))
+        val picked = spreadTap(bands, 1, highlight = null)
+        assertEquals(bands[1], picked)
+        assertEquals(1, spreadSelection(bands, picked))
+        assertNull(spreadTap(bands, 1, highlight = picked))
+        assertEquals(bands[0], spreadTap(bands, 0, highlight = picked))
+    }
+
+    @Test
+    fun aHighlightWhoseBlockIsGoneSelectsNothing() {
+        val pm = WhoGuidelines.PM25
+        val bands = listOf(stepBand(pm, WhoStep.GUIDELINE))
+        assertNull(spreadSelection(bands, null))
+        assertNull(spreadSelection(bands, stepBand(pm, WhoStep.IT1)))
+        assertNull(spreadSelection(bands, stepBand(WhoGuidelines.PM10, WhoStep.GUIDELINE)))
     }
 }

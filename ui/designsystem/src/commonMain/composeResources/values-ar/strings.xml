@@ -5,4 +5,22 @@
     <string name="info_more">المزيد عن %1$s</string>
     <!-- SignalBars content description, the argument is 1 to 4. -->
     <string name="signal_bars">الإشارة %1$d من 4</string>
+    <string name="mood_fresh">هواء نقي</string>
+    <string name="mood_fair">مقبول</string>
+    <string name="mood_hazy">يميل إلى الضبابية</string>
+    <string name="mood_poor">سيئ</string>
+    <string name="mood_smoky">دخاني</string>
+    <string name="mood_thick">دخان كثيف</string>
+    <string name="mood_none">لا توجد قراءة</string>
+    <string name="mood_fresh_line">هواء نظيف. وقت جيد للخروج.</string>
+    <string name="mood_fair_line">مناسب لمعظم الناس.</string>
+    <string name="mood_hazy_line">قد يلاحظه الأشخاص الحساسون.</string>
+    <string name="mood_poor_line">خفف المجهود الطويل في الخارج.</string>
+    <string name="mood_smoky_line">ابقَ في الداخل إن استطعت. فلتر الهواء يساعد.</string>
+    <string name="mood_thick_line">ابقَ في الداخل والنوافذ مغلقة.</string>
+    <string name="mood_none_line">لا توجد قراءة هنا بعد.</string>
+    <string name="value_not_available">غير متاح</string>
+    <string name="mood_strip_selected">تم اختيار %1$s</string>
+    <!-- The list comma, spoken lists join with it and one space. -->
+    <string name="list_separator">،</string>
 </resources>

@@ -32,6 +32,8 @@ import earth.walkthru.aqsync.data.history.MetricSpec
 import earth.walkthru.aqsync.data.history.localDateOf
 import earth.walkthru.aqsync.units.UnitFormatter
 import earth.walkthru.opensensor.designsystem.AirQualityPeacock
+import earth.walkthru.opensensor.designsystem.listSeparator
+import earth.walkthru.opensensor.designsystem.spokenList
 import earth.walkthru.opensensor.history.resources.Res
 import earth.walkthru.opensensor.history.resources.chart_average_value
 import earth.walkthru.opensensor.history.resources.chart_ring_title
@@ -76,14 +78,17 @@ internal fun DayRing(
     // One spoken element for the ring and its centre: the day's average with its mood and WHO step,
     // the coverage, then the highest hour. The hour colours alone would say nothing to a screen reader.
     val average = units.value(mean, metric.unit)?.let { stringResource(Res.string.chart_average_value, fmtValue(it), units.unit(metric.unit)) }
-    val description = listOfNotNull(
-        stringResource(Res.string.chart_ring_title, metric.label),
-        average ?: stringResource(Res.string.history_no_readings_short),
-        mood?.titleText(),
-        mood?.step?.labelText(),
-        if (mean != null) stringResource(Res.string.history_day_coverage, (coverage * 100).toInt()) else null,
-        chartHighest(columns, metric, units) { c -> slotLabel(c, HistoryRange.DAY, zone) },
-    ).joinToString(", ")
+    val description = spokenList(
+        listOfNotNull(
+            stringResource(Res.string.chart_ring_title, metric.label),
+            average ?: stringResource(Res.string.history_no_readings_short),
+            mood?.titleText(),
+            mood?.step?.labelText(),
+            if (mean != null) stringResource(Res.string.history_day_coverage, (coverage * 100).toInt()) else null,
+            chartHighest(columns, metric, units) { c -> slotLabel(c, HistoryRange.DAY, zone) },
+        ),
+        listSeparator(),
+    )
 
     Box(modifier.size(size).clearAndSetSemantics { contentDescription = description }, contentAlignment = Alignment.Center) {
         Canvas(Modifier.fillMaxSize()) {

@@ -40,6 +40,8 @@ import earth.walkthru.opensensor.designsystem.PeacockIcon
 import earth.walkthru.opensensor.designsystem.SectionCard
 import earth.walkthru.opensensor.designsystem.StatLine
 import earth.walkthru.opensensor.designsystem.WarningNote
+import earth.walkthru.opensensor.designsystem.listSeparator
+import earth.walkthru.opensensor.designsystem.spokenList
 import earth.walkthru.opensensor.files.resources.Res
 import earth.walkthru.opensensor.files.resources.action_back
 import earth.walkthru.opensensor.files.resources.fm_benchmark
@@ -225,7 +227,7 @@ private fun Loaded(s: FileMetricsState.Loaded, padding: PaddingValues, developer
                 stringResource(Res.string.fm_col_nulls) + " " + c.nulls,
                 stringResource(Res.string.fm_col_min) + " " + c.min,
                 stringResource(Res.string.fm_col_max) + " " + c.max,
-            ).joinToString(", ")
+            ).let { spokenList(it, listSeparator()) }
             Column(Modifier.semantics(mergeDescendants = true) {}) {
                 Row(Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = spoken }, verticalAlignment = Alignment.CenterVertically) {
                     Cell(c.name, 3f, mono = true)

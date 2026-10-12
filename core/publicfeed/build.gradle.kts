@@ -1,7 +1,8 @@
 // The public Discover feed (docs/devices-and-discovery.md Part 2). `commonMain` holds the feed port,
 // the Parquet feed reader (the portable :core:parquet reader, so Android and iOS share one path),
 // the H3 interface, the viewport cover, the bundled sample source and the colour scale. `jvmMain`
-// binds H3 to com.uber:h3. `iosMain` holds the iOS H3 binding.
+// binds H3 to com.uber:h3. `iosMain` holds the iOS H3 binding. The live OpenAQ aggregates feed reads
+// over :core:net HTTP ranges and folds daily rows with kotlinx-datetime local dates.
 plugins {
     id("opensensor.kmp.library")
     alias(libs.plugins.kotlin.serialization)
@@ -15,6 +16,10 @@ kotlin {
             api(project(":core:storage"))
             // WHO 2021 steps for PM2.5 and PM10 (CellScale, HealthAxis).
             api(project(":core:airquality"))
+            // OpenAqAggregatesFeed takes an HttpRangeEngine and reads through HttpRangeSource.
+            api(project(":core:net"))
+            // Daily rows carry a station local date (CellRow.date, DailyCellFold).
+            api(libs.kotlinx.datetime)
             implementation(libs.kotlinx.serialization.json)
         }
         commonTest.dependencies {
@@ -70,11 +75,17 @@ kotlin {
 // the app ships are the files the tests check. `SIMCTL_CHILD_` variables reach the simulator process
 // without the prefix.
 val sampleRoot = rootProject.file("feature/discover/src/commonMain/composeResources/files/discover-sample")
+// Test only fixtures of this module (tools/discover-fixture/make_openaq_fixture.py), read the same way.
+val fixtureRoot = layout.projectDirectory.dir("src/commonTest/fixtures").asFile
 tasks.withType<Test>().configureEach {
     systemProperty("discover.sample.root", sampleRoot.absolutePath)
+    systemProperty("publicfeed.fixture.root", fixtureRoot.absolutePath)
     inputs.dir(sampleRoot).withPropertyName("discoverSample")
+    inputs.dir(fixtureRoot).withPropertyName("publicfeedFixtures")
 }
 tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeSimulatorTest>().configureEach {
     environment("SIMCTL_CHILD_DISCOVER_SAMPLE_ROOT", sampleRoot.absolutePath)
+    environment("SIMCTL_CHILD_PUBLICFEED_FIXTURE_ROOT", fixtureRoot.absolutePath)
     inputs.dir(sampleRoot).withPropertyName("discoverSample")
+    inputs.dir(fixtureRoot).withPropertyName("publicfeedFixtures")
 }
