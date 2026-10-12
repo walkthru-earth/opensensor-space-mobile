@@ -29,9 +29,6 @@ import androidx.compose.ui.unit.dp
 import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.ui.components.ConnectionBanner
-import earth.walkthru.aqsync.ui.components.DeviceSectionTabs
-import earth.walkthru.aqsync.ui.components.DeviceTab
-import earth.walkthru.aqsync.ui.components.TransportChip
 import earth.walkthru.aqsync.ui.device.cards.AutoSyncCard
 import earth.walkthru.aqsync.ui.device.cards.DeviceInfoCard
 import earth.walkthru.opensensor.designsystem.AppIcons
@@ -42,6 +39,9 @@ import earth.walkthru.opensensor.device.LanAccess
 import earth.walkthru.opensensor.device.StickerScan
 import earth.walkthru.opensensor.device.deviceConfigItems
 import earth.walkthru.opensensor.device.sensorIdentityItem
+import earth.walkthru.opensensor.today.DeviceSectionTabs
+import earth.walkthru.opensensor.today.DeviceTab
+import earth.walkthru.opensensor.today.TransportChip
 
 /** Everything the Device screen can ask for. Device-changing ones are confirmed by the shared controller. */
 sealed interface DeviceAction {

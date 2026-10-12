@@ -114,27 +114,9 @@
     <string name="info_file_chart_body">One column per synced file in file order. Faint columns have few valid readings, for example during warm up. Dashed columns have an estimated time. Touch a column to read its file, rows, time span and mean.</string>
 
     <!-- Connection banner -->
-    <string name="conn_disconnected">Not connected</string>
-    <string name="conn_connecting">Connecting…</string>
-    <string name="conn_discovering">Discovering services…</string>
-    <string name="conn_pairing">Pairing. Enter the code shown on the sensor</string>
-    <string name="conn_mtu">Negotiating MTU…</string>
-    <string name="conn_notifications">Enabling notifications…</string>
-    <string name="conn_setting_up">Setting up the link…</string>
-    <string name="conn_lan_auth">Authenticating on the LAN…</string>
-    <string name="conn_lan_checking">Checking this phone on your Wi-Fi…</string>
-    <string name="conn_ready">Connected</string>
-    <string name="conn_ready_mtu">Connected, MTU %1$d</string>
     <string name="conn_failed">Could not connect. Move closer and try again</string>
-    <string name="conn_link_lost">Link lost. Reconnecting by itself…</string>
-    <string name="conn_link_lost_detail">Link lost (%1$s). Reconnecting, attempt %2$d of %3$d…</string>
-    <string name="conn_bluetooth_settings">Bluetooth settings</string>
 
     <!-- Bottom bar -->
-    <string name="tab_today">Today</string>
-    <string name="tab_history">History</string>
-    <string name="tab_files">Files</string>
-    <string name="tab_device">Device</string>
 
     <!-- Files -->
     <string name="files_bg_queued">Background sync queued…</string>
@@ -287,9 +269,6 @@
     <string name="ago_minutes">%1$d min ago</string>
     <string name="ago_hours">%1$d h ago</string>
     <string name="ago_days">%1$d d ago</string>
-    <string name="transport_ble">Bluetooth</string>
-    <string name="transport_lan">Wi-Fi LAN</string>
-    <string name="transport_fake">Fake device</string>
     <string name="file_chart_estimated">%1$s, estimated</string>
     <string name="file_chart_unplaced">No place on the timeline yet. This boot has no clock time.</string>
     <plurals name="file_chart_rows">

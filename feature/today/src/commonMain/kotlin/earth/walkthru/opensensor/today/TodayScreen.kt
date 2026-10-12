@@ -222,12 +222,12 @@ fun TodayContent(
                             IconButton(onClick = { onAction(TodayAction.Disconnect) }) { Icon(AppIcons.LinkOff, contentDescription = stringResource(Res.string.nav_disconnect)) }
                         },
                     )
-                    DeviceSectionTabs { index ->
-                        when (index) {
-                            1 -> onAction(TodayAction.OpenHistory)
-                            2 -> onAction(TodayAction.OpenFiles)
-                            3 -> onAction(TodayAction.OpenDevice)
-                            else -> Unit
+                    DeviceSectionTabs(DeviceTab.TODAY) { tab ->
+                        when (tab) {
+                            DeviceTab.HISTORY -> onAction(TodayAction.OpenHistory)
+                            DeviceTab.FILES -> onAction(TodayAction.OpenFiles)
+                            DeviceTab.DEVICE -> onAction(TodayAction.OpenDevice)
+                            DeviceTab.TODAY -> Unit
                         }
                     }
                 }
@@ -298,87 +298,4 @@ fun TodayContent(
             }
         }
     }
-}
-
-/** The link state as a banner, with the reconnect attempt and, when pairing broke, a Bluetooth settings link. */
-@Composable
-internal fun ConnectionBanner(
-    state: ConnectionState,
-    reconnecting: TodayReconnect?,
-    technical: Boolean,
-    pairingRepair: Boolean,
-    onOpenBluetoothSettings: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val (container, content) = when (state) {
-        is ConnectionState.Ready -> MaterialTheme.colorScheme.surfaceContainer to MaterialTheme.colorScheme.onSurface
-        is ConnectionState.Failed -> MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
-        ConnectionState.Bonding -> MaterialTheme.colorScheme.tertiaryContainer to MaterialTheme.colorScheme.onTertiaryContainer
-        else -> MaterialTheme.colorScheme.secondaryContainer to MaterialTheme.colorScheme.onSecondaryContainer
-    }
-    Surface(color = container, contentColor = content, shape = MaterialTheme.shapes.large, modifier = modifier.fillMaxWidth()) {
-        Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (state.isBusy) {
-                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-            } else {
-                StatusDot(
-                    when (state) {
-                        is ConnectionState.Ready -> MaterialTheme.colorScheme.primary
-                        is ConnectionState.Failed -> MaterialTheme.colorScheme.error
-                        else -> MaterialTheme.colorScheme.outline
-                    },
-                )
-            }
-            Spacer(Modifier.width(12.dp))
-            Column {
-                // The link state changes while the user waits, so screen readers hear it without moving focus.
-                Text(
-                    state.describe(technical, pairingRepair),
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                )
-                if (reconnecting != null) {
-                    Text(
-                        if (technical) {
-                            stringResource(Res.string.conn_link_lost_detail, reconnecting.reason, reconnecting.attempt, reconnecting.maxAttempts)
-                        } else {
-                            stringResource(Res.string.conn_link_lost)
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-                if (pairingRepair && state is ConnectionState.Failed) {
-                    TextButton(onClick = onOpenBluetoothSettings) { Text(stringResource(Res.string.conn_bluetooth_settings)) }
-                }
-            }
-        }
-    }
-}
-
-/** The four sections of one device, Today selected. The bottom bar stays below with My devices selected. */
-@Composable
-internal fun DeviceSectionTabs(containerColor: Color = MaterialTheme.colorScheme.background, onSelect: (Int) -> Unit) {
-    SectionTabs(
-        labels = listOf(
-            stringResource(Res.string.tab_today),
-            stringResource(Res.string.tab_history),
-            stringResource(Res.string.tab_files),
-            stringResource(Res.string.tab_device),
-        ),
-        selectedIndex = 0,
-        onSelect = onSelect,
-        containerColor = containerColor,
-    )
-}
-
-/** Small chip naming the active byte pipe, Bluetooth or Wi-Fi LAN (and the fake device in debug builds). */
-@Composable
-internal fun TransportChip(kind: TransportKind?, modifier: Modifier = Modifier) {
-    if (kind == null) return
-    val (icon, container, content) = when (kind) {
-        TransportKind.BLE -> Triple(AppIcons.Bluetooth, MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.onSecondaryContainer)
-        TransportKind.LAN -> Triple(AppIcons.Wifi, MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.onTertiaryContainer)
-        TransportKind.FAKE -> Triple(AppIcons.BugReport, MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-    TagChip(icon, kind.labelText(), container, content, modifier)
 }

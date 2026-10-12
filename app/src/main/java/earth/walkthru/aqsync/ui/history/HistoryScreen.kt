@@ -11,11 +11,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import earth.walkthru.aqsync.ui.components.DeviceSectionTabs
-import earth.walkthru.aqsync.ui.components.DeviceTab
 import earth.walkthru.aqsync.ui.components.LocalUnits
-import earth.walkthru.aqsync.ui.components.TransportChip
 import earth.walkthru.opensensor.history.historyTitle
+import earth.walkthru.opensensor.today.DeviceSectionTabs
+import earth.walkthru.opensensor.today.DeviceTab
+import earth.walkthru.opensensor.today.TransportChip
 import earth.walkthru.opensensor.history.HistoryScreen as SharedHistoryScreen
 
 /**

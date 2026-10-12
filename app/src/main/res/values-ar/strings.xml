@@ -123,27 +123,9 @@
     <string name="info_file_chart_body">عمود لكل ملف تمت مزامنته بترتيب الملفات. الأعمدة الباهتة فيها قراءات صالحة قليلة، مثلًا أثناء الإحماء. الأعمدة المتقطعة وقتها مقدَّر. المس عمودًا لقراءة ملفه وصفوفه ومدته الزمنية ومتوسطه.</string>
 
     <!-- Connection banner -->
-    <string name="conn_disconnected">غير متصل</string>
-    <string name="conn_connecting">جارٍ الاتصال…</string>
-    <string name="conn_discovering">جارٍ اكتشاف الخدمات…</string>
-    <string name="conn_pairing">جارٍ الإقران. أدخل الرمز الظاهر على المستشعر</string>
-    <string name="conn_mtu">جارٍ التفاوض على MTU…</string>
-    <string name="conn_notifications">جارٍ تفعيل الإشعارات…</string>
-    <string name="conn_setting_up">جارٍ إعداد الاتصال…</string>
-    <string name="conn_lan_auth">جارٍ التحقق على الشبكة المحلية…</string>
-    <string name="conn_lan_checking">جارٍ التحقق من هذا الهاتف على شبكة Wi-Fi لديك…</string>
-    <string name="conn_ready">متصل</string>
-    <string name="conn_ready_mtu">متصل، MTU %1$d</string>
     <string name="conn_failed">تعذّر الاتصال. اقترب وحاول مرة أخرى</string>
-    <string name="conn_link_lost">انقطع الاتصال. جارٍ إعادة الاتصال تلقائيًا…</string>
-    <string name="conn_link_lost_detail">انقطع الاتصال (%1$s). جارٍ إعادة الاتصال، المحاولة %2$d من %3$d…</string>
-    <string name="conn_bluetooth_settings">إعدادات Bluetooth</string>
 
     <!-- Bottom bar -->
-    <string name="tab_today">اليوم</string>
-    <string name="tab_history">السجل</string>
-    <string name="tab_files">الملفات</string>
-    <string name="tab_device">الجهاز</string>
 
     <!-- Files -->
     <string name="files_bg_queued">المزامنة في الخلفية في الانتظار…</string>
@@ -315,9 +297,6 @@
     <string name="ago_minutes">قبل %1$d د</string>
     <string name="ago_hours">قبل %1$d س</string>
     <string name="ago_days">قبل %1$d يوم</string>
-    <string name="transport_ble">Bluetooth</string>
-    <string name="transport_lan">Wi-Fi LAN</string>
-    <string name="transport_fake">جهاز وهمي</string>
     <string name="file_chart_estimated">%1$s، تقديري</string>
     <string name="file_chart_unplaced">لا مكان له على الخط الزمني بعد. لا يملك هذا التشغيل وقتًا من الساعة.</string>
     <plurals name="file_chart_rows">

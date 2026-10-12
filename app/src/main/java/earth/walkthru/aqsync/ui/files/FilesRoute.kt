@@ -20,15 +20,15 @@ import earth.walkthru.aqsync.data.background.AutoSyncScheduler
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.ui.components.CollectEvents
 import earth.walkthru.aqsync.ui.components.ConnectionBanner
-import earth.walkthru.aqsync.ui.components.DeviceSectionTabs
-import earth.walkthru.aqsync.ui.components.DeviceTab
-import earth.walkthru.aqsync.ui.components.TransportChip
 import earth.walkthru.aqsync.ui.components.showScreenMessage
 import earth.walkthru.aqsync.ui.permissions.rememberNotificationPermission
 import earth.walkthru.opensensor.designsystem.AppIcons
 import earth.walkthru.opensensor.files.DeviceFilesAction
 import earth.walkthru.opensensor.files.FileMetricsScreen
 import earth.walkthru.opensensor.files.FilesScreen
+import earth.walkthru.opensensor.today.DeviceSectionTabs
+import earth.walkthru.opensensor.today.DeviceTab
+import earth.walkthru.opensensor.today.TransportChip
 
 /**
  * The Android host of the shared Files screen (`:feature:files`). It adds what only Android has

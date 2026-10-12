@@ -9,20 +9,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import earth.walkthru.aqsync.R
+import earth.walkthru.aqsync.data.ble.BleConnectionFailure
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.settings.DetailLevel
 import earth.walkthru.aqsync.ui.components.NO_VALUE
 import earth.walkthru.aqsync.ui.components.agoFormatter
-import earth.walkthru.aqsync.ui.components.describe
-import earth.walkthru.aqsync.ui.components.labelText
 import earth.walkthru.opensensor.designsystem.BrandCard
 import earth.walkthru.opensensor.designsystem.Eyebrow
 import earth.walkthru.opensensor.designsystem.StatLine
 import earth.walkthru.opensensor.designsystem.TickingText
 import earth.walkthru.opensensor.designsystem.listSeparator
 import earth.walkthru.opensensor.designsystem.spokenList
+import earth.walkthru.opensensor.today.describe
+import earth.walkthru.opensensor.today.labelText
 
 /**
  * The device header card. Simple names the device and how it is connected, in words. Detailed adds
@@ -45,7 +46,7 @@ fun DeviceInfoCard(
         Spacer(Modifier.height(6.dp))
         Text(name ?: stringResource(R.string.device_unnamed), style = MaterialTheme.typography.titleLarge)
         Text(
-            if (connection.isReady && transport != null) stringResource(R.string.device_connected_over, transport.labelText()) else connection.describe(level.developer),
+            if (connection.isReady && transport != null) stringResource(R.string.device_connected_over, transport.labelText()) else connection.describe(level.developer, BleConnectionFailure.needsPairingRepair(connection)),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

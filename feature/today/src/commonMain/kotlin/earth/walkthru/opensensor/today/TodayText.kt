@@ -206,7 +206,7 @@ internal fun ClockQuality.reasonRes(): StringResource = when (this) {
 
 /** The name of a byte pipe, for chips and stat lines. */
 @Composable
-internal fun TransportKind.labelText(): String = stringResource(
+fun TransportKind.labelText(): String = stringResource(
     when (this) {
         TransportKind.BLE -> Res.string.transport_ble
         TransportKind.LAN -> Res.string.transport_lan
@@ -219,7 +219,7 @@ internal fun TransportKind.labelText(): String = stringResource(
  * (Developer level). [pairingRepair] comes from the platform, which knows its own failure codes.
  */
 @Composable
-internal fun ConnectionState.describe(technical: Boolean, pairingRepair: Boolean = false): String = when (this) {
+fun ConnectionState.describe(technical: Boolean, pairingRepair: Boolean = false): String = when (this) {
     ConnectionState.Disconnected -> stringResource(Res.string.conn_disconnected)
     ConnectionState.Connecting -> stringResource(Res.string.conn_connecting)
     ConnectionState.DiscoveringServices -> stringResource(if (technical) Res.string.conn_discovering else Res.string.conn_connecting)
