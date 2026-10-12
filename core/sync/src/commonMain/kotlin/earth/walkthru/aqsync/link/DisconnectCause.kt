@@ -104,6 +104,8 @@ val DisconnectCause.retryable: Boolean
  * Why the link ended when the peer closed it after [bye]. A BYE that names a credential or slot
  * problem becomes its typed cause, so retry policy never reconnects with a rotated or refused LAN
  * token and screens name the real reason. Any other BYE, or none, stays [DisconnectCause.PeerClosed].
+ * Only LAN sessions receive BYE (BLE never sends one), so `auth-failed` here is always a LAN token
+ * refusal, never a Bluetooth encryption failure.
  */
 fun peerClosedCause(bye: Frame.Bye?): DisconnectCause = when (bye?.disconnectReason) {
     DisconnectReason.TOKEN_ROTATED -> DisconnectCause.Auth(AuthKind.TOKEN_ROTATED)

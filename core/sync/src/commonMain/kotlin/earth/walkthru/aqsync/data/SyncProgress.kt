@@ -4,7 +4,6 @@ import earth.walkthru.aqsync.collection.SyncEndReason
 import earth.walkthru.aqsync.data.sync.FileOutcome
 import earth.walkthru.aqsync.data.sync.FileProgress
 import earth.walkthru.aqsync.data.sync.SyncEndCause
-import earth.walkthru.aqsync.data.sync.SyncResumePolicy
 
 /** Progress of one collection run over every planned file, as the screens and notifications show it. */
 data class SyncProgress(
@@ -20,7 +19,7 @@ data class SyncProgress(
     val outcomes: List<FileOutcome> = emptyList(),
     val startedAtEpochMs: Long? = null,
     val finishedAtEpochMs: Long? = null,
-    /** Why the last run ended (null while running or before the first run); see [SyncResumePolicy]. */
+    /** Why the last run ended (null while running or before the first run). */
     val endCause: SyncEndCause? = null,
     /** The person-facing reason for that ending, shared by every screen and notification. */
     val endReason: SyncEndReason? = null,
