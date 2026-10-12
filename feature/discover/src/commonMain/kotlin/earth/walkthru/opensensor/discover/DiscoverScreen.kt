@@ -84,7 +84,6 @@ import androidx.navigationevent.compose.NavigationBackHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
 import earth.walkthru.aqsync.airquality.HealthScale
 import earth.walkthru.aqsync.airquality.WhoStep
-import earth.walkthru.aqsync.publicfeed.CellFreshness
 import earth.walkthru.aqsync.publicfeed.CellRow
 import earth.walkthru.aqsync.publicfeed.CellScale
 import earth.walkthru.aqsync.publicfeed.FeedProperty
@@ -644,10 +643,12 @@ private fun FirstRunCard(strings: DiscoverStrings, onAddSensor: () -> Unit, onEx
 }
 
 @Composable
-private fun freshness(strings: DiscoverStrings, updated: Long?, reference: Long): String? {
-    updated ?: return null
-    val hours = ((reference - updated) / 3_600_000L).toInt()
-    return if (hours < 1) strings.updatedRecently else strings.updatedHoursAgo(hours)
+private fun freshness(strings: DiscoverStrings, freshness: Freshness?): String? = when (freshness) {
+    null -> null
+    Freshness.Stale -> strings.stale
+    Freshness.Recent -> strings.updatedRecently
+    is Freshness.HoursAgo -> strings.updatedHoursAgo(freshness.hours)
+    is Freshness.DataTo -> strings.dataTo(freshness.day)
 }
 
 @Composable
@@ -695,7 +696,7 @@ private fun InView(
         }
     }
     Text(strings.areasInView(state.rows.size), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
-    freshness(strings, state.newestUpdateEpochMs, reference)?.let {
+    freshness(strings, freshnessOf(state.newestUpdateEpochMs, reference, state.dailyAsOf, staleShown = false))?.let {
         Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     property ?: return
@@ -836,8 +837,7 @@ private fun CellDetail(
         } else {
             Text(strings.notMeasured, style = MaterialTheme.typography.titleMedium)
         }
-        val stale = reference - row.updatedEpochMs >= CellFreshness.STALE_AFTER_MS
-        val parts = listOfNotNull(strings.sensors(row.devices), if (stale) strings.stale else freshness(strings, row.updatedEpochMs, reference))
+        val parts = listOfNotNull(strings.sensors(row.devices), freshness(strings, freshnessOf(row.updatedEpochMs, reference, state.dailyAsOf)))
         Text(parts.joinToString("  "), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (property != null && headline != null) {
             percentBelow(state.rows.mapNotNull { it.mean(property.id) }, headline)?.let {
@@ -951,8 +951,7 @@ private fun SimpleCellDetail(
         // Sensors, freshness and the other values come from the 24 hour row, like the headline.
         val facts = state.simpleCellFacts()
         val updated = facts.updatedEpochMs
-        val stale = updated != null && reference - updated >= CellFreshness.STALE_AFTER_MS
-        val parts = listOfNotNull(facts.devices?.let { strings.sensors(it) }, if (stale) strings.stale else freshness(strings, updated, reference))
+        val parts = listOfNotNull(facts.devices?.let { strings.sensors(it) }, freshness(strings, freshnessOf(updated, reference, state.dailyAsOf)))
         if (parts.isNotEmpty()) Text(parts.joinToString("  "), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         val others = facts.others
         if (others.isNotEmpty()) {

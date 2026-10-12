@@ -16,6 +16,7 @@ import earth.walkthru.opensensor.discover.resources.discover_average_summary
 import earth.walkthru.opensensor.discover.resources.discover_avg
 import earth.walkthru.opensensor.discover.resources.discover_clear_search
 import earth.walkthru.opensensor.discover.resources.discover_data_openaq
+import earth.walkthru.opensensor.discover.resources.discover_data_to
 import earth.walkthru.opensensor.discover.resources.discover_day_month
 import earth.walkthru.opensensor.discover.resources.discover_explore
 import earth.walkthru.opensensor.discover.resources.discover_first_run
@@ -181,6 +182,10 @@ class DiscoverStrings internal constructor(
     /** The Real label, as in "OpenAQ, data to 8 Oct". */
     @Composable
     fun realDataTo(date: LocalDate): String = stringResource(Res.string.discover_real_data_to, dayMonth(date))
+
+    /** "Data to 8 Oct", the last day a daily value measured. */
+    @Composable
+    fun dataTo(date: LocalDate): String = stringResource(Res.string.discover_data_to, dayMonth(date))
 
     /** A short local date, day then month. */
     @Composable

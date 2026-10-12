@@ -47,6 +47,8 @@ class DiscoverControllerTest {
         override val isSample: Boolean = true,
         override val windows: List<FeedWindow> = FeedWindow.entries,
         private val partition: FeedPartition = FeedPartition("2026-10-12", 10),
+        override val isDaily: Boolean = false,
+        private val updatedMs: Long = 1_000L,
     ) : PublicFeed {
         override val available = true
         val calls = mutableListOf<Pair<FeedWindow, List<LongRange>?>>()
@@ -93,7 +95,7 @@ class DiscoverControllerTest {
             }
             val rows = listOf(cellA, cellB)
                 .filter { c -> ranges == null || ranges.any { c in it } }
-                .map { c -> CellRow(c, devices = 3, updatedEpochMs = 1_000L, stats = mapOf("pm25" to CellStat(3, value(c, window), null, null))) }
+                .map { c -> CellRow(c, devices = 3, updatedEpochMs = updatedMs, stats = mapOf("pm25" to CellStat(3, value(c, window), null, null))) }
             return CellsTable(CellsFileInfo(sample = isSample, window = null, h3Res = res, properties = listOf(pm25)), rows, 1, 1)
         }
     }
@@ -137,6 +139,7 @@ class DiscoverControllerTest {
         saved: MutableList<DiscoverSource>? = null,
         prefs: MemoryPrefs = MemoryPrefs(),
         io: CoroutineDispatcher = StandardTestDispatcher(testScheduler),
+        nowMs: Long = 1_000L,
     ): DiscoverController {
         val c = DiscoverController(
             backgroundScope,
@@ -144,7 +147,7 @@ class DiscoverControllerTest {
             FakeGrid,
             prefs,
             "UTC",
-            now = { 1_000L },
+            now = { nowMs },
             io = io,
             liveFeed = live,
             saveSource = { saved?.add(it) },
@@ -415,6 +418,28 @@ class DiscoverControllerTest {
         runCurrent()
         assertTrue(FeedWindow.DAY in c.state.value.selectedWindows, "the 24 hours lands before the last hour retries")
         assertEquals(SimpleHeadline.SHOWN, c.state.value.simpleHeadline())
+    }
+
+    @Test
+    fun aRealDailyCellIsJudgedAgainstThePartitionDateNotTheClock() = runTest {
+        // Rows that ran to 8 Oct end at midnight UTC on 9 Oct. The phone reads them 98 hours later.
+        val endOfDay = LocalDate(2026, 10, 9).toEpochDays() * 86_400_000L
+        val live = FakeFeed(
+            isSample = false,
+            windows = listOf(FeedWindow.DAY, FeedWindow.WEEK),
+            partition = FeedPartition("2026-10-08", 0),
+            isDaily = true,
+            updatedMs = endOfDay,
+        )
+        val c = controller(FakeFeed(), live, nowMs = endOfDay + 98 * 3_600_000L)
+        c.onSourceSettings(DiscoverSource.OPENAQ, publicSensors = true)
+        settle()
+        val s = c.state.value
+        assertTrue(s.daily)
+        assertEquals(LocalDate(2026, 10, 8), s.dataDate)
+        assertTrue(s.rows.isNotEmpty())
+        assertTrue("\"stale\":false" in s.geoJson, s.geoJson)
+        assertFalse("\"stale\":true" in s.geoJson, s.geoJson)
     }
 
     @Test

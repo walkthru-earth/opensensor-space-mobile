@@ -87,7 +87,10 @@ object CellFreshness {
     fun isStale(row: CellRow, nowEpochMs: Long): Boolean = nowEpochMs - row.updatedEpochMs >= STALE_AFTER_MS
 
     /** The newest day a daily row measured. Its `updatedEpochMs` is the UTC midnight after that day. */
-    fun dataDay(row: CellRow): LocalDate = LocalDate.fromEpochDays(row.updatedEpochMs.floorDiv(DAY_MS) - 1)
+    fun dataDay(row: CellRow): LocalDate = dataDay(row.updatedEpochMs)
+
+    /** [dataDay] for a row's `updatedEpochMs` alone. */
+    fun dataDay(updatedEpochMs: Long): LocalDate = LocalDate.fromEpochDays(updatedEpochMs.floorDiv(DAY_MS) - 1)
 
     /**
      * A daily row is stale when its newest day is older than the day before [asOf], the partition

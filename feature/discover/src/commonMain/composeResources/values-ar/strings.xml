@@ -126,6 +126,7 @@
     <string name="discover_source_real">حقيقية</string>
     <!-- The Real label, the local day the OpenAQ data runs to, as in "OpenAQ, data to 8 Oct". -->
     <string name="discover_real_data_to">OpenAQ، بيانات حتى %1$s</string>
+    <string name="discover_data_to">بيانات حتى %1$s</string>
     <!-- A short date, day then month, as in "8 Oct". -->
     <string name="discover_day_month">%1$d %2$s</string>
     <string-array name="discover_months_short">
