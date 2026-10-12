@@ -66,7 +66,12 @@ object BleDisconnectCauses {
             bond?.missing == true -> DisconnectCause.Auth(AuthKind.BOND_MISSING)
             bond != null -> DisconnectCause.Auth(AuthKind.BOND_FAILED)
             chain.any { it is BleLinkDriver.ConnectTimeoutException } -> DisconnectCause.Timeout(TimeoutPhase.OPEN, 0)
-            else -> e.gattStatus?.let(::ofStatus) ?: DisconnectCause.LocalAbort()
+            else -> {
+                val status = e.gattStatus?.let(::ofStatus) ?: DisconnectCause.LocalAbort()
+                // A GATT connect that failed with a plain status (133, 147, 62) means the sensor
+                // was not reached. Unreachable gets the short connect retry bound, not five tries.
+                if (status is DisconnectCause.LocalAbort && chain.any { it is BleLinkDriver.ConnectFailedException }) DisconnectCause.Unreachable else status
+            }
         }
     }
 }
