@@ -13,8 +13,8 @@ import earth.walkthru.opensensor.permissions.IosAuthorization
 import earth.walkthru.opensensor.permissions.RuntimeAccess
 import earth.walkthru.opensensor.permissions.openAppSettings
 import kotlinx.cinterop.useContents
-import kotlinx.coroutines.CancellableContinuation
-import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import platform.CoreLocation.CLLocation
 import platform.CoreLocation.CLLocationManager
 import platform.CoreLocation.CLLocationManagerDelegateProtocol
@@ -24,7 +24,6 @@ import platform.Foundation.NSDate
 import platform.Foundation.NSError
 import platform.Foundation.timeIntervalSince1970
 import platform.darwin.NSObject
-import kotlin.coroutines.resume
 
 @Composable
 internal actual fun rememberDeviceLocationRequest(): DeviceLocationRequest {
@@ -45,7 +44,7 @@ internal actual fun rememberDeviceLocationRequest(): DeviceLocationRequest {
 private class CellLocation(private val onPermissionResult: () -> Unit) {
     val manager = CLLocationManager()
     private var awaitingPermission = false
-    private var continuation: CancellableContinuation<String?>? = null
+    private val pending = PendingFix(FIX_TIMEOUT_MS, start = { manager.requestLocation() }, stop = { manager.stopUpdatingLocation() })
     private var resolution = 5
     private val delegate = object : NSObject(), CLLocationManagerDelegateProtocol {
         override fun locationManagerDidChangeAuthorization(manager: CLLocationManager) {
@@ -77,19 +76,23 @@ private class CellLocation(private val onPermissionResult: () -> Unit) {
         manager.requestWhenInUseAuthorization()
     }
 
-    suspend fun cell(resolution: Int): String? = suspendCancellableCoroutine { next ->
-        this.resolution = resolution
-        continuation = next
-        next.invokeOnCancellation { continuation = null; manager.stopUpdatingLocation() }
-        manager.requestLocation()
+    /** The manager was made on the main thread, so every request and stop runs there. */
+    suspend fun cell(resolution: Int): String? = withContext(Dispatchers.Main) {
+        this@CellLocation.resolution = resolution
+        pending.await()
     }
 
-    private fun finish(cell: String?) {
-        val next = continuation
-        continuation = null
+    private fun finish(cell: String?) = pending.finish(cell)
+
+    fun close() {
+        finish(null)
         manager.stopUpdatingLocation()
-        if (next?.isActive == true) next.resume(cell)
+        awaitingPermission = false
+        manager.delegate = null
     }
 
-    fun close() { finish(null); awaitingPermission = false; manager.delegate = null }
+    private companion object {
+        /** Indoors a fix can take long. The card says it failed instead of spinning. */
+        const val FIX_TIMEOUT_MS = 15_000L
+    }
 }
