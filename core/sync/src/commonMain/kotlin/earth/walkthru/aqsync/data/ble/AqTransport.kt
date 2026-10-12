@@ -1,5 +1,6 @@
 package earth.walkthru.aqsync.data.ble
 
+import earth.walkthru.aqsync.link.UnavailableKind
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,6 +28,9 @@ sealed interface ConnectionState {
 }
 
 open class TransportException(message: String, val gattStatus: Int? = null, cause: Throwable? = null) : Exception(message, cause)
+
+/** The transport cannot open until the user acts (radio off, permission missing, no adapter). Never retried. */
+class TransportUnavailableException(val kind: UnavailableKind, message: String) : TransportException(message)
 
 /** Which byte pipe a transport is. The protocol above it is identical. */
 enum class TransportKind { BLE, LAN, FAKE }

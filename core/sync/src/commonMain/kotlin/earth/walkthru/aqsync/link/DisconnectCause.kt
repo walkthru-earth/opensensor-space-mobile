@@ -46,6 +46,12 @@ sealed interface DisconnectCause {
     /** The phone lost the radio that carried the link. */
     data class RadioLost(val radio: Radio) : DisconnectCause
 
+    /**
+     * The phone cannot open this transport at all until the user acts: the radio is off, a
+     * permission is missing or there is no adapter. Retrying without that action repeats it.
+     */
+    data class Unavailable(val kind: UnavailableKind) : DisconnectCause
+
     /** The device speaks an older protocol than this app requires. */
     data class UpdateFirmware(val reported: Int?, val required: Int) : DisconnectCause
 
@@ -68,7 +74,13 @@ enum class AuthKind {
 
     /** The phone lost its bond keys for the peer (Android `ACTION_KEY_MISSING`). Pair again. */
     BOND_MISSING,
+
+    /** The device rotated its LAN token (BYE reason 10). A fresh token comes over bonded BLE. */
+    TOKEN_ROTATED,
 }
+
+/** Why a transport cannot be opened before any byte moves. */
+enum class UnavailableKind { RADIO_OFF, PERMISSION_MISSING, NO_ADAPTER }
 
 enum class Radio { BLUETOOTH, WIFI }
 
@@ -82,6 +94,7 @@ val DisconnectCause.retryable: Boolean
         is DisconnectCause.Deliberate,
         is DisconnectCause.FramingViolation,
         is DisconnectCause.Rejected,
+        is DisconnectCause.Unavailable,
         is DisconnectCause.UpdateFirmware -> false
         else -> true
     }
@@ -100,6 +113,7 @@ fun DisconnectCause.describe(): String = when (this) {
     DisconnectCause.Busy -> "device busy"
     DisconnectCause.Unreachable -> "unreachable"
     is DisconnectCause.RadioLost -> "${radio.name.lowercase()} lost"
+    is DisconnectCause.Unavailable -> "unavailable (${kind.name.lowercase()})"
     is DisconnectCause.UpdateFirmware -> "firmware proto $reported, app needs $required"
     is DisconnectCause.Rejected -> "rejected ($reason)"
     is DisconnectCause.Deliberate -> "closed ($reason)"
