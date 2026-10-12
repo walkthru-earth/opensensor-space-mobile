@@ -268,6 +268,10 @@ class DevicesBridge internal constructor(
     fun deviceFor(peripheral: String): String? =
         (records.value + credentials.value).firstOrNull { it.peripheral.equals(peripheral, ignoreCase = true) }?.device
 
+    /** The saved peripheral id for a 12-hex hardware id, so a retry can reopen its Bluetooth link. */
+    fun peripheralFor(device: String): String? =
+        (records.value + credentials.value).firstOrNull { it.device.equals(device, ignoreCase = true) }?.peripheral
+
     /** The verified station for a previously opened peripheral. This is only a discovery hint. */
     fun stationFor(peripheral: String): String? =
         (records.value + credentials.value).firstOrNull { it.peripheral.equals(peripheral, ignoreCase = true) }?.station

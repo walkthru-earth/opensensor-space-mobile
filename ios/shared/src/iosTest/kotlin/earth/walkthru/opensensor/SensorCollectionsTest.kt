@@ -4,6 +4,7 @@ package earth.walkthru.opensensor
 
 import earth.walkthru.aqsync.archive.IosArchiveStore
 import earth.walkthru.aqsync.archive.ReceiptArchiveIndex
+import earth.walkthru.aqsync.collection.KeepAlive
 import earth.walkthru.aqsync.collection.LinkPreference
 import earth.walkthru.aqsync.collection.RetryPolicy
 import earth.walkthru.aqsync.data.protocol.Frame
@@ -32,6 +33,7 @@ import platform.Foundation.NSUUID
 import kotlin.concurrent.atomics.AtomicInt
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.concurrent.atomics.incrementAndFetch
+import kotlin.coroutines.CoroutineContext
 import kotlin.random.Random
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -98,9 +100,9 @@ class SensorCollectionsTest {
         val dials = AtomicInt(0)
         var current: IosLink? = null
 
-        fun connect(): IosLink {
+        fun connect(wifi: Boolean = true): IosLink {
             lateinit var link: IosLink
-            link = IosLink(Port { answer(link, it) }, overWifi = true, address = device, callbacks = Dispatchers.Default, context = Dispatchers.Default)
+            link = IosLink(Port { answer(link, it) }, overWifi = wifi, address = device, callbacks = Dispatchers.Default, context = Dispatchers.Default)
             link.identify(station, "boot", 1024)
             current = link
             return link
@@ -178,12 +180,13 @@ class SensorCollectionsTest {
     private fun u16(b: ByteArray, at: Int) = (b[at].toInt() and 0xFF) or ((b[at + 1].toInt() and 0xFF) shl 8)
     private fun u32(b: ByteArray, at: Int) = u16(b, at).toLong() or (u16(b, at + 2).toLong() shl 16)
 
-    private fun collections(board: Board) = SensorCollections(
+    private fun collections(board: Board, keepAlive: KeepAlive = KeepAlive.None, callbacks: CoroutineContext = Dispatchers.Default) = SensorCollections(
         sync,
         IosLinkProvider({ board.current }, 5.seconds, Dispatchers.Default, board::dial, poll = 10.milliseconds),
         record,
         Dispatchers.Default,
-        Dispatchers.Default,
+        callbacks,
+        keepAlive = keepAlive,
         retry = RetryPolicy(firstBackoff = 10.milliseconds, maxBackoff = 50.milliseconds),
         progressInterval = 0,
     )
@@ -398,5 +401,73 @@ class SensorCollectionsTest {
         assertEquals(2, result.files)
         assertEquals(1, result.saved)
         assertEquals(0, result.notSaved)
+    }
+
+    @Test
+    fun aRunIosGivesNoBackgroundTimeEndsBeforeItTouchesTheLink() = runBlocking {
+        val board = Board()
+        board.connect()
+        val asked = ArrayList<Boolean>()
+        val refusing = IosKeepAlive({ _, _, unattended -> asked += unattended; false }, {}, Dispatchers.Default)
+        val runs = collections(board, refusing)
+        val seen = Seen()
+        runs.collect(device, null, LinkPreference.ANY, true, seen::progress, seen::finished)
+        val result = withTimeout(10_000) { seen.done.await() }
+        assertEquals(SyncEnd.FAILED, result.end)
+        assertEquals(listOf(true), asked, "an unattended run says so")
+        assertEquals(0, board.lists.load(), "a refused run never lists")
+        assertFalse(board.current!!.leased)
+        assertFalse(runs.isActive(device))
+    }
+
+    @Test
+    fun aRunHoldsItsBackgroundTimeUntilItHandedTheLinkBackAndIsActiveUntilItsResult() = runBlocking {
+        val board = Board()
+        board.connect()
+        val serial = Dispatchers.Default.limitedParallelism(1)
+        val order = ArrayList<String>()
+        val orderLock = NSLock()
+        fun note(event: String) {
+            orderLock.lock()
+            order += event
+            orderLock.unlock()
+        }
+        val keepAlive = IosKeepAlive({ _, _, unattended -> note("protect $unattended"); true }, { note("unprotect") }, serial)
+        val runs = collections(board, keepAlive, serial)
+        val done = CompletableDeferred<SyncResult>()
+        runs.collect(device, null, LinkPreference.ANY, false, {}) {
+            assertFalse(board.current!!.leased, "the link is back before the result")
+            note("finished")
+            done.complete(it)
+        }
+        assertTrue(runs.isActive(device))
+        assertFalse(runs.isActive("ffffffffffff"))
+        assertEquals(SyncEnd.COMPLETE, withTimeout(10_000) { done.await() }.end)
+        assertEquals(listOf("protect false", "unprotect", "finished"), order)
+        assertFalse(runs.isActive(device))
+    }
+
+    @Test
+    fun thePickedLinkFollowsTheRunsTransport() = runBlocking {
+        val board = Board()
+        val wifi = board.connect(wifi = true)
+        val bluetooth = board.connect(wifi = false)
+        val provider = IosLinkProvider(
+            { null },
+            1.seconds,
+            Dispatchers.Default,
+            null,
+            poll = 10.milliseconds,
+            pick = { _, prefer -> if (prefer == LinkPreference.BLE) bluetooth else wifi },
+        )
+        val overBluetooth = provider.connect(device, LinkPreference.BLE)
+        assertSame(bluetooth.session, overBluetooth.session)
+        overBluetooth.release()
+        val overWifi = provider.connect(device, LinkPreference.LAN)
+        assertSame(wifi.session, overWifi.session)
+        overWifi.release()
+        // A Bluetooth link never serves a Wi-Fi only run.
+        val wrong = IosLinkProvider({ null }, 200.milliseconds, Dispatchers.Default, null, pick = { _, _ -> bluetooth })
+        assertEquals(DisconnectCause.Unreachable, assertFailsWith<LinkClosedException> { wrong.connect(device, LinkPreference.LAN) }.disconnectCause)
     }
 }

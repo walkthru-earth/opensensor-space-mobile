@@ -39,6 +39,7 @@ import platform.Foundation.NSLock
 import platform.Foundation.NSLog
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 
 /** Stops one sync. Safe from any thread and more than once. */
@@ -273,6 +274,35 @@ class SensorSync internal constructor(
         try {
             return shared ?: SensorCollections(this, IosLinkProvider(linkFor, dial), recordClockAnchor, work, callbacks, progressInterval = progressInterval)
                 .also { shared = it }
+        } finally {
+            lock.unlock()
+        }
+    }
+
+    /**
+     * The app's collections (#81). [pick] returns Swift's open link for a device and transport, on
+     * the main thread. [dial] opens one as above. [protect] runs on the main thread when a run starts,
+     * with the device, the run id and whether it is unattended, and returns false when iOS gives the
+     * run no time to finish, which refuses it. [unprotect] runs on the main thread once that run
+     * handed its link back, before its `finished`. The first call of either overload wins.
+     */
+    fun collections(
+        pick: (String, LinkPreference) -> IosLink?,
+        dial: (String, LinkPreference, (Boolean) -> Unit) -> Unit,
+        protect: (String, Long, Boolean) -> Boolean,
+        unprotect: (Long) -> Unit,
+    ): SensorCollections {
+        lock.lock()
+        try {
+            return shared ?: SensorCollections(
+                this,
+                IosLinkProvider({ null }, 20.seconds, Dispatchers.Main, dial, pick = pick),
+                recordClockAnchor,
+                work,
+                callbacks,
+                keepAlive = IosKeepAlive(protect, unprotect, callbacks),
+                progressInterval = progressInterval,
+            ).also { shared = it }
         } finally {
             lock.unlock()
         }

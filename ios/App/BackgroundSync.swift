@@ -57,6 +57,8 @@ final class AutoSync {
     private let bluetooth: BluetoothCompanion
     private let lan: LanDiscovery
     private let devices: DevicesBridge
+    /// The shared collections, set at launch. Auto-sync skips a sensor that a run holds.
+    var runs: SensorCollections?
     private let logger = Logger(subsystem: "earth.walkthru.opensensor", category: "autosync")
     /// The raw UNAuthorizationStatus, refreshed when the app comes back and after the prompt.
     private var notificationStatus = UNAuthorizationStatus.notDetermined.rawValue
@@ -432,10 +434,11 @@ final class AutoSync {
 
     // MARK: Shared pieces
 
+    /// True while a run, a session or the user's work holds this sensor, so Auto-sync skips it.
     private func isOwned(_ id: String) -> Bool {
-        if bluetooth.isBusy(id: id) { return true }
+        if bluetooth.isHeld(id: id) { return true }
         guard let device = devices.deviceFor(peripheral: id) else { return false }
-        return lan.holds(device: device)
+        return runs?.isActive(device: device) == true || lan.hasSession(device: device)
     }
 
     /// Cancels the run going now. With [handle], only when that run is still the current one, so

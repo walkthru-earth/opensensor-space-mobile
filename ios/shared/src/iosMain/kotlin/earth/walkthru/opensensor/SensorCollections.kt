@@ -88,7 +88,7 @@ class SensorCollections internal constructor(
         finished: (SyncResult) -> Unit,
     ): SyncHandle {
         val id = ids.incrementAndFetch()
-        val request = Request(onlyName, progress, finished)
+        val request = Request(device, onlyName, progress, finished)
         val controller = controllerFor(device)
         // Registered before start, so a refusal published inside start still finds it.
         locked { requests[id] = request }
@@ -115,6 +115,12 @@ class SensorCollections internal constructor(
     fun stop(device: String) {
         locked { controllers[device] }?.stop(StopSource.APP)
     }
+
+    /**
+     * True from [collect] until its `finished` ran, also while the controller waits to retry. Swift
+     * asks before it closes a link or lets another run take the device. Call on the main thread.
+     */
+    fun isActive(device: String): Boolean = locked { requests.values.any { it.device == device } }
 
     private suspend fun deliver(controller: CollectionController, id: Long, request: Request) {
         val ticks = Channel<SyncProgress>(Channel.CONFLATED)
@@ -242,7 +248,7 @@ class SensorCollections internal constructor(
     }
 
     /** One request's callbacks and what it settled. [outcomes] and [listed] are guarded by [lock]. */
-    private class Request(val onlyName: String?, val progress: (SyncProgress) -> Unit, val finished: (SyncResult) -> Unit) {
+    private class Request(val device: String, val onlyName: String?, val progress: (SyncProgress) -> Unit, val finished: (SyncResult) -> Unit) {
         val outcomes = linkedMapOf<String, FileOutcome>()
         var listed = 0
         val ended = CompletableDeferred<CollectionState>()
