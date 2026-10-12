@@ -379,6 +379,7 @@ class SensorCollectionsTest {
         val stopped = withTimeout(10_000) { first.done.await() }
         val done = withTimeout(10_000) { next.done.await() }
         assertEquals(SyncEnd.STOPPED, stopped.end)
+        assertEquals(SyncEndReason.STOPPED, stopped.endReason, "a user stop is not an interruption")
         assertEquals(0, stopped.saved)
         assertEquals(SyncEnd.COMPLETE, done.end)
         assertEquals(2, done.saved)
