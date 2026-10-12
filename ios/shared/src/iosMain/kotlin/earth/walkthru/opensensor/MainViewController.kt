@@ -65,17 +65,17 @@ fun mainViewController(
     }
     MapCache.configure(cachesDirectory(), mapCacheBytes)
     IosMemoryPressure.install()
+    // Every user path that opens, connects or syncs a sensor stops Collect all first, the same rule
+    // for opening, Wi-Fi only, Smart Sync and Files. Restart reopen and cancel are not user takes.
+    val userOpen = devices.userFirst(openSensor)
+    val userOpenBluetooth = devices.userFirst(openBluetoothSensor)
+    val userOpenLanOnly = devices.userFirst(openLanOnly)
+    val userConnectLan = devices.userFirst(connectLan)
+    val userSyncLan = devices.userFirst(syncLan)
+    val userSyncBluetooth = devices.userFirst(syncBluetooth)
+    val userSyncOneFile = devices.userFirst(syncOneFile)
     return ComposeUIViewController {
-        // A sensor the user opens may take Wi-Fi or the one Bluetooth link, so Collect all stops first.
-        val userOpen: (String) -> Unit = { id ->
-            devices.cancelCollectAll()
-            openSensor(id)
-        }
-        val userOpenBluetooth: (String) -> Unit = { id ->
-            devices.cancelCollectAll()
-            openBluetoothSensor(id)
-        }
-        val today = remember { CompanionToday(state, CompanionLinkActions(syncFiles = syncBluetooth, command = command, connect = userOpen, disconnect = disconnectSensor)) }
+        val today = remember { CompanionToday(state, CompanionLinkActions(syncFiles = userSyncBluetooth, command = command, connect = userOpen, disconnect = disconnectSensor)) }
         val configLinks = remember {
             DeviceConfigLinks(
                 openConfigLink = linkFor,
@@ -90,9 +90,9 @@ fun mainViewController(
             )
         }
         val filesActions = remember {
-            DeviceFilesActions(linkFor, syncBluetooth, syncOneFile, cancelSync)
+            DeviceFilesActions(linkFor, userSyncBluetooth, userSyncOneFile, cancelSync)
         }
-        AppRoot(devices, today, requestBluetooth, userOpen, openLanOnly, linkFor, closeIdle, configLinks, filesActions) { id, units, level, openDebug, openSettings, onBack ->
+        AppRoot(devices, today, requestBluetooth, userOpen, userOpenLanOnly, linkFor, closeIdle, configLinks, filesActions) { id, units, level, openDebug, openSettings, onBack ->
             val peripheral = IosKnown.isPeripheral(id)
             val records by devices.known.collectAsState()
             val known = peripheral && records.any { it.peripheral.equals(id, ignoreCase = true) }
@@ -113,10 +113,10 @@ fun mainViewController(
                 disconnect = disconnect,
                 scanLan = scanLan,
                 saveWifiAccess = saveWifiAccess,
-                connectLan = connectLan,
-                syncLan = syncLan,
+                connectLan = userConnectLan,
+                syncLan = userSyncLan,
                 disconnectLan = disconnectLan,
-                syncBluetooth = { syncBluetooth(id) },
+                syncBluetooth = { userSyncBluetooth(id) },
                 selectedBluetooth = selectedBluetooth,
                 selectedStation = selectedStation,
                 activeDevice = activeDevice,

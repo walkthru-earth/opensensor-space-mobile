@@ -253,6 +253,20 @@ class DevicesBridge internal constructor(
         settle(q)
     }
 
+    /**
+     * One rule for every user path. Opening, connecting or syncing a sensor by hand takes the link
+     * Collect all may hold next, so the pass stops first. Its running step finishes on its own.
+     */
+    fun <A> userFirst(action: (A) -> Unit): (A) -> Unit = { a ->
+        cancelCollectAll()
+        action(a)
+    }
+
+    fun <A, B> userFirst(action: (A, B) -> Unit): (A, B) -> Unit = { a, b ->
+        cancelCollectAll()
+        action(a, b)
+    }
+
     /** The name the device page shows for a row id, from the scan, the known records or the Wi-Fi name. */
     internal fun nameFor(id: String): String? =
         if (id.startsWith(IosKnown.WIFI_PREFIX)) {

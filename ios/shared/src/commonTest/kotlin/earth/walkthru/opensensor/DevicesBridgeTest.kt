@@ -204,6 +204,31 @@ class DevicesBridgeTest {
         assertEquals(3, calls.collected.size, "cancel drops the rest")
     }
 
+    @Test fun everyUserActionStopsCollectAllBeforeItRuns() {
+        val state = CompanionState()
+        val calls = Calls()
+        val bridge = bridge(state = state, calls = calls)
+        bridge.sensorOpened(a, "A", "st-a", "aabbccddeeff")
+        bridge.sensorOpened(b, "B", "st-b", "112233445566")
+        val seen = mutableListOf<String>()
+        val sync = bridge.userFirst<String> { seen += it }
+        val oneFile = bridge.userFirst<String, String> { id, _ -> seen += id }
+
+        bridge.startCollectAll()
+        assertEquals(1, calls.collected.size)
+        sync(b)
+        assertEquals(listOf(b), seen, "the user action still runs")
+        bridge.collectFinished(calls.collected.single().first, ok = true)
+        assertEquals(1, calls.collected.size, "the pass starts no further step")
+        assertTrue(!bridge.collectAllRunning, "the pass ended")
+
+        bridge.startCollectAll()
+        oneFile(a, "f.parquet")
+        bridge.collectFinished(calls.collected.last().first, ok = false)
+        assertEquals(2, calls.collected.size, "a single file sync stops the pass too")
+        assertEquals(listOf(b, a), seen)
+    }
+
     @Test fun collectAllSkipsTheOpenLink() {
         val state = CompanionState()
         val calls = Calls()
