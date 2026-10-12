@@ -844,7 +844,7 @@ private fun CellDetail(
             Text(strings.notMeasured, style = MaterialTheme.typography.titleMedium)
         }
         val parts = listOfNotNull(strings.sensors(row.devices), freshness(strings, freshnessOf(row.updatedEpochMs, reference, state.dailyAsOf)))
-        Text(parts.joinToString("  "), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(spokenList(parts, listSeparator()), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (property != null && headline != null) {
             percentBelow(state.rows.mapNotNull { it.mean(property.id) }, headline)?.let {
                 Text(strings.higherThan(it), style = MaterialTheme.typography.bodyMedium)
@@ -958,7 +958,7 @@ private fun SimpleCellDetail(
         val facts = state.simpleCellFacts()
         val updated = facts.updatedEpochMs
         val parts = listOfNotNull(facts.devices?.let { strings.sensors(it) }, freshness(strings, freshnessOf(updated, reference, state.dailyAsOf)))
-        if (parts.isNotEmpty()) Text(parts.joinToString("  "), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (parts.isNotEmpty()) Text(spokenList(parts, listSeparator()), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         val others = facts.others
         if (others.isNotEmpty()) {
             Spacer(Modifier.height(16.dp))
