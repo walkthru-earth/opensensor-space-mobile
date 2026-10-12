@@ -8,17 +8,22 @@ import earth.walkthru.aqsync.collection.CollectionOrigin
 import earth.walkthru.aqsync.collection.CollectionScope
 import earth.walkthru.aqsync.collection.CollectionState
 import earth.walkthru.aqsync.collection.KeepAlive
+import earth.walkthru.aqsync.collection.KeepAliveKind
 import earth.walkthru.aqsync.collection.LinkPreference
 import earth.walkthru.aqsync.collection.LinkProvider
 import earth.walkthru.aqsync.collection.RetryPolicy
 import earth.walkthru.aqsync.collection.StartResult
 import earth.walkthru.aqsync.collection.StopSource
+import earth.walkthru.aqsync.collection.endReason
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.sync.CollectionSummary
 import earth.walkthru.aqsync.data.sync.FileOutcome
 import earth.walkthru.aqsync.data.sync.FileProblem
 import earth.walkthru.aqsync.link.DisconnectCause
 import earth.walkthru.aqsync.link.LinkClosedException
+import earth.walkthru.opensensor.strings.resources.Res
+import earth.walkthru.opensensor.strings.resources.companion_lan_paused
+import earth.walkthru.opensensor.strings.resources.companion_lan_sync_paused
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -28,6 +33,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.withContext
+import org.jetbrains.compose.resources.getString
 import platform.Foundation.NSLock
 import kotlin.concurrent.atomics.AtomicLong
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
@@ -69,6 +75,9 @@ class SensorCollections internal constructor(
     /** Guarded by [lock]. */
     private val controllers = HashMap<String, CollectionController>()
 
+    /** Runs the OS interrupted, by device, until the app is back. Guarded by [lock]. */
+    private val interrupted = LinkedHashMap<String, InterruptedRun>()
+
     /** Requests by intent id, until their `finished` ran. Guarded by [lock]. */
     private val requests = HashMap<Long, Request>()
 
@@ -88,10 +97,14 @@ class SensorCollections internal constructor(
         finished: (SyncResult) -> Unit,
     ): SyncHandle {
         val id = ids.incrementAndFetch()
-        val request = Request(onlyName, progress, finished)
+        val request = Request(device, onlyName, prefer, background, progress, finished)
         val controller = controllerFor(device)
-        // Registered before start, so a refusal published inside start still finds it.
-        locked { requests[id] = request }
+        // Registered before start, so a refusal published inside start still finds it. A new run
+        // replaces one the OS interrupted.
+        locked {
+            requests[id] = request
+            interrupted.remove(device)
+        }
         val intent = CollectionIntent(
             id = id,
             device = device,
@@ -115,6 +128,55 @@ class SensorCollections internal constructor(
     fun stop(device: String) {
         locked { controllers[device] }?.stop(StopSource.APP)
     }
+
+    /**
+     * The OS ended the background time of [device]'s run the user started. The run ends with
+     * [earth.walkthru.aqsync.collection.SyncEndReason.INTERRUPTED], keeps its saved files and
+     * partials, and waits in [takeInterrupted] until the app is back. False when no such run is active.
+     */
+    fun interrupt(device: String): Boolean {
+        val (controller, id) = locked {
+            val controller = controllers[device] ?: return false
+            val id = controller.state.value.intentId ?: return false
+            val request = requests[id]?.takeIf { !it.background } ?: return false
+            interrupted[device] = InterruptedRun(device, request.onlyName, request.prefer)
+            controller to id
+        }
+        if (controller.keepAliveRefused(KeepAliveKind.PROCESS, id)) return true
+        locked { interrupted.remove(device) }
+        return false
+    }
+
+    /**
+     * The interrupted runs to start again, once each, oldest first. Swift calls it when the scene is
+     * active and starts each through its own entry point, so the screens follow the new run.
+     */
+    fun takeInterrupted(): List<InterruptedRun> = locked {
+        interrupted.values.toList().also { interrupted.clear() }
+    }
+
+    /**
+     * The title and body of the notice that a run paused off screen, in the app's language. Swift
+     * reads them once at launch, so the expiry handler posts without waiting. [done] runs on the main thread.
+     */
+    fun pausedNotice(done: (String, String) -> Unit) {
+        scope.launch {
+            val title = getString(Res.string.companion_lan_paused)
+            val body = getString(Res.string.companion_lan_sync_paused)
+            withContext(callbacks) { done(title, body) }
+        }
+    }
+
+    /** Forgets an interrupted run of [device], as when the user closed or forgot the sensor. */
+    fun dropInterrupted(device: String) {
+        locked { interrupted.remove(device) }
+    }
+
+    /**
+     * True from [collect] until its `finished` ran, also while the controller waits to retry. Swift
+     * asks before it closes a link or lets another run take the device. Call on the main thread.
+     */
+    fun isActive(device: String): Boolean = locked { requests.values.any { it.device == device } }
 
     private suspend fun deliver(controller: CollectionController, id: Long, request: Request) {
         val ticks = Channel<SyncProgress>(Channel.CONFLATED)
@@ -209,7 +271,7 @@ class SensorCollections internal constructor(
     private fun resultOf(terminal: CollectionState, request: Request): SyncResult = when (terminal) {
         is CollectionState.Done -> resultOf(terminal.summary)
         is CollectionState.Stopped -> partialResult(SyncEnd.STOPPED, request.listed, request.outcomes)
-        is CollectionState.Failed -> partialResult(endOf(terminal.failure), request.listed, request.outcomes)
+        is CollectionState.Failed -> partialResult(terminal.failure.syncEnd(), request.listed, request.outcomes, terminal.failure.endReason())
         else -> partialResult(SyncEnd.FAILED, request.listed, request.outcomes)
     }
 
@@ -222,16 +284,6 @@ class SensorCollections internal constructor(
         return SyncResult(end, summary.files, summary.newFiles, summary.notSaved.size, summary.notSaved)
     }
 
-    private fun endOf(failure: CollectionFailure): SyncEnd = when (failure) {
-        is CollectionFailure.Link -> when (failure.cause) {
-            is DisconnectCause.Auth -> SyncEnd.AUTH_FAILED
-            DisconnectCause.Busy -> SyncEnd.BUSY
-            else -> SyncEnd.LINK_LOST
-        }
-        is CollectionFailure.Storage -> SyncEnd.STORAGE_FAILED
-        is CollectionFailure.Device, is CollectionFailure.KeepAliveRefused, is CollectionFailure.Unexpected -> SyncEnd.FAILED
-    }
-
     private inline fun <T> locked(block: () -> T): T {
         lock.lock()
         try {
@@ -242,7 +294,14 @@ class SensorCollections internal constructor(
     }
 
     /** One request's callbacks and what it settled. [outcomes] and [listed] are guarded by [lock]. */
-    private class Request(val onlyName: String?, val progress: (SyncProgress) -> Unit, val finished: (SyncResult) -> Unit) {
+    private class Request(
+        val device: String,
+        val onlyName: String?,
+        val prefer: LinkPreference,
+        val background: Boolean,
+        val progress: (SyncProgress) -> Unit,
+        val finished: (SyncResult) -> Unit,
+    ) {
         val outcomes = linkedMapOf<String, FileOutcome>()
         var listed = 0
         val ended = CompletableDeferred<CollectionState>()
@@ -251,4 +310,9 @@ class SensorCollections internal constructor(
     internal companion object {
         const val MAX_CONCURRENT = 2
     }
+}
+
+/** A run the OS interrupted off screen. [onlyName] is set for a one-file sync from Files. */
+class InterruptedRun internal constructor(val device: String, val onlyName: String?, val prefer: LinkPreference) {
+    override fun toString(): String = "InterruptedRun(${prefer.name.lowercase()}, ${if (onlyName == null) "all files" else "one file"})"
 }

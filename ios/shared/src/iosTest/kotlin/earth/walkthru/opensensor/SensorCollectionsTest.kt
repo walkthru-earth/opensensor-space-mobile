@@ -4,8 +4,10 @@ package earth.walkthru.opensensor
 
 import earth.walkthru.aqsync.archive.IosArchiveStore
 import earth.walkthru.aqsync.archive.ReceiptArchiveIndex
+import earth.walkthru.aqsync.collection.KeepAlive
 import earth.walkthru.aqsync.collection.LinkPreference
 import earth.walkthru.aqsync.collection.RetryPolicy
+import earth.walkthru.aqsync.collection.SyncEndReason
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.protocol.FrameCodec
 import earth.walkthru.aqsync.data.protocol.Opcode
@@ -20,6 +22,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -32,6 +35,7 @@ import platform.Foundation.NSUUID
 import kotlin.concurrent.atomics.AtomicInt
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.concurrent.atomics.incrementAndFetch
+import kotlin.coroutines.CoroutineContext
 import kotlin.random.Random
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -98,9 +102,9 @@ class SensorCollectionsTest {
         val dials = AtomicInt(0)
         var current: IosLink? = null
 
-        fun connect(): IosLink {
+        fun connect(wifi: Boolean = true): IosLink {
             lateinit var link: IosLink
-            link = IosLink(Port { answer(link, it) }, overWifi = true, address = device, callbacks = Dispatchers.Default, context = Dispatchers.Default)
+            link = IosLink(Port { answer(link, it) }, overWifi = wifi, address = device, callbacks = Dispatchers.Default, context = Dispatchers.Default)
             link.identify(station, "boot", 1024)
             current = link
             return link
@@ -178,12 +182,13 @@ class SensorCollectionsTest {
     private fun u16(b: ByteArray, at: Int) = (b[at].toInt() and 0xFF) or ((b[at + 1].toInt() and 0xFF) shl 8)
     private fun u32(b: ByteArray, at: Int) = u16(b, at).toLong() or (u16(b, at + 2).toLong() shl 16)
 
-    private fun collections(board: Board) = SensorCollections(
+    private fun collections(board: Board, keepAlive: KeepAlive = KeepAlive.None, callbacks: CoroutineContext = Dispatchers.Default) = SensorCollections(
         sync,
         IosLinkProvider({ board.current }, 5.seconds, Dispatchers.Default, board::dial, poll = 10.milliseconds),
         record,
         Dispatchers.Default,
-        Dispatchers.Default,
+        callbacks,
+        keepAlive = keepAlive,
         retry = RetryPolicy(firstBackoff = 10.milliseconds, maxBackoff = 50.milliseconds),
         progressInterval = 0,
     )
@@ -344,6 +349,7 @@ class SensorCollectionsTest {
         collections(board).collect(seen)
         val result = withTimeout(10_000) { seen.done.await() }
         assertEquals(SyncEnd.AUTH_FAILED, result.end)
+        assertEquals(SyncEndReason.PAIRING_REPAIR, result.endReason, "a broken bond is worded as pairing repair, not a lost link")
         assertEquals(2, result.files)
         assertEquals(1, result.saved)
         assertEquals(0, result.notSaved)
@@ -386,6 +392,72 @@ class SensorCollectionsTest {
     }
 
     @Test
+    fun anInterruptedRunKeepsWhatItSavedAndResumesOnceWhenTheAppIsBack() = runBlocking {
+        val held = CompletableDeferred<Unit>()
+        val board = Board { _, name ->
+            // The second file never answers in the first run, as when iOS suspends the app.
+            (name == second && !held.isCompleted).also { if (it) held.complete(Unit) }
+        }
+        board.connect()
+        val runs = collections(board)
+        val first = Seen()
+        runs.collect(device, null, LinkPreference.LAN, false, first::progress, first::finished)
+        withTimeout(10_000) { held.await() }
+
+        assertTrue(runs.interrupt(device))
+        val interrupted = withTimeout(10_000) { first.done.await() }
+        assertEquals(SyncEnd.STOPPED, interrupted.end)
+        assertEquals(SyncEndReason.INTERRUPTED, interrupted.endReason)
+        assertEquals(1, interrupted.saved, "the file saved before the interruption stays")
+        assertFalse(runs.interrupt(device), "nothing left to interrupt")
+
+        val resumed = runs.takeInterrupted()
+        assertEquals(1, resumed.size)
+        assertEquals(device, resumed[0].device)
+        assertEquals(null, resumed[0].onlyName)
+        assertEquals(LinkPreference.LAN, resumed[0].prefer)
+        assertTrue(runs.takeInterrupted().isEmpty(), "a run resumes once")
+
+        val next = Seen()
+        runs.collect(resumed[0].device, resumed[0].onlyName, resumed[0].prefer, false, next::progress, next::finished)
+        val done = withTimeout(10_000) { next.done.await() }
+        assertEquals(SyncEnd.COMPLETE, done.end)
+        assertEquals(1, done.saved, "only the file the interrupted run lacked")
+        assertFalse(board.current!!.leased)
+    }
+
+    @Test
+    fun anUnattendedRunIsNeverRememberedAndANewRunReplacesAnInterruptedOne() = runBlocking {
+        val reads = Channel<Unit>(Channel.UNLIMITED)
+        // Every READ of the second file goes unanswered, so each run waits there until it ends.
+        val board = Board { _, name -> (name == second).also { if (it) reads.trySend(Unit) } }
+        board.connect()
+        val runs = collections(board)
+
+        val unattended = Seen()
+        val handle = runs.collect(device, null, LinkPreference.ANY, true, unattended::progress, unattended::finished)
+        withTimeout(10_000) { reads.receive() }
+        assertFalse(runs.interrupt(device), "a BGTask run ends through its own expiry")
+        handle.cancel()
+        assertEquals(SyncEnd.STOPPED, withTimeout(10_000) { unattended.done.await() }.end)
+
+        val user = Seen()
+        runs.collect(device, null, LinkPreference.ANY, false, user::progress, user::finished)
+        withTimeout(10_000) { reads.receive() }
+        assertTrue(runs.interrupt(device))
+        withTimeout(10_000) { user.done.await() }
+
+        val again = Seen()
+        val next = runs.collect(device, null, LinkPreference.ANY, false, again::progress, again::finished)
+        assertTrue(runs.takeInterrupted().isEmpty(), "the user's new run replaced the interrupted one")
+        withTimeout(10_000) { reads.receive() }
+        next.cancel()
+        withTimeout(10_000) { again.done.await() }
+        runs.interrupt(device)
+        assertTrue(runs.takeInterrupted().isEmpty())
+    }
+
+    @Test
     fun aDirectSyncThatLosesItsLinkStillCountsTheFilesItSaved() = runBlocking {
         val board = Board { link, name ->
             (name == second).also { if (it) link.linkLost(IosLink.REASON_PEER_CLOSED) }
@@ -398,5 +470,75 @@ class SensorCollectionsTest {
         assertEquals(2, result.files)
         assertEquals(1, result.saved)
         assertEquals(0, result.notSaved)
+    }
+
+    @Test
+    fun aRunIosGivesNoBackgroundTimeEndsBeforeItTouchesTheLink() = runBlocking {
+        val board = Board()
+        board.connect()
+        val asked = ArrayList<Boolean>()
+        val refusing = IosKeepAlive({ _, _, unattended -> asked += unattended; false }, {}, Dispatchers.Default)
+        val runs = collections(board, refusing)
+        val seen = Seen()
+        runs.collect(device, null, LinkPreference.ANY, true, seen::progress, seen::finished)
+        val result = withTimeout(10_000) { seen.done.await() }
+        assertEquals(SyncEnd.STOPPED, result.end)
+        assertEquals(SyncEndReason.INTERRUPTED, result.endReason)
+        assertTrue(result.resumable)
+        assertEquals(listOf(true), asked, "an unattended run says so")
+        assertEquals(0, board.lists.load(), "a refused run never lists")
+        assertFalse(board.current!!.leased)
+        assertFalse(runs.isActive(device))
+    }
+
+    @Test
+    fun aRunHoldsItsBackgroundTimeUntilItHandedTheLinkBackAndIsActiveUntilItsResult() = runBlocking {
+        val board = Board()
+        board.connect()
+        val serial = Dispatchers.Default.limitedParallelism(1)
+        val order = ArrayList<String>()
+        val orderLock = NSLock()
+        fun note(event: String) {
+            orderLock.lock()
+            order += event
+            orderLock.unlock()
+        }
+        val keepAlive = IosKeepAlive({ _, _, unattended -> note("protect $unattended"); true }, { note("unprotect") }, serial)
+        val runs = collections(board, keepAlive, serial)
+        val done = CompletableDeferred<SyncResult>()
+        runs.collect(device, null, LinkPreference.ANY, false, {}) {
+            assertFalse(board.current!!.leased, "the link is back before the result")
+            note("finished")
+            done.complete(it)
+        }
+        assertTrue(runs.isActive(device))
+        assertFalse(runs.isActive("ffffffffffff"))
+        assertEquals(SyncEnd.COMPLETE, withTimeout(10_000) { done.await() }.end)
+        assertEquals(listOf("protect false", "unprotect", "finished"), order)
+        assertFalse(runs.isActive(device))
+    }
+
+    @Test
+    fun thePickedLinkFollowsTheRunsTransport() = runBlocking {
+        val board = Board()
+        val wifi = board.connect(wifi = true)
+        val bluetooth = board.connect(wifi = false)
+        val provider = IosLinkProvider(
+            { null },
+            1.seconds,
+            Dispatchers.Default,
+            null,
+            poll = 10.milliseconds,
+            pick = { _, prefer -> if (prefer == LinkPreference.BLE) bluetooth else wifi },
+        )
+        val overBluetooth = provider.connect(device, LinkPreference.BLE)
+        assertSame(bluetooth.session, overBluetooth.session)
+        overBluetooth.release()
+        val overWifi = provider.connect(device, LinkPreference.LAN)
+        assertSame(wifi.session, overWifi.session)
+        overWifi.release()
+        // A Bluetooth link never serves a Wi-Fi only run.
+        val wrong = IosLinkProvider({ null }, 200.milliseconds, Dispatchers.Default, null, pick = { _, _ -> bluetooth })
+        assertEquals(DisconnectCause.Unreachable, assertFailsWith<LinkClosedException> { wrong.connect(device, LinkPreference.LAN) }.disconnectCause)
     }
 }

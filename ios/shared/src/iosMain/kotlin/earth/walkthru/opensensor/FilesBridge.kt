@@ -52,9 +52,19 @@ internal class IosDeviceFiles(
             ?: devices.state.info?.dev?.takeIf { ble }
         val run = lan?.let { devices.state.lanRuns[it] }
         val lanProgress = lan?.let { devices.state.lanSessions[it] }
-        val progress = if (ble) devices.state.syncProgress else null
+        // A run whose Bluetooth link dropped is dialling it again, so it still counts as running.
+        val reconnecting = devices.state.syncBusy && devices.state.reconnectingId.equals(address, ignoreCase = true)
+        val progress = if (ble || reconnecting) devices.state.syncProgress else null
         val result = run?.result ?: devices.state.lastSyncResult.takeIf { ble }
-        return SensorFilesLink(station, device, connected, run?.running == true || (ble && devices.state.syncBusy), progress, lanProgress, result)
+        return SensorFilesLink(
+            station,
+            device,
+            connected,
+            run?.running == true || (ble && devices.state.syncBusy) || reconnecting,
+            progress,
+            lanProgress,
+            result,
+        )
     }
     private val selected = combine(devices.known, snapshotFlow { currentLink() }) { _, _ -> currentLink() }.distinctUntilChanged()
 

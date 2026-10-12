@@ -42,7 +42,8 @@ class CompanionTodaySourceTest {
         stationFor: (String) -> String? = { null },
     ): CompanionTodaySource {
         val scope = CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler))
-        val source = CompanionTodaySource(scope, state, "device", MutableStateFlow(emptyList()), todaySoFar, calls.actions, stationFor, now = { 1_000L })
+        state.clock = { 1_000L }
+        val source = CompanionTodaySource(scope, state, "device", MutableStateFlow(emptyList()), todaySoFar, calls.actions, stationFor)
         scope.launch { source.notices.collect { notices += it } }
         return source
     }
@@ -240,5 +241,59 @@ class CompanionTodaySourceTest {
         source.flush()
         source.disconnect()
         assertTrue(calls.list.isEmpty())
+    }
+
+    @Test fun arrivalTimesStayPutWhenTheScreenLooksAgain() = runTest {
+        val state = connected()
+        var now = 1_000L
+        val source = source(state, Calls(), mutableListOf())
+        state.clock = { now }
+        state.receiveStatus("{\"t\":1}")
+        state.receiveLive("{\"pms\":4,\"pm25\":12.0}")
+        settle(this)
+        assertEquals(1_000L, source.snapshot.value.statusAtEpochMs)
+        assertEquals(1_000L, source.snapshot.value.liveAtEpochMs)
+        // An unrelated change makes Today look again later. The readings did not arrive again.
+        now = 9_000L
+        state.bluetoothSyncStarted()
+        settle(this)
+        assertEquals(1_000L, source.snapshot.value.statusAtEpochMs)
+        assertEquals(1_000L, source.snapshot.value.liveAtEpochMs)
+        assertEquals(9_000L, source.snapshot.value.sync.startedAtEpochMs)
+        now = 12_000L
+        state.bluetoothSyncFinished(SyncResult(SyncEnd.COMPLETE, 0, 0, 0))
+        settle(this)
+        now = 20_000L
+        state.receiveLive("{\"pms\":4,\"pm25\":12.0}")
+        settle(this)
+        assertEquals(12_000L, source.snapshot.value.sync.finishedAtEpochMs)
+        assertEquals(20_000L, source.snapshot.value.liveAtEpochMs, "the same value arriving again is a new reading")
+    }
+
+    @Test fun aDroppedLinkUnderARunShowsReconnectingWithItsProgress() = runTest {
+        val state = connected()
+        val source = source(state, Calls(), mutableListOf())
+        state.bluetoothSyncStarted()
+        state.bluetoothSyncProgressed(SyncProgress(2, 5, 10, 10, 5.0))
+        state.bluetoothReconnecting(CompanionNotice.SENSOR_DISCONNECTED)
+        settle(this)
+        val snapshot = source.snapshot.value
+        assertEquals(ConnectionState.Connecting, snapshot.connection)
+        assertTrue(snapshot.sync.running)
+        assertEquals(2, snapshot.sync.filesDone)
+        assertFalse(snapshot.needsPairingRepair)
+    }
+
+    @Test fun aLostBondAsksForPairingRepairUntilANewConnection() = runTest {
+        val state = connected()
+        val source = source(state, Calls(), mutableListOf())
+        state.connectionClosedNoticed(CompanionNotice.PAIRING_REMOVED)
+        settle(this)
+        assertTrue(source.snapshot.value.connection is ConnectionState.Failed)
+        assertTrue(source.snapshot.value.needsPairingRepair)
+        state.connectionStarted("device")
+        settle(this)
+        assertEquals(ConnectionState.Connecting, source.snapshot.value.connection)
+        assertFalse(source.snapshot.value.needsPairingRepair)
     }
 }

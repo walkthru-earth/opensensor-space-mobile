@@ -1,5 +1,6 @@
 package earth.walkthru.opensensor
 
+import earth.walkthru.aqsync.collection.SyncEndReason
 import earth.walkthru.aqsync.data.history.NowReading
 import earth.walkthru.aqsync.data.protocol.LiveSample
 import earth.walkthru.opensensor.permissions.AccessStatus
@@ -251,5 +252,70 @@ class CompanionStateTest {
         assertTrue(PermissionFlow.offersSettings(state.lanAccess))
         state.lanScanReady()
         assertEquals(AccessStatus.UNKNOWN, state.lanAccess)
+    }
+
+    private fun linked(id: String = "p1"): CompanionState = CompanionState().also {
+        it.connectionStarted(id)
+        assertTrue(it.receiveInfo("{\"proto\":3,\"dev\":\"112233445566\",\"station\":\"st\"}"))
+    }
+
+    @Test fun aDroppedLinkUnderARunKeepsItsProgressUntilTheSensorAnswersAgain() {
+        val state = linked()
+        state.bluetoothSyncStarted()
+        state.bluetoothSyncProgressed(SyncProgress(1, 3, 10, 10, 5.0))
+        state.bluetoothReconnecting(CompanionNotice.SENSOR_DISCONNECTED)
+        assertNull(state.selectedId)
+        assertEquals("p1", state.reconnectingId)
+        assertTrue(state.syncBusy)
+        assertEquals(1, state.syncProgress?.filesDone)
+        state.connectionStarted("p1")
+        assertEquals("p1", state.reconnectingId, "dialling the same sensor again is still a reconnect")
+        assertTrue(state.receiveInfo("{\"proto\":3,\"dev\":\"112233445566\",\"station\":\"st\"}"))
+        assertNull(state.reconnectingId)
+        state.bluetoothSyncFinished(SyncResult(SyncEnd.COMPLETE, 3, 3, 0))
+        assertFalse(state.syncBusy)
+    }
+
+    @Test fun aLostBondMarksTheSensorFailedUntilANewConnectionOrForget() {
+        val state = linked()
+        state.bluetoothSyncStarted()
+        state.bluetoothSyncClosed(SyncResult(SyncEnd.AUTH_FAILED, 0, 0, 0, endReason = SyncEndReason.PAIRING_REPAIR))
+        assertEquals("p1", state.failedId)
+        state.connectionStarted("p1")
+        assertNull(state.failedId)
+        val other = linked()
+        other.connectionClosedNoticed(CompanionNotice.PAIRING_REMOVED)
+        assertEquals("p1", other.failedId)
+        other.sensorForgotten("P1")
+        assertNull(other.failedId)
+        val plain = linked()
+        plain.bluetoothSyncClosed(SyncResult(SyncEnd.LINK_LOST, 0, 0, 0))
+        assertNull(plain.failedId, "an ordinary loss needs no repair")
+    }
+
+    @Test fun arrivalTimesComeFromTheMessagesNotFromLooking() {
+        val state = linked()
+        var now = 5L
+        state.clock = { now }
+        state.receiveLive("{\"pms\":4,\"pm25\":12.0}")
+        now = 50L
+        assertEquals(5L, state.liveAtEpochMs)
+        state.readingExpired()
+        assertNull(state.liveAtEpochMs)
+        state.bluetoothSyncStarted()
+        assertEquals(50L, state.syncStartedAtEpochMs)
+        assertNull(state.syncFinishedAtEpochMs)
+    }
+
+    @Test fun backgroundOwnershipFollowsTheAdapters() {
+        val state = CompanionState()
+        state.bluetoothBackgroundOwned(true)
+        state.lanBackgroundOwned("aq-b", true)
+        assertTrue(state.bluetoothBackground)
+        assertEquals(setOf("aq-b"), state.lanBackground)
+        state.bluetoothBackgroundOwned(false)
+        state.lanBackgroundOwned("aq-b", false)
+        assertFalse(state.bluetoothBackground)
+        assertTrue(state.lanBackground.isEmpty())
     }
 }

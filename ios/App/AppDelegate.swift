@@ -57,6 +57,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationC
 final class AppServices {
     private var openAttempt = UUID()
     private var selectedOpenId: String?
+    private var livePage = LivePage()
     /// One shared engine, so LAN and Bluetooth save into the same archive and never sync a station twice at once.
     let engine = IosArchiveKt.sharedSensorSync()
     private(set) lazy var bluetooth = BluetoothCompanion(engine: engine)
@@ -71,10 +72,43 @@ final class AppServices {
         collect: { [weak self] id, wifiName in self?.collect(id: id, wifiName: wifiName) }
     )
     private(set) lazy var autoSync = AutoSync(bluetooth: bluetooth, lan: lan, devices: devices)
+    /// One shared collection controller per device (#81), for every sync this app starts. Swift
+    /// lends its open links, dials a new one on a retry and gives each run its background time.
+    private(set) lazy var runs: SensorCollections = engine.collections(
+        pick: { [weak self] device, prefer in
+            let transport = RunTransport(prefer)
+            return MainActor.assumeIsolated { self?.syncLink(device: device, transport: transport) }
+        },
+        dial: { [weak self] device, prefer, done in
+            let transport = RunTransport(prefer)
+            let answer = DialAnswer { opened in _ = done(KotlinBoolean(value: opened)) }
+            MainActor.assumeIsolated {
+                guard let self else { return answer.call(false) }
+                self.dial(device: device, transport: transport, done: answer.call)
+            }
+        },
+        protect: { [weak self] device, id, unattended in
+            MainActor.assumeIsolated {
+                KotlinBoolean(value: self?.protect(device: device, id: id.int64Value, unattended: unattended.boolValue) ?? false)
+            }
+        },
+        unprotect: { [weak self] id in MainActor.assumeIsolated { self?.unprotect(id.int64Value) } }
+    )
+    /// UIKit background time by run, for runs the user started.
+    private var protections: [Int64: UIBackgroundTaskIdentifier] = [:]
+    /// The paused notice in the app's language, read once at launch so the expiry handler never waits.
+    private var pausedWords: (title: String, body: String)?
 
     /// Before launch ends. Registers the background task, and creates the central manager when iOS
     /// restores Bluetooth or a switch is on and access was already given, so no prompt shows here.
     func launch(restoringBluetooth: Bool) {
+        bluetooth.runs = runs
+        lan.runs = runs
+        autoSync.runs = runs
+        runs.pausedNotice { [weak self] title, body in
+            MainActor.assumeIsolated { self?.pausedWords = (title, body) }
+        }
+        bluetooth.peripheralFor = { [weak self] device in self?.devices.peripheralFor(device: device) }
         bluetooth.onSensorOpened = { [weak self] peripheral, name, station, device in
             guard let self else { return SensorOpenResult(accepted: false, notice: .infoInvalid, credentialToRemove: nil) }
             let result = self.devices.sensorOpened(peripheral: peripheral, name: name, station: station, device: device)
@@ -131,9 +165,12 @@ final class AppServices {
     /// removed in iOS Settings.
     private func forget(peripheral: String, device: String?) {
         cancelPendingOpen(id: peripheral)
+        livePage.closed(peripheral)
         bluetooth.close(id: peripheral)
+        bluetooth.state.sensorForgotten(id: peripheral)
         autoSync.forget(peripheral: peripheral)
         if let device {
+            runs.dropInterrupted(device: device)
             lan.disconnect(device: device)
             credentials.remove(device: device)
         }
@@ -164,6 +201,7 @@ final class AppServices {
     func openSensor(id: String, allowBluetooth: Bool = true) {
         openAttempt = UUID()
         selectedOpenId = id
+        livePage.opened(id, allowBluetooth: allowBluetooth)
         let attempt = openAttempt
         if let station = devices.stationFor(peripheral: id), let device = devices.deviceFor(peripheral: id) {
             let started = lan.connectKnown(station: station, device: device, onFailure: allowBluetooth ? { [weak self] in
@@ -183,19 +221,25 @@ final class AppServices {
     func openBluetoothSensor(id: String) {
         cancelPendingOpen()
         selectedOpenId = id
+        livePage.opened(id, allowBluetooth: true)
         bluetooth.requestAccess()
         bluetooth.open(id: id)
     }
 
     func disconnectSensor(id: String) {
         cancelPendingOpen(id: id)
+        livePage.closed(id)
         if let device = devices.deviceFor(peripheral: id) { lan.disconnect(device: device) }
         bluetooth.close(id: id)
     }
 
+    /// The last page of this sensor is gone. Its Bluetooth link and Wi-Fi session close now, or
+    /// once the sync, command or lease on them ends.
     func closeIdle(id: String) {
         cancelPendingOpen(id: id)
+        livePage.closed(id)
         bluetooth.closeIdle(id: id)
+        if let device = devices.deviceFor(peripheral: id) { lan.closeIdle(device: device) }
     }
 
     func cancelPendingOpen(id: String? = nil) {
@@ -210,7 +254,7 @@ final class AppServices {
             return
         }
         if lan.command(device: device, command: command) { return }
-        if lan.holds(device: device) {
+        if lan.hasSession(device: device) || runs.isActive(device: device) {
             bluetooth.state.today.commandRefused()
             return
         }
@@ -227,9 +271,11 @@ final class AppServices {
             bluetooth.state.today.commandRefused()
             return
         }
-        if let name = lan.connectedSession(device: device) {
+        if runs.isActive(device: device) {
+            bluetooth.state.today.commandRefused()
+        } else if let name = lan.connectedSession(device: device) {
             lan.sync(name: name)
-        } else if lan.holds(device: device) {
+        } else if lan.hasSession(device: device) {
             bluetooth.state.today.commandRefused()
         } else if bluetooth.deviceId == device {
             bluetooth.sync()
@@ -239,10 +285,10 @@ final class AppServices {
     }
 
     func syncOneFile(id: String, name: String) {
-        guard let device = devices.deviceFor(peripheral: id) else { return }
+        guard let device = devices.deviceFor(peripheral: id), !runs.isActive(device: device) else { return }
         if let session = lan.connectedSession(device: device) {
             lan.sync(name: session, onlyName: name)
-        } else if !lan.holds(device: device), bluetooth.deviceId == device {
+        } else if !lan.hasSession(device: device), bluetooth.deviceId == device {
             bluetooth.sync(fileName: name)
         }
     }
@@ -258,6 +304,102 @@ final class AppServices {
     func linkFor(device: String) -> IosLink? {
         lan.link(device: device) ?? bluetooth.link(device: device)
     }
+
+    /// The open link of the kind a run allows, Wi-Fi first when either will do.
+    private func syncLink(device: String, transport: RunTransport) -> IosLink? {
+        switch transport {
+        case .lan: lan.syncLink(device: device)
+        case .ble: bluetooth.syncLink(device: device)
+        case .any: lan.syncLink(device: device) ?? bluetooth.syncLink(device: device)
+        }
+    }
+
+    /// A run's retry found no open link. Wi-Fi when the run allows it and the sensor is on this network.
+    private func dial(device: String, transport: RunTransport, done: @escaping (Bool) -> Void) {
+        if transport == .lan || (transport == .any && lan.canDial(device: device)) {
+            lan.dial(device: device, done: done)
+        } else {
+            bluetooth.dial(device: device, done: done)
+        }
+    }
+
+    /// Background time for a run. Unattended runs and a continued Collect all already hold their
+    /// BGTask. A run the user started takes a UIKit background task, and iOS refusing one while
+    /// the app is off screen refuses the run.
+    private func protect(device: String, id: Int64, unattended: Bool) -> Bool {
+        if unattended || autoSync.collectAllContinues { return true }
+        let task = UIApplication.shared.beginBackgroundTask(withName: "Sensor sync") { [weak self] in
+            // UIKit invokes the expiration handler on the main thread.
+            MainActor.assumeIsolated { self?.protectionExpired(device: device, id: id) }
+        }
+        if task == .invalid { return UIApplication.shared.applicationState != .background }
+        protections[id] = task
+        return true
+    }
+
+    /// iOS ended the time off screen. The run ends as interrupted, keeps what it saved and starts
+    /// again when the scene is active. The notice shows only when notifications are already allowed.
+    private func protectionExpired(device: String, id: Int64) {
+        // A continued Collect all task launched since, and it keeps the app running.
+        if autoSync.collectAllContinues { return unprotect(id) }
+        if runs.interrupt(device: device), let words = pausedWords {
+            autoSync.notifyPaused(title: words.title, body: words.body)
+        }
+        unprotect(id)
+    }
+
+    /// The user ended the live link from the open page, so returning to the app leaves it closed.
+    func userDisconnected() {
+        livePage.disconnected()
+    }
+
+    /// Back on screen. The sensor page still open reconnects the way it was opened, Wi-Fi first.
+    /// Leaving the app closed its idle link, and an open link or a pending open is kept. A Collect
+    /// all that iOS kept running off screen keeps the link until it ends.
+    func reopenLivePage() {
+        guard let page = livePage.page, !autoSync.collectAllHeld else { return }
+        openSensor(id: page.id, allowBluetooth: page.allowBluetooth)
+    }
+
+    /// Back on screen. Each run iOS interrupted starts again over its own transport, through the
+    /// entry point the screens follow. The shared controller skips the files already saved.
+    func resumeInterrupted() {
+        autoSync.clearPaused()
+        for interrupted in runs.takeInterrupted() {
+            let device = interrupted.device
+            let onlyName = interrupted.onlyName
+            switch RunTransport(interrupted.prefer) {
+            case .lan:
+                _ = lan.resumeSync(device: device, onlyName: onlyName)
+            case .ble:
+                _ = bluetooth.resumeSync(device: device, onlyName: onlyName)
+            case .any:
+                if !lan.resumeSync(device: device, onlyName: onlyName) {
+                    _ = bluetooth.resumeSync(device: device, onlyName: onlyName)
+                }
+            }
+        }
+    }
+
+    private func unprotect(_ id: Int64) {
+        guard let task = protections.removeValue(forKey: id) else { return }
+        UIApplication.shared.endBackgroundTask(task)
+    }
+}
+
+/// The transports a run allows, read from Kotlin before the hop to the main actor.
+private enum RunTransport: Sendable {
+    case lan, ble, any
+
+    init(_ prefer: SyncLinkPreference) {
+        self = prefer == .lan ? .lan : prefer == .ble ? .ble : .any
+    }
+}
+
+/// Invariant. Kotlin's dial answer is safe from any thread, and its provider ignores a second call.
+private final class DialAnswer: @unchecked Sendable {
+    let call: (Bool) -> Void
+    init(_ call: @escaping (Bool) -> Void) { self.call = call }
 }
 
 final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
@@ -286,12 +428,18 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             openBluetoothSensor: { [weak services] id in services?.openBluetoothSensor(id: id) },
             openLanOnly: { [weak services] id in services?.openSensor(id: id, allowBluetooth: false) },
             disconnectSensor: { [weak services] id in services?.disconnectSensor(id: id) },
-            disconnect: { bluetooth.disconnect() },
+            disconnect: { [weak services] in
+                services?.userDisconnected()
+                bluetooth.disconnect()
+            },
             scanLan: { lan.scan() },
             saveWifiAccess: { bluetooth.saveWifiAccess() },
             connectLan: { name in lan.connect(name: name) },
             syncLan: { name in lan.sync(name: name) },
-            disconnectLan: { name in lan.disconnect(name: name) },
+            disconnectLan: { [weak services] name in
+                services?.userDisconnected()
+                lan.disconnect(name: name)
+            },
             syncBluetooth: { [weak services] id in services?.syncSensor(id: id) },
             syncInBackground: { [weak services] id in KotlinBoolean(value: services?.autoSync.syncInBackground(id) ?? false) },
             closeIdle: { [weak services] id in services?.closeIdle(id: id) },
@@ -322,9 +470,9 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     func sceneDidEnterBackground(_ scene: UIScene) {
         guard let services else { return }
         services.cancelPendingOpen()
-        // Collect all is a foreground pass, unless iOS 26 took it as a continued task. Otherwise the
-        // step in flight ends with the link below.
-        if !services.autoSync.collectAllContinues { services.devices.cancelCollectAll() }
+        // Collect all is a foreground pass, unless iOS 26 took it as a continued task or is about to
+        // launch one. Otherwise the step in flight ends with the link below.
+        if !services.autoSync.collectAllHeld { services.devices.cancelCollectAll() }
         services.bluetooth.suspend()
         services.lan.enterBackground()
         services.autoSync.enteredBackground()
@@ -334,6 +482,9 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         services.bluetooth.resume()
         services.lan.resume()
         services.autoSync.becameActive()
+        // The open page reconnects first. A resumed run of the same sensor then shares its link.
+        services.reopenLivePage()
+        services.resumeInterrupted()
     }
     func sceneDidDisconnect(_ scene: UIScene) {
         guard let services else { return }

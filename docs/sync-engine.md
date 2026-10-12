@@ -74,10 +74,19 @@ Sync is a **pull of immutable files**. The device is never asked to delete, rena
 Android `DeviceFacade` owns one collection controller per address and routes Sync all,
 Smart Sync, one-file sync and worker requests into it. `DeviceLinkOwner` lends connections
 and owns manual commands and idle reconnect. `DeviceConnectionRepository` is the
-compatibility typealias for the facade. iOS uses the shared link, collector and engine through
-`SensorSync`, and `SensorCollections` holds one controller per device over `IosLinkProvider`,
-which asks Swift to dial when a retry finds no open link. Only tests build it today. Routing the Swift entry points into
-it, and giving it a Swift dial, remains [#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81).
+compatibility typealias for the facade. iOS routes every sync through the same controller
+([#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81)). `SensorCollections` is
+one app-wide instance that holds one controller per device over `IosLinkProvider`. Sync, Smart
+Sync, one-file sync, Collect all steps and Auto-sync steps on Bluetooth and Wi-Fi all call
+`runs.collect`, and a retry that finds no open link asks Swift to dial it again. `IosKeepAlive`
+hands out the background time leases a run holds.
+
+On iOS each result carries `SyncResult.endReason` (`SyncEndReason`), mapped from the typed
+`DisconnectCause` and `CollectionFailure` as Android does. A lost or stale bond ends as
+`PAIRING_REPAIR`, which the device page and My devices show as a failed link that needs pairing
+again. A run iOS stops when the app leaves the screen is kept as interrupted
+(`SensorCollections.interrupt`). When the app is active again, `AppServices.resumeInterrupted`
+starts it once through the Swift entry points, and Forget drops it.
 
 ## Planner (`SyncPlanner`)
 

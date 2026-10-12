@@ -10,7 +10,6 @@ import earth.walkthru.aqsync.data.protocol.DeviceStatus
 import earth.walkthru.aqsync.data.protocol.LiveSample
 import earth.walkthru.aqsync.data.sync.ClockSyncMode
 import earth.walkthru.aqsync.data.sync.FileOutcome
-import earth.walkthru.opensensor.designsystem.nowEpochMillis
 import earth.walkthru.opensensor.today.TodayArchive
 import earth.walkthru.opensensor.today.TodayNotice
 import earth.walkthru.opensensor.today.TodaySnapshot
@@ -53,7 +52,6 @@ internal class CompanionTodaySource(
     private val actions: CompanionLinkActions,
     private val stationFor: (String) -> String? = { null },
     private val nameFor: (String) -> String? = { null },
-    private val now: () -> Long = { nowEpochMillis() },
 ) : TodaySource {
     /** One read of the companion state. Compose state, so [snapshotFlow] sees every change. */
     private data class Seen(
@@ -66,24 +64,24 @@ internal class CompanionTodaySource(
         val syncBusy: Boolean,
         val progress: SyncProgress?,
         val result: SyncResult?,
+        val statusAt: Long?,
+        val liveAt: Long?,
+        val startedAt: Long?,
+        val finishedAt: Long?,
+        val reconnecting: Boolean,
+        val failed: Boolean,
         val lanName: String?,
         val lanInfo: DeviceInfo?,
         val lanStatus: DeviceStatus?,
         val lanLive: LiveSample?,
         val lanStatusAt: Long?,
+        val lanLiveAt: Long?,
         val lanSession: LanSessionState?,
         val lanRun: LanRunState?,
     )
 
-    /** [Seen] with the instants Today shows: when status and live arrived, when the sync ran. */
-    private data class Stamped(
-        val seen: Seen,
-        val name: String?,
-        val statusAt: Long?,
-        val liveAt: Long?,
-        val startedAt: Long?,
-        val finishedAt: Long?,
-    )
+    /** [Seen] with the name the user last saw, kept when a new scan clears the nearby list. */
+    private data class Stamped(val seen: Seen, val name: String?)
 
     private val stamped: Flow<Stamped> = snapshotFlow {
         val station = stationFor(address)
@@ -102,32 +100,25 @@ internal class CompanionTodaySource(
             syncBusy = state.syncBusy,
             progress = state.syncProgress,
             result = state.lastSyncResult,
+            // The instants come from when each message arrived, so a recomposition never moves them.
+            statusAt = state.statusAtEpochMs,
+            liveAt = state.liveAtEpochMs,
+            startedAt = state.syncStartedAtEpochMs,
+            finishedAt = state.syncFinishedAtEpochMs,
+            reconnecting = state.reconnectingId == address,
+            failed = state.failedId == address,
             lanName = lanName,
             lanInfo = lanName?.let(state.lanInfo::get),
             lanStatus = lanName?.let(state.lanStatus::get),
             lanLive = lanName?.let(state.lanLive::get),
             lanStatusAt = lanName?.let(state.lanStatusAtEpochMs::get),
+            lanLiveAt = lanName?.let(state.lanLiveAtEpochMs::get),
             lanSession = lanName?.let(state.lanSessions::get),
             lanRun = lanRun,
         )
     }.runningFold<Seen, Stamped?>(null) { previous, seen ->
-        val at = now()
-        val was = previous?.seen
-        Stamped(
-            seen = seen,
-            // A new scan clears the nearby list, the name the user saw stays.
-            name = seen.name ?: previous?.name,
-            statusAt = if (seen.lanName != null) seen.lanStatusAt else seen.status?.let { if (was?.status == it) previous.statusAt else at },
-            liveAt = (if (seen.lanName != null) seen.lanLive else seen.live)?.let {
-                if (was?.lanName == seen.lanName && (if (seen.lanName != null) was?.lanLive else was?.live) == it) previous?.liveAt else at
-            },
-            startedAt = if ((seen.syncBusy || seen.lanSession?.busy == true) && was?.syncBusy != true && was?.lanSession?.busy != true) at else previous?.startedAt,
-            finishedAt = when {
-                seen.syncBusy || seen.result == null -> null
-                was?.syncBusy == true || was?.result !== seen.result -> at
-                else -> previous.finishedAt
-            },
-        )
+        // A new scan clears the nearby list, the name the user saw stays.
+        Stamped(seen, seen.name ?: previous?.name)
     }.filterNotNull()
 
     override val snapshot: StateFlow<TodaySnapshot> = combine(stamped, archive, todaySoFar) { s, records, today ->
@@ -142,7 +133,8 @@ internal class CompanionTodaySource(
             name = s.name,
             connection = when {
                 connected -> ConnectionState.Ready(0)
-                mine -> ConnectionState.Connecting
+                mine || seen.reconnecting -> ConnectionState.Connecting
+                seen.failed -> ConnectionState.Failed(PAIRING_REPAIR)
                 else -> ConnectionState.Disconnected
             },
             transport = when {
@@ -152,16 +144,17 @@ internal class CompanionTodaySource(
             },
             info = if (overLan) seen.lanInfo else seen.info?.takeIf { mine },
             status = if (overLan) seen.lanStatus else seen.status?.takeIf { mine },
-            statusAtEpochMs = s.statusAt?.takeIf { connected },
+            statusAtEpochMs = (if (overLan) seen.lanStatusAt else seen.statusAt?.takeIf { mine })?.takeIf { connected },
             live = if (overLan) seen.lanLive else seen.live?.takeIf { mine },
-            liveAtEpochMs = s.liveAt?.takeIf { connected },
+            liveAtEpochMs = (if (overLan) seen.lanLiveAt else seen.liveAt?.takeIf { mine })?.takeIf { connected },
             sync = when {
                 overLan || (!mine && seen.lanRun != null) -> lanProgress(seen.lanSession, seen.lanRun)
-                mine -> runProgress(seen, s)
+                mine || seen.reconnecting -> runProgress(seen)
                 else -> RunProgress()
             },
             archive = if (station == null) TodayArchive() else TodayArchive.of(records.filter { it.station == station }),
             todaySoFar = today?.takeIf { connected },
+            needsPairingRepair = !connected && !mine && seen.failed,
         )
     }.stateIn(scope, SharingStarted.Eagerly, TodaySnapshot(address = address))
 
@@ -223,7 +216,7 @@ internal class CompanionTodaySource(
         return if (result.end == SyncEnd.COMPLETE || result.end == SyncEnd.FILES_NOT_SAVED) 0 else 1
     }
 
-    private fun runProgress(seen: Seen, s: Stamped): RunProgress {
+    private fun runProgress(seen: Seen): RunProgress {
         val progress = seen.progress
         // iOS reports how many files were not saved, not which. The card shows the count only.
         val notSaved = seen.result?.notSaved ?: 0
@@ -235,13 +228,18 @@ internal class CompanionTodaySource(
             bytesTotal = progress?.bytesTotal ?: 0,
             bytesPerSecond = progress?.bytesPerSecond ?: 0.0,
             outcomes = fileFailures(seen.result, notSaved),
-            startedAtEpochMs = s.startedAt,
-            finishedAtEpochMs = s.finishedAt,
+            startedAtEpochMs = seen.startedAt,
+            finishedAtEpochMs = seen.finishedAt.takeIf { !seen.syncBusy && seen.result != null },
         )
     }
 
     private fun fileFailures(result: SyncResult?, count: Int): List<FileOutcome> {
         val known = result?.failures.orEmpty().map { FileOutcome.Failed(name = it.name, message = it.problem.name) }
         return known + List((count - known.size).coerceAtLeast(0)) { FileOutcome.Failed(name = "", message = "") }
+    }
+
+    private companion object {
+        /** The technical reason behind a lost bond. Today shows its own repair words for it. */
+        const val PAIRING_REPAIR = "Bluetooth pairing needs repair."
     }
 }

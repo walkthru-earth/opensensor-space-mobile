@@ -49,6 +49,11 @@ class IosLinkProvider internal constructor(
     private val poll: Duration = 100.milliseconds,
     /** Runs once the lease is taken, before it is lent. A test hook for a cancel landing there. */
     private val granted: suspend () -> Unit = {},
+    /**
+     * Swift's open link of the preferred kind, when Swift keeps more than one per device. Replaces
+     * [linkFor], so a Wi-Fi link never hides an open Bluetooth one from a Bluetooth-only attempt.
+     */
+    private val pick: ((String, LinkPreference) -> IosLink?)? = null,
 ) : LinkProvider {
     constructor(linkFor: (String) -> IosLink?) : this(linkFor, 20.seconds, Dispatchers.Main)
 
@@ -152,7 +157,7 @@ class IosLinkProvider internal constructor(
     }
 
     private suspend fun usable(device: String, prefer: LinkPreference): IosLink? =
-        withContext(main) { linkFor(device) }?.takeIf { it.isOpen && it.station != null && prefer.allows(it.kind) }
+        withContext(main) { pick?.invoke(device, prefer) ?: linkFor(device) }?.takeIf { it.isOpen && it.station != null && prefer.allows(it.kind) }
 
     private fun LinkPreference.allows(kind: TransportKind) = when (this) {
         LinkPreference.ANY -> true

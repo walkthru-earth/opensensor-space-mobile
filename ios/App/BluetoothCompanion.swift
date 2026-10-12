@@ -32,8 +32,9 @@ final class BluetoothCompanion {
     private var identity: SyncIdentity?
     private var tokenTimer: Timer?
     private var requestingToken = false
-    /// The sensor whose last page closed while a write or read was still queued, or while a lease
-    /// held its link. Settling closes it.
+    /// The sensor whose last page closed while a sync, a Collect all or Auto-sync step, Wi-Fi access
+    /// setup, a queued write or a lease held its link. Settling closes it once that work ended.
+    /// Opening the sensor again keeps it.
     private var closeWhenIdle: String?
     /// Held while this side writes `GET_TOKEN` itself, so no Kotlin request shares the link.
     private var nativeLease: IosNativeLease?
@@ -74,21 +75,26 @@ final class BluetoothCompanion {
     private let engine: SensorSync
     /// This connection's shared link, made once INFO named the sensor. RESPONSE notifications go to it.
     private var ioLink: IosLink?
-    /// The sync or command this side started, while it runs.
-    private var syncHandle: SyncHandle?
-    /// Keeps a sync the user started running for a short while after the app leaves the screen.
-    private var syncTask: UIBackgroundTaskIdentifier = .invalid
-    private var interactiveFileName: String?
-    private var interactiveSyncId: String?
-    private var resumePeripheral: String?
-    private var resumeTimer: Timer?
-    private var resumeWaiting = false
-    private var resumeAttempts = 0
-    private var resumeStartedAt: Date?
-    private let maxForegroundResumeAttempts = 2
-    private let foregroundResumeWindow: TimeInterval = 75
+    /// The command this side started, while it runs.
+    private var commandHandle: SyncHandle?
+    /// The shared collections (#81). Every Bluetooth sync runs on its controller for the device.
+    var runs: SensorCollections?
+    /// The collection this side started, from its start until its result arrived. The controller
+    /// owns its retries, so it outlives a lost connection and reconnects through [dial].
+    private var run: SyncHandle?
+    /// Numbers [run], so a callback from an earlier run is ignored.
+    private var runToken: UUID?
+    /// The controller asked for a link to the connecting sensor. Each answers once.
+    private var dialWaiters: [(Bool) -> Void] = []
+    /// Peripheral ids by hardware id, from INFO, so a retry reopens the same sensor.
+    private var peripherals: [String: String] = [:]
+    /// The saved peripheral for a hardware id the app has not opened since launch.
+    var peripheralFor: ((String) -> String?)?
     /// The sensor an Auto-sync step is copying now (#23), and whether that step opened the link.
-    private var backgroundId: String?
+    private var backgroundId: String? {
+        // My devices marks the link as Auto-sync's while a step owns it.
+        didSet { if (oldValue == nil) != (backgroundId == nil) { state.bluetoothBackgroundOwned(owned: backgroundId != nil) } }
+    }
     private var backgroundOpened = false
     private var backgroundDone: ((BackgroundStepResult) -> Void)?
     private var backgroundBytes: Int64 = 0
@@ -104,11 +110,12 @@ final class BluetoothCompanion {
 
     /// Links keep working off screen only for work already under way.
     private var active: Bool {
-        foreground || syncHandle != nil || ioLink?.leased == true || backgroundId != nil || collectId != nil
+        foreground || run != nil || commandHandle != nil || ioLink?.leased == true || backgroundId != nil
+            || collectId != nil || !dialWaiters.isEmpty
     }
 
-    /// A run, a lease or Wi-Fi access setup holds the link.
-    private var linkBusy: Bool { syncHandle != nil || ioLink?.leased == true || requestingToken }
+    /// A run, a command, a lease or Wi-Fi access setup holds the link.
+    private var linkBusy: Bool { run != nil || commandHandle != nil || ioLink?.leased == true || requestingToken }
 
     private var poweredOn: Bool { centralState == .poweredOn }
 
@@ -180,10 +187,9 @@ final class BluetoothCompanion {
     /// open is refused instead.
     func open(id: String) {
         guard foreground || collectOffScreen else { return }
-        if resumeWaiting { clearInteractiveResume() }
         closeWhenIdle = nil
         if sameId(current, id) { return }
-        if current != nil, syncHandle != nil || ioLink?.leased == true, collectId == nil { return }
+        if current != nil, run != nil || commandHandle != nil || ioLink?.leased == true, collectId == nil { return }
         guard poweredOn else {
             openRequested = id
             return
@@ -197,8 +203,7 @@ final class BluetoothCompanion {
     /// A link the user holds stays untouched. A link to another sensor, or a sync or Debug request
     /// on this one, fails the step. An idle link to this sensor is synced and left open.
     func collect(id: String) {
-        guard foreground || collectOffScreen, !resumeWaiting, !linkBusy, collectId == nil, backgroundId == nil,
-            poweredOn
+        guard foreground || collectOffScreen, !linkBusy, collectId == nil, backgroundId == nil, poweredOn
         else {
             onCollectFinished?(id, false)
             return
@@ -229,7 +234,7 @@ final class BluetoothCompanion {
     /// An active sync, command, configuration request or token operation retains its owner.
     func releaseIdleForCollect(next id: String) {
         guard let current, current.caseInsensitiveCompare(id) != .orderedSame,
-            !resumeWaiting, !linkBusy, collectId == nil, backgroundId == nil, gattIdle
+            !linkBusy, collectId == nil, backgroundId == nil, gattIdle
         else { return }
         disconnect()
     }
@@ -253,13 +258,13 @@ final class BluetoothCompanion {
     func cancelCollect() {
         guard collectId != nil else { return }
         collectCancelled = true
-        if let syncHandle { syncHandle.cancel() } else { failCollect() }
+        if let run { run.cancel() } else { failCollect() }
     }
 
     /// Ends the Collect all step that has not started its sync. A link the step opened closes, which
     /// reports the failure. A link the user held stays open.
     private func failCollect() {
-        guard let id = collectId, syncHandle == nil else { return }
+        guard let id = collectId, run == nil else { return }
         collectTimer?.invalidate()
         collectTimer = nil
         if collectOpened {
@@ -293,76 +298,45 @@ final class BluetoothCompanion {
         }
     }
 
-    /// Ends the connection for a typed reason. The shared state picks the words.
+    /// Ends the connection for a typed reason. The shared state picks the words. A collection this
+    /// side started stops with it, because the app closed the link on purpose.
     func disconnect(notice: CompanionNotice = .disconnected) {
-        clearInteractiveResume()
+        run?.cancel()
         teardown()
         state.connectionClosedNoticed(notice: notice)
     }
 
-    private func clearInteractiveResume() {
-        resumeTimer?.invalidate()
-        resumeTimer = nil
-        resumePeripheral = nil
-        resumeWaiting = false
-        resumeAttempts = 0
-        resumeStartedAt = nil
-        interactiveSyncId = nil
-        interactiveFileName = nil
-    }
-
-    /// Retry only a foreground, user-started transfer whose BLE pipe failed. The shared engine
-    /// re-lists files and resumes retained partials; no archive state is copied through Swift.
-    @discardableResult
-    private func scheduleInteractiveResume(notice: CompanionNotice, result: SyncResult? = nil) -> Bool {
-        guard foreground, collectId == nil, backgroundId == nil, let peripheral = current,
-            let id = interactiveSyncId, peripheral.caseInsensitiveCompare(id) == .orderedSame,
-            poweredOn, resumeAttempts < maxForegroundResumeAttempts,
-            Date().timeIntervalSince(resumeStartedAt ?? Date()) < foregroundResumeWindow
-        else { return false }
-        if resumeStartedAt == nil { resumeStartedAt = Date() }
-        resumeAttempts += 1
-        resumeWaiting = true
-        resumePeripheral = peripheral
+    /// Ends the connection, which the sensor or the radio lost. A running collection stays with the
+    /// shared controller, which retries through [dial] or ends with the typed cause.
+    private func drop(notice: CompanionNotice) {
         teardown()
-        if let result { state.bluetoothSyncClosed(result: result) }
-        else { state.connectionClosedNoticed(notice: notice) }
-        resumeTimer?.invalidate()
-        resumeTimer = Timer.scheduledTimer(withTimeInterval: TimeInterval(resumeAttempts), repeats: false) { [weak self] _ in
-            MainActor.assumeIsolated { self?.reconnectInteractiveSync() }
-        }
-        return true
-    }
-
-    private func reconnectInteractiveSync() {
-        resumeTimer = nil
-        guard resumeWaiting, foreground, interactiveSyncId != nil,
-            let started = resumeStartedAt, Date().timeIntervalSince(started) < foregroundResumeWindow,
-            let peripheral = resumePeripheral, poweredOn,
-            collectId == nil, backgroundId == nil, current == nil
-        else {
-            clearInteractiveResume()
-            return
-        }
-        connect(peripheral)
+        state.connectionClosedNoticed(notice: notice)
     }
 
     private func unexpectedLoss(notice: CompanionNotice) {
-        if scheduleInteractiveResume(notice: notice) { return }
-        disconnect(notice: notice)
+        guard run != nil else {
+            disconnect(notice: notice)
+            return
+        }
+        // A lost bond ends the run, so the page shows the repair. Any other loss is dialled again.
+        if notice == .pairingRemoved {
+            drop(notice: notice)
+        } else {
+            teardown()
+            state.bluetoothReconnecting(notice: notice)
+        }
     }
 
     private func teardown() {
         openRequested = nil
         closeWhenIdle = nil
-        // The engine sees the link end at once. Its result for this link is then ignored.
-        syncHandle?.cancel()
-        syncHandle = nil
+        // A command ends with its link. A collection sees the link end and retries or fails itself.
+        commandHandle?.cancel()
+        commandHandle = nil
         nativeLease?.end()
         nativeLease = nil
         ioLink?.close()
         ioLink = nil
-        endSyncTask()
         connectionTimer?.invalidate()
         freshnessTimer?.invalidate()
         connectionTimer = nil
@@ -383,25 +357,28 @@ final class BluetoothCompanion {
         gattIdle = true
         // A command outcome held for its last write reaches Today now that the connection is gone.
         state.today.linkIdle()
+        let waiters = dialWaiters
+        dialWaiters = []
+        waiters.forEach { $0(false) }
+        // A step whose collection started hears its result instead.
+        guard run == nil else { return }
         collectTimer?.invalidate()
         collectTimer = nil
         collectOpened = false
         if let id = collectId {
-            // Timed out, refused or lost before the sync ended. Collect all moves on.
+            // Timed out or refused before the sync started. Collect all moves on.
             collectId = nil
             onCollectFinished?(id, false)
         }
         if let done = backgroundDone {
-            // The link ended before the step finished. Verified files stay, and the run moves on.
-            let started = backgroundBytes > 0
+            // The link ended before the step started its sync, and the run moves on.
             clearBackground()
-            done(started ? BackgroundStepResult.lost() : BackgroundStepResult.skipped("connect failed"))
+            done(BackgroundStepResult.skipped("connect failed"))
         }
     }
 
     /// Closes the link to this sensor, if it is open. Forget calls it.
     func close(id: String) {
-        if interactiveSyncId?.caseInsensitiveCompare(id) == .orderedSame { clearInteractiveResume() }
         if sameId(openRequested, id) { openRequested = nil }
         guard let current, current.caseInsensitiveCompare(id) == .orderedSame else { return }
         disconnect()
@@ -411,45 +388,53 @@ final class BluetoothCompanion {
     /// UTC is synchronized before LIST, OPEN, READ and CLOSE through the operation queue.
     func sync(fileName: String? = nil) {
         // Today's Smart Sync and the Sync button say the link is busy instead of doing nothing.
-        if startSync(onlyName: fileName) {
-            interactiveSyncId = current
-            interactiveFileName = fileName
-            resumeStartedAt = nil
-            resumeAttempts = 0
-        } else {
-            state.today.commandRefused()
-        }
+        if !startSync(onlyName: fileName) { state.today.commandRefused() }
     }
 
+    /// The Stop button. Collect all and Auto-sync steps end through their own cancel.
     func cancelInteractiveSync() {
         guard collectId == nil, backgroundId == nil else { return }
-        let reconnecting = resumeWaiting
-        clearInteractiveResume()
-        syncHandle?.cancel()
-        if reconnecting, current != nil { disconnect() }
+        run?.cancel()
     }
 
     /// Starts the sync when the link is free. Collect all and Auto-sync steps call this from their
-    /// idle waiters, so a refusal there stays quiet and the step waits for the next idle link.
+    /// idle waiters, so a refusal there stays quiet and the step waits for the next idle link. The
+    /// shared controller for the device runs it over Bluetooth, takes its background time and
+    /// retries a lost link through [dial].
     @discardableResult
     private func startSync(onlyName: String? = nil) -> Bool {
         // A lease still held by Debug or Device settings queues the sync behind it on the shared link.
-        guard active, clockAttempted, current != nil, let link = ioLink, link.isOpen, let identity, syncHandle == nil,
-            !requestingToken
+        guard active, clockAttempted, current != nil, let link = ioLink, link.isOpen, let identity, run == nil,
+            commandHandle == nil, !requestingToken
         else { return false }
-        // The engine ends a stalled sync itself, so the step timers are no longer needed.
+        return beginRun(device: identity.device, onlyName: onlyName)
+    }
+
+    /// Starts a run iOS interrupted off screen, back on screen. With no open link to this sensor the
+    /// shared controller dials it through [dial], as on a retry. False while other work holds the link.
+    @discardableResult
+    func resumeSync(device: String, onlyName: String?) -> Bool {
+        guard foreground, run == nil, commandHandle == nil, ioLink?.leased != true, !requestingToken,
+            collectId == nil, backgroundId == nil
+        else { return false }
+        return beginRun(device: device, onlyName: onlyName)
+    }
+
+    private func beginRun(device: String, onlyName: String?) -> Bool {
+        guard let runs else { return false }
+        // The controller ends a stalled sync itself, so the step timers are no longer needed.
         collectTimer?.invalidate()
         collectTimer = nil
         backgroundTimer?.invalidate()
         backgroundTimer = nil
+        let token = UUID()
+        runToken = token
         state.bluetoothSyncStarted()
-        if foreground, collectId == nil, backgroundId == nil { beginSyncTask() }
-        syncHandle = engine.startSelected(
-            link: link, station: identity.station, device: identity.device, maxRead: identity.maxRead,
-            onlyName: onlyName,
+        let handle = runs.collect(
+            device: device, onlyName: onlyName, prefer: .ble, background: backgroundId != nil,
             progress: { [weak self] update in
                 MainActor.assumeIsolated {
-                    guard let self, self.ioLink === link else { return }
+                    guard let self, self.runToken == token else { return }
                     self.state.bluetoothSyncProgressed(progress: update)
                     if self.backgroundId != nil {
                         self.backgroundBytes = update.receivedBytes
@@ -458,28 +443,30 @@ final class BluetoothCompanion {
                 }
             },
             finished: { [weak self] result in
-                MainActor.assumeIsolated { self?.syncEnded(result, link: link) }
+                MainActor.assumeIsolated { self?.syncEnded(result, token: token) }
             })
+        // The result may already have arrived for a refused start.
+        if runToken == token { run = handle }
         return true
     }
 
     /// Sends automatic UTC synchronization or a confirmed flush through the shared session.
     func command(_ command: SensorCommand, automatic: Bool = false) {
-        guard (foreground || automatic), current != nil, let link = ioLink, link.isOpen, syncHandle == nil,
-            !requestingToken
+        guard (foreground || automatic), current != nil, let link = ioLink, link.isOpen, run == nil,
+            commandHandle == nil, !requestingToken
         else {
             state.today.commandRefused()
             return
         }
         if !automatic { state.today.commandStarted() }
-        syncHandle = engine.command(link: link, command: command, automatic: automatic) { [weak self] result in
+        commandHandle = engine.command(link: link, command: command, automatic: automatic) { [weak self] result in
             MainActor.assumeIsolated { self?.commandEnded(result, link: link, automatic: automatic) }
         }
     }
 
     private func commandEnded(_ result: CommandResult, link: IosLink, automatic: Bool) {
         guard ioLink === link else { return }
-        syncHandle = nil
+        commandHandle = nil
         // Today hears an explicit command outcome once the link settles; automatic maintenance
         // remains silent.
         if !automatic { state.today.commandEnded(result: result) }
@@ -495,16 +482,10 @@ final class BluetoothCompanion {
     /// outcome of a command for Today, then a Collect all step or an Auto-sync step waiting for the link.
     private func settle() {
         guard !linkBusy, gattIdle else { return }
-        if ioLink != nil, !clockAttempted {
+        // A run that reconnected holds the link at once. Its clock was set before it started.
+        if ioLink != nil, !clockAttempted, run == nil {
             clockAttempted = true
             command(.setTime, automatic: true)
-            return
-        }
-        if resumeWaiting, current?.caseInsensitiveCompare(interactiveSyncId ?? "") == .orderedSame,
-            startSync(onlyName: interactiveFileName)
-        {
-            resumeWaiting = false
-            resumePeripheral = nil
             return
         }
         state.today.linkIdle()
@@ -516,28 +497,33 @@ final class BluetoothCompanion {
         }
     }
 
-    private func syncEnded(_ result: SyncResult, link: IosLink) {
-        guard ioLink === link else { return }
-        endSyncTask()
-        if result.resumable, scheduleInteractiveResume(notice: .syncAborted, result: result) { return }
-        clearInteractiveResume()
-        syncHandle = nil
+    /// The collection's one result, after the controller handed the link back.
+    private func syncEnded(_ result: SyncResult, token: UUID) {
+        guard runToken == token else { return }
+        runToken = nil
+        run = nil
         let collected = collectId
         let opened = collectOpened
         collectId = nil
         collectOpened = false
+        collectTimer?.invalidate()
+        collectTimer = nil
         let background = backgroundDone
         let backgroundOwned = backgroundOpened
         let bytes = backgroundBytes
         clearBackground()
-        if result.keepsLink, link.isOpen {
+        if result.keepsLink, let link = ioLink, link.isOpen {
             state.bluetoothSyncFinished(result: result)
             // Collect all and Auto-sync close what they opened, so the next sensor can take the one
             // link. Off screen nothing stays open once its work ended.
-            if (collected != nil && opened) || (background != nil && backgroundOwned) || !foreground { disconnect() }
+            if (collected != nil && opened) || (background != nil && backgroundOwned) || !foreground {
+                disconnect()
+            } else {
+                settle()
+            }
         } else {
             // A stalled or failed link may still hold a write in flight. Start the next sync on a fresh connection.
-            teardown()
+            if current != nil { teardown() }
             state.bluetoothSyncClosed(result: result)
         }
         if let collected { onCollectFinished?(collected, result.end == .complete) }
@@ -548,11 +534,11 @@ final class BluetoothCompanion {
     /// keeps its link and closes it when it ends.
     func suspend() {
         foreground = false
-        if resumeWaiting { clearInteractiveResume() }
         scanRequested = false
         stopScan()
         openRequested = nil
-        guard syncHandle == nil, ioLink?.leased != true, backgroundId == nil, !(collectOffScreen && collectId != nil)
+        guard run == nil, commandHandle == nil, ioLink?.leased != true, backgroundId == nil,
+            !(collectOffScreen && collectId != nil)
         else { return }
         disconnect(notice: .resumeLive)
     }
@@ -567,38 +553,29 @@ final class BluetoothCompanion {
         physical.releaseWaiting(id: nil)
     }
 
-    /// Closes an idle link to this sensor once its last Today, Device or Device settings page is gone
-    /// (#16). A sync, Wi-Fi access setup, Collect all or an Auto-sync step keeps it. A command, a
-    /// Debug or Device settings lease, or a write still queued delays the close until the link settles.
+    /// Closes the link to this sensor once its last Today, Device or Device settings page is gone
+    /// (#16). A sync, Wi-Fi access setup, Collect all or an Auto-sync step, a command, a lease or a
+    /// write still queued delays the close until that work ends and the link settles.
     func closeIdle(id: String) {
-        if resumeWaiting, interactiveSyncId?.caseInsensitiveCompare(id) == .orderedSame {
-            clearInteractiveResume()
-            if current != nil { disconnect() }
-            return
-        }
-        guard let current, current.caseInsensitiveCompare(id) == .orderedSame,
-            ioLink?.syncRunning != true, collectId == nil, backgroundId == nil, !requestingToken
-        else { return }
-        guard !linkBusy, gattIdle else {
+        guard let current, current.caseInsensitiveCompare(id) == .orderedSame else { return }
+        guard run == nil, collectId == nil, backgroundId == nil, !requestingToken, !linkBusy, gattIdle else {
             closeWhenIdle = id
             return
         }
         disconnect()
     }
 
-    /// True while the user's work holds the link to this sensor. An idle open link is not held.
-    func isBusy(id: String) -> Bool {
-        if resumeWaiting, interactiveSyncId?.caseInsensitiveCompare(id) == .orderedSame { return true }
-        guard let current, current.caseInsensitiveCompare(id) == .orderedSame else {
-            return false
-        }
+    /// True while a command, a Debug or Device settings lease, Wi-Fi access setup or a Collect all
+    /// step holds the link to this sensor. A collection is the shared controller's to report.
+    func isHeld(id: String) -> Bool {
+        guard sameId(current, id) else { return false }
         return linkBusy || collectId != nil
     }
 
     /// Asks the sensor for its LAN token. The request takes a native lease of the shared link, so it
     /// waits for any Kotlin request and its reply stays on this side.
     func saveWifiAccess() {
-        guard foreground, current != nil, identity != nil, let link = ioLink, syncHandle == nil,
+        guard foreground, current != nil, identity != nil, let link = ioLink, run == nil, commandHandle == nil,
             !requestingToken, mtu >= 4
         else { return }
         requestingToken = true
@@ -718,11 +695,12 @@ extension BluetoothCompanion {
     /// The sensor refused this phone's pairing keys. Nothing retries, because only removing the
     /// pairing in iOS Settings and pairing again fixes it. An Auto-sync step is skipped, not lost.
     private func pairingRemoved() {
-        if let done = backgroundDone {
+        if run == nil, let done = backgroundDone {
             clearBackground()
             done(BackgroundStepResult.skipped("pairing removed"))
         }
-        disconnect(notice: .pairingRemoved)
+        // A collection already heard the missing bond from its link and ends without a retry.
+        unexpectedLoss(notice: .pairingRemoved)
     }
 
     fileprivate func powerChanged(_ newState: CBManagerState) {
@@ -748,7 +726,8 @@ extension BluetoothCompanion {
                 ? current ?? openRequested : nil
             let rescan = newState == .resetting && foreground && (scanRequested || scanTimer != nil)
             stopScan()
-            disconnect(notice: notice)
+            // A collection heard the radio go from its link. The controller retries or ends it.
+            unexpectedLoss(notice: notice)
             if let reopen { openRequested = reopen }
             if rescan { scanRequested = true }
         }
@@ -782,6 +761,7 @@ extension BluetoothCompanion {
             return
         }
         identity = observed
+        peripherals[observed.device] = id
         self.mtu = mtu
         self.canSync = canSync
         openLink(identity: observed)
@@ -835,6 +815,9 @@ extension BluetoothCompanion {
             Task { @MainActor in self?.linkClosed(id) }
         }
         ioLink = link
+        let waiters = dialWaiters
+        dialWaiters = []
+        waiters.forEach { $0(true) }
     }
 
     /// A lease ended. Work waiting for an idle link runs, and off screen an idle link closes.
@@ -846,25 +829,37 @@ extension BluetoothCompanion {
     /// The shared link closed or was poisoned while the connection is still up. A running sync ends
     /// with it and closes the connection itself. Otherwise the connection closes now.
     private func linkClosed(_ id: ObjectIdentifier) {
-        guard let ioLink, ObjectIdentifier(ioLink) == id, syncHandle == nil else { return }
-        disconnect(notice: .sensorDisconnected)
+        guard let ioLink, ObjectIdentifier(ioLink) == id else { return }
+        // A collection on it retries on a fresh connection, so this one closes either way.
+        unexpectedLoss(notice: .sensorDisconnected)
     }
 
-    /// A short background task for a sync the user started, so leaving the screen does not cut it.
-    fileprivate func beginSyncTask() {
-        guard syncTask == .invalid else { return }
-        syncTask = UIApplication.shared.beginBackgroundTask(withName: "Bluetooth sync") { [weak self] in
-            MainActor.assumeIsolated {
-                self?.syncHandle?.cancel()
-                self?.endSyncTask()
-            }
+    /// The open link to this hardware id for the shared controller, also off screen while work holds it.
+    func syncLink(device: String) -> IosLink? {
+        guard active, current != nil, let identity, identity.device == device, let ioLink, ioLink.isOpen else {
+            return nil
         }
+        return ioLink
     }
 
-    fileprivate func endSyncTask() {
-        guard syncTask != .invalid else { return }
-        UIApplication.shared.endBackgroundTask(syncTask)
-        syncTask = .invalid
+    /// The shared controller found no open link for this sensor's collection and asks for one.
+    /// [done] runs once, true when the link is open and identified. A link held for other work
+    /// on another sensor refuses.
+    func dial(device: String, done: @escaping (Bool) -> Void) {
+        guard hasCentral, poweredOn, let id = peripherals[device] ?? peripheralFor?(device), UUID(uuidString: id) != nil
+        else { return done(false) }
+        if sameId(current, id) {
+            if let identity, identity.device == device, ioLink?.isOpen == true { return done(true) }
+            dialWaiters.append(done)
+            return
+        }
+        if current != nil {
+            guard commandHandle == nil, ioLink?.leased != true, !requestingToken, collectId == nil, backgroundId == nil
+            else { return done(false) }
+            drop(notice: .disconnected)
+        }
+        dialWaiters.append(done)
+        connect(id)
     }
 }
 
@@ -875,7 +870,7 @@ extension BluetoothCompanion {
     /// One step of the shared background run. Adopts an idle link to this sensor, or a pending connect
     /// that completed, or opens the saved peripheral. Answers once, with no ids or secrets in the result.
     func backgroundSync(id: String, done: @escaping (BackgroundStepResult) -> Void) {
-        guard backgroundDone == nil, backgroundRequested == nil, collectId == nil, !resumeWaiting else {
+        guard backgroundDone == nil, backgroundRequested == nil, collectId == nil, run == nil else {
             done(BackgroundStepResult.skipped("busy"))
             return
         }
@@ -927,7 +922,7 @@ extension BluetoothCompanion {
 
     /// Ends a step that never started its sync. A link the step opened closes, which reports it.
     private func failBackground() {
-        guard let done = backgroundDone, syncHandle == nil else { return }
+        guard let done = backgroundDone, run == nil else { return }
         if backgroundOpened {
             disconnect()
         } else {

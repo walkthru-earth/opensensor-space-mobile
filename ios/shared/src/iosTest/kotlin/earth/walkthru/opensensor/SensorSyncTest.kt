@@ -570,10 +570,10 @@ class SensorSyncTest {
     fun aCancelRightAfterTheProviderTookTheLeaseGivesItBack() = runBlocking {
         val link = sensor().also { it.identify(station, "boot", 1024) }
         val took = CompletableDeferred<Unit>()
-        val provider = IosLinkProvider({ link }, 5.seconds, EmptyCoroutineContext) {
+        val provider = IosLinkProvider({ link }, 5.seconds, EmptyCoroutineContext, granted = {
             took.complete(Unit)
             currentCoroutineContext().job.cancel()
-        }
+        })
         val connecting = launch(Dispatchers.Default) { provider.connect("a1b2c3d4e5f6", LinkPreference.ANY) }
         connecting.join()
         assertTrue(took.isCompleted)
