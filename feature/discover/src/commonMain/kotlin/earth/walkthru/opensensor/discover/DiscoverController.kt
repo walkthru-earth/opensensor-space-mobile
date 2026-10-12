@@ -16,6 +16,8 @@ import earth.walkthru.aqsync.publicfeed.PublicFeed
 import earth.walkthru.aqsync.publicfeed.PublicSummary
 import earth.walkthru.aqsync.publicfeed.TimeZoneRegions
 import earth.walkthru.aqsync.publicfeed.ViewportCover
+import earth.walkthru.aqsync.settings.DiscoverSource
+import earth.walkthru.aqsync.settings.effectiveDiscoverSource
 import earth.walkthru.aqsync.storage.MemoryTrimmable
 import earth.walkthru.aqsync.storage.trimOnMemoryPressure
 import kotlinx.coroutines.CancellationException
@@ -34,6 +36,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.LocalDate
 
 /** A camera worth restoring: where the map was last left. */
 data class SavedCamera(val lat: Double, val lng: Double, val zoom: Double)
@@ -91,6 +94,16 @@ data class DiscoverUiState(
      * Cleared by a new cell, window or resolution, and by a later read that succeeds.
      */
     val failedWindows: Set<FeedWindow> = emptySet(),
+    /** The feed on screen. [DiscoverSource.OPENAQ] only while public sensors is on. */
+    val source: DiscoverSource = DiscoverSource.SAMPLE,
+    /** True when the Sample and Real toggle can switch, public sensors on and a live feed built. */
+    val sourceEnabled: Boolean = false,
+    /** The windows the feed on screen offers. The real feed has no last hour. */
+    val windows: List<FeedWindow> = FeedWindow.entries,
+    /** The local day the real data runs to, for the toggle label. Null for the sample. */
+    val dataDate: LocalDate? = null,
+    /** True when the real feed could not be read. The map shows an error with Retry, never the sample. */
+    val loadFailed: Boolean = false,
     val newestUpdateEpochMs: Long? = null,
     val firstRun: Boolean = false,
     val res: Int = ViewportCover.MIN_RES,
@@ -103,7 +116,7 @@ data class DiscoverUiState(
 /** The selected cell's summary for [property], three windows, headline the 24 hour mean. Null with no selection. */
 fun DiscoverUiState.selectedSummary(property: FeedProperty): StationSummary? {
     selected ?: return null
-    return PublicSummary.of(property.id, property.unit, selectedWindows)
+    return PublicSummary.of(property.id, property.unit, selectedWindows, offered = windows)
 }
 
 /**
@@ -169,6 +182,8 @@ internal fun DiscoverUiState.simpleCellFacts(): SimpleCellFacts {
 /**
  * State holder of the Discover screen. Android keeps it in a ViewModel, iOS in the composition.
  * Reads run on [io], never on the main thread, and only after the camera rests for 400 ms.
+ * [feed] is the bundled sample. [liveFeed] is the real feed, read only while the host reports public
+ * sensors on and the saved source is [DiscoverSource.OPENAQ] ([onSourceSettings]).
  */
 class DiscoverController(
     private val scope: CoroutineScope,
@@ -178,13 +193,21 @@ class DiscoverController(
     private val timeZoneId: String,
     private val now: () -> Long,
     private val io: CoroutineDispatcher = Dispatchers.Default,
+    private val liveFeed: PublicFeed? = null,
+    /** Persists the toggle's choice. The host's settings flow then reports it back. */
+    private val saveSource: suspend (DiscoverSource) -> Unit = {},
 ) {
-    private val _state = MutableStateFlow(DiscoverUiState(available = feed.available && h3.available, isSample = feed.isSample))
+    private val _state = MutableStateFlow(DiscoverUiState(available = feed.available && h3.available, isSample = feed.isSample, windows = feed.windows))
     val state: StateFlow<DiscoverUiState> = _state.asStateFlow()
 
     private val rest = MutableStateFlow<CameraRest?>(null)
     private val reload = MutableStateFlow(0)
     private var saved = DiscoverSaved()
+
+    /** The feed every read goes to. Swapped only by [switchTo]. */
+    private var active: PublicFeed = feed
+    private var publicSensors = false
+    private var savedSource = DiscoverSource.SAMPLE
     private var partition: FeedPartition? = null
     private var restyleJob: Job? = null
     private var windowsJob: Job? = null
@@ -198,11 +221,11 @@ class DiscoverController(
     init {
         // A feed that caches bytes in memory gives them back under memory pressure (#61).
         if (feed is MemoryTrimmable) scope.trimOnMemoryPressure(feed)
+        if (liveFeed is MemoryTrimmable) scope.trimOnMemoryPressure(liveFeed)
         scope.launch {
             saved = catching { prefs.load() }.getOrDefault(DiscoverSaved())
             val start = saved.camera?.let { StartView.Camera(it) } ?: StartView.Region(TimeZoneRegions.regionFor(timeZoneId))
-            _state.update { it.copy(start = start, window = saved.window, firstRun = !saved.firstRunDone) }
-            partition = withContext(io) { catching { feed.latest() }.getOrNull() }
+            _state.update { it.copy(start = start, window = offered(saved.window, it.windows), firstRun = !saved.firstRunDone) }
             // One loader. A newer camera rest or a chip change cancels the read in flight.
             combine(rest.filterNotNull(), reload) { r, _ -> r }.collectLatest { r ->
                 delay(REST_MS)
@@ -223,8 +246,70 @@ class DiscoverController(
         restyle(id)
     }
 
+    /**
+     * The host's saved source and public sensors switch, on every change. The real feed is on screen
+     * only for [DiscoverSource.OPENAQ] with public sensors on. A change of feed clears and reloads.
+     */
+    fun onSourceSettings(saved: DiscoverSource, publicSensors: Boolean) {
+        savedSource = saved
+        this.publicSensors = publicSensors
+        val enabled = publicSensors && liveFeed != null
+        if (_state.value.sourceEnabled != enabled) _state.update { it.copy(sourceEnabled = enabled) }
+        val next = if (liveFeed != null && effectiveDiscoverSource(saved, publicSensors) == DiscoverSource.OPENAQ) DiscoverSource.OPENAQ else DiscoverSource.SAMPLE
+        if (next != _state.value.source) switchTo(next)
+    }
+
+    /** The Sample and Real toggle. Ignored while it is disabled. Saves the choice and switches now. */
+    fun chooseSource(source: DiscoverSource) {
+        if (!_state.value.sourceEnabled || source == savedSource) return
+        savedSource = source
+        scope.launch { catching { saveSource(source) } }
+        onSourceSettings(source, publicSensors)
+    }
+
+    /** Reads the feed again after [DiscoverUiState.loadFailed], from the map's Retry. */
+    fun retry() {
+        if (!_state.value.loadFailed) return
+        _state.update { it.copy(loadFailed = false, loading = true) }
+        reload.value++
+    }
+
+    private fun switchTo(next: DiscoverSource) {
+        active = if (next == DiscoverSource.OPENAQ) liveFeed ?: feed else feed
+        windowsJob?.cancel()
+        windowsJob = null
+        windowsFor = null
+        rowsWindow = null
+        partition = null
+        restyleJob?.cancel()
+        val windows = active.windows
+        _state.update {
+            it.copy(
+                source = next,
+                isSample = active.isSample,
+                available = active.available && h3.available,
+                windows = windows,
+                // Ruling: the last hour moves to the 24 hours on screen only. The saved window stays.
+                window = offered(it.window, windows),
+                dataDate = null,
+                loadFailed = false,
+                loading = true,
+                ranked = emptyList(),
+                chips = emptyList(),
+                scale = null,
+                rows = emptyList(),
+                geoJson = DiscoverUiState.EMPTY_GEOJSON,
+                selected = null,
+                selectedWindows = emptyMap(),
+                failedWindows = emptySet(),
+                newestUpdateEpochMs = null,
+            )
+        }
+        reload.value++
+    }
+
     fun selectWindow(next: FeedWindow) {
-        if (_state.value.window == next) return
+        if (_state.value.window == next || next !in _state.value.windows) return
         saved = saved.copy(window = next)
         persist()
         _state.update { it.copy(window = next, loading = true, failedWindows = emptySet()) }
@@ -246,7 +331,7 @@ class DiscoverController(
         val s = _state.value
         val row = s.selected ?: return
         if (windowsJob?.isActive == true) return
-        val missing = FeedWindow.entries.filter { it !in s.selectedWindows }
+        val missing = s.windows.filter { it !in s.selectedWindows }
         if (missing.isEmpty()) return
         _state.update { it.copy(failedWindows = emptySet()) }
         readWindows(row, missing)
@@ -268,18 +353,36 @@ class DiscoverController(
         saved = saved.copy(camera = SavedCamera(r.lat, r.lng, r.zoom))
         persist()
         val res = ViewportCover.resolutionForZoom(r.zoom)
-        val current = _state.value
-        val p = partition
-        if (!current.available || p == null) {
+        val source = active
+        val real = !source.isSample
+        if (!_state.value.available) {
             _state.update { it.copy(loading = false, res = res) }
             return
         }
+        // The sample's partition never changes. The real one is asked again on every load, its
+        // manifest is cached by the feed, so a new day is picked up and a failed read is retried.
+        if (partition == null || real) {
+            partition = withContext(io) { catching { source.latest() }.getOrNull() } ?: partition
+        }
+        if (source !== active) return
+        val p = partition
+        if (p == null) {
+            _state.update { it.copy(loading = false, res = res, loadFailed = real) }
+            return
+        }
+        val current = _state.value
         val window = current.window
-        val table = withContext(io) {
+        val read = withContext(io) {
             catching {
                 val cover = ViewportCover.cover(h3, r.bounds, res)
-                feed.cells(p, window, res, cover.ranges)
-            }.getOrNull()
+                source.cells(p, window, res, cover.ranges)
+            }
+        }
+        if (source !== active) return
+        val table = read.getOrNull()
+        if (real && table == null) {
+            _state.update { it.copy(loading = false, res = res, loadFailed = true, dataDate = partitionDate(p)) }
+            return
         }
         val rows = table?.rows.orEmpty()
         val dictionary = table?.info?.properties.orEmpty().ifEmpty { current.dictionary }
@@ -293,7 +396,9 @@ class DiscoverController(
         _state.update {
             it.copy(
                 loading = false,
-                isSample = table?.info?.sample ?: feed.isSample,
+                loadFailed = false,
+                isSample = table?.info?.sample ?: source.isSample,
+                dataDate = if (real) partitionDate(p) else null,
                 dictionary = dictionary,
                 ranked = ranked,
                 rows = rows,
@@ -311,18 +416,16 @@ class DiscoverController(
         if (!sameWindows) {
             readWindows(selected)
         } else if (windowsJob?.isActive != true) {
-            // A window whose read failed has no key. The pan reads it again, only that one.
-            val missing = FeedWindow.entries.filter { it !in _state.value.selectedWindows }
-            if (missing.isNotEmpty()) {
-                _state.update { it.copy(failedWindows = emptySet()) }
-                readWindows(selected, missing)
-            }
+            // A window whose read failed has no key. The pan reads it again, only that one. It stays
+            // failed on screen until the read lands, so the sheet never flips back to loading.
+            val missing = _state.value.windows.filter { it !in _state.value.selectedWindows }
+            if (missing.isNotEmpty()) readWindows(selected, missing)
         }
         restyle(property?.id)
     }
 
     /**
-     * Reads [row]'s cell in the two windows not on screen, one small read each, the same anonymous
+     * Reads [row]'s cell in the other windows its feed offers, the 24 hours first, one small read each, the same anonymous
      * feed the map uses. A newer selection cancels it, and a result for an older cell, window or
      * resolution is dropped, so it never lands on the cell selected since. Each window lands as soon
      * as it is read. A read that fails is tried again after 1 s and then 2 s. One that still fails
@@ -334,26 +437,33 @@ class DiscoverController(
         windowsJob = null
         windowsFor = null
         row ?: return
-        val p = partition ?: return
         val current = _state.value
         val window = current.window
         val res = current.res
+        // The 24 hours first. It is the headline, so a window that fails never delays it.
+        val wanted = (only ?: current.windows.filter { it != window }).sortedBy { if (it == FeedWindow.DAY) 0 else 1 }
+        val p = partition
+        if (p == null) {
+            // Nothing to read from. Fail now, so the sheet shows Retry instead of loading forever.
+            _state.update { it.copy(failedWindows = it.failedWindows + wanted) }
+            return
+        }
+        val source = active
         windowsFor = Triple(row.h3, window, res)
         windowsJob = scope.launch {
-            val wanted = only ?: FeedWindow.entries.filter { it != window }
             for (w in wanted) {
                 val read = withContext(io) {
-                    var result = catching { readCell(p, w, res, row.h3) }
+                    var result = catching { readCell(source, p, w, res, row.h3) }
                     for (wait in RETRY_DELAYS_MS) {
                         if (result.isSuccess) break
                         delay(wait)
-                        result = catching { readCell(p, w, res, row.h3) }
+                        result = catching { readCell(source, p, w, res, row.h3) }
                     }
                     result
                 }
                 ensureActive()
                 _state.update {
-                    if (it.selected?.h3 != row.h3 || it.window != window || it.res != res) return@update it
+                    if (source !== active || it.selected?.h3 != row.h3 || it.window != window || it.res != res) return@update it
                     read.fold(
                         onSuccess = { r -> it.copy(selectedWindows = it.selectedWindows + (w to r), failedWindows = it.failedWindows - w) },
                         onFailure = { _ -> it.copy(failedWindows = it.failedWindows + w) },
@@ -363,8 +473,8 @@ class DiscoverController(
         }
     }
 
-    private suspend fun readCell(p: FeedPartition, w: FeedWindow, res: Int, cell: Long): CellRow? =
-        feed.cells(p, w, res, listOf(cell..cell)).rows.firstOrNull { it.h3 == cell }
+    private suspend fun readCell(source: PublicFeed, p: FeedPartition, w: FeedWindow, res: Int, cell: Long): CellRow? =
+        source.cells(p, w, res, listOf(cell..cell)).rows.firstOrNull { it.h3 == cell }
 
     /** Recomputes chips, scale and GeoJSON for [propertyId] from the rows already loaded. */
     private fun restyle(propertyId: String?) {
@@ -402,6 +512,16 @@ class DiscoverController(
 
         /** The waits before the second and third try of a failed window read. */
         val RETRY_DELAYS_MS = longArrayOf(1_000L, 2_000L)
+
+        /** [window] when [windows] offers it, else the 24 hours. */
+        fun offered(window: FeedWindow, windows: List<FeedWindow>): FeedWindow = if (window in windows) window else FeedWindow.DAY
+
+        /** The partition's local day. Null when the date does not parse. */
+        fun partitionDate(p: FeedPartition): LocalDate? = try {
+            LocalDate.parse(p.date)
+        } catch (e: IllegalArgumentException) {
+            null
+        }
 
         /** [runCatching] that lets cancellation through, so a cancelled read stops instead of reading on. */
         inline fun <T> catching(block: () -> T): Result<T> = try {

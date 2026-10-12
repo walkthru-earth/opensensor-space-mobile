@@ -13,6 +13,7 @@ import earth.walkthru.aqsync.publicfeed.H3Grid
 import earth.walkthru.aqsync.publicfeed.H3Index
 import earth.walkthru.aqsync.publicfeed.LatLng
 import earth.walkthru.aqsync.publicfeed.PublicFeed
+import earth.walkthru.aqsync.settings.DiscoverSource
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -20,8 +21,10 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -38,10 +41,19 @@ class DiscoverControllerTest {
         else -> 80.0
     }
 
-    private inner class FakeFeed : PublicFeed {
-        override val isSample = true
+    private inner class FakeFeed(
+        override val isSample: Boolean = true,
+        override val windows: List<FeedWindow> = FeedWindow.entries,
+        private val partition: FeedPartition = FeedPartition("2026-10-12", 10),
+    ) : PublicFeed {
         override val available = true
         val calls = mutableListOf<Pair<FeedWindow, List<LongRange>?>>()
+
+        /** True makes [latest] throw, like a manifest that cannot be read. */
+        var latestFails = false
+
+        /** True makes every viewport read throw. */
+        var viewportFails = false
 
         /** Holds the single-cell reads of one cell, the window reads of a selection. */
         val gates = mutableMapOf<Long, CompletableDeferred<Unit>>()
@@ -52,7 +64,10 @@ class DiscoverControllerTest {
         /** How many more times a single-cell read throws before it succeeds. */
         val failures = mutableMapOf<Pair<Long, FeedWindow>, Int>()
 
-        override suspend fun latest() = FeedPartition("2026-10-12", 10)
+        override suspend fun latest(): FeedPartition {
+            if (latestFails) throw IllegalStateException("manifest failed")
+            return partition
+        }
 
         override suspend fun cells(partition: FeedPartition, window: FeedWindow, res: Int, ranges: List<LongRange>?): CellsTable {
             calls += window to ranges
@@ -66,11 +81,12 @@ class DiscoverControllerTest {
                 }
             } else {
                 viewportGate?.await()
+                if (viewportFails) throw IllegalStateException("viewport failed")
             }
             val rows = listOf(cellA, cellB)
                 .filter { c -> ranges == null || ranges.any { c in it } }
                 .map { c -> CellRow(c, devices = 3, updatedEpochMs = 1_000L, stats = mapOf("pm25" to CellStat(3, value(c, window), null, null))) }
-            return CellsTable(CellsFileInfo(sample = true, window = null, h3Res = res, properties = listOf(pm25)), rows, 1, 1)
+            return CellsTable(CellsFileInfo(sample = isSample, window = null, h3Res = res, properties = listOf(pm25)), rows, 1, 1)
         }
     }
 
@@ -107,8 +123,18 @@ class DiscoverControllerTest {
         runCurrent()
     }
 
-    private fun TestScope.controller(feed: FakeFeed): DiscoverController {
-        val c = DiscoverController(backgroundScope, feed, FakeGrid, MemoryPrefs(), "UTC", now = { 1_000L }, io = StandardTestDispatcher(testScheduler))
+    private fun TestScope.controller(feed: FakeFeed, live: FakeFeed? = null, saved: MutableList<DiscoverSource>? = null): DiscoverController {
+        val c = DiscoverController(
+            backgroundScope,
+            feed,
+            FakeGrid,
+            MemoryPrefs(),
+            "UTC",
+            now = { 1_000L },
+            io = StandardTestDispatcher(testScheduler),
+            liveFeed = live,
+            saveSource = { saved?.add(it) },
+        )
         // Zoom 6.25 reads resolution 5, the resolution of both test cells.
         c.onCamera(CameraRest(GeoBounds(-122.01, 36.99, -121.99, 37.01), zoom = 6.25, lat = 37.0, lng = -122.0))
         settle()
@@ -316,5 +342,206 @@ class DiscoverControllerTest {
         assertEquals(1, feed.calls.count { it.second == listOf(cellA..cellA) }, "reads ${feed.calls}")
         assertEquals(cellB, c.state.value.selected?.h3)
         assertEquals(3, c.state.value.selectedWindows.size)
+    }
+
+    private fun liveFeed() = FakeFeed(isSample = false, windows = listOf(FeedWindow.DAY, FeedWindow.WEEK), partition = FeedPartition("2026-10-08", 0))
+
+    @Test
+    fun aPanAfterAFailedWindowKeepsItFailedUntilTheRereadLands() = runTest {
+        val feed = FakeFeed()
+        val c = onTheLastHour(feed)
+        feed.failures[cellA to FeedWindow.DAY] = 3
+        c.selectCell(H3Index.toHex(cellA))
+        retriesDone()
+        assertEquals(SimpleHeadline.FAILED, c.state.value.simpleHeadline())
+        feed.failures[cellA to FeedWindow.DAY] = 1
+        c.onCamera(CameraRest(GeoBounds(-122.02, 36.98, -121.98, 37.02), zoom = 6.25, lat = 37.0, lng = -122.0))
+        settle()
+        // The pan rereads the failed window, and the sheet does not flip back to loading meanwhile.
+        assertEquals(SimpleHeadline.FAILED, c.state.value.simpleHeadline())
+        assertEquals(setOf(FeedWindow.DAY), c.state.value.failedWindows)
+        retriesDone()
+        assertEquals(SimpleHeadline.SHOWN, c.state.value.simpleHeadline())
+        assertTrue(c.state.value.failedWindows.isEmpty())
+    }
+
+    @Test
+    fun aWindowChangeClearsTheFailedWindows() = runTest {
+        val feed = FakeFeed()
+        val c = onTheLastHour(feed)
+        feed.failures[cellA to FeedWindow.DAY] = 3
+        c.selectCell(H3Index.toHex(cellA))
+        retriesDone()
+        assertEquals(setOf(FeedWindow.DAY), c.state.value.failedWindows)
+        c.selectWindow(FeedWindow.WEEK)
+        assertTrue(c.state.value.failedWindows.isEmpty())
+    }
+
+    @Test
+    fun retryWithNothingMissingReadsNothing() = runTest {
+        val feed = FakeFeed()
+        val c = controller(feed)
+        c.selectCell(H3Index.toHex(cellA))
+        settle()
+        feed.calls.clear()
+        c.retryWindows()
+        settle()
+        assertTrue(feed.calls.isEmpty())
+        assertEquals(3, c.state.value.selectedWindows.size)
+    }
+
+    @Test
+    fun theDayWindowIsReadFirstSoAFailingWindowNeverDelaysIt() = runTest {
+        val feed = FakeFeed()
+        val c = controller(feed)
+        c.selectWindow(FeedWindow.WEEK)
+        settle()
+        feed.failures[cellA to FeedWindow.LAST_HOUR] = 3
+        c.selectCell(H3Index.toHex(cellA))
+        runCurrent()
+        assertTrue(FeedWindow.DAY in c.state.value.selectedWindows, "the 24 hours lands before the last hour retries")
+        assertEquals(SimpleHeadline.SHOWN, c.state.value.simpleHeadline())
+    }
+
+    @Test
+    fun switchingToRealReadsTheLiveFeedAndClearsEverything() = runTest {
+        val sample = FakeFeed()
+        val live = liveFeed()
+        val c = controller(sample, live)
+        c.onSourceSettings(DiscoverSource.SAMPLE, publicSensors = true)
+        assertTrue(c.state.value.isSample)
+        assertTrue(c.state.value.sourceEnabled)
+        c.selectCell(H3Index.toHex(cellA))
+        settle()
+        assertTrue(live.calls.isEmpty())
+        c.onSourceSettings(DiscoverSource.OPENAQ, publicSensors = true)
+        val s = c.state.value
+        assertFalse(s.isSample)
+        assertEquals(DiscoverSource.OPENAQ, s.source)
+        assertNull(s.selected)
+        assertTrue(s.selectedWindows.isEmpty() && s.failedWindows.isEmpty() && s.rows.isEmpty())
+        assertEquals(listOf(FeedWindow.DAY, FeedWindow.WEEK), s.windows)
+        sample.calls.clear()
+        settle()
+        assertTrue(live.calls.isNotEmpty())
+        assertTrue(sample.calls.isEmpty())
+        assertEquals(2, c.state.value.rows.size)
+        assertEquals(LocalDate(2026, 10, 8), c.state.value.dataDate)
+        // Back to the sample.
+        c.onSourceSettings(DiscoverSource.SAMPLE, publicSensors = true)
+        settle()
+        assertTrue(c.state.value.isSample)
+        assertNull(c.state.value.dataDate)
+        assertEquals(FeedWindow.entries, c.state.value.windows)
+    }
+
+    @Test
+    fun publicSensorsOffKeepsTheSampleAndDisablesTheToggle() = runTest {
+        val live = liveFeed()
+        val saved = mutableListOf<DiscoverSource>()
+        val c = controller(FakeFeed(), live, saved)
+        c.onSourceSettings(DiscoverSource.OPENAQ, publicSensors = false)
+        settle()
+        assertTrue(c.state.value.isSample)
+        assertFalse(c.state.value.sourceEnabled)
+        c.chooseSource(DiscoverSource.OPENAQ)
+        settle()
+        assertTrue(c.state.value.isSample)
+        assertTrue(saved.isEmpty())
+        assertTrue(live.calls.isEmpty(), "no live request while public sensors is off")
+    }
+
+    @Test
+    fun choosingRealSavesItAndSwitches() = runTest {
+        val live = liveFeed()
+        val saved = mutableListOf<DiscoverSource>()
+        val c = controller(FakeFeed(), live, saved)
+        c.onSourceSettings(DiscoverSource.SAMPLE, publicSensors = true)
+        c.chooseSource(DiscoverSource.OPENAQ)
+        settle()
+        assertEquals(listOf(DiscoverSource.OPENAQ), saved)
+        assertFalse(c.state.value.isSample)
+        assertTrue(live.calls.isNotEmpty())
+        // The saved value comes back from the settings flow. Nothing reloads.
+        live.calls.clear()
+        c.onSourceSettings(DiscoverSource.OPENAQ, publicSensors = true)
+        settle()
+        assertTrue(live.calls.isEmpty())
+    }
+
+    @Test
+    fun theLastHourMovesToTheDayInRealMode() = runTest {
+        val live = liveFeed()
+        val c = controller(FakeFeed(), live)
+        c.selectWindow(FeedWindow.LAST_HOUR)
+        settle()
+        c.onSourceSettings(DiscoverSource.OPENAQ, publicSensors = true)
+        assertEquals(FeedWindow.DAY, c.state.value.window)
+        c.selectWindow(FeedWindow.LAST_HOUR)
+        assertEquals(FeedWindow.DAY, c.state.value.window)
+        settle()
+        assertTrue(live.calls.none { it.first == FeedWindow.LAST_HOUR })
+    }
+
+    @Test
+    fun aRealCellReadsOnlyTheRealWindowsAndHasTwoBlocks() = runTest {
+        val live = liveFeed()
+        val c = controller(FakeFeed(), live)
+        c.onSourceSettings(DiscoverSource.OPENAQ, publicSensors = true)
+        settle()
+        live.calls.clear()
+        c.selectCell(H3Index.toHex(cellA))
+        settle()
+        assertEquals(listOf(FeedWindow.WEEK), live.calls.map { it.first })
+        assertEquals(setOf(FeedWindow.DAY, FeedWindow.WEEK), c.state.value.selectedWindows.keys)
+        assertEquals(listOf(WhoStep.GUIDELINE, WhoStep.IT3), c.state.value.selectedSummary(pm25)!!.blocks.map { it.step })
+        assertEquals(SimpleHeadline.SHOWN, c.state.value.simpleHeadline())
+    }
+
+    @Test
+    fun aFailedRealLoadIsAnErrorWithRetryNeverTheSample() = runTest {
+        val sample = FakeFeed()
+        val live = liveFeed().apply { viewportFails = true }
+        val c = controller(sample, live)
+        sample.calls.clear()
+        c.onSourceSettings(DiscoverSource.OPENAQ, publicSensors = true)
+        settle()
+        val s = c.state.value
+        assertTrue(s.loadFailed)
+        assertFalse(s.isSample)
+        assertFalse(s.loading)
+        assertTrue(s.rows.isEmpty())
+        assertTrue(sample.calls.isEmpty(), "no silent fallback to the sample")
+        live.viewportFails = false
+        c.retry()
+        assertFalse(c.state.value.loadFailed)
+        assertTrue(c.state.value.loading)
+        settle()
+        assertFalse(c.state.value.loadFailed)
+        assertEquals(2, c.state.value.rows.size)
+    }
+
+    @Test
+    fun anUnreadableManifestIsAnErrorAndRetryReadsItAgain() = runTest {
+        val live = liveFeed().apply { latestFails = true }
+        val c = controller(FakeFeed(), live)
+        c.onSourceSettings(DiscoverSource.OPENAQ, publicSensors = true)
+        settle()
+        assertTrue(c.state.value.loadFailed)
+        assertTrue(live.calls.isEmpty())
+        live.latestFails = false
+        c.retry()
+        settle()
+        assertFalse(c.state.value.loadFailed)
+        assertEquals(LocalDate(2026, 10, 8), c.state.value.dataDate)
+        assertEquals(2, c.state.value.rows.size)
+    }
+
+    @Test
+    fun withoutALiveFeedTheToggleIsDisabled() = runTest {
+        val c = controller(FakeFeed())
+        c.onSourceSettings(DiscoverSource.OPENAQ, publicSensors = true)
+        assertFalse(c.state.value.sourceEnabled)
+        assertTrue(c.state.value.isSample)
     }
 }
