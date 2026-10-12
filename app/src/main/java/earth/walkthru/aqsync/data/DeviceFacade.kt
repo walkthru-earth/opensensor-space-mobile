@@ -268,7 +268,7 @@ class DeviceFacade internal constructor(
         val active = request
         val interactive = active?.intent?.origin == CollectionOrigin.USER_TAP
         needed.value = state.active && interactive
-        waiting.value = (state as? CollectionState.Waiting)?.let { ReconnectState(it.attempt, 5, "link lost") }
+        waiting.value = (state as? CollectionState.Waiting)?.let { ReconnectState(it.retry, it.retryLimit, "link lost") }
         val old = progress.value
         val next = when (state) {
             CollectionState.Idle -> old

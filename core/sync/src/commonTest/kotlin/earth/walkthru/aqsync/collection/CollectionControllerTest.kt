@@ -727,6 +727,8 @@ class CollectionControllerTest {
 
         val waiting = assertIs<CollectionState.Waiting>(controller.state.value)
         assertEquals(2, waiting.attempt)
+        assertEquals(2, waiting.retry)
+        assertEquals(RetryPolicy().attempts, waiting.retryLimit)
         assertEquals(2_000, waiting.retryAtEpochMs)
         assertEquals(1, keepAlive.held(KeepAliveKind.PROCESS))
         settle(controller)
@@ -1073,6 +1075,8 @@ class CollectionControllerTest {
         )
         val controller = controller(links, keepAlive)
         val request = intent()
+        val waits = ArrayList<CollectionState.Waiting>()
+        backgroundScope.launch { controller.state.collect { if (it is CollectionState.Waiting) waits += it } }
 
         controller.start(request)
         settle(controller)
@@ -1082,6 +1086,10 @@ class CollectionControllerTest {
         assertIs<CollectionFailure.Link>(failed.failure)
         // Progress resets the attempt bound, so only the 30 min ceiling ends it.
         assertTrue(links.connects > RetryPolicy().attempts, "${links.connects} connects")
+        // The banner reads "attempt N of M". N counts attempts without progress, so it never passes M.
+        assertTrue(waits.any { it.attempt > RetryPolicy().attempts }, "total attempts pass the bound")
+        assertTrue(waits.all { it.retryLimit == RetryPolicy().attempts })
+        assertTrue(waits.all { it.retry in 2..it.retryLimit }, waits.map { it.retry }.toString())
         // No retry starts past 30 min. The attempt already running ends within its own 15 s.
         assertTrue(testScheduler.currentTime in 29 * 60_000L..30 * 60_000L + 15_000L, "${testScheduler.currentTime} ms")
         assertEquals(1, keepAlive.acquired(KeepAliveKind.PROCESS))
