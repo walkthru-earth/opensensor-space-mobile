@@ -4,6 +4,26 @@
 **Code:** `./gradlew verify` (the gate), `.github/workflows/verify.yml`.
 **Related:** measured device behaviour is recorded in the board-specific `../aq-parquet/docs/boards/*/bench-verified.md`; anything not recorded there is unverified.
 
+## 2026-10-12, consistent sync on Android and iOS (code only)
+
+Branch `fix/sync-consistency`. Host tests, the iOS simulator build and `verify-native.sh` only.
+No phone or iPad run yet.
+
+- Shared. Every run ends with a typed `SyncEndReason`. `TransportUnavailableException` (Bluetooth
+  off, permission missing) fails at once without retry. An unreachable device or an OPEN timeout
+  gets one retry, and the transfer permit is released while waiting. LAN BYE 10 (token rotated)
+  and BYE 3 (token refused) clear the stored LAN token. BYE 4 reads as busy.
+- Android. A refused GATT connect reads as unreachable. A LAN connect refused for the local
+  network permission reads as permission missing.
+- iOS. Every sync, Collect all step and Auto-sync step runs through `runs.collect` on the shared
+  controller. Collect all is cancelled only for sensors in the pass. A reopened sensor page keeps
+  its Bluetooth link and a resumed run for another sensor is dropped.
+- Screens. Today, Device, Files and Stations share one status model. Today names the end reason
+  and never shows caught up after a failure. Each action has one home. The iOS companion page,
+  the clock sync setting and other unused code are removed.
+- To check on phones. A PIN prompt that times out shows no repair message (Android). Token
+  rotation over Wi-Fi. An interrupted iOS Bluetooth run resumes. Bluetooth off fails at once.
+
 ## 2026-10-11, stale-bond handling, iOS link queue and shared iOS controller (code only)
 
 Branch `fix/open-gaps-2026-10-11`. Host, simulator and gate results only. No phone or
@@ -19,6 +39,7 @@ iPad run yet.
 - iOS shared. `IosLinkProvider` can ask Swift to dial a link. `SensorCollections` holds one
   `CollectionController` per device (#81, partial). Swift does not route Smart Sync, Collect
   all or background collection through it yet, so the Swift resume and retry timers remain.
+  Superseded on 2026-10-12, every iOS sync now runs through `runs.collect`.
   Early-ending runs now report the files they saved instead of 0.
 - Android. HCI 0x06 and 0x3D map to a missing bond. Below API 36, which has no
   `ACTION_KEY_MISSING`, `BleStaleBondDetector` treats a second consecutive close of a bonded
@@ -577,7 +598,7 @@ estimate, `RealArchiveTest`). Debug APK 68.4 MiB unminified.
 | v1 file sync (LIST/OPEN/READ/CLOSE, SET_TIME, FLUSH) | captured v1 payloads from `AQ-6b40` | macOS host client 2026-09-16 (766 files, 15–21 KB/s); phone partial runs 2026-09-17 | instrumented **full** 776-file sync over each link with the foreground-service build |
 | v2 config / Wi-Fi / reboot / log / token | hand-assembled fixtures from the contract | a v2 device was read from the phone; no capture taken | `ble.clear_bonds`, `lan.rotate_token` end to end, `fixed`/`none` pairing (needs display-less board) |
 | LAN transport | loopback `TcpTransportTest` | `LanDiscovery` found the board via `NsdManager`; app chose TCP on its own | `ACCESS_LOCAL_NETWORK` prompt (enforced only from API 37) |
-| Lost window / drain / resume | `SyncEngineTest`, `SyncResumePolicyTest` | 514-byte-frame drop reproduced 2026-09-17 and survived | — |
+| Lost window / drain / resume | `SyncEngineTest`, `CollectionControllerTest` | 514-byte-frame drop reproduced 2026-09-17 and survived | — |
 | Auto-sync worker | `AutoSyncRunnerTest` over the fake (incl. `lanOnly`) | — | a complete 15-min period cycle, `setForeground` refusal in background, OEM battery settings |
 | Auto-sync triggers | `AdvertisementTest` (2.1 bytes) | **advertising wake** 2026-09-18: `flag scan registered … 2 filters`, `Start proc … for broadcast {…AdvertScanReceiver}` +19 s after `PARQUET READY`, `trigger=ADVERTISEMENT`, LAN sync 1 file / 22,498 B, done +28 s, app process killed beforehand | association dialog finding the advertising logger, `EVENT_BLE_APPEARED`, companion exemptions vs the screen-off socket kill and the `setForeground` refusal (still refused, no association yet), Wi-Fi-arrival run end to end (fired at both process starts, second throttled) |
 | History pipeline | fixtures + `RealArchiveTest` (766 real files, 0.2 s) | derive fix observed 2026-09-18 02:35 ("derived 1 of 3 station-days") | chart update after a sync of a v3 file recorded in bench-verified |
