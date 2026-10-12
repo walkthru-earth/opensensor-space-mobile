@@ -23,8 +23,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import earth.walkthru.aqsync.archive.IosExportSpace
+import earth.walkthru.aqsync.net.UrlSessionRangeEngine
+import earth.walkthru.aqsync.publicfeed.OpenAqAggregatesFeed
 import earth.walkthru.aqsync.publicfeed.platformH3Grid
 import earth.walkthru.aqsync.settings.DetailLevel
+import earth.walkthru.aqsync.settings.DiscoverSource
 import earth.walkthru.aqsync.settings.SettingsRepository
 import earth.walkthru.aqsync.settings.iosSettingsRepository
 import earth.walkthru.aqsync.units.UnitFormatter
@@ -101,6 +104,14 @@ import platform.Foundation.timeIntervalSince1970
 private val settingsRepository: SettingsRepository by lazy { iosSettingsRepository() }
 
 /**
+ * The real Discover feed, OpenAQ aggregates on source.coop, one for the process so its session and
+ * kept rows are shared. Built here, read only while public sensors is on and Real is chosen.
+ */
+private val openAqFeed: OpenAqAggregatesFeed by lazy {
+    OpenAqAggregatesFeed(UrlSessionRangeEngine.create(allowsExpensive = true, allowsConstrained = true))
+}
+
+/**
  * Holds the Discover controller for the Discover entry, so it survives tab switches and is cleared
  * only when its entry leaves the back stack (the ViewModel entry decorator of the shell).
  */
@@ -112,6 +123,8 @@ private class DiscoverHolder : ViewModel() {
         prefs = UserDefaultsDiscoverPrefs(NSUserDefaults.standardUserDefaults),
         timeZoneId = NSTimeZone.localTimeZone.name,
         now = { (NSDate().timeIntervalSince1970 * 1000.0).toLong() },
+        liveFeed = openAqFeed,
+        saveSource = settingsRepository::setDiscoverSource,
     )
 }
 
@@ -191,13 +204,14 @@ internal fun AppRoot(
     val unitChoice = prefs?.unitSystem ?: UnitSystem.AUTO
     val units = if (unitChoice == UnitSystem.AUTO) systemUnits else unitChoice
     val level = prefs?.detailLevel ?: DetailLevel.SIMPLE
+    val discoverSource = prefs?.discoverSource ?: DiscoverSource.SAMPLE
     val version = remember { appVersion() }
     val leases = remember { PeripheralLeases(closeIdle) }
     OpenSensorTheme {
         AppShell(
             entries = { nav ->
                 entry<DiscoverKey> {
-                    DiscoverEntry(networkAllowed = showPublic, level = level, units = units, onAddSensor = { nav.toMyDevicesRoot() })
+                    DiscoverEntry(networkAllowed = showPublic, source = discoverSource, level = level, units = units, onAddSensor = { nav.toMyDevicesRoot() })
                 }
                 entry<ScanKey> {
                     MyDevicesEntry(
@@ -389,7 +403,7 @@ private fun MyDevicesEntry(
 
 /** Discover with its controller kept per entry. The shared screen takes Back, or the edge swipe, while a sheet is open. */
 @Composable
-private fun DiscoverEntry(networkAllowed: Boolean, level: DetailLevel, units: UnitSystem, onAddSensor: () -> Unit) {
+private fun DiscoverEntry(networkAllowed: Boolean, source: DiscoverSource, level: DetailLevel, units: UnitSystem, onAddSensor: () -> Unit) {
     val controller = viewModel { DiscoverHolder() }.controller
     DiscoverScreen(
         controller = controller,
@@ -397,6 +411,7 @@ private fun DiscoverEntry(networkAllowed: Boolean, level: DetailLevel, units: Un
         level = level,
         onAddSensor = onAddSensor,
         units = units,
+        savedSource = source,
     )
 }
 

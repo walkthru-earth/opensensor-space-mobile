@@ -12,7 +12,10 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import earth.walkthru.aqsync.data.settings.AppSettings
 import earth.walkthru.aqsync.data.settings.DetailLevel
 import earth.walkthru.aqsync.data.settings.DiscoverStore
+import earth.walkthru.aqsync.net.OkHttpRangeEngine
+import earth.walkthru.aqsync.publicfeed.OpenAqAggregatesFeed
 import earth.walkthru.aqsync.publicfeed.platformH3Grid
+import earth.walkthru.aqsync.settings.DiscoverSource
 import earth.walkthru.aqsync.ui.components.LocalUnits
 import earth.walkthru.opensensor.designsystem.InfoButton
 import earth.walkthru.opensensor.designsystem.InfoContent
@@ -22,6 +25,7 @@ import earth.walkthru.opensensor.discover.bundledSampleFeed
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
+import okhttp3.OkHttpClient
 import java.util.TimeZone
 import javax.inject.Inject
 
@@ -35,7 +39,13 @@ class DiscoverViewModel @Inject constructor(store: DiscoverStore, settings: AppS
         prefs = store,
         timeZoneId = TimeZone.getDefault().id,
         now = System::currentTimeMillis,
+        // Read only while public sensors is on and Real is chosen. Anonymous GETs, no identifiers.
+        liveFeed = OpenAqAggregatesFeed(OkHttpRangeEngine(publicFeedClient)),
+        saveSource = settings::setDiscoverSource,
     )
+
+    /** The saved Discover source. Sample until it is read, so nothing is fetched before then. */
+    val source: StateFlow<DiscoverSource> = settings.discoverSource.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DiscoverSource.SAMPLE)
 
     /** Starts false, so no request leaves the phone before the saved switch is read. */
     val showPublicSensors: StateFlow<Boolean> = settings.showPublicSensors.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
@@ -53,6 +63,7 @@ class DiscoverViewModel @Inject constructor(store: DiscoverStore, settings: AppS
 fun DiscoverRoute(onAddSensor: () -> Unit, viewModel: DiscoverViewModel = hiltViewModel()) {
     val showPublic by viewModel.showPublicSensors.collectAsStateWithLifecycle()
     val level by viewModel.level.collectAsStateWithLifecycle()
+    val source by viewModel.source.collectAsStateWithLifecycle()
     DiscoverScreen(
         controller = viewModel.controller,
         networkAllowed = showPublic,
@@ -61,5 +72,9 @@ fun DiscoverRoute(onAddSensor: () -> Unit, viewModel: DiscoverViewModel = hiltVi
         modifier = Modifier.fillMaxSize(),
         infoButton = { info, modifier -> InfoButton(InfoContent(info.title, info.body), modifier) },
         units = LocalUnits.current.system,
+        savedSource = source,
     )
 }
+
+/** One HTTP client for the public feed in the process, so connections are reused across entries. */
+private val publicFeedClient: OkHttpClient by lazy { OkHttpClient() }
