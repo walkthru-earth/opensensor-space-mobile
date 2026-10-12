@@ -75,8 +75,19 @@ final class AutoSync {
     /// The continued task iOS took for this pass and its progress, once it launched.
     private var collectTask: BGTask?
     private var collectProgress: Progress?
-    /// True once iOS took a continued task for the pass going now, so it may run off screen.
+    /// True once iOS launched the continued task for the pass going now, so it may run off screen.
+    /// A submitted task that has not launched yet does not count.
     private(set) var collectAllContinues = false
+    /// The pass submitted its continued task and iOS has not launched it yet.
+    private var collectSubmitPending = false
+    /// A Sync now in background submitted its continued task and iOS has not launched it yet. A second
+    /// tap, a wake or the scheduled run waits instead of starting a run the task would then refuse.
+    private var continuedPending = PendingLaunch()
+    /// No run is going and none is about to start.
+    private var idle: Bool { run == nil && !continuedPending.isPending }
+    /// The user's Collect all pass keeps going when the app leaves, under its continued task or
+    /// one about to launch. Otherwise the pass ends with the screen.
+    var collectAllHeld: Bool { collectAllContinues || collectSubmitPending }
     private var retryAttempt: Int {
         get { UserDefaults.standard.integer(forKey: "autosync.retry.v1") }
         set { UserDefaults.standard.set(newValue, forKey: "autosync.retry.v1") }
@@ -165,7 +176,7 @@ final class AutoSync {
     // MARK: Scheduled run
 
     private func runScheduled(_ task: BGTask) {
-        guard run == nil else {
+        guard idle else {
             // A wake or a user request is already running. Try again next period.
             schedule(after: AutoSyncSchedule.shared.periodSeconds)
             return task.setTaskCompleted(success: true)
@@ -238,7 +249,7 @@ final class AutoSync {
     /// A pending connect reached a sensor while the app was off screen. Its run gets a background
     /// time lease. A sensor that is not due, or a wake during another run, releases the link.
     private func wake(_ id: String) {
-        guard run == nil, settings.shouldWake(peripheral: id) else {
+        guard idle, settings.shouldWake(peripheral: id) else {
             bluetooth.releaseWaiting(id: id)
             return
         }
@@ -265,7 +276,7 @@ final class AutoSync {
     /// app gets on leaving. True only when iOS took the continued task, so the screen can say the
     /// user may leave. A run already going answers false and starts nothing.
     func syncInBackground(_ id: String) -> Bool {
-        guard run == nil else { return false }
+        guard idle else { return false }
         if #available(iOS 26, *), submitContinued(id) { return true }
         beginLease()
         let current = Ref<BackgroundRunHandle>()
@@ -303,6 +314,11 @@ final class AutoSync {
         request.strategy = .fail
         do {
             try BGTaskScheduler.shared.submit(request)
+            let pending = continuedPending.submitted()
+            // `.fail` launches at once or never. A launch that never came frees the next request.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
+                MainActor.assumeIsolated { self?.continuedPending.expire(pending) }
+            }
             return true
         } catch {
             logger.error("continued sync not started: \(error.localizedDescription, privacy: .public)")
@@ -312,6 +328,7 @@ final class AutoSync {
 
     @available(iOS 26, *)
     private func runContinued(_ task: BGContinuedProcessingTask, id: String) {
+        continuedPending.launched()
         guard run == nil else { return task.setTaskCompleted(success: false) }
         task.progress.totalUnitCount = 1
         task.progress.completedUnitCount = 0
@@ -355,6 +372,7 @@ final class AutoSync {
     private func collectAllChanged(done: Int, total: Int) {
         guard total > 0 else {
             collectRunning = false
+            collectSubmitPending = false
             collectCounts = (0, 0)
             setCollectOffScreen(false)
             if let task = collectTask {
@@ -367,9 +385,10 @@ final class AutoSync {
         collectCounts = (done, total)
         if !collectRunning {
             collectRunning = true
-            var continues = false
-            if #available(iOS 26, *) { continues = submitCollect() }
-            setCollectOffScreen(continues)
+            // Off screen only once iOS launched the task. Leaving before that keeps the step going
+            // under its own background time, as a run the user started.
+            if #available(iOS 26, *) { collectSubmitPending = submitCollect() }
+            setCollectOffScreen(false)
         }
         collectProgress?.totalUnitCount = Int64(total)
         collectProgress?.completedUnitCount = Int64(min(done, total))
@@ -409,8 +428,10 @@ final class AutoSync {
     @available(iOS 26, *)
     private func runCollect(_ task: BGContinuedProcessingTask) {
         // The pass may have ended before iOS launched its task.
+        collectSubmitPending = false
         guard collectRunning, collectTask == nil else { return task.setTaskCompleted(success: !collectRunning) }
         collectTask = task
+        setCollectOffScreen(true)
         collectProgress = task.progress
         task.progress.totalUnitCount = Int64(max(collectCounts.total, 1))
         task.progress.completedUnitCount = Int64(collectCounts.done)

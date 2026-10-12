@@ -19,7 +19,23 @@ enum CancellationChecks {
         await alreadyCancelledRunCancelsHandleBeforeSetReturns()
         await immediateCompletionKeepsResultAndCancellation()
         await installedHandleCanBeCancelledFromBackground()
+        pendingLaunchHoldsUntilItsOwnLaunchOrTimeout()
         print("iOS cancellation checks passed")
+    }
+
+    private static func pendingLaunchHoldsUntilItsOwnLaunchOrTimeout() {
+        var gate = PendingLaunch()
+        precondition(!gate.isPending)
+        let first = gate.submitted()
+        precondition(gate.isPending, "a submitted task holds the next request")
+        gate.launched()
+        precondition(!gate.isPending, "a launched task frees it")
+        let stale = gate.submitted()
+        gate.expire(stale)
+        precondition(!gate.isPending, "a launch that never came frees it")
+        _ = gate.submitted()
+        gate.expire(first)
+        precondition(gate.isPending, "an older timeout never frees a newer submit")
     }
 
     private static func alreadyCancelledRunCancelsHandleBeforeSetReturns() async {

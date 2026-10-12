@@ -330,6 +330,8 @@ final class AppServices {
     /// iOS ended the time off screen. The run ends as interrupted, keeps what it saved and starts
     /// again when the scene is active. The notice shows only when notifications are already allowed.
     private func protectionExpired(device: String, id: Int64) {
+        // A continued Collect all task launched since, and it keeps the app running.
+        if autoSync.collectAllContinues { return unprotect(id) }
         if runs.interrupt(device: device), let words = pausedWords {
             autoSync.notifyPaused(title: words.title, body: words.body)
         }
@@ -439,9 +441,9 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     func sceneDidEnterBackground(_ scene: UIScene) {
         guard let services else { return }
         services.cancelPendingOpen()
-        // Collect all is a foreground pass, unless iOS 26 took it as a continued task. Otherwise the
-        // step in flight ends with the link below.
-        if !services.autoSync.collectAllContinues { services.devices.cancelCollectAll() }
+        // Collect all is a foreground pass, unless iOS 26 took it as a continued task or is about to
+        // launch one. Otherwise the step in flight ends with the link below.
+        if !services.autoSync.collectAllHeld { services.devices.cancelCollectAll() }
         services.bluetooth.suspend()
         services.lan.enterBackground()
         services.autoSync.enteredBackground()
