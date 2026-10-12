@@ -3,6 +3,7 @@ package earth.walkthru.opensensor
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import earth.walkthru.aqsync.collection.SyncEndReason
 import earth.walkthru.aqsync.data.history.NowReading
 import earth.walkthru.aqsync.data.protocol.AqGatt
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
@@ -41,6 +42,9 @@ internal data class NearbyDevice(val id: String, val name: String, val rssi: Int
  * never words what the user reads. The String overloads stay internal for the shared tests.
  */
 class CompanionState {
+    /** When each push arrived. Tests set a fixed clock. */
+    internal var clock: () -> Long = { Clock.System.now().toEpochMilliseconds() }
+
     internal var devices by mutableStateOf<List<NearbyDevice>>(emptyList())
         private set
     internal var scanning by mutableStateOf(false)
@@ -72,6 +76,31 @@ class CompanionState {
     internal var statusAtEpochMs by mutableStateOf<Long?>(null)
         private set
     internal var live by mutableStateOf<LiveSample?>(null)
+        private set
+
+    /** When the live reading arrived, not when a screen looked. */
+    internal var liveAtEpochMs by mutableStateOf<Long?>(null)
+        private set
+
+    /**
+     * The sensor whose Bluetooth link dropped while a run holds it. The shared controller dials it
+     * again, so My devices shows it reconnecting until the link is back or the run ends.
+     */
+    internal var reconnectingId by mutableStateOf<String?>(null)
+        private set
+
+    /** The sensor whose bond is gone, until a new connection starts. It needs pairing again. */
+    internal var failedId by mutableStateOf<String?>(null)
+        private set
+
+    /** True while an Auto-sync step owns the Bluetooth link. */
+    internal var bluetoothBackground by mutableStateOf(false)
+        private set
+
+    /** When the last Bluetooth sync started and ended, as they happened. */
+    internal var syncStartedAtEpochMs by mutableStateOf<Long?>(null)
+        private set
+    internal var syncFinishedAtEpochMs by mutableStateOf<Long?>(null)
         private set
     internal val reading: NowReading get() = NowReading.of(live)
     internal val profile get() = LiveProfiles.resolve(info)
@@ -121,14 +150,14 @@ class CompanionState {
             name to LanRunState(
                 station = lanInfo[name]?.station,
                 running = true,
-                startedAtEpochMs = Clock.System.now().toEpochMilliseconds(),
+                startedAtEpochMs = clock(),
             )
             )
     }
 
     fun lanSyncStopped(name: String) {
         val run = lanRuns[name]?.takeIf { it.running } ?: return
-        lanRuns = lanRuns + (name to run.copy(running = false, interrupted = true, finishedAtEpochMs = Clock.System.now().toEpochMilliseconds()))
+        lanRuns = lanRuns + (name to run.copy(running = false, interrupted = true, finishedAtEpochMs = clock()))
     }
 
     internal fun connectedLanForStation(station: String?): String? =
@@ -187,7 +216,7 @@ class CompanionState {
                 station = previousRun?.station ?: lanInfo[name]?.station,
                 running = false,
                 startedAtEpochMs = previousRun?.startedAtEpochMs,
-                finishedAtEpochMs = Clock.System.now().toEpochMilliseconds(),
+                finishedAtEpochMs = clock(),
                 result = result,
                 interrupted = false,
             )
@@ -206,6 +235,7 @@ class CompanionState {
             lanStatusRaw = lanStatusRaw - name
             lanStatusAtEpochMs = lanStatusAtEpochMs - name
             lanLive = lanLive - name
+            lanLiveAtEpochMs = lanLiveAtEpochMs - name
         }
     }
 
@@ -231,6 +261,8 @@ class CompanionState {
     }
 
     fun bluetoothSyncStarted() {
+        syncStartedAtEpochMs = clock()
+        syncFinishedAtEpochMs = null
         syncBusy = true
         syncProgress = null
         syncMessage = UiText.None
@@ -241,6 +273,8 @@ class CompanionState {
     }
 
     fun bluetoothSyncFinished(result: SyncResult) {
+        syncFinishedAtEpochMs = clock()
+        reconnectingId = null
         syncBusy = false
         lastSyncResult = result
         syncMessage = result.message
@@ -248,7 +282,24 @@ class CompanionState {
 
     /** A Bluetooth sync ended with the link gone. The connection closes and shows the outcome. */
     fun bluetoothSyncClosed(result: SyncResult) {
+        val id = selectedId ?: reconnectingId
         close(result.message)
+        syncFinishedAtEpochMs = clock()
+        if (result.endReason == SyncEndReason.PAIRING_REPAIR) failedId = id
+    }
+
+    /**
+     * The Bluetooth link dropped while a run holds it. The run goes on and dials the sensor again,
+     * so its progress stays and My devices shows it reconnecting.
+     */
+    fun bluetoothReconnecting(notice: CompanionNotice) {
+        val id = selectedId
+        val running = syncBusy
+        val progress = syncProgress
+        close(notice.text)
+        reconnectingId = id
+        syncBusy = running
+        syncProgress = progress
     }
 
     internal var lanReadings by mutableStateOf<Map<String, NowReading>>(emptyMap())
@@ -265,6 +316,33 @@ class CompanionState {
         private set
     internal var lanLive by mutableStateOf<Map<String, LiveSample>>(emptyMap())
         private set
+    internal var lanLiveAtEpochMs by mutableStateOf<Map<String, Long>>(emptyMap())
+        private set
+
+    /** Wi-Fi services an Auto-sync step owns. */
+    internal var lanBackground by mutableStateOf<Set<String>>(emptySet())
+        private set
+
+    /** An Auto-sync step took or released this Wi-Fi service. */
+    fun lanBackgroundOwned(name: String, owned: Boolean) {
+        lanBackground = if (owned) lanBackground + name else lanBackground - name
+    }
+
+    /**
+     * An Auto-sync step holds this sensor, over Bluetooth by its peripheral [address] or over Wi-Fi
+     * by its [station]. Station pages then wait calmly and offer no Reconnect.
+     */
+    internal fun heldInBackground(address: String, station: String?): Boolean {
+        val bluetoothId = selectedId ?: reconnectingId ?: failedId
+        val overBluetooth = bluetoothBackground && bluetoothId.equals(address, ignoreCase = true)
+        val overWifi = station != null && lanBackground.any { lanStations[it] == station || lanInfo[it]?.station == station }
+        return overBluetooth || overWifi
+    }
+
+    /** An Auto-sync step took or released the Bluetooth link. */
+    fun bluetoothBackgroundOwned(owned: Boolean) {
+        bluetoothBackground = owned
+    }
 
     fun lanInfoReceived(name: String, json: String) {
         if (lanSessions[name]?.connected != true) return
@@ -281,7 +359,7 @@ class CompanionState {
         lanStatusAtEpochMs = if (parsed == null) {
             lanStatusAtEpochMs - name
         } else {
-            lanStatusAtEpochMs + (name to Clock.System.now().toEpochMilliseconds())
+            lanStatusAtEpochMs + (name to clock())
         }
     }
 
@@ -289,12 +367,14 @@ class CompanionState {
         if (lanSessions[name]?.connected != true) return
         val sample = runCatching { LiveSample.parse(json) }.getOrNull()
         lanLive = if (sample == null) lanLive - name else lanLive + (name to sample)
+        lanLiveAtEpochMs = if (sample == null) lanLiveAtEpochMs - name else lanLiveAtEpochMs + (name to clock())
         lanReadings = lanReadings + (name to NowReading.of(sample))
     }
 
     fun lanReadingExpired(name: String) {
         lanReadings = lanReadings - name
         lanLive = lanLive - name
+        lanLiveAtEpochMs = lanLiveAtEpochMs - name
     }
 
     // Export strings through this facade; platform adapters do not duplicate the wire contract.
@@ -400,6 +480,8 @@ class CompanionState {
     }
 
     fun connectionStarted(id: String) {
+        failedId = null
+        if (reconnectingId != id) reconnectingId = null
         selectedId = id
         connected = false
         scanning = false
@@ -426,6 +508,7 @@ class CompanionState {
         }
         info = decoded
         connected = true
+        reconnectingId = null
         message = UiText.of(Res.string.companion_live)
         return true
     }
@@ -433,7 +516,7 @@ class CompanionState {
     fun receiveStatus(json: String) {
         if (!connected) return
         statusRaw = json
-        statusAtEpochMs = Clock.System.now().toEpochMilliseconds()
+        statusAtEpochMs = clock()
         status = runCatching { DeviceStatus.parse(json) }.getOrNull()
         if (status == null) message = UiText.of(Res.string.companion_status_unreadable)
     }
@@ -442,11 +525,13 @@ class CompanionState {
         if (!connected) return
         // A bad notification must not leave an earlier number looking current.
         live = runCatching { LiveSample.parse(json) }.getOrNull()
+        liveAtEpochMs = live?.let { clock() }
         message = if (live == null) UiText.of(Res.string.companion_live_unreadable) else UiText.of(Res.string.companion_live)
     }
 
     fun readingExpired() {
         live = null
+        liveAtEpochMs = null
         if (connected) message = UiText.of(Res.string.now_waiting)
     }
 
@@ -456,7 +541,15 @@ class CompanionState {
 
     /** The Bluetooth connection ended for a typed [notice], shown in Android's words. */
     fun connectionClosedNoticed(notice: CompanionNotice) {
+        val id = selectedId ?: reconnectingId
         close(notice.text)
+        if (notice == CompanionNotice.PAIRING_REMOVED) failedId = id
+    }
+
+    /** The user forgot this sensor, so nothing is left to repair or reconnect. */
+    fun sensorForgotten(id: String) {
+        if (failedId.equals(id, ignoreCase = true)) failedId = null
+        if (reconnectingId.equals(id, ignoreCase = true)) reconnectingId = null
     }
 
     private fun close(explanation: UiText) {
@@ -467,6 +560,8 @@ class CompanionState {
         statusRaw = null
         statusAtEpochMs = null
         live = null
+        liveAtEpochMs = null
+        reconnectingId = null
         syncAvailable = false
         syncBusy = false
         syncProgress = null

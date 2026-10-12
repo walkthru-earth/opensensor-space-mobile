@@ -11,8 +11,7 @@ UTC when no anchor exists, the clock came from RTC, an external anchor is at lea
 old, or device UTC differs by more than two seconds plus half the measured request delay.
 The six-hour cadence uses the existing 50 ppm drift assumption (about 1.08 seconds), not
 measured oscillator accuracy. A recent host or network clock survives reconnects, switching
-transports and creating a new iOS byte pipe without another `SET_TIME`. Explicit Set time
-still sends an update. Legacy firmware with a usable UTC clock but no age/drift fields keeps
+transports and creating a new iOS byte pipe without another `SET_TIME`. Legacy firmware with a usable UTC clock but no age/drift fields keeps
 that anchor; unavailable status obtains an initial acknowledged phone anchor. A failed clock
 check does not prevent downloading verified original files. There is no user-facing device-time setting or confirmation.
 The optional microsecond remainder in `SET_TIME` retains the phone's millisecond precision;
@@ -58,8 +57,7 @@ The layout stays compatible; new files identify the shared writer as `derived_ve
 ESP32 history rewriting would compete with acquisition, require a decoder, and risk the
 only raw copy. Server-only recovery would delay offline use and depend on a service that
 is not deployed. The mobile archive already has a decoder, storage and derived history;
-it can reconcile as soon as evidence and verified raw files are present. The server's
-[revision protocol remains future work](../../air-quality-sync/docs/time-reconciliation.md);
+it can reconcile as soon as evidence and verified raw files are present. A server revision protocol remains future work, and
 corrected records must not be re-uploaded as new independent samples.
 
 ## Limits

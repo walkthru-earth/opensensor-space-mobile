@@ -78,7 +78,7 @@ including the `:ios:shared` presentation-state tests, and links the framework. E
 plugin adds its module's tasks to `verify` and `verifyIos` (`build-logic/src/main/kotlin/Gates.kt`).
 On a Mac `verify` runs `verifyIos` too, so the pre-push hook covers iOS. Linux CI skips it, and
 `-Popensensor.skipIos=true` skips it locally. Xcode compiles the Swift app. Signing teams stay in local Xcode settings
-or command-line overrides. See [ios-migration.md](ios-migration.md) for commands,
+or command-line overrides. See [ios.md](ios.md) for commands,
 current feature scope and simulator versus phone qualification.
 
 ### GitHub Actions iOS validation (researched 2026-10-08)

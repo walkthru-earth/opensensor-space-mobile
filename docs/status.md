@@ -4,6 +4,26 @@
 **Code:** `./gradlew verify` (the gate), `.github/workflows/verify.yml`.
 **Related:** measured device behaviour is recorded in the board-specific `../aq-parquet/docs/boards/*/bench-verified.md`; anything not recorded there is unverified.
 
+## 2026-10-12, consistent sync on Android and iOS (code only)
+
+Branch `fix/sync-consistency`. Host tests, the iOS simulator build and `verify-native.sh` only.
+No phone or iPad run yet.
+
+- Shared. Every run ends with a typed `SyncEndReason`. `TransportUnavailableException` (Bluetooth
+  off, permission missing) fails at once without retry. An unreachable device or an OPEN timeout
+  gets one retry, and the transfer permit is released while waiting. LAN BYE 10 (token rotated)
+  and BYE 3 (token refused) clear the stored LAN token. BYE 4 reads as busy.
+- Android. A refused GATT connect reads as unreachable. A LAN connect refused for the local
+  network permission reads as permission missing.
+- iOS. Every sync, Collect all step and Auto-sync step runs through `runs.collect` on the shared
+  controller. Collect all is cancelled only for sensors in the pass. A reopened sensor page keeps
+  its Bluetooth link and a resumed run for another sensor is dropped.
+- Screens. Today, Device, Files and Stations share one status model. Today names the end reason
+  and never shows caught up after a failure. Each action has one home. The iOS companion page,
+  the clock sync setting and other unused code are removed.
+- To check on phones. A PIN prompt that times out shows no repair message (Android). Token
+  rotation over Wi-Fi. An interrupted iOS Bluetooth run resumes. Bluetooth off fails at once.
+
 ## 2026-10-11, stale-bond handling, iOS link queue and shared iOS controller (code only)
 
 Branch `fix/open-gaps-2026-10-11`. Host, simulator and gate results only. No phone or
@@ -19,6 +39,7 @@ iPad run yet.
 - iOS shared. `IosLinkProvider` can ask Swift to dial a link. `SensorCollections` holds one
   `CollectionController` per device (#81, partial). Swift does not route Smart Sync, Collect
   all or background collection through it yet, so the Swift resume and retry timers remain.
+  Superseded on 2026-10-12, every iOS sync now runs through `runs.collect`.
   Early-ending runs now report the files they saved instead of 0.
 - Android. HCI 0x06 and 0x3D map to a missing bond. Below API 36, which has no
   `ACTION_KEY_MISSING`, `BleStaleBondDetector` treats a second consecutive close of a bonded
@@ -121,7 +142,7 @@ matching incident lines were not extracted before the owner ended checks.
 The temporary Developer detail level was restored to Simple.
 
 The full ecosystem report, including source findings, evidence limits and ten
-Mermaid diagrams, is [in the parent directory](../../SYNC-STABILITY-INVESTIGATION-2026-10-10.md).
+Mermaid diagrams, is `SYNC-STABILITY-INVESTIGATION-2026-10-10.md` in the parent directory, outside this repository.
 Ignored app evidence is under `ios/build/DeviceInstall/evidence-bed7949/`.
 No current iPhone radio qualification was performed.
 
@@ -389,8 +410,8 @@ profiles; its latest recorded phone checks cover one-file BLE sync and navigatio
 multi-device, LAN and background qualifications outstanding. The iOS app shares protocol and
 sensor rules and has a dated iPhone BLE live-reading check plus Bonjour discovery observation.
 Authenticated foreground LAN collection, concurrent sensor sessions and verified local archives now
-have host/simulator/build checks; their real-phone qualification and background collection remain outstanding. See [opensensor-space.md](opensensor-space.md)
-and [ios-migration.md](ios-migration.md). Android, iOS simulator, and iPhone evidence are recorded
+have host/simulator/build checks; their real-phone qualification and background collection remain outstanding. See [opensensor-space.md](device-identity.md)
+and [ios-migration.md](ios.md). Android, iOS simulator, and iPhone evidence are recorded
 separately in the platform records and the relevant firmware board bench files.
 
 
@@ -577,7 +598,7 @@ estimate, `RealArchiveTest`). Debug APK 68.4 MiB unminified.
 | v1 file sync (LIST/OPEN/READ/CLOSE, SET_TIME, FLUSH) | captured v1 payloads from `AQ-6b40` | macOS host client 2026-09-16 (766 files, 15–21 KB/s); phone partial runs 2026-09-17 | instrumented **full** 776-file sync over each link with the foreground-service build |
 | v2 config / Wi-Fi / reboot / log / token | hand-assembled fixtures from the contract | a v2 device was read from the phone; no capture taken | `ble.clear_bonds`, `lan.rotate_token` end to end, `fixed`/`none` pairing (needs display-less board) |
 | LAN transport | loopback `TcpTransportTest` | `LanDiscovery` found the board via `NsdManager`; app chose TCP on its own | `ACCESS_LOCAL_NETWORK` prompt (enforced only from API 37) |
-| Lost window / drain / resume | `SyncEngineTest`, `SyncResumePolicyTest` | 514-byte-frame drop reproduced 2026-09-17 and survived | — |
+| Lost window / drain / resume | `SyncEngineTest`, `CollectionControllerTest` | 514-byte-frame drop reproduced 2026-09-17 and survived | — |
 | Auto-sync worker | `AutoSyncRunnerTest` over the fake (incl. `lanOnly`) | — | a complete 15-min period cycle, `setForeground` refusal in background, OEM battery settings |
 | Auto-sync triggers | `AdvertisementTest` (2.1 bytes) | **advertising wake** 2026-09-18: `flag scan registered … 2 filters`, `Start proc … for broadcast {…AdvertScanReceiver}` +19 s after `PARQUET READY`, `trigger=ADVERTISEMENT`, LAN sync 1 file / 22,498 B, done +28 s, app process killed beforehand | association dialog finding the advertising logger, `EVENT_BLE_APPEARED`, companion exemptions vs the screen-off socket kill and the `setForeground` refusal (still refused, no association yet), Wi-Fi-arrival run end to end (fired at both process starts, second throttled) |
 | History pipeline | fixtures + `RealArchiveTest` (766 real files, 0.2 s) | derive fix observed 2026-09-18 02:35 ("derived 1 of 3 station-days") | chart update after a sync of a v3 file recorded in bench-verified |
@@ -594,7 +615,7 @@ estimate, `RealArchiveTest`). Debug APK 68.4 MiB unminified.
   stays archived/exportable and is excluded from the new station's charts. No board was flashed,
   rebooted or paired during the initial source audit. The later USB/foreground repair evidence
   is recorded above. Qualification and limitations are in
-  [opensensor-space.md](opensensor-space.md).
+  [opensensor-space.md](device-identity.md).
 
 - **2026-09-20** — LAN bearer tokens are encrypted at rest with Android Keystore AES-GCM. Startup
   completes plaintext migration before Auto-sync services can consume tokens. Missing keys, failed
@@ -624,7 +645,7 @@ estimate, `RealArchiveTest`). Debug APK 68.4 MiB unminified.
 3. **API 37 local-network permission** on a real Android 17 device (grant / deny / revoke while connected) and `NsdManager` across API 31–37.
 4. **Further transports** (LoRa relays) behind `AqTransport`; engine, archive, verification unchanged.
 5. **Opt-in cloud step after local sync** — off by default, own setting and review; `INTERNET` for LAN does not pre-approve it. Privacy boundaries: `../aq-parquet/product/mobile-architecture.md`.
-6. **Open decisions** D1–D10 (location/map, import UI, iOS parity) in [history-ux-and-data-layer.md](history-ux-and-data-layer.md) §6.
+6. **Open decisions** D1–D10 (location/map, import UI, iOS parity) in `history-ux-and-data-layer.md` §6, since deleted.
 
 ## Test phone
 
@@ -637,7 +658,7 @@ SyncEngine DeviceConnection TcpTransport BleTransport AutoSync SyncWorker SyncFg
 
 The Android app and first iOS app now compile the same portable protocol and
 sensor-domain implementations. JVM-only Parquet/file adapters and existing
-Android screens remain in place. [ios-migration.md](ios-migration.md) describes
+Android screens remain in place. [ios-migration.md](ios.md) describes
 the exact source-set split, build commands and remaining feature work.
 
 Host verification: `./gradlew --no-daemon verify` passed after formatting,

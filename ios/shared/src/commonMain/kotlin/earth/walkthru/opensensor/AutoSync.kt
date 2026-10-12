@@ -117,8 +117,6 @@ class AutoSyncSettings internal constructor(
     private val notificationStatus: () -> Long,
     private val requestNotifications: (done: () -> Unit) -> Unit,
     private val changed: () -> Unit,
-    /** iOS 26 and later keep "Sync now in background" going after the user leaves the app. */
-    val continuedTask: Boolean,
 ) {
     private val entries = MutableStateFlow(IosAutoSync.decode(storage.load()))
 
@@ -179,9 +177,6 @@ object AutoSyncSchedule {
 
     /** The delay before retry number [attempt], 0 based. */
     fun retrySeconds(attempt: Int): Double = BackgroundSyncPolicy.backoffMs(attempt) / 1000.0
-
-    /** The browse window for Wi-Fi sensors, which the runner passes to Swift. */
-    val browseSeconds: Double get() = BackgroundSyncPolicy.LAN_BROWSE_MS / 1000.0
 }
 
 /** One known sensor as the shared runner sees it. [address] is the peripheral id. */
@@ -272,9 +267,6 @@ class BackgroundSyncBridge internal constructor(
     /** True while a run is going. A second request waits for the next schedule. */
     val busy: Boolean get() = running?.isActive == true
 
-    /** The sensor's name for the continued processing task's subtitle, or empty when it has none. */
-    fun sensorName(id: String): String = devices.nameFor(id).orEmpty()
-
     /** The title the continued processing task shows, in the app language. A callback, so Swift needs no suspend call. */
     fun progressTitle(done: (String) -> Unit) {
         scope.launch { done(getString(Res.string.autosync_progress_title)) }
@@ -296,10 +288,6 @@ class BackgroundSyncBridge internal constructor(
         settings.markWake(id)
         return runDue(listOf(id), done)
     }
-
-    /** "Sync now in background" for one sensor, switch on or off, due or not. */
-    fun runOne(id: String, done: (BackgroundRunSummary) -> Unit): BackgroundRunHandle =
-        start(listOfNotNull(all().firstOrNull { it.address.equals(id, ignoreCase = true) }), done)
 
     private fun start(chosen: List<IosSyncDevice>, done: (BackgroundRunSummary) -> Unit): BackgroundRunHandle {
         if (busy || chosen.isEmpty()) {

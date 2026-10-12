@@ -19,7 +19,55 @@ enum CancellationChecks {
         await alreadyCancelledRunCancelsHandleBeforeSetReturns()
         await immediateCompletionKeepsResultAndCancellation()
         await installedHandleCanBeCancelledFromBackground()
+        idleCloseWaitsForTheWorkOnTheLink()
+        livePageReopensUntilTheUserLeavesIt()
+        aNewRunCountsFromZero()
         print("iOS cancellation checks passed")
+    }
+
+    private static func aNewRunCountsFromZero() {
+        var counts = RunCounts<String>()
+        let first = counts.noticed("aq", done: 3, total: 5, bytes: 300, totalBytes: 500)
+        precondition(counts.noticed("aq", done: nil, total: nil, bytes: nil, totalBytes: nil) == first, "a notice keeps the run's counts")
+        counts.runStarted("aq")
+        precondition(counts.noticed("aq", done: nil, total: nil, bytes: nil, totalBytes: nil) == .init(), "a new run starts at zero")
+        precondition(counts.noticed("other", done: 1, total: nil, bytes: nil, totalBytes: nil).done == 1)
+    }
+
+    private static func livePageReopensUntilTheUserLeavesIt() {
+        var live = LivePage()
+        precondition(live.page == nil)
+        live.opened("AA-11", allowBluetooth: false)
+        precondition(live.page == LivePage.Page(id: "AA-11", allowBluetooth: false), "a Wi-Fi only page reopens over Wi-Fi only")
+        live.closed("bb-22")
+        precondition(live.page != nil, "another sensor's page closing keeps it")
+        live.closed("aa-11")
+        precondition(live.page == nil, "leaving the page forgets it")
+        live.opened("BB-22", allowBluetooth: true)
+        live.disconnected()
+        precondition(live.page == nil, "a manual disconnect is never undone on return")
+
+        precondition(live.letsResumeUseBluetooth(device: "dev-a", pageDevice: nil), "no page, the resume may use Bluetooth")
+        live.opened("BB-22", allowBluetooth: true)
+        precondition(!live.letsResumeUseBluetooth(device: "dev-a", pageDevice: "dev-b"), "the user's page for another sensor keeps Bluetooth")
+        precondition(!live.letsResumeUseBluetooth(device: "dev-a", pageDevice: nil), "an unknown page device keeps Bluetooth too")
+        precondition(live.letsResumeUseBluetooth(device: "DEV-B", pageDevice: "dev-b"), "a resume of the page's own sensor shares its link")
+        live.opened("BB-22", allowBluetooth: false)
+        precondition(live.letsResumeUseBluetooth(device: "dev-a", pageDevice: "dev-b"), "a Wi-Fi only page leaves Bluetooth free")
+    }
+
+    private static func idleCloseWaitsForTheWorkOnTheLink() {
+        var close = IdleClose<String>()
+        precondition(close.pageClosed("a", held: false), "an idle link closes with its last page")
+        precondition(!close.isWaiting("a"))
+        precondition(!close.pageClosed("b", held: true), "a sync keeps its link")
+        precondition(!close.settled("b", held: true), "a command after the sync still holds it")
+        precondition(close.settled("b", held: false), "the link closes once the work ended")
+        precondition(!close.settled("b", held: false), "it closes once")
+        _ = close.pageClosed("c", held: true)
+        close.forget("c")
+        precondition(!close.settled("c", held: false), "opening the sensor again keeps the link")
+        precondition(!close.settled("d", held: false), "a link no page let go of stays open")
     }
 
     private static func alreadyCancelledRunCancelsHandleBeforeSetReturns() async {

@@ -40,7 +40,7 @@ import java.net.InetAddress
 import java.nio.file.Files
 
 /**
- * The auto-sync worker's decision logic ([AutoSyncRunner] / [AutoSyncPolicy]) against a gateway
+ * The auto-sync worker's decision logic ([AutoSyncRunner] / [BackgroundSyncPolicy]) against a gateway
  * whose "sync" is the real LIST → plan → download path over the in-process [FakeTransport], so
  * "new files" and "nothing new" come from actual transfers, not canned numbers.
  */
@@ -87,7 +87,7 @@ class AutoSyncRunnerTest {
 
     @Test
     fun `policy - LAN first when the station is discovered and a token is stored, then Bluetooth when bonded`() {
-        val links = AutoSyncPolicy.linksFor(device(), onLan(), bonded = true)
+        val links = BackgroundSyncPolicy.linksFor(device(), onLan(), bonded = true)
         assertEquals(2, links.size)
         assertTrue(links[0] is BackgroundSyncLink.Lan)
         assertEquals(BackgroundSyncLink.Ble, links[1])
@@ -95,21 +95,21 @@ class AutoSyncRunnerTest {
 
     @Test
     fun `policy - no token means no LAN even when discovered, no bond means no Bluetooth`() {
-        assertEquals(listOf<AutoSyncLink>(BackgroundSyncLink.Ble), AutoSyncPolicy.linksFor(device(token = null), onLan(), bonded = true))
-        assertTrue(AutoSyncPolicy.linksFor(device(token = null), onLan(), bonded = false).isEmpty())
+        assertEquals(listOf<AutoSyncLink>(BackgroundSyncLink.Ble), BackgroundSyncPolicy.linksFor(device(token = null), onLan(), bonded = true))
+        assertTrue(BackgroundSyncPolicy.linksFor(device(token = null), onLan(), bonded = false).isEmpty())
         // Discovered under another station: not this device.
-        assertEquals(listOf<AutoSyncLink>(BackgroundSyncLink.Ble), AutoSyncPolicy.linksFor(device(), onLan("other-station"), bonded = true))
+        assertEquals(listOf<AutoSyncLink>(BackgroundSyncLink.Ble), BackgroundSyncPolicy.linksFor(device(), onLan("other-station"), bonded = true))
         // Unresolved address: not connectable.
         val unresolved = mapOf(gateway.fake.station to LanDevice("AQ-6b40", null, 47390, mapOf(LanFraming.TXT_STATION to gateway.fake.station), 0L))
-        assertTrue(AutoSyncPolicy.linksFor(device(), unresolved, bonded = false).isEmpty())
+        assertTrue(BackgroundSyncPolicy.linksFor(device(), unresolved, bonded = false).isEmpty())
     }
 
     @Test
     fun `policy - lanOnly (Wi-Fi trigger) never offers Bluetooth, even when bonded`() {
-        val links = AutoSyncPolicy.linksFor(device(), onLan(), bonded = true, lanOnly = true)
+        val links = BackgroundSyncPolicy.linksFor(device(), onLan(), bonded = true, lanOnly = true)
         assertEquals(1, links.size)
         assertTrue(links[0] is BackgroundSyncLink.Lan)
-        assertTrue(AutoSyncPolicy.linksFor(device(), emptyMap(), bonded = true, lanOnly = true).isEmpty())
+        assertTrue(BackgroundSyncPolicy.linksFor(device(), emptyMap(), bonded = true, lanOnly = true).isEmpty())
     }
 
     // ------------------------------------------------------------------ runner

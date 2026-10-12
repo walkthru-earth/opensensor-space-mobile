@@ -41,7 +41,6 @@ private class TodayHolder(today: CompanionToday, devices: DevicesBridge, address
             nameFor = devices::nameFor,
         ),
         detailLevel = settings.detailLevel,
-        clockSyncMode = settings.clockSyncMode,
     )
 }
 
@@ -58,6 +57,7 @@ internal fun TodayEntry(address: String, today: CompanionToday, devices: Devices
         onAction = { action ->
             when (action) {
                 TodayAction.SmartSync -> controller.smartSync()
+                TodayAction.StopSync -> controller.stopSync()
                 TodayAction.Reconnect -> controller.reconnect()
                 // The sensor keeps recording. My devices shows it as known.
                 TodayAction.Disconnect -> {

@@ -5,6 +5,7 @@ import androidx.annotation.PluralsRes
 import androidx.annotation.StringRes
 import androidx.compose.material3.SnackbarHostState
 import earth.walkthru.aqsync.R
+import earth.walkthru.aqsync.collection.SyncEndReason
 import earth.walkthru.aqsync.data.DeviceContinuityPolicy
 import earth.walkthru.aqsync.data.DeviceEvent
 import earth.walkthru.aqsync.data.DeviceMessage
@@ -12,7 +13,7 @@ import earth.walkthru.aqsync.data.DeviceMessage.Command
 import earth.walkthru.aqsync.data.DeviceMessage.ConfigChange
 import earth.walkthru.aqsync.data.lan.LanFailure
 import earth.walkthru.aqsync.data.protocol.ConfigProblem
-import earth.walkthru.aqsync.data.sync.ClockQuality
+import earth.walkthru.aqsync.link.UnavailableKind
 
 /**
  * A string resource and its arguments, resolved late so the mapping is a pure, testable function.
@@ -55,6 +56,13 @@ fun DeviceMessage.toUiText(): UiText = when (this) {
         },
     )
     DeviceMessage.ConnectFailed -> res(R.string.conn_failed)
+    is DeviceMessage.BluetoothUnavailable -> res(
+        when (kind) {
+            UnavailableKind.RADIO_OFF -> R.string.msg_bluetooth_off
+            UnavailableKind.PERMISSION_MISSING -> R.string.msg_bluetooth_permission
+            UnavailableKind.NO_ADAPTER -> R.string.msg_bluetooth_missing
+        },
+    )
     DeviceMessage.PairingRepair -> res(R.string.conn_pairing_repair)
     is DeviceMessage.NewerProtocol -> res(R.string.msg_newer_protocol, device, app)
     is DeviceMessage.FirmwareUpdateRequired ->
@@ -88,7 +96,7 @@ fun DeviceMessage.toUiText(): UiText = when (this) {
     )
     is DeviceMessage.SyncFinished -> plural(R.plurals.msg_sync_finished, total.toLong(), synced, total)
     DeviceMessage.SyncStopped -> res(R.string.msg_sync_stopped)
-    DeviceMessage.SyncAborted -> res(R.string.msg_sync_aborted)
+    is DeviceMessage.SyncEnded -> res(reason.toStringRes())
     is DeviceMessage.NotEnoughSpace -> res(R.string.msg_not_enough_space, formatBytes(shortBytes))
     is DeviceMessage.UnplacedReadings -> plural(R.plurals.msg_unplaced, rows, rows)
     DeviceMessage.ClockSet -> res(R.string.msg_clock_set)
@@ -99,6 +107,26 @@ fun DeviceMessage.toUiText(): UiText = when (this) {
     DeviceMessage.Rebooting -> res(R.string.msg_rebooting)
     is DeviceMessage.CommandRejected -> res(command.rejectedRes())
     is DeviceMessage.CommandFailed -> res(command.failedRes())
+}
+
+/** One line per way a sync can end, shared with the notification and the Files screen. */
+@StringRes
+fun SyncEndReason.toStringRes(): Int = when (this) {
+    SyncEndReason.COMPLETED -> R.string.msg_up_to_date
+    SyncEndReason.STOPPED -> R.string.msg_sync_stopped
+    SyncEndReason.INTERRUPTED -> R.string.msg_sync_end_interrupted
+    SyncEndReason.BLUETOOTH_OFF -> R.string.msg_sync_end_bluetooth_off
+    SyncEndReason.PERMISSION_MISSING -> R.string.msg_sync_end_permission
+    SyncEndReason.PAIRING_REPAIR -> R.string.conn_pairing_repair
+    SyncEndReason.TOKEN_ROTATED -> R.string.msg_sync_end_token_rotated
+    SyncEndReason.TOKEN_REJECTED -> R.string.msg_sync_end_token_rejected
+    SyncEndReason.DEVICE_BUSY -> R.string.msg_sync_end_busy
+    SyncEndReason.OUT_OF_RANGE -> R.string.msg_sync_end_out_of_range
+    SyncEndReason.UPDATE_FIRMWARE -> R.string.msg_sync_end_update_firmware
+    SyncEndReason.NO_SPACE -> R.string.msg_sync_end_no_space
+    SyncEndReason.STORAGE_ERROR -> R.string.msg_sync_end_storage
+    SyncEndReason.LINK_LOST -> R.string.msg_sync_end_link_lost
+    SyncEndReason.OTHER -> R.string.msg_sync_aborted
 }
 
 @StringRes
@@ -151,12 +179,11 @@ private fun Command.failedRes(): Int = when (this) {
 
 fun DeviceMessage.text(res: Resources): String = toUiText().resolve(res)
 
-/** The usual snackbar handling of a [DeviceEvent]. [onClock] handles the Smart Sync clock question. */
-suspend fun SnackbarHostState.showDeviceEvent(res: Resources, ev: DeviceEvent, onClock: suspend (ClockQuality) -> Unit) {
+/** The usual snackbar handling of a [DeviceEvent]. */
+suspend fun SnackbarHostState.showDeviceEvent(res: Resources, ev: DeviceEvent) {
     when (ev) {
         is DeviceEvent.Info -> showSnackbar(ev.message.text(res))
         is DeviceEvent.Error -> showSnackbar(ev.message.text(res))
-        is DeviceEvent.ClockConfirmationRequired -> onClock(ev.quality)
     }
 }
 
@@ -167,9 +194,9 @@ sealed interface ScreenMessage {
 }
 
 /** [showDeviceEvent] for screens that also post their own lines. */
-suspend fun SnackbarHostState.showScreenMessage(res: Resources, msg: ScreenMessage, onClock: suspend (ClockQuality) -> Unit) {
+suspend fun SnackbarHostState.showScreenMessage(res: Resources, msg: ScreenMessage) {
     when (msg) {
-        is ScreenMessage.Device -> showDeviceEvent(res, msg.event, onClock)
+        is ScreenMessage.Device -> showDeviceEvent(res, msg.event)
         is ScreenMessage.Text -> showSnackbar(msg.text)
     }
 }

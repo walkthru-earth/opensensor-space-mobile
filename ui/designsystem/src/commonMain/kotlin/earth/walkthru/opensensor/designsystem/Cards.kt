@@ -6,9 +6,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -27,9 +25,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
@@ -143,22 +138,6 @@ fun MascotGuide(
             action()
         }
     }
-}
-
-/**
- * A badge tilted like the website's `.brand-icon` (rotate -5deg, rounded square). Only for the
- * hero card's character, never for numbers or charts.
- */
-@Composable
-fun TiltedBadge(color: Color, modifier: Modifier = Modifier, size: Dp = 88.dp, content: @Composable () -> Unit) {
-    Box(
-        modifier
-            .size(size)
-            .graphicsLayer { rotationZ = -5f }
-            .clip(MaterialTheme.shapes.large)
-            .background(color),
-        contentAlignment = Alignment.Center,
-    ) { content() }
 }
 
 /** A warning strip inside a card. */

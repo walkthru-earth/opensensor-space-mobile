@@ -63,6 +63,12 @@ class CollectAllQueue(steps: List<CollectStep>, private val parallel: Int = 1) {
     /** The ids of the steps running now. */
     val runningIds: Set<String> get() = running.keys.toSet()
 
+    /** The steps running now, with their route. */
+    val runningSteps: List<CollectStep> get() = running.values.toList()
+
+    /** The ids of the steps not started yet. */
+    val plannedIds: Set<String> get() = pending.mapTo(LinkedHashSet()) { it.id }
+
     fun start(): List<CollectStep> = fill()
 
     /** Marks [id] done and returns the next steps to begin. An unknown id changes nothing. */

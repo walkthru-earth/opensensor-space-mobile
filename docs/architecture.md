@@ -30,7 +30,7 @@ flowchart TB
   end
   APP[":app (Android)<br/>Hilt, Room v10, DataStore, WorkManager, Compose, zstd-jni"]
   IOS["ios/App (Xcode + Swift)<br/>Core Bluetooth, Bonjour, lifecycle, Keychain, export"]
-  IS[":ios:shared (iOS only)<br/>AppRoot, DevicesBridge, the device page, static OpenSensorShared framework"]
+  IS[":ios:shared (iOS only)<br/>AppRoot, DevicesBridge, the iOS bridges, static OpenSensorShared framework"]
   SY1 --> PR & AR1
   AR1 --> PR & PQ & ST
   HI --> PQ & PR & AQ
@@ -63,7 +63,7 @@ windows use kotlinx-datetime. Android passes its `ZoneId` through `toKotlinTimeZ
 and iOS. `:ios:shared` targets iOS only, so its `commonMain` consumes them directly. It renders the
 current Compose iOS screen. `ios/App` supplies native app integration, Core Bluetooth, Bonjour
 discovery, lifecycle, Keychain and Files export. Both platforms run the shared sync engine. The Android app remains a separate
-platform entry point. See [ios-migration.md](ios-migration.md) for current scope and build commands.
+platform entry point. See [ios.md](ios.md) for current scope and build commands.
 
 Navigation is shared ([ADR 0001](adr/0001-shared-navigation.md)). `:feature:shell` holds the
 sealed `AppKey : NavKey` hierarchy, `AppNavConfig` (a `SavedStateConfiguration` built with
@@ -76,16 +76,14 @@ Screens that take Back first use `NavigationBackHandler`, never `BackHandler`.
 
 ### Target module graph
 
-The graph above is today's code. [platform-parity-plan.md](platform-parity-plan.md) moves toward
-the graph below, where every rule that must give the same answer on both phones is shared and
-platform code only adapts OS services. `:core:sync`, `:core:archive`, `:core:settings` and
-`:feature:settings` exist. The shared sync engine is adopted on both platforms. Room KMP backing remains planned.
-Android uses the shared collection controller. iOS has it in `SensorCollections`, built only by tests so far, and routing
-the native entry points into it remains
-[#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81). iOS Core Bluetooth
-runs on the `BlePhysicalLink` serial queue. `:core:model` (device families and metrics
-as data) is planned in [production-readiness-plan.md](production-readiness-plan.md) W11 and
-[devices-and-discovery.md](devices-and-discovery.md).
+The graph above is today's code. The graph below is the target, where every rule that must give
+the same answer on both phones is shared and platform code only adapts OS services. `:core:sync`,
+`:core:archive`, `:core:settings` and `:feature:settings` exist. Both platforms run the shared
+sync engine and one shared collection controller per device (Android through `DeviceFacade`, iOS
+through `SensorCollections`, [#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81)).
+iOS Core Bluetooth runs on the `BlePhysicalLink` serial queue. Room KMP backing and `:core:model`
+(device families and metrics as data, [devices-and-discovery.md](devices-and-discovery.md)) are
+planned.
 
 ```mermaid
 flowchart TB
@@ -180,7 +178,7 @@ flowchart LR
 | `data/background/` | `SyncForegroundService`, `SyncNotifications`, `SyncWorker`, `AutoSyncScheduler`, `AutoSyncRunner` (pure), `AppAutoSyncGateway`; triggers `CompanionPresence` + `CompanionPresenceService`, `AdvertFlagScan` + `AdvertScanReceiver`, `SyncTriggers` + `WifiArrivalReceiver` + `BootReceiver` | yes (runner: no) |
 | `data/history/` | `HistoryIndexer`, `HistoryDeriver`, `DailyDerived*`, `HistoryRepository`, `parquet/AppParquetCodecs` (ZSTD) | Room + files |
 | `data/local/database/` | `AppDatabase` (v10), `KnownDevice`, `StationEpoch`, `ArchivedFile`, `History.kt` (`MetricBucket`, `DerivedDay`) | yes |
-| `data/settings/AppSettings.kt` | Android view of `:core:settings` (`DetailLevel` Simple · Detailed · Developer, clock consent, units, public sensors) | yes |
+| `data/settings/AppSettings.kt` | Android view of `:core:settings` (`DetailLevel` Simple · Detailed · Developer, units, public sensors) | yes |
 | `data/fake/FakeTransport.kt` | in-process proto 3 device with fault hooks | no (JVM) |
 | `ui/scan · device (Today, Device, NowCard) · history · files · debug · settings · permissions · theme` | Compose. `ui/files` hosts the shared Files and inspector screens (`:feature:files`) with the Android slots and the chart by file. `Navigation.kt` supplies the Android entries to the shared `AppShell` (`:feature:shell`) | yes |
 

@@ -24,16 +24,16 @@ import kotlin.concurrent.withLock
 @OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
 class DeviceConnectionManager @Inject constructor(
-    private val factory: Provider<DeviceConnectionRepository>,
+    private val factory: Provider<DeviceFacade>,
     private val discovery: LanDiscoveryState,
     private val admission: CollectionAdmission,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val controllers = MutableStateFlow<Map<String, DeviceConnectionRepository>>(emptyMap())
+    private val controllers = MutableStateFlow<Map<String, DeviceFacade>>(emptyMap())
 
     private val lock = ReentrantLock()
 
-    fun controller(address: String): DeviceConnectionRepository = lock.withLock {
+    fun controller(address: String): DeviceFacade = lock.withLock {
         controllers.value[address] ?: factory.get().also {
             it.bind(address)
             controllers.value = controllers.value + (address to it)
@@ -50,8 +50,8 @@ class DeviceConnectionManager @Inject constructor(
         } else {
             combine(
                 all.map { (address, controller) ->
-                    combine(controller.connectionState, controller.sync, controller.reconnecting, controller.foregroundNeeded, controller.backgroundOwner) { connection, progress, reconnect, needed, owner ->
-                        DeviceSnapshot(address, controller.currentDisplayName, connection, progress, reconnect, needed, owner)
+                    combine(controller.connectionState, controller.sync, controller.reconnecting, controller.foregroundNeeded, controller.ownership) { connection, progress, reconnect, needed, ownership ->
+                        DeviceSnapshot(address, controller.currentDisplayName, connection, progress, reconnect, needed, controller.backgroundOwner.value, ownership)
                     }
                 }
             ) { it.toList() }
@@ -78,7 +78,15 @@ data class DeviceSnapshot(
     val reconnect: ReconnectState?,
     val foregroundNeeded: Boolean,
     val backgroundOwner: String?,
+    val ownership: DeviceOwnership = DeviceOwnership.IDLE,
 )
+
+/**
+ * App-wide "a collection is queued or running": a one-time background request waits or runs
+ * ([workActive]) or any device is held by an interactive or background collection.
+ */
+fun anyCollectionActive(workActive: Boolean, devices: List<DeviceSnapshot>): Boolean =
+    workActive || devices.any { it.ownership != DeviceOwnership.IDLE || it.progress.running }
 
 /** Aggregate counts without assigning one device's current filename or reconnect state to another. */
 fun collectionProgress(devices: List<DeviceSnapshot>): SyncProgress = SyncProgress(

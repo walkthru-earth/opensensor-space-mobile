@@ -8,8 +8,10 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import earth.walkthru.aqsync.BuildConfig
 import earth.walkthru.aqsync.data.DeviceConnectionManager
+import earth.walkthru.aqsync.data.DeviceOwnership
 import earth.walkthru.aqsync.data.DeviceSnapshot
 import earth.walkthru.aqsync.data.TransportPreference
+import earth.walkthru.aqsync.data.anyCollectionActive
 import earth.walkthru.aqsync.data.background.AutoSyncScheduler
 import earth.walkthru.aqsync.data.ble.BleScanner
 import earth.walkthru.aqsync.data.ble.BluetoothStatus
@@ -46,6 +48,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -110,8 +113,11 @@ class ScanViewModel @Inject constructor(
 
     /** Android runs Collect all as one bounded background pass, sharing the two-transfer budget. */
     private val collect = object : CollectAllPort {
-        override val running: Flow<Boolean> = autoSyncScheduler.observeActive()
-        override fun collectAll() = autoSyncScheduler.collectAll()
+        // App-wide, so an interactive sync on any device also holds Collect all back.
+        override val running: Flow<Boolean> = combine(autoSyncScheduler.observeAnyActive(), manager.snapshots, ::anyCollectionActive).distinctUntilChanged()
+        override fun collectAll() {
+            viewModelScope.launch { autoSyncScheduler.collectAll() }
+        }
     }
 
     private val controller = DevicesController(viewModelScope, knownStore, radio, summaries, collect)
@@ -257,5 +263,5 @@ private fun DeviceSnapshot.toActiveLink(): ActiveLink = ActiveLink(
     collecting = progress.running,
     filesDone = progress.filesDone,
     filesTotal = progress.filesTotal,
-    background = backgroundOwner != null,
+    background = ownership == DeviceOwnership.BACKGROUND,
 )

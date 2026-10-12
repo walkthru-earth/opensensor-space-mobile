@@ -1,11 +1,14 @@
 package earth.walkthru.opensensor
 
 import androidx.compose.runtime.snapshots.Snapshot
+import earth.walkthru.aqsync.collection.SyncEndReason
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.history.TodaySoFar
-import earth.walkthru.aqsync.data.sync.ClockSyncMode
+import earth.walkthru.opensensor.today.SyncMood
+import earth.walkthru.opensensor.today.TodayArchive
 import earth.walkthru.opensensor.today.TodayNotice
+import earth.walkthru.opensensor.today.syncMood
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -31,6 +34,7 @@ class CompanionTodaySourceTest {
             command = { _, command -> list += command.name },
             connect = { list += "connect $it" },
             disconnect = { list += "disconnect" },
+            cancelSync = { list += "cancel $it" },
         )
     }
 
@@ -42,7 +46,8 @@ class CompanionTodaySourceTest {
         stationFor: (String) -> String? = { null },
     ): CompanionTodaySource {
         val scope = CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler))
-        val source = CompanionTodaySource(scope, state, "device", MutableStateFlow(emptyList()), todaySoFar, calls.actions, stationFor, now = { 1_000L })
+        state.clock = { 1_000L }
+        val source = CompanionTodaySource(scope, state, "device", MutableStateFlow(emptyList()), todaySoFar, calls.actions, stationFor)
         scope.launch { source.notices.collect { notices += it } }
         return source
     }
@@ -96,7 +101,7 @@ class CompanionTodaySourceTest {
         assertEquals(TransportKind.LAN, source.snapshot.value.transport)
         assertEquals("st", source.snapshot.value.info?.station)
         assertEquals(12.0, source.snapshot.value.live?.pm25)
-        source.sync(ClockSyncMode.AUTOMATIC, clockConfirmed = false)
+        source.sync()
         assertEquals(listOf("sync"), calls.list)
 
         state.lanSessionNoticed("AQ-kitchen", false, false, CompanionNotice.LAN_DISCONNECTED, 0, 0, 0, 0.0)
@@ -137,17 +142,19 @@ class CompanionTodaySourceTest {
         state.lanSessionNoticed("AQ-kitchen", false, false, CompanionNotice.LAN_DISCONNECTED, 0, 0, 0, 0.0)
         settle(this)
         assertFalse(source.snapshot.value.sync.running)
-        assertTrue(source.snapshot.value.sync.failures.isNotEmpty(), "a closed socket cannot report All caught up")
+        assertEquals(SyncEndReason.LINK_LOST, source.snapshot.value.sync.endReason, "a closed socket cannot report All caught up")
+        assertEquals(SyncMood.FAILED, syncMood(source.snapshot.value.sync, TodayArchive()))
 
-        state.lanSyncFinished("AQ-kitchen", false, SyncResult(SyncEnd.LINK_LOST, 0, 0, 0))
+        state.lanSyncFinished("AQ-kitchen", false, SyncResult(SyncEnd.BUSY, 0, 0, 0))
         settle(this)
-        assertTrue(source.snapshot.value.sync.failures.isNotEmpty(), "the engine result remains after session cleanup")
+        assertEquals(SyncEndReason.DEVICE_BUSY, source.snapshot.value.sync.endReason, "the engine result remains after session cleanup")
+        assertTrue(source.snapshot.value.sync.failures.isEmpty(), "an early end is a reason, not a fake file failure")
     }
 
     @Test fun anAnchoredClockSyncsFilesOnly() = runTest {
         val calls = Calls()
         val source = source(connected("{\"utc\":1,\"clk\":1}"), calls, mutableListOf())
-        source.sync(ClockSyncMode.AUTOMATIC, clockConfirmed = false)
+        source.sync()
         assertEquals(listOf("sync"), calls.list)
     }
 
@@ -156,7 +163,7 @@ class CompanionTodaySourceTest {
             val calls = Calls()
             val notices = mutableListOf<TodayNotice>()
             val source = source(connected(json), calls, notices)
-            source.sync(ClockSyncMode.ASK, clockConfirmed = false)
+            source.sync()
             assertEquals(listOf("sync"), calls.list)
             assertTrue(notices.isEmpty())
         }
@@ -190,7 +197,7 @@ class CompanionTodaySourceTest {
         val source = source(state, calls, notices)
         state.today.commandStarted()
         source.flush()
-        source.sync(ClockSyncMode.NEVER, clockConfirmed = false)
+        source.sync()
         state.today.commandFinished(CommandResult(TodayNotice.Finalized(12, 1)))
         state.bluetoothSyncStarted()
         source.setTime()
@@ -236,9 +243,63 @@ class CompanionTodaySourceTest {
         assertNull(snapshot.info)
         assertNull(snapshot.live)
         assertNull(snapshot.todaySoFar)
-        source.sync(ClockSyncMode.AUTOMATIC, clockConfirmed = true)
+        source.sync()
         source.flush()
         source.disconnect()
         assertTrue(calls.list.isEmpty())
+    }
+
+    @Test fun arrivalTimesStayPutWhenTheScreenLooksAgain() = runTest {
+        val state = connected()
+        var now = 1_000L
+        val source = source(state, Calls(), mutableListOf())
+        state.clock = { now }
+        state.receiveStatus("{\"t\":1}")
+        state.receiveLive("{\"pms\":4,\"pm25\":12.0}")
+        settle(this)
+        assertEquals(1_000L, source.snapshot.value.statusAtEpochMs)
+        assertEquals(1_000L, source.snapshot.value.liveAtEpochMs)
+        // An unrelated change makes Today look again later. The readings did not arrive again.
+        now = 9_000L
+        state.bluetoothSyncStarted()
+        settle(this)
+        assertEquals(1_000L, source.snapshot.value.statusAtEpochMs)
+        assertEquals(1_000L, source.snapshot.value.liveAtEpochMs)
+        assertEquals(9_000L, source.snapshot.value.sync.startedAtEpochMs)
+        now = 12_000L
+        state.bluetoothSyncFinished(SyncResult(SyncEnd.COMPLETE, 0, 0, 0))
+        settle(this)
+        now = 20_000L
+        state.receiveLive("{\"pms\":4,\"pm25\":12.0}")
+        settle(this)
+        assertEquals(12_000L, source.snapshot.value.sync.finishedAtEpochMs)
+        assertEquals(20_000L, source.snapshot.value.liveAtEpochMs, "the same value arriving again is a new reading")
+    }
+
+    @Test fun aDroppedLinkUnderARunShowsReconnectingWithItsProgress() = runTest {
+        val state = connected()
+        val source = source(state, Calls(), mutableListOf())
+        state.bluetoothSyncStarted()
+        state.bluetoothSyncProgressed(SyncProgress(2, 5, 10, 10, 5.0))
+        state.bluetoothReconnecting(CompanionNotice.SENSOR_DISCONNECTED)
+        settle(this)
+        val snapshot = source.snapshot.value
+        assertEquals(ConnectionState.Connecting, snapshot.connection)
+        assertTrue(snapshot.sync.running)
+        assertEquals(2, snapshot.sync.filesDone)
+        assertFalse(snapshot.needsPairingRepair)
+    }
+
+    @Test fun aLostBondAsksForPairingRepairUntilANewConnection() = runTest {
+        val state = connected()
+        val source = source(state, Calls(), mutableListOf())
+        state.connectionClosedNoticed(CompanionNotice.PAIRING_REMOVED)
+        settle(this)
+        assertTrue(source.snapshot.value.connection is ConnectionState.Failed)
+        assertTrue(source.snapshot.value.needsPairingRepair)
+        state.connectionStarted("device")
+        settle(this)
+        assertEquals(ConnectionState.Connecting, source.snapshot.value.connection)
+        assertFalse(source.snapshot.value.needsPairingRepair)
     }
 }

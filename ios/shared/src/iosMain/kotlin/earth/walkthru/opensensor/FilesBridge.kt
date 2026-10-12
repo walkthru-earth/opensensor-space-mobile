@@ -1,8 +1,6 @@
 package earth.walkthru.opensensor
 
 import androidx.compose.runtime.snapshotFlow
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import earth.walkthru.aqsync.data.ManifestState
 import earth.walkthru.aqsync.data.sync.ArchivedIdentity
 import earth.walkthru.aqsync.data.sync.FileOutcome
@@ -12,6 +10,7 @@ import earth.walkthru.opensensor.files.DeviceFilesAction
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
@@ -35,6 +34,7 @@ internal class DeviceFilesActions(
 )
 
 /** One sensor's manifest and plan, independent of the whole-phone export controller. */
+@OptIn(ExperimentalCoroutinesApi::class)
 internal class IosDeviceFiles(
     private val address: String,
     private val devices: DevicesBridge,
@@ -52,9 +52,19 @@ internal class IosDeviceFiles(
             ?: devices.state.info?.dev?.takeIf { ble }
         val run = lan?.let { devices.state.lanRuns[it] }
         val lanProgress = lan?.let { devices.state.lanSessions[it] }
-        val progress = if (ble) devices.state.syncProgress else null
+        // A run whose Bluetooth link dropped is dialling it again, so it still counts as running.
+        val reconnecting = devices.state.syncBusy && devices.state.reconnectingId.equals(address, ignoreCase = true)
+        val progress = if (ble || reconnecting) devices.state.syncProgress else null
         val result = run?.result ?: devices.state.lastSyncResult.takeIf { ble }
-        return SensorFilesLink(station, device, connected, run?.running == true || (ble && devices.state.syncBusy), progress, lanProgress, result)
+        return SensorFilesLink(
+            station,
+            device,
+            connected,
+            run?.running == true || (ble && devices.state.syncBusy) || reconnecting,
+            progress,
+            lanProgress,
+            result,
+        )
     }
     private val selected = combine(devices.known, snapshotFlow { currentLink() }) { _, _ -> currentLink() }.distinctUntilChanged()
 

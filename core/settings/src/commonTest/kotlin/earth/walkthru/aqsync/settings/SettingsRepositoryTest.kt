@@ -32,7 +32,6 @@ class SettingsRepositoryTest {
             listOf(
                 "detail_level",
                 "advanced_mode",
-                "clock_sync_mode",
                 "show_public_sensors",
                 "unit_system",
                 "derived_quota_bytes",
@@ -47,7 +46,7 @@ class SettingsRepositoryTest {
     @Test
     fun emptyStoreReadsTheDefaults() = runTest {
         val prefs = SettingsRepository(MemoryStore()).current()
-        assertEquals(AppPrefs(DetailLevel.SIMPLE, ClockSyncMode.ASK, showPublicSensors = true, unitSystem = UnitSystem.AUTO), prefs)
+        assertEquals(AppPrefs(DetailLevel.SIMPLE, showPublicSensors = true, unitSystem = UnitSystem.AUTO), prefs)
     }
 
     @Test
@@ -73,11 +72,9 @@ class SettingsRepositoryTest {
     fun everySetterRoundTrips() = runTest {
         val store = MemoryStore()
         val repo = SettingsRepository(store)
-        repo.setClockSyncMode(ClockSyncMode.NEVER)
         repo.setShowPublicSensors(false)
         repo.setUnitSystem(UnitSystem.IMPERIAL)
-        assertEquals(AppPrefs(DetailLevel.SIMPLE, ClockSyncMode.NEVER, showPublicSensors = false, unitSystem = UnitSystem.IMPERIAL), repo.current())
-        assertEquals("NEVER", store.state.value[SettingsKeys.CLOCK_SYNC_MODE])
+        assertEquals(AppPrefs(DetailLevel.SIMPLE, showPublicSensors = false, unitSystem = UnitSystem.IMPERIAL), repo.current())
         assertEquals("IMPERIAL", store.state.value[SettingsKeys.UNIT_SYSTEM])
     }
 
@@ -85,7 +82,6 @@ class SettingsRepositoryTest {
     fun unknownNamesFallBackToDefaults() = runTest {
         val prefs = mutablePreferencesOf(
             SettingsKeys.DETAIL_LEVEL to "EXPERT",
-            SettingsKeys.CLOCK_SYNC_MODE to "SOMETIMES",
             SettingsKeys.UNIT_SYSTEM to "furlongs",
             SettingsKeys.DISCOVER_SOURCE to "MARS",
         )

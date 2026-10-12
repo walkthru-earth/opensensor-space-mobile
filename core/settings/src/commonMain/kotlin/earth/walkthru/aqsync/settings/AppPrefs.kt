@@ -23,18 +23,6 @@ enum class DetailLevel {
     val developer: Boolean get() = this == DEVELOPER
 }
 
-/** User consent for the state-changing SET_TIME step of Smart Sync. */
-enum class ClockSyncMode {
-    /** Detect clock problems, but ask before sending this phone's time. */
-    ASK,
-
-    /** With no UTC or an RTC-restored clock, send this phone's time before downloading. */
-    AUTOMATIC,
-
-    /** Only download files. The app still warns when readings cannot be placed on the timeline. */
-    NEVER,
-}
-
 /** Which public feed the Discover map reads. Unknown stored names read as [SAMPLE]. */
 enum class DiscoverSource {
     /** The bundled sample feed. */
@@ -54,8 +42,6 @@ fun effectiveDiscoverSource(source: DiscoverSource, showPublicSensors: Boolean):
  */
 data class AppPrefs(
     val detailLevel: DetailLevel = DetailLevel.SIMPLE,
-    /** Consent policy for SET_TIME during an explicit Smart Sync. Default asks first. */
-    val clockSyncMode: ClockSyncMode = ClockSyncMode.ASK,
     /**
      * "Show public sensors". Off, Discover makes no network request at all (no basemap, no public
      * feed) and shows the bundled sample on a plain background (AGENTS.md network boundary).

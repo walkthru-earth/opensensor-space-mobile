@@ -56,7 +56,7 @@ class SemanticsLintTest {
     @Test
     fun scansTheSharedScreens() {
         val names = files().map { it.name }
-        assertTrue(names.containsAll(listOf("BottomBar.kt", "DiscoverScreen.kt", "CompanionScreen.kt")), "files $names")
+        assertTrue(names.containsAll(listOf("BottomBar.kt", "DiscoverScreen.kt", "AutoSyncSwitch.kt")), "files $names")
     }
 
     @Test

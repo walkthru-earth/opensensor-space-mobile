@@ -1,9 +1,11 @@
 package earth.walkthru.opensensor.today
 
 import earth.walkthru.aqsync.archive.ArchiveRecord
+import earth.walkthru.aqsync.collection.SyncEndReason
 import earth.walkthru.aqsync.data.SyncProgress
 import earth.walkthru.aqsync.data.ble.ConfigSnapshot
 import earth.walkthru.aqsync.data.ble.ConnectionState
+import earth.walkthru.aqsync.data.ble.StationStatus
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.history.DeviceCapabilities
 import earth.walkthru.aqsync.data.history.TodaySoFar
@@ -11,8 +13,6 @@ import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.protocol.DeviceStatus
 import earth.walkthru.aqsync.data.protocol.LiveSample
 import earth.walkthru.aqsync.data.protocol.TemperatureSource
-import earth.walkthru.aqsync.data.sync.ClockQuality
-import earth.walkthru.aqsync.settings.ClockSyncMode
 import earth.walkthru.aqsync.settings.DetailLevel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
@@ -67,7 +67,12 @@ data class TodaySnapshot(
     val needsPairingRepair: Boolean = false,
     /** Today (local calendar day) from the phone archive, once it has timed rows for this station. */
     val todaySoFar: TodaySoFar? = null,
-)
+    /** A background worker or Collect all holds this device. The page waits, it never offers Reconnect. */
+    val heldInBackground: Boolean = false,
+) {
+    /** The status every station page reads, see [StationStatus]. */
+    val station: StationStatus get() = StationStatus(connection, reconnecting != null, sync.running, heldInBackground)
+}
 
 /** A device command Today can send. Each one is confirmed by the user first. */
 enum class TodayCommand { SET_TIME, FLUSH }
@@ -81,25 +86,19 @@ sealed interface TodayNotice {
 
     /** The link is doing something else, nothing was sent. */
     data object Busy : TodayNotice
-
-    /** The platform's own Smart Sync found a clock to fix and needs consent first. */
-    data class ClockConfirmationRequired(val quality: ClockQuality) : TodayNotice
 }
 
 /**
  * The port between the shared Today screen and a platform's live link. Android adapts
- * `DeviceConnectionRepository`, iOS adapts the companion state of `BluetoothCompanion` and
+ * `DeviceFacade`, iOS adapts the companion state of `BluetoothCompanion` and
  * `LanDiscovery`. Transport stays behind it, the screen only reads [snapshot] and calls the verbs.
  */
 interface TodaySource {
     val snapshot: StateFlow<TodaySnapshot>
     val notices: Flow<TodayNotice>
 
-    /**
-     * Smart Sync always uses automatic UTC. [mode] and [clockConfirmed] remain for adapter
-     * compatibility with older stored preferences and are not user-facing clock controls.
-     */
-    fun sync(mode: earth.walkthru.aqsync.data.sync.ClockSyncMode, clockConfirmed: Boolean)
+    /** Smart Sync. The sync engine sets the device clock automatically from this phone's UTC. */
+    fun sync()
 
     /** Internal automatic `SET_TIME` with this phone UTC. No manual control exposes this action. */
     fun setTime()
@@ -107,19 +106,17 @@ interface TodaySource {
     /** `FLUSH`, finalizing the buffered rows. Called only after the user confirmed it. */
     fun flush()
 
+    /** Stops this phone's running sync. Files already verified stay synced. */
+    fun stopSync()
+
     fun reconnect()
     fun disconnect()
 }
-
-/** The settings ClockSyncMode as the sync policy's own enum (same names). */
-fun ClockSyncMode.toPolicy(): earth.walkthru.aqsync.data.sync.ClockSyncMode =
-    earth.walkthru.aqsync.data.sync.ClockSyncMode.valueOf(name)
 
 /** The state Today draws: the snapshot, the detail level, and what follows from both. */
 data class TodayUiState(
     val snapshot: TodaySnapshot = TodaySnapshot(),
     val level: DetailLevel = DetailLevel.SIMPLE,
-    val clockSyncMode: ClockSyncMode = ClockSyncMode.ASK,
 ) {
     /** What this device can do, from `INFO` (shared mapping, no schema strings in the UI). */
     val capabilities: DeviceCapabilities get() = DeviceCapabilities.from(snapshot.info)
@@ -174,13 +171,64 @@ fun todayCards(state: TodayUiState): List<TodayCard> = buildList {
     }
 }
 
-/** Plain-language sync state, derived only from what the platform reports. */
-enum class SyncMood { RUNNING, CAUGHT_UP, SOME_FAILED, READY, EMPTY }
+/**
+ * Plain-language sync state, derived only from what the platform reports. A run that ended early
+ * is [STOPPED] (the user, another action or the OS ended it) or [FAILED], never caught up.
+ */
+enum class SyncMood { RUNNING, CAUGHT_UP, SOME_FAILED, STOPPED, FAILED, READY, EMPTY }
 
-fun syncMood(sync: SyncProgress, archive: TodayArchive): SyncMood = when {
-    sync.running -> SyncMood.RUNNING
-    sync.finishedAtEpochMs != null && sync.failures.isNotEmpty() -> SyncMood.SOME_FAILED
-    sync.finishedAtEpochMs != null -> SyncMood.CAUGHT_UP
-    archive.files > 0 -> SyncMood.READY
-    else -> SyncMood.EMPTY
+fun syncMood(sync: SyncProgress, archive: TodayArchive): SyncMood {
+    val reason = sync.endReason
+    return when {
+        sync.running -> SyncMood.RUNNING
+        reason == SyncEndReason.STOPPED || reason == SyncEndReason.INTERRUPTED -> SyncMood.STOPPED
+        reason != null && reason != SyncEndReason.COMPLETED -> SyncMood.FAILED
+        sync.finishedAtEpochMs != null && sync.failures.isNotEmpty() -> SyncMood.SOME_FAILED
+        sync.finishedAtEpochMs != null -> SyncMood.CAUGHT_UP
+        archive.files > 0 -> SyncMood.READY
+        else -> SyncMood.EMPTY
+    }
+}
+
+/** The one line Today shows for a run that ended early. Each one says what to do next. */
+enum class SyncEndLine {
+    STOPPED,
+    INTERRUPTED,
+    BLUETOOTH_OFF,
+    PERMISSION_MISSING,
+    PAIRING_REPAIR,
+
+    /** Simple wording for both Wi-Fi token endings. Detailed names which one. */
+    WIFI_ACCESS,
+    TOKEN_ROTATED,
+    TOKEN_REJECTED,
+    DEVICE_BUSY,
+    OUT_OF_RANGE,
+    UPDATE_FIRMWARE,
+    NO_SPACE,
+    STORAGE_ERROR,
+    LINK_LOST,
+    OTHER,
+}
+
+/** The line for a [SyncMood.STOPPED] or [SyncMood.FAILED] ending, or null for any other mood. */
+fun syncEndLine(sync: SyncProgress, level: DetailLevel): SyncEndLine? {
+    if (sync.running) return null
+    return when (sync.endReason) {
+        null, SyncEndReason.COMPLETED -> null
+        SyncEndReason.STOPPED -> SyncEndLine.STOPPED
+        SyncEndReason.INTERRUPTED -> SyncEndLine.INTERRUPTED
+        SyncEndReason.BLUETOOTH_OFF -> SyncEndLine.BLUETOOTH_OFF
+        SyncEndReason.PERMISSION_MISSING -> SyncEndLine.PERMISSION_MISSING
+        SyncEndReason.PAIRING_REPAIR -> SyncEndLine.PAIRING_REPAIR
+        SyncEndReason.TOKEN_ROTATED -> if (level.detailed) SyncEndLine.TOKEN_ROTATED else SyncEndLine.WIFI_ACCESS
+        SyncEndReason.TOKEN_REJECTED -> if (level.detailed) SyncEndLine.TOKEN_REJECTED else SyncEndLine.WIFI_ACCESS
+        SyncEndReason.DEVICE_BUSY -> SyncEndLine.DEVICE_BUSY
+        SyncEndReason.OUT_OF_RANGE -> SyncEndLine.OUT_OF_RANGE
+        SyncEndReason.UPDATE_FIRMWARE -> SyncEndLine.UPDATE_FIRMWARE
+        SyncEndReason.NO_SPACE -> SyncEndLine.NO_SPACE
+        SyncEndReason.STORAGE_ERROR -> SyncEndLine.STORAGE_ERROR
+        SyncEndReason.LINK_LOST -> SyncEndLine.LINK_LOST
+        SyncEndReason.OTHER -> SyncEndLine.OTHER
+    }
 }

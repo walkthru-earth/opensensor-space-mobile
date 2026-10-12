@@ -49,17 +49,10 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import earth.walkthru.aqsync.settings.ClockSyncMode
 import earth.walkthru.aqsync.settings.DetailLevel
 import earth.walkthru.aqsync.units.UnitSystem
 import earth.walkthru.opensensor.designsystem.FloatingControl
 import earth.walkthru.opensensor.settings.resources.Res
-import earth.walkthru.opensensor.settings.resources.clock_mode_ask
-import earth.walkthru.opensensor.settings.resources.clock_mode_ask_title
-import earth.walkthru.opensensor.settings.resources.clock_mode_automatic
-import earth.walkthru.opensensor.settings.resources.clock_mode_automatic_title
-import earth.walkthru.opensensor.settings.resources.clock_mode_never
-import earth.walkthru.opensensor.settings.resources.clock_mode_never_title
 import earth.walkthru.opensensor.settings.resources.info_privacy
 import earth.walkthru.opensensor.settings.resources.info_settings_body1
 import earth.walkthru.opensensor.settings.resources.info_settings_body2
@@ -346,18 +339,6 @@ internal fun levelCaption(level: DetailLevel): StringResource = when (level) {
     DetailLevel.SIMPLE -> Res.string.settings_level_simple
     DetailLevel.DETAILED -> Res.string.settings_level_detailed
     DetailLevel.DEVELOPER -> Res.string.settings_level_developer
-}
-
-internal fun clockLabel(mode: ClockSyncMode): StringResource = when (mode) {
-    ClockSyncMode.ASK -> Res.string.clock_mode_ask_title
-    ClockSyncMode.AUTOMATIC -> Res.string.clock_mode_automatic_title
-    ClockSyncMode.NEVER -> Res.string.clock_mode_never_title
-}
-
-internal fun clockCaption(mode: ClockSyncMode): StringResource = when (mode) {
-    ClockSyncMode.ASK -> Res.string.clock_mode_ask
-    ClockSyncMode.AUTOMATIC -> Res.string.clock_mode_automatic
-    ClockSyncMode.NEVER -> Res.string.clock_mode_never
 }
 
 internal fun unitLabel(system: UnitSystem): StringResource = when (system) {

@@ -16,8 +16,8 @@ sweeps Scratch at start, enforces the derived quota and never deletes Durable da
 `ByteReader` are `AutoCloseable`, open them with `use`. `sync/` holds the link session, the sync
 engine and, in `collection/`, the per-device `CollectionController` ([sync guide](../docs/sync-engine.md)). Android adopts the controller
 through `DeviceFacade`; iOS uses `IosLink` and `SensorSync` for link and engine adoption,
-and `SensorCollections` for one controller per device. Routing native entry points into it is
-tracked in [#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81).
+and `SensorCollections` for one controller per device, which every native sync entry point
+runs through ([#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81)).
 `settings/` owns shared DataStore preferences, keys, units and detail level, with the
 iOS Application Support path and one-time UserDefaults migration. See `docs/README.md` in the repo
 root for the relevant concern. No Android, Hilt, Room, `Context` or
@@ -31,7 +31,7 @@ root for the relevant concern. No Android, Hilt, Room, `Context` or
   a code branch or a schema string check in a screen. Today add metrics through
   `history/.../Metrics.kt` (`MetricSpec`), with column, unit, validity gate and
   an optional scale. A missing column produces no value. When `:core:model`
-  lands (W11, not started), families, capabilities, properties and scales move
+  lands (planned), families, capabilities, properties and scales move
   there. Read `docs/devices-and-discovery.md` first. New shared types use generic
   names (for example `Reading`, or a future `MetricCard`), never `Air*`.
 - Public discover data carries H3 cells, never coordinates. The publisher owns aggregation and
@@ -70,7 +70,7 @@ root for the relevant concern. No Android, Hilt, Room, `Context` or
   (a hand-declared variant, see `core/parquet/build.gradle.kts`). Inside `:core:parquet`, common
   tests read them with `fixtureBytes(path)` on both platforms.
   Test names in `commonTest` cannot contain commas or other characters Kotlin/Native rejects.
-  See `docs/ios-migration.md`.
+  See `docs/ios.md`.
 - Common code must compile for every declared target and cannot import Java, Android,
   Room, UIKit, or Apple framework APIs. Put platform behavior behind narrow interfaces
   constructed at app entry points; use `expect`/`actual` only for small seams where it

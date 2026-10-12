@@ -1,13 +1,11 @@
 package earth.walkthru.aqsync.ui.device
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -18,6 +16,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -27,29 +26,25 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import earth.walkthru.aqsync.R
-import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.ui.components.ConnectionBanner
-import earth.walkthru.aqsync.ui.components.DeviceSectionTabs
-import earth.walkthru.aqsync.ui.components.DeviceTab
-import earth.walkthru.aqsync.ui.components.TransportChip
 import earth.walkthru.aqsync.ui.device.cards.AutoSyncCard
 import earth.walkthru.aqsync.ui.device.cards.DeviceInfoCard
 import earth.walkthru.opensensor.designsystem.AppIcons
-import earth.walkthru.opensensor.designsystem.PillButton
 import earth.walkthru.opensensor.device.DeviceConfigAction
 import earth.walkthru.opensensor.device.DeviceConfigUiState
 import earth.walkthru.opensensor.device.LanAccess
 import earth.walkthru.opensensor.device.StickerScan
 import earth.walkthru.opensensor.device.deviceConfigItems
 import earth.walkthru.opensensor.device.sensorIdentityItem
+import earth.walkthru.opensensor.today.DeviceSectionTabs
+import earth.walkthru.opensensor.today.DeviceTab
+import earth.walkthru.opensensor.today.TransportChip
 
 /** Everything the Device screen can ask for. Device-changing ones are confirmed by the shared controller. */
 sealed interface DeviceAction {
     data object OpenToday : DeviceAction
     data object OpenHistory : DeviceAction
     data object OpenFiles : DeviceAction
-    data object OpenDebug : DeviceAction
-    data object OpenSettings : DeviceAction
     data object Disconnect : DeviceAction
     data object Reconnect : DeviceAction
     data object RefreshConfig : DeviceAction
@@ -95,7 +90,7 @@ fun DeviceScreen(
                         Column {
                             Text(stringResource(R.string.device_screen_title), style = MaterialTheme.typography.titleLarge)
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                TransportChip(state.transport)
+                                if (state.detailLevel.detailed) TransportChip(state.transport)
                                 Text(state.name ?: stringResource(R.string.device_unnamed), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
@@ -104,11 +99,12 @@ fun DeviceScreen(
                         IconButton(onClick = { onAction(DeviceAction.RefreshConfig) }, enabled = state.ready && state.isV2) {
                             Icon(AppIcons.Refresh, contentDescription = stringResource(R.string.device_refresh))
                         }
-                        if (state.detailLevel.developer) {
-                            IconButton(onClick = { onAction(DeviceAction.OpenDebug) }) { Icon(AppIcons.BugReport, contentDescription = stringResource(R.string.nav_debug)) }
+                        // Reconnect and Disconnect live only here, in the station header, as on Today.
+                        if (state.station.offersReconnect) {
+                            TextButton(onClick = { onAction(DeviceAction.Reconnect) }) { Text(stringResource(R.string.action_reconnect)) }
+                        } else {
+                            IconButton(onClick = { onAction(DeviceAction.Disconnect) }) { Icon(AppIcons.LinkOff, contentDescription = stringResource(R.string.nav_disconnect)) }
                         }
-                        IconButton(onClick = { onAction(DeviceAction.OpenSettings) }) { Icon(AppIcons.Settings, contentDescription = stringResource(R.string.nav_settings)) }
-                        IconButton(onClick = { onAction(DeviceAction.Disconnect) }) { Icon(AppIcons.LinkOff, contentDescription = stringResource(R.string.nav_disconnect)) }
                     },
                 )
                 DeviceSectionTabs(DeviceTab.DEVICE) {
@@ -124,13 +120,9 @@ fun DeviceScreen(
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(top = padding.calculateTopPadding())) {
-            if (!state.ready) {
-                Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-                    ConnectionBanner(state.connection, technical = state.detailLevel.developer)
-                    if (state.connection is ConnectionState.Failed || state.connection is ConnectionState.Disconnected) {
-                        Spacer(Modifier.height(8.dp))
-                        PillButton(stringResource(R.string.action_reconnect), onClick = { onAction(DeviceAction.Reconnect) }, modifier = Modifier.fillMaxWidth())
-                    }
+            if (state.station.showsBanner) {
+                Box(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                    ConnectionBanner(state.connection, technical = state.detailLevel.developer, heldInBackground = state.heldInBackground)
                 }
             }
             LazyColumn(

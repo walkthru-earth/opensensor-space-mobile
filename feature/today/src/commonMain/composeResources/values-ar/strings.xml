@@ -4,7 +4,6 @@
     <string name="today_station_short">المعرّف %1$s…</string>
     <string name="nav_devices">الأجهزة</string>
     <string name="nav_debug">تصحيح الأخطاء</string>
-    <string name="nav_settings">الإعدادات</string>
     <string name="nav_disconnect">قطع الاتصال</string>
     <string name="action_reconnect">إعادة الاتصال</string>
     <string name="tab_today">اليوم</string>
@@ -27,16 +26,11 @@
     <string name="conn_ready">متصل</string>
     <string name="conn_pairing_repair">يحتاج إقران Bluetooth إلى إصلاح. إذا أُعيد ضبط هذا المستشعر أو أُعيد تثبيت برنامجه الثابت، فانسَه في إعدادات Bluetooth في Android ثم أقرنه مجددًا. ملفاتك المؤرشفة محفوظة.</string>
     <string name="conn_failed">تعذّر الاتصال. اقترب وحاول مرة أخرى</string>
+    <string name="conn_held_background">تجري المزامنة في الخلفية. تتحدث هذه الصفحة عند انتهائها.</string>
     <string name="conn_link_lost">انقطع الاتصال. جارٍ إعادة الاتصال تلقائيًا…</string>
     <string name="conn_link_lost_detail">انقطع الاتصال (%1$s). جارٍ إعادة الاتصال، المحاولة %2$d من %3$d…</string>
     <string name="conn_bluetooth_settings">إعدادات Bluetooth</string>
-    <string name="set_time">اضبط الوقت من الهاتف</string>
-    <string name="set_time_confirm">يرسل وقت هذا الهاتف (%1$s). القراءات الجديدة فقط تحصل على تاريخ. القراءات السابقة تبقى كما هي.</string>
-    <string name="set_time_button">اضبط الوقت</string>
     <string name="action_cancel">إلغاء</string>
-    <string name="sync_clock_title">المزامنة الذكية تحتاج الوقت</string>
-    <string name="sync_clock_confirm">%1$s هل تُرسل وقت هذا الهاتف أولًا؟ الملفات الخام لا تُغيَّر أبدًا.</string>
-    <string name="sync_clock_button">اضبط الوقت وزامِن</string>
     <string name="action_not_now">ليس الآن</string>
     <string name="flush">إنهاء الصفوف المخزّنة مؤقتًا</string>
     <string name="flush_confirm">يكتب القراءات المنتظرة في الذاكرة إلى ملف قصير الآن، لتتمكن من مزامنتها.</string>
@@ -71,7 +65,6 @@
     <string name="now_snapshot_note">لقطة لمدة 10 ثوانٍ، وليست متوسطًا يوميًا.</string>
     <string name="info_now_body">لقطة مدتها 10 ثوانٍ من المستشعر. ليست مؤشر جودة الهواء ولا متوسط 24 ساعة، فاعتبرها إشارة تقريبية. الوجه والكلمة واللون كلها تُظهر درجة منظمة الصحة العالمية نفسها.</string>
     <string name="info_now_body_simple">لقطة مدتها 10 ثوانٍ من المستشعر وليست متوسطًا يوميًا، فاعتبرها إشارة تقريبية. الوجه والكلمة واللون كلها تُظهر حالة الهواء نفسها.</string>
-    <string name="now_no_reading">لا قراءة بعد</string>
     <string name="now_waiting">في انتظار قراءة…</string>
     <string name="now_sample_number">العيّنة %1$d</string>
     <string name="mood_fresh_advice">ضمن إرشاد منظمة الصحة العالمية. استمتع به.</string>
@@ -97,7 +90,6 @@
     <string name="pms_error_hint">يبلّغ المستشعر عن خطأ، لذا لا تُعرض أرقامه.</string>
     <string name="env_title">درجة الحرارة والرطوبة</string>
     <string name="env_unsupported">القراءات المباشرة تحتاج برنامجًا ثابتًا أحدث. الملفات المتزامنة لا تزال تعمل.</string>
-    <string name="today_title">اليوم</string>
     <string name="today_so_far">اليوم حتى الآن</string>
     <string name="today_none">لا قراءات مؤرخة اليوم بعد.</string>
     <string name="today_none_clock">لا قراءات مؤرخة بعد. اضبط وقت المستشعر ثم زامِن.</string>
@@ -168,6 +160,22 @@
     </plurals>
     <string name="sync_button_running">جارٍ المزامنة…</string>
     <string name="sync_button">زامِن الآن</string>
+    <string name="sync_end_stopped">توقفت المزامنة. الملفات المنسوخة حتى الآن محفوظة.</string>
+    <string name="sync_end_interrupted">توقفت المزامنة مؤقتًا أثناء إغلاق التطبيق. ستكمل عند المزامنة مرة أخرى.</string>
+    <string name="sync_end_bluetooth_off">توقفت المزامنة. شغّل البلوتوث ثم زامن مرة أخرى.</string>
+    <string name="sync_end_permission">توقفت المزامنة. اسمح لهذا التطبيق بالوصول إلى المستشعر من إعدادات الهاتف ثم زامن مرة أخرى.</string>
+    <string name="sync_end_pairing">توقفت المزامنة. أقرن المستشعر مرة أخرى من إعدادات البلوتوث.</string>
+    <string name="sync_end_wifi_access">توقفت المزامنة. اتصل عبر البلوتوث مرة واحدة ثم زامن مرة أخرى.</string>
+    <string name="sync_end_token_rotated">توقفت المزامنة. تغيّر رمز Wi-Fi. اتصل عبر البلوتوث مرة واحدة لجلب الرمز الجديد.</string>
+    <string name="sync_end_token_rejected">توقفت المزامنة. رفض المستشعر رمز Wi-Fi. اتصل عبر البلوتوث مرة واحدة لتجديده.</string>
+    <string name="sync_end_busy">توقفت المزامنة. المستشعر مشغول. حاول مرة أخرى قريبًا.</string>
+    <string name="sync_end_out_of_range">توقفت المزامنة. المستشعر بعيد. اقترب منه ثم زامن مرة أخرى.</string>
+    <string name="sync_end_update_firmware">توقفت المزامنة. حدّث البرنامج الثابت للمستشعر ثم زامن مرة أخرى.</string>
+    <string name="sync_end_no_space">توقفت المزامنة. لا توجد مساحة كافية على هذا الهاتف. أفرغ بعض المساحة ثم زامن مرة أخرى.</string>
+    <string name="sync_end_storage">توقفت المزامنة. تعذّر حفظ ملف على هذا الهاتف. زامن مرة أخرى للمحاولة من جديد.</string>
+    <string name="sync_end_link_lost">توقفت المزامنة. انقطع الاتصال. ستكمل المزامنة التالية من حيث توقفت هذه.</string>
+    <string name="sync_end_other">توقفت المزامنة. حاول مرة أخرى.</string>
+    <string name="sync_stop">إيقاف</string>
     <string name="batch_title">تقدير الدفعة، غير متحقَّق منه</string>
     <string name="batch_explain">%1$s ضرب الجسيمات الأكبر من 0.3 µm في كل 0.1 لتر. تبقى القراءة الخام هي القيمة الأساسية. لا يزال يحتاج مقارنة بجهاز مرجعي.</string>
     <string name="batch_value">%1$s µg/m³</string>

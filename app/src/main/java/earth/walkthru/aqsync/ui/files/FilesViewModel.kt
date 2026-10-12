@@ -9,17 +9,17 @@ import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
-import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.archive.ArchiveIndex
 import earth.walkthru.aqsync.archive.ArchiveStore
 import earth.walkthru.aqsync.archive.FileExportSpace
 import earth.walkthru.aqsync.archive.directoryEntries
 import earth.walkthru.aqsync.data.DeviceConnectionManager
+import earth.walkthru.aqsync.data.DeviceOwnership
 import earth.walkthru.aqsync.data.ManifestState
 import earth.walkthru.aqsync.data.ReconnectState
 import earth.walkthru.aqsync.data.SyncProgress
-import earth.walkthru.aqsync.data.background.AutoSyncScheduler
 import earth.walkthru.aqsync.data.ble.ConnectionState
+import earth.walkthru.aqsync.data.ble.StationStatus
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.history.ArchiveQueryResult
 import earth.walkthru.aqsync.data.history.DerivedStore
@@ -31,7 +31,6 @@ import earth.walkthru.aqsync.data.history.Metrics
 import earth.walkthru.aqsync.data.history.archiveQueryResults
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
-import earth.walkthru.aqsync.data.local.database.KnownDevice
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
 import earth.walkthru.aqsync.data.settings.AppSettings
 import earth.walkthru.aqsync.data.settings.DetailLevel
@@ -42,7 +41,6 @@ import earth.walkthru.opensensor.files.FileMetricsController
 import earth.walkthru.opensensor.files.FilesController
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -52,9 +50,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
 import java.io.File
 import javax.inject.Inject
 
@@ -66,20 +62,21 @@ import javax.inject.Inject
 @Immutable
 data class FilesUiState(
     val connection: ConnectionState = ConnectionState.Disconnected,
-    /** A transfer is running, for the background sync menu item. */
+    /** A transfer is running. */
     val syncRunning: Boolean = false,
     val reconnecting: ReconnectState? = null,
-    /** Auto-sync switch of the connected device (null: no session / unknown device). */
-    val autoSync: Boolean? = null,
-    /** A background sync job is queued or running right now. */
-    val backgroundSyncActive: Boolean = false,
+    /** A background worker or Collect all holds this device right now, see [StationStatus]. */
+    val heldInBackground: Boolean = false,
     /** Active pipe, for the top-bar chip (same source as Today / Device). */
     val transport: TransportKind? = null,
     /** Simple shows times, sizes and states in words. Detailed adds the chart and inspector, Developer file names and transfer internals. */
     val detailLevel: DetailLevel = DetailLevel.SIMPLE,
     /** "Chart by file": one column per archived file of the connected station (null while off). */
     val fileChart: FileChartState? = null,
-)
+) {
+    /** The status every station page reads, the same rule Today and Device use. */
+    val station: StationStatus get() = StationStatus(connection, reconnecting != null, syncRunning, heldInBackground)
+}
 
 /** The strip of per-file columns: the window shown, of how many files, for which metric. */
 @Immutable
@@ -130,7 +127,6 @@ class FilesViewModel @AssistedInject constructor(
     derived: DerivedStore,
     deriver: HistoryDeriver,
     quota: DerivedQuota,
-    private val autoSyncScheduler: AutoSyncScheduler,
     settings: AppSettings,
 ) : ViewModel() {
     private val repository = manager.controller(deviceAddress)
@@ -162,8 +158,7 @@ class FilesViewModel @AssistedInject constructor(
         holdDaily = { block -> quota.holding { block() } },
     )
 
-    private val localEvents = MutableSharedFlow<ScreenMessage>(extraBufferCapacity = 4)
-    val events: Flow<ScreenMessage> = merge(repository.events.map(ScreenMessage::Device), localEvents)
+    val events: Flow<ScreenMessage> = repository.events.map(ScreenMessage::Device)
 
     private val fileChartOn = MutableStateFlow(false)
     private val fileChartMetric = MutableStateFlow(Metrics.primary)
@@ -202,21 +197,19 @@ class FilesViewModel @AssistedInject constructor(
         repository.connectionState,
         repository.sync.map { it.running }.distinctUntilChanged(),
         repository.reconnecting,
-        repository.currentKnownDevice,
-        autoSyncScheduler.observeActive(),
         repository.activeTransport,
         settings.detailLevel,
         fileChart,
+        repository.ownership,
     ) { values ->
         FilesUiState(
             connection = values[0] as ConnectionState,
             syncRunning = values[1] as Boolean,
             reconnecting = values[2] as ReconnectState?,
-            autoSync = (values[3] as KnownDevice?)?.autoSync,
-            backgroundSyncActive = values[4] as Boolean,
-            transport = values[5] as TransportKind?,
-            detailLevel = values[6] as DetailLevel,
-            fileChart = values[7] as FileChartState?,
+            transport = values[3] as TransportKind?,
+            detailLevel = values[4] as DetailLevel,
+            fileChart = values[5] as FileChartState?,
+            heldInBackground = values[6] == DeviceOwnership.BACKGROUND,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FilesUiState())
 
@@ -248,28 +241,6 @@ class FilesViewModel @AssistedInject constructor(
     fun refresh() = repository.refreshManifest()
     fun syncAll() = repository.syncAll()
 
-    /** Quick toggle of the connected device's Auto-sync switch (same row the Device screen edits). */
-    fun setAutoSync(enabled: Boolean) {
-        val addr = repository.currentAddress ?: return
-        viewModelScope.launch {
-            repository.setAutoSync(addr, enabled)
-            localEvents.tryEmit(ScreenMessage.Text(if (enabled) context.getString(R.string.files_autosync_event_on, AutoSyncScheduler.PERIOD_MINUTES.toInt()) else context.getString(R.string.files_autosync_event_off)))
-        }
-    }
-
-    /**
-     * One expedited background run for the connected device, so the user can leave the app right
-     * away. The worker refuses to touch a device the app is connected to, so the current session is
-     * released first; the worker's own session then feeds the same progress state this screen shows.
-     */
-    fun syncNowInBackground() {
-        val addr = repository.currentAddress ?: return
-        viewModelScope.launch {
-            repository.disconnectNow()
-            autoSyncScheduler.syncNow(addr)
-            localEvents.tryEmit(ScreenMessage.Text(context.getString(R.string.files_bg_event)))
-        }
-    }
     fun syncOne(name: String) = repository.syncOne(name)
     fun cancelSync() = repository.cancelSync()
     fun disconnect() = repository.disconnect()

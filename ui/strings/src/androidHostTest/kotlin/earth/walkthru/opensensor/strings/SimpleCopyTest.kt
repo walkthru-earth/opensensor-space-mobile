@@ -7,7 +7,7 @@ import kotlin.test.fail
 
 /**
  * Simple speaks in moods. Its copy never names the guideline body, in any language, even though
- * the colours and moods still come from the WHO steps (docs/superpowers/specs/2026-10-12-stations-ux-design.md).
+ * the colours and moods still come from the WHO steps (docs/screens.md).
  */
 class SimpleCopyTest {
     private val banned = listOf(Regex("""\bWHO\b"""), Regex("منظمة الصحة"))

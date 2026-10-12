@@ -26,7 +26,7 @@ See [transports.md](transports.md).
 - **`NsdManager` needs two code paths.** `registerServiceInfoCallback` from API 34; API 31–33 only `resolveService`, which rejects concurrent calls (`FAILURE_ALREADY_ACTIVE`) → queue resolves.
 - **`BleTransport` left the state at `EnablingNotifications` after a runtime auth retry** (never back to `Ready`), which would keep the banner visible and every button disabled. Fixed structurally (not reproduced).
 - **A worker cannot answer a passkey dialog.** `allowBonding = false` + configurable connect timeout: the unattended path connects straight to the bonded address and treats "not bonded" as a failure to log, never a reason to `createBond()`.
-- **One flow for the transport chip.** The chip kept saying "Wi-Fi LAN" after a BLE reconnect because each screen derived the kind from the session object in its own eight-way `combine`. `DeviceConnectionRepository.activeTransport` is the single source.
+- **One flow for the transport chip.** The chip kept saying "Wi-Fi LAN" after a BLE reconnect because each screen derived the kind from the session object in its own eight-way `combine`. `DeviceFacade.activeTransport` is the single source.
 
 ## Background
 
@@ -57,7 +57,7 @@ See [data-model.md](data-model.md), [history-pipeline.md](history-pipeline.md).
 
 See [screens.md](screens.md).
 
-- **An iOS Wi-Fi discovery card needs visible connection and reading feedback.** Make the card and its Connect action respond consistently; show connecting progress, authenticated connection state, waiting for fresh data, and the sensor's unavailable/warming/error hint. Do not hide every state except a valid number. Clear the sensor's readings on disconnect and ignore late callbacks (`CompanionScreen.kt`, `CompanionState.kt`). LAN LIVE is an unsolicited push under the firmware contract; do not invent a live-read opcode to hide the initial wait.
+- **A sensor's connection and reading need visible feedback.** Show connecting progress, authenticated connection state, waiting for fresh data, and the sensor's unavailable, warming or error hint. Do not hide every state except a valid number. Clear the sensor's readings on disconnect and ignore late callbacks (`CompanionState.kt`). LAN LIVE is an unsolicited push under the firmware contract; do not invent a live-read opcode to hide the initial wait.
 - **The board speaks UTC everywhere; every date a person reads must be converted, and each screen is a separate place to forget.** The Hive path (`day=`), the file name (`data_HHMM_`), `event_time_utc_ns` and the daily derived files are all UTC by contract. The Today card (fixed 2026-09-18 02:00: showed yesterday), then the Files list (fixed later the same day: headers were the SD `day=` folder, so after 21:00 local everything sat under tomorrow) each needed their own fix. Rule: a `LocalDate` shown to the user comes from an `Instant` + `ZoneId.systemDefault()`, never from a path or name; keep the conversion in a pure object with `zone` as a parameter (`FileGrouping`, `Columns`) and pin `Asia/Riyadh` / `America/Los_Angeles` / `UTC` in its test. Keep the UTC folder visible as a subtitle so the archive on disk stays traceable.
 - **`String.uppercase()` is not unit-safe.** `"µ".uppercase()` is `"Μ"` (Greek capital mu) → "(MM)". `Eyebrow` has an `uppercase` flag; labels with units pass `false`.
 - **The first line chart failed on real data**: one 379 µg/m³ spike set the axis to 600 and flattened a normal day. Replaced by `Canvas` columns with `Columns.axisMax` (95th percentile + floor, capped spikes labelled).

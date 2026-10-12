@@ -48,23 +48,24 @@ private final class TaskFinish {
 final class AutoSync {
     /// The scheduled run, a `BGProcessingTask` (Info.plist `BGTaskSchedulerPermittedIdentifiers`).
     static let processingId = "earth.walkthru.opensensor.autosync"
-    /// "Sync now in background" on iOS 26 and later. Each request adds a unique suffix to this prefix,
-    /// which Info.plist permits as `earth.walkthru.opensensor.sync.*`.
+    /// The Collect all continued task on iOS 26 and later. Each pass adds a unique suffix to this
+    /// prefix, which Info.plist permits as `earth.walkthru.opensensor.sync.*`.
     static let continuedPrefix = "earth.walkthru.opensensor.sync"
     /// The summary notification. A new one replaces the last, and a tap opens My devices.
     nonisolated static let notificationThread = "autosync"
+    nonisolated static let pausedThread = "sync.paused"
 
     private let bluetooth: BluetoothCompanion
     private let lan: LanDiscovery
     private let devices: DevicesBridge
+    /// The shared collections, set at launch. Auto-sync skips a sensor that a run holds.
+    var runs: SensorCollections?
     private let logger = Logger(subsystem: "earth.walkthru.opensensor", category: "autosync")
     /// The raw UNAuthorizationStatus, refreshed when the app comes back and after the prompt.
     private var notificationStatus = UNAuthorizationStatus.notDetermined.rawValue
     private var progressTitle = "Syncing sensors"
     private var run: BackgroundRunHandle?
     private var lease: UIBackgroundTaskIdentifier = .invalid
-    /// The progress of a continued task, which iOS shows with a Cancel button.
-    private var progress: Progress?
     /// A Collect all pass, from its first step until its last one ended.
     private var collectRunning = false
     /// Steps ended and steps planned in the pass going now.
@@ -72,8 +73,16 @@ final class AutoSync {
     /// The continued task iOS took for this pass and its progress, once it launched.
     private var collectTask: BGTask?
     private var collectProgress: Progress?
-    /// True once iOS took a continued task for the pass going now, so it may run off screen.
+    /// True once iOS launched the continued task for the pass going now, so it may run off screen.
+    /// A submitted task that has not launched yet does not count.
     private(set) var collectAllContinues = false
+    /// The pass submitted its continued task and iOS has not launched it yet.
+    private var collectSubmitPending = false
+    /// No run is going.
+    private var idle: Bool { run == nil }
+    /// The user's Collect all pass keeps going when the app leaves, under its continued task or
+    /// one about to launch. Otherwise the pass ends with the screen.
+    var collectAllHeld: Bool { collectAllContinues || collectSubmitPending }
     private var retryAttempt: Int {
         get { UserDefaults.standard.integer(forKey: "autosync.retry.v1") }
         set { UserDefaults.standard.set(newValue, forKey: "autosync.retry.v1") }
@@ -82,8 +91,7 @@ final class AutoSync {
     private(set) lazy var settings: AutoSyncSettings = AutoSyncIosKt.autoSyncSettings(
         notificationStatus: { [weak self] in KotlinLong(value: Int64(self?.notificationStatus ?? 0)) },
         requestNotifications: { [weak self] done in self?.askNotifications(done: done) },
-        changed: { [weak self] in self?.settingsChanged() },
-        continuedTask: AutoSync.continuedAvailable
+        changed: { [weak self] in self?.settingsChanged() }
     )
 
     private lazy var bridge: BackgroundSyncBridge = AutoSyncIosKt.backgroundSyncBridge(
@@ -112,18 +120,11 @@ final class AutoSync {
         log: { [weak self] line in self?.logger.info("\(line, privacy: .private)") }
     )
 
-    static var continuedAvailable: Bool {
-        if #available(iOS 26, *) { return true }
-        return false
-    }
-
     init(bluetooth: BluetoothCompanion, lan: LanDiscovery, devices: DevicesBridge) {
         self.bluetooth = bluetooth
         self.lan = lan
         self.devices = devices
         bluetooth.onWake = { [weak self] id in self?.wake(id) }
-        bluetooth.onBackgroundProgress = { [weak self] done, total in self?.progressed(done: done, total: total) }
-        lan.onBackgroundProgress = { [weak self] done, total in self?.progressed(done: done, total: total) }
         devices.collectAllChanged = { [weak self] done, total in
             self?.collectAllChanged(done: Int(truncating: done), total: Int(truncating: total))
         }
@@ -141,7 +142,21 @@ final class AutoSync {
         bridge.progressTitle { [weak self] title in
             MainActor.assumeIsolated { self?.progressTitle = title }
         }
-        schedule(after: AutoSyncSchedule.shared.periodSeconds)
+        scheduleUnlessPending()
+    }
+
+    /// A launch keeps a request already waiting, so opening the app never pushes its start back.
+    private func scheduleUnlessPending() {
+        let id = Self.processingId
+        BGTaskScheduler.shared.getPendingTaskRequests { [weak self] requests in
+            let pending = requests.contains { $0.identifier == id }
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard let self, !pending || !self.hasSensors else { return }
+                    self.schedule(after: AutoSyncSchedule.shared.periodSeconds)
+                }
+            }
+        }
     }
 
     /// True when any switch is on, so launch may create the central manager for state restoration.
@@ -162,7 +177,7 @@ final class AutoSync {
     // MARK: Scheduled run
 
     private func runScheduled(_ task: BGTask) {
-        guard run == nil else {
+        guard idle else {
             // A wake or a user request is already running. Try again next period.
             schedule(after: AutoSyncSchedule.shared.periodSeconds)
             return task.setTaskCompleted(success: true)
@@ -235,7 +250,7 @@ final class AutoSync {
     /// A pending connect reached a sensor while the app was off screen. Its run gets a background
     /// time lease. A sensor that is not due, or a wake during another run, releases the link.
     private func wake(_ id: String) {
-        guard run == nil, settings.shouldWake(peripheral: id) else {
+        guard idle, settings.shouldWake(peripheral: id) else {
             bluetooth.releaseWaiting(id: id)
             return
         }
@@ -255,95 +270,6 @@ final class AutoSync {
         run = handle
     }
 
-    // MARK: Sync now in background
-
-    /// One sensor, switch on or off. iOS 26 and later show it as a continued task with a Cancel
-    /// button. Earlier releases, or a refused submit, run it under the background time lease the
-    /// app gets on leaving. True only when iOS took the continued task, so the screen can say the
-    /// user may leave. A run already going answers false and starts nothing.
-    func syncInBackground(_ id: String) -> Bool {
-        guard run == nil else { return false }
-        if #available(iOS 26, *), submitContinued(id) { return true }
-        beginLease()
-        let current = Ref<BackgroundRunHandle>()
-        let handle = bridge.runOne(id: id) { [weak self] summary in
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                self.clearRun(current.value)
-                self.post(summary)
-                self.endLease()
-            }
-        }
-        current.value = handle
-        run = handle
-        return false
-    }
-
-    /// Registers a handler for a fresh identifier, then submits it. Continued task registrations are
-    /// exempt from the launch time rule, and a unique suffix never registers the same id twice.
-    @available(iOS 26, *)
-    private func submitContinued(_ id: String) -> Bool {
-        let identifier = "\(Self.continuedPrefix).\(UUID().uuidString)"
-        let registered = BGTaskScheduler.shared.register(forTaskWithIdentifier: identifier, using: .main) {
-            [weak self] task in
-            MainActor.assumeIsolated {
-                guard let self, let continued = task as? BGContinuedProcessingTask else {
-                    return task.setTaskCompleted(success: false)
-                }
-                self.runContinued(continued, id: id)
-            }
-        }
-        guard registered else { return false }
-        let request = BGContinuedProcessingTaskRequest(
-            identifier: identifier, title: progressTitle, subtitle: bridge.sensorName(id: id))
-        // Start now or not at all. When iOS cannot start it, the lease takes over.
-        request.strategy = .fail
-        do {
-            try BGTaskScheduler.shared.submit(request)
-            return true
-        } catch {
-            logger.error("continued sync not started: \(error.localizedDescription, privacy: .public)")
-            return false
-        }
-    }
-
-    @available(iOS 26, *)
-    private func runContinued(_ task: BGContinuedProcessingTask, id: String) {
-        guard run == nil else { return task.setTaskCompleted(success: false) }
-        task.progress.totalUnitCount = 1
-        task.progress.completedUnitCount = 0
-        progress = task.progress
-        let finish = TaskFinish(task)
-        // Cancel in the system UI, or expiry. The step ends and a link it opened closes.
-        task.expirationHandler = { @Sendable in
-            DispatchQueue.main.async {
-                MainActor.assumeIsolated {
-                    guard !finish.isFinished else { return }
-                    self.cancelRun(finish.handle)
-                    finish.complete(success: false)
-                }
-            }
-        }
-        let handle = bridge.runOne(id: id) { [weak self] summary in
-            MainActor.assumeIsolated {
-                guard let self else { return finish.complete(success: false) }
-                guard !finish.isFinished else { return }
-                self.clearRun(finish.handle)
-                task.progress.completedUnitCount = task.progress.totalUnitCount
-                self.post(summary)
-                finish.complete(success: summary.failures == 0)
-            }
-        }
-        finish.handle = handle
-        run = handle
-    }
-
-    private func progressed(done: Int, total: Int) {
-        guard let progress else { return }
-        progress.totalUnitCount = Int64(max(total, 1))
-        progress.completedUnitCount = Int64(min(done, max(total, 1)))
-    }
-
     // MARK: Collect all
 
     /// A Collect all pass started, moved on or ended. On iOS 26 the user's pass submits one continued
@@ -352,6 +278,7 @@ final class AutoSync {
     private func collectAllChanged(done: Int, total: Int) {
         guard total > 0 else {
             collectRunning = false
+            collectSubmitPending = false
             collectCounts = (0, 0)
             setCollectOffScreen(false)
             if let task = collectTask {
@@ -364,9 +291,10 @@ final class AutoSync {
         collectCounts = (done, total)
         if !collectRunning {
             collectRunning = true
-            var continues = false
-            if #available(iOS 26, *) { continues = submitCollect() }
-            setCollectOffScreen(continues)
+            // Off screen only once iOS launched the task. Leaving before that keeps the step going
+            // under its own background time, as a run the user started.
+            if #available(iOS 26, *) { collectSubmitPending = submitCollect() }
+            setCollectOffScreen(false)
         }
         collectProgress?.totalUnitCount = Int64(total)
         collectProgress?.completedUnitCount = Int64(min(done, total))
@@ -378,7 +306,8 @@ final class AutoSync {
         lan.collectOffScreen = on
     }
 
-    /// Registers a fresh identifier for this pass and submits it, as for one sensor.
+    /// Registers a fresh identifier for this pass and submits it. Continued task registrations are
+    /// exempt from the launch time rule, and a unique suffix never registers the same id twice.
     @available(iOS 26, *)
     private func submitCollect() -> Bool {
         let identifier = "\(Self.continuedPrefix).\(UUID().uuidString)"
@@ -406,8 +335,10 @@ final class AutoSync {
     @available(iOS 26, *)
     private func runCollect(_ task: BGContinuedProcessingTask) {
         // The pass may have ended before iOS launched its task.
+        collectSubmitPending = false
         guard collectRunning, collectTask == nil else { return task.setTaskCompleted(success: !collectRunning) }
         collectTask = task
+        setCollectOffScreen(true)
         collectProgress = task.progress
         task.progress.totalUnitCount = Int64(max(collectCounts.total, 1))
         task.progress.completedUnitCount = Int64(collectCounts.done)
@@ -432,10 +363,11 @@ final class AutoSync {
 
     // MARK: Shared pieces
 
+    /// True while a run, a session or the user's work holds this sensor, so Auto-sync skips it.
     private func isOwned(_ id: String) -> Bool {
-        if bluetooth.isBusy(id: id) { return true }
+        if bluetooth.isHeld(id: id) { return true }
         guard let device = devices.deviceFor(peripheral: id) else { return false }
-        return lan.holds(device: device)
+        return runs?.isActive(device: device) == true || lan.hasSession(device: device)
     }
 
     /// Cancels the run going now. With [handle], only when that run is still the current one, so
@@ -444,7 +376,6 @@ final class AutoSync {
         if let handle, run !== handle { return }
         run?.cancel()
         run = nil
-        progress = nil
         bluetooth.cancelBackground()
         lan.cancelBackground()
         endLease()
@@ -454,7 +385,6 @@ final class AutoSync {
     private func clearRun(_ handle: BackgroundRunHandle?) {
         guard let handle, run === handle else { return }
         run = nil
-        progress = nil
     }
 
     private func beginLease() {
@@ -481,6 +411,24 @@ final class AutoSync {
         content.threadIdentifier = Self.notificationThread
         let request = UNNotificationRequest(identifier: "autosync.summary", content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request, withCompletionHandler: nil)
+    }
+
+    /// Tells the user that iOS paused a sync off screen. Never asks for permission, and stays quiet
+    /// unless notifications are already allowed. One notice replaces the last.
+    func notifyPaused(title: String, body: String) {
+        let allowed: [UNAuthorizationStatus] = [.authorized, .provisional, .ephemeral]
+        guard allowed.contains(where: { $0.rawValue == notificationStatus }) else { return }
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.threadIdentifier = Self.pausedThread
+        let request = UNNotificationRequest(identifier: "sync.paused", content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request, withCompletionHandler: nil)
+    }
+
+    /// Back on screen, the paused notice has served its purpose.
+    func clearPaused() {
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ["sync.paused"])
     }
 
     private func refreshNotificationStatus(then done: (@MainActor () -> Void)? = nil) {

@@ -112,7 +112,7 @@ PLAIN, RLE definition levels, LZ4_RAW, per-chunk `min_value`/`max_value` + exact
 `null_count` + `nan_count`, TYPE_ORDER column orders, `TIMESTAMP(NANOS, UTC)`, `sorting_columns`,
 row-group `file_offset`/`ordinal`, key/value metadata; since D11 also `BYTE_ARRAY`/`DOUBLE`,
 `GEOMETRY`/`GEOGRAPHY` logical types with `geospatial_statistics` (bbox + WKB type codes) and the
-`geo` key. Used by `DailyDerivedBuilder` ([history-pipeline.md](history-pipeline.md#derived-daily-parquet-dailyderivedbuilder)).
+`geo` key. Used by `DailyDerivedBuilder` ([history-pipeline.md](history-pipeline.md#derived-daily-parquet-dailyparquetbuilder)).
 Output is accepted by PyArrow 25 and DuckDB 1.5.5 (`tools/validate_parquet_samples.py`: every
 statistic matches the values, `TIMESTAMPTZ` read, range pruning, `time_bucket`).
 

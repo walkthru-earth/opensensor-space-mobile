@@ -140,6 +140,31 @@ class DevicesBridgeTest {
         assertTrue(IosKnown.active(null, false, false, 0, 0, null, emptyMap()).isEmpty())
     }
 
+    @Test fun activeLinksShowReconnectingFailedAndBackgroundPhases() {
+        val reconnecting = IosKnown.active(null, false, true, 2, 5, "Kitchen", emptyMap(), reconnectingId = a, bluetoothBackground = true).single()
+        assertEquals(LinkPhase.RECONNECTING, reconnecting.phase)
+        assertTrue(reconnecting.collecting, "the run goes on while the link is dialled again")
+        assertTrue(reconnecting.background)
+        assertEquals(2, reconnecting.filesDone)
+        val back = IosKnown.active(a, true, true, 3, 5, "Kitchen", emptyMap()).single()
+        assertEquals(LinkPhase.CONNECTED, back.phase)
+        assertFalse(back.background)
+        val failed = IosKnown.active(null, false, false, 0, 0, "Kitchen", emptyMap(), failedId = a).single()
+        assertEquals(LinkPhase.FAILED, failed.phase)
+        assertFalse(failed.collecting)
+        assertEquals(LinkPhase.CONNECTING, IosKnown.active(a, false, false, 0, 0, null, emptyMap(), failedId = a).single().phase)
+        val sessions = mapOf(
+            "aq-p" to LanSessionState(connected = false, busy = true, message = UiText.None, filesDone = 1, filesTotal = 3, bytesDone = 0),
+            "aq-q" to LanSessionState(connected = true, busy = true, message = UiText.None, filesDone = 0, filesTotal = 2, bytesDone = 0),
+        )
+        val wifi = IosKnown.active(null, false, false, 0, 0, null, sessions, lanPaused = setOf("aq-p"), lanBackground = setOf("aq-q"))
+        assertEquals(LinkPhase.RECONNECTING, wifi[0].phase)
+        assertTrue(wifi[0].collecting)
+        assertFalse(wifi[0].background)
+        assertEquals(LinkPhase.CONNECTED, wifi[1].phase)
+        assertTrue(wifi[1].background)
+    }
+
     @Test fun onlyPeripheralIdsOpenOverBluetooth() {
         assertTrue(IosKnown.isPeripheral(a))
         assertFalse(IosKnown.isPeripheral("wifi:aq-b"))
@@ -202,6 +227,52 @@ class DevicesBridgeTest {
         bridge.cancelCollectAll()
         bridge.collectFinished(b, ok = false)
         assertEquals(3, calls.collected.size, "cancel drops the rest")
+    }
+
+    @Test fun aUserActionOnASensorOfThePassStopsItBeforeItRuns() {
+        val state = CompanionState()
+        val calls = Calls()
+        val bridge = bridge(state = state, calls = calls)
+        bridge.sensorOpened(a, "A", "st-a", "aabbccddeeff")
+        bridge.sensorOpened(b, "B", "st-b", "112233445566")
+        val seen = mutableListOf<String>()
+        val sync = bridge.userFirst({ id: String -> seen += id })
+        val oneFile = bridge.userFirst { id: String, _: String -> seen += id }
+
+        bridge.startCollectAll()
+        assertEquals(1, calls.collected.size)
+        sync(b)
+        assertEquals(listOf(b), seen, "the user action still runs")
+        bridge.collectFinished(calls.collected.single().first, ok = true)
+        assertEquals(1, calls.collected.size, "the pass starts no further step")
+        assertTrue(!bridge.collectAllRunning, "the pass ended")
+
+        bridge.startCollectAll()
+        oneFile(a, "f.parquet")
+        bridge.collectFinished(calls.collected.last().first, ok = false)
+        assertEquals(2, calls.collected.size, "a single file sync stops the pass too")
+        assertEquals(listOf(b, a), seen)
+    }
+
+    @Test fun aUserActionOnAnotherSensorLeavesThePassGoing() {
+        val state = CompanionState()
+        val calls = Calls()
+        val bridge = bridge(state = state, calls = calls)
+        bridge.sensorOpened(a, "A", "st-a", "aabbccddeeff")
+        bridge.sensorOpened(b, "B", "st-b", "112233445566")
+        val other = "33333333-3333-3333-3333-333333333333"
+        val seen = mutableListOf<String>()
+        val sync = bridge.userFirst({ id: String -> seen += id })
+        val open = bridge.userFirst({ id: String -> seen += id }, takesBluetooth = true)
+
+        bridge.startCollectAll()
+        sync(other)
+        assertEquals(listOf(other), seen)
+        assertTrue(bridge.collectAllRunning, "a sensor outside the pass leaves it going")
+        open(other)
+        bridge.collectFinished(calls.collected.single().first, ok = false)
+        assertEquals(1, calls.collected.size, "an open stops a pass on Bluetooth, no further step")
+        assertTrue(!bridge.collectAllRunning)
     }
 
     @Test fun collectAllSkipsTheOpenLink() {

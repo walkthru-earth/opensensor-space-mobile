@@ -99,6 +99,6 @@ class TabNavigator(
     }
 
     companion object {
-        fun isDeviceSection(key: NavKey): Boolean = key is TodayKey || key is HistoryKey || key is FilesKey || key is DeviceKey || key is DeviceSettingsKey
+        fun isDeviceSection(key: NavKey): Boolean = key is TodayKey || key is HistoryKey || key is FilesKey || key is DeviceKey
     }
 }

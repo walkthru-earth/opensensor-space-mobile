@@ -16,7 +16,7 @@ struct LanReply: Sendable {
     var refusal: LanRefusal = .none
 }
 
-/// A frame received in place of HELLO. Only `tokenRejected` (ERROR 14 or BYE auth-failed) drops the
+/// A frame received in place of HELLO. Only `tokenRejected` (ERROR 14, BYE auth-failed or token-rotated) drops the
 /// stored token. `peerClosed` is a BYE without an auth verdict and keeps it, like a bare close.
 enum LanRefusal: Sendable {
     case none, tokenRejected, busy, peerClosed, invalid

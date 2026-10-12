@@ -171,7 +171,6 @@ import earth.walkthru.opensensor.device.resources.wifi_passphrase_label
 import earth.walkthru.opensensor.device.resources.wifi_psk_open
 import earth.walkthru.opensensor.device.resources.wifi_psk_storage
 import earth.walkthru.opensensor.device.resources.wifi_psk_stored
-import earth.walkthru.opensensor.device.resources.wifi_refresh
 import earth.walkthru.opensensor.device.resources.wifi_rssi
 import earth.walkthru.opensensor.device.resources.wifi_save_connect
 import earth.walkthru.opensensor.device.resources.wifi_scan
@@ -428,7 +427,7 @@ fun LanCard(
             if (state.overBle) {
                 OutlinePillButton(stringResource(if (hasToken) Res.string.lan_fetch_again else Res.string.lan_fetch), onClick = onFetchToken, enabled = state.canEdit)
             } else {
-                OutlinePillButton(stringResource(Res.string.lan_reconnect_ble), onClick = onReconnectBle, enabled = state.ready && !snapshot.busy)
+                OutlinePillButton(stringResource(Res.string.lan_reconnect_ble), onClick = onReconnectBle, enabled = state.ready && !snapshot.busy && !snapshot.heldInBackground)
             }
             if (level.detailed) OutlinePillButton(stringResource(Res.string.lan_rotate), onClick = onRotateToken, enabled = state.canDisrupt)
         }
@@ -448,7 +447,6 @@ fun WifiCard(
     onScan: () -> Unit,
     onClearScan: () -> Unit,
     onJoin: (WifiJoin) -> Unit,
-    onRefresh: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val snapshot = state.snapshot
@@ -519,10 +517,7 @@ fun WifiCard(
         }
 
         Spacer(Modifier.height(12.dp))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinePillButton(stringResource(Res.string.wifi_scan), onClick = onScan, enabled = state.canEdit && scan !is WifiScanState.Scanning)
-            OutlinePillButton(stringResource(Res.string.wifi_refresh), onClick = onRefresh, enabled = state.ready && state.isV2)
-        }
+        OutlinePillButton(stringResource(Res.string.wifi_scan), onClick = onScan, enabled = state.canEdit && scan !is WifiScanState.Scanning)
         if (snapshot.transport == TransportKind.LAN) InfoNote(stringResource(Res.string.wifi_over_lan))
 
         when (scan) {

@@ -17,13 +17,6 @@
     <string name="settings_level_detailed">Adds every measurement and file details.</string>
     <string name="settings_level_developer">Adds identifiers and the Debug screen.</string>
 
-    <string name="settings_clock">Smart Sync clock</string>
-    <string name="clock_mode_ask_title">Ask first</string>
-    <string name="clock_mode_automatic_title">Automatic</string>
-    <string name="clock_mode_never_title">Never</string>
-    <string name="clock_mode_ask">Ask before sending this phone’s time.</string>
-    <string name="clock_mode_automatic">Send this phone’s time when the sensor clock is missing.</string>
-    <string name="clock_mode_never">Only copy files. You still see a warning for undated readings.</string>
 
     <string name="settings_units">Units</string>
     <string name="units_auto">Automatic</string>

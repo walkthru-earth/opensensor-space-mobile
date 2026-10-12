@@ -11,23 +11,19 @@ user lands on a public H3 discover map (sample data until the S3 and source.coop
 then pairs and collects their own devices over BLE or LAN into a verified local archive. Simple
 screens explain readings in plain words. Technical detail lives behind the Detailed and
 Developer levels. Android and iOS share rules, sync and design. Read
-[devices-and-discovery.md](devices-and-discovery.md), [cross-platform-guide.md](cross-platform-guide.md)
-and [production-readiness-plan.md](production-readiness-plan.md) before planning new work. Use [architecture.md](architecture.md), [sync-engine.md](sync-engine.md) and
-[ios-migration.md](ios-migration.md) for current source ownership. Dated audits and plan
-wave tables describe their original revision, not current implementation status.
+[devices-and-discovery.md](devices-and-discovery.md) and [cross-platform-guide.md](cross-platform-guide.md)
+before planning new work. Use [architecture.md](architecture.md), [sync-engine.md](sync-engine.md) and
+[ios.md](ios.md) for current source ownership.
 
 ## Routing table
 
 | I need to… | Read | Then open the code in |
 | --- | --- | --- |
 | Know what is verified on Android, iOS simulator, and real devices | [status.md](status.md) | `../aq-parquet/docs/boards/*/bench-verified.md` |
-| Keep design and sync behaviour the same on iOS and Android, add a sensor family or transport | [cross-platform-guide.md](cross-platform-guide.md) | `core/*/src/commonMain/`, `ios/App/`, `app/` |
+| Keep design and sync behaviour the same on iOS and Android, see what still differs and why, add a sensor family or transport | [cross-platform-guide.md](cross-platform-guide.md) | `core/*/src/commonMain/`, `ios/App/`, `app/` |
 | Understand the product direction, device families, the public H3 discover map and sharing rules | [devices-and-discovery.md](devices-and-discovery.md) | `core/publicfeed/`, `feature/discover/` |
-| See the Android and iOS drift audit and the parity plan | [platform-parity-plan.md](platform-parity-plan.md), [parity-audit/](parity-audit/) | every module |
-| See what still differs between Android and iOS, and why | [platform-differences.md](platform-differences.md), [parity-decisions.md](parity-decisions.md) | `app/`, `ios/App/` |
-| See the production refactor plan and its workstreams | [production-readiness-plan.md](production-readiness-plan.md) | every module |
-| Understand the opensensor.space rebrand, concurrent multi-device collection and reset/reflash recovery | [opensensor-space.md](opensensor-space.md) (implementation and remaining qualification) | `data/DeviceFacade.kt`, `data/DeviceLinkOwner.kt`, `data/background/`, `core/sync/`, `ui/`; new firmware owner `../aq-parquet/docs/shared/` |
-| Build or extend the iOS app and shared Kotlin core | [ios-migration.md](ios-migration.md), `../ios/AGENTS.md` | `core/*/src/commonMain/`, `ios/` |
+| Know which values identify a sensor and how the app recovers after a reset or reflash | [device-identity.md](device-identity.md) | `data/DeviceLinkOwner.kt`, `data/ble/`, `data/local/database/` |
+| Build or extend the iOS app and shared Kotlin core | [ios.md](ios.md), `../ios/AGENTS.md` | `core/*/src/commonMain/`, `ios/` |
 | Understand modules, layers, who depends on whom, "what a change touches" | [architecture.md](architecture.md) | `core/*/build.gradle.kts`, `app/build.gradle.kts` |
 | Change a screen, the nav graph, detail levels | [screens.md](screens.md) | `app/…/ui/`, `data/settings/AppSettings.kt` |
 | Permissions, privacy manifest, Play Data safety and App Store label | [store-compliance.md](store-compliance.md) | `app/src/main/AndroidManifest.xml`, `ui/permissions/`, `ios/App/` |
@@ -42,8 +38,6 @@ wave tables describe their original revision, not current implementation status.
 | Touch the Parquet reader/writer, GeoParquet, codecs, fixtures, oracles | [parquet.md](parquet.md) | `core/parquet/`, `tools/*.py` |
 | Build, sign, release, run hooks/CI, use the fake device | [build-and-release.md](build-and-release.md) | `tools/`, `.github/workflows/`, `data/fake/` |
 | Avoid a mistake that was already made | [lessons-learned.md](lessons-learned.md) | (grouped by the concern above) |
-| The long-form evaluation: history UX, data layer, iOS parity, D1–D11 (its location section is superseded by H3 cells) | [history-ux-and-data-layer.md](history-ux-and-data-layer.md) | — |
-| What the AirGradient Android app does differently, and verdicts | [review-airgradient-android.md](review-airgradient-android.md) | — |
 
 Rules (non-negotiables and AI delegation guidance) live in [`../AGENTS.md`](../AGENTS.md).
 The iOS app boundary is documented in [`../ios/AGENTS.md`](../ios/AGENTS.md). The protocol

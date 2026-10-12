@@ -2,9 +2,9 @@
 
 **Scope:** everything between a verified file in the archive and a coloured column on screen: the file index, the metric registry, aggregation tiers, the derived daily Parquet, time estimation for unsynced boots, the friendly layer, chart binning.
 **Code (pure, `:core:history` `commonMain`, JVM and iOS since W8):** `Metrics.kt`, `Aggregation.kt` (`Resolution`, `Aggregator`, `Bucket`), `TimeEstimate.kt`, `Columns.kt`, `AirMood.kt` (+ `NowReading`), `HistoryModel.kt` (`HistoryRange`, `HistorySeries`, `HistoryColumn`), `HistoryWindow.kt`, `FileSummary.kt`, `ParquetIndexer.kt`.
-**Code (`:app`):** `data/history/HistoryIndexer.kt`, `HistoryDeriver.kt`, `DailyDerived.kt` (`DailyDerivedBuilder`, `DerivedStore`), `HistoryRepository.kt`; `ui/history/*`, `ui/device/NowCard.kt`, `ui/files/FileChartCard.kt`.
+**Code (`:app`):** `data/history/HistoryIndexer.kt`, `HistoryDeriver.kt`, `DailyDerived.kt` (`DailyDerivedBuilder`, `DerivedStore`), `HistoryRepository.kt`; `ui/history/*`, `ui/files/FileChartCard.kt`, with the shared day builder in `core/history` (`DailyParquetBuilder`).
 **Tests:** `AggregationTest`, `TimeEstimateTest`, `ColumnsTest`, `AirMoodTest`, `FileSummaryTest`, `ParquetIndexerTest`, `RealArchiveTest` (all 766 real files when the firmware repo is a sibling); `HistoryIndexerTest`, `HistoryDeriverTest`, `HistoryRepositoryTest`.
-**Related:** [parquet.md](parquet.md) (the reader/writer underneath), [data-model.md](data-model.md) (the tables), [screens.md](screens.md) (what is drawn). The long-form evaluation is [history-ux-and-data-layer.md](history-ux-and-data-layer.md).
+**Related:** [parquet.md](parquet.md) (the reader/writer underneath), [data-model.md](data-model.md) (the tables), [screens.md](screens.md) (what is drawn).
 
 ## Flow
 
@@ -41,7 +41,7 @@ Derived from the **file**, never its name: rows, row groups, `schema_version`, `
 
 ## Metric registry
 
-**A new sensor is a registry entry, not code.** (W11 generalizes this into device families in `:core:model`, see [devices-and-discovery.md](devices-and-discovery.md).) Every quantity is a `MetricSpec(id, column, label,
+**A new sensor is a registry entry, not code.** (A planned `:core:model` generalizes this into device families, see [devices-and-discovery.md](devices-and-discovery.md).) Every quantity is a `MetricSpec(id, column, label,
 unit, kind, gate, healthScale, chartable, envelope, axisFloor, settleSeconds)`. Tiers, daily files, the
 History picker (`Metrics.chartable`) and the charts iterate the registry and never name a column.
 A spec whose column a file lacks yields **no values, never zeros**, so the registry may be ahead of
@@ -223,7 +223,7 @@ the user pages back, and opens on the last local day with readings.
 | Current station | the known device's station | the archived station with the latest reading |
 | Chips | the device's authenticated station epochs | every archived station, oldest latest reading first |
 | Index repair | `HistoryIndexer.backfillAll` once per process from `AqSyncApplication`, and after each sync | `ArchiveIndexRepair.repairWhenWaiting` from `IosArchive.startIndexRepair`, at launch and whenever a receipt waits for its index. Changes during a pass are conflated, and passes repeat until no record is waiting |
-| Header | device section tabs and the link chip | a back arrow, opened from a History button on My devices or the device page |
+| Header | device section tabs and the link chip | a back arrow, opened from the History button on My devices |
 
 Repair writes only its own columns. It merges the index and estimate columns onto the latest
 record with `ArchiveIndex.update`, so a fingerprint the engine fills during a pass survives.

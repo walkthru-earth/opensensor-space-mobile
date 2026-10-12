@@ -4,12 +4,16 @@ import earth.walkthru.aqsync.archive.ArchiveIndex
 import earth.walkthru.aqsync.archive.ArchiveStore
 import earth.walkthru.aqsync.archive.IosArchiveStore
 import earth.walkthru.aqsync.archive.ReceiptArchiveIndex
+import earth.walkthru.aqsync.collection.CollectionFailure
 import earth.walkthru.aqsync.collection.LinkPreference
+import earth.walkthru.aqsync.collection.SyncEndReason
+import earth.walkthru.aqsync.collection.endReason
 import earth.walkthru.aqsync.data.ble.AuthFailedException
 import earth.walkthru.aqsync.data.ble.DeviceBusyException
 import earth.walkthru.aqsync.data.ble.DeviceErrorException
 import earth.walkthru.aqsync.data.ble.DeviceSession
 import earth.walkthru.aqsync.data.ble.TransportException
+import earth.walkthru.aqsync.data.ble.TransportUnavailableException
 import earth.walkthru.aqsync.data.sync.ArchiveCollector
 import earth.walkthru.aqsync.data.sync.CollectionProgress
 import earth.walkthru.aqsync.data.sync.CollectionSummary
@@ -18,6 +22,9 @@ import earth.walkthru.aqsync.data.sync.FileProblem
 import earth.walkthru.aqsync.data.sync.InsufficientSpaceException
 import earth.walkthru.aqsync.data.sync.SyncEngine
 import earth.walkthru.aqsync.data.sync.WriterLeases
+import earth.walkthru.aqsync.link.DisconnectCause
+import earth.walkthru.aqsync.link.LinkClosedException
+import earth.walkthru.aqsync.link.LinkTimeoutException
 import earth.walkthru.aqsync.storage.IosStorageBudget
 import earth.walkthru.aqsync.storage.StorageBudget
 import earth.walkthru.aqsync.storage.StorageRole
@@ -39,6 +46,7 @@ import platform.Foundation.NSLock
 import platform.Foundation.NSLog
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 
 /** Stops one sync. Safe from any thread and more than once. */
@@ -54,9 +62,10 @@ class SyncHandle internal constructor(private val stop: () -> Unit) {
  * The Swift-facing runner for the shared engine. It owns the archive store, the receipt index and
  * the [ArchiveCollector], so LAN and Bluetooth save into the same archive under the same rules.
  *
- * Make one per app and call [start] on the main thread. Work runs off the main thread on a lease of
- * the [IosLink]. Every callback arrives on the main thread, `progress` at most four times a second
- * and in order, `finished` exactly once, last. A station syncs over one link at a time, so a second
+ * Make one per app. Swift syncs through [collections] and sends commands through [command]. The
+ * direct single-link [start] is internal, for host tests of the runner. Work runs off the main
+ * thread on a lease of the [IosLink]. Every callback arrives on the main thread, `progress` at
+ * most four times a second and in order, `finished` exactly once, last. A station syncs over one link at a time, so a second
  * physical link to the same station (Bluetooth and Wi-Fi) waits its turn. The runner maintains UTC
  * if needed, then lists, opens, reads and closes files. It never asks the sensor to delete, rename
  * or rewrite one.
@@ -90,8 +99,7 @@ class SensorSync internal constructor(
      * Collects every file of [station] that this phone lacks over [link]. [device] is the hardware
      * id recorded with each file. [maxRead] is the sensor's advertised read window.
      */
-    @OptIn(DelicateCoroutinesApi::class)
-    fun start(
+    internal fun start(
         link: IosLink,
         station: String,
         device: String,
@@ -100,9 +108,9 @@ class SensorSync internal constructor(
         finished: (SyncResult) -> Unit,
     ): SyncHandle = startSelected(link, station, device, maxRead, null, progress, finished)
 
-    /** One exact listed file for Files retry, with the same verification and station writer lock. */
+    /** One exact listed file, with the same verification and station writer lock. */
     @OptIn(DelicateCoroutinesApi::class)
-    fun startSelected(
+    internal fun startSelected(
         link: IosLink,
         station: String,
         device: String,
@@ -167,9 +175,11 @@ class SensorSync internal constructor(
             } catch (e: InsufficientSpaceException) {
                 // Refused before any OPEN, or a full disk mid-run. Partials stay for resume.
                 syncLog("sync refused, ${e.available} bytes free of ${e.needed}")
-                partialResult(SyncEnd.STORAGE_FAILED, listed, outcomes)
+                partialResult(SyncEnd.STORAGE_FAILED, listed, outcomes, SyncEndReason.NO_SPACE)
             } catch (e: TransportException) {
-                partialResult(SyncEnd.LINK_LOST, listed, outcomes)
+                // Keep the typed cause, so a radio that is off or a rotated token is not worded as a lost link.
+                val failure = CollectionFailure.Link(e.disconnectCause())
+                partialResult(failure.syncEnd(), listed, outcomes, failure.endReason())
             } catch (e: Exception) {
                 // A protocol fault, or the archive failing outside one file. The class only, a message could carry config text.
                 syncLog("sync ended, ${e::class.simpleName}")
@@ -268,11 +278,40 @@ class SensorSync internal constructor(
      * The first call creates the controllers and every later call returns the same instance, so the
      * per-device busy guard and the run permits hold app wide. Later closures are ignored.
      */
-    fun collections(linkFor: (String) -> IosLink?, dial: (String, LinkPreference, (Boolean) -> Unit) -> Unit): SensorCollections {
+    fun collections(linkFor: (String) -> IosLink?, dial: (String, LinkPreference, (DialResult) -> Unit) -> Unit): SensorCollections {
         lock.lock()
         try {
             return shared ?: SensorCollections(this, IosLinkProvider(linkFor, dial), recordClockAnchor, work, callbacks, progressInterval = progressInterval)
                 .also { shared = it }
+        } finally {
+            lock.unlock()
+        }
+    }
+
+    /**
+     * The app's collections (#81). [pick] returns Swift's open link for a device and transport, on
+     * the main thread. [dial] opens one as above. [protect] runs on the main thread when a run starts,
+     * with the device, the run id and whether it is unattended, and returns false when iOS gives the
+     * run no time to finish, which refuses it. [unprotect] runs on the main thread once that run
+     * handed its link back, before its `finished`. The first call of either overload wins.
+     */
+    fun collections(
+        pick: (String, LinkPreference) -> IosLink?,
+        dial: (String, LinkPreference, (DialResult) -> Unit) -> Unit,
+        protect: (String, Long, Boolean) -> Boolean,
+        unprotect: (Long) -> Unit,
+    ): SensorCollections {
+        lock.lock()
+        try {
+            return shared ?: SensorCollections(
+                this,
+                IosLinkProvider({ null }, 20.seconds, Dispatchers.Main, dial, pick = pick),
+                recordClockAnchor,
+                work,
+                callbacks,
+                keepAlive = IosKeepAlive(protect, unprotect, callbacks),
+                progressInterval = progressInterval,
+            ).also { shared = it }
         } finally {
             lock.unlock()
         }
@@ -318,10 +357,32 @@ internal fun MutableMap<String, FileOutcome>.record(outcome: FileOutcome) {
 }
 
 /** A run that ended before its summary. [listed] files were listed and the outcomes are real. */
-internal fun partialResult(end: SyncEnd, listed: Int, outcomes: Map<String, FileOutcome>): SyncResult {
+internal fun partialResult(end: SyncEnd, listed: Int, outcomes: Map<String, FileOutcome>, reason: SyncEndReason = end.reason): SyncResult {
     val saved = outcomes.values.count { it is FileOutcome.Synced && !it.alreadyArchived }
     val failed = outcomes.values.count { it !is FileOutcome.Synced }
-    return SyncResult(end, listed, saved, failed)
+    return SyncResult(end, listed, saved, failed, endReason = reason)
+}
+
+/** The typed cause a transport failure carries, as the shared controller classifies it. */
+internal fun TransportException.disconnectCause(): DisconnectCause = when (this) {
+    is LinkClosedException -> disconnectCause
+    is LinkTimeoutException -> timeout
+    is TransportUnavailableException -> DisconnectCause.Unavailable(kind)
+    else -> DisconnectCause.LocalAbort(gattStatus = gattStatus)
+}
+
+/** The coarse ending the native adapters branch on. The shared [endReason] carries the detail. */
+internal fun CollectionFailure.syncEnd(): SyncEnd = when (this) {
+    is CollectionFailure.Link -> when (cause) {
+        is DisconnectCause.Auth -> SyncEnd.AUTH_FAILED
+        DisconnectCause.Busy -> SyncEnd.BUSY
+        is DisconnectCause.Deliberate -> SyncEnd.STOPPED
+        else -> SyncEnd.LINK_LOST
+    }
+    is CollectionFailure.Storage -> SyncEnd.STORAGE_FAILED
+    // The OS ended the time off screen. Nothing is wrong with the link or the files, and the run resumes.
+    is CollectionFailure.KeepAliveRefused -> SyncEnd.STOPPED
+    is CollectionFailure.Device, is CollectionFailure.Unexpected -> SyncEnd.FAILED
 }
 
 /** Unsafe names and local conflicts are decided by the plan and never downloaded. */

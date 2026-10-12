@@ -62,7 +62,6 @@ import earth.walkthru.opensensor.designsystem.StatusDot
 import earth.walkthru.opensensor.designsystem.TickingText
 import earth.walkthru.opensensor.designsystem.WarningNote
 import earth.walkthru.opensensor.designsystem.listSeparator
-import earth.walkthru.opensensor.designsystem.moodWord
 import earth.walkthru.opensensor.designsystem.nowEpochMillis
 import earth.walkthru.opensensor.designsystem.peacockExpressionFor
 import earth.walkthru.opensensor.designsystem.rememberNowMillis
@@ -147,11 +146,27 @@ import earth.walkthru.opensensor.today.resources.sync_button
 import earth.walkthru.opensensor.today.resources.sync_button_running
 import earth.walkthru.opensensor.today.resources.sync_caught_up
 import earth.walkthru.opensensor.today.resources.sync_empty
+import earth.walkthru.opensensor.today.resources.sync_end_bluetooth_off
+import earth.walkthru.opensensor.today.resources.sync_end_busy
+import earth.walkthru.opensensor.today.resources.sync_end_interrupted
+import earth.walkthru.opensensor.today.resources.sync_end_link_lost
+import earth.walkthru.opensensor.today.resources.sync_end_no_space
+import earth.walkthru.opensensor.today.resources.sync_end_other
+import earth.walkthru.opensensor.today.resources.sync_end_out_of_range
+import earth.walkthru.opensensor.today.resources.sync_end_pairing
+import earth.walkthru.opensensor.today.resources.sync_end_permission
+import earth.walkthru.opensensor.today.resources.sync_end_stopped
+import earth.walkthru.opensensor.today.resources.sync_end_storage
+import earth.walkthru.opensensor.today.resources.sync_end_token_rejected
+import earth.walkthru.opensensor.today.resources.sync_end_token_rotated
+import earth.walkthru.opensensor.today.resources.sync_end_update_firmware
+import earth.walkthru.opensensor.today.resources.sync_end_wifi_access
 import earth.walkthru.opensensor.today.resources.sync_estimated_detail
 import earth.walkthru.opensensor.today.resources.sync_explain
 import earth.walkthru.opensensor.today.resources.sync_ready
 import earth.walkthru.opensensor.today.resources.sync_running
 import earth.walkthru.opensensor.today.resources.sync_some_failed
+import earth.walkthru.opensensor.today.resources.sync_stop
 import earth.walkthru.opensensor.today.resources.sync_title
 import earth.walkthru.opensensor.today.resources.sync_unplaced_detail
 import earth.walkthru.opensensor.today.resources.sync_unplaced_simple
@@ -162,6 +177,7 @@ import earth.walkthru.opensensor.today.resources.today_of_the_day
 import earth.walkthru.opensensor.today.resources.today_readings_since_midnight
 import earth.walkthru.opensensor.today.resources.today_so_far
 import kotlinx.coroutines.delay
+import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import kotlin.time.Instant
@@ -388,7 +404,15 @@ internal fun TodaySoFarCard(today: TodaySoFar?, clockMissing: Boolean, level: De
  * character, so this card adds no repeated portrait. Detailed adds how earlier readings were placed.
  */
 @Composable
-internal fun SmartSyncCard(sync: SyncProgress, archive: TodayArchive, enabled: Boolean, level: DetailLevel, onSync: () -> Unit, modifier: Modifier = Modifier) {
+internal fun SmartSyncCard(
+    sync: SyncProgress,
+    archive: TodayArchive,
+    enabled: Boolean,
+    level: DetailLevel,
+    onSync: () -> Unit,
+    modifier: Modifier = Modifier,
+    onStop: (() -> Unit)? = null,
+) {
     val mood = syncMood(sync, archive)
     BrandCard(modifier = modifier, tone = CardTone.SOFT) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -399,6 +423,7 @@ internal fun SmartSyncCard(sync: SyncProgress, archive: TodayArchive, enabled: B
                         SyncMood.RUNNING -> pluralStringResource(Res.plurals.sync_running, sync.filesTotal, sync.filesDone, sync.filesTotal)
                         SyncMood.CAUGHT_UP -> stringResource(Res.string.sync_caught_up)
                         SyncMood.SOME_FAILED -> pluralStringResource(Res.plurals.sync_some_failed, sync.failures.size, sync.failures.size)
+                        SyncMood.STOPPED, SyncMood.FAILED -> stringResource((syncEndLine(sync, level) ?: SyncEndLine.OTHER).text)
                         SyncMood.READY -> pluralStringResource(Res.plurals.sync_ready, archive.files, archive.files)
                         SyncMood.EMPTY -> stringResource(Res.string.sync_empty)
                     },
@@ -437,14 +462,37 @@ internal fun SmartSyncCard(sync: SyncProgress, archive: TodayArchive, enabled: B
             )
         }
         Spacer(Modifier.height(14.dp))
-        PillButton(
-            text = stringResource(if (sync.running) Res.string.sync_button_running else Res.string.sync_button),
-            onClick = onSync,
-            enabled = enabled && !sync.running,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        // The one Sync of this station. Stop sits beside it while this phone's own run is going.
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            PillButton(
+                text = stringResource(if (sync.running) Res.string.sync_button_running else Res.string.sync_button),
+                onClick = onSync,
+                enabled = enabled && !sync.running,
+                modifier = Modifier.weight(1f),
+            )
+            if (onStop != null) OutlinePillButton(stringResource(Res.string.sync_stop), onClick = onStop)
+        }
     }
 }
+
+private val SyncEndLine.text: StringResource
+    get() = when (this) {
+        SyncEndLine.STOPPED -> Res.string.sync_end_stopped
+        SyncEndLine.INTERRUPTED -> Res.string.sync_end_interrupted
+        SyncEndLine.BLUETOOTH_OFF -> Res.string.sync_end_bluetooth_off
+        SyncEndLine.PERMISSION_MISSING -> Res.string.sync_end_permission
+        SyncEndLine.PAIRING_REPAIR -> Res.string.sync_end_pairing
+        SyncEndLine.WIFI_ACCESS -> Res.string.sync_end_wifi_access
+        SyncEndLine.TOKEN_ROTATED -> Res.string.sync_end_token_rotated
+        SyncEndLine.TOKEN_REJECTED -> Res.string.sync_end_token_rejected
+        SyncEndLine.DEVICE_BUSY -> Res.string.sync_end_busy
+        SyncEndLine.OUT_OF_RANGE -> Res.string.sync_end_out_of_range
+        SyncEndLine.UPDATE_FIRMWARE -> Res.string.sync_end_update_firmware
+        SyncEndLine.NO_SPACE -> Res.string.sync_end_no_space
+        SyncEndLine.STORAGE_ERROR -> Res.string.sync_end_storage
+        SyncEndLine.LINK_LOST -> Res.string.sync_end_link_lost
+        SyncEndLine.OTHER -> Res.string.sync_end_other
+    }
 
 private fun Long.toPluralCount(): Int = coerceIn(0, Int.MAX_VALUE.toLong()).toInt()
 
@@ -790,7 +838,3 @@ internal fun DeviceInfoCard(
         }
     }
 }
-
-/** The mood face's accessible name when there is no reading. */
-@Composable
-internal fun noMoodText(): String = moodWord(null)

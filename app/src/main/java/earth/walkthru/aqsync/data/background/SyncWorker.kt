@@ -34,7 +34,7 @@ import java.util.UUID
 
 /**
  * The auto-sync worker. Scheduled by [AutoSyncScheduler] every 15 min (WorkManager's minimum) while
- * any known device has Auto-sync on, and once, expedited, for "Sync now in background".
+ * any known device has Auto-sync on, and once, expedited, for a trigger or "Collect from all loggers".
  *
  * It asks to run as a **foreground worker** (`dataSync`) with the same progress notification the
  * interactive sync shows, so the transfer survives the app being swiped away and the screen going

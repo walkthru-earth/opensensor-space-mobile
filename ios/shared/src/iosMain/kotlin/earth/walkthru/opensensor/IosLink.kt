@@ -16,7 +16,6 @@ import earth.walkthru.aqsync.link.LinkClosedException
 import earth.walkthru.aqsync.link.LinkDriver
 import earth.walkthru.aqsync.link.LinkInfo
 import earth.walkthru.aqsync.link.LinkSession
-import earth.walkthru.aqsync.link.LinkState
 import earth.walkthru.aqsync.link.OnceSink
 import earth.walkthru.aqsync.link.PushChannel
 import earth.walkthru.aqsync.link.Radio
@@ -26,6 +25,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
@@ -99,7 +99,7 @@ internal class LeaseRefusedException(val syncRunning: Boolean) : Exception(if (s
  * - A write that fails or never completes, an inbox overflow or a drain past its bound poisons the
  *   link. It refuses leases from then on, [whenClosed] fires and Swift reconnects with a new one.
  */
-@OptIn(ExperimentalAtomicApi::class)
+@OptIn(ExperimentalAtomicApi::class, ExperimentalCoroutinesApi::class)
 class IosLink internal constructor(
     private val port: IosLinkPort,
     overWifi: Boolean,

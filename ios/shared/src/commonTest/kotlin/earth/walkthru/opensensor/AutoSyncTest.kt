@@ -33,7 +33,7 @@ class AutoSyncTest {
     private var changes = 0
 
     private fun settings(storage: AutoSyncStorage = Memory(), status: Long = 0) =
-        AutoSyncSettings(storage, { clock }, { status }, { it() }, { changes++ }, continuedTask = true)
+        AutoSyncSettings(storage, { clock }, { status }, { it() }, { changes++ })
 
     private fun devices() = DevicesBridge(CompanionState(), emptyFlow(), Memory(), { clock }, {}, {}, { _, _ -> }, { _, _ -> }).also {
         it.sensorOpened(a, "Kitchen", "st-a", "aabbccddeeff")
@@ -143,7 +143,7 @@ class AutoSyncTest {
         assertTrue(s.isDue(b))
         // A second request while idle again runs, a cancelled one never reports.
         summary = null
-        bridge.runOne(b) { summary = it }.cancel()
+        bridge.runDue(listOf(b)) { summary = it }.cancel()
         testScheduler.advanceUntilIdle()
         assertNull(summary)
     }

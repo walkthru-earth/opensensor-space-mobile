@@ -1,7 +1,8 @@
 package earth.walkthru.aqsync.data
 
+import earth.walkthru.aqsync.collection.SyncEndReason
 import earth.walkthru.aqsync.data.lan.LanFailure
-import earth.walkthru.aqsync.data.sync.ClockQuality
+import earth.walkthru.aqsync.link.UnavailableKind
 
 /**
  * What a device snackbar says, as a code with typed arguments. The data layer never builds
@@ -34,6 +35,9 @@ sealed interface DeviceMessage {
     data class LanFallback(val failure: LanFailure?) : DeviceMessage
     data object ConnectFailed : DeviceMessage
 
+    /** Bluetooth is off, missing, or its permission is not granted, so a connect never started. */
+    data class BluetoothUnavailable(val kind: UnavailableKind) : DeviceMessage
+
     /** The sensor refused this phone's bond keys, for example after a reset. Pair again in Settings. */
     data object PairingRepair : DeviceMessage
     data class NewerProtocol(val device: Int, val app: Int) : DeviceMessage
@@ -60,7 +64,12 @@ sealed interface DeviceMessage {
     data class FileNotSynced(val name: String, val problem: FileProblem) : DeviceMessage
     data class SyncFinished(val synced: Int, val total: Int) : DeviceMessage
     data object SyncStopped : DeviceMessage
-    data object SyncAborted : DeviceMessage
+
+    /**
+     * A collection ended before finishing. [reason] is the shared [SyncEndReason], so the
+     * snackbar, the notification and the iOS screen word the same ending the same way.
+     */
+    data class SyncEnded(val reason: SyncEndReason) : DeviceMessage
 
     /** The planned files do not fit, [shortBytes] more must be freed. Nothing was opened. */
     data class NotEnoughSpace(val shortBytes: Long) : DeviceMessage
@@ -83,5 +92,4 @@ sealed interface DeviceMessage {
 sealed interface DeviceEvent {
     data class Info(val message: DeviceMessage) : DeviceEvent
     data class Error(val message: DeviceMessage) : DeviceEvent
-    data class ClockConfirmationRequired(val quality: ClockQuality) : DeviceEvent
 }

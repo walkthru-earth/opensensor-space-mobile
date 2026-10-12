@@ -110,7 +110,7 @@
 
         <!--
           Keeps the process out of the background firewall chain while a user-started sync runs.
-          Started by DeviceConnectionRepository when a transfer begins (the app is in the
+          Started by DeviceFacade when a transfer begins (the app is in the
           foreground at that moment); it attaches to the repository's sync state flow, shows the
           progress notification with a Stop action, and stops itself when the sync ends.
         -->

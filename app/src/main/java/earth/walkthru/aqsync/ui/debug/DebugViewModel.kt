@@ -7,8 +7,8 @@ import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import earth.walkthru.aqsync.data.DeviceConnectionManager
-import earth.walkthru.aqsync.data.DeviceConnectionRepository
 import earth.walkthru.aqsync.data.DeviceEvent
+import earth.walkthru.aqsync.data.DeviceFacade
 import earth.walkthru.aqsync.data.LogTailState
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.RawFrameRecord
@@ -40,7 +40,7 @@ import kotlinx.coroutines.flow.stateIn
  * frame recorder, raw commands run through its mutex, and background sync blocks the raw box.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
-internal class RepositoryDebugSource(private val repository: DeviceConnectionRepository) : DebugSource {
+internal class RepositoryDebugSource(private val repository: DeviceFacade) : DebugSource {
     override val link: Flow<DebugLink> = combine(repository.session, repository.connectionState, repository.activeTransport) { session, conn, kind ->
         DebugLink(conn, kind, session?.transport?.endpoint, (conn as? ConnectionState.Ready)?.let { it.mtu - 3 })
     }

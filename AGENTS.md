@@ -11,9 +11,9 @@ concern you are changing in `docs/README.md`.
 | Task | Open next | Code |
 | --- | --- | --- |
 | Current status and real-phone evidence | `docs/status.md`, then `../aq-parquet/docs/boards/*/bench-verified.md` | — |
-| Cross-platform design and sync rules, production refactor plan | `docs/cross-platform-guide.md`, `docs/production-readiness-plan.md` | `core/`, `app/`, `ios/` |
+| Cross-platform design and sync rules | `docs/cross-platform-guide.md` | `core/`, `app/`, `ios/` |
 | Device families, sensor-agnostic model, public H3 discover map | `docs/devices-and-discovery.md` | `core/publicfeed/`, `feature/discover/`, `tools/discover-fixture/` |
-| iOS app, shared Kotlin, simulator and iPhone builds | `docs/ios-migration.md`, `ios/AGENTS.md` | `core/`, `ios/` |
+| iOS app, shared Kotlin, simulator and iPhone builds | `docs/ios.md`, `ios/AGENTS.md` | `core/`, `ios/` |
 | App layers and dependencies | `docs/architecture.md`, `core/AGENTS.md` | `core/`, `app/` |
 | BLE, LAN, sync, pairing, background work | `docs/transports.md`, `docs/sync-engine.md`, `docs/background-sync.md`, `app/src/main/java/earth/walkthru/aqsync/data/AGENTS.md` | `data/` |
 | Room, history, Parquet | `docs/data-model.md`, `docs/history-pipeline.md`, `docs/parquet.md` | `data/history/`, `data/local/`, `core/` |
@@ -59,11 +59,11 @@ concern you are changing in `docs/README.md`.
 - `:core:sync` owns one `LinkSession` per physical connection, the shared `SyncEngine`,
   `ArchiveCollector` and per-device `CollectionController`. Android `DeviceFacade` routes
   collection and UI through that controller. `DeviceLinkOwner` owns connections, manual
-  commands and idle reconnect. `DeviceConnectionRepository` is a compatibility typealias.
+  commands and idle reconnect.
   iOS adopts the link and engine through `IosLink` and `SensorSync`, and Core Bluetooth runs
   on the `BlePhysicalLink` serial queue. `SensorCollections` holds one shared controller per
-  device over `IosLinkProvider`, built only by tests so far. Routing the native entry points into it remains
-  [#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81).
+  device over `IosLinkProvider`, and every native sync entry point runs through it
+  ([#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81)).
 - Platform entry points own their UI and OS services. Android Compose and Android
   framework APIs stay in `app/`; iOS app code and Apple frameworks stay in `ios/`.
   The current iOS screen uses Compose Multiplatform; native Swift files are adapters.

@@ -1,12 +1,14 @@
 package earth.walkthru.aqsync.ui.components
 
 import earth.walkthru.aqsync.R
+import earth.walkthru.aqsync.collection.SyncEndReason
 import earth.walkthru.aqsync.data.DeviceContinuityPolicy
 import earth.walkthru.aqsync.data.DeviceMessage
 import earth.walkthru.aqsync.data.DeviceMessage.Command
 import earth.walkthru.aqsync.data.DeviceMessage.ConfigChange
 import earth.walkthru.aqsync.data.lan.LanFailure
 import earth.walkthru.aqsync.data.protocol.ConfigProblem
+import earth.walkthru.aqsync.link.UnavailableKind
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -53,6 +55,17 @@ class DeviceMessagesTest {
         assertDistinct(ConfigChange.entries.map { it.toStringRes() })
         assertDistinct(ConfigProblem.entries.map { it.toStringRes() })
         assertDistinct(DeviceMessage.TokenRotation.entries.map { DeviceMessage.TokenRotated(it).toUiText() })
+        assertDistinct(SyncEndReason.entries.map { it.toStringRes() })
+        assertDistinct(UnavailableKind.entries.map { DeviceMessage.BluetoothUnavailable(it).toUiText() })
+    }
+
+    @Test
+    fun `a sync ending names its reason and shares the pairing and stop lines`() {
+        assertEquals(UiText.Res(R.string.msg_sync_end_bluetooth_off), DeviceMessage.SyncEnded(SyncEndReason.BLUETOOTH_OFF).toUiText())
+        assertEquals(UiText.Res(R.string.msg_sync_end_token_rotated), DeviceMessage.SyncEnded(SyncEndReason.TOKEN_ROTATED).toUiText())
+        assertEquals(UiText.Res(R.string.conn_pairing_repair), DeviceMessage.SyncEnded(SyncEndReason.PAIRING_REPAIR).toUiText())
+        assertEquals(UiText.Res(R.string.msg_sync_stopped), DeviceMessage.SyncEnded(SyncEndReason.STOPPED).toUiText())
+        assertEquals(UiText.Res(R.string.msg_sync_aborted), DeviceMessage.SyncEnded(SyncEndReason.OTHER).toUiText())
     }
 
     private fun assertDistinct(items: List<Any>) = assertEquals(items.size, items.toSet().size)

@@ -12,6 +12,7 @@ import earth.walkthru.aqsync.collection.Lease
 import earth.walkthru.aqsync.collection.LinkPreference
 import earth.walkthru.aqsync.collection.PrepareStep
 import earth.walkthru.aqsync.collection.StopSource
+import earth.walkthru.aqsync.collection.SyncEndReason
 import earth.walkthru.aqsync.data.archive.FileArchiveStore
 import earth.walkthru.aqsync.data.archive.RoomArchiveIndex
 import earth.walkthru.aqsync.data.archive.asRecordIndexer
@@ -23,6 +24,7 @@ import earth.walkthru.aqsync.data.ble.FrameDirection
 import earth.walkthru.aqsync.data.ble.RawCommandRefusedException
 import earth.walkthru.aqsync.data.ble.TransportException
 import earth.walkthru.aqsync.data.ble.TransportKind
+import earth.walkthru.aqsync.data.ble.TransportUnavailableException
 import earth.walkthru.aqsync.data.fake.FakeTransport
 import earth.walkthru.aqsync.data.history.HistoryDeriver
 import earth.walkthru.aqsync.data.history.HistoryIndexer
@@ -32,7 +34,6 @@ import earth.walkthru.aqsync.data.lan.LanDevice
 import earth.walkthru.aqsync.data.lan.LanFailure
 import earth.walkthru.aqsync.data.lan.LanTargets
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
-import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.local.database.DerivedArchivedFileQueries
 import earth.walkthru.aqsync.data.local.database.KnownDevice
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
@@ -45,7 +46,6 @@ import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.protocol.LanFraming
 import earth.walkthru.aqsync.data.protocol.Opcode
 import earth.walkthru.aqsync.data.sync.ArchiveCollector
-import earth.walkthru.aqsync.data.sync.ClockSyncMode
 import earth.walkthru.aqsync.data.sync.FileArchive
 import earth.walkthru.aqsync.data.sync.FileOutcome
 import earth.walkthru.aqsync.data.sync.SyncEngine
@@ -55,6 +55,7 @@ import earth.walkthru.aqsync.link.FrameSink
 import earth.walkthru.aqsync.link.LinkClosedException
 import earth.walkthru.aqsync.link.LinkInfo
 import earth.walkthru.aqsync.link.LinkState
+import earth.walkthru.aqsync.link.UnavailableKind
 import earth.walkthru.aqsync.link.retryable
 import earth.walkthru.aqsync.storage.FakeStorageBudget
 import earth.walkthru.aqsync.storage.StorageException
@@ -100,7 +101,7 @@ import java.util.concurrent.CopyOnWriteArrayList
  * Collection state, synchronous protection and fresh listings use the same controller as the app.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
-class DeviceConnectionRepositoryTest {
+class DeviceFacadeTest {
     private lateinit var tmp: File
 
     @Before
@@ -197,7 +198,7 @@ class DeviceConnectionRepositoryTest {
         // The repair banner outlives the closed session and the reason is said once.
         assertTrue(BleConnectionFailure.needsPairingRepair(h.repo.connectionState.value))
         assertEquals(1, h.events.count { it == DeviceEvent.Error(DeviceMessage.PairingRepair) })
-        assertFalse(h.events.contains(DeviceEvent.Error(DeviceMessage.SyncAborted)))
+        assertFalse(h.events.any { (it as? DeviceEvent.Error)?.message is DeviceMessage.SyncEnded })
     }
 
     @Test
@@ -448,7 +449,7 @@ class DeviceConnectionRepositoryTest {
         val newer = h.newFile()
         h.device.files += newer
 
-        h.repo.smartSync(ClockSyncMode.AUTOMATIC)
+        h.repo.smartSync()
         h.until { h.archived.rows.size == h.device.files.size && !h.repo.sync.value.running }
 
         assertTrue(h.repo.sync.value.outcomes.any { it.name == newer.name })
@@ -484,7 +485,7 @@ class DeviceConnectionRepositoryTest {
         val before = h.factory.requests.count { it == Opcode.LIST }
 
         h.repo.syncAll()
-        h.repo.smartSync(ClockSyncMode.AUTOMATIC)
+        h.repo.smartSync()
         h.until { h.archived.rows.size == h.device.files.size && !h.repo.sync.value.running }
 
         assertTrue(h.events.any { it == DeviceEvent.Info(DeviceMessage.Busy) || it == DeviceEvent.Info(DeviceMessage.BusyBeforeSync) })
@@ -618,6 +619,33 @@ class DeviceConnectionRepositoryTest {
         assertNotNull("a fresh token was fetched over the Bluetooth session", renewed)
         assertFalse(renewed == OLD_TOKEN)
         assertTrue(h.events.contains(DeviceEvent.Info(DeviceMessage.LanFallback(LanFailure.AUTH_FAILED))))
+    }
+
+    @Test
+    fun `a rotated LAN token is cleared and the Bluetooth session renews it`() = harnessTest { h ->
+        h.knownDao.upsert(h.enrolled(token = OLD_TOKEN))
+        h.lan.devices.value = mapOf(h.device.station to h.lanTarget())
+        h.factory.lanClose = LinkClosedException(DisconnectCause.Auth(AuthKind.TOKEN_ROTATED), LanConnectException(LanFailure.AUTH_FAILED, "BYE token-rotated"))
+
+        h.repo.connect(ADDRESS, "AQ-6b40")
+        h.until { h.repo.connectionState.value.isReady }
+
+        assertEquals(TransportKind.FAKE, h.repo.activeTransport.value)
+        val renewed = h.knownDao.lanToken(ADDRESS)
+        assertNotNull("a fresh token was fetched over the Bluetooth session", renewed)
+        assertFalse(renewed == OLD_TOKEN)
+    }
+
+    @Test
+    fun `a LAN only lend after a rotated token ends as TOKEN_ROTATED`() = harnessTest { h ->
+        h.knownDao.upsert(h.enrolled(token = OLD_TOKEN))
+        h.lan.devices.value = mapOf(h.device.station to h.lanTarget())
+        h.factory.lanClose = LinkClosedException(DisconnectCause.Auth(AuthKind.TOKEN_ROTATED), LanConnectException(LanFailure.AUTH_FAILED, "BYE token-rotated"))
+
+        val e = async { runCatching { h.repo.lendLink(ADDRESS, LinkPreference.LAN) } }.also { h.until { it.isCompleted } }.await().exceptionOrNull()
+        assertEquals(DisconnectCause.Auth(AuthKind.TOKEN_ROTATED), (e as LinkClosedException).disconnectCause)
+        assertNull("the rotated token is cleared, not only marked stale", h.knownDao.lanToken(ADDRESS))
+        assertEquals(0, h.factory.fakeConnects)
     }
 
     @Test
@@ -927,6 +955,150 @@ class DeviceConnectionRepositoryTest {
         assertEquals(DisconnectCause.Busy, (e as LinkClosedException).disconnectCause)
     }
 
+    @Test
+    fun `Bluetooth off ends a sync once with its own reason and no retry`() = harnessTest { h ->
+        h.factory.unavailable = UnavailableKind.RADIO_OFF
+        h.repo.syncAll()
+        h.until { !h.repo.collectionState.value.active && !h.repo.busy.value }
+        assertEquals(SyncEndReason.BLUETOOTH_OFF, h.repo.sync.value.endReason)
+        assertEquals(0, h.factory.fakeConnects)
+        assertEquals(1, h.events.count { it == DeviceEvent.Error(DeviceMessage.SyncEnded(SyncEndReason.BLUETOOTH_OFF)) })
+        // One message for one failure, the open does not add its own Bluetooth line.
+        assertEquals(listOf<DeviceEvent>(DeviceEvent.Error(DeviceMessage.SyncEnded(SyncEndReason.BLUETOOTH_OFF))), h.events.filterIsInstance<DeviceEvent.Error>())
+    }
+
+    @Test
+    fun `a missing Bluetooth permission is named on connect`() = harnessTest { h ->
+        h.factory.unavailable = UnavailableKind.PERMISSION_MISSING
+        h.repo.connect(ADDRESS, "AQ-6b40")
+        h.until { h.events.isNotEmpty() && !h.repo.busy.value }
+        assertTrue(h.events.contains(DeviceEvent.Error(DeviceMessage.BluetoothUnavailable(UnavailableKind.PERMISSION_MISSING))))
+        assertNull(h.repo.session.value)
+    }
+
+    @Test
+    fun `each ending carries its reason and a new run clears it`() = harnessTest { h ->
+        h.repo.syncAll()
+        h.until { !h.repo.collectionState.value.active && !h.repo.busy.value }
+        assertEquals(SyncEndReason.COMPLETED, h.repo.sync.value.endReason)
+
+        h.device.files += h.newFile()
+        h.factory.listDelayMs = 60_000
+        h.repo.syncAll()
+        h.until { h.repo.sync.value.running }
+        assertNull(h.repo.sync.value.endReason)
+        h.repo.stop(StopSource.FGS_TIMEOUT)
+        h.until { !h.repo.busy.value }
+        assertEquals(SyncEndReason.INTERRUPTED, h.repo.sync.value.endReason)
+        assertTrue(h.events.contains(DeviceEvent.Info(DeviceMessage.SyncEnded(SyncEndReason.INTERRUPTED))))
+
+        h.repo.syncAll()
+        h.until { h.repo.sync.value.running }
+        h.repo.cancelSync()
+        h.until { !h.repo.busy.value }
+        assertEquals(SyncEndReason.STOPPED, h.repo.sync.value.endReason)
+        assertTrue(h.events.contains(DeviceEvent.Info(DeviceMessage.SyncStopped)))
+    }
+
+    @Test
+    fun `the last sync and the archive summary survive a disconnect and a reconnect`() = harnessTest { h ->
+        h.repo.connect(ADDRESS, "AQ-6b40", fake = true)
+        h.until { h.repo.plan.value != null }
+        h.repo.syncAll()
+        h.until { !h.repo.collectionState.value.active && !h.repo.busy.value && h.archived.rows.size == h.device.files.size }
+        h.until { h.repo.archiveTimeSummary.value.files == h.archived.rows.size }
+
+        h.repo.disconnectNow()
+        h.until { h.repo.session.value == null }
+        assertEquals(h.archived.rows.size, h.repo.archiveTimeSummary.value.files)
+        val last = h.owner.sync.value
+        assertEquals(SyncEndReason.COMPLETED, last.endReason)
+        assertEquals(h.device.files.size, last.outcomes.size)
+
+        h.repo.connect(ADDRESS, "AQ-6b40", fake = true)
+        h.until { h.repo.plan.value != null }
+        assertEquals(last, h.owner.sync.value)
+        assertEquals(h.archived.rows.size, h.repo.archiveTimeSummary.value.files)
+    }
+
+    @Test
+    fun `the archive summary counts every archived row before any connection`() = harnessTest { h ->
+        h.knownDao.upsert(h.enrolled(token = null))
+        val station = h.device.station
+        h.archived.upsert(archivedRow(station, "a.parquet", indexed = true))
+        h.archived.upsert(archivedRow(station, "b.parquet", indexed = false))
+        h.archived.upsert(archivedRow("other", "c.parquet", indexed = true))
+        h.until { h.repo.archiveTimeSummary.value.files == 2 }
+        assertNull(h.repo.session.value)
+        assertEquals(10L, h.repo.archiveTimeSummary.value.rows)
+    }
+
+    @Test
+    fun `ownership names who holds the device through an interactive and a background run`() = harnessTest(chunkDelayMs = 1) { h ->
+        h.repo.connect(ADDRESS, "AQ-6b40", fake = true)
+        h.until { h.repo.plan.value != null }
+        assertEquals(DeviceOwnership.IDLE, h.repo.ownershipNow())
+        h.repo.syncAll()
+        h.until { h.archived.rows.isNotEmpty() }
+        h.until { h.repo.ownership.value == DeviceOwnership.INTERACTIVE }
+        assertTrue(h.repo.sync.value.running)
+        assertNotNull(h.repo.session.value)
+        h.until { !h.repo.collectionState.value.active && !h.repo.busy.value && h.archived.rows.size == h.device.files.size }
+        h.until { h.repo.ownership.value == DeviceOwnership.IDLE }
+        assertEquals(SyncEndReason.COMPLETED, h.repo.sync.value.endReason)
+
+        h.repo.disconnectNow()
+        assertNull(h.repo.session.value)
+        val work = async { h.repo.syncInBackground(ADDRESS, null, owner = "synthetic-worker", protection = KeepAlive.None) }
+        h.until { h.repo.ownership.value == DeviceOwnership.BACKGROUND || work.isCompleted }
+        h.until { work.isCompleted }
+        h.until { h.repo.ownership.value == DeviceOwnership.IDLE }
+    }
+
+    @Test
+    fun `a link that died during a stopped sync does not stay in the slot`() = harnessTest(chunkDelayMs = 1) { h ->
+        h.repo.connect(ADDRESS, "AQ-6b40", fake = true)
+        h.until { h.repo.plan.value != null }
+        h.repo.syncAll()
+        h.until { h.archived.rows.isNotEmpty() }
+        h.device.disconnect()
+        h.until { h.repo.collectionState.value is CollectionState.Waiting }
+        h.repo.cancelSync()
+        h.until { !h.repo.collectionState.value.active && h.repo.ownership.value == DeviceOwnership.IDLE }
+        h.until { h.repo.session.value == null }
+        assertNull(h.repo.interactiveSessionAddress)
+        assertEquals(DeviceOwnership.IDLE, h.repo.ownershipNow())
+    }
+
+    @Test
+    fun `a refused restart keeps the device reserved until the stopped run let go`() = harnessTest { h ->
+        h.factory.listDelayMs = 60_000
+        h.repo.syncAll()
+        h.until { (h.repo.collectionState.value as? CollectionState.Preparing)?.step == PrepareStep.LIST }
+        h.repo.stop(StopSource.USER)
+        h.refuseProcess = true
+        h.repo.syncAll()
+        assertTrue(h.repo.collectionState.value is CollectionState.Failed)
+        // The stopped run still holds its link, so nothing else may claim the device yet.
+        assertEquals(DeviceOwnership.INTERACTIVE, h.repo.ownershipNow())
+        assertTrue(h.repo.busy.value)
+        h.until { h.processLeases == 0 && h.repo.ownershipNow() == DeviceOwnership.IDLE && !h.repo.busy.value }
+        assertNull(h.repo.session.value)
+    }
+
+    private fun archivedRow(station: String, name: String, indexed: Boolean) = ArchivedFile(
+        station = station,
+        name = name,
+        bytes = 100,
+        crc32 = 1,
+        sha256 = "",
+        syncedAtEpochMs = 1,
+        sourceDevice = ADDRESS,
+        rows = 10,
+        utcRows = 10,
+        indexedAtEpochMs = if (indexed) 1 else null,
+    )
+
     private fun harnessTest(chunkDelayMs: Long = 0, block: suspend TestScope.(Harness) -> Unit) = runTest {
         val h = Harness(this, chunkDelayMs)
         try {
@@ -1089,6 +1261,9 @@ class DeviceConnectionRepositoryTest {
      */
     private class TestTransports(private val device: FakeTransport, private val scope: CoroutineScope) : TransportSource {
         var lanFailure: Exception = LanConnectException(LanFailure.UNREACHABLE)
+
+        /** When set, the LAN link's open fails with this typed close, as the TCP driver reports a BYE. */
+        var lanClose: LinkClosedException? = null
         val lanTransports = CopyOnWriteArrayList<FailingLanTransport>()
         var fakeConnects = 0
         var interactiveConnects = 0
@@ -1097,6 +1272,9 @@ class DeviceConnectionRepositoryTest {
         var rejectReconnect = false
         var reconnectFailure: DisconnectCause? = null
         var clockMissingOnReconnect = false
+
+        /** When set, Bluetooth links cannot be built, as with the radio off or the permission missing. */
+        var unavailable: UnavailableKind? = null
 
         /** When set, Bluetooth links never finish connecting and ignore everything but cancel. */
         var hangConnect = false
@@ -1134,15 +1312,24 @@ class DeviceConnectionRepositoryTest {
             }
         }
 
-        override fun ble(address: String): AndroidLink = counted().also { interactiveConnects++ }
-        override fun bleUnattended(address: String, connectTimeoutMs: Long): AndroidLink = counted().also {
+        override fun ble(address: String): AndroidLink = requireRadio().let { counted().also { interactiveConnects++ } }
+        override fun bleUnattended(address: String, connectTimeoutMs: Long): AndroidLink = requireRadio().let { counted() }.also {
             unattendedConnects++
             unattendedTimeout = connectTimeoutMs
         }
-        override fun lan(address: String, name: String?, host: InetAddress, port: Int, token: ByteArray): AndroidLink =
-            FailingLanTransport(address, lanFailure).also { lanTransports += it }.let { TransportLink(it, scope) }
+        override fun lan(address: String, name: String?, host: InetAddress, port: Int, token: ByteArray): AndroidLink {
+            val link = FailingLanTransport(address, lanFailure).also { lanTransports += it }.let { TransportLink(it, scope) }
+            val close = lanClose ?: return link
+            return object : AndroidLink by link {
+                override suspend fun open(sink: FrameSink): LinkInfo = throw close
+            }
+        }
         override fun fake(address: String): AndroidLink = counted()
         override fun isFake(transport: AqTransport): Boolean = (transport as? TransportLink)?.wrapped === observedDevice
+
+        private fun requireRadio() {
+            unavailable?.let { throw TransportUnavailableException(it, "synthetic ${it.name}") }
+        }
 
         private fun counted(): AndroidLink {
             fakeConnects++
@@ -1243,7 +1430,7 @@ class DeviceConnectionRepositoryTest {
         private val state = MutableStateFlow<List<ArchivedFile>>(emptyList())
         val rows: List<ArchivedFile> get() = state.value
         override fun observeAll(): Flow<List<ArchivedFile>> = state
-        override fun observeForStation(station: String): Flow<List<ArchivedFile>> = flowOf(rows.filter { it.station == station })
+        override fun observeForStation(station: String): Flow<List<ArchivedFile>> = state.map { all -> all.filter { it.station == station } }
         override suspend fun forStation(station: String) = rows.filter { it.station == station }
         override suspend fun get(station: String, name: String) = rows.firstOrNull { it.station == station && it.name == name }
         override fun observeCount(): Flow<Int> = flowOf(rows.size)

@@ -11,7 +11,7 @@ flowchart TD
   C[connect address] --> Q{station discovered on mDNS<br/>AND token stored?}
   Q -- yes --> L[TcpLinkDriver AQS1 handshake]
   L -- HELLO --> R[Ready · chip Wi-Fi LAN]
-  L -- ERROR 14 --> X[clear token, mark stale] --> B
+  L -- ERROR 14 / BYE 3 / BYE 10 --> X[clear token, mark stale] --> B
   L -- ERROR 7 / timeout / bad HELLO --> B[BleLinkDriver]
   Q -- no --> B
   B --> R2[Ready · chip Bluetooth]
@@ -26,7 +26,11 @@ unavailable. LAN-only results without an enrolled Bluetooth identity and saved t
 informational. Opening an enrolled sensor uses the AUTO rule below. If Bluetooth permission is declined,
 a known sensor with a saved token, station and current mDNS discovery may open LAN only. That
 path has no BLE fallback or BLE auto-reconnect; if LAN cannot connect, its archive remains
-available offline.
+available offline. `TransportFactory` throws `TransportUnavailableException` (RADIO_OFF,
+PERMISSION_MISSING or NO_ADAPTER) before any Bluetooth open. Connect and collection turn it into
+`DisconnectCause.Unavailable`, which is never retried, and say which one applies (2026-10-12).
+A LAN connect refused with EPERM, the Local Network permission refusal, is the same
+`Unavailable(PERMISSION_MISSING)` (`SocketErrors.connectException`), never a retried UNREACHABLE.
 
 `TransportPreference.AUTO` is the rule above; `GET_TOKEN` and *Fetch token* force BLE. Any LAN
 connection failure falls back to BLE with a snackbar. After connection, INFO must pass
@@ -60,9 +64,17 @@ same local Wi-Fi without internet.
 Android already keeps separate controllers for several sensors and limits
 concurrent file transfers to two per phone. Its existing framed TCP transport
 uses the same protocol with the firmware's multi-client pool. iOS collection
-support and its validation scope are documented in [ios-migration.md](ios-migration.md).
+support and its validation scope are documented in [ios.md](ios.md).
 Real multi-phone/multi-sensor throughput and radio behavior require phone and
 board qualification; host tests alone do not establish these results.
+
+On iOS the one Bluetooth link and each Wi-Fi session close once nothing holds them. Leaving a
+sensor page asks for an idle close. While a run, a Collect all step, an Auto-sync step, a token
+request or a GATT exchange holds the link, the close waits and runs when that work ends. A
+Bluetooth link that drops under a run is dialled again by the shared controller, and My devices
+shows it reconnecting with the run's progress. A paused Wi-Fi run shows the same way. Each new
+Wi-Fi run counts its files from zero. Core Bluetooth reports no bonding step, so iOS never shows
+the pairing phase, and a lost bond shows as a failed link until the next connect or Forget.
 
 ## Side by side
 
@@ -190,14 +202,15 @@ other boards need their own records.
 
 ## LAN token lifecycle
 
-`LanTokenPolicy` (pure, unit-tested).
+`LanTokenPolicy` (pure, unit-tested). `DeviceLinkOwner` clears the stored token whenever `invalidatesToken(cause)` holds for a LAN close. A clear, not only a stale mark, because a stored token is never fetched again.
 
 ```mermaid
 stateDiagram-v2
   [*] --> None
   None --> Stored: BLE session Ready, proto ≥ 3 → GET_TOKEN
   Stored --> Stored: LAN HELLO ok
-  Stored --> Stale: LAN ERROR 14 (rotated elsewhere) → lanToken cleared
+  Stored --> Stale: LAN ERROR 14 or BYE 3 (refused) → lanToken cleared
+  Stored --> Stale: LAN BYE 10 (rotated), at the handshake or mid-session → lanToken cleared
   Stale --> Stored: next BLE session refetches, snackbar LanTokenRenewed
   Stored --> Stale: unreadable encrypted value → token + port cleared
   Stored --> Stale: verified BLE station-generation change → token + port cleared
@@ -207,7 +220,7 @@ stateDiagram-v2
 `known_device.lanToken` (nullable) holds AES-GCM ciphertext. Rows read through the DAO, and so
 every ViewModel, see only that ciphertext, enough for `hasLanToken`. The plaintext hex comes only from
 `LanCredentialStore.lanToken(address)`, which the repository calls at the moment it builds a LAN
-transport (`tryLan`, `syncInBackground`). **Never logged, never displayed**: `KnownDevice.toString`,
+transport (`tryLan`, the facade `syncInBackground` worker path). **Never logged, never displayed**: `KnownDevice.toString`,
 `Frame.Token.toString`, `FrameRecorder` and the raw-command view redact it. Startup finishes the
 one-time plaintext migration before Auto-sync scheduling or triggers can read credentials. Failed GCM
 authentication (`AEADBadTagException`, which is also what a regenerated key gives), a key Android
@@ -281,7 +294,7 @@ API 34+: `registerServiceInfoCallback` (continuous, `getHostAddresses`). API 31�
 | `LanTokenPolicy` | repository `tryLan`, token refetch after Ready, snackbar copy |
 | `DeviceContinuityPolicy` / `DeviceIdentityClaims` | INFO acceptance, station epochs, credential renewal and prevention of duplicate physical-device owners |
 | `DeviceConnectionManager` | per-device ownership and snapshots; selection must not close another controller |
-| `LanDiscovery` TXT parsing | `AutoSyncPolicy.linksFor` (station match), Device screen LAN card |
+| `LanDiscovery` TXT parsing | `BackgroundSyncPolicy.linksFor` (station match), Device screen LAN card |
 | `DeviceFacade.activeTransport` | the top-bar chip on four screens |
 
 ## Automatic UTC on connection

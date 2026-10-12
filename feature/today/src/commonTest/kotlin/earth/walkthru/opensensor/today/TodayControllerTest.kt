@@ -3,29 +3,25 @@ package earth.walkthru.opensensor.today
 import earth.walkthru.aqsync.data.SyncProgress
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.protocol.DeviceStatus
-import earth.walkthru.aqsync.data.sync.ClockQuality
-import earth.walkthru.aqsync.settings.ClockSyncMode
 import earth.walkthru.aqsync.settings.DetailLevel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
-import earth.walkthru.aqsync.data.sync.ClockSyncMode as PolicyMode
 
 private class FakeSource(connection: ConnectionState = ConnectionState.Ready(247), status: DeviceStatus? = null) : TodaySource {
     override val snapshot = MutableStateFlow(TodaySnapshot(address = "AA", connection = connection, status = status))
     override val notices = MutableSharedFlow<TodayNotice>(extraBufferCapacity = 8)
     val calls = mutableListOf<String>()
 
-    override fun sync(mode: PolicyMode, clockConfirmed: Boolean) {
-        calls += "sync $mode $clockConfirmed"
+    override fun sync() {
+        calls += "sync"
     }
 
     override fun setTime() {
@@ -34,6 +30,10 @@ private class FakeSource(connection: ConnectionState = ConnectionState.Ready(247
 
     override fun flush() {
         calls += "flush"
+    }
+
+    override fun stopSync() {
+        calls += "stopSync"
     }
 
     override fun reconnect() {
@@ -52,11 +52,10 @@ private val clockMissing = DeviceStatus(utc = 0, clockSource = 0)
 class TodayControllerTest {
     private fun TestScope.controller(
         source: FakeSource,
-        mode: ClockSyncMode = ClockSyncMode.ASK,
         level: DetailLevel = DetailLevel.SIMPLE,
     ): TodayController {
         val scope = CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler))
-        return TodayController(scope, source, MutableStateFlow(level), MutableStateFlow(mode))
+        return TodayController(scope, source, MutableStateFlow(level))
     }
 
     @Test
@@ -93,34 +92,14 @@ class TodayControllerTest {
     }
 
     @Test
-    fun legacyAskWithAMissingClockSynchronizesAutomatically() = runTest {
-        val source = FakeSource(status = clockMissing)
-        val c = controller(source, ClockSyncMode.ASK)
-        c.smartSync()
-        assertNull(c.dialog.value)
-        assertEquals(listOf("sync AUTOMATIC false"), source.calls)
-    }
-
-    @Test
-    fun askWithAnAnchoredClockSyncsWithoutAQuestion() = runTest {
-        val source = FakeSource(status = DeviceStatus(utc = 1, clockSource = 1))
-        val c = controller(source, ClockSyncMode.ASK)
-        c.smartSync()
-        assertNull(c.dialog.value)
-        assertEquals(listOf("sync AUTOMATIC false"), source.calls)
-    }
-
-    @Test
-    fun automaticAndNeverDoNotAsk() = runTest {
-        val auto = FakeSource(status = clockMissing)
-        controller(auto, ClockSyncMode.AUTOMATIC).smartSync()
-        assertEquals(listOf("sync AUTOMATIC false"), auto.calls)
-
-        val never = FakeSource(status = clockMissing)
-        val c = controller(never, ClockSyncMode.NEVER)
-        c.smartSync()
-        assertNull(c.dialog.value)
-        assertEquals(listOf("sync AUTOMATIC false"), never.calls)
+    fun syncNeverAsksAboutTheClock() = runTest {
+        for (status in listOf(clockMissing, DeviceStatus(utc = 1, clockSource = 1))) {
+            val source = FakeSource(status = status)
+            val c = controller(source)
+            c.smartSync()
+            assertNull(c.dialog.value)
+            assertEquals(listOf("sync"), source.calls)
+        }
     }
 
     @Test
@@ -132,32 +111,40 @@ class TodayControllerTest {
     }
 
     @Test
-    fun aLegacyClockQuestionIsHandledAutomaticallyAndOtherNoticesPassThrough() = runTest {
+    fun flushWaitsWhileASyncRunsOrBackgroundWorkHoldsTheDevice() = runTest {
         val source = FakeSource()
         val c = controller(source)
-        val seen = mutableListOf<TodayNotice>()
-        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { c.notices.collect { seen += it } }
-
-        source.notices.emit(TodayNotice.ClockConfirmationRequired(ClockQuality.RTC_RESTORED))
-        source.notices.emit(TodayNotice.ClockSet)
+        source.snapshot.value = source.snapshot.value.copy(sync = SyncProgress(running = true))
+        c.requestFlush()
         assertNull(c.dialog.value)
-        assertEquals(listOf<TodayNotice>(TodayNotice.ClockSet), seen)
+        source.snapshot.value = source.snapshot.value.copy(sync = SyncProgress(), heldInBackground = true)
+        c.requestFlush()
+        c.smartSync()
+        assertNull(c.dialog.value)
+        assertEquals(emptyList(), source.calls)
+    }
 
-        c.confirm()
-        assertEquals(listOf("sync AUTOMATIC true"), source.calls)
+    @Test
+    fun stopReachesTheSourceOnlyForThisPhonesRunningSync() = runTest {
+        val source = FakeSource()
+        val c = controller(source)
+        c.stopSync()
+        source.snapshot.value = source.snapshot.value.copy(sync = SyncProgress(running = true), heldInBackground = true)
+        c.stopSync()
+        assertEquals(emptyList(), source.calls)
+        source.snapshot.value = source.snapshot.value.copy(heldInBackground = false)
+        c.stopSync()
+        assertEquals(listOf("stopSync"), source.calls)
     }
 
     @Test
     fun stateFollowsTheSettingsStore() = runTest {
         val source = FakeSource()
         val level = MutableStateFlow(DetailLevel.SIMPLE)
-        val mode = MutableStateFlow(ClockSyncMode.ASK)
         val scope = CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler))
-        val c = TodayController(scope, source, level, mode)
+        val c = TodayController(scope, source, level)
         level.value = DetailLevel.DEVELOPER
-        mode.value = ClockSyncMode.NEVER
         assertEquals(DetailLevel.DEVELOPER, c.state.value.level)
-        assertEquals(ClockSyncMode.NEVER, c.state.value.clockSyncMode)
     }
 
     @Test
@@ -167,10 +154,5 @@ class TodayControllerTest {
         c.reconnect()
         c.disconnect()
         assertEquals(listOf("reconnect", "disconnect"), source.calls)
-    }
-
-    @Test
-    fun settingsModesMapToThePolicyByName() {
-        ClockSyncMode.entries.forEach { assertEquals(it.name, it.toPolicy().name) }
     }
 }

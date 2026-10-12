@@ -31,15 +31,14 @@ data carries H3 cells, never coordinates.
 
 **One product on two phones.** Rules that must give the same answer on Android and iOS live in
 shared Kotlin, and screens share one design system based on the opensensor.space website. See
-[docs/cross-platform-guide.md](docs/cross-platform-guide.md). The production refactor that gets
-there is tracked in [docs/production-readiness-plan.md](docs/production-readiness-plan.md).
+[docs/cross-platform-guide.md](docs/cross-platform-guide.md).
 
 ## Platform status
 
 | Platform | Current scope | Verification |
 | --- | --- | --- |
 | Android | Multi-device BLE/LAN collection, verified local archive, offline history, and background sync | Host gate passes; phone qualification is tracked separately in [`docs/status.md`](docs/status.md) and the [CoreS3](../aq-parquet/docs/boards/m5stack-cores3/bench-verified.md) and [Waveshare](../aq-parquet/docs/boards/waveshare-esp32-s3-sim7670g/bench-verified.md) records. |
-| iOS | Foreground BLE enrollment/live readings; multi-sensor authenticated LAN sessions and verified local Parquet archive collection | Shared/native host tests and simulator/device builds pass. The earlier iPhone observation covers BLE live/discovery; new LAN transfer still needs real-phone qualification. See [`docs/ios-migration.md`](docs/ios-migration.md). |
+| iOS | The same shared screens, BLE and LAN collection into a verified local archive, offline history and per-device Auto-sync | Host, simulator and native checks pass. iPhone runs are tracked in [`docs/status.md`](docs/status.md), see [`docs/ios.md`](docs/ios.md) |
 
 Host tests, simulator builds, and phone observations are different evidence. The Android
 application ID and signing identity remain stable for existing installations. Read the
@@ -62,11 +61,10 @@ flowchart LR
 | --- | --- |
 | Product direction, device families, public H3 discover map, sharing rules | [`docs/devices-and-discovery.md`](docs/devices-and-discovery.md) |
 | Keeping Android and iOS the same, adding a sensor family or transport | [`docs/cross-platform-guide.md`](docs/cross-platform-guide.md) |
-| Production refactor plan and workstreams | [`docs/production-readiness-plan.md`](docs/production-readiness-plan.md) |
-| Rebrand, multi-device implementation, reset/reflash policy and remaining qualification | [`docs/opensensor-space.md`](docs/opensensor-space.md) |
+| Device identity, fixed names, reset and reflash recovery | [`docs/device-identity.md`](docs/device-identity.md) |
 | What is verified, where, and what is next | [`docs/status.md`](docs/status.md) |
 | Modules, layers, "what a change touches" | [`docs/architecture.md`](docs/architecture.md) |
-| iOS app, shared Kotlin boundaries, build and qualification | [`docs/ios-migration.md`](docs/ios-migration.md), [`ios/AGENTS.md`](ios/AGENTS.md) |
+| iOS app, shared Kotlin boundaries, build and qualification | [`docs/ios.md`](docs/ios.md), [`ios/AGENTS.md`](ios/AGENTS.md) |
 | Screens, navigation, detail levels | [`docs/screens.md`](docs/screens.md) |
 | Opcodes, frames, error codes, UUIDs, LAN framing (mirror of the firmware contract) | [`docs/protocol-quickref.md`](docs/protocol-quickref.md) |
 | BLE vs LAN, pairing, the LAN token, reconnect | [`docs/transports.md`](docs/transports.md) |
@@ -77,7 +75,6 @@ flowchart LR
 | Own Parquet reader/writer, GeoParquet 2.0, fixtures, oracles | [`docs/parquet.md`](docs/parquet.md) |
 | Stack, build, hooks, CI, signing, fake device | [`docs/build-and-release.md`](docs/build-and-release.md) |
 | Lessons learned, grouped by concern | [`docs/lessons-learned.md`](docs/lessons-learned.md) |
-| Long-form evaluation: history UX, data layer, iOS parity, D1–D11 | [`docs/history-ux-and-data-layer.md`](docs/history-ux-and-data-layer.md) |
 
 ## iOS app and current scope
 
@@ -88,7 +85,7 @@ can collect over Wi-Fi after each phone saves access through BLE pairing. The sh
 firmware allows three Wi-Fi clients per sensor alongside one BLE connection; both apps
 can sync two sensors concurrently per phone. History/export UI and background collection
 remain Android features while iOS migration continues. Build and qualification
-instructions are in [docs/ios-migration.md](docs/ios-migration.md); local iOS coding
+instructions are in [docs/ios.md](docs/ios.md); local iOS coding
 instructions are in [ios/AGENTS.md](ios/AGENTS.md). On 2026-10-08, the owner confirmed
 live readings, Bonjour discovery, saved Wi-Fi access and collection starting on a
 connected iPhone. Pairing prompts, reading accuracy, stale/background behavior and
@@ -107,7 +104,7 @@ tools/setup-hooks.sh                 # once per clone: git hooks (ktlint, gitlea
 adb install app/build/outputs/apk/debug/app-debug.apk
 ```
 
-The iOS build requires macOS and Xcode. Follow [`docs/ios-migration.md`](docs/ios-migration.md)
+The iOS build requires macOS and Xcode. Follow [`docs/ios.md`](docs/ios.md)
 for simulator framework linking, the Xcode build, and real-iPhone qualification steps.
 GitHub Actions validates shared Kotlin iOS tests and unsigned simulator Debug/device
 Release builds on Apple Silicon with Xcode 27 and the iOS 27 SDK. Simulator apps and failure reports are retained

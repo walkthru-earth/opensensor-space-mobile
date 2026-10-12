@@ -8,8 +8,9 @@ import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import earth.walkthru.aqsync.data.ArchiveTimeSummary
 import earth.walkthru.aqsync.data.DeviceConnectionManager
-import earth.walkthru.aqsync.data.DeviceConnectionRepository
 import earth.walkthru.aqsync.data.DeviceEvent
+import earth.walkthru.aqsync.data.DeviceFacade
+import earth.walkthru.aqsync.data.DeviceOwnership
 import earth.walkthru.aqsync.data.ReconnectState
 import earth.walkthru.aqsync.data.SyncProgress
 import earth.walkthru.aqsync.data.TimedLive
@@ -27,8 +28,6 @@ import earth.walkthru.aqsync.data.local.database.KnownDevice
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.settings.AppSettings
-import earth.walkthru.aqsync.data.settings.toShared
-import earth.walkthru.aqsync.data.sync.ClockSyncMode
 import earth.walkthru.opensensor.today.TodayArchive
 import earth.walkthru.opensensor.today.TodayController
 import earth.walkthru.opensensor.today.TodayNotice
@@ -42,14 +41,14 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.stateIn
 
 /**
  * Android host of the shared Today ([TodayController], `:feature:today`). The screen, its cards and
  * the confirmation dialogs are shared with iOS. This class only adapts the device's
- * [DeviceConnectionRepository] to the [TodaySource] port and reads the settings store.
+ * [DeviceFacade] to the [TodaySource] port and reads the settings store.
  */
 @HiltViewModel(assistedFactory = TodayViewModel.Factory::class)
 class TodayViewModel @AssistedInject constructor(
@@ -88,16 +87,15 @@ class TodayViewModel @AssistedInject constructor(
         scope = viewModelScope,
         source = source,
         detailLevel = settings.detailLevel,
-        clockSyncMode = settings.clockSyncMode.map { it.toShared() },
     )
 
     fun reconnectLanOnly() = repository.connect(deviceAddress, controller.state.value.snapshot.name, preference = TransportPreference.LAN_ONLY)
 }
 
-/** [DeviceConnectionRepository] as the shared Today port. Every verb is a call the old screen made. */
+/** [DeviceFacade] as the shared Today port. Every verb is a call the old screen made. */
 private class RepositoryTodaySource(
     scope: CoroutineScope,
-    private val repository: DeviceConnectionRepository,
+    private val repository: DeviceFacade,
     private val address: String,
     enrolled: Flow<KnownDevice?>,
     todaySoFar: Flow<TodaySoFar?>,
@@ -107,7 +105,7 @@ private class RepositoryTodaySource(
     override val snapshot: StateFlow<TodaySnapshot> = combine(
         repository.session, repository.connectionState, repository.info, repository.status, repository.live,
         repository.sync, repository.reconnecting, repository.activeTransport, todaySoFar, repository.archiveTimeSummary,
-        enrolled, repository.config,
+        enrolled, repository.config, repository.ownership,
     ) { values ->
         val session = values[0] as DeviceSession?
         val connection = values[1] as ConnectionState
@@ -132,19 +130,21 @@ private class RepositoryTodaySource(
             reconnecting = reconnect?.let { TodayReconnect(it.attempt, it.maxAttempts, it.reason) },
             needsPairingRepair = BleConnectionFailure.needsPairingRepair(connection),
             todaySoFar = values[8] as TodaySoFar?,
+            heldInBackground = values[12] == DeviceOwnership.BACKGROUND,
         )
     }.stateIn(scope, SharingStarted.Eagerly, TodaySnapshot(address = address))
 
-    /** Only the clock question. Info and error lines are shown from [DeviceConnectionRepository.events]. */
-    override val notices: Flow<TodayNotice> = repository.events.mapNotNull { event ->
-        (event as? DeviceEvent.ClockConfirmationRequired)?.let { TodayNotice.ClockConfirmationRequired(it.quality) }
-    }
+    /** Only the clock question. Info and error lines are shown from [DeviceFacade.events]. */
+    override val notices: Flow<TodayNotice> = emptyFlow()
 
-    override fun sync(mode: ClockSyncMode, clockConfirmed: Boolean) = repository.smartSync(mode, clockConfirmed)
+    /** Collection applies the automatic clock rule. */
+    override fun sync() = repository.smartSync()
 
     override fun setTime() = repository.setTimeFromPhone()
 
     override fun flush() = repository.flush()
+
+    override fun stopSync() = repository.cancelSync()
 
     override fun reconnect() = repository.connect(address, snapshot.value.name, fake = fakeEndpoint)
 

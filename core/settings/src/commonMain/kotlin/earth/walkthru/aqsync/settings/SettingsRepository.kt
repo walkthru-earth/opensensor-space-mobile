@@ -24,7 +24,6 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     val prefs: Flow<AppPrefs> = store.data.map { it.toAppPrefs() }.distinctUntilChanged()
 
     val detailLevel: Flow<DetailLevel> = prefs.map { it.detailLevel }.distinctUntilChanged()
-    val clockSyncMode: Flow<ClockSyncMode> = prefs.map { it.clockSyncMode }.distinctUntilChanged()
     val showPublicSensors: Flow<Boolean> = prefs.map { it.showPublicSensors }.distinctUntilChanged()
     val unitSystem: Flow<UnitSystem> = prefs.map { it.unitSystem }.distinctUntilChanged()
     val retention: Flow<RetentionPolicy> = prefs.map { it.retention }.distinctUntilChanged()
@@ -39,10 +38,6 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             it[SettingsKeys.DETAIL_LEVEL] = level.name
             it[SettingsKeys.ADVANCED_MODE] = level.developer
         }
-    }
-
-    suspend fun setClockSyncMode(mode: ClockSyncMode) {
-        store.edit { it[SettingsKeys.CLOCK_SYNC_MODE] = mode.name }
     }
 
     suspend fun setShowPublicSensors(on: Boolean) {
@@ -72,8 +67,6 @@ fun Preferences.toAppPrefs(): AppPrefs {
         ?: if (this[SettingsKeys.ADVANCED_MODE] == true) DetailLevel.DEVELOPER else defaults.detailLevel
     return AppPrefs(
         detailLevel = level,
-        clockSyncMode = this[SettingsKeys.CLOCK_SYNC_MODE]?.let { name -> ClockSyncMode.entries.firstOrNull { it.name == name } }
-            ?: defaults.clockSyncMode,
         showPublicSensors = this[SettingsKeys.SHOW_PUBLIC_SENSORS] ?: defaults.showPublicSensors,
         unitSystem = UnitSystem.parse(this[SettingsKeys.UNIT_SYSTEM]),
         retention = RetentionPolicy(

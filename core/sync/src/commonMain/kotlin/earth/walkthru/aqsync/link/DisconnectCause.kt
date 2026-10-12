@@ -1,5 +1,6 @@
 package earth.walkthru.aqsync.link
 
+import earth.walkthru.aqsync.data.protocol.DisconnectReason
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.protocol.Opcode
 import kotlin.time.Duration
@@ -46,6 +47,12 @@ sealed interface DisconnectCause {
     /** The phone lost the radio that carried the link. */
     data class RadioLost(val radio: Radio) : DisconnectCause
 
+    /**
+     * The phone cannot open this transport at all until the user acts: the radio is off, a
+     * permission is missing or there is no adapter. Retrying without that action repeats it.
+     */
+    data class Unavailable(val kind: UnavailableKind) : DisconnectCause
+
     /** The device speaks an older protocol than this app requires. */
     data class UpdateFirmware(val reported: Int?, val required: Int) : DisconnectCause
 
@@ -68,7 +75,13 @@ enum class AuthKind {
 
     /** The phone lost its bond keys for the peer (Android `ACTION_KEY_MISSING`). Pair again. */
     BOND_MISSING,
+
+    /** The device rotated its LAN token (BYE reason 10). A fresh token comes over bonded BLE. */
+    TOKEN_ROTATED,
 }
+
+/** Why a transport cannot be opened before any byte moves. */
+enum class UnavailableKind { RADIO_OFF, PERMISSION_MISSING, NO_ADAPTER }
 
 enum class Radio { BLUETOOTH, WIFI }
 
@@ -82,9 +95,24 @@ val DisconnectCause.retryable: Boolean
         is DisconnectCause.Deliberate,
         is DisconnectCause.FramingViolation,
         is DisconnectCause.Rejected,
+        is DisconnectCause.Unavailable,
         is DisconnectCause.UpdateFirmware -> false
         else -> true
     }
+
+/**
+ * Why the link ended when the peer closed it after [bye]. A BYE that names a credential or slot
+ * problem becomes its typed cause, so retry policy never reconnects with a rotated or refused LAN
+ * token and screens name the real reason. Any other BYE, or none, stays [DisconnectCause.PeerClosed].
+ * Only LAN sessions receive BYE (BLE never sends one), so `auth-failed` here is always a LAN token
+ * refusal, never a Bluetooth encryption failure.
+ */
+fun peerClosedCause(bye: Frame.Bye?): DisconnectCause = when (bye?.disconnectReason) {
+    DisconnectReason.TOKEN_ROTATED -> DisconnectCause.Auth(AuthKind.TOKEN_ROTATED)
+    DisconnectReason.AUTH_FAILED -> DisconnectCause.Auth(AuthKind.TOKEN_REJECTED)
+    DisconnectReason.SESSIONS_FULL -> DisconnectCause.Busy
+    else -> DisconnectCause.PeerClosed(bye)
+}
 
 /** Short label for logs. Contains codes and counts only. */
 fun DisconnectCause.describe(): String = when (this) {
@@ -100,6 +128,7 @@ fun DisconnectCause.describe(): String = when (this) {
     DisconnectCause.Busy -> "device busy"
     DisconnectCause.Unreachable -> "unreachable"
     is DisconnectCause.RadioLost -> "${radio.name.lowercase()} lost"
+    is DisconnectCause.Unavailable -> "unavailable (${kind.name.lowercase()})"
     is DisconnectCause.UpdateFirmware -> "firmware proto $reported, app needs $required"
     is DisconnectCause.Rejected -> "rejected ($reason)"
     is DisconnectCause.Deliberate -> "closed ($reason)"

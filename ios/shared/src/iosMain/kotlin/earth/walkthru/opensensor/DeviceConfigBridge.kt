@@ -42,7 +42,7 @@ internal class DeviceConfigLinks(
     /** The open connection's link to the sensor with this hardware id, or null when it is not connected. */
     val openConfigLink: (String) -> IosLink?,
     /**
-     * Reads the Wi-Fi access token over Bluetooth into the Keychain, the companion page's Save Wi-Fi
+     * Reads the Wi-Fi access token over Bluetooth into the Keychain, the Device settings Save Wi-Fi
      * access. Swift marks Wi-Fi access busy before returning when it started.
      */
     val saveWifiAccess: () -> Unit,
@@ -96,11 +96,19 @@ internal class IosDeviceConfigSource(
         val info = state.info.takeIf { bleReady } ?: lanInfo
         CompanionView(
             ready = ready,
+            connection = when {
+                ready -> ConnectionState.Ready(0)
+                state.failedId.equals(address, ignoreCase = true) -> ConnectionState.Failed(PAIRING_REPAIR)
+                state.reconnectingId.equals(address, ignoreCase = true) ||
+                    state.selectedId.equals(address, ignoreCase = true) -> ConnectionState.Connecting
+                else -> ConnectionState.Disconnected
+            },
             info = info,
             transport = if (bleReady) TransportKind.BLE else TransportKind.LAN,
             lanSeen = lan != null || (info != null && info.station in state.lanStations.values),
             busy = state.wifiAccessBusy || state.today.busy || (lan?.let { state.lanSessions[it]?.busy } == true),
             syncRunning = state.syncBusy || (lan?.let { state.lanSessions[it]?.busy } == true),
+            heldInBackground = state.heldInBackground(address, devices.stationFor(address)),
         )
     }
 
@@ -114,7 +122,7 @@ internal class IosDeviceConfigSource(
         DeviceConfigSnapshot(
             address = address,
             name = devices.nameFor(address),
-            connection = if (view.ready) ConnectionState.Ready(0) else ConnectionState.Disconnected,
+            connection = view.connection,
             transport = view.transport,
             info = view.info,
             config = cfg.takeIf { view.ready },
@@ -123,6 +131,7 @@ internal class IosDeviceConfigSource(
             hasLanToken = view.info?.dev?.lowercase()?.let { it in withAccess } == true,
             busy = busy || view.busy,
             syncRunning = view.syncRunning,
+            heldInBackground = view.heldInBackground,
         )
     }.stateIn(scope, SharingStarted.Eagerly, DeviceConfigSnapshot(address = address, name = devices.nameFor(address), transport = TransportKind.BLE))
 
@@ -319,15 +328,20 @@ internal class IosDeviceConfigSource(
 
     private data class CompanionView(
         val ready: Boolean,
+        val connection: ConnectionState,
         val info: DeviceInfo?,
         val transport: TransportKind,
         val lanSeen: Boolean,
         val busy: Boolean,
         val syncRunning: Boolean,
+        val heldInBackground: Boolean,
     )
 
     private companion object {
         const val REBOOT_MIN_MS = 100L
+
+        /** The technical reason behind a lost bond. The screen shows its own words. */
+        const val PAIRING_REPAIR = "BOND_MISSING"
         const val REBOOT_MAX_MS = 5_000L
 
         /** The same wait Android takes before reconnecting after a restart. */

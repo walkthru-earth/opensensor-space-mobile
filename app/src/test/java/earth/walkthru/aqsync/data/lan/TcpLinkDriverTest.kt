@@ -2,6 +2,7 @@ package earth.walkthru.aqsync.data.lan
 
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.NotAllowedOnLinkException
+import earth.walkthru.aqsync.data.ble.TransportUnavailableException
 import earth.walkthru.aqsync.data.openableSession
 import earth.walkthru.aqsync.data.protocol.DisconnectReason
 import earth.walkthru.aqsync.data.protocol.Frame
@@ -21,6 +22,8 @@ import earth.walkthru.aqsync.link.LinkState
 import earth.walkthru.aqsync.link.LinkTimeoutException
 import earth.walkthru.aqsync.link.PushChannel
 import earth.walkthru.aqsync.link.TimeoutPhase
+import earth.walkthru.aqsync.link.UnavailableKind
+import earth.walkthru.aqsync.link.retryable
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -427,6 +430,27 @@ class TcpLinkDriverTest {
     }
 
     @Test
+    fun `a connect refused for the local network permission is Unavailable, not retried`() = runBlocking {
+        val refusing = {
+            object : Socket() {
+                override fun connect(endpoint: java.net.SocketAddress?, timeout: Int) = throw java.net.SocketException("connect failed: EPERM (Operation not permitted)")
+            }
+        }
+        val sink = RecordingSink()
+        val e = try {
+            withTimeout(10_000) { driver(1, socketFactory = refusing).open(sink) }
+            fail("expected LinkClosedException")
+            error("unreachable")
+        } catch (e: LinkClosedException) {
+            e
+        }
+        assertEquals(DisconnectCause.Unavailable(UnavailableKind.PERMISSION_MISSING), e.disconnectCause)
+        assertEquals(e.disconnectCause, sink.closed.await())
+        assertEquals(UnavailableKind.PERMISSION_MISSING, (e.cause as TransportUnavailableException).kind)
+        assertTrue(!e.disconnectCause.retryable)
+    }
+
+    @Test
     fun `wrong token is Auth TOKEN_REJECTED`() = runBlocking {
         FakeLanDevice(token, hello()) { emptyList() }.use {
             val e = openFails(it, it.port, ByteArray(32) { 0x42 })
@@ -452,6 +476,26 @@ class TcpLinkDriverTest {
             val e = openFails(it, it.port)
             assertEquals(DisconnectCause.Auth(AuthKind.TOKEN_REJECTED), e.disconnectCause)
             assertEquals(LanFailure.AUTH_FAILED, (e.cause as LanConnectException).failure)
+        }
+    }
+
+    @Test
+    fun `BYE token-rotated at the handshake is Auth TOKEN_ROTATED`() = runBlocking {
+        val bye = FrameCodec.encode(Frame.Bye(DisconnectReason.TOKEN_ROTATED.code, 2, -1, 0, 5))
+        FakeLanDevice(token, bye) { emptyList() }.use {
+            val e = openFails(it, it.port)
+            assertEquals(DisconnectCause.Auth(AuthKind.TOKEN_ROTATED), e.disconnectCause)
+            assertEquals(LanFailure.AUTH_FAILED, (e.cause as LanConnectException).failure)
+        }
+    }
+
+    @Test
+    fun `BYE sessions-full at the handshake is Busy`() = runBlocking {
+        val bye = FrameCodec.encode(Frame.Bye(DisconnectReason.SESSIONS_FULL.code, 2, -1, 0, 5))
+        FakeLanDevice(token, bye) { emptyList() }.use {
+            val e = openFails(it, it.port)
+            assertEquals(DisconnectCause.Busy, e.disconnectCause)
+            assertEquals(LanFailure.BUSY, (e.cause as LanConnectException).failure)
         }
     }
 

@@ -1,4 +1,4 @@
-// Shared app settings (docs/platform-parity-plan.md, `:core:settings`). One Preferences DataStore
+// Shared app settings (`:core:settings`). One Preferences DataStore
 // on Android and iOS with Android's existing file name and keys, so Android users keep their values.
 // The detail level, the Smart Sync clock consent, the Discover network switch, the units and the
 // cache quotas. Pure

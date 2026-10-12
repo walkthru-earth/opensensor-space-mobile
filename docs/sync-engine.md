@@ -45,7 +45,7 @@ sentence for them.
 | BLE writes | With response | `control` with response, payload sized from `maximumWriteValueLength(for: .withResponse)` |
 | Background | `SyncWorker` on WorkManager | UIKit background-task leases for active BLE and LAN transfers. iOS 26 continued tasks support eligible collection, with bounded lease fallback |
 
-The keepalive rules are unchanged on both phones. See [ios-migration.md](ios-migration.md) for
+The keepalive rules are unchanged on both phones. See [ios.md](ios.md) for
 bounded execution and phone qualification.
 
 ## One file
@@ -73,11 +73,29 @@ Sync is a **pull of immutable files**. The device is never asked to delete, rena
 
 Android `DeviceFacade` owns one collection controller per address and routes Sync all,
 Smart Sync, one-file sync and worker requests into it. `DeviceLinkOwner` lends connections
-and owns manual commands and idle reconnect. `DeviceConnectionRepository` is the
-compatibility typealias for the facade. iOS uses the shared link, collector and engine through
-`SensorSync`, and `SensorCollections` holds one controller per device over `IosLinkProvider`,
-which asks Swift to dial when a retry finds no open link. Only tests build it today. Routing the Swift entry points into
-it, and giving it a Swift dial, remains [#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81).
+and owns manual commands and idle reconnect. iOS routes every sync through the same controller
+([#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81)). `SensorCollections` is
+one app-wide instance that holds one controller per device over `IosLinkProvider`. Sync, Smart
+Sync, one-file sync, Collect all steps and Auto-sync steps on Bluetooth and Wi-Fi all call
+`runs.collect`, and a retry that finds no open link asks Swift to dial it again. Swift answers each
+dial with a `DialResult`. A refusal is `Unreachable` and retried. Bluetooth that is off, not
+allowed or missing throws `TransportUnavailableException` of that kind, which ends the run at once
+as `BLUETOOTH_OFF` or `PERMISSION_MISSING`. `IosKeepAlive` hands out the background time leases a
+run holds.
+
+On iOS each result carries `SyncResult.endReason` (`SyncEndReason`), mapped from the typed
+`DisconnectCause` and `CollectionFailure` as Android does. A lost or stale bond ends as
+`PAIRING_REPAIR`, which the station page and My devices show as a failed link that needs pairing
+again. A stop by the user or the app reads `STOPPED` and one by the OS `INTERRUPTED`, from the
+shared `CollectionState.endReason()`. `SyncResult.dropsLanToken` is true for `TOKEN_REJECTED` and
+`TOKEN_ROTATED`, the causes `LanTokenPolicy.invalidatesToken` names, and Swift then removes the
+Keychain token. A BYE in place of HELLO goes through `peerClosedCause` the same way, so a rotated
+token is dropped and sessions-full reads as busy. A run iOS stops when the app leaves the screen is kept as interrupted
+(`SensorCollections.interrupt`). When the app is active again, `AppServices.resumeInterrupted`
+starts it once through the Swift entry points, and Forget drops it. A Bluetooth resume yields to a
+page reopened over Bluetooth for another sensor and is dropped. Today shows how a run ended
+(`SyncMood` STOPPED or FAILED with one `SyncEndLine`), and its Stop ends only this phone's running
+sync, never a worker's.
 
 ## Planner (`SyncPlanner`)
 
@@ -138,7 +156,7 @@ per BLE connection and LAN peer. Phone ownership policy remains per physical dev
 Raw Hive paths and outer INFO-station namespaces remain unchanged. After station regeneration,
 a retained inner Hive station mismatch is archived/exportable but excluded from the new station's
 history. Earlier epochs remain separately selectable. Richer producer provenance and duplicate
-old-station downloads need an owner-contract decision ([opensensor-space.md](opensensor-space.md)).
+old-station downloads need an owner-contract decision ([device-identity.md](device-identity.md#files-from-another-station-on-the-same-sd-card)).
 
 ## Archive layout (`FileArchive`)
 
@@ -218,9 +236,13 @@ fake and compatibility `AqTransport` paths. iOS uses the connection's `IosLink`.
 - The optional `Heartbeat` (LAN 120 s ping, 180 s deadline) reads only reader RX marks from an
   injected `TimeSource`. Nothing polls.
 - Loss is a typed `DisconnectCause`. `retryable` is false for `Auth`, `Deliberate`,
-  `FramingViolation`, `Rejected` and `UpdateFirmware`. `Rejected` is a peer the app refused after
+  `FramingViolation`, `Rejected`, `Unavailable` and `UpdateFirmware`. `Rejected` is a peer the app refused after
   it answered (another identity, hardware held elsewhere, a failed setup step). A `BYE` refuses new requests and attaches its reason
-  to the close.
+  to the close. `peerClosedCause` types three reasons: `token-rotated` (10) is `Auth(TOKEN_ROTATED)`,
+  `auth-failed` (3) is `Auth(TOKEN_REJECTED)` and `sessions-full` (4) is `Busy`. Any other BYE stays
+  `PeerClosed(bye)`. `LanTokenPolicy.invalidatesToken(cause)` is true for both `Auth` token kinds.
+  Android `TcpLinkDriver` applies `peerClosedCause` to a BYE at the handshake too. A Bluetooth GATT connect that fails
+  with a plain status (`BleLinkDriver.ConnectFailedException`) is `Unreachable`, a connect timeout is `Timeout(OPEN)`.
 - `open` applies `requireProto3`, so firmware below proto 3 ends as `UpdateFirmware`.
 
 ## Collection controller (`core/sync` `collection/`, #56)
@@ -275,14 +297,19 @@ stateDiagram-v2
 - **Retry.** A retryable `DisconnectCause` publishes `Waiting(attempt, retryAtEpochMs)`, waits per
   `RetryPolicy` (2 s doubling to 60 s, 5 attempts, no retry starts after 30 min) and starts again at
   `Preparing(CONNECT)` with a fresh `LIST`. An attempt that received bytes resets the count.
-  `Auth` fails at once, `Deliberate` ends `Stopped(APP)`. Spent retries end
-  `Failed(Link(lastCause))`. Partial files resume by offset through the collector.
+  A connect that finds nothing (`Unreachable` or `Timeout(OPEN)`, see `connectPhase`) retries only
+  `RetryPolicy.connectRetries` times in a row (1), so an absent device ends fast. `Auth` and
+  `Unavailable` (a `TransportUnavailableException` for radio off, missing permission or no adapter)
+  fail at once with no wait, `Deliberate` ends `Stopped(APP)`. Spent retries end
+  `Failed(Link(lastCause))`. Partial files resume by offset through the collector. The shared
+  permit is handed back for the `Waiting` backoff and taken again before the next connect, so a
+  device that is away never blocks one in reach. PROCESS stays held.
 - **Outcomes** stay in `state`. `events` is a bounded channel of terminal states for one toast
   consumer and drops the oldest when nobody reads.
 - **Logs** carry the intent id, state names, causes and counts, never names of networks, tokens or
   a PIN.
 
-`SyncResumePolicy` remains a compatibility helper with tests, with no production callers. Android collection
+Android collection
 retry is owned exclusively by `CollectionController`. `StopSource.FGS_TIMEOUT` distinguishes
 the Android service deadline from a user Stop. A generation-specific refused foreground start
 ends only its protected intents as `Failed(KeepAliveRefused)`.
@@ -296,8 +323,18 @@ attempts. Worker summaries use those new totals.
 `CollectionState` is the authoritative Android lifecycle. `DeviceFacade` projects it to
 `SyncProgress` for Files and notifications, keeping `running` true through preparation,
 retry waiting and finalization. Done maps to COMPLETED, Failed to FAILURE and Stopped to
-STOPPED. PROCESS lease ownership determines service lifetime, even during terminal cleanup.
+STOPPED. `SyncProgress.endReason` names why a run ended (2026-10-12), set from
+`CollectionState.endReason()` (below). Each reason has its own short message
+(`DeviceMessage.SyncEnded`), pairing repair and not enough space keep their own paths. The last
+`SyncProgress` and the archive summary survive a disconnect. The summary reads Room for the bound
+station and counts every archived row, like the Stations card. `DeviceFacade.ownership` says
+whether a device is idle, held by an interactive run or by a background worker. A restart during
+cleanup takes over the old reservation and hands it back only after that run let go. A collection
+that ends on a dead link clears it, so workers do not skip the device. PROCESS lease ownership determines service lifetime, even during terminal cleanup.
 Per-file outcomes remain separate from controller failure. iOS receives typed `SyncResult`.
+`CollectionState.endReason()` (in `SyncEndReason.kt`) gives the `SyncEndReason` for
+`SyncProgress.endReason`: Done is COMPLETED, Failed uses `CollectionFailure.endReason()`, Stopped by
+USER or APP is STOPPED and by SYSTEM or FGS_TIMEOUT is INTERRUPTED. Null while active or idle.
 
 **Session errors end the run (2026-10-09).** An `ERROR` about the session, not the file, is not a
 per-file `DeviceError`. `AUTH_FAILED`, `BUSY` and any `ERROR` with op 0 during `OPEN` or `READ`
@@ -342,7 +379,7 @@ listing, even when that plan has zero missing files. A failed refresh keeps know
 but reports a typed collection failure, starts no download, and cannot emit `UpToDate`. The Files screen
 suppresses its all-synced message while the latest refresh is loading or failed. Stop and disconnect
 also cancel preparation before the first OPEN; the command slot hands off atomically to the transfer.
-Host regressions: `DeviceConnectionRepositoryTest`. The shared `DeviceSession.list` rejects a
+Host regressions: `DeviceFacadeTest`. The shared `DeviceSession.list` rejects a
 FILE-frame count that differs from LIST_END on both phone platforms without delaying the next
 request and with the link still Ready (`DeviceSessionTest`). These checks
 cannot detect a firmware scan that silently skips card entries and reports its own smaller count;
@@ -353,24 +390,19 @@ the firmware must report scan failure instead of LIST_END in that case.
 Android active collection retry belongs exclusively to `CollectionController`. A retryable
 `DisconnectCause` enters Waiting with PROCESS held, then restarts CONNECT, clock setup, LIST
 and PLAN. Partial bytes resume only after a new OPENED confirms size and CRC. The controller
-uses its bounded `RetryPolicy`, not the old five-minute `SyncResumePolicy.shouldResume`
-progress heuristic. `SyncResumePolicy` remains in core for compatibility tests only.
+uses its bounded `RetryPolicy`.
 
 Idle reconnect belongs to `DeviceLinkOwner`, which suppresses its watcher while collection
 is reserved. A user Stop, deliberate disconnect, service timeout or refused protection
 ends the relevant intent. Workers additionally remain bounded by their eight-minute attempt.
-iOS adapters retain their native retry and foreground-resume intent until issue 81.
-
-Historical observation motivating the old compatibility policy. Seen on the phone: the sync died of the pipe a
-moment before the link was declared lost, the reconnect succeeded with `resumeSync=false`, and the
-user had to press Sync all again — hence the policy.
+iOS runs the same controller retry through `SensorCollections`.
 
 ## Smart Sync and state-changing requests
 
 **Device UTC synchronizes automatically on connection, before LIST.** Android and iOS send
 phone UTC without a manual clock control or consent setting. Smart Sync retries missing or
 RTC-restored UTC automatically; phone and network anchors (`clk == 1` or `clk == 3`) continue
-without a second clock update. Legacy Ask/Never preferences cannot disable this behavior.
+without a second clock update. An old stored `clock_sync_mode` key is ignored.
 
 The accepted UTC/monotonic acknowledgement is bound to the full station and boot identity,
 allowing the local archive to reconcile earlier untimed rows from that boot. Android collection

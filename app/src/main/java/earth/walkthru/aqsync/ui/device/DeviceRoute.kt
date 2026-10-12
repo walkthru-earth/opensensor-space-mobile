@@ -46,8 +46,6 @@ fun DeviceRoute(
     onOpenToday: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenFiles: () -> Unit,
-    onOpenDebug: () -> Unit,
-    onOpenSettings: () -> Unit,
     onDisconnected: () -> Unit,
     viewModel: DeviceViewModel = hiltViewModel<DeviceViewModel, DeviceViewModel.Factory>(key = address, creationCallback = { it.create(address) }),
 ) {
@@ -59,11 +57,10 @@ fun DeviceRoute(
     var stickerScan by remember { mutableStateOf<StickerScan?>(null) }
     val scanUnrecognized = stringResource(R.string.sensor_scan_unrecognized)
     val scanUnavailable = stringResource(R.string.sensor_scan_unavailable)
-    val clockHint = stringResource(R.string.event_clock_on_today)
     val res = LocalResources.current
 
     CollectEvents(viewModel.events) { ev ->
-        snackbar.showScreenMessage(res, ev) { snackbar.showSnackbar(clockHint) }
+        snackbar.showScreenMessage(res, ev)
     }
     // Confirm dialogs and the controller's own notices (validation, sensor saved).
     DeviceConfigEffects(controller, snackbar)
@@ -99,8 +96,6 @@ fun DeviceRoute(
                 DeviceAction.OpenToday -> onOpenToday()
                 DeviceAction.OpenHistory -> onOpenHistory()
                 DeviceAction.OpenFiles -> onOpenFiles()
-                DeviceAction.OpenDebug -> onOpenDebug()
-                DeviceAction.OpenSettings -> onOpenSettings()
                 DeviceAction.Disconnect -> { viewModel.disconnect(); onDisconnected() }
                 DeviceAction.Reconnect -> {
                     if (canReconnectLanOnly(bluetooth.ready, localNetwork.ready, lanReconnectAvailable)) {

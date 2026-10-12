@@ -1,7 +1,6 @@
 package earth.walkthru.opensensor.settings
 
 import earth.walkthru.aqsync.settings.AppPrefs
-import earth.walkthru.aqsync.settings.ClockSyncMode
 import earth.walkthru.aqsync.settings.DetailLevel
 import earth.walkthru.aqsync.settings.SettingsRepository
 import earth.walkthru.aqsync.units.UnitSystem
@@ -79,10 +78,6 @@ class SettingsController(
 
     fun setDetailLevel(level: DetailLevel) {
         scope.launch { repository.setDetailLevel(level) }
-    }
-
-    fun setClockSyncMode(mode: ClockSyncMode) {
-        scope.launch { repository.setClockSyncMode(mode) }
     }
 
     fun setShowPublicSensors(on: Boolean) {

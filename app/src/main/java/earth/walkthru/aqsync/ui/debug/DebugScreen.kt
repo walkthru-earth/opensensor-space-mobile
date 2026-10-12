@@ -6,10 +6,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalResources
-import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.ui.components.CollectEvents
 import earth.walkthru.aqsync.ui.components.ConnectionBanner
 import earth.walkthru.aqsync.ui.components.showDeviceEvent
@@ -29,10 +27,9 @@ fun DebugScreen(
     val developer by viewModel.developer.collectAsStateWithLifecycle()
     val sessionAddress by viewModel.sessionAddress.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
-    val clockHint = stringResource(R.string.event_clock_on_today)
     val res = LocalResources.current
     CollectEvents(viewModel.events) { ev ->
-        snackbar.showDeviceEvent(res, ev) { snackbar.showSnackbar(clockHint) }
+        snackbar.showDeviceEvent(res, ev)
     }
     LaunchedEffect(sessionAddress) {
         if (sessionAddress != null && sessionAddress != address) onDisconnected()

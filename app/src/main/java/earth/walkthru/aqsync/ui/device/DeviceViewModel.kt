@@ -13,6 +13,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.DeviceConnectionManager
 import earth.walkthru.aqsync.data.DeviceMessage
+import earth.walkthru.aqsync.data.DeviceOwnership
 import earth.walkthru.aqsync.data.TimedStatus
 import earth.walkthru.aqsync.data.TransportFactory
 import earth.walkthru.aqsync.data.TransportPreference
@@ -21,6 +22,7 @@ import earth.walkthru.aqsync.data.background.AutoSyncScheduler
 import earth.walkthru.aqsync.data.background.CompanionPresence
 import earth.walkthru.aqsync.data.ble.ConfigSnapshot
 import earth.walkthru.aqsync.data.ble.ConnectionState
+import earth.walkthru.aqsync.data.ble.StationStatus
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.fake.FakeTransport
 import earth.walkthru.aqsync.data.history.DeviceCapabilities
@@ -75,6 +77,8 @@ data class DeviceUiState(
     val busy: Boolean = false,
     /** A file transfer is running on this session (interactive or worker-fed). */
     val syncRunning: Boolean = false,
+    /** A background worker or Collect all holds this device, see [StationStatus]. */
+    val heldInBackground: Boolean = false,
     val isFake: Boolean = false,
     val detailLevel: DetailLevel = DetailLevel.SIMPLE,
     /** The phone has the companion-device feature (the "wake when nearby" setup can be offered). */
@@ -96,13 +100,16 @@ data class DeviceUiState(
     val advancedMode: Boolean get() = detailLevel.developer
     val isV2: Boolean get() = capabilities.configurable
     val ready: Boolean get() = connection.isReady
-    val canEdit: Boolean get() = ready && isV2 && !busy
+    val canEdit: Boolean get() = ready && isV2 && !busy && !heldInBackground
+
+    /** The status every station page reads, the same rule Today and Files use. */
+    val station: StationStatus get() = StationStatus(connection, syncRunning = syncRunning, heldInBackground = heldInBackground)
 
     /**
      * Actions that drop the link (reboot, rotate token, forget bonds) are also refused while a
      * transfer runs: a `REBOOT` mid-sync would kill the download and finalize the RAM batch under it.
      */
-    val canDisrupt: Boolean get() = canEdit && !syncRunning
+    val canDisrupt: Boolean get() = canEdit && !station.busy
     val overBle: Boolean get() = transport == TransportKind.BLE || transport == TransportKind.FAKE
 
     /** What the shared Device section reads. The LAN token itself never leaves the repository. */
@@ -120,6 +127,7 @@ data class DeviceUiState(
         hasLanToken = known?.hasLanToken == true,
         busy = busy,
         syncRunning = syncRunning,
+        heldInBackground = heldInBackground,
         sensorRecord = sensorRecord,
     )
 }
@@ -193,8 +201,8 @@ class DeviceViewModel @AssistedInject constructor(
     }
 
     // The transport chip reads the repository's activeTransport flow, not the session object (see there).
-    private val activity = combine(repository.busy, repository.sync, repository.activeTransport) { busy, sync, transport ->
-        Triple(busy, sync.running, transport)
+    private val activity = combine(repository.busy, repository.sync, repository.activeTransport, repository.ownership) { busy, sync, transport, owner ->
+        Activity(busy, sync.running, transport, owner == DeviceOwnership.BACKGROUND)
     }
 
     val uiState: StateFlow<DeviceUiState> = combine(
@@ -203,15 +211,16 @@ class DeviceViewModel @AssistedInject constructor(
         lan,
         activity,
         combine(settings.detailLevel, companionBusy) { a, b -> a to b },
-    ) { base, scan, (lanDevices, lanErr, known), (busy, syncRunning, transport), (level, companionBusy) ->
+    ) { base, scan, (lanDevices, lanErr, known), activity, (level, companionBusy) ->
         base.copy(
-            transport = transport,
+            transport = activity.transport,
             wifiScan = scan,
             known = known,
             onLan = base.info?.station?.let { lanDevices[it] },
             lanDiscoveryError = lanErr,
-            busy = busy,
-            syncRunning = syncRunning,
+            busy = activity.busy,
+            syncRunning = activity.syncRunning,
+            heldInBackground = activity.heldInBackground,
             detailLevel = level,
             companionSupported = companionPresence.supported && !base.isFake,
             companionBusy = companionBusy,
@@ -224,7 +233,7 @@ class DeviceViewModel @AssistedInject constructor(
     }
 
     /**
-     * The shared Device section over this repository (docs/parity-decisions.md P53). Pairing, Wi-Fi,
+     * The shared Device section over this repository. Pairing, Wi-Fi,
      * Sync over Wi-Fi, paired phones and the sticker card run through it, with its four
      * confirmations and its Wi-Fi join poll. Repository outcomes still arrive through [events].
      */
@@ -397,3 +406,6 @@ class DeviceViewModel @AssistedInject constructor(
         repository.connect(deviceAddress, s.name, preference = TransportPreference.LAN_ONLY)
     }
 }
+
+/** What the link is doing for the Device page: a command in flight, a transfer, the pipe and the owner. */
+private data class Activity(val busy: Boolean, val syncRunning: Boolean, val transport: TransportKind?, val heldInBackground: Boolean)

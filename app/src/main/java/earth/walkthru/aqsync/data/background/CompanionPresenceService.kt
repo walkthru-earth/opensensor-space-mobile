@@ -94,7 +94,7 @@ class CompanionPresenceService : CompanionDeviceService() {
                 !known.autoSync -> Log.i(TAG, "${known.name ?: address} appeared; Auto-sync is off, nothing to do")
                 else -> {
                     Log.i(TAG, "${known.name ?: address} appeared; enqueueing a background sync")
-                    scheduler.syncNow(address, SyncTrigger.PRESENCE)
+                    if (scheduler.syncNow(address, SyncTrigger.PRESENCE) == AutoSyncScheduler.Enqueue.ALREADY_QUEUED) Log.i(TAG, "${known.name ?: address}: a triggered run is already queued")
                 }
             }
         }

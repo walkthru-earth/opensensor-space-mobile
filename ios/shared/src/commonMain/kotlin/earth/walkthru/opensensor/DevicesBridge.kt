@@ -8,6 +8,7 @@ import earth.walkthru.opensensor.devices.ArchiveGlance
 import earth.walkthru.opensensor.devices.CollectAllPlan
 import earth.walkthru.opensensor.devices.CollectAllPort
 import earth.walkthru.opensensor.devices.CollectAllQueue
+import earth.walkthru.opensensor.devices.CollectRoute
 import earth.walkthru.opensensor.devices.DeviceRadio
 import earth.walkthru.opensensor.devices.DevicesController
 import earth.walkthru.opensensor.devices.KnownDeviceStore
@@ -116,7 +117,10 @@ internal object IosKnown {
 
     /**
      * The open links. The one Bluetooth link by its peripheral id, then each Wi-Fi session that is
-     * connecting or connected, by service name.
+     * connecting, connected or paused, by service name. A Bluetooth link that dropped under a run
+     * shows [LinkPhase.RECONNECTING] until it is back, and a lost bond shows [LinkPhase.FAILED]
+     * until a new connection starts. Core Bluetooth reports no bonding step, so iOS never shows
+     * [LinkPhase.PAIRING]. [bluetoothBackground] and [lanBackground] mark Auto-sync steps.
      */
     fun active(
         selectedId: String?,
@@ -126,27 +130,47 @@ internal object IosKnown {
         syncTotal: Int,
         name: String?,
         lanSessions: Map<String, LanSessionState>,
+        reconnectingId: String? = null,
+        failedId: String? = null,
+        bluetoothBackground: Boolean = false,
+        lanPaused: Set<String> = emptySet(),
+        lanBackground: Set<String> = emptySet(),
     ): List<ActiveLink> {
-        val bluetooth = selectedId?.let {
+        val bluetooth = (selectedId ?: reconnectingId ?: failedId)?.let {
+            val phase = when {
+                connected -> LinkPhase.CONNECTED
+                reconnectingId != null && it == reconnectingId -> LinkPhase.RECONNECTING
+                selectedId == null && it == failedId -> LinkPhase.FAILED
+                else -> LinkPhase.CONNECTING
+            }
             ActiveLink(
                 id = it,
                 name = name,
-                phase = if (connected) LinkPhase.CONNECTED else LinkPhase.CONNECTING,
-                collecting = connected && syncBusy,
+                phase = phase,
+                collecting = syncBusy && (connected || phase == LinkPhase.RECONNECTING),
                 filesDone = syncDone,
                 filesTotal = syncTotal,
+                background = bluetoothBackground,
             )
         }
-        val wifi = lanSessions.entries.sortedBy { it.key }.filter { it.value.connected || it.value.busy }.map { (n, s) ->
-            ActiveLink(
-                id = WIFI_PREFIX + n,
-                name = n,
-                phase = if (s.connected) LinkPhase.CONNECTED else LinkPhase.CONNECTING,
-                collecting = s.connected && s.busy,
-                filesDone = s.filesDone,
-                filesTotal = s.filesTotal,
-            )
-        }
+        val wifi = lanSessions.entries.sortedBy { it.key }
+            .filter { it.value.connected || it.value.busy || it.key in lanPaused }
+            .map { (n, s) ->
+                val paused = n in lanPaused && !s.connected
+                ActiveLink(
+                    id = WIFI_PREFIX + n,
+                    name = n,
+                    phase = when {
+                        s.connected -> LinkPhase.CONNECTED
+                        paused -> LinkPhase.RECONNECTING
+                        else -> LinkPhase.CONNECTING
+                    },
+                    collecting = s.busy && (s.connected || paused),
+                    filesDone = s.filesDone,
+                    filesTotal = s.filesTotal,
+                    background = n in lanBackground,
+                )
+            }
         return listOfNotNull(bluetooth) + wifi
     }
 
@@ -253,6 +277,29 @@ class DevicesBridge internal constructor(
         settle(q)
     }
 
+    /**
+     * One rule for every user path on a sensor id. The user wins, so Collect all stops first when the
+     * action targets a sensor the pass holds now or still plans. Its running step finishes on its
+     * own. A [takesBluetooth] action, opening a sensor, also stops a pass whose running step is on
+     * Bluetooth, because the phone holds one Bluetooth link. Any other action leaves the pass going.
+     */
+    fun userFirst(action: (String) -> Unit, takesBluetooth: Boolean = false): (String) -> Unit = { id ->
+        stopCollectAllFor(id, takesBluetooth)
+        action(id)
+    }
+
+    fun <B> userFirst(action: (String, B) -> Unit): (String, B) -> Unit = { id, b ->
+        stopCollectAllFor(id, takesBluetooth = false)
+        action(id, b)
+    }
+
+    private fun stopCollectAllFor(id: String, takesBluetooth: Boolean) {
+        val q = queue ?: return
+        val targeted = (q.runningIds + q.plannedIds).any { it.equals(id, ignoreCase = true) }
+        val onBluetooth = takesBluetooth && q.runningSteps.any { it.route == CollectRoute.BLUETOOTH }
+        if (targeted || onBluetooth) cancelCollectAll()
+    }
+
     /** The name the device page shows for a row id, from the scan, the known records or the Wi-Fi name. */
     internal fun nameFor(id: String): String? =
         if (id.startsWith(IosKnown.WIFI_PREFIX)) {
@@ -267,6 +314,10 @@ class DevicesBridge internal constructor(
     /** The 12-hex hardware id INFO gave for this peripheral, so Swift can find its Wi-Fi session. */
     fun deviceFor(peripheral: String): String? =
         (records.value + credentials.value).firstOrNull { it.peripheral.equals(peripheral, ignoreCase = true) }?.device
+
+    /** The saved peripheral id for a 12-hex hardware id, so a retry can reopen its Bluetooth link. */
+    fun peripheralFor(device: String): String? =
+        (records.value + credentials.value).firstOrNull { it.device.equals(device, ignoreCase = true) }?.peripheral
 
     /** The verified station for a previously opened peripheral. This is only a discovery hint. */
     fun stationFor(peripheral: String): String? =
@@ -308,11 +359,18 @@ class DevicesBridge internal constructor(
     internal fun wifiNow(): List<WifiSensor> = state.lanDevices.map { WifiSensor(it, state.lanStations[it]) }
 
     internal fun activeNow(): List<ActiveLink> {
-        val name = state.selectedId?.let { id ->
+        val name = (state.selectedId ?: state.reconnectingId ?: state.failedId)?.let { id ->
             state.devices.firstOrNull { it.id == id }?.name ?: records.value.firstOrNull { it.peripheral.equals(id, ignoreCase = true) }?.name
         }
         val progress = state.syncProgress
-        return IosKnown.active(state.selectedId, state.connected, state.syncBusy, progress?.filesDone ?: 0, progress?.filesTotal ?: 0, name, state.lanSessions)
+        return IosKnown.active(
+            state.selectedId, state.connected, state.syncBusy, progress?.filesDone ?: 0, progress?.filesTotal ?: 0, name, state.lanSessions,
+            reconnectingId = state.reconnectingId,
+            failedId = state.failedId,
+            bluetoothBackground = state.bluetoothBackground,
+            lanPaused = state.lanPaused,
+            lanBackground = state.lanBackground,
+        )
     }
 
     internal fun startCollectAll() {

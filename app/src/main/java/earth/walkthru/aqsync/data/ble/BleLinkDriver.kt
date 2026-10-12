@@ -333,8 +333,8 @@ class BleLinkDriver(
                     }
                 }
             } ?: throw ConnectTimeoutException()
-            linkFailure.throwIfFailed()
-            if (g != BluetoothGatt.GATT_SUCCESS) throw TransportException(BleConnectionFailure.message(g), g)
+            linkFailure.exceptionOrNull()?.let { throw ConnectFailedException(it.message, it.gattStatus) }
+            if (g != BluetoothGatt.GATT_SUCCESS) throw ConnectFailedException(BleConnectionFailure.message(g), g)
             val gattRef = gatt ?: throw TransportException("no GATT after connect")
             if (device.bondState != BluetoothDevice.BOND_BONDED) staleBond.onUnbondedLink(device.address)
 
@@ -414,6 +414,9 @@ class BleLinkDriver(
 
     /** The GATT connect did not answer in time, the sensor is out of range or off. */
     class ConnectTimeoutException : TransportException("timed out while connecting")
+
+    /** The GATT connect itself failed, before any service was discovered. */
+    class ConnectFailedException(message: String?, gattStatus: Int?) : TransportException(message ?: "connection failed", gattStatus)
 
     private suspend fun ensureBonded() {
         // Refresh after an owner forgets a stale bond in Settings; the constructor snapshot may

@@ -268,7 +268,7 @@ class LinkSession(
         override fun onClosed(cause: DisconnectCause) {
             val farewell = bye.load()
             val final = if (farewell != null && (cause is DisconnectCause.PeerClosed || cause == DisconnectCause.PeerReset)) {
-                DisconnectCause.PeerClosed(farewell)
+                peerClosedCause(farewell)
             } else {
                 cause
             }
@@ -294,7 +294,7 @@ class LinkSession(
         // The peer closes right after BYE. If it does not, stop waiting for it.
         own.launch {
             delay(byeGrace)
-            terminate(DisconnectCause.PeerClosed(frame))
+            terminate(peerClosedCause(frame))
         }
     }
 
@@ -318,7 +318,7 @@ class LinkSession(
 
     private fun ensureUsable() {
         if (_closed.isCompleted) throw LinkClosedException(_closed.getCompleted())
-        bye.load()?.let { throw LinkClosedException(DisconnectCause.PeerClosed(it)) }
+        bye.load()?.let { throw LinkClosedException(peerClosedCause(it)) }
         check(_state.value is LinkState.Ready) { "LinkSession is not open" }
     }
 
@@ -475,7 +475,7 @@ class LinkSession(
     private fun onEnqueue(owner: Owner) {
         val farewell = bye.load()
         if (farewell != null) {
-            owner.admitted.completeExceptionally(LinkClosedException(DisconnectCause.PeerClosed(farewell)))
+            owner.admitted.completeExceptionally(LinkClosedException(peerClosedCause(farewell)))
             return
         }
         waiting.addLast(owner)
@@ -499,7 +499,7 @@ class LinkSession(
     }
 
     private fun refuseWaiting() {
-        val cause = DisconnectCause.PeerClosed(bye.load())
+        val cause = peerClosedCause(bye.load())
         while (waiting.isNotEmpty()) waiting.removeFirst().admitted.completeExceptionally(LinkClosedException(cause))
     }
 

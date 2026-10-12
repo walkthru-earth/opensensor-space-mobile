@@ -44,7 +44,6 @@ fun TodayRoute(
     onOpenFiles: () -> Unit,
     onOpenDevice: () -> Unit,
     onOpenDebug: () -> Unit,
-    onOpenSettings: () -> Unit,
     onDisconnected: () -> Unit,
     viewModel: TodayViewModel = hiltViewModel<TodayViewModel, TodayViewModel.Factory>(key = address, creationCallback = { it.create(address) }),
 ) {
@@ -62,7 +61,7 @@ fun TodayRoute(
     val notificationPermission = rememberNotificationPermission()
 
     // The clock question reaches the shared controller through the TodaySource notices.
-    CollectEvents(viewModel.events) { ev -> snackbar.showDeviceEvent(res, ev) {} }
+    CollectEvents(viewModel.events) { ev -> snackbar.showDeviceEvent(res, ev) }
     // The repository dropped the session (user disconnected, or another device was picked).
     val current = state.snapshot.address
     LaunchedEffect(current) {
@@ -80,7 +79,6 @@ fun TodayRoute(
                 TodayAction.OpenDevice -> onOpenDevice()
                 TodayAction.OpenDebug -> onOpenDebug()
                 TodayAction.OpenDevices -> onDisconnected()
-                TodayAction.OpenSettings -> onOpenSettings()
                 TodayAction.OpenBluetoothSettings ->
                     context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 TodayAction.Disconnect -> {
@@ -95,6 +93,7 @@ fun TodayRoute(
                     }
                 }
                 TodayAction.SmartSync -> notificationPermission.ensureThen { controller.smartSync() }
+                TodayAction.StopSync -> controller.stopSync()
             }
         },
     )

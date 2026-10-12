@@ -1,6 +1,5 @@
 package earth.walkthru.opensensor.today
 
-import earth.walkthru.aqsync.settings.ClockSyncMode
 import earth.walkthru.aqsync.settings.DetailLevel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.BufferOverflow
@@ -27,12 +26,9 @@ class TodayController(
     private val scope: CoroutineScope,
     private val source: TodaySource,
     detailLevel: Flow<DetailLevel>,
-    clockSyncMode: Flow<ClockSyncMode>,
 ) {
-    private val mode = clockSyncMode.stateIn(scope, SharingStarted.Eagerly, ClockSyncMode.ASK)
-
-    val state: StateFlow<TodayUiState> = combine(source.snapshot, detailLevel, mode) { snapshot, level, clock ->
-        TodayUiState(snapshot, level, clock)
+    val state: StateFlow<TodayUiState> = combine(source.snapshot, detailLevel) { snapshot, level ->
+        TodayUiState(snapshot, level)
     }.stateIn(scope, SharingStarted.Eagerly, TodayUiState(source.snapshot.value))
 
     private val _dialog = MutableStateFlow<TodayDialog?>(null)
@@ -40,30 +36,27 @@ class TodayController(
 
     private val _notices = MutableSharedFlow<TodayNotice>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
-    /** Outcomes to show as a snackbar. A clock question opens its dialog instead. */
+    /** Outcomes to show as a snackbar. */
     val notices: SharedFlow<TodayNotice> = _notices.asSharedFlow()
 
     init {
-        scope.launch {
-            source.notices.collect { notice ->
-                if (notice is TodayNotice.ClockConfirmationRequired) {
-                    source.sync(ClockSyncMode.AUTOMATIC.toPolicy(), clockConfirmed = true)
-                } else {
-                    _notices.tryEmit(notice)
-                }
-            }
-        }
+        scope.launch { source.notices.collect { _notices.tryEmit(it) } }
     }
 
     fun requestFlush() {
         if (canCommand()) _dialog.value = TodayDialog.Flush
     }
 
-    /** Collect with automatic clock synchronization regardless of legacy settings. */
+    /** Collect. The engine synchronizes the device clock automatically. */
     fun smartSync() {
+        if (!source.snapshot.value.station.canCommand) return
+        source.sync()
+    }
+
+    /** Stop beside Sync. Only this phone's own run, never one that background work holds. */
+    fun stopSync() {
         val snapshot = source.snapshot.value
-        if (!snapshot.connection.isReady || snapshot.sync.running) return
-        source.sync(ClockSyncMode.AUTOMATIC.toPolicy(), clockConfirmed = false)
+        if (snapshot.sync.running && !snapshot.heldInBackground) source.stopSync()
     }
 
     /** The user confirmed the open dialog. Only now does the command go to the device. */
@@ -84,5 +77,5 @@ class TodayController(
 
     fun disconnect() = source.disconnect()
 
-    private fun canCommand(): Boolean = source.snapshot.value.connection.isReady
+    private fun canCommand(): Boolean = source.snapshot.value.station.canCommand
 }

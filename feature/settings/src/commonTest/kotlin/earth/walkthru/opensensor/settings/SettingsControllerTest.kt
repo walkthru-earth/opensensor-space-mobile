@@ -4,7 +4,6 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.emptyPreferences
 import earth.walkthru.aqsync.settings.AppPrefs
-import earth.walkthru.aqsync.settings.ClockSyncMode
 import earth.walkthru.aqsync.settings.DetailLevel
 import earth.walkthru.aqsync.settings.SettingsRepository
 import earth.walkthru.aqsync.units.UnitSystem
@@ -61,10 +60,9 @@ class SettingsControllerTest {
         assertEquals(AppPrefs(), controller.prefs.value)
 
         controller.setDetailLevel(DetailLevel.DETAILED)
-        controller.setClockSyncMode(ClockSyncMode.AUTOMATIC)
         controller.setShowPublicSensors(false)
         controller.setUnitSystem(UnitSystem.METRIC)
-        assertEquals(AppPrefs(DetailLevel.DETAILED, ClockSyncMode.AUTOMATIC, showPublicSensors = false, unitSystem = UnitSystem.METRIC), controller.prefs.value)
+        assertEquals(AppPrefs(DetailLevel.DETAILED, showPublicSensors = false, unitSystem = UnitSystem.METRIC), controller.prefs.value)
     }
 
     @Test
@@ -123,7 +121,6 @@ class SettingsControllerTest {
     fun everyChoiceHasALabel() {
         // A new enum value without copy fails here before it reaches a screen.
         DetailLevel.entries.forEach { levelLabel(it); levelCaption(it) }
-        ClockSyncMode.entries.forEach { clockLabel(it); clockCaption(it) }
         UnitSystem.entries.forEach { unitLabel(it) }
     }
 }

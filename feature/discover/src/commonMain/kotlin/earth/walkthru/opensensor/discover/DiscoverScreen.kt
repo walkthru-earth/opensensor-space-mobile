@@ -111,7 +111,6 @@ import earth.walkthru.opensensor.designsystem.peacockExpressionFor
 import earth.walkthru.opensensor.designsystem.spokenList
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import org.maplibre.compose.camera.CameraPosition
 import org.maplibre.compose.camera.CameraUpdate
 import org.maplibre.spatialk.geojson.Position
 

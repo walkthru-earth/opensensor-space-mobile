@@ -3,10 +3,7 @@ package earth.walkthru.opensensor.device
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
@@ -33,7 +30,6 @@ import androidx.compose.ui.unit.dp
 import earth.walkthru.aqsync.data.protocol.ConfigProblem
 import earth.walkthru.opensensor.designsystem.AppIcons
 import earth.walkthru.opensensor.designsystem.InfoNote
-import earth.walkthru.opensensor.designsystem.PillButton
 import earth.walkthru.opensensor.device.resources.Res
 import earth.walkthru.opensensor.device.resources.action_cancel
 import earth.walkthru.opensensor.device.resources.action_reconnect
@@ -49,7 +45,6 @@ import earth.walkthru.opensensor.device.resources.device_back
 import earth.walkthru.opensensor.device.resources.device_not_ready
 import earth.walkthru.opensensor.device.resources.device_refresh
 import earth.walkthru.opensensor.device.resources.device_screen_title
-import earth.walkthru.opensensor.device.resources.device_settings_open
 import earth.walkthru.opensensor.device.resources.msg_bonds_cleared
 import earth.walkthru.opensensor.device.resources.msg_busy
 import earth.walkthru.opensensor.device.resources.msg_config_key_rejected
@@ -201,7 +196,6 @@ fun LazyListScope.deviceConfigItems(state: DeviceConfigUiState, lanAccess: LanAc
             onScan = { onAction(DeviceConfigAction.ScanWifi) },
             onClearScan = { onAction(DeviceConfigAction.ClearWifiScan) },
             onJoin = { onAction(DeviceConfigAction.JoinWifi(it)) },
-            onRefresh = { onAction(DeviceConfigAction.Refresh) },
         )
     }
     item(key = "lan") {
@@ -309,7 +303,8 @@ suspend fun deviceConfigNoticeText(notice: DeviceConfigNotice): String = when (n
  * The Device section as its own page, for iOS: back, title, refresh, the cards and the snackbar.
  * Android draws the same cards inside its Device screen with the device header and Auto-sync.
  * [lanAccess] reflects the platform's local network permission, [onPlatformAction] gets the two
- * actions the controller leaves to the platform.
+ * actions the controller leaves to the platform. [lead] is the platform's first card, the iOS
+ * Auto-sync switch. Reconnect sits in the top bar, the station header of this page.
  */
 @Composable
 fun DeviceConfigScreen(
@@ -321,6 +316,7 @@ fun DeviceConfigScreen(
     scan: StickerScan? = null,
     canScan: Boolean = false,
     snackbar: SnackbarHostState = remember { SnackbarHostState() },
+    lead: (@Composable () -> Unit)? = null,
 ) {
     val state by controller.state.collectAsState()
     DeviceConfigEffects(controller, snackbar)
@@ -341,6 +337,9 @@ fun DeviceConfigScreen(
                     }
                 },
                 actions = {
+                    if (state.snapshot.station.offersReconnect) {
+                        TextButton(onClick = controller::reconnect) { Text(stringResource(Res.string.action_reconnect)) }
+                    }
                     IconButton(onClick = { onAction(DeviceConfigAction.Refresh) }, enabled = state.ready && state.isV2) {
                         Icon(AppIcons.Refresh, contentDescription = stringResource(Res.string.device_refresh))
                     }
@@ -355,20 +354,11 @@ fun DeviceConfigScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             if (!state.ready) {
-                item(key = "not_ready") {
-                    Column {
-                        InfoNote(stringResource(Res.string.device_not_ready))
-                        Spacer(Modifier.height(8.dp))
-                        PillButton(stringResource(Res.string.action_reconnect), onClick = controller::reconnect, modifier = Modifier.fillMaxWidth().padding(top = 4.dp))
-                    }
-                }
+                item(key = "not_ready") { InfoNote(stringResource(Res.string.device_not_ready)) }
             }
+            if (lead != null) item(key = "lead") { lead() }
             sensorIdentityItem(state, scan, canScan, onAction)
             deviceConfigItems(state, lanAccess, onAction)
         }
     }
 }
-
-/** The label of the way into [DeviceConfigScreen] from a platform's device page. */
-@Composable
-fun deviceSettingsLabel(): String = stringResource(Res.string.device_settings_open)
