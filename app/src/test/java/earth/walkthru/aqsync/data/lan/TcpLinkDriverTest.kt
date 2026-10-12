@@ -2,6 +2,7 @@ package earth.walkthru.aqsync.data.lan
 
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.NotAllowedOnLinkException
+import earth.walkthru.aqsync.data.ble.TransportUnavailableException
 import earth.walkthru.aqsync.data.openableSession
 import earth.walkthru.aqsync.data.protocol.DisconnectReason
 import earth.walkthru.aqsync.data.protocol.Frame
@@ -21,6 +22,8 @@ import earth.walkthru.aqsync.link.LinkState
 import earth.walkthru.aqsync.link.LinkTimeoutException
 import earth.walkthru.aqsync.link.PushChannel
 import earth.walkthru.aqsync.link.TimeoutPhase
+import earth.walkthru.aqsync.link.UnavailableKind
+import earth.walkthru.aqsync.link.retryable
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -424,6 +427,27 @@ class TcpLinkDriverTest {
         }
         assertEquals(e.disconnectCause, sink.closed.await())
         return e
+    }
+
+    @Test
+    fun `a connect refused for the local network permission is Unavailable, not retried`() = runBlocking {
+        val refusing = {
+            object : Socket() {
+                override fun connect(endpoint: java.net.SocketAddress?, timeout: Int) = throw java.net.SocketException("connect failed: EPERM (Operation not permitted)")
+            }
+        }
+        val sink = RecordingSink()
+        val e = try {
+            withTimeout(10_000) { driver(1, socketFactory = refusing).open(sink) }
+            fail("expected LinkClosedException")
+            error("unreachable")
+        } catch (e: LinkClosedException) {
+            e
+        }
+        assertEquals(DisconnectCause.Unavailable(UnavailableKind.PERMISSION_MISSING), e.disconnectCause)
+        assertEquals(e.disconnectCause, sink.closed.await())
+        assertEquals(UnavailableKind.PERMISSION_MISSING, (e.cause as TransportUnavailableException).kind)
+        assertTrue(!e.disconnectCause.retryable)
     }
 
     @Test

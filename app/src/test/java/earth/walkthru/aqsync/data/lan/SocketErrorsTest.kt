@@ -1,6 +1,8 @@
 package earth.walkthru.aqsync.data.lan
 
+import earth.walkthru.aqsync.data.ble.TransportUnavailableException
 import earth.walkthru.aqsync.link.DisconnectCause
+import earth.walkthru.aqsync.link.UnavailableKind
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.io.EOFException
@@ -26,7 +28,10 @@ class SocketErrorsTest {
 
     @Test
     fun `connect failures keep the local network permission apart`() {
-        assertEquals(DisconnectCause.LocalAbort(errno = SocketErrors.EPERM), SocketErrors.connectCause(SocketException("connect failed: EPERM (Operation not permitted)")))
+        val refused = SocketException("connect failed: EPERM (Operation not permitted)")
+        assertEquals(DisconnectCause.Unavailable(UnavailableKind.PERMISSION_MISSING), SocketErrors.connectCause(refused))
+        assertEquals(UnavailableKind.PERMISSION_MISSING, (SocketErrors.connectException(refused) as TransportUnavailableException).kind)
+        assertEquals(LanFailure.UNREACHABLE, (SocketErrors.connectException(ConnectException("Connection refused")) as LanConnectException).failure)
         assertEquals(DisconnectCause.Unreachable, SocketErrors.connectCause(ConnectException("Connection refused")))
         assertEquals(DisconnectCause.Unreachable, SocketErrors.connectCause(SocketTimeoutException("connect timed out")))
     }

@@ -167,7 +167,7 @@ class TcpLinkDriver(
             s.keepAlive = true
             s.connect(InetSocketAddress(host, port), connectTimeoutMs)
         } catch (e: IOException) {
-            throw LinkClosedException(SocketErrors.connectCause(e), LanConnectException(LanFailure.UNREACHABLE, null, e))
+            throw LinkClosedException(SocketErrors.connectCause(e), SocketErrors.connectException(e))
         }
         _state.value = ConnectionState.Authenticating
         val input = BufferedInputStream(s.getInputStream(), 8 * 1024)

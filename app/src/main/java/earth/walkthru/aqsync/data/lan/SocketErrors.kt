@@ -1,6 +1,9 @@
 package earth.walkthru.aqsync.data.lan
 
+import earth.walkthru.aqsync.data.ble.TransportException
+import earth.walkthru.aqsync.data.ble.TransportUnavailableException
 import earth.walkthru.aqsync.link.DisconnectCause
+import earth.walkthru.aqsync.link.UnavailableKind
 import java.io.EOFException
 import java.io.IOException
 
@@ -27,14 +30,23 @@ object SocketErrors {
         }
     }
 
-    /** A connect failure. `EPERM` stays distinct, it is the Android local network permission. */
-    fun connectCause(e: IOException): DisconnectCause {
-        val text = generateSequence<Throwable>(e) { it.cause }.mapNotNull { it.message }.joinToString(" ")
-        return when {
-            isPermissionDenied(text) -> DisconnectCause.LocalAbort(errno = EPERM)
-            else -> DisconnectCause.Unreachable
+    /**
+     * A connect failure. `EPERM` is the Android local network permission, so it is
+     * [DisconnectCause.Unavailable] with [UnavailableKind.PERMISSION_MISSING]. Retrying cannot help
+     * until the user grants it. Anything else is [DisconnectCause.Unreachable].
+     */
+    fun connectCause(e: IOException): DisconnectCause =
+        if (isPermissionDenied(text(e))) DisconnectCause.Unavailable(UnavailableKind.PERMISSION_MISSING) else DisconnectCause.Unreachable
+
+    /** The typed exception for a refused connect, [TransportUnavailableException] for the permission. */
+    fun connectException(e: IOException): TransportException =
+        if (isPermissionDenied(text(e))) {
+            TransportUnavailableException(UnavailableKind.PERMISSION_MISSING, "local network permission refused")
+        } else {
+            LanConnectException(LanFailure.UNREACHABLE, null, e)
         }
-    }
+
+    private fun text(e: Throwable) = generateSequence(e) { it.cause }.mapNotNull { it.message }.joinToString(" ")
 
     private fun isPermissionDenied(text: String) = "EPERM" in text || "Operation not permitted" in text
 }
