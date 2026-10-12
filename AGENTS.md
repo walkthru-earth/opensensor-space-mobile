@@ -11,9 +11,9 @@ concern you are changing in `docs/README.md`.
 | Task | Open next | Code |
 | --- | --- | --- |
 | Current status and real-phone evidence | `docs/status.md`, then `../aq-parquet/docs/boards/*/bench-verified.md` | — |
-| Cross-platform design and sync rules | `docs/cross-platform-guide.md`, `docs/platform-differences.md` | `core/`, `app/`, `ios/` |
+| Cross-platform design and sync rules | `docs/cross-platform-guide.md` | `core/`, `app/`, `ios/` |
 | Device families, sensor-agnostic model, public H3 discover map | `docs/devices-and-discovery.md` | `core/publicfeed/`, `feature/discover/`, `tools/discover-fixture/` |
-| iOS app, shared Kotlin, simulator and iPhone builds | `docs/ios-migration.md`, `ios/AGENTS.md` | `core/`, `ios/` |
+| iOS app, shared Kotlin, simulator and iPhone builds | `docs/ios.md`, `ios/AGENTS.md` | `core/`, `ios/` |
 | App layers and dependencies | `docs/architecture.md`, `core/AGENTS.md` | `core/`, `app/` |
 | BLE, LAN, sync, pairing, background work | `docs/transports.md`, `docs/sync-engine.md`, `docs/background-sync.md`, `app/src/main/java/earth/walkthru/aqsync/data/AGENTS.md` | `data/` |
 | Room, history, Parquet | `docs/data-model.md`, `docs/history-pipeline.md`, `docs/parquet.md` | `data/history/`, `data/local/`, `core/` |

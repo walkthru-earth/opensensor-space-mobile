@@ -2,8 +2,7 @@
 
 **Scope:** how this project keeps one product, one design and one sync behaviour across Android
 and iOS, and the rules every new feature follows. **Code:** `core/`, `ios/shared/`, `app/`,
-`ios/App/`. **Related:** [platform-differences.md](platform-differences.md),
-[architecture.md](architecture.md), [ios-migration.md](ios-migration.md), `../ios/AGENTS.md`.
+`ios/App/`. **Related:** [architecture.md](architecture.md), [ios.md](ios.md), `../ios/AGENTS.md`.
 
 ## The one-sentence rule
 
@@ -34,17 +33,17 @@ interfaces.
 
 ## Sync parity
 
-### Where the code will live (target)
+### Where the code lives
 
-The engine part of this target shape is in place. Both phones run `SyncEngine` and `ArchiveCollector` from `:core:sync`, with the
-`ArchiveStore` and `ArchiveIndex` ports from `:core:archive`. Android adapts them in
-`app/.../data/archive/`. iOS uses `IosArchiveStore` and `ReceiptArchiveIndex` in `:core:archive`
-iosMain. The frame link exists on iOS as `IosLink` in `ios/shared` iosMain, one per connection over
-`LinkSession`, fed by Swift `LanSession` and `BluetoothCompanion`. The shared `LinkDriver` and `FrameSink` boundary feeds each `LinkSession`. A separate
-`CredentialStore` does not exist yet, so Keychain and Keystore stay platform code. The Swift
-transfer engine was removed. `SensorArchive.swift` remains only for Files export. See
-[sync-engine.md](sync-engine.md#where-ios-still-differs-from-android) for the behaviour that still
-differs.
+Both phones run `SyncEngine`, `ArchiveCollector` and one `CollectionController` per device from
+`:core:sync`, with the `ArchiveStore` and `ArchiveIndex` ports from `:core:archive`. Android adapts
+the ports in `app/.../data/archive/` and routes collection through `DeviceFacade`. iOS uses
+`IosArchiveStore` and `ReceiptArchiveIndex` in `:core:archive` iosMain, one `IosLink` per
+connection over `LinkSession`, and `SensorCollections`, which every Swift sync entry point calls.
+Swift `LanSession` and `BlePhysicalLink` feed each `LinkSession` through `LinkDriver` and
+`FrameSink`. Keystore and Keychain stay platform code, and the credential port in the diagram is
+planned. See [sync-engine.md](sync-engine.md#where-ios-still-differs-from-android) for the
+behaviour that still differs.
 
 ```mermaid
 flowchart LR
@@ -81,13 +80,6 @@ flowchart LR
   AK -.implements.-> CS
   IK -.implements.-> CS
 ```
-
-Android adopts the per-device `CollectionController` through `DeviceFacade` and
-`DeviceLinkOwner`. iOS uses the link and engine, and `SensorCollections` holds one controller
-per device over `IosLinkProvider`, built only by tests so far. Native intent and retry ownership stay in the Swift adapters
-until they route into it in [#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81). Its BLE
-physical link (`BlePhysicalLink`) runs Core Bluetooth on one serial queue, off the main actor.
-The diagram includes the planned credential port.
 
 ### Rules
 
@@ -363,6 +355,34 @@ To add a language `xx`.
    files, and `StringsMatchAndroidTest` and `CopyRulesTest` compare the shared keys in each language.
 4. Have a native speaker review the copy and check the screens on a phone, then record it in
    `status.md`.
+
+## Android and iOS differences that stay
+
+Everything not listed here is shared Kotlin and behaves the same.
+
+| Feature | Android | iOS |
+| --- | --- | --- |
+| Sync when the phone joins home Wi-Fi | `data/background/SyncTriggers.kt`, `WifiArrivalReceiver` | None. iOS gives a suspended app no public wake on network change |
+| Re-arm triggers after reboot or update | `BootReceiver` in `data/background/SyncTriggers.kt` | Not needed. `BGTaskScheduler` requests and Core Bluetooth state restoration persist |
+| Wi-Fi lock during a LAN transfer | `data/lan/LanWifiLock.kt` | Not needed |
+| Wake near the sensor | Companion Device Manager presence and an offloaded advert scan (`CompanionPresence.kt`) | A pending `CBCentralManager.connect` with state restoration, armed only for sensors whose Auto-sync is due |
+| Periodic Auto-sync | WorkManager every 15 min, battery not low | `BGProcessingTaskRequest`, the system picks the time. Background modes `processing` and `bluetooth-central` |
+| Collect all off screen | Foreground service with a progress notification | `BGContinuedProcessingTask` on iOS 26 and later. Older iOS ends the pass when the app leaves |
+| A run the user started, off screen | Foreground service | A UIKit background task. When iOS ends it the run stops as interrupted, keeps its bytes and starts again when the app is back |
+| Turn Bluetooth on | System enable dialog | Not possible for apps. The system power alert and shared copy explain it |
+| Bluetooth settings after a failed bond | Bluetooth settings intent | No public URL. Shared repair copy and the app settings link |
+| Forget a sensor | Keeps the system bond | Drops the app record, Keychain access and Auto-sync. The dialog says to remove the bond in iOS Settings |
+| Local network permission | Runtime permission on API 37 and later | No status API. A `PolicyDenied` browse result counts as denied |
+| Notifications permission | Asked from Sync or the Auto-sync switch | Asked from the Auto-sync switch only |
+| LAN token at rest | Encrypted with an Android Keystore key | Keychain, `AfterFirstUnlockThisDeviceOnly` |
+| Archive access | Read-only FileProvider over the export cache | Share and Save only, never in the Files app |
+| Backup | Settings to cloud, archive device-to-device only | Settings backed up, archive excluded |
+| Sticker scan | Google Code Scanner, no camera permission | VisionKit `DataScannerViewController`, camera asked on the Scan tap, Scan hidden where unsupported |
+| Fake devices | Debug builds only (`TransportFactory`) | None |
+| Idle Bluetooth link | Kept while the station is open | Closed when the last page for the sensor leaves or the app leaves the screen |
+
+Both apps keep the raw command denylist (`REBOOT`, `SET_CONFIG`) and frame redaction in
+`:core:sync`. Neither app has widgets, Live Activities, App Intents or deep links.
 
 ## Checklist for a cross-platform change
 

@@ -129,8 +129,7 @@ deep-optimization / sleep-standby lists; a swiped-away app may still be killed. 
 
 ## iOS Auto-sync
 
-Issue #23, inventory F48, F53, F54, F66 to F69, F74, F77. Decisions P10, P11, P16, P17 in
-[parity-decisions.md](parity-decisions.md). Host and simulator evidence only so far. No iPhone run.
+Issue #23. Host and simulator evidence only so far. No iPhone run.
 
 **Code:** `ios/App/BackgroundSync.swift` (`AutoSync`, the OS side), `AppDelegate.swift`
 (`AppServices` owns the adapters, so a launch without a screen works), the Auto-sync extensions in

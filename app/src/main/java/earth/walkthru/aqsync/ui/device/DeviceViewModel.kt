@@ -233,7 +233,7 @@ class DeviceViewModel @AssistedInject constructor(
     }
 
     /**
-     * The shared Device section over this repository (docs/parity-decisions.md P53). Pairing, Wi-Fi,
+     * The shared Device section over this repository. Pairing, Wi-Fi,
      * Sync over Wi-Fi, paired phones and the sticker card run through it, with its four
      * confirmations and its Wi-Fi join poll. Repository outcomes still arrive through [events].
      */
