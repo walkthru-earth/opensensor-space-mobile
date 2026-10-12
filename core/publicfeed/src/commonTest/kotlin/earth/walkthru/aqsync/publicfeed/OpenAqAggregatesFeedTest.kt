@@ -73,6 +73,7 @@ class OpenAqAggregatesFeedTest {
     @Test
     fun `the feed is live data for 24 hours and 7 days`() {
         assertFalse(feed.isSample)
+        assertTrue(feed.isDaily)
         assertEquals(listOf(FeedWindow.DAY, FeedWindow.WEEK), feed.windows)
         assertEquals("$root/cells/h3_res=7/data.parquet", feed.cellsUrl(7))
     }

@@ -1,7 +1,9 @@
 package earth.walkthru.aqsync.publicfeed
 
+import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -74,5 +76,23 @@ class CellMapTest {
             "cells/window=24h/date=2026-10-08/hour=09/h3_res=7/data.parquet",
             FeedPaths.cells(FeedPartition("2026-10-08", 9), FeedWindow.DAY, 7),
         )
+    }
+
+    /** A daily row as [DailyCellFold] makes it, updated at the UTC midnight after its newest day. */
+    private fun dailyRow(newest: LocalDate) = CellRow(1L, 1, (newest.toEpochDays() + 1) * 86_400_000L, emptyMap())
+
+    @Test
+    fun `a daily row carries the day it measured`() {
+        assertEquals(LocalDate(2026, 10, 8), CellFreshness.dataDay(dailyRow(LocalDate(2026, 10, 8))))
+    }
+
+    @Test
+    fun `a daily row is stale against the partition date and never against the clock`() {
+        val asOf = LocalDate(2026, 10, 8)
+        assertFalse(CellFreshness.isStaleDaily(dailyRow(asOf), asOf))
+        assertFalse(CellFreshness.isStaleDaily(dailyRow(LocalDate(2026, 10, 7)), asOf))
+        assertTrue(CellFreshness.isStaleDaily(dailyRow(LocalDate(2026, 10, 6)), asOf))
+        // The hourly rule would call the newest day stale 98 hours later.
+        assertTrue(CellFreshness.isStale(dailyRow(asOf), dailyRow(asOf).updatedEpochMs + 98 * 3_600_000L))
     }
 }

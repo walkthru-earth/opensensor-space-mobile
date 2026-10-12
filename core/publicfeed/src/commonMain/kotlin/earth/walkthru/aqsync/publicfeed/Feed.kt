@@ -105,6 +105,12 @@ interface PublicFeed {
     /** True while the feed is the bundled sample. The map then shows the "Sample data" pill. */
     val isSample: Boolean
 
+    /**
+     * True when each row is a daily mean dated by its day, not an hourly one. Its freshness is then
+     * read against the partition date ([CellFreshness.isStaleDaily]), never against the clock.
+     */
+    val isDaily: Boolean get() = false
+
     /** The windows this feed can answer, in [FeedWindow] order. Every window unless a feed says less. */
     val windows: List<FeedWindow> get() = FeedWindow.entries
 
