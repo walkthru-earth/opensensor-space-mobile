@@ -39,6 +39,7 @@ import earth.walkthru.aqsync.data.history.HistoryRange
 import earth.walkthru.aqsync.data.history.MetricSpec
 import earth.walkthru.aqsync.data.history.localDateOf
 import earth.walkthru.aqsync.data.history.startOfDay
+import earth.walkthru.aqsync.settings.DetailLevel
 import earth.walkthru.aqsync.units.UnitConversion
 import earth.walkthru.aqsync.units.UnitFormatter
 import earth.walkthru.aqsync.units.UnitSystem
@@ -49,7 +50,9 @@ import earth.walkthru.opensensor.designsystem.listSeparator
 import earth.walkthru.opensensor.designsystem.spokenList
 import earth.walkthru.opensensor.history.resources.Res
 import earth.walkthru.opensensor.history.resources.chart_bars_title
+import earth.walkthru.opensensor.history.resources.chart_guideline_24h
 import earth.walkthru.opensensor.history.resources.chart_guideline_note
+import earth.walkthru.opensensor.history.resources.chart_guideline_note_simple
 import earth.walkthru.opensensor.history.resources.chart_highest
 import earth.walkthru.opensensor.history.resources.chart_highest_at
 import earth.walkthru.opensensor.history.resources.chart_mean_daily
@@ -63,6 +66,7 @@ import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.plus
 import kotlinx.datetime.toInstant
+import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.abs
 import kotlin.math.max
@@ -94,6 +98,8 @@ fun BandColumnChart(
     units: UnitFormatter = UnitFormatter.Metric,
     /** X-axis labels `(position, text)` in the chart's own units, null for time ticks. The "chart by file" strip passes file indices. */
     xLabels: List<Pair<Long, String>>? = null,
+    /** Simple labels the guideline line in plain words and never names WHO. */
+    level: DetailLevel = DetailLevel.DETAILED,
 ) {
     val onSurface = MaterialTheme.colorScheme.onSurface
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
@@ -104,7 +110,7 @@ fun BandColumnChart(
     val labelStyle = remember(muted) { chartTextStyle(muted, 11) }
     val capStyle = remember(onSurface) { chartTextStyle(onSurface, 10, bold = true) }
     val guideStyle = remember(onSurface) { chartTextStyle(onSurface, 11) }
-    val whoLabel = stringResource(Res.string.chart_who_24h)
+    val whoLabel = stringResource(guidelineLabelRes(level))
 
     val axis = remember(columns, metric) { ChartAxes.of(columns, metric) }
     val yMax = axis.max
@@ -119,7 +125,7 @@ fun BandColumnChart(
     } else {
         null
     }
-    val summary = chartSummary(stringResource(Res.string.chart_bars_title, metric.label), columns, metric, units, slot)
+    val summary = chartSummary(stringResource(Res.string.chart_bars_title, metric.label), columns, metric, units, stepNamed = level.detailed, slot = slot)
 
     Canvas(
         modifier
@@ -261,7 +267,7 @@ fun BandColumnChart(
  * [metric]. Stated under the chart, because a 1-hour mean is read against a 24-hour value.
  */
 @Composable
-fun averagingNote(range: HistoryRange, metric: MetricSpec): String {
+fun averagingNote(range: HistoryRange, metric: MetricSpec, level: DetailLevel = DetailLevel.DETAILED): String {
     val mean = stringResource(
         when (range) {
             HistoryRange.DAY, HistoryRange.WEEK -> Res.string.chart_mean_hourly
@@ -269,7 +275,7 @@ fun averagingNote(range: HistoryRange, metric: MetricSpec): String {
             HistoryRange.YEAR -> Res.string.chart_mean_weekly
         },
     )
-    return if (ChartAxes.guidelineOf(metric) != null) mean + " " + stringResource(Res.string.chart_guideline_note) else mean
+    return if (ChartAxes.guidelineOf(metric) != null) mean + " " + stringResource(guidelineNoteRes(level)) else mean
 }
 
 /**
@@ -282,8 +288,15 @@ internal fun chartSummary(
     columns: List<HistoryColumn>,
     metric: MetricSpec,
     units: UnitFormatter,
+    stepNamed: Boolean = true,
     slot: (@Composable (HistoryColumn) -> String)?,
-): String = title + ", " + (chartHighest(columns, metric, units, slot) ?: stringResource(Res.string.history_no_readings_short))
+): String = title + ", " + (chartHighest(columns, metric, units, stepNamed, slot) ?: stringResource(Res.string.history_no_readings_short))
+
+/** The label on the guideline line. Simple never names WHO. */
+internal fun guidelineLabelRes(level: DetailLevel): StringResource = if (level.detailed) Res.string.chart_who_24h else Res.string.chart_guideline_24h
+
+/** The note under the chart about the dashed line. Simple never names WHO. */
+internal fun guidelineNoteRes(level: DetailLevel): StringResource = if (level.detailed) Res.string.chart_guideline_note else Res.string.chart_guideline_note_simple
 
 /** The highest mean of [columns] with the time [slot] names (when given) and its WHO step, null without readings. */
 @Composable
@@ -291,6 +304,8 @@ internal fun chartHighest(
     columns: List<HistoryColumn>,
     metric: MetricSpec,
     units: UnitFormatter,
+    /** False leaves out the WHO step, for Simple. */
+    stepNamed: Boolean = true,
     slot: (@Composable (HistoryColumn) -> String)?,
 ): String? {
     val top = columns.filter { it.mean?.isFinite() == true }.maxByOrNull { it.mean ?: Float.NEGATIVE_INFINITY }
@@ -298,7 +313,7 @@ internal fun chartHighest(
     val value = fmtValue(units.value(mean, metric.unit))
     val unit = units.unit(metric.unit)
     val highest = if (slot != null) stringResource(Res.string.chart_highest_at, value, unit, slot(top)) else stringResource(Res.string.chart_highest, value, unit)
-    val step = metric.stepOf(mean.toDouble())?.labelText()
+    val step = if (stepNamed) metric.stepOf(mean.toDouble())?.labelText() else null
     return spokenList(listOfNotNull(highest, step), listSeparator())
 }
 

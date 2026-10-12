@@ -89,4 +89,7 @@
     <string name="chart_average_value">average %1$s %2$s</string>
     <!-- Calendar summary, days with readings out of days shown. -->
     <string name="chart_days_with_readings">%1$d of %2$d days with readings</string>
+    <string name="chart_guideline_24h">24 h guideline</string>
+    <string name="chart_guideline_note_simple">The dashed line is the 24 hour health guideline.</string>
+    <string name="info_history_body5_simple">PM2.5 and PM10 colours are moods of the air. A colour means the same in every place and every view.</string>
 </resources>
