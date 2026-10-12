@@ -16,6 +16,7 @@ import earth.walkthru.opensensor.discover.resources.discover_average_summary
 import earth.walkthru.opensensor.discover.resources.discover_avg
 import earth.walkthru.opensensor.discover.resources.discover_clear_search
 import earth.walkthru.opensensor.discover.resources.discover_data_openaq
+import earth.walkthru.opensensor.discover.resources.discover_data_to
 import earth.walkthru.opensensor.discover.resources.discover_day_month
 import earth.walkthru.opensensor.discover.resources.discover_explore
 import earth.walkthru.opensensor.discover.resources.discover_first_run
@@ -55,6 +56,7 @@ import earth.walkthru.opensensor.discover.resources.discover_sample_data
 import earth.walkthru.opensensor.discover.resources.discover_sample_info
 import earth.walkthru.opensensor.discover.resources.discover_scale_info1
 import earth.walkthru.opensensor.discover.resources.discover_scale_info2
+import earth.walkthru.opensensor.discover.resources.discover_scale_info2_real
 import earth.walkthru.opensensor.discover.resources.discover_scale_title
 import earth.walkthru.opensensor.discover.resources.discover_search_places
 import earth.walkthru.opensensor.discover.resources.discover_sensors
@@ -80,8 +82,10 @@ import earth.walkthru.opensensor.discover.resources.discover_who_title
 import earth.walkthru.opensensor.discover.resources.discover_window_24_hours
 import earth.walkthru.opensensor.discover.resources.discover_window_7_days
 import earth.walkthru.opensensor.discover.resources.discover_window_last_hour
+import earth.walkthru.opensensor.discover.resources.discover_window_latest_day
 import earth.walkthru.opensensor.discover.resources.discover_window_short_day
 import earth.walkthru.opensensor.discover.resources.discover_window_short_hour
+import earth.walkthru.opensensor.discover.resources.discover_window_short_latest_day
 import earth.walkthru.opensensor.discover.resources.discover_window_short_week
 import earth.walkthru.opensensor.discover.resources.who_step_above_it1
 import earth.walkthru.opensensor.discover.resources.who_step_guideline
@@ -110,9 +114,13 @@ class DiscoverStrings internal constructor(
     val windowLastHour: String,
     val window24Hours: String,
     val window7Days: String,
+    /** The DAY window of a daily feed, its newest day of data. */
+    val windowLatestDay: String,
     val sampleData: String,
     val sampleInfo: InfoText,
     val scaleInfo: InfoText,
+    /** [scaleInfo] for the daily public feed, one or more stations, the latest day. */
+    val scaleInfoReal: InfoText,
     val osm: String,
     val mapInfo: InfoText,
     val noAreas: String,
@@ -143,6 +151,7 @@ class DiscoverStrings internal constructor(
     val windowShortHour: String,
     val windowShortDay: String,
     val windowShortWeek: String,
+    val windowShortLatestDay: String,
     /** The time pill, spoken only. Its state is the full window name. */
     val timeWindow: String,
     /** Names of the six WHO steps, cleanest first, in [WhoStep] order. Shown beside values, so colour is never the only cue. */
@@ -157,6 +166,8 @@ class DiscoverStrings internal constructor(
     val noHealthScale: String,
     /** The legend info sheet for PM2.5 and PM10. */
     val whoInfo: InfoText,
+    /** [whoInfo] for the daily public feed. */
+    val whoInfoReal: InfoText,
 
     /** The legend info sheet at the Simple level. No guideline body, no numbers. */
     val moodInfo: InfoText,
@@ -181,6 +192,10 @@ class DiscoverStrings internal constructor(
     /** The Real label, as in "OpenAQ, data to 8 Oct". */
     @Composable
     fun realDataTo(date: LocalDate): String = stringResource(Res.string.discover_real_data_to, dayMonth(date))
+
+    /** "Data to 8 Oct", the last day a daily value measured. */
+    @Composable
+    fun dataTo(date: LocalDate): String = stringResource(Res.string.discover_data_to, dayMonth(date))
 
     /** A short local date, day then month. */
     @Composable
@@ -252,11 +267,16 @@ fun discoverStrings(): DiscoverStrings = DiscoverStrings(
     windowLastHour = stringResource(Res.string.discover_window_last_hour),
     window24Hours = stringResource(Res.string.discover_window_24_hours),
     window7Days = stringResource(Res.string.discover_window_7_days),
+    windowLatestDay = stringResource(Res.string.discover_window_latest_day),
     sampleData = stringResource(Res.string.discover_sample_data),
     sampleInfo = InfoText(stringResource(Res.string.discover_sample_data), listOf(stringResource(Res.string.discover_sample_info))),
     scaleInfo = InfoText(
         stringResource(Res.string.discover_scale_title),
         listOf(stringResource(Res.string.discover_scale_info1), stringResource(Res.string.discover_scale_info2)),
+    ),
+    scaleInfoReal = InfoText(
+        stringResource(Res.string.discover_scale_title),
+        listOf(stringResource(Res.string.discover_scale_info1), stringResource(Res.string.discover_scale_info2_real)),
     ),
     osm = stringResource(Res.string.discover_osm),
     mapInfo = InfoText(
@@ -294,6 +314,7 @@ fun discoverStrings(): DiscoverStrings = DiscoverStrings(
     windowShortHour = stringResource(Res.string.discover_window_short_hour),
     windowShortDay = stringResource(Res.string.discover_window_short_day),
     windowShortWeek = stringResource(Res.string.discover_window_short_week),
+    windowShortLatestDay = stringResource(Res.string.discover_window_short_latest_day),
     timeWindow = stringResource(Res.string.discover_time_window),
     whoSteps = listOf(
         stringResource(Res.string.who_step_guideline),
@@ -314,6 +335,15 @@ fun discoverStrings(): DiscoverStrings = DiscoverStrings(
             stringResource(Res.string.discover_who_info2),
             stringResource(Res.string.discover_who_info3),
             stringResource(Res.string.discover_scale_info2),
+        ),
+    ),
+    whoInfoReal = InfoText(
+        stringResource(Res.string.discover_who_title),
+        listOf(
+            stringResource(Res.string.discover_who_info1),
+            stringResource(Res.string.discover_who_info2),
+            stringResource(Res.string.discover_who_info3),
+            stringResource(Res.string.discover_scale_info2_real),
         ),
     ),
     moodInfo = InfoText(

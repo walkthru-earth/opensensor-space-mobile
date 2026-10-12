@@ -78,13 +78,13 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationBackHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
 import earth.walkthru.aqsync.airquality.HealthScale
 import earth.walkthru.aqsync.airquality.WhoStep
-import earth.walkthru.aqsync.publicfeed.CellFreshness
 import earth.walkthru.aqsync.publicfeed.CellRow
 import earth.walkthru.aqsync.publicfeed.CellScale
 import earth.walkthru.aqsync.publicfeed.FeedProperty
@@ -223,7 +223,9 @@ private fun DiscoverContent(
             if (start != null && style != null) {
                 val selectedHex = state.selected?.let { H3Index.toHex(it.h3) }
                 val nearMe = rememberNearMe()
-                val mapState = rememberDiscoverMapState(start, style, state.geoJson, selectedHex, ink, nearMe.location, highlight) { hex ->
+                // A rotation rebuilds the map. It resumes at the last camera, not the region fit.
+                val mapStart = remember(start) { controller.resumeStart() ?: start }
+                val mapState = rememberDiscoverMapState(mapStart, style, state.geoJson, selectedHex, ink, nearMe.location, highlight) { hex ->
                     controller.selectCell(hex)
                     controller.dismissFirstRun()
                     showAll = false
@@ -241,7 +243,7 @@ private fun DiscoverContent(
                 DiscoverMap(
                     modifier = Modifier.semantics { contentDescription = mapLabel },
                     state = mapState,
-                    start = start,
+                    start = mapStart,
                     viewportInsets = PaddingValues(top = 120.dp, bottom = PEEK_HEIGHT),
                     onCamera = controller::onCamera,
                     onMapClick = {
@@ -278,6 +280,7 @@ private fun DiscoverContent(
                     strings = strings,
                     onWindow = controller::selectWindow,
                     modifier = Modifier.align(Alignment.CenterStart).padding(start = FloatingControl.Margin),
+                    daily = state.daily,
                 )
                 Row(
                     Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 12.dp, end = 4.dp, bottom = PEEK_HEIGHT + 8.dp),
@@ -287,7 +290,7 @@ private fun DiscoverContent(
                     val scale = state.scale
                     if (property != null && scale != null) {
                         // Simple shows mood words for a health scale. A property without one keeps its gradient.
-                        if (simple && scale is CellScale.Health) SimpleLegend(property, strings, infoButton) else Legend(property, scale, state.window, strings, infoButton)
+                        if (simple && scale is CellScale.Health) SimpleLegend(property, strings, infoButton) else Legend(property, scale, state.window, strings, infoButton, state.daily)
                     }
                     Spacer(Modifier.weight(1f))
                     Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -417,17 +420,18 @@ private fun SourceToggle(
     val realLabel = if (real && date != null) strings.realDataTo(date) else strings.sourceReal
     FloatingSurface(shape = FloatingControl.SmallShape) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = FloatingControl.Inset)) {
-            Row(Modifier.selectableGroup().semantics { contentDescription = strings.sourceLabel }) {
+            // On a narrow phone the longer Real label ends in an ellipsis, the info button keeps its place.
+            Row(Modifier.weight(1f, fill = false).selectableGroup().semantics { contentDescription = strings.sourceLabel }) {
                 SourceSegment(strings.sourceSample, selected = !real, enabled = enabled, disabledNote = null) { onSource(DiscoverSource.SAMPLE) }
-                SourceSegment(realLabel, selected = real, enabled = enabled, disabledNote = strings.sourceOff) { onSource(DiscoverSource.OPENAQ) }
+                SourceSegment(realLabel, selected = real, enabled = enabled, disabledNote = strings.sourceOff, Modifier.weight(1f, fill = false)) { onSource(DiscoverSource.OPENAQ) }
             }
-            infoButton(if (real) strings.realInfo else strings.sampleInfo, Modifier.size(40.dp))
+            infoButton(if (real) strings.realInfo else strings.sampleInfo, Modifier.minimumInteractiveComponentSize().size(40.dp))
         }
     }
 }
 
 @Composable
-private fun SourceSegment(label: String, selected: Boolean, enabled: Boolean, disabledNote: String?, onClick: () -> Unit) {
+private fun SourceSegment(label: String, selected: Boolean, enabled: Boolean, disabledNote: String?, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val shape = FloatingControl.BadgeShape
     val color = when {
         selected -> FloatingControl.OnSelected
@@ -436,7 +440,7 @@ private fun SourceSegment(label: String, selected: Boolean, enabled: Boolean, di
     }
     // The touch target is at least 48 dp. The drawn pill stays 36 dp inside it.
     Box(
-        Modifier.selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onClick)
+        modifier.selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onClick)
             .semantics { if (!enabled && disabledNote != null) stateDescription = disabledNote }
             .minimumInteractiveComponentSize(),
         contentAlignment = Alignment.Center,
@@ -448,7 +452,7 @@ private fun SourceSegment(label: String, selected: Boolean, enabled: Boolean, di
                 .padding(horizontal = 12.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Text(label, style = MaterialTheme.typography.labelLarge, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, color = color, maxLines = 1)
+            Text(label, style = MaterialTheme.typography.labelLarge, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -465,6 +469,7 @@ private fun Legend(
     window: FeedWindow,
     strings: DiscoverStrings,
     infoButton: @Composable (InfoText, Modifier) -> Unit,
+    daily: Boolean,
 ) {
     val units = LocalDiscoverUnits.current
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
@@ -490,7 +495,7 @@ private fun Legend(
                         Spacer(Modifier.height(2.dp))
                         Text(caption, style = MaterialTheme.typography.labelSmall, color = muted)
                     }
-                    infoButton(strings.whoInfo, Modifier.size(40.dp))
+                    infoButton(if (daily) strings.whoInfoReal else strings.whoInfo, Modifier.minimumInteractiveComponentSize().size(40.dp))
                 }
                 is CellScale.Relative -> {
                     val low = scale.percentile.low
@@ -511,7 +516,7 @@ private fun Legend(
                         }
                         Text(strings.noHealthScale, style = MaterialTheme.typography.labelSmall, color = muted)
                     }
-                    infoButton(strings.scaleInfo, Modifier.size(40.dp))
+                    infoButton(if (daily) strings.scaleInfoReal else strings.scaleInfo, Modifier.minimumInteractiveComponentSize().size(40.dp))
                 }
             }
         }
@@ -524,7 +529,7 @@ private fun SimpleLegend(property: FeedProperty, strings: DiscoverStrings, infoB
     FloatingSurface {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 10.dp)) {
             MoodLegend(Modifier.width(212.dp).padding(vertical = 8.dp), title = property.label)
-            infoButton(strings.moodInfo, Modifier.size(40.dp))
+            infoButton(strings.moodInfo, Modifier.minimumInteractiveComponentSize().size(40.dp))
         }
     }
 }
@@ -561,7 +566,7 @@ private fun Attribution(strings: DiscoverStrings, open: Boolean, real: Boolean, 
                         .wrapContentSize(),
                 )
             }
-            infoButton(strings.mapInfo, Modifier.size(36.dp))
+            infoButton(strings.mapInfo, Modifier.minimumInteractiveComponentSize().size(36.dp))
         }
     }
 }
@@ -644,10 +649,12 @@ private fun FirstRunCard(strings: DiscoverStrings, onAddSensor: () -> Unit, onEx
 }
 
 @Composable
-private fun freshness(strings: DiscoverStrings, updated: Long?, reference: Long): String? {
-    updated ?: return null
-    val hours = ((reference - updated) / 3_600_000L).toInt()
-    return if (hours < 1) strings.updatedRecently else strings.updatedHoursAgo(hours)
+private fun freshness(strings: DiscoverStrings, freshness: Freshness?): String? = when (freshness) {
+    null -> null
+    Freshness.Stale -> strings.stale
+    Freshness.Recent -> strings.updatedRecently
+    is Freshness.HoursAgo -> strings.updatedHoursAgo(freshness.hours)
+    is Freshness.DataTo -> strings.dataTo(freshness.day)
 }
 
 @Composable
@@ -695,7 +702,7 @@ private fun InView(
         }
     }
     Text(strings.areasInView(state.rows.size), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
-    freshness(strings, state.newestUpdateEpochMs, reference)?.let {
+    freshness(strings, freshnessOf(state.newestUpdateEpochMs, reference, state.dailyAsOf, staleShown = false))?.let {
         Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     property ?: return
@@ -764,7 +771,7 @@ private fun ChartTitle(property: FeedProperty, strings: DiscoverStrings, state: 
         Text("${property.label}  ${unitLabel(property, LocalDiscoverUnits.current)}", style = MaterialTheme.typography.titleSmall)
         Spacer(Modifier.width(8.dp))
         Text(
-            "${strings.avg}  ${windowLabel(state.window, strings)}",
+            "${strings.avg}  ${windowLabel(state.window, strings, state.daily)}",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(1f),
@@ -790,7 +797,7 @@ private fun CellDetail(
         if (state.isSample) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(strings.sampleData, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.weight(1f))
-                infoButton(strings.sampleInfo, Modifier.size(40.dp))
+                infoButton(strings.sampleInfo, Modifier.minimumInteractiveComponentSize().size(40.dp))
             }
         }
         val property = state.property
@@ -836,8 +843,7 @@ private fun CellDetail(
         } else {
             Text(strings.notMeasured, style = MaterialTheme.typography.titleMedium)
         }
-        val stale = reference - row.updatedEpochMs >= CellFreshness.STALE_AFTER_MS
-        val parts = listOfNotNull(strings.sensors(row.devices), if (stale) strings.stale else freshness(strings, row.updatedEpochMs, reference))
+        val parts = listOfNotNull(strings.sensors(row.devices), freshness(strings, freshnessOf(row.updatedEpochMs, reference, state.dailyAsOf)))
         Text(parts.joinToString("  "), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (property != null && headline != null) {
             percentBelow(state.rows.mapNotNull { it.mean(property.id) }, headline)?.let {
@@ -879,7 +885,7 @@ private fun SimpleCellDetail(
         if (state.isSample) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(strings.sampleData, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.weight(1f))
-                infoButton(strings.sampleInfo, Modifier.size(40.dp))
+                infoButton(strings.sampleInfo, Modifier.minimumInteractiveComponentSize().size(40.dp))
             }
         }
         val property = state.property
@@ -922,7 +928,7 @@ private fun SimpleCellDetail(
                 Text(moodLine(summary.step), style = MaterialTheme.typography.bodyMedium)
                 Spacer(Modifier.height(12.dp))
                 // One block per window the feed offers, oldest first, so Real shows 7 days and 24 hours.
-                MoodStrip(summary.blocks, captions = PublicSummary.ORDER.filter { it in state.windows }.map { windowLabel(it, strings) })
+                MoodStrip(summary.blocks, captions = PublicSummary.ORDER.filter { it in state.windows }.map { windowLabel(it, strings, state.daily) })
             }
         } else if (headline == SimpleHeadline.LOADING) {
             // The 24 hour row is still on its way. Neutral, no mood and no verdict yet.
@@ -951,8 +957,7 @@ private fun SimpleCellDetail(
         // Sensors, freshness and the other values come from the 24 hour row, like the headline.
         val facts = state.simpleCellFacts()
         val updated = facts.updatedEpochMs
-        val stale = updated != null && reference - updated >= CellFreshness.STALE_AFTER_MS
-        val parts = listOfNotNull(facts.devices?.let { strings.sensors(it) }, if (stale) strings.stale else freshness(strings, updated, reference))
+        val parts = listOfNotNull(facts.devices?.let { strings.sensors(it) }, freshness(strings, freshnessOf(updated, reference, state.dailyAsOf)))
         if (parts.isNotEmpty()) Text(parts.joinToString("  "), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         val others = facts.others
         if (others.isNotEmpty()) {

@@ -101,4 +101,7 @@
     <string name="chart_average_value">المتوسط %1$s %2$s</string>
     <!-- Calendar summary, days with readings out of days shown. -->
     <string name="chart_days_with_readings">%1$d من %2$d يومًا فيها قراءات</string>
+    <string name="chart_guideline_24h">الحد الإرشادي لمدة 24 ساعة</string>
+    <string name="chart_guideline_note_simple">الخط المتقطع هو الحد الصحي الإرشادي لمدة 24 ساعة.</string>
+    <string name="info_history_body5_simple">ألوان PM2.5 وPM10 هي حالات الهواء. اللون يعني الشيء نفسه في كل مكان وكل عرض.</string>
 </resources>

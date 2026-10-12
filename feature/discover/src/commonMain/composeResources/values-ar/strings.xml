@@ -126,6 +126,7 @@
     <string name="discover_source_real">حقيقية</string>
     <!-- The Real label, the local day the OpenAQ data runs to, as in "OpenAQ, data to 8 Oct". -->
     <string name="discover_real_data_to">OpenAQ، بيانات حتى %1$s</string>
+    <string name="discover_data_to">بيانات حتى %1$s</string>
     <!-- A short date, day then month, as in "8 Oct". -->
     <string name="discover_day_month">%1$d %2$s</string>
     <string-array name="discover_months_short">
@@ -147,7 +148,10 @@
     <!-- The attribution in Real mode, it opens the OpenAQ licenses. -->
     <string name="discover_data_openaq">البيانات من OpenAQ</string>
     <string name="discover_real_title">بيانات OpenAQ</string>
-    <string name="discover_real_info">البيانات الحقيقية من OpenAQ، متوسطات يومية لكل منطقة. يحتفظ كل مزوّد بيانات برخصته الخاصة.</string>
+    <string name="discover_real_info">البيانات الحقيقية من OpenAQ، متوسطات يومية من محطة عامة واحدة أو أكثر لكل منطقة، لآخر يوم من البيانات. يحتفظ كل مزوّد بيانات برخصته الخاصة.</string>
     <!-- The real feed could not be read, with Retry beside it. -->
     <string name="discover_load_failed">تعذّر تحميل المستشعرات العامة</string>
+    <string name="discover_window_latest_day">آخر يوم</string>
+    <string name="discover_window_short_latest_day">يوم</string>
+    <string name="discover_scale_info2_real">تعرض كل منطقة متوسطات يومية من محطة عامة واحدة أو أكثر، لآخر يوم من البيانات. المنطقة الباهتة ليس لها قيمة في آخر يومين من البيانات. الحدود وحدها تعني أن المنطقة لا تقيس هذا.</string>
 </resources>

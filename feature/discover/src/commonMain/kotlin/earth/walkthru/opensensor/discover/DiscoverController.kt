@@ -103,6 +103,8 @@ data class DiscoverUiState(
     val windows: List<FeedWindow> = FeedWindow.entries,
     /** The local day the real data runs to, for the toggle label. Null for the sample. */
     val dataDate: LocalDate? = null,
+    /** True when each row is a daily mean. Freshness is then read against [dataDate], never the clock. */
+    val daily: Boolean = false,
     /** True when the real feed could not be read. The map shows an error with Retry, never the sample. */
     val loadFailed: Boolean = false,
     val newestUpdateEpochMs: Long? = null,
@@ -198,7 +200,7 @@ class DiscoverController(
     /** Persists the toggle's choice. The host's settings flow then reports it back. */
     private val saveSource: suspend (DiscoverSource) -> Unit = {},
 ) {
-    private val _state = MutableStateFlow(DiscoverUiState(available = feed.available && h3.available, isSample = feed.isSample, windows = feed.windows))
+    private val _state = MutableStateFlow(DiscoverUiState(available = feed.available && h3.available, isSample = feed.isSample, daily = feed.isDaily, windows = feed.windows))
     val state: StateFlow<DiscoverUiState> = _state.asStateFlow()
 
     private val rest = MutableStateFlow<CameraRest?>(null)
@@ -234,6 +236,12 @@ class DiscoverController(
             }
         }
     }
+
+    /**
+     * Where a map built again should start, the last camera that rested, else [DiscoverUiState.start].
+     * A rotation rebuilds the map, and it should not fit the region again over the user's view.
+     */
+    fun resumeStart(): StartView? = saved.camera?.let { StartView.Camera(it) } ?: _state.value.start
 
     /** Called on every camera move. The read starts once the camera has rested for 400 ms. */
     fun onCamera(rest: CameraRest) {
@@ -291,6 +299,7 @@ class DiscoverController(
             it.copy(
                 source = next,
                 isSample = active.isSample,
+                daily = active.isDaily,
                 available = active.available && h3.available,
                 windows = windows,
                 // Ruling: the last hour moves to the 24 hours on screen only. The saved window stays.
@@ -522,10 +531,17 @@ class DiscoverController(
         restyleJob = scope.launch {
             // Sample data is a snapshot, so freshness is read against its own newest hour.
             val nowMs = if (current.isSample) rows.maxOfOrNull { it.updatedEpochMs } ?: now() else now()
+            // A daily feed lags by days on purpose. Its cells are judged against the partition date.
+            val asOf = current.dataDate?.takeIf { current.daily }
+            val stale: (CellRow) -> Boolean = if (asOf != null) {
+                { CellFreshness.isStaleDaily(it, asOf) }
+            } else {
+                { CellFreshness.isStale(it, nowMs) }
+            }
             val (scale, json) = withContext(io) {
                 val scale = property?.let { p -> CellScale.of(p.id, rows.mapNotNull { it.mean(p.id) }) }
                 val json = if (current.available) {
-                    CellGeoJson.build(h3, rows, property?.id, scale) { CellFreshness.isStale(it, nowMs) }
+                    CellGeoJson.build(h3, rows, property?.id, scale, stale)
                 } else {
                     DiscoverUiState.EMPTY_GEOJSON
                 }

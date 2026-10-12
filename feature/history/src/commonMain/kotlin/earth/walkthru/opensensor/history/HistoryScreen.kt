@@ -116,7 +116,9 @@ import earth.walkthru.opensensor.history.resources.info_history_body2
 import earth.walkthru.opensensor.history.resources.info_history_body3
 import earth.walkthru.opensensor.history.resources.info_history_body4
 import earth.walkthru.opensensor.history.resources.info_history_body5
+import earth.walkthru.opensensor.history.resources.info_history_body5_simple
 import kotlinx.datetime.TimeZone
+import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -172,7 +174,7 @@ fun HistoryScreen(
                 if (state.availableMetrics.isEmpty()) {
                     HistoryStateMessage(stringResource(if (state.files.untimed > 0) Res.string.history_untimed else Res.string.history_nothing_indexed))
                 } else {
-                    ChartCard(state, units, controller.nowS(), onOpenDay = controller::openDay)
+                    ChartCard(state, units, controller.nowS(), level, onOpenDay = controller::openDay)
                 }
             }
             item(key = "metric") {
@@ -272,7 +274,7 @@ private fun ArchiveCard(state: HistoryUiState, level: DetailLevel) {
                     stringResource(Res.string.info_history_body2),
                     stringResource(Res.string.info_history_body3),
                     stringResource(Res.string.info_history_body4),
-                    stringResource(Res.string.info_history_body5),
+                    stringResource(colourInfoRes(level)),
                 ),
             )
         },
@@ -292,12 +294,15 @@ private fun ArchiveCard(state: HistoryUiState, level: DetailLevel) {
     }
 }
 
+/** The archive info line about PM colours. Simple never names WHO. */
+internal fun colourInfoRes(level: DetailLevel): StringResource = if (level.detailed) Res.string.info_history_body5 else Res.string.info_history_body5_simple
+
 /**
  * The picture depends on the span: a day is a ring plus hourly columns, a week hourly columns, a
  * month or a year a calendar of days plus daily or weekly columns. Touch a column to read it.
  */
 @Composable
-private fun ChartCard(state: HistoryUiState, units: UnitFormatter, nowS: Long, onOpenDay: (Long) -> Unit) {
+private fun ChartCard(state: HistoryUiState, units: UnitFormatter, nowS: Long, level: DetailLevel, onOpenDay: (Long) -> Unit) {
     val s = state.series
     val zone = state.zone
     var selected by remember(state.range, state.toS, state.metric) { mutableStateOf<HistoryColumn?>(null) }
@@ -360,16 +365,17 @@ private fun ChartCard(state: HistoryUiState, units: UnitFormatter, nowS: Long, o
                         height = if (state.range == HistoryRange.DAY) 170.dp else 200.dp,
                         zone = zone,
                         units = units,
+                        level = level,
                     )
                     Text(
-                        averagingNote(state.range, state.metric),
+                        averagingNote(state.range, state.metric, level),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 4.dp),
                     )
-                    SelectedColumn(selected, state, units)
+                    SelectedColumn(selected, state, units, level.detailed)
                     Spacer(Modifier.height(8.dp))
-                    Summary(s, units)
+                    Summary(s, units, level.detailed)
                 }
             }
         }
@@ -378,7 +384,7 @@ private fun ChartCard(state: HistoryUiState, units: UnitFormatter, nowS: Long, o
 
 /** What the touched column says: slot, value with its mood and WHO step in words, peak, coverage, estimated or not. */
 @Composable
-private fun SelectedColumn(c: HistoryColumn?, state: HistoryUiState, units: UnitFormatter) {
+private fun SelectedColumn(c: HistoryColumn?, state: HistoryUiState, units: UnitFormatter, stepNamed: Boolean) {
     val zone = state.zone
     val text = if (c == null) {
         stringResource(Res.string.chart_touch)
@@ -404,7 +410,8 @@ private fun SelectedColumn(c: HistoryColumn?, state: HistoryUiState, units: Unit
             listOfNotNull(
                 slot,
                 fmtValue(units.value(m, unit)) + " " + units.unit(unit),
-                mood?.let { it.titleText() + " · " + it.step.labelText() },
+                // Simple names the mood only, never the WHO step.
+                mood?.let { if (stepNamed) it.titleText() + " · " + it.step.labelText() else it.titleText() },
                 c.max?.takeIf { it > m * 1.15f }?.let { stringResource(Res.string.history_peak_value, fmtValue(units.value(it, unit))) },
                 stringResource(Res.string.history_covered, (c.coverage * 100).toInt()),
                 if (c.estimated) stringResource(Res.string.history_estimated_time) else null,
@@ -415,15 +422,15 @@ private fun SelectedColumn(c: HistoryColumn?, state: HistoryUiState, units: Unit
 }
 
 @Composable
-private fun Summary(s: HistorySeries, units: UnitFormatter) {
+private fun Summary(s: HistorySeries, units: UnitFormatter, stepNamed: Boolean) {
     // Moods and colours read the SI value. Only the printed number converts.
     val unit = s.metric.unit
     val noValue = stringResource(Res.string.history_no_value)
     // The value colours carry the mood, so each figure also states it in words.
     val meanMood = s.mean?.let { s.metric.moodOf(it.toDouble()) }
     val peakMood = s.max?.let { s.metric.moodOf(it.toDouble()) }
-    val meanState = meanMood?.let { it.titleText() + ", " + it.step.labelText() }
-    val peakState = peakMood?.let { it.titleText() + ", " + it.step.labelText() }
+    val meanState = meanMood?.let { if (stepNamed) it.titleText() + ", " + it.step.labelText() else it.titleText() }
+    val peakState = peakMood?.let { if (stepNamed) it.titleText() + ", " + it.step.labelText() else it.titleText() }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Column(Modifier.semantics(mergeDescendants = true) { meanState?.let { stateDescription = it } }) {
             Eyebrow(stringResource(Res.string.history_average))

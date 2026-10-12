@@ -70,6 +70,7 @@ class OpenAqAggregatesFeed(
     override suspend fun trim(level: MemoryPressure.Level) = rowsLock.withLock { daily.trim(level) }
 
     override val isSample: Boolean get() = false
+    override val isDaily: Boolean get() = true
     override val available: Boolean get() = reader.available
     override val windows: List<FeedWindow> get() = WINDOWS
 

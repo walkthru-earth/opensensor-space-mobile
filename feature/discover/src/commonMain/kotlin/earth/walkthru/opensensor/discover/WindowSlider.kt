@@ -61,6 +61,7 @@ internal fun WindowSlider(
     strings: DiscoverStrings,
     onWindow: (FeedWindow) -> Unit,
     modifier: Modifier = Modifier,
+    daily: Boolean = false,
 ) {
     // The stop of the chosen window. A window the feed does not offer is never chosen for long.
     val index = windows.indexOf(window).coerceAtLeast(0)
@@ -92,8 +93,8 @@ internal fun WindowSlider(
     }
 
     val title = strings.timeWindow
-    val state = windowLabel(window, strings)
-    val actions = windows.filter { it != window }.map { w -> CustomAccessibilityAction(windowLabel(w, strings)) { onWindow(w); true } }
+    val state = windowLabel(window, strings, daily)
+    val actions = windows.filter { it != window }.map { w -> CustomAccessibilityAction(windowLabel(w, strings, daily)) { onWindow(w); true } }
     FloatingSurface(
         modifier = modifier.width(STOP).height(height).clearAndSetSemantics {
             contentDescription = title
@@ -147,7 +148,7 @@ internal fun WindowSlider(
                         val selected = if (drag != null) i == thumb.roundToInt() else w == window
                         Box(Modifier.size(STOP), contentAlignment = Alignment.Center) {
                             Text(
-                                strings.windowShort(w),
+                                strings.windowShort(w, daily),
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                                 color = if (selected) FloatingControl.OnSelected else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -161,8 +162,8 @@ internal fun WindowSlider(
     }
 }
 
-internal fun DiscoverStrings.windowShort(w: FeedWindow): String = when (w) {
+internal fun DiscoverStrings.windowShort(w: FeedWindow, daily: Boolean = false): String = when (w) {
     FeedWindow.LAST_HOUR -> windowShortHour
-    FeedWindow.DAY -> windowShortDay
+    FeedWindow.DAY -> if (daily) windowShortLatestDay else windowShortDay
     FeedWindow.WEEK -> windowShortWeek
 }

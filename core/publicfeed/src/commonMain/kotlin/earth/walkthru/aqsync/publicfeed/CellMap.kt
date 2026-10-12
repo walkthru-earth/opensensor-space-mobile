@@ -1,5 +1,8 @@
 package earth.walkthru.aqsync.publicfeed
 
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.minus
 import kotlin.math.floor
 import kotlin.math.roundToInt
 
@@ -82,6 +85,20 @@ object CellFreshness {
     const val STALE_AFTER_MS: Long = 3 * 60 * 60 * 1000L
 
     fun isStale(row: CellRow, nowEpochMs: Long): Boolean = nowEpochMs - row.updatedEpochMs >= STALE_AFTER_MS
+
+    /** The newest day a daily row measured. Its `updatedEpochMs` is the UTC midnight after that day. */
+    fun dataDay(row: CellRow): LocalDate = dataDay(row.updatedEpochMs)
+
+    /** [dataDay] for a row's `updatedEpochMs` alone. */
+    fun dataDay(updatedEpochMs: Long): LocalDate = LocalDate.fromEpochDays(updatedEpochMs.floorDiv(DAY_MS) - 1)
+
+    /**
+     * A daily row is stale when its newest day is older than the day before [asOf], the partition
+     * date. A daily feed lags by days on purpose, so the clock never decides.
+     */
+    fun isStaleDaily(row: CellRow, asOf: LocalDate): Boolean = dataDay(row) < asOf.minus(1, DateTimeUnit.DAY)
+
+    private const val DAY_MS = 86_400_000L
 }
 
 /**
