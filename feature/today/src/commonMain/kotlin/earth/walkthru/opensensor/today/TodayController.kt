@@ -53,8 +53,7 @@ class TodayController(
 
     /** Collect. The engine synchronizes the device clock automatically. */
     fun smartSync() {
-        val snapshot = source.snapshot.value
-        if (!snapshot.connection.isReady || snapshot.sync.running) return
+        if (!source.snapshot.value.station.canCommand) return
         source.sync()
     }
 
@@ -76,5 +75,5 @@ class TodayController(
 
     fun disconnect() = source.disconnect()
 
-    private fun canCommand(): Boolean = source.snapshot.value.connection.isReady
+    private fun canCommand(): Boolean = source.snapshot.value.station.canCommand
 }

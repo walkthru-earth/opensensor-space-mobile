@@ -10,6 +10,7 @@ import earth.walkthru.aqsync.data.ArchiveTimeSummary
 import earth.walkthru.aqsync.data.DeviceConnectionManager
 import earth.walkthru.aqsync.data.DeviceConnectionRepository
 import earth.walkthru.aqsync.data.DeviceEvent
+import earth.walkthru.aqsync.data.DeviceOwnership
 import earth.walkthru.aqsync.data.ReconnectState
 import earth.walkthru.aqsync.data.SyncProgress
 import earth.walkthru.aqsync.data.TimedLive
@@ -106,7 +107,7 @@ private class RepositoryTodaySource(
     override val snapshot: StateFlow<TodaySnapshot> = combine(
         repository.session, repository.connectionState, repository.info, repository.status, repository.live,
         repository.sync, repository.reconnecting, repository.activeTransport, todaySoFar, repository.archiveTimeSummary,
-        enrolled, repository.config,
+        enrolled, repository.config, repository.ownership,
     ) { values ->
         val session = values[0] as DeviceSession?
         val connection = values[1] as ConnectionState
@@ -131,6 +132,7 @@ private class RepositoryTodaySource(
             reconnecting = reconnect?.let { TodayReconnect(it.attempt, it.maxAttempts, it.reason) },
             needsPairingRepair = BleConnectionFailure.needsPairingRepair(connection),
             todaySoFar = values[8] as TodaySoFar?,
+            heldInBackground = values[12] == DeviceOwnership.BACKGROUND,
         )
     }.stateIn(scope, SharingStarted.Eagerly, TodaySnapshot(address = address))
 

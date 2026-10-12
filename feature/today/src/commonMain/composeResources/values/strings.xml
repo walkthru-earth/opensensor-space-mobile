@@ -27,6 +27,7 @@
     <string name="conn_ready">Connected</string>
     <string name="conn_pairing_repair">Bluetooth pairing needs repair. If this sensor was reset or reflashed, forget it in Android Bluetooth settings and pair again. Your archived files are kept.</string>
     <string name="conn_failed">Could not connect. Move closer and try again</string>
+    <string name="conn_held_background">Syncing in the background. This page updates when it finishes.</string>
     <string name="conn_link_lost">Link lost. Reconnecting by itself…</string>
     <string name="conn_link_lost_detail">Link lost (%1$s). Reconnecting, attempt %2$d of %3$d…</string>
     <string name="conn_bluetooth_settings">Bluetooth settings</string>

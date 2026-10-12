@@ -53,6 +53,7 @@ import earth.walkthru.opensensor.today.resources.Res
 import earth.walkthru.opensensor.today.resources.action_cancel
 import earth.walkthru.opensensor.today.resources.action_reconnect
 import earth.walkthru.opensensor.today.resources.conn_bluetooth_settings
+import earth.walkthru.opensensor.today.resources.conn_held_background
 import earth.walkthru.opensensor.today.resources.conn_link_lost
 import earth.walkthru.opensensor.today.resources.conn_link_lost_detail
 import earth.walkthru.opensensor.today.resources.device_unnamed
@@ -92,16 +93,20 @@ fun ConnectionBanner(
     pairingRepair: Boolean,
     onOpenBluetoothSettings: () -> Unit,
     modifier: Modifier = Modifier,
+    heldInBackground: Boolean = false,
 ) {
-    val (container, content) = when (state) {
-        is ConnectionState.Ready -> MaterialTheme.colorScheme.surfaceContainer to MaterialTheme.colorScheme.onSurface
-        is ConnectionState.Failed -> MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
-        ConnectionState.Bonding -> MaterialTheme.colorScheme.tertiaryContainer to MaterialTheme.colorScheme.onTertiaryContainer
-        else -> MaterialTheme.colorScheme.secondaryContainer to MaterialTheme.colorScheme.onSecondaryContainer
+    val (container, content) = when {
+        heldInBackground -> MaterialTheme.colorScheme.surfaceContainer to MaterialTheme.colorScheme.onSurface
+        else -> when (state) {
+            is ConnectionState.Ready -> MaterialTheme.colorScheme.surfaceContainer to MaterialTheme.colorScheme.onSurface
+            is ConnectionState.Failed -> MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
+            ConnectionState.Bonding -> MaterialTheme.colorScheme.tertiaryContainer to MaterialTheme.colorScheme.onTertiaryContainer
+            else -> MaterialTheme.colorScheme.secondaryContainer to MaterialTheme.colorScheme.onSecondaryContainer
+        }
     }
     Surface(color = container, contentColor = content, shape = MaterialTheme.shapes.large, modifier = modifier.fillMaxWidth()) {
         Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (state.isBusy) {
+            if (heldInBackground || state.isBusy) {
                 CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
             } else {
                 StatusDot(
@@ -116,11 +121,11 @@ fun ConnectionBanner(
             Column {
                 // The link state changes while the user waits, so screen readers hear it without moving focus.
                 Text(
-                    state.describe(technical, pairingRepair),
+                    if (heldInBackground) stringResource(Res.string.conn_held_background) else state.describe(technical, pairingRepair),
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                 )
-                if (reconnecting != null) {
+                if (reconnecting != null && !heldInBackground) {
                     Text(
                         if (technical) {
                             stringResource(Res.string.conn_link_lost_detail, reconnecting.reason, reconnecting.attempt, reconnecting.maxAttempts)

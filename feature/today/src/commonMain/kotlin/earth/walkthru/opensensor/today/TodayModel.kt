@@ -5,6 +5,7 @@ import earth.walkthru.aqsync.collection.SyncEndReason
 import earth.walkthru.aqsync.data.SyncProgress
 import earth.walkthru.aqsync.data.ble.ConfigSnapshot
 import earth.walkthru.aqsync.data.ble.ConnectionState
+import earth.walkthru.aqsync.data.ble.StationStatus
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.history.DeviceCapabilities
 import earth.walkthru.aqsync.data.history.TodaySoFar
@@ -67,7 +68,12 @@ data class TodaySnapshot(
     val needsPairingRepair: Boolean = false,
     /** Today (local calendar day) from the phone archive, once it has timed rows for this station. */
     val todaySoFar: TodaySoFar? = null,
-)
+    /** A background worker or Collect all holds this device. The page waits, it never offers Reconnect. */
+    val heldInBackground: Boolean = false,
+) {
+    /** The status every station page reads, see [StationStatus]. */
+    val station: StationStatus get() = StationStatus(connection, reconnecting != null, sync.running, heldInBackground)
+}
 
 /** A device command Today can send. Each one is confirmed by the user first. */
 enum class TodayCommand { SET_TIME, FLUSH }

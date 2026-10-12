@@ -21,6 +21,7 @@ import earth.walkthru.aqsync.data.ReconnectState
 import earth.walkthru.aqsync.data.SyncProgress
 import earth.walkthru.aqsync.data.background.AutoSyncScheduler
 import earth.walkthru.aqsync.data.ble.ConnectionState
+import earth.walkthru.aqsync.data.ble.StationStatus
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.history.ArchiveQueryResult
 import earth.walkthru.aqsync.data.history.DerivedStore
@@ -74,13 +75,18 @@ data class FilesUiState(
     val autoSync: Boolean? = null,
     /** A background sync job is queued or running right now. */
     val backgroundSyncActive: Boolean = false,
+    /** A background worker or Collect all holds this device right now, see [StationStatus]. */
+    val heldInBackground: Boolean = false,
     /** Active pipe, for the top-bar chip (same source as Today / Device). */
     val transport: TransportKind? = null,
     /** Simple shows times, sizes and states in words. Detailed adds the chart and inspector, Developer file names and transfer internals. */
     val detailLevel: DetailLevel = DetailLevel.SIMPLE,
     /** "Chart by file": one column per archived file of the connected station (null while off). */
     val fileChart: FileChartState? = null,
-)
+) {
+    /** The status every station page reads, the same rule Today and Device use. */
+    val station: StationStatus get() = StationStatus(connection, reconnecting != null, syncRunning, heldInBackground)
+}
 
 /** The strip of per-file columns: the window shown, of how many files, for which metric. */
 @Immutable
@@ -208,6 +214,7 @@ class FilesViewModel @AssistedInject constructor(
         repository.activeTransport,
         settings.detailLevel,
         fileChart,
+        repository.ownership,
     ) { values ->
         FilesUiState(
             connection = values[0] as ConnectionState,
@@ -218,6 +225,7 @@ class FilesViewModel @AssistedInject constructor(
             transport = values[5] as TransportKind?,
             detailLevel = values[6] as DetailLevel,
             fileChart = values[7] as FileChartState?,
+            heldInBackground = values[8] == DeviceOwnership.BACKGROUND,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FilesUiState())
 

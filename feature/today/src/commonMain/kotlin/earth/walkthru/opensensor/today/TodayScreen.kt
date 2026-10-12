@@ -236,7 +236,8 @@ fun TodayContent(
         ) { padding ->
             Column(Modifier.fillMaxSize().padding(top = padding.calculateTopPadding())) {
                 // The banner lives outside the list, so no list index shifts when it comes and goes.
-                if (snapshot.connection !is ConnectionState.Ready) {
+                val station = snapshot.station
+                if (station.showsBanner) {
                     Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
                         ConnectionBanner(
                             snapshot.connection,
@@ -244,8 +245,9 @@ fun TodayContent(
                             technical = level.developer,
                             pairingRepair = snapshot.needsPairingRepair,
                             onOpenBluetoothSettings = { onAction(TodayAction.OpenBluetoothSettings) },
+                            heldInBackground = station.heldInBackground,
                         )
-                        if (snapshot.reconnecting == null && (snapshot.connection is ConnectionState.Failed || snapshot.connection is ConnectionState.Disconnected)) {
+                        if (station.offersReconnect) {
                             Spacer(Modifier.height(8.dp))
                             PillButton(stringResource(Res.string.action_reconnect), onClick = { onAction(TodayAction.Reconnect) }, modifier = Modifier.fillMaxWidth())
                         }
@@ -267,14 +269,14 @@ fun TodayContent(
                                 TodayCard.SMART_SYNC -> SmartSyncCard(
                                     sync = snapshot.sync,
                                     archive = snapshot.archive,
-                                    enabled = snapshot.connection.isReady,
+                                    enabled = snapshot.station.canCommand,
                                     level = level,
                                     onSync = { onAction(TodayAction.SmartSync) },
                                 )
                                 TodayCard.CLOCK -> ClockCard(
                                     status = snapshot.status,
                                     live = live,
-                                    enabled = snapshot.connection.isReady,
+                                    enabled = snapshot.station.canCommand,
                                     level = level,
                                     onFlush = onRequestFlush,
                                 )

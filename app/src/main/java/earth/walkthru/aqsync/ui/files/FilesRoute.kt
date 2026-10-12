@@ -87,8 +87,8 @@ fun FilesRoute(
                 }
             }
         },
-        banner = if (state.connection !is ConnectionState.Ready) {
-            { ConnectionBanner(state.connection, reconnecting = state.reconnecting, technical = level.developer) }
+        banner = if (state.station.showsBanner) {
+            { ConnectionBanner(state.connection, reconnecting = state.reconnecting, technical = level.developer, heldInBackground = state.heldInBackground) }
         } else {
             null
         },

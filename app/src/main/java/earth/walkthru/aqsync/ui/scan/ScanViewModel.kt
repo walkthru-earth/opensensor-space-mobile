@@ -8,6 +8,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import earth.walkthru.aqsync.BuildConfig
 import earth.walkthru.aqsync.data.DeviceConnectionManager
+import earth.walkthru.aqsync.data.DeviceOwnership
 import earth.walkthru.aqsync.data.DeviceSnapshot
 import earth.walkthru.aqsync.data.TransportPreference
 import earth.walkthru.aqsync.data.anyCollectionActive
@@ -262,5 +263,5 @@ private fun DeviceSnapshot.toActiveLink(): ActiveLink = ActiveLink(
     collecting = progress.running,
     filesDone = progress.filesDone,
     filesTotal = progress.filesTotal,
-    background = backgroundOwner != null,
+    background = ownership == DeviceOwnership.BACKGROUND,
 )

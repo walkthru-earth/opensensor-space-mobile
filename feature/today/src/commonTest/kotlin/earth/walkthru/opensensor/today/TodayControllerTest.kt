@@ -130,6 +130,20 @@ class TodayControllerTest {
     }
 
     @Test
+    fun flushWaitsWhileASyncRunsOrBackgroundWorkHoldsTheDevice() = runTest {
+        val source = FakeSource()
+        val c = controller(source)
+        source.snapshot.value = source.snapshot.value.copy(sync = SyncProgress(running = true))
+        c.requestFlush()
+        assertNull(c.dialog.value)
+        source.snapshot.value = source.snapshot.value.copy(sync = SyncProgress(), heldInBackground = true)
+        c.requestFlush()
+        c.smartSync()
+        assertNull(c.dialog.value)
+        assertEquals(emptyList(), source.calls)
+    }
+
+    @Test
     fun stateFollowsTheSettingsStore() = runTest {
         val source = FakeSource()
         val level = MutableStateFlow(DetailLevel.SIMPLE)

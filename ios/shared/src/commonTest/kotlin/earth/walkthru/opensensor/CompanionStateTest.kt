@@ -318,4 +318,17 @@ class CompanionStateTest {
         assertFalse(state.bluetoothBackground)
         assertTrue(state.lanBackground.isEmpty())
     }
+
+    @Test fun aBackgroundHoldMarksOnlyTheSensorItHolds() {
+        val state = CompanionState()
+        state.connectionStarted("ble-a")
+        state.bluetoothBackgroundOwned(true)
+        assertTrue(state.heldInBackground("ble-a", null))
+        assertFalse(state.heldInBackground("ble-b", null))
+        state.lanScanStarted()
+        state.lanSensorsFound(listOf("aq-b"), listOf("station-b"))
+        state.lanBackgroundOwned("aq-b", true)
+        assertTrue(state.heldInBackground("ble-b", "station-b"))
+        assertFalse(state.heldInBackground("ble-c", "station-c"))
+    }
 }

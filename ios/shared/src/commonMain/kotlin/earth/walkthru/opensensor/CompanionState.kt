@@ -328,6 +328,17 @@ class CompanionState {
         lanBackground = if (owned) lanBackground + name else lanBackground - name
     }
 
+    /**
+     * An Auto-sync step holds this sensor, over Bluetooth by its peripheral [address] or over Wi-Fi
+     * by its [station]. Station pages then wait calmly and offer no Reconnect.
+     */
+    internal fun heldInBackground(address: String, station: String?): Boolean {
+        val bluetoothId = selectedId ?: reconnectingId ?: failedId
+        val overBluetooth = bluetoothBackground && bluetoothId.equals(address, ignoreCase = true)
+        val overWifi = station != null && lanBackground.any { lanStations[it] == station || lanInfo[it]?.station == station }
+        return overBluetooth || overWifi
+    }
+
     /** An Auto-sync step took or released the Bluetooth link. */
     fun bluetoothBackgroundOwned(owned: Boolean) {
         bluetoothBackground = owned

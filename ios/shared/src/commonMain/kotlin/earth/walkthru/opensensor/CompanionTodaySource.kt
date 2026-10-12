@@ -78,6 +78,7 @@ internal class CompanionTodaySource(
         val lanLiveAt: Long?,
         val lanSession: LanSessionState?,
         val lanRun: LanRunState?,
+        val heldInBackground: Boolean,
     )
 
     /** [Seen] with the name the user last saw, kept when a new scan clears the nearby list. */
@@ -115,6 +116,7 @@ internal class CompanionTodaySource(
             lanLiveAt = lanName?.let(state.lanLiveAtEpochMs::get),
             lanSession = lanName?.let(state.lanSessions::get),
             lanRun = lanRun,
+            heldInBackground = state.heldInBackground(address, station),
         )
     }.runningFold<Seen, Stamped?>(null) { previous, seen ->
         // A new scan clears the nearby list, the name the user saw stays.
@@ -155,6 +157,7 @@ internal class CompanionTodaySource(
             archive = if (station == null) TodayArchive() else TodayArchive.of(records.filter { it.station == station }),
             todaySoFar = today?.takeIf { connected },
             needsPairingRepair = !connected && !mine && seen.failed,
+            heldInBackground = seen.heldInBackground,
         )
     }.stateIn(scope, SharingStarted.Eagerly, TodaySnapshot(address = address))
 

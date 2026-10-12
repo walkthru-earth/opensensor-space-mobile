@@ -27,6 +27,7 @@
     <string name="conn_ready">متصل</string>
     <string name="conn_pairing_repair">يحتاج إقران Bluetooth إلى إصلاح. إذا أُعيد ضبط هذا المستشعر أو أُعيد تثبيت برنامجه الثابت، فانسَه في إعدادات Bluetooth في Android ثم أقرنه مجددًا. ملفاتك المؤرشفة محفوظة.</string>
     <string name="conn_failed">تعذّر الاتصال. اقترب وحاول مرة أخرى</string>
+    <string name="conn_held_background">تجري المزامنة في الخلفية. تتحدث هذه الصفحة عند انتهائها.</string>
     <string name="conn_link_lost">انقطع الاتصال. جارٍ إعادة الاتصال تلقائيًا…</string>
     <string name="conn_link_lost_detail">انقطع الاتصال (%1$s). جارٍ إعادة الاتصال، المحاولة %2$d من %3$d…</string>
     <string name="conn_bluetooth_settings">إعدادات Bluetooth</string>

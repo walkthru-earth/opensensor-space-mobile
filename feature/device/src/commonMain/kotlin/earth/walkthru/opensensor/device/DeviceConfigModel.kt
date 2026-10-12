@@ -3,6 +3,7 @@ package earth.walkthru.opensensor.device
 import earth.walkthru.aqsync.data.WifiScanState
 import earth.walkthru.aqsync.data.ble.ConfigSnapshot
 import earth.walkthru.aqsync.data.ble.ConnectionState
+import earth.walkthru.aqsync.data.ble.StationStatus
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.history.DeviceCapabilities
 import earth.walkthru.aqsync.data.protocol.ConfigPatch
@@ -38,8 +39,13 @@ data class DeviceConfigSnapshot(
     val busy: Boolean = false,
     /** A file transfer is running on this link. */
     val syncRunning: Boolean = false,
+    /** A background worker or Collect all holds this device, see [StationStatus]. */
+    val heldInBackground: Boolean = false,
     val sensorRecord: SensorRecord? = null,
-)
+) {
+    /** The status every station page reads, so Device gates exactly like Today. */
+    val station: StationStatus get() = StationStatus(connection, syncRunning = syncRunning, heldInBackground = heldInBackground)
+}
 
 /** The state the Device section draws: the snapshot, the detail level, and what follows from both. */
 data class DeviceConfigUiState(
@@ -51,13 +57,13 @@ data class DeviceConfigUiState(
     val capabilities: DeviceCapabilities get() = DeviceCapabilities.from(snapshot.info)
     val isV2: Boolean get() = capabilities.configurable
     val ready: Boolean get() = snapshot.connection.isReady
-    val canEdit: Boolean get() = ready && isV2 && !snapshot.busy
+    val canEdit: Boolean get() = ready && isV2 && !snapshot.busy && !snapshot.heldInBackground
 
     /**
      * Actions that drop the link (reboot, rotate token, forget bonds) are also refused while a
      * transfer runs. A `REBOOT` mid-sync would kill the download and finalize the RAM batch under it.
      */
-    val canDisrupt: Boolean get() = canEdit && !snapshot.syncRunning
+    val canDisrupt: Boolean get() = canEdit && !snapshot.station.busy
     val overBle: Boolean get() = snapshot.transport == TransportKind.BLE || snapshot.transport == TransportKind.FAKE
 
     /** Simple still shows the pairing card for a default PIN in fixed mode or a pending restart. */

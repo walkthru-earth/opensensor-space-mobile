@@ -113,6 +113,7 @@ fun ConnectionBanner(
     modifier: Modifier = Modifier,
     reconnecting: ReconnectState? = null,
     technical: Boolean = false,
+    heldInBackground: Boolean = false,
 ) = earth.walkthru.opensensor.today.ConnectionBanner(
     state = state,
     reconnecting = reconnecting?.toShared(),
@@ -120,4 +121,5 @@ fun ConnectionBanner(
     pairingRepair = BleConnectionFailure.needsPairingRepair(state),
     onOpenBluetoothSettings = rememberOpenBluetoothSettings(),
     modifier = modifier,
+    heldInBackground = heldInBackground,
 )

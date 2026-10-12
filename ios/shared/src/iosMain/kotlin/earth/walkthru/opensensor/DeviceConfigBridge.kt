@@ -108,6 +108,7 @@ internal class IosDeviceConfigSource(
             lanSeen = lan != null || (info != null && info.station in state.lanStations.values),
             busy = state.wifiAccessBusy || state.today.busy || (lan?.let { state.lanSessions[it]?.busy } == true),
             syncRunning = state.syncBusy || (lan?.let { state.lanSessions[it]?.busy } == true),
+            heldInBackground = state.heldInBackground(address, devices.stationFor(address)),
         )
     }
 
@@ -130,6 +131,7 @@ internal class IosDeviceConfigSource(
             hasLanToken = view.info?.dev?.lowercase()?.let { it in withAccess } == true,
             busy = busy || view.busy,
             syncRunning = view.syncRunning,
+            heldInBackground = view.heldInBackground,
         )
     }.stateIn(scope, SharingStarted.Eagerly, DeviceConfigSnapshot(address = address, name = devices.nameFor(address), transport = TransportKind.BLE))
 
@@ -332,6 +334,7 @@ internal class IosDeviceConfigSource(
         val lanSeen: Boolean,
         val busy: Boolean,
         val syncRunning: Boolean,
+        val heldInBackground: Boolean,
     )
 
     private companion object {

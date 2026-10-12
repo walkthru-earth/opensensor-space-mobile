@@ -124,10 +124,10 @@ fun DeviceScreen(
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(top = padding.calculateTopPadding())) {
-            if (!state.ready) {
+            if (state.station.showsBanner) {
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-                    ConnectionBanner(state.connection, technical = state.detailLevel.developer)
-                    if (state.connection is ConnectionState.Failed || state.connection is ConnectionState.Disconnected) {
+                    ConnectionBanner(state.connection, technical = state.detailLevel.developer, heldInBackground = state.heldInBackground)
+                    if (state.station.offersReconnect) {
                         Spacer(Modifier.height(8.dp))
                         PillButton(stringResource(R.string.action_reconnect), onClick = { onAction(DeviceAction.Reconnect) }, modifier = Modifier.fillMaxWidth())
                     }

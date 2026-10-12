@@ -428,7 +428,7 @@ fun LanCard(
             if (state.overBle) {
                 OutlinePillButton(stringResource(if (hasToken) Res.string.lan_fetch_again else Res.string.lan_fetch), onClick = onFetchToken, enabled = state.canEdit)
             } else {
-                OutlinePillButton(stringResource(Res.string.lan_reconnect_ble), onClick = onReconnectBle, enabled = state.ready && !snapshot.busy)
+                OutlinePillButton(stringResource(Res.string.lan_reconnect_ble), onClick = onReconnectBle, enabled = state.ready && !snapshot.busy && !snapshot.heldInBackground)
             }
             if (level.detailed) OutlinePillButton(stringResource(Res.string.lan_rotate), onClick = onRotateToken, enabled = state.canDisrupt)
         }
