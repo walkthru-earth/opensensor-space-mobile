@@ -30,13 +30,7 @@
     <string name="conn_link_lost">انقطع الاتصال. جارٍ إعادة الاتصال تلقائيًا…</string>
     <string name="conn_link_lost_detail">انقطع الاتصال (%1$s). جارٍ إعادة الاتصال، المحاولة %2$d من %3$d…</string>
     <string name="conn_bluetooth_settings">إعدادات Bluetooth</string>
-    <string name="set_time">اضبط الوقت من الهاتف</string>
-    <string name="set_time_confirm">يرسل وقت هذا الهاتف (%1$s). القراءات الجديدة فقط تحصل على تاريخ. القراءات السابقة تبقى كما هي.</string>
-    <string name="set_time_button">اضبط الوقت</string>
     <string name="action_cancel">إلغاء</string>
-    <string name="sync_clock_title">المزامنة الذكية تحتاج الوقت</string>
-    <string name="sync_clock_confirm">%1$s هل تُرسل وقت هذا الهاتف أولًا؟ الملفات الخام لا تُغيَّر أبدًا.</string>
-    <string name="sync_clock_button">اضبط الوقت وزامِن</string>
     <string name="action_not_now">ليس الآن</string>
     <string name="flush">إنهاء الصفوف المخزّنة مؤقتًا</string>
     <string name="flush_confirm">يكتب القراءات المنتظرة في الذاكرة إلى ملف قصير الآن، لتتمكن من مزامنتها.</string>
@@ -71,7 +65,6 @@
     <string name="now_snapshot_note">لقطة لمدة 10 ثوانٍ، وليست متوسطًا يوميًا.</string>
     <string name="info_now_body">لقطة مدتها 10 ثوانٍ من المستشعر. ليست مؤشر جودة الهواء ولا متوسط 24 ساعة، فاعتبرها إشارة تقريبية. الوجه والكلمة واللون كلها تُظهر درجة منظمة الصحة العالمية نفسها.</string>
     <string name="info_now_body_simple">لقطة مدتها 10 ثوانٍ من المستشعر وليست متوسطًا يوميًا، فاعتبرها إشارة تقريبية. الوجه والكلمة واللون كلها تُظهر حالة الهواء نفسها.</string>
-    <string name="now_no_reading">لا قراءة بعد</string>
     <string name="now_waiting">في انتظار قراءة…</string>
     <string name="now_sample_number">العيّنة %1$d</string>
     <string name="mood_fresh_advice">ضمن إرشاد منظمة الصحة العالمية. استمتع به.</string>

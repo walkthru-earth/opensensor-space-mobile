@@ -30,13 +30,7 @@
     <string name="conn_link_lost">Link lost. Reconnecting by itself…</string>
     <string name="conn_link_lost_detail">Link lost (%1$s). Reconnecting, attempt %2$d of %3$d…</string>
     <string name="conn_bluetooth_settings">Bluetooth settings</string>
-    <string name="set_time">Set time from phone</string>
-    <string name="set_time_confirm">Sends this phone’s time (%1$s). Only new readings get a date. Earlier ones stay as they are.</string>
-    <string name="set_time_button">Set time</string>
     <string name="action_cancel">Cancel</string>
-    <string name="sync_clock_title">Smart Sync needs the time</string>
-    <string name="sync_clock_confirm">%1$s Send this phone’s time first? Raw files are never changed.</string>
-    <string name="sync_clock_button">Set time and sync</string>
     <string name="action_not_now">Not now</string>
     <string name="flush">Finalize buffered rows</string>
     <string name="flush_confirm">Writes the readings waiting in memory to a short file now, so you can sync them.</string>
@@ -67,7 +61,6 @@
     <string name="now_snapshot_note">A 10 second snapshot, not a daily average.</string>
     <string name="info_now_body">A 10 second snapshot from the sensor. It is not an AQI and not a 24 hour mean, so read it as a hint. The face, the word and the colour all show the same WHO step.</string>
     <string name="info_now_body_simple">A 10 second snapshot from the sensor, not a daily average, so read it as a hint. The face, the word and the colour all show the same air mood.</string>
-    <string name="now_no_reading">No reading yet</string>
     <string name="now_waiting">Waiting for a reading…</string>
     <string name="now_sample_number">sample %1$d</string>
     <string name="mood_fresh_advice">Within the WHO guideline. Enjoy it.</string>
