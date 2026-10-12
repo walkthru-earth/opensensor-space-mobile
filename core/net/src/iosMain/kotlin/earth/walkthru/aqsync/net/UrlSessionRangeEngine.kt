@@ -73,10 +73,11 @@ class UrlSessionRangeEngine(private val session: NSURLSession) : HttpRangeEngine
                 setAllowsConstrainedNetworkAccess(allowsConstrained)
                 setURLCache(null)
                 setRequestCachePolicy(NSURLRequestReloadIgnoringLocalCacheData)
-                // A stalled request gives up after 15 s and a whole read after 30 s, not the 60 s and
-                // 7 day defaults, so a dead network ends in an error with Retry.
+                // A stalled request gives up after 15 s and a whole read after 120 s, not the 60 s and
+                // 7 day defaults, so a dead network ends in an error with Retry while a whole cell file
+                // still arrives over a slow mobile link.
                 setTimeoutIntervalForRequest(15.0)
-                setTimeoutIntervalForResource(30.0)
+                setTimeoutIntervalForResource(120.0)
             }
     }
 }

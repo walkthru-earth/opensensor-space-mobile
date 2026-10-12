@@ -105,10 +105,10 @@ class UrlSessionRangeEngineTest {
     }
 
     @Test
-    fun `a stalled request gives up after 15 s and a whole read after 30 s`() {
+    fun `a stalled request gives up after 15 s and a whole read after 120 s`() {
         val c = UrlSessionRangeEngine.configuration(allowsExpensive = true, allowsConstrained = true)
         assertEquals(15.0, c.timeoutIntervalForRequest)
-        assertEquals(30.0, c.timeoutIntervalForResource)
+        assertEquals(120.0, c.timeoutIntervalForResource)
     }
 
     @Test
