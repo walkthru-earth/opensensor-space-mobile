@@ -24,6 +24,9 @@ import earth.walkthru.opensensor.discover.DiscoverScreen
 import earth.walkthru.opensensor.discover.bundledSampleFeed
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import okhttp3.OkHttpClient
 import java.util.TimeZone
@@ -43,6 +46,14 @@ class DiscoverViewModel @Inject constructor(store: DiscoverStore, settings: AppS
         liveFeed = OpenAqAggregatesFeed(OkHttpRangeEngine(publicFeedClient)),
         saveSource = settings::setDiscoverSource,
     )
+
+    init {
+        // The controller outlives the screen, so the switch reaches a read in flight even while
+        // Settings is open. Turning public sensors off cancels it before another request leaves.
+        combine(settings.discoverSource, settings.showPublicSensors, ::Pair)
+            .onEach { (source, publicSensors) -> controller.onSourceSettings(source, publicSensors) }
+            .launchIn(viewModelScope)
+    }
 
     /** The saved Discover source. Sample until it is read, so nothing is fetched before then. */
     val source: StateFlow<DiscoverSource> = settings.discoverSource.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DiscoverSource.SAMPLE)

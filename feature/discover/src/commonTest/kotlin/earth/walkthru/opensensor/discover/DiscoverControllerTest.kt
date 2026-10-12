@@ -500,6 +500,24 @@ class DiscoverControllerTest {
     }
 
     @Test
+    fun publicSensorsOffStopsARealReadThatIsRetrying() = runTest {
+        val live = liveFeed()
+        val c = controller(FakeFeed(), live)
+        c.onSourceSettings(DiscoverSource.OPENAQ, publicSensors = true)
+        settle()
+        FeedWindow.entries.forEach { live.failures[cellA to it] = 3 }
+        c.selectCell(H3Index.toHex(cellA))
+        runCurrent()
+        assertTrue(live.calls.any { it.second == listOf(cellA..cellA) }, "the first window read went out")
+        // Settings turns public sensors off while the read waits for its retry.
+        c.onSourceSettings(DiscoverSource.OPENAQ, publicSensors = false)
+        live.calls.clear()
+        retriesDone()
+        assertTrue(live.calls.isEmpty(), "no live request after public sensors is off, got ${live.calls}")
+        assertTrue(c.state.value.isSample)
+    }
+
+    @Test
     fun choosingRealSavesItAndSwitches() = runTest {
         val live = liveFeed()
         val saved = mutableListOf<DiscoverSource>()

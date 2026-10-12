@@ -85,8 +85,11 @@ import earth.walkthru.opensensor.shell.TabNavigator
 import earth.walkthru.opensensor.shell.TodayKey
 import earth.walkthru.opensensor.shell.TopTab
 import earth.walkthru.opensensor.today.TodayAction
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import platform.Foundation.NSBundle
 import platform.Foundation.NSCurrentLocaleDidChangeNotification
 import platform.Foundation.NSDate
@@ -126,6 +129,14 @@ private class DiscoverHolder : ViewModel() {
         liveFeed = openAqFeed,
         saveSource = settingsRepository::setDiscoverSource,
     )
+
+    init {
+        // The controller outlives the screen, so the switch reaches a read in flight even while
+        // Settings is open. Turning public sensors off cancels it before another request leaves.
+        combine(settingsRepository.discoverSource, settingsRepository.showPublicSensors, ::Pair)
+            .onEach { (source, publicSensors) -> controller.onSourceSettings(source, publicSensors) }
+            .launchIn(viewModelScope)
+    }
 }
 
 /** One page's hold on a Bluetooth sensor, released when its navigation entry is removed. */
