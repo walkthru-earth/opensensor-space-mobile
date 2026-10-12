@@ -171,8 +171,8 @@ class SensorSync internal constructor(
             } catch (e: TransportException) {
                 partialResult(SyncEnd.LINK_LOST, listed, outcomes)
             } catch (e: Exception) {
-                // A protocol fault, or the archive failing outside one file. The class and message only.
-                syncLog("sync ended, ${e::class.simpleName}: ${e.message}")
+                // A protocol fault, or the archive failing outside one file. The class only, a message could carry config text.
+                syncLog("sync ended, ${e::class.simpleName}")
                 partialResult(SyncEnd.FAILED, listed, outcomes)
             }
             ticks.close()
