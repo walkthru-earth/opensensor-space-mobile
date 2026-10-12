@@ -326,9 +326,9 @@ class DeviceFacade internal constructor(
             }
             is CollectionState.Transferring -> old.copy(running = true, endReason = null, current = state.progress.current, filesDone = state.progress.filesDone, filesTotal = state.progress.filesTotal, bytesDone = state.progress.receivedBytes, bytesTotal = state.progress.bytesTotal, bytesPerSecond = state.progress.bytesPerSecond)
             is CollectionState.Waiting, is CollectionState.Finalizing -> old.copy(running = true, endReason = null)
-            is CollectionState.Done -> old.copy(running = false, filesDone = state.summary.files, filesTotal = state.summary.files, outcomes = state.summary.outcomes, current = null, finishedAtEpochMs = clock.nowEpochMs(), endCause = SyncEndCause.COMPLETED, endReason = SyncEndReason.COMPLETED)
-            is CollectionState.Failed -> old.copy(running = false, current = null, outcomes = active?.outcomes?.values?.toList() ?: old.outcomes, finishedAtEpochMs = clock.nowEpochMs(), endCause = SyncEndCause.FAILURE, endReason = state.failure.endReason())
-            is CollectionState.Stopped -> old.copy(running = false, current = null, outcomes = active?.outcomes?.values?.toList() ?: old.outcomes, finishedAtEpochMs = clock.nowEpochMs(), endCause = SyncEndCause.STOPPED, endReason = state.by.endReason())
+            is CollectionState.Done -> old.copy(running = false, filesDone = state.summary.files, filesTotal = state.summary.files, outcomes = state.summary.outcomes, current = null, finishedAtEpochMs = clock.nowEpochMs(), endCause = SyncEndCause.COMPLETED, endReason = state.endReason())
+            is CollectionState.Failed -> old.copy(running = false, current = null, outcomes = active?.outcomes?.values?.toList() ?: old.outcomes, finishedAtEpochMs = clock.nowEpochMs(), endCause = SyncEndCause.FAILURE, endReason = state.endReason())
+            is CollectionState.Stopped -> old.copy(running = false, current = null, outcomes = active?.outcomes?.values?.toList() ?: old.outcomes, finishedAtEpochMs = clock.nowEpochMs(), endCause = SyncEndCause.STOPPED, endReason = state.endReason())
         }
         progressIntent = state.intentId
         progress.value = next
@@ -371,7 +371,7 @@ class DeviceFacade internal constructor(
                     linkOwner.emitCollectionEvent(DeviceEvent.Error(message))
                 }
                 is CollectionState.Stopped -> linkOwner.emitCollectionEvent(
-                    DeviceEvent.Info(if (state.by.endReason() == SyncEndReason.STOPPED) DeviceMessage.SyncStopped else DeviceMessage.SyncEnded(SyncEndReason.INTERRUPTED)),
+                    DeviceEvent.Info(if (state.endReason() == SyncEndReason.STOPPED) DeviceMessage.SyncStopped else DeviceMessage.SyncEnded(SyncEndReason.INTERRUPTED)),
                 )
                 else -> Unit
             }
@@ -462,12 +462,6 @@ class DeviceFacade internal constructor(
         /** Endings with no action for the user, so a failed listing says the list was not ready. */
         val GENERIC_ENDS = setOf(SyncEndReason.LINK_LOST, SyncEndReason.OTHER)
     }
-}
-
-/** A Stop the person or the app chose is [SyncEndReason.STOPPED]; one the OS forced is [SyncEndReason.INTERRUPTED]. */
-internal fun StopSource.endReason(): SyncEndReason = when (this) {
-    StopSource.USER, StopSource.APP -> SyncEndReason.STOPPED
-    StopSource.SYSTEM, StopSource.FGS_TIMEOUT -> SyncEndReason.INTERRUPTED
 }
 
 /** Per-device collection holder, see [DeviceFacade.ownership]. */
