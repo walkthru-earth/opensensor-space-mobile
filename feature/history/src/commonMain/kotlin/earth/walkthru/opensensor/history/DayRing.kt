@@ -67,6 +67,7 @@ internal fun DayRing(
     units: UnitFormatter,
     modifier: Modifier = Modifier,
     size: Dp = 220.dp,
+    showStep: Boolean = true,
 ) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val onSurface = MaterialTheme.colorScheme.onSurface
@@ -75,7 +76,8 @@ internal fun DayRing(
     val measurer = rememberTextMeasurer()
     val labelStyle = remember(muted) { chartTextStyle(muted, 11) }
     val mood = mean?.let { metric.moodOf(it.toDouble()) }
-    // One spoken element for the ring and its centre: the day's average with its mood and WHO step,
+    // One spoken element for the ring and its centre: the day's average with its mood and WHO step
+    // (the step only when `showStep`, Simple never names WHO),
     // the coverage, then the highest hour. The hour colours alone would say nothing to a screen reader.
     val average = units.value(mean, metric.unit)?.let { stringResource(Res.string.chart_average_value, fmtValue(it), units.unit(metric.unit)) }
     val description = spokenList(
@@ -83,7 +85,7 @@ internal fun DayRing(
             stringResource(Res.string.chart_ring_title, metric.label),
             average ?: stringResource(Res.string.history_no_readings_short),
             mood?.titleText(),
-            mood?.step?.labelText(),
+            if (showStep) mood?.step?.labelText() else null,
             if (mean != null) stringResource(Res.string.history_day_coverage, (coverage * 100).toInt()) else null,
             chartHighest(columns, metric, units) { c -> slotLabel(c, HistoryRange.DAY, zone) },
         ),

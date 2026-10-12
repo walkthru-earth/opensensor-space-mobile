@@ -58,7 +58,8 @@ import org.jetbrains.compose.resources.stringResource
  * along the top.
  *
  * Screen readers get a summary of the calendar, then one button per day the tap opens, in date order,
- * naming the date, the mean with its mood and WHO step, and estimated time. Those buttons are
+ * naming the date, the mean with its mood and WHO step (step only when `showStep`, Simple never
+ * names WHO), and estimated time. Those buttons are
  * semantics only (no pointer input), so a finger still lands on the canvas as before.
  */
 @Composable
@@ -71,6 +72,7 @@ internal fun CalendarHeatmap(
     zone: TimeZone,
     modifier: Modifier = Modifier,
     units: UnitFormatter = UnitFormatter.Metric,
+    showStep: Boolean = true,
 ) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val empty = MaterialTheme.colorScheme.surfaceContainerHighest
@@ -178,7 +180,7 @@ internal fun CalendarHeatmap(
                         formatEpoch(startS, zone, DAY_SPOKEN),
                         fmtValue(units.value(m, metric.unit)) + " " + units.unit(metric.unit),
                         mood?.let { moodTitles[it] },
-                        metric.stepOf(m.toDouble())?.let { stepLabels[it] },
+                        if (showStep) metric.stepOf(m.toDouble())?.let { stepLabels[it] } else null,
                         estimated.takeIf { col.estimated },
                     ).let { spokenList(it, separator) }
                     val order = (week * 7 + dow).toFloat()

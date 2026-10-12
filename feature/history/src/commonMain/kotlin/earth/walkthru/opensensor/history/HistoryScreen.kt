@@ -342,13 +342,14 @@ private fun ChartCard(state: HistoryUiState, units: UnitFormatter, nowS: Long, l
                                     selected = selected,
                                     zone = zone,
                                     units = units,
+                                    showStep = level.detailed,
                                 )
                             }
                             Spacer(Modifier.height(8.dp))
                         }
                         HistoryRange.MONTH, HistoryRange.YEAR -> {
                             val days = remember(s, zone) { Columns.rebinLocalDays(s, zone) }
-                            CalendarHeatmap(days, state.metric, s.fromS, s.toS, onPickDay = { onOpenDay(it.startS) }, zone = zone, units = units)
+                            CalendarHeatmap(days, state.metric, s.fromS, s.toS, onPickDay = { onOpenDay(it.startS) }, zone = zone, units = units, showStep = level.detailed)
                             InfoNote(stringResource(Res.string.history_tap_day))
                             Spacer(Modifier.height(8.dp))
                         }
