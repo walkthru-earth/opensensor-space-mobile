@@ -17,12 +17,6 @@
     <string name="settings_level_detailed">يضيف كل القياسات وتفاصيل الملفات.</string>
     <string name="settings_level_developer">يضيف المعرّفات وشاشة تصحيح الأخطاء.</string>
 
-    <string name="clock_mode_ask_title">اسأل أولًا</string>
-    <string name="clock_mode_automatic_title">تلقائي</string>
-    <string name="clock_mode_never_title">أبدًا</string>
-    <string name="clock_mode_ask">اسأل قبل إرسال وقت هذا الهاتف.</string>
-    <string name="clock_mode_automatic">أرسل وقت هذا الهاتف عندما تكون ساعة المستشعر غير مضبوطة.</string>
-    <string name="clock_mode_never">انسخ الملفات فقط. سترى تنبيهًا للقراءات غير المؤرخة.</string>
 
     <string name="settings_units">الوحدات</string>
     <string name="units_auto">تلقائي</string>

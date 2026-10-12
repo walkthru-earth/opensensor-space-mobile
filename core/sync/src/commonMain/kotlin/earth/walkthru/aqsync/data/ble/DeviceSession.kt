@@ -11,7 +11,6 @@ import earth.walkthru.aqsync.data.protocol.Opcode
 import earth.walkthru.aqsync.data.protocol.ProtocolError
 import earth.walkthru.aqsync.data.protocol.Request
 import earth.walkthru.aqsync.data.sync.ClockSyncAction
-import earth.walkthru.aqsync.data.sync.ClockSyncMode
 import earth.walkthru.aqsync.data.sync.SmartSyncPolicy
 import earth.walkthru.aqsync.link.LinkLog
 import earth.walkthru.aqsync.link.LinkSession
@@ -265,7 +264,7 @@ class DeviceSession(val link: LinkSession, val transport: AqTransport, val frame
         }
         val delayMillis = elapsed.elapsedNow().inWholeMilliseconds.coerceAtLeast(0)
         val midpoint = before + delayMillis / 2
-        val decision = SmartSyncPolicy.decide(snapshot, ClockSyncMode.AUTOMATIC, midpoint, (delayMillis + 1) / 2)
+        val decision = SmartSyncPolicy.decide(snapshot, midpoint, (delayMillis + 1) / 2)
         return if (decision.action == ClockSyncAction.SET_TIME) synchronizeClock(nowMillis) else null
     }
 

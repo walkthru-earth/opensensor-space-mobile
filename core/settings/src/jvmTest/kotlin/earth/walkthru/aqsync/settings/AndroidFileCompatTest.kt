@@ -2,6 +2,7 @@ package earth.walkthru.aqsync.settings
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import earth.walkthru.aqsync.units.UnitSystem
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -29,7 +30,8 @@ class AndroidFileCompatTest {
         old.edit {
             it[SettingsKeys.DETAIL_LEVEL] = "DETAILED"
             it[SettingsKeys.ADVANCED_MODE] = false
-            it[SettingsKeys.CLOCK_SYNC_MODE] = "AUTOMATIC"
+            // A key an older build wrote and this one no longer reads.
+            it[stringPreferencesKey("clock_sync_mode")] = "AUTOMATIC"
             it[SettingsKeys.SHOW_PUBLIC_SENSORS] = false
             it[SettingsKeys.UNIT_SYSTEM] = "IMPERIAL"
         }
@@ -37,7 +39,7 @@ class AndroidFileCompatTest {
 
         val shared = SettingsRepository(createSettingsDataStore(file.absolutePath))
         assertEquals(
-            AppPrefs(DetailLevel.DETAILED, ClockSyncMode.AUTOMATIC, showPublicSensors = false, unitSystem = UnitSystem.IMPERIAL),
+            AppPrefs(DetailLevel.DETAILED, showPublicSensors = false, unitSystem = UnitSystem.IMPERIAL),
             shared.current(),
         )
         filesDir.deleteRecursively()

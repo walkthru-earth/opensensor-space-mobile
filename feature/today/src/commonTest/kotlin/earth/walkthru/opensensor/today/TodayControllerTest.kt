@@ -3,7 +3,6 @@ package earth.walkthru.opensensor.today
 import earth.walkthru.aqsync.data.SyncProgress
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.protocol.DeviceStatus
-import earth.walkthru.aqsync.settings.ClockSyncMode
 import earth.walkthru.aqsync.settings.DetailLevel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -53,11 +52,10 @@ private val clockMissing = DeviceStatus(utc = 0, clockSource = 0)
 class TodayControllerTest {
     private fun TestScope.controller(
         source: FakeSource,
-        mode: ClockSyncMode = ClockSyncMode.ASK,
         level: DetailLevel = DetailLevel.SIMPLE,
     ): TodayController {
         val scope = CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler))
-        return TodayController(scope, source, MutableStateFlow(level), MutableStateFlow(mode))
+        return TodayController(scope, source, MutableStateFlow(level))
     }
 
     @Test
@@ -94,34 +92,14 @@ class TodayControllerTest {
     }
 
     @Test
-    fun legacyAskWithAMissingClockSynchronizesAutomatically() = runTest {
-        val source = FakeSource(status = clockMissing)
-        val c = controller(source, ClockSyncMode.ASK)
-        c.smartSync()
-        assertNull(c.dialog.value)
-        assertEquals(listOf("sync"), source.calls)
-    }
-
-    @Test
-    fun askWithAnAnchoredClockSyncsWithoutAQuestion() = runTest {
-        val source = FakeSource(status = DeviceStatus(utc = 1, clockSource = 1))
-        val c = controller(source, ClockSyncMode.ASK)
-        c.smartSync()
-        assertNull(c.dialog.value)
-        assertEquals(listOf("sync"), source.calls)
-    }
-
-    @Test
-    fun automaticAndNeverDoNotAsk() = runTest {
-        val auto = FakeSource(status = clockMissing)
-        controller(auto, ClockSyncMode.AUTOMATIC).smartSync()
-        assertEquals(listOf("sync"), auto.calls)
-
-        val never = FakeSource(status = clockMissing)
-        val c = controller(never, ClockSyncMode.NEVER)
-        c.smartSync()
-        assertNull(c.dialog.value)
-        assertEquals(listOf("sync"), never.calls)
+    fun syncNeverAsksAboutTheClock() = runTest {
+        for (status in listOf(clockMissing, DeviceStatus(utc = 1, clockSource = 1))) {
+            val source = FakeSource(status = status)
+            val c = controller(source)
+            c.smartSync()
+            assertNull(c.dialog.value)
+            assertEquals(listOf("sync"), source.calls)
+        }
     }
 
     @Test
@@ -163,13 +141,10 @@ class TodayControllerTest {
     fun stateFollowsTheSettingsStore() = runTest {
         val source = FakeSource()
         val level = MutableStateFlow(DetailLevel.SIMPLE)
-        val mode = MutableStateFlow(ClockSyncMode.ASK)
         val scope = CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler))
-        val c = TodayController(scope, source, level, mode)
+        val c = TodayController(scope, source, level)
         level.value = DetailLevel.DEVELOPER
-        mode.value = ClockSyncMode.NEVER
         assertEquals(DetailLevel.DEVELOPER, c.state.value.level)
-        assertEquals(ClockSyncMode.NEVER, c.state.value.clockSyncMode)
     }
 
     @Test

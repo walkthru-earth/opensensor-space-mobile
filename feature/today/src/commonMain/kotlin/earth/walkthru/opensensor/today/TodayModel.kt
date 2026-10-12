@@ -13,7 +13,6 @@ import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.protocol.DeviceStatus
 import earth.walkthru.aqsync.data.protocol.LiveSample
 import earth.walkthru.aqsync.data.protocol.TemperatureSource
-import earth.walkthru.aqsync.settings.ClockSyncMode
 import earth.walkthru.aqsync.settings.DetailLevel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
@@ -118,7 +117,6 @@ interface TodaySource {
 data class TodayUiState(
     val snapshot: TodaySnapshot = TodaySnapshot(),
     val level: DetailLevel = DetailLevel.SIMPLE,
-    val clockSyncMode: ClockSyncMode = ClockSyncMode.ASK,
 ) {
     /** What this device can do, from `INFO` (shared mapping, no schema strings in the UI). */
     val capabilities: DeviceCapabilities get() = DeviceCapabilities.from(snapshot.info)

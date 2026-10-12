@@ -178,7 +178,7 @@ flowchart LR
 | `data/background/` | `SyncForegroundService`, `SyncNotifications`, `SyncWorker`, `AutoSyncScheduler`, `AutoSyncRunner` (pure), `AppAutoSyncGateway`; triggers `CompanionPresence` + `CompanionPresenceService`, `AdvertFlagScan` + `AdvertScanReceiver`, `SyncTriggers` + `WifiArrivalReceiver` + `BootReceiver` | yes (runner: no) |
 | `data/history/` | `HistoryIndexer`, `HistoryDeriver`, `DailyDerived*`, `HistoryRepository`, `parquet/AppParquetCodecs` (ZSTD) | Room + files |
 | `data/local/database/` | `AppDatabase` (v10), `KnownDevice`, `StationEpoch`, `ArchivedFile`, `History.kt` (`MetricBucket`, `DerivedDay`) | yes |
-| `data/settings/AppSettings.kt` | Android view of `:core:settings` (`DetailLevel` Simple · Detailed · Developer, clock consent, units, public sensors) | yes |
+| `data/settings/AppSettings.kt` | Android view of `:core:settings` (`DetailLevel` Simple · Detailed · Developer, units, public sensors) | yes |
 | `data/fake/FakeTransport.kt` | in-process proto 3 device with fault hooks | no (JVM) |
 | `ui/scan · device (Today, Device, NowCard) · history · files · debug · settings · permissions · theme` | Compose. `ui/files` hosts the shared Files and inspector screens (`:feature:files`) with the Android slots and the chart by file. `Navigation.kt` supplies the Android entries to the shared `AppShell` (`:feature:shell`) | yes |
 

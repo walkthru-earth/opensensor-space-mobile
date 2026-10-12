@@ -28,7 +28,6 @@ import earth.walkthru.aqsync.data.local.database.KnownDevice
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.settings.AppSettings
-import earth.walkthru.aqsync.data.settings.toShared
 import earth.walkthru.opensensor.today.TodayArchive
 import earth.walkthru.opensensor.today.TodayController
 import earth.walkthru.opensensor.today.TodayNotice
@@ -88,7 +87,6 @@ class TodayViewModel @AssistedInject constructor(
         scope = viewModelScope,
         source = source,
         detailLevel = settings.detailLevel,
-        clockSyncMode = settings.clockSyncMode.map { it.toShared() },
     )
 
     fun reconnectLanOnly() = repository.connect(deviceAddress, controller.state.value.snapshot.name, preference = TransportPreference.LAN_ONLY)

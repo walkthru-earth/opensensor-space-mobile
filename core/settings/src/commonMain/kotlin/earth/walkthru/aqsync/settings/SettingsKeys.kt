@@ -25,9 +25,6 @@ object SettingsKeys {
      */
     val ADVANCED_MODE: Preferences.Key<Boolean> = booleanPreferencesKey("advanced_mode")
 
-    /** The [ClockSyncMode] name. */
-    val CLOCK_SYNC_MODE: Preferences.Key<String> = stringPreferencesKey("clock_sync_mode")
-
     val SHOW_PUBLIC_SENSORS: Preferences.Key<Boolean> = booleanPreferencesKey("show_public_sensors")
 
     /** The `UnitSystem` name. Missing or unknown reads as Automatic. */
@@ -43,5 +40,5 @@ object SettingsKeys {
     val DISCOVER_SOURCE: Preferences.Key<String> = stringPreferencesKey("discover_source")
 
     val ALL: List<Preferences.Key<*>> =
-        listOf(DETAIL_LEVEL, ADVANCED_MODE, CLOCK_SYNC_MODE, SHOW_PUBLIC_SENSORS, UNIT_SYSTEM, DERIVED_QUOTA_BYTES, MAP_CACHE_BYTES, DISCOVER_SOURCE)
+        listOf(DETAIL_LEVEL, ADVANCED_MODE, SHOW_PUBLIC_SENSORS, UNIT_SYSTEM, DERIVED_QUOTA_BYTES, MAP_CACHE_BYTES, DISCOVER_SOURCE)
 }

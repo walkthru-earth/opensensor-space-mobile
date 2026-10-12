@@ -1,6 +1,5 @@
 package earth.walkthru.opensensor.today
 
-import earth.walkthru.aqsync.settings.ClockSyncMode
 import earth.walkthru.aqsync.settings.DetailLevel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.BufferOverflow
@@ -27,12 +26,9 @@ class TodayController(
     private val scope: CoroutineScope,
     private val source: TodaySource,
     detailLevel: Flow<DetailLevel>,
-    clockSyncMode: Flow<ClockSyncMode>,
 ) {
-    private val mode = clockSyncMode.stateIn(scope, SharingStarted.Eagerly, ClockSyncMode.ASK)
-
-    val state: StateFlow<TodayUiState> = combine(source.snapshot, detailLevel, mode) { snapshot, level, clock ->
-        TodayUiState(snapshot, level, clock)
+    val state: StateFlow<TodayUiState> = combine(source.snapshot, detailLevel) { snapshot, level ->
+        TodayUiState(snapshot, level)
     }.stateIn(scope, SharingStarted.Eagerly, TodayUiState(source.snapshot.value))
 
     private val _dialog = MutableStateFlow<TodayDialog?>(null)

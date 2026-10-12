@@ -407,7 +407,7 @@ user had to press Sync all again — hence the policy.
 **Device UTC synchronizes automatically on connection, before LIST.** Android and iOS send
 phone UTC without a manual clock control or consent setting. Smart Sync retries missing or
 RTC-restored UTC automatically; phone and network anchors (`clk == 1` or `clk == 3`) continue
-without a second clock update. Legacy Ask/Never preferences cannot disable this behavior.
+without a second clock update. An old stored `clock_sync_mode` key is ignored.
 
 The accepted UTC/monotonic acknowledgement is bound to the full station and boot identity,
 allowing the local archive to reconcile earlier untimed rows from that boot. Android collection

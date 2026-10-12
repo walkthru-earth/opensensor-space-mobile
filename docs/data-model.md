@@ -204,9 +204,10 @@ through `AppSettings`. `SettingsRepositoryTest` holds the golden key list.
 | --- | --- | --- |
 | `detail_level` | string (`SIMPLE` / `DETAILED` / `DEVELOPER`) | the detail level |
 | `advanced_mode` | boolean (legacy) | unset `detail_level` + `advanced_mode = true` → `DEVELOPER`. Still written with the level |
-| `clock_sync_mode` | string (`ASK` / `AUTOMATIC` / `NEVER`) | Stored but unused. The engine always sets the clock automatically and no screen changes it |
 | `show_public_sensors` | boolean | Discover network switch, missing = on |
 | `unit_system` | string (`AUTO` / `METRIC` / `IMPERIAL`) | display units, missing = `AUTO`. Display only, Room, Parquet and exports stay SI |
+
+An older `clock_sync_mode` key may remain in the file. Nothing reads it.
 
 ## Files under `filesDir`
 

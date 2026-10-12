@@ -2,21 +2,9 @@ package earth.walkthru.aqsync.data.sync
 
 import earth.walkthru.aqsync.data.protocol.DeviceStatus
 
-/** User consent for the state-changing SET_TIME step of Smart Sync. */
-enum class ClockSyncMode {
-    /** Detect clock problems, but ask before sending this phone's time. */
-    ASK,
-
-    /** With no UTC or an RTC-restored clock, send this phone's time before downloading. */
-    AUTOMATIC,
-
-    /** Only download files. The app still warns when readings cannot be placed on the timeline. */
-    NEVER,
-}
-
 enum class ClockQuality { HOST_ANCHORED, RTC_RESTORED, MISSING, UNKNOWN }
 
-enum class ClockSyncAction { CONTINUE, SET_TIME, ASK_USER }
+enum class ClockSyncAction { CONTINUE, SET_TIME }
 
 data class ClockSyncDecision(
     val quality: ClockQuality,
@@ -25,14 +13,14 @@ data class ClockSyncDecision(
 )
 
 /**
- * Pure policy for the only state-changing part of Smart Sync. File transfer remains automatic and
- * immutable; FLUSH is deliberately excluded and stays an explicit "sync through now" action.
+ * Pure policy for the only state-changing part of Smart Sync. The engine sends phone UTC whenever
+ * this returns [ClockSyncAction.SET_TIME], with no user setting. File transfer stays immutable, and
+ * FLUSH stays an explicit confirmed action.
  */
 object SmartSyncPolicy {
     /** A fresh snapshot is compared at the request midpoint; [uncertaintyMillis] bounds link delay. */
     fun decide(
         status: DeviceStatus?,
-        mode: ClockSyncMode,
         nowEpochMillis: Long? = null,
         uncertaintyMillis: Long = 0,
     ): ClockSyncDecision {
@@ -40,7 +28,6 @@ object SmartSyncPolicy {
         val ageSeconds = status?.clockAgeSeconds
         val deviceUtcMillis = status?.utcEpochMillis
         val reason = when {
-            mode == ClockSyncMode.NEVER -> null
             quality == ClockQuality.MISSING -> "device has no UTC anchor, new rows go to the unsynced tree"
             quality == ClockQuality.RTC_RESTORED -> "RTC clock needs an external anchor this boot"
             quality == ClockQuality.UNKNOWN -> "clock state unavailable, obtain an acknowledged phone anchor"
@@ -55,13 +42,7 @@ object SmartSyncPolicy {
         }
         return ClockSyncDecision(
             quality,
-            if (reason == null) {
-                ClockSyncAction.CONTINUE
-            } else if (mode == ClockSyncMode.AUTOMATIC) {
-                ClockSyncAction.SET_TIME
-            } else {
-                ClockSyncAction.ASK_USER
-            },
+            if (reason == null) ClockSyncAction.CONTINUE else ClockSyncAction.SET_TIME,
             reason ?: "clock is anchored; no refresh required",
         )
     }

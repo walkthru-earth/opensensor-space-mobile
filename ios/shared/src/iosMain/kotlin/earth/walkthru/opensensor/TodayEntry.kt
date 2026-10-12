@@ -41,7 +41,6 @@ private class TodayHolder(today: CompanionToday, devices: DevicesBridge, address
             nameFor = devices::nameFor,
         ),
         detailLevel = settings.detailLevel,
-        clockSyncMode = settings.clockSyncMode,
     )
 }
 
