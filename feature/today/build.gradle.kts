@@ -1,6 +1,6 @@
 // The Today screen of one device (docs/screens.md), shared Compose in `commonMain` for the Android
 // app and the iOS framework. A plain TodayController over the TodaySource port exposes a StateFlow and
-// the confirmation dialogs. Android adapts DeviceConnectionRepository, iOS adapts the companion state.
+// the confirmation dialogs. Android adapts DeviceFacade, iOS adapts the companion state.
 // The live reading is the shared protocol model, its meaning comes from the metric registry, and the
 // copy is a Compose resource, one catalogue for both apps.
 // opensensor.kmp.compose-feature sets the Android and iOS targets, Compose and the resources package.

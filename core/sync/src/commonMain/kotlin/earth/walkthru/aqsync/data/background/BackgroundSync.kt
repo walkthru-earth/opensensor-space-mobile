@@ -195,7 +195,7 @@ class BackgroundSyncRunner<D : BackgroundSyncDevice, T : BackgroundLanTarget>(
     private val maxConcurrentDevices: Int = BackgroundSyncPolicy.MAX_CONCURRENT_DEVICES,
 ) {
     /**
-     * [onlyAddress] = a manual "Sync now in background" for that one device, whether or not its
+     * [onlyAddress] = a triggered run for that one device (presence or advert), whether or not its
      * Auto-sync switch is on; [allKnown] = a manual "Collect from all loggers" over every known device;
      * otherwise the periodic run over every device with the switch on. [devices], when given,
      * replaces that choice (iOS passes the due subset). In every case each device is tried in turn

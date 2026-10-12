@@ -73,8 +73,7 @@ Sync is a **pull of immutable files**. The device is never asked to delete, rena
 
 Android `DeviceFacade` owns one collection controller per address and routes Sync all,
 Smart Sync, one-file sync and worker requests into it. `DeviceLinkOwner` lends connections
-and owns manual commands and idle reconnect. `DeviceConnectionRepository` is the
-compatibility typealias for the facade. iOS routes every sync through the same controller
+and owns manual commands and idle reconnect. iOS routes every sync through the same controller
 ([#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81)). `SensorCollections` is
 one app-wide instance that holds one controller per device over `IosLinkProvider`. Sync, Smart
 Sync, one-file sync, Collect all steps and Auto-sync steps on Bluetooth and Wi-Fi all call
@@ -380,7 +379,7 @@ listing, even when that plan has zero missing files. A failed refresh keeps know
 but reports a typed collection failure, starts no download, and cannot emit `UpToDate`. The Files screen
 suppresses its all-synced message while the latest refresh is loading or failed. Stop and disconnect
 also cancel preparation before the first OPEN; the command slot hands off atomically to the transfer.
-Host regressions: `DeviceConnectionRepositoryTest`. The shared `DeviceSession.list` rejects a
+Host regressions: `DeviceFacadeTest`. The shared `DeviceSession.list` rejects a
 FILE-frame count that differs from LIST_END on both phone platforms without delaying the next
 request and with the link still Ready (`DeviceSessionTest`). These checks
 cannot detect a firmware scan that silently skips card entries and reports its own smaller count;

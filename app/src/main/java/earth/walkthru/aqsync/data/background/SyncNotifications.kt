@@ -141,8 +141,6 @@ class SyncNotifications @Inject constructor(
         }
     }
 
-    fun cancelSummary() = manager.cancel(SUMMARY_ID)
-
     private fun openAppIntent(): PendingIntent {
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP

@@ -8,8 +8,8 @@ import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import earth.walkthru.aqsync.data.ArchiveTimeSummary
 import earth.walkthru.aqsync.data.DeviceConnectionManager
-import earth.walkthru.aqsync.data.DeviceConnectionRepository
 import earth.walkthru.aqsync.data.DeviceEvent
+import earth.walkthru.aqsync.data.DeviceFacade
 import earth.walkthru.aqsync.data.DeviceOwnership
 import earth.walkthru.aqsync.data.ReconnectState
 import earth.walkthru.aqsync.data.SyncProgress
@@ -49,7 +49,7 @@ import kotlinx.coroutines.flow.stateIn
 /**
  * Android host of the shared Today ([TodayController], `:feature:today`). The screen, its cards and
  * the confirmation dialogs are shared with iOS. This class only adapts the device's
- * [DeviceConnectionRepository] to the [TodaySource] port and reads the settings store.
+ * [DeviceFacade] to the [TodaySource] port and reads the settings store.
  */
 @HiltViewModel(assistedFactory = TodayViewModel.Factory::class)
 class TodayViewModel @AssistedInject constructor(
@@ -94,10 +94,10 @@ class TodayViewModel @AssistedInject constructor(
     fun reconnectLanOnly() = repository.connect(deviceAddress, controller.state.value.snapshot.name, preference = TransportPreference.LAN_ONLY)
 }
 
-/** [DeviceConnectionRepository] as the shared Today port. Every verb is a call the old screen made. */
+/** [DeviceFacade] as the shared Today port. Every verb is a call the old screen made. */
 private class RepositoryTodaySource(
     scope: CoroutineScope,
-    private val repository: DeviceConnectionRepository,
+    private val repository: DeviceFacade,
     private val address: String,
     enrolled: Flow<KnownDevice?>,
     todaySoFar: Flow<TodaySoFar?>,
@@ -136,7 +136,7 @@ private class RepositoryTodaySource(
         )
     }.stateIn(scope, SharingStarted.Eagerly, TodaySnapshot(address = address))
 
-    /** Only the clock question. Info and error lines are shown from [DeviceConnectionRepository.events]. */
+    /** Only the clock question. Info and error lines are shown from [DeviceFacade.events]. */
     override val notices: Flow<TodayNotice> = emptyFlow()
 
     /** Collection applies the automatic clock rule. */

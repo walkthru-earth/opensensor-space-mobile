@@ -195,7 +195,7 @@ palette `sensing`. `BrandTokensTest` pins every value and checks text contrast o
   `FloatingControl.Selected`, Signal blue with ink text (6.5 to 1 contrast). The bottom bar is
   `BrandBottomBar`, one component for Android and iOS, its selected icon on a curved card, not a pill. Circles stay only for
   round things (status dots, the mascot, ring charts, radio buttons and switches).
-  `SignalBars` and `TiltedBadge` (the website's -5 degree icon tilt, hero only) complete the set.
+  `SignalBars` completes the set.
   Icons are `AppIcons`, the Material vectors the apps use, vendored node for node so neither app
   ships `material-icons-extended`.
 - **Floating controls.** Anything over the map or a list uses `FloatingSurface`,

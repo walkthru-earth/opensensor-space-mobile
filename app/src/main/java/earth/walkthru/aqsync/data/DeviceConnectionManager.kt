@@ -24,16 +24,16 @@ import kotlin.concurrent.withLock
 @OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
 class DeviceConnectionManager @Inject constructor(
-    private val factory: Provider<DeviceConnectionRepository>,
+    private val factory: Provider<DeviceFacade>,
     private val discovery: LanDiscoveryState,
     private val admission: CollectionAdmission,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val controllers = MutableStateFlow<Map<String, DeviceConnectionRepository>>(emptyMap())
+    private val controllers = MutableStateFlow<Map<String, DeviceFacade>>(emptyMap())
 
     private val lock = ReentrantLock()
 
-    fun controller(address: String): DeviceConnectionRepository = lock.withLock {
+    fun controller(address: String): DeviceFacade = lock.withLock {
         controllers.value[address] ?: factory.get().also {
             it.bind(address)
             controllers.value = controllers.value + (address to it)

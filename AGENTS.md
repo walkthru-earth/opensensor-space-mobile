@@ -59,7 +59,7 @@ concern you are changing in `docs/README.md`.
 - `:core:sync` owns one `LinkSession` per physical connection, the shared `SyncEngine`,
   `ArchiveCollector` and per-device `CollectionController`. Android `DeviceFacade` routes
   collection and UI through that controller. `DeviceLinkOwner` owns connections, manual
-  commands and idle reconnect. `DeviceConnectionRepository` is a compatibility typealias.
+  commands and idle reconnect.
   iOS adopts the link and engine through `IosLink` and `SensorSync`, and Core Bluetooth runs
   on the `BlePhysicalLink` serial queue. `SensorCollections` holds one shared controller per
   device over `IosLinkProvider`, and every native sync entry point runs through it

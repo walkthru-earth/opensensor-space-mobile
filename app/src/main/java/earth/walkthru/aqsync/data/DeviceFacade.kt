@@ -105,16 +105,6 @@ class DeviceFacade internal constructor(
     /** [ownership] read straight from the link owner, without the flow's dispatch delay. */
     fun ownershipNow(): DeviceOwnership = deviceOwnership(linkOwner.collectionActive.value, linkOwner.backgroundOwner.value)
 
-    /**
-     * Free the device for a background worker. Never stops a collection: returns false and leaves
-     * everything as it is while any run holds the device. True once no session is open.
-     */
-    suspend fun releaseForBackground(): Boolean {
-        if (ownershipNow() != DeviceOwnership.IDLE) return false
-        linkOwner.disconnectNow()
-        return linkOwner.session.value == null && ownershipNow() == DeviceOwnership.IDLE
-    }
-
     internal fun bind(address: String) {
         check(this.address == null || this.address == address)
         if (this.address != null) return
@@ -265,7 +255,7 @@ class DeviceFacade internal constructor(
     suspend fun syncInBackground(
         address: String,
         lanTarget: LanDevice?,
-        bleConnectTimeoutMs: Long = 15_000L,
+        bleConnectTimeoutMs: Long = DeviceLinkOwner.BACKGROUND_BLE_CONNECT_MS,
         owner: String = "background",
         protection: KeepAlive = KeepAlive { _, _ -> null },
         stopSource: () -> StopSource = { StopSource.SYSTEM },

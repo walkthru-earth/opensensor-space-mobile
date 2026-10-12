@@ -33,9 +33,8 @@ import javax.inject.Singleton
  *   reset the schedule. It exists exactly while at least one known device has
  *   Auto-sync on — [start] observes the count in Room and (un)registers accordingly, so the switch
  *   in the UI only has to flip the row.
- * - **Sync now**: one unique expedited one-time request per device (`RUN_AS_NON_EXPEDITED_WORK_REQUEST`
- *   when the quota is spent), `KEEP` so a double tap does not queue a second run. Each request is
- *   tagged with its device ([deviceTag]) so the Files menu reads only its own device.
+ * - **Per device**: one unique expedited one-time request per device (`RUN_AS_NON_EXPEDITED_WORK_REQUEST`
+ *   when the quota is spent), `KEEP` so a double tap does not queue a second run.
  * - **Triggered**: the same one-time request under a second per-device name, enqueued by
  *   [CompanionPresenceService] (logger came into BLE range) and [AdvertFlagScan]. The Wi-Fi join in
  *   [SyncTriggers] and Collect all each have one app-wide name. See the firmware repo's
@@ -88,15 +87,14 @@ class AutoSyncScheduler internal constructor(
     }
 
     /**
-     * "Sync now in background" for [address] (Auto-sync switch on or not): runs as soon as the
-     * system allows, and the user may leave the app. Returns [Enqueue.ALREADY_QUEUED] when a run
+     * One run for [address] as soon as the system allows, enqueued by a presence or advert trigger. Returns [Enqueue.ALREADY_QUEUED] when a run
      * for this device under the same name is still queued or running, so the caller never claims
      * a second run that `KEEP` would drop.
      */
     suspend fun syncNow(address: String, trigger: SyncTrigger = SyncTrigger.MANUAL): Enqueue {
         val name = deviceWorkName(address, trigger)
         if (queue.pending(name)) return Enqueue.ALREADY_QUEUED
-        val request = oneTime(workDataOf(SyncWorker.KEY_ADDRESS to address, SyncWorker.KEY_TRIGGER to trigger.name), deviceTag(address))
+        val request = oneTime(workDataOf(SyncWorker.KEY_ADDRESS to address, SyncWorker.KEY_TRIGGER to trigger.name))
         // Triggered runs queue under their own name so a presence event is not swallowed by a
         // manual run the user just started; at most one of each is pending per device.
         queue.enqueue(name, request)
@@ -125,13 +123,6 @@ class AutoSyncScheduler internal constructor(
     }
 
     /**
-     * True while a one-time run for [address] is queued or running. A Collect all, trigger or
-     * periodic run that holds this device shows through `DeviceFacade.ownership` instead, since
-     * those requests name no device when they are queued.
-     */
-    fun observeActive(address: String): Flow<Boolean> = queue.observe(deviceTag(address)).map(::anyOneTimeActive).distinctUntilChanged()
-
-    /**
      * True while any one-time background run is queued or running. Combine with the interactive
      * state ([earth.walkthru.aqsync.data.anyCollectionActive]) for an app-wide answer.
      */
@@ -139,12 +130,11 @@ class AutoSyncScheduler internal constructor(
 
     // Expedited work may only carry network/storage constraints (so no battery rule), and we
     // want none of those either: the Bluetooth path needs no network.
-    private fun oneTime(input: Data, vararg tags: String): OneTimeWorkRequest = OneTimeWorkRequestBuilder<SyncWorker>()
+    private fun oneTime(input: Data): OneTimeWorkRequest = OneTimeWorkRequestBuilder<SyncWorker>()
         .setInputData(input)
         .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
         .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_MINUTES, TimeUnit.MINUTES)
         .addTag(TAG_AUTO_SYNC)
-        .apply { tags.forEach { addTag(it) } }
         .build()
 
     /** Whether a request was added or one under the same unique name was already waiting or running. */
@@ -167,9 +157,6 @@ class AutoSyncScheduler internal constructor(
         /** One unique name per device and kind: `auto-sync-now-<address>` or `auto-sync-trigger-<address>`. */
         fun deviceWorkName(address: String, trigger: SyncTrigger): String =
             (if (trigger == SyncTrigger.MANUAL) "auto-sync-now-" else "auto-sync-trigger-") + address
-
-        /** Every one-time request for one device carries this tag. */
-        fun deviceTag(address: String): String = "auto-sync-device-$address"
 
         /** A periodic request is ENQUEUED between runs by definition, so only a one-time one waiting counts. */
         internal fun anyOneTimeActive(work: List<QueuedWork>): Boolean = work.any { it.running || (it.enqueued && !it.periodic) }

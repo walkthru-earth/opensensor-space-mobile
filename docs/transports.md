@@ -294,7 +294,7 @@ API 34+: `registerServiceInfoCallback` (continuous, `getHostAddresses`). API 31â
 | `LanTokenPolicy` | repository `tryLan`, token refetch after Ready, snackbar copy |
 | `DeviceContinuityPolicy` / `DeviceIdentityClaims` | INFO acceptance, station epochs, credential renewal and prevention of duplicate physical-device owners |
 | `DeviceConnectionManager` | per-device ownership and snapshots; selection must not close another controller |
-| `LanDiscovery` TXT parsing | `AutoSyncPolicy.linksFor` (station match), Device screen LAN card |
+| `LanDiscovery` TXT parsing | `BackgroundSyncPolicy.linksFor` (station match), Device screen LAN card |
 | `DeviceFacade.activeTransport` | the top-bar chip on four screens |
 
 ## Automatic UTC on connection

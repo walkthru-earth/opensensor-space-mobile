@@ -101,7 +101,7 @@ import java.util.concurrent.CopyOnWriteArrayList
  * Collection state, synchronous protection and fresh listings use the same controller as the app.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
-class DeviceConnectionRepositoryTest {
+class DeviceFacadeTest {
     private lateinit var tmp: File
 
     @Before
@@ -1034,21 +1034,20 @@ class DeviceConnectionRepositoryTest {
     }
 
     @Test
-    fun `ownership names who holds the device and a background release never stops a sync`() = harnessTest(chunkDelayMs = 1) { h ->
+    fun `ownership names who holds the device through an interactive and a background run`() = harnessTest(chunkDelayMs = 1) { h ->
         h.repo.connect(ADDRESS, "AQ-6b40", fake = true)
         h.until { h.repo.plan.value != null }
         assertEquals(DeviceOwnership.IDLE, h.repo.ownershipNow())
         h.repo.syncAll()
         h.until { h.archived.rows.isNotEmpty() }
         h.until { h.repo.ownership.value == DeviceOwnership.INTERACTIVE }
-        assertFalse(h.repo.releaseForBackground())
         assertTrue(h.repo.sync.value.running)
         assertNotNull(h.repo.session.value)
         h.until { !h.repo.collectionState.value.active && !h.repo.busy.value && h.archived.rows.size == h.device.files.size }
         h.until { h.repo.ownership.value == DeviceOwnership.IDLE }
         assertEquals(SyncEndReason.COMPLETED, h.repo.sync.value.endReason)
 
-        assertTrue(h.repo.releaseForBackground())
+        h.repo.disconnectNow()
         assertNull(h.repo.session.value)
         val work = async { h.repo.syncInBackground(ADDRESS, null, owner = "synthetic-worker", protection = KeepAlive.None) }
         h.until { h.repo.ownership.value == DeviceOwnership.BACKGROUND || work.isCompleted }

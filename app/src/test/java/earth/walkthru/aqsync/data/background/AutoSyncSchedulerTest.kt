@@ -65,20 +65,17 @@ class AutoSyncSchedulerTest {
     }
 
     @Test
-    fun `every one-time request names its device and the active flag stays per device`() = runTest {
+    fun `every one-time request is named after its device and counts as active`() = runTest {
         scheduler.syncNow(A)
         scheduler.syncNow(B, SyncTrigger.PRESENCE)
         val (nameA, requestA) = queue.requests[0]
         val (nameB, requestB) = queue.requests[1]
         assertEquals("auto-sync-now-$A", nameA)
         assertEquals("auto-sync-trigger-$B", nameB)
-        assertTrue(AutoSyncScheduler.deviceTag(A) in requestA.tags)
-        assertTrue(AutoSyncScheduler.deviceTag(B) in requestB.tags)
-        assertFalse(AutoSyncScheduler.deviceTag(B) in requestA.tags)
+        assertTrue(AutoSyncScheduler.TAG_AUTO_SYNC in requestA.tags)
+        assertTrue(AutoSyncScheduler.TAG_AUTO_SYNC in requestB.tags)
 
         queue.update(nameA) { finished = true }
-        assertFalse(scheduler.observeActive(A).first())
-        assertTrue(scheduler.observeActive(B).first())
         assertTrue(scheduler.observeAnyActive().first())
     }
 
@@ -95,8 +92,6 @@ class AutoSyncSchedulerTest {
         assertEquals(AutoSyncScheduler.Enqueue.QUEUED, scheduler.collectAll())
         assertEquals(AutoSyncScheduler.Enqueue.ALREADY_QUEUED, scheduler.collectAll())
         assertEquals(AutoSyncScheduler.COLLECT_ALL_NAME, queue.requests.last().first)
-        assertFalse(AutoSyncScheduler.deviceTag(A) in queue.requests.last().second.tags)
-        assertFalse(scheduler.observeActive(B).first())
     }
 
     @Test

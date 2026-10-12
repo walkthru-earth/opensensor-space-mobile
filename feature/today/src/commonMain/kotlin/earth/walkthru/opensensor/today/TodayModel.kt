@@ -91,7 +91,7 @@ sealed interface TodayNotice {
 
 /**
  * The port between the shared Today screen and a platform's live link. Android adapts
- * `DeviceConnectionRepository`, iOS adapts the companion state of `BluetoothCompanion` and
+ * `DeviceFacade`, iOS adapts the companion state of `BluetoothCompanion` and
  * `LanDiscovery`. Transport stays behind it, the screen only reads [snapshot] and calls the verbs.
  */
 interface TodaySource {

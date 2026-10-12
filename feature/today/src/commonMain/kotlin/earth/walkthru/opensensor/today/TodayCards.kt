@@ -62,7 +62,6 @@ import earth.walkthru.opensensor.designsystem.StatusDot
 import earth.walkthru.opensensor.designsystem.TickingText
 import earth.walkthru.opensensor.designsystem.WarningNote
 import earth.walkthru.opensensor.designsystem.listSeparator
-import earth.walkthru.opensensor.designsystem.moodWord
 import earth.walkthru.opensensor.designsystem.nowEpochMillis
 import earth.walkthru.opensensor.designsystem.peacockExpressionFor
 import earth.walkthru.opensensor.designsystem.rememberNowMillis
@@ -839,7 +838,3 @@ internal fun DeviceInfoCard(
         }
     }
 }
-
-/** The mood face's accessible name when there is no reading. */
-@Composable
-internal fun noMoodText(): String = moodWord(null)

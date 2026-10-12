@@ -58,8 +58,6 @@ data class LinkInfo(val kind: TransportKind, val payloadMax: Int, val info: Devi
 class OnceSink(private val delegate: FrameSink) : FrameSink {
     private val done = AtomicBoolean(false)
 
-    val isClosed: Boolean get() = done.load()
-
     override fun onFrame(raw: ByteArray) {
         if (!done.load()) delegate.onFrame(raw)
     }

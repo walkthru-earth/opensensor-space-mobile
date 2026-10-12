@@ -97,7 +97,6 @@
     <string name="pms_error_hint">يبلّغ المستشعر عن خطأ، لذا لا تُعرض أرقامه.</string>
     <string name="env_title">درجة الحرارة والرطوبة</string>
     <string name="env_unsupported">القراءات المباشرة تحتاج برنامجًا ثابتًا أحدث. الملفات المتزامنة لا تزال تعمل.</string>
-    <string name="today_title">اليوم</string>
     <string name="today_so_far">اليوم حتى الآن</string>
     <string name="today_none">لا قراءات مؤرخة اليوم بعد.</string>
     <string name="today_none_clock">لا قراءات مؤرخة بعد. اضبط وقت المستشعر ثم زامِن.</string>

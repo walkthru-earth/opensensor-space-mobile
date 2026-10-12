@@ -6,7 +6,7 @@ logic belongs in `:core:*`; this layer adapts Android BLE, LAN, files, Room and
 WorkManager. Each physical connection has one shared `LinkSession`; `DeviceSession` is
 a typed view. `DeviceFacade` routes interactive and worker collection through one
 `CollectionController` per address. `DeviceLinkOwner` owns connections, identity, manual
-commands and idle reconnect. `DeviceConnectionRepository` is a compatibility typealias.
+commands and idle reconnect.
 The shared `ArchiveCollector` plans and the shared `SyncEngine` downloads through archive ports.
 
 | Change | Owner | Contract / test |

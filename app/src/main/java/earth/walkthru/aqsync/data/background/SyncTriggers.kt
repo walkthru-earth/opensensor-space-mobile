@@ -23,7 +23,7 @@ import javax.inject.Singleton
 
 /** Why a one-time [SyncWorker] run was enqueued; logged and shown in the worker's log lines only. */
 enum class SyncTrigger {
-    /** Files › "Sync now in background" or Home › "Collect from all loggers". */
+    /** Home › "Collect from all loggers". */
     MANUAL,
 
     /** [CompanionPresenceService]: the logger came into BLE range. */

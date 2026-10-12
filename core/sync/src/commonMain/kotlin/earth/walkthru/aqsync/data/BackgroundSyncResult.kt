@@ -4,7 +4,7 @@ import earth.walkthru.aqsync.data.ble.TransportKind
 
 /**
  * Outcome of one background sync of one device, for the run's summary. Android fills it from
- * `DeviceConnectionRepository.syncInBackground`, iOS from the Swift adapters that drive
+ * `DeviceFacade.syncInBackground`, iOS from the Swift adapters that drive
  * `SensorSync`. Moved here from `app/` for #23 so both platforms report the same shape.
  */
 data class BackgroundSyncResult(

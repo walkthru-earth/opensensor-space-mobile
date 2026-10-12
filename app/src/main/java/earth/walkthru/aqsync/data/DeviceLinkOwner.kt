@@ -150,7 +150,7 @@ enum class TransportPreference { AUTO, BLE_ONLY, LAN_ONLY }
 /** A worker's discovered LAN endpoint or a direct, bonded BLE attempt. Never permits pairing. */
 data class BackgroundLinkRequest(
     val lanTarget: LanDevice?,
-    val bleConnectTimeoutMs: Long = 15_000L,
+    val bleConnectTimeoutMs: Long = DeviceLinkOwner.BACKGROUND_BLE_CONNECT_MS,
     val owner: String,
 )
 

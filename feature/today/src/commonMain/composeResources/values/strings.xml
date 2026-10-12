@@ -93,7 +93,6 @@
     <string name="pms_error_hint">The sensor reports an error, so its numbers are not shown.</string>
     <string name="env_title">Temperature and humidity</string>
     <string name="env_unsupported">Live readings need newer firmware. Synced files still work.</string>
-    <string name="today_title">Today</string>
     <string name="today_so_far">Today so far</string>
     <string name="today_none">No timed readings yet today.</string>
     <string name="today_none_clock">No timed readings yet. Set the sensor time, then sync.</string>

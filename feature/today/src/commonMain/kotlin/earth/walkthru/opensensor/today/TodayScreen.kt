@@ -52,7 +52,6 @@ import earth.walkthru.opensensor.today.resources.nav_debug
 import earth.walkthru.opensensor.today.resources.nav_devices
 import earth.walkthru.opensensor.today.resources.nav_disconnect
 import earth.walkthru.opensensor.today.resources.today_station_short
-import earth.walkthru.opensensor.today.resources.today_title
 import org.jetbrains.compose.resources.getPluralString
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
@@ -108,10 +107,6 @@ fun TodayScreen(
 
     dialog?.let { TodayDialogs(it, onConfirm = controller::confirm, onDismiss = controller::dismiss) }
 }
-
-/** The screen title, for a platform control that opens [TodayScreen]. */
-@Composable
-fun todayTitle(): String = stringResource(Res.string.today_title)
 
 /** A notice in words, or null for one that opens a dialog instead. */
 internal suspend fun noticeText(notice: TodayNotice): String? = when (notice) {

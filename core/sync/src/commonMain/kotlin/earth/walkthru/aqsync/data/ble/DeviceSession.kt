@@ -467,6 +467,3 @@ class DeviceSession(val link: LinkSession, val transport: AqTransport, val frame
         val OPEN_TIMEOUT: Duration = 180.seconds
     }
 }
-
-/** Convenience for UI code that wants the raw JSON as text. */
-fun Flow<ByteArray>.asUtf8(): Flow<String> = map { it.decodeToString() }

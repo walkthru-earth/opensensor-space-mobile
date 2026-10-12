@@ -59,13 +59,3 @@ fun AccessDialogs(access: RuntimeAccess, texts: AccessDialogTexts) {
         null -> Unit
     }
 }
-
-/**
- * A small link to the app's page in system settings, for a screen that shows a denial inline
- * (iOS Bluetooth and Local Network). Show it only when [PermissionFlow.offersSettings] is true.
- */
-@Composable
-fun SettingsLink(label: String, modifier: Modifier = Modifier) {
-    val open = rememberOpenAppSettings()
-    TextButton(onClick = open, modifier = modifier) { Text(label) }
-}

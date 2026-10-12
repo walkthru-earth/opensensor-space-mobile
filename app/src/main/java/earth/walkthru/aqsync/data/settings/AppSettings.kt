@@ -52,9 +52,6 @@ class AppSettings @Inject constructor(private val repository: SettingsRepository
     suspend fun setDetailLevel(level: DetailLevel) = repository.setDetailLevel(level)
 
     suspend fun setClockSyncMode(mode: ClockSyncMode) = repository.setClockSyncMode(mode.toShared())
-
-    /** Kept for callers that only know the old switch. On is Developer, off is Simple. */
-    suspend fun setAdvancedMode(on: Boolean) = setDetailLevel(if (on) DetailLevel.DEVELOPER else DetailLevel.SIMPLE)
 }
 
 internal fun SharedClockSyncMode.toEngine(): ClockSyncMode = ClockSyncMode.valueOf(name)

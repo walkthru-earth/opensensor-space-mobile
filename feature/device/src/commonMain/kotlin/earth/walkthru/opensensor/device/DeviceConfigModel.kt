@@ -128,7 +128,7 @@ data class LanAccess(val granted: Boolean, val requestable: Boolean)
 
 /**
  * The port between the shared Device section and a platform's live link. Android adapts
- * `DeviceConnectionRepository`, iOS borrows the Bluetooth link from `BluetoothCompanion`. Transport
+ * `DeviceFacade`, iOS borrows the Bluetooth link from `BluetoothCompanion`. Transport
  * stays behind it. The controller decides what may be sent and when, the source only sends it.
  */
 interface DeviceConfigSource {

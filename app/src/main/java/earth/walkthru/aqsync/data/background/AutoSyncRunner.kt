@@ -16,9 +16,6 @@ typealias AutoSyncLink = BackgroundSyncLink<LanDevice>
 /** Room, mDNS, the Bluetooth adapter and the repository, behind the shared gateway port. */
 typealias AutoSyncGateway = BackgroundSyncGateway<KnownDevice, LanDevice>
 
-/** The shared link order rule. */
-typealias AutoSyncPolicy = BackgroundSyncPolicy
-
 /** One run over the auto-sync devices. */
 typealias AutoSyncReport = BackgroundSyncReport<KnownDevice>
 

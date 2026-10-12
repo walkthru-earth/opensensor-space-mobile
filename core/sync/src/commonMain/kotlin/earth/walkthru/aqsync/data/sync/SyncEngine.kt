@@ -30,8 +30,6 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 
-class SyncAbortedException(message: String, cause: Throwable? = null) : Exception(message, cause)
-
 /**
  * Fills a record's index columns (rows, time span) from the committed file, in the same write as the
  * record itself. Android reads the Parquet footer here. A platform without a history index keeps the
