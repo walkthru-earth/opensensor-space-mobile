@@ -1,8 +1,8 @@
 package earth.walkthru.opensensor
 
+import earth.walkthru.aqsync.data.lan.LanTokenPolicy
 import earth.walkthru.aqsync.data.protocol.AqGatt
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
-import earth.walkthru.aqsync.data.protocol.DisconnectReason
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.protocol.FrameCodec
 import earth.walkthru.aqsync.data.protocol.LanProtocol
@@ -11,6 +11,8 @@ import earth.walkthru.aqsync.data.protocol.ProtoGate
 import earth.walkthru.aqsync.data.protocol.ProtocolError
 import earth.walkthru.aqsync.data.protocol.Request
 import earth.walkthru.aqsync.data.protocol.requireProto3
+import earth.walkthru.aqsync.link.DisconnectCause
+import earth.walkthru.aqsync.link.peerClosedCause
 
 /**
  * Small Swift facade around the canonical shared codec for the session itself: the token
@@ -93,9 +95,10 @@ class SyncReply(
     internal val bytes: ByteArray = EMPTY,
 ) {
     /**
-     * How this frame ends a LAN handshake, the same rule as Android `TcpLinkDriver`. Only ERROR 14 or
-     * BYE auth-failed is an auth verdict that rejects the stored token. Any other BYE is the sensor
-     * going away (a reboot, Wi-Fi lost), so the token stays, as it does for a bare socket close.
+     * How this frame ends a LAN handshake, the same rule as Android `TcpLinkDriver`. ERROR 14 rejects
+     * the stored token. A BYE is read through the shared [peerClosedCause], so auth-failed (3) and
+     * token-rotated (10) drop the token by [LanTokenPolicy], sessions-full (4) is busy, and any other
+     * BYE is the sensor going away (a reboot, Wi-Fi lost), so the token stays, as for a bare close.
      */
     val refusal: HandshakeRefusal get() = when (kind) {
         "error" -> when (code) {
@@ -103,7 +106,7 @@ class SyncReply(
             ProtocolError.BUSY.code -> HandshakeRefusal.BUSY
             else -> HandshakeRefusal.INVALID
         }
-        "bye" -> if (code == DisconnectReason.AUTH_FAILED.code) HandshakeRefusal.TOKEN_REJECTED else HandshakeRefusal.PEER_CLOSED
+        "bye" -> byeRefusal(code)
         else -> HandshakeRefusal.NONE
     }
 
@@ -117,15 +120,27 @@ class SyncReply(
     }
 }
 
+private val tokenPolicy = LanTokenPolicy()
+
+/** Only the reason byte of a BYE decides its cause, so the other fields are left at zero. */
+private fun byeRefusal(reason: Int): HandshakeRefusal {
+    val cause = peerClosedCause(Frame.Bye(reason = reason, generation = 0, err = 0, queued = 0, uptimeSeconds = 0))
+    return when {
+        tokenPolicy.invalidatesToken(cause) -> HandshakeRefusal.TOKEN_REJECTED
+        cause == DisconnectCause.Busy -> HandshakeRefusal.BUSY
+        else -> HandshakeRefusal.PEER_CLOSED
+    }
+}
+
 /** What a frame received in place of HELLO means for the stored LAN token. */
 enum class HandshakeRefusal {
     /** Not a refusal, such as HELLO. */
     NONE,
 
-    /** ERROR 14 or BYE auth-failed. The stored token is wrong. */
+    /** ERROR 14, or BYE auth-failed or token-rotated. The stored token is no longer valid. */
     TOKEN_REJECTED,
 
-    /** ERROR 7, every session slot is taken. */
+    /** ERROR 7 or BYE sessions-full, every session slot is taken. */
     BUSY,
 
     /** A BYE without an auth verdict. The sensor is unreachable for now and the token stays. */

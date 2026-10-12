@@ -14,6 +14,7 @@ import earth.walkthru.aqsync.collection.LinkProvider
 import earth.walkthru.aqsync.collection.RetryPolicy
 import earth.walkthru.aqsync.collection.StartResult
 import earth.walkthru.aqsync.collection.StopSource
+import earth.walkthru.aqsync.collection.SyncEndReason
 import earth.walkthru.aqsync.collection.endReason
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.sync.CollectionSummary
@@ -270,7 +271,8 @@ class SensorCollections internal constructor(
 
     private fun resultOf(terminal: CollectionState, request: Request): SyncResult = when (terminal) {
         is CollectionState.Done -> resultOf(terminal.summary)
-        is CollectionState.Stopped -> partialResult(SyncEnd.STOPPED, request.listed, request.outcomes)
+        // The shared reason, so a stop by the OS reads INTERRUPTED and one by the user or app STOPPED.
+        is CollectionState.Stopped -> partialResult(SyncEnd.STOPPED, request.listed, request.outcomes, terminal.endReason() ?: SyncEndReason.STOPPED)
         is CollectionState.Failed -> partialResult(terminal.failure.syncEnd(), request.listed, request.outcomes, terminal.failure.endReason())
         else -> partialResult(SyncEnd.FAILED, request.listed, request.outcomes)
     }

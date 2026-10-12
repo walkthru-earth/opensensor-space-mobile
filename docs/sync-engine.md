@@ -78,13 +78,20 @@ compatibility typealias for the facade. iOS routes every sync through the same c
 ([#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81)). `SensorCollections` is
 one app-wide instance that holds one controller per device over `IosLinkProvider`. Sync, Smart
 Sync, one-file sync, Collect all steps and Auto-sync steps on Bluetooth and Wi-Fi all call
-`runs.collect`, and a retry that finds no open link asks Swift to dial it again. `IosKeepAlive`
-hands out the background time leases a run holds.
+`runs.collect`, and a retry that finds no open link asks Swift to dial it again. Swift answers each
+dial with a `DialResult`. A refusal is `Unreachable` and retried. Bluetooth that is off, not
+allowed or missing throws `TransportUnavailableException` of that kind, which ends the run at once
+as `BLUETOOTH_OFF` or `PERMISSION_MISSING`. `IosKeepAlive` hands out the background time leases a
+run holds.
 
 On iOS each result carries `SyncResult.endReason` (`SyncEndReason`), mapped from the typed
 `DisconnectCause` and `CollectionFailure` as Android does. A lost or stale bond ends as
 `PAIRING_REPAIR`, which the station page and My devices show as a failed link that needs pairing
-again. A run iOS stops when the app leaves the screen is kept as interrupted
+again. A stop by the user or the app reads `STOPPED` and one by the OS `INTERRUPTED`, from the
+shared `CollectionState.endReason()`. `SyncResult.dropsLanToken` is true for `TOKEN_REJECTED` and
+`TOKEN_ROTATED`, the causes `LanTokenPolicy.invalidatesToken` names, and Swift then removes the
+Keychain token. A BYE in place of HELLO goes through `peerClosedCause` the same way, so a rotated
+token is dropped and sessions-full reads as busy. A run iOS stops when the app leaves the screen is kept as interrupted
 (`SensorCollections.interrupt`). When the app is active again, `AppServices.resumeInterrupted`
 starts it once through the Swift entry points, and Forget drops it. A Bluetooth resume yields to a
 page reopened over Bluetooth for another sensor and is dropped. Today shows how a run ended

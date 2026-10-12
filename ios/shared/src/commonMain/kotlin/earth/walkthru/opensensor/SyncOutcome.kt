@@ -68,6 +68,14 @@ class SyncResult internal constructor(
         SyncEnd.STOPPED, SyncEnd.LINK_LOST, SyncEnd.AUTH_FAILED, SyncEnd.BUSY -> false
     }
 
+    /**
+     * The sensor refused or rotated the LAN token, so the stored one is dropped and the next
+     * Bluetooth connection fetches a new one. The same causes `LanTokenPolicy.invalidatesToken`
+     * names, read from [endReason]. A broken Bluetooth bond is not one of them.
+     */
+    val dropsLanToken: Boolean
+        get() = endReason == SyncEndReason.TOKEN_REJECTED || endReason == SyncEndReason.TOKEN_ROTATED
+
     /** Worth resuming automatically when the link returns. */
     val resumable: Boolean get() = end == SyncEnd.LINK_LOST || endReason == SyncEndReason.INTERRUPTED
 

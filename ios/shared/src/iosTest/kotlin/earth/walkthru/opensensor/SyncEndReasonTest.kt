@@ -7,6 +7,7 @@ import earth.walkthru.aqsync.collection.SyncEndReason
 import earth.walkthru.aqsync.collection.endReason
 import earth.walkthru.aqsync.data.ble.TransportException
 import earth.walkthru.aqsync.data.ble.TransportUnavailableException
+import earth.walkthru.aqsync.data.lan.LanTokenPolicy
 import earth.walkthru.aqsync.data.sync.FileOutcome
 import earth.walkthru.aqsync.link.AuthKind
 import earth.walkthru.aqsync.link.DisconnectCause
@@ -60,6 +61,24 @@ class SyncEndReasonTest {
         assertEquals(SyncEnd.STOPPED, interrupted.syncEnd())
         assertEquals(SyncEndReason.INTERRUPTED, interrupted.endReason())
         assertEquals(SyncEnd.FAILED, CollectionFailure.Unexpected("X").syncEnd())
+    }
+
+    @Test
+    fun theStoredLanTokenDropsExactlyWhenTheSharedPolicySaysSo() {
+        val policy = LanTokenPolicy()
+        val causes = AuthKind.entries.map { DisconnectCause.Auth(it) } + listOf(
+            DisconnectCause.Busy,
+            DisconnectCause.Unreachable,
+            DisconnectCause.PeerClosed(),
+            DisconnectCause.Unavailable(UnavailableKind.RADIO_OFF),
+        )
+        for (cause in causes) {
+            assertEquals(policy.invalidatesToken(cause), ended(LinkClosedException(cause)).dropsLanToken, cause.toString())
+        }
+        // An ERROR 14 refusal without a typed cause drops it too, a stop or lost link never does.
+        assertTrue(SyncResult(SyncEnd.AUTH_FAILED, 0, 0, 0).dropsLanToken)
+        assertFalse(SyncResult(SyncEnd.STOPPED, 0, 0, 0).dropsLanToken)
+        assertFalse(SyncResult(SyncEnd.LINK_LOST, 0, 0, 0).dropsLanToken)
     }
 
     @Test

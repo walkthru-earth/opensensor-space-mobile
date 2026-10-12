@@ -245,9 +245,10 @@ actor LanSession {
         }
     }
 
-    /// Session ERROR or BYE frames in place of HELLO end the connection. Only ERROR 14 or BYE
-    /// auth-failed is `.authentication`, which drops the Keychain token. Any other BYE, like a bare
-    /// close, is `.disconnected` and keeps it (Android `TcpLinkDriver` parity).
+    /// Session ERROR or BYE frames in place of HELLO end the connection. ERROR 14, or a BYE the
+    /// shared token policy reads as rejected or rotated, is `.authentication`, which drops the
+    /// Keychain token. BYE sessions-full is `.busy`. Any other BYE, like a bare close, is
+    /// `.disconnected` and keeps it (Android `TcpLinkDriver` parity).
     private static func refuse(_ frame: LanReply) throws {
         switch frame.refusal {
         case .tokenRejected: throw LanFailure.authentication

@@ -842,6 +842,18 @@ extension BluetoothCompanion {
         return ioLink
     }
 
+    /// Why no Bluetooth dial can open a link now, or nil when one may. Bluetooth never started for
+    /// this app reads as not allowed. A radio that is still starting is a plain refusal, retried later.
+    var dialUnavailable: DialResult? {
+        guard hasCentral else { return .permissionMissing }
+        switch centralState {
+        case .poweredOff: return .radioOff
+        case .unauthorized: return .permissionMissing
+        case .unsupported: return .noAdapter
+        default: return nil
+        }
+    }
+
     /// The shared controller found no open link for this sensor's collection and asks for one.
     /// [done] runs once, true when the link is open and identified. A link held for other work
     /// on another sensor refuses.
