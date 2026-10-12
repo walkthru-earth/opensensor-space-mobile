@@ -182,7 +182,7 @@ final class BluetoothCompanion {
         guard foreground || collectOffScreen else { return }
         if resumeWaiting { clearInteractiveResume() }
         closeWhenIdle = nil
-        if current == id { return }
+        if sameId(current, id) { return }
         if current != nil, syncHandle != nil || ioLink?.leased == true, collectId == nil { return }
         guard poweredOn else {
             openRequested = id
@@ -211,7 +211,7 @@ final class BluetoothCompanion {
             collectOpened = false
         } else {
             open(id: id)
-            guard current == id else {
+            guard sameId(current, id) else {
                 onCollectFinished?(id, false)
                 return
             }
@@ -402,7 +402,7 @@ final class BluetoothCompanion {
     /// Closes the link to this sensor, if it is open. Forget calls it.
     func close(id: String) {
         if interactiveSyncId?.caseInsensitiveCompare(id) == .orderedSame { clearInteractiveResume() }
-        if openRequested == id { openRequested = nil }
+        if sameId(openRequested, id) { openRequested = nil }
         guard let current, current.caseInsensitiveCompare(id) == .orderedSame else { return }
         disconnect()
     }
@@ -956,12 +956,17 @@ extension BluetoothCompanion {
     /// completes one when the sensor is in range, then [onWake] runs.
     func armPendingConnects(ids: [String]) {
         guard !foreground, poweredOn else { return }
-        physical.arm(ids: ids.filter { $0 != current })
+        physical.arm(ids: ids.filter { !sameId(current, $0) })
     }
 
     /// The run did not take this pending connect, so it ends and the sensor is free again.
     func releaseWaiting(id: String) {
-        guard id != current else { return }
+        guard !sameId(current, id) else { return }
         physical.releaseWaiting(id: id)
     }
+}
+
+/// Peripheral ids are UUID strings, and the shared code may carry them in another case.
+private func sameId(_ a: String?, _ b: String) -> Bool {
+    a?.caseInsensitiveCompare(b) == .orderedSame
 }
