@@ -338,7 +338,7 @@ internal class IosDeviceConfigSource(
         const val REBOOT_MIN_MS = 100L
 
         /** The technical reason behind a lost bond. The screen shows its own words. */
-        const val PAIRING_REPAIR = "Bluetooth pairing needs repair."
+        const val PAIRING_REPAIR = "BOND_MISSING"
         const val REBOOT_MAX_MS = 5_000L
 
         /** The same wait Android takes before reconnecting after a restart. */

@@ -240,6 +240,6 @@ internal class CompanionTodaySource(
 
     private companion object {
         /** The technical reason behind a lost bond. Today shows its own repair words for it. */
-        const val PAIRING_REPAIR = "Bluetooth pairing needs repair."
+        const val PAIRING_REPAIR = "BOND_MISSING"
     }
 }
