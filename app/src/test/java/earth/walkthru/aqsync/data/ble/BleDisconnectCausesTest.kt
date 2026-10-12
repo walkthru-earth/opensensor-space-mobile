@@ -51,6 +51,15 @@ class BleDisconnectCausesTest {
     }
 
     @Test
+    fun `a stale bond hint shows the repair message and keeps retrying`() {
+        // The driver keeps the link status and only swaps the reason for a hint.
+        val hint = TransportException(BleConnectionFailure.PAIRING_REPAIR_MESSAGE, BleDisconnectCauses.PEER_USER)
+        assertTrue(BleDisconnectCauses.ofOpenFailure(hint).retryable)
+        assertFalse(BleDisconnectCauses.needsPairingRepair(BleDisconnectCauses.ofOpenFailure(hint)))
+        assertTrue(BleConnectionFailure.needsPairingRepair(ConnectionState.Failed(BleConnectionFailure.PAIRING_REPAIR_MESSAGE, BleDisconnectCauses.PEER_USER)))
+    }
+
+    @Test
     fun `only failed or missing keys ask for pairing again`() {
         assertTrue(BleDisconnectCauses.needsPairingRepair(DisconnectCause.Auth(AuthKind.BOND_MISSING)))
         assertTrue(BleDisconnectCauses.needsPairingRepair(DisconnectCause.Auth(AuthKind.ENCRYPTION_FAILED)))
