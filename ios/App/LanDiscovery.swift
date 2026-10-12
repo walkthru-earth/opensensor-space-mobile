@@ -37,7 +37,7 @@ final class LanDiscovery {
     /// Sessions whose last sensor page closed while a run, a command or a lease held them. They
     /// close once that work ends. Connecting again keeps them.
     private var closeWhenIdle = IdleClose<String>()
-    private var progressCounts: [String: (done: Int, total: Int, bytes: Int64, totalBytes: Int64)] = [:]
+    private var progressCounts = RunCounts<String>()
     private struct Device {
         let endpoint: NWEndpoint
         let station: String
@@ -313,6 +313,8 @@ final class LanDiscovery {
         }
         let token = UUID()
         runTokens[name] = token
+        // A new run counts from zero. Notices before its first progress keep these, not the last run's.
+        progressCounts.runStarted(name)
         state.lanSyncStarted(name: name)
         report(name, connected: true, busy: true, notice: .lanListing)
         let handle = runs.collect(
@@ -613,10 +615,7 @@ final class LanDiscovery {
         _ name: String, connected: Bool = false, busy: Bool = false, notice: CompanionNotice, done: Int? = nil,
         total: Int? = nil, bytes: Int64? = nil, rate: Double = 0, bytesTotal: Int64? = nil
     ) {
-        let previous = progressCounts[name] ?? (done: 0, total: 0, bytes: Int64(0), totalBytes: Int64(0))
-        let progress = (done: done ?? previous.done, total: total ?? previous.total, bytes: bytes ?? previous.bytes,
-                        totalBytes: bytesTotal ?? previous.totalBytes)
-        progressCounts[name] = progress
+        let progress = progressCounts.noticed(name, done: done, total: total, bytes: bytes, totalBytes: bytesTotal)
         state.lanSessionNoticed(
             name: name, connected: connected, busy: busy, notice: notice, filesDone: Int32(progress.done),
             filesTotal: Int32(progress.total), bytesDone: progress.bytes, bytesPerSecond: rate,

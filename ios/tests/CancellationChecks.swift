@@ -22,7 +22,17 @@ enum CancellationChecks {
         pendingLaunchHoldsUntilItsOwnLaunchOrTimeout()
         idleCloseWaitsForTheWorkOnTheLink()
         livePageReopensUntilTheUserLeavesIt()
+        aNewRunCountsFromZero()
         print("iOS cancellation checks passed")
+    }
+
+    private static func aNewRunCountsFromZero() {
+        var counts = RunCounts<String>()
+        let first = counts.noticed("aq", done: 3, total: 5, bytes: 300, totalBytes: 500)
+        precondition(counts.noticed("aq", done: nil, total: nil, bytes: nil, totalBytes: nil) == first, "a notice keeps the run's counts")
+        counts.runStarted("aq")
+        precondition(counts.noticed("aq", done: nil, total: nil, bytes: nil, totalBytes: nil) == .init(), "a new run starts at zero")
+        precondition(counts.noticed("other", done: 1, total: nil, bytes: nil, totalBytes: nil).done == 1)
     }
 
     private static func livePageReopensUntilTheUserLeavesIt() {

@@ -122,3 +122,29 @@ struct ArmedConnects {
         ids.filter { !waiting.contains($0) && $0 != current }.sorted()
     }
 }
+
+/// The last progress counts of each Wi-Fi run. A notice without counts keeps the run's own, and a
+/// new run starts from zero instead of the previous run's totals.
+struct RunCounts<Key: Hashable> {
+    struct Counts: Equatable {
+        var done = 0
+        var total = 0
+        var bytes: Int64 = 0
+        var totalBytes: Int64 = 0
+    }
+
+    private var counts: [Key: Counts] = [:]
+
+    mutating func runStarted(_ key: Key) { counts[key] = nil }
+
+    /// Merges the counts given with the ones kept and returns what to show.
+    mutating func noticed(_ key: Key, done: Int?, total: Int?, bytes: Int64?, totalBytes: Int64?) -> Counts {
+        var next = counts[key] ?? Counts()
+        if let done { next.done = done }
+        if let total { next.total = total }
+        if let bytes { next.bytes = bytes }
+        if let totalBytes { next.totalBytes = totalBytes }
+        counts[key] = next
+        return next
+    }
+}
