@@ -4,6 +4,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.window.ComposeUIViewController
+import earth.walkthru.aqsync.settings.AppPrefs
 import earth.walkthru.opensensor.discover.MapCache
 import kotlinx.coroutines.runBlocking
 import platform.UIKit.UIViewController
@@ -54,8 +55,15 @@ fun mainViewController(
     scanSticker: ScanSticker?,
 ): UIViewController {
     // The basemap tile cache stays in Library/Caches under its stored cap, set before any map runs
-    // (#61). One small settings read, blocking because the map runtime takes the cap only once.
-    MapCache.configure(cachesDirectory(), runBlocking { settingsRepository.current().retention.mapCacheBytes })
+    // (#61). One small settings read, blocking because the map runtime takes the cap only once. A
+    // settings file that cannot be read at launch falls back to the default cap instead of a crash.
+    val mapCacheBytes = try {
+        runBlocking { settingsRepository.current().retention.mapCacheBytes }
+    } catch (e: Exception) {
+        println("settings: launch read failed, ${e::class.simpleName}")
+        AppPrefs().retention.mapCacheBytes
+    }
+    MapCache.configure(cachesDirectory(), mapCacheBytes)
     IosMemoryPressure.install()
     return ComposeUIViewController {
         // A sensor the user opens may take Wi-Fi or the one Bluetooth link, so Collect all stops first.
