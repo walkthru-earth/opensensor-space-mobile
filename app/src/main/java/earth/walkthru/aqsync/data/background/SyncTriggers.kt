@@ -116,7 +116,7 @@ class SyncTriggers @Inject constructor(
         }
         prefs.edit { putLong(KEY_LAST_WIFI_MS, now) }
         Log.i(TAG, "Wi-Fi available; $lanDevices LAN device(s) with Auto-sync on, enqueueing a LAN-only run")
-        scheduler.syncOnTrigger(SyncTrigger.WIFI, lanOnly = true)
+        if (scheduler.syncOnTrigger(SyncTrigger.WIFI, lanOnly = true) == AutoSyncScheduler.Enqueue.ALREADY_QUEUED) Log.i(TAG, "Wi-Fi available; a LAN-only run is already queued")
     }
 
     companion object {

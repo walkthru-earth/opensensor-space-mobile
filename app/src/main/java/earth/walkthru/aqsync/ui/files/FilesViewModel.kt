@@ -15,6 +15,7 @@ import earth.walkthru.aqsync.archive.ArchiveStore
 import earth.walkthru.aqsync.archive.FileExportSpace
 import earth.walkthru.aqsync.archive.directoryEntries
 import earth.walkthru.aqsync.data.DeviceConnectionManager
+import earth.walkthru.aqsync.data.DeviceOwnership
 import earth.walkthru.aqsync.data.ManifestState
 import earth.walkthru.aqsync.data.ReconnectState
 import earth.walkthru.aqsync.data.SyncProgress
@@ -203,7 +204,7 @@ class FilesViewModel @AssistedInject constructor(
         repository.sync.map { it.running }.distinctUntilChanged(),
         repository.reconnecting,
         repository.currentKnownDevice,
-        autoSyncScheduler.observeActive(),
+        backgroundActive(autoSyncScheduler.observeActive(deviceAddress), repository.ownership),
         repository.activeTransport,
         settings.detailLevel,
         fileChart,
@@ -261,13 +262,17 @@ class FilesViewModel @AssistedInject constructor(
      * One expedited background run for the connected device, so the user can leave the app right
      * away. The worker refuses to touch a device the app is connected to, so the current session is
      * released first; the worker's own session then feeds the same progress state this screen shows.
+     * A sync started here already keeps running in the background, so it is never stopped for this.
      */
     fun syncNowInBackground() {
         val addr = repository.currentAddress ?: return
         viewModelScope.launch {
-            repository.disconnectNow()
-            autoSyncScheduler.syncNow(addr)
-            localEvents.tryEmit(ScreenMessage.Text(context.getString(R.string.files_bg_event)))
+            val message = backgroundSyncRequest(
+                ownership = repository.ownershipNow(),
+                release = repository::releaseForBackground,
+                enqueue = { autoSyncScheduler.syncNow(addr) },
+            )
+            localEvents.tryEmit(ScreenMessage.Text(context.getString(message)))
         }
     }
     fun syncOne(name: String) = repository.syncOne(name)
@@ -277,6 +282,29 @@ class FilesViewModel @AssistedInject constructor(
     companion object {
         /** Columns per page of the "chart by file" strip: a day of 15-min files, tappable at phone width. */
         const val FILE_CHART_PAGE = 96
+    }
+}
+
+/** Per-device background flag for the Files menu: a request for this device or a worker holding it. */
+internal fun backgroundActive(queued: Flow<Boolean>, ownership: Flow<DeviceOwnership>): Flow<Boolean> =
+    combine(queued, ownership) { waiting, owner -> waiting || owner == DeviceOwnership.BACKGROUND }.distinctUntilChanged()
+
+/**
+ * "Sync now in background", decided in order. A running interactive sync keeps going under its
+ * foreground service. A worker already holding the device counts as queued. Otherwise the session
+ * is released first, and the request is only enqueued once that worked. Returns the string to show.
+ */
+internal suspend fun backgroundSyncRequest(
+    ownership: DeviceOwnership,
+    release: suspend () -> Boolean,
+    enqueue: suspend () -> AutoSyncScheduler.Enqueue,
+): Int = when (ownership) {
+    DeviceOwnership.INTERACTIVE -> R.string.files_bg_keeps_running
+    DeviceOwnership.BACKGROUND -> R.string.files_bg_already
+    DeviceOwnership.IDLE -> when {
+        !release() -> R.string.msg_busy
+        enqueue() == AutoSyncScheduler.Enqueue.ALREADY_QUEUED -> R.string.files_bg_already
+        else -> R.string.files_bg_event
     }
 }
 

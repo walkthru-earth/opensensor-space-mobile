@@ -173,7 +173,7 @@ class AdvertFlagScan @Inject constructor(
                         "${known.name ?: address}: advertisement ${advert.changeKey} new_files=${advert.newFiles} no_utc=${advert.noUtc} lan=${advert.lanUp}; enqueueing a sync",
                     )
                     prefs.edit { putString(keyFor(address), advert.changeKey); putLong(timeFor(address), now) }
-                    scheduler.syncNow(address, SyncTrigger.ADVERTISEMENT)
+                    if (scheduler.syncNow(address, SyncTrigger.ADVERTISEMENT) == AutoSyncScheduler.Enqueue.ALREADY_QUEUED) Log.i(TAG, "${known.name ?: address}: a triggered run is already queued")
                 }
             }
         }

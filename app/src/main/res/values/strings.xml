@@ -147,6 +147,8 @@
     <string name="files_autosync_event_on">Auto-sync is on, about every %1$d min.</string>
     <string name="files_autosync_event_off">Auto-sync is off for this sensor.</string>
     <string name="files_bg_event">Background sync queued. You can leave the app.</string>
+    <string name="files_bg_keeps_running">Sync keeps running in the background. You can leave the app.</string>
+    <string name="files_bg_already">A background sync is already queued.</string>
     <string name="chart_by_file">Chart by file</string>
     <plurals name="chart_by_file_summary">
         <item quantity="one">%1$d file, %2$s</item>

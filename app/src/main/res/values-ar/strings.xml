@@ -156,6 +156,8 @@
     <string name="files_autosync_event_on">المزامنة التلقائية مفعّلة، كل %1$d دقيقة تقريبًا.</string>
     <string name="files_autosync_event_off">المزامنة التلقائية متوقفة لهذا المستشعر.</string>
     <string name="files_bg_event">المزامنة في الخلفية في الانتظار. يمكنك مغادرة التطبيق.</string>
+    <string name="files_bg_keeps_running">تستمر المزامنة في الخلفية. يمكنك مغادرة التطبيق.</string>
+    <string name="files_bg_already">المزامنة في الخلفية في الانتظار بالفعل.</string>
     <string name="chart_by_file">رسم بياني حسب الملف</string>
     <plurals name="chart_by_file_summary">
         <item quantity="zero">%1$d ملف، %2$s</item>
