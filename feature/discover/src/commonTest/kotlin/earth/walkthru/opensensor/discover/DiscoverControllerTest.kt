@@ -421,6 +421,15 @@ class DiscoverControllerTest {
     }
 
     @Test
+    fun aRecreatedMapResumesAtTheLastCameraInsteadOfFittingTheRegionAgain() = runTest {
+        val c = controller(FakeFeed())
+        // First launch, no saved camera, so the map fits the time zone region once.
+        assertTrue(c.state.value.start is StartView.Region)
+        // After the camera rests, a map built again (a rotation) starts where the camera was.
+        assertEquals(StartView.Camera(SavedCamera(37.0, -122.0, 6.25)), c.resumeStart())
+    }
+
+    @Test
     fun aRealDailyCellIsJudgedAgainstThePartitionDateNotTheClock() = runTest {
         // Rows that ran to 8 Oct end at midnight UTC on 9 Oct. The phone reads them 98 hours later.
         val endOfDay = LocalDate(2026, 10, 9).toEpochDays() * 86_400_000L

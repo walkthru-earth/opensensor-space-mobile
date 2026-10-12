@@ -237,6 +237,12 @@ class DiscoverController(
         }
     }
 
+    /**
+     * Where a map built again should start, the last camera that rested, else [DiscoverUiState.start].
+     * A rotation rebuilds the map, and it should not fit the region again over the user's view.
+     */
+    fun resumeStart(): StartView? = saved.camera?.let { StartView.Camera(it) } ?: _state.value.start
+
     /** Called on every camera move. The read starts once the camera has rested for 400 ms. */
     fun onCamera(rest: CameraRest) {
         this.rest.value = rest

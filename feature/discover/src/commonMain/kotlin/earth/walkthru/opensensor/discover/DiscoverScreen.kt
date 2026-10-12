@@ -222,7 +222,9 @@ private fun DiscoverContent(
             if (start != null && style != null) {
                 val selectedHex = state.selected?.let { H3Index.toHex(it.h3) }
                 val nearMe = rememberNearMe()
-                val mapState = rememberDiscoverMapState(start, style, state.geoJson, selectedHex, ink, nearMe.location, highlight) { hex ->
+                // A rotation rebuilds the map. It resumes at the last camera, not the region fit.
+                val mapStart = remember(start) { controller.resumeStart() ?: start }
+                val mapState = rememberDiscoverMapState(mapStart, style, state.geoJson, selectedHex, ink, nearMe.location, highlight) { hex ->
                     controller.selectCell(hex)
                     controller.dismissFirstRun()
                     showAll = false
@@ -240,7 +242,7 @@ private fun DiscoverContent(
                 DiscoverMap(
                     modifier = Modifier.semantics { contentDescription = mapLabel },
                     state = mapState,
-                    start = start,
+                    start = mapStart,
                     viewportInsets = PaddingValues(top = 120.dp, bottom = PEEK_HEIGHT),
                     onCamera = controller::onCamera,
                     onMapClick = {

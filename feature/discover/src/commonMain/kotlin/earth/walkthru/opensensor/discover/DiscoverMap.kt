@@ -3,6 +3,10 @@ package earth.walkthru.opensensor.discover
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -129,10 +133,13 @@ internal fun DiscoverMap(
     onFirstMove: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // The region fit runs once. Kept across a rotation, so a rebuilt map never refits over the user's view.
+    var fitted by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(state, start) {
-        if (start is StartView.Region) {
+        if (start is StartView.Region && !fitted) {
             val b = start.bounds
-            runCatching { state.fitCameraToBounds(BoundingBox(west = b.west, south = b.south, east = b.east, north = b.north)) }
+            // A fit cut short by cancellation or an unready map runs again next time.
+            if (runCatching { state.fitCameraToBounds(BoundingBox(west = b.west, south = b.south, east = b.east, north = b.north)) }.isSuccess) fitted = true
         }
     }
     LaunchedEffect(state) {
