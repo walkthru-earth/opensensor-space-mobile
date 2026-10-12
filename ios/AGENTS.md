@@ -2,7 +2,7 @@
 
 The iOS app entry point is the Xcode project in this directory. Read the root
 `AGENTS.md`, then the relevant section of `../docs/README.md` and
-`../docs/ios-migration.md` before changing code.
+`../docs/ios.md` before changing code.
 
 ## Ownership and boundaries
 

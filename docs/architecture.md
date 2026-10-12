@@ -63,7 +63,7 @@ windows use kotlinx-datetime. Android passes its `ZoneId` through `toKotlinTimeZ
 and iOS. `:ios:shared` targets iOS only, so its `commonMain` consumes them directly. It renders the
 current Compose iOS screen. `ios/App` supplies native app integration, Core Bluetooth, Bonjour
 discovery, lifecycle, Keychain and Files export. Both platforms run the shared sync engine. The Android app remains a separate
-platform entry point. See [ios-migration.md](ios-migration.md) for current scope and build commands.
+platform entry point. See [ios.md](ios.md) for current scope and build commands.
 
 Navigation is shared ([ADR 0001](adr/0001-shared-navigation.md)). `:feature:shell` holds the
 sealed `AppKey : NavKey` hierarchy, `AppNavConfig` (a `SavedStateConfiguration` built with

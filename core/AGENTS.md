@@ -70,7 +70,7 @@ root for the relevant concern. No Android, Hilt, Room, `Context` or
   (a hand-declared variant, see `core/parquet/build.gradle.kts`). Inside `:core:parquet`, common
   tests read them with `fixtureBytes(path)` on both platforms.
   Test names in `commonTest` cannot contain commas or other characters Kotlin/Native rejects.
-  See `docs/ios-migration.md`.
+  See `docs/ios.md`.
 - Common code must compile for every declared target and cannot import Java, Android,
   Room, UIKit, or Apple framework APIs. Put platform behavior behind narrow interfaces
   constructed at app entry points; use `expect`/`actual` only for small seams where it

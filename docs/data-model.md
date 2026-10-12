@@ -17,7 +17,7 @@ iOS raw files live in the app's private
 cloud backup. **Files** (a button next to History on My devices) shares one file, all files,
 or a zip of the archive, and saves the zip through Apple's Files picker, preserving
 station/Hive paths. Partial downloads and `.verified.json` size/CRC receipts are not exported. The original archive stays private and supports resume;
-export is available without connecting a sensor. See [ios-migration.md](ios-migration.md)
+export is available without connecting a sensor. See [ios.md](ios.md)
 for lifecycle and validation limits.
 
 ## Room schema v10 (`aq-sync.db`)
@@ -204,7 +204,7 @@ through `AppSettings`. `SettingsRepositoryTest` holds the golden key list.
 | --- | --- | --- |
 | `detail_level` | string (`SIMPLE` / `DETAILED` / `DEVELOPER`) | the detail level |
 | `advanced_mode` | boolean (legacy) | unset `detail_level` + `advanced_mode = true` → `DEVELOPER`. Still written with the level |
-| `clock_sync_mode` | string (`ASK` / `AUTOMATIC` / `NEVER`) | Smart Sync clock consent, missing = `ASK` |
+| `clock_sync_mode` | string (`ASK` / `AUTOMATIC` / `NEVER`) | Stored but unused. The engine always sets the clock automatically and no screen changes it |
 | `show_public_sensors` | boolean | Discover network switch, missing = on |
 | `unit_system` | string (`AUTO` / `METRIC` / `IMPERIAL`) | display units, missing = `AUTO`. Display only, Room, Parquet and exports stay SI |
 

@@ -64,7 +64,7 @@ same local Wi-Fi without internet.
 Android already keeps separate controllers for several sensors and limits
 concurrent file transfers to two per phone. Its existing framed TCP transport
 uses the same protocol with the firmware's multi-client pool. iOS collection
-support and its validation scope are documented in [ios-migration.md](ios-migration.md).
+support and its validation scope are documented in [ios.md](ios.md).
 Real multi-phone/multi-sensor throughput and radio behavior require phone and
 board qualification; host tests alone do not establish these results.
 
