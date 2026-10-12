@@ -23,17 +23,22 @@ import javax.inject.Singleton
  * Reactive and read only. [fileSummaries] serves the Android Files screen.
  */
 @Singleton
-class HistoryRepository @Inject constructor(
+class HistoryRepository internal constructor(
     private val archive: FileArchive,
     archivedFileDao: ArchivedFileDao,
     bucketDao: MetricBucketDao,
     derived: DerivedDayFiles,
+    /** Coverage counts only the elapsed part of a window holding now. Tests pin it. */
+    nowEpochS: () -> Long,
 ) {
+    @Inject constructor(archive: FileArchive, archivedFileDao: ArchivedFileDao, bucketDao: MetricBucketDao, derived: DerivedDayFiles) :
+        this(archive, archivedFileDao, bucketDao, derived, { System.currentTimeMillis() / 1_000 })
+
     val index = RoomArchiveIndex(archivedFileDao)
     val store = FileArchiveStore(archive, Dispatchers.IO)
     val tiers: HistoryTiers = RoomHistoryTiers(bucketDao)
     private val clockAnchors = FileClockAnchorStore(File(archive.root.parentFile, "clock-anchors"))
-    val reader = HistorySeriesReader(store, index, tiers, Dispatchers.IO, clockAnchors, derived)
+    val reader = HistorySeriesReader(store, index, tiers, Dispatchers.IO, clockAnchors, derived, nowEpochS = nowEpochS)
 
     fun observe(station: String, metric: MetricSpec, range: HistoryRange, window: HistoryWindow): Flow<HistorySeries> =
         reader.observe(station, metric, range, window)
