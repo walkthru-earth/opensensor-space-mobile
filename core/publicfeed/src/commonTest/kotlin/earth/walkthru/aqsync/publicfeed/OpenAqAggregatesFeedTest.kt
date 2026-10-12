@@ -242,6 +242,25 @@ class OpenAqAggregatesFeedTest {
     }
 
     @Test
+    fun `a download that started before a new partition is served but not kept`() = runTest {
+        val partition = feed.latest()!!
+        val gate = CompletableDeferred<Unit>()
+        store.gate = gate
+        val read = async { feed.cells(partition, FeedWindow.DAY, 5, ranges = null) }
+        runCurrent()
+        // The manifest moves on while the old file is still downloading.
+        store.objects["$root/manifest.json"] = """{"as_of":"2026-10-09"}""".encodeToByteArray() to "\"m2\""
+        clock.ms += OpenAqAggregatesFeed.MANIFEST_TTL_MS
+        assertEquals(FeedPartition("2026-10-09", 0), feed.latest())
+        gate.complete(Unit)
+        assertEquals(3, read.await().rows.size)
+        assertEquals(0, feed.cachedResolutions(), "rows of the old generation are never kept")
+        // So the old partition is read again rather than served from memory.
+        feed.cells(partition, FeedWindow.DAY, 5, ranges = null)
+        assertEquals(2, cellsReads())
+    }
+
+    @Test
     fun `memory pressure trims the rows and only a few resolutions are kept`() = runTest {
         val partition = feed.latest()!!
         feed.cells(partition, FeedWindow.DAY, 5, ranges = null)
