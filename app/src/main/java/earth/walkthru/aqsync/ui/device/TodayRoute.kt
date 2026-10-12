@@ -62,7 +62,7 @@ fun TodayRoute(
     val notificationPermission = rememberNotificationPermission()
 
     // The clock question reaches the shared controller through the TodaySource notices.
-    CollectEvents(viewModel.events) { ev -> snackbar.showDeviceEvent(res, ev) {} }
+    CollectEvents(viewModel.events) { ev -> snackbar.showDeviceEvent(res, ev) }
     // The repository dropped the session (user disconnected, or another device was picked).
     val current = state.snapshot.address
     LaunchedEffect(current) {

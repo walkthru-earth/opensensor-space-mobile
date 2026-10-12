@@ -8,7 +8,6 @@ import earth.walkthru.aqsync.data.history.TodaySoFar
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.protocol.DeviceStatus
 import earth.walkthru.aqsync.data.protocol.LiveSample
-import earth.walkthru.aqsync.data.sync.ClockSyncMode
 import earth.walkthru.aqsync.data.sync.FileOutcome
 import earth.walkthru.opensensor.today.TodayArchive
 import earth.walkthru.opensensor.today.TodayNotice
@@ -165,7 +164,7 @@ internal class CompanionTodaySource(
     /** The one Bluetooth link is open to this sensor. Nothing is sent to another one. */
     private val linked: Boolean get() = state.connectedLanForStation(stationFor(address)) != null || (state.selectedId == address && state.connected)
 
-    override fun sync(mode: ClockSyncMode, clockConfirmed: Boolean) {
+    override fun sync() {
         // A closed link shows Reconnect, so a stale tap has nothing to send.
         if (!linked) return
         if (state.today.busy || state.syncBusy || lanBusy) {

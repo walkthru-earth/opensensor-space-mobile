@@ -50,7 +50,6 @@ fun FilesRoute(
     val snackbar = remember { SnackbarHostState() }
     val res = LocalResources.current
     val level = state.detailLevel
-    val clockHint = stringResource(R.string.event_clock_on_today)
 
     // The sync runs under a dataSync foreground service whose notification needs POST_NOTIFICATIONS
     // on API 33+. Ask once, right before the first sync. Whatever the answer, the sync starts. A
@@ -58,7 +57,7 @@ fun FilesRoute(
     val notificationPermission = rememberNotificationPermission()
 
     CollectEvents(viewModel.events) { ev ->
-        snackbar.showScreenMessage(res, ev) { snackbar.showSnackbar(clockHint) }
+        snackbar.showScreenMessage(res, ev)
     }
 
     FilesScreen(

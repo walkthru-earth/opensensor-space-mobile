@@ -59,11 +59,10 @@ fun DeviceRoute(
     var stickerScan by remember { mutableStateOf<StickerScan?>(null) }
     val scanUnrecognized = stringResource(R.string.sensor_scan_unrecognized)
     val scanUnavailable = stringResource(R.string.sensor_scan_unavailable)
-    val clockHint = stringResource(R.string.event_clock_on_today)
     val res = LocalResources.current
 
     CollectEvents(viewModel.events) { ev ->
-        snackbar.showScreenMessage(res, ev) { snackbar.showSnackbar(clockHint) }
+        snackbar.showScreenMessage(res, ev)
     }
     // Confirm dialogs and the controller's own notices (validation, sensor saved).
     DeviceConfigEffects(controller, snackbar)

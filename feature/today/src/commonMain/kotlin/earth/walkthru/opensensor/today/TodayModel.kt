@@ -11,7 +11,6 @@ import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.protocol.DeviceStatus
 import earth.walkthru.aqsync.data.protocol.LiveSample
 import earth.walkthru.aqsync.data.protocol.TemperatureSource
-import earth.walkthru.aqsync.data.sync.ClockQuality
 import earth.walkthru.aqsync.settings.ClockSyncMode
 import earth.walkthru.aqsync.settings.DetailLevel
 import kotlinx.coroutines.flow.Flow
@@ -81,9 +80,6 @@ sealed interface TodayNotice {
 
     /** The link is doing something else, nothing was sent. */
     data object Busy : TodayNotice
-
-    /** The platform's own Smart Sync found a clock to fix and needs consent first. */
-    data class ClockConfirmationRequired(val quality: ClockQuality) : TodayNotice
 }
 
 /**
@@ -95,11 +91,8 @@ interface TodaySource {
     val snapshot: StateFlow<TodaySnapshot>
     val notices: Flow<TodayNotice>
 
-    /**
-     * Smart Sync always uses automatic UTC. [mode] and [clockConfirmed] remain for adapter
-     * compatibility with older stored preferences and are not user-facing clock controls.
-     */
-    fun sync(mode: earth.walkthru.aqsync.data.sync.ClockSyncMode, clockConfirmed: Boolean)
+    /** Smart Sync. The sync engine sets the device clock automatically from this phone's UTC. */
+    fun sync()
 
     /** Internal automatic `SET_TIME` with this phone UTC. No manual control exposes this action. */
     fun setTime()
@@ -110,10 +103,6 @@ interface TodaySource {
     fun reconnect()
     fun disconnect()
 }
-
-/** The settings ClockSyncMode as the sync policy's own enum (same names). */
-fun ClockSyncMode.toPolicy(): earth.walkthru.aqsync.data.sync.ClockSyncMode =
-    earth.walkthru.aqsync.data.sync.ClockSyncMode.valueOf(name)
 
 /** The state Today draws: the snapshot, the detail level, and what follows from both. */
 data class TodayUiState(

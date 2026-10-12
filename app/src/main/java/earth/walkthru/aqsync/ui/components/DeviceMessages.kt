@@ -13,7 +13,6 @@ import earth.walkthru.aqsync.data.DeviceMessage.Command
 import earth.walkthru.aqsync.data.DeviceMessage.ConfigChange
 import earth.walkthru.aqsync.data.lan.LanFailure
 import earth.walkthru.aqsync.data.protocol.ConfigProblem
-import earth.walkthru.aqsync.data.sync.ClockQuality
 import earth.walkthru.aqsync.link.UnavailableKind
 
 /**
@@ -180,12 +179,11 @@ private fun Command.failedRes(): Int = when (this) {
 
 fun DeviceMessage.text(res: Resources): String = toUiText().resolve(res)
 
-/** The usual snackbar handling of a [DeviceEvent]. [onClock] handles the Smart Sync clock question. */
-suspend fun SnackbarHostState.showDeviceEvent(res: Resources, ev: DeviceEvent, onClock: suspend (ClockQuality) -> Unit) {
+/** The usual snackbar handling of a [DeviceEvent]. */
+suspend fun SnackbarHostState.showDeviceEvent(res: Resources, ev: DeviceEvent) {
     when (ev) {
         is DeviceEvent.Info -> showSnackbar(ev.message.text(res))
         is DeviceEvent.Error -> showSnackbar(ev.message.text(res))
-        is DeviceEvent.ClockConfirmationRequired -> onClock(ev.quality)
     }
 }
 
@@ -196,9 +194,9 @@ sealed interface ScreenMessage {
 }
 
 /** [showDeviceEvent] for screens that also post their own lines. */
-suspend fun SnackbarHostState.showScreenMessage(res: Resources, msg: ScreenMessage, onClock: suspend (ClockQuality) -> Unit) {
+suspend fun SnackbarHostState.showScreenMessage(res: Resources, msg: ScreenMessage) {
     when (msg) {
-        is ScreenMessage.Device -> showDeviceEvent(res, msg.event, onClock)
+        is ScreenMessage.Device -> showDeviceEvent(res, msg.event)
         is ScreenMessage.Text -> showSnackbar(msg.text)
     }
 }

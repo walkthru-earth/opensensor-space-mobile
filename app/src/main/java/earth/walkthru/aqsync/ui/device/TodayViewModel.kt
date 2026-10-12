@@ -28,7 +28,6 @@ import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.settings.AppSettings
 import earth.walkthru.aqsync.data.settings.toShared
-import earth.walkthru.aqsync.data.sync.ClockSyncMode
 import earth.walkthru.opensensor.today.TodayArchive
 import earth.walkthru.opensensor.today.TodayController
 import earth.walkthru.opensensor.today.TodayNotice
@@ -42,8 +41,8 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.stateIn
 
 /**
@@ -136,12 +135,10 @@ private class RepositoryTodaySource(
     }.stateIn(scope, SharingStarted.Eagerly, TodaySnapshot(address = address))
 
     /** Only the clock question. Info and error lines are shown from [DeviceConnectionRepository.events]. */
-    override val notices: Flow<TodayNotice> = repository.events.mapNotNull { event ->
-        (event as? DeviceEvent.ClockConfirmationRequired)?.let { TodayNotice.ClockConfirmationRequired(it.quality) }
-    }
+    override val notices: Flow<TodayNotice> = emptyFlow()
 
-    /** The shared controller still passes a clock mode. Collection applies the automatic clock rule. */
-    override fun sync(mode: ClockSyncMode, clockConfirmed: Boolean) = repository.smartSync()
+    /** Collection applies the automatic clock rule. */
+    override fun sync() = repository.smartSync()
 
     override fun setTime() = repository.setTimeFromPhone()
 

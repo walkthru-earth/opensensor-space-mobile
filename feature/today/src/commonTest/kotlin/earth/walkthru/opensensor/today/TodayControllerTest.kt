@@ -3,7 +3,6 @@ package earth.walkthru.opensensor.today
 import earth.walkthru.aqsync.data.SyncProgress
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.protocol.DeviceStatus
-import earth.walkthru.aqsync.data.sync.ClockQuality
 import earth.walkthru.aqsync.settings.ClockSyncMode
 import earth.walkthru.aqsync.settings.DetailLevel
 import kotlinx.coroutines.CoroutineScope
@@ -17,15 +16,14 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
-import earth.walkthru.aqsync.data.sync.ClockSyncMode as PolicyMode
 
 private class FakeSource(connection: ConnectionState = ConnectionState.Ready(247), status: DeviceStatus? = null) : TodaySource {
     override val snapshot = MutableStateFlow(TodaySnapshot(address = "AA", connection = connection, status = status))
     override val notices = MutableSharedFlow<TodayNotice>(extraBufferCapacity = 8)
     val calls = mutableListOf<String>()
 
-    override fun sync(mode: PolicyMode, clockConfirmed: Boolean) {
-        calls += "sync $mode $clockConfirmed"
+    override fun sync() {
+        calls += "sync"
     }
 
     override fun setTime() {
@@ -98,7 +96,7 @@ class TodayControllerTest {
         val c = controller(source, ClockSyncMode.ASK)
         c.smartSync()
         assertNull(c.dialog.value)
-        assertEquals(listOf("sync AUTOMATIC false"), source.calls)
+        assertEquals(listOf("sync"), source.calls)
     }
 
     @Test
@@ -107,20 +105,20 @@ class TodayControllerTest {
         val c = controller(source, ClockSyncMode.ASK)
         c.smartSync()
         assertNull(c.dialog.value)
-        assertEquals(listOf("sync AUTOMATIC false"), source.calls)
+        assertEquals(listOf("sync"), source.calls)
     }
 
     @Test
     fun automaticAndNeverDoNotAsk() = runTest {
         val auto = FakeSource(status = clockMissing)
         controller(auto, ClockSyncMode.AUTOMATIC).smartSync()
-        assertEquals(listOf("sync AUTOMATIC false"), auto.calls)
+        assertEquals(listOf("sync"), auto.calls)
 
         val never = FakeSource(status = clockMissing)
         val c = controller(never, ClockSyncMode.NEVER)
         c.smartSync()
         assertNull(c.dialog.value)
-        assertEquals(listOf("sync AUTOMATIC false"), never.calls)
+        assertEquals(listOf("sync"), never.calls)
     }
 
     @Test
@@ -129,22 +127,6 @@ class TodayControllerTest {
         source.snapshot.value = source.snapshot.value.copy(sync = SyncProgress(running = true))
         controller(source).smartSync()
         assertEquals(emptyList(), source.calls)
-    }
-
-    @Test
-    fun aLegacyClockQuestionIsHandledAutomaticallyAndOtherNoticesPassThrough() = runTest {
-        val source = FakeSource()
-        val c = controller(source)
-        val seen = mutableListOf<TodayNotice>()
-        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { c.notices.collect { seen += it } }
-
-        source.notices.emit(TodayNotice.ClockConfirmationRequired(ClockQuality.RTC_RESTORED))
-        source.notices.emit(TodayNotice.ClockSet)
-        assertNull(c.dialog.value)
-        assertEquals(listOf<TodayNotice>(TodayNotice.ClockSet), seen)
-
-        c.confirm()
-        assertEquals(listOf("sync AUTOMATIC true"), source.calls)
     }
 
     @Test
@@ -167,10 +149,5 @@ class TodayControllerTest {
         c.reconnect()
         c.disconnect()
         assertEquals(listOf("reconnect", "disconnect"), source.calls)
-    }
-
-    @Test
-    fun settingsModesMapToThePolicyByName() {
-        ClockSyncMode.entries.forEach { assertEquals(it.name, it.toPolicy().name) }
     }
 }

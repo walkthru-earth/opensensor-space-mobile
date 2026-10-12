@@ -2,7 +2,6 @@ package earth.walkthru.aqsync.data
 
 import earth.walkthru.aqsync.collection.SyncEndReason
 import earth.walkthru.aqsync.data.lan.LanFailure
-import earth.walkthru.aqsync.data.sync.ClockQuality
 import earth.walkthru.aqsync.link.UnavailableKind
 
 /**
@@ -93,5 +92,4 @@ sealed interface DeviceMessage {
 sealed interface DeviceEvent {
     data class Info(val message: DeviceMessage) : DeviceEvent
     data class Error(val message: DeviceMessage) : DeviceEvent
-    data class ClockConfirmationRequired(val quality: ClockQuality) : DeviceEvent
 }

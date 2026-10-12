@@ -141,7 +141,6 @@ internal suspend fun noticeText(notice: TodayNotice): String? = when (notice) {
     is TodayNotice.Rejected -> getString(if (notice.command == TodayCommand.SET_TIME) Res.string.msg_rejected_set_time else Res.string.msg_rejected_flush)
     is TodayNotice.Failed -> getString(if (notice.command == TodayCommand.SET_TIME) Res.string.msg_failed_set_time else Res.string.msg_failed_flush)
     TodayNotice.Busy -> getString(Res.string.msg_busy)
-    is TodayNotice.ClockConfirmationRequired -> null
 }
 
 /** The open confirmation, one at a time. Cancel and Not now send nothing. */

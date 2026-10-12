@@ -17,7 +17,6 @@
     <string name="nav_debug">تصحيح الأخطاء</string>
     <string name="nav_settings">الإعدادات</string>
     <string name="nav_disconnect">قطع الاتصال</string>
-    <string name="event_clock_on_today">افتح اليوم وشغّل المزامنة الذكية لتأكيد تحديث الساعة.</string>
 
     <!-- Scan (Home) -->
     <string name="scan_fake">جهاز وهمي للتصحيح</string>

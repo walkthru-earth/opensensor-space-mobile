@@ -4,7 +4,6 @@ import androidx.compose.runtime.snapshots.Snapshot
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.history.TodaySoFar
-import earth.walkthru.aqsync.data.sync.ClockSyncMode
 import earth.walkthru.opensensor.today.TodayNotice
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -97,7 +96,7 @@ class CompanionTodaySourceTest {
         assertEquals(TransportKind.LAN, source.snapshot.value.transport)
         assertEquals("st", source.snapshot.value.info?.station)
         assertEquals(12.0, source.snapshot.value.live?.pm25)
-        source.sync(ClockSyncMode.AUTOMATIC, clockConfirmed = false)
+        source.sync()
         assertEquals(listOf("sync"), calls.list)
 
         state.lanSessionNoticed("AQ-kitchen", false, false, CompanionNotice.LAN_DISCONNECTED, 0, 0, 0, 0.0)
@@ -148,7 +147,7 @@ class CompanionTodaySourceTest {
     @Test fun anAnchoredClockSyncsFilesOnly() = runTest {
         val calls = Calls()
         val source = source(connected("{\"utc\":1,\"clk\":1}"), calls, mutableListOf())
-        source.sync(ClockSyncMode.AUTOMATIC, clockConfirmed = false)
+        source.sync()
         assertEquals(listOf("sync"), calls.list)
     }
 
@@ -157,7 +156,7 @@ class CompanionTodaySourceTest {
             val calls = Calls()
             val notices = mutableListOf<TodayNotice>()
             val source = source(connected(json), calls, notices)
-            source.sync(ClockSyncMode.ASK, clockConfirmed = false)
+            source.sync()
             assertEquals(listOf("sync"), calls.list)
             assertTrue(notices.isEmpty())
         }
@@ -191,7 +190,7 @@ class CompanionTodaySourceTest {
         val source = source(state, calls, notices)
         state.today.commandStarted()
         source.flush()
-        source.sync(ClockSyncMode.NEVER, clockConfirmed = false)
+        source.sync()
         state.today.commandFinished(CommandResult(TodayNotice.Finalized(12, 1)))
         state.bluetoothSyncStarted()
         source.setTime()
@@ -237,7 +236,7 @@ class CompanionTodaySourceTest {
         assertNull(snapshot.info)
         assertNull(snapshot.live)
         assertNull(snapshot.todaySoFar)
-        source.sync(ClockSyncMode.AUTOMATIC, clockConfirmed = true)
+        source.sync()
         source.flush()
         source.disconnect()
         assertTrue(calls.list.isEmpty())

@@ -16,7 +16,6 @@
     <string name="nav_debug">Debug</string>
     <string name="nav_settings">Settings</string>
     <string name="nav_disconnect">Disconnect</string>
-    <string name="event_clock_on_today">Open Today and run Smart Sync to confirm the clock update.</string>
 
     <!-- Scan (Home) -->
     <string name="scan_fake">Debug fake device</string>
