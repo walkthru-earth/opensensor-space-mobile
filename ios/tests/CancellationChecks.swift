@@ -21,7 +21,22 @@ enum CancellationChecks {
         await installedHandleCanBeCancelledFromBackground()
         pendingLaunchHoldsUntilItsOwnLaunchOrTimeout()
         idleCloseWaitsForTheWorkOnTheLink()
+        livePageReopensUntilTheUserLeavesIt()
         print("iOS cancellation checks passed")
+    }
+
+    private static func livePageReopensUntilTheUserLeavesIt() {
+        var live = LivePage()
+        precondition(live.page == nil)
+        live.opened("AA-11", allowBluetooth: false)
+        precondition(live.page == LivePage.Page(id: "AA-11", allowBluetooth: false), "a Wi-Fi only page reopens over Wi-Fi only")
+        live.closed("bb-22")
+        precondition(live.page != nil, "another sensor's page closing keeps it")
+        live.closed("aa-11")
+        precondition(live.page == nil, "leaving the page forgets it")
+        live.opened("BB-22", allowBluetooth: true)
+        live.disconnected()
+        precondition(live.page == nil, "a manual disconnect is never undone on return")
     }
 
     private static func idleCloseWaitsForTheWorkOnTheLink() {

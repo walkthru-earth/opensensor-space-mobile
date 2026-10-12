@@ -78,3 +78,26 @@ struct IdleClose<Key: Hashable> {
     /// The user opened it again, or the link closed for another reason.
     mutating func forget(_ key: Key) { waiting.remove(key) }
 }
+
+/// The sensor page the user has open, kept across the background so returning reconnects it.
+/// Leaving the page or disconnecting by hand forgets it.
+struct LivePage: Equatable {
+    struct Page: Equatable {
+        let id: String
+        let allowBluetooth: Bool
+    }
+
+    private(set) var page: Page?
+
+    mutating func opened(_ id: String, allowBluetooth: Bool) {
+        page = Page(id: id, allowBluetooth: allowBluetooth)
+    }
+
+    /// The last page of [id] closed, or the user disconnected or forgot it.
+    mutating func closed(_ id: String) {
+        if page?.id.caseInsensitiveCompare(id) == .orderedSame { page = nil }
+    }
+
+    /// The user ended the live link from the open page.
+    mutating func disconnected() { page = nil }
+}
