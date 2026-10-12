@@ -283,7 +283,7 @@ Smart Sync trace card yet, and reads the config on request.
 ## The transport chip
 
 Top bar of Today, Files, Device and Debug shows **Bluetooth** or **Wi-Fi LAN**. Single source:
-`DeviceConnectionRepository.activeTransport` (re-evaluated on every session swap *and* connection
+`DeviceFacade.activeTransport` (re-evaluated on every session swap *and* connection
 state change, de-duplicated). Never derive it per screen from the session object
 ([lesson](lessons-learned.md#ui--compose)).
 

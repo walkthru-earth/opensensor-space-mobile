@@ -26,7 +26,7 @@ See [transports.md](transports.md).
 - **`NsdManager` needs two code paths.** `registerServiceInfoCallback` from API 34; API 31–33 only `resolveService`, which rejects concurrent calls (`FAILURE_ALREADY_ACTIVE`) → queue resolves.
 - **`BleTransport` left the state at `EnablingNotifications` after a runtime auth retry** (never back to `Ready`), which would keep the banner visible and every button disabled. Fixed structurally (not reproduced).
 - **A worker cannot answer a passkey dialog.** `allowBonding = false` + configurable connect timeout: the unattended path connects straight to the bonded address and treats "not bonded" as a failure to log, never a reason to `createBond()`.
-- **One flow for the transport chip.** The chip kept saying "Wi-Fi LAN" after a BLE reconnect because each screen derived the kind from the session object in its own eight-way `combine`. `DeviceConnectionRepository.activeTransport` is the single source.
+- **One flow for the transport chip.** The chip kept saying "Wi-Fi LAN" after a BLE reconnect because each screen derived the kind from the session object in its own eight-way `combine`. `DeviceFacade.activeTransport` is the single source.
 
 ## Background
 

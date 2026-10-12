@@ -16,8 +16,8 @@ sweeps Scratch at start, enforces the derived quota and never deletes Durable da
 `ByteReader` are `AutoCloseable`, open them with `use`. `sync/` holds the link session, the sync
 engine and, in `collection/`, the per-device `CollectionController` ([sync guide](../docs/sync-engine.md)). Android adopts the controller
 through `DeviceFacade`; iOS uses `IosLink` and `SensorSync` for link and engine adoption,
-and `SensorCollections` for one controller per device. Routing native entry points into it is
-tracked in [#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81).
+and `SensorCollections` for one controller per device, which every native sync entry point
+runs through ([#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81)).
 `settings/` owns shared DataStore preferences, keys, units and detail level, with the
 iOS Application Support path and one-time UserDefaults migration. See `docs/README.md` in the repo
 root for the relevant concern. No Android, Hilt, Room, `Context` or

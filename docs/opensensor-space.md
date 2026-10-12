@@ -2,7 +2,7 @@
 
 **Scope:** implemented first slice, source audit and remaining qualification for a hardware-neutral,
 multi-device Android companion. Host tests do not establish phone or board behavior.
-**Code:** `data/DeviceConnectionRepository.kt`, `TransportFactory.kt`, `data/background/`,
+**Code:** `data/DeviceFacade.kt`, `data/DeviceLinkOwner.kt`, `TransportFactory.kt`, `data/background/`,
 `data/sync/`, `data/local/database/`, `core/protocol/.../JsonModels.kt`, `core/history/.../Metrics.kt`,
 `ui/`, `res/values/strings.xml`.
 **Related:** [architecture.md](architecture.md), [transports.md](transports.md),
