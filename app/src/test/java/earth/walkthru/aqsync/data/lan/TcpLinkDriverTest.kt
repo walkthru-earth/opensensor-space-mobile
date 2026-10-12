@@ -349,8 +349,11 @@ class TcpLinkDriverTest {
                     override fun getInputStream(): InputStream {
                         val real = super.getInputStream()
                         return object : InputStream() {
-                            override fun read(): Int = check().let { real.read() }
-                            override fun read(b: ByteArray, off: Int, len: Int): Int = check().let { real.read(b, off, len) }
+                            // The error surfaces after data arrives, never before. Where the reader
+                            // is when the test arms (parked in a read or not yet started) cannot
+                            // change the outcome, and nothing aborts before STATUS is written.
+                            override fun read(): Int = real.read().also { check() }
+                            override fun read(b: ByteArray, off: Int, len: Int): Int = real.read(b, off, len).also { check() }
                             private fun check() {
                                 if (armed.count == 0L) throw SocketException("recvfrom failed: ECONNABORTED (Software caused connection abort)")
                             }
@@ -360,9 +363,13 @@ class TcpLinkDriverTest {
             }
             withTimeout(5_000) { t.open(sink) }
             armed.countDown()
-            // The reader is parked in a read that predates the abort. The answer wakes it and its
-            // next read sees the error.
-            t.writeControl(byteArrayOf(Opcode.STATUS.toByte()))
+            // The answer to STATUS is the first data after arming, and reading it raises the abort.
+            // The answer can beat the write's own completion, so the write may already see the
+            // closed link. The cause the sink records is what this test checks.
+            try {
+                t.writeControl(byteArrayOf(Opcode.STATUS.toByte()))
+            } catch (_: LinkClosedException) {
+            }
             assertEquals(DisconnectCause.LocalAbort(errno = SocketErrors.ECONNABORTED), withTimeout(5_000) { sink.closed.await() })
         }
     }
