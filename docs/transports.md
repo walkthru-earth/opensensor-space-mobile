@@ -29,6 +29,8 @@ path has no BLE fallback or BLE auto-reconnect; if LAN cannot connect, its archi
 available offline. `TransportFactory` throws `TransportUnavailableException` (RADIO_OFF,
 PERMISSION_MISSING or NO_ADAPTER) before any Bluetooth open. Connect and collection turn it into
 `DisconnectCause.Unavailable`, which is never retried, and say which one applies (2026-10-12).
+A LAN connect refused with EPERM, the Local Network permission refusal, is the same
+`Unavailable(PERMISSION_MISSING)` (`SocketErrors.connectException`), never a retried UNREACHABLE.
 
 `TransportPreference.AUTO` is the rule above; `GET_TOKEN` and *Fetch token* force BLE. Any LAN
 connection failure falls back to BLE with a snackbar. After connection, INFO must pass
@@ -218,7 +220,7 @@ stateDiagram-v2
 `known_device.lanToken` (nullable) holds AES-GCM ciphertext. Rows read through the DAO, and so
 every ViewModel, see only that ciphertext, enough for `hasLanToken`. The plaintext hex comes only from
 `LanCredentialStore.lanToken(address)`, which the repository calls at the moment it builds a LAN
-transport (`tryLan`, `syncInBackground`). **Never logged, never displayed**: `KnownDevice.toString`,
+transport (`tryLan`, the facade `syncInBackground` worker path). **Never logged, never displayed**: `KnownDevice.toString`,
 `Frame.Token.toString`, `FrameRecorder` and the raw-command view redact it. Startup finishes the
 one-time plaintext migration before Auto-sync scheduling or triggers can read credentials. Failed GCM
 authentication (`AEADBadTagException`, which is also what a regenerated key gives), a key Android

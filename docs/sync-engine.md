@@ -83,10 +83,13 @@ hands out the background time leases a run holds.
 
 On iOS each result carries `SyncResult.endReason` (`SyncEndReason`), mapped from the typed
 `DisconnectCause` and `CollectionFailure` as Android does. A lost or stale bond ends as
-`PAIRING_REPAIR`, which the device page and My devices show as a failed link that needs pairing
+`PAIRING_REPAIR`, which the station page and My devices show as a failed link that needs pairing
 again. A run iOS stops when the app leaves the screen is kept as interrupted
 (`SensorCollections.interrupt`). When the app is active again, `AppServices.resumeInterrupted`
-starts it once through the Swift entry points, and Forget drops it.
+starts it once through the Swift entry points, and Forget drops it. A Bluetooth resume yields to a
+page reopened over Bluetooth for another sensor and is dropped. Today shows how a run ended
+(`SyncMood` STOPPED or FAILED with one `SyncEndLine`), and its Stop ends only this phone's running
+sync, never a worker's.
 
 ## Planner (`SyncPlanner`)
 

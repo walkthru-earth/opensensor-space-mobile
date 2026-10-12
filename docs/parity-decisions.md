@@ -7,6 +7,12 @@ so each one can be confirmed or reversed. **Code:** see the linked issue or comm
 Each row says what was decided, why, and what reversing it would cost. Rows marked
 **Confirm** change user-visible behavior.
 
+Since 2026-10-12 the iOS companion page is gone and each station action has one home
+(`screens.md`). Rows P33, P35, P41, P44, P49, P54 and P59 that place an action on that page are
+superseded. Debug opens from Today at Developer, Device settings and the Auto-sync switch form
+the Device section, no screen offers a background sync of one sensor, and the Wi-Fi browse starts
+from My devices Scan. The button that clears paired phones is now named Clear.
+
 | # | Decision | Why | Reverse cost | Where |
 | --- | --- | --- | --- | --- |
 | P1 | iOS Wi-Fi sync keeps the session open when some files fail and says "N of M files were not saved" | Same as Android, the next tap retries only the failed files | Small, one branch in `LanDiscovery.swift` | 329d6f5 |

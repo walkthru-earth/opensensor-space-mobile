@@ -79,12 +79,10 @@ holds. It skips a sensor the user has open on Bluetooth or Wi-Fi (a Wi-Fi sessio
 known sensor through the TXT station), fails while another sensor holds the Bluetooth link, closes
 only what it opened, and fails when its sync has not started within a minute. Opening a sensor
 cancels Collect all first. My devices **Scan** starts both the Bluetooth search and a bounded
-Wi-Fi browse, and the list merges their results. **Find Wi-Fi sensors** remains available on the
-device page.
+Wi-Fi browse, and the list merges their results.
 
 Wi-Fi discovery is also available through `NWBrowser`, restricted to
-`_aqsync._tcp` in `local.`. Tapping **Scan** on My devices or **Find Wi-Fi sensors** on
-the device page starts a bounded browse and lets iOS request Local Network access. `Info.plist` declares
+`_aqsync._tcp` in `local.`. Tapping **Scan** on My devices starts a bounded browse and lets iOS request Local Network access. `Info.plist` declares
 `NSLocalNetworkUsageDescription` and `NSBonjourServices`. Adding the description
 alone does not request access; the real browse triggers the system decision.
 Browser waiting states retain the browse while the user answers; they can also
@@ -265,7 +263,7 @@ For a phone check: allow Bluetooth, tap **Scan** on My devices, connect your nea
 sensor, complete the system PIN prompt if shown, compare readings with the
 sensor, then verify disconnect, radio-off and background/resume behavior.
 Use **Scan** on My devices to test Bluetooth and Bonjour together, including the Local Network
-prompt on the phone. The device page also offers **Find Wi-Fi sensors**. Decline/allow/revoke
+prompt on the phone. Decline/allow/revoke
 checks remain phone
 qualification work. An iOS simulator cannot exercise the real BLE transport. Keep dated real-phone
 results separate from compilation and common-test evidence. On 2026-10-08 the
@@ -323,8 +321,8 @@ accuracy, stale/background handling or authenticated Wi-Fi connections. See
     Smart Sync, Set time and Finalize use a ready LAN session for that sensor when available, then
     Bluetooth if present. Commands are refused while another sync, Debug or Wi-Fi access request
     holds the link. Smart Sync follows the Clock sync setting, now shown on iOS, and a refused
-    clock step stops the sync. The Device action opens the companion page, which keeps Wi-Fi
-    access, the Wi-Fi session and Debug. Shared Device settings use authenticated LAN when available;
+    clock step stops the sync. The Device section holds the Auto-sync switch and Device settings,
+    and Debug opens from Today at Developer. Shared Device settings use authenticated LAN when available;
     the sync bar has no byte total. Qualify on an iPhone
     that Set time anchors a logger that has no UTC, that Finalize writes a short file the next sync
     downloads, that Smart Sync under Automatic sets the clock then syncs, that Ask shows the consent
@@ -342,7 +340,7 @@ accuracy, stale/background handling or authenticated Wi-Fi connections. See
     from Android: no phone installation history, device header or Auto-sync card on the page, and
     no Wi-Fi endpoint line. Qualify on an iPhone that each of the four confirmations sends nothing on
     Cancel, that a Wi-Fi join is polled until connected, that Replace token stores a new token and the
-    next Wi-Fi sync uses it, that Forget all paired phones asks for pairing on the next connection,
+    next Wi-Fi sync uses it, that Clear paired phones asks for pairing on the next connection,
     that Restart reconnects after about 6 s, and that a sync or Collect all waiting for the link starts
     once a request ends.
 13. Done in code (#21, 2026-10-09), not yet seen on an iPhone. The sensor sticker card scans with
