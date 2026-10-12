@@ -174,8 +174,12 @@ and Android's pairing/settings interaction. There is no guaranteed fully automat
 after all device trust material is erased, nor a hidden `removeBond` recovery path.
 The app recognises the stale bond and stops retrying with `Auth(BOND_MISSING)` and the pairing
 repair banner from `ACTION_KEY_MISSING` (API 36), a link close with HCI 0x06 or 0x3D, or, below
-API 36, the second consecutive close of a bonded link that had connected but was not yet Ready
-(19, 22, 133 or a bare disconnect, `BleStaleBondDetector`).
+API 36, the second consecutive peer or host close (19 or 22) of a bonded link that had reached
+the bond check or the CCCD writes but was not yet Ready (`BleStaleBondDetector`). The same closes
+during the settle, service discovery or MTU only show the repair hint and keep the normal retries,
+because Android may encrypt a bonded link right after connect but flaky stacks also drop there.
+133 and a bare disconnect never count. No stale bond on a phone has produced them, while healthy
+bonds do at the edge of range.
 
 Station generations preserve the original archive and Hive paths; they do not reparent old data
 ([data model](data-model.md#station-generations-and-device-continuity)). The policies and migration

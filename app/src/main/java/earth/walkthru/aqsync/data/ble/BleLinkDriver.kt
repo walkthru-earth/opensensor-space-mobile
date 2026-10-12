@@ -69,7 +69,7 @@ import kotlin.time.Duration.Companion.milliseconds
  * link that drops after Ready reports one typed cause ([BleDisconnectCauses]). Android 16 reports
  * lost bond keys as `ACTION_KEY_MISSING`, which ends the link as `Auth(BOND_MISSING)`. Older
  * Android gets the same result from HCI 0x06 or 0x3D, or from [BleStaleBondDetector] when a bonded
- * link keeps closing while it opens.
+ * link keeps closing after it tried its keys. Closes before that point only show the repair hint.
  *
  * Permissions: every call here needs BLUETOOTH_CONNECT. The UI gates on it before any transport is
  * created ([earth.walkthru.aqsync.ui.permissions]); lint cannot see that, hence the suppression.
@@ -132,6 +132,9 @@ class BleLinkDriver(
     /** This attempt reached CONNECTED. A 133 before that is an absent sensor, not a stale bond. */
     @Volatile
     private var linkConnected = false
+
+    /** The open reached the bond check, so the link has tried its keys. Under [connectMutex]. */
+    private var encryptionAttempted = false
 
     @Volatile
     private var gatt: BluetoothGatt? = null
@@ -320,6 +323,7 @@ class BleLinkDriver(
         try {
             linkFailure.reset()
             linkConnected = false
+            encryptionAttempted = false
             _state.value = ConnectionState.Connecting
             acceptConnectionCallbacks = true
             // withTimeoutOrNull, so a radio timeout is a typed failure and not a cancellation.
@@ -357,6 +361,7 @@ class BleLinkDriver(
 
             // "createBond() before first characteristic access if not bonded". Every characteristic
             // requires an encrypted and authenticated link (passkey typed from the device screen).
+            encryptionAttempted = true
             ensureBonded()
 
             _state.value = ConnectionState.EnablingNotifications
@@ -376,10 +381,11 @@ class BleLinkDriver(
             val failure = linkClosed ?: e
             teardown()
             val bonded = device.bondState == BluetoothDevice.BOND_BONDED
-            val staleBondSuspected = staleBond.onOpenFailed(device.address, bonded, linkClosed?.gattStatus?.takeIf { linkConnected })
-            // A suspected stale bond reports as missing keys, so retries stop as on API 36.
-            val status = if (staleBondSuspected) BleDisconnectCauses.KEY_MISSING else (failure as? TransportException)?.gattStatus
-            val reason = if (BleConnectionFailure.isRepairStatus(status)) {
+            val verdict = staleBond.onOpenFailed(device.address, bonded, linkClosed?.gattStatus?.takeIf { linkConnected }, encryptionAttempted)
+            // A stale bond reports as missing keys, so retries stop as on API 36. A hint keeps the
+            // link status, so the cause stays retryable while the state shows the repair message.
+            val status = if (verdict == BleStaleBondDetector.Verdict.STALE) BleDisconnectCauses.KEY_MISSING else (failure as? TransportException)?.gattStatus
+            val reason = if (BleConnectionFailure.isRepairStatus(status) || verdict == BleStaleBondDetector.Verdict.HINT) {
                 BleConnectionFailure.PAIRING_REPAIR_MESSAGE
             } else {
                 when (failure) {
@@ -387,7 +393,7 @@ class BleLinkDriver(
                     else -> failure.message ?: failure::class.simpleName ?: "connection failed"
                 }
             }
-            if (staleBondSuspected) Log.w(TAG, "bonded link closed again while opening (GATT status ${linkClosed?.gattStatus}); stale bond suspected")
+            if (verdict != BleStaleBondDetector.Verdict.NONE) Log.w(TAG, "bonded link closed again while opening (GATT status ${linkClosed?.gattStatus}, after encryption $encryptionAttempted); stale bond ${verdict.name.lowercase()}")
             Log.w(TAG, "connection failed (GATT status $status): $reason")
             _state.value = ConnectionState.Failed(reason, status)
             throw TransportException(reason, status, e)
