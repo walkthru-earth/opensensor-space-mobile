@@ -679,13 +679,13 @@ class DeviceLinkOwner @Inject constructor(
         if (!quiet) _events.tryEmit(DeviceEvent.Error(DeviceMessage.TokenNeedsBluetooth))
         false
     } catch (e: DeviceErrorException) {
-        Log.w(TAG, "GET_TOKEN rejected (${e.message})")
+        Log.w(TAG, "GET_TOKEN rejected (code ${e.frame.code})")
         if (!quiet) _events.tryEmit(DeviceEvent.Error(DeviceMessage.CommandRejected(DeviceMessage.Command.GET_TOKEN)))
         false
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
-        Log.w(TAG, "GET_TOKEN failed: ${e.message}")
+        Log.w(TAG, "GET_TOKEN failed (${e::class.simpleName})")
         if (!quiet) _events.tryEmit(DeviceEvent.Error(DeviceMessage.CommandFailed(DeviceMessage.Command.GET_TOKEN)))
         false
     }
