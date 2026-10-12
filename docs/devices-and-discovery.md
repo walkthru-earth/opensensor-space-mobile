@@ -548,8 +548,7 @@ The phone reads them through the same reader from a local file source, so the sa
 live feed share one code path. The toggle shows Sample while `sample` is true.
 
 **Live feed, OpenAQ aggregates (current).** Until the opensensor publisher exists, the live feed
-is the OpenAQ aggregates collection on source.coop, read with the same reader. Design
-`docs/superpowers/specs/2026-10-12-openaq-live-feed-design.md`. Root
+is the OpenAQ aggregates collection on source.coop, read with the same reader. Root
 `https://data.source.coop/walkthru-earth/opensensor-space/openaq-aggregates/`.
 
 - `manifest.json` carries `as_of` (`YYYY-MM-DD`, the newest complete PM2.5 day) and

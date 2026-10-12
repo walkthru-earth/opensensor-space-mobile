@@ -15,7 +15,7 @@ import kotlin.math.abs
 import kotlin.test.Test
 
 /**
- * GeoParquet 2.0 against PyArrow 25 and DuckDB 1.5.5 as oracles (docs/history-ux-and-data-layer.md §7).
+ * GeoParquet 2.0 against PyArrow 25 and DuckDB 1.5.5 as oracles (docs/parquet.md, Fixtures and oracles).
  * `src/test/resources/geoparquet/expected.json` is produced by `tools/make_geoparquet_fixtures.py`: 18
  * PyArrow files (codec × dictionary × data-page version, a multi-page/multi-group one whose dictionary
  * overflows into PLAIN pages, one without the `geo` key) and two DuckDB files (`GEOPARQUET_VERSION` V2
