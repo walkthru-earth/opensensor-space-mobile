@@ -18,10 +18,10 @@ the `WifiManager.WifiLock` below.
 flowchart TD
   SW["known_device.autoSync on (any row)"] --> P["PeriodicWorkRequest 15 min · KEEP<br/>battery not low · backoff exp 5 min (the floor)"]
   M1["Files › Sync now in background"] --> O1["OneTimeWorkRequest expedited · KEEP auto-sync-now-address<br/>KEY_ADDRESS"]
-  M2["Home › Collect from all N devices"] --> O2["OneTimeWorkRequest expedited · KEEP auto-sync-now<br/>KEY_ALL_KNOWN"]
+  M2["Home › Collect from all N devices"] --> O2["OneTimeWorkRequest expedited · KEEP auto-sync-collect-all<br/>KEY_ALL_KNOWN"]
   T1["CDM: device came into BLE range<br/>CompanionPresenceService"] --> O3["OneTimeWorkRequest expedited · KEEP auto-sync-trigger-address<br/>KEY_ADDRESS + KEY_TRIGGER"]
   T2["controller: device advertises new_files / no_utc<br/>AdvertScanReceiver"] --> O3
-  T3["phone joined Wi-Fi<br/>WifiArrivalReceiver"] --> O4["OneTimeWorkRequest expedited · KEEP auto-sync-trigger<br/>KEY_TRIGGER + KEY_LAN_ONLY"]
+  T3["phone joined Wi-Fi<br/>WifiArrivalReceiver"] --> O4["OneTimeWorkRequest expedited · KEEP auto-sync-trigger-all<br/>KEY_TRIGGER + KEY_LAN_ONLY"]
   P --> W[SyncWorker]
   O1 --> W
   O2 --> W
@@ -45,8 +45,9 @@ flowchart TD
 
 The 15-minute periodic request is the **floor**. Three sources enqueue expedited one-time
 `SyncWorker` requests with `KEEP` and `KEY_TRIGGER`. Presence/advertisement work is unique per device
-(`auto-sync-trigger-<address>`); Wi-Fi arrival uses `auto-sync-trigger` for a run over all opted-in
-LAN devices. Manual work has separate names. A pending request for device A therefore does not
+(`auto-sync-trigger-<address>`); Wi-Fi arrival uses `auto-sync-trigger-all` for a run over all opted-in
+LAN devices. Manual work has separate names. Every enqueue checks its unique name first and returns
+`ALREADY_QUEUED` instead of claiming a run that `KEEP` drops (2026-10-12). A pending request for device A therefore does not
 swallow device B's presence or advertising event; duplicate requests for the same target coalesce.
 All per-device ownership guards still apply.
 
@@ -71,8 +72,8 @@ work in the scope.
 | Request | Details |
 | --- | --- |
 | Periodic | Unique name, `KEEP`, **15 min** (`PeriodicWorkRequest.MIN_PERIODIC_INTERVAL_MILLIS`; Android picks the moment, later under Doze). Exists exactly while ≥ 1 `known_device.autoSync` row is on (the scheduler observes the count; the switch only flips the row) and is cancelled when the last goes off. Constraint: **battery not low only** — `NetworkType.CONNECTED` was dropped because the BLE path needs no network and a phone with Wi-Fi off never ran. |
-| Sync now / Collect all | `OneTimeWorkRequest`, `setExpedited(RUN_AS_NON_EXPEDITED_WORK_REQUEST)`, `KEEP`: `auto-sync-now-<address>` with `KEY_ADDRESS` for one device, `auto-sync-now` with `KEY_ALL_KNOWN` for all. Expedited work may carry network/storage constraints only → no battery rule. |
-| Triggered | `auto-sync-trigger-<address>` for presence/advertisement, `auto-sync-trigger` for Wi-Fi, `KEEP`; input `KEY_TRIGGER` (+ `KEY_ADDRESS` or `KEY_LAN_ONLY`). Workers may overlap. A controller already owned by another run is skipped; another device remains eligible. |
+| Sync now / Collect all | `OneTimeWorkRequest`, `setExpedited(RUN_AS_NON_EXPEDITED_WORK_REQUEST)`, `KEEP`: `auto-sync-now-<address>` with `KEY_ADDRESS` for one device, `auto-sync-collect-all` with `KEY_ALL_KNOWN` for all. Every per-device request also carries the tag `auto-sync-device-<address>`. Expedited work may carry network/storage constraints only → no battery rule. |
+| Triggered | `auto-sync-trigger-<address>` for presence/advertisement, `auto-sync-trigger-all` for Wi-Fi, `KEEP`; input `KEY_TRIGGER` (+ `KEY_ADDRESS` or `KEY_LAN_ONLY`). Workers may overlap. A controller already owned by another run is skipped; another device remains eligible. |
 | Retry | `Result.retry()` with exponential backoff from 5 min, at most `MAX_RETRIES` 2 per period, **only** for transient conditions (a link exception, or a transfer that broke before every planned file had an outcome — `BackgroundSyncResult.incomplete`). Not reachable is not an error: one log line, next period. Per-file failures are not retried inside the period. |
 
 ## Decision logic (`AutoSyncRunner`, pure)
@@ -80,7 +81,7 @@ work in the scope.
 - **Which devices**: `autoSync` rows; `onlyAddress` for Sync now; `allKnown` visits `known_device` ordered by last connection whether or not the switch is on.
 - **Links** (`AutoSyncPolicy.linksFor`): one mDNS browse per run (`LAN_BROWSE_MS` 10 s, early exit once every wanted station resolved); LAN when the station is found **and** a token is stored; else, and after a failed LAN connect, **BLE only if bonded** — direct `connectGatt` to the stored address, no scan, `BACKGROUND_BLE_CONNECT_MS` 15 s, `allowBonding = false`. Not found → finish quietly. `lanOnly` (the Wi-Fi trigger) leaves BLE out altogether.
 - **Bounded collection**: the runner tries up to two devices concurrently, with LAN then BLE fallback sequential within each device. `CollectionBudget` caps active transfers across every worker and interactive controller together at two. Two is a conservative app policy, not a hardware BLE limit; simultaneous physical-device runs remain unverified.
-- **Collection admission**: a process-wide lease rejects every worker collection while any interactive collection is active, including preparation, retry waiting and cleanup. An existing worker collection also prevents an overlapping interactive start. Idle UI sessions still block their own endpoint only. `CollectionAdmission.acquire` checks and records the process lease under one lock. `CollectionBudget` shares two permits across workers and UI. The per-device owner reservation and connection mutex enforce per-device command and link ownership; workers re-check before fallback. "Sync now in background" releases only that device's interactive session before enqueueing; the address-bound Files screen observes the same controller's progress.
+- **Collection admission**: a process-wide lease rejects every worker collection while any interactive collection is active, including preparation, retry waiting and cleanup. An existing worker collection also prevents an overlapping interactive start. Idle UI sessions still block their own endpoint only. `CollectionAdmission.acquire` checks and records the process lease under one lock. `CollectionBudget` shares two permits across workers and UI. The per-device owner reservation and connection mutex enforce per-device command and link ownership; workers re-check before fallback. "Sync now in background" never stops a running sync. An interactive run already continues under its foreground service, so the menu only says so. A worker already holding the device counts as queued. An idle device is released first (`DeviceFacade.releaseForBackground`) and the request is enqueued only when that worked. The address-bound Files screen observes the same controller's progress, and its menu flag is per device (`AutoSyncScheduler.observeActive(address)` or `DeviceFacade.ownership == BACKGROUND`). Collect all is gated app-wide (`observeAnyActive()` plus any device not idle, `anyCollectionActive`). `AutoSyncScheduler` talks to WorkManager through `SyncWorkQueue`, faked in `AutoSyncSchedulerTest`.
 - **Hardware ownership**: after authenticated identity validation, a full `info.dev` claim prevents endpoint aliases on this phone from concurrently owning one physical board. Firmware has independent logical handles per BLE connection and LAN peer. Transfer cancellation/join precedes session close; cancellation during initialization also closes the provisional transport. A worker's `finally` closes only its own session.
 - **Wi-Fi gate**: `AppAutoSyncGateway.browseLan` returns empty when no `TRANSPORT_WIFI` network is up (active network first, else a ≤ 1 s `NetworkRequest` probe; an offline LAN counts), so the 10 s browse never runs for nothing.
 - **Discovery**: `LanDiscoveryState` shares foreground browsing across controllers. Each worker browses once for its target set. On API 31–33 all browses share one `LegacyResolver` queue so only one `resolveService` call is active; API 34+ uses service-info callbacks.

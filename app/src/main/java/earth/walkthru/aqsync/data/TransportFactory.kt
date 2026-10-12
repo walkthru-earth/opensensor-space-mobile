@@ -2,6 +2,7 @@ package earth.walkthru.aqsync.data
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.content.Context
@@ -11,11 +12,12 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import earth.walkthru.aqsync.BuildConfig
 import earth.walkthru.aqsync.data.ble.AqTransport
 import earth.walkthru.aqsync.data.ble.BleLinkDriver
-import earth.walkthru.aqsync.data.ble.TransportException
+import earth.walkthru.aqsync.data.ble.TransportUnavailableException
 import earth.walkthru.aqsync.data.coroutines.ApplicationScope
 import earth.walkthru.aqsync.data.coroutines.IoDispatcher
 import earth.walkthru.aqsync.data.fake.FakeTransport
 import earth.walkthru.aqsync.data.lan.TcpLinkDriver
+import earth.walkthru.aqsync.link.UnavailableKind
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import java.net.InetAddress
@@ -46,27 +48,31 @@ class TransportFactory @Inject constructor(
     @ApplicationScope private val appScope: CoroutineScope,
 ) : TransportSource {
 
-    @SuppressLint("MissingPermission") // gated by the permission screen before any connect
-    override fun ble(address: String): AndroidLink {
-        val manager = context.getSystemService(BluetoothManager::class.java)
-        val adapter = manager?.adapter ?: throw TransportException("this phone has no Bluetooth adapter")
-        val device = adapter.getRemoteDevice(address)
-        return BleLinkDriver(context, device)
-    }
+    /**
+     * Interactive BLE connect. A missing permission, adapter or radio throws a typed
+     * [TransportUnavailableException] before any GATT work, so the sync ends with a reason the
+     * user can act on and the connect retry loop does not spin on a radio that is off.
+     */
+    @SuppressLint("MissingPermission") // checked by requireBluetooth() first
+    override fun ble(address: String): AndroidLink = BleLinkDriver(context, requireBluetooth().getRemoteDevice(address))
 
     /**
      * Unattended BLE connect for the auto-sync worker: straight `connectGatt` to a **bonded** address
      * (no scan, no pairing dialog — [isBonded] is checked first), with a short timeout so an absent
      * logger costs seconds, not the 30 s the interactive path allows.
      */
-    @SuppressLint("MissingPermission") // the worker checks hasConnectPermission() first
+    @SuppressLint("MissingPermission") // checked by requireBluetooth() first
     override fun bleUnattended(address: String, connectTimeoutMs: Long): AndroidLink {
-        if (!hasConnectPermission()) throw TransportException("BLUETOOTH_CONNECT is not granted")
-        val manager = context.getSystemService(BluetoothManager::class.java)
-        val adapter = manager?.adapter ?: throw TransportException("this phone has no Bluetooth adapter")
-        if (!adapter.isEnabled) throw TransportException("Bluetooth is off")
-        val device = adapter.getRemoteDevice(address)
+        val device = requireBluetooth().getRemoteDevice(address)
         return BleLinkDriver(context, device, connectTimeoutMs = connectTimeoutMs, allowBonding = false)
+    }
+
+    private fun requireBluetooth(): BluetoothAdapter {
+        if (!hasConnectPermission()) throw TransportUnavailableException(UnavailableKind.PERMISSION_MISSING, "BLUETOOTH_CONNECT is not granted")
+        val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter
+            ?: throw TransportUnavailableException(UnavailableKind.NO_ADAPTER, "this phone has no Bluetooth adapter")
+        if (!adapter.isEnabled) throw TransportUnavailableException(UnavailableKind.RADIO_OFF, "Bluetooth is off")
+        return adapter
     }
 
     fun hasConnectPermission(): Boolean =

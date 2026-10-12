@@ -147,6 +147,8 @@
     <string name="files_autosync_event_on">Auto-sync is on, about every %1$d min.</string>
     <string name="files_autosync_event_off">Auto-sync is off for this sensor.</string>
     <string name="files_bg_event">Background sync queued. You can leave the app.</string>
+    <string name="files_bg_keeps_running">Sync keeps running in the background. You can leave the app.</string>
+    <string name="files_bg_already">A background sync is already queued.</string>
     <string name="chart_by_file">Chart by file</string>
     <plurals name="chart_by_file_summary">
         <item quantity="one">%1$d file, %2$s</item>
@@ -226,6 +228,20 @@
     </plurals>
     <string name="msg_sync_stopped">Sync stopped. Partial files resume next time.</string>
     <string name="msg_sync_aborted">Sync stopped early. It resumes on the next sync.</string>
+    <string name="msg_bluetooth_off">Turn on Bluetooth to connect.</string>
+    <string name="msg_bluetooth_permission">Allow Nearby devices for this app to connect.</string>
+    <string name="msg_bluetooth_missing">This phone has no Bluetooth.</string>
+    <string name="msg_sync_end_interrupted">Android paused the sync. It resumes when you open the app.</string>
+    <string name="msg_sync_end_bluetooth_off">Sync stopped. Turn on Bluetooth, then sync again.</string>
+    <string name="msg_sync_end_permission">Sync stopped. Allow Nearby devices for this app, then sync again.</string>
+    <string name="msg_sync_end_token_rotated">The Wi-Fi token changed. Connect over Bluetooth once to fetch the new one.</string>
+    <string name="msg_sync_end_token_rejected">The sensor refused the Wi-Fi token. Connect over Bluetooth once to renew it.</string>
+    <string name="msg_sync_end_busy">The sensor is busy with another phone. Try again soon.</string>
+    <string name="msg_sync_end_out_of_range">The sensor is out of reach. Move closer and sync again.</string>
+    <string name="msg_sync_end_update_firmware">Update the sensor firmware, then sync again.</string>
+    <string name="msg_sync_end_no_space">Not enough space on this phone. Free some space, then sync again.</string>
+    <string name="msg_sync_end_storage">Could not save to this phone. Sync again to retry.</string>
+    <string name="msg_sync_end_link_lost">Connection lost. The next sync resumes where this one stopped.</string>
     <string name="msg_not_enough_space">Not enough space on this phone. Free %1$s, then sync again.</string>
     <plurals name="msg_unplaced">
         <item quantity="one">%1$d reading is archived but has no time yet, so it is not on the calendar.</item>

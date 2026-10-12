@@ -11,7 +11,7 @@ flowchart TD
   C[connect address] --> Q{station discovered on mDNS<br/>AND token stored?}
   Q -- yes --> L[TcpLinkDriver AQS1 handshake]
   L -- HELLO --> R[Ready · chip Wi-Fi LAN]
-  L -- ERROR 14 --> X[clear token, mark stale] --> B
+  L -- ERROR 14 / BYE 3 / BYE 10 --> X[clear token, mark stale] --> B
   L -- ERROR 7 / timeout / bad HELLO --> B[BleLinkDriver]
   Q -- no --> B
   B --> R2[Ready · chip Bluetooth]
@@ -26,7 +26,9 @@ unavailable. LAN-only results without an enrolled Bluetooth identity and saved t
 informational. Opening an enrolled sensor uses the AUTO rule below. If Bluetooth permission is declined,
 a known sensor with a saved token, station and current mDNS discovery may open LAN only. That
 path has no BLE fallback or BLE auto-reconnect; if LAN cannot connect, its archive remains
-available offline.
+available offline. `TransportFactory` throws `TransportUnavailableException` (RADIO_OFF,
+PERMISSION_MISSING or NO_ADAPTER) before any Bluetooth open. Connect and collection turn it into
+`DisconnectCause.Unavailable`, which is never retried, and say which one applies (2026-10-12).
 
 `TransportPreference.AUTO` is the rule above; `GET_TOKEN` and *Fetch token* force BLE. Any LAN
 connection failure falls back to BLE with a snackbar. After connection, INFO must pass
@@ -190,14 +192,15 @@ other boards need their own records.
 
 ## LAN token lifecycle
 
-`LanTokenPolicy` (pure, unit-tested).
+`LanTokenPolicy` (pure, unit-tested). `DeviceLinkOwner` clears the stored token whenever `invalidatesToken(cause)` holds for a LAN close. A clear, not only a stale mark, because a stored token is never fetched again.
 
 ```mermaid
 stateDiagram-v2
   [*] --> None
   None --> Stored: BLE session Ready, proto ≥ 3 → GET_TOKEN
   Stored --> Stored: LAN HELLO ok
-  Stored --> Stale: LAN ERROR 14 (rotated elsewhere) → lanToken cleared
+  Stored --> Stale: LAN ERROR 14 or BYE 3 (refused) → lanToken cleared
+  Stored --> Stale: LAN BYE 10 (rotated), at the handshake or mid-session → lanToken cleared
   Stale --> Stored: next BLE session refetches, snackbar LanTokenRenewed
   Stored --> Stale: unreadable encrypted value → token + port cleared
   Stored --> Stale: verified BLE station-generation change → token + port cleared

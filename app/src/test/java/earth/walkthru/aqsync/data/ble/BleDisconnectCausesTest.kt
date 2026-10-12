@@ -48,6 +48,10 @@ class BleDisconnectCausesTest {
         val wrappedTimeout = TransportException("timed out while connecting", null, BleLinkDriver.ConnectTimeoutException())
         assertEquals(DisconnectCause.Timeout(TimeoutPhase.OPEN, 0), BleDisconnectCauses.ofOpenFailure(wrappedTimeout))
         assertEquals(DisconnectCause.LocalAbort(), BleDisconnectCauses.ofOpenFailure(TransportException("no adapter")))
+        val connectFailed = TransportException("connection failed", 133, BleLinkDriver.ConnectFailedException("gatt", 133))
+        assertEquals(DisconnectCause.Unreachable, BleDisconnectCauses.ofOpenFailure(connectFailed))
+        val staleAtConnect = TransportException("repair", BleDisconnectCauses.KEY_MISSING, BleLinkDriver.ConnectFailedException("gatt", 133))
+        assertEquals(DisconnectCause.Auth(AuthKind.BOND_MISSING), BleDisconnectCauses.ofOpenFailure(staleAtConnect))
     }
 
     @Test

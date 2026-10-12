@@ -15,6 +15,8 @@ import earth.walkthru.aqsync.collection.PrepareStep
 import earth.walkthru.aqsync.collection.StartResult
 import earth.walkthru.aqsync.collection.StopSource
 import earth.walkthru.aqsync.collection.StorageFailure
+import earth.walkthru.aqsync.collection.SyncEndReason
+import earth.walkthru.aqsync.collection.endReason
 import earth.walkthru.aqsync.data.background.AndroidKeepAlive
 import earth.walkthru.aqsync.data.ble.BleDisconnectCauses
 import earth.walkthru.aqsync.data.ble.DeviceSession
@@ -25,7 +27,6 @@ import earth.walkthru.aqsync.data.coroutines.WallClock
 import earth.walkthru.aqsync.data.lan.LanDevice
 import earth.walkthru.aqsync.data.protocol.ConfigPatch
 import earth.walkthru.aqsync.data.sync.ArchiveCollector
-import earth.walkthru.aqsync.data.sync.ClockSyncMode
 import earth.walkthru.aqsync.data.sync.FileOutcome
 import earth.walkthru.aqsync.data.sync.FileProblem
 import earth.walkthru.aqsync.data.sync.SyncEndCause
@@ -79,6 +80,9 @@ class DeviceFacade internal constructor(
     private val lock = ReentrantLock()
     private var address: String? = null
     private var request: Request? = null
+
+    /** True from reservation until controller.start returned. Guarded by [lock]. */
+    private var starting = false
     private lateinit var controller: CollectionController
     val collectionState: StateFlow<CollectionState> get() = controller.state
     private val progress = MutableStateFlow(SyncProgress())
@@ -90,6 +94,27 @@ class DeviceFacade internal constructor(
         if (reserved) collection else idle
     }.stateIn(scope, SharingStarted.Eagerly, null)
 
+    /**
+     * Who holds this device for a collection right now: nobody, an interactive run started from
+     * the app, or a background worker. Reserved from admission to cleanup, so it stays set while a
+     * run waits for its link to come back.
+     */
+    val ownership: StateFlow<DeviceOwnership> = combine(linkOwner.collectionActive, linkOwner.backgroundOwner, ::deviceOwnership)
+        .stateIn(scope, SharingStarted.Eagerly, DeviceOwnership.IDLE)
+
+    /** [ownership] read straight from the link owner, without the flow's dispatch delay. */
+    fun ownershipNow(): DeviceOwnership = deviceOwnership(linkOwner.collectionActive.value, linkOwner.backgroundOwner.value)
+
+    /**
+     * Free the device for a background worker. Never stops a collection: returns false and leaves
+     * everything as it is while any run holds the device. True once no session is open.
+     */
+    suspend fun releaseForBackground(): Boolean {
+        if (ownershipNow() != DeviceOwnership.IDLE) return false
+        linkOwner.disconnectNow()
+        return linkOwner.session.value == null && ownershipNow() == DeviceOwnership.IDLE
+    }
+
     internal fun bind(address: String) {
         check(this.address == null || this.address == address)
         if (this.address != null) return
@@ -98,7 +123,8 @@ class DeviceFacade internal constructor(
         controller = CollectionController(
             address,
             LinkProvider { device, preference ->
-                val active = lock.withLock { requireNotNull(request) }
+                val active = lock.withLock { requireNotNull(request).also { it.replaced = null } }
+                // A run asks for a link only after the run it replaced cleaned up.
                 linkOwner.lendLink(device, preference, active.background, forCollection = true)
             },
             collector,
@@ -172,7 +198,17 @@ class DeviceFacade internal constructor(
             if (request !== active) false else { request = null; true }
         }
         if (released) {
-            linkOwner.releaseCollection(active.background?.owner)
+            val previous = active.replaced
+            if (previous == null) {
+                linkOwner.releaseCollection(active.background?.owner)
+            } else {
+                // A restart took over the reservation of a run still cleaning up. Hand it back
+                // only once that run let go of its link.
+                scope.launch {
+                    withContext(NonCancellable) { controller.awaitCleanup(previous) }
+                    linkOwner.releaseCollection(active.background?.owner)
+                }
+            }
         }
         active.admission.close()
     }
@@ -182,11 +218,15 @@ class DeviceFacade internal constructor(
         val active = Request(intent, background, protection, admitted, clock.nowEpochMs())
         val reserved = lock.withLock {
             val previous = request
-            val restarting = previous != null && !controller.state.value.active && previous.background == null && background == null
+            // A stopped interactive run still cleaning up hands its reservation to the next tap.
+            // Never while another start is between here and controller.start, or both would own it.
+            val restarting = previous != null && !starting && !controller.state.value.active && previous.background == null && background == null
             if ((previous != null && !restarting) || (previous == null && !linkOwner.reserveCollection(background?.owner))) {
                 false
             } else {
+                if (restarting) active.replaced = previous?.intent?.id
                 request = active
+                starting = true
                 true
             }
         }
@@ -194,7 +234,11 @@ class DeviceFacade internal constructor(
             admitted.close()
             return null
         }
-        val result = controller.start(intent)
+        val result = try {
+            controller.start(intent)
+        } finally {
+            lock.withLock { starting = false }
+        }
         publish(controller.state.value)
         active.loss?.let { applyLoss(intent.id, it) }
         if (result !is StartResult.Started) releaseRequest(active)
@@ -207,8 +251,11 @@ class DeviceFacade internal constructor(
         if (start(intent) == null) linkOwner.emitCollectionEvent(DeviceEvent.Info(DeviceMessage.BusyBeforeSync))
     }
 
-    /** Collection uses the automatic clock rule shared with connection setup. */
-    fun smartSync(mode: ClockSyncMode, clockConfirmed: Boolean = false) = interactive(CollectionScope.All, clockConfirmed = true)
+    /**
+     * Sync everything. The clock follows the automatic rule shared with connection setup, so
+     * there is no mode or confirmation to pass.
+     */
+    fun smartSync() = interactive(CollectionScope.All, clockConfirmed = true)
     fun syncAll() = interactive(CollectionScope.All, clockConfirmed = true)
     fun syncOne(name: String) = interactive(CollectionScope.One(name), clockConfirmed = true)
     fun cancelSync() { stop(StopSource.USER) }
@@ -277,11 +324,11 @@ class DeviceFacade internal constructor(
                 if (state.step == PrepareStep.LIST && active?.lastListedAttempt != state.attempt) linkOwner.collectionListing()
                 if (old.running && progressIntent == state.intentId) old else SyncProgress(running = true, startedAtEpochMs = clock.nowEpochMs())
             }
-            is CollectionState.Transferring -> old.copy(running = true, current = state.progress.current, filesDone = state.progress.filesDone, filesTotal = state.progress.filesTotal, bytesDone = state.progress.receivedBytes, bytesTotal = state.progress.bytesTotal, bytesPerSecond = state.progress.bytesPerSecond)
-            is CollectionState.Waiting, is CollectionState.Finalizing -> old.copy(running = true)
-            is CollectionState.Done -> old.copy(running = false, filesDone = state.summary.files, filesTotal = state.summary.files, outcomes = state.summary.outcomes, current = null, finishedAtEpochMs = clock.nowEpochMs(), endCause = SyncEndCause.COMPLETED)
-            is CollectionState.Failed -> old.copy(running = false, current = null, outcomes = active?.outcomes?.values?.toList() ?: old.outcomes, finishedAtEpochMs = clock.nowEpochMs(), endCause = SyncEndCause.FAILURE)
-            is CollectionState.Stopped -> old.copy(running = false, current = null, outcomes = active?.outcomes?.values?.toList() ?: old.outcomes, finishedAtEpochMs = clock.nowEpochMs(), endCause = SyncEndCause.STOPPED)
+            is CollectionState.Transferring -> old.copy(running = true, endReason = null, current = state.progress.current, filesDone = state.progress.filesDone, filesTotal = state.progress.filesTotal, bytesDone = state.progress.receivedBytes, bytesTotal = state.progress.bytesTotal, bytesPerSecond = state.progress.bytesPerSecond)
+            is CollectionState.Waiting, is CollectionState.Finalizing -> old.copy(running = true, endReason = null)
+            is CollectionState.Done -> old.copy(running = false, filesDone = state.summary.files, filesTotal = state.summary.files, outcomes = state.summary.outcomes, current = null, finishedAtEpochMs = clock.nowEpochMs(), endCause = SyncEndCause.COMPLETED, endReason = state.endReason())
+            is CollectionState.Failed -> old.copy(running = false, current = null, outcomes = active?.outcomes?.values?.toList() ?: old.outcomes, finishedAtEpochMs = clock.nowEpochMs(), endCause = SyncEndCause.FAILURE, endReason = state.endReason())
+            is CollectionState.Stopped -> old.copy(running = false, current = null, outcomes = active?.outcomes?.values?.toList() ?: old.outcomes, finishedAtEpochMs = clock.nowEpochMs(), endCause = SyncEndCause.STOPPED, endReason = state.endReason())
         }
         progressIntent = state.intentId
         progress.value = next
@@ -313,14 +360,19 @@ class DeviceFacade internal constructor(
                         linkOwner.collectionNeedsPairingRepair()
                         return@withLock
                     }
+                    val reason = failure.endReason()
                     val message = when {
                         failure is CollectionFailure.Storage && failure.kind == StorageFailure.NO_SPACE && shortBytes != null -> DeviceMessage.NotEnoughSpace(shortBytes)
-                        lastStep == PrepareStep.LIST -> DeviceMessage.FileListNotReady
-                        else -> DeviceMessage.SyncAborted
+                        // The open failure already said the firmware must be updated, with versions.
+                        reason == SyncEndReason.UPDATE_FIRMWARE -> return@withLock
+                        lastStep == PrepareStep.LIST && reason in GENERIC_ENDS -> DeviceMessage.FileListNotReady
+                        else -> DeviceMessage.SyncEnded(reason)
                     }
                     linkOwner.emitCollectionEvent(DeviceEvent.Error(message))
                 }
-                is CollectionState.Stopped -> linkOwner.emitCollectionEvent(DeviceEvent.Info(DeviceMessage.SyncStopped))
+                is CollectionState.Stopped -> linkOwner.emitCollectionEvent(
+                    DeviceEvent.Info(if (state.endReason() == SyncEndReason.STOPPED) DeviceMessage.SyncStopped else DeviceMessage.SyncEnded(SyncEndReason.INTERRUPTED)),
+                )
                 else -> Unit
             }
         }
@@ -334,6 +386,9 @@ class DeviceFacade internal constructor(
         val newlySynced = linkedMapOf<String, FileOutcome.Synced>()
 
         @Volatile var loss: AndroidKeepAlive.ServiceLoss? = null
+
+        /** The stopped run whose reservation this restart took over, until it cleaned up. Guarded by the facade lock. */
+        var replaced: Long? = null
     }
 
     val session get() = linkOwner.session
@@ -401,5 +456,19 @@ class DeviceFacade internal constructor(
     suspend fun touchSeen(address: String, name: String?) = linkOwner.touchSeen(address, name)
     suspend fun forget(address: String) { if (this.address == address) disconnectNow(); linkOwner.forget(address) }
 
-    private companion object { val nextIntent = AtomicLong(0) }
+    private companion object {
+        val nextIntent = AtomicLong(0)
+
+        /** Endings with no action for the user, so a failed listing says the list was not ready. */
+        val GENERIC_ENDS = setOf(SyncEndReason.LINK_LOST, SyncEndReason.OTHER)
+    }
+}
+
+/** Per-device collection holder, see [DeviceFacade.ownership]. */
+enum class DeviceOwnership { IDLE, INTERACTIVE, BACKGROUND }
+
+internal fun deviceOwnership(collectionActive: Boolean, backgroundOwner: String?): DeviceOwnership = when {
+    backgroundOwner != null -> DeviceOwnership.BACKGROUND
+    collectionActive -> DeviceOwnership.INTERACTIVE
+    else -> DeviceOwnership.IDLE
 }

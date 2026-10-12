@@ -1,6 +1,8 @@
 package earth.walkthru.aqsync.data.lan
 
 import earth.walkthru.aqsync.data.ble.TransportKind
+import earth.walkthru.aqsync.link.AuthKind
+import earth.walkthru.aqsync.link.DisconnectCause
 import earth.walkthru.aqsync.sync.SyncLock
 
 /**
@@ -20,6 +22,13 @@ class LanTokenPolicy {
 
     /** True when a LAN connect failure means the stored token must be dropped. */
     fun invalidatesToken(failure: LanFailure): Boolean = failure == LanFailure.AUTH_FAILED
+
+    /**
+     * True when a LAN link that ended for [cause] proves the stored token is no longer valid: the
+     * device refused it, or rotated it (BYE reason 10). The next bonded BLE session fetches again.
+     */
+    fun invalidatesToken(cause: DisconnectCause): Boolean =
+        cause is DisconnectCause.Auth && (cause.kind == AuthKind.TOKEN_REJECTED || cause.kind == AuthKind.TOKEN_ROTATED)
 
     /** Record that [address]'s token was rejected; call after clearing it from storage. */
     fun markStale(address: String) {

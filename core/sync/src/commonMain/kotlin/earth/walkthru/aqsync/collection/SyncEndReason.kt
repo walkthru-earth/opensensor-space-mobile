@@ -61,3 +61,19 @@ fun CollectionFailure.endReason(): SyncEndReason = when (this) {
     is CollectionFailure.KeepAliveRefused -> SyncEndReason.INTERRUPTED
     is CollectionFailure.Unexpected -> SyncEndReason.OTHER
 }
+
+/**
+ * The person-facing reason a request ended, or null while it runs or before the first one. Both
+ * platforms set `SyncProgress.endReason` from this when they publish a terminal state. A Stop by
+ * the user or the app reads [SyncEndReason.STOPPED], and one by the OS reads
+ * [SyncEndReason.INTERRUPTED].
+ */
+fun CollectionState.endReason(): SyncEndReason? = when (this) {
+    is CollectionState.Done -> SyncEndReason.COMPLETED
+    is CollectionState.Failed -> failure.endReason()
+    is CollectionState.Stopped -> when (by) {
+        StopSource.USER, StopSource.APP -> SyncEndReason.STOPPED
+        StopSource.SYSTEM, StopSource.FGS_TIMEOUT -> SyncEndReason.INTERRUPTED
+    }
+    else -> null
+}
