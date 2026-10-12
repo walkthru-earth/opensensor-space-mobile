@@ -8,6 +8,7 @@ import earth.walkthru.opensensor.devices.ArchiveGlance
 import earth.walkthru.opensensor.devices.CollectAllPlan
 import earth.walkthru.opensensor.devices.CollectAllPort
 import earth.walkthru.opensensor.devices.CollectAllQueue
+import earth.walkthru.opensensor.devices.CollectRoute
 import earth.walkthru.opensensor.devices.DeviceRadio
 import earth.walkthru.opensensor.devices.DevicesController
 import earth.walkthru.opensensor.devices.KnownDeviceStore
@@ -277,17 +278,26 @@ class DevicesBridge internal constructor(
     }
 
     /**
-     * One rule for every user path. Opening, connecting or syncing a sensor by hand takes the link
-     * Collect all may hold next, so the pass stops first. Its running step finishes on its own.
+     * One rule for every user path on a sensor id. The user wins, so Collect all stops first when the
+     * action targets a sensor the pass holds now or still plans. Its running step finishes on its
+     * own. A [takesBluetooth] action, opening a sensor, also stops a pass whose running step is on
+     * Bluetooth, because the phone holds one Bluetooth link. Any other action leaves the pass going.
      */
-    fun <A> userFirst(action: (A) -> Unit): (A) -> Unit = { a ->
-        cancelCollectAll()
-        action(a)
+    fun userFirst(action: (String) -> Unit, takesBluetooth: Boolean = false): (String) -> Unit = { id ->
+        stopCollectAllFor(id, takesBluetooth)
+        action(id)
     }
 
-    fun <A, B> userFirst(action: (A, B) -> Unit): (A, B) -> Unit = { a, b ->
-        cancelCollectAll()
-        action(a, b)
+    fun <B> userFirst(action: (String, B) -> Unit): (String, B) -> Unit = { id, b ->
+        stopCollectAllFor(id, takesBluetooth = false)
+        action(id, b)
+    }
+
+    private fun stopCollectAllFor(id: String, takesBluetooth: Boolean) {
+        val q = queue ?: return
+        val targeted = (q.runningIds + q.plannedIds).any { it.equals(id, ignoreCase = true) }
+        val onBluetooth = takesBluetooth && q.runningSteps.any { it.route == CollectRoute.BLUETOOTH }
+        if (targeted || onBluetooth) cancelCollectAll()
     }
 
     /** The name the device page shows for a row id, from the scan, the known records or the Wi-Fi name. */

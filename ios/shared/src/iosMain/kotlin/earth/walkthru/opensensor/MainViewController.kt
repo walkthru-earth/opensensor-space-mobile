@@ -58,10 +58,11 @@ fun mainViewController(
     }
     MapCache.configure(cachesDirectory(), mapCacheBytes)
     IosMemoryPressure.install()
-    // Every user path that opens, connects or syncs a sensor stops Collect all first, the same rule
-    // for opening, Wi-Fi only, Smart Sync and Files. Restart reopen and cancel are not user takes.
-    val userOpen = devices.userFirst(openSensor)
-    val userOpenBluetooth = devices.userFirst(openBluetoothSensor)
+    // A user path that opens, connects or syncs a sensor the Collect all pass holds or plans stops
+    // the pass first, the same rule for opening, Wi-Fi only, Smart Sync and Files. An open that may
+    // take Bluetooth also stops a pass on Bluetooth. Restart reopen and cancel are not user takes.
+    val userOpen = devices.userFirst(openSensor, takesBluetooth = true)
+    val userOpenBluetooth = devices.userFirst(openBluetoothSensor, takesBluetooth = true)
     val userOpenLanOnly = devices.userFirst(openLanOnly)
     val userSyncBluetooth = devices.userFirst(syncBluetooth)
     val userSyncOneFile = devices.userFirst(syncOneFile)
