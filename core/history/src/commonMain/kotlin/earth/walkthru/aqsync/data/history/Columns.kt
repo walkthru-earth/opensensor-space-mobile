@@ -82,7 +82,21 @@ object Columns {
         val peak = FloatArray(count) { Float.NEGATIVE_INFINITY }
         for (p in series.points) {
             if (p.endS <= series.fromS || p.startS >= series.toS) continue
-            var i = boundaries.binarySearch(p.startS).let { if (it >= 0) it else -it - 2 }.coerceIn(0, count - 1)
+            val firstBin = boundaries.binarySearch(p.startS).let { if (it >= 0) it else -it - 2 }.coerceIn(0, count - 1)
+            // The peak happened at one instant, so only the bin holding most of the point gets it
+            // (the earlier on a tie). The others get the mean, so max never drops below mean.
+            var peakBin = firstBin
+            var peakOverlap = -1L
+            var i = firstBin
+            while (i < count && boundaries[i] < p.endS) {
+                val overlap = (minOf(p.endS, boundaries[i + 1]) - maxOf(p.startS, boundaries[i])).coerceAtLeast(0)
+                if (overlap > peakOverlap) {
+                    peakOverlap = overlap
+                    peakBin = i
+                }
+                i++
+            }
+            i = firstBin
             while (i < count && boundaries[i] < p.endS) {
                 val overlap = (minOf(p.endS, boundaries[i + 1]) - maxOf(p.startS, boundaries[i])).coerceAtLeast(0)
                 if (overlap > 0) {
@@ -92,7 +106,7 @@ object Columns {
                     p.mean?.let { m ->
                         sum[i] += m * w
                         weight[i] += w
-                        val hi = p.max ?: m
+                        val hi = if (i == peakBin) p.max ?: m else m
                         if (hi > peak[i]) peak[i] = hi
                     }
                 }
