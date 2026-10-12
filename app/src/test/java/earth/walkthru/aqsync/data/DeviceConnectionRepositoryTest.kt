@@ -12,6 +12,7 @@ import earth.walkthru.aqsync.collection.Lease
 import earth.walkthru.aqsync.collection.LinkPreference
 import earth.walkthru.aqsync.collection.PrepareStep
 import earth.walkthru.aqsync.collection.StopSource
+import earth.walkthru.aqsync.collection.SyncEndReason
 import earth.walkthru.aqsync.data.archive.FileArchiveStore
 import earth.walkthru.aqsync.data.archive.RoomArchiveIndex
 import earth.walkthru.aqsync.data.archive.asRecordIndexer
@@ -23,6 +24,7 @@ import earth.walkthru.aqsync.data.ble.FrameDirection
 import earth.walkthru.aqsync.data.ble.RawCommandRefusedException
 import earth.walkthru.aqsync.data.ble.TransportException
 import earth.walkthru.aqsync.data.ble.TransportKind
+import earth.walkthru.aqsync.data.ble.TransportUnavailableException
 import earth.walkthru.aqsync.data.fake.FakeTransport
 import earth.walkthru.aqsync.data.history.HistoryDeriver
 import earth.walkthru.aqsync.data.history.HistoryIndexer
@@ -55,6 +57,7 @@ import earth.walkthru.aqsync.link.FrameSink
 import earth.walkthru.aqsync.link.LinkClosedException
 import earth.walkthru.aqsync.link.LinkInfo
 import earth.walkthru.aqsync.link.LinkState
+import earth.walkthru.aqsync.link.UnavailableKind
 import earth.walkthru.aqsync.link.retryable
 import earth.walkthru.aqsync.storage.FakeStorageBudget
 import earth.walkthru.aqsync.storage.StorageException
@@ -197,7 +200,7 @@ class DeviceConnectionRepositoryTest {
         // The repair banner outlives the closed session and the reason is said once.
         assertTrue(BleConnectionFailure.needsPairingRepair(h.repo.connectionState.value))
         assertEquals(1, h.events.count { it == DeviceEvent.Error(DeviceMessage.PairingRepair) })
-        assertFalse(h.events.contains(DeviceEvent.Error(DeviceMessage.SyncAborted)))
+        assertFalse(h.events.any { (it as? DeviceEvent.Error)?.message is DeviceMessage.SyncEnded })
     }
 
     @Test
@@ -927,6 +930,49 @@ class DeviceConnectionRepositoryTest {
         assertEquals(DisconnectCause.Busy, (e as LinkClosedException).disconnectCause)
     }
 
+    @Test
+    fun `Bluetooth off ends a sync once with its own reason and no retry`() = harnessTest { h ->
+        h.factory.unavailable = UnavailableKind.RADIO_OFF
+        h.repo.syncAll()
+        h.until { !h.repo.collectionState.value.active && !h.repo.busy.value }
+        assertEquals(SyncEndReason.BLUETOOTH_OFF, h.repo.sync.value.endReason)
+        assertEquals(0, h.factory.fakeConnects)
+        assertEquals(1, h.events.count { it == DeviceEvent.Error(DeviceMessage.SyncEnded(SyncEndReason.BLUETOOTH_OFF)) })
+    }
+
+    @Test
+    fun `a missing Bluetooth permission is named on connect`() = harnessTest { h ->
+        h.factory.unavailable = UnavailableKind.PERMISSION_MISSING
+        h.repo.connect(ADDRESS, "AQ-6b40")
+        h.until { h.events.isNotEmpty() && !h.repo.busy.value }
+        assertTrue(h.events.contains(DeviceEvent.Error(DeviceMessage.BluetoothUnavailable(UnavailableKind.PERMISSION_MISSING))))
+        assertNull(h.repo.session.value)
+    }
+
+    @Test
+    fun `each ending carries its reason and a new run clears it`() = harnessTest { h ->
+        h.repo.syncAll()
+        h.until { !h.repo.collectionState.value.active && !h.repo.busy.value }
+        assertEquals(SyncEndReason.COMPLETED, h.repo.sync.value.endReason)
+
+        h.device.files += h.newFile()
+        h.factory.listDelayMs = 60_000
+        h.repo.syncAll()
+        h.until { h.repo.sync.value.running }
+        assertNull(h.repo.sync.value.endReason)
+        h.repo.stop(StopSource.FGS_TIMEOUT)
+        h.until { !h.repo.busy.value }
+        assertEquals(SyncEndReason.INTERRUPTED, h.repo.sync.value.endReason)
+        assertTrue(h.events.contains(DeviceEvent.Info(DeviceMessage.SyncEnded(SyncEndReason.INTERRUPTED))))
+
+        h.repo.syncAll()
+        h.until { h.repo.sync.value.running }
+        h.repo.cancelSync()
+        h.until { !h.repo.busy.value }
+        assertEquals(SyncEndReason.STOPPED, h.repo.sync.value.endReason)
+        assertTrue(h.events.contains(DeviceEvent.Info(DeviceMessage.SyncStopped)))
+    }
+
     private fun harnessTest(chunkDelayMs: Long = 0, block: suspend TestScope.(Harness) -> Unit) = runTest {
         val h = Harness(this, chunkDelayMs)
         try {
@@ -1098,6 +1144,9 @@ class DeviceConnectionRepositoryTest {
         var reconnectFailure: DisconnectCause? = null
         var clockMissingOnReconnect = false
 
+        /** When set, Bluetooth links cannot be built, as with the radio off or the permission missing. */
+        var unavailable: UnavailableKind? = null
+
         /** When set, Bluetooth links never finish connecting and ignore everything but cancel. */
         var hangConnect = false
         var listFailure: Exception? = null
@@ -1134,8 +1183,8 @@ class DeviceConnectionRepositoryTest {
             }
         }
 
-        override fun ble(address: String): AndroidLink = counted().also { interactiveConnects++ }
-        override fun bleUnattended(address: String, connectTimeoutMs: Long): AndroidLink = counted().also {
+        override fun ble(address: String): AndroidLink = requireRadio().let { counted().also { interactiveConnects++ } }
+        override fun bleUnattended(address: String, connectTimeoutMs: Long): AndroidLink = requireRadio().let { counted() }.also {
             unattendedConnects++
             unattendedTimeout = connectTimeoutMs
         }
@@ -1143,6 +1192,10 @@ class DeviceConnectionRepositoryTest {
             FailingLanTransport(address, lanFailure).also { lanTransports += it }.let { TransportLink(it, scope) }
         override fun fake(address: String): AndroidLink = counted()
         override fun isFake(transport: AqTransport): Boolean = (transport as? TransportLink)?.wrapped === observedDevice
+
+        private fun requireRadio() {
+            unavailable?.let { throw TransportUnavailableException(it, "synthetic ${it.name}") }
+        }
 
         private fun counted(): AndroidLink {
             fakeConnects++

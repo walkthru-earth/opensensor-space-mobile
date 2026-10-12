@@ -247,6 +247,20 @@
     </plurals>
     <string name="msg_sync_stopped">توقفت المزامنة. تُستأنف الملفات الجزئية في المرة القادمة.</string>
     <string name="msg_sync_aborted">توقفت المزامنة مبكرًا. تُستأنف في المزامنة التالية.</string>
+    <string name="msg_bluetooth_off">شغِّل Bluetooth للاتصال.</string>
+    <string name="msg_bluetooth_permission">اسمح لهذا التطبيق بالوصول إلى الأجهزة القريبة للاتصال.</string>
+    <string name="msg_bluetooth_missing">لا يحتوي هذا الهاتف على Bluetooth.</string>
+    <string name="msg_sync_end_interrupted">أوقف أندرويد المزامنة مؤقتًا. تُستأنف عند فتح التطبيق.</string>
+    <string name="msg_sync_end_bluetooth_off">توقفت المزامنة. شغِّل Bluetooth ثم زامِن مرة أخرى.</string>
+    <string name="msg_sync_end_permission">توقفت المزامنة. اسمح لهذا التطبيق بالوصول إلى الأجهزة القريبة ثم زامِن مرة أخرى.</string>
+    <string name="msg_sync_end_token_rotated">تغيّر رمز الوصول عبر Wi-Fi. اتصل عبر Bluetooth مرة واحدة لجلب الرمز الجديد.</string>
+    <string name="msg_sync_end_token_rejected">رفض المستشعر رمز الوصول عبر Wi-Fi. اتصل عبر Bluetooth مرة واحدة لتجديده.</string>
+    <string name="msg_sync_end_busy">المستشعر مشغول بهاتف آخر. حاول مرة أخرى بعد قليل.</string>
+    <string name="msg_sync_end_out_of_range">المستشعر بعيد. اقترب منه ثم زامِن مرة أخرى.</string>
+    <string name="msg_sync_end_update_firmware">حدِّث البرنامج الثابت للمستشعر ثم زامِن مرة أخرى.</string>
+    <string name="msg_sync_end_no_space">لا توجد مساحة كافية على هذا الهاتف. حرِّر بعض المساحة ثم زامِن مرة أخرى.</string>
+    <string name="msg_sync_end_storage">تعذّر الحفظ على هذا الهاتف. زامِن مرة أخرى لإعادة المحاولة.</string>
+    <string name="msg_sync_end_link_lost">انقطع الاتصال. تُستأنف المزامنة التالية من حيث توقفت.</string>
     <string name="msg_not_enough_space">لا توجد مساحة كافية على هذا الهاتف. حرّر %1$s ثم زامن مرة أخرى.</string>
     <plurals name="msg_unplaced">
         <item quantity="zero">%1$d قراءة مؤرشفة لكن بلا وقت بعد، لذا لا تظهر في التقويم.</item>

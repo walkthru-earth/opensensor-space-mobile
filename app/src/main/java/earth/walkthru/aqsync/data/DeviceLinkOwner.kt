@@ -14,6 +14,7 @@ import earth.walkthru.aqsync.data.ble.InvalidConfigException
 import earth.walkthru.aqsync.data.ble.LogTail
 import earth.walkthru.aqsync.data.ble.NotAllowedOnLinkException
 import earth.walkthru.aqsync.data.ble.TransportKind
+import earth.walkthru.aqsync.data.ble.TransportUnavailableException
 import earth.walkthru.aqsync.data.ble.WifiUnavailableException
 import earth.walkthru.aqsync.data.coroutines.ApplicationScope
 import earth.walkthru.aqsync.data.coroutines.IoDispatcher
@@ -392,7 +393,12 @@ class DeviceLinkOwner @Inject constructor(
                 connectionFailure.value = "Wi-Fi connection failed"
                 return false
             }
-            transport = transportFactory.ble(address)
+            transport = try {
+                transportFactory.ble(address)
+            } catch (e: TransportUnavailableException) {
+                reportOpenFailure(LinkClosedException(DisconnectCause.Unavailable(e.kind), e))
+                return false
+            }
         }
         val opened = try {
             openSession(transport, address, name, fake, claim = claim, preference = preference)
@@ -492,6 +498,12 @@ class DeviceLinkOwner @Inject constructor(
                 Log.w(TAG, "device verification failed (${cause.describe()})")
                 connectionFailure.value = "verification failed"
                 _events.tryEmit(DeviceEvent.Error(DeviceMessage.VerificationFailed))
+            }
+            is DisconnectCause.Unavailable -> {
+                // Bluetooth is off, missing or not permitted. Nothing was attempted.
+                Log.w(TAG, "connect not started (${cause.describe()})")
+                connectionFailure.value = e.message ?: "Bluetooth unavailable"
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.BluetoothUnavailable(cause.kind)))
             }
             is DisconnectCause.Auth if BleDisconnectCauses.needsPairingRepair(cause) -> {
                 // The bond keys failed. Reconnecting cannot help until the user pairs again.
@@ -883,7 +895,12 @@ class DeviceLinkOwner @Inject constructor(
         }
         if (link == null) {
             if (prefer == LinkPreference.LAN) throw LinkClosedException(lastOpenFailure ?: DisconnectCause.Unreachable)
-            link = if (background == null) transportFactory.ble(address) else transportFactory.bleUnattended(address, background.bleConnectTimeoutMs)
+            link = try {
+                if (background == null) transportFactory.ble(address) else transportFactory.bleUnattended(address, background.bleConnectTimeoutMs)
+            } catch (e: TransportUnavailableException) {
+                // The radio, adapter or permission is missing. Retrying cannot help until the user acts.
+                throw LinkClosedException(DisconnectCause.Unavailable(e.kind), e)
+            }
         }
         val opened = try {
             openSession(link, address, name, fake = transportFactory.isFake(link), watch = false)

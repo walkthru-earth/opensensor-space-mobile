@@ -15,6 +15,8 @@ import earth.walkthru.aqsync.collection.PrepareStep
 import earth.walkthru.aqsync.collection.StartResult
 import earth.walkthru.aqsync.collection.StopSource
 import earth.walkthru.aqsync.collection.StorageFailure
+import earth.walkthru.aqsync.collection.SyncEndReason
+import earth.walkthru.aqsync.collection.endReason
 import earth.walkthru.aqsync.data.background.AndroidKeepAlive
 import earth.walkthru.aqsync.data.ble.BleDisconnectCauses
 import earth.walkthru.aqsync.data.ble.DeviceSession
@@ -277,11 +279,11 @@ class DeviceFacade internal constructor(
                 if (state.step == PrepareStep.LIST && active?.lastListedAttempt != state.attempt) linkOwner.collectionListing()
                 if (old.running && progressIntent == state.intentId) old else SyncProgress(running = true, startedAtEpochMs = clock.nowEpochMs())
             }
-            is CollectionState.Transferring -> old.copy(running = true, current = state.progress.current, filesDone = state.progress.filesDone, filesTotal = state.progress.filesTotal, bytesDone = state.progress.receivedBytes, bytesTotal = state.progress.bytesTotal, bytesPerSecond = state.progress.bytesPerSecond)
-            is CollectionState.Waiting, is CollectionState.Finalizing -> old.copy(running = true)
-            is CollectionState.Done -> old.copy(running = false, filesDone = state.summary.files, filesTotal = state.summary.files, outcomes = state.summary.outcomes, current = null, finishedAtEpochMs = clock.nowEpochMs(), endCause = SyncEndCause.COMPLETED)
-            is CollectionState.Failed -> old.copy(running = false, current = null, outcomes = active?.outcomes?.values?.toList() ?: old.outcomes, finishedAtEpochMs = clock.nowEpochMs(), endCause = SyncEndCause.FAILURE)
-            is CollectionState.Stopped -> old.copy(running = false, current = null, outcomes = active?.outcomes?.values?.toList() ?: old.outcomes, finishedAtEpochMs = clock.nowEpochMs(), endCause = SyncEndCause.STOPPED)
+            is CollectionState.Transferring -> old.copy(running = true, endReason = null, current = state.progress.current, filesDone = state.progress.filesDone, filesTotal = state.progress.filesTotal, bytesDone = state.progress.receivedBytes, bytesTotal = state.progress.bytesTotal, bytesPerSecond = state.progress.bytesPerSecond)
+            is CollectionState.Waiting, is CollectionState.Finalizing -> old.copy(running = true, endReason = null)
+            is CollectionState.Done -> old.copy(running = false, filesDone = state.summary.files, filesTotal = state.summary.files, outcomes = state.summary.outcomes, current = null, finishedAtEpochMs = clock.nowEpochMs(), endCause = SyncEndCause.COMPLETED, endReason = SyncEndReason.COMPLETED)
+            is CollectionState.Failed -> old.copy(running = false, current = null, outcomes = active?.outcomes?.values?.toList() ?: old.outcomes, finishedAtEpochMs = clock.nowEpochMs(), endCause = SyncEndCause.FAILURE, endReason = state.failure.endReason())
+            is CollectionState.Stopped -> old.copy(running = false, current = null, outcomes = active?.outcomes?.values?.toList() ?: old.outcomes, finishedAtEpochMs = clock.nowEpochMs(), endCause = SyncEndCause.STOPPED, endReason = state.by.endReason())
         }
         progressIntent = state.intentId
         progress.value = next
@@ -313,14 +315,19 @@ class DeviceFacade internal constructor(
                         linkOwner.collectionNeedsPairingRepair()
                         return@withLock
                     }
+                    val reason = failure.endReason()
                     val message = when {
                         failure is CollectionFailure.Storage && failure.kind == StorageFailure.NO_SPACE && shortBytes != null -> DeviceMessage.NotEnoughSpace(shortBytes)
-                        lastStep == PrepareStep.LIST -> DeviceMessage.FileListNotReady
-                        else -> DeviceMessage.SyncAborted
+                        // The open failure already said the firmware must be updated, with versions.
+                        reason == SyncEndReason.UPDATE_FIRMWARE -> return@withLock
+                        lastStep == PrepareStep.LIST && reason in GENERIC_ENDS -> DeviceMessage.FileListNotReady
+                        else -> DeviceMessage.SyncEnded(reason)
                     }
                     linkOwner.emitCollectionEvent(DeviceEvent.Error(message))
                 }
-                is CollectionState.Stopped -> linkOwner.emitCollectionEvent(DeviceEvent.Info(DeviceMessage.SyncStopped))
+                is CollectionState.Stopped -> linkOwner.emitCollectionEvent(
+                    DeviceEvent.Info(if (state.by.endReason() == SyncEndReason.STOPPED) DeviceMessage.SyncStopped else DeviceMessage.SyncEnded(SyncEndReason.INTERRUPTED)),
+                )
                 else -> Unit
             }
         }
@@ -401,5 +408,16 @@ class DeviceFacade internal constructor(
     suspend fun touchSeen(address: String, name: String?) = linkOwner.touchSeen(address, name)
     suspend fun forget(address: String) { if (this.address == address) disconnectNow(); linkOwner.forget(address) }
 
-    private companion object { val nextIntent = AtomicLong(0) }
+    private companion object {
+        val nextIntent = AtomicLong(0)
+
+        /** Endings with no action for the user, so a failed listing says the list was not ready. */
+        val GENERIC_ENDS = setOf(SyncEndReason.LINK_LOST, SyncEndReason.OTHER)
+    }
+}
+
+/** A Stop the person or the app chose is [SyncEndReason.STOPPED]; one the OS forced is [SyncEndReason.INTERRUPTED]. */
+internal fun StopSource.endReason(): SyncEndReason = when (this) {
+    StopSource.USER, StopSource.APP -> SyncEndReason.STOPPED
+    StopSource.SYSTEM, StopSource.FGS_TIMEOUT -> SyncEndReason.INTERRUPTED
 }
