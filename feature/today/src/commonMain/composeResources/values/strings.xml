@@ -98,7 +98,7 @@
     <string name="today_none">No timed readings yet today.</string>
     <string name="today_none_clock">No timed readings yet. Set the sensor time, then sync.</string>
     <string name="today_average">Average %1$s µg/m³</string>
-    <string name="today_of_the_day">of the day covered</string>
+    <string name="today_of_the_day">covered so far</string>
     <plurals name="today_readings_since_midnight">
         <item quantity="one">%1$d reading since midnight</item>
         <item quantity="other">%1$d readings since midnight</item>

@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
+import kotlin.time.Clock
 
 /**
  * The derived daily file of a station's UTC day (#63), for the Day view. The platform hands it out
@@ -57,7 +58,14 @@ class HistorySeriesReader(
     private val clockAnchors: ClockAnchorStore = EmptyClockAnchorStore,
     private val derived: DerivedDayFiles = DerivedDayFiles.NONE,
     private val footers: FooterCache = FooterCache(DERIVED_FOOTERS),
+    private val nowEpochS: () -> Long = { Clock.System.now().epochSeconds },
 ) {
+    /**
+     * Rows the logger could have written in `[fromS, toS)` by now. A window holding now (today, this
+     * week) counts only its elapsed part, so a device that never missed a reading shows 100 %.
+     */
+    private fun expectedRows(fromS: Long, toS: Long): Long = (minOf(toS, nowEpochS()) - fromS).coerceAtLeast(0) / 10
+
     @OptIn(ExperimentalCoroutinesApi::class)
     fun observe(station: String, metric: MetricSpec, range: HistoryRange, window: HistoryWindow): Flow<HistorySeries> {
         val tier = range.tier
@@ -119,7 +127,7 @@ class HistorySeriesReader(
         return HistorySeries(
             metric, range, fromS, toS, points,
             validRows = weight,
-            expectedRows = (toS - fromS) / 10,
+            expectedRows = expectedRows(fromS, toS),
             mean = if (weight > 0) (weighted / weight).toFloat() else null,
             max = max,
             binned = false,
@@ -223,7 +231,7 @@ class HistorySeriesReader(
             }
             flush()
         }
-        return HistorySeries(metric, range, fromS, toS, points, validRows = n, expectedRows = (toS - fromS) / 10, mean = if (n > 0) (sum / n).toFloat() else null, max = max, binned = binned, estimatedRows = rows.estimatedValid)
+        return HistorySeries(metric, range, fromS, toS, points, validRows = n, expectedRows = expectedRows(fromS, toS), mean = if (n > 0) (sum / n).toFloat() else null, max = max, binned = binned, estimatedRows = rows.estimatedValid)
     }
 
     /** The rows of one raw file inside `[fromNs, toNs)`, timed by UTC or by the boot's anchor. */
