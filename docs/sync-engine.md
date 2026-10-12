@@ -45,7 +45,7 @@ sentence for them.
 | BLE writes | With response | `control` with response, payload sized from `maximumWriteValueLength(for: .withResponse)` |
 | Background | `SyncWorker` on WorkManager | UIKit background-task leases for active BLE and LAN transfers. iOS 26 continued tasks support eligible collection, with bounded lease fallback |
 
-The keepalive rules are unchanged on both phones. See [ios-migration.md](ios-migration.md) for
+The keepalive rules are unchanged on both phones. See [ios.md](ios.md) for
 bounded execution and phone qualification.
 
 ## One file
@@ -156,7 +156,7 @@ per BLE connection and LAN peer. Phone ownership policy remains per physical dev
 Raw Hive paths and outer INFO-station namespaces remain unchanged. After station regeneration,
 a retained inner Hive station mismatch is archived/exportable but excluded from the new station's
 history. Earlier epochs remain separately selectable. Richer producer provenance and duplicate
-old-station downloads need an owner-contract decision ([opensensor-space.md](opensensor-space.md)).
+old-station downloads need an owner-contract decision ([device-identity.md](device-identity.md#files-from-another-station-on-the-same-sd-card)).
 
 ## Archive layout (`FileArchive`)
 
