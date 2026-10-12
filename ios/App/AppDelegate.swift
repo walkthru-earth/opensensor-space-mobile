@@ -81,9 +81,9 @@ final class AppServices {
         },
         dial: { [weak self] device, prefer, done in
             let transport = RunTransport(prefer)
-            let answer = DialAnswer { opened in _ = done(KotlinBoolean(value: opened)) }
+            let answer = DialAnswer { result in _ = done(result) }
             MainActor.assumeIsolated {
-                guard let self else { return answer.call(false) }
+                guard let self else { return answer.call(.refused) }
                 self.dial(device: device, transport: transport, done: answer.call)
             }
         },
@@ -315,11 +315,14 @@ final class AppServices {
     }
 
     /// A run's retry found no open link. Wi-Fi when the run allows it and the sensor is on this network.
-    private func dial(device: String, transport: RunTransport, done: @escaping (Bool) -> Void) {
+    /// Bluetooth that is off, not allowed or missing answers as such, so the run is not retried.
+    private func dial(device: String, transport: RunTransport, done: @escaping (DialResult) -> Void) {
         if transport == .lan || (transport == .any && lan.canDial(device: device)) {
-            lan.dial(device: device, done: done)
+            lan.dial(device: device) { done($0 ? .opened : .refused) }
+        } else if let unavailable = bluetooth.dialUnavailable {
+            done(unavailable)
         } else {
-            bluetooth.dial(device: device, done: done)
+            bluetooth.dial(device: device) { done($0 ? .opened : .refused) }
         }
     }
 
@@ -398,8 +401,8 @@ private enum RunTransport: Sendable {
 
 /// Invariant. Kotlin's dial answer is safe from any thread, and its provider ignores a second call.
 private final class DialAnswer: @unchecked Sendable {
-    let call: (Bool) -> Void
-    init(_ call: @escaping (Bool) -> Void) { self.call = call }
+    let call: (DialResult) -> Void
+    init(_ call: @escaping (DialResult) -> Void) { self.call = call }
 }
 
 final class SceneDelegate: UIResponder, UIWindowSceneDelegate {

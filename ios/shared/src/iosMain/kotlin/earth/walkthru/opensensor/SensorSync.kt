@@ -278,7 +278,7 @@ class SensorSync internal constructor(
      * The first call creates the controllers and every later call returns the same instance, so the
      * per-device busy guard and the run permits hold app wide. Later closures are ignored.
      */
-    fun collections(linkFor: (String) -> IosLink?, dial: (String, LinkPreference, (Boolean) -> Unit) -> Unit): SensorCollections {
+    fun collections(linkFor: (String) -> IosLink?, dial: (String, LinkPreference, (DialResult) -> Unit) -> Unit): SensorCollections {
         lock.lock()
         try {
             return shared ?: SensorCollections(this, IosLinkProvider(linkFor, dial), recordClockAnchor, work, callbacks, progressInterval = progressInterval)
@@ -297,7 +297,7 @@ class SensorSync internal constructor(
      */
     fun collections(
         pick: (String, LinkPreference) -> IosLink?,
-        dial: (String, LinkPreference, (Boolean) -> Unit) -> Unit,
+        dial: (String, LinkPreference, (DialResult) -> Unit) -> Unit,
         protect: (String, Long, Boolean) -> Boolean,
         unprotect: (Long) -> Unit,
     ): SensorCollections {

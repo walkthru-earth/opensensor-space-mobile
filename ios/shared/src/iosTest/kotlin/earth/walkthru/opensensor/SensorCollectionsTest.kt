@@ -8,6 +8,7 @@ import earth.walkthru.aqsync.collection.KeepAlive
 import earth.walkthru.aqsync.collection.LinkPreference
 import earth.walkthru.aqsync.collection.RetryPolicy
 import earth.walkthru.aqsync.collection.SyncEndReason
+import earth.walkthru.aqsync.data.ble.TransportUnavailableException
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.protocol.FrameCodec
 import earth.walkthru.aqsync.data.protocol.Opcode
@@ -16,6 +17,7 @@ import earth.walkthru.aqsync.data.protocol.ProtocolError
 import earth.walkthru.aqsync.link.DisconnectCause
 import earth.walkthru.aqsync.link.LinkClosedException
 import earth.walkthru.aqsync.link.TimeoutPhase
+import earth.walkthru.aqsync.link.UnavailableKind
 import earth.walkthru.aqsync.storage.FakeStorageBudget
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -102,6 +104,9 @@ class SensorCollectionsTest {
         val dials = AtomicInt(0)
         var current: IosLink? = null
 
+        /** What Swift answers a dial when it cannot open one, such as Bluetooth off. */
+        var refuseAs: DialResult? = null
+
         fun connect(wifi: Boolean = true): IosLink {
             lateinit var link: IosLink
             link = IosLink(Port { answer(link, it) }, overWifi = wifi, address = device, callbacks = Dispatchers.Default, context = Dispatchers.Default)
@@ -111,11 +116,12 @@ class SensorCollectionsTest {
         }
 
         /** Swift's reconnect, a fresh identified link. */
-        fun dial(name: String, prefer: LinkPreference, done: (Boolean) -> Unit) {
+        fun dial(name: String, prefer: LinkPreference, done: (DialResult) -> Unit) {
             assertEquals(device, name)
             dials.incrementAndFetch()
+            refuseAs?.let { return done(it) }
             connect()
-            done(true)
+            done(DialResult.OPENED)
         }
 
         private fun answer(link: IosLink, req: ByteArray) {
@@ -240,7 +246,7 @@ class SensorCollectionsTest {
             { null },
             5.seconds,
             Dispatchers.Default,
-            { _, _, done -> dials.incrementAndFetch().also { done(false) } },
+            { _, _, done -> dials.incrementAndFetch().also { done(DialResult.REFUSED) } },
             poll = 1.seconds,
         )
         val began = TimeSource.Monotonic.markNow()
@@ -253,9 +259,37 @@ class SensorCollectionsTest {
     }
 
     @Test
+    fun aDialWithTheRadioUnavailableFailsAsThatKind() = runBlocking {
+        val kinds = mapOf(
+            DialResult.RADIO_OFF to UnavailableKind.RADIO_OFF,
+            DialResult.PERMISSION_MISSING to UnavailableKind.PERMISSION_MISSING,
+            DialResult.NO_ADAPTER to UnavailableKind.NO_ADAPTER,
+        )
+        for ((answer, kind) in kinds) {
+            val provider = IosLinkProvider({ null }, 5.seconds, Dispatchers.Default, { _, _, done -> done(answer) }, poll = 1.seconds)
+            val failed = assertFailsWith<TransportUnavailableException> { provider.connect(device, LinkPreference.BLE) }
+            assertEquals(kind, failed.kind)
+        }
+    }
+
+    @Test
+    fun aRunWithBluetoothOffEndsAtOnceAsBluetoothOffAndNeverDialsAgain() = runBlocking {
+        val board = Board { _, _ -> false }
+        board.refuseAs = DialResult.RADIO_OFF
+        val runs = collections(board)
+        val seen = Seen()
+        runs.collect(seen)
+        val result = withTimeout(10_000) { seen.done.await() }
+        assertEquals(SyncEndReason.BLUETOOTH_OFF, result.endReason)
+        assertFalse(result.dropsLanToken)
+        repeat(20) { yield() }
+        assertEquals(1, board.dials.load(), "a radio that is off is not retried")
+    }
+
+    @Test
     fun attemptsWhileADialIsInFlightWaitForItInsteadOfDiallingAgain() = runBlocking {
         val board = Board()
-        val answer = CompletableDeferred<(Boolean) -> Unit>()
+        val answer = CompletableDeferred<(DialResult) -> Unit>()
         val dials = AtomicInt(0)
         val provider = IosLinkProvider(
             { board.current },
@@ -269,7 +303,7 @@ class SensorCollectionsTest {
         val done = withTimeout(5_000) { answer.await() }
         repeat(10) { yield() }
         board.connect()
-        done(true)
+        done(DialResult.OPENED)
         val results = listOf(first, second).awaitAll()
         assertEquals(1, dials.load())
         // One lends the new link, the other finds its sync lease taken.
@@ -283,7 +317,7 @@ class SensorCollectionsTest {
     @Test
     fun aCancelDuringADialLeavesItInFlightAndTheRetryLendsItsLink() = runBlocking {
         val board = Board()
-        val answer = CompletableDeferred<(Boolean) -> Unit>()
+        val answer = CompletableDeferred<(DialResult) -> Unit>()
         val dials = AtomicInt(0)
         val provider = IosLinkProvider(
             { board.current },
@@ -301,7 +335,7 @@ class SensorCollectionsTest {
         val retry = async(Dispatchers.Default) { provider.connect(device, LinkPreference.ANY) }
         repeat(10) { yield() }
         board.connect()
-        done(true)
+        done(DialResult.OPENED)
         val lent = withTimeout(5_000) { retry.await() }
         assertEquals(1, dials.load(), "the retry waits for the dial Swift is still making")
         assertEquals(station, lent.station)
@@ -313,7 +347,7 @@ class SensorCollectionsTest {
     fun collectionsIsOneInstancePerRunner() {
         val board = Board()
         val first = sync.collections({ board.current }, board::dial)
-        assertSame(first, sync.collections({ null }, { _, _, done -> done(false) }))
+        assertSame(first, sync.collections({ null }, { _, _, done -> done(DialResult.REFUSED) }))
     }
 
     @Test
