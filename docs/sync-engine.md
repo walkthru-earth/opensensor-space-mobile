@@ -223,6 +223,8 @@ fake and compatibility `AqTransport` paths. iOS uses the connection's `IosLink`.
   to the close. `peerClosedCause` types three reasons: `token-rotated` (10) is `Auth(TOKEN_ROTATED)`,
   `auth-failed` (3) is `Auth(TOKEN_REJECTED)` and `sessions-full` (4) is `Busy`. Any other BYE stays
   `PeerClosed(bye)`. `LanTokenPolicy.invalidatesToken(cause)` is true for both `Auth` token kinds.
+  Android `TcpLinkDriver` applies `peerClosedCause` to a BYE at the handshake too. A Bluetooth GATT connect that fails
+  with a plain status (`BleLinkDriver.ConnectFailedException`) is `Unreachable`, a connect timeout is `Timeout(OPEN)`.
 - `open` applies `requireProto3`, so firmware below proto 3 ends as `UpdateFirmware`.
 
 ## Collection controller (`core/sync` `collection/`, #56)
@@ -303,9 +305,8 @@ attempts. Worker summaries use those new totals.
 `CollectionState` is the authoritative Android lifecycle. `DeviceFacade` projects it to
 `SyncProgress` for Files and notifications, keeping `running` true through preparation,
 retry waiting and finalization. Done maps to COMPLETED, Failed to FAILURE and Stopped to
-STOPPED. `SyncProgress.endReason` names why a run ended (2026-10-12). It is null while running,
-COMPLETED on Done, `CollectionFailure.endReason()` on Failed, STOPPED for a user or app stop and
-INTERRUPTED for a system stop or foreground timeout. Each reason has its own short message
+STOPPED. `SyncProgress.endReason` names why a run ended (2026-10-12), set from
+`CollectionState.endReason()` (below). Each reason has its own short message
 (`DeviceMessage.SyncEnded`), pairing repair and not enough space keep their own paths. The last
 `SyncProgress` and the archive summary survive a disconnect. The summary reads Room for the bound
 station and counts every archived row, like the Stations card. `DeviceFacade.ownership` says

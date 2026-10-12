@@ -11,7 +11,7 @@ flowchart TD
   C[connect address] --> Q{station discovered on mDNS<br/>AND token stored?}
   Q -- yes --> L[TcpLinkDriver AQS1 handshake]
   L -- HELLO --> R[Ready · chip Wi-Fi LAN]
-  L -- ERROR 14 --> X[clear token, mark stale] --> B
+  L -- ERROR 14 / BYE 3 / BYE 10 --> X[clear token, mark stale] --> B
   L -- ERROR 7 / timeout / bad HELLO --> B[BleLinkDriver]
   Q -- no --> B
   B --> R2[Ready · chip Bluetooth]
@@ -192,14 +192,15 @@ other boards need their own records.
 
 ## LAN token lifecycle
 
-`LanTokenPolicy` (pure, unit-tested).
+`LanTokenPolicy` (pure, unit-tested). `DeviceLinkOwner` clears the stored token whenever `invalidatesToken(cause)` holds for a LAN close. A clear, not only a stale mark, because a stored token is never fetched again.
 
 ```mermaid
 stateDiagram-v2
   [*] --> None
   None --> Stored: BLE session Ready, proto ≥ 3 → GET_TOKEN
   Stored --> Stored: LAN HELLO ok
-  Stored --> Stale: LAN ERROR 14 (rotated elsewhere) → lanToken cleared
+  Stored --> Stale: LAN ERROR 14 or BYE 3 (refused) → lanToken cleared
+  Stored --> Stale: LAN BYE 10 (rotated), at the handshake or mid-session → lanToken cleared
   Stale --> Stored: next BLE session refetches, snackbar LanTokenRenewed
   Stored --> Stale: unreadable encrypted value → token + port cleared
   Stored --> Stale: verified BLE station-generation change → token + port cleared
