@@ -1,5 +1,8 @@
 package earth.walkthru.aqsync.data.ble
 
+import earth.walkthru.aqsync.link.AuthKind
+import earth.walkthru.aqsync.link.DisconnectCause
+import earth.walkthru.aqsync.link.describe
 import java.util.concurrent.atomic.AtomicInteger
 
 /** Preserve the first terminal callback while connect stages and teardown run on other threads. */
@@ -40,6 +43,24 @@ internal class BleConnectionFailure {
         )
 
         fun isRepairStatus(status: Int?): Boolean = status in REPAIR_STATUSES
+
+        /**
+         * The state after a link closed with [cause]. Only stale or failed keys carry the repair
+         * message. An unfinished pairing (a PIN prompt that timed out) is an ordinary failure.
+         */
+        fun closedState(cause: DisconnectCause): ConnectionState = when {
+            cause is DisconnectCause.Deliberate || cause is DisconnectCause.PeerClosed -> ConnectionState.Disconnected
+            BleDisconnectCauses.needsPairingRepair(cause) -> ConnectionState.Failed(
+                PAIRING_REPAIR_MESSAGE,
+                BleDisconnectCauses.KEY_MISSING.takeIf { cause == DisconnectCause.Auth(AuthKind.BOND_MISSING) },
+            )
+            cause is DisconnectCause.Auth -> ConnectionState.Failed(cause.describe())
+            else -> ConnectionState.Failed(cause::class.simpleName ?: "closed", (cause as? DisconnectCause.LocalAbort)?.gattStatus)
+        }
+
+        /** What a link lost to [cause] reports, the repair message only for stale or failed keys. */
+        fun authLossMessage(cause: DisconnectCause.Auth, fallback: String): String =
+            if (BleDisconnectCauses.needsPairingRepair(cause)) PAIRING_REPAIR_MESSAGE else fallback
 
         fun needsPairingRepair(state: ConnectionState): Boolean = state is ConnectionState.Failed &&
             (isRepairStatus(state.gattStatus) || state.reason.startsWith("Bluetooth pairing needs repair."))

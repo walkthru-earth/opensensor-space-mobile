@@ -304,11 +304,7 @@ class BleLinkDriver(
         sink?.onClosed(cause)
         teardown()
         unregisterBondReceiver()
-        _state.value = when (cause) {
-            is DisconnectCause.Deliberate, is DisconnectCause.PeerClosed -> ConnectionState.Disconnected
-            is DisconnectCause.Auth -> ConnectionState.Failed(BleConnectionFailure.PAIRING_REPAIR_MESSAGE, BleDisconnectCauses.KEY_MISSING.takeIf { cause.kind == AuthKind.BOND_MISSING })
-            else -> ConnectionState.Failed(cause::class.simpleName ?: "closed", (cause as? DisconnectCause.LocalAbort)?.gattStatus)
-        }
+        _state.value = BleConnectionFailure.closedState(cause)
     }
 
     // ---------------------------------------------------------------- connect

@@ -947,9 +947,9 @@ class DeviceLinkOwner @Inject constructor(
             val reason = (lost as? ConnectionState.Failed)?.reason ?: "device closed the connection"
             val linkCause = (session.link.state.value as? LinkState.Closed)?.cause
             if (linkCause is DisconnectCause.Auth) {
-                // A refused or missing credential repeats on every attempt. The user pairs again.
+                // A refused or missing credential repeats on every attempt. Only stale keys ask to pair again.
                 Log.w(TAG, "link lost (${linkCause.describe()}); no auto-reconnect")
-                connectionFailure.value = BleConnectionFailure.PAIRING_REPAIR_MESSAGE.takeIf { linkCause.kind != AuthKind.TOKEN_REJECTED } ?: reason
+                connectionFailure.value = BleConnectionFailure.authLossMessage(linkCause, reason)
                 return@launch
             }
             if (collectionActive.value) return@launch
