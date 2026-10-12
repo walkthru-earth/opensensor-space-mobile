@@ -78,9 +78,10 @@ private val BAND = 4.dp
 private const val ANIM_MS = 350
 private val GUIDE_DASH = PathEffect.dashPathEffect(floatArrayOf(6f, 5f))
 
-internal fun windowLabel(window: FeedWindow, strings: DiscoverStrings): String = when (window) {
+/** The window's name. A [daily] feed's DAY window is its latest day, not the last 24 hours. */
+internal fun windowLabel(window: FeedWindow, strings: DiscoverStrings, daily: Boolean = false): String = when (window) {
     FeedWindow.LAST_HOUR -> strings.windowLastHour
-    FeedWindow.DAY -> strings.window24Hours
+    FeedWindow.DAY -> if (daily) strings.windowLatestDay else strings.window24Hours
     FeedWindow.WEEK -> strings.window7Days
 }
 

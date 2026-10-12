@@ -277,6 +277,7 @@ private fun DiscoverContent(
                     strings = strings,
                     onWindow = controller::selectWindow,
                     modifier = Modifier.align(Alignment.CenterStart).padding(start = FloatingControl.Margin),
+                    daily = state.daily,
                 )
                 Row(
                     Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 12.dp, end = 4.dp, bottom = PEEK_HEIGHT + 8.dp),
@@ -286,7 +287,7 @@ private fun DiscoverContent(
                     val scale = state.scale
                     if (property != null && scale != null) {
                         // Simple shows mood words for a health scale. A property without one keeps its gradient.
-                        if (simple && scale is CellScale.Health) SimpleLegend(property, strings, infoButton) else Legend(property, scale, state.window, strings, infoButton)
+                        if (simple && scale is CellScale.Health) SimpleLegend(property, strings, infoButton) else Legend(property, scale, state.window, strings, infoButton, state.daily)
                     }
                     Spacer(Modifier.weight(1f))
                     Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -464,6 +465,7 @@ private fun Legend(
     window: FeedWindow,
     strings: DiscoverStrings,
     infoButton: @Composable (InfoText, Modifier) -> Unit,
+    daily: Boolean,
 ) {
     val units = LocalDiscoverUnits.current
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
@@ -489,7 +491,7 @@ private fun Legend(
                         Spacer(Modifier.height(2.dp))
                         Text(caption, style = MaterialTheme.typography.labelSmall, color = muted)
                     }
-                    infoButton(strings.whoInfo, Modifier.size(40.dp))
+                    infoButton(if (daily) strings.whoInfoReal else strings.whoInfo, Modifier.size(40.dp))
                 }
                 is CellScale.Relative -> {
                     val low = scale.percentile.low
@@ -510,7 +512,7 @@ private fun Legend(
                         }
                         Text(strings.noHealthScale, style = MaterialTheme.typography.labelSmall, color = muted)
                     }
-                    infoButton(strings.scaleInfo, Modifier.size(40.dp))
+                    infoButton(if (daily) strings.scaleInfoReal else strings.scaleInfo, Modifier.size(40.dp))
                 }
             }
         }
@@ -765,7 +767,7 @@ private fun ChartTitle(property: FeedProperty, strings: DiscoverStrings, state: 
         Text("${property.label}  ${unitLabel(property, LocalDiscoverUnits.current)}", style = MaterialTheme.typography.titleSmall)
         Spacer(Modifier.width(8.dp))
         Text(
-            "${strings.avg}  ${windowLabel(state.window, strings)}",
+            "${strings.avg}  ${windowLabel(state.window, strings, state.daily)}",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(1f),
@@ -922,7 +924,7 @@ private fun SimpleCellDetail(
                 Text(moodLine(summary.step), style = MaterialTheme.typography.bodyMedium)
                 Spacer(Modifier.height(12.dp))
                 // One block per window the feed offers, oldest first, so Real shows 7 days and 24 hours.
-                MoodStrip(summary.blocks, captions = PublicSummary.ORDER.filter { it in state.windows }.map { windowLabel(it, strings) })
+                MoodStrip(summary.blocks, captions = PublicSummary.ORDER.filter { it in state.windows }.map { windowLabel(it, strings, state.daily) })
             }
         } else if (headline == SimpleHeadline.LOADING) {
             // The 24 hour row is still on its way. Neutral, no mood and no verdict yet.
