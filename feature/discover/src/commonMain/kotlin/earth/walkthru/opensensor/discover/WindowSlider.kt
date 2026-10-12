@@ -84,11 +84,11 @@ internal fun WindowSlider(
         }
     }
 
+    // The window on screen is always reported too, so choosing a coerced one (24 hours standing in
+    // for a saved last hour in Real) saves it. The controller ignores a repeat.
     fun pick(w: FeedWindow) {
-        if (w != current) {
-            haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-            onWindow(w)
-        }
+        if (w != current) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+        onWindow(w)
     }
 
     val title = strings.timeWindow

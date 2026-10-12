@@ -15,6 +15,8 @@ import earth.walkthru.aqsync.publicfeed.LatLng
 import earth.walkthru.aqsync.publicfeed.PublicFeed
 import earth.walkthru.aqsync.settings.DiscoverSource
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -52,6 +54,9 @@ class DiscoverControllerTest {
         /** True makes [latest] throw, like a manifest that cannot be read. */
         var latestFails = false
 
+        /** Holds the next [latest] calls, a slow manifest. */
+        var latestGate: CompletableDeferred<Unit>? = null
+
         /** True makes every viewport read throw. */
         var viewportFails = false
 
@@ -65,12 +70,15 @@ class DiscoverControllerTest {
         val failures = mutableMapOf<Pair<Long, FeedWindow>, Int>()
 
         override suspend fun latest(): FeedPartition {
+            latestGate?.await()
             if (latestFails) throw IllegalStateException("manifest failed")
             return partition
         }
 
         override suspend fun cells(partition: FeedPartition, window: FeedWindow, res: Int, ranges: List<LongRange>?): CellsTable {
             calls += window to ranges
+            // Another feed's partition names files this feed does not have.
+            if (partition != this.partition) throw IllegalStateException("no file for $partition")
             val single = ranges?.singleOrNull()?.takeIf { it.first == it.last }?.first
             if (single != null) {
                 gates[single]?.await()
@@ -123,15 +131,21 @@ class DiscoverControllerTest {
         runCurrent()
     }
 
-    private fun TestScope.controller(feed: FakeFeed, live: FakeFeed? = null, saved: MutableList<DiscoverSource>? = null): DiscoverController {
+    private fun TestScope.controller(
+        feed: FakeFeed,
+        live: FakeFeed? = null,
+        saved: MutableList<DiscoverSource>? = null,
+        prefs: MemoryPrefs = MemoryPrefs(),
+        io: CoroutineDispatcher = StandardTestDispatcher(testScheduler),
+    ): DiscoverController {
         val c = DiscoverController(
             backgroundScope,
             feed,
             FakeGrid,
-            MemoryPrefs(),
+            prefs,
             "UTC",
             now = { 1_000L },
-            io = StandardTestDispatcher(testScheduler),
+            io = io,
             liveFeed = live,
             saveSource = { saved?.add(it) },
         )
@@ -543,5 +557,44 @@ class DiscoverControllerTest {
         c.onSourceSettings(DiscoverSource.OPENAQ, publicSensors = true)
         assertFalse(c.state.value.sourceEnabled)
         assertTrue(c.state.value.isSample)
+    }
+
+    @Test
+    fun aSwitchToSampleWhileTheLiveManifestIsAnsweringNeverLeavesTheSampleOnTheLivePartition() = runTest {
+        val sample = FakeFeed()
+        val live = liveFeed()
+        // Unconfined io resumes the gated manifest read at once, so its answer is queued on the
+        // controller before the switch back reaches the loader.
+        val c = controller(sample, live, io = Dispatchers.Unconfined)
+        c.onSourceSettings(DiscoverSource.SAMPLE, publicSensors = true)
+        live.latestGate = CompletableDeferred()
+        c.onSourceSettings(DiscoverSource.OPENAQ, publicSensors = true)
+        settle()
+        live.latestGate!!.complete(Unit)
+        c.onSourceSettings(DiscoverSource.SAMPLE, publicSensors = true)
+        settle()
+        val s = c.state.value
+        assertTrue(s.isSample)
+        assertFalse(s.loading)
+        assertEquals(2, s.rows.size, "the sample reads its own partition")
+    }
+
+    @Test
+    fun choosingTheDayInRealSavesItOverASavedLastHour() = runTest {
+        val prefs = MemoryPrefs()
+        val c = controller(FakeFeed(), liveFeed(), prefs = prefs)
+        c.selectWindow(FeedWindow.LAST_HOUR)
+        settle()
+        assertEquals(FeedWindow.LAST_HOUR, prefs.saved.window)
+        c.onSourceSettings(DiscoverSource.OPENAQ, publicSensors = true)
+        settle()
+        assertEquals(FeedWindow.DAY, c.state.value.window)
+        assertEquals(FeedWindow.LAST_HOUR, prefs.saved.window, "the coercion alone is not saved")
+        c.selectWindow(FeedWindow.DAY)
+        settle()
+        assertEquals(FeedWindow.DAY, prefs.saved.window)
+        c.onSourceSettings(DiscoverSource.SAMPLE, publicSensors = true)
+        settle()
+        assertEquals(FeedWindow.DAY, c.state.value.window)
     }
 }

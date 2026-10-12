@@ -309,7 +309,16 @@ class DiscoverController(
     }
 
     fun selectWindow(next: FeedWindow) {
-        if (_state.value.window == next || next !in _state.value.windows) return
+        if (next !in _state.value.windows) return
+        if (_state.value.window == next) {
+            // The window on screen may be a coerced one (the last hour shown as the 24 hours in
+            // Real). Choosing it is still the user's choice, so it is saved.
+            if (saved.window != next) {
+                saved = saved.copy(window = next)
+                persist()
+            }
+            return
+        }
         saved = saved.copy(window = next)
         persist()
         _state.update { it.copy(window = next, loading = true, failedWindows = emptySet()) }
@@ -362,7 +371,11 @@ class DiscoverController(
         // The sample's partition never changes. The real one is asked again on every load, its
         // manifest is cached by the feed, so a new day is picked up and a failed read is retried.
         if (partition == null || real) {
-            partition = withContext(io) { catching { source.latest() }.getOrNull() } ?: partition
+            val asked = withContext(io) { catching { source.latest() }.getOrNull() }
+            // A switch made while the manifest answered owns the partition now. Never write this
+            // feed's partition over it, or the other feed reads files it does not have.
+            if (source !== active) return
+            partition = asked ?: partition
         }
         if (source !== active) return
         val p = partition
