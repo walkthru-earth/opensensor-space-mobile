@@ -1043,6 +1043,22 @@ class DeviceConnectionRepositoryTest {
         assertEquals(DeviceOwnership.IDLE, h.repo.ownershipNow())
     }
 
+    @Test
+    fun `a refused restart keeps the device reserved until the stopped run let go`() = harnessTest { h ->
+        h.factory.listDelayMs = 60_000
+        h.repo.syncAll()
+        h.until { (h.repo.collectionState.value as? CollectionState.Preparing)?.step == PrepareStep.LIST }
+        h.repo.stop(StopSource.USER)
+        h.refuseProcess = true
+        h.repo.syncAll()
+        assertTrue(h.repo.collectionState.value is CollectionState.Failed)
+        // The stopped run still holds its link, so nothing else may claim the device yet.
+        assertEquals(DeviceOwnership.INTERACTIVE, h.repo.ownershipNow())
+        assertTrue(h.repo.busy.value)
+        h.until { h.processLeases == 0 && h.repo.ownershipNow() == DeviceOwnership.IDLE && !h.repo.busy.value }
+        assertNull(h.repo.session.value)
+    }
+
     private fun archivedRow(station: String, name: String, indexed: Boolean) = ArchivedFile(
         station = station,
         name = name,

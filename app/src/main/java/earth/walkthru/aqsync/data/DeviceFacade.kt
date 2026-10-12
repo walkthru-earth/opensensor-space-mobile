@@ -80,6 +80,9 @@ class DeviceFacade internal constructor(
     private val lock = ReentrantLock()
     private var address: String? = null
     private var request: Request? = null
+
+    /** True from reservation until controller.start returned. Guarded by [lock]. */
+    private var starting = false
     private lateinit var controller: CollectionController
     val collectionState: StateFlow<CollectionState> get() = controller.state
     private val progress = MutableStateFlow(SyncProgress())
@@ -120,7 +123,8 @@ class DeviceFacade internal constructor(
         controller = CollectionController(
             address,
             LinkProvider { device, preference ->
-                val active = lock.withLock { requireNotNull(request) }
+                val active = lock.withLock { requireNotNull(request).also { it.replaced = null } }
+                // A run asks for a link only after the run it replaced cleaned up.
                 linkOwner.lendLink(device, preference, active.background, forCollection = true)
             },
             collector,
@@ -194,7 +198,17 @@ class DeviceFacade internal constructor(
             if (request !== active) false else { request = null; true }
         }
         if (released) {
-            linkOwner.releaseCollection(active.background?.owner)
+            val previous = active.replaced
+            if (previous == null) {
+                linkOwner.releaseCollection(active.background?.owner)
+            } else {
+                // A restart took over the reservation of a run still cleaning up. Hand it back
+                // only once that run let go of its link.
+                scope.launch {
+                    withContext(NonCancellable) { controller.awaitCleanup(previous) }
+                    linkOwner.releaseCollection(active.background?.owner)
+                }
+            }
         }
         active.admission.close()
     }
@@ -204,11 +218,15 @@ class DeviceFacade internal constructor(
         val active = Request(intent, background, protection, admitted, clock.nowEpochMs())
         val reserved = lock.withLock {
             val previous = request
-            val restarting = previous != null && !controller.state.value.active && previous.background == null && background == null
+            // A stopped interactive run still cleaning up hands its reservation to the next tap.
+            // Never while another start is between here and controller.start, or both would own it.
+            val restarting = previous != null && !starting && !controller.state.value.active && previous.background == null && background == null
             if ((previous != null && !restarting) || (previous == null && !linkOwner.reserveCollection(background?.owner))) {
                 false
             } else {
+                if (restarting) active.replaced = previous?.intent?.id
                 request = active
+                starting = true
                 true
             }
         }
@@ -216,7 +234,11 @@ class DeviceFacade internal constructor(
             admitted.close()
             return null
         }
-        val result = controller.start(intent)
+        val result = try {
+            controller.start(intent)
+        } finally {
+            lock.withLock { starting = false }
+        }
         publish(controller.state.value)
         active.loss?.let { applyLoss(intent.id, it) }
         if (result !is StartResult.Started) releaseRequest(active)
@@ -364,6 +386,9 @@ class DeviceFacade internal constructor(
         val newlySynced = linkedMapOf<String, FileOutcome.Synced>()
 
         @Volatile var loss: AndroidKeepAlive.ServiceLoss? = null
+
+        /** The stopped run whose reservation this restart took over, until it cleaned up. Guarded by the facade lock. */
+        var replaced: Long? = null
     }
 
     val session get() = linkOwner.session
