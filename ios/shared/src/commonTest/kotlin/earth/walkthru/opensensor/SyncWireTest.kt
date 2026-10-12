@@ -91,6 +91,9 @@ class SyncWireTest {
         val authBye = wire.decodeHex("4b" + "03" + "04030201f5ff0300100e0000")!!
         assertEquals("bye", authBye.kind)
         assertEquals(HandshakeRefusal.TOKEN_REJECTED, authBye.refusal)
+        // A rotated token is no longer valid either, and a full session table is busy.
+        assertEquals(HandshakeRefusal.TOKEN_REJECTED, wire.decodeHex("4b" + "0a" + "04030201f5ff0300100e0000")!!.refusal)
+        assertEquals(HandshakeRefusal.BUSY, wire.decodeHex("4b" + "04" + "04030201f5ff0300100e0000")!!.refusal)
         // A reboot or Wi-Fi drop says goodbye without an auth verdict, so the token stays.
         assertEquals(HandshakeRefusal.PEER_CLOSED, wire.decodeHex("4b" + "0b" + "04030201f5ff0300100e0000")!!.refusal)
         assertEquals(HandshakeRefusal.PEER_CLOSED, wire.decodeHex("4b" + "08" + "04030201f5ff0300100e0000")!!.refusal)

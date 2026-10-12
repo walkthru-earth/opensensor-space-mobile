@@ -362,7 +362,7 @@ final class LanDiscovery {
             // An Auto-sync step closes the session it opened.
             let bytes = backgroundBytes[name] ?? 0
             dropSession(name)
-            if result.end == .authFailed, let device { removeCredential(device: device) }
+            if result.dropsLanToken, let device { removeCredential(device: device) }
             state.lanSyncFinished(name: name, connected: false, result: result)
             backgroundBytes[name] = nil
             backgroundRuns[name] = nil
@@ -375,7 +375,7 @@ final class LanDiscovery {
         } else {
             // A stopped or failed link may still hold a write in flight. The next sync starts on a fresh session.
             dropSession(name)
-            if result.end == .authFailed, let device { removeCredential(device: device) }
+            if result.dropsLanToken, let device { removeCredential(device: device) }
             state.lanSyncFinished(name: name, connected: false, result: result)
         }
         advanceCollect(name)
