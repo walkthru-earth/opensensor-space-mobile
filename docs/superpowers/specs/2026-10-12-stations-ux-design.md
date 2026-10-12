@@ -51,8 +51,7 @@ legend are each one accessibility node with a spoken summary.
 
 Mood words move into `:ui:designsystem` strings (`mood_fresh` … `mood_thick`, `mood_none`,
 `mood_*_line`). The duplicate `mood_*_title` keys in today, history, devices and `app/` are
-deleted. This also fixes iOS `CompanionScreen.kt:140,272`, which prints the English mood name
-under Arabic.
+deleted, so no screen prints an English mood name under Arabic.
 
 **Discover at Simple.** `DiscoverScreen` takes `level`. Android reads it in `DiscoverViewModel`,
 iOS passes the level `AppRoot` already holds. The controller stays level agnostic and, on

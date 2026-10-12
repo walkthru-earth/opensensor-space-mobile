@@ -31,7 +31,7 @@ root for the relevant concern. No Android, Hilt, Room, `Context` or
   a code branch or a schema string check in a screen. Today add metrics through
   `history/.../Metrics.kt` (`MetricSpec`), with column, unit, validity gate and
   an optional scale. A missing column produces no value. When `:core:model`
-  lands (W11, not started), families, capabilities, properties and scales move
+  lands (planned), families, capabilities, properties and scales move
   there. Read `docs/devices-and-discovery.md` first. New shared types use generic
   names (for example `Reading`, or a future `MetricCard`), never `Air*`.
 - Public discover data carries H3 cells, never coordinates. The publisher owns aggregation and

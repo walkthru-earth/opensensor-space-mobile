@@ -3,8 +3,6 @@
 **Scope:** every user-visible feature that intentionally differs between the two apps after the
 parity work, and why. Everything not listed here is shared Kotlin and behaves the same.
 **Code:** the linked Android files and `ios/App/`. **Related:**
-[platform-parity-plan.md](platform-parity-plan.md),
-[parity-audit/F-feature-inventory.md](parity-audit/F-feature-inventory.md) (full feature table),
 [parity-decisions.md](parity-decisions.md).
 
 ## Android only

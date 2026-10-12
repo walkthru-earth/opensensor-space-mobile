@@ -33,7 +33,7 @@ include(":core:units")
 include(":core:airquality")
 // HTTP range reads for remote Parquet, OkHttp on Android and NSURLSession on iOS (issue #62).
 include(":core:net")
-// Planned shared sync engine, phone archive and app settings (docs/platform-parity-plan.md).
+// The shared sync engine (docs/sync-engine.md).
 include(":core:sync")
 include(":core:archive")
 // Storage classes, durable no-replace commits, free space and the startup janitor's walk (issue #60).
@@ -46,7 +46,7 @@ include(":ui:strings")
 // When each permission is asked and where its settings link goes, for both apps.
 include(":ui:permissions")
 include(":feature:discover")
-// The Settings screen, shared Compose for Android and iOS (docs/platform-parity-plan.md).
+// The Settings screen, shared Compose for Android and iOS (docs/screens.md).
 include(":feature:settings")
 // My devices, one shared list of nearby, known and Wi-Fi sensors (docs/screens.md, My devices).
 include(":feature:devices")

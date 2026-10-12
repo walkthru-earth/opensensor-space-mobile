@@ -31,8 +31,7 @@ data carries H3 cells, never coordinates.
 
 **One product on two phones.** Rules that must give the same answer on Android and iOS live in
 shared Kotlin, and screens share one design system based on the opensensor.space website. See
-[docs/cross-platform-guide.md](docs/cross-platform-guide.md). The production refactor that gets
-there is tracked in [docs/production-readiness-plan.md](docs/production-readiness-plan.md).
+[docs/cross-platform-guide.md](docs/cross-platform-guide.md).
 
 ## Platform status
 
@@ -62,7 +61,6 @@ flowchart LR
 | --- | --- |
 | Product direction, device families, public H3 discover map, sharing rules | [`docs/devices-and-discovery.md`](docs/devices-and-discovery.md) |
 | Keeping Android and iOS the same, adding a sensor family or transport | [`docs/cross-platform-guide.md`](docs/cross-platform-guide.md) |
-| Production refactor plan and workstreams | [`docs/production-readiness-plan.md`](docs/production-readiness-plan.md) |
 | Rebrand, multi-device implementation, reset/reflash policy and remaining qualification | [`docs/opensensor-space.md`](docs/opensensor-space.md) |
 | What is verified, where, and what is next | [`docs/status.md`](docs/status.md) |
 | Modules, layers, "what a change touches" | [`docs/architecture.md`](docs/architecture.md) |

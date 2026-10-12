@@ -1,4 +1,4 @@
-// The shared phone archive (docs/platform-parity-plan.md, `:core:archive`). One archive layout (Hive
+// The shared phone archive (docs/data-model.md, `:core:archive`). One archive layout (Hive
 // paths, partial and legacy receipt names), the file verifier (size, CRC-32, PAR1), the plain records
 // both platforms store, and the store ports (`ArchiveStore`, `ArchiveIndex`). Platform adapters do file
 // and database I/O only. No Android, Hilt or Room here (AGENTS.md).

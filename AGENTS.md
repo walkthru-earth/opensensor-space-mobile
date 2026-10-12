@@ -11,7 +11,7 @@ concern you are changing in `docs/README.md`.
 | Task | Open next | Code |
 | --- | --- | --- |
 | Current status and real-phone evidence | `docs/status.md`, then `../aq-parquet/docs/boards/*/bench-verified.md` | — |
-| Cross-platform design and sync rules, production refactor plan | `docs/cross-platform-guide.md`, `docs/production-readiness-plan.md` | `core/`, `app/`, `ios/` |
+| Cross-platform design and sync rules | `docs/cross-platform-guide.md`, `docs/platform-differences.md` | `core/`, `app/`, `ios/` |
 | Device families, sensor-agnostic model, public H3 discover map | `docs/devices-and-discovery.md` | `core/publicfeed/`, `feature/discover/`, `tools/discover-fixture/` |
 | iOS app, shared Kotlin, simulator and iPhone builds | `docs/ios-migration.md`, `ios/AGENTS.md` | `core/`, `ios/` |
 | App layers and dependencies | `docs/architecture.md`, `core/AGENTS.md` | `core/`, `app/` |

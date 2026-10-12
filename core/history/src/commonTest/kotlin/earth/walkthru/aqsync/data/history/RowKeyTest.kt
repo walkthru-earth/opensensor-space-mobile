@@ -11,7 +11,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
-/** D12 in docs/platform-parity-plan.md. One de-duplication key for the tiers, the day chart and the daily file. */
+/** One de-duplication key for the tiers, the day chart and the daily file. */
 class RowKeyTest {
 
     private val second = 1_000_000_000L
@@ -78,8 +78,13 @@ class RowKeyTest {
         val keys = RowKeys { _, _, _, _ -> 42L }
         // Keys that differ in one field only, so a hash match alone would wrongly drop them.
         val distinct = listOf(
-            RowKey(1, 2, true, 5), RowKey(1, 2, false, 5), RowKey(1, 3, true, 5), RowKey(2, 2, true, 5),
-            RowKey(1, 2, true, 6), RowKey(0, 0, false, 0), RowKey(0, 0, true, 0),
+            RowKey(1, 2, true, 5),
+            RowKey(1, 2, false, 5),
+            RowKey(1, 3, true, 5),
+            RowKey(2, 2, true, 5),
+            RowKey(1, 2, true, 6),
+            RowKey(0, 0, false, 0),
+            RowKey(0, 0, true, 0),
         )
         for (k in distinct) assertTrue(keys.firstSight(k.bootHi, k.bootLo, k.bySequence, k.value), "$k is new")
         for (k in distinct) assertFalse(keys.firstSight(k.bootHi, k.bootLo, k.bySequence, k.value), "$k was seen")

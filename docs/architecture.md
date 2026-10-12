@@ -30,7 +30,7 @@ flowchart TB
   end
   APP[":app (Android)<br/>Hilt, Room v10, DataStore, WorkManager, Compose, zstd-jni"]
   IOS["ios/App (Xcode + Swift)<br/>Core Bluetooth, Bonjour, lifecycle, Keychain, export"]
-  IS[":ios:shared (iOS only)<br/>AppRoot, DevicesBridge, the device page, static OpenSensorShared framework"]
+  IS[":ios:shared (iOS only)<br/>AppRoot, DevicesBridge, the iOS bridges, static OpenSensorShared framework"]
   SY1 --> PR & AR1
   AR1 --> PR & PQ & ST
   HI --> PQ & PR & AQ
@@ -76,16 +76,14 @@ Screens that take Back first use `NavigationBackHandler`, never `BackHandler`.
 
 ### Target module graph
 
-The graph above is today's code. [platform-parity-plan.md](platform-parity-plan.md) moves toward
-the graph below, where every rule that must give the same answer on both phones is shared and
-platform code only adapts OS services. `:core:sync`, `:core:archive`, `:core:settings` and
-`:feature:settings` exist. The shared sync engine is adopted on both platforms. Room KMP backing remains planned.
-Android uses the shared collection controller. iOS has it in `SensorCollections`, built only by tests so far, and routing
-the native entry points into it remains
-[#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81). iOS Core Bluetooth
-runs on the `BlePhysicalLink` serial queue. `:core:model` (device families and metrics
-as data) is planned in [production-readiness-plan.md](production-readiness-plan.md) W11 and
-[devices-and-discovery.md](devices-and-discovery.md).
+The graph above is today's code. The graph below is the target, where every rule that must give
+the same answer on both phones is shared and platform code only adapts OS services. `:core:sync`,
+`:core:archive`, `:core:settings` and `:feature:settings` exist. Both platforms run the shared
+sync engine and one shared collection controller per device (Android through `DeviceFacade`, iOS
+through `SensorCollections`, [#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81)).
+iOS Core Bluetooth runs on the `BlePhysicalLink` serial queue. Room KMP backing and `:core:model`
+(device families and metrics as data, [devices-and-discovery.md](devices-and-discovery.md)) are
+planned.
 
 ```mermaid
 flowchart TB

@@ -3,7 +3,6 @@
 **Scope:** how the app supports any sensor family (air quality is one of many), and how a new user
 sees public sensor data near them on first open through a privacy-preserving H3 map.
 **Code:** `core/publicfeed/`, `feature/discover/`, `tools/discover-fixture/`, planned `:core:model`. **Related:**
-[production-readiness-plan.md](production-readiness-plan.md) (W11, W12),
 [cross-platform-guide.md](cross-platform-guide.md),
 `../aq-parquet/docs/shared/table-and-observation-model.md`.
 

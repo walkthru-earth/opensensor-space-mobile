@@ -1,8 +1,7 @@
-// The shared sync engine (docs/platform-parity-plan.md, target shape). Wave 2 moved the pure parts
-// of Android's stack here: the request session and its timeouts, the device, token and resume
-// policies, the planner, the window retry rule and the progress and rate maths. Moved classes keep
-// their `earth.walkthru.aqsync.data.*` packages so no caller changed. Wave 3 puts the engine behind
-// the FrameLink, ArchiveStore, ArchiveIndex and CredentialStore ports for Android and iOS.
+// The shared sync engine (docs/sync-engine.md). The link session and its timeouts, the device, token
+// and resume policies, the planner, the window retry rule, progress and rate maths, `SyncEngine`,
+// `ArchiveCollector` and the per-device `CollectionController`, run by Android and iOS over the
+// `:core:archive` store ports. Classes keep their `earth.walkthru.aqsync.data.*` packages.
 plugins {
     id("opensensor.kmp.library")
 }

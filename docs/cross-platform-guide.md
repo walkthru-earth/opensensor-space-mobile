@@ -2,7 +2,7 @@
 
 **Scope:** how this project keeps one product, one design and one sync behaviour across Android
 and iOS, and the rules every new feature follows. **Code:** `core/`, `ios/shared/`, `app/`,
-`ios/App/`. **Related:** [production-readiness-plan.md](production-readiness-plan.md),
+`ios/App/`. **Related:** [platform-differences.md](platform-differences.md),
 [architecture.md](architecture.md), [ios-migration.md](ios-migration.md), `../ios/AGENTS.md`.
 
 ## The one-sentence rule
@@ -36,8 +36,7 @@ interfaces.
 
 ### Where the code will live (target)
 
-This is the target shape from [platform-parity-plan.md](platform-parity-plan.md). The engine part
-is in place. Both phones run `SyncEngine` and `ArchiveCollector` from `:core:sync`, with the
+The engine part of this target shape is in place. Both phones run `SyncEngine` and `ArchiveCollector` from `:core:sync`, with the
 `ArchiveStore` and `ArchiveIndex` ports from `:core:archive`. Android adapts them in
 `app/.../data/archive/`. iOS uses `IosArchiveStore` and `ReceiptArchiveIndex` in `:core:archive`
 iosMain. The frame link exists on iOS as `IosLink` in `ios/shared` iosMain, one per connection over
@@ -134,8 +133,8 @@ Air quality is one family among many. Follow "Adding a device family" in
 properties, the metric registry gets a dictionary entry with `commonTest` coverage, and screens
 pick it up through capabilities. Never a schema string check in a screen. Today the registry is
 `Metrics` and `DeviceCapabilities` in `:core:history`. `:core:model`, `DeviceFamily` and a generic
-`MetricCard` are planned (W11 in [production-readiness-plan.md](production-readiness-plan.md)) and
-do not exist yet.
+`MetricCard` are planned ([devices-and-discovery.md](devices-and-discovery.md)) and do not exist
+yet.
 
 ## Design parity
 
@@ -323,7 +322,7 @@ logs and diagnostics. A new field states its level in code, and screenshot tests
 
 Write user-facing text so both platforms say the same thing. Shared screens keep their copy in
 Compose resources, one catalogue for both apps (`feature/<name>/src/commonMain/composeResources/values/strings.xml`,
-today Discover and Settings). Copy for the iOS companion screen and shared screens without a module
+today Discover and Settings). Copy for iOS only screens and shared screens without a module
 of their own lives in `:ui:strings`, and a key Android already has keeps its name and words. State
 code holds a `UiText` (a catalogue key with arguments) and the composable resolves it. Android-only
 screens still use `res/values*/strings.xml`. The `:ui:strings` host tests check every Android and
