@@ -3,6 +3,7 @@ package earth.walkthru.aqsync.data.lan
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.NotAllowedOnLinkException
 import earth.walkthru.aqsync.data.openableSession
+import earth.walkthru.aqsync.data.protocol.DisconnectReason
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.protocol.FrameCodec
 import earth.walkthru.aqsync.data.protocol.LanFraming
@@ -428,10 +429,32 @@ class TcpLinkDriverTest {
     }
 
     @Test
-    fun `closing without HELLO is a rejected token not a hang`() = runBlocking {
+    fun `closing without HELLO is unreachable and keeps the token`() = runBlocking {
+        // A reboot or a Wi-Fi drop between the handshake and HELLO. Only ERROR 14 or BYE 3 rejects.
         FakeLanDevice(token, hello = null) { emptyList() }.use {
             val e = openFails(it, it.port)
+            assertEquals(DisconnectCause.PeerClosed(), e.disconnectCause)
+            assertEquals(LanFailure.UNREACHABLE, (e.cause as LanConnectException).failure)
+        }
+    }
+
+    @Test
+    fun `BYE auth-failed at the handshake is Auth TOKEN_REJECTED`() = runBlocking {
+        val bye = FrameCodec.encode(Frame.Bye(DisconnectReason.AUTH_FAILED.code, 2, -1, 0, 5))
+        FakeLanDevice(token, bye) { emptyList() }.use {
+            val e = openFails(it, it.port)
+            assertEquals(DisconnectCause.Auth(AuthKind.TOKEN_REJECTED), e.disconnectCause)
             assertEquals(LanFailure.AUTH_FAILED, (e.cause as LanConnectException).failure)
+        }
+    }
+
+    @Test
+    fun `another BYE at the handshake is PeerClosed and keeps the token`() = runBlocking {
+        val frame = Frame.Bye(DisconnectReason.HANDSHAKE_TIMEOUT.code, 2, -1, 0, 5)
+        FakeLanDevice(token, FrameCodec.encode(frame)) { emptyList() }.use {
+            val e = openFails(it, it.port)
+            assertEquals(DisconnectCause.PeerClosed(frame), e.disconnectCause)
+            assertEquals(LanFailure.UNREACHABLE, (e.cause as LanConnectException).failure)
         }
     }
 
