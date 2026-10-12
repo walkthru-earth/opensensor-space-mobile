@@ -14,7 +14,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import earth.walkthru.aqsync.R
-import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.ui.components.CollectEvents
 import earth.walkthru.aqsync.ui.components.ConnectionBanner
 import earth.walkthru.aqsync.ui.components.showScreenMessage

@@ -16,7 +16,6 @@ import earth.walkthru.aqsync.link.LinkClosedException
 import earth.walkthru.aqsync.link.LinkDriver
 import earth.walkthru.aqsync.link.LinkInfo
 import earth.walkthru.aqsync.link.LinkSession
-import earth.walkthru.aqsync.link.LinkState
 import earth.walkthru.aqsync.link.OnceSink
 import earth.walkthru.aqsync.link.PushChannel
 import earth.walkthru.aqsync.link.Radio

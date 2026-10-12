@@ -1,7 +1,6 @@
 package earth.walkthru.opensensor
 
 import earth.walkthru.aqsync.collection.CollectionController
-import earth.walkthru.aqsync.collection.CollectionFailure
 import earth.walkthru.aqsync.collection.CollectionIntent
 import earth.walkthru.aqsync.collection.CollectionLink
 import earth.walkthru.aqsync.collection.CollectionOrigin

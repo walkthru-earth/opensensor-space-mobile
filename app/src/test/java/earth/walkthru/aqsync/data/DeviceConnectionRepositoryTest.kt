@@ -34,7 +34,6 @@ import earth.walkthru.aqsync.data.lan.LanDevice
 import earth.walkthru.aqsync.data.lan.LanFailure
 import earth.walkthru.aqsync.data.lan.LanTargets
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
-import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.local.database.DerivedArchivedFileQueries
 import earth.walkthru.aqsync.data.local.database.KnownDevice
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao

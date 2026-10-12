@@ -8,7 +8,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalResources
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.ui.components.CollectEvents
 import earth.walkthru.aqsync.ui.components.ConnectionBanner
 import earth.walkthru.aqsync.ui.components.showDeviceEvent

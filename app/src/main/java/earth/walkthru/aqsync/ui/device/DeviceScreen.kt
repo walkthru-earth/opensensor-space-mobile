@@ -26,7 +26,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import earth.walkthru.aqsync.R
-import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.ui.components.ConnectionBanner
 import earth.walkthru.aqsync.ui.device.cards.AutoSyncCard
 import earth.walkthru.aqsync.ui.device.cards.DeviceInfoCard

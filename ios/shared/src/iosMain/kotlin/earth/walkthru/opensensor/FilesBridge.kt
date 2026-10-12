@@ -1,8 +1,6 @@
 package earth.walkthru.opensensor
 
 import androidx.compose.runtime.snapshotFlow
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import earth.walkthru.aqsync.data.ManifestState
 import earth.walkthru.aqsync.data.sync.ArchivedIdentity
 import earth.walkthru.aqsync.data.sync.FileOutcome
