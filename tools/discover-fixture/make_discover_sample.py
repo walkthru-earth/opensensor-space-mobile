@@ -68,6 +68,7 @@ CITIES = [
     ("Nairobi", -1.286, 36.817, ["pm25", "co2", "temperature"], {"pm25": 22, "co2": 460, "temperature": 21}, 24, 0.25),
     ("New York", 40.713, -74.006, ["pm25", "temperature", "humidity", "co2"], {"pm25": 9, "temperature": 15, "humidity": 58, "co2": 430}, 36, 0.0),
     ("Jakarta", -6.208, 106.846, ["pm25", "pm10", "humidity"], {"pm25": 45, "pm10": 70, "humidity": 78}, 30, 0.0),
+    ("Accra", 5.603, -0.187, ["pm25", "pm10", "temperature", "humidity"], {"pm25": 35, "pm10": 70, "temperature": 28, "humidity": 78}, 30, 0.0),
 ]
 
 # Daily swing and noise per property, as a fraction of the base value.
