@@ -127,8 +127,8 @@ sheets stacked on top of each other.
 
 ### First screen at the Simple level
 
-Zero taps shows the map, the metric chips, the time slider, the legend, the "Sample data" pill while
-the feed is a fixture, and the sheet at peek height. Nothing else. Every explanation sits behind
+Zero taps shows the map, the metric chips, the time slider, the legend, the Sample and Real
+toggle, and the sheet at peek height. Nothing else. Every explanation sits behind
 an info button.
 
 - **Top bar.** A search field ("Search places") and an "Add your sensor" icon button (`+`). The
@@ -139,8 +139,9 @@ an info button.
   property grouped by category from the metric registry (Air, Weather, Water, Soil, Noise,
   Energy). Choosing one from "More" moves it into the row. The last choice is remembered.
 - **Time slider.** A 44dp pill on the left edge of the map, not in the chip row. At rest it
-  shows only the chosen window. A touch grows it into one snap stop per window, 1h at the top,
-  then 24h and 7d, with a tinted thumb that follows a vertical drag (a haptic tick at each stop).
+  shows only the chosen window. A touch grows it into one snap stop per window the feed on
+  screen offers, 1h at the top, then 24h and 7d (Real has no 1h stop, and a 1h choice moves to
+  24h on screen while the saved window stays), with a tinted thumb that follows a vertical drag (a haptic tick at each stop).
   Tap a stop to pick it. It folds back about two seconds after the last touch. Screen readers get
   one control named Time window, its state is the full window name, and its actions pick the
   others. The chip row holds metrics only.
@@ -169,12 +170,12 @@ an info button.
 - **Cell sheet at Simple (2026-10-12).** Peacock and mood word beside the 24 hour mean, or "n/a"
   when that window has no value, one plain line, then a three block mood strip for 7 days, 24
   hours and the last hour, with a visible caption under each block. Selecting a cell reads the
-  other two windows for that one cell from the same feed the map uses, bundled today
-  (`DiscoverUiState.selectedWindows`). Until the 24 hour row is read the sheet says "Loading",
+  other windows for that one cell from the same feed the map uses
+  (`DiscoverUiState.selectedWindows`). Real has two blocks, 7 days and 24 hours. Until the 24 hour row is read the sheet says "Loading",
   with no mood and no value. A failed window read is tried again after 1 s and 2 s. If it still
   fails it stays unread (`DiscoverUiState.failedWindows`), the sheet says "Not available right now"
   with a Retry button, and the next pan or Retry reads it again. A failure never reads as "Not
-  measured". Loading and that line are polite live regions. A future network feed must sit behind the Show public sensors switch. Then sensors,
+  measured". Loading and that line are polite live regions. The Real feed sits behind the Show public sensors switch. Then sensors,
   freshness and the other measurements as plain value rows, all from the 24 hour row. A property
   without a health scale shows only its number. Detailed and Developer are unchanged. The mood
   words live only in `:ui:designsystem`.
@@ -182,12 +183,21 @@ an info button.
   (`HealthScale.colorOf`) for PM, the percentile ramp for the rest. A stale cell (no hourly value for 3 hours) is
   drawn at 40 percent opacity with a dashed outline. A cell that does not measure the chosen
   metric is outline only, no fill. Selected cell has a thick ink outline.
-- **Sample data.** A pill top right under the chips, "Sample data", in the `accent` tone. It also
-  appears as the first line of every cell sheet and device page. Its info button says the
-  numbers are made up for a preview and real sensors appear when the public feed goes live. It
-  disappears only when the newest files no longer carry `sample = true`.
+- **Sample and Real (2026-10-12).** A compact two-state toggle top right under the chips, a
+  floating control with the brand blue only on the chosen half. Sample is the bundled fixture,
+  Real is the OpenAQ aggregates feed, labelled with the day its data runs to in the phone's
+  language, as in "OpenAQ, data to 8 Oct". The choice is saved (`DiscoverSource`) and Real is
+  read only while Show public sensors is on (`effectiveDiscoverSource`). With the switch off the
+  toggle is disabled and shows Sample, and screen readers hear how to turn it on. A switch of
+  feed clears the rows, the selection and the window reads, then reloads. Real offers 24 hours
+  and 7 days, so the cell sheet's mood strip shows two blocks. A failed Real read shows "Could not
+  load public sensors" with Retry in the sheet, never the sample in its place. "Sample data" still
+  heads every cell sheet while the feed on screen is the sample, and the info button explains the
+  feed on screen. `DiscoverController.onSourceSettings`, `chooseSource` and `retry`.
 - **Attribution.** "© OpenStreetMap" bottom right, visible at launch. It collapses to an info
-  button after the first pan or after 5 seconds, as the OSMF guidelines allow.
+  button after the first pan or after 5 seconds, as the OSMF guidelines allow. In Real mode it
+  also shows "Data OpenAQ", which stays while Real is on screen and opens
+  https://docs.openaq.org/resources/licenses.
 - **First run.** The peek area holds one card instead of the summary. A 48 dp peacock, one line
   "Public sensors near you, shown as areas", and two actions "Add your sensor" and "Explore".
   Either action dismisses it for good. The card carries no numbers. The mascot stays away from
@@ -213,7 +223,7 @@ the medium and large detents.
 +--------------------------------------+
 | [Search places              ] [ + ]  |
 | (PM2.5) (Temp) (Humidity) (More)     |
-|                       (Sample data i)|
+|                    (Sample | Real i)|
 | .1h   __    __                       |
 | |    /  \__/  \__      map of hexes  |
 | o24h \__/  \__/  \                   |
@@ -531,7 +541,7 @@ newest hour moves on. The last complete hour stays on disk for offline use.
 **Sample data.** `tools/discover-fixture/` writes the same layout and schema with Python `h3`
 and PyArrow, including `sample = true` in the key value metadata, and the files ship in the app.
 The phone reads them through the same reader from a local file source, so the sample and the
-live feed share one code path. The pill shows while `sample` is true.
+live feed share one code path. The toggle shows Sample while `sample` is true.
 
 **Live feed, OpenAQ aggregates (current).** Until the opensensor publisher exists, the live feed
 is the OpenAQ aggregates collection on source.coop, read with the same reader. Design
@@ -562,7 +572,12 @@ is the OpenAQ aggregates collection on source.coop, read with the same reader. D
   `updated` the end of the newest day used. A cell with nothing in range is dropped. Null stays
   null.
 - The feed offers 24 hours and 7 days only. Last hour answers an empty table without a request.
-  Errors propagate, the screen decides what to show. Tests use a 13 row fixture from
+  Errors propagate, the screen decides what to show. Android builds it over `OkHttpRangeEngine`
+  in `DiscoverViewModel`, iOS over `UrlSessionRangeEngine` in `AppRoot`, one per process.
+- `DiscoverController` holds the sample and this feed. Real asks `latest()` on every load (the
+  manifest is cached for 5 minutes) and keeps the last partition when a later ask fails. A cell's
+  other windows are read 24 hours first, so a failing window never delays the headline. A pan
+  rereads a failed window without flipping the sheet back to loading. Tests use a 13 row fixture from
   `tools/discover-fixture/make_openaq_fixture.py` served by a fake HTTP engine. The live URL is
   not in the gate.
 
