@@ -165,7 +165,7 @@ private fun DiscoverContent(
     val paper = MaterialTheme.colorScheme.surfaceContainerLow
     val ink = MaterialTheme.colorScheme.onSurface
     val styleJson by produceState<String?>(null, networkAllowed, dark) {
-        value = if (networkAllowed) runCatching { basemapStyle(dark) }.getOrNull() ?: paperStyle(SequentialRamp.hex(paperArgb(paper))) else paperStyle(SequentialRamp.hex(paperArgb(paper)))
+        value = if (networkAllowed) catchingNonCancel { basemapStyle(dark) }.getOrNull() ?: paperStyle(SequentialRamp.hex(paperArgb(paper))) else paperStyle(SequentialRamp.hex(paperArgb(paper)))
     }
     val scope = rememberCoroutineScope()
     val sheet = rememberBottomSheetScaffoldState(rememberStandardBottomSheetState(initialValue = SheetValue.PartiallyExpanded))
@@ -174,8 +174,8 @@ private fun DiscoverContent(
     var highlight by remember { mutableStateOf<ValueBand?>(null) }
     // Bumped to let go of a pinned bar, when the map is tapped outside any area.
     var clearSignal by remember { mutableStateOf(0) }
-    fun expand() = scope.launch { runCatching { sheet.bottomSheetState.expand() } }
-    fun peek() = scope.launch { runCatching { sheet.bottomSheetState.partialExpand() } }
+    fun expand() = scope.launch { catchingNonCancel { sheet.bottomSheetState.expand() } }
+    fun peek() = scope.launch { catchingNonCancel { sheet.bottomSheetState.partialExpand() } }
 
     // Back, the Android predictive back or the iOS edge swipe, first returns an open sheet to peek.
     // Navigation Event runs the newest handler first, so this wins over the shell's NavDisplay.
@@ -262,7 +262,7 @@ private fun DiscoverContent(
                     onAddSensor = { controller.dismissFirstRun(); onAddSensor() },
                     onPlace = { place ->
                         scope.launch {
-                            runCatching {
+                            catchingNonCancel {
                                 mapState.animateCamera(CameraUpdate(center = Position(longitude = place.lng, latitude = place.lat), zoom = 9.0))
                             }
                         }

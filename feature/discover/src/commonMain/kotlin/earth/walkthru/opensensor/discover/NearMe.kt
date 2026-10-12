@@ -101,7 +101,7 @@ internal fun NearMeButton(
         if (nearMe.recenter == 0 || location == null) return@LaunchedEffect
         val fix = snapshotFlow { location.lastLocation }.filterNotNull().first()
         val centre = target(fix.position.latitude, fix.position.longitude) ?: return@LaunchedEffect
-        runCatching { mapState.animateCamera(CameraUpdate(center = Position(longitude = centre.lng, latitude = centre.lat), zoom = NEAR_ME_ZOOM)) }
+        catchingNonCancel { mapState.animateCamera(CameraUpdate(center = Position(longitude = centre.lng, latitude = centre.lat), zoom = NEAR_ME_ZOOM)) }
     }
     FloatingIconButton(onClick = nearMe.onTap, contentDescription = label, modifier = modifier) {
         Icon(DiscoverIcons.MyLocation, contentDescription = null)
