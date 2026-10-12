@@ -362,19 +362,22 @@ final class AppServices {
     }
 
     /// Back on screen. Each run iOS interrupted starts again over its own transport, through the
-    /// entry point the screens follow. The shared controller skips the files already saved.
+    /// entry point the screens follow. The shared controller skips the files already saved. A page
+    /// the user reopened for another sensor keeps the Bluetooth link, so that resume skips Bluetooth.
     func resumeInterrupted() {
         autoSync.clearPaused()
+        let pageDevice = livePage.page.flatMap { devices.deviceFor(peripheral: $0.id) }
         for interrupted in runs.takeInterrupted() {
             let device = interrupted.device
             let onlyName = interrupted.onlyName
+            let bluetoothFree = livePage.letsResumeUseBluetooth(device: device, pageDevice: pageDevice)
             switch RunTransport(interrupted.prefer) {
             case .lan:
                 _ = lan.resumeSync(device: device, onlyName: onlyName)
             case .ble:
-                _ = bluetooth.resumeSync(device: device, onlyName: onlyName)
+                if bluetoothFree { _ = bluetooth.resumeSync(device: device, onlyName: onlyName) }
             case .any:
-                if !lan.resumeSync(device: device, onlyName: onlyName) {
+                if !lan.resumeSync(device: device, onlyName: onlyName), bluetoothFree {
                     _ = bluetooth.resumeSync(device: device, onlyName: onlyName)
                 }
             }

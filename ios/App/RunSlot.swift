@@ -100,6 +100,15 @@ struct LivePage: Equatable {
 
     /// The user ended the live link from the open page.
     mutating func disconnected() { page = nil }
+
+    /// Whether a resumed run of [device] may take the one Bluetooth link. The user's page wins, so a
+    /// page reopened over Bluetooth for another sensor ([pageDevice] is its hardware id, nil when not
+    /// known yet) keeps the link and the resume skips Bluetooth.
+    func letsResumeUseBluetooth(device: String, pageDevice: String?) -> Bool {
+        guard let page, page.allowBluetooth else { return true }
+        guard let pageDevice else { return false }
+        return pageDevice.caseInsensitiveCompare(device) == .orderedSame
+    }
 }
 
 /// The sensors the app asked Core Bluetooth to wait for. Core Bluetooth drops pending connects when

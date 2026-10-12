@@ -47,6 +47,14 @@ enum CancellationChecks {
         live.opened("BB-22", allowBluetooth: true)
         live.disconnected()
         precondition(live.page == nil, "a manual disconnect is never undone on return")
+
+        precondition(live.letsResumeUseBluetooth(device: "dev-a", pageDevice: nil), "no page, the resume may use Bluetooth")
+        live.opened("BB-22", allowBluetooth: true)
+        precondition(!live.letsResumeUseBluetooth(device: "dev-a", pageDevice: "dev-b"), "the user's page for another sensor keeps Bluetooth")
+        precondition(!live.letsResumeUseBluetooth(device: "dev-a", pageDevice: nil), "an unknown page device keeps Bluetooth too")
+        precondition(live.letsResumeUseBluetooth(device: "DEV-B", pageDevice: "dev-b"), "a resume of the page's own sensor shares its link")
+        live.opened("BB-22", allowBluetooth: false)
+        precondition(live.letsResumeUseBluetooth(device: "dev-a", pageDevice: "dev-b"), "a Wi-Fi only page leaves Bluetooth free")
     }
 
     private static func idleCloseWaitsForTheWorkOnTheLink() {
