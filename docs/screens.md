@@ -18,7 +18,6 @@ flowchart LR
   Today <--> Files["FilesKey"]
   Today <--> Device["DeviceKey"]
   Today -. Developer .-> Debug["DebugKey"]
-  Device -. iOS, Bluetooth .-> DeviceSettings["DeviceSettingsKey (iOS)"]
   Files -. Detailed .-> Metrics["FileMetricsKey(station, name)"]
   Discover -. Add your sensor .-> Scan
 ```

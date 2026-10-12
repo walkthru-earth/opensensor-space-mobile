@@ -65,7 +65,6 @@ import earth.walkthru.opensensor.settings.SettingsScreen
 import earth.walkthru.opensensor.shell.AppShell
 import earth.walkthru.opensensor.shell.DebugKey
 import earth.walkthru.opensensor.shell.DeviceKey
-import earth.walkthru.opensensor.shell.DeviceSettingsKey
 import earth.walkthru.opensensor.shell.DiscoverKey
 import earth.walkthru.opensensor.shell.FileMetricsKey
 import earth.walkthru.opensensor.shell.FilesKey
@@ -265,10 +264,6 @@ internal fun AppRoot(
                     } else {
                         LaunchedEffect(key) { nav.popIfTop { it == key } }
                     }
-                }
-                entry<DeviceSettingsKey> { key ->
-                    LeasePeripheral(leases, key.address)
-                    DeviceSettingsEntry(key.address, devices, configLinks, autoSync, onBack = { nav.popIfTop { it == key } })
                 }
                 entry<HistoryKey> { key ->
                     HistoryEntry(address = key.address, devices = devices, units = units, level = level, onBack = { nav.pop() })

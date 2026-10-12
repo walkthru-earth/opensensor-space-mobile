@@ -19,7 +19,6 @@ class AppNavConfigTest {
         HistoryKey("AA:BB"),
         FilesKey("AA:BB"),
         DeviceKey("AA:BB"),
-        DeviceSettingsKey("AA:BB"),
         DebugKey("AA:BB"),
         FileMetricsKey("station", "2026-10-09.parquet"),
     )

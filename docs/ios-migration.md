@@ -195,7 +195,7 @@ copies through `:core:archive` into a fresh run under `tmp/opensensor-export`, t
 are exported, so partials and receipts stay private, and the archive is never moved or changed.
 The daily zip action remains hidden; automatic UTC reconciliation now persists a derived daily
 Parquet cache, but that cache is not yet wired to the iOS export picker. The Swift folder export and its
-companion button are gone. Background Bluetooth is limited to Auto-sync (#23). The shared History screen draws archive charts.
+button are gone. Background Bluetooth is limited to Auto-sync (#23). The shared History screen draws archive charts.
 Native BLE uses Core Bluetooth's
 peripheral identifier; the Keychain identity also pins station and full hardware ID. New
 LAN/archive behavior has host/simulator/build evidence plus the owner's report of
@@ -283,7 +283,7 @@ accuracy, stale/background handling or authenticated Wi-Fi connections. See
    iOS enforces the derived quota after building. Collection separately checks Durable
    free space before OPEN through the shared collector.
 2. Done in code (#18), not yet seen on an iPhone. History is the shared `:feature:history`
-   screen, opened from History buttons on My devices and the device page, with Day, Week, Month and Year, the ring,
+   screen, opened from the History button on My devices, with Day, Week, Month and Year, the ring,
    the calendar and station chips for every archived station. Check on an iPhone that a fresh sync
    shows in History without a relaunch, that index repair fills an archive synced by an older build,
    and how long Week, Month and Year take on a large archive. The
@@ -328,8 +328,8 @@ accuracy, stale/background handling or authenticated Wi-Fi connections. See
     downloads, that Smart Sync under Automatic sets the clock then syncs, that Ask shows the consent
     dialog, and that opening another sensor leaves the first Today closed.
 12. Done in code (#20, 2026-10-09), not yet seen on an iPhone. Device settings are the shared
-    `:feature:device` cards and confirmations, opened from a Sensor settings button on the companion
-    page of a connected enrolled sensor (`DeviceSettingsKey`). `IosDeviceConfigSource` (`ios/shared`
+    `:feature:device` cards and confirmations, opened as `DeviceKey` for a Bluetooth sensor, as on
+    Android. `IosDeviceConfigSource` (`ios/shared`
     iosMain) borrows one short authenticated LAN or Bluetooth link per request, using the same
     command guards and settling the link when it is handed back. The page reads the config when
     its selected link turns ready. After a restart the reopen goes only to the same sensor, or to a free link with no

@@ -43,13 +43,6 @@ data class FilesKey(val address: String) : AppKey
 @Serializable
 data class DeviceKey(val address: String) : AppKey
 
-/**
- * iOS only. The shared Device settings (`:feature:device`) of one Bluetooth sensor, opened from its
- * companion page. Android shows the same cards inside [DeviceKey].
- */
-@Serializable
-data class DeviceSettingsKey(val address: String) : AppKey
-
 /** Advanced mode only. Raw status JSON, frame log, device log, raw commands. */
 @Serializable
 data class DebugKey(val address: String) : AppKey

@@ -42,7 +42,7 @@ internal class DeviceConfigLinks(
     /** The open connection's link to the sensor with this hardware id, or null when it is not connected. */
     val openConfigLink: (String) -> IosLink?,
     /**
-     * Reads the Wi-Fi access token over Bluetooth into the Keychain, the companion page's Save Wi-Fi
+     * Reads the Wi-Fi access token over Bluetooth into the Keychain, the Device settings Save Wi-Fi
      * access. Swift marks Wi-Fi access busy before returning when it started.
      */
     val saveWifiAccess: () -> Unit,
