@@ -64,7 +64,15 @@ final class LanDiscovery {
     private var backgroundFound: [String: Device] = [:]
     private var backgroundBrowseDone: (([String], [String]) -> Void)?
     /// Auto-sync steps by service name. Each opens its own session and closes it when it ends.
-    private var backgroundRuns: [String: (BackgroundStepResult) -> Void] = [:]
+    private var backgroundRuns: [String: (BackgroundStepResult) -> Void] = [:] {
+        // My devices marks each Wi-Fi link an Auto-sync step owns.
+        didSet {
+            let now = Set(backgroundRuns.keys)
+            let was = Set(oldValue.keys)
+            for name in now.subtracting(was) { state.lanBackgroundOwned(name: name, owned: true) }
+            for name in was.subtracting(now) { state.lanBackgroundOwned(name: name, owned: false) }
+        }
+    }
     private var backgroundBytes: [String: Int64] = [:]
     /// An Auto-sync step's progress, files done and files listed.
     var onBackgroundProgress: ((Int, Int) -> Void)?

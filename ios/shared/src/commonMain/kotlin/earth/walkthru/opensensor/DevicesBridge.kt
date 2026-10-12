@@ -116,7 +116,10 @@ internal object IosKnown {
 
     /**
      * The open links. The one Bluetooth link by its peripheral id, then each Wi-Fi session that is
-     * connecting or connected, by service name.
+     * connecting, connected or paused, by service name. A Bluetooth link that dropped under a run
+     * shows [LinkPhase.RECONNECTING] until it is back, and a lost bond shows [LinkPhase.FAILED]
+     * until a new connection starts. Core Bluetooth reports no bonding step, so iOS never shows
+     * [LinkPhase.PAIRING]. [bluetoothBackground] and [lanBackground] mark Auto-sync steps.
      */
     fun active(
         selectedId: String?,
@@ -126,27 +129,47 @@ internal object IosKnown {
         syncTotal: Int,
         name: String?,
         lanSessions: Map<String, LanSessionState>,
+        reconnectingId: String? = null,
+        failedId: String? = null,
+        bluetoothBackground: Boolean = false,
+        lanPaused: Set<String> = emptySet(),
+        lanBackground: Set<String> = emptySet(),
     ): List<ActiveLink> {
-        val bluetooth = selectedId?.let {
+        val bluetooth = (selectedId ?: reconnectingId ?: failedId)?.let {
+            val phase = when {
+                connected -> LinkPhase.CONNECTED
+                reconnectingId != null && it == reconnectingId -> LinkPhase.RECONNECTING
+                selectedId == null && it == failedId -> LinkPhase.FAILED
+                else -> LinkPhase.CONNECTING
+            }
             ActiveLink(
                 id = it,
                 name = name,
-                phase = if (connected) LinkPhase.CONNECTED else LinkPhase.CONNECTING,
-                collecting = connected && syncBusy,
+                phase = phase,
+                collecting = syncBusy && (connected || phase == LinkPhase.RECONNECTING),
                 filesDone = syncDone,
                 filesTotal = syncTotal,
+                background = bluetoothBackground,
             )
         }
-        val wifi = lanSessions.entries.sortedBy { it.key }.filter { it.value.connected || it.value.busy }.map { (n, s) ->
-            ActiveLink(
-                id = WIFI_PREFIX + n,
-                name = n,
-                phase = if (s.connected) LinkPhase.CONNECTED else LinkPhase.CONNECTING,
-                collecting = s.connected && s.busy,
-                filesDone = s.filesDone,
-                filesTotal = s.filesTotal,
-            )
-        }
+        val wifi = lanSessions.entries.sortedBy { it.key }
+            .filter { it.value.connected || it.value.busy || it.key in lanPaused }
+            .map { (n, s) ->
+                val paused = n in lanPaused && !s.connected
+                ActiveLink(
+                    id = WIFI_PREFIX + n,
+                    name = n,
+                    phase = when {
+                        s.connected -> LinkPhase.CONNECTED
+                        paused -> LinkPhase.RECONNECTING
+                        else -> LinkPhase.CONNECTING
+                    },
+                    collecting = s.busy && (s.connected || paused),
+                    filesDone = s.filesDone,
+                    filesTotal = s.filesTotal,
+                    background = n in lanBackground,
+                )
+            }
         return listOfNotNull(bluetooth) + wifi
     }
 
@@ -326,11 +349,18 @@ class DevicesBridge internal constructor(
     internal fun wifiNow(): List<WifiSensor> = state.lanDevices.map { WifiSensor(it, state.lanStations[it]) }
 
     internal fun activeNow(): List<ActiveLink> {
-        val name = state.selectedId?.let { id ->
+        val name = (state.selectedId ?: state.reconnectingId ?: state.failedId)?.let { id ->
             state.devices.firstOrNull { it.id == id }?.name ?: records.value.firstOrNull { it.peripheral.equals(id, ignoreCase = true) }?.name
         }
         val progress = state.syncProgress
-        return IosKnown.active(state.selectedId, state.connected, state.syncBusy, progress?.filesDone ?: 0, progress?.filesTotal ?: 0, name, state.lanSessions)
+        return IosKnown.active(
+            state.selectedId, state.connected, state.syncBusy, progress?.filesDone ?: 0, progress?.filesTotal ?: 0, name, state.lanSessions,
+            reconnectingId = state.reconnectingId,
+            failedId = state.failedId,
+            bluetoothBackground = state.bluetoothBackground,
+            lanPaused = state.lanPaused,
+            lanBackground = state.lanBackground,
+        )
     }
 
     internal fun startCollectAll() {

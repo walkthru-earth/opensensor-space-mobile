@@ -167,6 +167,7 @@ final class AppServices {
         cancelPendingOpen(id: peripheral)
         livePage.closed(peripheral)
         bluetooth.close(id: peripheral)
+        bluetooth.state.sensorForgotten(id: peripheral)
         autoSync.forget(peripheral: peripheral)
         if let device {
             runs.dropInterrupted(device: device)

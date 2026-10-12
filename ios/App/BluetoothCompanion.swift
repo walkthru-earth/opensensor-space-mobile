@@ -91,7 +91,10 @@ final class BluetoothCompanion {
     /// The saved peripheral for a hardware id the app has not opened since launch.
     var peripheralFor: ((String) -> String?)?
     /// The sensor an Auto-sync step is copying now (#23), and whether that step opened the link.
-    private var backgroundId: String?
+    private var backgroundId: String? {
+        // My devices marks the link as Auto-sync's while a step owns it.
+        didSet { if (oldValue == nil) != (backgroundId == nil) { state.bluetoothBackgroundOwned(owned: backgroundId != nil) } }
+    }
     private var backgroundOpened = false
     private var backgroundDone: ((BackgroundStepResult) -> Void)?
     private var backgroundBytes: Int64 = 0
@@ -311,7 +314,17 @@ final class BluetoothCompanion {
     }
 
     private func unexpectedLoss(notice: CompanionNotice) {
-        if run != nil { drop(notice: notice) } else { disconnect(notice: notice) }
+        guard run != nil else {
+            disconnect(notice: notice)
+            return
+        }
+        // A lost bond ends the run, so the page shows the repair. Any other loss is dialled again.
+        if notice == .pairingRemoved {
+            drop(notice: notice)
+        } else {
+            teardown()
+            state.bluetoothReconnecting(notice: notice)
+        }
     }
 
     private func teardown() {
