@@ -623,6 +623,33 @@ class DeviceConnectionRepositoryTest {
     }
 
     @Test
+    fun `a rotated LAN token is cleared and the Bluetooth session renews it`() = harnessTest { h ->
+        h.knownDao.upsert(h.enrolled(token = OLD_TOKEN))
+        h.lan.devices.value = mapOf(h.device.station to h.lanTarget())
+        h.factory.lanClose = LinkClosedException(DisconnectCause.Auth(AuthKind.TOKEN_ROTATED), LanConnectException(LanFailure.AUTH_FAILED, "BYE token-rotated"))
+
+        h.repo.connect(ADDRESS, "AQ-6b40")
+        h.until { h.repo.connectionState.value.isReady }
+
+        assertEquals(TransportKind.FAKE, h.repo.activeTransport.value)
+        val renewed = h.knownDao.lanToken(ADDRESS)
+        assertNotNull("a fresh token was fetched over the Bluetooth session", renewed)
+        assertFalse(renewed == OLD_TOKEN)
+    }
+
+    @Test
+    fun `a LAN only lend after a rotated token ends as TOKEN_ROTATED`() = harnessTest { h ->
+        h.knownDao.upsert(h.enrolled(token = OLD_TOKEN))
+        h.lan.devices.value = mapOf(h.device.station to h.lanTarget())
+        h.factory.lanClose = LinkClosedException(DisconnectCause.Auth(AuthKind.TOKEN_ROTATED), LanConnectException(LanFailure.AUTH_FAILED, "BYE token-rotated"))
+
+        val e = async { runCatching { h.repo.lendLink(ADDRESS, LinkPreference.LAN) } }.also { h.until { it.isCompleted } }.await().exceptionOrNull()
+        assertEquals(DisconnectCause.Auth(AuthKind.TOKEN_ROTATED), (e as LinkClosedException).disconnectCause)
+        assertNull("the rotated token is cleared, not only marked stale", h.knownDao.lanToken(ADDRESS))
+        assertEquals(0, h.factory.fakeConnects)
+    }
+
+    @Test
     fun `unexpected LAN failure closes the probe and falls back to Bluetooth`() = harnessTest { h ->
         h.knownDao.upsert(h.enrolled(token = OLD_TOKEN))
         h.lan.devices.value = mapOf(h.device.station to h.lanTarget())
@@ -1234,6 +1261,9 @@ class DeviceConnectionRepositoryTest {
      */
     private class TestTransports(private val device: FakeTransport, private val scope: CoroutineScope) : TransportSource {
         var lanFailure: Exception = LanConnectException(LanFailure.UNREACHABLE)
+
+        /** When set, the LAN link's open fails with this typed close, as the TCP driver reports a BYE. */
+        var lanClose: LinkClosedException? = null
         val lanTransports = CopyOnWriteArrayList<FailingLanTransport>()
         var fakeConnects = 0
         var interactiveConnects = 0
@@ -1287,8 +1317,13 @@ class DeviceConnectionRepositoryTest {
             unattendedConnects++
             unattendedTimeout = connectTimeoutMs
         }
-        override fun lan(address: String, name: String?, host: InetAddress, port: Int, token: ByteArray): AndroidLink =
-            FailingLanTransport(address, lanFailure).also { lanTransports += it }.let { TransportLink(it, scope) }
+        override fun lan(address: String, name: String?, host: InetAddress, port: Int, token: ByteArray): AndroidLink {
+            val link = FailingLanTransport(address, lanFailure).also { lanTransports += it }.let { TransportLink(it, scope) }
+            val close = lanClose ?: return link
+            return object : AndroidLink by link {
+                override suspend fun open(sink: FrameSink): LinkInfo = throw close
+            }
+        }
         override fun fake(address: String): AndroidLink = counted()
         override fun isFake(transport: AqTransport): Boolean = (transport as? TransportLink)?.wrapped === observedDevice
 

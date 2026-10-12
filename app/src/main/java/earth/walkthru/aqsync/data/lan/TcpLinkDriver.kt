@@ -6,7 +6,6 @@ import earth.walkthru.aqsync.data.ble.FrameRecorder
 import earth.walkthru.aqsync.data.ble.TransportException
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
-import earth.walkthru.aqsync.data.protocol.DisconnectReason
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.protocol.FrameCodec
 import earth.walkthru.aqsync.data.protocol.FrameDecodeException
@@ -25,6 +24,7 @@ import earth.walkthru.aqsync.link.OnceSink
 import earth.walkthru.aqsync.link.PushChannel
 import earth.walkthru.aqsync.link.RequestSpec
 import earth.walkthru.aqsync.link.TimeoutPhase
+import earth.walkthru.aqsync.link.peerClosedCause
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -181,13 +181,13 @@ class TcpLinkDriver(
         s.soTimeout = handshakeTimeoutMs
         val raw = try {
             LanFraming.read(input, LanFraming.PAYLOAD_MAX)
-                ?: throw peerClosed("device closed the socket without HELLO", null)
+                ?: throw peerClosed("device closed the socket without HELLO")
         } catch (e: SocketTimeoutException) {
             throw LinkClosedException(DisconnectCause.Timeout(TimeoutPhase.HANDSHAKE, 0), LanConnectException(LanFailure.TIMEOUT, cause = e))
         } catch (e: EOFException) {
             // A bare close is not an auth verdict (a reboot or a Wi-Fi drop looks the same). Only
             // ERROR 14 or BYE auth-failed (3) rejects the token, so the stored token survives.
-            throw peerClosed("device closed the socket during the handshake", null)
+            throw peerClosed("device closed the socket during the handshake")
         } catch (e: FrameDecodeException) {
             throw protocol(e.message)
         } catch (e: IOException) {
@@ -205,11 +205,7 @@ class TcpLinkDriver(
                 ProtocolError.BUSY.code -> LinkClosedException(DisconnectCause.Busy, LanConnectException(LanFailure.BUSY, frame.describe()))
                 else -> protocol(frame.describe())
             }
-            is Frame.Bye -> throw if (frame.disconnectReason == DisconnectReason.AUTH_FAILED) {
-                rejected("BYE ${frame.disconnectReason.wireName}")
-            } else {
-                peerClosed("BYE ${frame.disconnectReason.wireName}", frame)
-            }
+            is Frame.Bye -> throw byeClosed(frame)
             else -> throw protocol("expected HELLO, got ${frame::class.simpleName}")
         }
         // Quiet between pushes is allowed. The session heartbeat is the liveness rule.
@@ -220,8 +216,19 @@ class TcpLinkDriver(
     private fun rejected(detail: String) =
         LinkClosedException(DisconnectCause.Auth(AuthKind.TOKEN_REJECTED), LanConnectException(LanFailure.AUTH_FAILED, detail))
 
-    private fun peerClosed(detail: String, bye: Frame.Bye?) =
-        LinkClosedException(DisconnectCause.PeerClosed(bye), LanConnectException(LanFailure.UNREACHABLE, detail))
+    /** A BYE at the handshake keeps its typed cause, so a rotated token (10) or full sessions (4) read as such. */
+    private fun byeClosed(bye: Frame.Bye): LinkClosedException {
+        val cause = peerClosedCause(bye)
+        val failure = when (cause) {
+            is DisconnectCause.Auth -> LanFailure.AUTH_FAILED
+            DisconnectCause.Busy -> LanFailure.BUSY
+            else -> LanFailure.UNREACHABLE
+        }
+        return LinkClosedException(cause, LanConnectException(failure, "BYE ${bye.disconnectReason.wireName}"))
+    }
+
+    private fun peerClosed(detail: String) =
+        LinkClosedException(DisconnectCause.PeerClosed(), LanConnectException(LanFailure.UNREACHABLE, detail))
 
     private fun protocol(detail: String?) =
         LinkClosedException(DisconnectCause.FramingViolation("handshake"), LanConnectException(LanFailure.PROTOCOL, detail))

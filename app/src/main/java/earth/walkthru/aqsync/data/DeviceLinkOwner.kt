@@ -497,16 +497,14 @@ class DeviceLinkOwner @Inject constructor(
                 return LanAttempt.Refused
             }
             val failure = (e.cause as? LanConnectException)?.failure
-                ?: if (cause == DisconnectCause.Auth(AuthKind.TOKEN_REJECTED)) LanFailure.AUTH_FAILED else null
+                ?: if (cause is DisconnectCause.Auth) LanFailure.AUTH_FAILED else null
             Log.w(TAG, "LAN connect failed (${cause.describe()})")
-            // A LAN-only lend reports this instead of Unreachable, so a rejected token is not retried.
-            lastOpenFailure = if (failure == LanFailure.AUTH_FAILED) DisconnectCause.Auth(AuthKind.TOKEN_REJECTED) else cause
-            if (failure != null && tokenPolicy.invalidatesToken(failure)) {
-                // The device rotated its token (ERROR 14 at the handshake). The stored copy is dead:
-                // drop it so the Bluetooth session we are about to open fetches a fresh one.
-                knownDeviceDao.setLanToken(address, null, null)
-                tokenPolicy.markStale(address)
-            }
+            // A LAN-only lend reports this instead of Unreachable, so a refused or rotated token is not retried.
+            val typed = if (cause !is DisconnectCause.Auth && failure == LanFailure.AUTH_FAILED) DisconnectCause.Auth(AuthKind.TOKEN_REJECTED) else cause
+            lastOpenFailure = typed
+            // ERROR 14 or BYE 3 (refused) and BYE 10 (rotated) at the handshake: the Bluetooth
+            // session we are about to open fetches a fresh token.
+            forgetInvalidatedToken(address, typed)
             if (fallbackToBle) _events.tryEmit(DeviceEvent.Info(DeviceMessage.LanFallback(failure)))
             return LanAttempt.Skipped
         } catch (e: CancellationException) {
@@ -564,8 +562,30 @@ class DeviceLinkOwner @Inject constructor(
         get() = connectionState.value.isReady && link.state.value is LinkState.Ready
 
     /** A session whose link is opened by [openSession]. Link events carry no frame bodies. */
-    private fun newSession(link: AndroidLink): DeviceSession =
-        link.openableSession(scope, log = LinkLog { Log.d(TAG, it.describe()) })
+    private fun newSession(link: AndroidLink): DeviceSession {
+        val session = link.openableSession(scope, log = LinkLog { Log.d(TAG, it.describe()) })
+        if (link.kind == TransportKind.LAN) {
+            // A LAN session the device ends with BYE 10 (token rotated) or 3 (refused), at any time.
+            scope.launch {
+                val closed = session.link.state.first { it is LinkState.Closed } as LinkState.Closed
+                forgetInvalidatedToken(link.address, closed.cause)
+            }
+        }
+        return session
+    }
+
+    /**
+     * Clear the stored LAN token when [cause] proves it dead (refused or rotated), so the next
+     * bonded Bluetooth session fetches a new one. Clearing, not only marking stale, because a
+     * stored token is never fetched again.
+     */
+    private suspend fun forgetInvalidatedToken(address: String, cause: DisconnectCause) {
+        if (!tokenPolicy.invalidatesToken(cause)) return
+        if (knownDeviceDao.get(address)?.hasLanToken != true) return
+        Log.i(TAG, "stored LAN token dropped (${cause.describe()})")
+        knownDeviceDao.setLanToken(address, null, null)
+        tokenPolicy.markStale(address)
+    }
 
     /**
      * The stored LAN token as bytes, decrypted only here, at the moment a LAN transport is built.

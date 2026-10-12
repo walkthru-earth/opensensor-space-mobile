@@ -456,6 +456,26 @@ class TcpLinkDriverTest {
     }
 
     @Test
+    fun `BYE token-rotated at the handshake is Auth TOKEN_ROTATED`() = runBlocking {
+        val bye = FrameCodec.encode(Frame.Bye(DisconnectReason.TOKEN_ROTATED.code, 2, -1, 0, 5))
+        FakeLanDevice(token, bye) { emptyList() }.use {
+            val e = openFails(it, it.port)
+            assertEquals(DisconnectCause.Auth(AuthKind.TOKEN_ROTATED), e.disconnectCause)
+            assertEquals(LanFailure.AUTH_FAILED, (e.cause as LanConnectException).failure)
+        }
+    }
+
+    @Test
+    fun `BYE sessions-full at the handshake is Busy`() = runBlocking {
+        val bye = FrameCodec.encode(Frame.Bye(DisconnectReason.SESSIONS_FULL.code, 2, -1, 0, 5))
+        FakeLanDevice(token, bye) { emptyList() }.use {
+            val e = openFails(it, it.port)
+            assertEquals(DisconnectCause.Busy, e.disconnectCause)
+            assertEquals(LanFailure.BUSY, (e.cause as LanConnectException).failure)
+        }
+    }
+
+    @Test
     fun `another BYE at the handshake is PeerClosed and keeps the token`() = runBlocking {
         val frame = Frame.Bye(DisconnectReason.HANDSHAKE_TIMEOUT.code, 2, -1, 0, 5)
         FakeLanDevice(token, FrameCodec.encode(frame)) { emptyList() }.use {
