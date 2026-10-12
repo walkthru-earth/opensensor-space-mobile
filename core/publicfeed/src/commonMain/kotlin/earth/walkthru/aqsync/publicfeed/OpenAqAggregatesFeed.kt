@@ -6,8 +6,15 @@ import earth.walkthru.aqsync.net.BodyLimit
 import earth.walkthru.aqsync.net.HttpRangeEngine
 import earth.walkthru.aqsync.net.HttpRangeException
 import earth.walkthru.aqsync.net.HttpRangeSource
+import earth.walkthru.aqsync.storage.ByteBudgetLru
+import earth.walkthru.aqsync.storage.MemoryPressure
+import earth.walkthru.aqsync.storage.MemoryTrimmable
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.minus
@@ -23,9 +30,15 @@ import kotlin.time.Clock
  *   the newest complete PM2.5 day. The answer is kept for [MANIFEST_TTL_MS] by [clock]. A manifest
  *   without `as_of` answers null.
  * - [cells] reads `cells/h3_res=<res>/data.parquet` through an [HttpRangeSource], with one
- *   [FooterCache] for the feed and row group pruning on `h3_index`, keeps the daily rows of the 7 days
- *   ending at the partition date and folds them with [DailyCellFold]. The files hold daily rows only,
- *   so [FeedWindow.LAST_HOUR] answers [CellsTable.EMPTY] without a request.
+ *   [FooterCache] for the feed, keeps the daily rows of the 7 days ending at the partition date and
+ *   folds them with [DailyCellFold]. The files hold daily rows only, so [FeedWindow.LAST_HOUR] answers
+ *   [CellsTable.EMPTY] without a request.
+ * - The live files are one row group with no page index, so any read fetches the whole file. The daily
+ *   rows of one `(res, as_of)` are therefore kept in memory, at most [MAX_RESOLUTIONS] resolutions and
+ *   [budgetBytes], least recently used first out. The 24 hour and 7 day windows of one viewport and
+ *   every later pan at that resolution read the network once, and `ranges` filters the kept rows.
+ *   Concurrent callers for one key share one download. A failure is never kept. A new partition from
+ *   [latest] drops every kept row, and [trim] gives them back on [MemoryPressure].
  *
  * Transport, HTTP and Parquet failures propagate as exceptions; the caller decides what to show.
  */
@@ -34,11 +47,27 @@ class OpenAqAggregatesFeed(
     root: String = DEFAULT_ROOT,
     private val clock: Clock = Clock.System,
     policy: RangePolicy = RangePolicy.CELLULAR,
-) : PublicFeed {
+    budgetBytes: Long = DEFAULT_BUDGET_BYTES,
+) : PublicFeed,
+    MemoryTrimmable {
     private val root = root.trimEnd('/')
     private val reader = ParquetFeedReader(FooterCache(), policy)
     private val mutex = Mutex()
     private var cached: Pair<Long, FeedPartition?>? = null
+
+    /** Guards [daily], [inflight] and [generation]. Never held across a network read. */
+    private val rowsLock = Mutex()
+    private val daily = ByteBudgetLru<DailyKey, CellsTable>(budgetBytes) { _, table -> estimateBytes(table) }
+    private val inflight = HashMap<DailyKey, CompletableDeferred<CellsTable>>()
+
+    /** Bumped whenever [daily] is dropped, so a download that started before is not kept after. */
+    private var generation = 0L
+    private var lastPartition: FeedPartition? = null
+
+    /** The resolutions whose daily rows are kept now. */
+    suspend fun cachedResolutions(): Int = rowsLock.withLock { daily.size }
+
+    override suspend fun trim(level: MemoryPressure.Level) = rowsLock.withLock { daily.trim(level) }
 
     override val isSample: Boolean get() = false
     override val available: Boolean get() = reader.available
@@ -49,18 +78,72 @@ class OpenAqAggregatesFeed(
         cached?.let { (at, partition) -> if (now - at in 0 until MANIFEST_TTL_MS) return@withLock partition }
         val partition = readManifest().asOf?.let { FeedPartition(LocalDate.parse(it).toString(), 0) }
         cached = now to partition
+        if (partition != null && partition != lastPartition) {
+            // A new generation replaces the files whole. Rows of the old one are never served again.
+            rowsLock.withLock {
+                if (lastPartition != null) clearRows()
+                lastPartition = partition
+            }
+        }
         partition
     }
 
     override suspend fun cells(partition: FeedPartition, window: FeedWindow, res: Int, ranges: List<LongRange>?): CellsTable {
         if (window !in WINDOWS) return CellsTable.EMPTY
         val asOf = LocalDate.parse(partition.date)
-        val days = asOf.minus(DatePeriod(days = DAYS - 1))..asOf
-        val table = reader.readCells(HttpRangeSource(cellsUrl(res), engine), ranges, days)
+        val table = dailyRows(DailyKey(res, asOf))
+        val rows = if (ranges == null) table.rows else table.rows.filter { row -> ranges.any { row.h3 in it } }
         return table.copy(
             info = table.info.copy(sample = false, window = window.key),
-            rows = DailyCellFold.fold(table.rows, window, asOf),
+            rows = DailyCellFold.fold(rows, window, asOf),
         )
+    }
+
+    /** The kept daily rows of [key], or one download shared with every concurrent caller of [key]. */
+    private suspend fun dailyRows(key: DailyKey): CellsTable {
+        while (true) {
+            var owner = false
+            val (deferred, startedAt) = rowsLock.withLock {
+                daily[key]?.let { return it }
+                val running = inflight[key]
+                if (running != null) {
+                    running to generation
+                } else {
+                    owner = true
+                    CompletableDeferred<CellsTable>().also { inflight[key] = it } to generation
+                }
+            }
+            if (!owner) {
+                try {
+                    return deferred.await()
+                } catch (_: Abandoned) {
+                    // The caller that downloaded was cancelled. Try again, maybe as the one who downloads.
+                    continue
+                }
+            }
+            try {
+                val days = key.asOf.minus(DatePeriod(days = DAYS - 1))..key.asOf
+                val table = reader.readCells(HttpRangeSource(cellsUrl(key.res), engine), ranges = null, days = days)
+                rowsLock.withLock {
+                    if (inflight[key] === deferred) inflight.remove(key)
+                    if (generation == startedAt) {
+                        daily[key] = table
+                        while (daily.size > MAX_RESOLUTIONS) daily.remove(daily.keys.first())
+                    }
+                }
+                deferred.complete(table)
+                return table
+            } catch (e: Throwable) {
+                withContext(NonCancellable) { rowsLock.withLock { if (inflight[key] === deferred) inflight.remove(key) } }
+                deferred.completeExceptionally(if (e is CancellationException) Abandoned() else e)
+                throw e
+            }
+        }
+    }
+
+    private fun clearRows() {
+        daily.clear()
+        generation++
     }
 
     /** The URL of the cells file at [res]. */
@@ -72,6 +155,11 @@ class OpenAqAggregatesFeed(
         if (response.status != 200) throw HttpRangeException(response.status, url)
         return FeedPaths.json.decodeFromString<Manifest>(response.body.decodeToString())
     }
+
+    private data class DailyKey(val res: Int, val asOf: LocalDate)
+
+    /** Tells the waiters of a download that its caller was cancelled before it finished. */
+    private class Abandoned : RuntimeException("download abandoned")
 
     @Serializable
     internal data class Manifest(
@@ -89,6 +177,18 @@ class OpenAqAggregatesFeed(
         /** The manifest is a few KB. Anything far larger is not the manifest. */
         const val MANIFEST_MAX_BYTES: Long = 1024L * 1024
 
+        /** The most resolutions whose daily rows are kept. A zoom spans about two. */
+        const val MAX_RESOLUTIONS: Int = 4
+
+        /** About a few thousand cells a week at the finest map resolution. */
+        const val DEFAULT_BUDGET_BYTES: Long = 4L * 1024 * 1024
+
+        /** A rough size of a kept table, enough for the budget. */
+        private fun estimateBytes(table: CellsTable): Long =
+            table.rows.sumOf { row -> ROW_BYTES + STAT_BYTES * row.stats.size }.toLong()
+
+        private const val ROW_BYTES = 96
+        private const val STAT_BYTES = 96
         private const val DAYS = 7
         private val WINDOWS = listOf(FeedWindow.DAY, FeedWindow.WEEK)
     }

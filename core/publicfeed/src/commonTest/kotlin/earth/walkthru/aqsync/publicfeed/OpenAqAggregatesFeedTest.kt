@@ -11,6 +11,12 @@ import earth.walkthru.aqsync.publicfeed.OpenAqFixture.LAGOS
 import earth.walkthru.aqsync.publicfeed.OpenAqFixture.NAIROBI
 import earth.walkthru.aqsync.publicfeed.OpenAqFixture.endOf
 import earth.walkthru.aqsync.publicfeed.OpenAqFixture.oct
+import earth.walkthru.aqsync.storage.MemoryPressure
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -18,10 +24,12 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Instant
 
 /** [OpenAqAggregatesFeed] over a fake [HttpRangeEngine] serving the fixture and its manifest. No network. */
+@OptIn(ExperimentalCoroutinesApi::class)
 class OpenAqAggregatesFeedTest {
     private val root = "https://example.test/openaq-aggregates"
 
@@ -30,8 +38,12 @@ class OpenAqAggregatesFeedTest {
         val objects = mutableMapOf<String, Pair<ByteArray, String>>()
         val requests = mutableListOf<Pair<String, String?>>()
 
+        /** Holds every cells file request until completed, so concurrent callers overlap. */
+        var gate: CompletableDeferred<Unit>? = null
+
         override suspend fun get(url: String, range: String?, ifRange: String?, ifNoneMatch: String?, limit: BodyLimit): HttpRangeResponse {
             requests += url to range
+            if (url.endsWith(".parquet")) gate?.await()
             val (bytes, etag) = objects[url] ?: return HttpRangeResponse(404, null, null, null, ByteArray(0))
             val size = bytes.size.toLong()
             if (range == null || (ifRange != null && ifRange != etag)) return HttpRangeResponse(200, etag, null, null, bytes.copyOf())
@@ -130,13 +142,116 @@ class OpenAqAggregatesFeedTest {
         assertFailsWith<HttpRangeException> { feed.cells(partition, FeedWindow.DAY, 6, ranges = null) }
     }
 
+    private fun cellsReads() = store.requests.count { it.first.endsWith(".parquet") }
+
     @Test
-    fun `a file inside the opening tail is read with one request per window`() = runTest {
+    fun `a file inside the opening tail is read with one request for every window`() = runTest {
         val partition = feed.latest()!!
-        for (window in feed.windows) {
-            store.requests.clear()
-            feed.cells(partition, window, 5, ranges = null)
-            assertEquals(listOf<Pair<String, String?>>("$root/cells/h3_res=5/data.parquet" to "bytes=-${RangePolicy.CELLULAR.tailPrefetchBytes}"), store.requests)
-        }
+        for (window in feed.windows) feed.cells(partition, window, 5, ranges = null)
+        assertEquals(listOf<Pair<String, String?>>("$root/cells/h3_res=5/data.parquet" to "bytes=-${RangePolicy.CELLULAR.tailPrefetchBytes}"), store.requests.filter { it.first.endsWith(".parquet") })
+    }
+
+    @Test
+    fun `24 hours and 7 days and later pans at one resolution read the network once`() = runTest {
+        val partition = feed.latest()!!
+        val day = feed.cells(partition, FeedWindow.DAY, 5, ranges = null)
+        val week = feed.cells(partition, FeedWindow.WEEK, 5, ranges = null)
+        val pan = feed.cells(partition, FeedWindow.DAY, 5, ranges = listOf(ACCRA..NAIROBI))
+        val single = feed.cells(partition, FeedWindow.WEEK, 5, ranges = listOf(CAIRO..CAIRO))
+        assertEquals(1, cellsReads())
+        assertEquals(listOf(CAIRO, LAGOS, NAIROBI), day.rows.map { it.h3 })
+        assertEquals(listOf(CAIRO, LAGOS, NAIROBI), week.rows.map { it.h3 })
+        // Ranges filter the cached rows exactly as they pruned the file.
+        assertEquals(listOf(NAIROBI), pan.rows.map { it.h3 })
+        assertEquals(week.rows.first(), single.rows.single())
+        assertEquals(5, pan.info.h3Res)
+        assertEquals("24h", pan.info.window)
+    }
+
+    @Test
+    fun `concurrent callers for one resolution share one download`() = runTest {
+        val partition = feed.latest()!!
+        val gate = CompletableDeferred<Unit>()
+        store.gate = gate
+        val reads = listOf(
+            async { feed.cells(partition, FeedWindow.DAY, 5, ranges = null) },
+            async { feed.cells(partition, FeedWindow.WEEK, 5, ranges = null) },
+            async { feed.cells(partition, FeedWindow.DAY, 5, ranges = listOf(NAIROBI..NAIROBI)) },
+        )
+        runCurrent()
+        gate.complete(Unit)
+        val (day, week, one) = reads.awaitAll()
+        assertEquals(1, cellsReads())
+        assertEquals(3, day.rows.size)
+        assertEquals(3, week.rows.size)
+        assertEquals(listOf(NAIROBI), one.rows.map { it.h3 })
+    }
+
+    @Test
+    fun `a failed read is shared by its waiters and not cached`() = runTest {
+        val partition = feed.latest()!!
+        val cells = store.objects.remove("$root/cells/h3_res=5/data.parquet")!!
+        val gate = CompletableDeferred<Unit>()
+        store.gate = gate
+        val reads = listOf(
+            async { runCatching { feed.cells(partition, FeedWindow.DAY, 5, ranges = null) } },
+            async { runCatching { feed.cells(partition, FeedWindow.WEEK, 5, ranges = null) } },
+        )
+        runCurrent()
+        gate.complete(Unit)
+        val results = reads.awaitAll()
+        assertTrue(results.all { it.exceptionOrNull() is HttpRangeException }, "$results")
+        assertEquals(1, cellsReads())
+        store.objects["$root/cells/h3_res=5/data.parquet"] = cells
+        assertEquals(3, feed.cells(partition, FeedWindow.DAY, 5, ranges = null).rows.size)
+        assertEquals(2, cellsReads())
+    }
+
+    @Test
+    fun `a cancelled download leaves its waiter to read on its own`() = runTest {
+        val partition = feed.latest()!!
+        val gate = CompletableDeferred<Unit>()
+        store.gate = gate
+        val first = async { feed.cells(partition, FeedWindow.DAY, 5, ranges = null) }
+        runCurrent()
+        val second = async { feed.cells(partition, FeedWindow.WEEK, 5, ranges = null) }
+        runCurrent()
+        first.cancel()
+        runCurrent()
+        gate.complete(Unit)
+        assertEquals(3, second.await().rows.size)
+        assertEquals(2, cellsReads())
+    }
+
+    @Test
+    fun `a new partition from latest clears the rows`() = runTest {
+        val partition = feed.latest()!!
+        feed.cells(partition, FeedWindow.DAY, 5, ranges = null)
+        // Same partition after the manifest is read again, the rows stay.
+        clock.ms += OpenAqAggregatesFeed.MANIFEST_TTL_MS
+        assertEquals(partition, feed.latest())
+        feed.cells(partition, FeedWindow.DAY, 5, ranges = null)
+        assertEquals(1, cellsReads())
+        assertTrue(feed.cachedResolutions() > 0)
+        store.objects["$root/manifest.json"] = """{"as_of":"2026-10-09"}""".encodeToByteArray() to "\"m2\""
+        clock.ms += OpenAqAggregatesFeed.MANIFEST_TTL_MS
+        val next = feed.latest()!!
+        assertEquals(0, feed.cachedResolutions())
+        feed.cells(next, FeedWindow.DAY, 5, ranges = null)
+        assertEquals(2, cellsReads())
+    }
+
+    @Test
+    fun `memory pressure trims the rows and only a few resolutions are kept`() = runTest {
+        val partition = feed.latest()!!
+        feed.cells(partition, FeedWindow.DAY, 5, ranges = null)
+        feed.trim(MemoryPressure.Level.Critical)
+        assertEquals(0, feed.cachedResolutions())
+        feed.cells(partition, FeedWindow.DAY, 5, ranges = null)
+        assertEquals(2, cellsReads())
+        // The fixture holds resolution 5 only. Other resolutions are served the same file.
+        for (res in 2..7) store.objects["$root/cells/h3_res=$res/data.parquet"] = store.objects["$root/cells/h3_res=5/data.parquet"]!!
+        for (res in 2..7) feed.cells(partition, FeedWindow.DAY, res, ranges = null)
+        assertEquals(OpenAqAggregatesFeed.MAX_RESOLUTIONS, feed.cachedResolutions())
     }
 }
