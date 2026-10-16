@@ -80,12 +80,19 @@ def check(path: Path) -> None:
             elif s.has_min_max:
                 fail(f"{path.name} rg{g} {c.path_in_schema}: min/max present without finite values")
         offset += rows
-    # Timestamp annotation where expected. Current files store microseconds, older ones nanoseconds.
-    units = {"event_time_utc_us": "us", "clock_anchor_utc_us": "us", "event_time_utc_ns": "ns", "clock_anchor_utc_ns": "ns"}
-    for name, unit in units.items():
-        want = f"timestamp[{unit}, tz=UTC]"
-        if name in table.column_names and str(table.schema.field(name).type) != want:
-            fail(f"{path.name}: {name} is {table.schema.field(name).type}, expected {want}")
+    # UTC instant columns. The unit comes from the logical type (MILLIS, MICROS or NANOS, adjusted to
+    # UTC), never from the name. Schema v1/v2 files left the old `*_utc_ns` names unannotated, and the
+    # app reads those as nanoseconds, so a plain int64 is accepted under those two names only.
+    legacy = {"event_time_utc_ns", "clock_anchor_utc_ns"}
+    for name in ("event_time_utc_us", "clock_anchor_utc_us", *sorted(legacy)):
+        if name not in table.column_names:
+            continue
+        t = table.schema.field(name).type
+        if pa.types.is_timestamp(t):
+            if t.unit not in ("ms", "us", "ns") or t.tz != "UTC":
+                fail(f"{path.name}: {name} is {t}, expected a UTC timestamp")
+        elif not (name in legacy and t == pa.int64()):
+            fail(f"{path.name}: {name} is {t}, expected a UTC timestamp")
     # DuckDB: full read and a pruned range query.
     con = duckdb.connect()
     n = con.execute("SELECT count(*) FROM read_parquet(?)", [str(path)]).fetchone()[0]
@@ -93,12 +100,13 @@ def check(path: Path) -> None:
         fail(f"{path.name}: DuckDB count {n} != {md.num_rows}")
     event = next((c for c in ("event_time_utc_us", "event_time_utc_ns") if c in table.column_names), None)
     if event and md.num_rows:
+        t = table.schema.field(event).type
         ts = table.column(event).cast(pa.int64()).drop_null().to_pylist()
         if ts:
             mid = sorted(ts)[len(ts) // 2]
-            expect = sum(1 for t in ts if t >= mid)
-            epoch = "epoch_us" if event.endswith("_us") else "epoch_ns"
-            got = con.execute(f"SELECT count(*) FROM read_parquet(?) WHERE {epoch}({event}) >= ?", [str(path), mid]).fetchone()[0]
+            expect = sum(1 for t_ in ts if t_ >= mid)
+            stored = {"ms": f"epoch_ms({event})", "us": f"epoch_us({event})", "ns": f"epoch_ns({event})"}.get(t.unit, event) if pa.types.is_timestamp(t) else event
+            got = con.execute(f"SELECT count(*) FROM read_parquet(?) WHERE {stored} >= ?", [str(path), mid]).fetchone()[0]
             if got != expect:
                 fail(f"{path.name}: DuckDB range query {got} != {expect}")
     meta = {k.decode(): v.decode() for k, v in (md.metadata or {}).items()}
