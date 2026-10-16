@@ -109,12 +109,32 @@ bytes (it used to receive a `java.nio.ByteBuffer`).
 ## Writer (`ParquetWriter`) — the mirror of the reader
 
 PLAIN, RLE definition levels, LZ4_RAW, per-chunk `min_value`/`max_value` + exact flags +
-`null_count` + `nan_count`, TYPE_ORDER column orders, `TIMESTAMP(NANOS, UTC)`, `sorting_columns`,
+`null_count` + `nan_count`, TYPE_ORDER column orders, `TIMESTAMP(MICROS|NANOS, UTC)`, schema `field_id`, `sorting_columns`,
 row-group `file_offset`/`ordinal`, key/value metadata; since D11 also `BYTE_ARRAY`/`DOUBLE`,
 `GEOMETRY`/`GEOGRAPHY` logical types with `geospatial_statistics` (bbox + WKB type codes) and the
 `geo` key. Used by `DailyDerivedBuilder` ([history-pipeline.md](history-pipeline.md#derived-daily-parquet-dailyparquetbuilder)).
 Output is accepted by PyArrow 25 and DuckDB 1.5.5 (`tools/validate_parquet_samples.py`: every
 statistic matches the values, `TIMESTAMPTZ` read, range pruning, `time_bucket`).
+
+## Device file layouts (`UtcColumns`)
+
+CoreS3 v6.12 (schema `cores3-telemetry-v5`, dictionary `cores3-telemetry-v4`) and Waveshare v2.6
+(schema and dictionary `waveshare-sim7670g-telemetry-v4`) write `event_time_utc_us` and
+`clock_anchor_utc_us` as `TIMESTAMP(MICROS, isAdjustedToUTC=true)`. Older files on the phone carry
+`event_time_utc_ns` and `clock_anchor_utc_ns` as `TIMESTAMP(NANOS, UTC)`, and the first CoreS3 files
+left them unannotated. The name only finds the column. The scale comes from the logical type unit,
+an unannotated INT64 under an old `*_ns` name reads as nanoseconds, and any other unannotated or non
+INT64 column under a UTC name is refused. A value past 2262 reads as null instead of wrapping. The
+reader exposes `LeafColumn.timestampUtcUnit` and `LeafColumn.fieldId`.
+
+Every leaf of a current device file has `field_id` = its 1-based position in the board's
+`telemetry_fields.inc`, and dictionaries are append only, so an id never changes meaning. Older
+files have no ids and are mapped by name. A newer schema string is never a reason to refuse a file.
+
+Both layouts stay readable. Cached files of the old layout are never deleted from the phone. The
+owner removed the old files from the Waveshare card, and a file that is no longer listed by the
+device is not data loss. The app never uploads a file to the device and never asks the firmware to
+delete or rewrite one.
 
 ## GeoParquet 2.0 (D11, 2026-09-17)
 

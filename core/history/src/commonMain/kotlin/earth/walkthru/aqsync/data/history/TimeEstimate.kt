@@ -7,7 +7,7 @@ import kotlin.math.abs
  * UTC for rows the logger stamped before it had a clock (§4.6 of the evaluation).
  *
  * Every row carries `monotonic_us`, microseconds since power-on. Once the same boot receives a time
- * anchor (`SET_TIME`), its later rows carry both `event_time_utc_ns` and `monotonic_us`, which fixes
+ * anchor (`SET_TIME`), its later rows carry both `event_time_utc_us` (`event_time_utc_ns` on older files) and `monotonic_us`, which fixes
  * the offset between the two clocks for that boot: `utc = anchor_utc + (mono − anchor_mono)`. Applied
  * backwards, it dates the boot's earlier, unsynced rows — **as an estimate**: the ESP32 crystal drifts
  * (tens of ppm), so the uncertainty grows with the distance from the anchor and is reported with it.
@@ -16,7 +16,7 @@ import kotlin.math.abs
  * - only rows of the **same boot** (`boot_id`) as the anchor — a reboot resets the monotonic clock;
  * - use the earliest boot-scoped receipt or fully-timed file, so a successful handshake can
  *   immediately date older data without waiting for another file rotation;
- * - the estimate never overwrites `event_time_utc_ns`: it lives in its own column/fields and every
+ * - the estimate never overwrites the event time column: it lives in its own column/fields and every
  *   UI that shows it says "estimated".
  */
 /**

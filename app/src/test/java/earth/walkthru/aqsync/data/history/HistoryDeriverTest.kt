@@ -1,6 +1,7 @@
 package earth.walkthru.aqsync.data.history
 
 import earth.walkthru.aqsync.data.archive.toRecord
+import earth.walkthru.aqsync.data.history.parquet.ParquetLogicalType
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
 import earth.walkthru.aqsync.data.local.database.DerivedArchivedFileQueries
 import earth.walkthru.aqsync.data.local.database.DerivedDay
@@ -218,7 +219,7 @@ class HistoryDeriverTest {
         assertEquals(105L, daily.numRows)
         assertEquals(1, daily.rowGroupCount) // 09:42–09:59Z is one UTC hour
         assertEquals(78, daily.leaves.size) // 77 + source_file_index
-        assertTrue(daily.leaf("event_time_utc_ns").isTimestampNanosUtc)
+        assertEquals(ParquetLogicalType.TimeUnit.MICROS, daily.leaf("event_time_utc_us").timestampUtcUnit)
         assertEquals("telemetry-derived-day", daily.metadata.keyValueMetadata["purpose"])
         assertTrue(daily.metadata.keyValueMetadata["complete"] in setOf("true", "false"))
         assertTrue(store.manifestFile(station, 20713).readText().contains("\"rows_used\":105"))
@@ -364,11 +365,11 @@ class HistoryDeriverTest {
                     store.manifestFile(station, day.epochDay).copyTo(File(outputs, "derived-clock-day-${day.epochDay}.manifest.json"), overwrite = true)
                 }
                 val parquet = earth.walkthru.aqsync.data.history.parquet.ParquetFile.open(store.dayFile(station, day.epochDay))
-                val actual = parquet.readColumn("event_time_utc_ns")
-                val estimated = parquet.readColumn("event_time_utc_estimated_ns")
+                val actual = parquet.readColumn("event_time_utc_us")
+                val estimated = parquet.readColumn("event_time_utc_estimated_us")
                 for (row in 0 until actual.size) {
                     assertTrue(actual.isNull(row))
-                    assertEquals(day.epochDay, StationDays.dayOf(estimated.asLong(row)!!))
+                    assertEquals(day.epochDay, StationDays.dayOf(estimated.asLong(row)!! * 1_000))
                 }
             }
         } finally {

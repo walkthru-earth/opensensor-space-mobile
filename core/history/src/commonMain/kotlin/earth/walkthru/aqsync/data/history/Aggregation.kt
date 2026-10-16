@@ -103,7 +103,7 @@ class Aggregator(
     fun add(file: ParquetFile, anchor: TimeEstimate.Anchor? = null) {
         val md = file.metadata
         fun col(name: String): ColumnValues? = md.leaf(name)?.let { file.readColumn(it) }
-        val utc = col(ParquetIndexer.UTC)?.let(LongColumn::of) ?: return
+        val utc = UtcColumns.readEventNs(file)?.let(LongColumn::of) ?: return
         val applicable = anchor?.takeIf { it.boot == md.bootId }
         val columns = columns(::col)
         val mono = if (applicable != null) columns.mono else null

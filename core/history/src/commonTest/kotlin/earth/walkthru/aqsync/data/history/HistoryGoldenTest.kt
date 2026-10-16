@@ -3,6 +3,7 @@ package earth.walkthru.aqsync.data.history
 import earth.walkthru.aqsync.archive.ArchiveRecord
 import earth.walkthru.aqsync.data.history.parquet.ColumnValues
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
+import earth.walkthru.aqsync.data.history.parquet.ParquetLogicalType
 import earth.walkthru.aqsync.data.history.parquet.ParquetWriter
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -48,7 +49,7 @@ class HistoryGoldenTest {
         val raw = ParquetFile.wrap(fixtureBytes("parquet/device/v3-board-2rg-180rows.parquet"))
         val values = raw.leaves.map { leaf ->
             val col = raw.readColumn(leaf)
-            if (leaf.name != ParquetIndexer.UTC) {
+            if (leaf.name != UtcColumns.EVENT_NS) {
                 col
             } else {
                 val step = 36 * 3_600L / col.size
@@ -56,7 +57,7 @@ class HistoryGoldenTest {
             }
         }
         val sink = MemorySink()
-        val writer = ParquetWriter(sink, raw.leaves.map { ParquetWriter.Column(it.name, it.type, it.isTimestampNanosUtc) }, keyValueMetadata = raw.metadata.keyValueMetadata)
+        val writer = ParquetWriter(sink, raw.leaves.map { ParquetWriter.Column(it.name, it.type, timestampUtc = it.timestampUtcUnit, fieldId = it.fieldId) }, keyValueMetadata = raw.metadata.keyValueMetadata)
         writer.begin()
         writer.rowGroup(values)
         writer.finish()

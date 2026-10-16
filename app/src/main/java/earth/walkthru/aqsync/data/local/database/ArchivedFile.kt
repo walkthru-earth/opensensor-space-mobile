@@ -49,7 +49,7 @@ data class ArchivedFile(
     val bootId: String? = null,
     /** `purpose` file metadata; `telemetry` for station data, `codec-comparison-duplicate-rows` for benchmark copies. */
     val purpose: String? = null,
-    /** Rows with a UTC timestamp and their span (`event_time_utc_ns`). 0 / null for unsynced files. */
+    /** Rows with a UTC timestamp and their span (the event time column, held in nanoseconds). 0 / null for unsynced files. */
     val utcRows: Long? = null,
     val firstUtcNs: Long? = null,
     val lastUtcNs: Long? = null,

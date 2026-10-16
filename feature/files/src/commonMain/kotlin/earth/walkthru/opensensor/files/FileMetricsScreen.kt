@@ -240,7 +240,7 @@ private fun Loaded(s: FileMetricsState.Loaded, padding: PaddingValues, developer
                     val statsMax = c.statsMax
                     val parts = listOfNotNull(
                         c.type.name.lowercase(),
-                        stringResource(Res.string.fm_col_timestamp).takeIf { c.timestamp },
+                        c.timestampUnit?.let { stringResource(Res.string.fm_col_timestamp, it) },
                         stringResource(Res.string.fm_col_first_last, c.first, c.last).takeIf { c.first != NO_VALUE },
                         if (statsMin != null && statsMax != null) {
                             if (statsMin == c.min && statsMax == c.max) stringResource(Res.string.fm_col_footer_agrees) else stringResource(Res.string.fm_col_footer_says, statsMin, statsMax)

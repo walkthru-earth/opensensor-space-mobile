@@ -1,6 +1,7 @@
 package earth.walkthru.aqsync.data.history.parquet
 
 import earth.walkthru.aqsync.data.history.ParquetIndexer
+import earth.walkthru.aqsync.data.history.UtcColumns
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -31,8 +32,8 @@ class RealArchiveTest {
         assertEquals(listOf(90L, 15L), md.rowGroups.map { it.numRows })
         assertEquals(105L, pf.numRows)
         assertEquals(77, pf.leaves.size)
-        assertTrue(pf.leaf(ParquetIndexer.UTC).isTimestampNanosUtc)
-        assertTrue(pf.leaf("clock_anchor_utc_ns").isTimestampNanosUtc)
+        assertEquals(ParquetLogicalType.TimeUnit.NANOS, pf.leaf(UtcColumns.EVENT_NS).timestampUtcUnit)
+        assertEquals(ParquetLogicalType.TimeUnit.NANOS, pf.leaf("clock_anchor_utc_ns").timestampUtcUnit)
         assertEquals(77, md.columnOrders.size)
 
         val index = ParquetIndexer.index(pf)

@@ -6,6 +6,7 @@ import earth.walkthru.aqsync.data.history.parquet.ColumnValues
 import earth.walkthru.aqsync.data.history.parquet.ParquetCodec
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 import earth.walkthru.aqsync.data.history.parquet.ParquetFormatException
+import earth.walkthru.aqsync.data.history.parquet.ParquetLogicalType
 import earth.walkthru.aqsync.data.history.parquet.ParquetSink
 import earth.walkthru.aqsync.data.history.parquet.ParquetType
 import earth.walkthru.aqsync.data.history.parquet.ParquetWriter
@@ -41,7 +42,7 @@ internal class LegacyAggregator(
     /** Adds every timed row of [file]; with an [anchor] for the file's boot, unsynced rows get an estimated time. */
     fun add(file: ParquetFile, anchor: TimeEstimate.Anchor? = null) {
         val md = file.metadata
-        val utc = md.leaf(ParquetIndexer.UTC)?.let { file.readColumn(it) } ?: return
+        val utc = UtcColumns.readEventNs(file) ?: return
         fun col(name: String): ColumnValues? = md.leaf(name)?.let { file.readColumn(it) }
         val applicable = anchor?.takeIf { it.boot == md.bootId }
         val monoAll = col(ParquetIndexer.MONO)
@@ -126,7 +127,7 @@ internal object LegacyDailyParquetBuilder {
             opened += source.open().use { pf ->
                 val md = pf.metadata
                 require(md.stationId == null || md.stationId == station) { "Parquet source belongs to another station" }
-                val utc = md.leaf(ParquetIndexer.UTC)?.let { pf.readColumn(it) } ?: return@use null
+                val utc = UtcColumns.readEventNs(pf) ?: return@use null
                 val bootHi = md.leaf("boot_id_hi")?.let { pf.readColumn(it) }
                 val bootLo = md.leaf("boot_id_lo")?.let { pf.readColumn(it) }
                 val seq = md.leaf(ParquetIndexer.SEQ)?.let { pf.readColumn(it) }
@@ -142,35 +143,34 @@ internal object LegacyDailyParquetBuilder {
                 }
                 // A source whose rows are all duplicates (or outside the day) stays in the manifest with rows_used 0: provenance, not data.
                 for (leaf in pf.leaves) {
-                    val prev = columnOrder[leaf.name]
-                    if (prev == null) columnOrder[leaf.name] = leaf.type
-                    if (prev != null && prev != leaf.type) throw ParquetFormatException("'${leaf.name}' is $prev in one file and ${leaf.type} in another")
-                    if (leaf.isTimestampNanosUtc) timestampColumns += leaf.name
+                    val name = UtcColumns.canonical(leaf.name)
+                    val prev = columnOrder[name]
+                    if (prev == null) columnOrder[name] = leaf.type
+                    if (prev != null && prev != leaf.type) throw ParquetFormatException("'$name' is $prev in one file and ${leaf.type} in another")
+                    if (UtcColumns.isUtcInstant(leaf)) timestampColumns += name
                 }
                 if (estimated != null && keep.isNotEmpty()) anyEstimated = true
                 // Decode every column of a contributing source once, while it is open.
-                val decoded = if (keep.isEmpty()) emptyMap() else pf.leaves.associate { it.name to if (it.name == ParquetIndexer.UTC) utc else pf.readColumn(it) }
+                val decoded = if (keep.isEmpty()) emptyMap() else pf.leaves.associate { leaf -> UtcColumns.canonical(leaf.name) to if (UtcColumns.isUtcInstant(leaf)) UtcColumns.toMicros(pf.readColumn(leaf), leaf) else pf.readColumn(leaf) }
                 Src(src, keep.toIntArray(), estimated, decoded, md.keyValueMetadata, md.schemaVersion)
             } ?: continue
         }
         if (opened.isEmpty() || opened.all { it.keep.isEmpty() }) return null
-        // The two *_utc_ns columns are annotated even when the sources (v1/v2) did not annotate them.
-        timestampColumns += listOf(ParquetIndexer.UTC, "clock_anchor_utc_ns").filter { it in columnOrder }
 
         // 2. Flatten to (source index, row index, timeline utc) sorted by time — real UTC or the estimate.
         data class Ref(val src: Int, val row: Int, val utcNs: Long)
         val refs = ArrayList<Ref>()
         opened.forEachIndexed { s, src ->
-            val utc = src.decoded[ParquetIndexer.UTC] ?: return@forEachIndexed
-            for (i in src.keep) refs += Ref(s, i, utc.asLong(i) ?: src.estimated!![i])
+            val utc = src.decoded[UtcColumns.EVENT_US] ?: return@forEachIndexed
+            for (i in src.keep) refs += Ref(s, i, utc.asLong(i)?.times(1_000L) ?: src.estimated!![i])
         }
         refs.sortBy { it.utcNs }
 
         // 3. Columns to write: the union, the manifest index, and — when any row is estimated — the estimate.
-        val columns = columnOrder.map { (name, type) -> ParquetWriter.Column(name, type, timestampNanosUtc = name in timestampColumns) } +
+        val columns = columnOrder.map { (name, type) -> ParquetWriter.Column(name, type, timestampUtc = ParquetLogicalType.TimeUnit.MICROS.takeIf { name in timestampColumns }) } +
             ParquetWriter.Column(SOURCE_INDEX, ParquetType.INT32) +
-            (if (anyEstimated) listOf(ParquetWriter.Column(ESTIMATED_UTC, ParquetType.INT64, timestampNanosUtc = true)) else emptyList())
-        val utcIndex = columns.indexOfFirst { it.name == ParquetIndexer.UTC }
+            (if (anyEstimated) listOf(ParquetWriter.Column(ESTIMATED_UTC, ParquetType.INT64, timestampUtc = ParquetLogicalType.TimeUnit.MICROS)) else emptyList())
+        val utcIndex = columns.indexOfFirst { it.name == UtcColumns.EVENT_US }
         val estimatedBySource: List<LongArray?> = opened.map { it.estimated }
         val decoded: List<Map<String, ColumnValues>> = opened.map { it.decoded }
 
@@ -184,7 +184,7 @@ internal object LegacyDailyParquetBuilder {
             put("station_id", station)
             put("day", ArchiveLayout.dayLabel(epochDay))
             put("derived_by", BUILDER)
-            put("derived_version", "2")
+            put("derived_version", "3")
             put("source_count", opened.size.toString())
             put("coverage_rows", refs.size.toString())
             put("complete", complete.toString())
@@ -192,7 +192,7 @@ internal object LegacyDailyParquetBuilder {
             put("purpose", "telemetry-derived-day")
             if (anyEstimated) {
                 put("estimated_rows", refs.count { r -> opened[r.src].estimated != null }.toString())
-                put("time_estimate", "rows with null event_time_utc_ns carry $ESTIMATED_UTC = anchor_utc_ns + (monotonic_us - anchor_mono_us) * 1000 from a same-boot UTC anchor; source/transport error unmeasured; drift not corrected (assume ±${TimeEstimate.DRIFT_PPM.toInt()} ppm)")
+                put("time_estimate", "rows with null event_time_utc_us carry $ESTIMATED_UTC = anchor_utc_ns / 1000 + (monotonic_us - anchor_mono_us) from a same-boot UTC anchor; source/transport error unmeasured; drift not corrected (assume ±${TimeEstimate.DRIFT_PPM.toInt()} ppm)")
             }
         }
 
@@ -227,7 +227,7 @@ internal object LegacyDailyParquetBuilder {
                 ColumnValues.Int32(IntArray(n) { rows[it].first }, null)
             } else if (c.name == ESTIMATED_UTC) {
                 val v = LongArray(n); val valid = BooleanArray(n)
-                rows.forEachIndexed { k, (s, i) -> estimated[s]?.get(i)?.takeIf { it != Long.MIN_VALUE }?.let { v[k] = it; valid[k] = true } }
+                rows.forEachIndexed { k, (s, i) -> estimated[s]?.get(i)?.takeIf { it != Long.MIN_VALUE }?.let { v[k] = it.floorDiv(1_000L); valid[k] = true } }
                 ColumnValues.Int64(v, valid.takeIf { it.any { b -> !b } })
             } else {
                 when (c.type) {
@@ -265,9 +265,9 @@ internal object LegacyDailyParquetBuilder {
         }
     }
 
-    const val BUILDER = "opensensor.space shared derived-v2"
+    const val BUILDER = "opensensor.space shared derived-v3"
     const val SOURCE_INDEX = "source_file_index"
-    const val ESTIMATED_UTC = "event_time_utc_estimated_ns"
+    const val ESTIMATED_UTC = "event_time_utc_estimated_us"
     const val HOUR_NS = 3_600L * 1_000_000_000L
     const val COMPLETE_GRACE_S = 30 * 60L
     private val COPIED_METADATA = setOf("board", "dictionary_version", "dictionary_uri", "dictionary_sha256", "device_id", "pms_status", "light_status", "proximity_status", "magnetic_units", "unavailable", "sample_interval_ms", "clock", "time_semantics")
