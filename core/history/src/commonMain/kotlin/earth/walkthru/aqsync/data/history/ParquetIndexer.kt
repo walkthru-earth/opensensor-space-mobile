@@ -24,7 +24,7 @@ data class ParquetIndex(
     val bootId: String?,
     /** `purpose` metadata: `telemetry`, or `codec-comparison-duplicate-rows` for benchmark copies that must stay out of History. */
     val purpose: String?,
-    /** Rows whose `event_time_utc_ns` is set, and its range. */
+    /** Rows whose event time (`event_time_utc_us`, or `event_time_utc_ns` on older files) is set, and its range in nanoseconds. */
     val utcRows: Long,
     val firstUtcNs: Long?,
     val lastUtcNs: Long?,
@@ -44,7 +44,8 @@ data class ParquetIndex(
 /** Builds a [ParquetIndex]. Pure: no Android, no I/O beyond the opened file. */
 object ParquetIndexer {
 
-    const val UTC = "event_time_utc_ns"
+    /** The current event time column. Read it through [UtcColumns], which also finds the older name. */
+    const val UTC = UtcColumns.EVENT_US
     const val MONO = "monotonic_us"
     const val SEQ = "sequence"
     const val PMS_STATUS = "pms_status"
@@ -52,18 +53,19 @@ object ParquetIndexer {
 
     fun index(file: ParquetFile): ParquetIndex {
         val md = file.metadata
-        val utcLeaf = md.leaf(UTC)
+        val utcLeaf = UtcColumns.eventLeaf(md)
+        val utcScale = utcLeaf?.let(UtcColumns::nanosPerUnit)
         val monoLeaf = md.leaf(MONO)
         val seqLeaf = md.leaf(SEQ)
         val pmsLeaf = md.leaf(PMS_STATUS)
 
         // Fast path: v6 footers carry min/max + null_count per row group for every column.
-        val utcStats = utcLeaf?.let { rangeFromStatistics(file, it) }
+        val utcStats = utcLeaf?.let { rangeFromStatistics(file, it) }?.scaled(utcScale!!)
         val monoStats = monoLeaf?.let { rangeFromStatistics(file, it) }
         val seqStats = seqLeaf?.let { rangeFromStatistics(file, it) }
         val fromStats = utcStats != null && monoStats != null && seqStats != null
 
-        val utc = utcStats ?: utcLeaf?.let { rangeByDecoding(file.readColumn(it)) }
+        val utc = utcStats ?: utcLeaf?.let { rangeByDecoding(UtcColumns.readNs(file, it)) }
         val mono = monoStats ?: monoLeaf?.let { rangeByDecoding(file.readColumn(it)) }
         val seq = seqStats ?: seqLeaf?.let { rangeByDecoding(file.readColumn(it)) }
         val pmValid = pmsLeaf?.let { leaf ->
@@ -94,7 +96,15 @@ object ParquetIndexer {
     }
 
     /** Non-null count and min/max of an integer column. `min`/`max` are null when every value is null. */
-    data class Range(val count: Long, val min: Long?, val max: Long?)
+    data class Range(val count: Long, val min: Long?, val max: Long?) {
+        /** This range with [min] and [max] multiplied by [scale], or null when either would overflow. */
+        fun scaled(scale: Long): Range? {
+            if (scale == 1L) return this
+            val limit = Long.MAX_VALUE / scale
+            if ((min != null && (min > limit || min < -limit)) || (max != null && (max > limit || max < -limit))) return null
+            return Range(count, min?.times(scale), max?.times(scale))
+        }
+    }
 
     /**
      * From footer statistics only, or null when any row group lacks `null_count` or — for a group

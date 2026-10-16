@@ -10,6 +10,7 @@ import earth.walkthru.aqsync.data.history.parquet.ByteArrayReader
 import earth.walkthru.aqsync.data.history.parquet.ByteReader
 import earth.walkthru.aqsync.data.history.parquet.ColumnValues
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
+import earth.walkthru.aqsync.data.history.parquet.ParquetLogicalType
 import earth.walkthru.aqsync.data.history.parquet.ParquetWriter
 import earth.walkthru.aqsync.storage.MemoryPressure
 import kotlinx.coroutines.flow.Flow
@@ -80,7 +81,7 @@ class HistoryMemoryTest {
         val raw = ParquetFile.wrap(board)
         val values = raw.leaves.map { leaf ->
             val col = raw.readColumn(leaf)
-            if (leaf.name != ParquetIndexer.UTC) {
+            if (leaf.name != UtcColumns.EVENT_NS) {
                 col
             } else {
                 val step = 86_400L / col.size
@@ -88,7 +89,7 @@ class HistoryMemoryTest {
             }
         }
         val sink = MemorySink()
-        val writer = ParquetWriter(sink, raw.leaves.map { ParquetWriter.Column(it.name, it.type, it.isTimestampNanosUtc) }, keyValueMetadata = raw.metadata.keyValueMetadata)
+        val writer = ParquetWriter(sink, raw.leaves.map { ParquetWriter.Column(it.name, it.type, timestampUtc = it.timestampUtcUnit, fieldId = it.fieldId) }, keyValueMetadata = raw.metadata.keyValueMetadata)
         writer.begin()
         writer.rowGroup(values)
         writer.finish()

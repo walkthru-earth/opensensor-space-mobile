@@ -4,6 +4,25 @@
 **Code:** `./gradlew verify` (the gate), `.github/workflows/verify.yml`.
 **Related:** measured device behaviour is recorded in the board-specific `../aq-parquet/docs/boards/*/bench-verified.md`; anything not recorded there is unverified.
 
+## 2026-10-16, firmware MICROS columns, field ids and LIVE keys (code only)
+
+Branch `yharby/firmware-parquet-micros-live-keys`, for CoreS3 v6.12 and Waveshare v2.6 from
+aq-parquet `integration/waveshare-bench` (PRs 20, 21 and 22, draft). Host tests, the iOS simulator
+build and `verify` only. No phone run against the new firmware yet.
+
+- Parquet. `event_time_utc_us` and `clock_anchor_utc_us` are read by their `TIMESTAMP` unit, MICROS
+  now, NANOS or unannotated on older files (`UtcColumns`). The reader exposes `field_id`.
+- Derived days. `derived-v3` writes UTC instants as MICROS under the current names, keeps device
+  field ids and renames the estimate to `event_time_utc_estimated_us`. `DERIVE_VERSION` 6 rebuilds
+  every cached day once.
+- LIVE. Profiles resolve by dictionary digest only, and a newer schema keeps its profile. CoreS3
+  board temperature comes from `imu_t`, Waveshare air temperature from `t`. Particle bins show only
+  the board's keys. Older dictionaries get no profile.
+- Old files. Both layouts stay readable, cached old files stay on the phone, and files the owner
+  removed from the Waveshare card are neither data loss nor uploaded again.
+- To check on phones. A sync of v6.12 and v2.6 files, a mixed old and new History day, the CoreS3
+  board temperature tile, and resume after a storage watchdog reset.
+
 ## 2026-10-12, consistent sync on Android and iOS (code only)
 
 Branch `fix/sync-consistency`. Host tests, the iOS simulator build and `verify-native.sh` only.

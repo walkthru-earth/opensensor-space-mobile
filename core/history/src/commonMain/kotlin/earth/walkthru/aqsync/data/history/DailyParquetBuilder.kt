@@ -6,6 +6,7 @@ import earth.walkthru.aqsync.data.history.parquet.ColumnValues
 import earth.walkthru.aqsync.data.history.parquet.ParquetCodec
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 import earth.walkthru.aqsync.data.history.parquet.ParquetFormatException
+import earth.walkthru.aqsync.data.history.parquet.ParquetLogicalType
 import earth.walkthru.aqsync.data.history.parquet.ParquetSink
 import earth.walkthru.aqsync.data.history.parquet.ParquetType
 import earth.walkthru.aqsync.data.history.parquet.ParquetWriter
@@ -68,7 +69,9 @@ object DayPass {
 
 /**
  * Shared Android/iOS derived UTC-day writer. Originals and their null UTC values are preserved;
- * same-boot estimates occupy a separate nanosecond timestamp column. Callers commit the sink only
+ * same-boot estimates occupy a separate microsecond timestamp column. UTC instants are written as
+ * `TIMESTAMP(MICROS, UTC)` under their current names (`event_time_utc_us`, `clock_anchor_utc_us`),
+ * converted by unit from older nanosecond sources, and each device column keeps its `field_id`. Callers commit the sink only
  * after success. Sources are de-duplicated by boot and sequence and split at UTC day/hour boundaries.
  * The rows are written in timeline order with a page index, and `sorting_columns = [utc]` when no
  * estimate interleaves them.
@@ -122,6 +125,10 @@ object DailyParquetBuilder {
         var anyEstimated = false
         val columnOrder = LinkedHashMap<String, ParquetType>()
         val timestampColumns = HashSet<String>()
+        // Output name to the sources' field_id. Older files have none and take the id of the same name
+        // from a newer source, dictionaries being append only. Ids that disagree are dropped.
+        val fieldIds = HashMap<String, Int>()
+        val conflictingIds = HashSet<String>()
         val seen = RowKeys()
         // Every kept row in source order: its timeline ns and its row inside its source. starts[s] is
         // the first kept row of opened source s.
@@ -140,8 +147,7 @@ object DailyParquetBuilder {
                     rowsRead += pf.numRows
                     val cache = HashMap<String, ColumnValues?>()
                     fun col(name: String): ColumnValues? = cache.getOrPut(name) { md.leaf(name)?.let { pf.readColumn(it) } }
-                    val utcValues = col(ParquetIndexer.UTC) ?: return@use null
-                    val utc = LongColumn.of(utcValues)
+                    val utc = UtcColumns.readEventNs(pf)?.let(LongColumn::of) ?: return@use null
                     val bootHi = col("boot_id_hi")?.let(LongColumn::of)
                     val bootLo = col("boot_id_lo")?.let(LongColumn::of)
                     val seq = col(ParquetIndexer.SEQ)?.let(LongColumn::of)
@@ -169,10 +175,18 @@ object DailyParquetBuilder {
                         try {
                             // A source whose rows are all duplicates (or outside the day) stays in the manifest with rows_used 0: provenance, not data.
                             for (leaf in pf.leaves) {
-                                val prev = columnOrder[leaf.name]
-                                if (prev == null) columnOrder[leaf.name] = leaf.type
-                                if (prev != null && prev != leaf.type) throw ParquetFormatException("'${leaf.name}' is $prev in one file and ${leaf.type} in another")
-                                if (leaf.isTimestampNanosUtc) timestampColumns += leaf.name
+                                val name = UtcColumns.canonical(leaf.name)
+                                val prev = columnOrder[name]
+                                if (prev == null) columnOrder[name] = leaf.type
+                                if (prev != null && prev != leaf.type) throw ParquetFormatException("'$name' is $prev in one file and ${leaf.type} in another")
+                                if (UtcColumns.isUtcInstant(leaf)) {
+                                    UtcColumns.nanosPerUnit(leaf)
+                                    timestampColumns += name
+                                }
+                                leaf.fieldId?.let { id ->
+                                    val known = fieldIds.getOrPut(name) { id }
+                                    if (known != id) conflictingIds += name
+                                }
                             }
                         } catch (e: ParquetFormatException) {
                             if (strict) throw e
@@ -183,7 +197,15 @@ object DailyParquetBuilder {
                     if (estimated != null && keepCount > 0) anyEstimated = true
                     // Decode every column of a contributing source once, while it is open. The tiers'
                     // columns are already in the cache.
-                    val decoded = if (!writing || keepCount == 0) emptyMap() else pf.leaves.associate { it.name to (col(it.name) ?: pf.readColumn(it)) }
+                    // UTC instants are stored in microseconds under their current name, whatever the source wrote.
+                    val decoded = if (!writing || keepCount == 0) {
+                        emptyMap()
+                    } else {
+                        pf.leaves.associate { leaf ->
+                            val values = col(leaf.name) ?: pf.readColumn(leaf)
+                            UtcColumns.canonical(leaf.name) to if (UtcColumns.isUtcInstant(leaf)) UtcColumns.toMicros(values, leaf) else values
+                        }
+                    }
                     Src(src, keepCount, estimated, decoded, md.keyValueMetadata, md.schemaVersion)
                 }
             } catch (e: CancellationException) {
@@ -208,18 +230,25 @@ object DailyParquetBuilder {
         val buckets = aggregator?.buckets().orEmpty()
         if (!writing || opened.isEmpty() || kept == 0) return DayPassResult(buckets, null, rowsRead, failed, dailyError)
         starts += kept
-        // The two *_utc_ns columns are annotated even when the sources (v1/v2) did not annotate them.
-        timestampColumns += listOf(ParquetIndexer.UTC, "clock_anchor_utc_ns").filter { it in columnOrder }
 
         // 2. Sort the kept rows by timeline, real UTC or the estimate, keeping source order for ties.
         val order = IntArray(kept) { it }
         sortByTimeline(order, keptUtc)
 
         // 3. Columns to write: the union, the manifest index, and — when any row is estimated — the estimate.
-        val columns = columnOrder.map { (name, type) -> ParquetWriter.Column(name, type, timestampNanosUtc = name in timestampColumns) } +
+        // UTC instants are TIMESTAMP(MICROS, UTC) like current device files, and every device column keeps
+        // its field_id. The two columns the phone adds have no device id.
+        val columns = columnOrder.map { (name, type) ->
+            ParquetWriter.Column(
+                name,
+                type,
+                timestampUtc = ParquetLogicalType.TimeUnit.MICROS.takeIf { name in timestampColumns },
+                fieldId = fieldIds[name]?.takeIf { name !in conflictingIds },
+            )
+        } +
             ParquetWriter.Column(SOURCE_INDEX, ParquetType.INT32) +
-            (if (anyEstimated) listOf(ParquetWriter.Column(ESTIMATED_UTC, ParquetType.INT64, timestampNanosUtc = true)) else emptyList())
-        val utcIndex = columns.indexOfFirst { it.name == ParquetIndexer.UTC }
+            (if (anyEstimated) listOf(ParquetWriter.Column(ESTIMATED_UTC, ParquetType.INT64, timestampUtc = ParquetLogicalType.TimeUnit.MICROS)) else emptyList())
+        val utcIndex = columns.indexOfFirst { it.name == UtcColumns.EVENT_US }
         val startsArray = starts.toIntArray()
 
         // 4. Metadata.
@@ -232,7 +261,7 @@ object DailyParquetBuilder {
             put("station_id", station)
             put("day", ArchiveLayout.dayLabel(epochDay))
             put("derived_by", BUILDER)
-            put("derived_version", "2")
+            put("derived_version", "3")
             put("source_count", opened.size.toString())
             put("coverage_rows", kept.toString())
             put("complete", complete.toString())
@@ -240,7 +269,7 @@ object DailyParquetBuilder {
             put("purpose", "telemetry-derived-day")
             if (anyEstimated) {
                 put("estimated_rows", opened.filter { it.estimated != null }.sumOf { it.keepCount }.toString())
-                put("time_estimate", "rows with null event_time_utc_ns carry $ESTIMATED_UTC = anchor_utc_ns + (monotonic_us - anchor_mono_us) * 1000 from a same-boot UTC anchor; source/transport error unmeasured; drift not corrected (assume ±${TimeEstimate.DRIFT_PPM.toInt()} ppm)")
+                put("time_estimate", "rows with null ${UtcColumns.EVENT_US} carry $ESTIMATED_UTC = anchor_utc_ns / 1000 + (monotonic_us - anchor_mono_us) from a same-boot UTC anchor; source/transport error unmeasured; drift not corrected (assume ±${TimeEstimate.DRIFT_PPM.toInt()} ppm)")
             }
         }
 
@@ -341,7 +370,7 @@ object DailyParquetBuilder {
                 ColumnValues.Int32(src.copyOf(), null)
             } else if (c.name == ESTIMATED_UTC) {
                 val v = LongArray(n); val valid = BooleanArray(n)
-                for (k in 0 until n) opened[src[k]].estimated?.get(row[k])?.takeIf { it != Long.MIN_VALUE }?.let { v[k] = it; valid[k] = true }
+                for (k in 0 until n) opened[src[k]].estimated?.get(row[k])?.takeIf { it != Long.MIN_VALUE }?.let { v[k] = UtcColumns.nsToUs(it); valid[k] = true }
                 ColumnValues.Int64(v, valid.takeIf { it.any { b -> !b } })
             } else {
                 val perSource = Array(opened.size) { opened[it].decoded[c.name] }
@@ -389,9 +418,9 @@ object DailyParquetBuilder {
         }
     }
 
-    const val BUILDER = "opensensor.space shared derived-v2"
+    const val BUILDER = "opensensor.space shared derived-v3"
     const val SOURCE_INDEX = "source_file_index"
-    const val ESTIMATED_UTC = "event_time_utc_estimated_ns"
+    const val ESTIMATED_UTC = "event_time_utc_estimated_us"
     const val HOUR_NS = 3_600L * 1_000_000_000L
     const val COMPLETE_GRACE_S = 30 * 60L
 

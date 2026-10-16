@@ -58,7 +58,7 @@ class ParquetIndexerTest {
         val index = ParquetIndexer.index(file)
         assertTrue("v6 footer statistics used", index.fromStatistics)
         assertEquals("cores3-telemetry-v3", index.schemaVersion)
-        for (name in listOf(ParquetIndexer.UTC, ParquetIndexer.MONO, ParquetIndexer.SEQ)) {
+        for (name in listOf(UtcColumns.EVENT_NS, ParquetIndexer.MONO, ParquetIndexer.SEQ)) {
             val leaf = file.leaf(name)
             val stats = ParquetIndexer.rangeFromStatistics(file, leaf)
             val decoded = ParquetIndexer.rangeByDecoding(file.readColumn(leaf))

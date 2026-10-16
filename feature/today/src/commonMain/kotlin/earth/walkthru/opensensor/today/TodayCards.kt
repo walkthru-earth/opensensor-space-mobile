@@ -185,7 +185,23 @@ import kotlin.time.Instant
 /** The display units for Today's readings, provided by [TodayScreen] from its `units` parameter. */
 internal val LocalTodayUnits = staticCompositionLocalOf { UnitFormatter.Metric }
 
-/** The registry metric that a reviewed profile's LIVE `t` field measures. */
+/** The size bins (label, LIVE key) to show. An unknown board shows every bin the protocol defines. */
+internal fun particleBins(profile: LiveProfile?): List<Pair<String, String>> =
+    PARTICLE_BINS.filter { (_, key) -> profile == null || key in profile.keys }
+
+private val PARTICLE_BINS = listOf(">0.3" to "n03", ">0.5" to "n05", ">1" to "n1", ">2.5" to "n25", ">5" to "n5", ">10" to "n10")
+
+private fun LiveSample.count(key: String): Long? = when (key) {
+    "n03" -> n03
+    "n05" -> n05
+    "n1" -> n1
+    "n25" -> n25
+    "n5" -> n5
+    "n10" -> n10
+    else -> null
+}
+
+/** The registry metric that a reviewed profile's LIVE temperature measures. */
 fun temperatureMetric(source: TemperatureSource?): MetricSpec =
     if (source == TemperatureSource.AMBIENT) Metrics.AMBIENT_TEMP else Metrics.BOARD_TEMP
 
@@ -351,7 +367,7 @@ internal fun EnvironmentCard(profile: LiveProfile?, live: LiveSample?, receivedA
         Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
             val temp = temperatureMetric(profile.temperature)
             val units = LocalTodayUnits.current
-            BigValue(temp.label, fmt(units.value(live?.t, temp.unit)), units.unit(temp.unit), Modifier.weight(1f))
+            BigValue(temp.label, fmt(units.value(profile.temperatureOf(live), temp.unit)), units.unit(temp.unit), Modifier.weight(1f))
             if (profile.humidity) BigValue(Metrics.HUMIDITY.label, fmt(live?.rh), Metrics.HUMIDITY.unit, Modifier.weight(1f))
         }
         if (live == null) {
@@ -628,17 +644,10 @@ internal fun ReadingsCard(live: LiveSample?, receivedAtEpochMs: Long?, level: De
     }
 }
 
-/** Detailed level: particle counts per 0.1 L by size bin. */
+/** Detailed level: particle counts per 0.1 L by size bin, only the bins the board's field table has. */
 @Composable
-internal fun ParticlesCard(live: LiveSample?, modifier: Modifier = Modifier) {
-    val counts = listOf(
-        ">0.3" to live?.n03,
-        ">0.5" to live?.n05,
-        ">1" to live?.n1,
-        ">2.5" to live?.n25,
-        ">5" to live?.n5,
-        ">10" to live?.n10,
-    )
+internal fun ParticlesCard(live: LiveSample?, profile: LiveProfile?, modifier: Modifier = Modifier) {
+    val counts = particleBins(profile).map { (label, key) -> label to live?.count(key) }
     BrandCard(modifier = modifier) {
         // Not uppercased. "µ".uppercase() is the Greek capital mu, which once rendered as "(MM)".
         Eyebrow(stringResource(Res.string.particles_title), uppercase = false, heading = true)
@@ -663,7 +672,7 @@ internal fun BoardCard(live: LiveSample?, profile: LiveProfile?, level: DetailLe
             Column(Modifier.weight(1f)) {
                 val temp = temperatureMetric(profile?.temperature)
                 val units = LocalTodayUnits.current
-                BigValue(temp.label, if (profile != null) fmt(units.value(live?.t, temp.unit)) else NO_VALUE, units.unit(temp.unit))
+                BigValue(temp.label, if (profile != null) fmt(units.value(profile.temperatureOf(live), temp.unit)) else NO_VALUE, units.unit(temp.unit))
                 Text(
                     stringResource(
                         when (profile?.temperature) {

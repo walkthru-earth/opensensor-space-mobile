@@ -49,7 +49,7 @@ data class ArchivedFile(
     val bootId: String? = null,
     /** `purpose` file metadata; `telemetry` for station data, `codec-comparison-duplicate-rows` for benchmark copies. */
     val purpose: String? = null,
-    /** Rows with a UTC timestamp and their span (`event_time_utc_ns`). 0 / null for unsynced files. */
+    /** Rows with a UTC timestamp and their span (the event time column, held in nanoseconds). 0 / null for unsynced files. */
     val utcRows: Long? = null,
     val firstUtcNs: Long? = null,
     val lastUtcNs: Long? = null,
@@ -88,10 +88,10 @@ data class ArchivedFile(
  */
 data class ArchivedFileIdentity(val station: String, val name: String, val bytes: Long, val crc32: Long)
 
-/** Per-station archive totals for the device list, computed in SQL instead of over every row. */
 /** A station's newest timed end, null when its timed files carry no end. */
 data class StationTimedEnd(val station: String, val lastNs: Long?)
 
+/** Per-station archive totals for the device list, computed in SQL instead of over every row. */
 data class StationArchiveGlance(
     val station: String,
     val files: Int,

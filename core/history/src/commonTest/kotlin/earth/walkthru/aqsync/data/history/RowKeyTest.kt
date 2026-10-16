@@ -3,6 +3,7 @@ package earth.walkthru.aqsync.data.history
 import earth.walkthru.aqsync.data.history.parquet.ColumnValues
 import earth.walkthru.aqsync.data.history.parquet.ParquetCodec
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
+import earth.walkthru.aqsync.data.history.parquet.ParquetLogicalType
 import earth.walkthru.aqsync.data.history.parquet.ParquetType
 import earth.walkthru.aqsync.data.history.parquet.ParquetWriter
 import kotlin.test.Test
@@ -20,7 +21,7 @@ class RowKeyTest {
     /** A small telemetry file. [seq] null leaves out the column, a null entry is a null cell. */
     private fun file(utc: LongArray, seq: Array<Long?>?, bootLo: Long? = 7L): ParquetFile {
         val columns = buildList {
-            add(ParquetWriter.Column(ParquetIndexer.UTC, ParquetType.INT64, timestampNanosUtc = true))
+            add(ParquetWriter.Column(UtcColumns.EVENT_NS, ParquetType.INT64, timestampUtc = ParquetLogicalType.TimeUnit.NANOS))
             if (bootLo != null) add(ParquetWriter.Column("boot_id_lo", ParquetType.INT64))
             if (seq != null) add(ParquetWriter.Column(ParquetIndexer.SEQ, ParquetType.INT64))
             add(ParquetWriter.Column("imu_temperature_c", ParquetType.FLOAT))
