@@ -62,4 +62,13 @@ class DeviceCapabilitiesTest {
         assertFalse(caps.batchEstimate)
         assertFalse(caps.showsBatchEstimate(1))
     }
+
+    @Test fun olderAndNewerWaveshareDictionariesKeepTheBatchEstimate() {
+        listOf(LiveProfiles.WAVESHARE_V5_DICTIONARY, LiveProfiles.WAVESHARE_V3_DICTIONARY).forEach { dict ->
+            val caps = DeviceCapabilities.from(DeviceInfo(proto = 3, schema = "waveshare-sim7670g-telemetry-v5", dict = dict))
+            assertEquals(TemperatureSource.AMBIENT, caps.liveProfile?.temperature)
+            assertTrue(caps.batchEstimate)
+        }
+        assertFalse(DeviceCapabilities.from(DeviceInfo(proto = 1, schema = "cores3-telemetry-v4", dict = LiveProfiles.CORES3_V4_DICTIONARY)).batchEstimate)
+    }
 }

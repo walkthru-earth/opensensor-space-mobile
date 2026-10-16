@@ -9,6 +9,7 @@ draft), `docs/shared/mobile-migration.md` and `docs/shared/ble-sync-protocol.md`
 | --- | --- | --- | --- | --- |
 | CoreS3 | `idf-cores3-parquet-v6.12` | `cores3-telemetry-v5` | `cores3-telemetry-v4` | `22291d3aab63365404394f30c1549fb18bde0699df9b2de863de70bb3f4edf65` |
 | Waveshare SIM7670G | `idf-waveshare-parquet-v2.6` | `waveshare-sim7670g-telemetry-v4` | same | `0a024b85c632f621c0e1223f1ecafe3a9c4524a1ec3c0d03d910d191aaee2f82` |
+| Waveshare SIM7670G | `idf-waveshare-parquet-v2.7` (aq-parquet #24) | `waveshare-sim7670g-telemetry-v5` | same | `d0d0129440e04108d8ca1f9b9555f1b45316ee0ccf3af0fcf7c3a88c8c0796b8` |
 
 ## Plan
 
@@ -26,7 +27,8 @@ draft), `docs/shared/mobile-migration.md` and `docs/shared/ble-sync-protocol.md`
 5. LIVE (`:core:protocol`). `LiveProfiles.resolve` by dictionary digest only. `LiveSample.imuT`
    for CoreS3 `imu_t`, shown as board temperature. Waveshare `t` stays air temperature. Profiles
    list the board's keys, and Today shows only those particle bins. Unknown keys are ignored and
-   missing keys are null. LIVE `utc` stays nanoseconds.
+   missing keys are null. LIVE `utc` stays nanoseconds. Older dictionaries keep a profile, with
+   CoreS3 v6.11 and earlier reading board temperature from `t`. Waveshare v2.7 (`d0d01294…`) adds `bstate`.
 6. Watchdog. `LOG_TAIL` watchdog lines are informational. A storage stall reset ends the link,
    and the existing `RetryPolicy` and a fresh LIST resume the run. No code change.
 7. Old files. Both layouts stay readable. Cached old files are never deleted from the phone. A

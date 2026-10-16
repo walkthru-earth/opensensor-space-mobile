@@ -69,13 +69,41 @@ class LiveProfileTest {
     }
 
     @Test
-    fun `unknown or older dictionary never borrows a temperature interpretation`() {
+    fun `older CoreS3 dictionaries read board temperature from t`() {
+        listOf(LiveProfiles.CORES3_V4_DICTIONARY, LiveProfiles.CORES3_V3_DICTIONARY).forEach { dict ->
+            val profile = LiveProfiles.resolve(DeviceInfo(schema = "cores3-telemetry-v4", dict = dict))!!
+            assertSame(LiveProfiles.CORES3_LEGACY, profile)
+            assertEquals(TemperatureSource.BOARD, profile.temperature)
+            assertFalse(profile.humidity)
+            assertEquals(cores3Keys - "imu_t" + "t", profile.keys)
+            assertEquals(31.5, profile.temperatureOf(LiveSample.parse("""{"pms":4,"t":31.5}"""))!!, 0.0)
+            assertNull(profile.temperatureOf(LiveSample.parse("""{"imu_t":40.0}""")))
+        }
+    }
+
+    @Test
+    fun `older Waveshare dictionaries keep the ambient profile`() {
+        listOf(LiveProfiles.WAVESHARE_V3_DICTIONARY, LiveProfiles.WAVESHARE_V2_DICTIONARY, LiveProfiles.WAVESHARE_V1_DICTIONARY).forEach { dict ->
+            assertSame(LiveProfiles.WAVESHARE, LiveProfiles.resolve(DeviceInfo(schema = "waveshare-sim7670g-telemetry-v3", dict = dict)))
+        }
+    }
+
+    @Test
+    fun `Waveshare v5 dictionary adds bstate and keeps ambient t and rh`() {
+        val profile = LiveProfiles.resolve(DeviceInfo(schema = "waveshare-sim7670g-telemetry-v5", dict = LiveProfiles.WAVESHARE_V5_DICTIONARY))!!
+        assertSame(LiveProfiles.WAVESHARE_V5, profile)
+        assertEquals(TemperatureSource.AMBIENT, profile.temperature)
+        assertTrue(profile.humidity)
+        assertEquals(waveshareKeys + "bstate", profile.keys)
+        assertEquals(22.4, profile.temperatureOf(LiveSample.parse("""{"t":22.4,"rh":51.0,"bstate":2}"""))!!, 0.0)
+    }
+
+    @Test
+    fun `unknown dictionary never borrows a temperature interpretation`() {
         assertNull(LiveProfiles.resolve(null))
         assertNull(LiveProfiles.resolve(DeviceInfo(fw = "idf-cores3-parquet-v6.12")))
         assertNull(LiveProfiles.resolve(DeviceInfo(schema = "cores3-telemetry-v5")))
-        // The CoreS3 v4 and Waveshare v3 dictionaries before this firmware.
-        assertNull(LiveProfiles.resolve(DeviceInfo(schema = "cores3-telemetry-v4", dict = "f35d73981ca65d9de587a4ec7988ccea19e71dce988c69eb4bb99713f2352bb3")))
-        assertNull(LiveProfiles.resolve(DeviceInfo(schema = "waveshare-sim7670g-telemetry-v3", dict = "7cd1c69da4ecd728dde2736e4c55063d9707ef53cdba1745b8896efcfd60f5da")))
+        assertNull(LiveProfiles.resolve(DeviceInfo(schema = "waveshare-sim7670g-telemetry-v6")))
         assertNull(LiveProfiles.resolve(DeviceInfo(dict = "0".repeat(64))))
     }
 }
