@@ -90,6 +90,7 @@ class LiveProfileTest {
 
     @Test
     fun `Waveshare v5 dictionary adds bstate and keeps ambient t and rh`() {
+        assertSame(LiveProfiles.WAVESHARE_V5, LiveProfiles.resolve(DeviceInfo(dict = LiveProfiles.WAVESHARE_V5_FIRST_DICTIONARY)))
         val profile = LiveProfiles.resolve(DeviceInfo(schema = "waveshare-sim7670g-telemetry-v5", dict = LiveProfiles.WAVESHARE_V5_DICTIONARY))!!
         assertSame(LiveProfiles.WAVESHARE_V5, profile)
         assertEquals(TemperatureSource.AMBIENT, profile.temperature)

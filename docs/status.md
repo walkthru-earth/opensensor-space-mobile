@@ -18,7 +18,7 @@ build and `verify` only. No phone run against the new firmware yet.
 - LIVE. Profiles resolve by dictionary digest only, and a newer schema keeps its profile. CoreS3
   board temperature comes from `imu_t`, Waveshare air temperature from `t`. Particle bins show only
   the board's keys. Older dictionaries keep a profile because boards in the field run them. Older
-  CoreS3 firmware reads board temperature from `t`. Waveshare v2.7 (`d0d01294…`, PR aq-parquet #24)
+  CoreS3 firmware reads board temperature from `t`. Waveshare v2.7 (`67688d0f…`, PR aq-parquet #24, and its first build `d0d01294…`)
   adds `bstate`.
 - Old files. Both layouts stay readable, cached old files stay on the phone, and files the owner
   removed from the Waveshare card are neither data loss nor uploaded again.

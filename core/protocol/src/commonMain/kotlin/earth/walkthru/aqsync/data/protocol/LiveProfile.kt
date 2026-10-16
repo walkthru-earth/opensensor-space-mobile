@@ -46,8 +46,14 @@ object LiveProfiles {
     /** CoreS3 `cores3-telemetry-v2` and `-v3`, also `t` for the IMU temperature. */
     const val CORES3_V3_DICTIONARY = "20f850852413abb1165f3f7ca95b4831a0e90a34ae7c7fcb41c44b108d3513c3"
 
-    /** Waveshare v2.7 writes schema and dictionary `waveshare-sim7670g-telemetry-v5`, adding `bstate`. */
-    const val WAVESHARE_V5_DICTIONARY = "d0d0129440e04108d8ca1f9b9555f1b45316ee0ccf3af0fcf7c3a88c8c0796b8"
+    /**
+     * Waveshare v2.7 writes schema and dictionary `waveshare-sim7670g-telemetry-v5`, adding `bstate`.
+     * Its field table holds the LIVE keys, so the digest covers them (aq-parquet #24, 91442d1).
+     */
+    const val WAVESHARE_V5_DICTIONARY = "67688d0fd2e86053c1c66b961a1446ad3c225ee71823e0fadb771b645c7183ff"
+
+    /** The first v2.7 build, before its LIVE keys joined the field table. Same keys as v5. */
+    const val WAVESHARE_V5_FIRST_DICTIONARY = "d0d0129440e04108d8ca1f9b9555f1b45316ee0ccf3af0fcf7c3a88c8c0796b8"
 
     /** Waveshare v2.6 writes schema and dictionary `waveshare-sim7670g-telemetry-v4`. */
     const val WAVESHARE_DICTIONARY = "0a024b85c632f621c0e1223f1ecafe3a9c4524a1ec3c0d03d910d191aaee2f82"
@@ -72,7 +78,7 @@ object LiveProfiles {
     fun resolve(info: DeviceInfo?): LiveProfile? = when (info?.dict) {
         CORES3_DICTIONARY -> CORES3
         CORES3_V4_DICTIONARY, CORES3_V3_DICTIONARY -> CORES3_LEGACY
-        WAVESHARE_V5_DICTIONARY -> WAVESHARE_V5
+        WAVESHARE_V5_DICTIONARY, WAVESHARE_V5_FIRST_DICTIONARY -> WAVESHARE_V5
         WAVESHARE_DICTIONARY, WAVESHARE_V3_DICTIONARY, WAVESHARE_V2_DICTIONARY, WAVESHARE_V1_DICTIONARY -> WAVESHARE
         else -> null
     }
