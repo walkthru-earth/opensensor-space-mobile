@@ -186,6 +186,38 @@ class StorageJanitorTest {
     }
 
     @Test
+    fun adoptionWaitsForAHeldLeaseAndSkipsAFileDeletedMeanwhile() = runTest {
+        val store = MemoryArchiveStore()
+        val index = MemoryArchiveIndex()
+        val key = ArchiveKey(known, "year=2026/month=10/day=04/data.parquet")
+        store.files[ArchiveLayout.finalPath(key)] = parquet
+        val leases = WriterLeases()
+        val held = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        // The old file cleanup holds the lease, drops the record and deletes the file while the janitor waits.
+        launch {
+            leases.withLease(key) {
+                held.complete(Unit)
+                release.await()
+                store.files.remove(ArchiveLayout.finalPath(key))
+            }
+        }
+        held.await()
+
+        val sweep = async { janitor(FakeTree(), store, index, testScheduler, leases).run() }
+        testScheduler.advanceUntilIdle()
+        assertFalse(sweep.isCompleted)
+        release.complete(Unit)
+        val report = sweep.await()
+
+        assertEquals(0, report.adopted)
+        assertEquals(0, report.unverifiable)
+        assertEquals(0, report.failures)
+        assertNull(index.get(key))
+        assertEquals(0, leases.activeCount())
+    }
+
+    @Test
     fun anIndexedFinalIsLeftAsItIs() = runTest {
         val store = MemoryArchiveStore()
         val index = MemoryArchiveIndex()

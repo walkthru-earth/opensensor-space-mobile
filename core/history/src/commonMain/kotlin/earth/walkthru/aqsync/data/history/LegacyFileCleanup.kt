@@ -12,6 +12,9 @@ import earth.walkthru.aqsync.storage.StorageRoots
 import earth.walkthru.aqsync.storage.StorageTree
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
@@ -50,7 +53,11 @@ data class UtcDayRange(val fromEpochDay: Long, val toEpochDay: Long) {
  * delete that fails puts the record back. [remove] refuses while [syncRunning], and stops between
  * files when a sync starts.
  *
- * Logs carry counts only, never paths or station ids.
+ * Cancellation is honoured between files only. Each file's steps, from the record removal to the
+ * re-adopt check, finish under [NonCancellable], and [afterRemoval] runs for the files already removed
+ * even when the caller is cancelled.
+ *
+ * Logs carry counts and exception class names only, never paths or station ids.
  */
 class LegacyFileCleanup(
     private val store: ArchiveStore,
@@ -73,11 +80,23 @@ class LegacyFileCleanup(
     data class Report(
         val removed: Int = 0,
         val bytes: Long = 0,
-        /** Files left in place, no longer old, gone already, or whose delete failed. */
+        /** Files left in place, no longer old, gone already, unreadable, or not reached because a sync started. */
         val kept: Int = 0,
+        /** Files whose record removal or delete threw. The file stays, with its record put back when that worked. */
+        val failed: Int = 0,
         /** True when a sync started before the plan was done, or was running already. */
         val stoppedBySync: Boolean = false,
+        /** True when [afterRemoval] threw. The files are gone, History catches up on its next rebuild. */
+        val rebuildFailed: Boolean = false,
     )
+
+    private sealed interface Outcome {
+        class Removed(val record: ArchiveRecord) : Outcome
+
+        data object Kept : Outcome
+
+        data object Failed : Outcome
+    }
 
     /** Every old layout file in [range], or in the whole archive when [range] is null. */
     suspend fun plan(range: UtcDayRange? = null): Plan {
@@ -85,9 +104,10 @@ class LegacyFileCleanup(
         var bytes = 0L
         var skipped = 0
         val stations = HashSet<String>()
+        val unreadable = UnreadableLog()
         for (record in index.observeAll().first()) {
             if (range != null && !range.covers(record)) continue
-            when (isLegacy(record.key)) {
+            when (isLegacy(record.key, unreadable)) {
                 true -> {
                     keys += record.key
                     bytes += record.bytes
@@ -106,46 +126,90 @@ class LegacyFileCleanup(
         if (syncRunning()) return Report(kept = plan.files, stoppedBySync = true)
         var report = Report()
         val removed = ArrayList<ArchiveRecord>()
-        for ((i, key) in plan.keys.withIndex()) {
-            if (syncRunning()) {
-                report = report.copy(kept = report.kept + plan.files - i, stoppedBySync = true)
-                break
+        val unreadable = UnreadableLog()
+        try {
+            for ((i, key) in plan.keys.withIndex()) {
+                currentCoroutineContext().ensureActive()
+                if (syncRunning()) {
+                    report = report.copy(kept = report.kept + plan.files - i, stoppedBySync = true)
+                    break
+                }
+                report = when (val outcome = leases.withLease(key) { removeOne(key, unreadable, removed) }) {
+                    is Outcome.Removed -> report.copy(removed = report.removed + 1, bytes = report.bytes + outcome.record.bytes)
+                    Outcome.Kept -> report.copy(kept = report.kept + 1)
+                    Outcome.Failed -> report.copy(failed = report.failed + 1)
+                }
             }
-            val record = leases.withLease(key) { removeOne(key) }
-            report = if (record != null) {
-                removed += record
-                report.copy(removed = report.removed + 1, bytes = report.bytes + record.bytes)
-            } else {
-                report.copy(kept = report.kept + 1)
-            }
+        } finally {
+            // The files already removed get their days rebuilt, also when the caller was cancelled.
+            if (removed.isNotEmpty() && !withContext(NonCancellable) { rebuild(removed) }) report = report.copy(rebuildFailed = true)
         }
-        if (removed.isNotEmpty()) {
-            val days = HashMap<String, Set<Long>>()
-            for (r in removed) days[r.station] = days[r.station].orEmpty()
-            days.putAll(StationDays.of(removed))
-            afterRemoval(days)
-        }
-        log("old file cleanup: removed ${report.removed}, kept ${report.kept}, stopped by sync ${report.stoppedBySync}")
+        log(
+            "old file cleanup: removed ${report.removed}, kept ${report.kept}, failed ${report.failed}, " +
+                "stopped by sync ${report.stoppedBySync}, rebuild failed ${report.rebuildFailed}",
+        )
         return report
     }
 
-    /** One file, under its lease. Returns the removed record, or null when the file stays. */
-    private suspend fun removeOne(key: ArchiveKey): ArchiveRecord? {
-        val record = index.get(key) ?: return null
-        if (isLegacy(key) != true) return null
-        val path = finalPath(key) ?: return null
-        index.remove(key)
+    /** Runs [afterRemoval] for the stations and days of [removed]. False when it threw. */
+    private suspend fun rebuild(removed: List<ArchiveRecord>): Boolean {
+        val days = HashMap<String, Set<Long>>()
+        for (r in removed) days[r.station] = days[r.station].orEmpty()
+        days.putAll(StationDays.of(removed))
+        return try {
+            afterRemoval(days)
+            true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log("old file cleanup: rebuild failed: ${e::class.simpleName}")
+            false
+        }
+    }
+
+    /**
+     * One file, under its lease. The checks may be cancelled, the removal itself runs to its end and adds
+     * the record to [removed] there, so a cancellation that discards the result still rebuilds its days.
+     */
+    private suspend fun removeOne(key: ArchiveKey, unreadable: UnreadableLog, removed: MutableList<ArchiveRecord>): Outcome {
+        val record = index.get(key) ?: return Outcome.Kept
+        if (isLegacy(key, unreadable) != true) return Outcome.Kept
+        val path = finalPath(key) ?: return Outcome.Kept
+        return withContext(NonCancellable) { drop(key, record, path, removed) }
+    }
+
+    private suspend fun drop(key: ArchiveKey, record: ArchiveRecord, path: String, removed: MutableList<ArchiveRecord>): Outcome {
         try {
+            index.remove(key)
             withContext(io) { tree.delete(path) }
         } catch (e: CancellationException) {
             throw e
-        } catch (_: Throwable) {
-            index.putIfAbsent(record)
-            return null
+        } catch (e: Exception) {
+            log("old file cleanup: delete failed: ${e::class.simpleName}")
+            restore(record)
+            return Outcome.Failed
         }
+        removed += record
         // The startup janitor may have adopted the file between the two steps. The file is gone, so its record goes too.
-        if (index.get(key) != null && !store.exists(key)) index.remove(key)
-        return record
+        try {
+            if (index.get(key) != null && !store.exists(key)) index.remove(key)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log("old file cleanup: re-adopt check failed: ${e::class.simpleName}")
+        }
+        return Outcome.Removed(record)
+    }
+
+    /** Puts [record] back after a failed delete. When that throws too, the startup janitor adopts the file again. */
+    private suspend fun restore(record: ArchiveRecord) {
+        try {
+            index.putIfAbsent(record)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log("old file cleanup: record restore failed: ${e::class.simpleName}")
+        }
     }
 
     /**
@@ -159,13 +223,25 @@ class LegacyFileCleanup(
         return path
     }
 
+    /** Logs the class of the first unreadable footer of one run, so a broken archive does not flood the log. */
+    private inner class UnreadableLog {
+        private var logged = false
+
+        fun note(e: Exception) {
+            if (logged) return
+            logged = true
+            log("old file cleanup: unreadable footer: ${e::class.simpleName}")
+        }
+    }
+
     /** True or false from the footer, null when the file cannot be read. */
-    private suspend fun isLegacy(key: ArchiveKey): Boolean? = withContext(io) {
+    private suspend fun isLegacy(key: ArchiveKey, unreadable: UnreadableLog): Boolean? = withContext(io) {
         try {
             ParquetFile.open(store.reader(key), key.name).use { UtcColumns.isLegacyLayout(it.metadata) }
         } catch (e: CancellationException) {
             throw e
-        } catch (_: Throwable) {
+        } catch (e: Exception) {
+            unreadable.note(e)
             null
         }
     }
