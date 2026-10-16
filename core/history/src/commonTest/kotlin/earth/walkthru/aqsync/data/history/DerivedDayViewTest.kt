@@ -100,10 +100,15 @@ class DerivedDayViewTest {
         val daily = assertNotNull(pass.daily)
         assertEquals(if (includeRealRows) 128 else 64, daily.rows)
         val derivedBytes = sink.toByteArray()
-        ParquetFile.wrap(derivedBytes).use { file ->
+        val estimatedUs = ParquetFile.wrap(derivedBytes).use { file ->
             assertEquals(64, file.readColumn(UtcColumns.EVENT_US).nullCount)
-            assertEquals(64L, file.numRows - file.readColumn(DailyParquetBuilder.ESTIMATED_UTC).nullCount)
+            val est = file.readColumn(DailyParquetBuilder.ESTIMATED_UTC)
+            assertEquals(ParquetLogicalType.TimeUnit.MICROS, file.leaf(DailyParquetBuilder.ESTIMATED_UTC).timestampUtcUnit)
+            assertEquals(64L, file.numRows - est.nullCount)
+            (0 until est.size).mapNotNull { est.asLong(it) }
         }
+        // Each estimated row is stored in microseconds and reads back at estimated_us * 1000.
+        assertEquals(estimatedTimes.sorted(), estimatedUs.map { it * 1_000L }.sorted())
         var derivedOpens = 0
         val derived = DerivedDayFiles { _, epochDay, _, _ ->
             assertEquals(day, epochDay)
@@ -136,6 +141,8 @@ class DerivedDayViewTest {
                 assertEquals(expectedEstimated.toLong(), raw.estimatedRows)
                 assertEquals((expectedEstimated + expectedReal).toLong(), raw.validRows)
                 assertEquals(raw.points, fromDerived.points)
+                val estimatedStarts = estimatedUs.map { (it * 1_000L).floorDiv(1_000_000_000L) }.filter { it >= window.fromS && it < window.toS }
+                assertEquals(estimatedStarts.sorted(), fromDerived.points.filter { it.estimated }.map { it.startS }.sorted())
                 assertEquals(raw.validRows, fromDerived.validRows)
                 assertEquals(raw.estimatedRows, fromDerived.estimatedRows)
                 assertEquals(raw.mean, fromDerived.mean)
