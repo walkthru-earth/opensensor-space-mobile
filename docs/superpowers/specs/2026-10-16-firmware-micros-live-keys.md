@@ -31,6 +31,12 @@ draft), `docs/shared/mobile-migration.md` and `docs/shared/ble-sync-protocol.md`
    and the existing `RetryPolicy` and a fresh LIST resume the run. No code change.
 7. Old files. Both layouts stay readable. Cached old files are never deleted from the phone. A
    file the device no longer lists is not data loss, and the app never uploads to the device.
+8. Iceberg v3. Owner update, aq-parquet commit c1f07ed. Tables are created as format v3, device
+   MICROS columns are `timestamptz` and `field_id` is the Iceberg field id. No `timestamptz_ns`.
+   Row lineage is left to the committing library (iceberg-go 0.7.0+ `AddFiles` or iceberg-rust
+   0.9.0+ with `DataFile` entries from footer metrics, not PyIceberg 0.12). Pre v6.12 and v2.6
+   files stay out of the table or are rewritten on a host. The app has no Iceberg commit code, so
+   this is recorded in `docs/parquet.md` and no catalog client is built here.
 
 ## Tests
 

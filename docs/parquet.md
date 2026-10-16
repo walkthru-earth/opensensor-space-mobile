@@ -136,6 +136,20 @@ owner removed the old files from the Waveshare card, and a file that is no longe
 device is not data loss. The app never uploads a file to the device and never asks the firmware to
 delete or rewrite one.
 
+### Iceberg v3 tables (not in the app yet)
+
+The app has no Iceberg catalog or commit code. When device files are registered, the table is
+created as Apache Iceberg format v3. The device files need no change for this.
+`TIMESTAMP(MICROS, UTC)` is Iceberg `timestamptz` in every format version, and each leaf's
+`field_id` is used as the Iceberg field id. `timestamptz_ns` is not used, Spark, Athena and
+Redshift cannot read it. Row lineage (`_row_id`, `_last_updated_sequence_number`) is left to the
+committing library, the device never writes it. The commit uses iceberg-go 0.7.0 or later
+(`AddFiles`) or iceberg-rust 0.9.0 or later with `DataFile` entries built from the footer
+metrics. PyIceberg 0.12 cannot write v3. Files from before CoreS3 v6.12 and Waveshare v2.6 store
+UTC as bare INT64 or `TIMESTAMP(NANOS, UTC)` without field ids. A name mapping cannot change a
+column's type, so these files stay out of the table or are rewritten on a host. Phone derived days
+(`derived-v3`) are a local cache and are not committed either.
+
 ## GeoParquet 2.0 (D11, 2026-09-17)
 
 **Read any GeoParquet 2.0 rc.1 file, write our own** by extending the reader, not importing an
