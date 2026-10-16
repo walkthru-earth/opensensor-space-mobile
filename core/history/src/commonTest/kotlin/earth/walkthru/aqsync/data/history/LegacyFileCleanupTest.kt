@@ -22,6 +22,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -53,6 +54,37 @@ class LegacyFileCleanupTest {
     private val nanos = fixtureBytes("parquet/device/v3-board-2rg-105rows.parquet")
     private val micros = single(UtcColumns.EVENT_US, TimeUnit.MICROS, fieldId = 1)
 
+    /**
+     * The v3 board fixture in the current device layout. Every leaf gets its position as field id, and
+     * with [renamed] the UTC columns become `*_utc_us` MICROS. Without it they stay `*_utc_ns` NANOS,
+     * the transitional layout of the first firmware that wrote field ids.
+     */
+    private fun current(renamed: Boolean): ByteArray {
+        val raw = ParquetFile.wrap(nanos)
+        val columns = raw.leaves.mapIndexed { i, leaf ->
+            val utc = UtcColumns.isUtcInstant(leaf)
+            val name = if (renamed) UtcColumns.canonical(leaf.name) else leaf.name
+            val unit = if (!utc) {
+                null
+            } else if (renamed) {
+                TimeUnit.MICROS
+            } else {
+                TimeUnit.NANOS
+            }
+            ParquetWriter.Column(name, leaf.type, timestampUtc = unit, fieldId = i + 1)
+        }
+        val values = raw.leaves.map { leaf ->
+            val col = raw.readColumn(leaf)
+            if (renamed && UtcColumns.isUtcInstant(leaf)) UtcColumns.toMicros(col, leaf) else col
+        }
+        val sink = MemorySink()
+        val writer = ParquetWriter(sink, columns, keyValueMetadata = raw.metadata.keyValueMetadata)
+        writer.begin()
+        writer.rowGroup(values)
+        writer.finish()
+        return sink.toByteArray()
+    }
+
     private fun single(name: String, unit: TimeUnit?, fieldId: Int? = null): ByteArray {
         val sink = MemorySink()
         val writer = ParquetWriter(sink, listOf(ParquetWriter.Column(name, ParquetType.INT64, timestampUtc = unit, fieldId = fieldId)))
@@ -78,6 +110,13 @@ class LegacyFileCleanupTest {
 
         /** Runs once, inside the first remove, like the janitor adopting the file in that window. */
         var onRemove: (() -> Unit)? = null
+
+        /** Makes [putIfAbsent] throw, like a database that went away after the delete failed. */
+        var failPut = false
+        override suspend fun putIfAbsent(record: ArchiveRecord): Boolean {
+            if (failPut) throw IllegalStateException("closed")
+            return super.putIfAbsent(record)
+        }
         override fun observeAll(): Flow<List<ArchiveRecord>> = rows.map { list -> list.sortedBy { it.name } }
         override fun observeStation(station: String): Flow<List<ArchiveRecord>> = rows.map { list -> list.filter { it.station == station } }
         override suspend fun get(key: ArchiveKey): ArchiveRecord? = rows.value.firstOrNull { it.key == key }
@@ -115,7 +154,11 @@ class LegacyFileCleanupTest {
 
     private fun name(day: Long, n: Int) = "station=$station/year=2024/month=10/day=$day/file-$n.parquet"
 
-    private fun setup(syncing: () -> Boolean = { false }, vararg files: Pair<ArchiveRecord, ByteArray>): Setup {
+    private fun setup(
+        syncing: () -> Boolean = { false },
+        vararg files: Pair<ArchiveRecord, ByteArray>,
+        afterRemoval: (suspend (Map<String, Set<Long>>) -> Unit)? = null,
+    ): Setup {
         val store = Store()
         val index = Index()
         for ((r, b) in files) {
@@ -124,7 +167,7 @@ class LegacyFileCleanupTest {
         }
         val tree = Tree(store, root)
         val rebuilt = mutableListOf<Map<String, Set<Long>>>()
-        val cleanup = LegacyFileCleanup(store, index, roots, tree, WriterLeases(), Dispatchers.Unconfined, syncing, afterRemoval = { rebuilt += it })
+        val cleanup = LegacyFileCleanup(store, index, roots, tree, WriterLeases(), Dispatchers.Unconfined, syncing, afterRemoval = afterRemoval ?: { rebuilt += it })
         return Setup(store, index, tree, cleanup, rebuilt)
     }
 
@@ -203,7 +246,8 @@ class LegacyFileCleanupTest {
         s.tree.failOn = { it.endsWith(a.name) }
         val report = s.cleanup.remove(s.cleanup.plan())
         assertEquals(1, report.removed)
-        assertEquals(1, report.kept)
+        assertEquals(0, report.kept)
+        assertEquals(1, report.failed)
         assertEquals(a, s.index.get(a.key))
         assertTrue(a.key in s.store.files)
         assertNull(s.index.get(b.key))
@@ -262,5 +306,76 @@ class LegacyFileCleanupTest {
         assertEquals(LegacyFileCleanup.Report(kept = 1), cleanup.remove(cleanup.plan()))
         assertNotNull(index.get(a.key))
         assertTrue(tree.deleted.isEmpty())
+    }
+
+    @Test
+    fun realCurrentAndTransitionalFilesAreNeverOld() = runTest {
+        val renamed = current(renamed = true)
+        val transitional = current(renamed = false)
+        val renamedMd = ParquetFile.wrap(renamed).metadata
+        assertTrue(renamedMd.leaves.size > 2)
+        assertEquals(TimeUnit.MICROS, renamedMd.leaf(UtcColumns.EVENT_US)?.timestampUtcUnit)
+        assertEquals(TimeUnit.MICROS, renamedMd.leaf(UtcColumns.ANCHOR_US)?.timestampUtcUnit)
+        assertTrue(renamedMd.leaves.all { it.fieldId != null })
+        assertFalse(UtcColumns.isLegacyLayout(renamedMd))
+        val transitionalMd = ParquetFile.wrap(transitional).metadata
+        assertEquals(TimeUnit.NANOS, transitionalMd.leaf(UtcColumns.EVENT_NS)?.timestampUtcUnit)
+        assertTrue(transitionalMd.leaves.all { it.fieldId != null })
+        assertFalse(UtcColumns.isLegacyLayout(transitionalMd))
+
+        val old = record(name(1, 1), nanos, day * dayNs)
+        val now = record(name(1, 2), renamed, day * dayNs)
+        val between = record(name(1, 3), transitional, day * dayNs)
+        val s = setup(files = arrayOf(old to nanos, now to renamed, between to transitional))
+        val plan = s.cleanup.plan()
+        assertEquals(listOf(old.key), plan.keys)
+        assertEquals(0, plan.skipped)
+        assertEquals(1, s.cleanup.remove(plan).removed)
+        assertEquals(setOf(now.key, between.key), s.store.files.keys)
+    }
+
+    @Test
+    fun aRebuildThatThrowsStillReportsTheRemovedFiles() = runTest {
+        val a = record(name(1, 1), nanos, day * dayNs)
+        val s = setup(files = arrayOf(a to nanos), afterRemoval = { throw IllegalStateException("derive") })
+        val report = s.cleanup.remove(s.cleanup.plan())
+        assertEquals(LegacyFileCleanup.Report(removed = 1, bytes = a.bytes, rebuildFailed = true), report)
+        assertTrue(s.store.files.isEmpty())
+        assertNull(s.index.get(a.key))
+    }
+
+    @Test
+    fun aFailingRestoreDoesNotEscapeAndTheRestGoesOn() = runTest {
+        val a = record(name(1, 1), nanos, day * dayNs)
+        val b = record(name(1, 2), nanos, day * dayNs)
+        val s = setup(files = arrayOf(a to nanos, b to nanos))
+        s.tree.failOn = { it.endsWith(a.name) }
+        s.index.failPut = true
+        val report = s.cleanup.remove(s.cleanup.plan())
+        assertEquals(LegacyFileCleanup.Report(removed = 1, bytes = b.bytes, failed = 1), report)
+        // The file stays without its record, the startup janitor adopts it again.
+        assertTrue(a.key in s.store.files)
+        assertNull(s.index.get(a.key))
+        assertEquals(listOf(mapOf(station to setOf(day))), s.rebuilt)
+    }
+
+    @Test
+    fun aCancelledRemovalFinishesItsFileAndRebuildsWhatWentAway() = runTest {
+        val a = record(name(1, 1), nanos, day * dayNs)
+        val b = record(name(1, 2), nanos, (day + 1) * dayNs)
+        lateinit var s: Setup
+        val job = launch {
+            s.cleanup.remove(s.cleanup.plan())
+        }
+        s = setup(files = arrayOf(a to nanos, b to nanos))
+        // The first delete cancels the caller, like leaving Settings while it runs.
+        s.tree.failOn = { job.cancel(); false }
+        job.join()
+        assertTrue(job.isCancelled)
+        assertNull(s.index.get(a.key))
+        assertFalse(a.key in s.store.files)
+        assertNotNull(s.index.get(b.key))
+        assertTrue(b.key in s.store.files)
+        assertEquals(listOf(mapOf(station to setOf(day))), s.rebuilt)
     }
 }
