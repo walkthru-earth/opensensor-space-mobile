@@ -144,15 +144,24 @@ the owner's approval. `UtcColumns.isLegacyLayout` decides from the footer. A fil
 MICROS file and a file whose footer does not parse are always kept. Purpose plays no part.
 
 `LegacyFileCleanup` (`:core:history`, both phones) runs a dry run first (`plan`), which reads every
-footer and changes nothing. A UTC day range is inclusive and matches a file whose real or estimated
+footer and changes nothing. A file whose footer cannot be read is counted as skipped and kept, and
+Settings shows that count, so it never reads as none found. The first unreadable footer's exception
+class is logged once per run. A UTC day range is inclusive and matches a file whose real or estimated
 span overlaps it. A file the timeline cannot place is included only when no range is set. `remove`
 is refused while any sync runs (Android `CollectionAdmission.busy`, iOS `SensorSync.isBusy`) and
 stops between files when one starts. Each file is handled under its `WriterLeases` lease. It checks
 the file is still old, removes the index record, then deletes the final file, and only below the
-Durable archive root. A failed delete puts the record back. A crash between the two steps leaves a
-final file without a record, which the startup janitor adopts again under the same lease, so the
-index never points at a missing file. The derived days of the removed files are rebuilt after
-(Android `HistoryDeriver.deriveStale`, iOS `rebuildDerived`). Nothing is sent to a device. A later
+Durable archive root. A failed delete puts the record back and counts as failed. When the restore
+throws too, the file stays without a record and the startup janitor adopts it again. A crash between
+the two steps leaves a final file without a record, which the startup janitor adopts again under the
+same lease, so the index never points at a missing file. Cancellation is honoured between files
+only. Each file's steps, from the record removal to the re-adopt check, run under `NonCancellable`.
+The derived days of the removed files are rebuilt after, also when the caller was cancelled
+(Android `HistoryDeriver.deriveStale`, iOS `rebuildDerived`, which also rebuilds a station whose
+files all went from no sources, so its stale day files are removed). A rebuild that throws is logged
+and reported as `rebuildFailed`, the files stay removed. The report counts removed, kept (no longer
+old, gone already, unreadable or not reached), failed and whether a sync stopped it. Logs carry
+counts and exception class names only. Nothing is sent to a device. A later
 sync downloads a removed file again when the device still lists it. A CoreS3 card may, the current
 Waveshare card holds none.
 
