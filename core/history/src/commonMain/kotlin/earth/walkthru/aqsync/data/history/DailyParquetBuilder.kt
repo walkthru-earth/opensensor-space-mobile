@@ -126,7 +126,8 @@ object DailyParquetBuilder {
         val columnOrder = LinkedHashMap<String, ParquetType>()
         val timestampColumns = HashSet<String>()
         // Output name to the sources' field_id. Older files have none and take the id of the same name
-        // from a newer source, dictionaries being append only. Ids that disagree are dropped.
+        // from a newer source, dictionaries being append only. Ids that disagree, or that two names share,
+        // are dropped.
         val fieldIds = HashMap<String, Int>()
         val conflictingIds = HashSet<String>()
         val seen = RowKeys()
@@ -238,6 +239,8 @@ object DailyParquetBuilder {
         // 3. Columns to write: the union, the manifest index, and — when any row is estimated — the estimate.
         // UTC instants are TIMESTAMP(MICROS, UTC) like current device files, and every device column keeps
         // its field_id. The two columns the phone adds have no device id.
+        // An id is also dropped when two names carry it, a field id must name one column.
+        fieldIds.entries.groupBy({ it.value }, { it.key }).values.filter { it.size > 1 }.forEach { conflictingIds += it }
         val columns = columnOrder.map { (name, type) ->
             ParquetWriter.Column(
                 name,

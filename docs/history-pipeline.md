@@ -93,9 +93,10 @@ of the identity fields on collisions. Primitive timeline arrays preserve source 
 columns null) + `source_file_index` (INT32 into the manifest's `sources`) +
 `event_time_utc_estimated_us` for estimated rows (with `event_time_utc_us` null). UTC instants are
 written as `event_time_utc_us` and `clock_anchor_utc_us`, `TIMESTAMP(MICROS, UTC)`, whatever the
-source stored, so a day that mixes older NANOS files and current MICROS files has one column of each
-(`UtcColumns`). Device columns keep their `field_id`. An older source without ids takes the id of the
-same name from a newer source, and an id two sources disagree on is dropped. `source_file_index` and
+source stored, so a day that mixes older NANOS files and current MICROS files still has one
+`event_time_utc_us` column in microseconds (`UtcColumns`). Device columns keep their `field_id`. An
+older source without ids takes the id of the same name from a newer source. An id two sources
+disagree on, or one that two names share, is dropped. `source_file_index` and
 the estimate column have no id. **No `station_id`
 string column** (deviation from the evaluation) — stays flat numeric so our reader reads it back;
 station is in the path and metadata. Metadata: invariant device keys + `derived_by`

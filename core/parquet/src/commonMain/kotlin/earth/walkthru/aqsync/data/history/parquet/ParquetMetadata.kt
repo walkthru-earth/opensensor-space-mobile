@@ -376,7 +376,7 @@ data class ParquetFileMetadata(
         }
     }
 
-    /** Firmware file metadata: `schema_version` (`cores3-telemetry-v1|v2|v3`), `station_id`, `boot_id`, … */
+    /** Firmware file metadata: `schema_version` (for example `cores3-telemetry-v5`), `station_id`, `boot_id`, … */
     val schemaVersion: String? get() = keyValueMetadata["schema_version"]
 
     private companion object {

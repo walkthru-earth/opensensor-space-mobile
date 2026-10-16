@@ -109,6 +109,12 @@ class UtcColumnsTest {
         assertEquals(2L, UtcColumns.nsToUsCeil(2_000L))
         assertEquals(-2L, UtcColumns.nsToUs(-1_001L))
         assertEquals(-1L, UtcColumns.nsToUsCeil(-1_001L))
+        // Any unit, a millisecond range keeps its ends on their side too.
+        assertEquals(1L, UtcColumns.nsToUnit(1_999_999L, 1_000_000L))
+        assertEquals(2L, UtcColumns.nsToUnitCeil(1_000_001L, 1_000_000L))
+        assertEquals(5L, UtcColumns.nsToUnit(5L, 1L))
+        assertEquals(1_000L, UtcColumns.scaleToNs(1L, 1_000L))
+        assertNull(UtcColumns.scaleToNs(Long.MAX_VALUE / 10, 1_000L))
     }
 
     @Test
@@ -159,5 +165,21 @@ class UtcColumnsTest {
         val conflicted = ParquetFile.wrap(mixed.toByteArray())
         assertTrue(conflicted.leaves.all { it.fieldId == null })
         assertEquals(TimeUnit.MICROS, conflicted.leaf(UtcColumns.EVENT_US).timestampUtcUnit)
+
+        // One id under two names, as a rename in place would give: neither name keeps it.
+        val renamed = current(seqOffset = 3_000_000).let { bytes ->
+            val raw = ParquetFile.wrap(bytes)
+            val last = raw.leaves.last().name
+            val columns = raw.leaves.map { ParquetWriter.Column(if (it.name == last) "${last}_renamed" else it.name, it.type, timestampUtc = it.timestampUtcUnit, fieldId = it.fieldId) }
+            write(columns, raw.leaves.map { raw.readColumn(it) }, raw.metadata.keyValueMetadata)
+        }
+        val shared = MemorySink()
+        DailyParquetBuilder.build(station, day, listOf(source("new.parquet", newBytes, 2), source("renamed.parquet", renamed, 4)), shared, nowEpochS = 0)
+        val sharedFile = ParquetFile.wrap(shared.toByteArray())
+        val last = ParquetFile.wrap(newBytes).leaves.last().name
+        assertNull(sharedFile.leaf(last).fieldId)
+        assertNull(sharedFile.leaf("${last}_renamed").fieldId)
+        val ids = sharedFile.leaves.mapNotNull { it.fieldId }
+        assertEquals(ids.size, ids.toSet().size, "every field id names one column")
     }
 }

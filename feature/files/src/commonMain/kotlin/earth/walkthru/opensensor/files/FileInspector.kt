@@ -86,7 +86,7 @@ object FileInspector {
                 val scale = utcLeaf?.let { runCatching { UtcColumns.nanosPerUnit(it) }.getOrNull() }
                 val groups = md.rowGroups.mapIndexed { g, rg ->
                     val s = utcLeaf?.takeIf { scale != null }?.let { rg.columns[it.index].statistics }
-                    RowGroupSummary(g, rg.numRows, rg.totalByteSize, s?.minLong(ParquetType.INT64)?.times(scale!!), s?.maxLong(ParquetType.INT64)?.times(scale!!))
+                    RowGroupSummary(g, rg.numRows, rg.totalByteSize, s?.minLong(ParquetType.INT64)?.let { UtcColumns.scaleToNs(it, scale!!) }, s?.maxLong(ParquetType.INT64)?.let { UtcColumns.scaleToNs(it, scale!!) })
                 }
                 val columns = pf.leaves.map { leaf ->
                     val col = pf.readColumn(leaf)

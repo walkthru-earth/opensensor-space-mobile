@@ -295,7 +295,7 @@ class HistorySeriesReader(
                 val estScale = estLeaf?.let(UtcColumns::nanosPerUnit) ?: 1L
                 val wanted = listOfNotNull(utcLeaf.name, estLeaf?.name, "boot_id_hi", "boot_id_lo", ParquetIndexer.SEQ, metric.gate?.column, metric.column).filter { it in names }
                 // Rows dated by an estimate have a null UTC, so only a file without them can prune by UTC.
-                val range = if (utcScale == 1L) fromNs until toNs else UtcColumns.nsToUs(fromNs) until UtcColumns.nsToUsCeil(toNs)
+                val range = UtcColumns.nsToUnit(fromNs, utcScale) until UtcColumns.nsToUnitCeil(toNs, utcScale)
                 val batch = reader.scan(
                     if (estLeaf != null) ScanRequest(wanted) else ScanRequest(wanted, filterColumn = utcLeaf.name, filterRanges = listOf(range)),
                 )
@@ -310,9 +310,9 @@ class HistorySeriesReader(
                 for (i in 0 until batch.rowCount) {
                     val real = !utc.isNull(i)
                     val ns = if (real) {
-                        utc.long(i).scaledOrNull(utcScale) ?: continue
+                        UtcColumns.scaleToNs(utc.long(i), utcScale) ?: continue
                     } else if (est != null && !est.isNull(i)) {
-                        est.long(i).scaledOrNull(estScale) ?: continue
+                        UtcColumns.scaleToNs(est.long(i), estScale) ?: continue
                     } else {
                         continue
                     }
@@ -360,9 +360,6 @@ class HistorySeriesReader(
 
     /** The [RowKey] rule, a missing column or cell counts as 0. */
     private fun PrimitiveColumn?.longOrZero(i: Int): Long = if (this == null || isNull(i)) 0L else long(i)
-
-    /** This stored UTC value in nanoseconds, or null when it would overflow a Long. */
-    private fun Long.scaledOrNull(scale: Long): Long? = if (scale == 1L) this else takeIf { it in -(Long.MAX_VALUE / scale)..(Long.MAX_VALUE / scale) }?.times(scale)
 
     /** A derived read staged until both extraction and closing succeeded. */
     private class DerivedRows(capacity: Int) {

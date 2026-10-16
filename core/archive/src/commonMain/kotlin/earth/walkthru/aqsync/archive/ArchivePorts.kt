@@ -59,7 +59,7 @@ interface PartialWriter : AutoCloseable {
 
 /**
  * The records of the archive, one per verified file, keyed by (station, name). Android adapts the Room
- * `archived_file` table (v10). iOS keeps one `.verified.json` receipt per file (`ReceiptArchiveIndex`)
+ * `archived_file` table (v11). iOS keeps one `.verified.json` receipt per file (`ReceiptArchiveIndex`)
  * until Room KMP gives it the same table.
  */
 interface ArchiveIndex {

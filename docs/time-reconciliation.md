@@ -46,7 +46,9 @@ while explicit Finalize can still cut a short chunk. The card never merges final
 5. Retain original paths and bytes; corrected time goes in `event_time_utc_estimated_us`,
    while the original `event_time_utc_us` remains null.
 
-The mapping is `anchor_utc_ns + (row_monotonic_us - anchor_monotonic_us) * 1000`.
+The mapping is `anchor_utc_ns + (row_monotonic_us - anchor_monotonic_us) * 1000` in nanoseconds,
+the phone's timeline unit. The derived file stores it floored to microseconds, which equals
+`anchor_utc_ns / 1000 + (row_monotonic_us - anchor_monotonic_us)` for a positive anchor.
 Source signatures include the anchor so new evidence invalidates the derived cache.
 Boot plus sequence remains row identity; moving a row to another UTC partition does not
 create another sample. Partitioning uses UTC, regardless of the phone's display timezone.

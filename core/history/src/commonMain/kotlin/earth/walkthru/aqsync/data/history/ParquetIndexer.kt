@@ -18,7 +18,7 @@ data class ParquetIndex(
     val rows: Long,
     val rowGroups: Int,
     val columns: Int,
-    /** `schema_version` file metadata: `cores3-telemetry-v1|v2|v3`; null on a foreign writer. */
+    /** `schema_version` file metadata: for example `cores3-telemetry-v5` or `waveshare-sim7670g-telemetry-v4`, null on a foreign writer. */
     val schemaVersion: String?,
     val createdBy: String?,
     val bootId: String?,
