@@ -110,7 +110,7 @@ a missing key is null, and the firmware omits non-finite values. `utc` is nanose
 `LiveProfiles.resolve` picks the interpretation from the `info.dict` digest only, so a newer schema
 string over the same dictionary keeps its profile. CoreS3 (dictionary
 `22291d3a…`) sends `imu_t`, the IMU die temperature, shown as board temperature, and has no `t`.
-Waveshare (dictionary `0a024b85…`, and v2.7 `d0d01294…` which adds `bstate`) sends `t`, ambient air
+Waveshare (dictionary `0a024b85…`, and v2.7 `67688d0f…` or its first build `d0d01294…`, which adds `bstate`) sends `t`, ambient air
 temperature, and `rh`. Older dictionaries keep a profile. CoreS3 v6.11 and earlier (`f35d7398…`,
 `20f85085…`) send the IMU temperature as `t`, still shown as board temperature, and older Waveshare
 dictionaries keep the ambient profile. An unknown digest gets no profile and Today shows no reading. LIVE is a snapshot, not archive data.
