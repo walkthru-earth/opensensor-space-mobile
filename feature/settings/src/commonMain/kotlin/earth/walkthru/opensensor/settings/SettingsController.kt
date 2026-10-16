@@ -66,6 +66,65 @@ class SettingsController(
         }
     }
 
+    private val _oldFilesRange = MutableStateFlow<OldFilesRange?>(null)
+
+    /** The UTC days the old format cleanup looks at. Null means every date. */
+    val oldFilesRange: StateFlow<OldFilesRange?> = _oldFilesRange.asStateFlow()
+
+    private val _oldFiles = MutableStateFlow<OldFilesState>(OldFilesState.Idle)
+
+    /** The old format cleanup, a dry run first, then a confirmed removal. */
+    val oldFiles: StateFlow<OldFilesState> = _oldFiles.asStateFlow()
+
+    /** A new range drops the last count, so a removal always matches what the user saw. */
+    fun setOldFilesRange(range: OldFilesRange?) {
+        if (_oldFiles.value.busy) return
+        _oldFilesRange.value = range
+        _oldFiles.value = OldFilesState.Idle
+    }
+
+    /** The dry run. Counts the old format files in [oldFilesRange] and changes nothing. */
+    fun findOldFiles() {
+        val controls = storage ?: return
+        if (_oldFiles.value.busy || _clearing.value) return
+        val range = _oldFilesRange.value
+        _oldFiles.value = OldFilesState.Finding
+        scope.launch {
+            _oldFiles.value = try {
+                OldFilesState.Found(controls.findOldFiles(range))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                OldFilesState.Failed
+            }
+        }
+    }
+
+    /** Removes the files of the last dry run, after the user confirmed. Refused while a sync runs. */
+    fun removeOldFiles() {
+        val controls = storage ?: return
+        val found = _oldFiles.value as? OldFilesState.Found ?: return
+        if (found.plan.files == 0 || _clearing.value) return
+        if (controls.syncRunning()) {
+            _oldFiles.value = OldFilesState.Removed(OldFilesResult(0, 0, found.plan.files, syncRunning = true))
+            return
+        }
+        _oldFiles.value = OldFilesState.Removing(found.plan)
+        _clearing.value = true
+        scope.launch {
+            try {
+                _oldFiles.value = OldFilesState.Removed(controls.removeOldFiles(found.plan))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _oldFiles.value = OldFilesState.Failed
+            } finally {
+                _clearing.value = false
+                measure(controls)
+            }
+        }
+    }
+
     private suspend fun measure(controls: StorageControls) {
         try {
             _storageUsage.value = controls.usage()
@@ -87,4 +146,23 @@ class SettingsController(
     fun setUnitSystem(system: UnitSystem) {
         scope.launch { repository.setUnitSystem(system) }
     }
+}
+
+/** The steps of the old format cleanup in the Storage card. */
+sealed interface OldFilesState {
+    /** Nothing counted yet. */
+    data object Idle : OldFilesState
+
+    data object Finding : OldFilesState
+
+    data class Found(val plan: OldFilesPlan) : OldFilesState
+
+    data class Removing(val plan: OldFilesPlan) : OldFilesState
+
+    data class Removed(val result: OldFilesResult) : OldFilesState
+
+    /** The count or the removal threw. Files that were not reached stay. */
+    data object Failed : OldFilesState
+
+    val busy: Boolean get() = this is Finding || this is Removing
 }
