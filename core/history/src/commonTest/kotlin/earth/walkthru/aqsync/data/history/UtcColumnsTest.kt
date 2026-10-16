@@ -23,35 +23,12 @@ class UtcColumnsTest {
     private val fixture = "parquet/device/v3-board-2rg-180rows.parquet"
 
     /**
-     * The fixture in the current device layout: UTC instants renamed to `*_us` with MICROS values, and
-     * every leaf given its 1-based position as field id. [seqOffset] makes the rows new to a day that
-     * already holds the original file.
+     * The fixture in the current device layout. [seqOffset] makes the rows new to a day that already
+     * holds the original file.
      */
-    private fun current(seqOffset: Long = 0, idShift: Int = 0): ByteArray {
-        val raw = ParquetFile.wrap(fixtureBytes(fixture))
-        val columns = raw.leaves.mapIndexed { i, leaf ->
-            val name = UtcColumns.canonical(leaf.name)
-            ParquetWriter.Column(name, leaf.type, timestampUtc = if (UtcColumns.isUtcInstant(leaf)) TimeUnit.MICROS else null, fieldId = i + 1 + idShift)
-        }
-        val values = raw.leaves.map { leaf ->
-            val col = raw.readColumn(leaf)
-            when {
-                UtcColumns.isUtcInstant(leaf) -> UtcColumns.toMicros(col, leaf)
-                leaf.name == ParquetIndexer.SEQ && seqOffset != 0L -> (col as ColumnValues.Int64).let { c -> ColumnValues.Int64(LongArray(c.size) { c.values[it] + seqOffset }, c.valid) }
-                else -> col
-            }
-        }
-        return write(columns, values, raw.metadata.keyValueMetadata)
-    }
+    private fun current(seqOffset: Long = 0, idShift: Int = 0): ByteArray = microsLayout(fixtureBytes(fixture), seqOffset, idShift)
 
-    private fun write(columns: List<ParquetWriter.Column>, values: List<ColumnValues>, meta: Map<String, String> = emptyMap()): ByteArray {
-        val sink = MemorySink()
-        val writer = ParquetWriter(sink, columns, keyValueMetadata = meta)
-        writer.begin()
-        writer.rowGroup(values)
-        writer.finish()
-        return sink.toByteArray()
-    }
+    private fun write(columns: List<ParquetWriter.Column>, values: List<ColumnValues>, meta: Map<String, String> = emptyMap()): ByteArray = writeParquet(columns, values, meta)
 
     private fun single(name: String, type: ParquetType, unit: TimeUnit?, values: ColumnValues): ParquetFile =
         ParquetFile.wrap(write(listOf(ParquetWriter.Column(name, type, timestampUtc = unit)), listOf(values)))
@@ -191,4 +168,36 @@ class UtcColumnsTest {
         val ids = sharedFile.leaves.mapNotNull { it.fieldId }
         assertEquals(ids.size, ids.toSet().size, "every field id names one column")
     }
+}
+
+/**
+ * [bytes], a NANOS device file, in the current device layout: UTC instants renamed to `*_us` with
+ * MICROS values, and every leaf given its 1-based position plus [idShift] as field id. [seqOffset]
+ * shifts every sequence number.
+ */
+internal fun microsLayout(bytes: ByteArray, seqOffset: Long = 0, idShift: Int = 0): ByteArray {
+    val raw = ParquetFile.wrap(bytes)
+    val columns = raw.leaves.mapIndexed { i, leaf ->
+        val name = UtcColumns.canonical(leaf.name)
+        ParquetWriter.Column(name, leaf.type, timestampUtc = if (UtcColumns.isUtcInstant(leaf)) TimeUnit.MICROS else null, fieldId = i + 1 + idShift)
+    }
+    val values = raw.leaves.map { leaf ->
+        val col = raw.readColumn(leaf)
+        when {
+            UtcColumns.isUtcInstant(leaf) -> UtcColumns.toMicros(col, leaf)
+            leaf.name == ParquetIndexer.SEQ && seqOffset != 0L -> (col as ColumnValues.Int64).let { c -> ColumnValues.Int64(LongArray(c.size) { c.values[it] + seqOffset }, c.valid) }
+            else -> col
+        }
+    }
+    return writeParquet(columns, values, raw.metadata.keyValueMetadata)
+}
+
+/** One row group of [values] under [columns]. */
+internal fun writeParquet(columns: List<ParquetWriter.Column>, values: List<ColumnValues>, meta: Map<String, String> = emptyMap()): ByteArray {
+    val sink = MemorySink()
+    val writer = ParquetWriter(sink, columns, keyValueMetadata = meta)
+    writer.begin()
+    writer.rowGroup(values)
+    writer.finish()
+    return sink.toByteArray()
 }

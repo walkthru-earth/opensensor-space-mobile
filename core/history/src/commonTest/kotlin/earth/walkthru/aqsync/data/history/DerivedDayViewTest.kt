@@ -306,6 +306,34 @@ class DerivedDayViewTest {
     }
 
     @Test
+    fun aRawMicrosDayGivesTheSamePointsAsItsNanosOriginal() = runTest {
+        val nanos = respread()
+        val micros = microsLayout(nanos)
+        val station = ParquetFile.wrap(nanos).metadata.stationId ?: "derived-station"
+        assertEquals(ParquetLogicalType.TimeUnit.MICROS, ParquetFile.wrap(micros).leaf(UtcColumns.EVENT_US).timestampUtcUnit)
+        suspend fun reader(bytes: ByteArray): HistorySeriesReader {
+            val store = Store()
+            val index = Index()
+            val r = ArchiveRecord(station, "station=$station/day/part.parquet", bytes.size.toLong(), 1, "s", 1, "fake")
+            store.files[r.key] = bytes
+            index.put(r)
+            ArchiveIndexRepair(store, index, nowEpochMs = { 42L }).backfillAll()
+            return HistorySeriesReader(store, index, ArchiveHistoryTiers(store, index))
+        }
+        val old = reader(nanos)
+        val new = reader(micros)
+        // Both sides of midnight, so both UTC days of the file are read raw.
+        val window = HistoryWindow(day * 86_400 + 9 * 3_600, (day + 1) * 86_400 + 9 * 3_600, TimeZone.UTC)
+        for (metric in listOf(Metrics.PM25, Metrics.BOARD_TEMP)) {
+            val expected = old.observe(station, metric, HistoryRange.DAY, window).first()
+            val actual = new.observe(station, metric, HistoryRange.DAY, window).first()
+            assertTrue(expected.points.isNotEmpty())
+            assertEquals(expected.points, actual.points, "$metric")
+            assertEquals(expected, actual)
+        }
+    }
+
+    @Test
     fun aDayWithoutADerivedFileReadsTheRawFiles() = runTest {
         val bytes = respread()
         val station = ParquetFile.wrap(bytes).metadata.stationId ?: "derived-station"
