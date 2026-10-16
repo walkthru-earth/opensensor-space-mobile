@@ -25,6 +25,8 @@ class SettingsController(
     private val repository: SettingsRepository,
     /** Null hides the Storage card. */
     private val storage: StorageControls? = null,
+    /** The host logger. Gets the operation and the exception class name, never a path or an id. */
+    private val log: (String) -> Unit = {},
 ) {
     val prefs: StateFlow<AppPrefs?> = repository.prefs.stateIn(scope, SharingStarted.Eagerly, null)
 
@@ -59,6 +61,7 @@ class SettingsController(
                 throw e
             } catch (e: Exception) {
                 // A cache that could not be cleared keeps its size, the card shows it as it is.
+                log("settings: clear failed: ${e::class.simpleName}")
             } finally {
                 _clearing.value = false
                 measure(controls)
@@ -95,6 +98,7 @@ class SettingsController(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                log("settings: find old files failed: ${e::class.simpleName}")
                 OldFilesState.Failed
             }
         }
@@ -117,7 +121,8 @@ class SettingsController(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _oldFiles.value = OldFilesState.Failed
+                log("settings: remove old files failed: ${e::class.simpleName}")
+                _oldFiles.value = OldFilesState.RemoveFailed
             } finally {
                 _clearing.value = false
                 measure(controls)
@@ -132,6 +137,7 @@ class SettingsController(
             throw e
         } catch (e: Exception) {
             // Keep the last measurement.
+            log("settings: storage usage failed: ${e::class.simpleName}")
         }
     }
 
@@ -161,8 +167,11 @@ sealed interface OldFilesState {
 
     data class Removed(val result: OldFilesResult) : OldFilesState
 
-    /** The count or the removal threw. Files that were not reached stay. */
+    /** The count threw. Nothing changed. */
     data object Failed : OldFilesState
+
+    /** The removal threw. Files that were not reached stay. */
+    data object RemoveFailed : OldFilesState
 
     val busy: Boolean get() = this is Finding || this is Removing
 }

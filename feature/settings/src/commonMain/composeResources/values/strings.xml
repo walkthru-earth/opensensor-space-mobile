@@ -51,6 +51,13 @@
     <string name="storage_old_files_removed">Removed %1$s, %2$s MB</string>
     <string name="storage_old_files_sync_busy">Wait until sync is done</string>
     <string name="storage_old_files_failed">Could not check the files</string>
+    <string name="storage_old_files_remove_failed">Could not remove the files</string>
+    <string name="storage_old_files_unreadable">%1$s could not be read</string>
+    <string name="storage_old_files_removed_none">No files removed</string>
+    <string name="storage_old_files_not_removed">Could not remove %1$s</string>
+    <string name="storage_old_files_kept">%1$s kept</string>
+    <string name="storage_old_files_stopped_by_sync">Stopped because a sync started</string>
+    <string name="storage_old_files_history_later">History updates later</string>
     <string name="storage_old_files_all_dates">All dates</string>
     <string name="storage_old_files_dates">%1$s to %2$s</string>
     <string name="storage_old_files_pick_dates">Choose dates</string>
