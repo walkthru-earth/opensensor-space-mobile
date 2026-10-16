@@ -131,10 +131,30 @@ Every leaf of a current device file has `field_id` = its 1-based position in the
 `telemetry_fields.inc`, and dictionaries are append only, so an id never changes meaning. Older
 files have no ids and are mapped by name. A newer schema string is never a reason to refuse a file.
 
-Both layouts stay readable. Cached files of the old layout are never deleted from the phone. The
-owner removed the old files from the Waveshare card, and a file that is no longer listed by the
-device is not data loss. The app never uploads a file to the device and never asks the firmware to
-delete or rewrite one.
+Both layouts stay readable. The owner removed the old files from the Waveshare card, and a file
+that is no longer listed by the device is not data loss. The app never uploads a file to the device
+and never asks the firmware to delete or rewrite one.
+
+### Removing old files from the phone
+
+Settings › Storage › Old format files removes old layout files from the phone archive only, with
+the owner's approval. `UtcColumns.isLegacyLayout` decides from the footer. A file is old when it has
+`event_time_utc_ns` as an INT64 that is `TIMESTAMP(NANOS, UTC)` or unannotated, no
+`event_time_utc_us`, and no leaf with a field id. A file without any event time column, a current
+MICROS file and a file whose footer does not parse are always kept. Purpose plays no part.
+
+`LegacyFileCleanup` (`:core:history`, both phones) runs a dry run first (`plan`), which reads every
+footer and changes nothing. A UTC day range is inclusive and matches a file whose real or estimated
+span overlaps it. A file the timeline cannot place is included only when no range is set. `remove`
+is refused while any sync runs (Android `CollectionAdmission.busy`, iOS `SensorSync.isBusy`) and
+stops between files when one starts. Each file is handled under its `WriterLeases` lease. It checks
+the file is still old, removes the index record, then deletes the final file, and only below the
+Durable archive root. A failed delete puts the record back. A crash between the two steps leaves a
+final file without a record, which the startup janitor adopts again under the same lease, so the
+index never points at a missing file. The derived days of the removed files are rebuilt after
+(Android `HistoryDeriver.deriveStale`, iOS `rebuildDerived`). Nothing is sent to a device. A later
+sync downloads a removed file again when the device still lists it. A CoreS3 card may, the current
+Waveshare card holds none.
 
 ### Iceberg v3 tables (not in the app yet)
 
