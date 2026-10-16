@@ -16,7 +16,7 @@ import earth.walkthru.aqsync.data.protocol.PmsStatus
  * - [configurable] is protocol v2 or later: pairing, Wi-Fi, LAN and bonds can be edited.
  * - [sensorIdentity] is the Waveshare telemetry family, whose board stores the fitted PM module's
  *   sticker (`sensor` config) and can opt in to a batch estimate.
- * - [batchEstimate] is the reviewed Waveshare dictionary, the only one whose live view may show
+ * - [batchEstimate] is a reviewed Waveshare dictionary, the only ones whose live view may show
  *   the unvalidated Plantower batch estimate (still gated by the board's opt-in, see
  *   [showsBatchEstimate]).
  */
@@ -50,7 +50,7 @@ data class DeviceCapabilities(
                 liveProfile = profile,
                 configurable = (info.proto ?: 1) >= 2,
                 sensorIdentity = schema?.startsWith(WAVESHARE_SCHEMA_PREFIX) == true,
-                batchEstimate = profile == LiveProfiles.WAVESHARE,
+                batchEstimate = profile in LiveProfiles.WAVESHARE_FAMILY,
             )
         }
     }
