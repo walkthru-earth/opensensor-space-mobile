@@ -317,6 +317,18 @@ class SensorSync internal constructor(
         }
     }
 
+    /** True while any station syncs through this runner or its collections, from any thread. */
+    internal fun isBusy(): Boolean {
+        lock.lock()
+        val collections = try {
+            if (active.isNotEmpty()) return true
+            shared
+        } finally {
+            lock.unlock()
+        }
+        return collections?.anyActive() == true
+    }
+
     internal fun claim(station: String): Boolean {
         lock.lock()
         try {

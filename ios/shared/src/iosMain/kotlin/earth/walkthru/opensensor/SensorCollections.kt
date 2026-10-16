@@ -179,6 +179,9 @@ class SensorCollections internal constructor(
      */
     fun isActive(device: String): Boolean = locked { requests.values.any { it.device == device } }
 
+    /** True while any device has a run requested, running or waiting to retry. Settings refuses to remove files then. */
+    internal fun anyActive(): Boolean = locked { requests.isNotEmpty() }
+
     private suspend fun deliver(controller: CollectionController, id: Long, request: Request) {
         val ticks = Channel<SyncProgress>(Channel.CONFLATED)
         val reporter = scope.launch { for (update in ticks) withContext(callbacks) { request.progress(update) } }
