@@ -20,6 +20,8 @@ build and `verify` only. No phone run against the new firmware yet.
   the board's keys. Older dictionaries get no profile.
 - Old files. Both layouts stay readable, cached old files stay on the phone, and files the owner
   removed from the Waveshare card are neither data loss nor uploaded again.
+- Iceberg. Tables target format v3 with the device MICROS columns as `timestamptz` and `field_id`
+  as the Iceberg id. The app has no Iceberg commit code yet, the plan is in `docs/parquet.md`.
 - To check on phones. A sync of v6.12 and v2.6 files, a mixed old and new History day, the CoreS3
   board temperature tile, and resume after a storage watchdog reset.
 
