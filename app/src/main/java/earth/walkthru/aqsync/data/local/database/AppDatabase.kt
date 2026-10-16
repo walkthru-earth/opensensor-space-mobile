@@ -28,10 +28,13 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  *   behind "wake when nearby"; `AutoMigration` (new nullable column).
  * - v9: `station_epoch` preserves the station generations associated with an enrolled endpoint;
  *   explicit migration seeds existing known stations without claiming recorded BLE verification.
+ * - v10: `sensor_installation`, the phone's record of each sensor fitted to a station.
+ * - v11: no schema change. Rows indexed with no UTC rows and no error are marked never indexed, so
+ *   the `event_time_utc_us` reader indexes them again (`ArchiveRecord.INDEX_LAYOUT` 2).
  */
 @Database(
     entities = [KnownDevice::class, ArchivedFile::class, MetricBucket::class, DerivedDay::class, StationEpoch::class, SensorInstallation::class],
-    version = 10,
+    version = 11,
     exportSchema = true,
     autoMigrations = [AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6), AutoMigration(from = 6, to = 7, spec = AppDatabase.DropWideTiers::class), AutoMigration(from = 7, to = 8)],
 )
@@ -85,6 +88,11 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_sensor_installation_station ON sensor_installation (station)")
             }
         }
-        val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_8_9, MIGRATION_9_10)
+        val MIGRATION_10_11: Migration = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("UPDATE archived_file SET indexedAtEpochMs = NULL WHERE indexedAtEpochMs IS NOT NULL AND indexError IS NULL AND COALESCE(utcRows, 0) = 0")
+            }
+        }
+        val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
     }
 }

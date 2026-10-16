@@ -14,6 +14,7 @@ import earth.walkthru.aqsync.data.history.parquet.ColumnValues
 import earth.walkthru.aqsync.data.history.parquet.FooterCache
 import earth.walkthru.aqsync.data.history.parquet.MemoryRangeSource
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
+import earth.walkthru.aqsync.data.history.parquet.ParquetLogicalType
 import earth.walkthru.aqsync.data.history.parquet.ParquetType
 import earth.walkthru.aqsync.data.history.parquet.ParquetWriter
 import earth.walkthru.aqsync.data.history.parquet.RangeSource
@@ -77,12 +78,12 @@ class DerivedDayViewTest {
                 val values = file.leaves.map { leaf ->
                     val column = file.readColumn(leaf)
                     when (leaf.name) {
-                        ParquetIndexer.UTC -> ColumnValues.Int64(LongArray(column.size) { anchor.estimateNs(mono[it]) + 5_000_000_000L }, null)
+                        UtcColumns.EVENT_NS -> ColumnValues.Int64(LongArray(column.size) { anchor.estimateNs(mono[it]) + 5_000_000_000L }, null)
                         ParquetIndexer.SEQ -> ColumnValues.Int64(LongArray(column.size) { column.asLong(it)!! + 10_000 }, null)
                         else -> column
                     }
                 }
-                val writer = ParquetWriter(sink, file.leaves.map { ParquetWriter.Column(it.name, it.type, it.isTimestampNanosUtc) }, keyValueMetadata = file.metadata.keyValueMetadata)
+                val writer = ParquetWriter(sink, file.leaves.map { ParquetWriter.Column(it.name, it.type, timestampUtc = it.timestampUtcUnit, fieldId = it.fieldId) }, keyValueMetadata = file.metadata.keyValueMetadata)
                 writer.begin()
                 writer.rowGroup(values)
                 writer.finish()
@@ -99,10 +100,15 @@ class DerivedDayViewTest {
         val daily = assertNotNull(pass.daily)
         assertEquals(if (includeRealRows) 128 else 64, daily.rows)
         val derivedBytes = sink.toByteArray()
-        ParquetFile.wrap(derivedBytes).use { file ->
-            assertEquals(64, file.readColumn(ParquetIndexer.UTC).nullCount)
-            assertEquals(64L, file.numRows - file.readColumn(DailyParquetBuilder.ESTIMATED_UTC).nullCount)
+        val estimatedUs = ParquetFile.wrap(derivedBytes).use { file ->
+            assertEquals(64, file.readColumn(UtcColumns.EVENT_US).nullCount)
+            val est = file.readColumn(DailyParquetBuilder.ESTIMATED_UTC)
+            assertEquals(ParquetLogicalType.TimeUnit.MICROS, file.leaf(DailyParquetBuilder.ESTIMATED_UTC).timestampUtcUnit)
+            assertEquals(64L, file.numRows - est.nullCount)
+            (0 until est.size).mapNotNull { est.asLong(it) }
         }
+        // Each estimated row is stored in microseconds and reads back at estimated_us * 1000.
+        assertEquals(estimatedTimes.sorted(), estimatedUs.map { it * 1_000L }.sorted())
         var derivedOpens = 0
         val derived = DerivedDayFiles { _, epochDay, _, _ ->
             assertEquals(day, epochDay)
@@ -135,6 +141,8 @@ class DerivedDayViewTest {
                 assertEquals(expectedEstimated.toLong(), raw.estimatedRows)
                 assertEquals((expectedEstimated + expectedReal).toLong(), raw.validRows)
                 assertEquals(raw.points, fromDerived.points)
+                val estimatedStarts = estimatedUs.map { (it * 1_000L).floorDiv(1_000_000_000L) }.filter { it >= window.fromS && it < window.toS }
+                assertEquals(estimatedStarts.sorted(), fromDerived.points.filter { it.estimated }.map { it.startS }.sorted())
                 assertEquals(raw.validRows, fromDerived.validRows)
                 assertEquals(raw.estimatedRows, fromDerived.estimatedRows)
                 assertEquals(raw.mean, fromDerived.mean)
@@ -153,7 +161,7 @@ class DerivedDayViewTest {
         fun put(name: String, hours: LongArray, temperatures: FloatArray) {
             val sink = MemorySink()
             val columns = listOf(
-                ParquetWriter.Column(ParquetIndexer.UTC, ParquetType.INT64, timestampNanosUtc = true),
+                ParquetWriter.Column(UtcColumns.EVENT_NS, ParquetType.INT64, timestampUtc = ParquetLogicalType.TimeUnit.NANOS),
                 ParquetWriter.Column("boot_id_hi", ParquetType.INT64),
                 ParquetWriter.Column("boot_id_lo", ParquetType.INT64),
                 ParquetWriter.Column(ParquetIndexer.SEQ, ParquetType.INT64),
@@ -243,7 +251,7 @@ class DerivedDayViewTest {
         val raw = ParquetFile.wrap(fixtureBytes("parquet/device/v3-board-2rg-180rows.parquet"))
         val values = raw.leaves.map { leaf ->
             val col = raw.readColumn(leaf)
-            if (leaf.name != ParquetIndexer.UTC) {
+            if (leaf.name != UtcColumns.EVENT_NS) {
                 col
             } else {
                 val step = 36 * 3_600L / col.size
@@ -251,7 +259,7 @@ class DerivedDayViewTest {
             }
         }
         val sink = MemorySink()
-        val writer = ParquetWriter(sink, raw.leaves.map { ParquetWriter.Column(it.name, it.type, it.isTimestampNanosUtc) }, keyValueMetadata = raw.metadata.keyValueMetadata)
+        val writer = ParquetWriter(sink, raw.leaves.map { ParquetWriter.Column(it.name, it.type, timestampUtc = it.timestampUtcUnit, fieldId = it.fieldId) }, keyValueMetadata = raw.metadata.keyValueMetadata)
         writer.begin()
         writer.rowGroup(values)
         writer.finish()
@@ -302,6 +310,34 @@ class DerivedDayViewTest {
             }
         }
         assertTrue(opened > 0)
+    }
+
+    @Test
+    fun aRawMicrosDayGivesTheSamePointsAsItsNanosOriginal() = runTest {
+        val nanos = respread()
+        val micros = microsLayout(nanos)
+        val station = ParquetFile.wrap(nanos).metadata.stationId ?: "derived-station"
+        assertEquals(ParquetLogicalType.TimeUnit.MICROS, ParquetFile.wrap(micros).leaf(UtcColumns.EVENT_US).timestampUtcUnit)
+        suspend fun reader(bytes: ByteArray): HistorySeriesReader {
+            val store = Store()
+            val index = Index()
+            val r = ArchiveRecord(station, "station=$station/day/part.parquet", bytes.size.toLong(), 1, "s", 1, "fake")
+            store.files[r.key] = bytes
+            index.put(r)
+            ArchiveIndexRepair(store, index, nowEpochMs = { 42L }).backfillAll()
+            return HistorySeriesReader(store, index, ArchiveHistoryTiers(store, index))
+        }
+        val old = reader(nanos)
+        val new = reader(micros)
+        // Both sides of midnight, so both UTC days of the file are read raw.
+        val window = HistoryWindow(day * 86_400 + 9 * 3_600, (day + 1) * 86_400 + 9 * 3_600, TimeZone.UTC)
+        for (metric in listOf(Metrics.PM25, Metrics.BOARD_TEMP)) {
+            val expected = old.observe(station, metric, HistoryRange.DAY, window).first()
+            val actual = new.observe(station, metric, HistoryRange.DAY, window).first()
+            assertTrue(expected.points.isNotEmpty())
+            assertEquals(expected.points, actual.points, "$metric")
+            assertEquals(expected, actual)
+        }
     }
 
     @Test

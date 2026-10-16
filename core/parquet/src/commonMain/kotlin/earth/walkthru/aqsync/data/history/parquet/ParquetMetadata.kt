@@ -163,10 +163,14 @@ data class LeafColumn(
     val type: ParquetType,
     val repetition: ParquetRepetition,
     val logicalType: ParquetLogicalType?,
+    /** The schema element's `field_id`, the Iceberg column id. Null on files written before the firmware set one. */
+    val fieldId: Int? = null,
 ) {
     val maxDefinitionLevel: Int get() = if (repetition == ParquetRepetition.REQUIRED) 0 else 1
-    val isTimestampNanosUtc: Boolean
-        get() = (logicalType as? ParquetLogicalType.Timestamp)?.let { it.isAdjustedToUtc && it.unit == ParquetLogicalType.TimeUnit.NANOS } == true
+
+    /** The unit of a `TIMESTAMP(isAdjustedToUTC=true)` annotation, or null for any other column. */
+    val timestampUtcUnit: ParquetLogicalType.TimeUnit?
+        get() = (logicalType as? ParquetLogicalType.Timestamp)?.takeIf { it.isAdjustedToUtc }?.unit
 
     /** GEOMETRY or GEOGRAPHY annotated (GeoParquet 2.0 native form). */
     val isGeospatial: Boolean get() = logicalType?.isGeospatial == true
@@ -276,6 +280,7 @@ data class ParquetFileMetadata(
             type = e.type ?: ParquetType.UNKNOWN,
             repetition = e.repetition ?: ParquetRepetition.OPTIONAL,
             logicalType = e.logicalType ?: if (e.convertedType == CONVERTED_UTF8 && e.type == ParquetType.BYTE_ARRAY) ParquetLogicalType.Utf8 else null,
+            fieldId = e.fieldId,
         )
     }
 
@@ -371,7 +376,7 @@ data class ParquetFileMetadata(
         }
     }
 
-    /** Firmware file metadata: `schema_version` (`cores3-telemetry-v1|v2|v3`), `station_id`, `boot_id`, … */
+    /** Firmware file metadata: `schema_version` (for example `cores3-telemetry-v5`), `station_id`, `boot_id`, … */
     val schemaVersion: String? get() = keyValueMetadata["schema_version"]
 
     private companion object {

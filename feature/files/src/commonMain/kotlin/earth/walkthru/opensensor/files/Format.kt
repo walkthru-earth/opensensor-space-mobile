@@ -28,7 +28,7 @@ internal fun formatRate(bytesPerSecond: Double): String = when {
 
 private fun pad(v: Int, width: Int = 2) = v.toString().padStart(width, '0')
 
-/** `event_time_utc_ns` as `2026-09-08 19:45:10Z`. */
+/** A UTC instant in nanoseconds as `2026-09-08 19:45:10Z`. */
 internal fun formatUtcNs(ns: Long): String {
     val seconds = floorDiv(ns, 1_000_000_000L)
     val t = Instant.fromEpochSeconds(seconds).toLocalDateTime(TimeZone.UTC)

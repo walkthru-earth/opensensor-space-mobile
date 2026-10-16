@@ -12,7 +12,7 @@ import kotlin.test.Test
 class ParquetWriterTest {
 
     private fun columns() = listOf(
-        ParquetWriter.Column("event_time_utc_ns", ParquetType.INT64, timestampNanosUtc = true),
+        ParquetWriter.Column("event_time_utc_ns", ParquetType.INT64, timestampUtc = ParquetLogicalType.TimeUnit.NANOS),
         ParquetWriter.Column("sequence", ParquetType.INT64),
         ParquetWriter.Column("pms_status", ParquetType.INT32),
         ParquetWriter.Column("temperature", ParquetType.FLOAT),
@@ -63,8 +63,8 @@ class ParquetWriterTest {
             assertEquals(3, pf.rowGroupCount)
             assertEquals(listOf(90L, 20L, 5L), md.rowGroups.map { it.numRows })
             assertEquals(4, md.columnOrders.size)
-            assertTrue(pf.leaf("event_time_utc_ns").isTimestampNanosUtc)
-            assertTrue(!pf.leaf("sequence").isTimestampNanosUtc)
+            assertEquals(ParquetLogicalType.TimeUnit.NANOS, pf.leaf("event_time_utc_ns").timestampUtcUnit)
+            assertEquals(null, pf.leaf("sequence").timestampUtcUnit)
             assertEquals("test", md.stationId)
             assertEquals(listOf(0), md.rowGroups[0].sortingColumns.map { it.columnIdx })
             md.rowGroups.forEachIndexed { g, rg ->
@@ -162,6 +162,34 @@ class ParquetWriterTest {
         val pf = ParquetFile.wrap(out.toByteArray())
         assertEquals(0L, pf.numRows)
         assertEquals(0, pf.readColumn("sequence").size)
+    }
+
+    @Test
+    fun `field ids and the TIMESTAMP unit round trip and columns without an id read as none`() {
+        val out = MemorySink()
+        val columns = listOf(
+            ParquetWriter.Column("event_time_utc_us", ParquetType.INT64, timestampUtc = ParquetLogicalType.TimeUnit.MICROS, fieldId = 9),
+            ParquetWriter.Column("event_time_utc_ns", ParquetType.INT64, timestampUtc = ParquetLogicalType.TimeUnit.NANOS),
+            ParquetWriter.Column("sequence", ParquetType.INT64, fieldId = 3),
+            ParquetWriter.Column("source_file_index", ParquetType.INT32),
+        )
+        val w = ParquetWriter(out, columns)
+        w.begin()
+        w.rowGroup(
+            listOf(
+                ColumnValues.Int64(longArrayOf(1_789_638_155_000_000L), null),
+                ColumnValues.Int64(longArrayOf(1_789_638_155_000_000_000L), null),
+                ColumnValues.Int64(longArrayOf(7L), null),
+                ColumnValues.Int32(intArrayOf(0), null),
+            ),
+        )
+        w.finish()
+        val pf = ParquetFile.wrap(out.toByteArray())
+        assertEquals(listOf(9, null, 3, null), pf.leaves.map { it.fieldId })
+        assertEquals(ParquetLogicalType.TimeUnit.MICROS, pf.leaf("event_time_utc_us").timestampUtcUnit)
+        assertEquals(ParquetLogicalType.TimeUnit.NANOS, pf.leaf("event_time_utc_ns").timestampUtcUnit)
+        assertNull(pf.leaf("sequence").timestampUtcUnit)
+        assertEquals(1_789_638_155_000_000L, pf.readColumn("event_time_utc_us").asLong(0))
     }
 
     @Test

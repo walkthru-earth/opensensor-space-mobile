@@ -16,7 +16,7 @@ import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 data class FileSummary(
     val name: String,
     val rows: Int,
-    /** Rows with a real `event_time_utc_ns`. */
+    /** Rows with a real event time (`event_time_utc_us`, or `event_time_utc_ns` on older files). */
     val timedRows: Int,
     /** Rows without UTC that an anchor dated (§4.6); 0 when there is no anchor. */
     val estimatedRows: Int,
@@ -53,7 +53,7 @@ data class FileSummary(
             val md = file.metadata
             fun col(colName: String): ColumnValues? = md.leaf(colName)?.let { file.readColumn(it) }
             val rows = file.numRows.toInt()
-            val utc = col(ParquetIndexer.UTC)
+            val utc = UtcColumns.readEventNs(file)
             val applicable = anchor?.takeIf { it.boot == md.bootId }
             val mono = if (applicable != null) col(ParquetIndexer.MONO) else null
             var timed = 0

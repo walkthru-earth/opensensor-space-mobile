@@ -3,6 +3,7 @@ package earth.walkthru.aqsync.data.history
 import earth.walkthru.aqsync.data.history.parquet.ColumnValues
 import earth.walkthru.aqsync.data.history.parquet.ParquetCodec
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
+import earth.walkthru.aqsync.data.history.parquet.ParquetLogicalType
 import earth.walkthru.aqsync.data.history.parquet.ParquetType
 import earth.walkthru.aqsync.data.history.parquet.ParquetWriter
 import kotlin.test.Test
@@ -56,7 +57,7 @@ class AggregationTest {
         val w = ParquetWriter(
             out,
             listOf(
-                ParquetWriter.Column("event_time_utc_ns", ParquetType.INT64, timestampNanosUtc = true),
+                ParquetWriter.Column("event_time_utc_ns", ParquetType.INT64, timestampUtc = ParquetLogicalType.TimeUnit.NANOS),
                 ParquetWriter.Column("pms_status", ParquetType.INT32),
                 ParquetWriter.Column("pm25_atmospheric_ug_m3", ParquetType.INT32),
                 ParquetWriter.Column("imu_temperature_c", ParquetType.FLOAT),

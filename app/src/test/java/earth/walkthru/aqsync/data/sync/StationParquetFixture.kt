@@ -2,6 +2,7 @@ package earth.walkthru.aqsync.data.sync
 
 import earth.walkthru.aqsync.data.history.parquet.ParquetCodec
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
+import earth.walkthru.aqsync.data.history.parquet.ParquetLogicalType
 import earth.walkthru.aqsync.data.history.parquet.ParquetWriter
 import java.io.ByteArrayOutputStream
 
@@ -11,7 +12,7 @@ internal fun stationParquetFixture(bytes: ByteArray, station: String): ByteArray
     val output = ByteArrayOutputStream()
     val writer = ParquetWriter(
         output,
-        source.leaves.map { ParquetWriter.Column(it.name, it.type, timestampNanosUtc = it.isTimestampNanosUtc) },
+        source.leaves.map { ParquetWriter.Column(it.name, it.type, timestampUtc = it.timestampUtcUnit, fieldId = it.fieldId) },
         ParquetCodec.UNCOMPRESSED,
         source.metadata.keyValueMetadata + ("station_id" to station),
     )

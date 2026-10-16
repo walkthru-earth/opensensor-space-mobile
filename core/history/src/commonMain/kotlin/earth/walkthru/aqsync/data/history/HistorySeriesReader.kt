@@ -239,7 +239,7 @@ class HistorySeriesReader(
         open(f)?.use { pf ->
             val md = pf.metadata
             fun long(name: String) = md.leaf(name)?.let { LongColumn.of(pf.readColumn(it)) }
-            val utc = long(ParquetIndexer.UTC) ?: return@use
+            val utc = UtcColumns.readEventNs(pf)?.let(LongColumn::of) ?: return@use
             val bootHi = long("boot_id_hi")
             val bootLo = long("boot_id_lo")
             val seq = long(ParquetIndexer.SEQ)
@@ -288,14 +288,19 @@ class HistorySeriesReader(
             val source = derived.open(station, day, sources, anchors) ?: return false
             val staged = ParquetReader.open(source, footerCache = footers).use { reader ->
                 val names = reader.leaves.mapTo(HashSet()) { it.name }
-                val estimated = DailyParquetBuilder.ESTIMATED_UTC in names
-                val wanted = listOfNotNull(ParquetIndexer.UTC, DailyParquetBuilder.ESTIMATED_UTC, "boot_id_hi", "boot_id_lo", ParquetIndexer.SEQ, metric.gate?.column, metric.column).filter { it in names }
+                val utcLeaf = reader.leaves.firstOrNull { it.name == UtcColumns.EVENT_US } ?: reader.leaves.firstOrNull { it.name == UtcColumns.EVENT_NS } ?: return@use null
+                val estLeaf = reader.leaves.firstOrNull { it.name == DailyParquetBuilder.ESTIMATED_UTC }
+                // Both scales come from the TIMESTAMP unit, so a file in another unit is read right or refused.
+                val utcScale = UtcColumns.nanosPerUnit(utcLeaf)
+                val estScale = estLeaf?.let(UtcColumns::nanosPerUnit) ?: 1L
+                val wanted = listOfNotNull(utcLeaf.name, estLeaf?.name, "boot_id_hi", "boot_id_lo", ParquetIndexer.SEQ, metric.gate?.column, metric.column).filter { it in names }
                 // Rows dated by an estimate have a null UTC, so only a file without them can prune by UTC.
+                val range = UtcColumns.nsToUnit(fromNs, utcScale) until UtcColumns.nsToUnitCeil(toNs, utcScale)
                 val batch = reader.scan(
-                    if (estimated) ScanRequest(wanted) else ScanRequest(wanted, filterColumn = ParquetIndexer.UTC, filterRanges = listOf(fromNs until toNs)),
+                    if (estLeaf != null) ScanRequest(wanted) else ScanRequest(wanted, filterColumn = utcLeaf.name, filterRanges = listOf(range)),
                 )
-                val utc = batch[ParquetIndexer.UTC] ?: return@use null
-                val est = batch[DailyParquetBuilder.ESTIMATED_UTC]
+                val utc = batch[utcLeaf.name] ?: return@use null
+                val est = estLeaf?.let { batch[it.name] }
                 val bootHi = batch["boot_id_hi"]
                 val bootLo = batch["boot_id_lo"]
                 val seq = batch[ParquetIndexer.SEQ]
@@ -305,9 +310,9 @@ class HistorySeriesReader(
                 for (i in 0 until batch.rowCount) {
                     val real = !utc.isNull(i)
                     val ns = if (real) {
-                        utc.long(i)
+                        UtcColumns.scaleToNs(utc.long(i), utcScale) ?: continue
                     } else if (est != null && !est.isNull(i)) {
-                        est.long(i)
+                        UtcColumns.scaleToNs(est.long(i), estScale) ?: continue
                     } else {
                         continue
                     }

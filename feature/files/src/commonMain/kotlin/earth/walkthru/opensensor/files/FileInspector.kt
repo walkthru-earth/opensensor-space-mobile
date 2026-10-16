@@ -4,10 +4,12 @@ import earth.walkthru.aqsync.archive.ArchiveKey
 import earth.walkthru.aqsync.archive.ArchiveStore
 import earth.walkthru.aqsync.data.history.ParquetIndex
 import earth.walkthru.aqsync.data.history.ParquetIndexer
+import earth.walkthru.aqsync.data.history.UtcColumns
 import earth.walkthru.aqsync.data.history.parquet.ColumnValues
 import earth.walkthru.aqsync.data.history.parquet.ParquetCodec
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 import earth.walkthru.aqsync.data.history.parquet.ParquetFormatException
+import earth.walkthru.aqsync.data.history.parquet.ParquetLogicalType
 import earth.walkthru.aqsync.data.history.parquet.ParquetType
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -25,7 +27,8 @@ import kotlin.time.TimeSource
 data class ColumnSummary(
     val name: String,
     val type: ParquetType,
-    val timestamp: Boolean,
+    /** The UTC `TIMESTAMP` unit as `us`, `ns` or `ms`, else null. */
+    val timestampUnit: String?,
     val rows: Int,
     val nulls: Int,
     val min: String,
@@ -78,10 +81,12 @@ object FileInspector {
             ParquetFile.open(reader, name).use { pf ->
                 val index = ParquetIndexer.index(pf)
                 val md = pf.metadata
-                val utcLeaf = md.leaf(ParquetIndexer.UTC)
+                val utcLeaf = UtcColumns.eventLeaf(md)
+                // Footer statistics are in the column's own unit, the summary is in nanoseconds.
+                val scale = utcLeaf?.let { runCatching { UtcColumns.nanosPerUnit(it) }.getOrNull() }
                 val groups = md.rowGroups.mapIndexed { g, rg ->
-                    val s = utcLeaf?.let { rg.columns[it.index].statistics }
-                    RowGroupSummary(g, rg.numRows, rg.totalByteSize, s?.minLong(ParquetType.INT64), s?.maxLong(ParquetType.INT64))
+                    val s = utcLeaf?.takeIf { scale != null }?.let { rg.columns[it.index].statistics }
+                    RowGroupSummary(g, rg.numRows, rg.totalByteSize, s?.minLong(ParquetType.INT64)?.let { UtcColumns.scaleToNs(it, scale!!) }, s?.maxLong(ParquetType.INT64)?.let { UtcColumns.scaleToNs(it, scale!!) })
                 }
                 val columns = pf.leaves.map { leaf ->
                     val col = pf.readColumn(leaf)
@@ -90,7 +95,7 @@ object FileInspector {
                     summarize(
                         leaf.name,
                         leaf.type,
-                        leaf.isTimestampNanosUtc,
+                        leaf.timestampUtcUnit?.let(::unitLabel),
                         col,
                         stats?.let { s -> if (float) s.minFloat()?.toString() else s.minLong(leaf.type)?.toString() },
                         stats?.let { s -> if (float) s.maxFloat()?.toString() else s.maxLong(leaf.type)?.toString() },
@@ -120,7 +125,7 @@ object FileInspector {
         }
     }
 
-    private fun summarize(name: String, type: ParquetType, timestamp: Boolean, col: ColumnValues, statsMin: String?, statsMax: String?): ColumnSummary {
+    private fun summarize(name: String, type: ParquetType, timestampUnit: String?, col: ColumnValues, statsMin: String?, statsMax: String?): ColumnSummary {
         var first: String? = null
         var last: String? = null
         var minD = Double.POSITIVE_INFINITY
@@ -158,7 +163,14 @@ object FileInspector {
             col is ColumnValues.Binary -> NO_VALUE to NO_VALUE
             else -> minL.toString() to maxL.toString()
         }
-        return ColumnSummary(name, type, timestamp, col.size, col.nullCount, minText, maxText, first ?: NO_VALUE, last ?: NO_VALUE, statsMin, statsMax)
+        return ColumnSummary(name, type, timestampUnit, col.size, col.nullCount, minText, maxText, first ?: NO_VALUE, last ?: NO_VALUE, statsMin, statsMax)
+    }
+
+    private fun unitLabel(unit: ParquetLogicalType.TimeUnit): String = when (unit) {
+        ParquetLogicalType.TimeUnit.MILLIS -> "ms"
+        ParquetLogicalType.TimeUnit.MICROS -> "us"
+        ParquetLogicalType.TimeUnit.NANOS -> "ns"
+        ParquetLogicalType.TimeUnit.UNKNOWN -> "?"
     }
 
     private fun format(col: ColumnValues, i: Int): String = when (col) {

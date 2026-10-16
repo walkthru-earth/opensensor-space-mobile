@@ -91,10 +91,16 @@ daily builder, and closes it before the next. Row keys use a 64-bit hash with ex
 of the identity fields on collisions. Primitive timeline arrays preserve source order on ties. Every UTC row of the day from the verified files is time-ordered and de-duplicated, with
 **one row group per UTC hour**. Columns: union of sources (v1 files leave the four v2
 columns null) + `source_file_index` (INT32 into the manifest's `sources`) +
-`event_time_utc_estimated_ns` for estimated rows (with `event_time_utc_ns` null). **No `station_id`
+`event_time_utc_estimated_us` for estimated rows (with `event_time_utc_us` null). UTC instants are
+written as `event_time_utc_us` and `clock_anchor_utc_us`, `TIMESTAMP(MICROS, UTC)`, whatever the
+source stored, so a day that mixes older NANOS files and current MICROS files still has one
+`event_time_utc_us` column in microseconds (`UtcColumns`). Device columns keep their `field_id`. An
+older source without ids takes the id of the same name from a newer source. An id two sources
+disagree on, or one that two names share, is dropped. `source_file_index` and
+the estimate column have no id. **No `station_id`
 string column** (deviation from the evaluation) — stays flat numeric so our reader reads it back;
 station is in the path and metadata. Metadata: invariant device keys + `derived_by`
-(`opensensor.space shared derived-v2`), `derived_version`, `source_count`, `coverage_rows`, `complete`
+(`opensensor.space shared derived-v3`), `derived_version`, `source_count`, `coverage_rows`, `complete`
 (every known file in and the day ended > 30 min ago), `day`, `purpose = telemetry-derived-day`,
 `time_estimate` note. Measured 188 B/row vs 512 B/row for device files (5–9× smaller). Validated by
 PyArrow 25 + DuckDB 1.5.5 (`TIMESTAMPTZ`, range pruning, `time_bucket`).
@@ -129,7 +135,7 @@ History uses the earliest receipt or fully-timed file of that boot; it also impo
 `reconciliation_anchor_*` footer evidence when a verified firmware file arrives. It no longer
 needs to wait for a fully-timed file to finalize. For that boot's unsynced files,
 `estimated_utc_ns = anchor_utc_ns + (monotonic_us − anchor_mono_us) * 1000` — never across a
-reboot, never overwriting `event_time_utc_ns`. The 50 ppm drift assumption is not a measured
+reboot, never overwriting the event time column. The 50 ppm drift assumption is not a measured
 accuracy bound and excludes phone clock error and transport latency. Verified on
 boot `e452563e…` (2026-09-08): reproduces the firmware's own stamp 43 min after the anchor
 **exactly**. Stored as `archived_file.estFirstUtcNs/estLastUtcNs/estAnchorFile` (index only, no

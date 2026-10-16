@@ -6,6 +6,7 @@ import earth.walkthru.aqsync.data.ble.TransportException
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.protocol.FrameCodec
+import earth.walkthru.aqsync.data.protocol.LiveProfiles
 import earth.walkthru.aqsync.data.protocol.Opcode
 import earth.walkthru.aqsync.data.protocol.ParquetVerify
 import earth.walkthru.aqsync.data.protocol.ProtocolError
@@ -130,7 +131,7 @@ class FakeTransport(
 
     init {
         finalized = files.size.toLong()
-        logLine("BOOT station=$station dev=$deviceId boot=$bootId fw=arduino-cores3-parquet-v5 (fake)")
+        logLine("BOOT station=$station dev=$deviceId boot=$bootId fw=idf-cores3-parquet-v6.12 (fake)")
         logLine("PARQUET STATUS files=$finalized codec=LZ4_RAW sd=1")
         logLine("BLE START name=$displayName pair=$pairMode")
         logLine("WIFI OFF (wifi.on=0)")
@@ -520,8 +521,8 @@ class FakeTransport(
     }
 
     private fun infoJson(): String =
-        """{"proto":3,"fw":"arduino-cores3-parquet-v5 (fake)","schema":"cores3-telemetry-v2","cols":77,""" +
-            """"dict":"20f850852413abb1165f3f7ca95b4831a0e90a34ae7c7fcb41c44b108d3513c3","station":"$station","dev":"$deviceId","boot":"$bootId","max_read":$maxRead}"""
+        """{"proto":3,"fw":"idf-cores3-parquet-v6.12 (fake)","schema":"cores3-telemetry-v5","cols":81,""" +
+            """"dict":"${LiveProfiles.CORES3_DICTIONARY}","station":"$station","dev":"$deviceId","boot":"$bootId","max_read":$maxRead}"""
 
     private fun statusJson(): String =
         """{"up_s":$upSeconds,"int_s":900,"buf":$buffered,"fin":$finalized,"drop":0,"err":0,"miss":0,""" +
@@ -535,7 +536,7 @@ class FakeTransport(
         return """{"seq":$seq,"mono":${upSeconds * 1_000_000},$utc"pms":4,""" +
             """"pm1":$pm1,"pm25":${pm25.toInt()},"pm10":$pm10,"c1":$pm1,"c25":${pm25.toInt()},"c10":$pm10,""" +
             """"n03":${(pm25 * 130).toInt()},"n05":${(pm25 * 36).toInt()},"n1":${(pm25 * 4).toInt()},"n25":2,"n5":0,"n10":0,""" +
-            """"t":${"%.1f".format(java.util.Locale.ROOT, 26.0 + rnd.nextDouble(-0.3, 0.3))},"bat":4100,"pct":80,"chg":0,"vbus":5000,"als":120}"""
+            """"imu_t":${"%.1f".format(java.util.Locale.ROOT, 26.0 + rnd.nextDouble(-0.3, 0.3))},"bat":4100,"pct":80,"chg":0,"vbus":5000,"als":120}"""
     }
 
     private fun sdUsedKib(): Long = 34_176 + files.sumOf { it.bytes.size.toLong() } / 1024

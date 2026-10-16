@@ -11,6 +11,7 @@ import earth.walkthru.aqsync.archive.PartialWriter
 import earth.walkthru.aqsync.data.history.parquet.ByteArrayReader
 import earth.walkthru.aqsync.data.history.parquet.ByteReader
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
+import earth.walkthru.aqsync.data.history.parquet.ParquetLogicalType
 import earth.walkthru.aqsync.data.history.parquet.ParquetSink
 import earth.walkthru.aqsync.data.history.parquet.ParquetWriter
 import kotlinx.coroutines.Dispatchers
@@ -102,7 +103,7 @@ class HistorySourcesTest {
             "reconciliation_anchor_utc_ns" to utc.toString(),
             "reconciliation_anchor_source" to "3",
         )
-        val writer = ParquetWriter(sink, raw.leaves.map { ParquetWriter.Column(it.name, it.type, it.isTimestampNanosUtc) }, keyValueMetadata = metadata)
+        val writer = ParquetWriter(sink, raw.leaves.map { ParquetWriter.Column(it.name, it.type, timestampUtc = it.timestampUtcUnit, fieldId = it.fieldId) }, keyValueMetadata = metadata)
         writer.begin()
         writer.rowGroup(raw.leaves.map { raw.readColumn(it) })
         writer.finish()
