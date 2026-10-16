@@ -88,10 +88,10 @@ data class ArchivedFile(
  */
 data class ArchivedFileIdentity(val station: String, val name: String, val bytes: Long, val crc32: Long)
 
-/** Per-station archive totals for the device list, computed in SQL instead of over every row. */
 /** A station's newest timed end, null when its timed files carry no end. */
 data class StationTimedEnd(val station: String, val lastNs: Long?)
 
+/** Per-station archive totals for the device list, computed in SQL instead of over every row. */
 data class StationArchiveGlance(
     val station: String,
     val files: Int,
