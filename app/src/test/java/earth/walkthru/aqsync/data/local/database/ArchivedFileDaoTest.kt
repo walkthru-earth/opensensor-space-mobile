@@ -2,6 +2,9 @@ package earth.walkthru.aqsync.data.local.database
 
 import android.content.ContextWrapper
 import androidx.room.Room
+import androidx.room.execSQL
+import androidx.room.useWriterConnection
+import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import app.cash.turbine.test
 import earth.walkthru.aqsync.data.ManifestState
@@ -23,6 +26,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.lang.reflect.Proxy
 
 /** The station-scoped, projected and aggregate queries of [ArchivedFileDao] on an in-memory Room database (#63). */
 class ArchivedFileDaoTest {
@@ -35,6 +39,16 @@ class ArchivedFileDaoTest {
     @After
     fun close() = db.close()
 
+    /**
+     * The migration's `SupportSQLiteDatabase`, routed to the bundled driver's writer connection. A
+     * Room database built on a driver has no open helper, and a migration here only runs `execSQL`.
+     */
+    private fun writerSql(): SupportSQLiteDatabase = Proxy.newProxyInstance(javaClass.classLoader, arrayOf(SupportSQLiteDatabase::class.java)) { _, method, args ->
+        check(method.name == "execSQL" && args?.size == 1) { "only execSQL is routed, not ${method.name}" }
+        runBlocking { db.useWriterConnection { it.execSQL(args[0] as String) } }
+        null
+    } as SupportSQLiteDatabase
+
     private fun file(
         station: String,
         name: String,
@@ -44,6 +58,7 @@ class ArchivedFileDaoTest {
         indexedAt: Long? = null,
         indexError: String? = null,
         lastUtcNs: Long? = null,
+        utcRows: Long? = null,
     ) = ArchivedFile(
         station = station,
         name = name,
@@ -55,7 +70,32 @@ class ArchivedFileDaoTest {
         indexedAtEpochMs = indexedAt,
         indexError = indexError,
         lastUtcNs = lastUtcNs,
+        utcRows = utcRows,
     )
+
+    @Test
+    fun `migration 10 to 11 reopens only indexed rows without UTC rows or an error`() = runBlocking {
+        dao.upsert(file("a", "zero.parquet", indexedAt = 5, utcRows = 0))
+        dao.upsert(file("a", "null.parquet", indexedAt = 5, utcRows = null))
+        dao.upsert(file("a", "dated.parquet", indexedAt = 5, utcRows = 90))
+        dao.upsert(file("a", "failed.parquet", indexedAt = 5, indexError = "bad footer", utcRows = 0))
+        assertEquals(listOf("failed.parquet"), dao.unindexed(10).map { it.name })
+
+        AppDatabase.MIGRATION_10_11.migrate(writerSql())
+
+        // A row with an error stays in the retry queue it was already in, never reopened by the migration.
+        assertEquals(setOf("zero.parquet", "null.parquet", "failed.parquet"), dao.unindexed(10).map { it.name }.toSet())
+        assertEquals(null, dao.get("a", "zero.parquet")!!.indexedAtEpochMs)
+        assertEquals(null, dao.get("a", "null.parquet")!!.indexedAtEpochMs)
+        val dated = dao.get("a", "dated.parquet")!!
+        assertEquals(5L, dated.indexedAtEpochMs)
+        assertEquals(null, dated.indexError)
+        val failed = dao.get("a", "failed.parquet")!!
+        assertEquals(5L, failed.indexedAtEpochMs)
+        assertEquals("bad footer", failed.indexError)
+        assertTrue(AppDatabase.MIGRATION_10_11 in AppDatabase.MIGRATIONS)
+        assertEquals(11, AppDatabase.MIGRATIONS.maxOf { it.endVersion })
+    }
 
     @Test
     fun `identities hold the station's rows only, ordered by name`() = runBlocking {

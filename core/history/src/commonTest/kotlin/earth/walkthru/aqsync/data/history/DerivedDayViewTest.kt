@@ -100,10 +100,15 @@ class DerivedDayViewTest {
         val daily = assertNotNull(pass.daily)
         assertEquals(if (includeRealRows) 128 else 64, daily.rows)
         val derivedBytes = sink.toByteArray()
-        ParquetFile.wrap(derivedBytes).use { file ->
+        val estimatedUs = ParquetFile.wrap(derivedBytes).use { file ->
             assertEquals(64, file.readColumn(UtcColumns.EVENT_US).nullCount)
-            assertEquals(64L, file.numRows - file.readColumn(DailyParquetBuilder.ESTIMATED_UTC).nullCount)
+            val est = file.readColumn(DailyParquetBuilder.ESTIMATED_UTC)
+            assertEquals(ParquetLogicalType.TimeUnit.MICROS, file.leaf(DailyParquetBuilder.ESTIMATED_UTC).timestampUtcUnit)
+            assertEquals(64L, file.numRows - est.nullCount)
+            (0 until est.size).mapNotNull { est.asLong(it) }
         }
+        // Each estimated row is stored in microseconds and reads back at estimated_us * 1000.
+        assertEquals(estimatedTimes.sorted(), estimatedUs.map { it * 1_000L }.sorted())
         var derivedOpens = 0
         val derived = DerivedDayFiles { _, epochDay, _, _ ->
             assertEquals(day, epochDay)
@@ -136,6 +141,8 @@ class DerivedDayViewTest {
                 assertEquals(expectedEstimated.toLong(), raw.estimatedRows)
                 assertEquals((expectedEstimated + expectedReal).toLong(), raw.validRows)
                 assertEquals(raw.points, fromDerived.points)
+                val estimatedStarts = estimatedUs.map { (it * 1_000L).floorDiv(1_000_000_000L) }.filter { it >= window.fromS && it < window.toS }
+                assertEquals(estimatedStarts.sorted(), fromDerived.points.filter { it.estimated }.map { it.startS }.sorted())
                 assertEquals(raw.validRows, fromDerived.validRows)
                 assertEquals(raw.estimatedRows, fromDerived.estimatedRows)
                 assertEquals(raw.mean, fromDerived.mean)
@@ -303,6 +310,34 @@ class DerivedDayViewTest {
             }
         }
         assertTrue(opened > 0)
+    }
+
+    @Test
+    fun aRawMicrosDayGivesTheSamePointsAsItsNanosOriginal() = runTest {
+        val nanos = respread()
+        val micros = microsLayout(nanos)
+        val station = ParquetFile.wrap(nanos).metadata.stationId ?: "derived-station"
+        assertEquals(ParquetLogicalType.TimeUnit.MICROS, ParquetFile.wrap(micros).leaf(UtcColumns.EVENT_US).timestampUtcUnit)
+        suspend fun reader(bytes: ByteArray): HistorySeriesReader {
+            val store = Store()
+            val index = Index()
+            val r = ArchiveRecord(station, "station=$station/day/part.parquet", bytes.size.toLong(), 1, "s", 1, "fake")
+            store.files[r.key] = bytes
+            index.put(r)
+            ArchiveIndexRepair(store, index, nowEpochMs = { 42L }).backfillAll()
+            return HistorySeriesReader(store, index, ArchiveHistoryTiers(store, index))
+        }
+        val old = reader(nanos)
+        val new = reader(micros)
+        // Both sides of midnight, so both UTC days of the file are read raw.
+        val window = HistoryWindow(day * 86_400 + 9 * 3_600, (day + 1) * 86_400 + 9 * 3_600, TimeZone.UTC)
+        for (metric in listOf(Metrics.PM25, Metrics.BOARD_TEMP)) {
+            val expected = old.observe(station, metric, HistoryRange.DAY, window).first()
+            val actual = new.observe(station, metric, HistoryRange.DAY, window).first()
+            assertTrue(expected.points.isNotEmpty())
+            assertEquals(expected.points, actual.points, "$metric")
+            assertEquals(expected, actual)
+        }
     }
 
     @Test

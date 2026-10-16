@@ -140,3 +140,21 @@ feature/discover/   shared map, cell sheet and public device page
 
 The Bluetooth protocol is owned by the firmware repo (`../aq-parquet/docs/shared/ble-sync-protocol.md`);
 this app mirrors it and never changes a frame, opcode, UUID or JSON key first.
+
+## License & Attribution (CC-BY-4.0)
+
+Walkthru.Earth original code in this repository (`app/`, `core/`, `feature/`, `ui/`, `ios/`, `tools/`, `build-logic/`, build files and documentation) is licensed under the **Creative Commons Attribution 4.0 International Public License (CC-BY-4.0)**. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE). The CC-BY-4.0 license does not cover the third-party parts listed below, which keep their own licenses.
+
+> **Attribution requirement.** Any application, app store build, firmware image, hardware product, dataset, or documentation that uses or incorporates `opensensor-space-mobile` must include clear, visible attribution to **Walkthru.Earth** ([https://walkthru.earth](https://walkthru.earth)), for example
+>
+> *"Sensor sync and air quality views powered by [Walkthru.Earth](https://walkthru.earth) (`walkthru-earth/opensensor-space-mobile`), licensed under CC-BY-4.0."*
+
+## Third-party notices
+
+| Component | Location | License | Copyright |
+| :--- | :--- | :--- | :--- |
+| Android Studio architecture template, the portions this project started from | spread through the Android project, per-file headers replaced by [`NOTICE`](NOTICE) | Apache-2.0, see [apache.org/licenses/LICENSE-2.0](https://www.apache.org/licenses/LICENSE-2.0) | Copyright (C) 2022 The Android Open Source Project |
+| [Cairo](https://github.com/Gue3bara/Cairo) font v3.130, from google/fonts `ofl/cairo` at commit `a2c83daed9bc723922de8d0a9512990bd3d91df4` | `ui/designsystem/src/commonMain/composeResources/` | SIL OFL 1.1, see [`Cairo-OFL.txt`](ui/designsystem/src/commonMain/composeResources/files/licenses/Cairo-OFL.txt) | Copyright 2009 The Cairo Project Authors |
+| Quicksand font, the variable TTF from google/fonts `ofl/quicksand` | `ui/designsystem/src/commonMain/composeResources/` | SIL OFL 1.1, see [`Quicksand-OFL.txt`](ui/designsystem/src/commonMain/composeResources/files/licenses/Quicksand-OFL.txt) | Copyright 2011 The Quicksand Project Authors |
+
+Libraries pulled in by Gradle (for example AndroidX, Kotlin, Compose Multiplatform, OkHttp and `zstd-jni`) are not copied into this repository. Each keeps its own license, and app builds that ship them must carry their notices.
