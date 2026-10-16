@@ -35,7 +35,34 @@
     <string name="storage_megabytes">%1$s ميغابايت</string>
     <string name="storage_clear">مسح</string>
     <string name="storage_clear_named">مسح %1$s</string>
-    <string name="settings_storage_body">تُبنى الذاكرة المؤقتة من جديد تلقائيًا عند الحاجة. لا تُحذف ملفات المستشعر أبدًا.</string>
+    <string name="settings_storage_body">تُبنى الذاكرة المؤقتة من جديد تلقائيًا عند الحاجة. تبقى ملفات المستشعر ما لم تحذف الملفات ذات التنسيق القديم.</string>
+    <string name="storage_old_files">ملفات بالتنسيق القديم</string>
+    <string name="storage_old_files_find">بحث</string>
+    <string name="storage_old_files_finding">جارٍ فحص الملفات</string>
+    <string name="storage_old_files_none">لا توجد ملفات</string>
+    <plurals name="storage_old_files_count">
+        <item quantity="zero">%1$d ملف</item>
+        <item quantity="one">%1$d ملف</item>
+        <item quantity="two">%1$d ملفان</item>
+        <item quantity="few">%1$d ملفات</item>
+        <item quantity="many">%1$d ملفًا</item>
+        <item quantity="other">%1$d ملف</item>
+    </plurals>
+    <string name="storage_old_files_summary">%1$s، %2$s ميغابايت</string>
+    <string name="storage_old_files_remove">حذف</string>
+    <string name="storage_old_files_confirm_title">حذف الملفات ذات التنسيق القديم؟</string>
+    <string name="storage_old_files_confirm_body">تُحذف %1$s و%2$s ميغابايت من هذا الهاتف. لا يتغير المستشعر.</string>
+    <string name="storage_old_files_removed">تم حذف %1$s، %2$s ميغابايت</string>
+    <string name="storage_old_files_sync_busy">انتظر حتى تنتهي المزامنة</string>
+    <string name="storage_old_files_failed">تعذر فحص الملفات</string>
+    <string name="storage_old_files_all_dates">كل التواريخ</string>
+    <string name="storage_old_files_dates">من %1$s إلى %2$s</string>
+    <string name="storage_old_files_pick_dates">اختيار التواريخ</string>
+    <string name="storage_apply">تطبيق</string>
+    <string name="storage_cancel">إلغاء</string>
+    <string name="storage_old_files_info1">ملفات حفظها إصدار أقدم من برنامج المستشعر. حذفها يوفر مساحة على هذا الهاتف فقط.</string>
+    <string name="storage_old_files_info2">لا يُرسل شيء إلى المستشعر. إذا كان لا يزال يحتفظ بملف، تنزّله المزامنة التالية مرة أخرى.</string>
+    <string name="storage_old_files_info3">التواريخ بتوقيت UTC. تُضمَّن الملفات بلا تاريخ فقط عند اختيار كل التواريخ.</string>
 
     <string name="settings_about">حول التطبيق</string>
     <string name="settings_about_body">opensensor.space %1$s</string>

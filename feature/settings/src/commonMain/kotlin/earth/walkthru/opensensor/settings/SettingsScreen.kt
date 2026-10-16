@@ -16,6 +16,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.DateRangePicker
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -29,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -74,17 +78,38 @@ import earth.walkthru.opensensor.settings.resources.settings_storage_body
 import earth.walkthru.opensensor.settings.resources.settings_title
 import earth.walkthru.opensensor.settings.resources.settings_units
 import earth.walkthru.opensensor.settings.resources.settings_units_auto
+import earth.walkthru.opensensor.settings.resources.storage_apply
+import earth.walkthru.opensensor.settings.resources.storage_cancel
 import earth.walkthru.opensensor.settings.resources.storage_clear
 import earth.walkthru.opensensor.settings.resources.storage_clear_named
 import earth.walkthru.opensensor.settings.resources.storage_history_cache
 import earth.walkthru.opensensor.settings.resources.storage_map_cache
 import earth.walkthru.opensensor.settings.resources.storage_megabytes
+import earth.walkthru.opensensor.settings.resources.storage_old_files
+import earth.walkthru.opensensor.settings.resources.storage_old_files_all_dates
+import earth.walkthru.opensensor.settings.resources.storage_old_files_confirm_body
+import earth.walkthru.opensensor.settings.resources.storage_old_files_confirm_title
+import earth.walkthru.opensensor.settings.resources.storage_old_files_count
+import earth.walkthru.opensensor.settings.resources.storage_old_files_dates
+import earth.walkthru.opensensor.settings.resources.storage_old_files_failed
+import earth.walkthru.opensensor.settings.resources.storage_old_files_find
+import earth.walkthru.opensensor.settings.resources.storage_old_files_finding
+import earth.walkthru.opensensor.settings.resources.storage_old_files_info1
+import earth.walkthru.opensensor.settings.resources.storage_old_files_info2
+import earth.walkthru.opensensor.settings.resources.storage_old_files_info3
+import earth.walkthru.opensensor.settings.resources.storage_old_files_none
+import earth.walkthru.opensensor.settings.resources.storage_old_files_pick_dates
+import earth.walkthru.opensensor.settings.resources.storage_old_files_remove
+import earth.walkthru.opensensor.settings.resources.storage_old_files_removed
+import earth.walkthru.opensensor.settings.resources.storage_old_files_summary
+import earth.walkthru.opensensor.settings.resources.storage_old_files_sync_busy
 import earth.walkthru.opensensor.settings.resources.storage_sensor_files
 import earth.walkthru.opensensor.settings.resources.storage_temporary
 import earth.walkthru.opensensor.settings.resources.units_auto
 import earth.walkthru.opensensor.settings.resources.units_imperial
 import earth.walkthru.opensensor.settings.resources.units_metric
 import org.jetbrains.compose.resources.StringResource
+import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
 /** The Settings title, also the tab label on iOS. */
@@ -157,7 +182,7 @@ fun SettingsScreen(
                 PublicSensorsRow(prefs.showPublicSensors, controller::setShowPublicSensors)
                 Caption(stringResource(Res.string.settings_public_sensors_body), top = 0.dp)
             }
-            if (controller.hasStorage) StorageCard(controller)
+            if (controller.hasStorage) StorageCard(controller, infoButton)
             About(appVersion)
         }
     }
@@ -208,9 +233,9 @@ private fun PublicSensorsRow(on: Boolean, onChange: (Boolean) -> Unit) {
     }
 }
 
-/** Usage per storage class, and clear actions for the two rebuildable caches (#61). */
+/** Usage per storage class, clear actions for the two rebuildable caches (#61), and the old format cleanup. */
 @Composable
-private fun StorageCard(controller: SettingsController) {
+private fun StorageCard(controller: SettingsController, infoButton: @Composable (title: String, body: List<String>, modifier: Modifier) -> Unit) {
     val usage by controller.storageUsage.collectAsState()
     val clearing by controller.clearing.collectAsState()
     // Measured each time the card shows, so a sync or a clear elsewhere is reflected.
@@ -222,9 +247,121 @@ private fun StorageCard(controller: SettingsController) {
         StorageRow(stringResource(Res.string.storage_history_cache), sizes.historyCacheBytes, !clearing, controller::clearHistoryCache)
         StorageRow(stringResource(Res.string.storage_map_cache), sizes.mapCacheBytes, !clearing, controller::clearMapCache)
         StorageRow(stringResource(Res.string.storage_temporary), sizes.temporaryBytes)
+        OldFilesRow(controller, !clearing, infoButton)
         Caption(stringResource(Res.string.settings_storage_body), top = 4.dp)
     }
 }
+
+/**
+ * The phone only cleanup of old format sensor files. Find runs a dry run over the chosen UTC dates,
+ * Remove asks once and then removes what the dry run counted. Nothing reaches the device.
+ */
+@Composable
+private fun OldFilesRow(
+    controller: SettingsController,
+    enabled: Boolean,
+    infoButton: @Composable (title: String, body: List<String>, modifier: Modifier) -> Unit,
+) {
+    val state by controller.oldFiles.collectAsState()
+    val range by controller.oldFilesRange.collectAsState()
+    var confirm by rememberSaveable { mutableStateOf(false) }
+    var pickDates by rememberSaveable { mutableStateOf(false) }
+    val label = stringResource(Res.string.storage_old_files)
+    val info = listOf(
+        stringResource(Res.string.storage_old_files_info1),
+        stringResource(Res.string.storage_old_files_info2),
+        stringResource(Res.string.storage_old_files_info3),
+    )
+    val found = (state as? OldFilesState.Found)?.plan?.takeIf { it.files > 0 }
+    Row(Modifier.fillMaxWidth().heightIn(min = FloatingControl.Size), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(label, style = MaterialTheme.typography.bodyLarge)
+                infoButton(label, info, Modifier)
+            }
+            oldFilesStatus(state)?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        if (found != null) {
+            TextButton(onClick = { confirm = true }, enabled = enabled) { Text(stringResource(Res.string.storage_old_files_remove)) }
+        } else {
+            TextButton(onClick = controller::findOldFiles, enabled = enabled && !state.busy) { Text(stringResource(Res.string.storage_old_files_find)) }
+        }
+    }
+    TextButton(onClick = { pickDates = true }, enabled = enabled && !state.busy) {
+        Text(range?.let { stringResource(Res.string.storage_old_files_dates, isoDate(it.fromEpochDay), isoDate(it.toEpochDay)) } ?: stringResource(Res.string.storage_old_files_all_dates))
+    }
+    if (confirm && found != null) {
+        AlertDialog(
+            onDismissRequest = { confirm = false },
+            title = { Text(stringResource(Res.string.storage_old_files_confirm_title)) },
+            text = { Text(stringResource(Res.string.storage_old_files_confirm_body, fileCount(found.files), megabytes(found.bytes))) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirm = false
+                    controller.removeOldFiles()
+                }) { Text(stringResource(Res.string.storage_old_files_remove)) }
+            },
+            dismissButton = { TextButton(onClick = { confirm = false }) { Text(stringResource(Res.string.storage_cancel)) } },
+        )
+    }
+    if (pickDates) {
+        OldFilesDates(range, onDismiss = { pickDates = false }, onPick = {
+            pickDates = false
+            controller.setOldFilesRange(it)
+        })
+    }
+}
+
+@Composable
+private fun oldFilesStatus(state: OldFilesState): String? = when (state) {
+    OldFilesState.Idle -> null
+    OldFilesState.Finding -> stringResource(Res.string.storage_old_files_finding)
+    is OldFilesState.Found ->
+        if (state.plan.files == 0) {
+            stringResource(Res.string.storage_old_files_none)
+        } else {
+            stringResource(Res.string.storage_old_files_summary, fileCount(state.plan.files), megabytes(state.plan.bytes))
+        }
+    is OldFilesState.Removing -> stringResource(Res.string.storage_old_files_summary, fileCount(state.plan.files), megabytes(state.plan.bytes))
+    is OldFilesState.Removed ->
+        if (state.result.syncRunning && state.result.removed == 0) {
+            stringResource(Res.string.storage_old_files_sync_busy)
+        } else {
+            stringResource(Res.string.storage_old_files_removed, fileCount(state.result.removed), megabytes(state.result.bytes))
+        }
+    OldFilesState.Failed -> stringResource(Res.string.storage_old_files_failed)
+}
+
+@Composable
+private fun fileCount(n: Int): String = pluralStringResource(Res.plurals.storage_old_files_count, n, n)
+
+/** A UTC date range picker. Apply with no dates chosen means every date. */
+@Composable
+private fun OldFilesDates(range: OldFilesRange?, onDismiss: () -> Unit, onPick: (OldFilesRange?) -> Unit) {
+    val state = rememberDateRangePickerState(
+        initialSelectedStartDateMillis = range?.let { it.fromEpochDay * DAY_MS },
+        initialSelectedEndDateMillis = range?.let { it.toEpochDay * DAY_MS },
+    )
+    DatePickerDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = {
+                val from = state.selectedStartDateMillis?.floorDiv(DAY_MS)
+                val to = state.selectedEndDateMillis?.floorDiv(DAY_MS) ?: from
+                onPick(if (from != null && to != null && from <= to) OldFilesRange(from, to) else null)
+            }) { Text(stringResource(Res.string.storage_apply)) }
+        },
+        dismissButton = {
+            TextButton(onClick = { onPick(null) }) { Text(stringResource(Res.string.storage_old_files_all_dates)) }
+        },
+    ) {
+        DateRangePicker(state, title = { Text(stringResource(Res.string.storage_old_files_pick_dates), Modifier.padding(start = 24.dp, top = 16.dp)) })
+    }
+}
+
+private const val DAY_MS = 86_400_000L
 
 @Composable
 private fun StorageRow(label: String, bytes: Long, enabled: Boolean = true, onClear: (() -> Unit)? = null) {
