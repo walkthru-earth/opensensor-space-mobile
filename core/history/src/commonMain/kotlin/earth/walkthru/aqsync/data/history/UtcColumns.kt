@@ -106,9 +106,19 @@ object UtcColumns {
         return ColumnValues.Int64(out, valid)
     }
 
+    /** One [value] in a unit of [scale] nanoseconds, as nanoseconds. Null past 2262, never wrapped. */
+    fun scaleToNs(value: Long, scale: Long): Long? =
+        if (scale == 1L) value else value.takeIf { it in -(Long.MAX_VALUE / scale)..(Long.MAX_VALUE / scale) }?.times(scale)
+
+    /** Whole units of [scale] nanoseconds at or before [ns]. */
+    fun nsToUnit(ns: Long, scale: Long): Long = ns.floorDiv(scale)
+
+    /** Whole units of [scale] nanoseconds at or after [ns], the exclusive end of a half-open range. */
+    fun nsToUnitCeil(ns: Long, scale: Long): Long = -(-ns).floorDiv(scale)
+
     /** Whole microseconds at or before [ns]. */
-    fun nsToUs(ns: Long): Long = ns.floorDiv(NS_PER_US)
+    fun nsToUs(ns: Long): Long = nsToUnit(ns, NS_PER_US)
 
     /** Whole microseconds at or after [ns], the exclusive end of a half-open range. */
-    fun nsToUsCeil(ns: Long): Long = -(-ns).floorDiv(NS_PER_US)
+    fun nsToUsCeil(ns: Long): Long = nsToUnitCeil(ns, NS_PER_US)
 }

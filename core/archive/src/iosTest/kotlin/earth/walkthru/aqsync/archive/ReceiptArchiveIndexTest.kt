@@ -120,4 +120,16 @@ class ReceiptArchiveIndexTest {
         val large = timeLookups(10_000)
         assertTrue(large < small * 10 + 50.milliseconds, "10,000 records took $large, 100 took $small")
     }
+
+    @Test
+    fun anOlderLayoutReceiptWithoutUtcRowsReadsAsNeverIndexed() {
+        val station = stations[0]
+        val noUtc = record(station, 1, indexed = true).copy(utcRows = 0)
+        val dated = record(station, 2, indexed = true).copy(utcRows = 90, firstUtcNs = 1, lastUtcNs = 2)
+        fun olderLayout(r: ArchiveRecord) = ReceiptArchiveIndex.encode(r).replace(",\"indexLayout\":${ArchiveRecord.INDEX_LAYOUT}", "")
+        assertNull(ReceiptArchiveIndex.decode(station, noUtc.name, olderLayout(noUtc))!!.indexedAtEpochMs)
+        assertEquals(dated, ReceiptArchiveIndex.decode(station, dated.name, olderLayout(dated)))
+        // Written by this layout, the same record stays indexed, so the repair runs once.
+        assertEquals(noUtc, ReceiptArchiveIndex.decode(station, noUtc.name, ReceiptArchiveIndex.encode(noUtc)))
+    }
 }

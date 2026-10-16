@@ -259,9 +259,13 @@ class ReceiptArchiveIndex(
             r.estFirstUtcNs?.let { put("estFirstUtcNs", it) }
             r.estLastUtcNs?.let { put("estLastUtcNs", it) }
             r.estAnchorFile?.let { put("estAnchorFile", it) }
+            put("indexLayout", ArchiveRecord.INDEX_LAYOUT)
         }.toString()
 
-        /** Null for anything without a valid `size` and `crc`, which then reads as not synced. */
+        /**
+         * Null for anything without a valid `size` and `crc`, which then reads as not synced. A receipt
+         * from an older index layout with no UTC rows reads as never indexed, so repair indexes it again.
+         */
         fun decode(station: String, name: String, text: String): ArchiveRecord? {
             val o = runCatching { Json.parseToJsonElement(text) as? JsonObject }.getOrNull() ?: return null
             fun long(key: String): Long? = o[key]?.let { runCatching { it.jsonPrimitive.longOrNull }.getOrNull() }
@@ -269,7 +273,7 @@ class ReceiptArchiveIndex(
             fun text(key: String): String? = o[key]?.let { runCatching { it.jsonPrimitive.contentOrNull }.getOrNull() }
             val size = long("size")?.takeIf { it >= 0 } ?: return null
             val crc = long("crc")?.takeIf { it in 0..0xFFFF_FFFFL } ?: return null
-            return ArchiveRecord(
+            val record = ArchiveRecord(
                 station = station,
                 name = name,
                 bytes = size,
@@ -296,6 +300,8 @@ class ReceiptArchiveIndex(
                 estLastUtcNs = long("estLastUtcNs"),
                 estAnchorFile = text("estAnchorFile"),
             )
+            val stale = (int("indexLayout") ?: 1) < ArchiveRecord.INDEX_LAYOUT && record.needsUtcReindex
+            return if (stale) record.copy(indexedAtEpochMs = null) else record
         }
     }
 }

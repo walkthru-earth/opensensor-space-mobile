@@ -44,7 +44,7 @@ data class ArchivedFile(
     val indexError: String? = null,
     val rows: Long? = null,
     val rowGroups: Int? = null,
-    /** `schema_version` file metadata (`cores3-telemetry-v1|v2|v3`). */
+    /** `schema_version` file metadata (for example `cores3-telemetry-v5`). */
     val schemaVersion: String? = null,
     val bootId: String? = null,
     /** `purpose` file metadata; `telemetry` for station data, `codec-comparison-duplicate-rows` for benchmark copies. */
