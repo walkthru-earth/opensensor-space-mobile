@@ -53,6 +53,20 @@ object UtcColumns {
         }
     }
 
+    /**
+     * True for a device file in the old layout, the one Settings can remove from the phone. Its row
+     * event column is `event_time_utc_ns`, an INT64 that is either `TIMESTAMP(NANOS, UTC)` or carries
+     * no annotation (schema v1/v2), the file has no `event_time_utc_us`, and no leaf has a field id.
+     * A file without any event time column is never old, so it is always kept. Purpose plays no part.
+     */
+    fun isLegacyLayout(md: ParquetFileMetadata): Boolean {
+        if (md.leaf(EVENT_US) != null) return false
+        val leaf = md.leaf(EVENT_NS) ?: return false
+        if (leaf.type != ParquetType.INT64) return false
+        val nanos = leaf.timestampUtcUnit == TimeUnit.NANOS || leaf.logicalType == null
+        return nanos && md.leaves.none { it.fieldId != null }
+    }
+
     /** True when [leaf] holds a UTC instant under one of the known names. */
     fun isUtcInstant(leaf: LeafColumn): Boolean = leaf.name in NAMES
 
