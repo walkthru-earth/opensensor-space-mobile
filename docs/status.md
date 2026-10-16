@@ -14,7 +14,13 @@ the owner's approval. Host tests, the iOS simulator build and `verify` only. No 
   a UTC column, current MICROS files and unreadable files stay.
 - Shared `LegacyFileCleanup` in `:core:history`. Refused while any sync runs. Per file under its
   writer lease, record first, then the final file below the Durable archive root. A failed delete
-  restores the record, and the startup janitor adopts a file left by a crash. Derived days rebuild after.
+  restores the record and counts as failed, and the startup janitor adopts a file left by a crash or a
+  failed restore. Each file's steps finish under `NonCancellable`, and derived days rebuild after, also
+  on cancellation. On iOS a station whose files all went is rebuilt from no sources, so its stale day
+  files go. A rebuild that throws is reported, the files stay removed.
+- Settings shows unreadable files, kept and failed counts, a stop by sync, a later History update and
+  a removal failure apart from a count failure. `SettingsController` logs the operation and exception
+  class only.
 - Phone only. No device command and the device card is not touched. A later sync downloads a file
   again when the device still lists it.
 - To check on phones. A removal of old files on Android and iOS, History after it, and a sync of a
