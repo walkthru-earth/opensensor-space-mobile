@@ -35,7 +35,10 @@ private class FakeStorage : StorageControls {
     var failClear = false
     val calls = mutableListOf<String>()
 
-    override suspend fun usage(): StorageUsage = usage
+    override suspend fun usage(): StorageUsage {
+        measured++
+        return usage
+    }
 
     override suspend fun clearHistoryCache() {
         calls += "history"
@@ -55,6 +58,11 @@ private class FakeStorage : StorageControls {
     var oldBytes = 15L
     var oldFiles = 3
     var failFind = false
+    var failRemove = false
+
+    /** What a removal returns. Null removes the whole plan. */
+    var removeResult: OldFilesResult? = null
+    var measured = 0
     val ranges = mutableListOf<OldFilesRange?>()
     val removed = mutableListOf<OldFilesPlan>()
 
@@ -70,6 +78,8 @@ private class FakeStorage : StorageControls {
     override suspend fun removeOldFiles(plan: OldFilesPlan): OldFilesResult {
         removed += plan
         gate?.await()
+        if (failRemove) error("disk")
+        removeResult?.let { return it }
         usage = usage.copy(sensorFilesBytes = usage.sensorFilesBytes - plan.bytes)
         return OldFilesResult(plan.files, plan.bytes, kept = 0, syncRunning = false)
     }
@@ -216,6 +226,60 @@ class SettingsControllerTest {
         storage.gate!!.complete(Unit)
         assertEquals(1, storage.ranges.size)
         assertIs<OldFilesState.Found>(controller.oldFiles.value)
+    }
+
+    @Test
+    fun aRemovalThatThrowsShowsTheRemovalFailureAndMeasuresAgain() = runTest {
+        val scope = CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler))
+        val storage = FakeStorage().apply { failRemove = true }
+        val logged = mutableListOf<String>()
+        val controller = SettingsController(scope, SettingsRepository(MemoryStore()), storage, log = { logged += it })
+        controller.findOldFiles()
+        val before = storage.measured
+        controller.removeOldFiles()
+        assertEquals(OldFilesState.RemoveFailed, controller.oldFiles.value)
+        assertFalse(controller.clearing.value)
+        assertEquals(before + 1, storage.measured)
+        assertEquals(listOf("settings: remove old files failed: IllegalStateException"), logged)
+    }
+
+    @Test
+    fun aSecondTapWhileRemovingDoesNothing() = runTest {
+        val scope = CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler))
+        val storage = FakeStorage()
+        val controller = SettingsController(scope, SettingsRepository(MemoryStore()), storage)
+        controller.findOldFiles()
+        storage.gate = CompletableDeferred()
+        controller.removeOldFiles()
+        assertIs<OldFilesState.Removing>(controller.oldFiles.value)
+        assertTrue(controller.clearing.value)
+        controller.removeOldFiles()
+        assertEquals(1, storage.removed.size)
+        storage.gate!!.complete(Unit)
+        assertIs<OldFilesState.Removed>(controller.oldFiles.value)
+        assertEquals(1, storage.removed.size)
+    }
+
+    @Test
+    fun aPartialRemovalKeepsWhatStayedAndTheSyncStop() = runTest {
+        val scope = CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler))
+        val partial = OldFilesResult(removed = 1, bytes = 5, kept = 1, syncRunning = true, failed = 1)
+        val storage = FakeStorage().apply { removeResult = partial }
+        val controller = SettingsController(scope, SettingsRepository(MemoryStore()), storage)
+        controller.findOldFiles()
+        controller.removeOldFiles()
+        val done = assertIs<OldFilesState.Removed>(controller.oldFiles.value)
+        assertEquals(partial, done.result)
+        assertEquals(1, done.result.kept)
+        assertEquals(1, done.result.failed)
+        assertTrue(done.result.syncRunning)
+        assertEquals(
+            listOf(RemovedLine.Removed, RemovedLine.NotRemoved, RemovedLine.Kept, RemovedLine.StoppedBySync),
+            removedLines(done.result),
+        )
+        // A removal refused before it began is one wait line, a rebuild that failed adds its own.
+        assertEquals(listOf(RemovedLine.SyncBusy), removedLines(OldFilesResult(0, 0, 3, syncRunning = true)))
+        assertEquals(listOf(RemovedLine.Removed, RemovedLine.HistoryLater), removedLines(OldFilesResult(2, 9, 0, false, rebuildFailed = true)))
     }
 
     @Test

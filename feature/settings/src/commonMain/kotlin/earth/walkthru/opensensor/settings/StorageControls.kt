@@ -20,19 +20,32 @@ data class OldFilesRange(val fromEpochDay: Long, val toEpochDay: Long) {
 }
 
 /**
- * The dry run of an old format cleanup. [handle] is the host's own plan, given back to
- * [StorageControls.removeOldFiles] so only the files counted here can be removed.
+ * The dry run of an old format cleanup. [skipped] counts files whose footer could not be read, which
+ * are kept. [handle] is the host's own plan, given back to [StorageControls.removeOldFiles] so only the
+ * files counted here can be removed.
  */
 data class OldFilesPlan(
     val files: Int,
     val bytes: Long,
     val stations: Int,
     val range: OldFilesRange?,
+    val skipped: Int = 0,
     val handle: Any? = null,
 )
 
-/** What a cleanup did. [syncRunning] is true when it stopped, or never started, because a sync ran. */
-data class OldFilesResult(val removed: Int, val bytes: Long, val kept: Int, val syncRunning: Boolean)
+/**
+ * What a cleanup did. [kept] files stayed (no longer old, gone already, or not reached), [failed] files
+ * could not be deleted. [syncRunning] is true when it stopped, or never started, because a sync ran.
+ * [rebuildFailed] is true when the files went but their History days were not rebuilt yet.
+ */
+data class OldFilesResult(
+    val removed: Int,
+    val bytes: Long,
+    val kept: Int,
+    val syncRunning: Boolean,
+    val failed: Int = 0,
+    val rebuildFailed: Boolean = false,
+)
 
 /**
  * What the Settings Storage card measures and clears. The host wires its archive roots, derived quota

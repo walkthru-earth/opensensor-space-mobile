@@ -94,15 +94,22 @@ import earth.walkthru.opensensor.settings.resources.storage_old_files_dates
 import earth.walkthru.opensensor.settings.resources.storage_old_files_failed
 import earth.walkthru.opensensor.settings.resources.storage_old_files_find
 import earth.walkthru.opensensor.settings.resources.storage_old_files_finding
+import earth.walkthru.opensensor.settings.resources.storage_old_files_history_later
 import earth.walkthru.opensensor.settings.resources.storage_old_files_info1
 import earth.walkthru.opensensor.settings.resources.storage_old_files_info2
 import earth.walkthru.opensensor.settings.resources.storage_old_files_info3
+import earth.walkthru.opensensor.settings.resources.storage_old_files_kept
 import earth.walkthru.opensensor.settings.resources.storage_old_files_none
+import earth.walkthru.opensensor.settings.resources.storage_old_files_not_removed
 import earth.walkthru.opensensor.settings.resources.storage_old_files_pick_dates
 import earth.walkthru.opensensor.settings.resources.storage_old_files_remove
+import earth.walkthru.opensensor.settings.resources.storage_old_files_remove_failed
 import earth.walkthru.opensensor.settings.resources.storage_old_files_removed
+import earth.walkthru.opensensor.settings.resources.storage_old_files_removed_none
+import earth.walkthru.opensensor.settings.resources.storage_old_files_stopped_by_sync
 import earth.walkthru.opensensor.settings.resources.storage_old_files_summary
 import earth.walkthru.opensensor.settings.resources.storage_old_files_sync_busy
+import earth.walkthru.opensensor.settings.resources.storage_old_files_unreadable
 import earth.walkthru.opensensor.settings.resources.storage_sensor_files
 import earth.walkthru.opensensor.settings.resources.storage_temporary
 import earth.walkthru.opensensor.settings.resources.units_auto
@@ -279,8 +286,8 @@ private fun OldFilesRow(
                 Text(label, style = MaterialTheme.typography.bodyLarge)
                 infoButton(label, info, Modifier)
             }
-            oldFilesStatus(state)?.let {
-                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            for (line in oldFilesStatus(state)) {
+                Text(line, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         if (found != null) {
@@ -314,24 +321,51 @@ private fun OldFilesRow(
     }
 }
 
+/** The status lines under Old format files. A partial removal says what stayed and why. */
 @Composable
-private fun oldFilesStatus(state: OldFilesState): String? = when (state) {
-    OldFilesState.Idle -> null
-    OldFilesState.Finding -> stringResource(Res.string.storage_old_files_finding)
-    is OldFilesState.Found ->
-        if (state.plan.files == 0) {
-            stringResource(Res.string.storage_old_files_none)
-        } else {
-            stringResource(Res.string.storage_old_files_summary, fileCount(state.plan.files), megabytes(state.plan.bytes))
+private fun oldFilesStatus(state: OldFilesState): List<String> = when (state) {
+    OldFilesState.Idle -> emptyList()
+    OldFilesState.Finding -> listOf(stringResource(Res.string.storage_old_files_finding))
+    is OldFilesState.Found -> buildList {
+        when {
+            state.plan.files > 0 -> add(stringResource(Res.string.storage_old_files_summary, fileCount(state.plan.files), megabytes(state.plan.bytes)))
+            // Unreadable files may be old too, so the card never says none were found.
+            state.plan.skipped == 0 -> add(stringResource(Res.string.storage_old_files_none))
         }
-    is OldFilesState.Removing -> stringResource(Res.string.storage_old_files_summary, fileCount(state.plan.files), megabytes(state.plan.bytes))
-    is OldFilesState.Removed ->
-        if (state.result.syncRunning && state.result.removed == 0) {
-            stringResource(Res.string.storage_old_files_sync_busy)
-        } else {
-            stringResource(Res.string.storage_old_files_removed, fileCount(state.result.removed), megabytes(state.result.bytes))
-        }
-    OldFilesState.Failed -> stringResource(Res.string.storage_old_files_failed)
+        if (state.plan.skipped > 0) add(stringResource(Res.string.storage_old_files_unreadable, fileCount(state.plan.skipped)))
+    }
+    is OldFilesState.Removing -> listOf(stringResource(Res.string.storage_old_files_summary, fileCount(state.plan.files), megabytes(state.plan.bytes)))
+    is OldFilesState.Removed -> removedStatus(state.result)
+    OldFilesState.Failed -> listOf(stringResource(Res.string.storage_old_files_failed))
+    OldFilesState.RemoveFailed -> listOf(stringResource(Res.string.storage_old_files_remove_failed))
+}
+
+@Composable
+private fun removedStatus(result: OldFilesResult): List<String> = removedLines(result).map { line ->
+    when (line) {
+        RemovedLine.SyncBusy -> stringResource(Res.string.storage_old_files_sync_busy)
+        RemovedLine.Removed -> stringResource(Res.string.storage_old_files_removed, fileCount(result.removed), megabytes(result.bytes))
+        RemovedLine.NoneRemoved -> stringResource(Res.string.storage_old_files_removed_none)
+        RemovedLine.NotRemoved -> stringResource(Res.string.storage_old_files_not_removed, fileCount(result.failed))
+        RemovedLine.Kept -> stringResource(Res.string.storage_old_files_kept, fileCount(result.kept))
+        RemovedLine.StoppedBySync -> stringResource(Res.string.storage_old_files_stopped_by_sync)
+        RemovedLine.HistoryLater -> stringResource(Res.string.storage_old_files_history_later)
+    }
+}
+
+/** The status lines after a removal, in order. */
+internal enum class RemovedLine { SyncBusy, Removed, NoneRemoved, NotRemoved, Kept, StoppedBySync, HistoryLater }
+
+/** A removal refused before it began reads as one wait line. Otherwise what went, what stayed and why. */
+internal fun removedLines(result: OldFilesResult): List<RemovedLine> {
+    if (result.syncRunning && result.removed == 0 && result.failed == 0) return listOf(RemovedLine.SyncBusy)
+    return buildList {
+        add(if (result.removed > 0) RemovedLine.Removed else RemovedLine.NoneRemoved)
+        if (result.failed > 0) add(RemovedLine.NotRemoved)
+        if (result.kept > 0) add(RemovedLine.Kept)
+        if (result.syncRunning) add(RemovedLine.StoppedBySync)
+        if (result.rebuildFailed) add(RemovedLine.HistoryLater)
+    }
 }
 
 @Composable

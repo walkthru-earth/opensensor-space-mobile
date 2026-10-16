@@ -41,9 +41,9 @@
     <string name="storage_old_files_finding">جارٍ فحص الملفات</string>
     <string name="storage_old_files_none">لا توجد ملفات</string>
     <plurals name="storage_old_files_count">
-        <item quantity="zero">%1$d ملف</item>
-        <item quantity="one">%1$d ملف</item>
-        <item quantity="two">%1$d ملفان</item>
+        <item quantity="zero">لا ملفات</item>
+        <item quantity="one">ملف واحد</item>
+        <item quantity="two">ملفان</item>
         <item quantity="few">%1$d ملفات</item>
         <item quantity="many">%1$d ملفًا</item>
         <item quantity="other">%1$d ملف</item>
@@ -55,6 +55,13 @@
     <string name="storage_old_files_removed">تم حذف %1$s، %2$s ميغابايت</string>
     <string name="storage_old_files_sync_busy">انتظر حتى تنتهي المزامنة</string>
     <string name="storage_old_files_failed">تعذر فحص الملفات</string>
+    <string name="storage_old_files_remove_failed">تعذر حذف الملفات</string>
+    <string name="storage_old_files_unreadable">تعذرت قراءة %1$s</string>
+    <string name="storage_old_files_removed_none">لم يُحذف أي ملف</string>
+    <string name="storage_old_files_not_removed">تعذر حذف %1$s</string>
+    <string name="storage_old_files_kept">بقي %1$s</string>
+    <string name="storage_old_files_stopped_by_sync">توقف الحذف لأن مزامنة بدأت</string>
+    <string name="storage_old_files_history_later">يتحدث السجل لاحقًا</string>
     <string name="storage_old_files_all_dates">كل التواريخ</string>
     <string name="storage_old_files_dates">من %1$s إلى %2$s</string>
     <string name="storage_old_files_pick_dates">اختيار التواريخ</string>

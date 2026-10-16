@@ -162,13 +162,13 @@ internal object IosArchive {
 
             override suspend fun findOldFiles(range: OldFilesRange?): OldFilesPlan {
                 val plan = oldFiles.plan(range?.let { UtcDayRange(it.fromEpochDay, it.toEpochDay) })
-                return OldFilesPlan(plan.files, plan.bytes, plan.stations, range, handle = plan)
+                return OldFilesPlan(plan.files, plan.bytes, plan.stations, range, skipped = plan.skipped, handle = plan)
             }
 
             override suspend fun removeOldFiles(plan: OldFilesPlan): OldFilesResult {
                 val planned = plan.handle as? LegacyFileCleanup.Plan ?: return OldFilesResult(0, 0, plan.files, syncRunning = false)
                 val report = oldFiles.remove(planned)
-                return OldFilesResult(report.removed, report.bytes, report.kept, report.stoppedBySync)
+                return OldFilesResult(report.removed, report.bytes, report.kept, report.stoppedBySync, report.failed, report.rebuildFailed)
             }
         }
     }
@@ -178,7 +178,8 @@ internal object IosArchive {
 
     /**
      * The phone only cleanup of old format files behind Settings. The receipt index change already
-     * rebuilds the derived days through [startIndexRepair], the explicit rebuild runs it now.
+     * rebuilds the derived days through [startIndexRepair], the explicit rebuild runs it now and also
+     * visits the stations whose files all went, so their stale day files are removed.
      */
     private val oldFiles by lazy {
         LegacyFileCleanup(
@@ -189,7 +190,7 @@ internal object IosArchive {
             leases = leases,
             io = Dispatchers.IO,
             syncRunning = { sync.value?.isBusy() == true },
-            afterRemoval = { rebuildDerived() },
+            afterRemoval = { days -> rebuildDerived(days.keys) },
             log = ::println,
         )
     }
@@ -230,9 +231,14 @@ internal object IosArchive {
         anchorFollowUp.request()
     }
 
-    private suspend fun rebuildDerived() = derivedMutex.withLock {
-        val records = index.observeAll().first()
-        for ((station, files) in records.groupBy { it.station }) {
+    /**
+     * Rebuilds the derived days of every station with records, and of each of [emptied]. A station in
+     * [emptied] that has no records left is rebuilt from no sources, which removes its stale day files.
+     */
+    private suspend fun rebuildDerived(emptied: Collection<String> = emptyList()) = derivedMutex.withLock {
+        val byStation = index.observeAll().first().groupBy { it.station }
+        for (station in byStation.keys + emptied) {
+            val files = byStation[station].orEmpty()
             val anchors = TimeEstimate.anchors(files.filter { it.isIndexed }.map { it.info() }, clockAnchors.anchors(station))
             derived.rebuild(station, files, store, anchors, Clock.System.now().epochSeconds)
         }
