@@ -118,6 +118,15 @@ class UtcColumnsTest {
     }
 
     @Test
+    fun aCeilEndAtTheLongExtremesDoesNotWrap() {
+        assertEquals(Long.MIN_VALUE.floorDiv(1_000L) + 1, UtcColumns.nsToUsCeil(Long.MIN_VALUE))
+        assertTrue(UtcColumns.nsToUsCeil(Long.MIN_VALUE) < 0)
+        assertEquals(Long.MIN_VALUE, UtcColumns.nsToUnitCeil(Long.MIN_VALUE, 1L))
+        assertEquals(Long.MAX_VALUE / 1_000L + 1, UtcColumns.nsToUsCeil(Long.MAX_VALUE))
+        assertEquals(Long.MAX_VALUE, UtcColumns.nsToUnitCeil(Long.MAX_VALUE, 1L))
+    }
+
+    @Test
     fun aDayOfOldNanosAndNewMicrosFilesIsWrittenInMicrosWithTheDeviceFieldIds() {
         val oldBytes = fixtureBytes(fixture)
         val newBytes = current(seqOffset = 1_000_000)

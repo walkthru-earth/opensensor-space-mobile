@@ -113,8 +113,14 @@ object UtcColumns {
     /** Whole units of [scale] nanoseconds at or before [ns]. */
     fun nsToUnit(ns: Long, scale: Long): Long = ns.floorDiv(scale)
 
-    /** Whole units of [scale] nanoseconds at or after [ns], the exclusive end of a half-open range. */
-    fun nsToUnitCeil(ns: Long, scale: Long): Long = -(-ns).floorDiv(scale)
+    /**
+     * Whole units of [scale] nanoseconds at or after [ns], the exclusive end of a half-open range.
+     * Built on the floor so `Long.MIN_VALUE` never wraps through negation.
+     */
+    fun nsToUnitCeil(ns: Long, scale: Long): Long {
+        val floor = ns.floorDiv(scale)
+        return if (floor * scale == ns) floor else floor + 1
+    }
 
     /** Whole microseconds at or before [ns]. */
     fun nsToUs(ns: Long): Long = nsToUnit(ns, NS_PER_US)
