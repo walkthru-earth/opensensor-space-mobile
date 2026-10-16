@@ -131,7 +131,7 @@ class FakeTransport(
 
     init {
         finalized = files.size.toLong()
-        logLine("BOOT station=$station dev=$deviceId boot=$bootId fw=arduino-cores3-parquet-v5 (fake)")
+        logLine("BOOT station=$station dev=$deviceId boot=$bootId fw=idf-cores3-parquet-v6.12 (fake)")
         logLine("PARQUET STATUS files=$finalized codec=LZ4_RAW sd=1")
         logLine("BLE START name=$displayName pair=$pairMode")
         logLine("WIFI OFF (wifi.on=0)")
