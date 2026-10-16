@@ -4,6 +4,22 @@
 **Code:** `./gradlew verify` (the gate), `.github/workflows/verify.yml`.
 **Related:** measured device behaviour is recorded in the board-specific `../aq-parquet/docs/boards/*/bench-verified.md`; anything not recorded there is unverified.
 
+## 2026-10-16, remove old format files from the phone (code only)
+
+Branch `yharby/phone-old-file-cleanup`, on top of `yharby/firmware-parquet-micros-live-keys`, with
+the owner's approval. Host tests, the iOS simulator build and `verify` only. No phone run yet.
+
+- Settings › Storage › Old format files. A dry run counts old layout files (`UtcColumns.isLegacyLayout`)
+  for all dates or a UTC date range, then one confirmation removes them from the phone. Files without
+  a UTC column, current MICROS files and unreadable files stay.
+- Shared `LegacyFileCleanup` in `:core:history`. Refused while any sync runs. Per file under its
+  writer lease, record first, then the final file below the Durable archive root. A failed delete
+  restores the record, and the startup janitor adopts a file left by a crash. Derived days rebuild after.
+- Phone only. No device command and the device card is not touched. A later sync downloads a file
+  again when the device still lists it.
+- To check on phones. A removal of old files on Android and iOS, History after it, and a sync of a
+  CoreS3 that still lists old files.
+
 ## 2026-10-16, firmware MICROS columns, field ids and LIVE keys (code only)
 
 Branch `yharby/firmware-parquet-micros-live-keys`, for CoreS3 v6.12 and Waveshare v2.6 from
