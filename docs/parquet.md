@@ -158,8 +158,8 @@ and keeps the file when the record is gone or its size or CRC-32 changed. Then i
 archive root. A failed delete puts the index record back, drops the `PrunedFile` and counts as
 failed. When the restore throws too, the file stays without a record and the startup janitor adopts
 it again. A crash between the steps leaves a final file without a record, which the janitor adopts
-again under the same gate, so the index never points at a missing file. Cancellation is honoured
-between files only. Each file's steps, from the record check to the re-adopt check, run under
+again under the same gate and drops its `PrunedFile`, so the index never points at a missing file and
+a held file is never marked removed. Cancellation is honoured between files only. Each file's steps, from the record check to the re-adopt check, run under
 `NonCancellable`. The derived days of the removed files are rebuilt after, also when the caller was
 cancelled (Android `HistoryDeriver.deriveStale`, iOS `rebuildDerived`, which also rebuilds a
 station whose files all went from no sources, so its stale day files are removed). A rebuild that
@@ -171,9 +171,12 @@ exception class names only. Nothing is sent to a device.
 iOS) keeps the station, name, size and CRC-32 of each removed file. The FILE frame carries no CRC,
 so `SyncPlanner` matches on station, name and size. A listed file with such a record and no phone
 copy plans as `REMOVED`. It is not downloaded and counts as done, so the device card can still read
-as all synced. A phone copy always wins over the record. Files shows the file as removed from this
-phone. Settings › Storage › Removed files › Download again empties the records after a confirm, and
-the next sync downloads those files again when the device still lists them.
+as all synced. A phone copy always wins over the record. A whole LIST that no longer names the file
+drops the record, so a later file under the same name and size, after a card reset, downloads.
+Files shows the file as removed from this phone. On iOS a records file that cannot be read whole
+reads as no records, and new records are refused until Download again rewrites it, so a removal
+keeps the file rather than overwrite the other records. Settings › Storage › Removed files ›
+Download again empties the records after a confirm, and the next sync downloads those files again when the device still lists them.
 
 ### Iceberg v3 tables (not in the app yet)
 
