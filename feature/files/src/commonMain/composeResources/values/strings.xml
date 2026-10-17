@@ -66,6 +66,7 @@
     <string name="file_not_synced">not synced</string>
     <string name="file_mismatch">mismatch</string>
     <string name="file_invalid">invalid name</string>
+    <string name="file_removed">removed from phone</string>
     <string name="file_metrics">Metrics</string>
     <string name="file_share">Share</string>
     <string name="files_no_daily">No daily files yet. They need synced files with a time.</string>

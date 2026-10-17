@@ -41,6 +41,11 @@ class SettingsController(
 
     val hasStorage: Boolean get() = storage != null
 
+    private val _removedFiles = MutableStateFlow(0)
+
+    /** Files removed from this phone that sync skips, measured with [storageUsage]. */
+    val removedFiles: StateFlow<Int> = _removedFiles.asStateFlow()
+
     fun refreshStorage() {
         val controls = storage ?: return
         scope.launch { measure(controls) }
@@ -49,6 +54,9 @@ class SettingsController(
     fun clearHistoryCache() = clear { it.clearHistoryCache() }
 
     fun clearMapCache() = clear { it.clearMapCache() }
+
+    /** Lets the next sync download the removed files again, after the user confirmed. */
+    fun downloadRemovedAgain() = clear { it.downloadRemovedAgain() }
 
     private fun clear(action: suspend (StorageControls) -> Unit) {
         val controls = storage ?: return
@@ -104,15 +112,11 @@ class SettingsController(
         }
     }
 
-    /** Removes the files of the last dry run, after the user confirmed. Refused while a sync runs. */
+    /** Removes the files of the last dry run, after the user confirmed. A sync may run meanwhile. */
     fun removeOldFiles() {
         val controls = storage ?: return
         val found = _oldFiles.value as? OldFilesState.Found ?: return
         if (found.plan.files == 0 || _clearing.value) return
-        if (controls.syncRunning()) {
-            _oldFiles.value = OldFilesState.Removed(OldFilesResult(0, 0, found.plan.files, syncRunning = true))
-            return
-        }
         _oldFiles.value = OldFilesState.Removing(found.plan)
         _clearing.value = true
         scope.launch {
@@ -138,6 +142,13 @@ class SettingsController(
         } catch (e: Exception) {
             // Keep the last measurement.
             log("settings: storage usage failed: ${e::class.simpleName}")
+        }
+        try {
+            _removedFiles.value = controls.removedFiles()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log("settings: removed files count failed: ${e::class.simpleName}")
         }
     }
 

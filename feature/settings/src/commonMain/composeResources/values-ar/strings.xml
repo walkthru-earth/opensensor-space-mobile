@@ -53,22 +53,24 @@
     <string name="storage_old_files_confirm_title">حذف الملفات ذات التنسيق القديم؟</string>
     <string name="storage_old_files_confirm_body">تُحذف %1$s و%2$s ميغابايت من هذا الهاتف. لا يتغير المستشعر.</string>
     <string name="storage_old_files_removed">تم حذف %1$s، %2$s ميغابايت</string>
-    <string name="storage_old_files_sync_busy">انتظر حتى تنتهي المزامنة</string>
     <string name="storage_old_files_failed">تعذر فحص الملفات</string>
     <string name="storage_old_files_remove_failed">تعذر حذف الملفات</string>
     <string name="storage_old_files_unreadable">تعذرت قراءة %1$s</string>
     <string name="storage_old_files_removed_none">لم يُحذف أي ملف</string>
     <string name="storage_old_files_not_removed">تعذر حذف %1$s</string>
     <string name="storage_old_files_kept">بقي %1$s</string>
-    <string name="storage_old_files_stopped_by_sync">توقف الحذف لأن مزامنة بدأت</string>
     <string name="storage_old_files_history_later">يتحدث السجل لاحقًا</string>
     <string name="storage_old_files_all_dates">كل التواريخ</string>
     <string name="storage_old_files_dates">من %1$s إلى %2$s</string>
     <string name="storage_old_files_pick_dates">اختيار التواريخ</string>
+    <string name="storage_removed_files">ملفات محذوفة</string>
+    <string name="storage_removed_files_again">التنزيل مرة أخرى</string>
+    <string name="storage_removed_files_confirm_title">تنزيل الملفات المحذوفة مرة أخرى؟</string>
+    <string name="storage_removed_files_confirm_body">تنزّل المزامنة التالية %1$s مرة أخرى إذا كانت لا تزال على المستشعر.</string>
     <string name="storage_apply">تطبيق</string>
     <string name="storage_cancel">إلغاء</string>
     <string name="storage_old_files_info1">ملفات حفظها إصدار أقدم من برنامج المستشعر. حذفها يوفر مساحة على هذا الهاتف فقط.</string>
-    <string name="storage_old_files_info2">لا يُرسل شيء إلى المستشعر. إذا كان لا يزال يحتفظ بملف، تنزّله المزامنة التالية مرة أخرى.</string>
+    <string name="storage_old_files_info2">لا يُرسل شيء إلى المستشعر. تتخطى المزامنة الملفات المحذوفة حتى تختار التنزيل مرة أخرى.</string>
     <string name="storage_old_files_info3">التواريخ بتوقيت UTC. تُضمَّن الملفات بلا تاريخ فقط عند اختيار كل التواريخ.</string>
 
     <string name="settings_about">حول التطبيق</string>

@@ -54,7 +54,6 @@ private class FakeStorage : StorageControls {
         usage = usage.copy(mapCacheBytes = 0)
     }
 
-    var syncing = false
     var oldBytes = 15L
     var oldFiles = 3
     var failFind = false
@@ -65,8 +64,6 @@ private class FakeStorage : StorageControls {
     var measured = 0
     val ranges = mutableListOf<OldFilesRange?>()
     val removed = mutableListOf<OldFilesPlan>()
-
-    override fun syncRunning(): Boolean = syncing
 
     override suspend fun findOldFiles(range: OldFilesRange?): OldFilesPlan {
         ranges += range
@@ -81,7 +78,20 @@ private class FakeStorage : StorageControls {
         if (failRemove) error("disk")
         removeResult?.let { return it }
         usage = usage.copy(sensorFilesBytes = usage.sensorFilesBytes - plan.bytes)
-        return OldFilesResult(plan.files, plan.bytes, kept = 0, syncRunning = false)
+        pruned += plan.files
+        return OldFilesResult(plan.files, plan.bytes, kept = 0)
+    }
+
+    var pruned = 0
+    var failAgain = false
+
+    override suspend fun removedFiles(): Int = pruned
+
+    override suspend fun downloadRemovedAgain() {
+        calls += "again"
+        gate?.await()
+        if (failAgain) error("disk")
+        pruned = 0
     }
 }
 
@@ -167,9 +177,40 @@ class SettingsControllerTest {
 
         controller.removeOldFiles()
         assertEquals(listOf(found.plan), storage.removed)
-        assertEquals(OldFilesState.Removed(OldFilesResult(3, 15, 0, false)), controller.oldFiles.value)
+        assertEquals(OldFilesState.Removed(OldFilesResult(3, 15, 0)), controller.oldFiles.value)
         assertEquals(25, controller.storageUsage.value?.sensorFilesBytes)
+        assertEquals(3, controller.removedFiles.value)
         assertFalse(controller.clearing.value)
+    }
+
+    @Test
+    fun downloadAgainClearsTheRemovedFilesAndCountsAgain() = runTest {
+        val scope = CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler))
+        val storage = FakeStorage().apply { pruned = 4 }
+        val controller = SettingsController(scope, SettingsRepository(MemoryStore()), storage)
+        controller.refreshStorage()
+        assertEquals(4, controller.removedFiles.value)
+
+        storage.gate = CompletableDeferred()
+        controller.downloadRemovedAgain()
+        assertTrue(controller.clearing.value)
+        // A second tap while it runs does nothing.
+        controller.downloadRemovedAgain()
+        storage.gate!!.complete(Unit)
+        assertEquals(listOf("again"), storage.calls)
+        assertEquals(0, controller.removedFiles.value)
+        assertFalse(controller.clearing.value)
+    }
+
+    @Test
+    fun aFailedDownloadAgainKeepsTheCount() = runTest {
+        val scope = CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler))
+        val storage = FakeStorage().apply { pruned = 2; failAgain = true }
+        val logged = mutableListOf<String>()
+        val controller = SettingsController(scope, SettingsRepository(MemoryStore()), storage, log = { logged += it })
+        controller.downloadRemovedAgain()
+        assertEquals(2, controller.removedFiles.value)
+        assertEquals(listOf("settings: clear failed: IllegalStateException"), logged)
     }
 
     @Test
@@ -183,20 +224,6 @@ class SettingsControllerTest {
         assertEquals(OldFilesState.Idle, controller.oldFiles.value)
         controller.removeOldFiles()
         assertTrue(storage.removed.isEmpty())
-    }
-
-    @Test
-    fun removalIsRefusedWhileASyncRuns() = runTest {
-        val scope = CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler))
-        val storage = FakeStorage()
-        val controller = SettingsController(scope, SettingsRepository(MemoryStore()), storage)
-        controller.findOldFiles()
-        storage.syncing = true
-        controller.removeOldFiles()
-        assertTrue(storage.removed.isEmpty())
-        val done = assertIs<OldFilesState.Removed>(controller.oldFiles.value)
-        assertTrue(done.result.syncRunning)
-        assertEquals(3, done.result.kept)
     }
 
     @Test
@@ -261,9 +288,9 @@ class SettingsControllerTest {
     }
 
     @Test
-    fun aPartialRemovalKeepsWhatStayedAndTheSyncStop() = runTest {
+    fun aPartialRemovalKeepsWhatStayed() = runTest {
         val scope = CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler))
-        val partial = OldFilesResult(removed = 1, bytes = 5, kept = 1, syncRunning = true, failed = 1)
+        val partial = OldFilesResult(removed = 1, bytes = 5, kept = 1, failed = 1)
         val storage = FakeStorage().apply { removeResult = partial }
         val controller = SettingsController(scope, SettingsRepository(MemoryStore()), storage)
         controller.findOldFiles()
@@ -272,14 +299,10 @@ class SettingsControllerTest {
         assertEquals(partial, done.result)
         assertEquals(1, done.result.kept)
         assertEquals(1, done.result.failed)
-        assertTrue(done.result.syncRunning)
-        assertEquals(
-            listOf(RemovedLine.Removed, RemovedLine.NotRemoved, RemovedLine.Kept, RemovedLine.StoppedBySync),
-            removedLines(done.result),
-        )
-        // A removal refused before it began is one wait line, a rebuild that failed adds its own.
-        assertEquals(listOf(RemovedLine.SyncBusy), removedLines(OldFilesResult(0, 0, 3, syncRunning = true)))
-        assertEquals(listOf(RemovedLine.Removed, RemovedLine.HistoryLater), removedLines(OldFilesResult(2, 9, 0, false, rebuildFailed = true)))
+        assertEquals(listOf(RemovedLine.Removed, RemovedLine.NotRemoved, RemovedLine.Kept), removedLines(done.result))
+        // Nothing removed is its own line, a rebuild that failed adds its own.
+        assertEquals(listOf(RemovedLine.NoneRemoved, RemovedLine.Kept), removedLines(OldFilesResult(0, 0, 3)))
+        assertEquals(listOf(RemovedLine.Removed, RemovedLine.HistoryLater), removedLines(OldFilesResult(2, 9, 0, rebuildFailed = true)))
     }
 
     @Test

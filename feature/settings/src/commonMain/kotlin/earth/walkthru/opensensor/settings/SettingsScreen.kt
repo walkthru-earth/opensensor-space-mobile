@@ -106,10 +106,12 @@ import earth.walkthru.opensensor.settings.resources.storage_old_files_remove
 import earth.walkthru.opensensor.settings.resources.storage_old_files_remove_failed
 import earth.walkthru.opensensor.settings.resources.storage_old_files_removed
 import earth.walkthru.opensensor.settings.resources.storage_old_files_removed_none
-import earth.walkthru.opensensor.settings.resources.storage_old_files_stopped_by_sync
 import earth.walkthru.opensensor.settings.resources.storage_old_files_summary
-import earth.walkthru.opensensor.settings.resources.storage_old_files_sync_busy
 import earth.walkthru.opensensor.settings.resources.storage_old_files_unreadable
+import earth.walkthru.opensensor.settings.resources.storage_removed_files
+import earth.walkthru.opensensor.settings.resources.storage_removed_files_again
+import earth.walkthru.opensensor.settings.resources.storage_removed_files_confirm_body
+import earth.walkthru.opensensor.settings.resources.storage_removed_files_confirm_title
 import earth.walkthru.opensensor.settings.resources.storage_sensor_files
 import earth.walkthru.opensensor.settings.resources.storage_temporary
 import earth.walkthru.opensensor.settings.resources.units_auto
@@ -255,6 +257,7 @@ private fun StorageCard(controller: SettingsController, infoButton: @Composable 
         StorageRow(stringResource(Res.string.storage_map_cache), sizes.mapCacheBytes, !clearing, controller::clearMapCache)
         StorageRow(stringResource(Res.string.storage_temporary), sizes.temporaryBytes)
         OldFilesRow(controller, !clearing, infoButton)
+        RemovedFilesRow(controller, !clearing)
         Caption(stringResource(Res.string.settings_storage_body), top = 4.dp)
     }
 }
@@ -321,6 +324,38 @@ private fun OldFilesRow(
     }
 }
 
+/**
+ * The files removed from this phone that sync skips, shown only when there are some. Download again
+ * asks once, then forgets them, so the next sync downloads them when a sensor still has them.
+ */
+@Composable
+private fun RemovedFilesRow(controller: SettingsController, enabled: Boolean) {
+    val removed by controller.removedFiles.collectAsState()
+    var confirm by rememberSaveable { mutableStateOf(false) }
+    if (removed <= 0) return
+    Row(Modifier.fillMaxWidth().heightIn(min = FloatingControl.Size), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(Res.string.storage_removed_files), style = MaterialTheme.typography.bodyLarge)
+            Text(fileCount(removed), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        TextButton(onClick = { confirm = true }, enabled = enabled) { Text(stringResource(Res.string.storage_removed_files_again)) }
+    }
+    if (confirm) {
+        AlertDialog(
+            onDismissRequest = { confirm = false },
+            title = { Text(stringResource(Res.string.storage_removed_files_confirm_title)) },
+            text = { Text(stringResource(Res.string.storage_removed_files_confirm_body, fileCount(removed))) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirm = false
+                    controller.downloadRemovedAgain()
+                }) { Text(stringResource(Res.string.storage_removed_files_again)) }
+            },
+            dismissButton = { TextButton(onClick = { confirm = false }) { Text(stringResource(Res.string.storage_cancel)) } },
+        )
+    }
+}
+
 /** The status lines under Old format files. A partial removal says what stayed and why. */
 @Composable
 private fun oldFilesStatus(state: OldFilesState): List<String> = when (state) {
@@ -343,29 +378,23 @@ private fun oldFilesStatus(state: OldFilesState): List<String> = when (state) {
 @Composable
 private fun removedStatus(result: OldFilesResult): List<String> = removedLines(result).map { line ->
     when (line) {
-        RemovedLine.SyncBusy -> stringResource(Res.string.storage_old_files_sync_busy)
         RemovedLine.Removed -> stringResource(Res.string.storage_old_files_removed, fileCount(result.removed), megabytes(result.bytes))
         RemovedLine.NoneRemoved -> stringResource(Res.string.storage_old_files_removed_none)
         RemovedLine.NotRemoved -> stringResource(Res.string.storage_old_files_not_removed, fileCount(result.failed))
         RemovedLine.Kept -> stringResource(Res.string.storage_old_files_kept, fileCount(result.kept))
-        RemovedLine.StoppedBySync -> stringResource(Res.string.storage_old_files_stopped_by_sync)
         RemovedLine.HistoryLater -> stringResource(Res.string.storage_old_files_history_later)
     }
 }
 
 /** The status lines after a removal, in order. */
-internal enum class RemovedLine { SyncBusy, Removed, NoneRemoved, NotRemoved, Kept, StoppedBySync, HistoryLater }
+internal enum class RemovedLine { Removed, NoneRemoved, NotRemoved, Kept, HistoryLater }
 
-/** A removal refused before it began reads as one wait line. Otherwise what went, what stayed and why. */
-internal fun removedLines(result: OldFilesResult): List<RemovedLine> {
-    if (result.syncRunning && result.removed == 0 && result.failed == 0) return listOf(RemovedLine.SyncBusy)
-    return buildList {
-        add(if (result.removed > 0) RemovedLine.Removed else RemovedLine.NoneRemoved)
-        if (result.failed > 0) add(RemovedLine.NotRemoved)
-        if (result.kept > 0) add(RemovedLine.Kept)
-        if (result.syncRunning) add(RemovedLine.StoppedBySync)
-        if (result.rebuildFailed) add(RemovedLine.HistoryLater)
-    }
+/** What went, what stayed and why. */
+internal fun removedLines(result: OldFilesResult): List<RemovedLine> = buildList {
+    add(if (result.removed > 0) RemovedLine.Removed else RemovedLine.NoneRemoved)
+    if (result.failed > 0) add(RemovedLine.NotRemoved)
+    if (result.kept > 0) add(RemovedLine.Kept)
+    if (result.rebuildFailed) add(RemovedLine.HistoryLater)
 }
 
 @Composable
