@@ -9,6 +9,7 @@ import earth.walkthru.aqsync.archive.ArchiveVerifier
 import earth.walkthru.aqsync.data.protocol.ParquetVerify
 import earth.walkthru.aqsync.data.protocol.Sha256
 import earth.walkthru.aqsync.data.protocol.toHex
+import earth.walkthru.aqsync.data.sync.ArchiveMutationGate
 import earth.walkthru.aqsync.data.sync.ArchiveRecordIndexer
 import earth.walkthru.aqsync.data.sync.WriterLeases
 import earth.walkthru.aqsync.sync.nowEpochMs
@@ -49,6 +50,8 @@ class StorageJanitor(
     private val quota: DerivedQuota? = null,
     /** The [SyncEngine][earth.walkthru.aqsync.data.sync.SyncEngine] leases, so a stale partial is never swept while a resume writes it. */
     private val leases: WriterLeases = WriterLeases(),
+    /** The archive's shared gate, taken around each adopted record's insert. */
+    private val gate: ArchiveMutationGate = ArchiveMutationGate(),
 ) {
     data class Report(
         val tempsSwept: Int = 0,
@@ -184,7 +187,10 @@ class StorageJanitor(
         }
     }
 
-    /** Under the lease of [key], so a file the old file cleanup just deleted is never adopted back. */
+    /**
+     * Under the lease of [key], and the insert under the station's gate, so a file the old file
+     * cleanup just deleted is never adopted back.
+     */
     private suspend fun adopt(key: ArchiveKey) {
         if (!store.exists(key)) return
         val hashed = withContext(io) {
@@ -213,7 +219,9 @@ class StorageJanitor(
             syncedAtEpochMs = clock(),
             sourceDevice = ADOPTED_SOURCE,
         )
-        if (index.putIfAbsent(indexer.indexed(record))) report = report.copy(adopted = report.adopted + 1)
+        val indexed = indexer.indexed(record)
+        val adopted = gate.withStation(key.station) { store.exists(key) && index.putIfAbsent(indexed) }
+        if (adopted) report = report.copy(adopted = report.adopted + 1)
     }
 
     /** Deletes [path] only when it lies under a Scratch or Rebuildable root. Returns whether it did. */

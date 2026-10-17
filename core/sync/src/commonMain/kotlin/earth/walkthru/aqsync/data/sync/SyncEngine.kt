@@ -71,6 +71,8 @@ class SyncEngine(
     private val windowRetryBackoffMs: Long = WINDOW_RETRY_BACKOFF_MS,
     private val clock: () -> Long = ::nowEpochMs,
     private val leases: WriterLeases = WriterLeases(),
+    /** Shared with every archive writer, so an index row is never written for a file cleanup just removed. */
+    private val gate: ArchiveMutationGate = ArchiveMutationGate(),
     /** One line per file this phone failed to store, file name and error class and message only. */
     private val log: (String) -> Unit = {},
     /** Where partial files are written, one file at a time. Tests pass their virtual-time dispatcher. */
@@ -251,7 +253,10 @@ class SyncEngine(
             )
             // Index the verified bytes now (rows, time span, …) so History never has to re-open the file.
             // A file the reader refuses keeps its record with `indexError`. The archive copy is untouched.
-            storage { index.put(indexer.indexed(record)) }
+            storage {
+                val indexed = indexer.indexed(record)
+                gate.withStation(key.station) { index.put(indexed) }
+            }
             return FileOutcome.Synced(name, opened.size, sha256)
         }
     }
@@ -345,29 +350,33 @@ class SyncEngine(
         // conflict with the device: the caller's storage wrapper fails this file and keeps the partial.
         val (verdict, sha256) = store.reader(key).use { verifyAndHash(it, meta) }
         if (!verdict.ok) return FileOutcome.Mismatch(name, "existing archive conflicts with device: ${verdict.describe()}")
-        val row = index.get(key)
-        // An older iOS receipt holds size and CRC only. Its empty fingerprint is filled, never compared.
-        val knownSha = row?.sha256?.takeIf { it.isNotEmpty() }
-        if (row != null && (row.bytes != meta.size || row.crc32 != meta.crc32 || (knownSha != null && knownSha != sha256))) {
-            return FileOutcome.Mismatch(name, "existing archive conflicts with its recorded fingerprint")
-        }
-        if (row != null && knownSha == null) {
-            index.put(row.copy(sha256 = sha256))
-        } else if (row == null) {
-            index.put(
-                indexer.indexed(
-                    ArchiveRecord(
-                        station = key.station,
-                        name = name,
-                        bytes = meta.size,
-                        crc32 = meta.crc32,
-                        sha256 = sha256,
-                        syncedAtEpochMs = clock(),
-                        sourceDevice = sourceDevice,
+        val conflict = gate.withStation(key.station) {
+            val row = index.get(key)
+            // An older iOS receipt holds size and CRC only. Its empty fingerprint is filled, never compared.
+            val knownSha = row?.sha256?.takeIf { it.isNotEmpty() }
+            if (row != null && (row.bytes != meta.size || row.crc32 != meta.crc32 || (knownSha != null && knownSha != sha256))) {
+                return@withStation true
+            }
+            if (row != null && knownSha == null) {
+                index.put(row.copy(sha256 = sha256))
+            } else if (row == null) {
+                index.put(
+                    indexer.indexed(
+                        ArchiveRecord(
+                            station = key.station,
+                            name = name,
+                            bytes = meta.size,
+                            crc32 = meta.crc32,
+                            sha256 = sha256,
+                            syncedAtEpochMs = clock(),
+                            sourceDevice = sourceDevice,
+                        )
                     )
                 )
-            )
+            }
+            false
         }
+        if (conflict) return FileOutcome.Mismatch(name, "existing archive conflicts with its recorded fingerprint")
         store.discardPartial(key)
         onProgress(FileProgress(name, meta.size, meta.size, meta.size))
         return FileOutcome.Synced(name, meta.size, sha256, alreadyArchived = true)
