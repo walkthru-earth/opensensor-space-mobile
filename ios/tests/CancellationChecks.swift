@@ -22,7 +22,46 @@ enum CancellationChecks {
         idleCloseWaitsForTheWorkOnTheLink()
         livePageReopensUntilTheUserLeavesIt()
         aNewRunCountsFromZero()
+        aUserCancelReachesTheRunThroughAReconnect()
+        aLeaseReleaseClosesAWaitingSession()
         print("iOS cancellation checks passed")
+    }
+
+    /// #105. The run outlives its connection while the controller waits to retry or dials again,
+    /// before INFO named the sensor. Stop, Disconnect and Forget route by the run, not the connection.
+    private static func aUserCancelReachesTheRunThroughAReconnect() {
+        var run = OwnedRun()
+        precondition(!run.stops(device: "aabbccddeeff") && !run.closes(device: "aabbccddeeff"), "no run, nothing to stop")
+        run.started(device: "aabbccddeeff", kind: .user)
+        // The connection and its identity are gone now. Nothing here reads them.
+        precondition(run.stops(device: "AABBCCDDEEFF"), "Stop reaches a run that waits to retry or reconnects")
+        precondition(run.closes(device: "aabbccddeeff"), "Disconnect and Forget reach it too")
+        precondition(!run.stops(device: "112233445566"), "Stop for another sensor leaves this run alone")
+        precondition(!run.closes(device: "112233445566"), "Forget of another sensor leaves this run alone")
+        run.ended()
+        precondition(!run.stops(device: "aabbccddeeff") && !run.closes(device: "aabbccddeeff"), "an ended run is not stopped again")
+
+        for kind in [OwnedRun.Kind.collectAll, .autoSync] {
+            run.started(device: "aabbccddeeff", kind: kind)
+            precondition(!run.stops(device: "aabbccddeeff"), "Collect all and Auto-sync keep their own cancel")
+            precondition(run.closes(device: "aabbccddeeff"), "Disconnect and Forget end every run of the sensor")
+            run.ended()
+        }
+    }
+
+    /// #111. A Debug, Device settings or Files lease ends after the last page closed. The lease
+    /// listener settles the waiting close, and reopening the page before that keeps the session.
+    private static func aLeaseReleaseClosesAWaitingSession() {
+        var close = IdleClose<String>()
+        var leased = true
+        precondition(!close.pageClosed("aq", held: leased), "a direct lease keeps the session")
+        leased = false
+        precondition(close.settled("aq", held: leased), "the final lease release closes it")
+        leased = true
+        _ = close.pageClosed("aq", held: leased)
+        close.forget("aq")
+        leased = false
+        precondition(!close.settled("aq", held: leased), "a reopened page cancels the pending close")
     }
 
     private static func aNewRunCountsFromZero() {

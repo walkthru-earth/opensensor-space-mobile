@@ -25,6 +25,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -47,6 +48,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 
@@ -107,6 +109,9 @@ class SensorCollectionsTest {
         /** What Swift answers a dial when it cannot open one, such as Bluetooth off. */
         var refuseAs: DialResult? = null
 
+        /** When set, a dial waits here for the test to answer it, like a reconnect still before INFO. */
+        var held: CompletableDeferred<(DialResult) -> Unit>? = null
+
         fun connect(wifi: Boolean = true): IosLink {
             lateinit var link: IosLink
             link = IosLink(Port { answer(link, it) }, overWifi = wifi, address = device, callbacks = Dispatchers.Default, context = Dispatchers.Default)
@@ -120,6 +125,10 @@ class SensorCollectionsTest {
             assertEquals(device, name)
             dials.incrementAndFetch()
             refuseAs?.let { return done(it) }
+            held?.let {
+                it.complete(done)
+                return
+            }
             connect()
             done(DialResult.OPENED)
         }
@@ -188,14 +197,19 @@ class SensorCollectionsTest {
     private fun u16(b: ByteArray, at: Int) = (b[at].toInt() and 0xFF) or ((b[at + 1].toInt() and 0xFF) shl 8)
     private fun u32(b: ByteArray, at: Int) = u16(b, at).toLong() or (u16(b, at + 2).toLong() shl 16)
 
-    private fun collections(board: Board, keepAlive: KeepAlive = KeepAlive.None, callbacks: CoroutineContext = Dispatchers.Default) = SensorCollections(
+    private fun collections(
+        board: Board,
+        keepAlive: KeepAlive = KeepAlive.None,
+        callbacks: CoroutineContext = Dispatchers.Default,
+        retry: RetryPolicy = RetryPolicy(firstBackoff = 10.milliseconds, maxBackoff = 50.milliseconds),
+    ) = SensorCollections(
         sync,
         IosLinkProvider({ board.current }, 5.seconds, Dispatchers.Default, board::dial, poll = 10.milliseconds),
         record,
         Dispatchers.Default,
         callbacks,
         keepAlive = keepAlive,
-        retry = RetryPolicy(firstBackoff = 10.milliseconds, maxBackoff = 50.milliseconds),
+        retry = retry,
         progressInterval = 0,
     )
 
@@ -341,6 +355,68 @@ class SensorCollectionsTest {
         assertEquals(station, lent.station)
         lent.release()
         assertFalse(board.current!!.leased)
+    }
+
+    @Test
+    fun anAppStopDuringTheRetryWaitEndsTheRunAndNeverDialsAgain() = runBlocking {
+        val dropped = CompletableDeferred<IosLink>()
+        val board = Board { link, name ->
+            (name == second && !dropped.isCompleted).also {
+                if (it) {
+                    link.linkLost(IosLink.REASON_PEER_CLOSED)
+                    dropped.complete(link)
+                }
+            }
+        }
+        board.connect()
+        // The retry waits ten minutes, so the run is still waiting when the stop comes.
+        val runs = collections(board, retry = RetryPolicy(firstBackoff = 10.minutes, maxBackoff = 10.minutes))
+        val seen = Seen()
+        runs.collect(seen)
+        val lost = withTimeout(10_000) { dropped.await() }
+        withTimeout(10_000) { while (lost.leased) yield() }
+        assertTrue(runs.isActive(device), "the run waits to retry")
+
+        runs.stop("ffffffffffff")
+        repeat(20) { yield() }
+        assertTrue(runs.isActive(device), "a stop of another sensor leaves this run alone")
+
+        runs.stop(device.uppercase())
+        val result = withTimeout(5_000) { seen.done.await() }
+        assertEquals(SyncEnd.STOPPED, result.end)
+        assertEquals(SyncEndReason.STOPPED, result.endReason)
+        assertEquals(1, result.saved, "the file saved before the loss counts")
+        assertEquals(0, board.dials.load(), "a stopped run never dials again")
+        assertFalse(runs.isActive(device))
+        assertEquals(1, seen.finishes.load())
+    }
+
+    @Test
+    fun anAppStopDuringADialEndsTheRunAndTheLateLinkIsNeverUsed() = runBlocking {
+        val held = CompletableDeferred<(DialResult) -> Unit>()
+        val board = Board()
+        board.held = held
+        // No link is open, so the run dials, like a reconnect that has not reached INFO.
+        val runs = collections(board)
+        val seen = Seen()
+        runs.collect(seen)
+        val done = withTimeout(10_000) { held.await() }
+        assertTrue(runs.isActive(device))
+
+        runs.stop(device)
+        val result = withTimeout(5_000) { seen.done.await() }
+        assertEquals(SyncEnd.STOPPED, result.end)
+        assertFalse(runs.isActive(device))
+
+        // The dial lands after the stop. Nothing lists or leases the new link.
+        board.held = null
+        val late = board.connect()
+        done(DialResult.OPENED)
+        delay(200.milliseconds)
+        assertEquals(1, board.dials.load(), "a stopped run never dials again")
+        assertEquals(0, board.lists.load(), "a stopped run never transfers")
+        assertFalse(late.leased)
+        assertEquals(1, seen.finishes.load())
     }
 
     @Test

@@ -25,6 +25,9 @@ final class LanDiscovery {
     /// outlives a lost socket while the controller retries.
     private var runTokens: [String: UUID] = [:]
     private var runHandles: [String: SyncHandle] = [:]
+    /// The sensor of each run and who started it, by service name. Stop and Disconnect find the run
+    /// here while the socket is gone and Bonjour may have lost the service.
+    private var owned: [String: OwnedRun] = [:]
     /// Runs whose socket closed while the controller reconnects.
     private var paused = Set<String>()
     /// The controller asked for a link to this service. Each answers once.
@@ -107,6 +110,16 @@ final class LanDiscovery {
         guard sessions[name] === session, links[name] !== link else { return }
         let id = ObjectIdentifier(link)
         links[name] = link
+        // Debug, Device settings and Files lease the link with no task here. The last lease ending
+        // settles a close that waited for the last page.
+        link.onLeaseChange { @Sendable [weak self] leased in
+            // Kotlin calls this on the main thread.
+            MainActor.assumeIsolated {
+                guard let self, !leased.boolValue, let current = self.links[name], ObjectIdentifier(current) == id
+                else { return }
+                self.closeIfUnheld(name)
+            }
+        }
         link.whenClosed { @Sendable [weak self, weak session] in
             session?.linkFailed()
             Task { @MainActor [weak self] in
@@ -319,6 +332,9 @@ final class LanDiscovery {
         }
         let token = UUID()
         runTokens[name] = token
+        var run = OwnedRun()
+        run.started(device: device, kind: backgroundRuns[name] != nil ? .autoSync : collectSteps[name] != nil ? .collectAll : .user)
+        owned[name] = run
         // A new run counts from zero. Notices before its first progress keep these, not the last run's.
         progressCounts.runStarted(name)
         state.lanSyncStarted(name: name)
@@ -350,6 +366,7 @@ final class LanDiscovery {
         guard runTokens[name] == token else { return }
         runTokens[name] = nil
         runHandles[name] = nil
+        owned[name] = nil
         if paused.remove(name) != nil { state.lanCollectionPaused(name: name, paused: false) }
         if collectSteps[name] != nil { collectOutcome[name] = result.end == .complete }
         let device = sessionDevices[name] ?? devices[name]?.device
@@ -488,20 +505,24 @@ final class LanDiscovery {
         onCollectFinished?(id, false)
     }
 
-    /// Closes every session with this hardware id. Forget calls it.
+    /// Closes every session and run with this hardware id, also a run that reconnects with no socket.
+    /// Disconnect and Forget call it.
     func disconnect(device: String) {
         let names = Set(sessions.keys).union(runTokens.keys)
-        for name in names where (sessionDevices[name] ?? devices[name]?.device) == device.lowercased() { disconnect(name: name) }
+        for name in names where (sessionDevices[name] ?? devices[name]?.device) == device.lowercased()
+            || owned[name]?.closes(device: device) == true {
+            disconnect(name: name)
+        }
     }
 
     func disconnect(name: String) {
         close(name: name, notice: .lanDisconnected)
     }
 
-    /// Stops only a user-started transfer. Its result closes the session.
+    /// Stops only a user-started transfer, in every phase, also while it reconnects with no socket.
+    /// Its result closes the session.
     func cancelInteractiveSync(device: String) {
-        for name in Array(runTokens.keys) where (sessionDevices[name] ?? devices[name]?.device) == device.lowercased() &&
-            collectSteps[name] == nil && backgroundRuns[name] == nil {
+        for name in Array(runTokens.keys) where owned[name]?.stops(device: device) == true {
             runHandles[name]?.cancel()
         }
     }

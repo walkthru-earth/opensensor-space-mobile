@@ -166,10 +166,12 @@ final class AppServices {
     private func forget(peripheral: String, device: String?) {
         cancelPendingOpen(id: peripheral)
         livePage.closed(peripheral)
-        bluetooth.close(id: peripheral)
+        bluetooth.close(id: peripheral, device: device)
         bluetooth.state.sensorForgotten(id: peripheral)
         autoSync.forget(peripheral: peripheral)
         if let device {
+            // Ends a run of this sensor that no transport still tracks, so nothing retries later.
+            runs.stop(device: device)
             runs.dropInterrupted(device: device)
             lan.disconnect(device: device)
             credentials.remove(device: device)
@@ -229,8 +231,11 @@ final class AppServices {
     func disconnectSensor(id: String) {
         cancelPendingOpen(id: id)
         livePage.closed(id)
-        if let device = devices.deviceFor(peripheral: id) { lan.disconnect(device: device) }
-        bluetooth.close(id: id)
+        let device = devices.deviceFor(peripheral: id)
+        if let device { lan.disconnect(device: device) }
+        bluetooth.close(id: id, device: device)
+        // Ends a run of this sensor that no transport still tracks, so nothing retries later.
+        if let device { runs.stop(device: device) }
     }
 
     /// The last page of this sensor is gone. Its Bluetooth link and Wi-Fi session close now, or
@@ -295,8 +300,9 @@ final class AppServices {
 
     func cancelSync(id: String) {
         guard let device = devices.deviceFor(peripheral: id) else { return }
+        // Each transport finds its run by the sensor, also while it reconnects with no connection.
         lan.cancelInteractiveSync(device: device)
-        if bluetooth.deviceId == device { bluetooth.cancelInteractiveSync() }
+        bluetooth.cancelInteractiveSync(device: device)
     }
 
     /// The open connection's shared link to this sensor, Wi-Fi first. Debug, Device settings and
