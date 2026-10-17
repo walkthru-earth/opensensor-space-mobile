@@ -350,6 +350,17 @@ class SyncEngine(
         // conflict with the device: the caller's storage wrapper fails this file and keeps the partial.
         val (verdict, sha256) = store.reader(key).use { verifyAndHash(it, meta) }
         if (!verdict.ok) return FileOutcome.Mismatch(name, "existing archive conflicts with device: ${verdict.describe()}")
+        val fresh = ArchiveRecord(
+            station = key.station,
+            name = name,
+            bytes = meta.size,
+            crc32 = meta.crc32,
+            sha256 = sha256,
+            syncedAtEpochMs = clock(),
+            sourceDevice = sourceDevice,
+        )
+        // The footer is read before the gate, as on the commit path, so the gate is held only for the row.
+        val indexed = if (index.get(key) == null) indexer.indexed(fresh) else null
         val conflict = gate.withStation(key.station) {
             val row = index.get(key)
             // An older iOS receipt holds size and CRC only. Its empty fingerprint is filled, never compared.
@@ -360,19 +371,8 @@ class SyncEngine(
             if (row != null && knownSha == null) {
                 index.put(row.copy(sha256 = sha256))
             } else if (row == null) {
-                index.put(
-                    indexer.indexed(
-                        ArchiveRecord(
-                            station = key.station,
-                            name = name,
-                            bytes = meta.size,
-                            crc32 = meta.crc32,
-                            sha256 = sha256,
-                            syncedAtEpochMs = clock(),
-                            sourceDevice = sourceDevice,
-                        )
-                    )
-                )
+                // A row that went in between leaves the record unindexed, and index repair fills it later.
+                index.put(indexed ?: fresh)
             }
             false
         }
