@@ -203,7 +203,7 @@ Unrelated crypto, programming and database failures also propagate.
 ### Write semantics that bit us
 
 - **`@Upsert` on an entity with an auto id and a unique index updates nothing** (it runs `UPDATE … WHERE id = ?` with id 0). `archived_file` and `derived_day` use `@Insert(onConflict = REPLACE)` — the id carries no meaning. `known_device` (address is the PK) may use `@Upsert`.
-- **`openSession` rewrites every `KnownDevice` column.** The post-`info` upsert carries `previous?.autoSync` and `previous?.companionAssociationId`; future columns must be preserved too. Identity checks run before the upsert, and a station change deliberately discards the old token and port.
+- **`openSession` never writes a `KnownDevice` snapshot.** After `info` a new address gets `insertIfAbsent` with default settings. A known address gets `recordConnection`, which writes identity and timestamps only, so Auto-sync, the companion association and the LAN credential keep their latest value. Identity checks run before that write, and a station change clears the old token and port first with `setLanToken`. Clearing an unusable credential uses `clearLanTokenIfStored`, one conditional update on the ciphertext that failed.
 - **`ArchiveIndex.update` is one Room transaction** (`ArchivedFileDao.update`, `@Transaction`), so index repair and a sync never lose each other's columns. `RoomArchiveIndexTest` runs 64 concurrent updates on one key.
 - `derived_day.dailyFile == null` means the daily Parquet failed → its signature is treated as stale next pass.
 
