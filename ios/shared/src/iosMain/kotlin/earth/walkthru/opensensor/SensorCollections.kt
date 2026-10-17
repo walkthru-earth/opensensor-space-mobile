@@ -125,9 +125,14 @@ class SensorCollections internal constructor(
         return SyncHandle { controller.stop(StopSource.USER, id) }
     }
 
-    /** Ends the running collection of [device], if any. The app closed its link on purpose. */
+    /**
+     * Ends the running collection of [device], if any, in any letter case. The app closed its link on
+     * purpose. It ends the run in every phase, also while it waits to retry or a dial is in flight,
+     * so no later dial or transfer happens. Other devices keep their runs.
+     */
     fun stop(device: String) {
-        locked { controllers[device] }?.stop(StopSource.APP)
+        locked { controllers.entries.filter { it.key.equals(device, ignoreCase = true) }.map { it.value } }
+            .forEach { it.stop(StopSource.APP) }
     }
 
     /**

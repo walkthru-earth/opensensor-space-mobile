@@ -135,3 +135,30 @@ struct RunCounts<Key: Hashable> {
         return next
     }
 }
+
+/// The sensor a transport's run collects from, kept from its start until it ends. A run outlives its
+/// connection while it waits to retry or dials again, so Stop, Disconnect and Forget find it here
+/// instead of through the connection.
+struct OwnedRun {
+    enum Kind: Equatable { case user, collectAll, autoSync }
+
+    private(set) var device: String?
+    private(set) var kind: Kind = .user
+
+    mutating func started(device: String, kind: Kind) {
+        self.device = device
+        self.kind = kind
+    }
+
+    mutating func ended() { device = nil }
+
+    /// The Stop button ends a run the user started. Collect all and Auto-sync keep their own cancel.
+    func stops(device: String) -> Bool { kind == .user && owns(device) }
+
+    /// Disconnect and Forget end any run of the sensor.
+    func closes(device: String) -> Bool { owns(device) }
+
+    private func owns(_ other: String) -> Bool {
+        device?.caseInsensitiveCompare(other) == .orderedSame
+    }
+}

@@ -266,19 +266,27 @@ class IosLink internal constructor(
     /** True while any lease holds the link. */
     val leased: Boolean get() = holder.load() != null
 
-    private val leaseListener = AtomicReference<((Boolean) -> Unit)?>(null)
+    private val leaseListeners = AtomicReference<List<(Boolean) -> Unit>>(emptyList())
 
     /**
-     * [listener] hears [leased] on the main thread after each lease starts or ends, so Swift can hold
-     * an idle close or a queued step while Kotlin uses the link.
+     * Adds [listener], which hears [leased] on the main thread after each lease starts or ends, so
+     * Swift can hold an idle close, a heartbeat or a queued step while Kotlin uses the link. Every
+     * listener added stays until the link is gone.
      */
     fun onLeaseChange(listener: (Boolean) -> Unit) {
-        leaseListener.store(listener)
+        while (true) {
+            val before = leaseListeners.load()
+            if (leaseListeners.compareAndSet(before, before + listener)) return
+        }
     }
 
     private fun leaseChanged() {
-        val listener = leaseListener.load() ?: return
-        scope.launch(callbacks) { listener(leased) }
+        val listeners = leaseListeners.load()
+        if (listeners.isEmpty()) return
+        scope.launch(callbacks) {
+            val now = leased
+            listeners.forEach { it(now) }
+        }
     }
 
     // ---- leases ----

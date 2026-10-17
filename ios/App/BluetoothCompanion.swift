@@ -84,6 +84,9 @@ final class BluetoothCompanion {
     private var run: SyncHandle?
     /// Numbers [run], so a callback from an earlier run is ignored.
     private var runToken: UUID?
+    /// The sensor of [run] and who started it. It outlives the connection while the controller waits
+    /// to retry or dials again, so Stop, Disconnect and Forget reach the run then too.
+    private var owned = OwnedRun()
     /// The controller asked for a link to the connecting sensor. Each answers once.
     private var dialWaiters: [(Bool) -> Void] = []
     /// Peripheral ids by hardware id, from INFO, so a retry reopens the same sensor.
@@ -375,9 +378,11 @@ final class BluetoothCompanion {
         }
     }
 
-    /// Closes the link to this sensor, if it is open. Forget calls it.
-    func close(id: String) {
+    /// Ends any run of [device], also one waiting to retry or dialling again, and closes the link to
+    /// this peripheral if it is open. Disconnect and Forget call it.
+    func close(id: String, device: String?) {
         if sameId(openRequested, id) { openRequested = nil }
+        if let device, owned.closes(device: device) { run?.cancel() }
         guard let current, current.caseInsensitiveCompare(id) == .orderedSame else { return }
         disconnect()
     }
@@ -389,9 +394,11 @@ final class BluetoothCompanion {
         if !startSync(onlyName: fileName) { state.today.commandRefused() }
     }
 
-    /// The Stop button. Collect all and Auto-sync steps end through their own cancel.
-    func cancelInteractiveSync() {
-        guard collectId == nil, backgroundId == nil else { return }
+    /// The Stop button for [device]. It reaches the run in every phase, also while the connection is
+    /// gone and the controller waits to retry or dials again. Collect all and Auto-sync steps end
+    /// through their own cancel.
+    func cancelInteractiveSync(device: String) {
+        guard owned.stops(device: device) else { return }
         run?.cancel()
     }
 
@@ -427,6 +434,7 @@ final class BluetoothCompanion {
         backgroundTimer = nil
         let token = UUID()
         runToken = token
+        owned.started(device: device, kind: backgroundId != nil ? .autoSync : collectId != nil ? .collectAll : .user)
         state.bluetoothSyncStarted()
         let handle = runs.collect(
             device: device, onlyName: onlyName, prefer: .ble, background: backgroundId != nil,
@@ -497,6 +505,7 @@ final class BluetoothCompanion {
         guard runToken == token else { return }
         runToken = nil
         run = nil
+        owned.ended()
         let collected = collectId
         let opened = collectOpened
         collectId = nil

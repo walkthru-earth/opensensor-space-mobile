@@ -188,6 +188,37 @@ class IosLinkLeaseTest {
     }
 
     @Test
+    fun everyLeaseListenerHearsTheFinalDirectLeaseRelease() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val port = object : IosLinkPort {
+            override val mtu = 517
+            override fun send(frame: NSData, done: (Boolean) -> Unit) = done(true)
+            override fun setReadPaused(paused: Boolean) = Unit
+        }
+        val link = IosLink(port, true, "synthetic-lease-listeners", dispatcher, dispatcher)
+        // The heartbeat listens first, then the idle close. Both must hear each release.
+        val heartbeat = mutableListOf<Boolean>()
+        val idleClose = mutableListOf<Boolean>()
+        link.onLeaseChange { heartbeat += it }
+        link.onLeaseChange { idleClose += it }
+        try {
+            for (kind in listOf(LeaseKind.DEBUG, LeaseKind.CONFIG, LeaseKind.FILES)) {
+                heartbeat.clear()
+                idleClose.clear()
+                val held = link.acquire(kind)
+                runCurrent()
+                held.end()
+                runCurrent()
+                assertEquals(false, heartbeat.lastOrNull(), "the heartbeat hears the $kind release")
+                assertEquals(false, idleClose.lastOrNull(), "the idle close hears the $kind release")
+            }
+        } finally {
+            link.close()
+            runCurrent()
+        }
+    }
+
+    @Test
     fun aLeaseQueuedBehindASyncIsRefusedEvenIfTheSyncEndsImmediately() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         val port = object : IosLinkPort {

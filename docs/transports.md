@@ -70,9 +70,16 @@ board qualification; host tests alone do not establish these results.
 
 On iOS the one Bluetooth link and each Wi-Fi session close once nothing holds them. Leaving a
 sensor page asks for an idle close. While a run, a Collect all step, an Auto-sync step, a token
-request or a GATT exchange holds the link, the close waits and runs when that work ends. A
+request or a GATT exchange holds the link, the close waits and runs when that work ends. Debug,
+Device settings and Files lease the link straight from Kotlin. `IosLink.onLeaseChange` takes any
+number of listeners, so the Wi-Fi idle close and the heartbeat both hear the last lease end, and
+the waiting close runs then. Opening the sensor again before that keeps the session. A
 Bluetooth link that drops under a run is dialled again by the shared controller, and My devices
-shows it reconnecting with the run's progress. A paused Wi-Fi run shows the same way. Each new
+shows it reconnecting with the run's progress. A paused Wi-Fi run shows the same way. Each
+transport keeps the sensor of its run (`OwnedRun`) from start to result, so Stop, Disconnect and
+Forget reach a run that waits to retry or dials again before INFO named the sensor. Stop ends only
+a run the user started. Disconnect and Forget also call `SensorCollections.stop`, which ends that
+sensor's run in any phase and leaves other sensors alone. Each new
 Wi-Fi run counts its files from zero. Core Bluetooth reports no bonding step, so iOS never shows
 the pairing phase, and a lost bond shows as a failed link until the next connect or Forget.
 
