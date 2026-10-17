@@ -1,6 +1,7 @@
 package earth.walkthru.aqsync.data
 
 import android.util.Log
+import earth.walkthru.aqsync.archive.PrunedFiles
 import earth.walkthru.aqsync.collection.CollectionLink
 import earth.walkthru.aqsync.collection.LinkPreference
 import earth.walkthru.aqsync.data.background.CompanionUnlinker
@@ -178,6 +179,8 @@ class DeviceLinkOwner @Inject constructor(
     @ApplicationScope applicationScope: CoroutineScope,
     @IoDispatcher private val io: CoroutineDispatcher,
     private val clock: WallClock,
+    /** Files removed in Settings, which the plan shows as removed instead of to sync. */
+    private val pruned: PrunedFiles,
 ) {
     /**
      * Child of the process scope: one failed child never cancels its siblings, and cancelling the
@@ -322,7 +325,7 @@ class DeviceLinkOwner @Inject constructor(
     val isFake: Boolean get() = _session.value?.transport?.let(transportFactory::isFake) == true
 
     /** Manifest joined with the archive, see [planWithProgress]. */
-    val plan: StateFlow<SyncPlan?> = planWithProgress(_manifest, _info, archivedFileDao::observeIdentitiesForStation, _sync, archive::partialLengths)
+    val plan: StateFlow<SyncPlan?> = planWithProgress(_manifest, _info, archivedFileDao::observeIdentitiesForStation, _sync, archive::partialLengths, pruned.observeAll())
         .stateIn(scope, SharingStarted.Eagerly, null)
 
     private var notificationJob: Job? = null

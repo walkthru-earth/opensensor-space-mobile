@@ -3,6 +3,8 @@ package earth.walkthru.aqsync.storage
 import earth.walkthru.aqsync.archive.ArchiveKey
 import earth.walkthru.aqsync.archive.ArchiveLayout
 import earth.walkthru.aqsync.archive.ArchiveRecord
+import earth.walkthru.aqsync.archive.PrunedFile
+import earth.walkthru.aqsync.archive.PrunedFiles
 import earth.walkthru.aqsync.data.protocol.ParquetVerify
 import earth.walkthru.aqsync.data.protocol.sha256Hex
 import earth.walkthru.aqsync.data.sync.MemoryArchiveIndex
@@ -10,6 +12,8 @@ import earth.walkthru.aqsync.data.sync.MemoryArchiveStore
 import earth.walkthru.aqsync.data.sync.WriterLeases
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -73,6 +77,7 @@ class StorageJanitorTest {
         scheduler: kotlinx.coroutines.test.TestCoroutineScheduler,
         leases: WriterLeases = WriterLeases(),
         quota: DerivedQuota? = null,
+        pruned: PrunedFiles = PrunedFiles.None,
     ) =
         StorageJanitor(
             roots = roots,
@@ -84,6 +89,7 @@ class StorageJanitorTest {
             clock = { now },
             leases = leases,
             quota = quota,
+            pruned = pruned,
         )
 
     @Test
@@ -183,6 +189,63 @@ class StorageJanitorTest {
         assertEquals(1, report.partialsKept)
         assertTrue(partial in tree.entries)
         assertTrue(meta in tree.entries)
+    }
+
+    @Test
+    fun adoptionWaitsForAHeldLeaseAndSkipsAFileDeletedMeanwhile() = runTest {
+        val store = MemoryArchiveStore()
+        val index = MemoryArchiveIndex()
+        val key = ArchiveKey(known, "year=2026/month=10/day=04/data.parquet")
+        store.files[ArchiveLayout.finalPath(key)] = parquet
+        val leases = WriterLeases()
+        val held = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        // The old file cleanup holds the lease, drops the record and deletes the file while the janitor waits.
+        launch {
+            leases.withLease(key) {
+                held.complete(Unit)
+                release.await()
+                store.files.remove(ArchiveLayout.finalPath(key))
+            }
+        }
+        held.await()
+
+        val sweep = async { janitor(FakeTree(), store, index, testScheduler, leases).run() }
+        testScheduler.advanceUntilIdle()
+        assertFalse(sweep.isCompleted)
+        release.complete(Unit)
+        val report = sweep.await()
+
+        assertEquals(0, report.adopted)
+        assertEquals(0, report.unverifiable)
+        assertEquals(0, report.failures)
+        assertNull(index.get(key))
+        assertEquals(0, leases.activeCount())
+    }
+
+    @Test
+    fun aFileLeftByACrashInTheOldFileCleanupIsAdoptedAndLosesItsRemovedMark() = runTest {
+        val store = MemoryArchiveStore()
+        val index = MemoryArchiveIndex()
+        val key = ArchiveKey(known, "year=2026/month=10/day=01/data.parquet")
+        val other = PrunedFile(known, "year=2026/month=10/day=02/data.parquet", 9, 1, 1)
+        // The cleanup wrote the mark and removed the row, then the phone stopped before the delete.
+        store.files[ArchiveLayout.finalPath(key)] = parquet
+        val marks = MutableStateFlow(listOf(PrunedFile(known, key.name, parquet.size.toLong(), 1, 1), other))
+        val pruned = object : PrunedFiles {
+            override fun observeAll(): Flow<List<PrunedFile>> = marks
+            override suspend fun put(file: PrunedFile) = error("not used")
+            override suspend fun remove(key: ArchiveKey) {
+                marks.value = marks.value.filterNot { it.key == key }
+            }
+            override suspend fun clear(): Int = error("not used")
+        }
+
+        val report = janitor(FakeTree(), store, index, testScheduler, pruned = pruned).run()
+
+        assertEquals(1, report.adopted)
+        assertNotNull(index.get(key))
+        assertEquals(listOf(other), marks.value)
     }
 
     @Test

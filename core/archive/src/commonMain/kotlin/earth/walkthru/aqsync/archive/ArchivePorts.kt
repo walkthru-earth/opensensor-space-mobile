@@ -9,7 +9,9 @@ import kotlinx.coroutines.flow.map
 /**
  * The bytes of the phone archive, laid out as [ArchiveLayout] says. Adapters do file I/O only,
  * every decision (what to resume, when a file is complete) is made by common callers. There is no
- * delete: a verified copy is immutable history, and the index record is its receipt (audit C, B6).
+ * delete. A verified copy is immutable history, and the index record is its receipt (audit C, B6).
+ * The one exception is the user's old format cleanup in Settings, `LegacyFileCleanup`, which removes
+ * the record and then the final file through `StorageTree`, and leaves a [PrunedFile] so sync skips it.
  *
  * Android adapts `FileArchive` (`filesDir`). iOS uses `IosArchiveStore` (Application Support, protection
  * class, backup exclusion, symlink checks), which keeps the finals of earlier iPhone builds in place.
@@ -101,8 +103,9 @@ interface ArchiveIndex {
     /**
      * Replaces the record of [key] with [transform] of its latest value, when there is one. A writer
      * that owns only some columns (index repair) uses it so it never writes back a stale snapshot over
-     * another writer's change. The default reads then writes. An adapter with a lock overrides it to do
-     * both under that lock.
+     * another writer's change. The default reads then writes and is not atomic, so another writer can
+     * land between the two. Every real adapter must override it to do both atomically (Room
+     * `@Transaction`, the iOS index lock).
      */
     suspend fun update(key: ArchiveKey, transform: (ArchiveRecord) -> ArchiveRecord) {
         get(key)?.let { put(transform(it)) }

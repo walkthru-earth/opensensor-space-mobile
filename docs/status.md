@@ -4,6 +4,32 @@
 **Code:** `./gradlew verify` (the gate), `.github/workflows/verify.yml`.
 **Related:** measured device behaviour is recorded in the board-specific `../aq-parquet/docs/boards/*/bench-verified.md`; anything not recorded there is unverified.
 
+## 2026-10-16, remove old format files from the phone (code only)
+
+Branch `yharby/phone-old-file-cleanup`, on top of `yharby/firmware-parquet-micros-live-keys`, with
+the owner's approval. Host tests, the iOS simulator build and `verify` only. No phone run yet.
+
+- Settings › Storage › Old format files. A dry run counts old layout files (`UtcColumns.isLegacyLayout`)
+  for all dates or a UTC date range, then one confirmation removes them from the phone. Files without
+  a UTC column, current MICROS files and unreadable files stay.
+- Shared `LegacyFileCleanup` in `:core:history`. It may run while a sync runs. Per file under its
+  writer lease and the station's `ArchiveMutationGate`, which sync, index repair and the janitor
+  share. It reads the live record again, writes a `PrunedFiles` record, removes the index record,
+  then the final file below the Durable archive root. A failed delete restores the record, drops
+  the removed mark and counts as failed, and the startup janitor adopts a file left by a crash or a
+  failed restore. Each file's steps finish under `NonCancellable`, and derived days rebuild after, also
+  on cancellation. On iOS a station whose files all went is rebuilt from no sources, so its stale day
+  files go. A rebuild that throws is reported, the files stay removed.
+- Settings shows unreadable files, kept and failed counts, a later History update and a removal
+  failure apart from a count failure. `SettingsController` logs the operation and exception
+  class only.
+- Phone only. No device command and the device card is not touched. Sync skips a removed file
+  while the device lists it at the same size (`REMOVED`, Room v12 `pruned_file`, iOS
+  `SensorArchive-pruned/pruned.v1`). Settings › Storage › Removed files › Download again clears
+  the marks after a confirm, so the next sync downloads them again.
+- To check on phones. A removal of old files on Android and iOS, History after it, and a sync of a
+  CoreS3 that still lists old files.
+
 ## 2026-10-16, firmware MICROS columns, field ids and LIVE keys (code only)
 
 Branch `yharby/firmware-parquet-micros-live-keys`, for CoreS3 v6.12 and Waveshare v2.6 from

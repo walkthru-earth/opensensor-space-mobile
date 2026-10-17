@@ -1,6 +1,8 @@
 package earth.walkthru.opensensor
 
 import androidx.compose.runtime.snapshotFlow
+import earth.walkthru.aqsync.archive.ArchiveRecord
+import earth.walkthru.aqsync.archive.PrunedFile
 import earth.walkthru.aqsync.data.ManifestState
 import earth.walkthru.aqsync.data.sync.ArchivedIdentity
 import earth.walkthru.aqsync.data.sync.FileOutcome
@@ -66,14 +68,16 @@ internal class IosDeviceFiles(
             result,
         )
     }
+    private data class Inputs(val link: SensorFilesLink, val manifest: ManifestState, val records: List<ArchiveRecord>, val removed: List<PrunedFile>)
+
     private val selected = combine(devices.known, snapshotFlow { currentLink() }) { _, _ -> currentLink() }.distinctUntilChanged()
 
-    val state = combine(selected, listing, IosArchive.index.observeAll()) { link, manifest, records ->
-        Triple(link, manifest, records)
-    }.mapLatest { (link, manifest, records) ->
+    val state = combine(selected, listing, IosArchive.index.observeAll(), IosArchive.pruned.observeAll()) { link, manifest, records, removed ->
+        Inputs(link, manifest, records, removed)
+    }.mapLatest { (link, manifest, records, removed) ->
         val plan = if (link.station != null && manifest.last != null) {
             val archived = records.map { ArchivedIdentity(it.station, it.name, it.bytes, it.crc32) }
-            SyncPlanner.plan(link.station, manifest.last!!.files, archived, IosArchive.store.partialLengths(link.station))
+            SyncPlanner.plan(link.station, manifest.last!!.files, archived, IosArchive.store.partialLengths(link.station), removed)
         } else {
             null
         }

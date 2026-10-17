@@ -8,14 +8,19 @@ import earth.walkthru.aqsync.archive.ClockAnchor
 import earth.walkthru.aqsync.archive.IosArchiveStore
 import earth.walkthru.aqsync.archive.IosClockAnchorStore
 import earth.walkthru.aqsync.archive.IosExportSpace
+import earth.walkthru.aqsync.archive.IosPrunedFiles
+import earth.walkthru.aqsync.archive.PrunedFiles
 import earth.walkthru.aqsync.archive.ReceiptArchiveIndex
 import earth.walkthru.aqsync.data.history.ArchiveHistoryTiers
 import earth.walkthru.aqsync.data.history.ArchiveIndexRepair
 import earth.walkthru.aqsync.data.history.HistorySeriesReader
 import earth.walkthru.aqsync.data.history.IosDailyDerivedStore
 import earth.walkthru.aqsync.data.history.IosFileTierStore
+import earth.walkthru.aqsync.data.history.LegacyFileCleanup
 import earth.walkthru.aqsync.data.history.TimeEstimate
+import earth.walkthru.aqsync.data.history.UtcDayRange
 import earth.walkthru.aqsync.data.history.info
+import earth.walkthru.aqsync.data.sync.ArchiveMutationGate
 import earth.walkthru.aqsync.data.sync.WriterLeases
 import earth.walkthru.aqsync.storage.AtomicFiles
 import earth.walkthru.aqsync.storage.DerivedQuota
@@ -30,6 +35,9 @@ import earth.walkthru.aqsync.storage.StorageRole
 import earth.walkthru.aqsync.storage.StorageRoots
 import earth.walkthru.aqsync.storage.trimOnMemoryPressure
 import earth.walkthru.opensensor.discover.MapCache
+import earth.walkthru.opensensor.settings.OldFilesPlan
+import earth.walkthru.opensensor.settings.OldFilesRange
+import earth.walkthru.opensensor.settings.OldFilesResult
 import earth.walkthru.opensensor.settings.StorageControls
 import earth.walkthru.opensensor.settings.StorageUsage
 import kotlinx.coroutines.CancellationException
@@ -59,6 +67,9 @@ internal object IosArchive {
     val index: ArchiveIndex by lazy { ReceiptArchiveIndex(store.finalRoot) }
     private val clockAnchorsRoot get() = store.finalRoot + "-clock-anchors"
     val clockAnchors by lazy { IosClockAnchorStore(clockAnchorsRoot) }
+
+    /** Files removed in Settings, which sync skips. Kept outside the station directories. */
+    val pruned: PrunedFiles by lazy { IosPrunedFiles(store.finalRoot + "-pruned") }
 
     // Tiers persist beside the derived day files, so a cold History open decodes only new days (#63).
     val tiers: ArchiveHistoryTiers by lazy {
@@ -98,6 +109,9 @@ internal object IosArchive {
     /** One writer per archive file, for the sync runner and the janitor's partial sweep. */
     val leases = WriterLeases()
 
+    /** One archive mutation per station, shared by sync, the janitor, the index repair and [oldFiles]. */
+    val gate = ArchiveMutationGate()
+
     private val derivedMutex = Mutex()
     private val base get() = store.finalRoot.substringBeforeLast('/')
 
@@ -130,7 +144,11 @@ internal object IosArchive {
         DerivedQuota(QuotaEnforcer(roots, IosStorageTree(), log = ::println)) { settingsRepository.current().retention.derivedQuotaBytes }
     }
 
-    /** The Settings Storage card. Clearing touches the derived day files and the map tiles only (#61). */
+    /**
+     * The Settings Storage card. Clearing touches the derived day files and the map tiles only (#61).
+     * Old format sensor files leave the phone only through [oldFiles], after the user confirms. Sync
+     * skips them until the user chooses Download again.
+     */
     val storageControls: StorageControls by lazy {
         object : StorageControls {
             override suspend fun usage(): StorageUsage {
@@ -148,16 +166,53 @@ internal object IosArchive {
             }
 
             override suspend fun clearMapCache() = MapCache.clear()
+
+            override suspend fun findOldFiles(range: OldFilesRange?): OldFilesPlan {
+                val plan = oldFiles.plan(range?.let { UtcDayRange(it.fromEpochDay, it.toEpochDay) })
+                return OldFilesPlan(plan.files, plan.bytes, plan.stations, range, skipped = plan.skipped, handle = plan)
+            }
+
+            override suspend fun removeOldFiles(plan: OldFilesPlan): OldFilesResult {
+                val planned = plan.handle as? LegacyFileCleanup.Plan ?: return OldFilesResult(0, 0, plan.files)
+                val report = oldFiles.remove(planned)
+                return OldFilesResult(report.removed, report.bytes, report.kept, report.failed, report.rebuildFailed)
+            }
+
+            override suspend fun removedFiles(): Int = pruned.observeAll().first().size
+
+            override suspend fun downloadRemovedAgain() {
+                pruned.clear()
+            }
         }
+    }
+
+    /**
+     * The phone only cleanup of old format files behind Settings. The receipt index change already
+     * rebuilds the derived days through [startIndexRepair], the explicit rebuild runs it now and also
+     * visits the stations whose files all went, so their stale day files are removed.
+     */
+    private val oldFiles by lazy {
+        LegacyFileCleanup(
+            store = store,
+            index = index,
+            roots = roots,
+            tree = IosStorageTree(),
+            leases = leases,
+            gate = gate,
+            pruned = pruned,
+            io = Dispatchers.IO,
+            afterRemoval = { days -> rebuildDerived(days.keys) },
+            log = ::println,
+        )
     }
 
     // Temps stay in Application Support, on the same volume as Library/Caches, where the janitor sweeps them.
     private val derivedAtomic by lazy { IosAtomicFiles("$base/${AtomicFiles.TEMP_DIR}") }
     private val tierStore by lazy { IosFileTierStore(cachesDirectory(), derivedAtomic) }
     private val derived by lazy { IosDailyDerivedStore(cachesDirectory(), derivedAtomic, tierStore) }
-    private val repair by lazy { ArchiveIndexRepair(store, index, clockAnchors = clockAnchors) }
+    private val repair by lazy { ArchiveIndexRepair(store, index, clockAnchors = clockAnchors, gate = gate) }
     private val janitor by lazy {
-        StorageJanitor(roots, IosStorageTree(), store, index, Dispatchers.IO, log = ::println, quota = derivedQuota, leases = leases)
+        StorageJanitor(roots, IosStorageTree(), store, index, Dispatchers.IO, log = ::println, quota = derivedQuota, leases = leases, gate = gate, pruned = pruned)
     }
 
     /**
@@ -187,9 +242,14 @@ internal object IosArchive {
         anchorFollowUp.request()
     }
 
-    private suspend fun rebuildDerived() = derivedMutex.withLock {
-        val records = index.observeAll().first()
-        for ((station, files) in records.groupBy { it.station }) {
+    /**
+     * Rebuilds the derived days of every station with records, and of each of [emptied]. A station in
+     * [emptied] that has no records left is rebuilt from no sources, which removes its stale day files.
+     */
+    private suspend fun rebuildDerived(emptied: Collection<String> = emptyList()) = derivedMutex.withLock {
+        val byStation = index.observeAll().first().groupBy { it.station }
+        for (station in byStation.keys + emptied) {
+            val files = byStation[station].orEmpty()
             val anchors = TimeEstimate.anchors(files.filter { it.isIndexed }.map { it.info() }, clockAnchors.anchors(station))
             derived.rebuild(station, files, store, anchors, Clock.System.now().epochSeconds)
         }
@@ -247,7 +307,7 @@ internal object IosArchive {
  */
 fun sharedSensorSync(): SensorSync {
     IosArchive.startIndexRepair()
-    return SensorSync(IosArchive.store, IosArchive.index, Dispatchers.Default, Dispatchers.Main, recordClockAnchor = IosArchive::recordClockAnchor, budget = IosArchive.budget, leases = IosArchive.leases)
+    return SensorSync(IosArchive.store, IosArchive.index, Dispatchers.Default, Dispatchers.Main, recordClockAnchor = IosArchive::recordClockAnchor, budget = IosArchive.budget, leases = IosArchive.leases, gate = IosArchive.gate, pruned = IosArchive.pruned)
 }
 
 /** `Library/Caches` of this app. */

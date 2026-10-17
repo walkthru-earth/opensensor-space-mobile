@@ -3,6 +3,7 @@ package earth.walkthru.opensensor
 import earth.walkthru.aqsync.archive.ArchiveIndex
 import earth.walkthru.aqsync.archive.ArchiveStore
 import earth.walkthru.aqsync.archive.IosArchiveStore
+import earth.walkthru.aqsync.archive.PrunedFiles
 import earth.walkthru.aqsync.archive.ReceiptArchiveIndex
 import earth.walkthru.aqsync.collection.CollectionFailure
 import earth.walkthru.aqsync.collection.LinkPreference
@@ -15,6 +16,7 @@ import earth.walkthru.aqsync.data.ble.DeviceSession
 import earth.walkthru.aqsync.data.ble.TransportException
 import earth.walkthru.aqsync.data.ble.TransportUnavailableException
 import earth.walkthru.aqsync.data.sync.ArchiveCollector
+import earth.walkthru.aqsync.data.sync.ArchiveMutationGate
 import earth.walkthru.aqsync.data.sync.CollectionProgress
 import earth.walkthru.aqsync.data.sync.CollectionSummary
 import earth.walkthru.aqsync.data.sync.FileOutcome
@@ -81,13 +83,17 @@ class SensorSync internal constructor(
     budget: StorageBudget,
     /** Shared with the storage janitor, so it never sweeps a partial this runner is writing. */
     leases: WriterLeases = WriterLeases(),
+    /** Shared with the index repair, the janitor and the old file cleanup of the same archive. */
+    gate: ArchiveMutationGate = ArchiveMutationGate(),
+    /** Files removed in Settings, which sync skips. */
+    pruned: PrunedFiles = PrunedFiles.None,
 ) {
     constructor() : this(IosArchiveStore.inApplicationSupport(), Dispatchers.Default, Dispatchers.Main)
 
     private constructor(store: IosArchiveStore, work: CoroutineContext, callbacks: CoroutineContext) :
         this(store, ReceiptArchiveIndex(store.finalRoot), work, callbacks, budget = IosStorageBudget(StorageRoots(mapOf(StorageRole.Archive to store.finalRoot))))
 
-    internal val collector = ArchiveCollector(store, index, SyncEngine(store, index, leases = leases, log = ::syncLog), budget)
+    internal val collector = ArchiveCollector(store, index, SyncEngine(store, index, leases = leases, gate = gate, log = ::syncLog), budget, pruned = pruned)
     private val scope = CoroutineScope(SupervisorJob())
     private val lock = NSLock()
     private val active = HashSet<String>()

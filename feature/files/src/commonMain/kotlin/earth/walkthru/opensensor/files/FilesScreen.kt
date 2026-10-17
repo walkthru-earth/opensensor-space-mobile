@@ -75,6 +75,7 @@ import earth.walkthru.opensensor.files.resources.file_metrics
 import earth.walkthru.opensensor.files.resources.file_mismatch
 import earth.walkthru.opensensor.files.resources.file_not_synced
 import earth.walkthru.opensensor.files.resources.file_partial
+import earth.walkthru.opensensor.files.resources.file_removed
 import earth.walkthru.opensensor.files.resources.file_share
 import earth.walkthru.opensensor.files.resources.file_sync_one
 import earth.walkthru.opensensor.files.resources.file_synced
@@ -537,6 +538,7 @@ private fun FileRow(entry: ManifestEntry, localTime: String?, showName: Boolean,
         FileSyncState.NOT_SYNCED -> Triple(AppIcons.CloudOff, scheme.onSurfaceVariant, stringResource(Res.string.file_not_synced))
         FileSyncState.MISMATCH -> Triple(AppIcons.Error, scheme.error, stringResource(Res.string.file_mismatch))
         FileSyncState.INVALID_NAME -> Triple(AppIcons.Error, scheme.error, stringResource(Res.string.file_invalid))
+        FileSyncState.REMOVED -> Triple(AppIcons.CloudOff, scheme.onSurfaceVariant, stringResource(Res.string.file_removed))
     }
     val clickable = when (entry.state) {
         FileSyncState.SYNCED -> true

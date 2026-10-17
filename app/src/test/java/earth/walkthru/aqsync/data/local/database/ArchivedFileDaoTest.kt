@@ -179,7 +179,7 @@ class ArchivedFileDaoTest {
             archived = { dao.observeIdentitiesForStation(it).onEach { rows -> projections.send(rows) } },
             sync = MutableStateFlow(SyncProgress()),
             partialLengths = { partialReads++; emptyMap() },
-            planner = { s, files, identities, partials -> plans++; SyncPlanner.plan(s, files, identities, partials) },
+            planner = { s, files, identities, partials, pruned -> plans++; SyncPlanner.plan(s, files, identities, partials, pruned) },
         )
         plan.test {
             assertEquals(FileSyncState.SYNCED, awaitItem()!!.entries.single().state)

@@ -8,6 +8,7 @@ import earth.walkthru.aqsync.archive.EmptyClockAnchorStore
 import earth.walkthru.aqsync.data.history.parquet.ByteReader
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 import earth.walkthru.aqsync.data.history.parquet.ParquetFormatException
+import earth.walkthru.aqsync.data.sync.ArchiveMutationGate
 import earth.walkthru.aqsync.data.sync.HivePartition
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -27,7 +28,8 @@ import kotlin.time.Clock
  * failed) in small batches, idempotently, safe to interrupt anywhere. [estimateTimes] gives files
  * without UTC an estimated span once their boot has a clock (§4.6). A file the reader refuses gets
  * `indexError` and stays out of History. It remains in the archive untouched, the raw copy is the
- * source of truth and the index only describes it.
+ * source of truth and the index only describes it. Each row update runs under the station's [gate],
+ * so a row the old file cleanup removed is never written back.
  */
 class ArchiveIndexRepair(
     private val store: ArchiveStore,
@@ -36,6 +38,7 @@ class ArchiveIndexRepair(
     private val nowEpochMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     private val log: (String) -> Unit = {},
     private val clockAnchors: ClockAnchorStore = EmptyClockAnchorStore,
+    private val gate: ArchiveMutationGate = ArchiveMutationGate(),
 ) {
     private val mutex = Mutex()
 
@@ -95,7 +98,7 @@ class ArchiveIndexRepair(
                 // A failed retry of an already failed record changes nothing. Skip the write so the loop ends.
                 if (record.indexError != null && updated.indexError != null) continue
                 // Only the index columns are repair's. The engine may have changed the rest meanwhile.
-                index.update(record.key) { latest -> withIndexColumns(latest, updated) }
+                gate.withStation(record.station) { index.update(record.key) { latest -> withIndexColumns(latest, updated) } }
                 done++
             }
             if (done > 0) log("indexed $done files (${pending.size} candidates)")
@@ -164,7 +167,9 @@ class ArchiveIndexRepair(
                 for (f in files) {
                     val updated = estimated(f, anchors)
                     if (updated != f) {
-                        index.update(f.key) { latest -> latest.copy(estFirstUtcNs = updated.estFirstUtcNs, estLastUtcNs = updated.estLastUtcNs, estAnchorFile = updated.estAnchorFile) }
+                        gate.withStation(f.station) {
+                            index.update(f.key) { latest -> latest.copy(estFirstUtcNs = updated.estFirstUtcNs, estLastUtcNs = updated.estLastUtcNs, estAnchorFile = updated.estAnchorFile) }
+                        }
                         changed++
                     }
                 }

@@ -10,6 +10,7 @@ import earth.walkthru.aqsync.data.archive.toRecord
 import earth.walkthru.aqsync.data.history.parquet.LocalFileReader
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
+import earth.walkthru.aqsync.data.sync.ArchiveMutationGate
 import earth.walkthru.aqsync.data.sync.FileArchive
 import kotlinx.coroutines.Dispatchers
 import java.io.File
@@ -26,6 +27,7 @@ import javax.inject.Singleton
 class HistoryIndexer @Inject constructor(
     archive: FileArchive,
     archivedFileDao: ArchivedFileDao,
+    gate: ArchiveMutationGate,
 ) {
     val clockAnchors = FileClockAnchorStore(File(archive.root.parentFile, "clock-anchors"))
 
@@ -44,6 +46,7 @@ class HistoryIndexer @Inject constructor(
         index = RoomArchiveIndex(archivedFileDao),
         io = Dispatchers.IO,
         clockAnchors = clockAnchors,
+        gate = gate,
         log = { Log.i(TAG, it) },
     )
 

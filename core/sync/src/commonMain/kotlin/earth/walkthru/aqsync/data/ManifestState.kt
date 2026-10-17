@@ -40,7 +40,7 @@ sealed interface ManifestState {
     /** The failure of the most recent refresh, if it failed; null after a success or before any attempt. */
     val error: String? get() = (this as? Error)?.message
 
-    /** A success banner requires verified entries from this exact successful listing. */
+    /** A success banner requires verified or user removed entries from this exact successful listing. */
     fun confirmsAllSynced(plan: SyncPlan?): Boolean {
         if (this !is Loaded || plan == null || files.isEmpty() || files.size != plan.entries.size) return false
         // SyncPlanner preserves FILE order. Compare directly without allocating a second index;
@@ -48,7 +48,7 @@ sealed interface ManifestState {
         return files.indices.all { index ->
             val file = files[index]
             val entry = plan.entries[index]
-            entry.state == FileSyncState.SYNCED && entry.name == file.name && entry.bytes == file.bytes
+            (entry.state == FileSyncState.SYNCED || entry.state == FileSyncState.REMOVED) && entry.name == file.name && entry.bytes == file.bytes
         }
     }
 

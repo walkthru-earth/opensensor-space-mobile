@@ -4,6 +4,7 @@ import earth.walkthru.aqsync.archive.ArchiveKey
 import earth.walkthru.aqsync.archive.ArchiveStore
 import earth.walkthru.aqsync.archive.PartialMeta
 import earth.walkthru.aqsync.archive.PartialWriter
+import earth.walkthru.aqsync.archive.PrunedFiles
 import earth.walkthru.aqsync.collection.CollectionFailure
 import earth.walkthru.aqsync.collection.CollectionState
 import earth.walkthru.aqsync.collection.KeepAlive
@@ -46,6 +47,7 @@ import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.protocol.LanFraming
 import earth.walkthru.aqsync.data.protocol.Opcode
 import earth.walkthru.aqsync.data.sync.ArchiveCollector
+import earth.walkthru.aqsync.data.sync.ArchiveMutationGate
 import earth.walkthru.aqsync.data.sync.FileArchive
 import earth.walkthru.aqsync.data.sync.FileOutcome
 import earth.walkthru.aqsync.data.sync.SyncEngine
@@ -1164,6 +1166,7 @@ class DeviceFacadeTest {
                 applicationScope = appScope,
                 io = dispatcher,
                 clock = { clockEpochOffset + test.testScheduler.currentTime },
+                pruned = PrunedFiles.None,
             )
             val delegateStore = FileArchiveStore(fileArchive, dispatcher)
             val store = object : ArchiveStore by delegateStore {
@@ -1180,7 +1183,7 @@ class DeviceFacadeTest {
                     committedNames += key.name
                 }
             }
-            val engine = SyncEngine(store, RoomArchiveIndex(archived), HistoryIndexer(fileArchive, archived).asRecordIndexer(fileArchive), windowRetryBackoffMs = 1, clock = { test.testScheduler.currentTime }, io = dispatcher)
+            val engine = SyncEngine(store, RoomArchiveIndex(archived), HistoryIndexer(fileArchive, archived, ArchiveMutationGate()).asRecordIndexer(fileArchive), windowRetryBackoffMs = 1, clock = { test.testScheduler.currentTime }, io = dispatcher)
             repo = DeviceFacade(
                 linkOwner = owner,
                 collector = ArchiveCollector(store, RoomArchiveIndex(archived), engine, FakeStorageBudget(), test.testScheduler.timeSource),

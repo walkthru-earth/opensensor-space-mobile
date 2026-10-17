@@ -98,6 +98,7 @@
     <string name="file_not_synced">لم تتم المزامنة</string>
     <string name="file_mismatch">غير مطابق</string>
     <string name="file_invalid">اسم غير صالح</string>
+    <string name="file_removed">حُذف من الهاتف</string>
     <string name="file_metrics">المقاييس</string>
     <string name="file_share">مشاركة</string>
     <string name="files_no_daily">لا توجد ملفات يومية بعد. تحتاج إلى ملفات متزامنة فيها وقت.</string>

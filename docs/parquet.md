@@ -131,10 +131,52 @@ Every leaf of a current device file has `field_id` = its 1-based position in the
 `telemetry_fields.inc`, and dictionaries are append only, so an id never changes meaning. Older
 files have no ids and are mapped by name. A newer schema string is never a reason to refuse a file.
 
-Both layouts stay readable. Cached files of the old layout are never deleted from the phone. The
-owner removed the old files from the Waveshare card, and a file that is no longer listed by the
-device is not data loss. The app never uploads a file to the device and never asks the firmware to
-delete or rewrite one.
+Both layouts stay readable. The owner removed the old files from the Waveshare card, and a file
+that is no longer listed by the device is not data loss. The app never uploads a file to the device
+and never asks the firmware to delete or rewrite one.
+
+### Removing old files from the phone
+
+Settings › Storage › Old format files removes old layout files from the phone archive only, with
+the owner's approval. `UtcColumns.isLegacyLayout` decides from the footer. A file is old when it has
+`event_time_utc_ns` as an INT64 that is `TIMESTAMP(NANOS, UTC)` or unannotated, no
+`event_time_utc_us`, and no leaf with a field id. A file without any event time column, a current
+MICROS file and a file whose footer does not parse are always kept. Purpose plays no part.
+
+`LegacyFileCleanup` (`:core:history`, both phones) runs a dry run first (`plan`), which reads every
+footer and changes nothing. A file whose footer cannot be read is counted as skipped and kept, and
+Settings shows that count, so it never reads as none found. The first unreadable footer's exception
+class is logged once per run. A UTC day range is inclusive and matches a file whose real or estimated
+span overlaps it. A file the timeline cannot place is included only when no range is set.
+
+`remove` may run while a sync runs. Each file is handled under its `WriterLeases` lease, so a sync of
+the same file waits. It checks the file is still old, then takes the station's
+`ArchiveMutationGate` (`:core:sync`), the one sync, `ArchiveIndexRepair` and the startup janitor
+take for every archive write. Readers never take it. Under the gate it reads the live record again
+and keeps the file when the record is gone or its size or CRC-32 changed. Then it writes a
+`PrunedFile` record, removes the index record and deletes the final file, only below the Durable
+archive root. A failed delete puts the index record back, drops the `PrunedFile` and counts as
+failed. When the restore throws too, the file stays without a record and the startup janitor adopts
+it again. A crash between the steps leaves a final file without a record, which the janitor adopts
+again under the same gate and drops its `PrunedFile`, so the index never points at a missing file and
+a held file is never marked removed. Cancellation is honoured between files only. Each file's steps, from the record check to the re-adopt check, run under
+`NonCancellable`. The derived days of the removed files are rebuilt after, also when the caller was
+cancelled (Android `HistoryDeriver.deriveStale`, iOS `rebuildDerived`, which also rebuilds a
+station whose files all went from no sources, so its stale day files are removed). A rebuild that
+throws is logged and reported as `rebuildFailed`, the files stay removed. The report counts
+removed, kept (no longer old, changed, gone already or unreadable) and failed. Logs carry counts and
+exception class names only. Nothing is sent to a device.
+
+`PrunedFiles` (`:core:archive`, Room `pruned_file` on Android, `SensorArchive-pruned/pruned.v1` on
+iOS) keeps the station, name, size and CRC-32 of each removed file. The FILE frame carries no CRC,
+so `SyncPlanner` matches on station, name and size. A listed file with such a record and no phone
+copy plans as `REMOVED`. It is not downloaded and counts as done, so the device card can still read
+as all synced. A phone copy always wins over the record. A whole LIST that no longer names the file
+drops the record, so a later file under the same name and size, after a card reset, downloads.
+Files shows the file as removed from this phone. On iOS a records file that cannot be read whole
+reads as no records, and new records are refused until Download again rewrites it, so a removal
+keeps the file rather than overwrite the other records. Settings › Storage › Removed files ›
+Download again empties the records after a confirm, and the next sync downloads those files again when the device still lists them.
 
 ### Iceberg v3 tables (not in the app yet)
 

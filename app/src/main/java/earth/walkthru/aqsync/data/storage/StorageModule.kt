@@ -10,11 +10,13 @@ import dagger.hilt.components.SingletonComponent
 import earth.walkthru.aqsync.archive.ArchiveIndex
 import earth.walkthru.aqsync.archive.ArchiveLayout
 import earth.walkthru.aqsync.archive.ArchiveStore
+import earth.walkthru.aqsync.archive.PrunedFiles
 import earth.walkthru.aqsync.data.archive.asRecordIndexer
 import earth.walkthru.aqsync.data.coroutines.IoDispatcher
 import earth.walkthru.aqsync.data.coroutines.WallClock
 import earth.walkthru.aqsync.data.history.HistoryIndexer
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
+import earth.walkthru.aqsync.data.sync.ArchiveMutationGate
 import earth.walkthru.aqsync.data.sync.FileArchive
 import earth.walkthru.aqsync.data.sync.WriterLeases
 import earth.walkthru.aqsync.settings.SettingsRepository
@@ -111,6 +113,8 @@ object StorageModule {
         clock: WallClock,
         quota: DerivedQuota,
         leases: WriterLeases,
+        gate: ArchiveMutationGate,
+        pruned: PrunedFiles,
         @IoDispatcher io: CoroutineDispatcher,
     ): StorageJanitor = StorageJanitor(
         roots = roots,
@@ -123,5 +127,7 @@ object StorageModule {
         clock = clock::nowEpochMs,
         quota = quota,
         leases = leases,
+        gate = gate,
+        pruned = pruned,
     )
 }

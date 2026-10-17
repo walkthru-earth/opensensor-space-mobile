@@ -1,5 +1,6 @@
 package earth.walkthru.aqsync.data
 
+import earth.walkthru.aqsync.archive.PrunedFile
 import earth.walkthru.aqsync.data.local.database.ArchivedFileIdentity
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.protocol.Frame
@@ -28,7 +29,7 @@ internal const val PROGRESS_SAMPLE_MS = 250L
 /**
  * Manifest joined with the archive, with the running transfer on top. The base plan, which walks
  * the partial directory, is rebuilt only when the listing, the station, that station's archived
- * identities or the running flag changes. A progress tick only redoes the cheap overlay, at most
+ * identities, the [pruned] files or the running flag changes. A progress tick only redoes the cheap overlay, at most
  * once per [sampleMs] (#57 and #63, performance audit B2).
  *
  * [archived] observes one station's identity columns ([ArchivedFileDao.observeIdentitiesForStation]),
@@ -41,7 +42,8 @@ internal fun planWithProgress(
     archived: (String) -> Flow<List<ArchivedFileIdentity>>,
     sync: Flow<SyncProgress>,
     partialLengths: (String) -> Map<String, Long>,
-    planner: (String, List<Frame.File>, List<ArchivedIdentity>, Map<String, Long>) -> SyncPlan = SyncPlanner::plan,
+    pruned: Flow<List<PrunedFile>> = flowOf(emptyList()),
+    planner: (String, List<Frame.File>, List<ArchivedIdentity>, Map<String, Long>, List<PrunedFile>) -> SyncPlan = SyncPlanner::plan,
     sampleMs: Long = PROGRESS_SAMPLE_MS,
 ): Flow<SyncPlan?> {
     // The station travels with its rows, so a station switch never plans new rows against the old station.
@@ -51,13 +53,14 @@ internal fun planWithProgress(
     val base = combine(
         manifest.map { it.last }.distinctUntilChanged(),
         identities,
+        pruned.distinctUntilChanged(),
         sync.map { it.running }.distinctUntilChanged(),
-    ) { loaded, stationRows, _ ->
+    ) { loaded, stationRows, removed, _ ->
         // The last successful listing, kept through a refresh or its failure (see ManifestState).
         if (stationRows == null || loaded == null) return@combine null
         val (station, rows) = stationRows
         // Partials are read here only, never on a progress tick. The overlay shows the live byte count.
-        planner(station, loaded.files, rows.map { it.toIdentity() }, partialLengths(station))
+        planner(station, loaded.files, rows.map { it.toIdentity() }, partialLengths(station), removed)
     }
     return combine(base, sync.sampleTicks(sampleMs)) { plan, progress -> plan?.let { overlayProgress(it, progress) } }
 }
