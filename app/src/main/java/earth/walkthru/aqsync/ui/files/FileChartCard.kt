@@ -123,6 +123,7 @@ fun FileChartCard(
                 zone = zone.toKotlinTimeZone(),
                 units = LocalUnits.current,
                 xLabels = labels,
+                barSlot = { c -> state.page.getOrNull(c.startS.toInt())?.firstS?.let { fmt.format(Instant.ofEpochSecond(it)) } ?: noTime },
             )
             val sel = selected?.let { c -> state.page.getOrNull(c.startS.toInt()) }
             if (sel != null) {

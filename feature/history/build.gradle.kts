@@ -24,5 +24,9 @@ kotlin {
         commonTest.dependencies {
             implementation(libs.kotlinx.coroutines.test)
         }
+        // Chart semantics tests render headless on the iOS simulator (verifyIos), as in :ui:designsystem.
+        iosTest.dependencies {
+            implementation(libs.compose.ui.test)
+        }
     }
 }
