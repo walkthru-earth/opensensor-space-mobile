@@ -256,9 +256,10 @@ The rules for a new screen or component.
    screen reader as words, through the control's own state, `stateDescription` or the merged text.
    The `Eyebrow` capitals are visual only, its semantics carry the text as written.
 7. **Charts and maps.** A chart starts with a text summary in `contentDescription` (what it shows,
-   the highest value and its WHO step). Then the bar chart and the calendar give one node per bar or
+   the highest value and its WHO step, which Simple leaves out). Then the bar chart and the calendar give one node per bar or
    day with a reading, in time order, naming the time, the value with its unit, the mood and the WHO
-   step (Simple leaves the step out). Activating a bar selects it, as a touch does. These nodes are
+   step (Simple leaves the step out). Each is a button, and activating a bar selects it, as a touch
+   does. These nodes are
    semantics only, laid over the canvas. Axis margins are measured from the labels, so a large font
    never clips them. The map container says what it shows, and the list beside it is the accessible
    way through the same cells.
@@ -292,12 +293,15 @@ Accessibility, VoiceOver, or triple-click the side button).
    double tap. Each choice reads as a radio button with its selected state. Icon-only buttons say
    what they do.
 6. **History and Files.** Range and metric choices read their selected state. Each chart reads its
-   summary. Each file row reads as one element, and the share and export buttons say what they do.
+   summary, then a swipe reads each bar with a reading, its time, value, unit and mood (and WHO step
+   above Simple). Each file row reads as one element, and the share and export buttons say what they
+   do.
 7. **Discover.** The map says what it shows, the time and metric controls read their current value,
    the cell sheet title is a heading, and the chart reads its summary.
 8. **Targets.** With touch exploration on, every control can be found by a finger without a near
    miss. Double tap works on the first try for the small floating controls.
-9. **Arabic.** Repeat steps 1 and 3 in Arabic. Swipe order follows right to left.
+9. **Arabic.** Repeat steps 1 and 3 in Arabic. Swipe order follows right to left, except chart bars,
+   which stay in time order, left to right, as they are drawn.
 
 ### Platform conventions that stay native
 

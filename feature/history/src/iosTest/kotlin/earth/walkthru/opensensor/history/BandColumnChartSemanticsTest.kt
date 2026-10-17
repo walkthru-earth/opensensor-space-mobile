@@ -1,8 +1,11 @@
 package earth.walkthru.opensensor.history
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
@@ -47,8 +50,9 @@ class BandColumnChartSemanticsTest {
         onNodeWithContentDescription("00:00, 22.0 µg/m³, Fair").assertExists()
         onNodeWithContentDescription("02:00, 40.0 µg/m³, Poor, estimated time").assertExists()
         onAllNodesWithContentDescription("WHO", substring = true).assertCountEquals(0)
-        // Empty hours are left out of the swipe order.
+        // Empty hours are left out of the swipe order. Each bar is a button, like a calendar day.
         onAllNodes(hasClickAction()).assertCountEquals(2)
+        onAllNodes(hasClickAction() and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button)).assertCountEquals(2)
     }
 
     @Test

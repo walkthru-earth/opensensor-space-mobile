@@ -24,9 +24,11 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.traversalIndex
@@ -323,6 +325,7 @@ fun BandColumnChart(
                             .absoluteOffset(x = left + plotWidth * ((c.startS - fromS) / span), y = top)
                             .size(plotWidth * ((c.endS - c.startS) / span), plotHeight)
                             .semantics {
+                                role = Role.Button
                                 contentDescription = description
                                 this.selected = isSel
                                 traversalIndex = i.toFloat()
