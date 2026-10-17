@@ -2,7 +2,7 @@ package earth.walkthru.aqsync.archive
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
+import kotlin.test.assertNull
 
 class PrunedFilesCodecTest {
     private val station = "53315f5f-cb85-4d8d-b623-d56266084189"
@@ -17,20 +17,20 @@ class PrunedFilesCodecTest {
     }
 
     @Test
-    fun malformedOrUnsafeLinesAreSkippedAndAnUnknownVersionReadsEmpty() {
+    fun anyMalformedOrUnsafeLineOrAnUnknownVersionMakesTheWholeFileUnreadable() {
         val good = "$station\t$name\t100\t7\t1"
-        val text = listOf(
-            PrunedFilesCodec.VERSION,
-            good,
+        assertEquals(listOf(PrunedFile(station, name, 100, 7, 1)), PrunedFilesCodec.decode("${PrunedFilesCodec.VERSION}\n$good\n".encodeToByteArray()))
+        val bad = listOf(
             "$station\t$name\t100\t7",
             "$station\t$name\tbig\t7\t1",
             "$station\t$name\t-1\t7\t1",
             "../x\t$name\t100\t7\t1",
             "$station\t../escape.parquet\t100\t7\t1",
-            "",
-        ).joinToString("\n")
-        assertEquals(listOf(PrunedFile(station, name, 100, 7, 1)), PrunedFilesCodec.decode(text.encodeToByteArray()))
-        assertTrue(PrunedFilesCodec.decode("pruned-v9\n$good\n".encodeToByteArray()).isEmpty())
-        assertTrue(PrunedFilesCodec.decode(ByteArray(0)).isEmpty())
+        )
+        for (line in bad) {
+            assertNull(PrunedFilesCodec.decode("${PrunedFilesCodec.VERSION}\n$good\n$line\n".encodeToByteArray()), line)
+        }
+        assertNull(PrunedFilesCodec.decode("pruned-v9\n$good\n".encodeToByteArray()))
+        assertNull(PrunedFilesCodec.decode(ByteArray(0)))
     }
 }

@@ -58,17 +58,20 @@ internal object PrunedFilesCodec {
         }
     }.encodeToByteArray()
 
-    /** The valid records of [bytes]. A malformed line is skipped, an unknown version reads as empty. */
-    fun decode(bytes: ByteArray): List<PrunedFile> {
+    /**
+     * The records of [bytes], or null when the version is not [VERSION] or any line is malformed. A
+     * reader that cannot trust every record must not rewrite the file from a partial list.
+     */
+    fun decode(bytes: ByteArray): List<PrunedFile>? {
         val lines = bytes.decodeToString().split('\n')
-        if (lines.firstOrNull() != VERSION) return emptyList()
-        return lines.drop(1).mapNotNull { line ->
+        if (lines.first() != VERSION) return null
+        return lines.drop(1).filter { it.isNotEmpty() }.map { line ->
             val parts = line.split('\t')
-            if (parts.size != 5) return@mapNotNull null
-            val size = parts[2].toLongOrNull() ?: return@mapNotNull null
-            val crc = parts[3].toLongOrNull() ?: return@mapNotNull null
-            val at = parts[4].toLongOrNull() ?: return@mapNotNull null
-            if (!ArchiveLayout.isSafeStation(parts[0]) || !ArchiveLayout.isArchiveName(parts[1]) || size < 0) return@mapNotNull null
+            if (parts.size != 5) return null
+            val size = parts[2].toLongOrNull() ?: return null
+            val crc = parts[3].toLongOrNull() ?: return null
+            val at = parts[4].toLongOrNull() ?: return null
+            if (!ArchiveLayout.isSafeStation(parts[0]) || !ArchiveLayout.isArchiveName(parts[1]) || size < 0) return null
             PrunedFile(parts[0], parts[1], size, crc, at)
         }
     }
