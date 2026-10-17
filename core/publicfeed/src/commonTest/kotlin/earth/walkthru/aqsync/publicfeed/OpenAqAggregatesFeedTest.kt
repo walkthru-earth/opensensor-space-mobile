@@ -121,8 +121,8 @@ class OpenAqAggregatesFeedTest {
         val (cairo, lagos, nairobi) = table.rows
         assertEquals(CellRow(CAIRO, 2, endOf(oct(8)), mapOf("pm25" to CellStat(2, 20.0, 12.0, 31.0), "temperature" to CellStat(2, 26.0, 21.0, 30.0))), cairo)
         assertEquals(CellRow(LAGOS, 1, endOf(oct(7)), mapOf("humidity" to CellStat(1, 70.0, 64.0, 77.0))), lagos)
-        // PM10 from the 5th and PM2.5 from the 7th. The 8th has stations but no value, so it is not used.
-        assertEquals(CellRow(NAIROBI, 2, endOf(oct(7)), mapOf("pm10" to CellStat(1, 33.0, 25.0, 41.0), "pm25" to CellStat(2, 12.0, 8.0, 17.0))), nairobi)
+        // PM10 from the 5th and PM2.5 from the 7th, each with its own date. The 8th has stations but no value, so it is not used.
+        assertEquals(CellRow(NAIROBI, 2, endOf(oct(7)), mapOf("pm10" to CellStat(1, 33.0, 25.0, 41.0), "pm25" to CellStat(2, 12.0, 8.0, 17.0)), updatedByProperty = mapOf("pm10" to endOf(oct(5)))), nairobi)
     }
 
     @Test
@@ -134,7 +134,7 @@ class OpenAqAggregatesFeedTest {
         // PM2.5 on the 2nd, 5th, 6th and 8th (30, 50, 40, 20). September 30 is outside the window.
         assertEquals(CellRow(CAIRO, 3, endOf(oct(8)), mapOf("pm25" to CellStat(3, 35.0, 12.0, 70.0), "temperature" to CellStat(3, 27.0, 21.0, 33.0))), cairo)
         assertEquals(CellRow(LAGOS, 1, endOf(oct(7)), mapOf("humidity" to CellStat(1, 75.0, 64.0, 91.0))), lagos)
-        assertEquals(CellRow(NAIROBI, 2, endOf(oct(7)), mapOf("pm10" to CellStat(1, 33.0, 25.0, 41.0), "pm25" to CellStat(2, 12.0, 8.0, 17.0))), nairobi)
+        assertEquals(CellRow(NAIROBI, 2, endOf(oct(7)), mapOf("pm10" to CellStat(1, 33.0, 25.0, 41.0), "pm25" to CellStat(2, 12.0, 8.0, 17.0)), updatedByProperty = mapOf("pm10" to endOf(oct(5)))), nairobi)
     }
 
     @Test

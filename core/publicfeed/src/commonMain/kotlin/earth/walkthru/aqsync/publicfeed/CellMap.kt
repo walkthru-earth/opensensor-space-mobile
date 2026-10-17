@@ -84,19 +84,24 @@ object CellFreshness {
     /** A cell with no hourly value for 3 hours is stale. */
     const val STALE_AFTER_MS: Long = 3 * 60 * 60 * 1000L
 
-    fun isStale(row: CellRow, nowEpochMs: Long): Boolean = nowEpochMs - row.updatedEpochMs >= STALE_AFTER_MS
+    /** [property] is the one on screen, so another property's newer value never hides a stale one. */
+    fun isStale(row: CellRow, nowEpochMs: Long, property: String? = null): Boolean = nowEpochMs - row.updatedEpochMs(property) >= STALE_AFTER_MS
 
-    /** The newest day a daily row measured. Its `updatedEpochMs` is the UTC midnight after that day. */
-    fun dataDay(row: CellRow): LocalDate = dataDay(row.updatedEpochMs)
+    /**
+     * The newest day a daily row measured [property], or any property when null. Its
+     * `updatedEpochMs` is the UTC midnight after that day.
+     */
+    fun dataDay(row: CellRow, property: String? = null): LocalDate = dataDay(row.updatedEpochMs(property))
 
     /** [dataDay] for a row's `updatedEpochMs` alone. */
     fun dataDay(updatedEpochMs: Long): LocalDate = LocalDate.fromEpochDays(updatedEpochMs.floorDiv(DAY_MS) - 1)
 
     /**
      * A daily row is stale when its newest day is older than the day before [asOf], the partition
-     * date. A daily feed lags by days on purpose, so the clock never decides.
+     * date. A daily feed lags by days on purpose, so the clock never decides. [property] is the one on
+     * screen, judged by its own newest day.
      */
-    fun isStaleDaily(row: CellRow, asOf: LocalDate): Boolean = dataDay(row) < asOf.minus(1, DateTimeUnit.DAY)
+    fun isStaleDaily(row: CellRow, asOf: LocalDate, property: String? = null): Boolean = dataDay(row, property) < asOf.minus(1, DateTimeUnit.DAY)
 
     private const val DAY_MS = 86_400_000L
 }

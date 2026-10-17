@@ -37,6 +37,25 @@ class DailyCellFoldTest {
     }
 
     @Test
+    fun `each property keeps the date of its own newest day`() {
+        // PM last measured on the 3rd, temperature on the 8th. The newer temperature must not make
+        // the old PM look current (#109).
+        val rows = listOf(
+            row(a, day(3), 2, "pm25" to stat(20, 10.0)),
+            row(a, day(8), 2, "temperature" to stat(20, 21.0)),
+        )
+        listOf(FeedWindow.DAY, FeedWindow.WEEK).forEach { window ->
+            val out = DailyCellFold.fold(rows, window, asOf).single()
+            assertEquals(endOf(day(8)), out.updatedEpochMs, "$window")
+            val windows = mapOf(FeedWindow.DAY to out)
+            assertEquals(endOf(day(3)), PublicSummary.of("pm25", "µg/m³", windows).updatedEpochMs, "$window")
+            assertEquals(endOf(day(8)), PublicSummary.of("temperature", "°C", windows).updatedEpochMs, "$window")
+            // A property the cell does not report stays missing.
+            assertNull(PublicSummary.of("humidity", "%", windows).value, "$window")
+        }
+    }
+
+    @Test
     fun `week averages daily means and takes extremes and the largest n skipping gap days`() {
         val rows = listOf(
             row(a, day(2), 1, "pm25" to stat(18, 10.0, 2.0, 30.0)),

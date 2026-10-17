@@ -181,7 +181,8 @@ an info button.
 - **Cell styles.** Filled with the scale colour, the fixed WHO step colour of the cell mean
   (`HealthScale.colorOf`) for PM, the percentile ramp for the rest. A stale cell (no hourly value for 3 hours) is
   drawn at 40 percent opacity with a dashed outline. A cell that does not measure the chosen
-  metric is outline only, no fill. Selected cell has a thick ink outline.
+  metric is outline only, no fill. Selected cell has a thick ink outline. Staleness is judged on
+  the chosen metric's own date, so a newer reading of another metric never hides it.
 - **Sample and Real (2026-10-12).** A compact two-state toggle top right under the chips, a
   floating control with the brand blue only on the chosen half. Sample is the bundled fixture,
   Real is the OpenAQ aggregates feed, labelled with the day its data runs to in the phone's
@@ -572,8 +573,10 @@ is the OpenAQ aggregates collection on source.coop, read with the same reader. R
   hours takes, per property, the newest day in range that has a mean, as it is. 7 days takes the
   mean of the daily means, the min of the mins, the max of the maxes and the largest daily `n`,
   skipping days without the property. `devices` is the largest daily count among the days used,
-  `updated` the end of the newest day used. A cell with nothing in range is dropped. Null stays
-  null.
+  `updated` the end of the newest day used. A property last measured on an older day keeps the end
+  of its own newest day in `CellRow.updatedByProperty`, and the sheet freshness and stale styling
+  read the shown property's date (`CellRow.updatedEpochMs(property)`). A cell with nothing in range
+  is dropped. Null stays null.
 - The feed offers 24 hours and 7 days only. Last hour answers an empty table without a request.
   Errors propagate, the screen decides what to show. Android builds it over `OkHttpRangeEngine`
   in `DiscoverViewModel`, iOS over `UrlSessionRangeEngine` in `AppRoot`, one per process.

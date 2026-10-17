@@ -848,7 +848,7 @@ private fun CellDetail(
         } else {
             Text(strings.notMeasured, style = MaterialTheme.typography.titleMedium)
         }
-        val parts = listOfNotNull(strings.sensors(row.devices), freshness(strings, freshnessOf(row.updatedEpochMs, reference, state.dailyAsOf)))
+        val parts = listOfNotNull(strings.sensors(row.devices), freshness(strings, freshnessOf(row.updatedEpochMs(property?.id), reference, state.dailyAsOf)))
         Text(spokenList(parts, listSeparator()), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (property != null && headline != null) {
             percentBelow(state.rows.mapNotNull { it.mean(property.id) }, headline)?.let {

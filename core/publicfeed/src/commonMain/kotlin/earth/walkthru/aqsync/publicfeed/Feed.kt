@@ -58,8 +58,20 @@ data class CellRow(
     val stats: Map<String, CellStat>,
     /** The station local day of a daily file row, null for an hourly cells file and for a folded cell. */
     val date: LocalDate? = null,
+    /**
+     * For a cell folded from daily rows, whose properties can be measured on different days. Per
+     * property last measured before the newest day used, the UTC midnight after its own newest day.
+     * A property not listed is dated by [updatedEpochMs]. Empty for other rows.
+     */
+    val updatedByProperty: Map<String, Long> = emptyMap(),
 ) {
     fun mean(property: String): Double? = stats[property]?.mean
+
+    /**
+     * When [property] was last measured, so an old reading is never dated by a newer one of another
+     * property. The row's [updatedEpochMs] when no property date is known.
+     */
+    fun updatedEpochMs(property: String?): Long = property?.let { updatedByProperty[it] } ?: updatedEpochMs
 }
 
 /** The facts of one cells file the screen needs. */

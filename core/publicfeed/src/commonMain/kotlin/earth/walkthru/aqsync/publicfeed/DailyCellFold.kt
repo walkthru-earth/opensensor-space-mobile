@@ -18,6 +18,8 @@ import kotlinx.datetime.minus
  * - [FeedWindow.LAST_HOUR] has no daily answer, so it folds to nothing.
  * - A cell with no property in range is dropped. [CellRow.devices] is the largest daily `devices`
  *   among the days used, [CellRow.updatedEpochMs] the UTC midnight after the newest day used.
+ *   [CellRow.updatedByProperty] holds the same for each property last measured before that day,
+ *   so an old reading is never dated by a newer one of another property.
  *
  * Null stays null. No value is made up. Cells come out sorted by `h3_index`.
  */
@@ -49,21 +51,26 @@ object DailyCellFold {
     /** Per property, the newest day that has its mean. */
     private fun newest(h3: Long, days: List<CellRow>): CellRow? {
         val stats = LinkedHashMap<String, CellStat>()
+        val newest = LinkedHashMap<String, LocalDate>()
         val used = LinkedHashSet<CellRow>()
         for (id in propertyIds(days)) {
             val day = days.lastOrNull { it.stats[id]?.mean != null } ?: continue
             stats[id] = day.stats.getValue(id)
+            newest[id] = day.date!!
             used += day
         }
-        return cell(h3, stats, used)
+        return cell(h3, stats, newest, used)
     }
 
     private fun week(h3: Long, days: List<CellRow>): CellRow? {
         val stats = LinkedHashMap<String, CellStat>()
+        val newest = LinkedHashMap<String, LocalDate>()
         val used = LinkedHashSet<CellRow>()
         for (id in propertyIds(days)) {
             val measured = days.filter { it.stats[id]?.mean != null }
             if (measured.isEmpty()) continue
+            // Days are sorted, so the last one measured is the newest.
+            newest[id] = measured.last().date!!
             val daily = measured.map { it.stats.getValue(id) }
             stats[id] = CellStat(
                 n = daily.mapNotNull { it.n }.maxOrNull(),
@@ -73,19 +80,24 @@ object DailyCellFold {
             )
             used += measured
         }
-        return cell(h3, stats, used)
+        return cell(h3, stats, newest, used)
     }
 
     private fun propertyIds(days: List<CellRow>): Set<String> = days.flatMapTo(LinkedHashSet()) { it.stats.keys }
 
-    private fun cell(h3: Long, stats: Map<String, CellStat>, used: Set<CellRow>): CellRow? {
+    private fun cell(h3: Long, stats: Map<String, CellStat>, newest: Map<String, LocalDate>, used: Set<CellRow>): CellRow? {
         if (stats.isEmpty()) return null
-        val newest = used.maxOf { it.date!! }
+        val updated = endOf(used.maxOf { it.date!! })
         return CellRow(
             h3 = h3,
             devices = used.maxOf { it.devices },
-            updatedEpochMs = (newest.toEpochDays() + 1) * DAY_MS,
+            updatedEpochMs = updated,
             stats = stats,
+            // Only the properties measured before the newest day. The rest are dated by the row.
+            updatedByProperty = newest.mapValues { (_, date) -> endOf(date) }.filterValues { it != updated },
         )
     }
+
+    /** The UTC midnight after [date]. */
+    private fun endOf(date: LocalDate): Long = (date.toEpochDays() + 1) * DAY_MS
 }

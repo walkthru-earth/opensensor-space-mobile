@@ -95,4 +95,19 @@ class CellMapTest {
         // The hourly rule would call the newest day stale 98 hours later.
         assertTrue(CellFreshness.isStale(dailyRow(asOf), dailyRow(asOf).updatedEpochMs + 98 * 3_600_000L))
     }
+
+    @Test
+    fun `a property is judged by its own newest day`() {
+        // PM last measured on the 3rd, temperature on the 8th (#109).
+        val asOf = LocalDate(2026, 10, 8)
+        val end = { d: LocalDate -> (d.toEpochDays() + 1) * 86_400_000L }
+        val row = dailyRow(asOf).copy(updatedByProperty = mapOf("pm25" to end(LocalDate(2026, 10, 3)), "temperature" to end(asOf)))
+        assertTrue(CellFreshness.isStaleDaily(row, asOf, "pm25"))
+        assertFalse(CellFreshness.isStaleDaily(row, asOf, "temperature"))
+        assertEquals(LocalDate(2026, 10, 3), CellFreshness.dataDay(row, "pm25"))
+        assertTrue(CellFreshness.isStale(row, end(asOf), "pm25"))
+        assertFalse(CellFreshness.isStale(row, end(asOf), "temperature"))
+        // Without a property date the row's newest day decides.
+        assertEquals(asOf, CellFreshness.dataDay(row, "humidity"))
+    }
 }

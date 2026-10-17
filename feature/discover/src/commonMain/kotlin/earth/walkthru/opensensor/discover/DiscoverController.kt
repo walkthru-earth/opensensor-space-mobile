@@ -179,7 +179,7 @@ internal fun DiscoverUiState.simpleCellFacts(): SimpleCellFacts {
     val others = dictionary
         .filter { p -> p.id != property?.id && (day?.mean(p.id) != null || selected?.mean(p.id) != null) }
         .map { p -> p to day?.mean(p.id) }
-    return SimpleCellFacts(day?.devices, day?.updatedEpochMs, others, loading = false)
+    return SimpleCellFacts(day?.devices, day?.updatedEpochMs(property?.id), others, loading = false)
 }
 
 /**
@@ -534,9 +534,9 @@ class DiscoverController(
             // A daily feed lags by days on purpose. Its cells are judged against the partition date.
             val asOf = current.dataDate?.takeIf { current.daily }
             val stale: (CellRow) -> Boolean = if (asOf != null) {
-                { CellFreshness.isStaleDaily(it, asOf) }
+                { CellFreshness.isStaleDaily(it, asOf, property?.id) }
             } else {
-                { CellFreshness.isStale(it, nowMs) }
+                { CellFreshness.isStale(it, nowMs, property?.id) }
             }
             val (scale, json) = withContext(io) {
                 val scale = property?.let { p -> CellScale.of(p.id, rows.mapNotNull { it.mean(p.id) }) }
