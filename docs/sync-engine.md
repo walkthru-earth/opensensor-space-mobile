@@ -103,8 +103,11 @@ Groups the manifest by `HivePartition` (`Dated` / `Unsynced` boot / `Benchmarks`
 validates names, and diffs against `archived_file` + partials → `SyncPlan.toDownload` and
 `missingBytes`. Android supplies projected `station`, `name`, `bytes` and `crc32` archive
 identities, not full history rows. Verified files are skipped, so a resume only pulls what
-is missing. Each controller attempt takes a fresh LIST and archive snapshot.
-`FileSyncState`: `NOT_SYNCED · PARTIAL · SYNCING · SYNCED · MISMATCH · INVALID_NAME`.
+is missing. Each controller attempt takes a fresh LIST and archive snapshot. A listed file with no
+phone copy and a `PrunedFiles` record of the same station, name and size is `REMOVED`. The user
+removed it in Settings, so it is not downloaded and counts as done. The FILE frame has no CRC, so
+the size is the match. A phone copy always wins.
+`FileSyncState`: `NOT_SYNCED · PARTIAL · SYNCING · SYNCED · REMOVED · MISMATCH · INVALID_NAME`.
 
 ## Integrity (`ParquetVerify`)
 
@@ -147,7 +150,11 @@ worker new-file counts. Conflicting or corrupt existing bytes are retained and r
 replaced. `commit` also refuses an existing destination with `AlreadyCommitted` (`AtomicFiles.commitNoReplace`,
 #60). The engine then adopts the existing file through the same size, CRC, `PAR1` and SHA-256
 check, so a final that appears between the plan and the commit is never replaced. A crash between
-the commit and the index record is repaired by `StorageJanitor` at the next start. Host coverage: `ConcurrentArchiveTest`;
+the commit and the index record is repaired by `StorageJanitor` at the next start.
+Every archive index write also takes the station's `ArchiveMutationGate` (`core/sync`), after the
+lease when there is one. Sync, `ArchiveIndexRepair`, the janitor and `LegacyFileCleanup` share one
+gate per archive, so the cleanup's live record check, record removal and file delete never interleave
+with a row written back for the same station. Readers never take it. Host coverage: `ConcurrentArchiveTest`;
 physical concurrent transfers remain unverified.
 
 The per-address controller reserves interactive/background ownership and the manager rejects

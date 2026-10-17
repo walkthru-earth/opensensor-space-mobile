@@ -20,7 +20,7 @@ station/Hive paths. Partial downloads and `.verified.json` size/CRC receipts are
 export is available without connecting a sensor. See [ios.md](ios.md)
 for lifecycle and validation limits.
 
-## Room schema v10 (`aq-sync.db`)
+## Room schema v12 (`aq-sync.db`)
 
 ```mermaid
 erDiagram
@@ -95,15 +95,28 @@ erDiagram
     long builtAtEpochMs
     string dailyFile "null → retry next pass"
   }
+  pruned_file {
+    string station PK "composite key with name"
+    string name PK "verbatim Hive path"
+    long bytes "size when removed, matched against the device list"
+    long crc32
+    long prunedAtEpochMs
+  }
   known_device ||--o{ archived_file : "station"
   known_device ||--o{ station_epoch : "address (logical association, no cascade)"
   archived_file }o--o{ metric_bucket : "derived per station-day"
   archived_file }o--|| derived_day : "signature over sources"
+  known_device ||--o{ pruned_file : "station"
 ```
 
 `metric_bucket` and `derived_day` are **caches**: drop them and derive again → identical rows.
 `archived_file` is the index of the archive, never its source of truth (a file the reader refuses
 keeps its row with `indexError`).
+`pruned_file` holds the files the user removed from this phone in Settings. Sync skips one while the
+device lists the same name and size and the phone has no copy. Settings › Storage › Download again
+empties it. iOS keeps the same records in one Durable file, `SensorArchive-pruned/pruned.v1`
+(`IosPrunedFiles`), outside the station directories, so the janitor never adopts or sweeps it.
+Both sit behind the `PrunedFiles` port in `:core:archive`.
 
 ### Migrations
 
@@ -118,6 +131,8 @@ keeps its row with `indexError`).
 | 7 → 8 | `AutoMigration` | nullable `known_device.companionAssociationId` |
 | 8 → 9 | explicit | `station_epoch`; seed current known stations and historical `(sourceDevice, station)` associations from archived files, preserving files, credentials and settings |
 | 9 → 10 | explicit | `sensor_installation`; the replaceable module's phone-local identity and assertion time, with one current row per device address and prior rows retained when the asserted module changes |
+| 10 → 11 | explicit | no schema change; rows indexed with no UTC rows and no error are marked never indexed, so the reader indexes them again |
+| 11 → 12 | `AutoMigration` | new table `pruned_file` |
 
 `sensor_installation` is an owner-entered identity record, not evidence of a calibration. It stores
 the full sticker, vendor/model, batch, source (`barcode` or `manual`), phone UTC assertion time,
@@ -284,8 +299,10 @@ root is Android `filesDir`. iOS still keeps its finals under `Application Suppor
 with partials beside them and a `<name>.verified.json` receipt each. `ArchiveLayout` names those
 legacy forms so the wave 3 move onto this layout can recognise them. The "is synced" receipt is the
 `archived_file` record (`ArchiveRecord` behind the `ArchiveIndex` port), never a file. The archive
-ports have no delete. A verified copy is removed only when the user removes old format files in
+ports have no file delete. A verified copy is removed only when the user removes old format files in
 Settings (`LegacyFileCleanup`, [parquet](parquet.md#removing-old-files-from-the-phone)), never by sync or the janitor (audit C, B6).
+Each removal leaves a `PrunedFiles` record, so sync does not download the file again until the user
+taps Download again.
 
 ## Backup
 

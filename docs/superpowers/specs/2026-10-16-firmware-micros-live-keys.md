@@ -38,8 +38,10 @@ draft), `docs/shared/mobile-migration.md` and `docs/shared/ble-sync-protocol.md`
    the back-fill keeps any day a waiting row may fill (`StationDays.held` in `:core:history`, used
    by `HistoryDeriver`, `IosDailyDerivedStore` and `ArchiveHistoryTiers`). `ArchiveRecord.isIndexed`
    is the one indexed test.
-8. Old files. Both layouts stay readable. Cached old files are never deleted from the phone. A
-   file the device no longer lists is not data loss, and the app never uploads to the device.
+8. Old files. Both layouts stay readable. Sync never deletes a cached old file from the phone. The
+   user may remove old format files in Settings (#88), phone only, and sync then skips them until
+   Download again. A file the device no longer lists is not data loss, and the app never uploads
+   to the device.
 9. Iceberg v3. Owner update, aq-parquet commit c1f07ed. Tables are created as format v3, device
    MICROS columns are `timestamptz` and `field_id` is the Iceberg field id. No `timestamptz_ns`.
    Row lineage is left to the committing library (iceberg-go 0.7.0+ `AddFiles` or iceberg-rust
