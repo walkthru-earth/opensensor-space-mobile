@@ -8,6 +8,8 @@ import earth.walkthru.aqsync.archive.ClockAnchor
 import earth.walkthru.aqsync.archive.IosArchiveStore
 import earth.walkthru.aqsync.archive.IosClockAnchorStore
 import earth.walkthru.aqsync.archive.IosExportSpace
+import earth.walkthru.aqsync.archive.IosPrunedFiles
+import earth.walkthru.aqsync.archive.PrunedFiles
 import earth.walkthru.aqsync.archive.ReceiptArchiveIndex
 import earth.walkthru.aqsync.data.history.ArchiveHistoryTiers
 import earth.walkthru.aqsync.data.history.ArchiveIndexRepair
@@ -18,6 +20,7 @@ import earth.walkthru.aqsync.data.history.LegacyFileCleanup
 import earth.walkthru.aqsync.data.history.TimeEstimate
 import earth.walkthru.aqsync.data.history.UtcDayRange
 import earth.walkthru.aqsync.data.history.info
+import earth.walkthru.aqsync.data.sync.ArchiveMutationGate
 import earth.walkthru.aqsync.data.sync.WriterLeases
 import earth.walkthru.aqsync.storage.AtomicFiles
 import earth.walkthru.aqsync.storage.DerivedQuota
@@ -52,7 +55,6 @@ import kotlinx.coroutines.withContext
 import platform.Foundation.NSCachesDirectory
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSUserDomainMask
-import kotlin.concurrent.AtomicReference
 import kotlin.time.Clock
 
 /**
@@ -65,6 +67,9 @@ internal object IosArchive {
     val index: ArchiveIndex by lazy { ReceiptArchiveIndex(store.finalRoot) }
     private val clockAnchorsRoot get() = store.finalRoot + "-clock-anchors"
     val clockAnchors by lazy { IosClockAnchorStore(clockAnchorsRoot) }
+
+    /** Files removed in Settings, which sync skips. Kept outside the station directories. */
+    val pruned: PrunedFiles by lazy { IosPrunedFiles(store.finalRoot + "-pruned") }
 
     // Tiers persist beside the derived day files, so a cold History open decodes only new days (#63).
     val tiers: ArchiveHistoryTiers by lazy {
@@ -104,6 +109,9 @@ internal object IosArchive {
     /** One writer per archive file, for the sync runner and the janitor's partial sweep. */
     val leases = WriterLeases()
 
+    /** One archive mutation per station, shared by sync, the janitor, the index repair and [oldFiles]. */
+    val gate = ArchiveMutationGate()
+
     private val derivedMutex = Mutex()
     private val base get() = store.finalRoot.substringBeforeLast('/')
 
@@ -138,7 +146,8 @@ internal object IosArchive {
 
     /**
      * The Settings Storage card. Clearing touches the derived day files and the map tiles only (#61).
-     * Old format sensor files leave the phone only through [oldFiles], after the user confirms.
+     * Old format sensor files leave the phone only through [oldFiles], after the user confirms. Sync
+     * skips them until the user chooses Download again.
      */
     val storageControls: StorageControls by lazy {
         object : StorageControls {
@@ -158,23 +167,24 @@ internal object IosArchive {
 
             override suspend fun clearMapCache() = MapCache.clear()
 
-            override fun syncRunning(): Boolean = sync.value?.isBusy() == true
-
             override suspend fun findOldFiles(range: OldFilesRange?): OldFilesPlan {
                 val plan = oldFiles.plan(range?.let { UtcDayRange(it.fromEpochDay, it.toEpochDay) })
                 return OldFilesPlan(plan.files, plan.bytes, plan.stations, range, skipped = plan.skipped, handle = plan)
             }
 
             override suspend fun removeOldFiles(plan: OldFilesPlan): OldFilesResult {
-                val planned = plan.handle as? LegacyFileCleanup.Plan ?: return OldFilesResult(0, 0, plan.files, syncRunning = false)
+                val planned = plan.handle as? LegacyFileCleanup.Plan ?: return OldFilesResult(0, 0, plan.files)
                 val report = oldFiles.remove(planned)
-                return OldFilesResult(report.removed, report.bytes, report.kept, report.stoppedBySync, report.failed, report.rebuildFailed)
+                return OldFilesResult(report.removed, report.bytes, report.kept, report.failed, report.rebuildFailed)
+            }
+
+            override suspend fun removedFiles(): Int = pruned.observeAll().first().size
+
+            override suspend fun downloadRemovedAgain() {
+                pruned.clear()
             }
         }
     }
-
-    /** The process sync runner once Swift asked for it, so Settings can tell whether a sync runs. */
-    val sync = AtomicReference<SensorSync?>(null)
 
     /**
      * The phone only cleanup of old format files behind Settings. The receipt index change already
@@ -188,8 +198,9 @@ internal object IosArchive {
             roots = roots,
             tree = IosStorageTree(),
             leases = leases,
+            gate = gate,
+            pruned = pruned,
             io = Dispatchers.IO,
-            syncRunning = { sync.value?.isBusy() == true },
             afterRemoval = { days -> rebuildDerived(days.keys) },
             log = ::println,
         )
@@ -199,9 +210,9 @@ internal object IosArchive {
     private val derivedAtomic by lazy { IosAtomicFiles("$base/${AtomicFiles.TEMP_DIR}") }
     private val tierStore by lazy { IosFileTierStore(cachesDirectory(), derivedAtomic) }
     private val derived by lazy { IosDailyDerivedStore(cachesDirectory(), derivedAtomic, tierStore) }
-    private val repair by lazy { ArchiveIndexRepair(store, index, clockAnchors = clockAnchors) }
+    private val repair by lazy { ArchiveIndexRepair(store, index, clockAnchors = clockAnchors, gate = gate) }
     private val janitor by lazy {
-        StorageJanitor(roots, IosStorageTree(), store, index, Dispatchers.IO, log = ::println, quota = derivedQuota, leases = leases)
+        StorageJanitor(roots, IosStorageTree(), store, index, Dispatchers.IO, log = ::println, quota = derivedQuota, leases = leases, gate = gate)
     }
 
     /**
@@ -292,14 +303,11 @@ internal object IosArchive {
 
 /**
  * The sync runner over the process archive, so History sees what it saves. Swift calls this once
- * (`IosArchiveKt.sharedSensorSync()`), which also starts the History index repair. Every call returns
- * the same runner, which Settings asks whether a sync runs.
+ * (`IosArchiveKt.sharedSensorSync()`), which also starts the History index repair.
  */
 fun sharedSensorSync(): SensorSync {
     IosArchive.startIndexRepair()
-    IosArchive.sync.value?.let { return it }
-    val created = SensorSync(IosArchive.store, IosArchive.index, Dispatchers.Default, Dispatchers.Main, recordClockAnchor = IosArchive::recordClockAnchor, budget = IosArchive.budget, leases = IosArchive.leases)
-    return if (IosArchive.sync.compareAndSet(null, created)) created else IosArchive.sync.value!!
+    return SensorSync(IosArchive.store, IosArchive.index, Dispatchers.Default, Dispatchers.Main, recordClockAnchor = IosArchive::recordClockAnchor, budget = IosArchive.budget, leases = IosArchive.leases, gate = IosArchive.gate, pruned = IosArchive.pruned)
 }
 
 /** `Library/Caches` of this app. */

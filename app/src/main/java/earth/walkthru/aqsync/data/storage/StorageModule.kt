@@ -15,6 +15,7 @@ import earth.walkthru.aqsync.data.coroutines.IoDispatcher
 import earth.walkthru.aqsync.data.coroutines.WallClock
 import earth.walkthru.aqsync.data.history.HistoryIndexer
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
+import earth.walkthru.aqsync.data.sync.ArchiveMutationGate
 import earth.walkthru.aqsync.data.sync.FileArchive
 import earth.walkthru.aqsync.data.sync.WriterLeases
 import earth.walkthru.aqsync.settings.SettingsRepository
@@ -111,6 +112,7 @@ object StorageModule {
         clock: WallClock,
         quota: DerivedQuota,
         leases: WriterLeases,
+        gate: ArchiveMutationGate,
         @IoDispatcher io: CoroutineDispatcher,
     ): StorageJanitor = StorageJanitor(
         roots = roots,
@@ -123,5 +125,6 @@ object StorageModule {
         clock = clock::nowEpochMs,
         quota = quota,
         leases = leases,
+        gate = gate,
     )
 }

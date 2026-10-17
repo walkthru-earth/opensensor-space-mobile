@@ -3,11 +3,12 @@ package earth.walkthru.aqsync.data.storage
 import android.util.Log
 import earth.walkthru.aqsync.archive.ArchiveIndex
 import earth.walkthru.aqsync.archive.ArchiveStore
-import earth.walkthru.aqsync.data.CollectionAdmission
+import earth.walkthru.aqsync.archive.PrunedFiles
 import earth.walkthru.aqsync.data.coroutines.IoDispatcher
 import earth.walkthru.aqsync.data.history.HistoryDeriver
 import earth.walkthru.aqsync.data.history.LegacyFileCleanup
 import earth.walkthru.aqsync.data.history.UtcDayRange
+import earth.walkthru.aqsync.data.sync.ArchiveMutationGate
 import earth.walkthru.aqsync.data.sync.WriterLeases
 import earth.walkthru.aqsync.storage.DerivedQuota
 import earth.walkthru.aqsync.storage.StorageBudget
@@ -21,12 +22,14 @@ import earth.walkthru.opensensor.settings.OldFilesResult
 import earth.walkthru.opensensor.settings.StorageControls
 import earth.walkthru.opensensor.settings.StorageUsage
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 /**
  * The Settings Storage card on Android (#61). It clears only the derived day files and the map tiles,
  * and removes old format sensor files from the phone through [LegacyFileCleanup] when the user asks.
+ * Sync skips the removed files until the user clears [pruned] with Download again.
  */
 class AppStorageControls @Inject constructor(
     private val budget: StorageBudget,
@@ -36,7 +39,8 @@ class AppStorageControls @Inject constructor(
     roots: StorageRoots,
     tree: StorageTree,
     leases: WriterLeases,
-    private val admission: CollectionAdmission,
+    gate: ArchiveMutationGate,
+    private val pruned: PrunedFiles,
     deriver: HistoryDeriver,
     @IoDispatcher private val io: CoroutineDispatcher,
 ) : StorageControls {
@@ -46,8 +50,9 @@ class AppStorageControls @Inject constructor(
         roots = roots,
         tree = tree,
         leases = leases,
+        gate = gate,
+        pruned = pruned,
         io = io,
-        syncRunning = { admission.busy },
         afterRemoval = { days -> deriver.deriveStale(days.keys) },
         log = { Log.i(TAG, it) },
     )
@@ -68,17 +73,21 @@ class AppStorageControls @Inject constructor(
 
     override suspend fun clearMapCache() = MapCache.clear()
 
-    override fun syncRunning(): Boolean = admission.busy
-
     override suspend fun findOldFiles(range: OldFilesRange?): OldFilesPlan {
         val plan = cleanup.plan(range?.let { UtcDayRange(it.fromEpochDay, it.toEpochDay) })
         return OldFilesPlan(plan.files, plan.bytes, plan.stations, range, skipped = plan.skipped, handle = plan)
     }
 
     override suspend fun removeOldFiles(plan: OldFilesPlan): OldFilesResult {
-        val planned = plan.handle as? LegacyFileCleanup.Plan ?: return OldFilesResult(0, 0, plan.files, syncRunning = false)
+        val planned = plan.handle as? LegacyFileCleanup.Plan ?: return OldFilesResult(0, 0, plan.files)
         val report = cleanup.remove(planned)
-        return OldFilesResult(report.removed, report.bytes, report.kept, report.stoppedBySync, report.failed, report.rebuildFailed)
+        return OldFilesResult(report.removed, report.bytes, report.kept, report.failed, report.rebuildFailed)
+    }
+
+    override suspend fun removedFiles(): Int = pruned.observeAll().first().size
+
+    override suspend fun downloadRemovedAgain() {
+        pruned.clear()
     }
 
     private companion object {

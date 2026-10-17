@@ -17,9 +17,6 @@ class CollectionAdmission @Inject constructor() {
 
     val hasInteractive: Boolean get() = lock.withLock { interactive > 0 }
 
-    /** True while any collection, interactive or worker, holds a lease. Settings refuses to remove files then. */
-    val busy: Boolean get() = lock.withLock { interactive > 0 || workers > 0 }
-
     fun acquire(origin: CollectionOrigin): Lease? = lock.withLock {
         if ((origin == CollectionOrigin.WORKER && interactive > 0) || (origin == CollectionOrigin.USER_TAP && workers > 0)) return null
         if (origin == CollectionOrigin.USER_TAP) interactive++ else workers++
