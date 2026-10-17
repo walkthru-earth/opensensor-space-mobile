@@ -195,7 +195,7 @@ internal fun AppRoot(
     autoSync: AutoSyncSettings,
 ) {
     val scope = rememberCoroutineScope()
-    val settings = remember { SettingsController(scope, settingsRepository, IosArchive.storageControls) }
+    val settings = remember { SettingsController(scope, settingsRepository, IosArchive.storageControls, log = ::println) }
     val prefs by settings.prefs.collectAsState()
     // Off until the saved switch is read, so no request leaves the phone before then.
     val showPublic = prefs?.showPublicSensors == true

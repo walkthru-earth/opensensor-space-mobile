@@ -179,12 +179,14 @@ class StorageJanitor(
             val indexed = index.observeStation(station).first().mapTo(HashSet()) { it.name }
             for (key in keys) {
                 if (key.name in indexed) continue
-                step { adopt(key) }
+                step { leases.withLease(key) { adopt(key) } }
             }
         }
     }
 
+    /** Under the lease of [key], so a file the old file cleanup just deleted is never adopted back. */
     private suspend fun adopt(key: ArchiveKey) {
+        if (!store.exists(key)) return
         val hashed = withContext(io) {
             store.reader(key).use { reader ->
                 val sha = Sha256()

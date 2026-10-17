@@ -14,7 +14,9 @@ import earth.walkthru.aqsync.data.history.ArchiveIndexRepair
 import earth.walkthru.aqsync.data.history.HistorySeriesReader
 import earth.walkthru.aqsync.data.history.IosDailyDerivedStore
 import earth.walkthru.aqsync.data.history.IosFileTierStore
+import earth.walkthru.aqsync.data.history.LegacyFileCleanup
 import earth.walkthru.aqsync.data.history.TimeEstimate
+import earth.walkthru.aqsync.data.history.UtcDayRange
 import earth.walkthru.aqsync.data.history.info
 import earth.walkthru.aqsync.data.sync.WriterLeases
 import earth.walkthru.aqsync.storage.AtomicFiles
@@ -30,6 +32,9 @@ import earth.walkthru.aqsync.storage.StorageRole
 import earth.walkthru.aqsync.storage.StorageRoots
 import earth.walkthru.aqsync.storage.trimOnMemoryPressure
 import earth.walkthru.opensensor.discover.MapCache
+import earth.walkthru.opensensor.settings.OldFilesPlan
+import earth.walkthru.opensensor.settings.OldFilesRange
+import earth.walkthru.opensensor.settings.OldFilesResult
 import earth.walkthru.opensensor.settings.StorageControls
 import earth.walkthru.opensensor.settings.StorageUsage
 import kotlinx.coroutines.CancellationException
@@ -47,6 +52,7 @@ import kotlinx.coroutines.withContext
 import platform.Foundation.NSCachesDirectory
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSUserDomainMask
+import kotlin.concurrent.AtomicReference
 import kotlin.time.Clock
 
 /**
@@ -130,7 +136,10 @@ internal object IosArchive {
         DerivedQuota(QuotaEnforcer(roots, IosStorageTree(), log = ::println)) { settingsRepository.current().retention.derivedQuotaBytes }
     }
 
-    /** The Settings Storage card. Clearing touches the derived day files and the map tiles only (#61). */
+    /**
+     * The Settings Storage card. Clearing touches the derived day files and the map tiles only (#61).
+     * Old format sensor files leave the phone only through [oldFiles], after the user confirms.
+     */
     val storageControls: StorageControls by lazy {
         object : StorageControls {
             override suspend fun usage(): StorageUsage {
@@ -148,7 +157,42 @@ internal object IosArchive {
             }
 
             override suspend fun clearMapCache() = MapCache.clear()
+
+            override fun syncRunning(): Boolean = sync.value?.isBusy() == true
+
+            override suspend fun findOldFiles(range: OldFilesRange?): OldFilesPlan {
+                val plan = oldFiles.plan(range?.let { UtcDayRange(it.fromEpochDay, it.toEpochDay) })
+                return OldFilesPlan(plan.files, plan.bytes, plan.stations, range, skipped = plan.skipped, handle = plan)
+            }
+
+            override suspend fun removeOldFiles(plan: OldFilesPlan): OldFilesResult {
+                val planned = plan.handle as? LegacyFileCleanup.Plan ?: return OldFilesResult(0, 0, plan.files, syncRunning = false)
+                val report = oldFiles.remove(planned)
+                return OldFilesResult(report.removed, report.bytes, report.kept, report.stoppedBySync, report.failed, report.rebuildFailed)
+            }
         }
+    }
+
+    /** The process sync runner once Swift asked for it, so Settings can tell whether a sync runs. */
+    val sync = AtomicReference<SensorSync?>(null)
+
+    /**
+     * The phone only cleanup of old format files behind Settings. The receipt index change already
+     * rebuilds the derived days through [startIndexRepair], the explicit rebuild runs it now and also
+     * visits the stations whose files all went, so their stale day files are removed.
+     */
+    private val oldFiles by lazy {
+        LegacyFileCleanup(
+            store = store,
+            index = index,
+            roots = roots,
+            tree = IosStorageTree(),
+            leases = leases,
+            io = Dispatchers.IO,
+            syncRunning = { sync.value?.isBusy() == true },
+            afterRemoval = { days -> rebuildDerived(days.keys) },
+            log = ::println,
+        )
     }
 
     // Temps stay in Application Support, on the same volume as Library/Caches, where the janitor sweeps them.
@@ -187,9 +231,14 @@ internal object IosArchive {
         anchorFollowUp.request()
     }
 
-    private suspend fun rebuildDerived() = derivedMutex.withLock {
-        val records = index.observeAll().first()
-        for ((station, files) in records.groupBy { it.station }) {
+    /**
+     * Rebuilds the derived days of every station with records, and of each of [emptied]. A station in
+     * [emptied] that has no records left is rebuilt from no sources, which removes its stale day files.
+     */
+    private suspend fun rebuildDerived(emptied: Collection<String> = emptyList()) = derivedMutex.withLock {
+        val byStation = index.observeAll().first().groupBy { it.station }
+        for (station in byStation.keys + emptied) {
+            val files = byStation[station].orEmpty()
             val anchors = TimeEstimate.anchors(files.filter { it.indexed }.map { it.info() }, clockAnchors.anchors(station))
             derived.rebuild(station, files, store, anchors, Clock.System.now().epochSeconds)
         }
@@ -243,11 +292,14 @@ internal object IosArchive {
 
 /**
  * The sync runner over the process archive, so History sees what it saves. Swift calls this once
- * (`IosArchiveKt.sharedSensorSync()`), which also starts the History index repair.
+ * (`IosArchiveKt.sharedSensorSync()`), which also starts the History index repair. Every call returns
+ * the same runner, which Settings asks whether a sync runs.
  */
 fun sharedSensorSync(): SensorSync {
     IosArchive.startIndexRepair()
-    return SensorSync(IosArchive.store, IosArchive.index, Dispatchers.Default, Dispatchers.Main, recordClockAnchor = IosArchive::recordClockAnchor, budget = IosArchive.budget, leases = IosArchive.leases)
+    IosArchive.sync.value?.let { return it }
+    val created = SensorSync(IosArchive.store, IosArchive.index, Dispatchers.Default, Dispatchers.Main, recordClockAnchor = IosArchive::recordClockAnchor, budget = IosArchive.budget, leases = IosArchive.leases)
+    return if (IosArchive.sync.compareAndSet(null, created)) created else IosArchive.sync.value!!
 }
 
 /** `Library/Caches` of this app. */

@@ -12,7 +12,7 @@ records and the `ArchiveStore` and `ArchiveIndex` ports. `storage/` owns `Storag
 `StorageBudget`, `StorageTree`, `RetentionPolicy` with the derived `QuotaEnforcer`, and
 `MemoryPressure` with `ByteBudgetLru` for memory caches that trim on the OS signal (#61). Every file
 writer goes through `AtomicFiles`, and the `StorageJanitor` (in `sync/`, it needs the archive ports)
-sweeps Scratch at start, enforces the derived quota and never deletes Durable data. `ParquetFile` and
+sweeps Scratch at start, enforces the derived quota and never deletes Durable data. Only the user's old format cleanup in Settings (`LegacyFileCleanup`, `:core:history`) removes archive files, phone only. `ParquetFile` and
 `ByteReader` are `AutoCloseable`, open them with `use`. `sync/` holds the link session, the sync
 engine and, in `collection/`, the per-device `CollectionController` ([sync guide](../docs/sync-engine.md)). Android adopts the controller
 through `DeviceFacade`; iOS uses `IosLink` and `SensorSync` for link and engine adoption,

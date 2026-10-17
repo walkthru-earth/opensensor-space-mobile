@@ -1,8 +1,9 @@
 package earth.walkthru.aqsync.storage
 
 /**
- * How many bytes each rebuildable cache may keep (#61). There is no archive retention: Durable data is
- * never evicted, on the device or the phone.
+ * How many bytes each rebuildable cache may keep (#61). There is no archive retention. Durable data is
+ * never evicted, on the device or the phone. The only removal of sensor files is the user's old
+ * format cleanup in Settings (`LegacyFileCleanup` in `:core:history`), on the phone only.
  */
 data class RetentionPolicy(
     /** `derived/v1` day files, evicted least recently written first by [QuotaEnforcer]. */

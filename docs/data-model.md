@@ -284,7 +284,8 @@ root is Android `filesDir`. iOS still keeps its finals under `Application Suppor
 with partials beside them and a `<name>.verified.json` receipt each. `ArchiveLayout` names those
 legacy forms so the wave 3 move onto this layout can recognise them. The "is synced" receipt is the
 `archived_file` record (`ArchiveRecord` behind the `ArchiveIndex` port), never a file. The archive
-ports have no delete. A verified copy is never removed by the app (audit C, B6).
+ports have no delete. A verified copy is removed only when the user removes old format files in
+Settings (`LegacyFileCleanup`, [parquet](parquet.md#removing-old-files-from-the-phone)), never by sync or the janitor (audit C, B6).
 
 ## Backup
 
