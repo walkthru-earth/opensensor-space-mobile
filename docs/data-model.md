@@ -249,7 +249,7 @@ zip stays the byte-exact mirror and the derived zip is the small analysis-ready 
 | Class | Directories | Janitor |
 | --- | --- | --- |
 | Durable | `archive/`, the Room database, `clock-anchors/` (iOS `SensorArchive/`, its receipts, `SensorArchive-clock-anchors/`) | never deletes |
-| Rebuildable | `cacheDir/derived/v1/` (iOS `Library/Caches/derived/v1/`), the map tile cache `cacheDir/maplibre-cache.db` | old derived temps, a `derived/` left in `filesDir` or Application Support by an older build (removed whole), then the derived quota |
+| Rebuildable | `cacheDir/derived/v1/` (iOS `Library/Caches/derived/v1/`), the map tile cache `cacheDir/maplibre-cache.db`, the feed block cache `cacheDir/feed-blocks/` (iOS `Library/Caches/feed-blocks/`) | old derived temps, a `derived/` left in `filesDir` or Application Support by an older build (removed whole), then the derived quota |
 | Scratch | `archive-partial/`, `storage-tmp/`, `cache/export/` (iOS `tmp/opensensor-export/`) | temps after 1 h (derived builds stream into theirs), export runs after 1 h, partials of an unknown station after 1 h, any partial after 30 days |
 | Settings | `datastore/` | never deletes |
 
@@ -272,8 +272,8 @@ starts during the sweep keeps its partial. The log line has counts only. `Storag
 
 ### Quotas and memory pressure (#61)
 
-`RetentionPolicy` (`:core:storage`) caps Rebuildable data, 64 MiB of derived day files and 20 MiB
-of map tiles by default. Durable data has no cap. The policy is stored in the shared settings DataStore
+`RetentionPolicy` (`:core:storage`) caps Rebuildable data, 64 MiB of derived day files, 20 MiB
+of map tiles and 16 MiB of feed blocks by default. Durable data has no cap. The policy is stored in the shared settings DataStore
 (`derived_quota_bytes`, `map_cache_bytes`, `SettingsRepository.setRetention`), and a missing or negative
 value reads as the default. Both apps read the derived quota from it at each enforcement and the map cap
 once at process start. No screen edits the quotas yet. `QuotaEnforcer` deletes only derived `.parquet` files, the
@@ -283,9 +283,13 @@ with a matching manifest is rebuilt when something reads it. On Android the dail
 `DerivedQuota.holding`, so no eviction runs until the zip is staged. When the last hold ends, after
 success, failure or cancellation, the quota is applied at once, and a Clear History cache tapped during
 the hold runs then. iOS has no derived reader yet. The quota also runs after a derive pass that rebuilt
-a day and in the janitor. The map cap is set once per process through MapLibre
+a day and in the janitor. The feed `BlockCache` (#94) reads its quota at every write from
+`blockCacheQuotaWithin`, the smaller of its cap and the OS cache allowance left after the map cache
+(Android `getCacheQuotaBytes`). The quota is 0 while the volume has under 256 MiB free for
+Rebuildable data, so the cache gives its files back under storage pressure, and the OS may purge the
+directory at any time. It evicts the least recently used block first. The map cap is set once per process through MapLibre
 `MapRuntimeOptions.maximumCacheSizeBytes`, before the first map. Settings shows the bytes per class
-and clears the History cache or the map cache. Sensor files have no clear button.
+and clears the History cache, which also empties the feed block cache, or the map cache. Sensor files have no clear button.
 
 `MemoryPressure` carries the OS signal to memory caches. Android maps `onTrimMemory`
 `TRIM_MEMORY_UI_HIDDEN` and `TRIM_MEMORY_RUNNING_LOW` to Moderate, and `TRIM_MEMORY_BACKGROUND` and

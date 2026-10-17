@@ -58,9 +58,16 @@ Bytes reach the decoder through two narrow seams, a blocking `ByteReader` and a 
   5.5.0 on Android and the JVM, `NSURLSession` on iOS). The tail is a suffix range, later ranges carry
   `If-Range` with a strong ETag, and a 200 for a changed object raises `SourceChangedException`. It
   sends `Accept-Encoding: identity`, skips the local HTTP cache and logs nothing. Issues #60 and #61
-  are closed, but nothing outside `:core:net` tests constructs `HttpRangeSource` or an engine yet. The
-  Discover map still reads the bundled sample, and wiring the live feed is open work. No disk byte
-  block cache (`BlockCache`) exists in code, it is planned with the live feed.
+  are closed. `OpenAqAggregatesFeed` builds one per feed file.
+- `CachedRangeSource` (`:core:net`, #94) serves a `RangeSource` through aligned 64 KiB blocks kept in a
+  `BlockCache` on disk. A cached block is read with no request. Missing blocks are fetched in runs of
+  consecutive blocks, one range per run. The key is the URL and a generation, the manifest's `as_of` in
+  the feed, and a small meta file keeps the size and ETag so a second open makes no request at all.
+  When upstream reports another object, every block of the key is dropped and the read throws
+  `SourceChangedException`, so the reader starts again on the new object. An object without a strong
+  ETag bypasses the cache. `BlockCache` evicts the least recently used file on every write until it is
+  under its quota, and writes nothing while the quota is 0 or unknown. It adds no request and no
+  endpoint of its own.
 - `ParquetFileMetadata.longStatistics(column)` returns the footer min, max and null count of an INT32
   or INT64 column per row group without reading a page. `rowGroupsOverlapping(column, ranges)` keeps the
   row groups whose `[min, max]` meets any inclusive `LongRange` (H3 descendant ranges in W12). A chunk

@@ -22,6 +22,8 @@ import earth.walkthru.aqsync.data.history.UtcDayRange
 import earth.walkthru.aqsync.data.history.info
 import earth.walkthru.aqsync.data.sync.ArchiveMutationGate
 import earth.walkthru.aqsync.data.sync.WriterLeases
+import earth.walkthru.aqsync.net.BlockCache
+import earth.walkthru.aqsync.net.DiskBlockStore
 import earth.walkthru.aqsync.storage.AtomicFiles
 import earth.walkthru.aqsync.storage.DerivedQuota
 import earth.walkthru.aqsync.storage.IosAtomicFiles
@@ -129,6 +131,7 @@ internal object IosArchive {
                 StorageRole.LegacyDerived to "$base/derived",
                 StorageRole.Temp to "$base/${AtomicFiles.TEMP_DIR}",
                 StorageRole.Exports to IosExportSpace.temporaryRoot(),
+                StorageRole.FeedBlocks to "${cachesDirectory()}/feed-blocks",
             ),
         )
     }
@@ -145,9 +148,21 @@ internal object IosArchive {
     }
 
     /**
-     * The Settings Storage card. Clearing touches the derived day files and the map tiles only (#61).
-     * Old format sensor files leave the phone only through [oldFiles], after the user confirms. Sync
-     * skips them until the user chooses Download again.
+     * The disk block cache of the public feed (#94), in `Library/Caches` where iOS purges it under
+     * storage pressure. iOS has no per app cache quota call, so the quota is the stored policy's, and
+     * 0 while the volume runs low.
+     */
+    val feedBlocks: BlockCache by lazy {
+        val store = DiskBlockStore(roots.rootOf(StorageRole.FeedBlocks), derivedAtomic, IosStorageTree())
+        BlockCache(store, quotaBytes = {
+            settingsRepository.current().retention.blockCacheQuotaWithin(Long.MAX_VALUE, budget.freeBytes(StorageClass.Rebuildable))
+        })
+    }
+
+    /**
+     * The Settings Storage card. Clearing touches the derived day files, the feed blocks and the map
+     * tiles only (#61). Old format sensor files leave the phone only through [oldFiles], after the user
+     * confirms. Sync skips them until the user chooses Download again.
      */
     val storageControls: StorageControls by lazy {
         object : StorageControls {
@@ -163,6 +178,7 @@ internal object IosArchive {
 
             override suspend fun clearHistoryCache() {
                 derivedMutex.withLock { withContext(Dispatchers.IO) { derivedQuota.clear() } }
+                feedBlocks.clear()
             }
 
             override suspend fun clearMapCache() = MapCache.clear()

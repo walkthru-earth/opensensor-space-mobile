@@ -535,8 +535,8 @@ offset indexes. `:core:net` adds `HttpRangeSource` over OkHttp 5.5.0 on Android 
 `If-Range` against the ETag, so a replaced file is read again from its new footer. Host and
 simulator tests only. `OpenAqAggregatesFeed` reads the OpenAQ aggregates through it (below).
 Android `DiscoverViewModel` and iOS `AppRoot` each build one per process, read only while Show
-public sensors is on and Real is chosen. Issues #60 and #61 are closed, but the disk byte
-block cache is not built yet. No third-party Parquet or DuckDB library exists for iOS that would do this
+public sensors is on and Real is chosen. Each file read goes through `CachedRangeSource` and the
+disk `BlockCache` (#94), so a second open of a view reads cached blocks with no request. No third-party Parquet or DuckDB library exists for iOS that would do this
 better.
 
 Paths under `date=` and `hour=` never change, so footers and ranges are cached until the
@@ -678,7 +678,7 @@ starts with the target layout from the producer guidance.
 | Module | Owns |
 | --- | --- |
 | `:core:model` | `Device`, `DeviceFamily`, `Capability`, `ObservedProperty`, `Scale`, registry |
-| `:core:publicfeed` | `PublicFeed` and `FeedReader` ports, `ParquetFeedReader` (common, one `ParquetReader.scan` filtered on `h3_index` with page pruning, `CellsTable` reports pages read of total), `BundledSampleFeed`, the `H3Grid` interface (`com.uber:h3` 4.5.0 on Android and JVM, the vendored H3 C 4.5.0 through cinterop on iOS), `H3Index` bit arithmetic and descendant ranges, `ViewportCover`, `CellScale` (WHO steps from `:core:airquality` for PM2.5 and PM10, else `PercentileScale`), `HealthAxis`, `PropertyRanking`, `CellGeoJson`, `TimeZoneRegions`. Built 2026-10-08. `OpenAqAggregatesFeed` over `:core:net`, the daily schema in `ParquetFeedReader` and `DailyCellFold`, built 2026-10-12 (host and simulator tests only). Planned here: S3 listing for the opensensor feed, a disk byte block cache |
+| `:core:publicfeed` | `PublicFeed` and `FeedReader` ports, `ParquetFeedReader` (common, one `ParquetReader.scan` filtered on `h3_index` with page pruning, `CellsTable` reports pages read of total), `BundledSampleFeed`, the `H3Grid` interface (`com.uber:h3` 4.5.0 on Android and JVM, the vendored H3 C 4.5.0 through cinterop on iOS), `H3Index` bit arithmetic and descendant ranges, `ViewportCover`, `CellScale` (WHO steps from `:core:airquality` for PM2.5 and PM10, else `PercentileScale`), `HealthAxis`, `PropertyRanking`, `CellGeoJson`, `TimeZoneRegions`. Built 2026-10-08. `OpenAqAggregatesFeed` over `:core:net`, the daily schema in `ParquetFeedReader` and `DailyCellFold`, built 2026-10-12 (host and simulator tests only). Its reads go through the `:core:net` block cache (#94). Planned here: S3 listing for the opensensor feed |
 | `:core:net` | `HttpRangeSource` and the `HttpRangeEngine` port, `OkHttpRangeEngine` (OkHttp 5.5.0, Android and JVM), `UrlSessionRangeEngine` (`NSURLSession`, iOS). Built with issue #62, used by `OpenAqAggregatesFeed` in both apps |
 | `:core:parquet` | The portable reader from W8, with `RangeSource`, `ParquetReader` (footer cache, coalesced reads, one-pass decoding), row group pruning by INT64 statistics and page pruning by the column and offset indexes |
 | `:feature:discover` | CMP `commonMain` map screen (`DiscoverScreen`), `DiscoverController` state holder, `DiscoverStrings` read from its Compose resources, one copy for both apps, the bundled sample and basemap styles as Compose resources. Targets Android (`com.android.kotlin.multiplatform.library`) and iOS, not the JVM, because the maplibre-compose desktop variant needs Java 25. Planned here: the public device page |

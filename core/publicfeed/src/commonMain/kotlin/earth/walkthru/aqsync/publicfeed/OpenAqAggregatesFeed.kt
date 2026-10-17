@@ -2,7 +2,10 @@ package earth.walkthru.aqsync.publicfeed
 
 import earth.walkthru.aqsync.data.history.parquet.FooterCache
 import earth.walkthru.aqsync.data.history.parquet.RangePolicy
+import earth.walkthru.aqsync.data.history.parquet.RangeSource
+import earth.walkthru.aqsync.net.BlockCache
 import earth.walkthru.aqsync.net.BodyLimit
+import earth.walkthru.aqsync.net.CachedRangeSource
 import earth.walkthru.aqsync.net.HttpRangeEngine
 import earth.walkthru.aqsync.net.HttpRangeException
 import earth.walkthru.aqsync.net.HttpRangeSource
@@ -31,7 +34,9 @@ import kotlin.time.Clock
  *   without `as_of` answers null.
  * - [cells] reads `cells/h3_res=<res>/data.parquet` through an [HttpRangeSource], with one
  *   [FooterCache] for the feed, keeps the daily rows of the 7 days ending at the partition date and
- *   folds them with [DailyCellFold]. The files hold daily rows only, so [FeedWindow.LAST_HOUR] answers
+ *   folds them with [DailyCellFold]. With [blocks] the source is a [CachedRangeSource] keyed by URL and
+ *   `as_of`, so a later read of the same partition, also after a restart, takes the blocks from disk
+ *   with no range request. The files hold daily rows only, so [FeedWindow.LAST_HOUR] answers
  *   [CellsTable.EMPTY] without a request.
  * - The live files are one row group with no page index, so any read fetches the whole file. The daily
  *   rows of one `(res, as_of)` are therefore kept in memory, at most [MAX_RESOLUTIONS] resolutions and
@@ -48,6 +53,8 @@ class OpenAqAggregatesFeed(
     private val clock: Clock = Clock.System,
     policy: RangePolicy = RangePolicy.CELLULAR,
     budgetBytes: Long = DEFAULT_BUDGET_BYTES,
+    /** The disk block cache, or null to read every block from the network. */
+    private val blocks: BlockCache? = null,
 ) : PublicFeed,
     MemoryTrimmable {
     private val root = root.trimEnd('/')
@@ -124,7 +131,7 @@ class OpenAqAggregatesFeed(
             }
             try {
                 val days = key.asOf.minus(DatePeriod(days = DAYS - 1))..key.asOf
-                val table = reader.readCells(HttpRangeSource(cellsUrl(key.res), engine), ranges = null, days = days)
+                val table = reader.readCells(source(key), ranges = null, days = days)
                 rowsLock.withLock {
                     if (inflight[key] === deferred) inflight.remove(key)
                     if (generation == startedAt) {
@@ -145,6 +152,12 @@ class OpenAqAggregatesFeed(
     private fun clearRows() {
         daily.clear()
         generation++
+    }
+
+    private fun source(key: DailyKey): RangeSource {
+        val url = cellsUrl(key.res)
+        val http = HttpRangeSource(url, engine)
+        return blocks?.let { CachedRangeSource(http, it, url, generation = key.asOf.toString()) } ?: http
     }
 
     /** The URL of the cells file at [res]. */

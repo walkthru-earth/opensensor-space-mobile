@@ -1,6 +1,8 @@
 // HTTP range reads for remote Parquet (issue #62). `commonMain` holds `HttpRangeSource`, the
 // `RangeSource` over an `HttpRangeEngine` (one GET with Range, If-Range and If-None-Match).
-// `jvmMain` binds the engine to OkHttp 5 for Android and the JVM. `iosMain` binds it to NSURLSession.
+// `CachedRangeSource` keeps the fetched blocks in a `BlockCache` on disk inside the rebuildable cache
+// quota (#94). `jvmMain` binds the engine to OkHttp 5 for Android and the JVM. `iosMain` binds it to
+// NSURLSession.
 plugins {
     id("opensensor.kmp.library")
 }
@@ -10,6 +12,8 @@ kotlin {
         commonMain.dependencies {
             api(project(":core:parquet"))
             api(libs.kotlinx.coroutines.core)
+            // BlockCache writes through AtomicFiles into the FeedBlocks root.
+            api(project(":core:storage"))
         }
         commonTest.dependencies {
             implementation(libs.kotlinx.coroutines.test)

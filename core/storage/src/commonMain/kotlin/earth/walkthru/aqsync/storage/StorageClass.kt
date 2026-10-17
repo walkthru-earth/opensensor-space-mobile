@@ -27,6 +27,9 @@ enum class StorageRole(val storageClass: StorageClass) {
     /** `derived/v1` day files, in the OS cache directory so the OS may purge them (#61). */
     Derived(StorageClass.Rebuildable),
 
+    /** Blocks of the public feed files the Discover map read (`BlockCache` in `:core:net`, #94), in the OS cache directory. */
+    FeedBlocks(StorageClass.Rebuildable),
+
     /** Where builds before #61 kept `derived/v1`, in app files. The startup janitor removes it whole. */
     LegacyDerived(StorageClass.Rebuildable),
 

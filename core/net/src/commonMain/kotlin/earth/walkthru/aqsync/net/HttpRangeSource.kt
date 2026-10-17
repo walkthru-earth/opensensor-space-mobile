@@ -37,7 +37,7 @@ import kotlin.random.Random
  * its version is unique to this source instance.
  *
  * Nothing is logged, and exception messages carry the URL without its query string.
- * Only tests construct it so far, the live feed is not wired and no disk block cache exists yet.
+ * `OpenAqAggregatesFeed` builds one per file and wraps it in a [CachedRangeSource].
  */
 class HttpRangeSource(
     private val url: String,

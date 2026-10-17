@@ -1,10 +1,12 @@
 package earth.walkthru.aqsync.publicfeed
 
 import earth.walkthru.aqsync.data.history.parquet.RangePolicy
+import earth.walkthru.aqsync.net.BlockCache
 import earth.walkthru.aqsync.net.BodyLimit
 import earth.walkthru.aqsync.net.HttpRangeEngine
 import earth.walkthru.aqsync.net.HttpRangeException
 import earth.walkthru.aqsync.net.HttpRangeResponse
+import earth.walkthru.aqsync.net.MemoryBlockStore
 import earth.walkthru.aqsync.publicfeed.OpenAqFixture.ACCRA
 import earth.walkthru.aqsync.publicfeed.OpenAqFixture.CAIRO
 import earth.walkthru.aqsync.publicfeed.OpenAqFixture.LAGOS
@@ -273,5 +275,30 @@ class OpenAqAggregatesFeedTest {
         for (res in 2..7) store.objects["$root/cells/h3_res=$res/data.parquet"] = store.objects["$root/cells/h3_res=5/data.parquet"]!!
         for (res in 2..7) feed.cells(partition, FeedWindow.DAY, res, ranges = null)
         assertEquals(OpenAqAggregatesFeed.MAX_RESOLUTIONS, feed.cachedResolutions())
+    }
+
+    @Test
+    fun `a second open of the view reads the cells from the block cache with no range request`() = runTest {
+        val blocks = BlockCache(MemoryBlockStore(), quotaBytes = { 1L shl 30 })
+        val first = OpenAqAggregatesFeed(store, root = root, clock = clock, blocks = blocks)
+        val expected = first.cells(first.latest()!!, FeedWindow.DAY, 5, ranges = null)
+        assertTrue(store.requests.any { it.first.endsWith(".parquet") })
+
+        // A new feed, as after a restart, keeps nothing in memory but shares the disk cache.
+        store.requests.clear()
+        val second = OpenAqAggregatesFeed(store, root = root, clock = clock, blocks = blocks)
+        assertEquals(expected.rows, second.cells(second.latest()!!, FeedWindow.DAY, 5, ranges = null).rows)
+        assertEquals(listOf("$root/manifest.json"), store.requests.map { it.first })
+    }
+
+    @Test
+    fun `a new as_of reads the cells again`() = runTest {
+        val blocks = BlockCache(MemoryBlockStore(), quotaBytes = { 1L shl 30 })
+        val first = OpenAqAggregatesFeed(store, root = root, clock = clock, blocks = blocks)
+        first.cells(first.latest()!!, FeedWindow.DAY, 5, ranges = null)
+        store.requests.clear()
+        val second = OpenAqAggregatesFeed(store, root = root, clock = clock, blocks = blocks)
+        second.cells(FeedPartition("2026-10-09", 0), FeedWindow.DAY, 5, ranges = null)
+        assertTrue(store.requests.any { it.first.endsWith(".parquet") })
     }
 }
