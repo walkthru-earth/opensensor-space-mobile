@@ -1,6 +1,7 @@
 package earth.walkthru.aqsync.data
 
 import app.cash.turbine.test
+import earth.walkthru.aqsync.archive.PrunedFile
 import earth.walkthru.aqsync.data.local.database.ArchivedFileIdentity
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.protocol.Frame
@@ -39,6 +40,7 @@ class PlanFlowTest {
         val info = MutableStateFlow<DeviceInfo?>(DeviceInfo(station = station))
         val archives = mutableMapOf<String, MutableStateFlow<List<ArchivedFileIdentity>>>()
         val sync = MutableStateFlow(SyncProgress())
+        val pruned = MutableStateFlow<List<PrunedFile>>(emptyList())
         val observed = mutableListOf<String>()
         var plans = 0
         var partials = 0
@@ -51,7 +53,8 @@ class PlanFlowTest {
             archived = { s -> observed += s; archive(s) },
             sync = sync,
             partialLengths = { partials++; emptyMap() },
-            planner = { s, files, ids, p -> plans++; SyncPlanner.plan(s, files, ids, p) },
+            pruned = pruned,
+            planner = { s, files, ids, p, r -> plans++; SyncPlanner.plan(s, files, ids, p, r) },
         )
 
         fun tick(file: String, done: Long) {
@@ -108,6 +111,21 @@ class PlanFlowTest {
 
             // Another station's archive is not observed at all.
             assertEquals(listOf(station), h.observed)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `a removed file shows as removed until its record is cleared`() = runTest {
+        val h = Harness(station, listing(name, second))
+        h.plan.test {
+            assertEquals(FileSyncState.NOT_SYNCED, awaitItem()!!.entries.first { it.name == name }.state)
+            h.pruned.value = listOf(PrunedFile(station, name, size, 7, 1))
+            val removed = awaitItem()!!
+            assertEquals(FileSyncState.REMOVED, removed.entries.first { it.name == name }.state)
+            assertEquals(listOf(second), removed.toDownload.map { it.name })
+            h.pruned.value = emptyList()
+            assertEquals(FileSyncState.NOT_SYNCED, awaitItem()!!.entries.first { it.name == name }.state)
             cancelAndIgnoreRemainingEvents()
         }
     }

@@ -31,12 +31,14 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * - v10: `sensor_installation`, the phone's record of each sensor fitted to a station.
  * - v11: no schema change. Rows indexed with no UTC rows and no error are marked never indexed, so
  *   the `event_time_utc_us` reader indexes them again (`ArchiveRecord.INDEX_LAYOUT` 2).
+ * - v12: `pruned_file`, the files the user removed from this phone in Settings, which sync skips until
+ *   Download again clears them; `AutoMigration` (new table only).
  */
 @Database(
-    entities = [KnownDevice::class, ArchivedFile::class, MetricBucket::class, DerivedDay::class, StationEpoch::class, SensorInstallation::class],
-    version = 11,
+    entities = [KnownDevice::class, ArchivedFile::class, MetricBucket::class, DerivedDay::class, StationEpoch::class, SensorInstallation::class, PrunedFileEntity::class],
+    version = 12,
     exportSchema = true,
-    autoMigrations = [AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6), AutoMigration(from = 6, to = 7, spec = AppDatabase.DropWideTiers::class), AutoMigration(from = 7, to = 8)],
+    autoMigrations = [AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6), AutoMigration(from = 6, to = 7, spec = AppDatabase.DropWideTiers::class), AutoMigration(from = 7, to = 8), AutoMigration(from = 11, to = 12)],
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun knownDeviceDao(): KnownDeviceDao
@@ -45,6 +47,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun derivedDayDao(): DerivedDayDao
     abstract fun stationEpochDao(): StationEpochDao
     abstract fun sensorInstallationDao(): SensorInstallationDao
+    abstract fun prunedFileDao(): PrunedFileDao
 
     @DeleteTable(tableName = "aggregate_bucket")
     class DropWideTiers : AutoMigrationSpec
