@@ -6,6 +6,7 @@ import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import app.cash.turbine.test
 import earth.walkthru.aqsync.data.ManifestState
 import earth.walkthru.aqsync.data.SyncProgress
+import earth.walkthru.aqsync.data.archive.toRecord
 import earth.walkthru.aqsync.data.planWithProgress
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.protocol.Frame
@@ -81,6 +82,17 @@ class ArchivedFileDaoTest {
         assertEquals("bad footer", failed.indexError)
         assertTrue(AppDatabase.MIGRATION_10_11 in AppDatabase.MIGRATIONS)
         assertEquals(11, AppDatabase.MIGRATIONS.maxOf { it.endVersion })
+    }
+
+    @Test
+    fun `the timeline query reads indexed rows only, the same test as onTimeline`() = runBlocking {
+        fun spanned(name: String, indexedAt: Long?, indexError: String? = null) =
+            file("a", name, indexedAt = indexedAt, indexError = indexError, lastUtcNs = 200, utcRows = 3).copy(firstUtcNs = 100, purpose = "telemetry")
+        val rows = listOf(spanned("ok.parquet", 5), spanned("reopened.parquet", null), spanned("failed.parquet", 5, "bad"))
+        rows.forEach { dao.upsert(it) }
+
+        assertEquals(listOf("ok.parquet"), dao.withUtcBetween("a", 0, 1000).map { it.name })
+        assertEquals(rows.filter { it.toRecord().onTimeline(0, 1000) }.map { it.name }, dao.withUtcBetween("a", 0, 1000).map { it.name })
     }
 
     @Test

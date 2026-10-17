@@ -167,6 +167,33 @@ class TierStoreTest {
     }
 
     @Test
+    fun aDayAWaitingRecordHoldsStaysInTheStore() = runTest {
+        val (store, index, station) = archive()
+        val tierStore = MemoryTierStore()
+        val tiers = ArchiveHistoryTiers(store, index, tierStore = tierStore)
+        tiers.observeDays(station).first()
+        val saved = tierStore.saved.keys.toSet()
+        assertTrue(saved.isNotEmpty())
+        val record = index.rows.value.single()
+
+        // Reopened by an index migration, the record keeps its span and holds those days (#87).
+        index.rows.value = listOf(record.copy(indexedAtEpochMs = null))
+        tiers.observeDays(station).first()
+        assertEquals(saved, tierStore.saved.keys)
+
+        // Without a span it could land on any day, so every day stays.
+        index.rows.value = listOf(record.copy(indexedAtEpochMs = null, utcRows = 0, firstUtcNs = null, lastUtcNs = null))
+        tiers.observeDays(station).first()
+        assertEquals(saved, tierStore.saved.keys)
+
+        // Indexed again, a new process reads the held tiers back instead of decoding the file.
+        index.rows.value = listOf(record)
+        val restarted = ArchiveHistoryTiers(store, index, tierStore = tierStore)
+        assertEquals(saved.size, restarted.observeDays(station).first().count)
+        assertEquals(0, restarted.decodedDays)
+    }
+
+    @Test
     fun theStationsObserversShareOneIndexCollection() = runTest {
         val (store, index, station) = archive()
         val tiers = ArchiveHistoryTiers(store, index, io = StandardTestDispatcher(testScheduler), shareScope = backgroundScope)
