@@ -78,6 +78,17 @@ class SyncPlannerTest {
     }
 
     @Test
+    fun aRemovedMarkWhoseNameTheDeviceNoLongerListsIsReportedForForgetting() {
+        val pruned = listOf(PrunedFile(station, dated, 100, 7, 1), PrunedFile(station, bench, 50, 7, 1), PrunedFile("other-station", unsynced, 1, 1, 1))
+        val plan = SyncPlanner.plan(station, listOf(Frame.File(100, dated)), emptyList(), pruned = pruned)
+        assertEquals(listOf(bench), plan.unlistedRemoved.map { it.name })
+
+        // After a board reset the name comes back at the same size. With the mark forgotten it is a new file.
+        val reused = SyncPlanner.plan(station, listOf(Frame.File(50, bench)), emptyList(), pruned = pruned - plan.unlistedRemoved.toSet())
+        assertEquals(listOf(bench), reused.toDownload.map { it.name })
+    }
+
+    @Test
     fun planDownloadsOnlyWhatTheArchiveLacksAndOrdersDatedFilesFirst() {
         val manifest = listOf(
             Frame.File(14_080, bench),

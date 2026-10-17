@@ -74,6 +74,8 @@ data class ManifestEntry(
 data class SyncPlan(
     val entries: List<ManifestEntry>,
     val toDownload: List<ManifestEntry>,
+    /** Removed records of this station whose name the listing no longer has. See [SyncPlanner]. */
+    val unlistedRemoved: List<PrunedFile> = emptyList(),
 ) {
     val missingBytes: Long get() = toDownload.sumOf { it.bytes - it.partialBytes }
     val missingCount: Int get() = toDownload.size
@@ -86,7 +88,10 @@ data class SyncPlan(
  * Archive identity is `(station, relative name)`. The file is immutable, so a differing `bytes`
  * for an already-archived name is a mismatch to surface, never a version to merge. A [PrunedFile]
  * with the same station, name and size marks the entry [FileSyncState.REMOVED]. A held copy wins
- * over it, and a different size is a new file that downloads as usual.
+ * over it, and a different size is a new file that downloads as usual. A record whose name the
+ * listing no longer has goes to [SyncPlan.unlistedRemoved]. The device dropped that file, so a later
+ * file under the same name is new even at the same size, and a caller with a whole listing forgets
+ * the record.
  */
 object SyncPlanner {
     fun plan(
@@ -135,6 +140,8 @@ object SyncPlanner {
         }
         val toDownload = entries.filter { it.state == FileSyncState.NOT_SYNCED || it.state == FileSyncState.PARTIAL }
             .sortedWith(compareBy<ManifestEntry> { it.partition !is HivePartition.Dated }.thenBy { it.name })
-        return SyncPlan(entries, toDownload)
+        val listed = manifest.mapTo(HashSet()) { it.name }
+        val unlisted = prunedByName.values.filter { it.name !in listed }.sortedBy { it.name }
+        return SyncPlan(entries, toDownload, unlisted)
     }
 }

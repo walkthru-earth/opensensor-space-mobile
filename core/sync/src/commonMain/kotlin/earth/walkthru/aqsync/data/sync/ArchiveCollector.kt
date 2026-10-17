@@ -2,10 +2,12 @@ package earth.walkthru.aqsync.data.sync
 
 import earth.walkthru.aqsync.archive.ArchiveIndex
 import earth.walkthru.aqsync.archive.ArchiveStore
+import earth.walkthru.aqsync.archive.PrunedFile
 import earth.walkthru.aqsync.archive.PrunedFiles
 import earth.walkthru.aqsync.data.ble.DeviceSession
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.storage.StorageBudget
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlin.time.TimeSource
 
@@ -88,7 +90,9 @@ data class CollectionSummary(
  * room again, and when it ran out the run ends the same way, keeping the partial for resume.
  *
  * A file the user removed from this phone in Settings ([pruned]) is skipped while the device still
- * lists it at the same size. The collector never asks the device to delete, rename or rewrite a file.
+ * lists it at the same size. A whole listing that no longer has the name forgets the record, so a
+ * later file under that name downloads. The collector never asks the device to delete, rename or
+ * rewrite a file.
  */
 class ArchiveCollector(
     private val store: ArchiveStore,
@@ -127,6 +131,9 @@ class ArchiveCollector(
         }
         val archived = archivedIdentities(station)
         val plan = SyncPlanner.plan(station, scopedFiles, archived, store.partialLengths(station), pruned.forStation(station))
+        // Only a whole listing proves a name is gone. A record that cannot be dropped stays until the
+        // next run, which never stops this one, since the device does not list that file now.
+        if (onlyName == null) plan.unlistedRemoved.forEach { forgetRemoved(it) }
         val notSaved = plan.entries.mapNotNull { entry ->
             when (entry.state) {
                 FileSyncState.INVALID_NAME -> FileNotSaved(entry.name, FileProblem.INVALID_ENTRY)
@@ -136,6 +143,16 @@ class ArchiveCollector(
         }
         budget.requireRoom(plan.missingBytes)
         return PlannedCollection(plan, notSaved)
+    }
+
+    private suspend fun forgetRemoved(file: PrunedFile) {
+        try {
+            pruned.remove(file.key)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // Kept for the next whole listing.
+        }
     }
 
     /**

@@ -23,6 +23,7 @@ import earth.walkthru.aqsync.storage.StorageBudget
 import earth.walkthru.aqsync.storage.StorageClass
 import earth.walkthru.aqsync.storage.StorageException
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -138,6 +139,34 @@ class ArchiveCollectorTest {
         assertEquals(2, summary.newFiles)
         assertEquals(null, finalBytes(fake.station, removed.name))
         assertEquals(fake.files.drop(1).map { it.name }.toSet(), index.records.map { it.name }.toSet())
+    }
+
+    @Test
+    fun aWholeListingForgetsRemovedMarksOfFilesTheDeviceDropped() = runTest {
+        val fake = FakeArchiveDevice(backgroundScope)
+        val listed = fake.files[0]
+        val kept = PrunedFile(fake.station, listed.name, listed.bytes.size.toLong(), 0, 1)
+        val gone = PrunedFile(fake.station, "station=${fake.station}/year=2020/month=01/day=01/gone.parquet", 10, 0, 1)
+        val marks = MutableStateFlow(listOf(kept, gone))
+        val pruned = object : PrunedFiles {
+            override fun observeAll(): Flow<List<PrunedFile>> = marks
+            override suspend fun put(file: PrunedFile) {
+                marks.value = marks.value.filterNot { it.key == file.key } + file
+            }
+            override suspend fun remove(key: ArchiveKey) {
+                marks.value = marks.value.filterNot { it.key == key }
+            }
+            override suspend fun clear(): Int = marks.value.size.also { marks.value = emptyList() }
+        }
+        val collector = ArchiveCollector(store, index, engine(), FakeStorageBudget(), testTimeSource, pruned = pruned)
+
+        // A run narrowed to one file proves nothing about the others.
+        collector.collect(session(fake), fake.station, fake.address, fake.maxRead, onlyName = fake.files[1].name) {}
+        assertEquals(listOf(kept, gone), marks.value)
+
+        collector.collect(session(fake), fake.station, fake.address, fake.maxRead) {}
+        assertEquals(listOf(kept), marks.value)
+        assertEquals(null, finalBytes(fake.station, listed.name))
     }
 
     @Test

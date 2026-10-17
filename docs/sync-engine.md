@@ -106,7 +106,8 @@ identities, not full history rows. Verified files are skipped, so a resume only 
 is missing. Each controller attempt takes a fresh LIST and archive snapshot. A listed file with no
 phone copy and a `PrunedFiles` record of the same station, name and size is `REMOVED`. The user
 removed it in Settings, so it is not downloaded and counts as done. The FILE frame has no CRC, so
-the size is the match. A phone copy always wins.
+the size is the match. A phone copy always wins. A whole LIST drops the records of names it no
+longer has, since the device dropped that file. A run for one selected file keeps them.
 `FileSyncState`: `NOT_SYNCED · PARTIAL · SYNCING · SYNCED · REMOVED · MISMATCH · INVALID_NAME`.
 
 ## Integrity (`ParquetVerify`)
