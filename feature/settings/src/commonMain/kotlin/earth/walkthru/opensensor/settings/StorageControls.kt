@@ -34,15 +34,14 @@ data class OldFilesPlan(
 )
 
 /**
- * What a cleanup did. [kept] files stayed (no longer old, gone already, or not reached), [failed] files
- * could not be deleted. [syncRunning] is true when it stopped, or never started, because a sync ran.
- * [rebuildFailed] is true when the files went but their History days were not rebuilt yet.
+ * What a cleanup did. [kept] files stayed (no longer old, changed or gone since the count), [failed]
+ * files could not be deleted. [rebuildFailed] is true when the files went but their History days were
+ * not rebuilt yet.
  */
 data class OldFilesResult(
     val removed: Int,
     val bytes: Long,
     val kept: Int,
-    val syncRunning: Boolean,
     val failed: Int = 0,
     val rebuildFailed: Boolean = false,
 )
@@ -50,7 +49,8 @@ data class OldFilesResult(
 /**
  * What the Settings Storage card measures and clears. The host wires its archive roots, derived quota
  * and map cache. Clearing touches rebuildable caches only. Old format sensor files leave the phone
- * only through [removeOldFiles], after the user confirms. Nothing here ever reaches a device.
+ * only through [removeOldFiles], after the user confirms. Sync skips a removed file until
+ * [downloadRemovedAgain]. Nothing here ever reaches a device.
  */
 interface StorageControls {
     suspend fun usage(): StorageUsage
@@ -59,14 +59,17 @@ interface StorageControls {
 
     suspend fun clearMapCache()
 
-    /** True while any device sync runs, when removal is refused. */
-    fun syncRunning(): Boolean
-
     /** The old format files in [range], or in the whole phone archive when null. Changes nothing. */
     suspend fun findOldFiles(range: OldFilesRange?): OldFilesPlan
 
     /** Removes the files of [plan] from this phone, then rebuilds the History days they fed. */
     suspend fun removeOldFiles(plan: OldFilesPlan): OldFilesResult
+
+    /** How many removed files sync skips. */
+    suspend fun removedFiles(): Int
+
+    /** Forgets the removed files, so the next sync downloads them again when a sensor still has them. */
+    suspend fun downloadRemovedAgain()
 }
 
 /** A byte count in megabytes with one decimal, the unit the Storage card uses. */

@@ -6,6 +6,8 @@ import earth.walkthru.aqsync.archive.ArchiveRecord
 import earth.walkthru.aqsync.archive.ArchiveStore
 import earth.walkthru.aqsync.archive.PartialMeta
 import earth.walkthru.aqsync.archive.PartialWriter
+import earth.walkthru.aqsync.archive.PrunedFile
+import earth.walkthru.aqsync.archive.PrunedFiles
 import earth.walkthru.aqsync.data.history.parquet.ByteArrayReader
 import earth.walkthru.aqsync.data.history.parquet.ByteReader
 import earth.walkthru.aqsync.data.history.parquet.ColumnValues
@@ -13,11 +15,13 @@ import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 import earth.walkthru.aqsync.data.history.parquet.ParquetLogicalType.TimeUnit
 import earth.walkthru.aqsync.data.history.parquet.ParquetType
 import earth.walkthru.aqsync.data.history.parquet.ParquetWriter
+import earth.walkthru.aqsync.data.sync.ArchiveMutationGate
 import earth.walkthru.aqsync.data.sync.WriterLeases
 import earth.walkthru.aqsync.storage.StorageEntry
 import earth.walkthru.aqsync.storage.StorageRole
 import earth.walkthru.aqsync.storage.StorageRoots
 import earth.walkthru.aqsync.storage.StorageTree
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,7 +39,8 @@ import kotlin.test.assertTrue
 /**
  * The phone only cleanup of old layout device files. Old means `event_time_utc_ns` NANOS or
  * unannotated with no field ids. Current MICROS files, files without a UTC column and unreadable files
- * always stay. The record goes before the file, and a failed delete puts it back.
+ * always stay. The record goes before the file, and a failed delete puts it back. Each removed file
+ * leaves a [PrunedFile], so sync skips it.
  */
 class LegacyFileCleanupTest {
     private val station = "53315f5f-cb85-4d8d-b623-d56266084189"
@@ -113,6 +118,14 @@ class LegacyFileCleanupTest {
 
         /** Makes [putIfAbsent] throw, like a database that went away after the delete failed. */
         var failPut = false
+
+        /** Runs inside [update] between its read and its write, where a writer without the gate could interleave. */
+        var duringUpdate: (suspend () -> Unit)? = null
+        override suspend fun update(key: ArchiveKey, transform: (ArchiveRecord) -> ArchiveRecord) {
+            val latest = get(key)
+            duringUpdate?.invoke()
+            latest?.let { put(transform(it)) }
+        }
         override suspend fun putIfAbsent(record: ArchiveRecord): Boolean {
             if (failPut) throw IllegalStateException("closed")
             return super.putIfAbsent(record)
@@ -127,9 +140,9 @@ class LegacyFileCleanupTest {
             rows.value = rows.value.filterNot { it.key == key }
             onRemove?.also { onRemove = null }?.invoke()
         }
-        override suspend fun unindexed(limit: Int): List<ArchiveRecord> = emptyList()
+        override suspend fun unindexed(limit: Int): List<ArchiveRecord> = rows.value.filter { it.indexedAtEpochMs == null }.take(limit)
         override suspend fun timeline(station: String, fromNs: Long, toNs: Long): List<ArchiveRecord> = emptyList()
-        override suspend fun indexedForStation(station: String): List<ArchiveRecord> = rows.value.filter { it.station == station && it.indexed }
+        override suspend fun indexedForStation(station: String): List<ArchiveRecord> = rows.value.filter { it.station == station && it.isIndexed }
         override suspend fun stations(): List<String> = rows.value.map { it.station }.distinct()
     }
 
@@ -145,7 +158,29 @@ class LegacyFileCleanupTest {
         }
     }
 
-    private class Setup(val store: Store, val index: Index, val tree: Tree, val cleanup: LegacyFileCleanup, val rebuilt: MutableList<Map<String, Set<Long>>>)
+    private class Pruned : PrunedFiles {
+        val files = MutableStateFlow<List<PrunedFile>>(emptyList())
+        var failPut = false
+        override fun observeAll(): Flow<List<PrunedFile>> = files
+        override suspend fun put(file: PrunedFile) {
+            if (failPut) throw IllegalStateException("full")
+            files.value = files.value.filterNot { it.key == file.key } + file
+        }
+        override suspend fun remove(key: ArchiveKey) {
+            files.value = files.value.filterNot { it.key == key }
+        }
+        override suspend fun clear(): Int = files.value.size.also { files.value = emptyList() }
+    }
+
+    private class Setup(
+        val store: Store,
+        val index: Index,
+        val tree: Tree,
+        val cleanup: LegacyFileCleanup,
+        val rebuilt: MutableList<Map<String, Set<Long>>>,
+        val gate: ArchiveMutationGate,
+        val pruned: Pruned,
+    )
 
     private fun record(name: String, bytes: ByteArray, firstNs: Long?, lastNs: Long? = firstNs, owner: String = station) = ArchiveRecord(
         station = owner, name = name, bytes = bytes.size.toLong(), crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake",
@@ -155,7 +190,6 @@ class LegacyFileCleanupTest {
     private fun name(day: Long, n: Int) = "station=$station/year=2024/month=10/day=$day/file-$n.parquet"
 
     private fun setup(
-        syncing: () -> Boolean = { false },
         vararg files: Pair<ArchiveRecord, ByteArray>,
         afterRemoval: (suspend (Map<String, Set<Long>>) -> Unit)? = null,
     ): Setup {
@@ -167,8 +201,14 @@ class LegacyFileCleanupTest {
         }
         val tree = Tree(store, root)
         val rebuilt = mutableListOf<Map<String, Set<Long>>>()
-        val cleanup = LegacyFileCleanup(store, index, roots, tree, WriterLeases(), Dispatchers.Unconfined, syncing, afterRemoval = afterRemoval ?: { rebuilt += it })
-        return Setup(store, index, tree, cleanup, rebuilt)
+        val gate = ArchiveMutationGate()
+        val pruned = Pruned()
+        val cleanup = LegacyFileCleanup(
+            store, index, roots, tree, WriterLeases(), gate, pruned, Dispatchers.Unconfined,
+            afterRemoval = afterRemoval ?: { rebuilt += it },
+            nowEpochMs = { 42 },
+        )
+        return Setup(store, index, tree, cleanup, rebuilt, gate, pruned)
     }
 
     @Test
@@ -236,6 +276,10 @@ class LegacyFileCleanupTest {
         assertEquals(setOf(current.key), s.store.files.keys)
         assertEquals(listOf("$root/$station/${old.name}", "$root/other-station/${unplaced.name}"), s.tree.deleted)
         assertEquals(listOf(mapOf(station to setOf(day, day + 1), "other-station" to emptySet())), s.rebuilt)
+        assertEquals(
+            listOf(PrunedFile(station, old.name, old.bytes, old.crc32, 42), PrunedFile("other-station", unplaced.name, unplaced.bytes, unplaced.crc32, 42)),
+            s.pruned.files.value,
+        )
     }
 
     @Test
@@ -251,6 +295,75 @@ class LegacyFileCleanupTest {
         assertEquals(a, s.index.get(a.key))
         assertTrue(a.key in s.store.files)
         assertNull(s.index.get(b.key))
+        // Only the file that went stays skipped by sync.
+        assertEquals(listOf(b.key), s.pruned.files.value.map { it.key })
+    }
+
+    @Test
+    fun aRemovedMarkThatCannotBeWrittenKeepsTheFile() = runTest {
+        val a = record(name(1, 1), nanos, day * dayNs)
+        val s = setup(files = arrayOf(a to nanos))
+        s.pruned.failPut = true
+        assertEquals(LegacyFileCleanup.Report(failed = 1), s.cleanup.remove(s.cleanup.plan()))
+        assertEquals(a, s.index.get(a.key))
+        assertTrue(a.key in s.store.files)
+        assertTrue(s.tree.deleted.isEmpty())
+    }
+
+    @Test
+    fun theLiveRecordIsCheckedAgainUnderTheGate() = runTest {
+        val a = record(name(1, 1), nanos, day * dayNs)
+        val b = record(name(1, 2), nanos, day * dayNs)
+        val s = setup(files = arrayOf(a to nanos, b to nanos))
+        val plan = s.cleanup.plan()
+        val held = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        // Another writer holds the gate after the cleanup read the records, and changes both meanwhile.
+        val writer = launch {
+            s.gate.withStation(station) {
+                held.complete(Unit)
+                release.await()
+                s.index.put(a.copy(crc32 = 2))
+                s.index.remove(b.key)
+            }
+        }
+        held.await()
+        val cleanup = launch { assertEquals(LegacyFileCleanup.Report(kept = 2), s.cleanup.remove(plan)) }
+        testScheduler.runCurrent()
+        release.complete(Unit)
+        writer.join()
+        cleanup.join()
+        assertEquals(2, s.store.files.size)
+        assertTrue(s.tree.deleted.isEmpty())
+        assertTrue(s.pruned.files.value.isEmpty())
+    }
+
+    @Test
+    fun repairAndCleanupTakeTurnsSoNoRecordComesBackForADeletedFile() = runTest {
+        val a = record(name(1, 1), nanos, day * dayNs).copy(indexedAtEpochMs = null)
+        val s = setup(files = arrayOf(a to nanos))
+        val plan = s.cleanup.plan()
+        val repair = ArchiveIndexRepair(s.store, s.index, io = Dispatchers.Unconfined, gate = s.gate)
+        val inside = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        s.index.duringUpdate = {
+            inside.complete(Unit)
+            release.await()
+        }
+        // Repair read the record and is about to write its index columns back.
+        val repairing = launch { repair.backfill() }
+        inside.await()
+        val cleaning = launch { s.cleanup.remove(plan) }
+        testScheduler.runCurrent()
+        // The cleanup waits for the gate, so nothing is gone yet.
+        assertNotNull(s.index.get(a.key))
+        assertTrue(a.key in s.store.files)
+        release.complete(Unit)
+        repairing.join()
+        cleaning.join()
+        assertTrue(s.index.rows.value.isEmpty())
+        assertTrue(s.store.files.isEmpty())
+        assertEquals(listOf(a.key), s.pruned.files.value.map { it.key })
     }
 
     @Test
@@ -279,30 +392,13 @@ class LegacyFileCleanupTest {
     }
 
     @Test
-    fun removalIsRefusedWhileASyncRunsAndStopsWhenOneStarts() = runTest {
-        val a = record(name(1, 1), nanos, day * dayNs)
-        val b = record(name(1, 2), nanos, day * dayNs)
-        val s = setup(syncing = { true }, files = arrayOf(a to nanos, b to nanos))
-        val plan = s.cleanup.plan()
-        assertEquals(LegacyFileCleanup.Report(kept = 2, stoppedBySync = true), s.cleanup.remove(plan))
-        assertEquals(2, s.store.files.size)
-
-        // A sync that starts after the first file stops the rest.
-        var checks = 0
-        val stopping = setup(syncing = { checks++ >= 2 }, files = arrayOf(a to nanos, b to nanos))
-        val report = stopping.cleanup.remove(stopping.cleanup.plan())
-        assertEquals(LegacyFileCleanup.Report(removed = 1, bytes = a.bytes, kept = 1, stoppedBySync = true), report)
-        assertNotNull(stopping.index.get(b.key))
-    }
-
-    @Test
     fun aPathOutsideTheDurableArchiveIsNeverDeleted() = runTest {
         val a = record(name(1, 1), nanos, day * dayNs)
         val store = Store().apply { files[a.key] = nanos }
         val index = Index().apply { rows.value = listOf(a) }
         val tree = Tree(store, root)
         val noArchive = StorageRoots(mapOf(StorageRole.Derived to "/data/app/cache/derived/v1"))
-        val cleanup = LegacyFileCleanup(store, index, noArchive, tree, WriterLeases(), Dispatchers.Unconfined, { false })
+        val cleanup = LegacyFileCleanup(store, index, noArchive, tree, WriterLeases(), ArchiveMutationGate(), Pruned(), Dispatchers.Unconfined)
         assertEquals(LegacyFileCleanup.Report(kept = 1), cleanup.remove(cleanup.plan()))
         assertNotNull(index.get(a.key))
         assertTrue(tree.deleted.isEmpty())
@@ -353,9 +449,10 @@ class LegacyFileCleanupTest {
         s.index.failPut = true
         val report = s.cleanup.remove(s.cleanup.plan())
         assertEquals(LegacyFileCleanup.Report(removed = 1, bytes = b.bytes, failed = 1), report)
-        // The file stays without its record, the startup janitor adopts it again.
+        // The file stays without its record, the startup janitor adopts it again. Sync no longer skips it.
         assertTrue(a.key in s.store.files)
         assertNull(s.index.get(a.key))
+        assertEquals(listOf(b.key), s.pruned.files.value.map { it.key })
         assertEquals(listOf(mapOf(station to setOf(day))), s.rebuilt)
     }
 
