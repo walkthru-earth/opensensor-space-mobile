@@ -5,6 +5,7 @@ import earth.walkthru.aqsync.data.history.parquet.ByteArrayReader
 import earth.walkthru.aqsync.data.history.parquet.ByteReader
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 import earth.walkthru.aqsync.data.history.parquet.ParquetFormatException
+import earth.walkthru.aqsync.data.history.parquet.ParquetLogicalType
 import earth.walkthru.aqsync.data.history.parquet.ParquetSink
 import kotlinx.coroutines.CancellationException
 import kotlin.test.Test
@@ -158,9 +159,10 @@ class DailyParquetBuilderTest {
             val file = ParquetFile.wrap(sink.bytes())
             totalRows += file.numRows
             assertEquals(result.rows.toLong(), file.numRows)
-            assertEquals(file.numRows.toInt(), file.readColumn(ParquetIndexer.UTC).nullCount)
-            assertTrue(file.metadata.leaf(DailyParquetBuilder.ESTIMATED_UTC)!!.isTimestampNanosUtc)
-            val times = file.readColumn(DailyParquetBuilder.ESTIMATED_UTC).longValues().toList()
+            assertEquals(file.numRows.toInt(), file.readColumn(UtcColumns.EVENT_US).nullCount)
+            assertEquals(ParquetLogicalType.TimeUnit.MICROS, file.metadata.leaf(DailyParquetBuilder.ESTIMATED_UTC)!!.timestampUtcUnit)
+            // Stored in microseconds, compared on the nanosecond timeline.
+            val times = file.readColumn(DailyParquetBuilder.ESTIMATED_UTC).longValues().map { it * 1_000L }
             assertTrue(times.all { StationDays.dayOf(it) == day })
             assertEquals(times.sorted(), times)
             actual += times
@@ -171,7 +173,7 @@ class DailyParquetBuilderTest {
         assertEquals(64L, totalRows)
         assertEquals(expected, actual)
         assertEquals(123_456_000L, actual.last() % 1_000_000_000L)
-        assertEquals(64, source.open().use { it.readColumn(ParquetIndexer.UTC) }.nullCount, "raw device UTC stays null")
+        assertEquals(64, source.open().use { it.readColumn(UtcColumns.EVENT_NS) }.nullCount, "raw device UTC stays null")
     }
 
     @Test

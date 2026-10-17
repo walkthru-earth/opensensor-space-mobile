@@ -1,12 +1,18 @@
 package earth.walkthru.aqsync.data.history
 
+import android.content.ContextWrapper
+import androidx.room.Room
+import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import earth.walkthru.aqsync.data.archive.toRecord
+import earth.walkthru.aqsync.data.history.parquet.ParquetLogicalType
+import earth.walkthru.aqsync.data.local.database.AppDatabase
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
 import earth.walkthru.aqsync.data.local.database.DerivedArchivedFileQueries
 import earth.walkthru.aqsync.data.local.database.DerivedDay
 import earth.walkthru.aqsync.data.local.database.DerivedDayDao
 import earth.walkthru.aqsync.data.local.database.MetricBucket
 import earth.walkthru.aqsync.data.local.database.MetricBucketDao
+import earth.walkthru.aqsync.data.local.database.writerSql
 import earth.walkthru.aqsync.data.sync.FileArchive
 import earth.walkthru.aqsync.storage.AtomicFiles
 import earth.walkthru.aqsync.storage.DerivedQuota
@@ -16,7 +22,9 @@ import earth.walkthru.aqsync.storage.QuotaEnforcer
 import earth.walkthru.aqsync.storage.StorageClass
 import earth.walkthru.aqsync.storage.StorageRole
 import earth.walkthru.aqsync.storage.StorageRoots
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.decodeFromString
@@ -218,7 +226,7 @@ class HistoryDeriverTest {
         assertEquals(105L, daily.numRows)
         assertEquals(1, daily.rowGroupCount) // 09:42–09:59Z is one UTC hour
         assertEquals(78, daily.leaves.size) // 77 + source_file_index
-        assertTrue(daily.leaf("event_time_utc_ns").isTimestampNanosUtc)
+        assertEquals(ParquetLogicalType.TimeUnit.MICROS, daily.leaf("event_time_utc_us").timestampUtcUnit)
         assertEquals("telemetry-derived-day", daily.metadata.keyValueMetadata["purpose"])
         assertTrue(daily.metadata.keyValueMetadata["complete"] in setOf("true", "false"))
         assertTrue(store.manifestFile(station, 20713).readText().contains("\"rows_used\":105"))
@@ -364,14 +372,71 @@ class HistoryDeriverTest {
                     store.manifestFile(station, day.epochDay).copyTo(File(outputs, "derived-clock-day-${day.epochDay}.manifest.json"), overwrite = true)
                 }
                 val parquet = earth.walkthru.aqsync.data.history.parquet.ParquetFile.open(store.dayFile(station, day.epochDay))
-                val actual = parquet.readColumn("event_time_utc_ns")
-                val estimated = parquet.readColumn("event_time_utc_estimated_ns")
+                val actual = parquet.readColumn("event_time_utc_us")
+                val estimated = parquet.readColumn("event_time_utc_estimated_us")
                 for (row in 0 until actual.size) {
                     assertTrue(actual.isNull(row))
-                    assertEquals(day.epochDay, StationDays.dayOf(estimated.asLong(row)!!))
+                    assertEquals(day.epochDay, StationDays.dayOf(estimated.asLong(row)!! * 1_000))
                 }
             }
         } finally {
+            tmp.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `a day reopened by the v11 migration survives a derive pass before its backfill`() = runBlocking {
+        val tmp = java.nio.file.Files.createTempDirectory("aq-migration-derive").toFile()
+        val db = Room.inMemoryDatabaseBuilder(ContextWrapper(null), AppDatabase::class.java)
+            .setDriver(BundledSQLiteDriver())
+            .setQueryCoroutineContext(Dispatchers.IO)
+            .build()
+        try {
+            val archive = FileArchive(tmp)
+            val files = db.archivedFileDao()
+            val days = db.derivedDayDao()
+            val buckets = db.metricBucketDao()
+            val indexer = HistoryIndexer(archive, files)
+            val store = DerivedStore(tmp)
+            val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp))
+            val name = "station=$station/unsynced/boot=e452563e96c72ca057a48924550779b6/raw.parquet"
+            val raw = archive.fileFor(station, name).apply {
+                parentFile!!.mkdirs()
+                writeBytes(bytes("device/v1-none-64rows-unsynced.parquet"))
+            }
+            files.upsert(indexer.indexed(ArchivedFile(station = station, name = name, bytes = raw.length(), crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), raw))
+            val indexed = files.forStation(station).single()
+            // An estimated file has no UTC rows, the shape the migration reopens.
+            deriver.recordClockAnchor(station, indexed.bootId!!, 1_788_912_000_123_456_000L, indexed.lastMonoUs!!)
+            val before = days.forStation(station).map { it.epochDay }.toSet()
+            assertEquals(2, before.size)
+            val bucketDays = buckets.observeDayCount(station).first()
+            assertEquals(2, bucketDays)
+
+            AppDatabase.MIGRATION_10_11.migrate(db.writerSql())
+            assertEquals(null, files.forStation(station).single().indexedAtEpochMs)
+
+            // The derive collector may run before the backfill. The waiting file still holds its days.
+            assertEquals(0, deriver.deriveStale().daysRebuilt)
+            assertEquals(before, days.forStation(station).map { it.epochDay }.toSet())
+            assertEquals(bucketDays, buckets.observeDayCount(station).first())
+            for (day in before) {
+                assertTrue(store.dayFile(station, day).isFile)
+                assertTrue(store.manifestFile(station, day).isFile)
+            }
+
+            indexer.backfillAll()
+            assertTrue(files.forStation(station).single().isIndexed)
+            deriver.deriveStale()
+            assertEquals(before, days.forStation(station).map { it.epochDay }.toSet())
+
+            // A deleted file still takes its days with it.
+            files.delete(station, name)
+            deriver.deriveStale()
+            assertTrue(days.forStation(station).isEmpty())
+            for (day in before) assertFalse(store.dayFile(station, day).exists())
+        } finally {
+            db.close()
             tmp.deleteRecursively()
         }
     }
@@ -452,7 +517,7 @@ class HistoryDeriverTest {
 
         // The deriver lists a station once and splits it by day (#63), a time query per day is a regression.
         override suspend fun withUtcBetween(station: String, fromNs: Long, toNs: Long): List<ArchivedFile> = error("the deriver must not query per day")
-        override suspend fun indexedForStation(station: String) = rows.filter { it.station == station && it.indexed }
+        override suspend fun indexedForStation(station: String) = rows.filter { it.station == station && it.isIndexed }
         override suspend fun stations() = rows.map { it.station }.distinct()
     }
 

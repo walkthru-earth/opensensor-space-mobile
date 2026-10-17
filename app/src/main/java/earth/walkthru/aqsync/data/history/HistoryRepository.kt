@@ -54,7 +54,7 @@ class HistoryRepository internal constructor(
      * by `(station, name, crc32)` for the life of the process.
      */
     suspend fun fileSummaries(station: String, files: List<ArchivedFile>): List<FileSummary> = withContext(Dispatchers.IO) {
-        val telemetry = files.filter { it.indexed && (it.purpose == null || it.purpose == "telemetry") }
+        val telemetry = files.filter { it.isIndexed && (it.purpose == null || it.purpose == "telemetry") }
         val anchors = if (telemetry.any { it.hasEstimatedUtc }) TimeEstimate.anchors(telemetry.map { it.info() }, clockAnchors.anchors(station)) else emptyMap()
         val ordered = telemetry.sortedWith(compareBy<ArchivedFile> { it.timelineFirstNs == null }.thenBy { it.timelineFirstNs ?: 0L }.thenBy { it.name })
         ordered.mapNotNull { f ->

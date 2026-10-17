@@ -44,12 +44,12 @@ data class ArchivedFile(
     val indexError: String? = null,
     val rows: Long? = null,
     val rowGroups: Int? = null,
-    /** `schema_version` file metadata (`cores3-telemetry-v1|v2|v3`). */
+    /** `schema_version` file metadata (for example `cores3-telemetry-v5`). */
     val schemaVersion: String? = null,
     val bootId: String? = null,
     /** `purpose` file metadata; `telemetry` for station data, `codec-comparison-duplicate-rows` for benchmark copies. */
     val purpose: String? = null,
-    /** Rows with a UTC timestamp and their span (`event_time_utc_ns`). 0 / null for unsynced files. */
+    /** Rows with a UTC timestamp and their span (the event time column, held in nanoseconds). 0 / null for unsynced files. */
     val utcRows: Long? = null,
     val firstUtcNs: Long? = null,
     val lastUtcNs: Long? = null,
@@ -66,10 +66,11 @@ data class ArchivedFile(
     val estLastUtcNs: Long? = null,
     val estAnchorFile: String? = null,
 ) {
-    val indexed: Boolean get() = indexedAtEpochMs != null && indexError == null
+    /** The same test as [earth.walkthru.aqsync.archive.ArchiveRecord.isIndexed]. */
+    val isIndexed: Boolean get() = indexedAtEpochMs != null && indexError == null
 
     /** The plain record the pure history module works with. */
-    fun info() = IndexedFileInfo(name, bootId, purpose, indexed, rows, utcRows, firstUtcNs, lastUtcNs, firstMonoUs, lastMonoUs)
+    fun info() = IndexedFileInfo(name, bootId, purpose, isIndexed, rows, utcRows, firstUtcNs, lastUtcNs, firstMonoUs, lastMonoUs)
 
     /** The file has real UTC rows. */
     val hasUtc: Boolean get() = (utcRows ?: 0L) > 0L
@@ -185,11 +186,11 @@ interface ArchivedFileDao {
     fun observeUnindexedCountForStation(station: String): Flow<Int>
 
     /**
-     * Telemetry files of one station on the timeline between [fromNs, toNs): real UTC rows, or an
-     * estimated span (§4.6) when the file has none. Ordered by (real or estimated) first time.
+     * Indexed telemetry files of one station on the timeline between [fromNs, toNs): real UTC rows,
+     * or an estimated span (§4.6) when the file has none. Ordered by (real or estimated) first time.
      */
     @Query(
-        "SELECT * FROM archived_file WHERE station = :station AND indexError IS NULL " +
+        "SELECT * FROM archived_file WHERE station = :station AND indexedAtEpochMs IS NOT NULL AND indexError IS NULL " +
             "AND (purpose IS NULL OR purpose = 'telemetry') " +
             "AND COALESCE(CASE WHEN utcRows > 0 THEN lastUtcNs ELSE estLastUtcNs END, -9223372036854775808) >= :fromNs " +
             "AND COALESCE(CASE WHEN utcRows > 0 THEN firstUtcNs ELSE estFirstUtcNs END, 9223372036854775807) < :toNs " +

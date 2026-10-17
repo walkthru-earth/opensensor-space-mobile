@@ -11,6 +11,7 @@ import earth.walkthru.aqsync.data.history.parquet.ByteReader
 import earth.walkthru.aqsync.data.history.parquet.ColumnValues
 import earth.walkthru.aqsync.data.history.parquet.MemoryRangeSource
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
+import earth.walkthru.aqsync.data.history.parquet.ParquetLogicalType
 import earth.walkthru.aqsync.data.history.parquet.ParquetSink
 import earth.walkthru.aqsync.data.history.parquet.ParquetType
 import earth.walkthru.aqsync.data.history.parquet.ParquetWriter
@@ -44,7 +45,7 @@ open class HistoryBenchmark {
             val writer = ParquetWriter(
                 sink,
                 listOf(
-                    ParquetWriter.Column(ParquetIndexer.UTC, ParquetType.INT64, true),
+                    ParquetWriter.Column(ParquetIndexer.UTC, ParquetType.INT64, timestampUtc = ParquetLogicalType.TimeUnit.MICROS),
                     ParquetWriter.Column("boot_id_hi", ParquetType.INT64),
                     ParquetWriter.Column("boot_id_lo", ParquetType.INT64),
                     ParquetWriter.Column(ParquetIndexer.SEQ, ParquetType.INT64),
@@ -57,7 +58,7 @@ open class HistoryBenchmark {
             writer.begin()
             writer.rowGroup(
                 listOf(
-                    ColumnValues.Int64(LongArray(90) { (day * 86_400 + (file * 90 + it) * 10) * 1_000_000_000 }, null),
+                    ColumnValues.Int64(LongArray(90) { (day * 86_400 + (file * 90 + it) * 10) * 1_000_000 }, null),
                     ColumnValues.Int64(LongArray(90) { 1 }, null),
                     ColumnValues.Int64(LongArray(90) { 2 }, null),
                     ColumnValues.Int64(LongArray(90) { (file * 90 + it).toLong() }, null),

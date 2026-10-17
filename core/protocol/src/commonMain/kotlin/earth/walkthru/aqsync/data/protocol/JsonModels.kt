@@ -124,13 +124,17 @@ enum class PmsStatus(val code: Int, val label: String) {
     }
 }
 
-/** `live` (read, notify). One snapshot per stored sample; PM keys appear only when `pms == 4`. */
+/**
+ * `live` (read, notify). One snapshot per stored sample, PM keys appear only when `pms == 4`. The
+ * keys come from the board's field table ([LiveProfile.keys]). Parsing ignores unknown keys and
+ * reads a missing key as null, and the firmware omits a non-finite value instead of sending it.
+ */
 @Serializable
 data class LiveSample(
     val seq: Long? = null,
     /** monotonic_us */
     val mono: Long? = null,
-    /** event_time_utc_ns; omitted when unsynchronized. */
+    /** UTC in nanoseconds (LIVE keeps ns while the Parquet column is in microseconds), omitted when unsynchronized. */
     val utc: Long? = null,
     /** pms_status code: 0 absent, 1 warming, 2 stale, 3 sensor error, 4 valid. */
     val pms: Int? = null,
@@ -149,8 +153,10 @@ data class LiveSample(
     val n25: Long? = null,
     val n5: Long? = null,
     val n10: Long? = null,
-    /** Board-specific temperature; interpret via info.schema/dictionary, never this key alone. */
+    /** Waveshare ambient air temperature (`t`). Absent on CoreS3. */
     val t: Double? = null,
+    /** CoreS3 IMU die temperature (`imu_t`), a board temperature, never air temperature. */
+    @SerialName("imu_t") val imuT: Double? = null,
     /** Waveshare PMS5003T relative_humidity_percent; absent when unavailable. */
     val rh: Double? = null,
     /** battery_mv */
@@ -163,6 +169,12 @@ data class LiveSample(
     val vbus: Int? = null,
     /** light_ch0_raw */
     val als: Long? = null,
+    /**
+     * Waveshare v5 battery_health_state, inferred from cell voltage with uncalibrated thresholds.
+     * 0 unknown, 1 external power likely, 2 ok, 3 low, 4 critical, 5 settling after a gauge reset.
+     * Absent when no battery is installed. Parsed only, no screen shows it yet (#90).
+     */
+    val bstate: Int? = null,
 ) {
     val pmsStatus: PmsStatus? get() = PmsStatus.fromCode(pms)
     val pmValid: Boolean get() = pms == PmsStatus.VALID.code

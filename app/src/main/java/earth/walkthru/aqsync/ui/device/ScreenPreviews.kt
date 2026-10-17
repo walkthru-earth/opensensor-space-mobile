@@ -23,17 +23,17 @@ import earth.walkthru.opensensor.today.TodayUiState
 internal object PreviewFakes {
     val info = DeviceInfo(
         proto = 3,
-        fw = "waveshare-0.9.0",
-        schema = "waveshare-sim7670g-telemetry-v2",
-        cols = 42,
-        dict = LiveProfiles.WAVESHARE_V2_DICTIONARY,
+        fw = "idf-waveshare-parquet-v2.6",
+        schema = "waveshare-sim7670g-telemetry-v4",
+        cols = 56,
+        dict = LiveProfiles.WAVESHARE_DICTIONARY,
         station = "4f1c2a9e-0000-4000-8000-1234567890ab",
         dev = "a1b2c3d4e5f6",
         boot = "0123456789abcdef0123456789abcdef",
         maxRead = 16384,
     )
     private val now = System.currentTimeMillis()
-    val live = LiveSample(seq = 1234, pms = 4, pm1 = 6.0, pm25 = 9.4, pm10 = 12.0, t = 24.6, rh = 41.0, n03 = 1800, n05 = 520, n1 = 90, n25 = 6, n5 = 1, n10 = 0, pct = 82, chg = 1, bat = 4012)
+    val live = LiveSample(seq = 1234, pms = 4, pm1 = 6.0, pm25 = 9.4, pm10 = 12.0, t = 24.6, rh = 41.0, n03 = 1800, n05 = 520, n1 = 90, n25 = 6, pct = 82, bat = 4012)
     val status = DeviceStatus(upSeconds = 86_400, intervalSeconds = 600, buf = 34, fin = 12)
 
     fun today(level: DetailLevel) = TodayUiState(

@@ -258,7 +258,7 @@ fun TodayContent(
                                 )
                                 TodayCard.BATCH_ESTIMATE -> BatchEstimateCard(live, receivedAt, snapshot.config)
                                 TodayCard.READINGS -> ReadingsCard(live, receivedAt, level)
-                                TodayCard.PARTICLES -> ParticlesCard(live)
+                                TodayCard.PARTICLES -> ParticlesCard(live, profile)
                                 TodayCard.BOARD -> BoardCard(live, profile, level)
                                 TodayCard.STORAGE -> StorageCard(snapshot.status, snapshot.statusAtEpochMs, level)
                                 TodayCard.DEVICE_INFO -> DeviceInfoCard(

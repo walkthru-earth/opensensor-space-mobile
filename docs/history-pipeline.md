@@ -37,7 +37,14 @@ Derived from the **file**, never its name: rows, row groups, `schema_version`, `
 `indexedAt`/`indexError`. v6 footers answer spans from statistics without decoding
 (`fromStatistics`); v1/v2 files decode three columns. `purpose = codec-comparison-duplicate-rows`
 (benchmark copies) is indexed but excluded from every history query (`withUtcBetween` filters on
-`purpose`). A refused file keeps its row with `indexError`.
+`purpose`). A refused file keeps its row with `indexError`. `ArchiveRecord.isIndexed` (indexed and no
+error) is the one test of whether a row's index columns can be read, and `withUtcBetween` applies the
+same test in SQL. `ArchiveRecord.awaitsIndex` (never indexed, or reopened) marks a row the back-fill
+still has to read.
+
+Room v11 and iOS receipt layout 2 (`ArchiveRecord.INDEX_LAYOUT`) reopen every indexed row without UTC
+rows or an error, so a file whose `event_time_utc_us` an older build could not read is indexed again
+once. Until the back-fill reaches it, such a row awaits its index.
 
 ## Metric registry
 
@@ -91,10 +98,16 @@ daily builder, and closes it before the next. Row keys use a 64-bit hash with ex
 of the identity fields on collisions. Primitive timeline arrays preserve source order on ties. Every UTC row of the day from the verified files is time-ordered and de-duplicated, with
 **one row group per UTC hour**. Columns: union of sources (v1 files leave the four v2
 columns null) + `source_file_index` (INT32 into the manifest's `sources`) +
-`event_time_utc_estimated_ns` for estimated rows (with `event_time_utc_ns` null). **No `station_id`
+`event_time_utc_estimated_us` for estimated rows (with `event_time_utc_us` null). UTC instants are
+written as `event_time_utc_us` and `clock_anchor_utc_us`, `TIMESTAMP(MICROS, UTC)`, whatever the
+source stored, so a day that mixes older NANOS files and current MICROS files still has one
+`event_time_utc_us` column in microseconds (`UtcColumns`). Device columns keep their `field_id`. An
+older source without ids takes the id of the same name from a newer source. An id two sources
+disagree on, or one that two names share, is dropped. `source_file_index` and
+the estimate column have no id. **No `station_id`
 string column** (deviation from the evaluation) — stays flat numeric so our reader reads it back;
 station is in the path and metadata. Metadata: invariant device keys + `derived_by`
-(`opensensor.space shared derived-v2`), `derived_version`, `source_count`, `coverage_rows`, `complete`
+(`opensensor.space shared derived-v3`), `derived_version`, `source_count`, `coverage_rows`, `complete`
 (every known file in and the day ended > 30 min ago), `day`, `purpose = telemetry-derived-day`,
 `time_estimate` note. Measured 188 B/row vs 512 B/row for device files (5–9× smaller). Validated by
 PyArrow 25 + DuckDB 1.5.5 (`TIMESTAMPTZ`, range pruning, `time_bucket`).
@@ -118,7 +131,13 @@ summaries, whose results Android already caches by name and CRC-32).
 
 `derived_day.sourceSignature` = SHA-256 over `derive-v<DERIVE_VERSION>` + the day's sorted
 `name:crc32` sources + anchors. `deriveStale()` rebuilds exactly the days whose set changed (late
-file, re-synced mismatch, deleted file, new anchor) and drops days with no sources. Healthy log
+file, re-synced mismatch, deleted file, new anchor) and drops days with no sources. A day with no
+source is kept while a row of that station awaits its index and may place itself there
+(`StationDays.held`). A waiting row that kept a span holds the days of that span, one without a span
+holds every day of its station, and a row with an index error holds nothing. Android's
+`HistoryDeriver`, iOS's `IosDailyDerivedStore` and the tier store retain in `ArchiveHistoryTiers` all
+use this rule, so a derive pass that runs before the back-fill never deletes a day the back-fill is
+about to fill again. Healthy log
 line after a sync: `HistoryDeriver: derived 0 of N station-days (nothing changed)` (debug level).
 
 ## Time for rows logged before the clock (`TimeEstimate`, Room v6)
@@ -129,7 +148,7 @@ History uses the earliest receipt or fully-timed file of that boot; it also impo
 `reconciliation_anchor_*` footer evidence when a verified firmware file arrives. It no longer
 needs to wait for a fully-timed file to finalize. For that boot's unsynced files,
 `estimated_utc_ns = anchor_utc_ns + (monotonic_us − anchor_mono_us) * 1000` — never across a
-reboot, never overwriting `event_time_utc_ns`. The 50 ppm drift assumption is not a measured
+reboot, never overwriting the event time column. The 50 ppm drift assumption is not a measured
 accuracy bound and excludes phone clock error and transport latency. Verified on
 boot `e452563e…` (2026-09-08): reproduces the firmware's own stamp 43 min after the anchor
 **exactly**. Stored as `archived_file.estFirstUtcNs/estLastUtcNs/estAnchorFile` (index only, no

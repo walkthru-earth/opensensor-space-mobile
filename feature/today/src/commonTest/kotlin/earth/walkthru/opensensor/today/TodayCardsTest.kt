@@ -30,8 +30,8 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class TodayCardsTest {
-    private val waveshareV2 = DeviceInfo(proto = 3, schema = "waveshare-sim7670g-telemetry-v2", dict = LiveProfiles.WAVESHARE_V2_DICTIONARY)
-    private val cores3 = DeviceInfo(proto = 1, schema = "cores3-telemetry-v3", dict = LiveProfiles.CORES3_DICTIONARY)
+    private val waveshare = DeviceInfo(proto = 3, schema = "waveshare-sim7670g-telemetry-v4", dict = LiveProfiles.WAVESHARE_DICTIONARY)
+    private val cores3 = DeviceInfo(proto = 1, schema = "cores3-telemetry-v5", dict = LiveProfiles.CORES3_DICTIONARY)
     private val particleSample = LiveSample(pms = 4, pm25 = 14.9)
 
     private fun state(info: DeviceInfo?, live: LiveSample?, level: DetailLevel, batch: Int? = null) = TodayUiState(
@@ -47,7 +47,7 @@ class TodayCardsTest {
     fun simpleShowsTheHeroTodaySyncAndClock() {
         assertEquals(
             listOf(NOW_AIR, TODAY_SO_FAR, ENVIRONMENT, SMART_SYNC, CLOCK),
-            state(waveshareV2, particleSample, DetailLevel.SIMPLE).cards,
+            state(waveshare, particleSample, DetailLevel.SIMPLE).cards,
         )
     }
 
@@ -55,31 +55,31 @@ class TodayCardsTest {
     fun detailedAddsMeasurementsBoardStorageAndDevice() {
         assertEquals(
             listOf(NOW_AIR, TODAY_SO_FAR, ENVIRONMENT, SMART_SYNC, CLOCK, READINGS, PARTICLES, BOARD, STORAGE, DEVICE_INFO),
-            state(waveshareV2, particleSample, DetailLevel.DETAILED).cards,
+            state(waveshare, particleSample, DetailLevel.DETAILED).cards,
         )
     }
 
     @Test
     fun developerShowsTheSameCardsAsDetailed() {
         assertEquals(
-            state(waveshareV2, particleSample, DetailLevel.DETAILED).cards,
-            state(waveshareV2, particleSample, DetailLevel.DEVELOPER).cards,
+            state(waveshare, particleSample, DetailLevel.DETAILED).cards,
+            state(waveshare, particleSample, DetailLevel.DEVELOPER).cards,
         )
     }
 
     @Test
     fun aBoardTemperatureDeviceGetsTheEnvironmentHeroAndNoParticleCards() {
         // CoreS3 reports board temperature, so neither the mood nor the ambient card applies.
-        assertEquals(listOf(NOW_ENVIRONMENT, TODAY_SO_FAR, SMART_SYNC, CLOCK), state(cores3, LiveSample(t = 31.0), DetailLevel.SIMPLE).cards)
+        assertEquals(listOf(NOW_ENVIRONMENT, TODAY_SO_FAR, SMART_SYNC, CLOCK), state(cores3, LiveSample(imuT = 31.0), DetailLevel.SIMPLE).cards)
         assertEquals(
             listOf(NOW_ENVIRONMENT, TODAY_SO_FAR, SMART_SYNC, CLOCK, BOARD, STORAGE, DEVICE_INFO),
-            state(cores3, LiveSample(t = 31.0), DetailLevel.DETAILED).cards,
+            state(cores3, LiveSample(imuT = 31.0), DetailLevel.DETAILED).cards,
         )
     }
 
     @Test
     fun anAbsentParticleSensorNeverShowsAMood() {
-        val cards = state(waveshareV2, LiveSample(pms = 0), DetailLevel.DETAILED).cards
+        val cards = state(waveshare, LiveSample(pms = 0), DetailLevel.DETAILED).cards
         assertEquals(NOW_ENVIRONMENT, cards.first())
         assertFalse(NOW_AIR in cards)
         assertFalse(PARTICLES in cards)
@@ -88,16 +88,16 @@ class TodayCardsTest {
 
     @Test
     fun noLiveSampleYetKeepsTheTopOfTheList() {
-        val cards = state(waveshareV2, null, DetailLevel.SIMPLE).cards
+        val cards = state(waveshare, null, DetailLevel.SIMPLE).cards
         assertEquals(listOf(NOW_ENVIRONMENT, TODAY_SO_FAR, SMART_SYNC, CLOCK), cards)
     }
 
     @Test
     fun theBatchEstimateNeedsTheOptInAndADetailedLevel() {
-        assertTrue(BATCH_ESTIMATE in state(waveshareV2, particleSample, DetailLevel.DETAILED, batch = 1).cards)
-        assertFalse(BATCH_ESTIMATE in state(waveshareV2, particleSample, DetailLevel.SIMPLE, batch = 1).cards)
-        assertFalse(BATCH_ESTIMATE in state(waveshareV2, particleSample, DetailLevel.DETAILED, batch = 0).cards)
-        assertFalse(BATCH_ESTIMATE in state(waveshareV2, particleSample, DetailLevel.DETAILED).cards)
+        assertTrue(BATCH_ESTIMATE in state(waveshare, particleSample, DetailLevel.DETAILED, batch = 1).cards)
+        assertFalse(BATCH_ESTIMATE in state(waveshare, particleSample, DetailLevel.SIMPLE, batch = 1).cards)
+        assertFalse(BATCH_ESTIMATE in state(waveshare, particleSample, DetailLevel.DETAILED, batch = 0).cards)
+        assertFalse(BATCH_ESTIMATE in state(waveshare, particleSample, DetailLevel.DETAILED).cards)
     }
 
     @Test
@@ -109,7 +109,7 @@ class TodayCardsTest {
     fun cardKeysAreUniqueWithinOneList() {
         for (level in DetailLevel.entries) {
             for (live in listOf(particleSample, LiveSample(pms = 0), null)) {
-                val keys = state(waveshareV2, live, level, batch = 1).cards.map { it.key }
+                val keys = state(waveshare, live, level, batch = 1).cards.map { it.key }
                 assertEquals(keys.size, keys.toSet().size, "duplicate key at $level with $live")
             }
         }

@@ -72,6 +72,29 @@ class IosDailyDerivedStoreTest {
     }
 
     @Test
+    fun aDayAWaitingRecordHoldsKeepsItsFilesUntilTheRecordIsGone() = runTest {
+        val (source, anchor) = dailyFixture()
+        val record = source.record
+        val anchors = mapOf(anchor.boot to anchor)
+        val now = anchor.utcNs / 1_000_000_000L + 200_000L
+        val store = IosDailyDerivedStore(root)
+        val paths = store.rebuild(record.station, listOf(record), archive, anchors, now)
+        assertEquals(2, paths.size)
+        fun allExist() = paths.all { NSFileManager.defaultManager.fileExistsAtPath(it) && NSFileManager.defaultManager.fileExistsAtPath(it.removeSuffix(".parquet") + ".manifest.json") }
+
+        // Reopened by an index migration, the record keeps its span and holds both days (#87).
+        assertEquals(emptyList(), store.rebuild(record.station, listOf(record.copy(indexedAtEpochMs = null)), archive, anchors, now + 1))
+        assertTrue(allExist())
+        // Without a span it could land on any day, so every day stays.
+        val spanless = record.copy(indexedAtEpochMs = null, estFirstUtcNs = null, estLastUtcNs = null)
+        store.rebuild(record.station, listOf(spanless), archive, anchors, now + 2)
+        assertTrue(allExist())
+        // A failed index holds nothing, so its days go.
+        store.rebuild(record.station, listOf(record.copy(indexError = "bad")), archive, anchors, now + 3)
+        paths.forEach { assertFalse(NSFileManager.defaultManager.fileExistsAtPath(it)) }
+    }
+
+    @Test
     fun dailyPassPersistsTiersWithoutASecondSourceDecode() = runTest {
         val (source, anchor) = dailyFixture()
         val record = source.record

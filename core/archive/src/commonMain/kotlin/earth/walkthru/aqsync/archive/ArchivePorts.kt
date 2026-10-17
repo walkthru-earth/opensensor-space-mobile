@@ -59,7 +59,7 @@ interface PartialWriter : AutoCloseable {
 
 /**
  * The records of the archive, one per verified file, keyed by (station, name). Android adapts the Room
- * `archived_file` table (v10). iOS keeps one `.verified.json` receipt per file (`ReceiptArchiveIndex`)
+ * `archived_file` table (v11). iOS keeps one `.verified.json` receipt per file (`ReceiptArchiveIndex`)
  * until Room KMP gives it the same table.
  */
 interface ArchiveIndex {
@@ -74,7 +74,7 @@ interface ArchiveIndex {
      * any change of the index, so a watcher whose pass stopped early is asked again. The default reads
      * every record. An adapter with a cheaper count or `EXISTS` overrides it.
      */
-    fun observeNeverIndexed(): Flow<Boolean> = observeAll().map { rows -> rows.any { it.indexedAtEpochMs == null } }
+    fun observeNeverIndexed(): Flow<Boolean> = observeAll().map { rows -> rows.any { it.awaitsIndex } }
 
     /**
      * [latestTimedEnds] of every record, which History uses to pick the station it opens on. The

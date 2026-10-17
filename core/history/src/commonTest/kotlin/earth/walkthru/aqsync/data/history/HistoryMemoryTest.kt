@@ -10,6 +10,7 @@ import earth.walkthru.aqsync.data.history.parquet.ByteArrayReader
 import earth.walkthru.aqsync.data.history.parquet.ByteReader
 import earth.walkthru.aqsync.data.history.parquet.ColumnValues
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
+import earth.walkthru.aqsync.data.history.parquet.ParquetLogicalType
 import earth.walkthru.aqsync.data.history.parquet.ParquetWriter
 import earth.walkthru.aqsync.storage.MemoryPressure
 import kotlinx.coroutines.flow.Flow
@@ -65,10 +66,10 @@ class HistoryMemoryTest {
         override suspend fun remove(key: ArchiveKey) {
             rows.value = rows.value.filterNot { it.key == key }
         }
-        override suspend fun unindexed(limit: Int): List<ArchiveRecord> = rows.value.filter { it.indexedAtEpochMs == null || it.indexError != null }.take(limit)
+        override suspend fun unindexed(limit: Int): List<ArchiveRecord> = rows.value.filter { !it.isIndexed }.take(limit)
         override suspend fun timeline(station: String, fromNs: Long, toNs: Long): List<ArchiveRecord> =
             rows.value.filter { it.station == station && it.onTimeline(fromNs, toNs) }.sortedWith(ArchiveRecord.TIMELINE_ORDER)
-        override suspend fun indexedForStation(station: String): List<ArchiveRecord> = rows.value.filter { it.station == station && it.indexed }
+        override suspend fun indexedForStation(station: String): List<ArchiveRecord> = rows.value.filter { it.station == station && it.isIndexed }
         override suspend fun stations(): List<String> = rows.value.map { it.station }.distinct()
     }
 
@@ -80,7 +81,7 @@ class HistoryMemoryTest {
         val raw = ParquetFile.wrap(board)
         val values = raw.leaves.map { leaf ->
             val col = raw.readColumn(leaf)
-            if (leaf.name != ParquetIndexer.UTC) {
+            if (leaf.name != UtcColumns.EVENT_NS) {
                 col
             } else {
                 val step = 86_400L / col.size
@@ -88,7 +89,7 @@ class HistoryMemoryTest {
             }
         }
         val sink = MemorySink()
-        val writer = ParquetWriter(sink, raw.leaves.map { ParquetWriter.Column(it.name, it.type, it.isTimestampNanosUtc) }, keyValueMetadata = raw.metadata.keyValueMetadata)
+        val writer = ParquetWriter(sink, raw.leaves.map { ParquetWriter.Column(it.name, it.type, timestampUtc = it.timestampUtcUnit, fieldId = it.fieldId) }, keyValueMetadata = raw.metadata.keyValueMetadata)
         writer.begin()
         writer.rowGroup(values)
         writer.finish()

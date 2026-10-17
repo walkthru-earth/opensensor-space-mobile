@@ -19,7 +19,7 @@ interface ParquetSink {
  * levels, UNCOMPRESSED or LZ4_RAW, any number of row groups — with the parquet-format ≥ 2.13 footer
  * statistics the v6 firmware also writes (`min_value`/`max_value` + exact flags, `null_count`,
  * `nan_count` on FLOAT/DOUBLE, TYPE_ORDER column orders, NaN excluded and ±0.0 normalised), the
- * `TIMESTAMP(NANOS, UTC)` and `STRING` annotations on request, and **GeoParquet 2.0**: a BYTE_ARRAY
+ * `TIMESTAMP(MICROS or NANOS, UTC)` and `STRING` annotations and a `field_id` on request, and **GeoParquet 2.0**: a BYTE_ARRAY
  * column of WKB annotated `GEOMETRY` gets `geospatial_statistics` (bbox + type codes) per chunk and the
  * file gets the `geo` key (version 2.0.0, WKB, OGC:CRS84 unless a `crs` is given) unless the caller
  * supplied one.
@@ -43,19 +43,22 @@ class ParquetWriter(
     private val pageIndex: Boolean = false,
 ) {
     /**
-     * A leaf column: name, physical type, and its annotation — `event_time_utc_ns`-like (TIMESTAMP NANOS
-     * UTC), UTF-8 string, or a WKB geometry ([geometry], GeoParquet 2.0; `crs` null = OGC:CRS84).
+     * A leaf column: name, physical type, and its annotation, either `event_time_utc_us`-like
+     * ([timestampUtc] MICROS or NANOS, UTC), UTF-8 string, or a WKB geometry ([geometry], GeoParquet
+     * 2.0; `crs` null = OGC:CRS84). [fieldId] is the schema element's `field_id` (the Iceberg column id).
      */
     data class Column(
         val name: String,
         val type: ParquetType,
-        val timestampNanosUtc: Boolean = false,
+        val timestampUtc: ParquetLogicalType.TimeUnit? = null,
         val utf8: Boolean = false,
         val geometry: GeometryAnnotation? = null,
+        val fieldId: Int? = null,
     ) {
         init {
             require(type in SUPPORTED_TYPES) { "unsupported type $type for '$name'" }
-            require(!timestampNanosUtc || type == ParquetType.INT64) { "TIMESTAMP needs INT64 on '$name'" }
+            require(timestampUtc == null || type == ParquetType.INT64) { "TIMESTAMP needs INT64 on '$name'" }
+            require(timestampUtc == null || timestampUtc in TIMESTAMP_UNITS) { "unsupported TIMESTAMP unit $timestampUtc on '$name'" }
             require(!utf8 || type == ParquetType.BYTE_ARRAY) { "STRING needs BYTE_ARRAY on '$name'" }
             require(geometry == null || type == ParquetType.BYTE_ARRAY) { "GEOMETRY needs BYTE_ARRAY on '$name'" }
             require(!(utf8 && geometry != null)) { "'$name' cannot be both STRING and GEOMETRY" }
@@ -353,13 +356,15 @@ class ParquetWriter(
                     i32(3, ParquetRepetition.OPTIONAL.code)
                     string(4, c.name)
                     if (c.utf8) i32(6, 0) // ConvertedType UTF8, for pre-LogicalType readers
+                    c.fieldId?.let { i32(9, it) }
                     when {
-                        c.timestampNanosUtc -> struct(10) {
+                        c.timestampUtc != null -> struct(10) {
                             // LogicalType
                             struct(8) {
                                 // TIMESTAMP
                                 bool(1, true) // isAdjustedToUTC
-                                struct(2) { struct(3) { } } // unit = NANOS (empty struct)
+                                // unit, a TimeUnit union of empty structs: 2 MICROS, 3 NANOS
+                                struct(2) { struct(if (c.timestampUtc == ParquetLogicalType.TimeUnit.MICROS) 2 else 3) { } }
                             }
                         }
                         c.utf8 -> struct(10) { struct(1) { } } // STRING
@@ -491,6 +496,7 @@ class ParquetWriter(
 
     companion object {
         val SUPPORTED_TYPES = setOf(ParquetType.INT32, ParquetType.INT64, ParquetType.FLOAT, ParquetType.DOUBLE, ParquetType.BYTE_ARRAY)
+        val TIMESTAMP_UNITS = setOf(ParquetLogicalType.TimeUnit.MICROS, ParquetLogicalType.TimeUnit.NANOS)
         private val MAGIC = "PAR1".encodeToByteArray()
         private fun leF(v: Float) = le32(v.toRawBits())
         private fun leD(v: Double) = le64(v.toRawBits())

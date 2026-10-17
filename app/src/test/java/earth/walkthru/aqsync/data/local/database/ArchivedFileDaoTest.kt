@@ -6,6 +6,7 @@ import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import app.cash.turbine.test
 import earth.walkthru.aqsync.data.ManifestState
 import earth.walkthru.aqsync.data.SyncProgress
+import earth.walkthru.aqsync.data.archive.toRecord
 import earth.walkthru.aqsync.data.planWithProgress
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.protocol.Frame
@@ -44,6 +45,7 @@ class ArchivedFileDaoTest {
         indexedAt: Long? = null,
         indexError: String? = null,
         lastUtcNs: Long? = null,
+        utcRows: Long? = null,
     ) = ArchivedFile(
         station = station,
         name = name,
@@ -55,7 +57,43 @@ class ArchivedFileDaoTest {
         indexedAtEpochMs = indexedAt,
         indexError = indexError,
         lastUtcNs = lastUtcNs,
+        utcRows = utcRows,
     )
+
+    @Test
+    fun `migration 10 to 11 reopens only indexed rows without UTC rows or an error`() = runBlocking {
+        dao.upsert(file("a", "zero.parquet", indexedAt = 5, utcRows = 0))
+        dao.upsert(file("a", "null.parquet", indexedAt = 5, utcRows = null))
+        dao.upsert(file("a", "dated.parquet", indexedAt = 5, utcRows = 90))
+        dao.upsert(file("a", "failed.parquet", indexedAt = 5, indexError = "bad footer", utcRows = 0))
+        assertEquals(listOf("failed.parquet"), dao.unindexed(10).map { it.name })
+
+        AppDatabase.MIGRATION_10_11.migrate(db.writerSql())
+
+        // A row with an error stays in the retry queue it was already in, never reopened by the migration.
+        assertEquals(setOf("zero.parquet", "null.parquet", "failed.parquet"), dao.unindexed(10).map { it.name }.toSet())
+        assertEquals(null, dao.get("a", "zero.parquet")!!.indexedAtEpochMs)
+        assertEquals(null, dao.get("a", "null.parquet")!!.indexedAtEpochMs)
+        val dated = dao.get("a", "dated.parquet")!!
+        assertEquals(5L, dated.indexedAtEpochMs)
+        assertEquals(null, dated.indexError)
+        val failed = dao.get("a", "failed.parquet")!!
+        assertEquals(5L, failed.indexedAtEpochMs)
+        assertEquals("bad footer", failed.indexError)
+        assertTrue(AppDatabase.MIGRATION_10_11 in AppDatabase.MIGRATIONS)
+        assertEquals(11, AppDatabase.MIGRATIONS.maxOf { it.endVersion })
+    }
+
+    @Test
+    fun `the timeline query reads indexed rows only, the same test as onTimeline`() = runBlocking {
+        fun spanned(name: String, indexedAt: Long?, indexError: String? = null) =
+            file("a", name, indexedAt = indexedAt, indexError = indexError, lastUtcNs = 200, utcRows = 3).copy(firstUtcNs = 100, purpose = "telemetry")
+        val rows = listOf(spanned("ok.parquet", 5), spanned("reopened.parquet", null), spanned("failed.parquet", 5, "bad"))
+        rows.forEach { dao.upsert(it) }
+
+        assertEquals(listOf("ok.parquet"), dao.withUtcBetween("a", 0, 1000).map { it.name })
+        assertEquals(rows.filter { it.toRecord().onTimeline(0, 1000) }.map { it.name }, dao.withUtcBetween("a", 0, 1000).map { it.name })
+    }
 
     @Test
     fun `identities hold the station's rows only, ordered by name`() = runBlocking {

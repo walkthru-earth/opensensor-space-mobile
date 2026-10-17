@@ -123,14 +123,14 @@ class MemoryArchiveIndex : ArchiveIndex {
     }
 
     override suspend fun unindexed(limit: Int): List<ArchiveRecord> = rows.value
-        .filter { it.indexedAtEpochMs == null || it.indexError != null }
-        .sortedWith(compareBy<ArchiveRecord> { it.indexedAtEpochMs != null }.thenBy { it.name })
+        .filter { !it.isIndexed }
+        .sortedWith(compareBy<ArchiveRecord> { !it.awaitsIndex }.thenBy { it.name })
         .take(limit)
 
     override suspend fun timeline(station: String, fromNs: Long, toNs: Long): List<ArchiveRecord> =
         rows.value.filter { it.station == station && it.onTimeline(fromNs, toNs) }.sortedWith(ArchiveRecord.TIMELINE_ORDER)
 
-    override suspend fun indexedForStation(station: String): List<ArchiveRecord> = rows.value.filter { it.station == station && it.indexed }
+    override suspend fun indexedForStation(station: String): List<ArchiveRecord> = rows.value.filter { it.station == station && it.isIndexed }
 
     override suspend fun stations(): List<String> = rows.value.map { it.station }.distinct()
 }

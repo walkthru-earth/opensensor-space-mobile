@@ -43,16 +43,21 @@ while explicit Finalize can still cut a short chunk. The card never merges final
 2. Import boot-scoped footer anchors from verified downloaded files.
 3. Estimate the UTC span of earlier unknown-UTC files of that same station and boot.
 4. Rebuild affected UTC day partitions and history buckets, splitting rows at UTC midnight.
-5. Retain original paths and bytes; corrected time goes in `event_time_utc_estimated_ns`,
-   while the original `event_time_utc_ns` remains null.
+5. Retain original paths and bytes; corrected time goes in `event_time_utc_estimated_us`,
+   while the original `event_time_utc_us` remains null.
 
-The mapping is `anchor_utc_ns + (row_monotonic_us - anchor_monotonic_us) * 1000`.
+The mapping is `anchor_utc_ns + (row_monotonic_us - anchor_monotonic_us) * 1000` in nanoseconds,
+the phone's timeline unit. The derived file stores it floored to microseconds, which equals
+`anchor_utc_ns / 1000 + (row_monotonic_us - anchor_monotonic_us)` for a positive anchor.
 Source signatures include the anchor so new evidence invalidates the derived cache.
 Boot plus sequence remains row identity; moving a row to another UTC partition does not
 create another sample. Partitioning uses UTC, regardless of the phone's display timezone.
 App restart reloads receipts and rebuilds missing or stale derived output. Both platforms use
 `DailyParquetBuilder` to write `derived/v1/<station>/day=YYYY-MM-DD.parquet` and a source manifest.
-The layout stays compatible; new files identify the shared writer as `derived_version=2`.
+New files identify the shared writer as `derived_version=3`. Row UTC columns are microseconds in
+current device files (`event_time_utc_us`, `clock_anchor_utc_us`) and nanoseconds in older ones
+(`*_utc_ns`). The app reads the unit from the Parquet logical type and keeps its own timeline in
+nanoseconds. The footer key `reconciliation_anchor_utc_ns` is still nanoseconds.
 
 ESP32 history rewriting would compete with acquisition, require a decoder, and risk the
 only raw copy. Server-only recovery would delay offline use and depend on a service that

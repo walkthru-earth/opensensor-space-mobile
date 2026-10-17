@@ -32,6 +32,11 @@ class ArchiveRecordTest {
         assertFalse(record("u.parquet").onTimeline(Long.MIN_VALUE + 1, Long.MAX_VALUE))
         assertFalse(record("b.parquet", 3, 100, 200, purpose = "codec-comparison-duplicate-rows").onTimeline(0, 1000))
         assertFalse(record("x.parquet", 3, 100, 200, error = "bad").onTimeline(0, 1000))
+        // A reopened record keeps its old span but waits for its index, so it is off the timeline too.
+        val reopened = record("r.parquet", 3, 100, 200).copy(indexedAtEpochMs = null)
+        assertFalse(reopened.isIndexed)
+        assertTrue(reopened.awaitsIndex)
+        assertFalse(reopened.onTimeline(0, 1000))
         assertTrue(record("n.parquet", 3, 100, 200, purpose = null).onTimeline(0, 1000))
     }
 

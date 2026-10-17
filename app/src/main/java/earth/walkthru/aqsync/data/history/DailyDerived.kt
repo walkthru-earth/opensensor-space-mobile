@@ -81,7 +81,8 @@ class RoomDerivedDayFiles @Inject constructor(private val store: DerivedStore, p
             } catch (_: Exception) {
                 return@synchronized null
             }
-            if (receipt.sourceSignature != signature || receipt.station != station || receipt.day != DerivedStore.dayLabel(epochDay)) return@synchronized null
+            // A file from an older builder may store UTC in another unit or layout, so it is rebuilt.
+            if (receipt.builder != DailyParquetBuilder.BUILDER || receipt.sourceSignature != signature || receipt.station != station || receipt.day != DerivedStore.dayLabel(epochDay)) return@synchronized null
             val file = store.dayFile(station, epochDay)
             // LocalRangeSource opens its channel in the constructor. A later replace cannot change
             // this descriptor's bytes after the lock is released.

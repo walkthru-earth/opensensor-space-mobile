@@ -146,7 +146,7 @@ class ArchiveIndexRepair(
     }
 
     /** [ArchiveIndex.unindexed] lists never indexed records first. */
-    private suspend fun neverIndexedWaiting(): Boolean = index.unindexed(1).any { it.indexedAtEpochMs == null }
+    private suspend fun neverIndexedWaiting(): Boolean = index.unindexed(1).any { it.awaitsIndex }
 
     /**
      * §4.6, gives every unsynced file whose boot later received a clock an estimated UTC span, from

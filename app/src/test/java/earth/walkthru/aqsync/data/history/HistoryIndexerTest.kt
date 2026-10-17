@@ -34,12 +34,12 @@ class HistoryIndexerTest {
 
         assertEquals(3, indexer.backfill())
         val g = dao.rows.first { it.name == good }
-        assertTrue(g.indexed)
+        assertTrue(g.isIndexed)
         assertEquals(4L, g.rows)
         assertEquals("cores3-telemetry-v2", g.schemaVersion)
         assertNotNull(g.firstUtcNs)
         val b = dao.rows.first { it.name == bogus }
-        assertFalse(b.indexed)
+        assertFalse(b.isIndexed)
         assertTrue(b.indexError!!.contains("footer") || b.indexError!!.contains("PAR1") || b.indexError!!.contains("small"))
         assertEquals("file missing from archive", dao.rows.first { it.name.endsWith("missing.parquet") }.indexError)
         // A second pass retries the failures, finds nothing new and stops the loop.
@@ -59,7 +59,7 @@ class HistoryIndexerTest {
             val file = archive.fileFor("new-station", name).apply { parentFile!!.mkdirs(); writeBytes(payload) }
             val row = ArchivedFile(station = "new-station", name = name, bytes = payload.size.toLong(), crc32 = 1, sha256 = "saved", syncedAtEpochMs = 1, sourceDevice = "same-device")
             val indexed = HistoryIndexer(archive, InMemoryDao()).indexed(row, file)
-            assertFalse(indexed.indexed)
+            assertFalse(indexed.isIndexed)
             assertTrue(indexed.indexError!!.contains("old-station"))
             org.junit.Assert.assertArrayEquals(payload, file.readBytes())
             assertEquals("new-station", indexed.station)
@@ -122,7 +122,7 @@ class HistoryIndexerTest {
         override fun observeUnindexedCount(): Flow<Int> = flowOf(rows.count { it.indexedAtEpochMs == null || it.indexError != null })
         override suspend fun withUtcBetween(station: String, fromNs: Long, toNs: Long) =
             rows.filter { it.station == station && it.indexError == null && (it.utcRows ?: 0) > 0 && (it.lastUtcNs ?: Long.MIN_VALUE) >= fromNs && (it.firstUtcNs ?: Long.MAX_VALUE) < toNs }
-        override suspend fun indexedForStation(station: String) = rows.filter { it.station == station && it.indexed }
+        override suspend fun indexedForStation(station: String) = rows.filter { it.station == station && it.isIndexed }
         override suspend fun stations() = rows.map { it.station }.distinct()
     }
 }

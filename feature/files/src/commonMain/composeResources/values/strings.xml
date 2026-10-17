@@ -138,7 +138,7 @@
     <string name="fm_col_nulls">nulls</string>
     <string name="fm_col_min">min</string>
     <string name="fm_col_max">max</string>
-    <string name="fm_col_timestamp">timestamp ns UTC</string>
+    <string name="fm_col_timestamp">timestamp %1$s UTC</string>
     <string name="fm_col_first_last">first %1$s · last %2$s</string>
     <string name="fm_col_footer_agrees">footer agrees</string>
     <string name="fm_col_footer_says">footer says %1$s to %2$s</string>

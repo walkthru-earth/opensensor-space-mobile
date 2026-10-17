@@ -11,7 +11,7 @@ import kotlin.test.Test
 class ParquetWriterPageIndexTest {
 
     private fun columns() = listOf(
-        ParquetWriter.Column("t", ParquetType.INT64, timestampNanosUtc = true),
+        ParquetWriter.Column("t", ParquetType.INT64, timestampUtc = ParquetLogicalType.TimeUnit.NANOS),
         ParquetWriter.Column("seq", ParquetType.INT32),
         ParquetWriter.Column("temp", ParquetType.FLOAT),
         ParquetWriter.Column("label", ParquetType.BYTE_ARRAY, utf8 = true),

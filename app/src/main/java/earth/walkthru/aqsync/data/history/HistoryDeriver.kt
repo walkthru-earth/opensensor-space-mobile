@@ -135,8 +135,11 @@ class HistoryDeriver @Inject constructor(
                     rebuilt++
                     rows += built
                 }
-                // Days that no longer have any source (files deleted) lose their tiers too.
+                // Days that no longer have any source (files deleted) lose their tiers too, unless a file
+                // still waiting for its index may place itself there (StationDays.held, #87).
+                val held = StationDays.held(byStation[station].orEmpty().map { it.toRecord() })
                 for (stale in known.keys - days) {
+                    if (stale in held) continue
                     bucketDao.replaceDay(station, stale * 86_400, emptyList())
                     dayDao.delete(station, stale)
                     store.dayFile(station, stale).delete()
@@ -281,8 +284,8 @@ class HistoryDeriver @Inject constructor(
         /** Each day's sources from one station listing, the same files and order as `withUtcBetween`. */
         fun sourcesByDay(files: List<ArchivedFile>): Map<Long, List<ArchivedFile>> = StationDays.sourcesByDay(files) { it.toRecord() }
 
-        /** Part of every day's signature. 2 = per-metric rows, 3 = shared RowKey, 4 = single pass, 5 = canonical duplicate source order. */
-        const val DERIVE_VERSION = 5
+        /** Part of every day's signature. 2 = per-metric rows, 3 = shared RowKey, 4 = single pass, 5 = canonical duplicate source order, 6 = MICROS UTC and field_id in the daily file. */
+        const val DERIVE_VERSION = 6
         const val DAY_NS = StationDays.DAY_NS
     }
 }

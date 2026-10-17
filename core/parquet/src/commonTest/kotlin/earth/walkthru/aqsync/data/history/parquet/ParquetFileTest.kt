@@ -99,7 +99,7 @@ class ParquetFileTest {
                 assertEquals("$label column $i name", cj["name"]!!.jsonPrimitive.content, leaf.name)
                 assertEquals("$label '${leaf.name}' physical", cj["physical"]!!.jsonPrimitive.content, leaf.type.name)
                 val arrow = cj["arrow"]!!.jsonPrimitive.content
-                assertEquals("$label '${leaf.name}' timestamp annotation", arrow == "timestamp[ns, tz=UTC]", leaf.isTimestampNanosUtc)
+                assertEquals("$label '${leaf.name}' timestamp annotation", arrow == "timestamp[ns, tz=UTC]", leaf.timestampUtcUnit == ParquetLogicalType.TimeUnit.NANOS)
             }
         }
     }
@@ -159,7 +159,7 @@ class ParquetFileTest {
         val pf = openFixture(f)
         assertEquals(4, pf.rowGroupCount)
         val time = pf.leaf("time_ms")
-        assertTrue(time.isTimestampNanosUtc)
+        assertEquals(ParquetLogicalType.TimeUnit.NANOS, time.timestampUtcUnit)
         val whole = pf.readColumn(time) as ColumnValues.Int64
         var offset = 0
         for (g in 0 until pf.rowGroupCount) {

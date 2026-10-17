@@ -61,10 +61,10 @@ class TierStoreTest {
         override suspend fun remove(key: ArchiveKey) {
             rows.value = rows.value.filterNot { it.key == key }
         }
-        override suspend fun unindexed(limit: Int): List<ArchiveRecord> = rows.value.filter { it.indexedAtEpochMs == null || it.indexError != null }.take(limit)
+        override suspend fun unindexed(limit: Int): List<ArchiveRecord> = rows.value.filter { !it.isIndexed }.take(limit)
         override suspend fun timeline(station: String, fromNs: Long, toNs: Long): List<ArchiveRecord> =
             rows.value.filter { it.station == station && it.onTimeline(fromNs, toNs) }.sortedWith(ArchiveRecord.TIMELINE_ORDER)
-        override suspend fun indexedForStation(station: String): List<ArchiveRecord> = rows.value.filter { it.station == station && it.indexed }
+        override suspend fun indexedForStation(station: String): List<ArchiveRecord> = rows.value.filter { it.station == station && it.isIndexed }
         override suspend fun stations(): List<String> = rows.value.map { it.station }.distinct()
     }
 
@@ -164,6 +164,33 @@ class TierStoreTest {
         index.rows.value = emptyList()
         tiers.observeDays(station).first()
         assertTrue(tierStore.saved.isEmpty())
+    }
+
+    @Test
+    fun aDayAWaitingRecordHoldsStaysInTheStore() = runTest {
+        val (store, index, station) = archive()
+        val tierStore = MemoryTierStore()
+        val tiers = ArchiveHistoryTiers(store, index, tierStore = tierStore)
+        tiers.observeDays(station).first()
+        val saved = tierStore.saved.keys.toSet()
+        assertTrue(saved.isNotEmpty())
+        val record = index.rows.value.single()
+
+        // Reopened by an index migration, the record keeps its span and holds those days (#87).
+        index.rows.value = listOf(record.copy(indexedAtEpochMs = null))
+        tiers.observeDays(station).first()
+        assertEquals(saved, tierStore.saved.keys)
+
+        // Without a span it could land on any day, so every day stays.
+        index.rows.value = listOf(record.copy(indexedAtEpochMs = null, utcRows = 0, firstUtcNs = null, lastUtcNs = null))
+        tiers.observeDays(station).first()
+        assertEquals(saved, tierStore.saved.keys)
+
+        // Indexed again, a new process reads the held tiers back instead of decoding the file.
+        index.rows.value = listOf(record)
+        val restarted = ArchiveHistoryTiers(store, index, tierStore = tierStore)
+        assertEquals(saved.size, restarted.observeDays(station).first().count)
+        assertEquals(0, restarted.decodedDays)
     }
 
     @Test

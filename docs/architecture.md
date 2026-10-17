@@ -28,7 +28,7 @@ flowchart TB
     FS[":feature:settings<br/>Settings screen and controller"]
     SH[":feature:shell<br/>AppKey, TabNavigator, AppShell, bottom bar"]
   end
-  APP[":app (Android)<br/>Hilt, Room v10, DataStore, WorkManager, Compose, zstd-jni"]
+  APP[":app (Android)<br/>Hilt, Room v11, DataStore, WorkManager, Compose, zstd-jni"]
   IOS["ios/App (Xcode + Swift)<br/>Core Bluetooth, Bonjour, lifecycle, Keychain, export"]
   IS[":ios:shared (iOS only)<br/>AppRoot, DevicesBridge, the iOS bridges, static OpenSensorShared framework"]
   SY1 --> PR & AR1

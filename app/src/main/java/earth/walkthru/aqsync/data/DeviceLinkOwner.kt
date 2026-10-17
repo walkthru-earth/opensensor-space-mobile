@@ -115,7 +115,7 @@ data class ArchiveTimeSummary(
  * row, as the Stations list does. The time figures cover indexed telemetry files only.
  */
 internal fun summarizeArchive(rows: List<ArchivedFile>): ArchiveTimeSummary {
-    val timed = rows.filter { it.indexed && (it.purpose == null || it.purpose == "telemetry") }
+    val timed = rows.filter { it.isIndexed && (it.purpose == null || it.purpose == "telemetry") }
     val estimated = timed.filter { it.hasEstimatedUtc }
     val unplaced = timed.filter { !it.hasUtc && !it.hasEstimatedUtc }
     return ArchiveTimeSummary(

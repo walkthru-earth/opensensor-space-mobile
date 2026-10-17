@@ -58,7 +58,13 @@ class ArchiveHistoryTiers(
     internal class Day(val signature: String, val buckets: DayTiers, val cacheable: Boolean = true)
 
     /** What one station's tiers depend on, each UTC day's source files and the boots' time anchors. */
-    private data class Sources(val records: List<ArchiveRecord>, val days: Map<Long, List<ArchiveRecord>>, val anchors: Map<String, TimeEstimate.Anchor>)
+    private data class Sources(
+        val records: List<ArchiveRecord>,
+        val days: Map<Long, List<ArchiveRecord>>,
+        val anchors: Map<String, TimeEstimate.Anchor>,
+        /** Days kept in the store while a record waits for its index, see [StationDays.held]. */
+        val held: StationDays.Held = StationDays.Held.NONE,
+    )
 
     /** No bucket references escape into the shared replay, so trimming the LRU releases whole days. */
     private data class Summary(val signature: String, val withData: Boolean, val metrics: Set<String>)
@@ -129,10 +135,11 @@ class ArchiveHistoryTiers(
 
     /** UTC epoch day to its source files, and the boots' anchors, from the index alone. */
     private suspend fun sources(station: String, records: List<ArchiveRecord>): Sources {
-        val own = records.filter { it.station == station && it.indexed }
+        val own = records.filter { it.station == station && it.isIndexed }
         // One pass over the station for every day, in the timeline order the pass reads them (#63).
         val days = StationDays.sourcesByDay(own) { it }
-        return Sources(own, days, TimeEstimate.anchors(own.map { it.info() }, clockAnchors.anchors(station)))
+        val held = StationDays.held(records.filter { it.station == station })
+        return Sources(own, days, TimeEstimate.anchors(own.map { it.info() }, clockAnchors.anchors(station)), held)
     }
 
     private suspend fun build(station: String, sources: Sources): Station {
@@ -144,9 +151,9 @@ class ArchiveHistoryTiers(
                 val buckets = loadDay(station, day, files, sources.anchors, sig).buckets[Resolution.DAY].orEmpty()
                 out[day] = Summary(sig, buckets.isNotEmpty(), buckets.filterValues { list -> list.any { it.validRows > 0 } }.keys.toSet())
             }
-            // Days that lost every source drop out of the cache and the store too.
+            // Days that lost every source drop out of the cache and the store too, unless a waiting record holds them.
             cache.removeAll { it.first == station && it.second !in sources.days }
-            tierStore.retain(station, sources.days.keys)
+            if (!sources.held.all) tierStore.retain(station, sources.days.keys + sources.held.days)
             Station(sources, out)
         }
         afterBuild()

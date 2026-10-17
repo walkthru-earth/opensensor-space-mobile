@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** The shared [ArchiveIndex] over Room's `archived_file` table (v10). Queries and ordering are the DAO's. */
+/** The shared [ArchiveIndex] over Room's `archived_file` table (v11). Queries and ordering are the DAO's. */
 @Singleton
 class RoomArchiveIndex @Inject constructor(private val dao: ArchivedFileDao) : ArchiveIndex {
     override fun observeAll(): Flow<List<ArchiveRecord>> = dao.observeAll().map { rows -> rows.map { it.toRecord() } }

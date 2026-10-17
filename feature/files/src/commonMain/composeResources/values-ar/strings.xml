@@ -182,7 +182,7 @@
     <string name="fm_col_nulls">الفارغة</string>
     <string name="fm_col_min">الأدنى</string>
     <string name="fm_col_max">الأعلى</string>
-    <string name="fm_col_timestamp">الطابع الزمني ns UTC</string>
+    <string name="fm_col_timestamp">الطابع الزمني %1$s UTC</string>
     <string name="fm_col_first_last">الأول %1$s · الأخير %2$s</string>
     <string name="fm_col_footer_agrees">التذييل مطابق</string>
     <string name="fm_col_footer_says">التذييل يقول من %1$s إلى %2$s</string>

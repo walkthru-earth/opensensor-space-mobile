@@ -149,14 +149,14 @@ class ReceiptArchiveIndex(
     }
 
     override suspend fun unindexed(limit: Int): List<ArchiveRecord> = loaded().all
-        .filter { it.indexedAtEpochMs == null || it.indexError != null }
-        .sortedWith(compareBy<ArchiveRecord> { it.indexedAtEpochMs != null }.thenBy { it.name })
+        .filter { !it.isIndexed }
+        .sortedWith(compareBy<ArchiveRecord> { !it.awaitsIndex }.thenBy { it.name })
         .take(limit)
 
     override suspend fun timeline(station: String, fromNs: Long, toNs: Long): List<ArchiveRecord> =
         loaded().all.filter { it.station == station && it.onTimeline(fromNs, toNs) }.sortedWith(ArchiveRecord.TIMELINE_ORDER)
 
-    override suspend fun indexedForStation(station: String): List<ArchiveRecord> = loaded().all.filter { it.station == station && it.indexed }
+    override suspend fun indexedForStation(station: String): List<ArchiveRecord> = loaded().all.filter { it.station == station && it.isIndexed }
 
     override suspend fun stations(): List<String> = loaded().all.map { it.station }.distinct()
 
@@ -222,12 +222,12 @@ class ReceiptArchiveIndex(
         companion object {
             private val ORDER: Comparator<ArchiveRecord> = compareBy<ArchiveRecord> { it.name }.thenBy { it.station }
 
-            private fun pending(r: ArchiveRecord): Int = if (r.indexedAtEpochMs == null) 1 else 0
+            private fun pending(r: ArchiveRecord): Int = if (r.awaitsIndex) 1 else 0
 
             /** One sort at load. [records] has one record per key, as one receipt per file gives. */
             fun of(records: List<ArchiveRecord>): Snapshot {
                 val sorted = records.sortedWith(ORDER).toTypedArray()
-                return Snapshot(sorted, sorted.count { it.indexedAtEpochMs == null })
+                return Snapshot(sorted, sorted.count { it.awaitsIndex })
             }
         }
     }
@@ -259,9 +259,13 @@ class ReceiptArchiveIndex(
             r.estFirstUtcNs?.let { put("estFirstUtcNs", it) }
             r.estLastUtcNs?.let { put("estLastUtcNs", it) }
             r.estAnchorFile?.let { put("estAnchorFile", it) }
+            put("indexLayout", ArchiveRecord.INDEX_LAYOUT)
         }.toString()
 
-        /** Null for anything without a valid `size` and `crc`, which then reads as not synced. */
+        /**
+         * Null for anything without a valid `size` and `crc`, which then reads as not synced. A receipt
+         * from an older index layout with no UTC rows reads as never indexed, so repair indexes it again.
+         */
         fun decode(station: String, name: String, text: String): ArchiveRecord? {
             val o = runCatching { Json.parseToJsonElement(text) as? JsonObject }.getOrNull() ?: return null
             fun long(key: String): Long? = o[key]?.let { runCatching { it.jsonPrimitive.longOrNull }.getOrNull() }
@@ -269,7 +273,7 @@ class ReceiptArchiveIndex(
             fun text(key: String): String? = o[key]?.let { runCatching { it.jsonPrimitive.contentOrNull }.getOrNull() }
             val size = long("size")?.takeIf { it >= 0 } ?: return null
             val crc = long("crc")?.takeIf { it in 0..0xFFFF_FFFFL } ?: return null
-            return ArchiveRecord(
+            val record = ArchiveRecord(
                 station = station,
                 name = name,
                 bytes = size,
@@ -296,6 +300,8 @@ class ReceiptArchiveIndex(
                 estLastUtcNs = long("estLastUtcNs"),
                 estAnchorFile = text("estAnchorFile"),
             )
+            val stale = (int("indexLayout") ?: 1) < ArchiveRecord.INDEX_LAYOUT && record.needsUtcReindex
+            return if (stale) record.copy(indexedAtEpochMs = null) else record
         }
     }
 }
