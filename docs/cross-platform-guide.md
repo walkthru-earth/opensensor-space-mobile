@@ -255,9 +255,13 @@ The rules for a new screen or component.
 6. **State in words.** Colour is never alone. Selected, on, off, progress and a WHO step reach the
    screen reader as words, through the control's own state, `stateDescription` or the merged text.
    The `Eyebrow` capitals are visual only, its semantics carry the text as written.
-7. **Charts and maps.** A chart is one element with a text summary in `contentDescription` (what it
-   shows, the span, the highest value and its WHO step). Touch to read a bar stays as it is. The map
-   container says what it shows, and the list beside it is the accessible way through the same cells.
+7. **Charts and maps.** A chart starts with a text summary in `contentDescription` (what it shows,
+   the highest value and its WHO step). Then the bar chart and the calendar give one node per bar or
+   day with a reading, in time order, naming the time, the value with its unit, the mood and the WHO
+   step (Simple leaves the step out). Activating a bar selects it, as a touch does. These nodes are
+   semantics only, laid over the canvas. Axis margins are measured from the labels, so a large font
+   never clips them. The map container says what it shows, and the list beside it is the accessible
+   way through the same cells.
 8. **Live regions, sparingly.** `liveRegion = LiveRegionMode.Polite` goes only on a line that changes
    while the person waits, such as sync progress or a notice. Never on a value that ticks every
    second.
@@ -265,7 +269,8 @@ The rules for a new screen or component.
    arguments, and no em dashes, colons or semicolons.
 
 `SemanticsTest` in `:ui:designsystem` `iosTest` renders the shared components on the iOS simulator
-and checks headings, merged rows and tab roles (`verifyIos`). Host tests cannot render Compose
+and checks headings, merged rows and tab roles, and `BandColumnChartSemanticsTest` in
+`:feature:history` `iosTest` walks the bar chart node by node (`verifyIos`). Host tests cannot render Compose
 without Robolectric, so the Android check is the phone walk below.
 
 #### Phone walk (TalkBack and VoiceOver)

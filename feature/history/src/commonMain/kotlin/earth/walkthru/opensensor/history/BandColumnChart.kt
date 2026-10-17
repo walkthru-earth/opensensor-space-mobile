@@ -3,8 +3,12 @@ package earth.walkthru.opensensor.history
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -21,7 +25,11 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
@@ -32,6 +40,8 @@ import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import earth.walkthru.aqsync.airquality.WhoStep
+import earth.walkthru.aqsync.data.history.AirMood
 import earth.walkthru.aqsync.data.history.ChartAxes
 import earth.walkthru.aqsync.data.history.ChartAxis
 import earth.walkthru.aqsync.data.history.HistoryColumn
@@ -59,6 +69,7 @@ import earth.walkthru.opensensor.history.resources.chart_mean_daily
 import earth.walkthru.opensensor.history.resources.chart_mean_hourly
 import earth.walkthru.opensensor.history.resources.chart_mean_weekly
 import earth.walkthru.opensensor.history.resources.chart_who_24h
+import earth.walkthru.opensensor.history.resources.history_estimated_time
 import earth.walkthru.opensensor.history.resources.history_no_readings_short
 import earth.walkthru.opensensor.history.resources.history_week_of
 import kotlinx.datetime.DateTimeUnit
@@ -79,6 +90,11 @@ import kotlin.math.roundToInt
  * guideline line is always in view. A peak whisker sits inside each slot, coverage is opacity,
  * estimated-time slots are hollow with a dashed outline, and the axis follows the 95th percentile:
  * outliers are clipped to a small cap that states their value. Touch or drag to inspect a slot.
+ * Axis margins are measured from the labels, so large font sizes never clip them.
+ *
+ * Screen readers get a summary, then one node per bar with a reading, in time order, naming the
+ * slot, the mean with its unit, its mood and its WHO step (step only above Simple) and estimated
+ * time. Activating a bar selects it, as a touch does.
  *
  * Pure common Compose (a [TextMeasurer], never a platform canvas), the same chart on Android and iOS.
  * Time runs left to right in every language.
@@ -100,12 +116,15 @@ fun BandColumnChart(
     xLabels: List<Pair<Long, String>>? = null,
     /** Simple labels the guideline line in plain words and never names WHO. */
     level: DetailLevel = DetailLevel.DETAILED,
+    /** A bar's name for a screen reader when [xLabels] replace time, null to read its value only. */
+    barSlot: ((HistoryColumn) -> String)? = null,
 ) {
     val onSurface = MaterialTheme.colorScheme.onSurface
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val surface = MaterialTheme.colorScheme.surface
     val gridColor = muted.copy(alpha = 0.18f)
-    val labelPx = with(LocalDensity.current) { 11.sp.toPx() }
+    val density = LocalDensity.current
+    val gapPx = with(density) { LABEL_GAP.toPx() }
     val measurer = rememberTextMeasurer()
     val labelStyle = remember(muted) { chartTextStyle(muted, 11) }
     val capStyle = remember(onSurface) { chartTextStyle(onSurface, 10, bold = true) }
@@ -118,149 +137,223 @@ fun BandColumnChart(
     // Geometry, data and bands stay on the SI values. Ticks are chosen round in the unit shown.
     val yTicks = remember(axis, metric.unit, units.system) { yAxisTicks(axis, metric.unit, units.system) }
     val xTicks = remember(xLabels, range, fromS, toS, zone) { xLabels ?: timeTicks(range, fromS, toS, zone) }
+    // Margins come from the measured labels, so a large font size never clips an axis.
+    val yLayouts = remember(yTicks, labelStyle, measurer) { yTicks.map { measurer.measure(it.second, labelStyle) } }
+    val xLayouts = remember(xTicks, labelStyle, measurer) { xTicks.map { measurer.measure(it.second, labelStyle) } }
+    val capHeight = remember(capStyle, measurer) { measurer.measure("0", capStyle).size.height }
+    val margins = chartMargins(
+        yLabelWidths = yLayouts.map { it.size.width },
+        xLabelHeight = xLayouts.maxOfOrNull { it.size.height } ?: measurer.measure("0", labelStyle).size.height,
+        capHeight = capHeight,
+        gap = gapPx,
+    )
     // The spoken chart: what it shows and its highest bar with the WHO step, built from the same data.
-    // A file strip (xLabels) has file indices, not times, so its highest bar names no slot.
+    // A file strip (xLabels) has file indices, not times, so its bars take their names from [barSlot].
     val slot: (@Composable (HistoryColumn) -> String)? = if (xLabels == null) {
         { c -> slotLabel(c, range, zone) }
     } else {
-        null
+        barSlot?.let { name -> { c -> name(c) } }
     }
-    val summary = chartSummary(stringResource(Res.string.chart_bars_title, metric.label), columns, metric, units, stepNamed = level.detailed, slot = slot)
+    val summary = chartSummary(stringResource(Res.string.chart_bars_title, metric.label), columns, metric, units, stepNamed = level.detailed, slot = if (xLabels == null) slot else null)
+    val bars = readableBars(columns)
+    val separator = listSeparator()
+    val estimated = stringResource(Res.string.history_estimated_time)
+    val moodTitles = AirMood.entries.associateWith { it.titleText() }
+    val stepLabels = WhoStep.entries.associateWith { it.labelText() }
+    val spoken = bars.map { c ->
+        val m = c.mean ?: 0f
+        listOfNotNull(
+            slot?.invoke(c),
+            fmtValue(units.value(m, metric.unit)) + " " + units.unit(metric.unit),
+            metric.moodOf(m.toDouble())?.let { moodTitles[it] },
+            // Simple names the mood only, never the WHO step.
+            if (level.detailed) metric.stepOf(m.toDouble())?.let { stepLabels[it] } else null,
+            estimated.takeIf { c.estimated },
+        ).let { spokenList(it, separator) }
+    }
 
-    Canvas(
-        modifier
-            .fillMaxWidth()
-            .height(height)
-            .semantics { contentDescription = summary }
-            .pointerInput(columns, fromS, toS) {
-                awaitEachGesture {
-                    val down = awaitFirstDown()
-                    fun pick(x: Float): HistoryColumn? {
-                        val left = labelPx * 3.2f
-                        val width = size.width - left
-                        if (width <= 0f) return null
-                        val t = fromS + ((x - left) / width * (toS - fromS)).toLong()
-                        return columns.firstOrNull { t >= it.startS && t < it.endS }
+    Box(modifier.fillMaxWidth().height(height).semantics { isTraversalGroup = true }) {
+        Canvas(
+            Modifier
+                .matchParentSize()
+                .semantics {
+                    contentDescription = summary
+                    traversalIndex = -1f
+                }
+                .pointerInput(columns, fromS, toS, margins) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown()
+                        fun pick(x: Float): HistoryColumn? {
+                            val left = margins.left
+                            val width = size.width - left
+                            if (width <= 0f) return null
+                            val t = fromS + ((x - left) / width * (toS - fromS)).toLong()
+                            return columns.firstOrNull { t >= it.startS && t < it.endS }
+                        }
+                        onSelect(pick(down.position.x))
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull() ?: break
+                            if (!change.pressed) break
+                            onSelect(pick(change.position.x))
+                            change.consume()
+                        }
                     }
-                    onSelect(pick(down.position.x))
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull() ?: break
-                        if (!change.pressed) break
-                        onSelect(pick(change.position.x))
-                        change.consume()
+                },
+        ) {
+            val plot = Rect(margins.left, margins.top, size.width, size.height - margins.bottom)
+            fun x(t: Long) = plot.left + (t - fromS).toFloat() / (toS - fromS) * plot.width
+            fun y(v: Float) = plot.bottom - axis.fraction(v) * plot.height
+            val zeroY = y(0f)
+
+            for ((i, tick) in yTicks.withIndex()) {
+                val at = tick.first
+                val yy = y(at)
+                drawLine(gridColor, Offset(plot.left, yy), Offset(plot.right, yy), 1f)
+                drawText(yLayouts[i], topLeft = Offset(0f, yy - yLayouts[i].size.height / 2f))
+            }
+
+            // Off-scale columns: label only the tallest of each contiguous run, or the labels pile up.
+            val labelCap = BooleanArray(columns.size)
+            run {
+                fun peak(k: Int) = columns[k].max?.takeIf(Float::isFinite) ?: columns[k].mean?.takeIf(Float::isFinite) ?: 0f
+                fun over(k: Int) = peak(k) > yMax
+                var i = 0
+                while (i < columns.size) {
+                    if (!over(i)) {
+                        i++
+                        continue
+                    }
+                    var j = i
+                    var best = i
+                    while (j < columns.size && over(j)) {
+                        if (peak(j) > peak(best)) best = j
+                        j++
+                    }
+                    labelCap[best] = true
+                    i = j
+                }
+            }
+            val slotW = if (columns.isNotEmpty()) x(columns[0].endS) - x(columns[0].startS) else 0f
+            val gap = (slotW * 0.18f).coerceIn(1f, 6f)
+            val radius = CornerRadius((slotW * 0.3f).coerceAtMost(8f))
+            for ((ci, c) in columns.withIndex()) {
+                val m = c.mean?.takeIf(Float::isFinite) ?: continue
+                val x0 = x(c.startS) + gap / 2
+                val w = max(slotW - gap, 1.5f)
+                val peak = c.max?.takeIf(Float::isFinite)
+                val clipped = (peak ?: m) > yMax
+                val meanY = y(m)
+                val topY = minOf(meanY, zeroY)
+                val barHeight = abs(meanY - zeroY)
+                val color = metric.valueColor(m.toDouble(), muted)
+                val alpha = 0.35f + 0.65f * c.coverage
+                val isSel = selected != null && selected.startS == c.startS
+                if (c.estimated) {
+                    drawRoundRect(color.copy(alpha = alpha), Offset(x0, topY), Size(w, barHeight), radius, style = Stroke(1.5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 3f))))
+                    drawRoundRect(color.copy(alpha = alpha * 0.25f), Offset(x0, topY), Size(w, barHeight), radius)
+                } else {
+                    drawRoundRect(color.copy(alpha = alpha), Offset(x0, topY), Size(w, barHeight), radius)
+                    // The lightest steps are faint on light paper, a hairline keeps the bar's edge.
+                    if (contrastRatio(color, surface) < LARGE_TEXT_CONTRAST) {
+                        drawRoundRect(onSurface.copy(alpha = 0.22f), Offset(x0, topY), Size(w, barHeight), radius, style = Stroke(1f))
                     }
                 }
-            },
-    ) {
-        val left = labelPx * 3.2f
-        val bottom = size.height - labelPx * 2.2f
-        val top = labelPx * 1.4f
-        val plot = Rect(left, top, size.width, bottom)
-        fun x(t: Long) = plot.left + (t - fromS).toFloat() / (toS - fromS) * plot.width
-        fun y(v: Float) = plot.bottom - axis.fraction(v) * plot.height
-        val zeroY = y(0f)
-
-        for ((at, label) in yTicks) {
-            val yy = y(at)
-            drawLine(gridColor, Offset(plot.left, yy), Offset(plot.right, yy), 1f)
-            drawLabel(measurer.measure(label, labelStyle), 0f, yy + labelPx * 0.35f)
-        }
-
-        // Off-scale columns: label only the tallest of each contiguous run, or the labels pile up.
-        val labelCap = BooleanArray(columns.size)
-        run {
-            fun peak(k: Int) = columns[k].max?.takeIf(Float::isFinite) ?: columns[k].mean?.takeIf(Float::isFinite) ?: 0f
-            fun over(k: Int) = peak(k) > yMax
-            var i = 0
-            while (i < columns.size) {
-                if (!over(i)) {
-                    i++
-                    continue
+                if (peak != null && peak - m > abs(m) * 0.15f) {
+                    val py = y(minOf(peak, yMax))
+                    drawLine(color.copy(alpha = 0.7f), Offset(x0 + w / 2, meanY), Offset(x0 + w / 2, py), 1.5f)
                 }
-                var j = i
-                var best = i
-                while (j < columns.size && over(j)) {
-                    if (peak(j) > peak(best)) best = j
-                    j++
+                if (clipped) {
+                    val cap = Path().apply {
+                        moveTo(x0 + w / 2, plot.top - gapPx / 2)
+                        lineTo(x0 + w / 2 - 5f, plot.top + 6f)
+                        lineTo(x0 + w / 2 + 5f, plot.top + 6f)
+                        close()
+                    }
+                    drawPath(cap, color)
+                    if (labelCap[ci]) {
+                        val layout = measurer.measure(fmtAxis(units.value(peak ?: m, metric.unit)), capStyle)
+                        val tw = layout.size.width.toFloat()
+                        drawText(layout, topLeft = Offset((x0 + w / 2 - tw / 2).coerceIn(plot.left, max(plot.left, plot.right - tw)), 0f))
+                    }
                 }
-                labelCap[best] = true
-                i = j
-            }
-        }
-        val slotW = if (columns.isNotEmpty()) x(columns[0].endS) - x(columns[0].startS) else 0f
-        val gap = (slotW * 0.18f).coerceIn(1f, 6f)
-        val radius = CornerRadius((slotW * 0.3f).coerceAtMost(8f))
-        for ((ci, c) in columns.withIndex()) {
-            val m = c.mean?.takeIf(Float::isFinite) ?: continue
-            val x0 = x(c.startS) + gap / 2
-            val w = max(slotW - gap, 1.5f)
-            val peak = c.max?.takeIf(Float::isFinite)
-            val clipped = (peak ?: m) > yMax
-            val meanY = y(m)
-            val topY = minOf(meanY, zeroY)
-            val barHeight = abs(meanY - zeroY)
-            val color = metric.valueColor(m.toDouble(), muted)
-            val alpha = 0.35f + 0.65f * c.coverage
-            val isSel = selected != null && selected.startS == c.startS
-            if (c.estimated) {
-                drawRoundRect(color.copy(alpha = alpha), Offset(x0, topY), Size(w, barHeight), radius, style = Stroke(1.5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 3f))))
-                drawRoundRect(color.copy(alpha = alpha * 0.25f), Offset(x0, topY), Size(w, barHeight), radius)
-            } else {
-                drawRoundRect(color.copy(alpha = alpha), Offset(x0, topY), Size(w, barHeight), radius)
-                // The lightest steps are faint on light paper, a hairline keeps the bar's edge.
-                if (contrastRatio(color, surface) < LARGE_TEXT_CONTRAST) {
-                    drawRoundRect(onSurface.copy(alpha = 0.22f), Offset(x0, topY), Size(w, barHeight), radius, style = Stroke(1f))
+                if (isSel) {
+                    drawRoundRect(onSurface, Offset(x0 - 1f, topY - 1f), Size(w + 2f, barHeight + 2f), radius, style = Stroke(2f))
                 }
             }
-            if (peak != null && peak - m > abs(m) * 0.15f) {
-                val py = y(minOf(peak, yMax))
-                drawLine(color.copy(alpha = 0.7f), Offset(x0 + w / 2, meanY), Offset(x0 + w / 2, py), 1.5f)
-            }
-            if (clipped) {
-                val cap = Path().apply {
-                    moveTo(x0 + w / 2, plot.top - labelPx * 0.2f)
-                    lineTo(x0 + w / 2 - 5f, plot.top + 6f)
-                    lineTo(x0 + w / 2 + 5f, plot.top + 6f)
-                    close()
-                }
-                drawPath(cap, color)
-                if (labelCap[ci]) {
-                    val layout = measurer.measure(fmtAxis(units.value(peak ?: m, metric.unit)), capStyle)
-                    val tw = layout.size.width.toFloat()
-                    drawLabel(layout, (x0 + w / 2 - tw / 2).coerceIn(plot.left, max(plot.left, plot.right - tw)), plot.top - labelPx * 0.45f)
+            for (c in columns) {
+                if (c.mean == null) {
+                    drawLine(muted.copy(alpha = 0.35f), Offset(x(c.startS) + gap / 2, zeroY - 1f), Offset(x(c.endS) - gap / 2, zeroY - 1f), 2f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(2f, 3f)))
                 }
             }
-            if (isSel) {
-                drawRoundRect(onSurface, Offset(x0 - 1f, topY - 1f), Size(w + 2f, barHeight + 2f), radius, style = Stroke(2f))
+            guideline?.let { g ->
+                val yy = y(g)
+                drawLine(onSurface.copy(alpha = 0.75f), Offset(plot.left, yy), Offset(plot.right, yy), 1.5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f)))
+                val layout = measurer.measure(whoLabel, guideStyle)
+                drawText(layout, topLeft = Offset(plot.right - layout.size.width, yy - layout.size.height - gapPx / 2))
+            }
+            selected?.let { s ->
+                val cx = (x(s.startS) + x(s.endS)) / 2
+                drawLine(onSurface.copy(alpha = 0.6f), Offset(cx, plot.top), Offset(cx, plot.bottom), 1f)
+            }
+            for ((i, tick) in xTicks.withIndex()) {
+                val xx = x(tick.first)
+                drawLine(gridColor, Offset(xx, plot.bottom), Offset(xx, plot.bottom + gapPx), 1f)
+                val layout = xLayouts[i]
+                val w = layout.size.width.toFloat()
+                drawText(layout, topLeft = Offset((xx - w / 2).coerceIn(plot.left, max(plot.left, plot.right - w)), plot.bottom + 2 * gapPx))
+            }
+            drawLine(muted.copy(alpha = 0.6f), Offset(plot.left, plot.bottom), Offset(plot.right, plot.bottom), 1f)
+            if (axis.min < 0f) drawLine(muted.copy(alpha = 0.6f), Offset(plot.left, zeroY), Offset(plot.right, zeroY), 1f)
+        }
+        // One node per bar with a reading, laid over the canvas at the drawn LTR positions. Semantics only
+        // (no pointer input), so a finger still lands on the canvas. Activating a bar selects it.
+        BoxWithConstraints(Modifier.matchParentSize()) {
+            val left = with(density) { margins.left.toDp() }
+            val top = with(density) { margins.top.toDp() }
+            val plotHeight = maxHeight - top - with(density) { margins.bottom.toDp() }
+            val plotWidth = maxWidth - left
+            val span = (toS - fromS).toFloat()
+            if (span > 0f && plotWidth > 0.dp && plotHeight > 0.dp) {
+                for ((i, c) in bars.withIndex()) {
+                    val description = spoken[i]
+                    val isSel = selected != null && selected.startS == c.startS
+                    Box(
+                        Modifier
+                            .absoluteOffset(x = left + plotWidth * ((c.startS - fromS) / span), y = top)
+                            .size(plotWidth * ((c.endS - c.startS) / span), plotHeight)
+                            .semantics {
+                                contentDescription = description
+                                this.selected = isSel
+                                traversalIndex = i.toFloat()
+                                onClick {
+                                    onSelect(c)
+                                    true
+                                }
+                            },
+                    )
+                }
             }
         }
-        for (c in columns) {
-            if (c.mean == null) {
-                drawLine(muted.copy(alpha = 0.35f), Offset(x(c.startS) + gap / 2, zeroY - 1f), Offset(x(c.endS) - gap / 2, zeroY - 1f), 2f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(2f, 3f)))
-            }
-        }
-        guideline?.let { g ->
-            val yy = y(g)
-            drawLine(onSurface.copy(alpha = 0.75f), Offset(plot.left, yy), Offset(plot.right, yy), 1.5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f)))
-            val layout = measurer.measure(whoLabel, guideStyle)
-            drawLabel(layout, plot.right - layout.size.width, yy - labelPx * 0.4f)
-        }
-        selected?.let { s ->
-            val cx = (x(s.startS) + x(s.endS)) / 2
-            drawLine(onSurface.copy(alpha = 0.6f), Offset(cx, plot.top), Offset(cx, plot.bottom), 1f)
-        }
-        for ((t, label) in xTicks) {
-            val xx = x(t)
-            drawLine(gridColor, Offset(xx, plot.bottom), Offset(xx, plot.bottom + 4f), 1f)
-            val layout = measurer.measure(label, labelStyle)
-            val w = layout.size.width.toFloat()
-            drawLabel(layout, (xx - w / 2).coerceIn(plot.left, max(plot.left, plot.right - w)), plot.bottom + labelPx * 1.5f)
-        }
-        drawLine(muted.copy(alpha = 0.6f), Offset(plot.left, plot.bottom), Offset(plot.right, plot.bottom), 1f)
-        if (axis.min < 0f) drawLine(muted.copy(alpha = 0.6f), Offset(plot.left, zeroY), Offset(plot.right, zeroY), 1f)
     }
 }
+
+/** Space between an axis label and the plot. */
+private val LABEL_GAP = 4.dp
+
+/** The plot's inset from the canvas edges in px, room for the y labels, the x labels and an off-scale cap. */
+internal data class ChartMargins(val left: Float, val top: Float, val bottom: Float)
+
+/** Margins that fit the widest y label, the tallest x label (under a tick of [gap]) and a cap label. */
+internal fun chartMargins(yLabelWidths: List<Int>, xLabelHeight: Int, capHeight: Int, gap: Float): ChartMargins = ChartMargins(
+    left = (yLabelWidths.maxOrNull() ?: 0) + gap,
+    top = capHeight + gap,
+    bottom = xLabelHeight + 2 * gap,
+)
+
+/** The bars a screen reader can read, those with a mean, in time order. Empty slots are left out. */
+internal fun readableBars(columns: List<HistoryColumn>): List<HistoryColumn> =
+    columns.filter { it.mean?.isFinite() == true }.sortedBy { it.startS }
 
 /**
  * What each column of [range] averages, and whether the WHO 24-hour guideline line is drawn for
