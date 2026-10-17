@@ -168,7 +168,7 @@ and the iOS 18 fallback.
 | Worker owner and notification IDs | run-scoped progress/cancel; worker/interactive exclusion is host-tested, OS notifications and quota need a phone check |
 | `WriterLeases` / immutable commit | `SyncEngine`, partial resume and summaries; `ConcurrentArchiveTest`, `SyncEngineTest` |
 | `SyncNotifications.progress` text | both the service and the worker (same notification) |
-| `known_device.autoSync` column | scheduler's observed count; every `KnownDevice` upsert must carry `previous?.autoSync` ([lesson](lessons-learned.md#room--data)) |
+| `known_device.autoSync` column | scheduler's observed count; enrollment writes identity columns only through `recordConnection`, never the switch ([lesson](lessons-learned.md#room--data)); `DeviceFacadeTest` |
 | `SyncForegroundService` start point | must remain a foreground-app moment (`CollectionController.start` PROCESS lease), else API 31+ refuses |
 | `LanWifiLock.acquireLease` | each controller's lease cleanup; `LanTransferLeasesTest`; last owner releases, never over BLE or idle |
 | Shared legacy mDNS resolver | foreground and overlapping worker browses; API 31–33 phone check |

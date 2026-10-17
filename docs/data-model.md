@@ -195,7 +195,7 @@ start; a dedicated `LanTokenMigration` binding avoids casting the DAO implementa
 `noBackupFilesDir` makes that migration idempotent without putting key state into backup. If an
 encrypted value cannot be authenticated (`AEADBadTagException`, also the result when the key was
 regenerated, for example after device-to-device transfer), its key was permanently invalidated, or it
-has malformed `enc1` framing, `lanToken` clears only that row's `lanToken` and `lanPort`, preserves
+has malformed `enc1` framing, `lanToken` clears only that row's `lanToken` and `lanPort` with one conditional update that matches the ciphertext it read, so a token renewed meanwhile survives. It preserves
 the device and settings, and returns no credential until a later bonded BLE session refreshes it. A
 transient `KeyStoreException` or `UnrecoverableKeyException` propagates and keeps the credential.
 Unrelated crypto, programming and database failures also propagate.

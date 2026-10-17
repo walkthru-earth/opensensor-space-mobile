@@ -692,21 +692,13 @@ class DeviceLinkOwner @Inject constructor(
                 tokenPolicy.markStale(address)
                 _events.tryEmit(DeviceEvent.Info(DeviceMessage.StationChanged))
             }
-            knownDeviceDao.upsert(
-                KnownDevice(
-                    address = address,
-                    name = name ?: transport.displayName ?: previous?.name,
-                    station = info.station,
-                    deviceId = info.dev,
-                    firmware = info.fw,
-                    lastSeenEpochMs = now,
-                    lastConnectedEpochMs = now,
-                    lanToken = previous?.lanToken?.takeUnless { continuity.invalidateLanToken },
-                    lanPort = previous?.lanPort?.takeUnless { continuity.invalidateLanToken },
-                    autoSync = previous?.autoSync ?: false,
-                    companionAssociationId = previous?.companionAssociationId,
-                )
-            )
+            // Enrollment writes identity fields only. Auto-sync, the companion association and the
+            // credential keep whatever the row holds now, never the snapshot read above (#106).
+            val displayName = name ?: transport.displayName
+            val enrolled = KnownDevice(address, displayName, info.station, info.dev, info.fw, now, now)
+            if (knownDeviceDao.insertIfAbsent(enrolled) == -1L) {
+                knownDeviceDao.recordConnection(address, displayName, info.station, info.dev, info.fw, now)
+            }
             verifiedSessionInfo = session to info
             _info.value = info
             if (!collectionActive.value) setTimeFromPhoneNow(session, quiet = true, automatic = true)

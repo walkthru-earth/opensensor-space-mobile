@@ -236,7 +236,7 @@ known-device row, and falls back to BLE. The next bonded BLE session fetches a f
 `KeyStoreException`, an `UnrecoverableKeyException` or another transient Keystore error keeps the
 credential and uses BLE for this connect only.
 An accepted same-hardware station-generation change also clears the token and port before the
-post-INFO upsert and requests a fresh token on that BLE connection. Rejected identity changes
+post-INFO identity write and requests a fresh token on that BLE connection. Rejected identity changes
 cannot overwrite credentials or trigger automatic trust replacement.
 Any LAN failure other than `AUTH_FAILED` keeps a readable token. Unrelated DAO/programmer failures are
 not converted into token loss ([data-model.md](data-model.md#backup)).

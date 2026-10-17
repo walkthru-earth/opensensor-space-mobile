@@ -606,6 +606,42 @@ class DeviceFacadeTest {
     }
 
     @Test
+    fun `settings changed while a known sensor enrolls survive the enrollment`() = harnessTest { h ->
+        h.knownDao.upsert(h.enrolled(token = OLD_TOKEN).copy(autoSync = true, companionAssociationId = 7))
+        // The user turns Auto-sync off, the companion changes and BLE renews the credential, all
+        // after enrollment read the row and before it writes (#106).
+        h.stationEpochs.beforeRecord = {
+            h.repo.setAutoSync(ADDRESS, false)
+            h.repo.setCompanionAssociation(ADDRESS, 9)
+            h.knownDao.setLanToken(ADDRESS, NEW_TOKEN, 47391)
+        }
+
+        h.repo.connect(ADDRESS, "AQ-6b40", fake = true)
+        h.until { h.repo.connectionState.value.isReady }
+
+        assertNull("the hook ran", h.stationEpochs.beforeRecord)
+        val row = h.knownDao.get(ADDRESS)!!
+        assertFalse("Auto-sync stays off", row.autoSync)
+        assertEquals(9, row.companionAssociationId)
+        assertTrue("the renewed credential survives", h.knownDao.lanToken(ADDRESS) == NEW_TOKEN)
+        assertEquals(47391, row.lanPort)
+        assertEquals(h.device.deviceId, row.deviceId)
+    }
+
+    @Test
+    fun `a new sensor enrolls with Auto-sync off and no companion`() = harnessTest { h ->
+        h.repo.connect(ADDRESS, "AQ-6b40", fake = true)
+        h.until { h.repo.connectionState.value.isReady }
+
+        val row = h.knownDao.get(ADDRESS)!!
+        assertFalse(row.autoSync)
+        assertNull(row.companionAssociationId)
+        assertEquals(h.device.station, row.station)
+        assertEquals(h.device.deviceId, row.deviceId)
+        assertNotNull(row.lastConnectedEpochMs)
+    }
+
+    @Test
     fun `rejected LAN token is cleared and the Bluetooth session renews it`() = harnessTest { h ->
         h.knownDao.upsert(h.enrolled(token = OLD_TOKEN))
         h.lan.devices.value = mapOf(h.device.station to h.lanTarget())
@@ -1124,6 +1160,7 @@ class DeviceFacadeTest {
         val appScope = CoroutineScope(SupervisorJob() + dispatcher)
         val factory = TestTransports(device, appScope)
         val identityClaims = DeviceIdentityClaims()
+        val stationEpochs = InMemoryStationEpochDao()
 
         var clockEpochOffset = 0L
         var partialFailuresRemaining = 0
@@ -1162,7 +1199,7 @@ class DeviceFacadeTest {
                 },
                 companionPresence = { _, _ -> },
                 identityClaims = identityClaims,
-                stationEpochDao = InMemoryStationEpochDao(),
+                stationEpochDao = stationEpochs,
                 applicationScope = appScope,
                 io = dispatcher,
                 clock = { clockEpochOffset + test.testScheduler.currentTime },
@@ -1409,6 +1446,16 @@ class DeviceFacadeTest {
         override suspend fun setLanToken(address: String, tokenHex: String?, port: Int?) {
             get(address)?.let { replace(it.copy(lanToken = tokenHex, lanPort = port)) }
         }
+        override suspend fun clearLanTokenIfStored(address: String, expected: String): Int {
+            val row = get(address)?.takeIf { it.lanToken == expected } ?: return 0
+            replace(row.copy(lanToken = null, lanPort = null))
+            return 1
+        }
+        override suspend fun recordConnection(address: String, name: String?, station: String?, deviceId: String?, firmware: String?, epochMs: Long) {
+            get(address)?.let {
+                replace(it.copy(name = name ?: it.name, station = station, deviceId = deviceId, firmware = firmware, lastSeenEpochMs = epochMs, lastConnectedEpochMs = epochMs))
+            }
+        }
         override suspend fun findByStation(station: String) = rows.firstOrNull { it.station == station }
         override suspend fun setAutoSync(address: String, enabled: Boolean) {
             get(address)?.let { replace(it.copy(autoSync = enabled)) }
@@ -1458,7 +1505,12 @@ class DeviceFacadeTest {
 
     private class InMemoryStationEpochDao : StationEpochDao {
         private val rows = CopyOnWriteArrayList<StationEpoch>()
+
+        /** Runs once inside the next epoch write, the suspension between enrollment's read and its write. */
+        var beforeRecord: (suspend () -> Unit)? = null
+
         override suspend fun recordIfAbsent(epoch: StationEpoch): Long {
+            beforeRecord?.also { beforeRecord = null }?.invoke()
             if (rows.any { it.address == epoch.address && it.station == epoch.station }) return -1
             rows += epoch
             return 1
@@ -1471,6 +1523,7 @@ class DeviceFacadeTest {
     private companion object {
         /** Built at runtime: a 64-hex literal looks like a leaked key to the secret scan. */
         val OLD_TOKEN = "0f".repeat(32)
+        val NEW_TOKEN = "1e".repeat(32)
         const val ADDRESS = "E0:5A:1B:F6:6B:40"
         const val STEP_MS = 50L
     }

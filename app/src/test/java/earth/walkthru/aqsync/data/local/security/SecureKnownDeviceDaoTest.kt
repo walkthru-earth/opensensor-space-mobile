@@ -132,6 +132,23 @@ class SecureKnownDeviceDaoTest {
     }
 
     @Test
+    fun `a credential renewed between the failed decrypt and the clear survives`() = runTest {
+        val original = device("enc1:tampered", autoSync = true)
+        val delegate = FakeKnownDeviceDao(original)
+        val cipher = FakeTokenCipher().apply { decryptFailure = AEADBadTagException("bad tag") }
+        val secure = SecureKnownDeviceDao(delegate, cipher)
+        val renewed = "enc1:" + "ef".repeat(32)
+        // BLE renews the credential just before the clear reaches the database (#107).
+        delegate.beforeClear = { delegate.renew(ADDRESS, renewed, 47391) }
+
+        assertEquals(null, secure.lanToken(ADDRESS))
+
+        assertEquals(null, delegate.beforeClear)
+        assertTrue("the renewed credential survives", delegate.rows.single().lanToken == renewed)
+        assertEquals(47391, delegate.rows.single().lanPort)
+    }
+
+    @Test
     fun `malformed encrypted ciphertext is cleared`() = runTest {
         val original = device("enc1:malformed")
         val delegate = FakeKnownDeviceDao(original)
@@ -213,6 +230,9 @@ class SecureKnownDeviceDaoTest {
     private class FakeKnownDeviceDao(vararg initial: KnownDevice) : KnownDeviceDao {
         private val state = MutableStateFlow(initial.toList())
         var clearFailure: RuntimeException? = null
+
+        /** Runs once just before the next clear lands, as a concurrent renewal would. */
+        var beforeClear: (() -> Unit)? = null
         val rows: List<KnownDevice> get() = state.value
 
         override fun observeAll(): Flow<List<KnownDevice>> = state
@@ -224,8 +244,26 @@ class SecureKnownDeviceDaoTest {
         }
         override suspend fun touch(address: String, name: String?, epochMs: Long) = Unit
         override suspend fun setLanToken(address: String, tokenHex: String?, port: Int?) {
-            if (tokenHex == null) clearFailure?.let { throw it }
-            replace(get(address)!!.copy(lanToken = tokenHex, lanPort = port))
+            if (tokenHex == null) {
+                clearFailure?.let { throw it }
+                beforeClear?.also { beforeClear = null }?.invoke()
+            }
+            renew(address, tokenHex, port)
+        }
+
+        override suspend fun clearLanTokenIfStored(address: String, expected: String): Int {
+            clearFailure?.let { throw it }
+            beforeClear?.also { beforeClear = null }?.invoke()
+            // The compare and the clear are one step, as in the single SQL update.
+            if (get(address)?.lanToken != expected) return 0
+            renew(address, null, null)
+            return 1
+        }
+
+        override suspend fun recordConnection(address: String, name: String?, station: String?, deviceId: String?, firmware: String?, epochMs: Long) = Unit
+
+        fun renew(address: String, tokenHex: String?, port: Int?) {
+            state.value = rows.map { if (it.address == address) it.copy(lanToken = tokenHex, lanPort = port) else it }
         }
         override suspend fun findByStation(station: String): KnownDevice? = rows.firstOrNull { it.station == station }
         override suspend fun setAutoSync(address: String, enabled: Boolean) = Unit
