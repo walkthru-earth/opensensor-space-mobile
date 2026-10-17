@@ -82,15 +82,15 @@ class OpenAqAggregatesFeedTest {
 
     @Test
     fun `latest is the manifest as_of cached for five minutes`() = runTest {
-        assertEquals(FeedPartition("2026-10-08", 0), feed.latest())
+        assertEquals(FeedPartition("2026-10-08", 0, "fixture-0001"), feed.latest())
         assertEquals(1, manifestReads())
         clock.ms += OpenAqAggregatesFeed.MANIFEST_TTL_MS - 1
-        assertEquals(FeedPartition("2026-10-08", 0), feed.latest())
+        assertEquals(FeedPartition("2026-10-08", 0, "fixture-0001"), feed.latest())
         assertEquals(1, manifestReads())
         // A new generation is seen once the five minutes are over.
         store.objects["$root/manifest.json"] = """{"as_of":"2026-10-09","generation":"g2","unknown":[1]}""".encodeToByteArray() to "\"m2\""
         clock.ms += 1
-        assertEquals(FeedPartition("2026-10-09", 0), feed.latest())
+        assertEquals(FeedPartition("2026-10-09", 0, "g2"), feed.latest())
         assertEquals(2, manifestReads())
     }
 
@@ -121,8 +121,8 @@ class OpenAqAggregatesFeedTest {
         val (cairo, lagos, nairobi) = table.rows
         assertEquals(CellRow(CAIRO, 2, endOf(oct(8)), mapOf("pm25" to CellStat(2, 20.0, 12.0, 31.0), "temperature" to CellStat(2, 26.0, 21.0, 30.0))), cairo)
         assertEquals(CellRow(LAGOS, 1, endOf(oct(7)), mapOf("humidity" to CellStat(1, 70.0, 64.0, 77.0))), lagos)
-        // PM10 from the 5th and PM2.5 from the 7th. The 8th has stations but no value, so it is not used.
-        assertEquals(CellRow(NAIROBI, 2, endOf(oct(7)), mapOf("pm10" to CellStat(1, 33.0, 25.0, 41.0), "pm25" to CellStat(2, 12.0, 8.0, 17.0))), nairobi)
+        // PM10 from the 5th and PM2.5 from the 7th, each with its own date. The 8th has stations but no value, so it is not used.
+        assertEquals(CellRow(NAIROBI, 2, endOf(oct(7)), mapOf("pm10" to CellStat(1, 33.0, 25.0, 41.0), "pm25" to CellStat(2, 12.0, 8.0, 17.0)), updatedByProperty = mapOf("pm10" to endOf(oct(5)))), nairobi)
     }
 
     @Test
@@ -134,7 +134,7 @@ class OpenAqAggregatesFeedTest {
         // PM2.5 on the 2nd, 5th, 6th and 8th (30, 50, 40, 20). September 30 is outside the window.
         assertEquals(CellRow(CAIRO, 3, endOf(oct(8)), mapOf("pm25" to CellStat(3, 35.0, 12.0, 70.0), "temperature" to CellStat(3, 27.0, 21.0, 33.0))), cairo)
         assertEquals(CellRow(LAGOS, 1, endOf(oct(7)), mapOf("humidity" to CellStat(1, 75.0, 64.0, 91.0))), lagos)
-        assertEquals(CellRow(NAIROBI, 2, endOf(oct(7)), mapOf("pm10" to CellStat(1, 33.0, 25.0, 41.0), "pm25" to CellStat(2, 12.0, 8.0, 17.0))), nairobi)
+        assertEquals(CellRow(NAIROBI, 2, endOf(oct(7)), mapOf("pm10" to CellStat(1, 33.0, 25.0, 41.0), "pm25" to CellStat(2, 12.0, 8.0, 17.0)), updatedByProperty = mapOf("pm10" to endOf(oct(5)))), nairobi)
     }
 
     @Test
@@ -314,9 +314,11 @@ class OpenAqAggregatesFeedTest {
         store.objects["$root/cells/h3_res=5/data.parquet"] = fixtureBytes(REPUBLISHED) to "\"c2\""
         store.objects["$root/manifest.json"] = """{"as_of":"2026-10-08","generation":"fixture-0002"}""".encodeToByteArray() to "\"m2\""
         clock.ms += OpenAqAggregatesFeed.MANIFEST_TTL_MS
-        assertEquals(partition, first.latest())
+        // Same date, a new partition, so a reader keyed on the partition reads again.
+        val republished = first.latest()!!
+        assertEquals(partition.copy(generation = "fixture-0002"), republished)
         assertEquals(0, first.cachedResolutions())
-        assertEquals(25.0, cairo(first.cells(partition, FeedWindow.DAY, 5, ranges = null)))
+        assertEquals(25.0, cairo(first.cells(republished, FeedWindow.DAY, 5, ranges = null)))
 
         // A restart reads the same generation from disk.
         store.requests.clear()

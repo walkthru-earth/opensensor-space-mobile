@@ -119,6 +119,23 @@ class CellChartMathTest {
     }
 
     @Test
+    fun aFlatChartsOccupiedBarKeepsItsOwnReadings() {
+        // Equal readings make a flat domain. All of them sit in the middle bar, so touching that
+        // bar keeps them all and every other bar keeps none (#110).
+        val values = listOf(20.0, 20.0, 20.0)
+        val domain = ChartDomain.of(values)!!
+        listOf(true, false).forEach { inclusive ->
+            val bins = 6
+            val counts = histogram(values, domain, bins, upperInclusive = inclusive)
+            assertEquals(3, counts[bins / 2])
+            for (i in 0 until bins) {
+                val band = bandOf(i, domain, bins, inclusive)
+                assertEquals(counts[i], values.count { it in band }, "bar $i, upper inclusive $inclusive")
+            }
+        }
+    }
+
+    @Test
     fun stepBlocksCountAreasPerStepAndSkipMissingValues() {
         val blocks = stepBlocks(listOf(3.0, 15.0, 15.1, 40.0, 200.0, Double.NaN), WhoGuidelines.PM25)
         assertEquals(WhoStep.entries.toList(), blocks.map { it.step })

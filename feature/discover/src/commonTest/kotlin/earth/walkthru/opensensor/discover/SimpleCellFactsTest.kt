@@ -36,6 +36,15 @@ class SimpleCellFactsTest {
     }
 
     @Test
+    fun theFreshnessIsTheShownPropertysOwnDate() {
+        // A folded daily row where PM was measured earlier than temperature (#109).
+        val day = row(4, 2_000L, "pm25" to 30.0, "temp" to 21.0).copy(updatedByProperty = mapOf("pm25" to 1_000L, "temp" to 2_000L))
+        val state = DiscoverUiState(dictionary = listOf(pm, temp), property = pm, selected = day, selectedWindows = mapOf(FeedWindow.DAY to day))
+        assertEquals(1_000L, state.simpleCellFacts().updatedEpochMs)
+        assertEquals(2_000L, state.copy(property = temp).simpleCellFacts().updatedEpochMs)
+    }
+
+    @Test
     fun beforeTheDayRowIsReadTheSheetIsLoadingNotNotAvailable() {
         val old = row(9, 2_000L, "pm25" to 80.0, "temp" to 30.0)
         val state = DiscoverUiState(

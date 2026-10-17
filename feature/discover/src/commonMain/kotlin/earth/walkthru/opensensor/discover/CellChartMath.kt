@@ -64,6 +64,15 @@ internal data class ValueBand(val low: Double, val high: Double, val upperInclus
 }
 
 internal fun bandOf(bin: Int, domain: ChartDomain, bins: Int, upperInclusive: Boolean): ValueBand {
+    // A flat domain puts every value in the middle bar ([binOf]), so that bar holds everything and
+    // the others hold nothing.
+    if (domain.high <= domain.low) {
+        return if (bin == bins / 2) {
+            ValueBand(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, upperInclusive)
+        } else {
+            ValueBand(domain.low, domain.low, upperInclusive)
+        }
+    }
     val step = (domain.high - domain.low) / bins
     val low = if (bin <= 0) Double.NEGATIVE_INFINITY else domain.low + step * bin
     val high = if (bin >= bins - 1) Double.POSITIVE_INFINITY else domain.low + step * (bin + 1)

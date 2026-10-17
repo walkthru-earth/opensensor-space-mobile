@@ -6,7 +6,8 @@ import earth.walkthru.aqsync.airquality.StationSummary
  * The public summary of one cell. The windows of its feed, oldest first (7 days, 24 hours, last hour),
  * one block each, so a feed without the last hour has two blocks. The headline is the 24 hour mean, the averaging of the WHO guideline. A window that
  * was not read, or holds no stat, is a null block, never zero. The update time is the 24 hour
- * row's too, so a newer hour never dates a headline that is not available.
+ * row's too, so a newer hour never dates a headline that is not available. It is the date of
+ * [propertyId] itself ([CellRow.updatedEpochMs]), so a newer reading of another property never dates it.
  */
 object PublicSummary {
     val ORDER: List<FeedWindow> = listOf(FeedWindow.WEEK, FeedWindow.DAY, FeedWindow.LAST_HOUR)
@@ -15,7 +16,7 @@ object PublicSummary {
         propertyId = propertyId,
         unit = unit,
         value = windows[FeedWindow.DAY]?.mean(propertyId),
-        updatedEpochMs = windows[FeedWindow.DAY]?.updatedEpochMs,
+        updatedEpochMs = windows[FeedWindow.DAY]?.updatedEpochMs(propertyId),
         history = ORDER.filter { it in offered }.map { windows[it]?.mean(propertyId) },
     )
 }
