@@ -28,12 +28,19 @@ draft), `docs/shared/mobile-migration.md` and `docs/shared/ble-sync-protocol.md`
    for CoreS3 `imu_t`, shown as board temperature. Waveshare `t` stays air temperature. Profiles
    list the board's keys, and Today shows only those particle bins. Unknown keys are ignored and
    missing keys are null. LIVE `utc` stays nanoseconds. Older dictionaries keep a profile, with
-   CoreS3 v6.11 and earlier reading board temperature from `t`. Waveshare v2.7 (`67688d0f…`, first build `d0d01294…`) adds `bstate`.
+   CoreS3 v6.11 and earlier reading board temperature from `t`. The current CoreS3 profile falls
+   back to `t` when `imu_t` is missing. Waveshare v2.7 (`67688d0f…`, first build `d0d01294…`) adds
+   `bstate`, the battery health code, which `LiveSample.bstate` parses. Showing it is #90.
 6. Watchdog. `LOG_TAIL` watchdog lines are informational. A storage stall reset ends the link,
    and the existing `RetryPolicy` and a fresh LIST resume the run. No code change.
-7. Old files. Both layouts stay readable. Cached old files are never deleted from the phone. A
+7. Index reopen. Room v11 and iOS receipt layout 2 reopen indexed rows without UTC rows or an
+   error, so an older build's index of a MICROS file is read again. A derive pass that runs before
+   the back-fill keeps any day a waiting row may fill (`StationDays.held` in `:core:history`, used
+   by `HistoryDeriver`, `IosDailyDerivedStore` and `ArchiveHistoryTiers`). `ArchiveRecord.isIndexed`
+   is the one indexed test.
+8. Old files. Both layouts stay readable. Cached old files are never deleted from the phone. A
    file the device no longer lists is not data loss, and the app never uploads to the device.
-8. Iceberg v3. Owner update, aq-parquet commit c1f07ed. Tables are created as format v3, device
+9. Iceberg v3. Owner update, aq-parquet commit c1f07ed. Tables are created as format v3, device
    MICROS columns are `timestamptz` and `field_id` is the Iceberg field id. No `timestamptz_ns`.
    Row lineage is left to the committing library (iceberg-go 0.7.0+ `AddFiles` or iceberg-rust
    0.9.0+ with `DataFile` entries from footer metrics, not PyIceberg 0.12). Pre v6.12 and v2.6
@@ -46,8 +53,12 @@ draft), `docs/shared/mobile-migration.md` and `docs/shared/ble-sync-protocol.md`
 - `UtcColumnsTest`, MICROS and NANOS copies of one file index and summarise the same, the unit
   comes from the logical type, unannotated old names read as ns, bad layouts are refused,
   overflow is null, range rounding, and a mixed old and new day written as MICROS with ids.
-- `LiveProfileTest`, `imu_t`, missing and unknown keys, newer schema, older dictionaries.
-- `DeviceCapabilitiesTest`, `TodayCardsTest`, `DailyParquetBuilderTest`, `HistoryDeriverTest`.
+- `LiveProfileTest`, `imu_t`, the CoreS3 fallback to `t`, `bstate`, missing and unknown keys, newer
+  schema, older dictionaries.
+- `StationDaysTest`, which days a waiting row holds.
+- `HistoryDeriverTest`, a day reopened by the v11 migration survives a derive pass before its
+  back-fill, on in-memory Room with the real migration SQL.
+- `DeviceCapabilitiesTest`, `TodayCardsTest`, `DailyParquetBuilderTest`.
 
 ## Not done here
 

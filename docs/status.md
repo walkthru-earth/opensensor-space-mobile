@@ -19,7 +19,11 @@ build and `verify` only. No phone run against the new firmware yet.
   board temperature comes from `imu_t`, Waveshare air temperature from `t`. Particle bins show only
   the board's keys. Older dictionaries keep a profile because boards in the field run them. Older
   CoreS3 firmware reads board temperature from `t`. Waveshare v2.7 (`67688d0f…`, PR aq-parquet #24, and its first build `d0d01294…`)
-  adds `bstate`.
+  adds `bstate`. CoreS3 board temperature falls back to `t` when `imu_t` is missing. `LiveSample`
+  parses `bstate`, and no screen shows it yet (#90).
+- Index reopen. Room v11 and iOS receipt layout 2 index rows without UTC rows again. A derive pass
+  before that back-fill keeps every day a waiting row may fill (`StationDays.held`), on Android and
+  iOS. `ArchiveRecord.isIndexed` is the one indexed test, and `withUtcBetween` uses it in SQL.
 - Old files. Both layouts stay readable, cached old files stay on the phone, and files the owner
   removed from the Waveshare card are neither data loss nor uploaded again.
 - Iceberg. Tables target format v3 with the device MICROS columns as `timestamptz` and `field_id`

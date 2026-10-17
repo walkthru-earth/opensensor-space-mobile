@@ -37,7 +37,14 @@ Derived from the **file**, never its name: rows, row groups, `schema_version`, `
 `indexedAt`/`indexError`. v6 footers answer spans from statistics without decoding
 (`fromStatistics`); v1/v2 files decode three columns. `purpose = codec-comparison-duplicate-rows`
 (benchmark copies) is indexed but excluded from every history query (`withUtcBetween` filters on
-`purpose`). A refused file keeps its row with `indexError`.
+`purpose`). A refused file keeps its row with `indexError`. `ArchiveRecord.isIndexed` (indexed and no
+error) is the one test of whether a row's index columns can be read, and `withUtcBetween` applies the
+same test in SQL. `ArchiveRecord.awaitsIndex` (never indexed, or reopened) marks a row the back-fill
+still has to read.
+
+Room v11 and iOS receipt layout 2 (`ArchiveRecord.INDEX_LAYOUT`) reopen every indexed row without UTC
+rows or an error, so a file whose `event_time_utc_us` an older build could not read is indexed again
+once. Until the back-fill reaches it, such a row awaits its index.
 
 ## Metric registry
 
@@ -124,7 +131,13 @@ summaries, whose results Android already caches by name and CRC-32).
 
 `derived_day.sourceSignature` = SHA-256 over `derive-v<DERIVE_VERSION>` + the day's sorted
 `name:crc32` sources + anchors. `deriveStale()` rebuilds exactly the days whose set changed (late
-file, re-synced mismatch, deleted file, new anchor) and drops days with no sources. Healthy log
+file, re-synced mismatch, deleted file, new anchor) and drops days with no sources. A day with no
+source is kept while a row of that station awaits its index and may place itself there
+(`StationDays.held`). A waiting row that kept a span holds the days of that span, one without a span
+holds every day of its station, and a row with an index error holds nothing. Android's
+`HistoryDeriver`, iOS's `IosDailyDerivedStore` and the tier store retain in `ArchiveHistoryTiers` all
+use this rule, so a derive pass that runs before the back-fill never deletes a day the back-fill is
+about to fill again. Healthy log
 line after a sync: `HistoryDeriver: derived 0 of N station-days (nothing changed)` (debug level).
 
 ## Time for rows logged before the clock (`TimeEstimate`, Room v6)
