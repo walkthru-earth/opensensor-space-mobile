@@ -169,6 +169,12 @@ data class LiveSample(
     val vbus: Int? = null,
     /** light_ch0_raw */
     val als: Long? = null,
+    /**
+     * Waveshare v5 battery_health_state, inferred from cell voltage with uncalibrated thresholds.
+     * 0 unknown, 1 external power likely, 2 ok, 3 low, 4 critical, 5 settling after a gauge reset.
+     * Absent when no battery is installed. Parsed only, no screen shows it yet (#90).
+     */
+    val bstate: Int? = null,
 ) {
     val pmsStatus: PmsStatus? get() = PmsStatus.fromCode(pms)
     val pmValid: Boolean get() = pms == PmsStatus.VALID.code

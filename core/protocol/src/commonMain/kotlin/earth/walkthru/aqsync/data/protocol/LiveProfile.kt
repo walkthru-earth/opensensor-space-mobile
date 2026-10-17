@@ -5,6 +5,7 @@ package earth.walkthru.aqsync.data.protocol
  * set the board's field table can send, so a screen shows a tile only when its key belongs to the
  * board. A listed key may still be missing from one sample, which reads as no value.
  * [temperatureKey] is the key [temperature] is read from, which older CoreS3 firmware sent as `t`.
+ * Only CoreS3 reads `imu_t`, so its fallback to `t` is the same board temperature under the old key.
  */
 data class LiveProfile(
     val temperature: TemperatureSource,
@@ -14,7 +15,7 @@ data class LiveProfile(
 ) {
     /** The temperature this board reports for [live], read from [temperatureKey]. */
     fun temperatureOf(live: LiveSample?): Double? = when (temperatureKey) {
-        "imu_t" -> live?.imuT
+        "imu_t" -> live?.imuT ?: live?.t
         "t" -> live?.t
         else -> null
     }

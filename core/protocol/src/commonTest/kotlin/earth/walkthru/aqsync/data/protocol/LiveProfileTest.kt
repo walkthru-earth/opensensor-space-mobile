@@ -44,7 +44,6 @@ class LiveProfileTest {
         val both = LiveSample.parse("""{"t":23.0,"imu_t":40.0}""")
         assertEquals(40.0, LiveProfiles.CORES3.temperatureOf(both)!!, 0.0)
         assertEquals(23.0, LiveProfiles.WAVESHARE.temperatureOf(both)!!, 0.0)
-        assertNull(LiveProfiles.CORES3.temperatureOf(LiveSample.parse("""{"t":23.0}""")))
         assertNull(LiveProfiles.WAVESHARE.temperatureOf(LiveSample.parse("""{"imu_t":40.0}""")))
         assertNull(LiveProfiles.CORES3.temperatureOf(null))
     }
@@ -96,7 +95,17 @@ class LiveProfileTest {
         assertEquals(TemperatureSource.AMBIENT, profile.temperature)
         assertTrue(profile.humidity)
         assertEquals(waveshareKeys + "bstate", profile.keys)
-        assertEquals(22.4, profile.temperatureOf(LiveSample.parse("""{"t":22.4,"rh":51.0,"bstate":2}"""))!!, 0.0)
+        val sample = LiveSample.parse("""{"t":22.4,"rh":51.0,"bstate":2}""")
+        assertEquals(22.4, profile.temperatureOf(sample)!!, 0.0)
+        assertEquals(2, sample.bstate)
+        assertNull(LiveSample.parse("""{"t":22.4,"rh":51.0}""").bstate, "no battery, no bstate")
+    }
+
+    @Test
+    fun `CoreS3 board temperature falls back to t when imu_t is missing`() {
+        assertEquals(31.5, LiveProfiles.CORES3.temperatureOf(LiveSample.parse("""{"pms":4,"t":31.5}"""))!!, 0.0)
+        assertEquals(40.0, LiveProfiles.CORES3.temperatureOf(LiveSample.parse("""{"t":31.5,"imu_t":40.0}"""))!!, 0.0)
+        assertNull(LiveProfiles.CORES3.temperatureOf(LiveSample.parse("""{"pms":4}""")))
     }
 
     @Test
