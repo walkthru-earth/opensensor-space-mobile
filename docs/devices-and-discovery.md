@@ -583,7 +583,9 @@ is the OpenAQ aggregates collection on source.coop, read with the same reader. R
 - `DiscoverController` holds the sample and this feed. Real asks `latest()` on every load (the
   manifest is cached for 5 minutes) and keeps the last partition when a later ask fails. A cell's
   other windows are read 24 hours first, so a failing window never delays the headline. A pan
-  rereads a failed window without flipping the sheet back to loading. Tests use a 13 row fixture from
+  rereads a failed window without flipping the sheet back to loading. A pan that picks up a new
+  partition reads every window of the selected cell again, and a window read of an older partition
+  never lands. Tests use a 13 row fixture from
   `tools/discover-fixture/make_openaq_fixture.py` served by a fake HTTP engine. The live URL is
   not in the gate.
 

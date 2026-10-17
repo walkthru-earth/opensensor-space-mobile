@@ -215,8 +215,11 @@ class DiscoverController(
     private var restyleJob: Job? = null
     private var windowsJob: Job? = null
 
-    /** The cell, window and resolution [windowsJob] read for, so a pan does not read them again. */
-    private var windowsFor: Triple<Long, FeedWindow, Int>? = null
+    /**
+     * The cell, window, resolution and partition [windowsJob] read for, so a pan does not read them
+     * again. A new partition is a new dataset, so every window is read again.
+     */
+    private var windowsFor: WindowsKey? = null
 
     /** The window the rows on screen were read for. It lags `state.window` until the reload lands. */
     private var rowsWindow: FeedWindow? = null
@@ -437,7 +440,7 @@ class DiscoverController(
         val property = ranked.firstOrNull { it.id == wanted } ?: dictionary.firstOrNull { it.id == wanted && ranked.isEmpty() } ?: ranked.firstOrNull()
         // Read after the suspended feed read, so a tap made while it ran is not reverted.
         val selected = _state.value.selected?.let { s -> rows.firstOrNull { it.h3 == s.h3 } }
-        val sameWindows = selected != null && windowsFor == Triple(selected.h3, window, res)
+        val sameWindows = selected != null && windowsFor == WindowsKey(selected.h3, window, res, p)
         rowsWindow = window
         _state.update {
             it.copy(
@@ -472,8 +475,8 @@ class DiscoverController(
 
     /**
      * Reads [row]'s cell in the other windows its feed offers, the 24 hours first, one small read each, the same anonymous
-     * feed the map uses. A newer selection cancels it, and a result for an older cell, window or
-     * resolution is dropped, so it never lands on the cell selected since. Each window lands as soon
+     * feed the map uses. A newer selection cancels it, and a result for an older cell, window,
+     * resolution or partition is dropped, so it never lands on the cell selected since. Each window lands as soon
      * as it is read. A read that fails is tried again after 1 s and then 2 s. One that still fails
      * stays out of the map and goes into [DiscoverUiState.failedWindows], and the next pan or the
      * sheet's Retry reads [only] the missing windows again.
@@ -495,7 +498,7 @@ class DiscoverController(
             return
         }
         val source = active
-        windowsFor = Triple(row.h3, window, res)
+        windowsFor = WindowsKey(row.h3, window, res, p)
         windowsJob = scope.launch {
             for (w in wanted) {
                 val read = withContext(io) {
@@ -509,7 +512,7 @@ class DiscoverController(
                 }
                 ensureActive()
                 _state.update {
-                    if (source !== active || it.selected?.h3 != row.h3 || it.window != window || it.res != res) return@update it
+                    if (source !== active || partition != p || it.selected?.h3 != row.h3 || it.window != window || it.res != res) return@update it
                     read.fold(
                         onSuccess = { r -> it.copy(selectedWindows = it.selectedWindows + (w to r), failedWindows = it.failedWindows - w) },
                         onFailure = { _ -> it.copy(failedWindows = it.failedWindows + w) },
@@ -559,6 +562,8 @@ class DiscoverController(
             }
         }
     }
+
+    private data class WindowsKey(val cell: Long, val window: FeedWindow, val res: Int, val partition: FeedPartition)
 
     private companion object {
         const val REST_MS = 400L

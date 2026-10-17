@@ -46,11 +46,15 @@ class DiscoverControllerTest {
     private inner class FakeFeed(
         override val isSample: Boolean = true,
         override val windows: List<FeedWindow> = FeedWindow.entries,
-        private val partition: FeedPartition = FeedPartition("2026-10-12", 10),
+        /** What [latest] answers. A newer one is a new day published while the screen is open. */
+        var partition: FeedPartition = FeedPartition("2026-10-12", 10),
         override val isDaily: Boolean = false,
         private val updatedMs: Long = 1_000L,
     ) : PublicFeed {
         override val available = true
+
+        /** The partitions this feed has files for, each with what it adds to every [value]. */
+        val published = mutableMapOf(partition to 0.0)
         val calls = mutableListOf<Pair<FeedWindow, List<LongRange>?>>()
 
         /** True makes [latest] throw, like a manifest that cannot be read. */
@@ -80,7 +84,7 @@ class DiscoverControllerTest {
         override suspend fun cells(partition: FeedPartition, window: FeedWindow, res: Int, ranges: List<LongRange>?): CellsTable {
             calls += window to ranges
             // Another feed's partition names files this feed does not have.
-            if (partition != this.partition) throw IllegalStateException("no file for $partition")
+            val offset = published[partition] ?: throw IllegalStateException("no file for $partition")
             val single = ranges?.singleOrNull()?.takeIf { it.first == it.last }?.first
             if (single != null) {
                 gates[single]?.await()
@@ -95,7 +99,7 @@ class DiscoverControllerTest {
             }
             val rows = listOf(cellA, cellB)
                 .filter { c -> ranges == null || ranges.any { c in it } }
-                .map { c -> CellRow(c, devices = 3, updatedEpochMs = updatedMs, stats = mapOf("pm25" to CellStat(3, value(c, window), null, null))) }
+                .map { c -> CellRow(c, devices = 3, updatedEpochMs = updatedMs, stats = mapOf("pm25" to CellStat(3, value(c, window) + offset, null, null))) }
             return CellsTable(CellsFileInfo(sample = isSample, window = null, h3Res = res, properties = listOf(pm25)), rows, 1, 1)
         }
     }
@@ -418,6 +422,60 @@ class DiscoverControllerTest {
         runCurrent()
         assertTrue(FeedWindow.DAY in c.state.value.selectedWindows, "the 24 hours lands before the last hour retries")
         assertEquals(SimpleHeadline.SHOWN, c.state.value.simpleHeadline())
+    }
+
+    /** Real on the 7 day map with cell A selected, every window read, on 8 Oct. */
+    private fun TestScope.realWeekWithCellA(live: FakeFeed): DiscoverController {
+        val c = controller(FakeFeed(), live)
+        c.onSourceSettings(DiscoverSource.OPENAQ, publicSensors = true)
+        settle()
+        c.selectWindow(FeedWindow.WEEK)
+        settle()
+        c.selectCell(H3Index.toHex(cellA))
+        settle()
+        assertEquals(30.0, c.state.value.selectedSummary(pm25)?.value)
+        return c
+    }
+
+    /** 9 Oct is published, every value 50 higher, and the camera rests again. */
+    private fun TestScope.nextDayAndPan(c: DiscoverController, live: FakeFeed) {
+        live.partition = FeedPartition("2026-10-09", 0)
+        live.published[live.partition] = 50.0
+        c.onCamera(CameraRest(GeoBounds(-122.02, 36.98, -121.98, 37.02), zoom = 6.25, lat = 37.0, lng = -122.0))
+        settle()
+    }
+
+    @Test
+    fun aNewPartitionRereadsEverySelectedWindow() = runTest {
+        // The map and its date move to 9 Oct, so the 24 hour headline must too (#108).
+        val live = liveFeed()
+        val c = realWeekWithCellA(live)
+        nextDayAndPan(c, live)
+        val s = c.state.value
+        assertEquals(LocalDate(2026, 10, 9), s.dataDate)
+        assertEquals(60.0, s.selectedWindows[FeedWindow.WEEK]?.mean("pm25"))
+        assertEquals(80.0, s.selectedWindows[FeedWindow.DAY]?.mean("pm25"))
+        assertEquals(80.0, s.selectedSummary(pm25)?.value)
+    }
+
+    @Test
+    fun aSlowReadOfTheOldPartitionNeverLandsOverTheNewOne() = runTest {
+        val live = liveFeed()
+        val c = controller(FakeFeed(), live)
+        c.onSourceSettings(DiscoverSource.OPENAQ, publicSensors = true)
+        settle()
+        c.selectWindow(FeedWindow.WEEK)
+        settle()
+        // The 24 hours of 8 Oct is held until 9 Oct is on screen.
+        val slow = CompletableDeferred<Unit>()
+        live.gates[cellA] = slow
+        c.selectCell(H3Index.toHex(cellA))
+        settle()
+        nextDayAndPan(c, live)
+        slow.complete(Unit)
+        settle()
+        assertEquals(80.0, c.state.value.selectedWindows[FeedWindow.DAY]?.mean("pm25"))
+        assertEquals(60.0, c.state.value.selectedWindows[FeedWindow.WEEK]?.mean("pm25"))
     }
 
     @Test
