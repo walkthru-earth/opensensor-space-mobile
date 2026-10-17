@@ -212,7 +212,7 @@ internal object IosArchive {
     private val derived by lazy { IosDailyDerivedStore(cachesDirectory(), derivedAtomic, tierStore) }
     private val repair by lazy { ArchiveIndexRepair(store, index, clockAnchors = clockAnchors, gate = gate) }
     private val janitor by lazy {
-        StorageJanitor(roots, IosStorageTree(), store, index, Dispatchers.IO, log = ::println, quota = derivedQuota, leases = leases, gate = gate)
+        StorageJanitor(roots, IosStorageTree(), store, index, Dispatchers.IO, log = ::println, quota = derivedQuota, leases = leases, gate = gate, pruned = pruned)
     }
 
     /**

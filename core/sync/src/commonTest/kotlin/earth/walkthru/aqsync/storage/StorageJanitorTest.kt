@@ -3,6 +3,8 @@ package earth.walkthru.aqsync.storage
 import earth.walkthru.aqsync.archive.ArchiveKey
 import earth.walkthru.aqsync.archive.ArchiveLayout
 import earth.walkthru.aqsync.archive.ArchiveRecord
+import earth.walkthru.aqsync.archive.PrunedFile
+import earth.walkthru.aqsync.archive.PrunedFiles
 import earth.walkthru.aqsync.data.protocol.ParquetVerify
 import earth.walkthru.aqsync.data.protocol.sha256Hex
 import earth.walkthru.aqsync.data.sync.MemoryArchiveIndex
@@ -10,6 +12,8 @@ import earth.walkthru.aqsync.data.sync.MemoryArchiveStore
 import earth.walkthru.aqsync.data.sync.WriterLeases
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -73,6 +77,7 @@ class StorageJanitorTest {
         scheduler: kotlinx.coroutines.test.TestCoroutineScheduler,
         leases: WriterLeases = WriterLeases(),
         quota: DerivedQuota? = null,
+        pruned: PrunedFiles = PrunedFiles.None,
     ) =
         StorageJanitor(
             roots = roots,
@@ -84,6 +89,7 @@ class StorageJanitorTest {
             clock = { now },
             leases = leases,
             quota = quota,
+            pruned = pruned,
         )
 
     @Test
@@ -215,6 +221,31 @@ class StorageJanitorTest {
         assertEquals(0, report.failures)
         assertNull(index.get(key))
         assertEquals(0, leases.activeCount())
+    }
+
+    @Test
+    fun aFileLeftByACrashInTheOldFileCleanupIsAdoptedAndLosesItsRemovedMark() = runTest {
+        val store = MemoryArchiveStore()
+        val index = MemoryArchiveIndex()
+        val key = ArchiveKey(known, "year=2026/month=10/day=01/data.parquet")
+        val other = PrunedFile(known, "year=2026/month=10/day=02/data.parquet", 9, 1, 1)
+        // The cleanup wrote the mark and removed the row, then the phone stopped before the delete.
+        store.files[ArchiveLayout.finalPath(key)] = parquet
+        val marks = MutableStateFlow(listOf(PrunedFile(known, key.name, parquet.size.toLong(), 1, 1), other))
+        val pruned = object : PrunedFiles {
+            override fun observeAll(): Flow<List<PrunedFile>> = marks
+            override suspend fun put(file: PrunedFile) = error("not used")
+            override suspend fun remove(key: ArchiveKey) {
+                marks.value = marks.value.filterNot { it.key == key }
+            }
+            override suspend fun clear(): Int = error("not used")
+        }
+
+        val report = janitor(FakeTree(), store, index, testScheduler, pruned = pruned).run()
+
+        assertEquals(1, report.adopted)
+        assertNotNull(index.get(key))
+        assertEquals(listOf(other), marks.value)
     }
 
     @Test

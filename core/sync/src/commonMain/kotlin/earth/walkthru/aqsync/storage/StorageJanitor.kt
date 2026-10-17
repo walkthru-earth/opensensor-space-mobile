@@ -6,6 +6,7 @@ import earth.walkthru.aqsync.archive.ArchiveLayout
 import earth.walkthru.aqsync.archive.ArchiveRecord
 import earth.walkthru.aqsync.archive.ArchiveStore
 import earth.walkthru.aqsync.archive.ArchiveVerifier
+import earth.walkthru.aqsync.archive.PrunedFiles
 import earth.walkthru.aqsync.data.protocol.ParquetVerify
 import earth.walkthru.aqsync.data.protocol.Sha256
 import earth.walkthru.aqsync.data.protocol.toHex
@@ -52,6 +53,8 @@ class StorageJanitor(
     private val leases: WriterLeases = WriterLeases(),
     /** The archive's shared gate, taken around each adopted record's insert. */
     private val gate: ArchiveMutationGate = ArchiveMutationGate(),
+    /** Removed file records. An adopted file is on the phone again, so its record goes. */
+    private val pruned: PrunedFiles = PrunedFiles.None,
 ) {
     data class Report(
         val tempsSwept: Int = 0,
@@ -189,7 +192,8 @@ class StorageJanitor(
 
     /**
      * Under the lease of [key], and the insert under the station's gate, so a file the old file
-     * cleanup just deleted is never adopted back.
+     * cleanup just deleted is never adopted back. A file left by a crash inside that cleanup still has
+     * its removed record, which is dropped with the insert, since the file is on the phone again.
      */
     private suspend fun adopt(key: ArchiveKey) {
         if (!store.exists(key)) return
@@ -220,8 +224,23 @@ class StorageJanitor(
             sourceDevice = ADOPTED_SOURCE,
         )
         val indexed = indexer.indexed(record)
-        val adopted = gate.withStation(key.station) { store.exists(key) && index.putIfAbsent(indexed) }
+        val adopted = gate.withStation(key.station) {
+            val inserted = store.exists(key) && index.putIfAbsent(indexed)
+            if (inserted) forgetRemoved(key)
+            inserted
+        }
         if (adopted) report = report.copy(adopted = report.adopted + 1)
+    }
+
+    /** A record that stays is harmless, since a phone copy wins in the planner. Settings only counts it. */
+    private suspend fun forgetRemoved(key: ArchiveKey) {
+        try {
+            pruned.remove(key)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log("janitor: removed record drop failed: ${e::class.simpleName}")
+        }
     }
 
     /** Deletes [path] only when it lies under a Scratch or Rebuildable root. Returns whether it did. */
