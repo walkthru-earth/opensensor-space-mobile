@@ -79,9 +79,10 @@ class MemoryBlockStore : BlockStore {
  * (#94). [CachedRangeSource] keeps the blocks of remote files in it.
  *
  * The recency order is rebuilt from file times when the cache is first used, and follows reads and
- * writes from then on. Every [put] evicts until the cache is under [quotaBytes], which each platform
- * computes from the OS cache allowance, so a shrinking allowance under storage pressure shrinks the
- * cache and a quota of 0 empties it. [clear] removes every file, the Settings clear action. Writes are
+ * writes from then on. [quotaBytes] is read at every [put] and [enforce], and each platform computes
+ * it from the OS cache allowance, so a shrinking allowance under storage pressure shrinks the cache
+ * and a quota of 0 empties it. A [put] makes room before each write, so the files never pass the
+ * quota. The apps call [enforce] once at start. [clear] removes every file, the Settings clear action. Writes are
  * best effort. A failed write or delete is counted, never thrown, since the cache only saves a GET.
  * Disk work runs on [io]. Nothing is logged.
  */
@@ -109,7 +110,8 @@ class BlockCache(
     suspend fun get(name: String): ByteArray? = locked { files ->
         val bytes = if (files.containsKey(name)) attempt { store.read(name) } else null
         if (bytes == null) {
-            forget(files, name)
+            // A file that failed to read is deleted too. One the OS purged is already gone.
+            if (!files.containsKey(name) || attempt { store.delete(name) } != null) forget(files, name)
             stats = stats.copy(misses = stats.misses + 1)
         } else {
             files.remove(name)
@@ -123,20 +125,24 @@ class BlockCache(
     suspend fun put(name: String, bytes: ByteArray) = putAll(listOf(name to bytes))
 
     /**
-     * Stores every entry, then evicts down to the quota, asked once. Nothing is written while the quota
-     * is 0 or cannot be read, and an entry larger than the quota is evicted at once.
+     * Stores every entry, evicting before each write so the cache stays under the quota, asked once.
+     * Nothing is written while the quota is 0 or cannot be read, and an entry larger than the quota is
+     * skipped.
      */
     suspend fun putAll(entries: List<Pair<String, ByteArray>>) {
         val quota = quota() ?: return
         locked { files ->
-            if (quota > 0) {
-                for ((name, bytes) in entries) {
-                    if (attempt { store.write(name, bytes) } == null) continue
-                    forget(files, name)
-                    files[name] = bytes.size.toLong()
-                    total += bytes.size
-                    stats = stats.copy(writes = stats.writes + 1)
-                }
+            for ((name, bytes) in entries) {
+                val size = bytes.size.toLong()
+                if (quota == 0L || size > quota) continue
+                val old = files[name] ?: 0L
+                evictTo(files, quota - size + old, keep = name)
+                if (total - old + size > quota) continue
+                if (attempt { store.write(name, bytes) } == null) continue
+                forget(files, name)
+                files[name] = size
+                total += size
+                stats = stats.copy(writes = stats.writes + 1)
             }
             evictTo(files, quota)
         }
@@ -163,10 +169,12 @@ class BlockCache(
     /** Removes every file. */
     suspend fun clear() = locked { evictTo(it, 0L) }
 
-    private fun evictTo(files: LinkedHashMap<String, Long>, quota: Long) {
+    /** Deletes the least recently used files but [keep] until [total] is at most [quota]. */
+    private fun evictTo(files: LinkedHashMap<String, Long>, quota: Long, keep: String? = null) {
         val iterator = files.entries.iterator()
         while (total > quota && iterator.hasNext()) {
             val (name, size) = iterator.next()
+            if (name == keep) continue
             if (attempt { store.delete(name) } == null) continue
             iterator.remove()
             total -= size

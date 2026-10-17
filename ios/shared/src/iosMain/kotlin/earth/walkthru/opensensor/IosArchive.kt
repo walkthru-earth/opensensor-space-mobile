@@ -150,7 +150,7 @@ internal object IosArchive {
     /**
      * The disk block cache of the public feed (#94), in `Library/Caches` where iOS purges it under
      * storage pressure. iOS has no per app cache quota call, so the quota is the stored policy's, and
-     * 0 while the volume runs low.
+     * 0 while the volume runs low. [startIndexRepair] applies it once at start.
      */
     val feedBlocks: BlockCache by lazy {
         val store = DiskBlockStore(roots.rootOf(StorageRole.FeedBlocks), derivedAtomic, IosStorageTree())
@@ -292,6 +292,7 @@ internal object IosArchive {
             } catch (e: Exception) {
                 println("storage janitor failed: ${e::class.simpleName}")
             }
+            feedBlocks.enforce()
             repair.backfillUntilSettled()
             try {
                 repair.repairWhenWaiting()

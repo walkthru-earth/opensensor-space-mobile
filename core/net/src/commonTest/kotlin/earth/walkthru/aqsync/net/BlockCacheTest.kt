@@ -10,10 +10,20 @@ import kotlin.test.assertNull
 class BlockCacheTest {
     private class FailingStore(val inner: MemoryBlockStore = MemoryBlockStore()) : BlockStore by inner {
         var failWrites = false
+        var failReads = false
+
+        /** The most bytes on disk after any write. */
+        var peak = 0L
+
+        override fun read(name: String): ByteArray? {
+            if (failReads) throw IllegalStateException("I/O error")
+            return inner.read(name)
+        }
 
         override fun write(name: String, bytes: ByteArray) {
             if (failWrites) throw IllegalStateException("disk full")
             inner.write(name, bytes)
+            peak = maxOf(peak, inner.list().sumOf { it.bytes })
         }
     }
 
@@ -104,5 +114,29 @@ class BlockCacheTest {
         assertEquals(800, restarted.bytes())
         restarted.put("next", ByteArray(400))
         assertEquals(setOf("new", "next"), store.list().map { it.name }.toSet())
+    }
+
+    @Test
+    fun `a batch makes room before each write so the files never pass the quota`() = runTest {
+        cache.put("a", ByteArray(400))
+        cache.put("b", ByteArray(400))
+        cache.putAll(listOf("c" to ByteArray(400), "d" to ByteArray(400), "huge" to ByteArray(2000)))
+        assertEquals(800, store.peak)
+        assertEquals(setOf("c", "d"), store.list().map { it.name }.toSet())
+        // Rewriting a kept name does not evict it.
+        cache.put("d", ByteArray(500))
+        assertEquals(setOf("c", "d"), store.list().map { it.name }.toSet())
+        assertEquals(900, cache.bytes())
+    }
+
+    @Test
+    fun `a block that fails to read is deleted and a miss`() = runTest {
+        cache.put("a", ByteArray(100))
+        store.failReads = true
+        assertNull(cache.get("a"))
+        store.failReads = false
+        assertEquals(emptyList<StoredBlock>(), store.list())
+        assertEquals(0, cache.bytes())
+        assertEquals(1, cache.stats().failures)
     }
 }

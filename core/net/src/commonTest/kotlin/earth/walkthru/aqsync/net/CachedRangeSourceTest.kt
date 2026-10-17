@@ -119,4 +119,17 @@ class CachedRangeSourceTest {
     fun `a range outside the file throws`() = runTest {
         assertFailsWith<IndexOutOfBoundsException> { source().readRanges(listOf(9_990L until 10_001L)) }
     }
+
+    @Test
+    fun `a meta file of another url or format is ignored`() = runTest {
+        source().readRanges(listOf(0L until 1_000L))
+        val meta = store.list().single { it.name.endsWith(".meta") }.name
+        for (stale in listOf("aqblocks1\n5\nhttps://example.test/other.parquet\n\"e1\"", "aqblocks0\n5\n$url\n\"e1\"", "aqblocks1\n-5\n$url\n\"e1\"")) {
+            store.write(meta, stale.encodeToByteArray())
+            engine.ranges.clear()
+            val source = source()
+            assertEquals(10_000, source.id().size)
+            assertEquals(listOf<String?>("bytes=-1024"), engine.ranges)
+        }
+    }
 }

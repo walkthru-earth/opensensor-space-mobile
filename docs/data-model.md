@@ -273,7 +273,8 @@ starts during the sweep keeps its partial. The log line has counts only. `Storag
 ### Quotas and memory pressure (#61)
 
 `RetentionPolicy` (`:core:storage`) caps Rebuildable data, 64 MiB of derived day files, 20 MiB
-of map tiles and 16 MiB of feed blocks by default. Durable data has no cap. The policy is stored in the shared settings DataStore
+of map tiles and 16 MiB of feed blocks by default. Inside the OS cache allowance the derived quota is
+what is left after the map cap and the 16 MiB block cap (`derivedQuotaWithin`). Durable data has no cap. The policy is stored in the shared settings DataStore
 (`derived_quota_bytes`, `map_cache_bytes`, `SettingsRepository.setRetention`), and a missing or negative
 value reads as the default. Both apps read the derived quota from it at each enforcement and the map cap
 once at process start. No screen edits the quotas yet. `QuotaEnforcer` deletes only derived `.parquet` files, the
@@ -287,7 +288,9 @@ a day and in the janitor. The feed `BlockCache` (#94) reads its quota at every w
 `blockCacheQuotaWithin`, the smaller of its cap and the OS cache allowance left after the map cache
 (Android `getCacheQuotaBytes`). The quota is 0 while the volume has under 256 MiB free for
 Rebuildable data, so the cache gives its files back under storage pressure, and the OS may purge the
-directory at any time. It evicts the least recently used block first. The map cap is set once per process through MapLibre
+directory at any time. It evicts the least recently used block first, before each write, so it never
+holds more than the quota. It applies the quota again once at process start, Android in the
+`storage-janitor` job and iOS after the startup sweep. The map cap is set once per process through MapLibre
 `MapRuntimeOptions.maximumCacheSizeBytes`, before the first map. Settings shows the bytes per class
 and clears the History cache, which also empties the feed block cache, or the map cache. Sensor files have no clear button.
 

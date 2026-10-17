@@ -301,4 +301,31 @@ class OpenAqAggregatesFeedTest {
         second.cells(FeedPartition("2026-10-09", 0), FeedWindow.DAY, 5, ranges = null)
         assertTrue(store.requests.any { it.first.endsWith(".parquet") })
     }
+
+    @Test
+    fun `a file replaced under the same as_of with a new generation reads the new bytes`() = runTest {
+        val blocks = BlockCache(MemoryBlockStore(), quotaBytes = { 1L shl 30 })
+        val first = OpenAqAggregatesFeed(store, root = root, clock = clock, blocks = blocks)
+        val partition = first.latest()!!
+        val cairo = { table: CellsTable -> table.rows.single { it.h3 == CAIRO }.mean("pm25") }
+        assertEquals(20.0, cairo(first.cells(partition, FeedWindow.DAY, 5, ranges = null)))
+
+        // The writer replaces the file in place and bumps the generation, as_of stays.
+        store.objects["$root/cells/h3_res=5/data.parquet"] = fixtureBytes(REPUBLISHED) to "\"c2\""
+        store.objects["$root/manifest.json"] = """{"as_of":"2026-10-08","generation":"fixture-0002"}""".encodeToByteArray() to "\"m2\""
+        clock.ms += OpenAqAggregatesFeed.MANIFEST_TTL_MS
+        assertEquals(partition, first.latest())
+        assertEquals(0, first.cachedResolutions())
+        assertEquals(25.0, cairo(first.cells(partition, FeedWindow.DAY, 5, ranges = null)))
+
+        // A restart reads the same generation from disk.
+        store.requests.clear()
+        val second = OpenAqAggregatesFeed(store, root = root, clock = clock, blocks = blocks)
+        assertEquals(25.0, cairo(second.cells(second.latest()!!, FeedWindow.DAY, 5, ranges = null)))
+        assertEquals(listOf("$root/manifest.json"), store.requests.map { it.first })
+    }
+
+    private companion object {
+        const val REPUBLISHED = "openaq-aggregates-republished/cells/h3_res=5/data.parquet"
+    }
 }

@@ -15,7 +15,7 @@ import kotlin.concurrent.Volatile
  * network only for blocks it never read or the cache gave back.
  *
  * - The key is [uri] and [generation], a token the caller changes whenever the object may have changed
- *   (the feed passes the manifest's `as_of`). Within one key [id] comes from a small meta file, so even
+ *   (the feed passes the manifest's `as_of` and `generation`). Within one key [id] comes from a small meta file, so even
  *   the footer read needs no request. Without one it asks [upstream] and keeps the answer.
  * - An id that is not [SourceId.cacheable] (no strong ETag) bypasses the cache, every read goes
  *   upstream.
