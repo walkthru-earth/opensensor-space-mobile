@@ -111,6 +111,18 @@ internal class ColumnSink(val leaf: LeafColumn, val capacity: Int, binaryHint: I
         if (optional) setValid(slot)
     }
 
+    /** A fixed-width value from its little endian [bits], as [DeltaBinaryPackedDecoder] and [ByteStreamSplitDecoder] return it. */
+    fun putBits(bits: Long, optional: Boolean) {
+        val slot = next()
+        when {
+            ints != null -> ints[slot] = bits.toInt()
+            longs != null -> longs[slot] = bits
+            floats != null -> floats[slot] = Float.fromBits(bits.toInt())
+            else -> doubles!![slot] = Double.fromBits(bits)
+        }
+        if (optional) setValid(slot)
+    }
+
     fun putBytes(b: ByteArray, at: Int, length: Int, optional: Boolean) {
         val slot = next()
         val offs = offsets!!
@@ -149,6 +161,8 @@ internal class DecodeScratch {
     var dictionaryEntries = IntArray(0)
     val levels = RleDecoder()
     val indices = RleDecoder()
+    val delta = DeltaBinaryPackedDecoder()
+    val split = ByteStreamSplitDecoder()
 
     fun page(size: Int): ByteArray {
         if (page.size < size) page = ByteArray(maxOf(size, page.size * 2))
@@ -172,7 +186,8 @@ internal class DecodeScratch {
  * its final slot. Compressed pages are decompressed from the fetched bytes into [scratch]; uncompressed
  * pages are read in place. Nothing is copied on the way except the values a BYTE_ARRAY column keeps.
  *
- * Supported: Data Page V1 and V2, PLAIN and PLAIN/RLE dictionary encodings, RLE definition levels with
+ * Supported: Data Page V1 and V2, PLAIN and PLAIN/RLE dictionary encodings, DELTA_BINARY_PACKED on
+ * INT32 and INT64, BYTE_STREAM_SPLIT on INT32, INT64, FLOAT and DOUBLE, RLE definition levels with
  * max level 1, no repetition. Anything else raises [ParquetFormatException] naming the feature.
  */
 internal class ChunkDecoder(
@@ -359,14 +374,25 @@ internal class ChunkDecoder(
 
     /**
      * Walks the rows `[row, row + numValues)` of one page. Runs of selected rows are written to the sink,
-     * runs outside the selection are skipped without decoding a value.
+     * runs outside the selection are skipped without writing a value. A DELTA_BINARY_PACKED value is still
+     * summed when skipped, since each one builds on the value before it.
      */
     private fun decodeValues(header: PageHeader, page: ByteArray, start: Int, limit: Int, levels: RleDecoder?, row: Long) {
         val n = header.numValues
-        val dictionaryEncoded = when (header.encoding) {
-            ParquetEncoding.PLAIN -> false
-            ParquetEncoding.RLE_DICTIONARY, ParquetEncoding.PLAIN_DICTIONARY -> true
-            else -> throw ParquetFormatException("'${leaf.name}': encoding ${header.encoding} is not supported, only PLAIN and dictionary ($source)")
+        val dictionaryEncoded = header.encoding == ParquetEncoding.RLE_DICTIONARY || header.encoding == ParquetEncoding.PLAIN_DICTIONARY
+        var delta: DeltaBinaryPackedDecoder? = null
+        var split: ByteStreamSplitDecoder? = null
+        when (header.encoding) {
+            ParquetEncoding.PLAIN, ParquetEncoding.RLE_DICTIONARY, ParquetEncoding.PLAIN_DICTIONARY -> Unit
+            ParquetEncoding.DELTA_BINARY_PACKED -> {
+                if (leaf.type != ParquetType.INT32 && leaf.type != ParquetType.INT64) throw ParquetFormatException("'${leaf.name}': DELTA_BINARY_PACKED on ${leaf.type} ($source)")
+                delta = scratch.delta.reset(page, start, limit, leaf.name, source)
+            }
+            ParquetEncoding.BYTE_STREAM_SPLIT -> {
+                if (width == 0) throw ParquetFormatException("'${leaf.name}': BYTE_STREAM_SPLIT on ${leaf.type} ($source)")
+                split = scratch.split.reset(page, start, limit, width, leaf.name, source)
+            }
+            else -> throw ParquetFormatException("'${leaf.name}': encoding ${header.encoding} is not supported, only PLAIN, dictionary, DELTA_BINARY_PACKED and BYTE_STREAM_SPLIT ($source)")
         }
         var indices: RleDecoder? = null
         if (dictionaryEncoded) {
@@ -393,6 +419,12 @@ internal class ChunkDecoder(
                     val ix = (indices ?: throw ParquetFormatException("'${leaf.name}': dictionary indices missing ($source)")).next()
                     if (ix < 0 || ix >= dictionaryCount) throw ParquetFormatException("'${leaf.name}': dictionary index $ix outside a dictionary of $dictionaryCount ($source)")
                     if (selected) putDictionary(ix)
+                } else if (delta != null) {
+                    val bits = delta.next()
+                    if (selected) sink.putBits(bits, optional)
+                } else if (split != null) {
+                    val bits = split.next()
+                    if (selected) sink.putBits(bits, optional)
                 } else if (width > 0) {
                     if (pos + width > limit) throw ParquetFormatException("'${leaf.name}': PLAIN values do not fit the page ($source)")
                     if (selected) sink.putPlain(page, pos, optional)

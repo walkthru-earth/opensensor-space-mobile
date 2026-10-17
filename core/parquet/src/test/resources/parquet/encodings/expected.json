@@ -1,0 +1,715 @@
+{
+ "generator": "tools/make_encoding_fixtures.py",
+ "pyarrow": "25.0.0",
+ "duckdb": "1.5.5",
+ "files": [
+  {
+   "label": "pyarrow-none-v1",
+   "file": "encodings/pyarrow-none-v1.parquet",
+   "size": 29107,
+   "rows": 500,
+   "row_groups": 2,
+   "codec": "UNCOMPRESSED",
+   "created_by": "parquet-cpp-arrow version 25.0.0",
+   "oracle": "pyarrow",
+   "columns": {
+    "seq": {
+     "physical": "INT64",
+     "encodings": [
+      "DELTA_BINARY_PACKED",
+      "RLE"
+     ],
+     "nulls": 0,
+     "fnv64": "f0bbbfa38e600140",
+     "also": [
+      "duckdb"
+     ]
+    },
+    "i32_delta": {
+     "physical": "INT32",
+     "encodings": [
+      "DELTA_BINARY_PACKED",
+      "RLE"
+     ],
+     "nulls": 0,
+     "fnv64": "06cb520538716e5a",
+     "also": [
+      "duckdb"
+     ]
+    },
+    "i32_delta_null": {
+     "physical": "INT32",
+     "encodings": [
+      "DELTA_BINARY_PACKED",
+      "RLE"
+     ],
+     "nulls": 86,
+     "fnv64": "26cac1b19ddd124a",
+     "also": [
+      "duckdb"
+     ]
+    },
+    "i64_delta": {
+     "physical": "INT64",
+     "encodings": [
+      "DELTA_BINARY_PACKED",
+      "RLE"
+     ],
+     "nulls": 0,
+     "fnv64": "4cbac683e6fd6180",
+     "also": [
+      "duckdb"
+     ]
+    },
+    "f32_split": {
+     "physical": "FLOAT",
+     "encodings": [
+      "BYTE_STREAM_SPLIT",
+      "RLE"
+     ],
+     "nulls": 39,
+     "fnv64": "05d42789a7a41f63",
+     "also": [
+      "duckdb"
+     ]
+    },
+    "f64_split": {
+     "physical": "DOUBLE",
+     "encodings": [
+      "BYTE_STREAM_SPLIT",
+      "RLE"
+     ],
+     "nulls": 0,
+     "fnv64": "d13d86b3d8b9d93a",
+     "also": [
+      "duckdb"
+     ]
+    },
+    "i32_split": {
+     "physical": "INT32",
+     "encodings": [
+      "BYTE_STREAM_SPLIT",
+      "RLE"
+     ],
+     "nulls": 0,
+     "fnv64": "32095533184047c0",
+     "also": []
+    },
+    "i64_split": {
+     "physical": "INT64",
+     "encodings": [
+      "BYTE_STREAM_SPLIT",
+      "RLE"
+     ],
+     "nulls": 0,
+     "fnv64": "20a2afd9eab33209",
+     "also": []
+    }
+   }
+  },
+  {
+   "label": "pyarrow-none-v2",
+   "file": "encodings/pyarrow-none-v2.parquet",
+   "size": 29191,
+   "rows": 500,
+   "row_groups": 2,
+   "codec": "UNCOMPRESSED",
+   "created_by": "parquet-cpp-arrow version 25.0.0",
+   "oracle": "pyarrow",
+   "columns": {
+    "seq": {
+     "physical": "INT64",
+     "encodings": [
+      "DELTA_BINARY_PACKED",
+      "RLE"
+     ],
+     "nulls": 0,
+     "fnv64": "f0bbbfa38e600140",
+     "also": [
+      "duckdb"
+     ]
+    },
+    "i32_delta": {
+     "physical": "INT32",
+     "encodings": [
+      "DELTA_BINARY_PACKED",
+      "RLE"
+     ],
+     "nulls": 0,
+     "fnv64": "06cb520538716e5a",
+     "also": [
+      "duckdb"
+     ]
+    },
+    "i32_delta_null": {
+     "physical": "INT32",
+     "encodings": [
+      "DELTA_BINARY_PACKED",
+      "RLE"
+     ],
+     "nulls": 86,
+     "fnv64": "26cac1b19ddd124a",
+     "also": [
+      "duckdb"
+     ]
+    },
+    "i64_delta": {
+     "physical": "INT64",
+     "encodings": [
+      "DELTA_BINARY_PACKED",
+      "RLE"
+     ],
+     "nulls": 0,
+     "fnv64": "4cbac683e6fd6180",
+     "also": [
+      "duckdb"
+     ]
+    },
+    "f32_split": {
+     "physical": "FLOAT",
+     "encodings": [
+      "BYTE_STREAM_SPLIT",
+      "RLE"
+     ],
+     "nulls": 39,
+     "fnv64": "05d42789a7a41f63",
+     "also": [
+      "duckdb"
+     ]
+    },
+    "f64_split": {
+     "physical": "DOUBLE",
+     "encodings": [
+      "BYTE_STREAM_SPLIT",
+      "RLE"
+     ],
+     "nulls": 0,
+     "fnv64": "d13d86b3d8b9d93a",
+     "also": [
+      "duckdb"
+     ]
+    },
+    "i32_split": {
+     "physical": "INT32",
+     "encodings": [
+      "BYTE_STREAM_SPLIT",
+      "RLE"
+     ],
+     "nulls": 0,
+     "fnv64": "32095533184047c0",
+     "also": []
+    },
+    "i64_split": {
+     "physical": "INT64",
+     "encodings": [
+      "BYTE_STREAM_SPLIT",
+      "RLE"
+     ],
+     "nulls": 0,
+     "fnv64": "20a2afd9eab33209",
+     "also": []
+    }
+   }
+  },
+  {
+   "label": "pyarrow-lz4-v1",
+   "file": "encodings/pyarrow-lz4-v1.parquet",
+   "size": 26077,
+   "rows": 500,
+   "row_groups": 2,
+   "codec": "LZ4",
+   "created_by": "parquet-cpp-arrow version 25.0.0",
+   "oracle": "pyarrow",
+   "columns": {
+    "seq": {
+     "physical": "INT64",
+     "encodings": [
+      "DELTA_BINARY_PACKED",
+      "RLE"
+     ],
+     "nulls": 0,
+     "fnv64": "f0bbbfa38e600140",
+     "also": [
+      "duckdb"
+     ]
+    },
+    "i32_delta": {
+     "physical": "INT32",
+     "encodings": [
+      "DELTA_BINARY_PACKED",
+      "RLE"
+     ],
+     "nulls": 0,
+     "fnv64": "06cb520538716e5a",
+     "also": [
+      "duckdb"
+     ]
+    },
+    "i32_delta_null": {
+     "physical": "INT32",
+     "encodings": [
+      "DELTA_BINARY_PACKED",
+      "RLE"
+     ],
+     "nulls": 86,
+     "fnv64": "26cac1b19ddd124a",
+     "also": [
+      "duckdb"
+     ]
+    },
+    "i64_delta": {
+     "physical": "INT64",
+     "encodings": [
+      "DELTA_BINARY_PACKED",
+      "RLE"
+     ],
+     "nulls": 0,
+     "fnv64": "4cbac683e6fd6180",
+     "also": [
+      "duckdb"
+     ]
+    },
+    "f32_split": {
+     "physical": "FLOAT",
+     "encodings": [
+      "BYTE_STREAM_SPLIT",
+      "RLE"
+     ],
+     "nulls": 39,
+     "fnv64": "05d42789a7a41f63",
+     "also": [
+      "duckdb"
+     ]
+    },
+    "f64_split": {
+     "physical": "DOUBLE",
+     "encodings": [
+      "BYTE_STREAM_SPLIT",
+      "RLE"
+     ],
+     "nulls": 0,
+     "fnv64": "d13d86b3d8b9d93a",
+     "also": [
+      "duckdb"
+     ]
+    },
+    "i32_split": {
+     "physical": "INT32",
+     "encodings": [
+      "BYTE_STREAM_SPLIT",
+      "RLE"
+     ],
+     "nulls": 0,
+     "fnv64": "32095533184047c0",
+     "also": []
+    },
+    "i64_split": {
+     "physical": "INT64",
+     "encodings": [
+      "BYTE_STREAM_SPLIT",
+      "RLE"
+     ],
+     "nulls": 0,
+     "fnv64": "20a2afd9eab33209",
+     "also": []
+    }
+   }
+  },
+  {
+   "label": "pyarrow-lz4-v2",
+   "file": "encodings/pyarrow-lz4-v2.parquet",
+   "size": 26086,
+   "rows": 500,
+   "row_groups": 2,
+   "codec": "LZ4",
+   "created_by": "parquet-cpp-arrow version 25.0.0",
+   "oracle": "pyarrow",
+   "columns": {
+    "seq": {
+     "physical": "INT64",
+     "encodings": [
+      "DELTA_BINARY_PACKED",
+      "RLE"
+     ],
+     "nulls": 0,
+     "fnv64": "f0bbbfa38e600140",
+     "also": [
+      "duckdb"
+     ]
+    },
+    "i32_delta": {
+     "physical": "INT32",
+     "encodings": [
+      "DELTA_BINARY_PACKED",
+      "RLE"
+     ],
+     "nulls": 0,
+     "fnv64": "06cb520538716e5a",
+     "also": [
+      "duckdb"
+     ]
+    },
+    "i32_delta_null": {
+     "physical": "INT32",
+     "encodings": [
+      "DELTA_BINARY_PACKED",
+      "RLE"
+     ],
+     "nulls": 86,
+     "fnv64": "26cac1b19ddd124a",
+     "also": [
+      "duckdb"
+     ]
+    },
+    "i64_delta": {
+     "physical": "INT64",
+     "encodings": [
+      "DELTA_BINARY_PACKED",
+      "RLE"
+     ],
+     "nulls": 0,
+     "fnv64": "4cbac683e6fd6180",
+     "also": [
+      "duckdb"
+     ]
+    },
+    "f32_split": {
+     "physical": "FLOAT",
+     "encodings": [
+      "BYTE_STREAM_SPLIT",
+      "RLE"
+     ],
+     "nulls": 39,
+     "fnv64": "05d42789a7a41f63",
+     "also": [
+      "duckdb"
+     ]
+    },
+    "f64_split": {
+     "physical": "DOUBLE",
+     "encodings": [
+      "BYTE_STREAM_SPLIT",
+      "RLE"
+     ],
+     "nulls": 0,
+     "fnv64": "d13d86b3d8b9d93a",
+     "also": [
+      "duckdb"
+     ]
+    },
+    "i32_split": {
+     "physical": "INT32",
+     "encodings": [
+      "BYTE_STREAM_SPLIT",
+      "RLE"
+     ],
+     "nulls": 0,
+     "fnv64": "32095533184047c0",
+     "also": []
+    },
+    "i64_split": {
+     "physical": "INT64",
+     "encodings": [
+      "BYTE_STREAM_SPLIT",
+      "RLE"
+     ],
+     "nulls": 0,
+     "fnv64": "20a2afd9eab33209",
+     "also": []
+    }
+   }
+  },
+  {
+   "label": "pyarrow-one-row",
+   "file": "encodings/pyarrow-one-row.parquet",
+   "size": 1607,
+   "rows": 1,
+   "row_groups": 1,
+   "codec": "UNCOMPRESSED",
+   "created_by": "parquet-cpp-arrow version 25.0.0",
+   "oracle": "pyarrow",
+   "columns": {
+    "seq": {
+     "physical": "INT64",
+     "encodings": [
+      "DELTA_BINARY_PACKED",
+      "RLE"
+     ],
+     "nulls": 0,
+     "fnv64": "d4cba148853a1ba6",
+     "also": [
+      "duckdb"
+     ]
+    },
+    "i32_delta": {
+     "physical": "INT32",
+     "encodings": [
+      "DELTA_BINARY_PACKED",
+      "RLE"
+     ],
+     "nulls": 0,
+     "fnv64": "2023244b4b0d7f36",
+     "also": [
+      "duckdb"
+     ]
+    },
+    "i32_delta_null": {
+     "physical": "INT32",
+     "encodings": [
+      "DELTA_BINARY_PACKED",
+      "RLE"
+     ],
+     "nulls": 0,
+     "fnv64": "685cd83ad34b3424",
+     "also": [
+      "duckdb"
+     ]
+    },
+    "i64_delta": {
+     "physical": "INT64",
+     "encodings": [
+      "DELTA_BINARY_PACKED",
+      "RLE"
+     ],
+     "nulls": 0,
+     "fnv64": "00e8ce78e352a08a",
+     "also": [
+      "duckdb"
+     ]
+    },
+    "f32_split": {
+     "physical": "FLOAT",
+     "encodings": [
+      "BYTE_STREAM_SPLIT",
+      "RLE"
+     ],
+     "nulls": 0,
+     "fnv64": "fbb445bb36f18d3f",
+     "also": [
+      "duckdb"
+     ]
+    },
+    "f64_split": {
+     "physical": "DOUBLE",
+     "encodings": [
+      "BYTE_STREAM_SPLIT",
+      "RLE"
+     ],
+     "nulls": 0,
+     "fnv64": "7286e36c1502bcff",
+     "also": [
+      "duckdb"
+     ]
+    },
+    "i32_split": {
+     "physical": "INT32",
+     "encodings": [
+      "BYTE_STREAM_SPLIT",
+      "RLE"
+     ],
+     "nulls": 0,
+     "fnv64": "eaa1089ad0eee97e",
+     "also": []
+    },
+    "i64_split": {
+     "physical": "INT64",
+     "encodings": [
+      "BYTE_STREAM_SPLIT",
+      "RLE"
+     ],
+     "nulls": 0,
+     "fnv64": "0bc4389000782f75",
+     "also": []
+    }
+   }
+  },
+  {
+   "label": "duckdb-uncompressed",
+   "file": "encodings/duckdb-uncompressed.parquet",
+   "size": 24212,
+   "rows": 500,
+   "row_groups": 1,
+   "codec": "UNCOMPRESSED",
+   "created_by": "DuckDB version v1.5.5 (build )",
+   "oracle": "duckdb",
+   "columns": {
+    "seq": {
+     "physical": "INT64",
+     "encodings": [
+      "DELTA_BINARY_PACKED"
+     ],
+     "nulls": 0,
+     "fnv64": "f0bbbfa38e600140",
+     "also": [
+      "pyarrow"
+     ]
+    },
+    "i32_delta": {
+     "physical": "INT32",
+     "encodings": [
+      "DELTA_BINARY_PACKED"
+     ],
+     "nulls": 0,
+     "fnv64": "06cb520538716e5a",
+     "also": []
+    },
+    "i32_delta_null": {
+     "physical": "INT32",
+     "encodings": [
+      "DELTA_BINARY_PACKED"
+     ],
+     "nulls": 86,
+     "fnv64": "26cac1b19ddd124a",
+     "also": []
+    },
+    "i64_delta": {
+     "physical": "INT64",
+     "encodings": [
+      "DELTA_BINARY_PACKED"
+     ],
+     "nulls": 0,
+     "fnv64": "4cbac683e6fd6180",
+     "also": [
+      "pyarrow"
+     ]
+    },
+    "f32_split": {
+     "physical": "FLOAT",
+     "encodings": [
+      "BYTE_STREAM_SPLIT"
+     ],
+     "nulls": 39,
+     "fnv64": "05d42789a7a41f63",
+     "also": [
+      "pyarrow"
+     ]
+    },
+    "f64_split": {
+     "physical": "DOUBLE",
+     "encodings": [
+      "BYTE_STREAM_SPLIT"
+     ],
+     "nulls": 0,
+     "fnv64": "d13d86b3d8b9d93a",
+     "also": [
+      "pyarrow"
+     ]
+    },
+    "i32_split": {
+     "physical": "INT32",
+     "encodings": [
+      "DELTA_BINARY_PACKED"
+     ],
+     "nulls": 0,
+     "fnv64": "32095533184047c0",
+     "also": []
+    },
+    "i64_split": {
+     "physical": "INT64",
+     "encodings": [
+      "DELTA_BINARY_PACKED"
+     ],
+     "nulls": 0,
+     "fnv64": "20a2afd9eab33209",
+     "also": [
+      "pyarrow"
+     ]
+    }
+   }
+  },
+  {
+   "label": "duckdb-snappy",
+   "file": "encodings/duckdb-snappy.parquet",
+   "size": 22126,
+   "rows": 500,
+   "row_groups": 1,
+   "codec": "SNAPPY",
+   "created_by": "DuckDB version v1.5.5 (build )",
+   "oracle": "duckdb",
+   "columns": {
+    "seq": {
+     "physical": "INT64",
+     "encodings": [
+      "DELTA_BINARY_PACKED"
+     ],
+     "nulls": 0,
+     "fnv64": "f0bbbfa38e600140",
+     "also": [
+      "pyarrow"
+     ]
+    },
+    "i32_delta": {
+     "physical": "INT32",
+     "encodings": [
+      "DELTA_BINARY_PACKED"
+     ],
+     "nulls": 0,
+     "fnv64": "06cb520538716e5a",
+     "also": []
+    },
+    "i32_delta_null": {
+     "physical": "INT32",
+     "encodings": [
+      "DELTA_BINARY_PACKED"
+     ],
+     "nulls": 86,
+     "fnv64": "26cac1b19ddd124a",
+     "also": []
+    },
+    "i64_delta": {
+     "physical": "INT64",
+     "encodings": [
+      "DELTA_BINARY_PACKED"
+     ],
+     "nulls": 0,
+     "fnv64": "4cbac683e6fd6180",
+     "also": [
+      "pyarrow"
+     ]
+    },
+    "f32_split": {
+     "physical": "FLOAT",
+     "encodings": [
+      "BYTE_STREAM_SPLIT"
+     ],
+     "nulls": 39,
+     "fnv64": "05d42789a7a41f63",
+     "also": [
+      "pyarrow"
+     ]
+    },
+    "f64_split": {
+     "physical": "DOUBLE",
+     "encodings": [
+      "BYTE_STREAM_SPLIT"
+     ],
+     "nulls": 0,
+     "fnv64": "d13d86b3d8b9d93a",
+     "also": [
+      "pyarrow"
+     ]
+    },
+    "i32_split": {
+     "physical": "INT32",
+     "encodings": [
+      "DELTA_BINARY_PACKED"
+     ],
+     "nulls": 0,
+     "fnv64": "32095533184047c0",
+     "also": []
+    },
+    "i64_split": {
+     "physical": "INT64",
+     "encodings": [
+      "DELTA_BINARY_PACKED"
+     ],
+     "nulls": 0,
+     "fnv64": "20a2afd9eab33209",
+     "also": [
+      "pyarrow"
+     ]
+    }
+   }
+  }
+ ]
+}

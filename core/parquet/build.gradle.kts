@@ -2,7 +2,7 @@ import org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType
 import org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeSimulatorTest
 
 // The Parquet subset the CoreS3 firmware writes, plus GeoParquet 2.0 (docs/parquet.md): reader (column
-// projection, primitive arrays; PLAIN + dictionary encodings, Data Page V1/V2, UNCOMPRESSED/LZ4_RAW/SNAPPY/
+// projection, primitive arrays; PLAIN, dictionary, DELTA_BINARY_PACKED and BYTE_STREAM_SPLIT encodings, Data Page V1/V2, UNCOMPRESSED/LZ4_RAW/SNAPPY/
 // GZIP built in, ZSTD through the codec SPI), writer (statistics, TIMESTAMP, GEOMETRY, LZ4_RAW), Thrift
 // compact codec, LZ4 block codec, Snappy decoder, WKB. `commonMain` compiles for Android's JVM and for iOS
 // and reads bytes through `ByteReader` (blocking, `ParquetFile`) or `RangeSource` (suspending, planned and
