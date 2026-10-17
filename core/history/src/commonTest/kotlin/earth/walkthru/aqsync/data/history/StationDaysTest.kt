@@ -3,6 +3,8 @@ package earth.walkthru.aqsync.data.history
 import earth.walkthru.aqsync.archive.ArchiveRecord
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class StationDaysTest {
     private val day = StationDays.DAY_NS
@@ -53,5 +55,39 @@ class StationDaysTest {
             assertEquals(expected.map { it.name }, byDay[d].orEmpty().map { it.name }, "day $d")
         }
         assertEquals(listOf("span.parquet", "est.parquet", "late.parquet"), byDay[20714]!!.map { it.name })
+    }
+
+    @Test
+    fun `nothing waiting holds no day`() {
+        val held = StationDays.held(listOf(record("a", "x.parquet", first = 0, last = day)))
+        assertEquals(StationDays.Held.NONE, held)
+        assertFalse(0L in held)
+    }
+
+    @Test
+    fun `a waiting record with a span holds the days of that span`() {
+        val held = StationDays.held(listOf(record("a", "x.parquet", utcRows = 0, estFirst = 20713 * day + 5, estLast = 20714 * day, indexed = false)))
+        assertFalse(held.all)
+        assertEquals(setOf(20713L, 20714L), held.days)
+        assertTrue(20714L in held)
+        assertFalse(20715L in held)
+    }
+
+    @Test
+    fun `a waiting record without a span holds every day`() {
+        val held = StationDays.held(listOf(record("a", "x.parquet", utcRows = 0, indexed = false)))
+        assertEquals(StationDays.Held.ALL, held)
+        assertTrue(12345L in held)
+    }
+
+    @Test
+    fun `failed or other purpose records hold no day`() {
+        val held = StationDays.held(
+            listOf(
+                record("a", "broken.parquet", utcRows = 0).copy(indexError = "bad"),
+                record("a", "other.parquet", utcRows = 0, purpose = "codec-comparison-duplicate-rows", indexed = false),
+            ),
+        )
+        assertEquals(StationDays.Held.NONE, held)
     }
 }

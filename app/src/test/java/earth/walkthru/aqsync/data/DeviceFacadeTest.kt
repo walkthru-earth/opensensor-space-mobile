@@ -1438,7 +1438,7 @@ class DeviceFacadeTest {
         override suspend fun unindexed(limit: Int) = rows.filter { it.indexedAtEpochMs == null || it.indexError != null }.take(limit)
         override fun observeUnindexedCount(): Flow<Int> = flowOf(rows.count { it.indexedAtEpochMs == null || it.indexError != null })
         override suspend fun withUtcBetween(station: String, fromNs: Long, toNs: Long) = emptyList<ArchivedFile>()
-        override suspend fun indexedForStation(station: String) = rows.filter { it.station == station && it.indexed }
+        override suspend fun indexedForStation(station: String) = rows.filter { it.station == station && it.isIndexed }
         override suspend fun stations() = rows.map { it.station }.distinct()
         override suspend fun upsert(file: ArchivedFile) {
             state.value = rows.filterNot { it.station == file.station && it.name == file.name } + file

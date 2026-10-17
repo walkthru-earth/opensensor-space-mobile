@@ -149,14 +149,14 @@ class ReceiptArchiveIndex(
     }
 
     override suspend fun unindexed(limit: Int): List<ArchiveRecord> = loaded().all
-        .filter { it.indexedAtEpochMs == null || it.indexError != null }
-        .sortedWith(compareBy<ArchiveRecord> { it.indexedAtEpochMs != null }.thenBy { it.name })
+        .filter { !it.isIndexed }
+        .sortedWith(compareBy<ArchiveRecord> { !it.awaitsIndex }.thenBy { it.name })
         .take(limit)
 
     override suspend fun timeline(station: String, fromNs: Long, toNs: Long): List<ArchiveRecord> =
         loaded().all.filter { it.station == station && it.onTimeline(fromNs, toNs) }.sortedWith(ArchiveRecord.TIMELINE_ORDER)
 
-    override suspend fun indexedForStation(station: String): List<ArchiveRecord> = loaded().all.filter { it.station == station && it.indexed }
+    override suspend fun indexedForStation(station: String): List<ArchiveRecord> = loaded().all.filter { it.station == station && it.isIndexed }
 
     override suspend fun stations(): List<String> = loaded().all.map { it.station }.distinct()
 
@@ -222,12 +222,12 @@ class ReceiptArchiveIndex(
         companion object {
             private val ORDER: Comparator<ArchiveRecord> = compareBy<ArchiveRecord> { it.name }.thenBy { it.station }
 
-            private fun pending(r: ArchiveRecord): Int = if (r.indexedAtEpochMs == null) 1 else 0
+            private fun pending(r: ArchiveRecord): Int = if (r.awaitsIndex) 1 else 0
 
             /** One sort at load. [records] has one record per key, as one receipt per file gives. */
             fun of(records: List<ArchiveRecord>): Snapshot {
                 val sorted = records.sortedWith(ORDER).toTypedArray()
-                return Snapshot(sorted, sorted.count { it.indexedAtEpochMs == null })
+                return Snapshot(sorted, sorted.count { it.awaitsIndex })
             }
         }
     }

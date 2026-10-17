@@ -378,7 +378,7 @@ class AutoSyncRunnerTest {
         assertEquals(0, report.failures)
         assertEquals(2, gateway.dao.rows.size)
         assertEquals(setOf(gateway.fake.station, second.station), gateway.dao.rows.map { it.station }.toSet())
-        assertTrue(gateway.dao.rows.all { it.indexed })
+        assertTrue(gateway.dao.rows.all { it.isIndexed })
     }
 
     // ---------------------------------------------------------------- fixtures
@@ -479,7 +479,7 @@ class AutoSyncRunnerTest {
         override fun observeUnindexedCount(): Flow<Int> = flowOf(rows.count { it.indexedAtEpochMs == null || it.indexError != null })
         override suspend fun withUtcBetween(station: String, fromNs: Long, toNs: Long) =
             rows.filter { it.station == station && it.indexError == null && (it.utcRows ?: 0) > 0 && (it.lastUtcNs ?: Long.MIN_VALUE) >= fromNs && (it.firstUtcNs ?: Long.MAX_VALUE) < toNs }
-        override suspend fun indexedForStation(station: String) = rows.filter { it.station == station && it.indexed }
+        override suspend fun indexedForStation(station: String) = rows.filter { it.station == station && it.isIndexed }
         override suspend fun stations() = rows.map { it.station }.distinct()
         override suspend fun upsert(file: ArchivedFile) {
             rows.removeAll { it.station == file.station && it.name == file.name }

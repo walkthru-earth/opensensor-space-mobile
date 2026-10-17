@@ -67,7 +67,7 @@ class HistoryControllerTest {
 
         // No rows on the timeline, so the Day reader never opens a file.
         override suspend fun timeline(station: String, fromNs: Long, toNs: Long): List<ArchiveRecord> = emptyList()
-        override suspend fun indexedForStation(station: String): List<ArchiveRecord> = rows.value.filter { it.station == station && it.indexed }
+        override suspend fun indexedForStation(station: String): List<ArchiveRecord> = rows.value.filter { it.station == station && it.isIndexed }
         override suspend fun stations(): List<String> = rows.value.map { it.station }.distinct()
     }
 

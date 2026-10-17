@@ -190,7 +190,7 @@ internal object IosArchive {
     private suspend fun rebuildDerived() = derivedMutex.withLock {
         val records = index.observeAll().first()
         for ((station, files) in records.groupBy { it.station }) {
-            val anchors = TimeEstimate.anchors(files.filter { it.indexed }.map { it.info() }, clockAnchors.anchors(station))
+            val anchors = TimeEstimate.anchors(files.filter { it.isIndexed }.map { it.info() }, clockAnchors.anchors(station))
             derived.rebuild(station, files, store, anchors, Clock.System.now().epochSeconds)
         }
         withContext(Dispatchers.IO) { derivedQuota.enforce() }

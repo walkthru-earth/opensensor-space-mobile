@@ -30,7 +30,7 @@ data class TodayArchive(
          * unplaced when neither real nor estimated UTC exists.
          */
         fun of(records: List<ArchiveRecord>): TodayArchive {
-            val files = records.filter { it.indexed && it.isTelemetry }
+            val files = records.filter { it.isIndexed && it.isTelemetry }
             return TodayArchive(
                 files = files.size,
                 estimatedRows = files.filter { it.hasEstimatedUtc }.sumOf { it.rows ?: 0L },

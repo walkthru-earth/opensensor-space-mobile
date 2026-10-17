@@ -2,9 +2,6 @@ package earth.walkthru.aqsync.data.local.database
 
 import android.content.ContextWrapper
 import androidx.room.Room
-import androidx.room.execSQL
-import androidx.room.useWriterConnection
-import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import app.cash.turbine.test
 import earth.walkthru.aqsync.data.ManifestState
@@ -26,7 +23,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.lang.reflect.Proxy
 
 /** The station-scoped, projected and aggregate queries of [ArchivedFileDao] on an in-memory Room database (#63). */
 class ArchivedFileDaoTest {
@@ -38,16 +34,6 @@ class ArchivedFileDaoTest {
 
     @After
     fun close() = db.close()
-
-    /**
-     * The migration's `SupportSQLiteDatabase`, routed to the bundled driver's writer connection. A
-     * Room database built on a driver has no open helper, and a migration here only runs `execSQL`.
-     */
-    private fun writerSql(): SupportSQLiteDatabase = Proxy.newProxyInstance(javaClass.classLoader, arrayOf(SupportSQLiteDatabase::class.java)) { _, method, args ->
-        check(method.name == "execSQL" && args?.size == 1) { "only execSQL is routed, not ${method.name}" }
-        runBlocking { db.useWriterConnection { it.execSQL(args[0] as String) } }
-        null
-    } as SupportSQLiteDatabase
 
     private fun file(
         station: String,
@@ -81,7 +67,7 @@ class ArchivedFileDaoTest {
         dao.upsert(file("a", "failed.parquet", indexedAt = 5, indexError = "bad footer", utcRows = 0))
         assertEquals(listOf("failed.parquet"), dao.unindexed(10).map { it.name })
 
-        AppDatabase.MIGRATION_10_11.migrate(writerSql())
+        AppDatabase.MIGRATION_10_11.migrate(db.writerSql())
 
         // A row with an error stays in the retry queue it was already in, never reopened by the migration.
         assertEquals(setOf("zero.parquet", "null.parquet", "failed.parquet"), dao.unindexed(10).map { it.name }.toSet())

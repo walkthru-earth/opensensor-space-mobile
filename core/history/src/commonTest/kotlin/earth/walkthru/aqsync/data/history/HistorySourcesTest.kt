@@ -64,12 +64,12 @@ class HistorySourcesTest {
         override suspend fun remove(key: ArchiveKey) {
             rows.value = rows.value.filterNot { it.key == key }
         }
-        override suspend fun unindexed(limit: Int): List<ArchiveRecord> = rows.value.filter { it.indexedAtEpochMs == null || it.indexError != null }.take(limit)
+        override suspend fun unindexed(limit: Int): List<ArchiveRecord> = rows.value.filter { !it.isIndexed }.take(limit)
         override suspend fun timeline(station: String, fromNs: Long, toNs: Long): List<ArchiveRecord> =
             rows.value.filter { it.station == station && it.onTimeline(fromNs, toNs) }.sortedWith(ArchiveRecord.TIMELINE_ORDER)
         override suspend fun indexedForStation(station: String): List<ArchiveRecord> {
             onEstimate?.also { onEstimate = null }?.invoke()
-            return rows.value.filter { it.station == station && it.indexed }
+            return rows.value.filter { it.station == station && it.isIndexed }
         }
         override suspend fun stations(): List<String> = rows.value.map { it.station }.distinct()
     }
@@ -155,7 +155,7 @@ class HistorySourcesTest {
 
         assertEquals(3, repair.backfill())
         val indexed = index.get(record(own).key)!!
-        assertTrue(indexed.indexed)
+        assertTrue(indexed.isIndexed)
         assertEquals(105L, indexed.rows)
         assertEquals(105L, indexed.utcRows)
         assertTrue(index.get(record(foreign).key)!!.indexError!!.contains("other"))
@@ -184,8 +184,8 @@ class HistorySourcesTest {
         val late = putDuringRepair(store, index)
         val repair = ArchiveIndexRepair(store, index, nowEpochMs = { 42L })
         repair.backfillUntilSettled()
-        assertTrue(index.get(first.key)!!.indexed)
-        assertTrue(index.get(late.key)!!.indexed)
+        assertTrue(index.get(first.key)!!.isIndexed)
+        assertTrue(index.get(late.key)!!.isIndexed)
     }
 
     @Test
@@ -200,7 +200,7 @@ class HistorySourcesTest {
         ArchiveIndexRepair(store, index, nowEpochMs = { 42L }).backfillAll()
         val after = index.get(old.key)!!
         assertEquals("filled", after.sha256)
-        assertTrue(after.indexed)
+        assertTrue(after.isIndexed)
         assertEquals(105L, after.rows)
     }
 
@@ -217,8 +217,8 @@ class HistorySourcesTest {
         val all = withContext(Dispatchers.Default) {
             withTimeout(10_000) { index.rows.first { rows -> rows.size == 2 && rows.all { it.indexedAtEpochMs != null } } }
         }
-        assertTrue(all.all { it.indexed })
-        assertTrue(index.get(late.key)!!.indexed)
+        assertTrue(all.all { it.isIndexed })
+        assertTrue(index.get(late.key)!!.isIndexed)
     }
 
     @Test

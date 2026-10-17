@@ -101,7 +101,7 @@ class ConcurrentArchiveTest {
             assertArrayEquals(aBytes, archive.fileFor("station-a", name).readBytes())
             assertArrayEquals(bBytes, archive.fileFor("station-b", name).readBytes())
             assertEquals(2, dao.rows.size)
-            assertTrue(dao.rows.values.all { it.indexed })
+            assertTrue(dao.rows.values.all { it.isIndexed })
         }
     }
 
@@ -216,12 +216,12 @@ class ConcurrentArchiveTest {
         override suspend fun get(station: String, name: String) = rows[station to name]
         override fun observeCount(): Flow<Int> = flowOf(rows.size)
         override fun observeTotalBytes(): Flow<Long> = flowOf(snapshot().sumOf { it.bytes })
-        override suspend fun unindexed(limit: Int) = snapshot().filter { !it.indexed }.take(limit)
-        override fun observeUnindexedCount(): Flow<Int> = flowOf(snapshot().count { !it.indexed })
+        override suspend fun unindexed(limit: Int) = snapshot().filter { !it.isIndexed }.take(limit)
+        override fun observeUnindexedCount(): Flow<Int> = flowOf(snapshot().count { !it.isIndexed })
         override suspend fun withUtcBetween(station: String, fromNs: Long, toNs: Long) = snapshot().filter {
-            it.station == station && it.indexed && it.hasUtc && (it.lastUtcNs ?: Long.MIN_VALUE) >= fromNs && (it.firstUtcNs ?: Long.MAX_VALUE) < toNs
+            it.station == station && it.isIndexed && it.hasUtc && (it.lastUtcNs ?: Long.MIN_VALUE) >= fromNs && (it.firstUtcNs ?: Long.MAX_VALUE) < toNs
         }
-        override suspend fun indexedForStation(station: String) = snapshot().filter { it.station == station && it.indexed }
+        override suspend fun indexedForStation(station: String) = snapshot().filter { it.station == station && it.isIndexed }
         override suspend fun stations() = snapshot().map { it.station }.distinct()
         override suspend fun upsert(file: ArchivedFile) {
             synchronized(rows) { upserts++; rows[file.station to file.name] = file }

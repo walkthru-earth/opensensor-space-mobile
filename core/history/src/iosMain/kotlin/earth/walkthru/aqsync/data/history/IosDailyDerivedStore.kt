@@ -83,7 +83,7 @@ class IosDailyDerivedStore(
         mutex.withLock {
             val directory = checked("$root/${ArchiveLayout.derivedStationDir(station)}")
             check(fm.createDirectoryAtPath(directory, true, protection, null)) { "cannot create derived directory" }
-            val records = files.filter { it.station == station && it.indexed && it.isTelemetry }
+            val records = files.filter { it.station == station && it.isIndexed && it.isTelemetry }
             // One pass over the station's records for every day, not a filter per day (#63).
             val byDay = StationDays.sourcesByDay(records) { it }
             val paths = mutableListOf<String>()
@@ -132,7 +132,10 @@ class IosDailyDerivedStore(
                     fm.removeItemAtPath(temporary, null)
                 }
             }
-            val names = fm.contentsOfDirectoryAtPath(directory, null).orEmpty().filterIsInstance<String>()
+            // A day that a record still waiting for its index may fill again is not stale yet (#87).
+            val held = StationDays.held(files.filter { it.station == station })
+            for (day in held.days) kept += ArchiveLayout.derivedDayPath(station, day).substringAfterLast('/')
+            val names = if (held.all) emptyList() else fm.contentsOfDirectoryAtPath(directory, null).orEmpty().filterIsInstance<String>()
             for (name in names) {
                 if (!name.startsWith("day=")) continue
                 val parquetName = when {

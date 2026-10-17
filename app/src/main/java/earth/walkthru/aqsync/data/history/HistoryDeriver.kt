@@ -135,8 +135,11 @@ class HistoryDeriver @Inject constructor(
                     rebuilt++
                     rows += built
                 }
-                // Days that no longer have any source (files deleted) lose their tiers too.
+                // Days that no longer have any source (files deleted) lose their tiers too, unless a file
+                // still waiting for its index may place itself there (StationDays.held, #87).
+                val held = StationDays.held(byStation[station].orEmpty().map { it.toRecord() })
                 for (stale in known.keys - days) {
+                    if (stale in held) continue
                     bucketDao.replaceDay(station, stale * 86_400, emptyList())
                     dayDao.delete(station, stale)
                     store.dayFile(station, stale).delete()

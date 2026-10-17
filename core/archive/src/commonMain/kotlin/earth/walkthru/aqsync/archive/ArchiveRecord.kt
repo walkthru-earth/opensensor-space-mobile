@@ -43,7 +43,14 @@ data class ArchiveRecord(
 ) {
     val key: ArchiveKey get() = ArchiveKey(station, name)
 
-    val indexed: Boolean get() = indexedAtEpochMs != null && indexError == null
+    /** Indexed without error, the one test of whether a record's index columns can be read. */
+    val isIndexed: Boolean get() = indexedAtEpochMs != null && indexError == null
+
+    /**
+     * Never indexed, or reopened for a new index pass, so its index columns are not current yet. A
+     * failed index is not waiting, it already has its answer.
+     */
+    val awaitsIndex: Boolean get() = indexedAtEpochMs == null
 
     /** Station data, the only purpose history reads. */
     val isTelemetry: Boolean get() = purpose == null || purpose == TELEMETRY
@@ -55,7 +62,7 @@ data class ArchiveRecord(
     val hasEstimatedUtc: Boolean get() = !hasUtc && estFirstUtcNs != null && estLastUtcNs != null
 
     /** Indexed station data with a real or estimated time, so History can place it. */
-    val hasHistoryTime: Boolean get() = indexed && isTelemetry && (hasUtc || hasEstimatedUtc)
+    val hasHistoryTime: Boolean get() = isIndexed && isTelemetry && (hasUtc || hasEstimatedUtc)
 
     /** Real or estimated span start and end, whichever the file has. */
     val timelineFirstNs: Long? get() = if (hasUtc) firstUtcNs else estFirstUtcNs
@@ -65,11 +72,11 @@ data class ArchiveRecord(
     fun matches(size: Long, crc32: Long): Boolean = bytes == size && this.crc32 == crc32
 
     /**
-     * A telemetry file on the timeline in `[fromNs, toNs)`, by real UTC or by its estimate. The same
+     * An indexed telemetry file on the timeline in `[fromNs, toNs)`, by real UTC or by its estimate. The same
      * predicate as Android's `ArchivedFileDao.withUtcBetween` query, written once for every store.
      */
     fun onTimeline(fromNs: Long, toNs: Long): Boolean =
-        indexError == null && isTelemetry &&
+        isIndexed && isTelemetry &&
             (timelineLastNs ?: Long.MIN_VALUE) >= fromNs &&
             (timelineFirstNs ?: Long.MAX_VALUE) < toNs
 
@@ -77,7 +84,7 @@ data class ArchiveRecord(
      * Indexed without error but with no UTC rows, which is all an index written before
      * [INDEX_LAYOUT] 2 could give a `*_utc_us` file. Such a record is indexed again once.
      */
-    val needsUtcReindex: Boolean get() = indexedAtEpochMs != null && indexError == null && (utcRows ?: 0L) == 0L
+    val needsUtcReindex: Boolean get() = isIndexed && (utcRows ?: 0L) == 0L
 
     companion object {
         const val TELEMETRY: String = "telemetry"

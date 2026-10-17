@@ -75,7 +75,7 @@ class HistorySeriesReader(
             // Re-read the rows only when the station's timeline changed (a synced or indexed file, a
             // new time estimate). A day re-read opens every file of the day.
             index.observeStation(station)
-                .map { files -> files.filter { it.indexed }.map { Triple(it.name, it.crc32, it.timelineFirstNs) } }
+                .map { files -> files.filter { it.isIndexed }.map { Triple(it.name, it.crc32, it.timelineFirstNs) } }
                 .distinctUntilChanged()
                 .flatMapLatest { flow { emit(fromRows(station, metric, range, window.fromS, window.toS)) }.flowOn(io) }
         }

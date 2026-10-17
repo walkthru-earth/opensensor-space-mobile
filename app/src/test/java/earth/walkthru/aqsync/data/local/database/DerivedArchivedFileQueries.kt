@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.map
 interface DerivedArchivedFileQueries : ArchivedFileDao {
     private fun ArchivedFile.identity() = ArchivedFileIdentity(station, name, bytes, crc32)
 
-    private fun ArchivedFile.unindexed() = indexedAtEpochMs == null || indexError != null
+    private fun ArchivedFile.unindexed() = !isIndexed
 
     private fun stationRows(station: String): Flow<List<ArchivedFile>> = observeAll().map { rows -> rows.filter { it.station == station } }
 
