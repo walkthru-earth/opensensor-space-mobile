@@ -22,9 +22,13 @@ enum class FeedWindow(val key: String) {
     fun next(): FeedWindow = entries[(ordinal + 1) % entries.size]
 }
 
-/** One `date=`/`hour=` partition of the feed, the newest complete hour. */
+/**
+ * One `date=`/`hour=` partition of the feed, the newest complete hour. [generation] is the manifest
+ * `generation` of a feed that republishes files in place under the same date, null otherwise. A
+ * republish is a new partition, so what was read from the old files is read again.
+ */
 @Serializable
-data class FeedPartition(val date: String, val hour: Int)
+data class FeedPartition(val date: String, val hour: Int, val generation: String? = null)
 
 /** One property from the dictionary named in the file's key value metadata. */
 @Serializable

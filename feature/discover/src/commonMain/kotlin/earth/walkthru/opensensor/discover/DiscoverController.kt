@@ -217,7 +217,8 @@ class DiscoverController(
 
     /**
      * The cell, window, resolution and partition [windowsJob] read for, so a pan does not read them
-     * again. A new partition is a new dataset, so every window is read again.
+     * again. A new partition, also a republish of the same date with a new generation, is a new
+     * dataset, so every window is read again.
      */
     private var windowsFor: WindowsKey? = null
 

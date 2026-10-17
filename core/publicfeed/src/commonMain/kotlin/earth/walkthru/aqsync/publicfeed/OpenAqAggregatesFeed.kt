@@ -29,7 +29,7 @@ import kotlin.time.Clock
  * The live public feed, read from the OpenAQ aggregates collection on source.coop
  * (docs/devices-and-discovery.md). Anonymous, read-only GETs, no identifiers.
  *
- * - [latest] GETs `manifest.json` and answers `FeedPartition(date = as_of, hour = 0)`, `as_of` being
+ * - [latest] GETs `manifest.json` and answers `FeedPartition(date = as_of, hour = 0, generation)`, `as_of` being
  *   the newest complete PM2.5 day. The answer is kept for [MANIFEST_TTL_MS] by [clock]. A manifest
  *   without `as_of` answers null.
  * - [cells] reads `cells/h3_res=<res>/data.parquet` through an [HttpRangeSource], with one
@@ -70,8 +70,8 @@ class OpenAqAggregatesFeed(
     /** Bumped whenever [daily] is dropped, so a download that started before is not kept after. */
     private var generation = 0L
 
-    /** The partition and manifest `generation` last read. */
-    private var lastManifest: Pair<FeedPartition, String?>? = null
+    /** The partition last read, which carries the manifest `generation`. */
+    private var lastManifest: FeedPartition? = null
 
     /** The manifest `generation` of the files, part of the block cache key with `as_of`. */
     private var files: String? = null
@@ -90,15 +90,14 @@ class OpenAqAggregatesFeed(
         val now = clock.now().toEpochMilliseconds()
         cached?.let { (at, partition) -> if (now - at in 0 until MANIFEST_TTL_MS) return@withLock partition }
         val manifest = readManifest()
-        val partition = manifest.asOf?.let { FeedPartition(LocalDate.parse(it).toString(), 0) }
+        val partition = manifest.asOf?.let { FeedPartition(LocalDate.parse(it).toString(), 0, manifest.generation) }
         cached = now to partition
         if (partition != null) {
             // A new as_of or generation replaces the files whole. Rows of the old one are never served again.
             rowsLock.withLock {
-                val seen = partition to manifest.generation
-                if (seen != lastManifest) {
+                if (partition != lastManifest) {
                     if (lastManifest != null) clearRows()
-                    lastManifest = seen
+                    lastManifest = partition
                     files = manifest.generation
                 }
             }

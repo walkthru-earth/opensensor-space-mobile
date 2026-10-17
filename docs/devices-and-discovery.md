@@ -553,7 +553,7 @@ is the OpenAQ aggregates collection on source.coop, read with the same reader. R
 `https://data.source.coop/walkthru-earth/opensensor-space/openaq-aggregates/`.
 
 - `manifest.json` carries `as_of` (`YYYY-MM-DD`, the newest complete PM2.5 day) and
-  `generation`, plus fields the phone ignores. `latest()` answers `FeedPartition(as_of, 0)` and
+  `generation`, plus fields the phone ignores. `latest()` answers `FeedPartition(as_of, 0, generation)` and
   keeps it for 5 minutes. A failed read throws and is not cached.
 - `cells/h3_res=<1..9>/data.parquet`, one file per resolution holding every day since 2023,
   written by DuckDB. Verified on 2026-10-12 against `h3_res=3` (250 KB, 3,131 rows, generation
@@ -585,7 +585,7 @@ is the OpenAQ aggregates collection on source.coop, read with the same reader. R
   other windows are read 24 hours first, so a failing window never delays the headline. A pan
   rereads a failed window without flipping the sheet back to loading. A pan that picks up a new
   partition reads every window of the selected cell again, and a window read of an older partition
-  never lands. Tests use a 13 row fixture from
+  never lands. A new manifest `generation` under the same `as_of` is a new partition. Tests use a 13 row fixture from
   `tools/discover-fixture/make_openaq_fixture.py` served by a fake HTTP engine. The live URL is
   not in the gate.
 

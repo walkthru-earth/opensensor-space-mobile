@@ -475,6 +475,16 @@ class DiscoverControllerTest {
     }
 
     @Test
+    fun aRepublishOfTheSameDayRereadsEverySelectedWindow() = runTest {
+        // A new manifest generation replaces the files under the same date and hour.
+        val live = liveFeed()
+        val c = realWeekWithCellA(live)
+        nextDayAndPan(c, live, FeedPartition("2026-10-08", 0, generation = "g2"))
+        assertEquals(80.0, c.state.value.selectedWindows[FeedWindow.DAY]?.mean("pm25"))
+        assertEquals(60.0, c.state.value.selectedWindows[FeedWindow.WEEK]?.mean("pm25"))
+    }
+
+    @Test
     fun aWindowResultOfTheOldPartitionIsDroppedWhileTheNewViewportLoads() = runTest {
         val live = liveFeed()
         val c = controller(FakeFeed(), live)

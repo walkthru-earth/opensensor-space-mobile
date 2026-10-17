@@ -82,15 +82,15 @@ class OpenAqAggregatesFeedTest {
 
     @Test
     fun `latest is the manifest as_of cached for five minutes`() = runTest {
-        assertEquals(FeedPartition("2026-10-08", 0), feed.latest())
+        assertEquals(FeedPartition("2026-10-08", 0, "fixture-0001"), feed.latest())
         assertEquals(1, manifestReads())
         clock.ms += OpenAqAggregatesFeed.MANIFEST_TTL_MS - 1
-        assertEquals(FeedPartition("2026-10-08", 0), feed.latest())
+        assertEquals(FeedPartition("2026-10-08", 0, "fixture-0001"), feed.latest())
         assertEquals(1, manifestReads())
         // A new generation is seen once the five minutes are over.
         store.objects["$root/manifest.json"] = """{"as_of":"2026-10-09","generation":"g2","unknown":[1]}""".encodeToByteArray() to "\"m2\""
         clock.ms += 1
-        assertEquals(FeedPartition("2026-10-09", 0), feed.latest())
+        assertEquals(FeedPartition("2026-10-09", 0, "g2"), feed.latest())
         assertEquals(2, manifestReads())
     }
 
@@ -314,9 +314,11 @@ class OpenAqAggregatesFeedTest {
         store.objects["$root/cells/h3_res=5/data.parquet"] = fixtureBytes(REPUBLISHED) to "\"c2\""
         store.objects["$root/manifest.json"] = """{"as_of":"2026-10-08","generation":"fixture-0002"}""".encodeToByteArray() to "\"m2\""
         clock.ms += OpenAqAggregatesFeed.MANIFEST_TTL_MS
-        assertEquals(partition, first.latest())
+        // Same date, a new partition, so a reader keyed on the partition reads again.
+        val republished = first.latest()!!
+        assertEquals(partition.copy(generation = "fixture-0002"), republished)
         assertEquals(0, first.cachedResolutions())
-        assertEquals(25.0, cairo(first.cells(partition, FeedWindow.DAY, 5, ranges = null)))
+        assertEquals(25.0, cairo(first.cells(republished, FeedWindow.DAY, 5, ranges = null)))
 
         // A restart reads the same generation from disk.
         store.requests.clear()
