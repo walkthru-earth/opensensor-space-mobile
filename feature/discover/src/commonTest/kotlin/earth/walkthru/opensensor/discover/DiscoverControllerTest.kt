@@ -50,6 +50,8 @@ class DiscoverControllerTest {
         var partition: FeedPartition = FeedPartition("2026-10-12", 10),
         override val isDaily: Boolean = false,
         private val updatedMs: Long = 1_000L,
+        /** When set, PM2.5 is dated by its own older day, as a folded daily cell does. */
+        private val pmUpdatedMs: Long? = null,
     ) : PublicFeed {
         override val available = true
 
@@ -99,7 +101,7 @@ class DiscoverControllerTest {
             }
             val rows = listOf(cellA, cellB)
                 .filter { c -> ranges == null || ranges.any { c in it } }
-                .map { c -> CellRow(c, devices = 3, updatedEpochMs = updatedMs, stats = mapOf("pm25" to CellStat(3, value(c, window) + offset, null, null))) }
+                .map { c -> CellRow(c, devices = 3, updatedEpochMs = updatedMs, stats = mapOf("pm25" to CellStat(3, value(c, window) + offset, null, null)), updatedByProperty = pmUpdatedMs?.let { mapOf("pm25" to it) }.orEmpty()) }
             return CellsTable(CellsFileInfo(sample = isSample, window = null, h3Res = res, properties = listOf(pm25)), rows, 1, 1)
         }
     }
@@ -437,12 +439,16 @@ class DiscoverControllerTest {
         return c
     }
 
-    /** 9 Oct is published, every value 50 higher, and the camera rests again. */
-    private fun TestScope.nextDayAndPan(c: DiscoverController, live: FakeFeed) {
-        live.partition = FeedPartition("2026-10-09", 0)
-        live.published[live.partition] = 50.0
-        c.onCamera(CameraRest(GeoBounds(-122.02, 36.98, -121.98, 37.02), zoom = 6.25, lat = 37.0, lng = -122.0))
+    /** [next] is published, every value 50 higher, and the camera rests again. 9 Oct by default. */
+    private fun TestScope.nextDayAndPan(c: DiscoverController, live: FakeFeed, next: FeedPartition = FeedPartition("2026-10-09", 0)) {
+        live.partition = next
+        live.published[next] = 50.0
+        pan(c)
         settle()
+    }
+
+    private fun pan(c: DiscoverController) {
+        c.onCamera(CameraRest(GeoBounds(-122.02, 36.98, -121.98, 37.02), zoom = 6.25, lat = 37.0, lng = -122.0))
     }
 
     @Test
@@ -456,6 +462,64 @@ class DiscoverControllerTest {
         assertEquals(60.0, s.selectedWindows[FeedWindow.WEEK]?.mean("pm25"))
         assertEquals(80.0, s.selectedWindows[FeedWindow.DAY]?.mean("pm25"))
         assertEquals(80.0, s.selectedSummary(pm25)?.value)
+    }
+
+    @Test
+    fun aNewHourOfTheSameDayRereadsEverySelectedWindow() = runTest {
+        // Keying on the date alone would keep the old values.
+        val live = liveFeed()
+        val c = realWeekWithCellA(live)
+        nextDayAndPan(c, live, FeedPartition("2026-10-08", 1))
+        assertEquals(80.0, c.state.value.selectedWindows[FeedWindow.DAY]?.mean("pm25"))
+        assertEquals(60.0, c.state.value.selectedWindows[FeedWindow.WEEK]?.mean("pm25"))
+    }
+
+    @Test
+    fun aWindowResultOfTheOldPartitionIsDroppedWhileTheNewViewportLoads() = runTest {
+        val live = liveFeed()
+        val c = controller(FakeFeed(), live)
+        c.onSourceSettings(DiscoverSource.OPENAQ, publicSensors = true)
+        settle()
+        c.selectWindow(FeedWindow.WEEK)
+        settle()
+        val slow = CompletableDeferred<Unit>()
+        live.gates[cellA] = slow
+        c.selectCell(H3Index.toHex(cellA))
+        settle()
+        // 9 Oct is asked for, its viewport read is held, and the 8 Oct window read lands meanwhile.
+        // Its job is not cancelled yet, so only the result guard keeps it out.
+        val viewport = CompletableDeferred<Unit>()
+        live.viewportGate = viewport
+        live.partition = FeedPartition("2026-10-09", 0)
+        live.published[live.partition] = 50.0
+        pan(c)
+        settle()
+        slow.complete(Unit)
+        settle()
+        assertNull(c.state.value.selectedWindows[FeedWindow.DAY], "an 8 Oct value landed after 9 Oct was chosen")
+        viewport.complete(Unit)
+        settle()
+        assertEquals(80.0, c.state.value.selectedWindows[FeedWindow.DAY]?.mean("pm25"))
+    }
+
+    @Test
+    fun theMapJudgesStaleOnTheShownPropertysOwnDate() = runTest {
+        // The cell has something from 8 Oct, but its PM2.5 is from 5 Oct (#109).
+        val endOf = { d: Int -> LocalDate(2026, 10, d + 1).toEpochDays() * 86_400_000L }
+        val live = FakeFeed(
+            isSample = false,
+            windows = listOf(FeedWindow.DAY, FeedWindow.WEEK),
+            partition = FeedPartition("2026-10-08", 0),
+            isDaily = true,
+            updatedMs = endOf(8),
+            pmUpdatedMs = endOf(5),
+        )
+        val c = controller(FakeFeed(), live, nowMs = endOf(8))
+        c.onSourceSettings(DiscoverSource.OPENAQ, publicSensors = true)
+        settle()
+        val json = c.state.value.geoJson
+        assertTrue("\"stale\":true" in json, json)
+        assertFalse("\"stale\":false" in json, json)
     }
 
     @Test
