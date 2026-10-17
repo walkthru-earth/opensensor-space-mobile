@@ -1,5 +1,6 @@
 package earth.walkthru.aqsync.data.sync
 
+import earth.walkthru.aqsync.archive.PrunedFile
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.protocol.SafeName
 import kotlin.test.Test
@@ -52,6 +53,28 @@ class SyncPlannerTest {
         assertTrue(SafeName.isValid(at399))
         assertFalse(SafeName.isValid(at400))
         assertFalse(SafeName.isValid("a".repeat(512 - suffix.length) + suffix), "the old 512 limit must not come back")
+    }
+
+    @Test
+    fun aFileRemovedFromThePhoneIsSkippedWhileTheDeviceListsItAtTheSameSize() {
+        val manifest = listOf(Frame.File(100, dated), Frame.File(200, unsynced))
+        val pruned = listOf(PrunedFile(station, dated, 100, 7, 1))
+        val plan = SyncPlanner.plan(station, manifest, emptyList(), pruned = pruned)
+        assertEquals(FileSyncState.REMOVED, plan.entries.first { it.name == dated }.state)
+        assertEquals(listOf(unsynced), plan.toDownload.map { it.name })
+
+        // A file that grew on the device is a new file, so it downloads again.
+        val grown = SyncPlanner.plan(station, listOf(Frame.File(150, dated)), emptyList(), pruned = pruned)
+        assertEquals(listOf(dated), grown.toDownload.map { it.name })
+
+        // A copy on the phone wins over the removed mark.
+        val held = SyncPlanner.plan(station, listOf(Frame.File(100, dated)), listOf(ArchivedIdentity(station, dated, 100, 7)), pruned = pruned)
+        assertEquals(FileSyncState.SYNCED, held.entries.single().state)
+
+        // Another station's mark does not apply, and clearing the marks downloads the file again.
+        val other = listOf(PrunedFile("other-station", dated, 100, 7, 1))
+        assertEquals(listOf(dated), SyncPlanner.plan(station, listOf(Frame.File(100, dated)), emptyList(), pruned = other).toDownload.map { it.name })
+        assertEquals(listOf(dated), SyncPlanner.plan(station, listOf(Frame.File(100, dated)), emptyList()).toDownload.map { it.name })
     }
 
     @Test

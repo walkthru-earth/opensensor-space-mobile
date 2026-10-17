@@ -7,6 +7,8 @@ import earth.walkthru.aqsync.archive.ArchiveRecord
 import earth.walkthru.aqsync.archive.ArchiveStore
 import earth.walkthru.aqsync.archive.PartialMeta
 import earth.walkthru.aqsync.archive.PartialWriter
+import earth.walkthru.aqsync.archive.PrunedFile
+import earth.walkthru.aqsync.archive.PrunedFiles
 import earth.walkthru.aqsync.data.ble.AuthFailedException
 import earth.walkthru.aqsync.data.ble.DeviceBusyException
 import earth.walkthru.aqsync.data.ble.DeviceErrorException
@@ -21,6 +23,7 @@ import earth.walkthru.aqsync.storage.StorageBudget
 import earth.walkthru.aqsync.storage.StorageClass
 import earth.walkthru.aqsync.storage.StorageException
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
@@ -116,6 +119,25 @@ class ArchiveCollectorTest {
         assertEquals(fake.files.sumOf { it.bytes.size }.toLong(), progress.last().receivedBytes)
         assertEquals(progress.last().receivedBytes, progress.last().bytesTotal)
         assertTrue(progress.zipWithNext().all { (a, b) -> b.receivedBytes >= a.receivedBytes }, "received bytes never go back")
+    }
+
+    @Test
+    fun aFileRemovedFromThePhoneIsNotReadAgain() = runTest {
+        val fake = FakeArchiveDevice(backgroundScope)
+        val removed = fake.files[0]
+        val pruned = object : PrunedFiles {
+            override fun observeAll(): Flow<List<PrunedFile>> = flowOf(listOf(PrunedFile(fake.station, removed.name, removed.bytes.size.toLong(), 0, 1)))
+            override suspend fun put(file: PrunedFile) = error("read only")
+            override suspend fun remove(key: ArchiveKey) = error("read only")
+            override suspend fun clear(): Int = error("read only")
+        }
+        val collector = ArchiveCollector(store, index, engine(), FakeStorageBudget(), testTimeSource, pruned = pruned)
+
+        val summary = collector.collect(session(fake), fake.station, fake.address, fake.maxRead) {}
+
+        assertEquals(2, summary.newFiles)
+        assertEquals(null, finalBytes(fake.station, removed.name))
+        assertEquals(fake.files.drop(1).map { it.name }.toSet(), index.records.map { it.name }.toSet())
     }
 
     @Test

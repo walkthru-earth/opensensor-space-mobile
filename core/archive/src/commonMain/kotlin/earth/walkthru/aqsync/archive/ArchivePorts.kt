@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.map
  * every decision (what to resume, when a file is complete) is made by common callers. There is no
  * delete. A verified copy is immutable history, and the index record is its receipt (audit C, B6).
  * The one exception is the user's old format cleanup in Settings, `LegacyFileCleanup`, which removes
- * the record and then the final file through `StorageTree`.
+ * the record and then the final file through `StorageTree`, and leaves a [PrunedFile] so sync skips it.
  *
  * Android adapts `FileArchive` (`filesDir`). iOS uses `IosArchiveStore` (Application Support, protection
  * class, backup exclusion, symlink checks), which keeps the finals of earlier iPhone builds in place.

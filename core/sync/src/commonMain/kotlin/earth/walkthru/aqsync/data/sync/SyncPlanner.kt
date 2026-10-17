@@ -1,5 +1,6 @@
 package earth.walkthru.aqsync.data.sync
 
+import earth.walkthru.aqsync.archive.PrunedFile
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.protocol.SafeName
 
@@ -54,8 +55,11 @@ sealed interface HivePartition {
 /** Identity of a file already held in the local archive. */
 data class ArchivedIdentity(val station: String, val name: String, val bytes: Long, val crc32: Long?)
 
-/** Per-manifest-entry state as shown in the Files screen. */
-enum class FileSyncState { NOT_SYNCED, PARTIAL, SYNCING, SYNCED, MISMATCH, INVALID_NAME }
+/**
+ * Per-manifest-entry state as shown in the Files screen. [REMOVED] is a file the user removed from
+ * this phone in Settings. It counts as done and is not downloaded until the user asks for it again.
+ */
+enum class FileSyncState { NOT_SYNCED, PARTIAL, SYNCING, SYNCED, MISMATCH, INVALID_NAME, REMOVED }
 
 data class ManifestEntry(
     val name: String,
@@ -80,7 +84,9 @@ data class SyncPlan(
  * Pure decision logic for "which files still need to come over".
  *
  * Archive identity is `(station, relative name)`. The file is immutable, so a differing `bytes`
- * for an already-archived name is a mismatch to surface, never a version to merge.
+ * for an already-archived name is a mismatch to surface, never a version to merge. A [PrunedFile]
+ * with the same station, name and size marks the entry [FileSyncState.REMOVED]. A held copy wins
+ * over it, and a different size is a new file that downloads as usual.
  */
 object SyncPlanner {
     fun plan(
@@ -88,8 +94,10 @@ object SyncPlanner {
         manifest: List<Frame.File>,
         archived: Collection<ArchivedIdentity>,
         partials: Map<String, Long> = emptyMap(),
+        pruned: Collection<PrunedFile> = emptyList(),
     ): SyncPlan {
         val byName = archived.filter { it.station == station }.associateBy { it.name }
+        val prunedByName = pruned.filter { it.station == station }.associateBy { it.name }
         val entries = manifest.map { file ->
             val partition = HivePartition.of(file.name)
             val local = byName[file.name]
@@ -102,6 +110,8 @@ object SyncPlanner {
                     FileSyncState.INVALID_NAME,
                     detail = "name violates the safe_name() whitelist, not stored"
                 )
+                local == null && prunedByName[file.name]?.bytes == file.bytes ->
+                    ManifestEntry(file.name, file.bytes, partition, FileSyncState.REMOVED)
                 local == null && partial in 1 until file.bytes -> ManifestEntry(
                     file.name,
                     file.bytes,

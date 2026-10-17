@@ -1,5 +1,6 @@
 package earth.walkthru.aqsync.data
 
+import earth.walkthru.aqsync.archive.PrunedFile
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.sync.ArchivedIdentity
 import earth.walkthru.aqsync.data.sync.FileSyncState
@@ -91,5 +92,13 @@ class ManifestStateTest {
         assertFalse(loaded.confirmsAllSynced(mismatch))
         val empty = ManifestState.Loaded(emptyList(), end.copy(count = 0), 2_000L)
         assertFalse(empty.confirmsAllSynced(SyncPlanner.plan("station", emptyList(), emptyList())))
+    }
+
+    @Test
+    fun filesRemovedFromThePhoneCountAsDone() {
+        val pruned = files.map { PrunedFile("station", it.name, it.bytes, 0, 1) }
+        val plan = SyncPlanner.plan("station", files, emptyList(), pruned = pruned)
+        assertTrue(plan.entries.all { it.state == FileSyncState.REMOVED })
+        assertTrue(loaded.confirmsAllSynced(plan))
     }
 }

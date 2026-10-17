@@ -2,6 +2,7 @@ package earth.walkthru.aqsync.data.sync
 
 import earth.walkthru.aqsync.archive.ArchiveIndex
 import earth.walkthru.aqsync.archive.ArchiveStore
+import earth.walkthru.aqsync.archive.PrunedFiles
 import earth.walkthru.aqsync.data.ble.DeviceSession
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.storage.StorageBudget
@@ -86,7 +87,8 @@ data class CollectionSummary(
  * does not fit throws [InsufficientSpaceException] and opens nothing. A file that fails to store checks the
  * room again, and when it ran out the run ends the same way, keeping the partial for resume.
  *
- * The collector never asks the device to delete, rename or rewrite a file.
+ * A file the user removed from this phone in Settings ([pruned]) is skipped while the device still
+ * lists it at the same size. The collector never asks the device to delete, rename or rewrite a file.
  */
 class ArchiveCollector(
     private val store: ArchiveStore,
@@ -98,6 +100,7 @@ class ArchiveCollector(
     private val archivedIdentities: suspend (String) -> List<ArchivedIdentity> = { station ->
         index.observeStation(station).first().map { ArchivedIdentity(it.station, it.name, it.bytes, it.crc32) }
     },
+    private val pruned: PrunedFiles = PrunedFiles.None,
 ) {
     suspend fun collect(
         session: DeviceSession,
@@ -123,7 +126,7 @@ class ArchiveCollector(
             return PlannedCollection(SyncPlan(emptyList(), emptyList()), listOf(FileNotSaved(onlyName, FileProblem.REFUSED)), unlisted = true)
         }
         val archived = archivedIdentities(station)
-        val plan = SyncPlanner.plan(station, scopedFiles, archived, store.partialLengths(station))
+        val plan = SyncPlanner.plan(station, scopedFiles, archived, store.partialLengths(station), pruned.forStation(station))
         val notSaved = plan.entries.mapNotNull { entry ->
             when (entry.state) {
                 FileSyncState.INVALID_NAME -> FileNotSaved(entry.name, FileProblem.INVALID_ENTRY)
