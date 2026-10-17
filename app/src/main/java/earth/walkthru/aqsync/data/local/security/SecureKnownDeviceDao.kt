@@ -17,11 +17,19 @@ fun interface LanTokenMigration {
  */
 fun interface LanCredentialStore {
     /**
-     * Plaintext token hex for [address], or null when none is stored or the stored ciphertext can
+     * The credential for [address], or null when none is stored or the stored ciphertext can
      * never be decrypted again (it is then cleared). A transient Keystore failure is thrown and
      * the stored credential is kept for the next attempt.
      */
-    suspend fun lanToken(address: String): String?
+    suspend fun lanCredential(address: String): LanCredential?
+}
+
+/**
+ * A stored LAN credential. [stored] is the ciphertext it was read from, so a later clear can
+ * match exactly this credential. [tokenHex] is the plaintext. Never log either.
+ */
+class LanCredential(val stored: String, val tokenHex: String) {
+    override fun toString(): String = "LanCredential(<redacted>)"
 }
 
 /**
@@ -71,11 +79,14 @@ class SecureKnownDeviceDao(
 
     override suspend fun delete(address: String) = delegate.delete(address)
 
-    override suspend fun lanToken(address: String): String? {
+    /** Plaintext token hex for [address], see [lanCredential]. */
+    suspend fun lanToken(address: String): String? = lanCredential(address)?.tokenHex
+
+    override suspend fun lanCredential(address: String): LanCredential? {
         val device = delegate.get(address) ?: return null
         val stored = device.lanToken ?: return null
         return try {
-            cipher.decrypt(stored)
+            LanCredential(stored, cipher.decrypt(stored))
         } catch (e: Exception) {
             if (!isUnusableCiphertext(e)) throw e
             // Only a ciphertext that can never decrypt again is deleted. One conditional update

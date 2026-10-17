@@ -87,6 +87,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.Collections
+import java.util.WeakHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.locks.ReentrantLock
@@ -189,6 +191,9 @@ class DeviceLinkOwner @Inject constructor(
     private val scope = CoroutineScope(applicationScope.coroutineContext + SupervisorJob(applicationScope.coroutineContext[Job]) + io)
     private val stateLock = ReentrantLock()
     private val tokenPolicy = LanTokenPolicy()
+
+    /** The ciphertext each LAN link authenticated with, so a dead token is cleared only if still stored. */
+    private val lanCiphertexts: MutableMap<AndroidLink, String> = Collections.synchronizedMap(WeakHashMap())
     private var identityLease: AutoCloseable? = null
 
     private val _session = MutableStateFlow<DeviceSession?>(null)
@@ -479,12 +484,13 @@ class DeviceLinkOwner @Inject constructor(
         if (seen.station != station) return LanAttempt.Skipped
         val host = seen.host ?: return LanAttempt.Skipped
         val port = TransportSelector.lanPort(known.hasLanToken, known.deviceId, seen.dev, seen.port, known.lanPort) ?: return LanAttempt.Skipped
-        val token = lanTokenBytes(address) ?: return LanAttempt.Skipped
+        val key = lanKey(address) ?: return LanAttempt.Skipped
         val transport = try {
-            transportFactory.lan(address, name, host, port, token)
+            transportFactory.lan(address, name, host, port, key.token)
         } finally {
-            token.fill(0)
+            key.token.fill(0)
         }
+        lanCiphertexts[transport] = key.stored
         // Put the LAN attempt in the session slot so the UI shows "Authenticating on the LAN…".
         val probe = newSession(transport)
         _session.value = probe
@@ -507,7 +513,7 @@ class DeviceLinkOwner @Inject constructor(
             lastOpenFailure = typed
             // ERROR 14 or BYE 3 (refused) and BYE 10 (rotated) at the handshake: the Bluetooth
             // session we are about to open fetches a fresh token.
-            forgetInvalidatedToken(address, typed)
+            forgetInvalidatedToken(address, typed, key.stored)
             if (fallbackToBle) _events.tryEmit(DeviceEvent.Info(DeviceMessage.LanFallback(failure)))
             return LanAttempt.Skipped
         } catch (e: CancellationException) {
@@ -567,37 +573,41 @@ class DeviceLinkOwner @Inject constructor(
     /** A session whose link is opened by [openSession]. Link events carry no frame bodies. */
     private fun newSession(link: AndroidLink): DeviceSession {
         val session = link.openableSession(scope, log = LinkLog { Log.d(TAG, it.describe()) })
-        if (link.kind == TransportKind.LAN) {
+        val lanStored = lanCiphertexts[link]
+        if (link.kind == TransportKind.LAN && lanStored != null) {
             // A LAN session the device ends with BYE 10 (token rotated) or 3 (refused), at any time.
             scope.launch {
                 val closed = session.link.state.first { it is LinkState.Closed } as LinkState.Closed
-                forgetInvalidatedToken(link.address, closed.cause)
+                forgetInvalidatedToken(link.address, closed.cause, lanStored)
             }
         }
         return session
     }
 
     /**
-     * Clear the stored LAN token when [cause] proves it dead (refused or rotated), so the next
-     * bonded Bluetooth session fetches a new one. Clearing, not only marking stale, because a
-     * stored token is never fetched again.
+     * Clear the LAN token this link authenticated with when [cause] proves it dead (refused or
+     * rotated), so the next bonded Bluetooth session fetches a new one. Clearing, not only marking
+     * stale, because a stored token is never fetched again. One conditional update clears only
+     * [stored], so a token renewed meanwhile survives.
      */
-    private suspend fun forgetInvalidatedToken(address: String, cause: DisconnectCause) {
+    private suspend fun forgetInvalidatedToken(address: String, cause: DisconnectCause, stored: String) {
         if (!tokenPolicy.invalidatesToken(cause)) return
-        if (knownDeviceDao.get(address)?.hasLanToken != true) return
+        if (knownDeviceDao.clearLanTokenIfStored(address, stored) == 0) return
         Log.i(TAG, "stored LAN token dropped (${cause.describe()})")
-        knownDeviceDao.setLanToken(address, null, null)
         tokenPolicy.markStale(address)
     }
 
+    /** A decrypted LAN token and the ciphertext it came from. */
+    private class LanKey(val token: ByteArray, val stored: String)
+
     /**
-     * The stored LAN token as bytes, decrypted only here, at the moment a LAN transport is built.
+     * The stored LAN token as bytes with its ciphertext, decrypted only here, at the moment a LAN transport is built.
      * Null (use Bluetooth) when none is stored, when it is malformed, or when the Keystore is
      * unavailable right now. The last case keeps the credential for the next attempt.
      */
-    private suspend fun lanTokenBytes(address: String): ByteArray? {
-        val hex = try {
-            lanCredentials.lanToken(address)
+    private suspend fun lanKey(address: String): LanKey? {
+        val credential = try {
+            lanCredentials.lanCredential(address)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -605,7 +615,7 @@ class DeviceLinkOwner @Inject constructor(
             return null
         } ?: return null
         return try {
-            hex.hexToBytes()
+            LanKey(credential.tokenHex.hexToBytes(), credential.stored)
         } catch (e: IllegalArgumentException) {
             Log.w(TAG, "stored LAN token is malformed; ignoring it")
             null

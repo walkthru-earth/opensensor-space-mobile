@@ -51,6 +51,16 @@ class KnownDeviceDaoTest {
     }
 
     @Test
+    fun `insertIfAbsent leaves an existing row untouched`() = runBlocking {
+        dao.upsert(device("enc1:kept"))
+
+        val result = dao.insertIfAbsent(KnownDevice(ADDRESS, "AQ-new", "station", "device", "fw", 50, 50))
+
+        assertEquals(-1L, result)
+        assertEquals(device("enc1:kept"), dao.get(ADDRESS))
+    }
+
+    @Test
     fun `recording a connection keeps settings and the credential`() = runBlocking {
         dao.upsert(device("enc1:kept"))
 

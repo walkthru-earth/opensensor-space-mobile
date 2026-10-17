@@ -687,6 +687,22 @@ class DeviceFacadeTest {
     }
 
     @Test
+    fun `a credential renewed before a rotated token is cleared survives`() = harnessTest { h ->
+        h.knownDao.upsert(h.enrolled(token = OLD_TOKEN))
+        h.lan.devices.value = mapOf(h.device.station to h.lanTarget())
+        h.factory.lanClose = LinkClosedException(DisconnectCause.Auth(AuthKind.TOKEN_ROTATED), LanConnectException(LanFailure.AUTH_FAILED, "BYE token-rotated"))
+        // BLE renews the credential after the LAN close proved the old one dead and before it is cleared.
+        h.rawKnown.beforeClear = { h.rawKnown.renew(ADDRESS, "enc1:$NEW_TOKEN", 47391) }
+
+        val e = async { runCatching { h.repo.lendLink(ADDRESS, LinkPreference.LAN) } }.also { h.until { it.isCompleted } }.await().exceptionOrNull()
+
+        assertEquals(DisconnectCause.Auth(AuthKind.TOKEN_ROTATED), (e as LinkClosedException).disconnectCause)
+        assertNull("the hook ran", h.rawKnown.beforeClear)
+        assertTrue("the renewed credential survives", h.knownDao.lanToken(ADDRESS) == NEW_TOKEN)
+        assertEquals(47391, h.knownDao.get(ADDRESS)!!.lanPort)
+    }
+
+    @Test
     fun `unexpected LAN failure closes the probe and falls back to Bluetooth`() = harnessTest { h ->
         h.knownDao.upsert(h.enrolled(token = OLD_TOKEN))
         h.lan.devices.value = mapOf(h.device.station to h.lanTarget())
@@ -1443,10 +1459,20 @@ class DeviceFacadeTest {
         override suspend fun touch(address: String, name: String?, epochMs: Long) {
             get(address)?.let { replace(it.copy(lastSeenEpochMs = epochMs, name = name ?: it.name)) }
         }
+
+        /** Runs once just before the next clear lands, as a concurrent renewal would. */
+        var beforeClear: (() -> Unit)? = null
+
+        fun renew(address: String, stored: String, port: Int) {
+            rows.firstOrNull { it.address == address }?.let { replace(it.copy(lanToken = stored, lanPort = port)) }
+        }
+
         override suspend fun setLanToken(address: String, tokenHex: String?, port: Int?) {
+            if (tokenHex == null) beforeClear?.also { beforeClear = null }?.invoke()
             get(address)?.let { replace(it.copy(lanToken = tokenHex, lanPort = port)) }
         }
         override suspend fun clearLanTokenIfStored(address: String, expected: String): Int {
+            beforeClear?.also { beforeClear = null }?.invoke()
             val row = get(address)?.takeIf { it.lanToken == expected } ?: return 0
             replace(row.copy(lanToken = null, lanPort = null))
             return 1

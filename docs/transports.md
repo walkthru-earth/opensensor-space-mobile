@@ -209,7 +209,7 @@ other boards need their own records.
 
 ## LAN token lifecycle
 
-`LanTokenPolicy` (pure, unit-tested). `DeviceLinkOwner` clears the stored token whenever `invalidatesToken(cause)` holds for a LAN close. A clear, not only a stale mark, because a stored token is never fetched again.
+`LanTokenPolicy` (pure, unit-tested). `DeviceLinkOwner` clears the stored token whenever `invalidatesToken(cause)` holds for a LAN close. The clear is one conditional update on the ciphertext that link authenticated with, so a token renewed meanwhile survives. A clear, not only a stale mark, because a stored token is never fetched again.
 
 ```mermaid
 stateDiagram-v2
@@ -226,7 +226,7 @@ stateDiagram-v2
 
 `known_device.lanToken` (nullable) holds AES-GCM ciphertext. Rows read through the DAO, and so
 every ViewModel, see only that ciphertext, enough for `hasLanToken`. The plaintext hex comes only from
-`LanCredentialStore.lanToken(address)`, which the repository calls at the moment it builds a LAN
+`LanCredentialStore.lanCredential(address)`, which the repository calls at the moment it builds a LAN
 transport (`tryLan`, the facade `syncInBackground` worker path). **Never logged, never displayed**: `KnownDevice.toString`,
 `Frame.Token.toString`, `FrameRecorder` and the raw-command view redact it. Startup finishes the
 one-time plaintext migration before Auto-sync scheduling or triggers can read credentials. Failed GCM
