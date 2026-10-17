@@ -30,6 +30,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import earth.walkthru.opensensor.designsystem.resources.Res
+import earth.walkthru.opensensor.designsystem.resources.info_close
 import earth.walkthru.opensensor.designsystem.resources.info_more
 import org.jetbrains.compose.resources.stringResource
 
@@ -53,13 +54,13 @@ fun InfoButton(
     tint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
 ) {
     var open by rememberSaveable { mutableStateOf(false) }
-    IconButton(onClick = { open = true }, modifier = modifier) {
+    IconButton(onClick = { open = true }, modifier = modifier.touchTarget()) {
         Icon(AppIcons.Outlined.Info, contentDescription = stringResource(Res.string.info_more, info.title), tint = tint)
     }
     if (open) InfoSheet(info, onDismiss = { open = false })
 }
 
-/** The bottom sheet behind [InfoButton]: a heading and short paragraphs, dismissed by swipe or scrim. */
+/** The bottom sheet behind [InfoButton]: a heading, short paragraphs, and a visible Close button. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InfoSheet(info: InfoContent, onDismiss: () -> Unit) {
@@ -68,20 +69,31 @@ fun InfoSheet(info: InfoContent, onDismiss: () -> Unit) {
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = MaterialTheme.colorScheme.surface,
     ) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .navigationBarsPadding()
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 32.dp),
-        ) {
-            Text(info.title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
-            info.body.forEach { paragraph ->
-                Spacer(Modifier.height(10.dp))
-                Text(paragraph, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+        InfoSheetContent(info = info, closeLabel = stringResource(Res.string.info_close), onDismiss = onDismiss)
+    }
+}
+
+@Composable
+internal fun InfoSheetContent(info: InfoContent, closeLabel: String, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+    Column(
+        modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .navigationBarsPadding()
+            .padding(horizontal = 24.dp)
+            .padding(bottom = 32.dp),
+    ) {
+        Text(info.title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.headingSemantics())
+        info.body.forEach { paragraph ->
+            Spacer(Modifier.height(10.dp))
+            Text(paragraph, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+        Spacer(Modifier.height(20.dp))
+        OutlinePillButton(
+            text = closeLabel,
+            onClick = onDismiss,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 

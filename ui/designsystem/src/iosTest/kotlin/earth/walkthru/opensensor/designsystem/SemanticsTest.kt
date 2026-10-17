@@ -256,4 +256,125 @@ class SemanticsTest {
         // Three 64 dp blocks and two 3 dp gaps.
         onNodeWithTag("unbounded").assertWidthIsEqualTo(198.dp)
     }
+
+    @Test
+    fun floatingAndPillButtonsEnforce48DpTouchTargets() = runComposeUiTest {
+        setContent {
+            MaterialTheme {
+                Column {
+                    FloatingIconButton(
+                        onClick = {},
+                        contentDescription = "Zoom in",
+                        modifier = Modifier.testTag("icon-btn"),
+                    ) { Text("+") }
+                    FloatingTextButton(
+                        text = "Scan",
+                        onClick = {},
+                        modifier = Modifier.testTag("text-btn"),
+                    )
+                    PillButton(
+                        text = "Continue",
+                        onClick = {},
+                        modifier = Modifier.testTag("pill-btn"),
+                    )
+                    OutlinePillButton(
+                        text = "Cancel",
+                        onClick = {},
+                        modifier = Modifier.testTag("outline-btn"),
+                    )
+                }
+            }
+        }
+        for (tag in listOf("icon-btn", "text-btn", "pill-btn", "outline-btn")) {
+            onNodeWithTag(tag).assertHeightIsAtLeast(48.dp)
+            val bounds = onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
+            kotlin.test.assertTrue(bounds.width >= 48f, "$tag width ${bounds.width}")
+        }
+    }
+
+    @Test
+    fun infoSheetContentExposesHeadingAndVisible48DpCloseAction() = runComposeUiTest {
+        var dismissed = false
+        setContent {
+            MaterialTheme {
+                InfoSheetContent(
+                    info = InfoContent("Particulate matter", "Fine particles under 2.5 micrometres."),
+                    closeLabel = "Close",
+                    onDismiss = { dismissed = true },
+                )
+            }
+        }
+        onNodeWithText("Particulate matter").assert(isHeading)
+        onNodeWithText("Close").assert(hasRole(Role.Button)).assertHeightIsAtLeast(48.dp)
+        onNodeWithText("Close").fetchSemanticsNode().config[SemanticsActions.OnClick].action?.invoke()
+        kotlin.test.assertTrue(dismissed)
+    }
+
+    @Test
+    fun sectionCardAndStatLineAt200PercentFontScaleKeepTrailingAndValueInsideViewport() = runComposeUiTest {
+        setContent {
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density = 2f, fontScale = 2f),
+            ) {
+                MaterialTheme {
+                    Column(Modifier.width(320.dp)) {
+                        SectionCard(
+                            title = "Automatic background sync over home Wi-Fi",
+                            trailing = {
+                                OutlinePillButton(text = "Edit", onClick = {}, modifier = Modifier.testTag("trailing-action"))
+                            },
+                        ) {
+                            StatLine(
+                                label = "Last recorded reading from station",
+                                value = "24 µg/m³",
+                                modifier = Modifier.testTag("stat-line"),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        val trailingBounds = onNodeWithTag("trailing-action").fetchSemanticsNode().boundsInRoot
+        // In a 320 dp viewport at density 2f (640 px wide), the trailing button stays inside the card.
+        kotlin.test.assertTrue(trailingBounds.right <= 640f, "trailing right ${trailingBounds.right} <= 640")
+        kotlin.test.assertTrue(trailingBounds.width >= 96f, "trailing width ${trailingBounds.width} >= 96 px (48 dp)")
+        onNodeWithTag("stat-line").assert(hasText("24 µg/m³"))
+    }
+
+    @Test
+    fun switchRowAndValueSemanticsExposeRolesAndDescriptions() = runComposeUiTest {
+        var toggled = false
+        setContent {
+            androidx.compose.runtime.CompositionLocalProvider(LocalReduceMotion provides true) {
+                MaterialTheme {
+                    Column {
+                        Row(
+                            Modifier
+                                .testTag("switch-row")
+                                .switchRowSemantics(checked = toggled, onCheckedChange = { toggled = it }),
+                        ) {
+                            Text("Sync on Wi-Fi")
+                        }
+                        Row(
+                            Modifier
+                                .testTag("value-node")
+                                .valueSemantics(label = "PM2.5", value = "12", unit = "µg/m³", state = "Fair"),
+                        ) {
+                            Text("12")
+                        }
+                        Peacock(
+                            contentDescription = "Calm peacock",
+                            expression = PeacockExpression.CALM,
+                            animate = true,
+                        )
+                    }
+                }
+            }
+        }
+        onNodeWithTag("switch-row").assert(hasRole(Role.Switch)).assertHeightIsAtLeast(48.dp)
+        onNodeWithTag("switch-row").fetchSemanticsNode().config[SemanticsActions.OnClick].action?.invoke()
+        kotlin.test.assertTrue(toggled)
+        onNodeWithTag("value-node").assert(hasContentDescription("PM2.5, 12 µg/m³, Fair"))
+        onNodeWithContentDescription("Calm peacock").assertExists()
+    }
 }

@@ -3,6 +3,7 @@ package earth.walkthru.opensensor.designsystem
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -20,6 +21,35 @@ import org.jetbrains.compose.resources.FontResource
 
 /** Tabular figures where a font has them, so live numbers do not jitter as digits change. */
 const val TABULAR = "tnum"
+
+/**
+ * Shared line and scale limits so system font scaling up to 200 percent wraps instead of clipping
+ * headings, labels, and display numerals on 320 dp phones.
+ */
+object TypographyLimits {
+    val EyebrowMaxLines: Int = 2
+    val StatLabelMaxLines: Int = 3
+    val StatValueMaxLines: Int = 2
+    val TabLabelMaxLines: Int = 2
+    val TickingMaxLines: Int = 2
+
+    /**
+     * Maximum effective scale multiplier for display numerals (`displayLarge` 84 sp, `displayMedium`
+     * 48 sp, `displaySmall` 32 sp). Body, label, title, and headline styles scale all the way to 200
+     * percent (`fontScale = 2.0f`), while display numerals cap at 1.35x so 3-digit readings fit on
+     * 320 dp screens without horizontal clipping.
+     */
+    val MaxDisplayFontScale: Float = 1.35f
+}
+
+/**
+ * Returns the compensation multiplier applied to `sp` display sizes at [fontScale] so the rendered
+ * pixel size caps at [TypographyLimits.MaxDisplayFontScale] times the 1.0x size.
+ */
+fun displayFontScaleFactor(fontScale: Float): Float {
+    val safeScale = fontScale.coerceAtLeast(0.1f)
+    return if (safeScale <= TypographyLimits.MaxDisplayFontScale) 1f else TypographyLimits.MaxDisplayFontScale / safeScale
+}
 
 /** Quicksand's variable `wght` axis (300 to 700). */
 internal val QuicksandWeights = listOf(300, 400, 500, 600, 700)
@@ -95,17 +125,19 @@ fun preferredLanguage(): String = Locale.current.language
 /**
  * The type scale. Headings are bold and rounded like the website (`.brand-page h1..h4` are weight
  * 700 with slightly negative tracking). Body text stays at Material sizes for a phone. Display
- * styles carry numbers and use [numbers].
+ * styles carry numbers and use [numbers], clamping their effective growth above
+ * [TypographyLimits.MaxDisplayFontScale] when [fontScale] exceeds it.
  */
-fun brandTypography(text: FontFamily, numbers: FontFamily): Typography {
+fun brandTypography(text: FontFamily, numbers: FontFamily, fontScale: Float = 1f): Typography {
     val base = Typography()
+    val displayFactor = displayFontScaleFactor(fontScale)
     fun TextStyle.brand(weight: FontWeight) = copy(fontFamily = text, fontWeight = weight)
     fun number(weight: FontWeight, size: Int, lineHeight: Int, tracking: Double) = TextStyle(
         fontFamily = numbers,
         fontWeight = weight,
-        fontSize = size.sp,
-        lineHeight = lineHeight.sp,
-        letterSpacing = tracking.sp,
+        fontSize = (size * displayFactor).sp,
+        lineHeight = (lineHeight * displayFactor).sp,
+        letterSpacing = (tracking * displayFactor).sp,
         fontFeatureSettings = TABULAR,
         lineHeightStyle = TrimmedNumbers,
     )
@@ -129,16 +161,17 @@ fun brandTypography(text: FontFamily, numbers: FontFamily): Typography {
 }
 
 /**
- * The brand type scale for the current locale. Quicksand text, or Cairo for Arabic-script languages
- * and right-to-left layouts, with Cairo display numbers either way.
+ * The brand type scale for the current locale and system [fontScale]. Quicksand text, or Cairo for
+ * Arabic-script languages and right-to-left layouts, with Cairo display numbers either way.
  */
 @Composable
 fun rememberBrandTypography(
     arabicScript: Boolean = usesCairoText(preferredLanguage(), LocalLayoutDirection.current),
+    fontScale: Float = LocalDensity.current.fontScale,
 ): Typography {
     val quicksand = quicksandFontFamily()
     val cairo = cairoFontFamily()
-    return remember(arabicScript, quicksand, cairo) {
-        brandTypography(text = if (arabicScript) cairo else quicksand, numbers = cairo)
+    return remember(arabicScript, quicksand, cairo, fontScale) {
+        brandTypography(text = if (arabicScript) cairo else quicksand, numbers = cairo, fontScale = fontScale)
     }
 }

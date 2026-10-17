@@ -3,6 +3,8 @@
 <resources>
     <!-- InfoButton content description, the argument is the topic. -->
     <string name="info_more">المزيد عن %1$s</string>
+    <!-- Visible close button inside InfoSheet. -->
+    <string name="info_close">إغلاق</string>
     <!-- SignalBars content description, the argument is 1 to 4. -->
     <string name="signal_bars">الإشارة %1$d من 4</string>
     <string name="mood_fresh">هواء نقي</string>

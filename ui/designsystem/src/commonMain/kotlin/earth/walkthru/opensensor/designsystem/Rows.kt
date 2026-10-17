@@ -3,6 +3,8 @@ package earth.walkthru.opensensor.designsystem
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -52,6 +54,7 @@ fun Eyebrow(
     color: Color = MaterialTheme.colorScheme.onSurfaceVariant,
     uppercase: Boolean = true,
     heading: Boolean = false,
+    maxLines: Int = TypographyLimits.EyebrowMaxLines,
 ) {
     Text(
         if (uppercase) text.uppercase() else text,
@@ -61,7 +64,7 @@ fun Eyebrow(
             if (uppercase) contentDescription = text
             if (heading) heading()
         },
-        maxLines = 1,
+        maxLines = maxLines,
         overflow = TextOverflow.Ellipsis,
     )
 }
@@ -80,20 +83,40 @@ fun StatusDot(color: Color, modifier: Modifier = Modifier, size: Int = 10) {
 /** Two-column key/value line for compact stat rows, read as one element ("Battery, 80 %"). */
 @Composable
 fun StatLine(label: String, value: String, modifier: Modifier = Modifier, valueColor: Color = MaterialTheme.colorScheme.onSurface) {
-    Row(modifier.fillMaxWidth().semantics(mergeDescendants = true) {}, horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, style = MaterialTheme.typography.bodyMedium, color = valueColor)
+    Row(
+        modifier.fillMaxWidth().cardSemantics(mergeDescendants = true),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Top,
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f).padding(end = 12.dp),
+            maxLines = TypographyLimits.StatLabelMaxLines,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            value,
+            style = MaterialTheme.typography.bodyMedium,
+            color = valueColor,
+            maxLines = TypographyLimits.StatValueMaxLines,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
 /** A labelled number with its unit, for the secondary measurements on a metric card, read as one element. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun BigValue(label: String, value: String, unit: String, modifier: Modifier = Modifier) {
-    Column(modifier.semantics(mergeDescendants = true) {}) {
+    Column(modifier.cardSemantics(mergeDescendants = true)) {
         Eyebrow(label, uppercase = false)
-        Row {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.Bottom,
+        ) {
             Text(value, style = MaterialTheme.typography.displaySmall, modifier = Modifier.alignByBaseline())
-            Spacer(Modifier.width(6.dp))
             Text(unit, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.alignByBaseline())
         }
     }
@@ -129,7 +152,8 @@ fun SectionTabs(
             Tab(
                 selected = index == selectedIndex,
                 onClick = { if (index != selectedIndex) onSelect(index) },
-                text = { Text(label, maxLines = 1) },
+                modifier = Modifier.touchTarget(),
+                text = { Text(label, maxLines = TypographyLimits.TabLabelMaxLines, overflow = TextOverflow.Ellipsis) },
             )
         }
     }
@@ -139,30 +163,31 @@ fun SectionTabs(
 fun nowEpochMillis(): Long = Clock.System.now().toEpochMilliseconds()
 
 /**
- * A clock that ticks once a second so "updated N s ago" stays honest. Read it only inside the leaf
- * that prints the age (see [TickingText]): a read at screen level recomposes the whole screen at
- * 1 Hz.
+ * A clock that ticks once a second (or every 10 seconds when reduce motion is active) so "updated
+ * N s ago" stays honest. Read it only inside the leaf that prints the age (see [TickingText]): a
+ * read at screen level recomposes the whole screen at 1 Hz.
  */
 @Composable
 fun rememberNowMillis(periodMs: Long = 1000): Long {
+    val effectivePeriodMs = coarsenTickPeriodMs(periodMs, rememberReduceMotion())
     var now by remember { mutableLongStateOf(nowEpochMillis()) }
-    LaunchedEffect(periodMs) {
+    LaunchedEffect(effectivePeriodMs) {
         while (true) {
-            delay(periodMs)
+            delay(effectivePeriodMs)
             now = nowEpochMillis()
         }
     }
     return now
 }
 
-/** A leaf text that re-renders once a second with the current time, so its parent does not. */
+/** A leaf text that re-renders with the current time, so its parent does not. */
 @Composable
 fun TickingText(
     text: (nowMs: Long) -> String,
     modifier: Modifier = Modifier,
     style: TextStyle = MaterialTheme.typography.labelSmall,
     color: Color = MaterialTheme.colorScheme.onSurfaceVariant,
-    maxLines: Int = 1,
+    maxLines: Int = TypographyLimits.TickingMaxLines,
 ) {
     val now = rememberNowMillis()
     Text(text(now), modifier = modifier, style = style, color = color, maxLines = maxLines, overflow = TextOverflow.Ellipsis)

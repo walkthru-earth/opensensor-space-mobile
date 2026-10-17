@@ -45,8 +45,11 @@ import androidx.compose.ui.unit.dp
  *   targets are at least [FloatingControl.Size].
  */
 object FloatingControl {
-    /** The smallest side of a control, and its touch target. */
-    val Size: Dp = 44.dp
+    /** The smallest side of a control, and its 48 dp touch target. */
+    val Size: Dp = MinTouchTarget
+
+    /** Minimum gap between adjacent interactive controls. */
+    val MinSpacing: Dp = MinTouchSpacing
 
     /** The corner radius of every floating control. */
     val Radius: Dp = 16.dp
@@ -120,12 +123,12 @@ fun FloatingSurface(
         shape = shape,
         color = color,
         shadowElevation = 3.dp,
-        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline),
         content = content,
     )
 }
 
-/** A square floating button for one icon, [FloatingControl.Size] on each side. */
+/** A square floating button for one icon, at least [FloatingControl.Size] on each side. */
 @Composable
 fun FloatingIconButton(
     onClick: () -> Unit,
@@ -135,14 +138,16 @@ fun FloatingIconButton(
 ) {
     Surface(
         onClick = onClick,
-        modifier = modifier.size(FloatingControl.Size).semantics {
-            this.contentDescription = contentDescription
-            role = Role.Button
-        },
+        modifier = modifier
+            .touchTarget(FloatingControl.Size, FloatingControl.Size)
+            .semantics {
+                this.contentDescription = contentDescription
+                role = Role.Button
+            },
         shape = FloatingControl.Shape,
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
         shadowElevation = 3.dp,
-        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline),
     ) {
         Box(contentAlignment = Alignment.Center) { content() }
     }
@@ -162,12 +167,12 @@ fun FloatingTextButton(
 ) {
     Surface(
         onClick = onClick,
-        modifier = modifier.heightIn(min = FloatingControl.Size),
+        modifier = modifier.touchTarget(minHeight = FloatingControl.Size),
         shape = FloatingControl.Shape,
         color = if (primary) FloatingControl.Selected else MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
         contentColor = if (primary) FloatingControl.OnSelected else MaterialTheme.colorScheme.onSurface,
         shadowElevation = 3.dp,
-        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline),
     ) {
         Row(
             Modifier.padding(start = if (icon != null) 16.dp else 20.dp, end = 20.dp, top = 14.dp, bottom = 14.dp),
@@ -175,7 +180,7 @@ fun FloatingTextButton(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             icon?.invoke()
-            Text(text, style = MaterialTheme.typography.labelLarge)
+            Text(text, style = MaterialTheme.typography.labelLarge, maxLines = TypographyLimits.TabLabelMaxLines)
         }
     }
 }

@@ -57,7 +57,7 @@ fun <T> BrandBottomBar(
                     .windowInsetsPadding(WindowInsets.navigationBars)
                     .padding(horizontal = FloatingControl.Margin, vertical = 6.dp)
                     .selectableGroup(),
-                horizontalArrangement = Arrangement.spacedBy(FloatingControl.Inset),
+                horizontalArrangement = Arrangement.spacedBy(FloatingControl.MinSpacing),
             ) {
                 tabs.forEach { tab ->
                     BottomBarItem(tab, selected = tab.key == selected, onClick = { onSelect(tab.key) }, modifier = Modifier.weight(1f))
@@ -72,7 +72,7 @@ private fun BottomBarItem(tab: BottomBarTab<*>, selected: Boolean, onClick: () -
     val colors = MaterialTheme.colorScheme
     Column(
         modifier
-            .heightIn(min = FloatingControl.Size)
+            .touchTarget(minHeight = FloatingControl.Size)
             .clip(FloatingControl.Shape)
             .selectable(selected = selected, onClick = onClick, role = Role.Tab)
             .padding(vertical = 6.dp),

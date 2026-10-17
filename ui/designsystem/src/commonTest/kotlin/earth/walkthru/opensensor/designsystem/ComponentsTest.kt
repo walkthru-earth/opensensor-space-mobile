@@ -71,4 +71,61 @@ class ComponentsTest {
         assertEquals(1, signalBars(-81))
         assertEquals(1, signalBars(-120))
     }
+
+    @Test
+    fun touchTargetTokensMeet48DpMinimumWith8DpSpacing() {
+        assertEquals(48.dp, MinTouchTarget)
+        assertEquals(48.dp, FloatingControl.Size)
+        assertEquals(8.dp, MinTouchSpacing)
+        assertEquals(8.dp, FloatingControl.MinSpacing)
+    }
+
+    @Test
+    fun displayTypographyClampsAboveMaxDisplayFontScaleWhileBodyScales() {
+        assertEquals(1f, displayFontScaleFactor(1.0f), 0.0001f)
+        assertEquals(1f, displayFontScaleFactor(1.35f), 0.0001f)
+        assertEquals(1.35f / 2.0f, displayFontScaleFactor(2.0f), 0.0001f)
+
+        val base = brandTypography(
+            text = androidx.compose.ui.text.font.FontFamily.SansSerif,
+            numbers = androidx.compose.ui.text.font.FontFamily.Monospace,
+            fontScale = 1.0f,
+        )
+        val scaled200 = brandTypography(
+            text = androidx.compose.ui.text.font.FontFamily.SansSerif,
+            numbers = androidx.compose.ui.text.font.FontFamily.Monospace,
+            fontScale = 2.0f,
+        )
+        // At 2.0x system font scale, the effective rendered displayLarge sp * 2.0 caps at 84 * 1.35 = 113.4.
+        assertEquals(84f * TypographyLimits.MaxDisplayFontScale, scaled200.displayLarge.fontSize.value * 2.0f, 0.01f)
+        // Body styles keep their uncompensated sp value so the OS 2.0x font scale doubles them in full.
+        assertEquals(base.bodyMedium.fontSize.value, scaled200.bodyMedium.fontSize.value, 0.001f)
+    }
+
+    @Test
+    fun reduceMotionHelpersSkipTransitionsAndCoarsenLiveTickers() {
+        assertTrue(!shouldReduceMotion(reduceMotion = false, motionScaleFactor = 1f))
+        assertTrue(shouldReduceMotion(reduceMotion = true, motionScaleFactor = 1f))
+        assertTrue(shouldReduceMotion(reduceMotion = false, motionScaleFactor = 0f))
+        assertEquals(420, reduceMotionDurationMillis(420, reduceMotion = false))
+        assertEquals(0, reduceMotionDurationMillis(420, reduceMotion = true))
+        assertEquals(1000L, coarsenTickPeriodMs(1000L, reduceMotion = false))
+        assertEquals(10_000L, coarsenTickPeriodMs(1000L, reduceMotion = true))
+    }
+
+    @Test
+    fun valueDescriptionJoinsLabelReadingAndStateWithLocalisedSeparator() {
+        assertEquals(
+            "PM2.5, 12 µg/m³, Fair",
+            formatValueDescription(label = "PM2.5", value = "12", unit = "µg/m³", state = "Fair"),
+        )
+        assertEquals(
+            "Battery, 80 %",
+            formatValueDescription(label = "Battery", value = "80", unit = "%"),
+        )
+        assertEquals(
+            "PM2.5، 12 µg/m³، مقبول",
+            formatValueDescription(label = "PM2.5", value = "12", unit = "µg/m³", state = "مقبول", separator = "،"),
+        )
+    }
 }
