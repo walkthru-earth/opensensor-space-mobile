@@ -100,7 +100,7 @@ internal val settingsRepository: SettingsRepository by lazy { iosSettingsReposit
  * kept rows are shared. Built here, read only while public sensors is on and Real is chosen.
  */
 private val openAqFeed: OpenAqAggregatesFeed by lazy {
-    OpenAqAggregatesFeed(UrlSessionRangeEngine.create(allowsExpensive = true, allowsConstrained = true))
+    OpenAqAggregatesFeed(UrlSessionRangeEngine.create(allowsExpensive = true, allowsConstrained = true), blocks = IosArchive.feedBlocks)
 }
 
 /**

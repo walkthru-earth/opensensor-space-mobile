@@ -2,7 +2,10 @@ package earth.walkthru.aqsync.publicfeed
 
 import earth.walkthru.aqsync.data.history.parquet.FooterCache
 import earth.walkthru.aqsync.data.history.parquet.RangePolicy
+import earth.walkthru.aqsync.data.history.parquet.RangeSource
+import earth.walkthru.aqsync.net.BlockCache
 import earth.walkthru.aqsync.net.BodyLimit
+import earth.walkthru.aqsync.net.CachedRangeSource
 import earth.walkthru.aqsync.net.HttpRangeEngine
 import earth.walkthru.aqsync.net.HttpRangeException
 import earth.walkthru.aqsync.net.HttpRangeSource
@@ -31,14 +34,16 @@ import kotlin.time.Clock
  *   without `as_of` answers null.
  * - [cells] reads `cells/h3_res=<res>/data.parquet` through an [HttpRangeSource], with one
  *   [FooterCache] for the feed, keeps the daily rows of the 7 days ending at the partition date and
- *   folds them with [DailyCellFold]. The files hold daily rows only, so [FeedWindow.LAST_HOUR] answers
+ *   folds them with [DailyCellFold]. With [blocks] the source is a [CachedRangeSource] keyed by URL,
+ *   `as_of` and the manifest `generation`, so a later read of the same partition, also after a restart, takes the blocks from disk
+ *   with no range request. The files hold daily rows only, so [FeedWindow.LAST_HOUR] answers
  *   [CellsTable.EMPTY] without a request.
  * - The live files are one row group with no page index, so any read fetches the whole file. The daily
  *   rows of one `(res, as_of)` are therefore kept in memory, at most [MAX_RESOLUTIONS] resolutions and
  *   [budgetBytes], least recently used first out. The 24 hour and 7 day windows of one viewport and
  *   every later pan at that resolution read the network once, and `ranges` filters the kept rows.
- *   Concurrent callers for one key share one download. A failure is never kept. A new partition from
- *   [latest] drops every kept row, and [trim] gives them back on [MemoryPressure].
+ *   Concurrent callers for one key share one download. A failure is never kept. A new `as_of` or
+ *   `generation` from [latest] drops every kept row, and [trim] gives them back on [MemoryPressure].
  *
  * Transport, HTTP and Parquet failures propagate as exceptions; the caller decides what to show.
  */
@@ -48,6 +53,8 @@ class OpenAqAggregatesFeed(
     private val clock: Clock = Clock.System,
     policy: RangePolicy = RangePolicy.CELLULAR,
     budgetBytes: Long = DEFAULT_BUDGET_BYTES,
+    /** The disk block cache, or null to read every block from the network. */
+    private val blocks: BlockCache? = null,
 ) : PublicFeed,
     MemoryTrimmable {
     private val root = root.trimEnd('/')
@@ -55,14 +62,19 @@ class OpenAqAggregatesFeed(
     private val mutex = Mutex()
     private var cached: Pair<Long, FeedPartition?>? = null
 
-    /** Guards [daily], [inflight] and [generation]. Never held across a network read. */
+    /** Guards [daily], [inflight], [generation], [lastManifest] and [files]. Never held across a network read. */
     private val rowsLock = Mutex()
     private val daily = ByteBudgetLru<DailyKey, CellsTable>(budgetBytes) { _, table -> estimateBytes(table) }
     private val inflight = HashMap<DailyKey, CompletableDeferred<CellsTable>>()
 
     /** Bumped whenever [daily] is dropped, so a download that started before is not kept after. */
     private var generation = 0L
-    private var lastPartition: FeedPartition? = null
+
+    /** The partition and manifest `generation` last read. */
+    private var lastManifest: Pair<FeedPartition, String?>? = null
+
+    /** The manifest `generation` of the files, part of the block cache key with `as_of`. */
+    private var files: String? = null
 
     /** The resolutions whose daily rows are kept now. */
     suspend fun cachedResolutions(): Int = rowsLock.withLock { daily.size }
@@ -77,13 +89,18 @@ class OpenAqAggregatesFeed(
     override suspend fun latest(): FeedPartition? = mutex.withLock {
         val now = clock.now().toEpochMilliseconds()
         cached?.let { (at, partition) -> if (now - at in 0 until MANIFEST_TTL_MS) return@withLock partition }
-        val partition = readManifest().asOf?.let { FeedPartition(LocalDate.parse(it).toString(), 0) }
+        val manifest = readManifest()
+        val partition = manifest.asOf?.let { FeedPartition(LocalDate.parse(it).toString(), 0) }
         cached = now to partition
-        if (partition != null && partition != lastPartition) {
-            // A new generation replaces the files whole. Rows of the old one are never served again.
+        if (partition != null) {
+            // A new as_of or generation replaces the files whole. Rows of the old one are never served again.
             rowsLock.withLock {
-                if (lastPartition != null) clearRows()
-                lastPartition = partition
+                val seen = partition to manifest.generation
+                if (seen != lastManifest) {
+                    if (lastManifest != null) clearRows()
+                    lastManifest = seen
+                    files = manifest.generation
+                }
             }
         }
         partition
@@ -104,8 +121,10 @@ class OpenAqAggregatesFeed(
     private suspend fun dailyRows(key: DailyKey): CellsTable {
         while (true) {
             var owner = false
+            var startedFiles: String? = null
             val (deferred, startedAt) = rowsLock.withLock {
                 daily[key]?.let { return it }
+                startedFiles = files
                 val running = inflight[key]
                 if (running != null) {
                     running to generation
@@ -124,7 +143,7 @@ class OpenAqAggregatesFeed(
             }
             try {
                 val days = key.asOf.minus(DatePeriod(days = DAYS - 1))..key.asOf
-                val table = reader.readCells(HttpRangeSource(cellsUrl(key.res), engine), ranges = null, days = days)
+                val table = reader.readCells(source(key, startedFiles), ranges = null, days = days)
                 rowsLock.withLock {
                     if (inflight[key] === deferred) inflight.remove(key)
                     if (generation == startedAt) {
@@ -145,6 +164,13 @@ class OpenAqAggregatesFeed(
     private fun clearRows() {
         daily.clear()
         generation++
+    }
+
+    /** The cells file of [key], through the block cache keyed on `as_of` and the manifest generation [files]. */
+    private fun source(key: DailyKey, files: String?): RangeSource {
+        val url = cellsUrl(key.res)
+        val http = HttpRangeSource(url, engine)
+        return blocks?.let { CachedRangeSource(http, it, url, generation = "${key.asOf}\n${files.orEmpty()}") } ?: http
     }
 
     /** The URL of the cells file at [res]. */

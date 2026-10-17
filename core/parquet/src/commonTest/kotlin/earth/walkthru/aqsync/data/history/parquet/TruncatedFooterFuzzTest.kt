@@ -230,6 +230,8 @@ class TruncatedFooterFuzzTest {
             "parquet/v3/v3-max-groups-lz4.parquet",
             "parquet/v3/v3-empty-none.parquet",
             "geoparquet/pyarrow/pa-snappy-dict-v1.parquet",
+            "parquet/encodings/pyarrow-none-v2.parquet",
+            "parquet/encodings/duckdb-snappy.parquet",
         )
     }
 

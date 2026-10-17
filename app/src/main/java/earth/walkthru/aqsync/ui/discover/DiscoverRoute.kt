@@ -12,6 +12,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import earth.walkthru.aqsync.data.settings.AppSettings
 import earth.walkthru.aqsync.data.settings.DetailLevel
 import earth.walkthru.aqsync.data.settings.DiscoverStore
+import earth.walkthru.aqsync.net.BlockCache
 import earth.walkthru.aqsync.net.OkHttpRangeEngine
 import earth.walkthru.aqsync.publicfeed.OpenAqAggregatesFeed
 import earth.walkthru.aqsync.publicfeed.platformH3Grid
@@ -34,7 +35,7 @@ import javax.inject.Inject
 
 /** Owns the shared [DiscoverController] for the Discover entry, so it survives rotation. */
 @HiltViewModel
-class DiscoverViewModel @Inject constructor(store: DiscoverStore, settings: AppSettings) : ViewModel() {
+class DiscoverViewModel @Inject constructor(store: DiscoverStore, settings: AppSettings, blocks: BlockCache) : ViewModel() {
     val controller = DiscoverController(
         scope = viewModelScope,
         feed = bundledSampleFeed(),
@@ -43,7 +44,7 @@ class DiscoverViewModel @Inject constructor(store: DiscoverStore, settings: AppS
         timeZoneId = TimeZone.getDefault().id,
         now = System::currentTimeMillis,
         // Read only while public sensors is on and Real is chosen. Anonymous GETs, no identifiers.
-        liveFeed = OpenAqAggregatesFeed(OkHttpRangeEngine(publicFeedClient)),
+        liveFeed = OpenAqAggregatesFeed(OkHttpRangeEngine(publicFeedClient), blocks = blocks),
         saveSource = settings::setDiscoverSource,
     )
 

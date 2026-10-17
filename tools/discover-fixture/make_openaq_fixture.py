@@ -28,6 +28,10 @@ is deterministic. Four resolution 5 cells over ten days, 2026-09-29 to 2026-10-0
 - Accra: one station, only 09-29 to 10-01, all before the 7 days ending at as_of.
 - Lagos: humidity only, PM2.5 null every day.
 - Nairobi: PM10 on 10-05, PM2.5 on 10-07, a row on 10-08 with nothing measured.
+
+It also writes `openaq-aggregates-republished/cells/h3_res=5/data.parquet`, the same as_of under
+generation `fixture-0002` with Cairo's PM2.5 mean on 10-08 at 25.0, for the test of a file replaced
+in place.
 """
 from __future__ import annotations
 
@@ -44,6 +48,8 @@ OUT = REPO / "core/publicfeed/src/commonTest/fixtures/openaq-aggregates"
 RES = 5
 AS_OF = "2026-10-08"
 GENERATION = "fixture-0001"
+REPUBLISHED = REPO / "core/publicfeed/src/commonTest/fixtures/openaq-aggregates-republished"
+REPUBLISHED_GENERATION = "fixture-0002"
 
 PROPERTIES = [
     {"id": "pm25", "label": "PM2.5", "unit": "µg/m³", "category": "Air", "precision": 0.1},
@@ -89,11 +95,12 @@ def schema() -> pa.Schema:
     return pa.schema(fields)
 
 
-def main() -> None:
+def write_cells(source: list, generation: str, out: Path) -> tuple[Path, int]:
+    """[source] rows as the cells file under [out], with [generation] in the key value metadata."""
     s = schema()
     columns: dict[str, list] = {f.name: [] for f in s}
     rows = []
-    for cell, day, devices, stats in ROWS:
+    for cell, day, devices, stats in source:
         month, dom = day if isinstance(day, tuple) else (10, day)
         rows.append((h3.str_to_int(CELLS[cell]), date(2026, month, dom), devices, stats))
     rows.sort(key=lambda r: (r[0], r[1]))
@@ -114,12 +121,12 @@ def main() -> None:
         b"dataset": b"cells",
         b"window": b"1d",
         b"h3_res": str(RES).encode(),
-        b"generation": GENERATION.encode(),
+        b"generation": generation.encode(),
         b"crowd_rule": b"none, public licensed stations",
         b"dictionary": json.dumps(dictionary, ensure_ascii=False).encode(),
         b"generated_by": b"tools/discover-fixture/make_openaq_fixture.py",
     })
-    path = OUT / f"cells/h3_res={RES}/data.parquet"
+    path = out / f"cells/h3_res={RES}/data.parquet"
     path.parent.mkdir(parents=True, exist_ok=True)
     pq.write_table(
         table,
@@ -131,16 +138,24 @@ def main() -> None:
         write_page_index=False,
         data_page_version="1.0",
     )
+    return path, len(rows)
+
+
+def main() -> None:
+    path, rows = write_cells(ROWS, GENERATION, OUT)
     manifest = {
         "generation": GENERATION,
         "derive_version": "openaq-aggregates/v1",
         "as_of": AS_OF,
         "stations": 6,
-        "outputs": [{"file": f"cells/h3_res={RES}/data.parquet", "bytes": path.stat().st_size, "rows": len(rows)}],
+        "outputs": [{"file": f"cells/h3_res={RES}/data.parquet", "bytes": path.stat().st_size, "rows": rows}],
         "cell_properties": PROPERTIES,
     }
     (OUT / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
-    print(f"{path.relative_to(REPO)}  rows={len(rows)}  bytes={path.stat().st_size}")
+    print(f"{path.relative_to(REPO)}  rows={rows}  bytes={path.stat().st_size}")
+    republished = [(c, d, n, {**s, "pm25": (2, 25.0, 12.0, 31.0)} if (c, d) == ("cairo", 8) else s) for c, d, n, s in ROWS]
+    path, rows = write_cells(republished, REPUBLISHED_GENERATION, REPUBLISHED)
+    print(f"{path.relative_to(REPO)}  rows={rows}  bytes={path.stat().st_size}")
     for name, cell in CELLS.items():
         print(f"{name} {h3.str_to_int(cell)}")
 

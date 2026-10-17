@@ -1,9 +1,9 @@
 # Parquet — the app's own reader and writer
 
 **Scope:** `:core:parquet`: what the reader accepts and refuses, the writer, GeoParquet 2.0, codecs, storage seams, fixtures and the oracles that prove them.
-**Code:** `core/parquet/src/commonMain/…/data/history/parquet/` (JVM and iOS): `ParquetFile.kt` (`ParquetFile`), `ParquetReader.kt` (`ParquetReader`, `ScanRequest`, `FooterCache`), `ColumnDecoder.kt` (the one-pass chunk decoder), `PrimitiveColumn.kt` (`PrimitiveColumn`, `ColumnBatch`), `PageIndex.kt`, `RangeSource.kt` (`RangeSource`, `ByteView`, `SourceId`, `RangePolicy`, `MemoryRangeSource`), `RangePlanner.kt` (`RangePlanner`, `CoalescingRangeSource`), `ByteReader.kt`, `Bytes.kt`, `ParquetFooterParser.kt`, `ParquetMetadata.kt`, `ColumnValues.kt`, `ParquetWriter.kt` (`ParquetSink`), `ThriftCompact.kt` / `ThriftCompactWriter.kt`, `Lz4Block.kt`, `ParquetCodecs.kt` (SPI, Snappy, `expect` gzip), `Geometry.kt` (WKB), `GeoParquetMetadata.kt`, `LocalFile.kt`. `src/jvmMain`: `LocalFileReader` (positional `FileChannel` reads), `LocalRangeSource` (the same reads), gzip via `java.util.zip`, `ParquetWriter(OutputStream, …)`. `src/iosMain`: `LocalFileReader` (POSIX `pread`), `LocalRangeSource` (the same reads), gzip via the system zlib. `:app` `data/history/parquet/AppParquetCodecs.kt` (ZSTD via `zstd-jni`).
-**Fixtures:** `core/parquet/src/test/resources/parquet/{device,v3,expected.json}` and `…/geoparquet/{pyarrow,duckdb,expected.json}`, `…/parquet/discover/` (page index) (published as `:core:parquet` test fixtures, see [Fixtures and oracles](#fixtures-and-oracles)).
-**Tools:** `tools/make_parquet_fixtures.py`, `tools/make_geoparquet_fixtures.py`, `tools/validate_parquet_samples.py` — run as `cd ../aq-parquet && pixi run python ../opensensor-space-android/tools/<script>`.
+**Code:** `core/parquet/src/commonMain/…/data/history/parquet/` (JVM and iOS): `ParquetFile.kt` (`ParquetFile`), `ParquetReader.kt` (`ParquetReader`, `ScanRequest`, `FooterCache`), `ColumnDecoder.kt` (the one-pass chunk decoder), `ValueDecoders.kt` (DELTA_BINARY_PACKED and BYTE_STREAM_SPLIT), `PrimitiveColumn.kt` (`PrimitiveColumn`, `ColumnBatch`), `PageIndex.kt`, `RangeSource.kt` (`RangeSource`, `ByteView`, `SourceId`, `RangePolicy`, `MemoryRangeSource`), `RangePlanner.kt` (`RangePlanner`, `CoalescingRangeSource`), `ByteReader.kt`, `Bytes.kt`, `ParquetFooterParser.kt`, `ParquetMetadata.kt`, `ColumnValues.kt`, `ParquetWriter.kt` (`ParquetSink`), `ThriftCompact.kt` / `ThriftCompactWriter.kt`, `Lz4Block.kt`, `ParquetCodecs.kt` (SPI, Snappy, `expect` gzip), `Geometry.kt` (WKB), `GeoParquetMetadata.kt`, `LocalFile.kt`. `src/jvmMain`: `LocalFileReader` (positional `FileChannel` reads), `LocalRangeSource` (the same reads), gzip via `java.util.zip`, `ParquetWriter(OutputStream, …)`. `src/iosMain`: `LocalFileReader` (POSIX `pread`), `LocalRangeSource` (the same reads), gzip via the system zlib. `:app` `data/history/parquet/AppParquetCodecs.kt` (ZSTD via `zstd-jni`).
+**Fixtures:** `core/parquet/src/test/resources/parquet/{device,v3,expected.json}` and `…/geoparquet/{pyarrow,duckdb,expected.json}`, `…/parquet/discover/` (page index), `…/parquet/encodings/` (DELTA and BYTE_STREAM_SPLIT) (published as `:core:parquet` test fixtures, see [Fixtures and oracles](#fixtures-and-oracles)).
+**Tools:** `tools/make_parquet_fixtures.py`, `tools/make_geoparquet_fixtures.py`, `tools/make_encoding_fixtures.py`, `tools/validate_parquet_samples.py` — run as `cd ../aq-parquet && pixi run python ../opensensor-space-android/tools/<script>`.
 **Related:** [history-pipeline.md](history-pipeline.md) (who reads/writes), [sync-engine.md](sync-engine.md) (PAR1/CRC verification is in `:core:protocol`, not here).
 
 ## Why an own reader
@@ -58,9 +58,17 @@ Bytes reach the decoder through two narrow seams, a blocking `ByteReader` and a 
   5.5.0 on Android and the JVM, `NSURLSession` on iOS). The tail is a suffix range, later ranges carry
   `If-Range` with a strong ETag, and a 200 for a changed object raises `SourceChangedException`. It
   sends `Accept-Encoding: identity`, skips the local HTTP cache and logs nothing. Issues #60 and #61
-  are closed, but nothing outside `:core:net` tests constructs `HttpRangeSource` or an engine yet. The
-  Discover map still reads the bundled sample, and wiring the live feed is open work. No disk byte
-  block cache (`BlockCache`) exists in code, it is planned with the live feed.
+  are closed. `OpenAqAggregatesFeed` builds one per feed file.
+- `CachedRangeSource` (`:core:net`, #94) serves a `RangeSource` through aligned 64 KiB blocks kept in a
+  `BlockCache` on disk. A cached block is read with no request. Missing blocks are fetched in runs of
+  consecutive blocks, one range per run. The key is the URL and a generation, the manifest's `as_of`
+  and `generation` in the feed. A small meta file keeps the size and ETag, so a second open makes no
+  request at all. Within one key nothing is revalidated, so a writer that replaces a file must change
+  the generation. When upstream reports another object, every block of the key is dropped and the
+  read throws `SourceChangedException`, so the reader starts again on the new object. An object
+  without a strong ETag bypasses the cache. `BlockCache` evicts the least recently used file before
+  each write so it stays under its quota, and writes nothing while the quota is 0 or unknown. It adds
+  no request and no endpoint of its own.
 - `ParquetFileMetadata.longStatistics(column)` returns the footer min, max and null count of an INT32
   or INT64 column per row group without reading a page. `rowGroupsOverlapping(column, ranges)` keeps the
   row groups whose `[min, max]` meets any inclusive `LongRange` (H3 descendant ranges in W12). A chunk
@@ -83,16 +91,26 @@ flowchart LR
   P --> V1[Data Page V1]
   P --> V2[Data Page V2]
   P --> DP[Dictionary page + RLE_DICTIONARY]
-  V1 & V2 & DP --> E[PLAIN · RLE def levels max 1]
+  P --> DE[DELTA_BINARY_PACKED on INT32 · INT64]
+  P --> BS[BYTE_STREAM_SPLIT on INT32 · INT64 · FLOAT · DOUBLE]
+  V1 & V2 & DP & DE & BS --> E[PLAIN · RLE def levels max 1]
   E --> C[codec: UNCOMPRESSED · LZ4_RAW · SNAPPY · GZIP · ZSTD via SPI]
   C --> TY[INT32 · INT64 · FLOAT · DOUBLE · BYTE_ARRAY]
   TY --> L[logical: TIMESTAMP · GEOMETRY · GEOGRAPHY]
 ```
 
 Refused with a typed `ParquetFormatException` naming the feature: repetition levels / nested
-schemas, DELTA / BYTE_STREAM_SPLIT encodings, BROTLI / LZO, BOOLEAN / INT96 / FIXED_LEN_BYTE_ARRAY.
+schemas, DELTA_LENGTH_BYTE_ARRAY / DELTA_BYTE_ARRAY and other encodings, BROTLI / LZO, BOOLEAN / INT96 / FIXED_LEN_BYTE_ARRAY.
 Footer statistics are read (`min_value`/`max_value`, exact flags, `null_count`), including the v6
 firmware's per-row-group statistics (the index takes spans from them without decoding).
+
+DELTA_BINARY_PACKED is read lazily, one miniblock at a time, and every delta is summed in 64 bits.
+PyArrow wraps INT32 deltas at 32 bits, DuckDB takes them in 64 bits and packs 33 bit miniblocks when
+a value jumps across the INT32 range. The reader accepts both and returns the same INT32 values.
+PyArrow refuses the DuckDB form, so a writer for PyArrow readers should wrap at 32 bits. Bit widths
+of miniblocks past the last value are not checked, as the spec allows. BYTE_STREAM_SPLIT works for 4
+and 8 byte values. A malformed header, a width over 64 or a truncated miniblock is a
+`ParquetFormatException`.
 
 ## Codecs (`ParquetCodecs` SPI)
 
@@ -210,6 +228,7 @@ files are unchanged; import UI and map are separate decisions (D4/D5).
 | `parquet/v3/` | 12 firmware writer fixtures (up to 8 row groups, statistics, `TIMESTAMP(NANOS, UTC)`) | the firmware's own fixture writers, compiled by the script | same `expected.json` |
 | `geoparquet/pyarrow/` + `duckdb/` | 20 files: PyArrow 25 `{none,snappy,gzip,zstd} × {plain,dict} × {page v1,v2}` + native-only + multipage; DuckDB 1.5.5 `GEOPARQUET_VERSION 'V1'` and `'V2'` | `make_geoparquet_fixtures.py` (PyArrow + DuckDB) | `expected.json`; decoded cell-for-cell |
 | `parquet/discover/` | `cells-24h-res7-pageindex.parquet`, one Discover sample file (190 rows, one row group sorted by `h3_index`, 16-row pages, page index) | `tools/discover-fixture/make_discover_sample.py` (PyArrow 25.0.1) | per-page `h3_index` bounds and null counts from PyArrow in `PageIndexTest` |
+| `parquet/encodings/` | 7 files of one seeded 500 row table (2 row groups, 256 byte pages, page index): PyArrow `{none,lz4_raw} × {page v1,v2}` with DELTA_BINARY_PACKED on integers and BYTE_STREAM_SPLIT on floats and two integer columns, a one row PyArrow file, DuckDB `PARQUET_VERSION V2` uncompressed and SNAPPY | `make_encoding_fixtures.py` (PyArrow + DuckDB) | `expected.json`, footer encodings, null counts and an FNV-1a 64 digest of every value's bits, checked by `EncodingFixtureTest` with full reads and pruned scans |
 | `RealArchiveTest` (`:core:history`) | sweeps **all 766 real files** when `../aq-parquet` is a sibling (67 272 rows, 58 868 column chunks, 136 statistics cross-checks, 0.2 s); skips otherwise | — | footer statistics vs decoded rows |
 
 The fixtures live once in `core/parquet/src/test/resources`. The build publishes that directory as
@@ -223,7 +242,7 @@ directory on the simulator (`SIMCTL_CHILD_PARQUET_FIXTURES`), like `:core:parque
 unit-test resources. Never copy the files into another module.
 
 The oracle tests (`ParquetFileTest`, `GeoParquetFileTest`, `ParquetWriterTest`, `ByteReaderTest`,
-`GzipTest`, `PageIndexTest`) and the range tests (`RangePlannerTest`, `LocalRangeSourceTest`,
+`GzipTest`, `PageIndexTest`, `EncodingFixtureTest`, `ValueDecodersTest`) and the range tests (`RangePlannerTest`, `LocalRangeSourceTest`,
 `TruncatedFooterFuzzTest`, truncated and corrupted files through both readers) live in `commonTest` and run on the JVM (`verify`) and on the iOS simulator (`verifyIos`).
 The JVM loads fixtures from the classpath. The simulator test binary reads them straight from the
 checkout through `PARQUET_FIXTURES`, which the build passes as `SIMCTL_CHILD_PARQUET_FIXTURES`. iOS

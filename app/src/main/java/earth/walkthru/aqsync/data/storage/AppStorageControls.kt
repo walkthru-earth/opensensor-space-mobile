@@ -10,6 +10,7 @@ import earth.walkthru.aqsync.data.history.LegacyFileCleanup
 import earth.walkthru.aqsync.data.history.UtcDayRange
 import earth.walkthru.aqsync.data.sync.ArchiveMutationGate
 import earth.walkthru.aqsync.data.sync.WriterLeases
+import earth.walkthru.aqsync.net.BlockCache
 import earth.walkthru.aqsync.storage.DerivedQuota
 import earth.walkthru.aqsync.storage.StorageBudget
 import earth.walkthru.aqsync.storage.StorageClass
@@ -27,13 +28,14 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 /**
- * The Settings Storage card on Android (#61). It clears only the derived day files and the map tiles,
- * and removes old format sensor files from the phone through [LegacyFileCleanup] when the user asks.
- * Sync skips the removed files until the user clears [pruned] with Download again.
+ * The Settings Storage card on Android (#61). It clears only the derived day files, the feed blocks and
+ * the map tiles, and removes old format sensor files from the phone through [LegacyFileCleanup] when the
+ * user asks. Sync skips the removed files until the user clears [pruned] with Download again.
  */
 class AppStorageControls @Inject constructor(
     private val budget: StorageBudget,
     private val quota: DerivedQuota,
+    private val blocks: BlockCache,
     store: ArchiveStore,
     index: ArchiveIndex,
     roots: StorageRoots,
@@ -69,6 +71,7 @@ class AppStorageControls @Inject constructor(
 
     override suspend fun clearHistoryCache() {
         withContext(io) { quota.clear() }
+        blocks.clear()
     }
 
     override suspend fun clearMapCache() = MapCache.clear()

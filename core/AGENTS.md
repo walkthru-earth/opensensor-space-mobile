@@ -6,7 +6,8 @@ implements the reader/writer and codec SPI; `history/` owns metrics, indexing,
 aggregation and presentation-ready analysis; `publicfeed/` owns the Discover feed
 port, H3 and the viewport cover; `units/` owns display units; `airquality/` owns
 the WHO 2021 scales and palette. `net/` owns HTTP range reads (`HttpRangeSource`, OkHttp
-on Android and the JVM, `NSURLSession` on iOS). `archive/` owns the archive layout, verifier,
+on Android and the JVM, `NSURLSession` on iOS) and the disk block cache (`CachedRangeSource`,
+`BlockCache`, #94). `archive/` owns the archive layout, verifier,
 records and the `ArchiveStore` and `ArchiveIndex` ports. `storage/` owns `StorageClass`,
 `StorageRoots`, `AtomicFiles` (no-replace commit, F_FULLFSYNC on iOS, directory sync),
 `StorageBudget`, `StorageTree`, `RetentionPolicy` with the derived `QuotaEnforcer`, and
