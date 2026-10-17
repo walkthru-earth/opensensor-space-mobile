@@ -27,7 +27,7 @@ import javax.inject.Singleton
 class HistoryIndexer @Inject constructor(
     archive: FileArchive,
     archivedFileDao: ArchivedFileDao,
-    gate: ArchiveMutationGate = ArchiveMutationGate(),
+    gate: ArchiveMutationGate,
 ) {
     val clockAnchors = FileClockAnchorStore(File(archive.root.parentFile, "clock-anchors"))
 

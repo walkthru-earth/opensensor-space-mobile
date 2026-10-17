@@ -13,6 +13,7 @@ import earth.walkthru.aqsync.data.local.database.DerivedDayDao
 import earth.walkthru.aqsync.data.local.database.MetricBucket
 import earth.walkthru.aqsync.data.local.database.MetricBucketDao
 import earth.walkthru.aqsync.data.local.database.writerSql
+import earth.walkthru.aqsync.data.sync.ArchiveMutationGate
 import earth.walkthru.aqsync.data.sync.FileArchive
 import earth.walkthru.aqsync.storage.AtomicFiles
 import earth.walkthru.aqsync.storage.DerivedQuota
@@ -52,7 +53,7 @@ class HistoryDeriverTest {
             val files = InMemoryFiles()
             val buckets = InMemoryBuckets()
             val days = InMemoryDays()
-            val indexer = HistoryIndexer(archive, files)
+            val indexer = HistoryIndexer(archive, files, ArchiveMutationGate())
             val store = DerivedStore(tmp)
             val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp))
             val name = "station=$station/day=2026-09-17/raw.parquet"
@@ -106,7 +107,7 @@ class HistoryDeriverTest {
             val archive = FileArchive(tmp)
             val files = InMemoryFiles()
             val days = InMemoryDays()
-            val indexer = HistoryIndexer(archive, files)
+            val indexer = HistoryIndexer(archive, files, ArchiveMutationGate())
             val store = DerivedStore(tmp)
             val deriver = HistoryDeriver(archive, files, InMemoryBuckets(), days, store, indexer, derivedQuota(tmp))
             val name = "station=$station/day=2026-09-17/raw.parquet"
@@ -167,7 +168,7 @@ class HistoryDeriverTest {
                 val files = InMemoryFiles()
                 val buckets = InMemoryBuckets()
                 val days = InMemoryDays()
-                val indexer = HistoryIndexer(archive, files)
+                val indexer = HistoryIndexer(archive, files, ArchiveMutationGate())
                 val store = DerivedStore(tmp, atomic)
                 val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp))
                 val name = "station=$station/day=2026-09-17/raw.parquet"
@@ -199,7 +200,7 @@ class HistoryDeriverTest {
         val files = InMemoryFiles()
         val buckets = InMemoryBuckets()
         val days = InMemoryDays()
-        val indexer = HistoryIndexer(archive, files)
+        val indexer = HistoryIndexer(archive, files, ArchiveMutationGate())
         val store = DerivedStore(tmp)
         val quota = derivedQuota(tmp)
         val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, quota)
@@ -295,7 +296,7 @@ class HistoryDeriverTest {
             val files = InMemoryFiles()
             val buckets = InMemoryBuckets()
             val days = InMemoryDays()
-            val indexer = HistoryIndexer(archive, files)
+            val indexer = HistoryIndexer(archive, files, ArchiveMutationGate())
             val store = DerivedStore(tmp)
             var backfills = 0
             val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp)) { backfills++ }
@@ -342,7 +343,7 @@ class HistoryDeriverTest {
             val files = InMemoryFiles()
             val buckets = InMemoryBuckets()
             val days = InMemoryDays()
-            val indexer = HistoryIndexer(archive, files)
+            val indexer = HistoryIndexer(archive, files, ArchiveMutationGate())
             val store = DerivedStore(tmp)
             val quota = derivedQuota(tmp)
             val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, quota)
@@ -363,7 +364,7 @@ class HistoryDeriverTest {
             assertEquals(0L, files.rows.single().utcRows)
             assertEquals(utcNs, files.rows.single().estLastUtcNs)
             assertEquals(0, deriver.deriveStale().daysRebuilt)
-            val restarted = HistoryIndexer(archive, files)
+            val restarted = HistoryIndexer(archive, files, ArchiveMutationGate())
             assertEquals(0, restarted.estimateTimes())
             assertEquals(utcNs, files.rows.single().estLastUtcNs)
             for (day in days.rows) {
@@ -396,7 +397,7 @@ class HistoryDeriverTest {
             val files = db.archivedFileDao()
             val days = db.derivedDayDao()
             val buckets = db.metricBucketDao()
-            val indexer = HistoryIndexer(archive, files)
+            val indexer = HistoryIndexer(archive, files, ArchiveMutationGate())
             val store = DerivedStore(tmp)
             val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp))
             val name = "station=$station/unsynced/boot=e452563e96c72ca057a48924550779b6/raw.parquet"
@@ -456,7 +457,7 @@ class HistoryDeriverTest {
             val files = InMemoryFiles()
             val buckets = InMemoryBuckets()
             val days = InMemoryDays()
-            val indexer = HistoryIndexer(archive, files)
+            val indexer = HistoryIndexer(archive, files, ArchiveMutationGate())
             val store = DerivedStore(tmp)
             val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp))
             val name = "station=$station/unsynced/boot=00000000000000000000000000000000/raw.parquet"
@@ -471,7 +472,7 @@ class HistoryDeriverTest {
 
             // Restart reads the exact durable acknowledgement, while the older archive row and
             // derived caches stay untouched until a cancellable pass explicitly reconciles them.
-            val restarted = HistoryIndexer(archive, files)
+            val restarted = HistoryIndexer(archive, files, ArchiveMutationGate())
             val anchor = restarted.clockAnchors.anchors(station).single()
             assertEquals(before.bootId, anchor.boot)
             assertEquals(utcNs, anchor.utcNs)

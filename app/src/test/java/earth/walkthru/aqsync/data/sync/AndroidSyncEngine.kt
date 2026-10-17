@@ -21,7 +21,7 @@ fun androidSyncEngine(
 ): SyncEngine = SyncEngine(
     store = FileArchiveStore(archive, Dispatchers.Unconfined),
     index = RoomArchiveIndex(dao),
-    indexer = HistoryIndexer(archive, dao).asRecordIndexer(archive),
+    indexer = HistoryIndexer(archive, dao, ArchiveMutationGate()).asRecordIndexer(archive),
     windowRetryBackoffMs = windowRetryBackoffMs,
     clock = clock,
     io = io,

@@ -180,7 +180,7 @@ class DeviceLinkOwner @Inject constructor(
     @IoDispatcher private val io: CoroutineDispatcher,
     private val clock: WallClock,
     /** Files removed in Settings, which the plan shows as removed instead of to sync. */
-    private val pruned: PrunedFiles = PrunedFiles.None,
+    private val pruned: PrunedFiles,
 ) {
     /**
      * Child of the process scope: one failed child never cancels its siblings, and cancelling the
