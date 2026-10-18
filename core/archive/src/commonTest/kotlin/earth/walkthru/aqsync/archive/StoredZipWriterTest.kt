@@ -194,15 +194,19 @@ class StoredZipWriterTest {
     }
 }
 
-/** An [ExportSpace] in memory that records which runs were created and deleted. */
+/** An [ExportSpace] in memory that records which runs were created, released and deleted. */
 class MemoryExportSpace : ExportSpace {
     inner class Run(val id: Int) : ExportRun {
         val files = LinkedHashMap<String, MemorySink>()
         var deleted = false
+        var released = false
         override fun path(name: String) = "mem/$id/$name"
         override fun create(name: String): ExportSink {
             require(name !in files) { "exists" }
             return MemorySink().also { files[name] = it }
+        }
+        override fun release() {
+            released = true
         }
         override fun delete() {
             deleted = true
@@ -216,10 +220,7 @@ class MemoryExportSpace : ExportSpace {
 
     override fun freeBytes(): Long? = free
 
-    override fun newRun(): ExportRun {
-        runs.forEach { it.deleted = true }
-        return Run(runs.size).also { runs += it }
-    }
+    override fun newRun(): ExportRun = Run(runs.size).also { runs += it }
 }
 
 class ArchiveExportTest {
@@ -272,12 +273,13 @@ class ArchiveExportTest {
     }
 
     @Test
-    fun aZipIsStagedInAFreshRunAndTheOldRunIsSwept() {
+    fun aZipIsStagedInAFreshRunAndTheOldRunStays() {
         val space = MemoryExportSpace()
         ArchiveExport.stageZip(space, listOf(entry("A/x.parquet")), "one.zip")
         val staged = ArchiveExport.stageZip(space, listOf(entry("A/x.parquet"), entry("B/x.parquet")), "two.zip")
         assertEquals("mem/1/two.zip", staged.path)
-        assertTrue(space.runs[0].deleted)
+        assertFalse(space.runs[0].deleted)
+        assertFalse(space.runs[0].released)
         val parsed = ParsedZip(space.runs[1].files.getValue("two.zip").bytes())
         assertEquals(listOf("A/x.parquet", "B/x.parquet"), parsed.entries.map { it.name })
     }

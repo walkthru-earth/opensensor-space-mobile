@@ -265,7 +265,7 @@ zip stays the byte-exact mirror and the derived zip is the small analysis-ready 
 | --- | --- | --- |
 | Durable | `archive/`, the Room database, `clock-anchors/` (iOS `SensorArchive/`, `SensorArchive-clock-anchors/`) | never deletes |
 | Rebuildable | `cacheDir/derived/v1/` (iOS `Library/Caches/derived/v1/`), the map tile cache `cacheDir/maplibre-cache.db`, the feed block cache `cacheDir/feed-blocks/` (iOS `Library/Caches/feed-blocks/`) | old derived temps, a `derived/` left in `filesDir` or Application Support by an older build (removed whole), then the derived quota |
-| Scratch | `archive-partial/`, `storage-tmp/`, `cache/export/` (iOS `tmp/opensensor-export/`) | temps after 1 h (derived builds stream into theirs), export runs after 1 h, partials of an unknown station after 1 h, any partial after 30 days |
+| Scratch | `archive-partial/`, `storage-tmp/`, `cache/export/` (iOS `tmp/opensensor-export/`) | temps after 1 h (derived builds stream into theirs), released export runs after 1 h (a leased run stays, `ExportRuns`), partials of an unknown station after 1 h, any partial after 30 days |
 | Settings | `datastore/` | never deletes |
 
 Every writer goes through `AtomicFiles`. Temps are `storage-tmp/.aqtmp-*` beside the roots, on the

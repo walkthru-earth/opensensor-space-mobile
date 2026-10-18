@@ -3,6 +3,7 @@ package earth.walkthru.aqsync.storage
 import earth.walkthru.aqsync.archive.ArchiveKey
 import earth.walkthru.aqsync.archive.ArchiveLayout
 import earth.walkthru.aqsync.archive.ArchiveRecord
+import earth.walkthru.aqsync.archive.ExportRuns
 import earth.walkthru.aqsync.archive.PrunedFile
 import earth.walkthru.aqsync.archive.PrunedFiles
 import earth.walkthru.aqsync.data.protocol.ParquetVerify
@@ -58,9 +59,12 @@ class StorageJanitorTest {
             entries[path] = true to modified
         }
 
+        /** Runs on each listing of a directory, after the listing is taken. */
+        var onList: (String) -> Unit = {}
+
         override fun list(dir: String): List<StorageEntry> = entries.filterKeys { it.startsWith("$dir/") }.map { (path, e) ->
             StorageEntry(path.removePrefix("$dir/"), e.first, sizes[path] ?: 0L, e.second)
-        }
+        }.also { onList(dir) }
 
         override fun delete(path: String) {
             deleted += path
@@ -154,6 +158,51 @@ class StorageJanitorTest {
         assertEquals(StorageJanitor.ADOPTED_SOURCE, record.sourceDevice)
         assertNull(index.get(broken))
         assertTrue(ArchiveLayout.finalPath(broken) in store.files)
+    }
+
+    @Test
+    fun aLeasedExportRunStaysPastTheAgeLimitAndAReleasedOneGoes() = runTest {
+        val tree = FakeTree()
+        val exports = "$base/cache/export"
+        val leased = "run-161-leased"
+        val released = "run-161-released"
+        for (run in listOf(leased, released)) {
+            tree.dir("$exports/$run", now - 2 * ExportRuns.MAX_AGE_MS)
+            tree.file("$exports/$run/a.zip", now - 2 * ExportRuns.MAX_AGE_MS)
+        }
+        ExportRuns.lease(leased)
+        val report = try {
+            janitor(tree, MemoryArchiveStore(), MemoryArchiveIndex(), testScheduler).run()
+        } finally {
+            ExportRuns.release(leased)
+        }
+        assertEquals(1, report.exportsSwept)
+        assertEquals(listOf("$exports/$released"), tree.deleted)
+        assertTrue("$exports/$leased/a.zip" in tree.entries)
+    }
+
+    @Test
+    fun anExportRunReleasedDuringTheSweepKeepsItsFreshTime() = runTest {
+        val tree = FakeTree()
+        val exports = "$base/cache/export"
+        val run = "run-161-handover"
+        tree.dir("$exports/$run", now - 2 * ExportRuns.MAX_AGE_MS)
+        ExportRuns.lease(run)
+        var listings = 0
+        // The chooser opens right after the first listing. The release refreshes the time, then ends the lease.
+        tree.onList = { dir ->
+            if (dir == exports && listings++ == 0) {
+                tree.dir("$exports/$run", now)
+                ExportRuns.release(run)
+            }
+        }
+        try {
+            val report = janitor(tree, MemoryArchiveStore(), MemoryArchiveIndex(), testScheduler).run()
+            assertEquals(0, report.exportsSwept)
+            assertTrue(tree.deleted.isEmpty())
+        } finally {
+            ExportRuns.release(run)
+        }
     }
 
     @Test

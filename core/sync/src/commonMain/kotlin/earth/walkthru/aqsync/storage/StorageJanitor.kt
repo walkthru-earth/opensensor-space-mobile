@@ -6,6 +6,7 @@ import earth.walkthru.aqsync.archive.ArchiveLayout
 import earth.walkthru.aqsync.archive.ArchiveRecord
 import earth.walkthru.aqsync.archive.ArchiveStore
 import earth.walkthru.aqsync.archive.ArchiveVerifier
+import earth.walkthru.aqsync.archive.ExportRuns
 import earth.walkthru.aqsync.archive.PrunedFiles
 import earth.walkthru.aqsync.data.protocol.ParquetVerify
 import earth.walkthru.aqsync.data.protocol.Sha256
@@ -24,7 +25,7 @@ import kotlinx.coroutines.withContext
  * is nothing to do.
  *
  * 1. Temp files of [AtomicFiles] older than [TEMP_AGE_MS], and the older builds' derived temps.
- * 2. Export runs older than [EXPORT_AGE_MS].
+ * 2. Released export runs older than [ExportRuns.MAX_AGE_MS]. A run a live export still leases stays.
  * 3. Partials of a station the phone does not know, after [UNKNOWN_STATION_AGE_MS], and any partial
  *    untouched for [STALE_PARTIAL_AGE_MS]. A fresh partial of a known station is kept for resume.
  * 4. Final files without an index record, left by a crash between the commit and the record. Each is
@@ -115,12 +116,18 @@ class StorageJanitor(
         }
     }
 
+    /**
+     * The policy of [ExportRuns], shared with every export space. The first pass checks the leases,
+     * then the times come from a second listing, since a run released in between has a fresh time by then.
+     */
     private suspend fun sweepExports(now: Long) {
         val dir = roots[StorageRole.Exports] ?: return
-        for (entry in list(dir)) {
-            if ('/' in entry.path || !entry.path.startsWith(EXPORT_RUN_PREFIX)) continue
-            if (now - entry.modifiedEpochMs >= EXPORT_AGE_MS) {
-                if (sweep("$dir/${entry.path}")) report = report.copy(exportsSwept = report.exportsSwept + 1)
+        val old = list(dir).filter { ExportRuns.isExpired(it.path, now) { it.modifiedEpochMs } }.map { it.path }
+        if (old.isEmpty()) return
+        val fresh = list(dir).associate { it.path to it.modifiedEpochMs }
+        for (run in old) {
+            if (ExportRuns.isExpired(run, now) { fresh[run] }) {
+                if (sweep("$dir/$run")) report = report.copy(exportsSwept = report.exportsSwept + 1)
             }
         }
     }
@@ -279,9 +286,6 @@ class StorageJanitor(
         /** A temp file this old belongs to no live write. Derived builds stream into theirs for minutes. */
         const val TEMP_AGE_MS: Long = 60L * 60_000L
 
-        /** An export run this old has left the share sheet. */
-        const val EXPORT_AGE_MS: Long = 60L * 60_000L
-
         /** A partial of a station the phone does not know is kept this long, in case its first sync is running. */
         const val UNKNOWN_STATION_AGE_MS: Long = 60L * 60_000L
 
@@ -291,7 +295,6 @@ class StorageJanitor(
         /** `sourceDevice` of a record the janitor wrote for an orphan final. */
         const val ADOPTED_SOURCE: String = "adopted"
 
-        private const val EXPORT_RUN_PREFIX = "run-"
         private const val LEGACY_DERIVED_PREFIX = ".derived-"
         private val LEGACY_UUID_TEMP = Regex(""".+\.[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\.tmp$""")
     }

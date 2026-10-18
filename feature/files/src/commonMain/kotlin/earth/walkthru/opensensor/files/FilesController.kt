@@ -6,6 +6,7 @@ import earth.walkthru.aqsync.archive.ArchiveRecord
 import earth.walkthru.aqsync.archive.ArchiveStore
 import earth.walkthru.aqsync.archive.ExportEntry
 import earth.walkthru.aqsync.archive.ExportRun
+import earth.walkthru.aqsync.archive.ExportRuns
 import earth.walkthru.aqsync.archive.ExportSink
 import earth.walkthru.aqsync.archive.ExportSpace
 import earth.walkthru.aqsync.archive.StagedFile
@@ -46,7 +47,7 @@ enum class ShareKind { FILE, FILES, ARCHIVE }
 /**
  * The platform share sheet and save picker. Each call returns once the sheet closed, true when the
  * staged copies may be removed now. Android returns false from [share], its chooser gives no close
- * signal and a target may still be reading, so the next export removes the run instead.
+ * signal and a target may still be reading, so the run is released to the age sweep instead.
  */
 interface ExportPresenter {
     suspend fun share(files: List<StagedFile>, kind: ShareKind): Boolean
@@ -83,7 +84,8 @@ data class FilesState(
  * The archive side of the Files screen, the same on Android and iOS. Lists the verified files and
  * stages every share through `:core:archive` ([ArchiveExport]) into a fresh run of [space]. A zip save
  * streams into the picked document when the platform allows ([ExportPresenter.saveStreaming]), else it
- * is staged too. Exports only read the archive, and a staged run is removed once the sheet closed (B7).
+ * is staged too. Exports only read the archive. A staged run is removed once the sheet closed (B7), or
+ * released to the age sweep of [ExportRuns] when the sheet gives no close signal (#161).
  */
 class FilesController(
     private val scope: CoroutineScope,
@@ -148,7 +150,8 @@ class FilesController(
         val name = ArchiveExport.archiveZipName(now())
         val streamed = p.saveStreaming(name) { sink -> withContext(io) { ArchiveExport.writeZip(sink, entries, cancelCheck()) } }
         if (streamed != null) return@run streamed
-        val zip = withContext(io) { ArchiveExport.stageZip(space, entries, name, cancelCheck()) }
+        val check = cancelCheck()
+        val zip = stage { listOf(ArchiveExport.stageZip(space, entries, name, check)) }.single()
         removingRun(zip.run) { p.save(zip) }
     }
 
@@ -157,9 +160,17 @@ class FilesController(
         // The stations the archive zip covers, the owner's alone when there is one (#156).
         val stations = state.value.shown.mapTo(HashSet()) { it.station }
         var zip: StagedFile? = null
-        holdDaily {
-            val entries = withContext(io) { ArchiveExport.dailyEntries(list(), stations) }
-            if (entries != null) zip = withContext(io) { ArchiveExport.stageZip(space, entries, ArchiveExport.dailyZipName(now()), cancelCheck()) }
+        try {
+            holdDaily {
+                val entries = withContext(io) { ArchiveExport.dailyEntries(list(), stations) }
+                if (entries != null) {
+                    val check = cancelCheck()
+                    zip = stage { listOf(ArchiveExport.stageZip(space, entries, ArchiveExport.dailyZipName(now()), check)) }.single()
+                }
+            }
+        } catch (e: Throwable) {
+            discard(zip?.run)
+            throw e
         }
         val staged = zip
         if (staged == null) {
@@ -169,7 +180,23 @@ class FilesController(
         present(it, listOf(staged), ShareKind.ARCHIVE)
     }
 
-    private suspend fun <T> stage(block: suspend () -> T): T = withContext(io) { block() }
+    /**
+     * Stages on [io]. A run staged just as this export is cancelled is removed, since nothing will
+     * show it and nothing else would end its lease.
+     */
+    private suspend fun stage(block: () -> List<StagedFile>): List<StagedFile> {
+        var staged: List<StagedFile> = emptyList()
+        try {
+            return withContext(io) { block().also { staged = it } }
+        } catch (e: Throwable) {
+            discard(staged.firstOrNull()?.run)
+            throw e
+        }
+    }
+
+    private suspend fun discard(run: ExportRun?) {
+        if (run != null) withContext(NonCancellable + io) { run.delete() }
+    }
 
     /** A zip write checkpoint that stops the blocking copy once this export is cancelled. */
     private suspend fun cancelCheck(): () -> Unit {
@@ -177,9 +204,12 @@ class FilesController(
         return { context.ensureActive() }
     }
 
-    private suspend fun archiveZip(): StagedFile? = withContext(io) {
-        val entries = ArchiveExport.archiveEntries(store, state.value.shown)
-        if (entries.isEmpty()) null else ArchiveExport.stageZip(space, entries, ArchiveExport.archiveZipName(now()), cancelCheck())
+    private suspend fun archiveZip(): StagedFile? {
+        val check = cancelCheck()
+        return stage {
+            val entries = ArchiveExport.archiveEntries(store, state.value.shown)
+            if (entries.isEmpty()) emptyList() else listOf(ArchiveExport.stageZip(space, entries, ArchiveExport.archiveZipName(now()), check))
+        }.firstOrNull()
     }
 
     /**
@@ -205,23 +235,25 @@ class FilesController(
         }
     }
 
-    /** Shows [files] and removes their run when the sheet says it is safe. */
+    /** Shows [files] and removes their run when the sheet says it is safe, else releases it. */
     private suspend fun present(presenter: ExportPresenter, files: List<StagedFile>, kind: ShareKind): Boolean =
         removingRun(files.firstOrNull()?.run) { presenter.share(files, kind) }
 
     /**
-     * Runs [show] and removes [run] once it returns true. A sheet that fails, or a wait for it that is
-     * cancelled, removes the run too, since nothing still reads it and it can be as large as the
-     * archive. Only an explicit false (Android's chooser) leaves it for the next export.
+     * Runs [show] while [run] stays leased and removes the run once it returns true, the close signal.
+     * A sheet that fails, or a wait for it that is cancelled, removes the run too, since nothing still
+     * reads it and it can be as large as the archive. An explicit false (Android's chooser, whose
+     * targets read by URI later) releases the run, which the age sweep of [ExportRuns] removes after
+     * [ExportRuns.MAX_AGE_MS]. A later export never removes it.
      */
     private suspend fun removingRun(run: ExportRun?, show: suspend () -> Boolean): Boolean {
         val done = try {
             show()
         } catch (e: Throwable) {
-            withContext(NonCancellable + io) { run?.delete() }
+            discard(run)
             throw e
         }
-        if (done) withContext(io) { run?.delete() }
+        withContext(NonCancellable + io) { if (done) run?.delete() else run?.release() }
         return done
     }
 
