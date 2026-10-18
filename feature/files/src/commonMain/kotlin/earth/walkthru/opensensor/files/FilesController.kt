@@ -244,7 +244,7 @@ class FilesController(
      * A sheet that fails, or a wait for it that is cancelled, removes the run too, since nothing still
      * reads it and it can be as large as the archive. An explicit false (Android's chooser, whose
      * targets read by URI later) releases the run, which the age sweep of [ExportRuns] removes after
-     * [ExportRuns.MAX_AGE_MS]. A later export never removes it.
+     * [ExportRuns.MAX_AGE_MS]. A later export removes it only by that age.
      */
     private suspend fun removingRun(run: ExportRun?, show: suspend () -> Boolean): Boolean {
         val done = try {

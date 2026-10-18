@@ -52,7 +52,7 @@ internal class PendingSave : ViewModel() {
  * Shares through a chooser over the app's `FileProvider` (`<applicationId>.files`, which serves only
  * `cacheDir/export`, the [earth.walkthru.aqsync.archive.FileExportSpace] root) and saves through the
  * Storage Access Framework. The chooser gives no close signal, so [ExportPresenter.share] returns false
- * and the run is released to the age sweep (`ExportRuns.MAX_AGE_MS`). A later export never removes it,
+ * and the run is released to the age sweep (`ExportRuns.MAX_AGE_MS`). A later export removes it only by that age,
  * so a target that opens its URI late still finds the file. A zip save streams into the picked document with no staged copy,
  * a share stays staged since its targets read a finished file by URI after the chooser returns.
  */
