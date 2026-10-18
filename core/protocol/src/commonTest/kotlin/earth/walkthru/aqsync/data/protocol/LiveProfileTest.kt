@@ -119,7 +119,7 @@ class LiveProfileTest {
     private val unknown = DeviceInfo(fw = "idf-cores3-parquet-v9.9", schema = "waveshare-sim7670g-telemetry-v9", dict = "0".repeat(64))
 
     @Test
-    fun `unknown dictionary with ambient keys still shows PM, ambient temperature and humidity`() {
+    fun `unknown dictionary with ambient keys still shows PM with ambient temperature and humidity`() {
         val sample = LiveSample.parse("""{"seq":1,"pms":4,"pm25":7,"n03":900,"t":22.4,"rh":51.0,"bat":4100}""")
         val profile = LiveProfiles.resolve(unknown, sample)!!
         assertFalse(profile.reviewed)
