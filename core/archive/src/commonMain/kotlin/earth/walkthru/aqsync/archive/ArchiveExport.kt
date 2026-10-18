@@ -56,28 +56,38 @@ object ArchiveExport {
     const val ZIP_MIME: String = "application/zip"
 
     /**
-     * Every verified file as `<station>/<Hive name>`, sorted by that path, the layout of the old
-     * Android zip. A file's time is when it was verified ([ArchiveRecord.syncedAtEpochMs]).
+     * The given verified [records] as `<station>/<Hive name>`, sorted by that path, the layout of the
+     * old Android zip. Only these exact keys go in, so a station's zip never carries another station's
+     * files or a final the index never verified (#156). The whole-phone zip passes every record. A
+     * file's time is when it was verified ([ArchiveRecord.syncedAtEpochMs]).
      */
-    suspend fun archiveEntries(store: ArchiveStore, records: List<ArchiveRecord>, nowEpochMs: Long): List<ExportEntry> {
-        val synced = records.associateBy({ it.key }, { it.syncedAtEpochMs })
-        return store.listFinal().sortedBy { "${it.station}/${it.name}" }.map { key ->
-            ExportEntry("${key.station}/${key.name}", synced[key] ?: nowEpochMs) { store.reader(key) }
+    fun archiveEntries(store: ArchiveStore, records: List<ArchiveRecord>): List<ExportEntry> =
+        records.distinctBy { it.key }.sortedBy { "${it.station}/${it.name}" }.map { r ->
+            ExportEntry("${r.station}/${r.name}", r.syncedAtEpochMs) { store.reader(r.key) }
         }
-    }
 
     /** The given verified files, for a loose share. */
     fun recordEntries(store: ArchiveStore, records: List<ArchiveRecord>): List<ExportEntry> =
         records.sortedBy { it.name }.map { r -> ExportEntry("${r.station}/${r.name}", r.syncedAtEpochMs) { store.reader(r.key) } }
 
     /**
-     * The daily export, `derived/v1/...` Parquet files and their manifests, sorted. Null when there is
-     * no daily Parquet file at all, so the screen can say so instead of sharing an empty zip.
+     * The daily export, `derived/v1/<station>/...` Parquet files and their manifests of [stations]
+     * only, sorted. A derived file of any other station stays out, the same scope as the station's
+     * archive zip (#156). Null when no daily Parquet file is left, so the screen can say so instead
+     * of sharing an empty zip.
      */
-    fun dailyEntries(derived: List<ExportEntry>): List<ExportEntry>? {
-        val kept = derived.filter { it.path.endsWith(".parquet") || it.path.endsWith(".manifest.json") }
+    fun dailyEntries(derived: List<ExportEntry>, stations: Set<String>): List<ExportEntry>? {
+        val kept = derived.filter { e ->
+            (e.path.endsWith(".parquet") || e.path.endsWith(".manifest.json")) && derivedStation(e.path) in stations
+        }
         if (kept.none { it.path.endsWith(".parquet") }) return null
         return kept.sortedBy { it.path }
+    }
+
+    /** The station directory of a `derived/v1/<station>/<file>` path, else null. */
+    private fun derivedStation(path: String): String? {
+        val rest = path.removePrefix("${ArchiveLayout.DERIVED}/").takeIf { it != path } ?: return null
+        return rest.substringBefore('/', missingDelimiterValue = "").takeIf { it.isNotEmpty() }
     }
 
     /** `opensensor-space-archive-yyyyMMdd-HHmmss.zip` in UTC. */

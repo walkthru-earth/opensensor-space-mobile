@@ -82,11 +82,11 @@ class ZipInteropTest {
     @Test
     fun directoryEntriesListFilesUnderAPrefix() {
         val derived = File(root, "derived/v1").apply { mkdirs() }
-        File(derived, "station=A").mkdirs()
-        File(derived, "station=A/d.parquet").writeBytes(a)
-        File(derived, "station=A/d.manifest.json").writeText("{}")
-        val entries = ArchiveExport.dailyEntries(directoryEntries(derived, "derived/v1"))!!
-        assertEquals(listOf("derived/v1/station=A/d.manifest.json", "derived/v1/station=A/d.parquet"), entries.map { it.path })
+        File(derived, "A").mkdirs()
+        File(derived, "A/d.parquet").writeBytes(a)
+        File(derived, "A/d.manifest.json").writeText("{}")
+        val entries = ArchiveExport.dailyEntries(directoryEntries(derived, "derived/v1"), setOf("A"))!!
+        assertEquals(listOf("derived/v1/A/d.manifest.json", "derived/v1/A/d.parquet"), entries.map { it.path })
     }
 
     @Test

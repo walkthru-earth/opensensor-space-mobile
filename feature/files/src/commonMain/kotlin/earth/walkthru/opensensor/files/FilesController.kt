@@ -143,7 +143,7 @@ class FilesController(
      * cache copy as large as the archive. Otherwise stages it and saves the copy.
      */
     fun saveZip(presenter: ExportPresenter) = run(presenter) { p ->
-        val entries = withContext(io) { ArchiveExport.archiveEntries(store, state.value.shown, now()) }
+        val entries = ArchiveExport.archiveEntries(store, state.value.shown)
         if (entries.isEmpty()) return@run null
         val name = ArchiveExport.archiveZipName(now())
         val streamed = p.saveStreaming(name) { sink -> withContext(io) { ArchiveExport.writeZip(sink, entries, cancelCheck()) } }
@@ -154,9 +154,11 @@ class FilesController(
 
     fun shareDaily(presenter: ExportPresenter) = run(presenter) {
         val list = daily ?: return@run null
+        // The stations the archive zip covers, the owner's alone when there is one (#156).
+        val stations = state.value.shown.mapTo(HashSet()) { it.station }
         var zip: StagedFile? = null
         holdDaily {
-            val entries = withContext(io) { ArchiveExport.dailyEntries(list()) }
+            val entries = withContext(io) { ArchiveExport.dailyEntries(list(), stations) }
             if (entries != null) zip = withContext(io) { ArchiveExport.stageZip(space, entries, ArchiveExport.dailyZipName(now()), cancelCheck()) }
         }
         val staged = zip
@@ -176,7 +178,7 @@ class FilesController(
     }
 
     private suspend fun archiveZip(): StagedFile? = withContext(io) {
-        val entries = ArchiveExport.archiveEntries(store, state.value.shown, now())
+        val entries = ArchiveExport.archiveEntries(store, state.value.shown)
         if (entries.isEmpty()) null else ArchiveExport.stageZip(space, entries, ArchiveExport.archiveZipName(now()), cancelCheck())
     }
 
