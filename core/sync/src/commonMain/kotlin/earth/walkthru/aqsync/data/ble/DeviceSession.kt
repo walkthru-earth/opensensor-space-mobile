@@ -50,6 +50,13 @@ open class DeviceErrorException(val frame: Frame.Error) : Exception(frame.descri
     }
 }
 
+/**
+ * A `SET_CONFIG` carrying `wifi.psk` or `ble.pin` was refused before it was written, because the
+ * session runs on a pipe that may not carry secrets (plaintext LAN). Nothing was sent. The caller
+ * offers the Bluetooth reconnect instead (#155).
+ */
+class SecretNeedsBluetoothException(val kind: TransportKind) : IllegalStateException("a secret config patch is sent over Bluetooth only, this link is ${kind.name}")
+
 /** `ERROR` 12: one key was rejected and nothing changed; [key] names it. */
 class InvalidConfigException(frame: Frame.Error) : DeviceErrorException(frame) {
     val key: String get() = frame.detail
@@ -303,9 +310,14 @@ class DeviceSession(val link: LinkSession, val transport: AqTransport, val frame
     /**
      * `SET_CONFIG key=value…` → `CONFIG` (the new state) or `ERROR` 12 ([InvalidConfigException]
      * with the offending key; nothing changed). Values are validated by [ConfigPatch] before send.
+     *
+     * A patch that [ConfigPatch.carriesSecret] goes only over a link whose real driver
+     * [TransportKind.carriesSecrets], else [SecretNeedsBluetoothException] and nothing is written.
+     * The check reads [LinkSession.kind], the pipe the bytes would take, not [transport]'s label.
      */
     suspend fun setConfig(patch: ConfigPatch): ConfigSnapshot {
         require(!patch.isEmpty) { "empty config patch" }
+        if (patch.carriesSecret && !link.kind.carriesSecrets) throw SecretNeedsBluetoothException(link.kind)
         return config(Request.SetConfig(patch), "SET_CONFIG")
     }
 

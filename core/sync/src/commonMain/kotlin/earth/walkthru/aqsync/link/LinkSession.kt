@@ -113,6 +113,12 @@ class LinkSession(
     private val writeLock = Mutex()
     private var router: Job? = null
 
+    /**
+     * The pipe this session really runs on, from its driver. Never a screen label, so a secret check
+     * reads the link it would actually write to (#155).
+     */
+    val kind: TransportKind get() = driver.kind
+
     private val _state = MutableStateFlow<LinkState>(LinkState.Idle)
     val state: StateFlow<LinkState> = _state.asStateFlow()
 

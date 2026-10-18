@@ -12,6 +12,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import earth.walkthru.aqsync.R
 import earth.walkthru.aqsync.data.DeviceConnectionManager
+import earth.walkthru.aqsync.data.DeviceEvent
 import earth.walkthru.aqsync.data.DeviceMessage
 import earth.walkthru.aqsync.data.DeviceOwnership
 import earth.walkthru.aqsync.data.TimedStatus
@@ -52,7 +53,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.filterNot
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.stateIn
@@ -172,8 +174,14 @@ class DeviceViewModel @AssistedInject constructor(
     /** Set while a companion setup dropped a Bluetooth session that should come back afterwards. */
     private var reconnectAfterCompanion: Pair<String, String?>? = null
 
-    /** Repository snackbar events plus local validation errors. */
-    val events: Flow<ScreenMessage> = merge(repository.events.map(ScreenMessage::Device), localEvents)
+    /**
+     * Repository snackbar events plus local validation errors. A secret refused on LAN goes to the
+     * shared controller instead, whose snackbar offers the Bluetooth reconnect.
+     */
+    val events: Flow<ScreenMessage> = merge(
+        repository.events.filterNot { it.isSecretNeedsBluetooth() }.map(ScreenMessage::Device),
+        localEvents,
+    )
 
     private val sessionCore = combine(
         repository.session,
@@ -246,7 +254,8 @@ class DeviceViewModel @AssistedInject constructor(
     fun disconnect() = repository.disconnect()
 
     private inner class RepositoryDeviceConfigSource(override val snapshot: StateFlow<DeviceConfigSnapshot>) : DeviceConfigSource {
-        override val notices: Flow<DeviceConfigNotice> = emptyFlow()
+        override val notices: Flow<DeviceConfigNotice> =
+            repository.events.filter { it.isSecretNeedsBluetooth() }.map { DeviceConfigNotice.SecretNeedsBluetooth }
 
         override fun refreshConfig() = repository.refreshConfig()
         override suspend fun readLocation() = repository.readLocation()
@@ -409,3 +418,6 @@ class DeviceViewModel @AssistedInject constructor(
 
 /** What the link is doing for the Device page: a command in flight, a transfer, the pipe and the owner. */
 private data class Activity(val busy: Boolean, val syncRunning: Boolean, val transport: TransportKind?, val heldInBackground: Boolean)
+
+private fun DeviceEvent.isSecretNeedsBluetooth(): Boolean =
+    this is DeviceEvent.Error && message == DeviceMessage.SecretNeedsBluetooth

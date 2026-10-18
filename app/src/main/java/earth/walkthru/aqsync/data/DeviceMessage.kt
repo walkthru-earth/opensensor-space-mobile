@@ -82,6 +82,9 @@ sealed interface DeviceMessage {
 
     /** `ERROR` 12. [key] is the protocol key the device named, shown verbatim. */
     data class ConfigKeyRejected(val key: String) : DeviceMessage
+
+    /** A passphrase or PIN patch was refused before sending, the live link is plaintext LAN (#155). */
+    data object SecretNeedsBluetooth : DeviceMessage
     data object NoRebootWhileSyncing : DeviceMessage
     data object Rebooting : DeviceMessage
     data class CommandRejected(val command: Command) : DeviceMessage

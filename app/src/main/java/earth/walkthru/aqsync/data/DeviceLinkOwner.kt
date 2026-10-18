@@ -14,6 +14,7 @@ import earth.walkthru.aqsync.data.ble.DeviceSession
 import earth.walkthru.aqsync.data.ble.InvalidConfigException
 import earth.walkthru.aqsync.data.ble.LogTail
 import earth.walkthru.aqsync.data.ble.NotAllowedOnLinkException
+import earth.walkthru.aqsync.data.ble.SecretNeedsBluetoothException
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.ble.TransportUnavailableException
 import earth.walkthru.aqsync.data.ble.WifiUnavailableException
@@ -1437,6 +1438,9 @@ class DeviceLinkOwner @Inject constructor(
                 val snap = session.setConfig(patch)
                 _config.value = snap
                 _events.tryEmit(DeviceEvent.Info(DeviceMessage.ConfigSaved(change, snap.rebootRequired)))
+            } catch (_: SecretNeedsBluetoothException) {
+                // The session is the plaintext LAN socket. Nothing was written (#155).
+                _events.tryEmit(DeviceEvent.Error(DeviceMessage.SecretNeedsBluetooth))
             } catch (e: InvalidConfigException) {
                 _events.tryEmit(DeviceEvent.Error(DeviceMessage.ConfigKeyRejected(e.key)))
             } catch (e: DeviceErrorException) {

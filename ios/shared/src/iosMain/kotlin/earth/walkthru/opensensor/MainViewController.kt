@@ -15,7 +15,8 @@ import platform.UIKit.UIViewController
  * [syncBluetooth] syncs the connected Bluetooth sensor, and the app routes it to an open Wi-Fi
  * session for the same sensor. [linkFor] answers the open connection's [IosLink] to the sensor with
  * this hardware id, Wi-Fi first, or null when it is not connected. Debug, Device settings and Files
- * take leases of it. [command] sends a confirmed `SET_TIME` or `FLUSH` from Today over the
+ * take leases of it. [bluetoothLinkFor] answers only the Bluetooth link, which a passphrase or PIN
+ * change in Device settings borrows so it never travels over Wi-Fi. [command] sends a confirmed `SET_TIME` or `FLUSH` from Today over the
  * Bluetooth connection.
  * [autoSync] holds the per device Auto-sync switches, shown first on the Device section. [closeIdle] runs
  * when the last Today or Device page for a sensor leaves the back stack. Swift closes that
@@ -41,6 +42,7 @@ fun mainViewController(
     syncBluetooth: (String) -> Unit,
     closeIdle: (String) -> Unit,
     linkFor: (String) -> IosLink?,
+    bluetoothLinkFor: (String) -> IosLink?,
     command: (String, SensorCommand) -> Unit,
     syncOneFile: (String, String) -> Unit,
     cancelSync: (String) -> Unit,
@@ -71,6 +73,7 @@ fun mainViewController(
         val configLinks = remember {
             DeviceConfigLinks(
                 openConfigLink = linkFor,
+                openBluetoothLink = bluetoothLinkFor,
                 saveWifiAccess = saveWifiAccess,
                 forgetWifiAccess = forgetWifiAccess,
                 connect = userOpen,

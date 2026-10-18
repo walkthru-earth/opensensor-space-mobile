@@ -94,6 +94,12 @@ sealed interface DeviceConfigNotice {
 
     /** `ERROR` 12. [key] is the protocol key the device named, shown verbatim. */
     data class KeyRejected(val key: String) : DeviceConfigNotice
+
+    /**
+     * A passphrase or PIN change was refused before sending, because the live link is the plaintext
+     * LAN socket. The snackbar offers the Bluetooth reconnect (#155).
+     */
+    data object SecretNeedsBluetooth : DeviceConfigNotice
     data class Rejected(val command: DeviceConfigCommand) : DeviceConfigNotice
     data class Failed(val command: DeviceConfigCommand) : DeviceConfigNotice
     data object Rebooting : DeviceConfigNotice

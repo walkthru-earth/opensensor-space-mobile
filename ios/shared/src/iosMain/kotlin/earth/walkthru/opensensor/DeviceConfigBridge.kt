@@ -7,6 +7,7 @@ import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.DeviceErrorException
 import earth.walkthru.aqsync.data.ble.DeviceSession
 import earth.walkthru.aqsync.data.ble.InvalidConfigException
+import earth.walkthru.aqsync.data.ble.SecretNeedsBluetoothException
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.ble.WifiUnavailableException
 import earth.walkthru.aqsync.data.protocol.ConfigPatch
@@ -41,6 +42,11 @@ import kotlin.time.Clock
 internal class DeviceConfigLinks(
     /** The open connection's link to the sensor with this hardware id, or null when it is not connected. */
     val openConfigLink: (String) -> IosLink?,
+    /**
+     * The open Bluetooth link to the sensor with this hardware id, never the Wi-Fi one, or null. A
+     * passphrase or PIN patch borrows only this one (#155).
+     */
+    val openBluetoothLink: (String) -> IosLink?,
     /**
      * Reads the Wi-Fi access token over Bluetooth into the Keychain, the Device settings Save Wi-Fi
      * access. Swift marks Wi-Fi access busy before returning when it started.
@@ -156,7 +162,7 @@ internal class IosDeviceConfigSource(
     }
 
     override fun applyConfig(patch: ConfigPatch, change: DeviceConfigChange) {
-        command(DeviceConfigCommand.SET_CONFIG) { session ->
+        command(DeviceConfigCommand.SET_CONFIG, bluetoothOnly = patch.carriesSecret) { session ->
             val snap = session.setConfig(patch)
             config.value = snap
             _notices.tryEmit(DeviceConfigNotice.Saved(change, snap.rebootRequired))
@@ -274,7 +280,7 @@ internal class IosDeviceConfigSource(
      * A firmware rejection is [DeviceConfigNotice.KeyRejected] for a named key, else
      * [DeviceConfigNotice.Rejected]. Anything else is [DeviceConfigNotice.Failed].
      */
-    private fun command(cmd: DeviceConfigCommand, block: suspend (DeviceSession) -> Unit) {
+    private fun command(cmd: DeviceConfigCommand, bluetoothOnly: Boolean = false, block: suspend (DeviceSession) -> Unit) {
         if (working.value) {
             _notices.tryEmit(DeviceConfigNotice.Busy)
             return
@@ -282,9 +288,11 @@ internal class IosDeviceConfigSource(
         working.value = true
         scope.launch {
             try {
-                if (borrow(block) == null) _notices.tryEmit(DeviceConfigNotice.Busy)
+                if (borrow(bluetoothOnly, block) == null) _notices.tryEmit(DeviceConfigNotice.Busy)
             } catch (e: CancellationException) {
                 throw e
+            } catch (_: SecretNeedsBluetoothException) {
+                _notices.tryEmit(DeviceConfigNotice.SecretNeedsBluetooth)
             } catch (e: InvalidConfigException) {
                 _notices.tryEmit(DeviceConfigNotice.KeyRejected(e.key))
             } catch (_: DeviceErrorException) {
@@ -313,10 +321,15 @@ internal class IosDeviceConfigSource(
         return done != null && state.wifiAccessNotice == CompanionNotice.TOKEN_STORED
     }
 
-    /** Runs [block] on a config lease of the connection's link. Null when not connected or a sync holds it. */
-    private suspend fun <T> borrow(block: suspend (DeviceSession) -> T): T? = lent.withLock {
+    /**
+     * Runs [block] on a config lease of the connection's link. Null when not connected or a sync holds
+     * it. With [bluetoothOnly] only the Bluetooth link is lent, and a sensor reachable only over Wi-Fi
+     * throws [SecretNeedsBluetoothException]. [DeviceSession.setConfig] checks the lent link again.
+     */
+    private suspend fun <T> borrow(bluetoothOnly: Boolean = false, block: suspend (DeviceSession) -> T): T? = lent.withLock {
         val id = device() ?: return@withLock null
-        val link = withContext(Dispatchers.Main) { links.openConfigLink(id) } ?: return@withLock null
+        val link = withContext(Dispatchers.Main) { configLinkFor(id, bluetoothOnly, links.openConfigLink, links.openBluetoothLink) }
+            ?: if (bluetoothOnly) throw SecretNeedsBluetoothException(TransportKind.LAN) else return@withLock null
         try {
             link.leased(LeaseKind.CONFIG, block)
         } catch (_: LeaseRefusedException) {
@@ -351,6 +364,14 @@ internal class IosDeviceConfigSource(
         const val TOKEN_TIMEOUT_MS = 20_000L
     }
 }
+
+/**
+ * The link a config request borrows. Any open link, Wi-Fi first as Swift orders it, or with
+ * [bluetoothOnly] the Bluetooth link alone, so a secret never rides the LAN socket the general
+ * selector prefers (#155).
+ */
+internal fun <L : Any> configLinkFor(id: String, bluetoothOnly: Boolean, anyLink: (String) -> L?, bluetoothLink: (String) -> L?): L? =
+    if (bluetoothOnly) bluetoothLink(id) else anyLink(id)
 
 /**
  * Whether the restart's reconnect may open [address] again. Only when the link still points at it,

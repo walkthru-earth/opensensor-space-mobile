@@ -74,6 +74,14 @@ class DeviceConfigTest {
     }
 
     @Test
+    fun `only the passphrase and the pin mark a patch as secret`() {
+        assertTrue(ConfigPatch.build { wifiPsk("<dev psk>") }.carriesSecret)
+        assertTrue(ConfigPatch.build { blePair(PairMode.FIXED); blePin("000000") }.carriesSecret)
+        assertFalse(ConfigPatch.build { wifiSsid("<dev ssid>"); wifiOn(true) }.carriesSecret)
+        assertFalse(ConfigPatch.build { blePair(PairMode.RANDOM); lanOn(true); rotateToken(); clearBonds() }.carriesSecret)
+    }
+
+    @Test
     fun `pin must be exactly six digits`() {
         for (bad in listOf("", "12345", "1234567", "12a456", "１２３４５６", " 12345")) {
             try {

@@ -159,6 +159,7 @@
     <string name="msg_bonds_cleared">The sensor forgot all paired phones. You pair again on the next Bluetooth connection.</string>
     <string name="msg_saved_after_reboot">%1$s. Bluetooth changes apply after a restart.</string>
     <string name="msg_config_key_rejected">The sensor refused %1$s. Nothing was changed.</string>
+    <string name="msg_secret_needs_bluetooth">Passwords and PINs go over Bluetooth only.</string>
 
     <!-- Device messages from the data layer (data/DeviceMessage.kt, mapped in components/DeviceMessages.kt) -->
     <string name="msg_background_owns_connect">Background sync is using this sensor. Its progress stays visible. Connect again when it finishes.</string>

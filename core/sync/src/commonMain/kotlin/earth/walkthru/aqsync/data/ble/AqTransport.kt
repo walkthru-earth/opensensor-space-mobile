@@ -33,7 +33,19 @@ open class TransportException(message: String, val gattStatus: Int? = null, caus
 class TransportUnavailableException(val kind: UnavailableKind, message: String) : TransportException(message)
 
 /** Which byte pipe a transport is. The protocol above it is identical. */
-enum class TransportKind { BLE, LAN, FAKE }
+enum class TransportKind {
+    BLE,
+    LAN,
+    FAKE,
+    ;
+
+    /**
+     * Whether a secret (`wifi.psk`, `ble.pin`) may travel on this pipe. Only the bonded, encrypted
+     * Bluetooth link, and the in-process fake whose bytes never leave the phone. The LAN socket is
+     * plaintext TCP and never carries one (#155).
+     */
+    val carriesSecrets: Boolean get() = this == BLE || this == FAKE
+}
 
 /**
  * The five GATT attributes of the AQ Sync service, abstracted so the same protocol/sync code runs
