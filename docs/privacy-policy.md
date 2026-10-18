@@ -42,7 +42,10 @@ day.
 
 ## Data retention and deletion
 
-Data on your phone stays until you forget a sensor, clear the app's storage or uninstall the app.
+Forget removes a sensor's enrollment and access credentials from the app, such as its saved
+record, its Wi-Fi token and its Auto-sync setting. Readings already collected from that sensor
+stay on your phone until you clear the app's storage or uninstall the app. Settings can also
+remove old format files and clear the History and map caches.
 There is no account to delete. Published data stays public under its licence. For a legal
 removal request, write to the contact below.
 
