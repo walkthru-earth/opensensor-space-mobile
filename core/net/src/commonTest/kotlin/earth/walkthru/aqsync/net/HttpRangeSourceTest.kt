@@ -1,5 +1,6 @@
 package earth.walkthru.aqsync.net
 
+import earth.walkthru.aqsync.data.history.parquet.ParquetBoundsException
 import earth.walkthru.aqsync.data.history.parquet.SourceChangedException
 import earth.walkthru.aqsync.data.history.parquet.SourceId
 import kotlinx.coroutines.CompletableDeferred
@@ -252,12 +253,12 @@ class HttpRangeSourceTest {
     }
 
     @Test
-    fun `ranges outside the file throw IndexOutOfBoundsException`() = runTest {
+    fun `ranges outside the file throw ParquetBoundsException`() = runTest {
         val engine = FakeEngine(RangeServer(payload(300_000), "\"e1\""))
         val source = HttpRangeSource(url, engine)
 
-        assertFailsWith<IndexOutOfBoundsException> { source.readRanges(listOf(299_990L until 300_001L)) }
-        assertFailsWith<IndexOutOfBoundsException> { source.readRanges(listOf(-1L until 10L)) }
+        assertFailsWith<ParquetBoundsException> { source.readRanges(listOf(299_990L until 300_001L)) }
+        assertFailsWith<ParquetBoundsException> { source.readRanges(listOf(-1L until 10L)) }
         assertEquals(1, engine.requests.size)
     }
 

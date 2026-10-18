@@ -1,5 +1,6 @@
 package earth.walkthru.aqsync.net
 
+import earth.walkthru.aqsync.data.history.parquet.ParquetBoundsException
 import earth.walkthru.aqsync.data.history.parquet.SourceChangedException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
@@ -117,7 +118,7 @@ class CachedRangeSourceTest {
 
     @Test
     fun `a range outside the file throws`() = runTest {
-        assertFailsWith<IndexOutOfBoundsException> { source().readRanges(listOf(9_990L until 10_001L)) }
+        assertFailsWith<ParquetBoundsException> { source().readRanges(listOf(9_990L until 10_001L)) }
     }
 
     @Test

@@ -460,18 +460,8 @@ internal class ChunkDecoder(
         return if (r >= s) true to minOf(sel.ends[selectionIndex], pageEnd) else false to minOf(s, pageEnd)
     }
 
-    private fun decompressInto(src: ByteArray, at: Int, compressedSize: Int, dst: ByteArray, size: Int) {
-        if (compressedSize < 0 || size < 0) throw ParquetFormatException("'${leaf.name}': negative page size ($source)")
-        if (chunk.codec == ParquetCodec.UNCOMPRESSED && compressedSize != size) throw ParquetFormatException("'${leaf.name}': uncompressed page sizes disagree ($compressedSize vs $size) ($source)")
-        val written = try {
-            decompressor.decompress(src, at, compressedSize, dst, 0, size)
-        } catch (e: ParquetFormatException) {
-            throw ParquetFormatException("'${leaf.name}': ${e.message} ($source)", e)
-        } catch (e: RuntimeException) {
-            throw ParquetFormatException("'${leaf.name}': ${chunk.codec} page failed to decompress: ${e.message} ($source)", e)
-        }
-        if (written != size) throw ParquetFormatException("'${leaf.name}': ${chunk.codec} page produced $written bytes, header says $size ($source)")
-    }
+    private fun decompressInto(src: ByteArray, at: Int, compressedSize: Int, dst: ByteArray, size: Int) =
+        decompressPage(decompressor, chunk.codec, src, at, compressedSize, dst, size, leaf.name, source)
 
     private class PageHeader(
         val type: Int,
@@ -557,6 +547,25 @@ internal class ChunkDecoder(
         const val DATA_PAGE_V2 = 3
         const val MAX_PAGES = 100_000
     }
+}
+
+/**
+ * Decompresses one page body of [compressedSize] bytes at [at] into the first [size] bytes of [dst]
+ * with [decompressor], the codec of [codec]. A negative size never reaches the codec, and every failure
+ * is a [ParquetFormatException] naming [column]. The page header parser already refuses negative sizes,
+ * so this check is the last line for any caller that derives a size itself.
+ */
+internal fun decompressPage(decompressor: PageDecompressor, codec: ParquetCodec, src: ByteArray, at: Int, compressedSize: Int, dst: ByteArray, size: Int, column: String, source: String) {
+    if (compressedSize < 0 || size < 0) throw ParquetFormatException("'$column': negative page size ($source)")
+    if (codec == ParquetCodec.UNCOMPRESSED && compressedSize != size) throw ParquetFormatException("'$column': uncompressed page sizes disagree ($compressedSize vs $size) ($source)")
+    val written = try {
+        decompressor.decompress(src, at, compressedSize, dst, 0, size)
+    } catch (e: ParquetFormatException) {
+        throw ParquetFormatException("'$column': ${e.message} ($source)", e)
+    } catch (e: RuntimeException) {
+        throw ParquetFormatException("'$column': $codec page failed to decompress: ${e.message} ($source)", e)
+    }
+    if (written != size) throw ParquetFormatException("'$column': $codec page produced $written bytes, header says $size ($source)")
 }
 
 /**
