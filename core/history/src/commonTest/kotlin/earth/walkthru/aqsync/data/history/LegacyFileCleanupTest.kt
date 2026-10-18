@@ -343,6 +343,34 @@ class LegacyFileCleanupTest {
     }
 
     @Test
+    fun theCleanupWaitsForTheWriterLeaseOfARunningDownloadBeforeItWritesTheTombstone() = runTest {
+        val a = record(name(1, 1), nanos, day * dayNs)
+        val s = setup(files = arrayOf(a to nanos))
+        val plan = s.cleanup.plan()
+        val held = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        // A download of the same file holds its writer lease.
+        val download = launch {
+            s.coordinator.withWriter(a.key) {
+                held.complete(Unit)
+                release.await()
+            }
+        }
+        held.await()
+        val cleaning = launch { assertEquals(1, s.cleanup.remove(plan).removed) }
+        testScheduler.runCurrent()
+        // No tombstone, no dropped record and no deleted file while the download holds the lease.
+        assertTrue(s.pruned.files.value.isEmpty())
+        assertNotNull(s.index.get(a.key))
+        assertTrue(s.tree.deleted.isEmpty())
+        release.complete(Unit)
+        download.join()
+        cleaning.join()
+        assertEquals(listOf(a.key), s.pruned.files.value.map { it.key })
+        assertTrue(s.store.files.isEmpty())
+    }
+
+    @Test
     fun repairAndCleanupTakeTurnsSoNoRecordComesBackForADeletedFile() = runTest {
         val a = record(name(1, 1), nanos, day * dayNs).copy(indexedAtEpochMs = null)
         val s = setup(files = arrayOf(a to nanos))

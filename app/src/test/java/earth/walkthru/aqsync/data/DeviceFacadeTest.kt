@@ -1000,6 +1000,22 @@ class DeviceFacadeTest {
     }
 
     @Test
+    fun `a second collection of a station already collecting is refused before any OPEN`() = harnessTest { h ->
+        h.knownDao.upsert(h.enrolled(token = null))
+        // Another collection of the same station, on another link, holds its admission.
+        assertTrue(h.coordinator.tryAdmit(h.device.station))
+        val refused = async { h.repo.syncInBackground(ADDRESS, null, owner = "synthetic-worker", protection = KeepAlive.None) }
+        h.until(120_000) { refused.isCompleted }
+        refused.await()
+        assertFalse(h.factory.requests.contains(Opcode.OPEN))
+        assertTrue(h.archived.rows.isEmpty())
+        h.coordinator.release(h.device.station)
+        val next = async { h.repo.syncInBackground(ADDRESS, null, owner = "synthetic-worker", protection = KeepAlive.None) }
+        h.until { next.isCompleted }
+        assertEquals(h.device.files.size, next.await().newFiles)
+    }
+
+    @Test
     fun `a lend while the facade collection runs is Busy`() = harnessTest(chunkDelayMs = 1) { h ->
         h.repo.connect(ADDRESS, "AQ-6b40", fake = true)
         h.until { h.repo.plan.value != null }
@@ -1189,6 +1205,7 @@ class DeviceFacadeTest {
         var refuseProcess = false
         var processLeases = 0
         var processAcquires = 0
+        val coordinator = DeviceCoordinator()
 
         init {
             val fileArchive = FileArchive(tmp)
@@ -1236,7 +1253,7 @@ class DeviceFacadeTest {
                     committedNames += key.name
                 }
             }
-            val engine = SyncEngine(store, RoomArchiveIndex(archived), HistoryIndexer(fileArchive, archived, DeviceCoordinator()).asRecordIndexer(fileArchive), windowRetryBackoffMs = 1, clock = { test.testScheduler.currentTime }, io = dispatcher)
+            val engine = SyncEngine(store, RoomArchiveIndex(archived), HistoryIndexer(fileArchive, archived, coordinator).asRecordIndexer(fileArchive), windowRetryBackoffMs = 1, clock = { test.testScheduler.currentTime }, io = dispatcher, coordinator = coordinator)
             repo = DeviceFacade(
                 linkOwner = owner,
                 collector = ArchiveCollector(store, RoomArchiveIndex(archived), engine, FakeStorageBudget(), test.testScheduler.timeSource),

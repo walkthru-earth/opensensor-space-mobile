@@ -19,7 +19,7 @@ import earth.walkthru.aqsync.sync.SyncLock
  *   the janitor's partial sweep and adoption, and the old file cleanup of that file take it.
  * - **Station gate.** One index or file mutation per station ([withStation]), held only around the
  *   short change, so a row read under it is still live when it is written.
- * - **Lock order.** A writer lease first, then the station gate ([withWriterThenStation]). Never a
+ * - **Lock order.** A writer lease first, then the station gate. Never a
  *   lease while holding the gate, and never the gate twice, since neither lock is reentrant.
  * - **Tombstones.** A file the user removed in Settings is in [pruned]. The engine checks
  *   [removedByUser] under the writer lease before `OPEN`, and the cleanup writes the tombstone
@@ -71,10 +71,6 @@ class DeviceCoordinator(
 
     /** Runs [block] holding the gate of [station]. Never call it with the gate already held. */
     suspend fun <T> withStation(station: String, block: suspend () -> T): T = gate.withStation(station, block)
-
-    /** The lease of [key], then the gate of its station, the one lock order of this archive. */
-    suspend fun <T> withWriterThenStation(key: ArchiveKey, block: suspend () -> T): T =
-        leases.withLease(key) { gate.withStation(key.station, block) }
 
     /**
      * Whether the user removed [key] at [bytes] from this phone, the planner's REMOVED rule. Call it
