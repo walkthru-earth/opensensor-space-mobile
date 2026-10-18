@@ -58,10 +58,11 @@ The archive is `Application Support/SensorArchive/<station>/<Hive path>`, with p
 live in the shared Room database `Application Support/database/aq-sync.db` (`IosArchiveDatabase` in
 `:core:database`), which uses the same protection class and is excluded from backup. A final name
 appears only after size, CRC-32 and `PAR1` pass, and its record also holds SHA-256. On its first open
-the database imports the `.verified.json` receipts and `pruned.v1` marks an older build left, once.
-Only a receipt whose file passes size, CRC-32 and `PAR1` becomes a record. Then a
-`receipts-imported` marker is written and the old files are deleted. The root uses `completeUntilFirstUserAuthentication`, so collection keeps writing after
-the phone locks, and is excluded from backup. `IosArchive` builds History tiers through the shared
+the database imports the `.verified.json` receipts and `pruned.v1` marks an older build left. Only a
+receipt whose file passes size, CRC-32 and `PAR1` becomes a record, and a receipt that fails or
+throws is skipped. The rows are checkpointed into the file before the `receipts-imported` marker is
+written, and a later launch deletes each old file only once it sees its row. The root uses
+`completeUntilFirstUserAuthentication`, so collection keeps writing after the phone locks, and is excluded from backup. `IosArchive` builds History tiers through the shared
 indexer and `DayPass`, persists them with `IosFileTierStore` and repairs the index at launch.
 `SensorArchive.swift` holds only the station ID check Swift applies before saving a credential.
 

@@ -122,9 +122,11 @@ device lists the same name and size and the phone has no copy. Settings › Stor
 empties it. Both phones use this table through `RoomPrunedFiles`, behind the `PrunedFiles` port in
 `:core:archive`. On the first open of the iOS database, `LegacyReceiptImport` moves an older build's
 `SensorArchive-pruned/pruned.v1` marks and `.verified.json` receipts into Room once. A receipt
-becomes a record only if its file passes size, CRC-32 and `PAR1`, and a half-written receipt is
-skipped. It writes the `receipts-imported` marker, then deletes the old files, and later opens only
-sweep leftovers.
+becomes a record only if its file passes size, CRC-32 and `PAR1`, and a half-written, failing or
+throwing receipt is skipped. The rows are checkpointed (`wal_checkpoint(FULL)`) before the
+`receipts-imported` marker is written. A later launch deletes a receipt once its row is there, or
+its file fails the check, and `pruned.v1` once every mark is there, copying any missing ones again.
+Download again also deletes `pruned.v1`.
 
 ### Migrations
 
@@ -310,10 +312,10 @@ its budget on Moderate and clears on Critical. The iOS History tiers keep at mos
 columns (`ByteBudgetLru`) and the bundled Discover sample feed at most 1 MiB.
 
 These relative paths are defined once, in `ArchiveLayout` (`:core:archive`), for both phones. The
-root is Android `filesDir`. iOS still keeps its finals under `Application Support/SensorArchive/`
-with partials beside them and a `<name>.verified.json` receipt each. `ArchiveLayout` names those
-legacy forms so the wave 3 move onto this layout can recognise them. The "is synced" receipt is the
-`archived_file` record (`ArchiveRecord` behind the `ArchiveIndex` port), never a file. The archive
+root is Android `filesDir`. iOS keeps its finals under `Application Support/SensorArchive/` and its
+partials under `archive-partial/`. `ArchiveLayout` names the older partial and `.verified.json`
+receipt forms, so iOS adopts old partials and imports old receipts once. On both phones the "is
+synced" receipt is the `archived_file` record (`ArchiveRecord` behind the `ArchiveIndex` port), never a file. The archive
 ports have no file delete. A verified copy is removed only when the user removes old format files in
 Settings (`LegacyFileCleanup`, [parquet](parquet.md#removing-old-files-from-the-phone)), never by sync or the janitor (audit C, B6).
 Each removal leaves a `PrunedFiles` record, so sync does not download the file again while the

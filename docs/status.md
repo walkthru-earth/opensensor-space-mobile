@@ -24,8 +24,8 @@ the owner's approval. Host tests, the iOS simulator build and `verify` only. No 
   failure apart from a count failure. `SettingsController` logs the operation and exception
   class only.
 - Phone only. No device command and the device card is not touched. Sync skips a removed file
-  while the device lists it at the same size (`REMOVED`, Room v12 `pruned_file`, iOS
-  `SensorArchive-pruned/pruned.v1`). Settings › Storage › Removed files › Download again clears
+  while the device lists it at the same size (`REMOVED`, Room v12 `pruned_file` on
+  both phones). Settings › Storage › Removed files › Download again clears
   the marks after a confirm, so the next sync downloads them again.
 - To check on phones. A removal of old files on Android and iOS, History after it, and a sync of a
   CoreS3 that still lists old files.
@@ -47,7 +47,7 @@ build and `verify` only. No phone run against the new firmware yet.
   CoreS3 firmware reads board temperature from `t`. Waveshare v2.7 (`67688d0f…`, PR aq-parquet #24, and its first build `d0d01294…`)
   adds `bstate`. CoreS3 board temperature falls back to `t` when `imu_t` is missing. `LiveSample`
   parses `bstate`, and no screen shows it yet (#90).
-- Index reopen. Room v11 and iOS receipt layout 2 index rows without UTC rows again. A derive pass
+- Index reopen. Room v11 and the one time iOS receipt import index rows without UTC rows again. A derive pass
   before that back-fill keeps every day a waiting row may fill (`StationDays.held`), on Android and
   iOS. `ArchiveRecord.isIndexed` is the one indexed test, and `withUtcBetween` uses it in SQL.
 - Old files. Both layouts stay readable, cached old files stay on the phone, and files the owner
