@@ -8,12 +8,11 @@ import earth.walkthru.aqsync.archive.EmptyClockAnchorStore
 import earth.walkthru.aqsync.data.history.parquet.ByteReader
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 import earth.walkthru.aqsync.data.history.parquet.ParquetFormatException
-import earth.walkthru.aqsync.data.sync.ArchiveMutationGate
+import earth.walkthru.aqsync.data.sync.DeviceCoordinator
 import earth.walkthru.aqsync.data.sync.HivePartition
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -28,8 +27,8 @@ import kotlin.time.Clock
  * failed) in small batches, idempotently, safe to interrupt anywhere. [estimateTimes] gives files
  * without UTC an estimated span once their boot has a clock (§4.6). A file the reader refuses gets
  * `indexError` and stays out of History. It remains in the archive untouched, the raw copy is the
- * source of truth and the index only describes it. Each row update runs under the station's [gate],
- * so a row the old file cleanup removed is never written back.
+ * source of truth and the index only describes it. Each row update runs under the station gate of the
+ * [coordinator], so a row the old file cleanup removed is never written back.
  */
 class ArchiveIndexRepair(
     private val store: ArchiveStore,
@@ -38,7 +37,8 @@ class ArchiveIndexRepair(
     private val nowEpochMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     private val log: (String) -> Unit = {},
     private val clockAnchors: ClockAnchorStore = EmptyClockAnchorStore,
-    private val gate: ArchiveMutationGate = ArchiveMutationGate(),
+    /** The archive's one coordinator. Each row update runs under its station gate. */
+    private val coordinator: DeviceCoordinator = DeviceCoordinator(),
 ) {
     private val mutex = Mutex()
 
@@ -98,7 +98,7 @@ class ArchiveIndexRepair(
                 // A failed retry of an already failed record changes nothing. Skip the write so the loop ends.
                 if (record.indexError != null && updated.indexError != null) continue
                 // Only the index columns are repair's. The engine may have changed the rest meanwhile.
-                gate.withStation(record.station) { index.update(record.key) { latest -> withIndexColumns(latest, updated) } }
+                coordinator.withStation(record.station) { index.update(record.key) { latest -> withIndexColumns(latest, updated) } }
                 done++
             }
             if (done > 0) log("indexed $done files (${pending.size} candidates)")
@@ -136,18 +136,6 @@ class ArchiveIndexRepair(
         } while (passes < maxPasses && neverIndexedWaiting())
     }
 
-    /**
-     * Repairs whenever [index] holds a record that was never indexed, until cancelled. iOS runs it for
-     * the life of the process, because its engine adds records without index columns. Changes that
-     * arrive during a pass are conflated into one more check after it, never dropped. It watches
-     * [ArchiveIndex.observeNeverIndexed], not every record.
-     */
-    suspend fun repairWhenWaiting() {
-        index.observeNeverIndexed()
-            .conflate()
-            .collect { waiting -> if (waiting) backfillUntilSettled() }
-    }
-
     /** [ArchiveIndex.unindexed] lists never indexed records first. */
     private suspend fun neverIndexedWaiting(): Boolean = index.unindexed(1).any { it.awaitsIndex }
 
@@ -167,7 +155,7 @@ class ArchiveIndexRepair(
                 for (f in files) {
                     val updated = estimated(f, anchors)
                     if (updated != f) {
-                        gate.withStation(f.station) {
+                        coordinator.withStation(f.station) {
                             index.update(f.key) { latest -> latest.copy(estFirstUtcNs = updated.estFirstUtcNs, estLastUtcNs = updated.estLastUtcNs, estAnchorFile = updated.estAnchorFile) }
                         }
                         changed++

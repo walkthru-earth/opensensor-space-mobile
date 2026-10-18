@@ -10,6 +10,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.LocalDate
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSFileProtectionCompleteUntilFirstUserAuthentication
 import platform.Foundation.NSFileProtectionKey
@@ -29,18 +30,35 @@ class IosFileTierStore(root: String, private val atomic: AtomicFiles) : TierStor
 
     private fun path(station: String, epochDay: Long) = checked("$root/${ArchiveLayout.derivedDayPath(station, epochDay).removeSuffix(".parquet")}$SUFFIX")
 
-    override suspend fun load(station: String, epochDay: Long, signature: String): DayTiers? = withContext(Dispatchers.IO) {
+    override suspend fun load(station: String, epochDay: Long, signature: String): DayTiers? =
+        read(station, epochDay) { TierCodec.decode(it, signature) }
+
+    override suspend fun loadSaved(station: String, epochDay: Long): SavedDay? = read(station, epochDay, TierCodec::decodeSaved)
+
+    private suspend fun <T> read(station: String, epochDay: Long, decode: (ByteArray) -> T?): T? = withContext(Dispatchers.IO) {
         val path = path(station, epochDay)
         if (fm.attributesOfItemAtPath(path, null)?.get(NSFileType) != NSFileTypeRegular) return@withContext null
         try {
             LocalFileReader(path).use { reader ->
                 if (reader.size > MAX_BYTES) return@use null
-                TierCodec.decode(reader.read(0, reader.size.toInt()), signature)
+                decode(reader.read(0, reader.size.toInt()))
             }
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
             null
+        }
+    }
+
+    override suspend fun savedDays(station: String): Set<Long> = withContext(Dispatchers.IO) {
+        val directory = checked("$root/${ArchiveLayout.derivedStationDir(station)}")
+        fm.contentsOfDirectoryAtPath(directory, null).orEmpty().filterIsInstance<String>().mapNotNullTo(HashSet()) { name ->
+            if (!name.startsWith("day=") || !name.endsWith(SUFFIX)) return@mapNotNullTo null
+            try {
+                LocalDate.parse(name.removePrefix("day=").removeSuffix(SUFFIX)).toEpochDays()
+            } catch (_: IllegalArgumentException) {
+                null
+            }
         }
     }
 

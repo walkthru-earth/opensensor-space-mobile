@@ -37,14 +37,14 @@ import kotlin.test.fail
 class SyncEngineTest {
     private val store = MemoryArchiveStore()
     private val index = MemoryArchiveIndex()
-    private val leases = WriterLeases()
+    private val coordinator = DeviceCoordinator()
 
     /** What the link reported. A frame it dropped as foreign is what the old stale-frame log caught. */
     private val linkEvents = ArrayList<LinkEvent>()
 
-    /** One engine per call shares [store], [index] and [leases], and writes on the test's virtual clock. */
+    /** One engine per call shares [store], [index] and [coordinator], and writes on the test's virtual clock. */
     private fun TestScope.engine() =
-        SyncEngine(store, index, windowRetryBackoffMs = 5, clock = { 1_000L }, leases = leases, io = StandardTestDispatcher(testScheduler))
+        SyncEngine(store, index, windowRetryBackoffMs = 5, clock = { 1_000L }, coordinator = coordinator, io = StandardTestDispatcher(testScheduler))
 
     private suspend fun device(scope: CoroutineScope, address: String = "fake-0"): Pair<FakeArchiveDevice, DeviceSession> {
         val fake = FakeArchiveDevice(scope, address = address)
@@ -90,7 +90,7 @@ class SyncEngineTest {
         assertFalse(assertIs<FileOutcome.Synced>(first).alreadyArchived)
         assertTrue(assertIs<FileOutcome.Synced>(second).alreadyArchived)
         assertEquals(1, index.puts, "reuse preserves the existing receipt and provenance")
-        assertEquals(0, leases.activeCount())
+        assertEquals(0, coordinator.activeWriters())
     }
 
     @Test
@@ -214,7 +214,7 @@ class SyncEngineTest {
         assertEquals(1, index.records.size)
         assertEquals(1, index.puts)
         assertFalse(hasPartials())
-        assertEquals(0, leases.activeCount())
+        assertEquals(0, coordinator.activeWriters())
     }
 
     @Test
@@ -373,13 +373,13 @@ class SyncEngineTest {
         val key = ArchiveKey(d.first.station, d.first.files[0].name)
         val holding = CompletableDeferred<Unit>()
         val release = CompletableDeferred<Unit>()
-        val owner = launch { leases.withLease(key) { holding.complete(Unit); release.await() } }
+        val owner = launch { coordinator.withWriter(key) { holding.complete(Unit); release.await() } }
         holding.await()
-        val waiter = launch(start = CoroutineStart.UNDISPATCHED) { leases.withLease(key) { fail("cancelled waiter ran") } }
+        val waiter = launch(start = CoroutineStart.UNDISPATCHED) { coordinator.withWriter(key) { fail("cancelled waiter ran") } }
         waiter.cancelAndJoin()
         release.complete(Unit)
         owner.join()
-        assertEquals(0, leases.activeCount())
+        assertEquals(0, coordinator.activeWriters())
         assertIs<FileOutcome.Synced>(engine().pull(d, 0))
     }
 }

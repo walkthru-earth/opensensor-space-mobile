@@ -40,7 +40,8 @@ class ArchiveCollectorTest {
     private val store = MemoryArchiveStore()
     private val index = MemoryArchiveIndex()
 
-    private fun TestScope.engine() = SyncEngine(store, index, windowRetryBackoffMs = 5, clock = { 1_000L }, io = StandardTestDispatcher(testScheduler))
+    private fun TestScope.engine(pruned: PrunedFiles = PrunedFiles.None) =
+        SyncEngine(store, index, windowRetryBackoffMs = 5, clock = { 1_000L }, coordinator = DeviceCoordinator(pruned), io = StandardTestDispatcher(testScheduler))
 
     /** One link per fake, as one phone keeps one session per connection. Each run takes a fresh view. */
     private val links = HashMap<FakeArchiveDevice, DeviceSession>()
@@ -132,7 +133,7 @@ class ArchiveCollectorTest {
             override suspend fun remove(key: ArchiveKey) = error("read only")
             override suspend fun clear(): Int = error("read only")
         }
-        val collector = ArchiveCollector(store, index, engine(), FakeStorageBudget(), testTimeSource, pruned = pruned)
+        val collector = ArchiveCollector(store, index, engine(pruned), FakeStorageBudget(), testTimeSource)
 
         val summary = collector.collect(session(fake), fake.station, fake.address, fake.maxRead) {}
 
@@ -158,7 +159,7 @@ class ArchiveCollectorTest {
             }
             override suspend fun clear(): Int = marks.value.size.also { marks.value = emptyList() }
         }
-        val collector = ArchiveCollector(store, index, engine(), FakeStorageBudget(), testTimeSource, pruned = pruned)
+        val collector = ArchiveCollector(store, index, engine(pruned), FakeStorageBudget(), testTimeSource)
 
         // A run narrowed to one file proves nothing about the others.
         collector.collect(session(fake), fake.station, fake.address, fake.maxRead, onlyName = fake.files[1].name) {}

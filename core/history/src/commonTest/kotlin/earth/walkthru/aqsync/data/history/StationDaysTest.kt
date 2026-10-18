@@ -90,4 +90,13 @@ class StationDaysTest {
         )
         assertEquals(StationDays.Held.NONE, held)
     }
+
+    @Test
+    fun `a held day keeps its derived tiers only while no source touches it`() {
+        val held = StationDays.Held(false, setOf(1L, 2L))
+        // Day 1 has no source now and is held, day 2 is held but rebuilt from its sources, day 3 is not held.
+        assertEquals(setOf(1L), StationDays.kept(setOf(1L, 2L, 3L), setOf(2L), held))
+        assertEquals(setOf(1L, 3L), StationDays.kept(setOf(1L, 2L, 3L), setOf(2L), StationDays.Held.ALL))
+        assertEquals(emptySet(), StationDays.kept(setOf(1L, 2L, 3L), setOf(2L), StationDays.Held.NONE))
+    }
 }

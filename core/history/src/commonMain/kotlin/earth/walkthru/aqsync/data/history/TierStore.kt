@@ -17,6 +17,15 @@ interface TierStore {
     /** Drops the station's saved days that are not in [days]. */
     suspend fun retain(station: String, days: Set<Long>)
 
+    /** The station's saved days, whatever their signature. */
+    suspend fun savedDays(station: String): Set<Long>
+
+    /**
+     * The day's tiers with the signature they were saved under, whatever it is, otherwise null. History
+     * shows a day a waiting record holds this way, see [StationDays.kept].
+     */
+    suspend fun loadSaved(station: String, epochDay: Long): SavedDay?
+
     companion object {
         /** The shared pass's buckets in the form used on disk and in the tier reader. */
         fun fromBuckets(buckets: List<Bucket>): DayTiers = buckets.groupBy { it.resolution }.mapValues { (_, list) ->
@@ -30,9 +39,14 @@ interface TierStore {
             override suspend fun load(station: String, epochDay: Long, signature: String): DayTiers? = null
             override suspend fun save(station: String, epochDay: Long, signature: String, tiers: DayTiers) = Unit
             override suspend fun retain(station: String, days: Set<Long>) = Unit
+            override suspend fun savedDays(station: String): Set<Long> = emptySet()
+            override suspend fun loadSaved(station: String, epochDay: Long): SavedDay? = null
         }
     }
 }
+
+/** One saved day, its tiers and the source signature they were built from. */
+class SavedDay(val signature: String, val tiers: DayTiers)
 
 /**
  * The binary form of one saved day: a version, the signature, then per resolution and metric the
@@ -67,9 +81,15 @@ object TierCodec {
     }
 
     /** The tiers, or null when [bytes] were saved under another signature, by another version, or are damaged. */
-    fun decode(bytes: ByteArray, signature: String): DayTiers? = try {
+    fun decode(bytes: ByteArray, signature: String): DayTiers? = decodeIf(bytes) { it == signature }?.tiers
+
+    /** The tiers and their signature whatever it is, or null when [bytes] are of another version or damaged. */
+    fun decodeSaved(bytes: ByteArray): SavedDay? = decodeIf(bytes) { true }
+
+    private fun decodeIf(bytes: ByteArray, accept: (String) -> Boolean): SavedDay? = try {
         val inp = In(bytes)
-        if (inp.int() != VERSION || inp.string() != signature) {
+        val signature = if (inp.int() != VERSION) null else inp.string().takeIf(accept)
+        if (signature == null) {
             null
         } else {
             val resolutions = Resolution.entries
@@ -85,7 +105,7 @@ object TierCodec {
                 }
                 tiers[resolution] = perMetric
             }
-            if (inp.remaining != 0) null else tiers
+            if (inp.remaining != 0) null else SavedDay(signature, tiers)
         }
     } catch (e: IndexOutOfBoundsException) {
         null

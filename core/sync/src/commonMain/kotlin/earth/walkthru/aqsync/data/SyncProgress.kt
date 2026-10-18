@@ -4,6 +4,7 @@ import earth.walkthru.aqsync.collection.SyncEndReason
 import earth.walkthru.aqsync.data.sync.FileOutcome
 import earth.walkthru.aqsync.data.sync.FileProgress
 import earth.walkthru.aqsync.data.sync.SyncEndCause
+import earth.walkthru.aqsync.data.sync.failed
 
 /** Progress of one collection run over every planned file, as the screens and notifications show it. */
 data class SyncProgress(
@@ -25,5 +26,5 @@ data class SyncProgress(
     val endReason: SyncEndReason? = null,
 ) {
     val fraction: Float get() = if (bytesTotal == 0L) 0f else (bytesDone.toFloat() / bytesTotal).coerceIn(0f, 1f)
-    val failures: List<FileOutcome> get() = outcomes.filter { it !is FileOutcome.Synced }
+    val failures: List<FileOutcome> get() = outcomes.filter { it.failed }
 }

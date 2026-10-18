@@ -11,10 +11,10 @@ import kotlinx.coroutines.sync.withLock
  * Readers never take it.
  *
  * Lock order is a [WriterLeases] lease first, then the gate. Never take a lease while holding the
- * gate, and never nest the gate, since the mutex is not reentrant. One instance per archive, shared
- * by every writer there.
+ * gate, and never nest the gate, since the mutex is not reentrant. Only [DeviceCoordinator] makes
+ * one, so every writer of an archive shares it.
  */
-class ArchiveMutationGate {
+internal class ArchiveMutationGate {
     private class Slot(val mutex: Mutex = Mutex(), var users: Int = 0)
 
     private val lock = SyncLock()
