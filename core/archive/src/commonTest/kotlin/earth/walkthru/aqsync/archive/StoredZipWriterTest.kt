@@ -376,7 +376,7 @@ class ArchiveExportTest {
     }
 
     @Test
-    fun aStationZipHoldsOnlyThatStationsVerifiedFiles() {
+    fun aStationZipHoldsOnlyThatStationsVerifiedFiles() = kotlinx.coroutines.test.runTest {
         val store = twoStationsAndAnOrphan()
         val a = record("A", "a.parquet", syncedAt = 42)
         val entries = ArchiveExport.archiveEntries(store, listOf(a))
@@ -386,7 +386,7 @@ class ArchiveExportTest {
     }
 
     @Test
-    fun theWholePhoneZipHoldsEveryVerifiedFileAndNoOrphan() {
+    fun theWholePhoneZipHoldsEveryVerifiedFileAndNoOrphan() = kotlinx.coroutines.test.runTest {
         val store = twoStationsAndAnOrphan()
         val records = listOf(record("B", "b.parquet", 2), record("A", "a.parquet", 1), record("A", "a.parquet", 1))
         assertEquals(listOf("A/a.parquet", "B/b.parquet"), zipNames(ArchiveExport.archiveEntries(store, records)))
