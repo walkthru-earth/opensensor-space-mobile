@@ -480,7 +480,7 @@ fun WifiCard(
     var pickedOpen by rememberSaveable { mutableStateOf(false) }
     // Kept in memory only, never saved with the instance state, so it does not outlive the screen.
     var psk by remember { mutableStateOf("") }
-    var showPsk by rememberSaveable { mutableStateOf(false) }
+    var showPsk by remember { mutableStateOf(false) }
     val scan = snapshot.wifiScan
     val ssid = wifi?.ssid ?: "?"
 
@@ -598,6 +598,13 @@ fun WifiCard(
                         Text(stringResource(Res.string.wifi_open_network), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } else {
                         val captured = rememberCredentialCaptureGuard()
+                        // Leaving the join form or the page drops the passphrase and hides it again.
+                        DisposableEffect(Unit) {
+                            onDispose {
+                                psk = ""
+                                showPsk = false
+                            }
+                        }
                         val revealed = showPsk && !captured
                         Spacer(Modifier.height(6.dp))
                         OutlinedTextField(

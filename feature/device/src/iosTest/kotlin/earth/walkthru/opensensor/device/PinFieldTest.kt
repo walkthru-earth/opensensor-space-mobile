@@ -12,16 +12,19 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.v2.runComposeUiTest
+import earth.walkthru.aqsync.data.WifiScanState
 import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
+import earth.walkthru.aqsync.data.protocol.Frame
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
  * The fixed PIN never shows on screen unless asked, keeps password semantics for TalkBack and
- * VoiceOver, and is dropped when Fixed PIN is left (#160). Rendered headless on the iOS simulator.
+ * VoiceOver, and is dropped when Fixed PIN is left (#160). The Wi-Fi passphrase also reopens hidden.
+ * Rendered headless on the iOS simulator.
  */
 @OptIn(ExperimentalTestApi::class)
 class PinFieldTest {
@@ -81,7 +84,27 @@ class PinFieldTest {
         assertEquals("•", pinField().shownText())
     }
 
+    @Test
+    fun aReopenedWifiJoinFormStartsEmptyAndHidden() = runComposeUiTest {
+        val scanned = state.copy(
+            snapshot = state.snapshot.copy(
+                wifiScan = WifiScanState.Done(listOf(Frame.WifiAp(rssi = -50, auth = 3, channel = 6, ssid = "home")), atEpochMs = 1),
+            ),
+        )
+        setContent { MaterialTheme { WifiCard(scanned, onToggleWifi = {}, onScan = {}, onClearScan = {}, onJoin = {}) } }
+        onNodeWithText("home").performSemanticsAction(SemanticsActions.OnClick)
+        pinField().performTextInput(SECRET_PSK)
+        onNodeWithContentDescription("Show passphrase").performSemanticsAction(SemanticsActions.OnClick)
+        assertEquals(SECRET_PSK, pinField().shownText())
+        onNodeWithText("Cancel").performSemanticsAction(SemanticsActions.OnClick)
+        onNodeWithText("home").performSemanticsAction(SemanticsActions.OnClick)
+        assertEquals("", pinField().shownText())
+        pinField().performTextInput("x")
+        assertEquals("\u2022", pinField().shownText())
+    }
+
     private companion object {
         const val SECRET_PIN = "482913"
+        const val SECRET_PSK = "correct horse"
     }
 }
