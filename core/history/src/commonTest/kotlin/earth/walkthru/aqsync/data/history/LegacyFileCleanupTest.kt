@@ -511,7 +511,8 @@ class LegacyFileCleanupTest {
     @Test
     fun archiveDaysSpanEveryPlacedFileAndFarDaysSaturate() = runTest {
         val a = record(name(1, 1), nanos, day * dayNs + 5)
-        val b = record(name(1, 2), nanos, (day + 3) * dayNs - 1)
+        // The latest file starts two days before it ends, so the range ends on its last row, not its first.
+        val b = record(name(1, 2), nanos, (day + 1) * dayNs, (day + 3) * dayNs - 1)
         val unplaced = record(name(1, 3), nanos, null)
         val s = setup(files = arrayOf(a, b, unplaced).map { it to nanos }.toTypedArray())
         assertEquals(UtcDayRange(day, day + 2), s.cleanup.archiveDays())
