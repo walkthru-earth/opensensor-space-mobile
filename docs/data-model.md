@@ -124,9 +124,11 @@ empties it. Both phones use this table through `RoomPrunedFiles`, behind the `Pr
 `SensorArchive-pruned/pruned.v1` marks and `.verified.json` receipts into Room once. A receipt
 becomes a record only if its file passes size, CRC-32 and `PAR1`, and a half-written, failing or
 throwing receipt is skipped. The rows are checkpointed (`wal_checkpoint(FULL)`) before the
-`receipts-imported` marker is written. A later launch deletes a receipt once its row is there, or
-its file fails the check, and `pruned.v1` once every mark is there, copying any missing ones again.
-Download again also deletes `pruned.v1`.
+`receipts-imported` marker is written, and that launch deletes nothing. The next launch deletes every
+receipt and `pruned.v1` without touching Room, so a row or mark removed in between stays removed.
+Once none is left it writes `receipts-settled`, and from then on no launch walks the archive or
+checkpoints. A launch cut short during the deletes leaves `receipts-settled` unwritten, so the next
+one finishes them and never imports again.
 
 ### Migrations
 

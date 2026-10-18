@@ -61,7 +61,8 @@ appears only after size, CRC-32 and `PAR1` pass, and its record also holds SHA-2
 the database imports the `.verified.json` receipts and `pruned.v1` marks an older build left. Only a
 receipt whose file passes size, CRC-32 and `PAR1` becomes a record, and a receipt that fails or
 throws is skipped. The rows are checkpointed into the file before the `receipts-imported` marker is
-written, and a later launch deletes each old file only once it sees its row. The root uses
+written. The next launch deletes the old files without touching Room, then writes `receipts-settled`,
+after which the import does nothing. The root uses
 `completeUntilFirstUserAuthentication`, so collection keeps writing after the phone locks, and is excluded from backup. `IosArchive` builds History tiers through the shared
 indexer and `DayPass`, persists them with `IosFileTierStore` and repairs the index at launch.
 `SensorArchive.swift` holds only the station ID check Swift applies before saving a credential.

@@ -20,14 +20,14 @@ import kotlinx.coroutines.sync.withLock
 /**
  * The iOS [index] and [pruned] marks, the shared Room tables in `<dir>/aq-sync.db`. The database opens
  * on first use, and the first call of either port waits for [LegacyReceiptImport] to finish, so no
- * reader sees the index before the older receipts are in. Each pass checkpoints the database before it
- * writes the marker or deletes an old file. A failed import throws to that caller and runs again on the
- * next call.
+ * reader sees the index before the older receipts are in. Only the first pass checkpoints the database,
+ * before it writes [IMPORT_MARKER]. Once [IMPORT_SETTLED] exists no launch walks the archive or
+ * checkpoints. A failed import throws to that caller and runs again on the next call.
  */
 class IosArchiveDatabase(store: IosArchiveStore, dir: String) {
     private val database: AppDatabase by lazy { openAppDatabase("$dir/${AppDatabase.FILE_NAME}") }
     private val rooms by lazy { RoomArchiveIndex(database.archivedFileDao()) to RoomPrunedFiles(database.prunedFileDao()) }
-    private val import = LegacyReceiptImport(store, "$dir/$IMPORT_MARKER")
+    private val import = LegacyReceiptImport(store, "$dir/$IMPORT_MARKER", "$dir/$IMPORT_SETTLED")
     private val imported = MutableStateFlow(false)
     private val importLock = Mutex()
 
@@ -70,7 +70,7 @@ class IosArchiveDatabase(store: IosArchiveStore, dir: String) {
         override suspend fun forStation(station: String): List<PrunedFile> = roomPruned().forStation(station)
         override suspend fun put(file: PrunedFile) = roomPruned().put(file)
         override suspend fun remove(key: ArchiveKey) = roomPruned().remove(key)
-        override suspend fun clear(): Int = roomPruned().clear().also { import.dropLegacyMarks() }
+        override suspend fun clear(): Int = roomPruned().clear()
     }
 
     /** Closes the database, for tests. The app keeps it open for the life of the process. */
@@ -81,8 +81,11 @@ class IosArchiveDatabase(store: IosArchiveStore, dir: String) {
     companion object {
         /**
          * Beside the database. Its presence means the first import pass finished and its rows were
-         * checkpointed into the database file. The old files go on a later launch, once their rows are seen.
+         * checkpointed into the database file, so a later launch deletes the old files.
          */
         const val IMPORT_MARKER = "receipts-imported"
+
+        /** Beside the database. Its presence means every old file is gone and the import does nothing. */
+        const val IMPORT_SETTLED = "receipts-settled"
     }
 }

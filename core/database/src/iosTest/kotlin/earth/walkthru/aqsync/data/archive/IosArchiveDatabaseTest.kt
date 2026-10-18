@@ -2,13 +2,17 @@
 
 package earth.walkthru.aqsync.data.archive
 
+import androidx.sqlite.driver.bundled.BundledSQLiteDriver
+import androidx.sqlite.execSQL
 import earth.walkthru.aqsync.archive.ArchiveKey
 import earth.walkthru.aqsync.archive.ArchiveLayout
 import earth.walkthru.aqsync.archive.IosArchiveStore
 import earth.walkthru.aqsync.archive.PrunedFile
 import earth.walkthru.aqsync.data.local.database.AppDatabase
+import earth.walkthru.aqsync.data.local.database.checkpointDurably
 import earth.walkthru.aqsync.data.local.database.deleteTempDir
 import earth.walkthru.aqsync.data.local.database.newTempDir
+import earth.walkthru.aqsync.data.local.database.openAppDatabase
 import earth.walkthru.aqsync.data.protocol.ParquetVerify
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.usePinned
@@ -21,6 +25,7 @@ import platform.Foundation.writeToFile
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFails
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -45,7 +50,7 @@ class IosArchiveDatabaseTest {
     }
 
     @Test
-    fun theFirstOpenImportsTheReceiptsAndALaterOpenReadsTheFileAndDeletesThem() = runTest {
+    fun theFirstOpenImportsTheReceiptsAndALaterOpenDeletesThemAndSettles() = runTest {
         val receipt = "$finals/$station/$name${ArchiveLayout.LEGACY_RECEIPT_SUFFIX}"
         val prunedFile = "$finals-pruned/pruned.v1"
         write("$finals/$station/$name", bytes)
@@ -63,7 +68,7 @@ class IosArchiveDatabaseTest {
         assertTrue(fm.fileExistsAtPath(receipt))
         assertTrue(fm.fileExistsAtPath(prunedFile))
 
-        // A later launch reads the same rows from the file, so the old files go and nothing is replaced.
+        // A later launch reads the same rows from the file, deletes the old files and replaces nothing.
         write(receipt, """{"size":${bytes.size},"crc":${ParquetVerify.crc32(bytes)},"sourceDevice":"later"}""".encodeToByteArray())
         IosArchiveDatabase(store, dir).apply {
             assertEquals("dev", index.get(ArchiveKey(station, name))?.sourceDevice)
@@ -72,19 +77,39 @@ class IosArchiveDatabaseTest {
         }
         assertFalse(fm.fileExistsAtPath(receipt))
         assertFalse(fm.fileExistsAtPath("$finals-pruned"))
+        assertTrue(fm.fileExistsAtPath("$dir/${IosArchiveDatabase.IMPORT_SETTLED}"))
     }
 
     @Test
-    fun downloadAgainAlsoDropsTheOldMarksFile() = runTest {
-        write("$finals-pruned/pruned.v1", "pruned-v1\n$station\tother.parquet\t46\t5\t11\n".encodeToByteArray())
-        IosArchiveDatabase(store, dir).apply {
-            assertEquals(1, pruned.clear())
+    fun aBusyCheckpointWritesNoMarkerAndDeletesNothing() = runTest {
+        val receipt = "$finals/$station/$name${ArchiveLayout.LEGACY_RECEIPT_SUFFIX}"
+        write("$finals/$station/$name", bytes)
+        write(receipt, """{"size":${bytes.size},"crc":${ParquetVerify.crc32(bytes)}}""".encodeToByteArray())
+        val path = "$dir/${AppDatabase.FILE_NAME}"
+        openAppDatabase(path).apply {
+            checkpointDurably()
             close()
         }
-        assertFalse(fm.fileExistsAtPath("$finals-pruned"))
+        // A reader on the snapshot before the import keeps a full checkpoint from finishing.
+        val reader = BundledSQLiteDriver().open(path)
+        try {
+            reader.execSQL("BEGIN")
+            reader.prepare("SELECT count(*) FROM archived_file").use { it.step() }
+
+            IosArchiveDatabase(store, dir).apply {
+                assertFails { index.get(ArchiveKey(station, name)) }
+                close()
+            }
+            assertFalse(fm.fileExistsAtPath("$dir/${IosArchiveDatabase.IMPORT_MARKER}"))
+            assertTrue(fm.fileExistsAtPath(receipt))
+        } finally {
+            reader.close()
+        }
+
         IosArchiveDatabase(store, dir).apply {
-            assertEquals(emptyList(), pruned.observeAll().first())
+            assertEquals(listOf(name), index.observeAll().first().map { it.name })
             close()
         }
+        assertTrue(fm.fileExistsAtPath("$dir/${IosArchiveDatabase.IMPORT_MARKER}"))
     }
 }

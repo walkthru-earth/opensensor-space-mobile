@@ -21,25 +21,26 @@ import kotlinx.serialization.json.longOrNull
  * `<hive name>.verified.json` receipt beside each verified file ([ArchiveLayout.LEGACY_RECEIPT_SUFFIX])
  * and the files removed in Settings in `<finalRoot>-pruned/pruned.v1`.
  *
- * It takes two launches, so no old file goes before a later launch has seen its row.
+ * It takes two launches, so no old file goes in the launch that copied it.
  * - Without the [marker], [run] copies and deletes nothing. A receipt becomes a record only when its
  *   file passes the full check again (size, CRC-32 and `PAR1` against the receipt), so nothing counts as
  *   synced without a verify. A receipt that is half written, unreadable, fails the check or throws is
  *   skipped, and sync verifies or downloads that file again. Records go in with
- *   [ArchiveIndex.putIfAbsent], so an engine record is never replaced. Then `durable` makes the rows
- *   survive a power loss, and only then is the marker written.
- * - With the marker, [run] deletes a receipt whose row is in the index, or whose file no longer passes
- *   the check, as that file is not synced either way. A receipt that passes but has no row (the rows
- *   were lost) goes in again and stays until the next launch sees its row. `pruned.v1` goes once every
- *   mark in it is in [PrunedFiles], otherwise the missing marks go in again and the file stays.
- *
- * A run cut short changes nothing it already moved, and a record already in the index is not verified
- * again. Deletes are best effort, and a file left behind goes on a later launch.
+ *   [ArchiveIndex.putIfAbsent], so an engine record is never replaced, and a record already in the index
+ *   is not verified again. Then `durable` makes the rows survive a power loss, and only then is the
+ *   marker written. A run cut short before the marker runs again and changes nothing it already moved.
+ * - With the marker, the rows are durable, so [run] deletes every receipt and `pruned.v1` and touches
+ *   neither port. A row or mark removed since the first pass stays removed. Once every old file is gone
+ *   it writes [settled]. A run cut short, or a delete that failed, leaves [settled] unwritten, so the
+ *   next launch deletes the rest and never imports again.
+ * - With [settled], [run] does nothing, no walk and no checkpoint.
  */
 class LegacyReceiptImport(
     private val store: IosArchiveStore,
     /** A file beside the database, written once the first pass's rows are durable. */
     private val marker: String,
+    /** A file beside the database, written once every old file is gone. */
+    private val settled: String,
     private val io: CoroutineDispatcher = Dispatchers.IO,
     private val atomic: AtomicFiles = IosAtomicFiles(IosArchiveStore.tempDirBeside(marker)),
 ) {
@@ -52,10 +53,17 @@ class LegacyReceiptImport(
 
     /**
      * One pass, as above. [durable] makes every row put so far survive a power loss, for Room a full WAL
-     * checkpoint. It runs before the marker is written and before any old file is deleted.
+     * checkpoint. Only the first pass calls it, before it writes the marker.
      */
     suspend fun run(index: ArchiveIndex, pruned: PrunedFiles, durable: suspend () -> Unit = {}): Result = withContext(io) {
-        if (IosFiles.kind(marker) != Kind.FILE) firstPass(index, pruned, durable) else confirmingPass(index, pruned, durable)
+        when {
+            IosFiles.kind(settled) == Kind.FILE -> Result(0, 0)
+            IosFiles.kind(marker) == Kind.FILE -> {
+                deleteOldFiles()
+                Result(0, 0)
+            }
+            else -> firstPass(index, pruned, durable)
+        }
     }
 
     private suspend fun firstPass(index: ArchiveIndex, pruned: PrunedFiles, durable: suspend () -> Unit): Result {
@@ -72,38 +80,15 @@ class LegacyReceiptImport(
         return Result(records, marks.size)
     }
 
-    private suspend fun confirmingPass(index: ArchiveIndex, pruned: PrunedFiles, durable: suspend () -> Unit): Result {
-        var records = 0
-        val done = mutableListOf<String>()
-        for ((key, path) in receipts()) {
-            if (index.get(key) != null) {
-                done += path
-                continue
-            }
-            val record = verified(key, path)
-            if (record == null) {
-                done += path
-            } else if (index.putIfAbsent(record)) {
-                records++
-            }
+    /** Deletes every receipt and `pruned.v1`, then writes [settled] when none is left. */
+    private fun deleteOldFiles() {
+        var left = 0
+        for ((_, path) in receipts()) if (!removeQuietly(path)) left++
+        if (IosFiles.kind(prunedRoot) == Kind.DIRECTORY) {
+            if (!removeQuietly(prunedFile)) left++
+            if (IosFiles.walk(prunedRoot).isEmpty()) removeQuietly(prunedRoot)
         }
-        val marks = prunedMarks()
-        val held = marks.map { it.station }.distinct().flatMap { pruned.forStation(it) }.toSet()
-        val missing = marks.filterNot { it in held }
-        for (mark in missing) pruned.put(mark)
-        durable()
-        for (path in done) removeQuietly(path)
-        if (missing.isEmpty()) dropMarksFile()
-        return Result(records, missing.size)
-    }
-
-    /** Deletes `pruned.v1`, for Settings › Storage › Download again, so a later launch cannot bring its marks back. */
-    suspend fun dropLegacyMarks() = withContext(io) { dropMarksFile() }
-
-    private fun dropMarksFile() {
-        if (IosFiles.kind(prunedRoot) != Kind.DIRECTORY) return
-        removeQuietly(prunedFile)
-        if (IosFiles.walk(prunedRoot).isEmpty()) removeQuietly(prunedRoot)
+        if (left == 0) atomic.writeAtomically(settled, byteArrayOf(), StorageClass.Durable)
     }
 
     private fun receipts(): List<Pair<ArchiveKey, String>> = IosFiles.walk(finalRoot).mapNotNull { relative ->
@@ -145,13 +130,12 @@ class LegacyReceiptImport(
         emptyList()
     }
 
-    private fun removeQuietly(path: String) {
-        try {
-            val kind = IosFiles.kind(path)
-            if (kind == Kind.FILE || kind == Kind.DIRECTORY) IosFiles.remove(path)
-        } catch (e: Exception) {
-            // Left for a later launch.
-        }
+    /** True once [path] is gone. A file left behind goes on a later launch. */
+    private fun removeQuietly(path: String): Boolean = try {
+        IosFiles.remove(path)
+        IosFiles.kind(path) == Kind.ABSENT
+    } catch (e: Exception) {
+        false
     }
 
     internal companion object {

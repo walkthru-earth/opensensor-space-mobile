@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import platform.Foundation.NSFileManager
+import platform.Foundation.NSFilePosixPermissions
 import platform.Foundation.NSTemporaryDirectory
 import platform.Foundation.NSUUID
 import kotlin.test.AfterTest
@@ -22,6 +23,7 @@ class LegacyReceiptImportTest {
     private val base = NSTemporaryDirectory().trimEnd('/') + "/receipt-import-test-" + NSUUID().UUIDString()
     private val finals = "$base/SensorArchive"
     private val marker = "$base/database/receipts-imported"
+    private val settled = "$base/database/receipts-settled"
     private val prunedFile = "$finals-pruned/pruned.v1"
     private val store = IosArchiveStore(finals, "$base/archive-partial", Dispatchers.Unconfined)
     private val station = "53315f5f-cb85-4d8d-b623-d56266084189"
@@ -31,7 +33,7 @@ class LegacyReceiptImportTest {
     private fun name(day: Int) = "station=$station/year=2026/month=09/day=$day/data_0930.parquet"
     private fun final(day: Int) = "$finals/$station/${name(day)}"
     private fun receipt(day: Int) = final(day) + ArchiveLayout.LEGACY_RECEIPT_SUFFIX
-    private fun importer() = LegacyReceiptImport(store, marker, Dispatchers.Unconfined)
+    private fun importer() = LegacyReceiptImport(store, marker, settled, Dispatchers.Unconfined)
     private fun kind(path: String) = IosFiles.kind(path)
 
     @AfterTest
@@ -56,8 +58,14 @@ class LegacyReceiptImportTest {
 
     private fun mark(day: Int) = PrunedFile(station, name(day), 46, 5, 11)
 
+    /** A later pass must not checkpoint, so a busy database cannot break startup. */
+    private val noCheckpoint: suspend () -> Unit = { error("checkpoint after the first pass") }
+
+    private fun legacyFiles(): List<String> = IosFiles.walk(finals).filter { it.endsWith(ArchiveLayout.LEGACY_RECEIPT_SUFFIX) } +
+        listOf("$finals-pruned").filter { kind(it) != IosFiles.Kind.ABSENT }
+
     @Test
-    fun theFirstLaunchCopiesAndALaterLaunchDeletesWhatItSees() = runTest {
+    fun theFirstLaunchCopiesALaterLaunchDeletesAndThenNothingRuns() = runTest {
         synced(1)
         synced(2, """{"size":${bytes.size},"crc":$crc,"sha256":"ab","syncedAtEpochMs":7,"sourceDevice":"dev","rows":2,"utcRows":2,"firstUtcNs":1,"lastUtcNs":2,"indexedAtEpochMs":9,"indexLayout":${ArchiveRecord.INDEX_LAYOUT}}""")
         writePruned(3)
@@ -78,12 +86,19 @@ class LegacyReceiptImportTest {
         assertEquals(IosFiles.Kind.FILE, kind(receipt(1)))
         assertEquals(IosFiles.Kind.FILE, kind(prunedFile))
 
-        assertEquals(LegacyReceiptImport.Result(0, 0), importer().run(index, pruned))
+        assertEquals(LegacyReceiptImport.Result(0, 0), importer().run(index, pruned, noCheckpoint))
 
-        assertEquals(IosFiles.Kind.ABSENT, kind(receipt(1)))
-        assertEquals(IosFiles.Kind.ABSENT, kind(receipt(2)))
-        assertEquals(IosFiles.Kind.ABSENT, kind("$finals-pruned"))
+        assertEquals(emptyList(), legacyFiles())
+        assertEquals(IosFiles.Kind.FILE, kind(settled))
         assertEquals(listOf(ArchiveKey(station, name(1)), ArchiveKey(station, name(2))), store.listFinal(station).sortedBy { it.name })
+        assertEquals(2, index.observeAll().first().size)
+        assertEquals(listOf(mark(3)), pruned.observeAll().first())
+
+        // Settled, so a later launch neither walks the archive nor checkpoints.
+        synced(4)
+        assertEquals(LegacyReceiptImport.Result(0, 0), importer().run(index, pruned, noCheckpoint))
+        assertEquals(IosFiles.Kind.FILE, kind(receipt(4)))
+        assertNull(index.get(ArchiveKey(station, name(4))))
     }
 
     @Test
@@ -98,9 +113,9 @@ class LegacyReceiptImportTest {
         assertEquals(LegacyReceiptImport.Result(1, 0), importer().run(index, MemoryPruned()))
         assertEquals(listOf(name(5)), index.observeAll().first().map { it.name })
 
-        assertEquals(LegacyReceiptImport.Result(0, 0), importer().run(index, MemoryPruned()))
+        assertEquals(LegacyReceiptImport.Result(0, 0), importer().run(index, MemoryPruned(), noCheckpoint))
         assertEquals(listOf(name(5)), index.observeAll().first().map { it.name })
-        for (day in 1..5) assertEquals(IosFiles.Kind.ABSENT, kind(receipt(day)))
+        assertEquals(emptyList(), legacyFiles())
         assertEquals(IosFiles.Kind.FILE, kind(final(1)))
     }
 
@@ -120,9 +135,9 @@ class LegacyReceiptImportTest {
         assertEquals(listOf(name(1), name(3)), index.observeAll().first().map { it.name }.sorted())
         assertEquals(listOf(mark(4)), pruned.observeAll().first())
 
-        importer().run(index, pruned)
-        for (day in 1..3) assertEquals(IosFiles.Kind.ABSENT, kind(receipt(day)))
-        assertEquals(IosFiles.Kind.ABSENT, kind(prunedFile))
+        importer().run(index, pruned, noCheckpoint)
+        assertEquals(emptyList(), legacyFiles())
+        assertEquals(IosFiles.Kind.FILE, kind(settled))
     }
 
     @Test
@@ -153,38 +168,79 @@ class LegacyReceiptImportTest {
     }
 
     @Test
-    fun aMarkerWithoutItsRowsKeepsTheOldFilesAndCopiesThemAgain() = runTest {
+    fun aRowOrMarkRemovedBetweenLaunchesStaysRemoved() = runTest {
         synced(1)
-        writePruned(2)
-        importer().run(InMemoryArchiveIndex(), MemoryPruned())
-        // The rows were lost after the marker was written, as a power loss could do.
+        synced(2)
+        writePruned(3, 4)
         val index = InMemoryArchiveIndex()
         val pruned = MemoryPruned()
+        importer().run(index, pruned)
+        // Removed on purpose before the next launch, as when the device stops listing a file or a delete is undone.
+        index.remove(ArchiveKey(station, name(1)))
+        pruned.remove(mark(3).key)
 
-        assertEquals(LegacyReceiptImport.Result(1, 1), importer().run(index, pruned))
+        assertEquals(LegacyReceiptImport.Result(0, 0), importer().run(index, pruned, noCheckpoint))
 
-        assertEquals(IosFiles.Kind.FILE, kind(receipt(1)))
-        assertEquals(IosFiles.Kind.FILE, kind(prunedFile))
-        assertEquals(listOf(name(1)), index.observeAll().first().map { it.name })
-        assertEquals(listOf(mark(2)), pruned.observeAll().first())
-
-        assertEquals(LegacyReceiptImport.Result(0, 0), importer().run(index, pruned))
-        assertEquals(IosFiles.Kind.ABSENT, kind(receipt(1)))
-        assertEquals(IosFiles.Kind.ABSENT, kind("$finals-pruned"))
+        assertEquals(listOf(name(2)), index.observeAll().first().map { it.name })
+        assertEquals(listOf(mark(4)), pruned.observeAll().first())
+        assertEquals(emptyList(), legacyFiles())
+        assertEquals(IosFiles.Kind.FILE, kind(settled))
     }
 
     @Test
-    fun downloadAgainDropsTheOldMarksSoNoLaunchBringsThemBack() = runTest {
-        writePruned(1)
+    fun downloadAgainBetweenLaunchesStaysEmpty() = runTest {
+        writePruned(1, 2)
         val pruned = MemoryPruned()
         importer().run(InMemoryArchiveIndex(), pruned)
 
-        pruned.clear()
-        importer().dropLegacyMarks()
-        importer().run(InMemoryArchiveIndex(), pruned)
+        assertEquals(2, pruned.clear())
+        importer().run(InMemoryArchiveIndex(), pruned, noCheckpoint)
 
         assertEquals(emptyList(), pruned.observeAll().first())
-        assertEquals(IosFiles.Kind.ABSENT, kind("$finals-pruned"))
+        assertEquals(emptyList(), legacyFiles())
+    }
+
+    @Test
+    fun aLaunchCutShortInTheDeletesFinishesThemWithoutImporting() = runTest {
+        synced(1)
+        synced(2)
+        writePruned(3)
+        val index = InMemoryArchiveIndex()
+        val pruned = MemoryPruned()
+        importer().run(index, pruned)
+        // The app died after deleting receipt 1, and the rows went since.
+        NSFileManager.defaultManager.removeItemAtPath(receipt(1), null)
+        index.remove(ArchiveKey(station, name(2)))
+        pruned.remove(mark(3).key)
+
+        assertEquals(LegacyReceiptImport.Result(0, 0), importer().run(index, pruned, noCheckpoint))
+
+        assertEquals(listOf(name(1)), index.observeAll().first().map { it.name })
+        assertEquals(emptyList(), pruned.observeAll().first())
+        assertEquals(emptyList(), legacyFiles())
+        assertEquals(IosFiles.Kind.FILE, kind(settled))
+    }
+
+    @Test
+    fun aDeleteThatFailsLeavesTheImportUnsettledForALaterLaunch() = runTest {
+        synced(1)
+        val index = InMemoryArchiveIndex()
+        importer().run(index, MemoryPruned())
+        val dir = receipt(1).substringBeforeLast('/')
+        fun mode(bits: Int) = check(NSFileManager.defaultManager.setAttributes(mapOf<Any?, Any?>(NSFilePosixPermissions to bits), dir, null))
+
+        mode(0b101_101_101)
+        try {
+            importer().run(index, MemoryPruned(), noCheckpoint)
+            assertEquals(IosFiles.Kind.FILE, kind(receipt(1)))
+            assertEquals(IosFiles.Kind.ABSENT, kind(settled))
+        } finally {
+            mode(0b111_101_101)
+        }
+
+        importer().run(index, MemoryPruned(), noCheckpoint)
+        assertEquals(emptyList(), legacyFiles())
+        assertEquals(IosFiles.Kind.FILE, kind(settled))
     }
 
     @Test
