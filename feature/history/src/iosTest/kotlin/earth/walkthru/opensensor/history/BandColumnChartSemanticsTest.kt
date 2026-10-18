@@ -3,6 +3,7 @@ package earth.walkthru.opensensor.history
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
@@ -12,6 +13,7 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.v2.runComposeUiTest
 import earth.walkthru.aqsync.data.history.HistoryColumn
@@ -53,6 +55,36 @@ class BandColumnChartSemanticsTest {
         // Empty hours are left out of the swipe order. Each bar is a button, like a calendar day.
         onAllNodes(hasClickAction()).assertCountEquals(2)
         onAllNodes(hasClickAction() and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button)).assertCountEquals(2)
+    }
+
+    @Test
+    fun walkingTheTreeFindsOneNodePerBarInTimeOrder() = runComposeUiTest {
+        // Every slot with a reading is one button node in time order, an empty slot is none.
+        val hours = listOf(hour(0, 3f), hour(1, 12f), hour(2, null), hour(3, 22f), hour(4, 40f), hour(5, 60f), hour(6, 120f)) + (7 until 24).map { hour(it, null) }
+        setContent {
+            MaterialTheme {
+                BandColumnChart(hours, Metrics.PM25, HistoryRange.DAY, 0, 24 * HOUR, selected = null, onSelect = {}, zone = TimeZone.UTC, level = DetailLevel.SIMPLE)
+            }
+        }
+        val spoken = ArrayList<String>()
+        fun walk(node: SemanticsNode) {
+            if (node.config.getOrElseNullable(SemanticsProperties.Role) { null } == Role.Button) {
+                spoken += node.config[SemanticsProperties.ContentDescription].joinToString()
+            }
+            node.children.forEach(::walk)
+        }
+        walk(onRoot().fetchSemanticsNode())
+        assertEquals(
+            listOf(
+                "00:00, 3.0 µg/m³, Fresh air",
+                "01:00, 12.0 µg/m³, Fresh air",
+                "03:00, 22.0 µg/m³, Fair",
+                "04:00, 40.0 µg/m³, Poor",
+                "05:00, 60.0 µg/m³, Smoky",
+                "06:00, 120 µg/m³, Thick smoke",
+            ),
+            spoken,
+        )
     }
 
     @Test
