@@ -156,7 +156,11 @@ class IosArchiveStore(
 
     override fun reader(key: ArchiveKey, partial: Boolean): ByteReader {
         val path = if (partial) partialFile(key) else finalFile(key)
-        check(IosFiles.kind(path) == Kind.FILE) { "archive entry is not a file" }
+        when (IosFiles.kind(path)) {
+            Kind.FILE -> Unit
+            Kind.ABSENT -> if (IosFiles.isGone(path)) throw ArchiveFileMissingException("archive entry is gone") else error("archive entry cannot be read")
+            else -> error("archive entry is not a file")
+        }
         return LocalFileReader(path)
     }
 

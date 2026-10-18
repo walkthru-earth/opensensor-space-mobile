@@ -17,8 +17,23 @@ class ExportEntry(
     val name: String get() = path.substringAfterLast('/')
 }
 
-/** A file staged for the share sheet or the save picker, inside one [ExportRun]. */
-class StagedFile(val path: String, val name: String, val mime: String, val run: ExportRun)
+/**
+ * An archived file that is no longer there. A reader throws it only after it checked that the path is
+ * gone, so a zip can leave that file out and still fail on any other error (#168).
+ */
+class ArchiveFileMissingException(message: String) : IllegalStateException(message)
+
+/**
+ * True when [error] says the file an export tried to open no longer exists. Never true for another
+ * failure, such as a denied permission, an IO error or too many open files.
+ */
+internal expect fun isMissingFile(error: Throwable): Boolean
+
+/**
+ * A file staged for the share sheet or the save picker, inside one [ExportRun]. [skipped] counts the
+ * listed files a zip left out because they were gone by then ([ArchiveExport.writeZip]).
+ */
+class StagedFile(val path: String, val name: String, val mime: String, val run: ExportRun, val skipped: Int = 0)
 
 /**
  * The temporary space exports are staged in. Each export gets its own run directory (B7), and runs
@@ -118,14 +133,33 @@ object ArchiveExport {
      * entry is opened once and closed after its copy. The sink stays open for the caller to close.
      * [checkpoint] runs before each entry and each 64 KiB slice, so a caller can stop a long write
      * (a coroutine passes `ensureActive`). A full disk fails with [StorageException].
+     *
+     * An entry whose file is gone, such as a final the old format cleanup removed after the listing,
+     * is left out and the zip still builds (#168). Returns how many were left out. When no Parquet file
+     * is left to write, the first of those failures is thrown instead, so a zip never holds manifests
+     * alone. Any other failure to open or read an entry still fails the zip.
      */
-    fun writeZip(sink: ExportSink, entries: List<ExportEntry>, checkpoint: () -> Unit = {}) = mappingNoSpace {
+    fun writeZip(sink: ExportSink, entries: List<ExportEntry>, checkpoint: () -> Unit = {}): Int = mappingNoSpace {
         val zip = StoredZipWriter(sink, checkpoint = checkpoint)
+        var skipped = 0
+        var finals = 0
+        var firstMissing: Exception? = null
         for (e in entries) {
             checkpoint()
-            e.open().use { zip.add(e.path, it, e.modifiedEpochMs) }
+            val reader = try {
+                e.open()
+            } catch (x: Exception) {
+                if (!isMissingFile(x)) throw x
+                skipped++
+                firstMissing = firstMissing ?: x
+                continue
+            }
+            reader.use { zip.add(e.path, it, e.modifiedEpochMs) }
+            if (e.path.endsWith(".parquet")) finals++
         }
+        firstMissing?.let { if (finals == 0) throw it }
         zip.finish()
+        skipped
     }
 
     /** Rethrows an out of space failure as [StorageException], so the screen says the disk is full. */
@@ -144,14 +178,21 @@ object ArchiveExport {
      */
     fun plannedZipBytes(entries: List<ExportEntry>): Long = entries.sumOf { e ->
         val name = e.path.encodeToByteArray().size.toLong()
-        e.open().use { it.size } + 2 * name + ZIP_ENTRY_OVERHEAD
+        // An entry whose file is gone is left out of the zip, so it adds nothing here either.
+        val size = try {
+            e.open().use { it.size }
+        } catch (x: Exception) {
+            if (!isMissingFile(x)) throw x
+            return@sumOf 0L
+        }
+        size + 2 * name + ZIP_ENTRY_OVERHEAD
     } + ZIP_END_OVERHEAD
 
     /**
      * Writes [entries] as one STORED zip named [name] into a new run. A space that reports fewer free
      * bytes than [plannedZipBytes] fails with [StorageException] before anything is written. The run
      * is deleted on failure. On success it stays leased, and the caller releases or deletes it.
-     * [checkpoint] is passed to [writeZip].
+     * [checkpoint] is passed to [writeZip], and the entries it left out are [StagedFile.skipped].
      */
     fun stageZip(space: ExportSpace, entries: List<ExportEntry>, name: String, checkpoint: () -> Unit = {}): StagedFile {
         require(entries.isNotEmpty()) { "nothing to export" }
@@ -159,8 +200,8 @@ object ArchiveExport {
         try {
             val free = space.freeBytes()
             if (free != null && plannedZipBytes(entries) > free) throw StorageException("not enough free space for the export")
-            run.create(name).use { sink -> writeZip(sink, entries, checkpoint) }
-            return StagedFile(run.path(name), name, ZIP_MIME, run)
+            val skipped = run.create(name).use { sink -> writeZip(sink, entries, checkpoint) }
+            return StagedFile(run.path(name), name, ZIP_MIME, run, skipped)
         } catch (t: Throwable) {
             run.delete()
             throw t

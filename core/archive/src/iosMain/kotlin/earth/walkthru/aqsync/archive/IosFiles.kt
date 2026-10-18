@@ -33,7 +33,11 @@ import platform.Foundation.dataWithContentsOfFile
 import platform.Foundation.dateWithTimeIntervalSince1970
 import platform.Foundation.timeIntervalSince1970
 import platform.Foundation.writeToFile
+import platform.posix.ENOENT
+import platform.posix.errno
+import platform.posix.lstat
 import platform.posix.memcpy
+import platform.posix.stat
 
 /**
  * Foundation file helpers shared by [IosArchiveStore] and [LegacyReceiptImport]. Every type check
@@ -59,6 +63,12 @@ internal object IosFiles {
             else -> Kind.OTHER
         }
     }
+
+    /**
+     * True only when `lstat` says nothing is at [path] (ENOENT). A path that cannot be checked for any
+     * other reason, such as a denied permission, is not gone.
+     */
+    fun isGone(path: String): Boolean = memScoped { lstat(path, alloc<stat>().ptr) != 0 && errno == ENOENT }
 
     fun size(path: String): Long = (fm.attributesOfItemAtPath(path, null)?.get(NSFileSize) as? NSNumber)?.longLongValue ?: 0L
 

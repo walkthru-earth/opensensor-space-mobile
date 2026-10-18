@@ -262,6 +262,13 @@ class ArchiveExportTest {
     }
 
     @Test
+    fun aFileRightUnderDerivedBelongsToNoStation() {
+        // Its own name is no station folder, even when a station has that name.
+        val loose = listOf(entry("derived/v1/loose.parquet"), entry("derived/v1/loose.manifest.json"))
+        assertEquals(null, ArchiveExport.dailyEntries(loose, setOf("loose.parquet", "loose.manifest.json")))
+    }
+
+    @Test
     fun copiesOfTheSameNameFromTwoStationsStayApart() {
         val space = MemoryExportSpace()
         val staged = ArchiveExport.stageCopies(space, listOf(entry("A/x.parquet"), entry("B/x.parquet"), entry("A/y.parquet")))
@@ -385,6 +392,63 @@ class ArchiveExportTest {
         assertEquals(listOf("A/a.parquet"), zipNames(entries))
         assertEquals(42, entries.single().modifiedEpochMs)
         assertContentEquals(byteArrayOf(8), entries.single().open().read(0, 1))
+    }
+
+    @Test
+    fun aFinalRemovedAfterTheListingIsSkippedAndCounted() = kotlinx.coroutines.test.runTest {
+        val store = twoStationsAndAnOrphan()
+        val entries = ArchiveExport.archiveEntries(store, listOf(record("A", "a.parquet", 1), record("B", "b.parquet", 2)))
+        // The old format cleanup removes a listed final before the zip is written.
+        store.files.remove("${ArchiveLayout.ARCHIVE}/A/a.parquet")
+        val left = entries.filter { it.path == "B/b.parquet" }
+        assertEquals(ArchiveExport.plannedZipBytes(left), ArchiveExport.plannedZipBytes(entries))
+
+        val sink = MemorySink()
+        assertEquals(1, ArchiveExport.writeZip(sink, entries))
+        assertEquals(listOf("B/b.parquet"), ParsedZip(sink.bytes()).entries.map { it.name })
+
+        val space = MemoryExportSpace().apply { free = Long.MAX_VALUE }
+        assertEquals(1, ArchiveExport.stageZip(space, entries, "z.zip").skipped)
+        assertEquals(0, ArchiveExport.stageZip(space, left, "b.zip").skipped)
+        assertFalse(space.runs.first().deleted)
+        assertContentEquals(sink.bytes(), space.runs.first().files.getValue("z.zip").bytes())
+
+        // With every listed final gone there is nothing to share, so the export fails and leaves no run.
+        store.files.remove("${ArchiveLayout.ARCHIVE}/B/b.parquet")
+        assertFailsWith<ArchiveFileMissingException> { ArchiveExport.writeZip(MemorySink(), entries) }
+        assertFailsWith<ArchiveFileMissingException> { ArchiveExport.stageZip(space, entries, "gone.zip") }
+        assertTrue(space.runs.last().deleted)
+    }
+
+    @Test
+    fun anOpenFailureThatIsNotAGoneFileStillFailsTheExport() {
+        // A denied permission, an IO error or too many open files is not a file the cleanup removed.
+        val denied = ExportEntry("B/y.parquet", 0) { error("open failed: EACCES (Permission denied)") }
+        val entries = listOf(entry("A/x.parquet"), denied)
+        assertFailsWith<IllegalStateException> { ArchiveExport.writeZip(MemorySink(), entries) }
+        assertFailsWith<IllegalStateException> { ArchiveExport.plannedZipBytes(entries) }
+        val space = MemoryExportSpace()
+        assertFailsWith<IllegalStateException> { ArchiveExport.stageZip(space, entries, "z.zip") }
+        assertTrue(space.runs.single().deleted)
+    }
+
+    @Test
+    fun aDailyZipWithEveryParquetFileGoneFailsEvenWithItsManifests() {
+        fun gone(path: String) = ExportEntry(path, 0) { throw ArchiveFileMissingException(path) }
+        val manifest = entry("derived/v1/A/day=2026-10-01.manifest.json")
+        val onlyManifests = listOf(manifest, gone("derived/v1/A/day=2026-10-01.parquet"))
+        assertFailsWith<ArchiveFileMissingException> { ArchiveExport.writeZip(MemorySink(), onlyManifests) }
+        val space = MemoryExportSpace()
+        assertFailsWith<ArchiveFileMissingException> { ArchiveExport.stageZip(space, onlyManifests, "daily.zip") }
+        assertTrue(space.runs.single().deleted)
+
+        // One day file still there is enough, and the gone one is counted.
+        val sink = MemorySink()
+        assertEquals(1, ArchiveExport.writeZip(sink, onlyManifests + entry("derived/v1/A/day=2026-10-02.parquet")))
+        assertEquals(
+            listOf("derived/v1/A/day=2026-10-01.manifest.json", "derived/v1/A/day=2026-10-02.parquet"),
+            ParsedZip(sink.bytes()).entries.map { it.name },
+        )
     }
 
     @Test

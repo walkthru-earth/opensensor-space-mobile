@@ -9,6 +9,7 @@ import earth.walkthru.aqsync.data.protocol.Opcode
 import earth.walkthru.aqsync.data.protocol.ParquetVerify
 import earth.walkthru.aqsync.data.protocol.ProtocolError
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.delay
@@ -58,6 +59,18 @@ class FakeArchiveDevice(
 
     /** True for a READ (1-based) that sends no frame until an `ABORT` stops it, as a stalled link does. */
     var stallRead: (readIndex: Int) -> Boolean = { false }
+
+    /**
+     * CHUNKs the k-th READ (1-based) sends before it goes silent until an `ABORT`, so the link times
+     * out between frames instead of before the first one. Negative never stalls.
+     */
+    var stallAfterChunks: (readIndex: Int) -> Int = { -1 }
+
+    /** True for a request write that never completes, as a write stuck on a full link does. */
+    var hangWrite: (op: Int) -> Boolean = { false }
+
+    /** Request writes started so far, by opcode, in order, including any that [hangWrite] holds. */
+    val writes: MutableList<Int> = mutableListOf()
 
     /** Runs before an OPEN is answered, so a test can change the files between LIST and OPEN. */
     var beforeOpen: (name: String) -> Unit = {}
@@ -117,6 +130,9 @@ class FakeArchiveDevice(
     }
 
     override suspend fun writeControl(request: ByteArray) {
+        val op = request[0].toInt() and 0xFF
+        writes += op
+        if (hangWrite(op)) awaitCancellation()
         scope.launch { handle(request) }
     }
 
@@ -170,16 +186,12 @@ class FakeArchiveDevice(
                 val end = minOf(f.bytes.size.toLong(), offset + minOf(length, maxRead.toLong()))
                 val chunkMax = mtu - 10
                 var toDrop = dropLeadingChunks(++readCount)
+                val stallAt = if (stallRead(readCount)) 0 else stallAfterChunks(readCount)
+                var sent = 0
                 var pos = offset
                 streaming = op
-                if (stallRead(readCount)) {
-                    while (!abortRequested) delay(100)
-                    abortRequested = false
-                    streaming = 0
-                    send(Frame.Error(op, ProtocolError.ABORTED.code, ""))
-                    return send(Frame.Aborted(op))
-                }
-                while (pos < end) {
+                while (pos < end || sent == stallAt) {
+                    if (sent == stallAt) while (!abortRequested) delay(100)
                     if (abortRequested) {
                         abortRequested = false
                         streaming = 0
@@ -188,6 +200,7 @@ class FakeArchiveDevice(
                     }
                     val n = minOf(chunkMax.toLong(), end - pos).toInt()
                     if (toDrop > 0) toDrop-- else send(Frame.Chunk(handle, pos, f.bytes.copyOfRange(pos.toInt(), pos.toInt() + n)))
+                    sent++
                     pos += n
                     if (chunkDelayMs > 0) delay(chunkDelayMs)
                 }
