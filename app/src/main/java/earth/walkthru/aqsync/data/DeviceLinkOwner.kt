@@ -15,6 +15,7 @@ import earth.walkthru.aqsync.data.ble.InvalidConfigException
 import earth.walkthru.aqsync.data.ble.LogTail
 import earth.walkthru.aqsync.data.ble.NotAllowedOnLinkException
 import earth.walkthru.aqsync.data.ble.SecretNeedsBluetoothException
+import earth.walkthru.aqsync.data.ble.SnapshotPoller
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.ble.TransportUnavailableException
 import earth.walkthru.aqsync.data.ble.WifiUnavailableException
@@ -55,6 +56,7 @@ import earth.walkthru.aqsync.link.LinkState
 import earth.walkthru.aqsync.link.TimeoutPhase
 import earth.walkthru.aqsync.link.describe
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -288,6 +290,9 @@ class DeviceLinkOwner @Inject constructor(
     private val _manifest = MutableStateFlow<ManifestState>(ManifestState.Idle)
     val manifest: StateFlow<ManifestState> = _manifest.asStateFlow()
     private val manifestMutex = Mutex()
+
+    /** LIVE and STATUS reads when the MTU cannot notify a full snapshot (#159). Paused by a transfer. */
+    private val snapshotPoller = SnapshotPoller()
 
     /**
      * The last collection's progress. Kept through a disconnect and a reconnect so the last
@@ -668,7 +673,7 @@ class DeviceLinkOwner @Inject constructor(
             _events.tryEmit(DeviceEvent.Error(DeviceMessage.VerificationFailed))
             return false
         }
-        startNotificationCollection(session)
+        val setupDone = startNotificationCollection(session)
         try {
             val proto = info.proto
             if (proto != null && proto > AqUuids.PROTOCOL_VERSION) {
@@ -718,11 +723,8 @@ class DeviceLinkOwner @Inject constructor(
                 return false
             }
             identityReady.value = true
-            suspendRunCatching { transport.readStatus().decodeToString() }.onSuccess { raw ->
-                _statusRaw.value = raw
-                runCatching { DeviceStatus.parse(raw) }.onSuccess { _status.value = TimedStatus(it, clock.nowEpochMs()) }
-            }
-            suspendRunCatching { session.readLive() }.onSuccess { _live.value = TimedLive(it, clock.nowEpochMs()) }
+            suspendRunCatching { transport.readStatus() }.onSuccess { applyStatusRead(session, it) }
+            suspendRunCatching { transport.readLive() }.onSuccess { applyLiveRead(session, it) }
             info.station?.let { station -> scope.launch { if (_session.value === session) reportArchiveTimeline(station) } }
             recordDiagnostic("connect", "${transport.kind} ready")
 
@@ -748,6 +750,8 @@ class DeviceLinkOwner @Inject constructor(
             _events.tryEmit(DeviceEvent.Error(DeviceMessage.VerificationFailed))
             return false
         }
+        // Paced snapshot reads start once setup's own reads and requests are done.
+        setupDone.complete(Unit)
         // Verification and enrollment must finish before link loss can start an automatic
         // reconnect. A rejected or half-open session must never re-enroll itself later.
         if (watch && claim != null && connectionIntent.owns(claim)) watchLink(session, address, name, fake, claim, preference)
@@ -774,14 +778,46 @@ class DeviceLinkOwner @Inject constructor(
         false
     }
 
-    private fun startNotificationCollection(session: DeviceSession) {
+    /**
+     * Collect [session]'s notifications. On a link whose MTU cannot notify a full snapshot, also
+     * read LIVE and STATUS at the snapshot pace once the returned signal completes (#159).
+     */
+    private fun startNotificationCollection(session: DeviceSession): CompletableDeferred<Unit> {
+        val setupDone = CompletableDeferred<Unit>()
         val job = scope.launch(start = CoroutineStart.LAZY) {
             launch { session.status.collect { if (_session.value === session) _status.value = TimedStatus(it, clock.nowEpochMs()) } }
             launch { session.statusJson.collect { if (_session.value === session) _statusRaw.value = it } }
             launch { session.live.collect { if (_session.value === session) _live.value = TimedLive(it, clock.nowEpochMs()) } }
+            if (SnapshotPoller.needed(session.transport.kind, session.transport.mtu)) {
+                launch {
+                    setupDone.await()
+                    snapshotPoller.run(
+                        session.transport,
+                        paused = ::transferActive,
+                        onLive = { applyLiveRead(session, it) },
+                        onStatus = { applyStatusRead(session, it) },
+                    )
+                }
+            }
         }
         stateLock.withLock { notificationJob.also { notificationJob = job } }?.cancel()
         job.start()
+        return setupDone
+    }
+
+    /** A collection or a lent link owns the device, so snapshot reads wait. */
+    private fun transferActive(): Boolean = stateLock.withLock { _collectionActive.value || lending || lends.get() != 0 }
+
+    private fun applyStatusRead(session: DeviceSession, raw: ByteArray) {
+        if (_session.value !== session) return
+        val text = raw.decodeToString()
+        _statusRaw.value = text
+        runCatching { DeviceStatus.parse(text) }.onSuccess { _status.value = TimedStatus(it, clock.nowEpochMs()) }
+    }
+
+    private fun applyLiveRead(session: DeviceSession, raw: ByteArray) {
+        if (_session.value !== session) return
+        runCatching { LiveSample.parse(raw.decodeToString()) }.onSuccess { _live.value = TimedLive(it, clock.nowEpochMs()) }
     }
 
     fun disconnect() {
@@ -882,6 +918,8 @@ class DeviceLinkOwner @Inject constructor(
                 // Idle cancellation may close a half-open link under connectMutex. Join outside it.
                 handoff.forEach { it.join() }
                 stateLock.withLock { if (collectionHandoff === handoff) collectionHandoff = emptyList() }
+                // `lending` is set, so no new snapshot read starts. Let one in flight finish first.
+                snapshotPoller.quiesce()
                 connectMutex.withLock { lent = lendLocked(address, prefer, background, forCollection) }
             }
             currentCoroutineContext().ensureActive()

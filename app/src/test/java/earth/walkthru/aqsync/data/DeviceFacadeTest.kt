@@ -23,6 +23,7 @@ import earth.walkthru.aqsync.data.ble.ConnectionState
 import earth.walkthru.aqsync.data.ble.DeviceSession
 import earth.walkthru.aqsync.data.ble.FrameDirection
 import earth.walkthru.aqsync.data.ble.RawCommandRefusedException
+import earth.walkthru.aqsync.data.ble.SnapshotPoller
 import earth.walkthru.aqsync.data.ble.TransportException
 import earth.walkthru.aqsync.data.ble.TransportKind
 import earth.walkthru.aqsync.data.ble.TransportUnavailableException
@@ -76,6 +77,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -343,6 +345,93 @@ class DeviceFacadeTest {
         assertEquals(listOf(0, 1), h.clockAnchorsBeforeList)
         assertEquals(2, h.factory.requests.count { it == Opcode.SET_TIME })
         assertEquals(2, h.factory.fakeConnects)
+    }
+
+    @Test
+    fun `MTU 247 without snapshot notifications keeps Today and status fresh by paced reads`() = harnessTest { h ->
+        h.factory.smallMtu = true
+        h.repo.connect(ADDRESS, "AQ-6b40")
+        h.until { h.repo.connectionState.value.isReady && h.repo.live.value != null && h.repo.status.value != null }
+        var seq = checkNotNull(h.repo.live.value).sample.seq!!
+        var up = checkNotNull(h.repo.status.value).status.upSeconds!!
+        repeat(3) {
+            h.advance(SnapshotPoller.SNAPSHOT_READ_INTERVAL.inWholeMilliseconds)
+            val live = checkNotNull(h.repo.live.value).sample.seq!!
+            val status = checkNotNull(h.repo.status.value).status.upSeconds!!
+            assertTrue("Today follows the board's cached LIVE value", live > seq)
+            assertTrue("STATUS follows the board's cached value", status > up)
+            seq = live
+            up = status
+        }
+        assertTrue(checkNotNull(h.repo.statusRaw.value).contains("\"up_s\":$up"))
+    }
+
+    @Test
+    fun `a failed snapshot read keeps the link and the next tick reads again`() = harnessTest { h ->
+        h.factory.smallMtu = true
+        h.repo.connect(ADDRESS, "AQ-6b40")
+        h.until { h.repo.connectionState.value.isReady && h.repo.live.value != null }
+        val seq = checkNotNull(h.repo.live.value).sample.seq!!
+        val reads = h.factory.snapshotReads.size
+        h.factory.failSnapshotReads = 2
+        h.advance(SnapshotPoller.SNAPSHOT_READ_INTERVAL.inWholeMilliseconds)
+        assertEquals("both reads of the failing tick ran", reads + 2, h.factory.snapshotReads.size)
+        assertEquals(seq, checkNotNull(h.repo.live.value).sample.seq)
+        assertTrue(h.repo.connectionState.value.isReady)
+        h.advance(SnapshotPoller.SNAPSHOT_READ_INTERVAL.inWholeMilliseconds)
+        assertTrue("the next tick reads a newer LIVE", checkNotNull(h.repo.live.value).sample.seq!! > seq)
+        assertTrue(h.repo.connectionState.value.isReady)
+    }
+
+    @Test
+    fun `snapshot reads pause for a transfer and never overlap its requests`() = harnessTest { h ->
+        h.factory.smallMtu = true
+        h.factory.snapshotReadMs = 2_000
+        h.repo.connect(ADDRESS, "AQ-6b40")
+        h.until { h.repo.connectionState.value.isReady && h.repo.live.value != null }
+        // Start the transfer while a paced read is in flight.
+        val setupReads = h.factory.snapshotReads.size
+        h.until { h.factory.snapshotReads.size > setupReads }
+        // LIST answers just inside its write deadline, so the transfer spans more than one read tick.
+        h.factory.listDelayMs = 8_000
+        val started = h.test.testScheduler.currentTime
+        h.repo.syncAll()
+        h.until(120_000) { h.repo.collectionState.value is CollectionState.Done && !h.repo.busy.value }
+        assertTrue(h.test.testScheduler.currentTime - started > 2 * SnapshotPoller.SNAPSHOT_READ_INTERVAL.inWholeMilliseconds)
+        assertTrue(Opcode.LIST in h.factory.requests)
+        assertEquals(emptyList<Int>(), h.factory.writesDuringRead.toList())
+        assertEquals(emptyList<String>(), h.factory.readsDuringTransfer.toList())
+        val afterTransfer = h.factory.snapshotReads.size
+        h.advance(2 * SnapshotPoller.SNAPSHOT_READ_INTERVAL.inWholeMilliseconds)
+        assertTrue("reads resume once the transfer ends", h.factory.snapshotReads.size > afterTransfer)
+    }
+
+    @Test
+    fun `no snapshot read runs after a disconnect`() = harnessTest { h ->
+        h.factory.smallMtu = true
+        h.repo.connect(ADDRESS, "AQ-6b40")
+        h.until { h.repo.connectionState.value.isReady && h.repo.live.value != null }
+        val setupReads = h.factory.snapshotReads.size
+        h.advance(SnapshotPoller.SNAPSHOT_READ_INTERVAL.inWholeMilliseconds)
+        assertTrue(h.factory.snapshotReads.size > setupReads)
+        h.repo.disconnect()
+        h.until { h.repo.session.value == null }
+        val reads = h.factory.snapshotReads.size
+        h.advance(6 * SnapshotPoller.SNAPSHOT_READ_INTERVAL.inWholeMilliseconds)
+        assertEquals(reads, h.factory.snapshotReads.size)
+    }
+
+    @Test
+    fun `no snapshot read runs after the link is lost`() = harnessTest { h ->
+        h.factory.smallMtu = true
+        h.repo.connect(ADDRESS, "AQ-6b40")
+        h.until { h.repo.connectionState.value.isReady && h.repo.live.value != null }
+        h.factory.unavailable = UnavailableKind.RADIO_OFF
+        h.device.disconnect()
+        h.test.runCurrent()
+        val reads = h.factory.snapshotReads.size
+        h.advance(6 * SnapshotPoller.SNAPSHOT_READ_INTERVAL.inWholeMilliseconds)
+        assertEquals(reads, h.factory.snapshotReads.size)
     }
 
     @Test
@@ -1342,6 +1431,7 @@ class DeviceFacadeTest {
                 monotonic = test.testScheduler.timeSource,
             )
             repo.bind(endpoint)
+            factory.transferActive = { owner.collectionActive.value }
             appScope.launch { repo.events.collect { events += it } }
         }
 
@@ -1426,6 +1516,28 @@ class DeviceFacadeTest {
 
         /** The device link drops once, when this opcode is written. */
         var dropOn: Int? = null
+
+        /**
+         * When set, Bluetooth links negotiate MTU 247 and the board omits every LIVE and STATUS
+         * notification, as it does for a snapshot over 244 bytes (#159). Each characteristic read
+         * returns a newer value and takes [snapshotReadMs] of virtual time.
+         */
+        var smallMtu = false
+        var snapshotReadMs = 0L
+
+        /** The next this many snapshot reads fail, as a transient ATT error does. */
+        var failSnapshotReads = 0
+
+        /** Whether a transfer owned the device, checked when each LIVE read starts. */
+        var transferActive: () -> Boolean = { false }
+        val snapshotReads = CopyOnWriteArrayList<String>()
+        val readsDuringTransfer = CopyOnWriteArrayList<String>()
+        private var readsInFlight = 0
+
+        /** Control writes issued while a snapshot read was in flight. */
+        val writesDuringRead = CopyOnWriteArrayList<Int>()
+        private var liveSeq = 100L
+        private var statusUp = 5_000L
         private fun clockStatus(payload: ByteArray): ByteArray = if (clockMissingOnReconnect && fakeConnects > 1) payload.decodeToString().replace("\"utc\":1", "\"utc\":0").encodeToByteArray() else payload
         private val observedDevice = object : AqTransport by device {
             override val statusNotifications: Flow<ByteArray> = device.statusNotifications.map(::clockStatus)
@@ -1438,6 +1550,7 @@ class DeviceFacadeTest {
             override suspend fun writeControl(request: ByteArray) {
                 val op = request.first().toInt() and 0xff
                 requests += op
+                if (readsInFlight > 0) writesDuringRead += op
                 if (op == Opcode.SET_TIME && fakeConnects > 1) clockMissingOnReconnect = false
                 if (op == dropOn) {
                     dropOn = null
@@ -1450,6 +1563,38 @@ class DeviceFacadeTest {
                 }
                 if (op == Opcode.SET_CONFIG) delay(configDelayMs)
                 device.writeControl(request)
+            }
+        }
+
+        /** A subscribed characteristic the board never notifies. It stays open and emits nothing. */
+        private val silent: Flow<ByteArray> = flow { awaitCancellation() }
+
+        /** A board at MTU 247 that caches each snapshot but never notifies it. */
+        private val smallMtuDevice = object : AqTransport by observedDevice {
+            override val kind = TransportKind.BLE
+            override val mtu = 247
+            override val statusNotifications: Flow<ByteArray> = silent
+            override val liveNotifications: Flow<ByteArray> = silent
+            override suspend fun readLive(): ByteArray = snapshotRead("live") { """{"seq":${++liveSeq},"pm25":${liveSeq % 50}}""" }
+            override suspend fun readStatus(): ByteArray = snapshotRead("status") {
+                observedDevice.readStatus().decodeToString().replace(Regex(""""up_s":\d+"""), """"up_s":${++statusUp}""")
+            }
+        }
+
+        private suspend fun snapshotRead(name: String, value: suspend () -> String): ByteArray {
+            snapshotReads += name
+            // The collection's clock check reads STATUS itself. Only the snapshot poller reads LIVE.
+            if (name == "live" && transferActive()) readsDuringTransfer += name
+            readsInFlight++
+            try {
+                delay(snapshotReadMs)
+                if (failSnapshotReads > 0) {
+                    failSnapshotReads--
+                    throw TransportException("read failed")
+                }
+                return value().encodeToByteArray()
+            } finally {
+                readsInFlight--
             }
         }
 
@@ -1481,7 +1626,7 @@ class DeviceFacadeTest {
         private fun counted(): AndroidLink {
             fakeConnects++
             if (hangConnect) return TransportLink(HangingTransport(observedDevice), scope)
-            val link = TransportLink(observedDevice, scope)
+            val link = TransportLink(if (smallMtu) smallMtuDevice else observedDevice, scope)
             val failure = reconnectFailure
             return if (fakeConnects > 1 && failure != null) {
                 object : AndroidLink by link {

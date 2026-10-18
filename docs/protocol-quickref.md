@@ -24,12 +24,12 @@ sequenceDiagram
 | --- | --- | --- |
 | SERVICE | `0001` | scan filter; device name prefix `AQ-` |
 | INFO | `0002` | read once: `proto`, `fw`, `station`, `max_read`, … |
-| STATUS | `0003` | notify: status JSON |
-| LIVE | `0004` | notify: live JSON (10-s sample) |
+| STATUS | `0003` | read + notify: status JSON (≤ 480 B) |
+| LIVE | `0004` | read + notify: live JSON (10-s sample, ≤ 480 B) |
 | CONTROL | `0005` | write: request |
 | RESPONSE | `0006` | notify: one frame per notification |
 
-`MTU_REQUEST = 517`, `MTU_MINIMUM = 247`, `PROTOCOL_VERSION = 2`. BLE `payload_max = min(MTU − 3, 512)`.
+`MTU_REQUEST = 517`, `MTU_MINIMUM = 247`, `PROTOCOL_VERSION = 2`. BLE `payload_max = min(MTU − 3, 512)`. Below MTU 483 a snapshot can exceed one notification and is skipped, so the app long reads STATUS and LIVE every 10 s.
 
 **Advertising service data** (`Advertisement`, protocol 2.1 / firmware ≥ `-v6.3`), under SERVICE in the ADV PDU; the name and UUID list are in the scan response (the `ScanRecord` merges both): `ver` u8 = 1 · `flags` u8 (bit 0 `no_utc`, 1 `new_files`, 2 `sd`, 3 `lan`, 4 `fail`, 5 `clk_restored`) · `fin` u32 LE · `boot16` u16 LE (last four hex digits of `info.boot`) · 2 reserved. `Advertisement.decode(scanRecord.getServiceData(SERVICE))`; `flagFilter(flag)` gives the `data/mask` pair for a hardware `ScanFilter`. Absent on older firmware → `null`.
 

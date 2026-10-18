@@ -22,7 +22,33 @@ enum BleGattChecks {
         nativeWriteFailureIsReported()
         brokenBondIsTold()
         pendingConnectsWaitAgainAfterTheRadioReturns()
+        snapshotReadsWaitForAnIdleQueue()
         print("iOS Bluetooth GATT checks passed")
+    }
+
+    private static func snapshotReadsWaitForAnIdleQueue() {
+        precondition(BleSnapshotReads.needed(mtu: 247), "a 247 byte MTU omits a full snapshot notification")
+        precondition(BleSnapshotReads.needed(mtu: 482), "a 482 byte MTU omits the largest snapshot notification")
+        precondition(!BleSnapshotReads.needed(mtu: 483), "a 483 byte MTU notifies every snapshot")
+        precondition(
+            !BleSnapshotReads.failedReadEndsLink(info: false, discovering: false), "a failed paced read keeps the link")
+        precondition(BleSnapshotReads.failedReadEndsLink(info: false, discovering: true), "a failed discovery read ends it")
+        precondition(BleSnapshotReads.failedReadEndsLink(info: true, discovering: false), "a failed INFO read ends it")
+        let live = Characteristic(), status = Characteristic(), control = Characteristic()
+        var queue = BleGattQueue<Characteristic>()
+        queue.attach(sender: 1)
+        let sent = Completion()
+        queue.write(Data([1]), to: control, from: 1, done: sent.record)
+        precondition(!queue.readSnapshots(live, status), "a queued request keeps snapshot reads out")
+        guard case .write? = queue.next() else { fatalError("the request runs") }
+        precondition(!queue.readSnapshots(live, status), "a request in flight keeps snapshot reads out")
+        precondition(queue.finish(write: control, ok: true) == .written, "the request completes")
+        precondition(queue.readSnapshots(live, status), "an idle queue takes snapshot reads")
+        guard case .read(let a)? = queue.next(), a === live else { fatalError("live is read first") }
+        precondition(queue.finish(read: live), "the live read completes")
+        guard case .read(let b)? = queue.next(), b === status else { fatalError("status is read second") }
+        queue.reset()
+        precondition(queue.isIdle && queue.next() == nil, "a disconnect drops the reads")
     }
 
     private static func pendingConnectsWaitAgainAfterTheRadioReturns() {

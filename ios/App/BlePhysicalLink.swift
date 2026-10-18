@@ -60,6 +60,9 @@ actor BlePhysicalLink {
     private var connection: UInt64 = 0
     private var control: CBCharacteristic?
     private var response: CBCharacteristic?
+    /// The snapshot characteristics, kept for paced reads (#159).
+    private var live: CBCharacteristic?
+    private var status: CBCharacteristic?
     private var responseSubscribed = false
     /// True until the discovery reads finished.
     private var discovering = false
@@ -195,6 +198,19 @@ actor BlePhysicalLink {
         }
     }
 
+    /// Reads `live` then `status` once for connection [number], only while discovery is over and no
+    /// other GATT operation is queued or in flight. Their values arrive as `.live` and `.status`.
+    nonisolated func readSnapshots(_ number: UInt64) {
+        queue.async { [self] in
+            assumeIsolated {
+                guard $0.connection == number, $0.current != nil, !$0.discovering, let live = $0.live,
+                    let status = $0.status, $0.gatt.readSnapshots(live, status)
+                else { return }
+                $0.performNext()
+            }
+        }
+    }
+
     /// Arms pending connects to these sensors. They never time out.
     nonisolated func arm(ids: [String]) {
         queue.async { [self] in
@@ -317,6 +333,8 @@ actor BlePhysicalLink {
         discovering = false
         control = nil
         response = nil
+        live = nil
+        status = nil
         if let peripheral = current {
             current = nil
             peripheral.delegate = nil
@@ -462,6 +480,8 @@ actor BlePhysicalLink {
         response = characteristics.first(where: {
             $0.uuid == CBUUID(string: uuids.response) && $0.properties.contains(.notify)
         })
+        self.live = live
+        self.status = status
         // Serialize discovery follow-up, encrypted subscription and reads through their delegate callbacks.
         discovering = true
         gatt.start([.read(info), .subscribe(live), .read(live), .subscribe(status), .read(status)])
@@ -505,7 +525,11 @@ actor BlePhysicalLink {
             deliver(connection, .token(kind: reply.kind, payload: reply.payload, port: Int(reply.port)))
             return
         }
-        guard !failed, let data = characteristic.value else { return lose(.readFailed) }
+        guard !failed, let data = characteristic.value else {
+            let info = characteristic.uuid == CBUUID(string: uuids.info)
+            if BleSnapshotReads.failedReadEndsLink(info: info, discovering: discovering) { return lose(.readFailed) }
+            return readDone(characteristic)
+        }
         guard let json = String(data: data, encoding: .utf8) else {
             // INFO identifies the sensor, so an unreadable one ends the link. One bad LIVE or STATUS
             // value is dropped, and a discovery read of it still completes so the queue moves on.
