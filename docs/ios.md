@@ -54,10 +54,16 @@ and Auto-sync steps all call `runs.collect`, and a retry with no open link asks 
 again. `SensorSync` reports progress at most four times a second and finishes with one result.
 
 The archive is `Application Support/SensorArchive/<station>/<Hive path>`, with partials under
-`archive-partial/<station>/`, through `IosArchiveStore` and `ReceiptArchiveIndex` in `:core:archive`.
-A final name appears only after size, CRC-32 and `PAR1` pass, and the receipt also records
-SHA-256. The root uses `completeUntilFirstUserAuthentication`, so collection keeps writing after
-the phone locks, and is excluded from backup. `IosArchive` builds History tiers through the shared
+`archive-partial/<station>/`, through `IosArchiveStore` in `:core:archive`. The index and pruned marks
+live in the shared Room database `Application Support/database/aq-sync.db` (`IosArchiveDatabase` in
+`:core:database`), which uses the same protection class and is excluded from backup. A final name
+appears only after size, CRC-32 and `PAR1` pass, and its record also holds SHA-256. On its first open
+the database imports the `.verified.json` receipts and `pruned.v1` marks an older build left. Only a
+receipt whose file passes size, CRC-32 and `PAR1` becomes a record, and a receipt that fails or
+throws is skipped. The rows are checkpointed into the file before the `receipts-imported` marker is
+written. The next launch deletes the old files without touching Room, then writes `receipts-settled`,
+after which the import does nothing. The root uses
+`completeUntilFirstUserAuthentication`, so collection keeps writing after the phone locks, and is excluded from backup. `IosArchive` builds History tiers through the shared
 indexer and `DayPass`, persists them with `IosFileTierStore` and repairs the index at launch.
 `SensorArchive.swift` holds only the station ID check Swift applies before saving a credential.
 
@@ -73,12 +79,12 @@ as a typed `CompanionNotice`, so iOS shows Android's words in English and Arabic
 | Auto-sync | `BGProcessingTask` and a pending Bluetooth connect, see [background-sync.md](background-sync.md#ios-auto-sync) |
 | Idle links | Discovery and idle links close when the app leaves. An open page reconnects on return |
 
-A force quit stops everything. Downloaded bytes and receipts stay for the next sync.
+A force quit stops everything. Downloaded bytes and index records stay for the next sync.
 
 ## Screens over iOS services
 
 - **My devices.** `DevicesBridge` feeds the shared list from `CompanionState`, known records in
-  UserDefaults (never a credential), the Keychain credential list (ids only) and the receipt
+  UserDefaults (never a credential), the Keychain credential list (ids only) and the Room
   index. Forget, after confirmation, drops the record, the Keychain access and Auto-sync, and
   says the bond is removed in iOS Settings.
 - **Today.** `CompanionTodaySource` reads INFO, STATUS and LIVE for the open link. Today so far

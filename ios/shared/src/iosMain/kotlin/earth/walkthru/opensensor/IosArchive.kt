@@ -8,9 +8,8 @@ import earth.walkthru.aqsync.archive.ClockAnchor
 import earth.walkthru.aqsync.archive.IosArchiveStore
 import earth.walkthru.aqsync.archive.IosClockAnchorStore
 import earth.walkthru.aqsync.archive.IosExportSpace
-import earth.walkthru.aqsync.archive.IosPrunedFiles
 import earth.walkthru.aqsync.archive.PrunedFiles
-import earth.walkthru.aqsync.archive.ReceiptArchiveIndex
+import earth.walkthru.aqsync.data.archive.IosArchiveDatabase
 import earth.walkthru.aqsync.data.history.ArchiveHistoryTiers
 import earth.walkthru.aqsync.data.history.ArchiveIndexRepair
 import earth.walkthru.aqsync.data.history.HistoryOrchestrator
@@ -60,18 +59,21 @@ import platform.Foundation.NSUserDomainMask
 import kotlin.time.Clock
 
 /**
- * The one phone archive of the iOS process: the store, its receipt index, the in-memory History
+ * The one phone archive of the iOS process: the store, its Room index, the in-memory History
  * tiers and the History reader. The sync runner and History share the same index instance, so a file
  * saved by a sync shows in History without a relaunch.
  */
 internal object IosArchive {
     val store: IosArchiveStore by lazy { IosArchiveStore.inApplicationSupport() }
-    val index: ArchiveIndex by lazy { ReceiptArchiveIndex(store.finalRoot) }
+
+    /** The shared Room tables in `Application Support/database/aq-sync.db`, after the one time receipt import. */
+    private val database by lazy { IosArchiveDatabase(store, "$base/database") }
+    val index: ArchiveIndex get() = database.index
     private val clockAnchorsRoot get() = store.finalRoot + "-clock-anchors"
     val clockAnchors by lazy { IosClockAnchorStore(clockAnchorsRoot) }
 
     /** Files removed in Settings, which sync skips. Kept outside the station directories. */
-    val pruned: PrunedFiles by lazy { IosPrunedFiles(store.finalRoot + "-pruned") }
+    val pruned: PrunedFiles get() = database.pruned
 
     // Tiers persist beside the derived day files, so a cold History open decodes only new days (#63).
     val tiers: ArchiveHistoryTiers by lazy {
@@ -224,7 +226,7 @@ internal object IosArchive {
     }
 
     /**
-     * The phone only cleanup of old format files behind Settings. The receipt index change already
+     * The phone only cleanup of old format files behind Settings. The index change already
      * rebuilds the derived days through [startIndexRepair], the explicit rebuild runs it now and also
      * visits the stations whose files all went, so their stale day files are removed.
      */

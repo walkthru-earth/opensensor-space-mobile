@@ -70,7 +70,7 @@ error) is the one test of whether a row's index columns can be read, and `withUt
 same test in SQL. `ArchiveRecord.awaitsIndex` (never indexed, or reopened) marks a row the back-fill
 still has to read.
 
-Room v11 and iOS receipt layout 2 (`ArchiveRecord.INDEX_LAYOUT`) reopen every indexed row without UTC
+Room v11 and the one time iOS receipt import (`ArchiveRecord.INDEX_LAYOUT`) reopen every indexed row without UTC
 rows or an error, so a file whose `event_time_utc_us` an older build could not read is indexed again
 once. Until the back-fill reaches it, such a row awaits its index.
 
@@ -273,17 +273,16 @@ the user pages back, and opens on the last local day with readings.
 | | Android | iOS |
 | --- | --- | --- |
 | Host | `HistoryViewModel` (Hilt, assisted by address) | `HistoryHolder` ViewModel in `AppRoot` |
-| Index | Room `archived_file` (`RoomArchiveIndex`) | `.verified.json` receipts (`ReceiptArchiveIndex`), one instance shared with the sync runner (`IosArchive`) |
+| Index | Room `archived_file` (`RoomArchiveIndex`) | Room `archived_file` (`RoomArchiveIndex` through `IosArchiveDatabase`), one instance shared with the sync runner (`IosArchive`) |
 | Tiers | Room `metric_bucket` (`RoomHistoryTiers`) | persisted signature-gated sidecars from the shared day pass (`ArchiveHistoryTiers`) |
 | Current station | the known device's station | the archived station with the latest reading |
 | Chips | the device's authenticated station epochs | every archived station, oldest latest reading first |
-| Index repair | `HistoryOrchestrator.run` from `AqSyncApplication`. The engine indexes each file in the same upsert, so a record waits only after a migration reopens it | `HistoryOrchestrator.run` from `IosArchive.startIndexRepair`. The engine adds receipts without index columns, so a back-fill follows each new file. On both phones changes during a pass are conflated, and passes repeat until no record is waiting |
+| Index repair | `HistoryOrchestrator.run` from `AqSyncApplication`. The engine indexes each file in the same upsert, so a record waits only after a migration reopens it | `HistoryOrchestrator.run` from `IosArchive.startIndexRepair`. The engine adds records without index columns, so a back-fill follows each new file. On both phones changes during a pass are conflated, and passes repeat until no record is waiting |
 | Header | device section tabs and the link chip | a back arrow, opened from the History button on My devices |
 
 Repair writes only its own columns. It merges the index and estimate columns onto the latest
 record with `ArchiveIndex.update`, so a fingerprint the engine fills during a pass survives.
-`ReceiptArchiveIndex` reads and writes under its lock. Room uses the default read then write,
-which narrows the race but is not atomic (follow-up, a Room transaction). The engine's own
+On both phones that read and write is one Room transaction (`ArchivedFileDao.update`). The engine's own
 fingerprint fill still writes back a whole record. When that snapshot lacks the index columns,
 the record waits again and the next pass repairs it.
 

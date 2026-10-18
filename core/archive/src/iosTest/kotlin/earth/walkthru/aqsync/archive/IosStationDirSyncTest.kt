@@ -60,15 +60,4 @@ class IosStationDirSyncTest {
         assertTrue(IosFiles.kind("$root/${clockTestAnchor.station}/${ClockAnchorReceipt.relativePath(clockTestAnchor)}") == IosFiles.Kind.FILE)
         assertStationDirSynced("$root/${clockTestAnchor.station}")
     }
-
-    @Test
-    fun receiptIndexPutIfAbsentSyncsANewStationDir() = runTest {
-        IosFiles.prepareRoot(finals)
-        val index = ReceiptArchiveIndex(finals, Dispatchers.Unconfined, recording)
-
-        assertTrue(index.putIfAbsent(ArchiveRecord(station, key.name, bytes.size.toLong(), ParquetVerify.crc32(bytes), "ab", 7, "device-a")))
-
-        assertTrue(IosFiles.kind("$stationDir/${key.name}${ArchiveLayout.LEGACY_RECEIPT_SUFFIX}") == IosFiles.Kind.FILE)
-        assertStationDirSynced(stationDir)
-    }
 }

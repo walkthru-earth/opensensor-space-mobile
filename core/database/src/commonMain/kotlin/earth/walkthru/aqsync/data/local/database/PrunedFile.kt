@@ -2,8 +2,9 @@ package earth.walkthru.aqsync.data.local.database
 
 import androidx.room.Dao
 import androidx.room.Entity
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
-import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
 /** A sensor file the user removed from this phone in Settings. Sync skips it while the device lists the same size. */
@@ -24,7 +25,8 @@ interface PrunedFileDao {
     @Query("SELECT * FROM pruned_file WHERE station = :station")
     suspend fun forStation(station: String): List<PrunedFileEntity>
 
-    @Upsert
+    /** The key is the whole primary key and nothing references the row, so `REPLACE` is an upsert. */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(file: PrunedFileEntity)
 
     @Query("DELETE FROM pruned_file WHERE station = :station AND name = :name")

@@ -46,7 +46,8 @@ concern you are changing in `docs/README.md`.
   LAN tokens remain encrypted at rest. Device-changing actions are explicit UI
   actions; reboot, token rotation, forgetting bonds and pairing mode `none`
   require confirmation. Debug raw commands cannot invoke `REBOOT` or `SET_CONFIG`.
-- `:core:*` stays reusable without Android, Hilt or Room. Every `:core` module
+- `:core:*` stays reusable without Android or Hilt. Room lives only in `:core:database`,
+  one Room KMP schema on the bundled SQLite driver for both phones. Every other `:core` module
   (`protocol`, `parquet`, `history`, `publicfeed`, `units`, `airquality`, `archive`,
   `storage`, `net`, `sync`, `settings`) compiles for JVM and iOS from `commonMain`.
   Platform adapters stay in `jvmMain` and `iosMain` (streams, file mapping, zlib,

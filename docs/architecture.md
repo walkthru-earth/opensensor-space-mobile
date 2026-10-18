@@ -28,7 +28,7 @@ flowchart TB
     FS[":feature:settings<br/>Settings screen and controller"]
     SH[":feature:shell<br/>AppKey, TabNavigator, AppShell, bottom bar"]
   end
-  APP[":app (Android)<br/>Hilt, Room v11, DataStore, WorkManager, Compose, zstd-jni"]
+  APP[":app (Android)<br/>Hilt, DataStore, WorkManager, Compose, zstd-jni"]
   IOS["ios/App (Xcode + Swift)<br/>Core Bluetooth, Bonjour, lifecycle, Keychain, export"]
   IS[":ios:shared (iOS only)<br/>AppRoot, DevicesBridge, the iOS bridges, static OpenSensorShared framework"]
   SY1 --> PR & AR1
@@ -81,9 +81,9 @@ the same answer on both phones is shared and platform code only adapts OS servic
 `:core:archive`, `:core:settings` and `:feature:settings` exist. Both platforms run the shared
 sync engine and one shared collection controller per device (Android through `DeviceFacade`, iOS
 through `SensorCollections`, [#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81)).
-iOS Core Bluetooth runs on the `BlePhysicalLink` serial queue. Room KMP backing and `:core:model`
-(device families and metrics as data, [devices-and-discovery.md](devices-and-discovery.md)) are
-planned.
+iOS Core Bluetooth runs on the `BlePhysicalLink` serial queue. Both phones keep the archive index and
+pruned marks in one Room KMP database, `:core:database`. `:core:model` (device families and metrics as
+data, [devices-and-discovery.md](devices-and-discovery.md)) is planned.
 
 ```mermaid
 flowchart TB
@@ -195,7 +195,8 @@ for iOS-specific guidance. SwiftUI review rules apply only if native SwiftUI vie
 | `publicfeed` | Discover feed, H3, viewport cover and sample data |
 | `units`, `airquality` | Display units, axis ticks and WHO 2021 scales |
 | `storage` | Durable/Derived/Scratch roots, atomic no-replace commits, free-space budget, quota and memory pressure |
-| `archive` | Layout, verifier, records and store/index ports. Android uses file/Room adapters; iosMain supplies `IosArchiveStore` and `ReceiptArchiveIndex` |
+| `archive` | Layout, verifier, records and store/index ports. Android uses file adapters, iosMain supplies `IosArchiveStore` and `LegacyReceiptImport` |
+| `database` | Room KMP schema v12 (`AppDatabase`, entities, DAOs) on the bundled SQLite driver, `RoomArchiveIndex` and `RoomPrunedFiles` for both phones. iosMain opens `Application Support/database/aq-sync.db` through `IosArchiveDatabase` |
 | `sync` | `LinkSession`, typed `DeviceSession` views, `SyncEngine`, `ArchiveCollector`, `CollectionController`, policies, progress and `StorageJanitor` |
 | `settings` | Shared DataStore preferences, keys and detail level. iOS supplies its Application Support path and one-time UserDefaults import |
 
@@ -275,7 +276,7 @@ not phone cold-open latency or a qualified latency improvement.
 | `core/protocol/Frames.kt` (opcodes, layouts) | `DeviceSession`, `FakeTransport`, `FrameRecorder`, `DebugScreen` raw box | the firmware contract first (owner), `FrameCodec*Test`, the fake |
 | `AqTransport` interface | `BleLinkDriver`, `TcpLinkDriver`, `FakeTransport` (through `TransportLink`), `DeviceSession`, repository | `TcpLinkDriverTest` loopback, `:core:sync` `SyncEngineTest` |
 | `Metrics` registry | `Aggregator`, `HistoryDeriver`, `DailyDerivedBuilder`, History picker, charts, Now card | `AggregationTest`, `HistoryDeriverTest`, Room `metric_bucket` rows (id strings) |
-| Room entities | `SyncEngine`, `HistoryIndexer/Deriver/Repository`, ViewModels | a new migration + `app/schemas/<n>.json`, `DERIVE_VERSION` if tier meaning changed |
+| Room entities | `SyncEngine`, `HistoryIndexer/Deriver/Repository`, ViewModels | a new migration + `core/database/schemas/<n>.json`, `DERIVE_VERSION` if tier meaning changed |
 | `ParquetWriter` output | `DailyDerivedBuilder`, `tools/validate_parquet_samples.py` | PyArrow + DuckDB oracle run |
 | `CollectionState` / `SyncProgress` | facade UI projections, Files, service and worker | `CollectionControllerTest`, facade tests, lease accounting and notification text |
 | Manager/controller ownership, transfer budget | address-bound ViewModels, runner, worker, foreground service | `DeviceOwnershipTest`, `AutoSyncRunnerTest`, cancellation and per-device progress |

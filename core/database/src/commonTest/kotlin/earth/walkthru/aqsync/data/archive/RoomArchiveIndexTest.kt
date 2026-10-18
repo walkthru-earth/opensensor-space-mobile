@@ -1,35 +1,32 @@
 package earth.walkthru.aqsync.data.archive
 
-import android.content.ContextWrapper
-import androidx.room.Room
-import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import earth.walkthru.aqsync.archive.ArchiveKey
 import earth.walkthru.aqsync.archive.ArchiveRecord
-import earth.walkthru.aqsync.data.local.database.AppDatabase
+import earth.walkthru.aqsync.data.local.database.inMemoryAppDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
-import org.junit.After
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import kotlinx.coroutines.test.runTest
+import kotlin.test.AfterTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
-/** [RoomArchiveIndex.update], [RoomArchiveIndex.putIfAbsent] and the narrow views on a real in-memory Room database over the bundled SQLite driver. */
+/**
+ * [RoomArchiveIndex.update], [RoomArchiveIndex.putIfAbsent] and the narrow views on a real in-memory
+ * Room database over the bundled SQLite driver, on the Android host and the iOS simulator.
+ */
 class RoomArchiveIndexTest {
-    private val db = Room.inMemoryDatabaseBuilder(ContextWrapper(null), AppDatabase::class.java)
-        .setDriver(BundledSQLiteDriver())
-        .setQueryCoroutineContext(Dispatchers.IO)
-        .build()
+    private val db = inMemoryAppDatabase()
     private val index = RoomArchiveIndex(db.archivedFileDao())
 
-    @After
+    @AfterTest
     fun close() = db.close()
 
     @Test
-    fun `concurrent updates of one key lose no update`() = runBlocking {
+    fun concurrentUpdatesOfOneKeyLoseNoUpdate() = runTest {
         val key = ArchiveKey("11111111-2222-3333-4444-555555555555", "year=2026/month=10/day=01/data.parquet")
         index.put(ArchiveRecord(key.station, key.name, 0L, 1L, "ab", 5L, "device"))
         val writers = 64
@@ -40,7 +37,7 @@ class RoomArchiveIndexTest {
     }
 
     @Test
-    fun `putIfAbsent never replaces an existing record`() = runBlocking {
+    fun putIfAbsentNeverReplacesAnExistingRecord() = runTest {
         val engine = ArchiveRecord("11111111-2222-3333-4444-555555555555", "year=2026/month=10/day=01/data.parquet", 10L, 1L, "ab", 5L, "device")
         index.put(engine)
 
@@ -53,7 +50,7 @@ class RoomArchiveIndexTest {
     }
 
     @Test
-    fun `the narrow views follow the table`() = runBlocking {
+    fun theNarrowViewsFollowTheTable() = runTest {
         val station = "11111111-2222-3333-4444-555555555555"
         val pending = ArchiveRecord(station, "year=2026/month=10/day=01/data.parquet", 10L, 1L, "ab", 5L, "device")
         index.put(pending)
@@ -64,5 +61,19 @@ class RoomArchiveIndexTest {
 
         assertFalse(index.observeNeverIndexed().first())
         assertEquals(mapOf(station to 42L), index.observeLatestTimed().first())
+    }
+
+    @Test
+    fun removeForgetsOnlyThatRecordAndStationsAreDistinct() = runTest {
+        val a = ArchiveRecord("station-a", "year=2026/month=10/day=01/data.parquet", 10L, 1L, "ab", 5L, "device")
+        val b = a.copy(name = "year=2026/month=10/day=02/data.parquet")
+        val c = a.copy(station = "station-b")
+        listOf(a, b, c).forEach { index.put(it) }
+
+        index.remove(a.key)
+
+        assertEquals(listOf(b), index.observeStation("station-a").first())
+        assertEquals(setOf("station-a", "station-b"), index.stations().toSet())
+        assertEquals(listOf(b.name, c.name).sorted(), index.observeAll().first().map { it.name }.sorted())
     }
 }

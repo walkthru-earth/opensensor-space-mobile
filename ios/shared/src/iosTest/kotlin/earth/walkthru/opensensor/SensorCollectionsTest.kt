@@ -3,11 +3,11 @@
 package earth.walkthru.opensensor
 
 import earth.walkthru.aqsync.archive.IosArchiveStore
-import earth.walkthru.aqsync.archive.ReceiptArchiveIndex
 import earth.walkthru.aqsync.collection.KeepAlive
 import earth.walkthru.aqsync.collection.LinkPreference
 import earth.walkthru.aqsync.collection.RetryPolicy
 import earth.walkthru.aqsync.collection.SyncEndReason
+import earth.walkthru.aqsync.data.archive.IosArchiveDatabase
 import earth.walkthru.aqsync.data.ble.TransportUnavailableException
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.protocol.FrameCodec
@@ -58,6 +58,7 @@ class SensorCollectionsTest {
     private val base = NSTemporaryDirectory().trimEnd('/') + "/sensor-collections-" + NSUUID().UUIDString()
     private val finals = "$base/SensorArchive"
     private val store = IosArchiveStore(finals, "$base/archive-partial", Dispatchers.Default)
+    private val database = IosArchiveDatabase(store, "$base/database")
     private val anchors = ArrayList<Long>()
     private val anchorLock = NSLock()
     private val record: suspend (String, String, Long, Long) -> Unit = { _, _, nanos, _ ->
@@ -67,7 +68,7 @@ class SensorCollectionsTest {
     }
     private val sync = SensorSync(
         store,
-        ReceiptArchiveIndex(finals, Dispatchers.Default),
+        database.index,
         Dispatchers.Default,
         Dispatchers.Default,
         progressInterval = 0,
@@ -79,6 +80,7 @@ class SensorCollectionsTest {
 
     @AfterTest
     fun cleanUp() {
+        database.close()
         NSFileManager.defaultManager.removeItemAtPath(base, null)
     }
 

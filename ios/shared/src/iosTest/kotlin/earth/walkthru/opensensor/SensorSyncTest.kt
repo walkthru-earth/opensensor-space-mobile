@@ -3,8 +3,8 @@
 package earth.walkthru.opensensor
 
 import earth.walkthru.aqsync.archive.IosArchiveStore
-import earth.walkthru.aqsync.archive.ReceiptArchiveIndex
 import earth.walkthru.aqsync.collection.LinkPreference
+import earth.walkthru.aqsync.data.archive.IosArchiveDatabase
 import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.protocol.FrameCodec
 import earth.walkthru.aqsync.data.protocol.Opcode
@@ -53,11 +53,13 @@ class SensorSyncTest {
     private val base = NSTemporaryDirectory().trimEnd('/') + "/sensor-sync-" + NSUUID().UUIDString()
     private val finals = "$base/SensorArchive"
     private val store = IosArchiveStore(finals, "$base/archive-partial", Dispatchers.Default)
-    private val sync = SensorSync(store, ReceiptArchiveIndex(finals, Dispatchers.Default), Dispatchers.Default, Dispatchers.Default, progressInterval = 0, budget = FakeStorageBudget())
+    private val database = IosArchiveDatabase(store, "$base/database")
+    private val sync = SensorSync(store, database.index, Dispatchers.Default, Dispatchers.Default, progressInterval = 0, budget = FakeStorageBudget())
     private val station = "53315f5f-cb85-4d8d-b623-d56266084189"
 
     @AfterTest
     fun cleanUp() {
+        database.close()
         NSFileManager.defaultManager.removeItemAtPath(base, null)
     }
 
@@ -205,7 +207,7 @@ class SensorSyncTest {
         var anchorCount = 0
         val runner = SensorSync(
             store,
-            ReceiptArchiveIndex(finals, Dispatchers.Default),
+            database.index,
             Dispatchers.Default,
             Dispatchers.Default,
             recordClockAnchor = { _, _, _, _ -> anchorCount++ },
@@ -229,7 +231,7 @@ class SensorSyncTest {
         val anchors = mutableListOf<Anchor>()
         val runner = SensorSync(
             store,
-            ReceiptArchiveIndex(finals, Dispatchers.Default),
+            database.index,
             Dispatchers.Default,
             Dispatchers.Default,
             recordClockAnchor = { st, boot, utc, mono -> anchors += Anchor(st, boot, utc, mono) },
@@ -309,7 +311,7 @@ class SensorSyncTest {
                 queue.trySend(block)
             }
         }
-        val gated = SensorSync(store, ReceiptArchiveIndex(finals, Dispatchers.Default), held, Dispatchers.Default, progressInterval = 0, budget = FakeStorageBudget())
+        val gated = SensorSync(store, database.index, held, Dispatchers.Default, progressInterval = 0, budget = FakeStorageBudget())
         suspend fun pumpUntil(done: CompletableDeferred<*>) = withTimeout(20_000) {
             while (!done.isCompleted) {
                 queue.tryReceive().getOrNull()?.run() ?: yield()

@@ -216,8 +216,7 @@ throws is logged and reported as `rebuildFailed`, the files stay removed. The re
 removed, kept (no longer old, changed, gone already or unreadable) and failed. Logs carry counts and
 exception class names only. Nothing is sent to a device.
 
-`PrunedFiles` (`:core:archive`, Room `pruned_file` on Android, `SensorArchive-pruned/pruned.v1` on
-iOS) keeps the station, name, size and CRC-32 of each removed file. The FILE frame carries no CRC,
+`PrunedFiles` (`:core:archive`, Room `pruned_file` on both phones) keeps the station, name, size and CRC-32 of each removed file. The FILE frame carries no CRC,
 so `SyncPlanner` matches on station, name and size. A listed file with such a record and no phone
 copy plans as `REMOVED`. It is not downloaded and counts as done, so the device card can still read
 as all synced. A phone copy always wins over the record. A whole LIST that no longer names the file

@@ -32,7 +32,7 @@ sentence for them.
 | --- | --- | --- |
 | Verify and SHA-256 | Shared engine | Shared engine, size, CRC-32, `PAR1` and SHA-256 in one pass over the finished partial |
 | Partials | App files | Application Support `archive-partial`. Partials left by the old Swift engine are adopted when size and CRC match |
-| Receipts | Room `ArchiveIndex` | `ReceiptArchiveIndex` beside each file, extended with SHA-256. An older receipt with no hash is filled on the next verify |
+| Index | Room `ArchiveIndex` | the same Room `ArchiveIndex` from `:core:database`. An older build's receipts are imported once, and a record with no hash is filled on the next verify |
 | Safe names | Shared check | Shared check, stricter than the old Swift whitelist. A name the plan rejects is reported and never downloaded |
 | Byte counter | Card shows bytes received | `receivedBytes` counts only this run. Today and Files show that run's planned remaining bytes and received bytes, including on LAN |
 | One link per station | Engine holds one writer | `SensorSync` refuses a second link for the same station with `msg_hardware_in_use` |
@@ -115,7 +115,7 @@ longer has, since the device dropped that file. A run for one selected file keep
 Synced ⇔ exactly `size` bytes **and** own CRC-32 == `OPENED.crc32` **and** head/tail `PAR1`. Then
 committed without replacement through `AtomicFiles` under the **verbatim Hive path**,
 SHA-256 calculated and recorded, then indexed. Android records archive and history index in one Room
-transaction. iOS persists a verification receipt. `OPENED.name` ≠ requested name → `Mismatch`, not
+transaction. iOS records it in the same Room `archived_file` table. `OPENED.name` ≠ requested name → `Mismatch`, not
 silently accepted. Nothing incomplete is ever presented as data.
 
 ## Disk writes and Stop (#55)

@@ -36,6 +36,8 @@ include(":core:net")
 // The shared sync engine (docs/sync-engine.md).
 include(":core:sync")
 include(":core:archive")
+// The one Room database of both phones on the bundled SQLite driver (docs/data-model.md, #100).
+include(":core:database")
 // Storage classes, durable no-replace commits, free space and the startup janitor's walk (issue #60).
 include(":core:storage")
 include(":core:settings")

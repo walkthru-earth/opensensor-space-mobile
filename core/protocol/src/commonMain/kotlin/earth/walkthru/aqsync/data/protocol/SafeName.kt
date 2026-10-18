@@ -10,14 +10,15 @@ package earth.walkthru.aqsync.data.protocol
  * charset is ASCII, so the byte length equals the character count for every accepted name.
  *
  * The phone adds one rule the firmware does not have. No segment between slashes may exceed
- * [MAX_SEGMENT_BYTES], so the longest sibling the phone writes (`<segment>.verified.json` on iOS)
- * still fits the 255-byte file-name limit of APFS and ext4/f2fs (#60).
+ * [MAX_SEGMENT_BYTES], so every sibling of a name still fits the 255-byte file-name limit of APFS
+ * and ext4/f2fs (#60). That covers `<segment>.partial.meta` and the `<segment>.verified.json` receipts
+ * older iOS builds wrote, which the iOS import still reads.
  */
 object SafeName {
     /** Longest name the firmware lists and opens (`OPENED.name` fits one MTU-517 PDU). */
     const val MAX_BYTES: Int = 399
 
-    /** 255 minus `.verified.json` (14 bytes), the longest suffix the phone appends to a name segment. */
+    /** 255 minus `.verified.json` (14 bytes), the longest suffix beside a name segment. */
     const val MAX_SEGMENT_BYTES: Int = 255 - 14
 
     private const val SUFFIX = ".parquet"

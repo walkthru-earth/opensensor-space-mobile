@@ -32,7 +32,7 @@ import platform.Foundation.writeToFile
 import platform.posix.memcpy
 
 /**
- * Foundation file helpers shared by [IosArchiveStore] and [ReceiptArchiveIndex]. Every type check
+ * Foundation file helpers shared by [IosArchiveStore] and [LegacyReceiptImport]. Every type check
  * uses `attributesOfItemAtPath`, which does not follow a symlink, so a link is seen as a link.
  */
 internal object IosFiles {

@@ -19,10 +19,10 @@ import kotlinx.datetime.LocalDate
  * card and `tools/export_parquet.py`. A file reaches `archive/` only by an atomic rename after
  * [ArchiveVerifier] passed. The "is synced" receipt is the [ArchiveIndex] record, never a file.
  *
- * This is Android's layout (`FileArchive`, `DerivedStore`). The iOS app today keeps finals under
- * [LEGACY_IOS_ROOT], partials beside them as `<name>.<size>-<crc hex>.partial`, and a
- * [LEGACY_RECEIPT_SUFFIX] receipt per file. Those names are listed here only so the iOS move onto
- * this layout (platform parity plan, wave 3) recognises them.
+ * This is Android's layout (`FileArchive`, `DerivedStore`). The iOS app keeps finals under
+ * [LEGACY_IOS_ROOT]. Older iOS builds kept partials beside them as `<name>.<size>-<crc hex>.partial`
+ * and a [LEGACY_RECEIPT_SUFFIX] receipt per file. Those names are listed here only so iOS adopts the
+ * partials and imports the receipts into Room once (`LegacyReceiptImport`).
  */
 object ArchiveLayout {
     /** Verified copies. */
@@ -40,7 +40,7 @@ object ArchiveLayout {
     /** The iOS archive root before the move, under Application Support. */
     const val LEGACY_IOS_ROOT: String = "SensorArchive"
 
-    /** The iOS per-file receipt before the move, `<hive name>.verified.json` holding `{size, crc}`. */
+    /** The older iOS per-file receipt, `<hive name>.verified.json` holding at least `{size, crc}`. */
     const val LEGACY_RECEIPT_SUFFIX: String = ".verified.json"
 
     /**

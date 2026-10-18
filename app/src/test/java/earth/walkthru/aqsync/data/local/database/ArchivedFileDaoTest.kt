@@ -2,6 +2,8 @@ package earth.walkthru.aqsync.data.local.database
 
 import android.content.ContextWrapper
 import androidx.room.Room
+import androidx.room.execSQL
+import androidx.room.useWriterConnection
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import app.cash.turbine.test
 import earth.walkthru.aqsync.data.ManifestState
@@ -68,7 +70,7 @@ class ArchivedFileDaoTest {
         dao.upsert(file("a", "failed.parquet", indexedAt = 5, indexError = "bad footer", utcRows = 0))
         assertEquals(listOf("failed.parquet"), dao.unindexed(10).map { it.name })
 
-        AppDatabase.MIGRATION_10_11.migrate(db.writerSql())
+        db.useWriterConnection { it.execSQL(AppDatabase.MIGRATION_10_11_SQL) }
 
         // A row with an error stays in the retry queue it was already in, never reopened by the migration.
         assertEquals(setOf("zero.parquet", "null.parquet", "failed.parquet"), dao.unindexed(10).map { it.name }.toSet())

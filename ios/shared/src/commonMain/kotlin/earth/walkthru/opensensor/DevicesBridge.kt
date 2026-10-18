@@ -181,7 +181,7 @@ internal object IosKnown {
 
 /**
  * The iOS side of My devices. It turns the Swift adapters' state ([CompanionState]), the saved
- * known records, the Keychain credential list and the receipt index into the three ports of
+ * known records, the Keychain credential list and the Room index into the three ports of
  * `:feature:devices`. Swift supplies plain callbacks and reports back. Only ids, names, stations
  * and hardware ids cross, never a PIN or token. Call everything on the main thread.
  *

@@ -21,8 +21,8 @@ and `SensorCollections` for one controller per device, which every native sync e
 runs through ([#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81)).
 `settings/` owns shared DataStore preferences, keys, units and detail level, with the
 iOS Application Support path and one-time UserDefaults migration. See `docs/README.md` in the repo
-root for the relevant concern. No Android, Hilt, Room, `Context` or
-`android.util.Log` in any `:core:*` module.
+root for the relevant concern. No Android, Hilt, `Context` or `android.util.Log` in any
+`:core:*` module. Room appears only in `:core:database`, the shared Room KMP database for both phones.
 
 - Change firmware's shared contract first for wire or measurement schema edits;
   preserve old archived bytes. Tests here should exercise real fixtures and
@@ -57,7 +57,7 @@ root for the relevant concern. No Android, Hilt, Room, `Context` or
 - Sync rules that both phones must share live in `protocol/commonMain`. `ParquetVerify` (size,
   CRC-32, `PAR1` head and tail) decides when a file is synced, `Crc32` is the streaming checksum,
   and `SafeName` is the firmware name rule (charset, no `..` or `//`, 399-byte cap) plus the phone's
-  241-byte segment cap, so `<segment>.verified.json` fits a 255-byte file name. Platform code
+  241-byte segment cap, so every sibling of a segment fits a 255-byte file name. Platform code
   measures and calls them, it does not re-implement them.
 - History derives each grouped day once with `DayPass`, producing tiers and daily Parquet
   together. Android uses derive version 5 and plans from projected station archive identities.

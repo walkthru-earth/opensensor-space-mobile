@@ -9,11 +9,12 @@ class PrunedFilesCodecTest {
     private val name = "station=$station/year=2024/month=10/day=1/file-1.parquet"
 
     @Test
-    fun recordsRoundTripSortedByStationAndName() {
+    fun everyRecordReadsInFileOrder() {
         val a = PrunedFile(station, name, 100, 4_294_967_295, 1_700_000_000_000)
         val b = PrunedFile("another-station", name, 0, 0, 1)
-        assertEquals(listOf(a, b), PrunedFilesCodec.decode(PrunedFilesCodec.encode(listOf(b, a))))
-        assertEquals(emptyList(), PrunedFilesCodec.decode(PrunedFilesCodec.encode(emptyList())))
+        val text = "${PrunedFilesCodec.VERSION}\n$station\t$name\t100\t4294967295\t1700000000000\nanother-station\t$name\t0\t0\t1\n"
+        assertEquals(listOf(a, b), PrunedFilesCodec.decode(text.encodeToByteArray()))
+        assertEquals(emptyList(), PrunedFilesCodec.decode("${PrunedFilesCodec.VERSION}\n".encodeToByteArray()))
     }
 
     @Test

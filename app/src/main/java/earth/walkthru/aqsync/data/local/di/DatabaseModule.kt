@@ -1,12 +1,15 @@
 package earth.walkthru.aqsync.data.local.di
 
 import android.content.Context
-import androidx.room.Room
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import earth.walkthru.aqsync.archive.ArchiveIndex
+import earth.walkthru.aqsync.archive.PrunedFiles
+import earth.walkthru.aqsync.data.archive.RoomArchiveIndex
+import earth.walkthru.aqsync.data.archive.RoomPrunedFiles
 import earth.walkthru.aqsync.data.local.database.AppDatabase
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.local.database.DerivedDayDao
@@ -15,6 +18,7 @@ import earth.walkthru.aqsync.data.local.database.MetricBucketDao
 import earth.walkthru.aqsync.data.local.database.PrunedFileDao
 import earth.walkthru.aqsync.data.local.database.SensorInstallationDao
 import earth.walkthru.aqsync.data.local.database.StationEpochDao
+import earth.walkthru.aqsync.data.local.database.openAppDatabase
 import earth.walkthru.aqsync.data.local.security.LanCredentialStore
 import earth.walkthru.aqsync.data.local.security.LanTokenCipher
 import earth.walkthru.aqsync.data.local.security.LanTokenCipherContract
@@ -61,10 +65,16 @@ class DatabaseModule {
     @Provides
     fun providePrunedFileDao(db: AppDatabase): PrunedFileDao = db.prunedFileDao()
 
+    /** The shared index adapter over `archived_file`, the same class iOS uses (#100). */
     @Provides
     @Singleton
-    fun provideAppDatabase(@ApplicationContext appContext: Context): AppDatabase =
-        Room.databaseBuilder(appContext, AppDatabase::class.java, "aq-sync.db")
-            .addMigrations(*AppDatabase.MIGRATIONS)
-            .build()
+    fun provideArchiveIndex(dao: ArchivedFileDao): ArchiveIndex = RoomArchiveIndex(dao)
+
+    @Provides
+    @Singleton
+    fun providePrunedFiles(dao: PrunedFileDao): PrunedFiles = RoomPrunedFiles(dao)
+
+    @Provides
+    @Singleton
+    fun provideAppDatabase(@ApplicationContext appContext: Context): AppDatabase = openAppDatabase(appContext)
 }

@@ -3,7 +3,7 @@ package earth.walkthru.aqsync.data.archive
 import earth.walkthru.aqsync.archive.ArchiveRecord
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
 
-// The Room entity (archived_file, v11) and the shared record carry the same columns. These two
+// The Room entity (archived_file) and the shared record carry the same columns. These two
 // mappers are the only place they meet, so the schema stays untouched.
 
 fun ArchivedFile.toRecord(): ArchiveRecord = ArchiveRecord(
