@@ -14,8 +14,10 @@ import kotlinx.cinterop.value
 import platform.Foundation.NSData
 import platform.Foundation.NSDataWritingAtomic
 import platform.Foundation.NSDataWritingFileProtectionCompleteUntilFirstUserAuthentication
+import platform.Foundation.NSDate
 import platform.Foundation.NSError
 import platform.Foundation.NSFileManager
+import platform.Foundation.NSFileModificationDate
 import platform.Foundation.NSFileProtectionCompleteUntilFirstUserAuthentication
 import platform.Foundation.NSFileProtectionKey
 import platform.Foundation.NSFileSize
@@ -28,6 +30,8 @@ import platform.Foundation.NSURL
 import platform.Foundation.NSURLIsExcludedFromBackupKey
 import platform.Foundation.create
 import platform.Foundation.dataWithContentsOfFile
+import platform.Foundation.dateWithTimeIntervalSince1970
+import platform.Foundation.timeIntervalSince1970
 import platform.Foundation.writeToFile
 import platform.posix.memcpy
 
@@ -57,6 +61,23 @@ internal object IosFiles {
     }
 
     fun size(path: String): Long = (fm.attributesOfItemAtPath(path, null)?.get(NSFileSize) as? NSNumber)?.longLongValue ?: 0L
+
+    /** The modification time of [path] in epoch milliseconds, or null when it is absent. */
+    fun modifiedEpochMs(path: String): Long? =
+        (fm.attributesOfItemAtPath(path, null)?.get(NSFileModificationDate) as? NSDate)?.let { (it.timeIntervalSince1970 * 1000.0).toLong() }
+
+    /** Sets the modification time of [path]. Does nothing when it is absent. */
+    fun setModified(path: String, epochMs: Long) {
+        if (kind(path) == Kind.ABSENT) return
+        fm.setAttributes(mapOf<Any?, Any?>(NSFileModificationDate to NSDate.dateWithTimeIntervalSince1970(epochMs / 1000.0)), path, null)
+    }
+
+    /** The names directly in [dir], without following links. Empty when [dir] is absent or cannot be listed. */
+    fun children(dir: String): List<String> {
+        if (kind(dir) != Kind.DIRECTORY) return emptyList()
+        @Suppress("UNCHECKED_CAST")
+        return (fm.contentsOfDirectoryAtPath(dir, null) as? List<String>).orEmpty()
+    }
 
     /** Refuses a symlink at [path] or at any existing ancestor below [root], as the old iOS archive did. */
     fun checkNoLinks(path: String, root: String) {

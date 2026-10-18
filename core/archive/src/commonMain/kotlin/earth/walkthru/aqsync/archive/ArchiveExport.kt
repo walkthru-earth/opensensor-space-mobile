@@ -21,20 +21,24 @@ class ExportEntry(
 class StagedFile(val path: String, val name: String, val mime: String, val run: ExportRun)
 
 /**
- * The temporary space exports are staged in. Each export gets its own run directory (B7), removed
- * when the sheet closes, and a new run first removes any run an earlier export left behind (the app
- * was killed, or the platform cannot say when its sheet closed). Android uses `cacheDir/export`,
- * which its `FileProvider` serves. iOS uses a folder in the app's temporary directory.
+ * The temporary space exports are staged in. Each export gets its own run directory (B7), and runs
+ * coexist, so a new export never removes a file an earlier share still offers or another controller
+ * is still staging. A run leaves through its owner ([ExportRun.delete] after a close signal) or, once
+ * released, through the age sweep of [ExportRuns]. Android uses `cacheDir/export`, which its
+ * `FileProvider` serves. iOS uses a folder in the app's temporary directory.
  */
 interface ExportSpace {
-    /** Removes every earlier run, then creates a new, empty one. */
+    /**
+     * Creates a new, empty run under a lease, after sweeping the released runs older than
+     * [ExportRuns.MAX_AGE_MS]. Runs that are leased or younger stay.
+     */
     fun newRun(): ExportRun
 
     /** Bytes a new run may still use, or null when the platform cannot tell (#61). */
     fun freeBytes(): Long? = null
 }
 
-/** One export's directory. */
+/** One export's directory, leased from [ExportSpace.newRun] until [release] or [delete]. */
 interface ExportRun {
     /** Absolute path of [name] in this run. */
     fun path(name: String): String
@@ -42,7 +46,14 @@ interface ExportRun {
     /** Creates [name] in this run for writing. */
     fun create(name: String): ExportSink
 
-    /** Removes the run and everything in it. Safe to call twice. */
+    /**
+     * Hands the run over to a reader that gives no close signal. The run stays on disk, its time is
+     * refreshed and its lease ends, so the age sweep removes it [ExportRuns.MAX_AGE_MS] later. Safe to
+     * call twice.
+     */
+    fun release()
+
+    /** Removes the run and everything in it, and ends its lease. Safe to call twice. */
     fun delete()
 }
 
@@ -138,12 +149,12 @@ object ArchiveExport {
 
     /**
      * Writes [entries] as one STORED zip named [name] into a new run. A space that reports fewer free
-     * bytes than [plannedZipBytes] fails with [StorageException] before a run exists. The run is
-     * deleted on failure. [checkpoint] is passed to [writeZip].
+     * bytes than [plannedZipBytes] fails with [StorageException] before anything is written. The run
+     * is deleted on failure. On success it stays leased, and the caller releases or deletes it.
+     * [checkpoint] is passed to [writeZip].
      */
     fun stageZip(space: ExportSpace, entries: List<ExportEntry>, name: String, checkpoint: () -> Unit = {}): StagedFile {
         require(entries.isNotEmpty()) { "nothing to export" }
-        // A new run first deletes the runs before it, so their bytes count as free.
         val run = space.newRun()
         try {
             val free = space.freeBytes()
@@ -158,7 +169,8 @@ object ArchiveExport {
 
     /**
      * Copies [entries] as loose Parquet files into a new run, one per entry under its file name. A
-     * name seen twice (two stations) gets the station folder as a prefix. The run is deleted on failure.
+     * name seen twice (two stations) gets the station folder as a prefix. The run is deleted on failure,
+     * and on success it stays leased until the caller releases or deletes it.
      */
     fun stageCopies(space: ExportSpace, entries: List<ExportEntry>): List<StagedFile> {
         require(entries.isNotEmpty()) { "nothing to export" }

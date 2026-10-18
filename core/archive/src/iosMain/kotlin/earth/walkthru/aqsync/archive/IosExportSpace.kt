@@ -7,12 +7,14 @@ import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.convert
 import kotlinx.cinterop.usePinned
+import platform.Foundation.NSDate
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSNumber
 import platform.Foundation.NSTemporaryDirectory
 import platform.Foundation.NSURL
 import platform.Foundation.NSURLVolumeAvailableCapacityForOpportunisticUsageKey
 import platform.Foundation.NSUUID
+import platform.Foundation.timeIntervalSince1970
 import platform.posix.O_CREAT
 import platform.posix.O_EXCL
 import platform.posix.O_WRONLY
@@ -21,15 +23,35 @@ import platform.posix.write
 
 /**
  * [ExportSpace] in the app's temporary directory, `tmp/opensensor-export/run-<uuid>/`. The share
- * sheet and the save picker read a staged copy, never the archive. A new run removes the older ones,
- * and the screen removes its run when the sheet closes.
+ * sheet and the save picker read a staged copy, never the archive. Runs coexist under the leases of
+ * [ExportRuns]. The screen removes its run when the sheet closes, and a run it could not remove ages
+ * out after [ExportRuns.MAX_AGE_MS].
  */
-class IosExportSpace(private val root: String) : ExportSpace {
+class IosExportSpace(private val root: String, private val clock: () -> Long = ::wallClockMs) : ExportSpace {
     override fun newRun(): ExportRun {
-        for (child in IosFiles.walk(root).filter { '/' !in it }) IosFiles.remove("$root/$child")
-        val dir = "$root/run-${NSUUID().UUIDString}"
-        IosFiles.mkdirs(dir)
-        return IosExportRun(dir)
+        sweepExpired()
+        val name = ExportRuns.PREFIX + NSUUID().UUIDString
+        // Leased before the directory exists, so no sweep ever sees it unleased while it stages.
+        ExportRuns.lease(name)
+        val dir = "$root/$name"
+        try {
+            IosFiles.mkdirs(dir)
+        } catch (t: Throwable) {
+            ExportRuns.release(name)
+            throw t
+        }
+        return IosExportRun(dir, name, clock)
+    }
+
+    /** Removes the released runs past [ExportRuns.MAX_AGE_MS]. Only `run-` directories, never the root. */
+    private fun sweepExpired() {
+        val now = clock()
+        for (child in IosFiles.children(root)) {
+            val path = "$root/$child"
+            if (IosFiles.kind(path) == Kind.DIRECTORY && ExportRuns.isExpired(child, now) { IosFiles.modifiedEpochMs(path) }) {
+                IosFiles.remove(path)
+            }
+        }
     }
 
     /** Scratch capacity, the "opportunistic usage" figure that excludes what iOS would purge (#61). */
@@ -49,7 +71,9 @@ class IosExportSpace(private val root: String) : ExportSpace {
     }
 }
 
-private class IosExportRun(private val dir: String) : ExportRun {
+private fun wallClockMs(): Long = (NSDate().timeIntervalSince1970 * 1000.0).toLong()
+
+private class IosExportRun(private val dir: String, private val name: String, private val clock: () -> Long) : ExportRun {
     override fun path(name: String): String {
         require(name.isNotEmpty() && '/' !in name && name != "." && name != "..") { "unsafe export name" }
         return "$dir/$name"
@@ -62,8 +86,15 @@ private class IosExportRun(private val dir: String) : ExportRun {
         return PosixSink(fd)
     }
 
+    override fun release() {
+        // The age counts from the hand over. The time is set before the lease ends (ExportRuns.isExpired).
+        if (ExportRuns.isLeased(name)) IosFiles.setModified(dir, clock())
+        ExportRuns.release(name)
+    }
+
     override fun delete() {
         if (IosFiles.kind(dir) != Kind.ABSENT) IosFiles.remove(dir)
+        ExportRuns.release(name)
     }
 }
 

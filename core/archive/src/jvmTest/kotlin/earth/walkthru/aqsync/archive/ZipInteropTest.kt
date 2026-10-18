@@ -68,18 +68,6 @@ class ZipInteropTest {
     }
 
     @Test
-    fun aNewRunSweepsTheOldOneAndDeleteRemovesIt() {
-        val space = FileExportSpace(File(root, "export"))
-        val first = ArchiveExport.stageZip(space, listOf(ExportEntry("A/x.parquet", 0) { ByteArrayReader(a) }), "one.zip")
-        assertTrue(File(first.path).isFile)
-        val second = ArchiveExport.stageCopies(space, listOf(ExportEntry("A/x.parquet", 0) { ByteArrayReader(b) }))
-        assertFalse(File(first.path).exists())
-        assertContentEquals(b, File(second.single().path).readBytes())
-        second.single().run.delete()
-        assertEquals(0, File(root, "export").listFiles()!!.size)
-    }
-
-    @Test
     fun directoryEntriesListFilesUnderAPrefix() {
         val derived = File(root, "derived/v1").apply { mkdirs() }
         File(derived, "A").mkdirs()

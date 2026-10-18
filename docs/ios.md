@@ -95,7 +95,8 @@ A force quit stops everything. Downloaded bytes and index records stay for the n
   `GET_TOKEN` and rotation need a live bonded Bluetooth link.
 - **Files.** Share one, share all, share zip and save zip stage copies under
   `tmp/opensensor-export/<run>` and open `UIActivityViewController` or the document picker. Only
-  verified files are exported and the run is removed when the sheet closes.
+  verified files are exported and the run is removed when the sheet closes. Runs coexist, and a
+  run the screen could not remove ages out after one hour (`ExportRuns`).
 - **Debug.** Borrows a short link for raw commands, `LOG_TAIL`, `GET_CONFIG` and `STATUS`, with the
   shared denylist and redaction.
 - **Sticker scan.** VisionKit `DataScannerViewController` (`StickerScanner.swift`), shown only where

@@ -70,10 +70,13 @@ class FilesControllerTest {
         override suspend fun stations(): List<String> = rows.value.map { it.station }.distinct()
     }
 
-    /** Runs in memory, each one a map of name to bytes, with a flag once deleted. */
+    /** Runs in memory, each one a map of name to bytes, with flags once released or deleted. */
     private class Space : ExportSpace {
         val runs = mutableListOf<Run>()
         var free: Long? = null
+
+        /** Runs inside [newRun], on the staging thread. */
+        var onNewRun: (() -> Unit)? = null
         override fun freeBytes(): Long? = free
 
         inner class Run(val id: Int) : ExportRun {
@@ -89,14 +92,18 @@ class FilesControllerTest {
                     files[name] = out.toByteArray()
                 }
             }
+            var released = false
+            override fun release() {
+                released = true
+            }
             override fun delete() {
                 deleted = true
             }
         }
 
-        override fun newRun(): ExportRun {
-            runs.forEach { it.deleted = true }
-            return Run(runs.size).also { runs += it }
+        override fun newRun(): ExportRun = Run(runs.size).also {
+            runs += it
+            onNewRun?.invoke()
         }
     }
 
@@ -224,7 +231,7 @@ class FilesControllerTest {
     }
 
     @Test
-    fun aSheetWithoutACloseSignalLeavesTheRunForTheNextExport() = runTest {
+    fun aSheetWithoutACloseSignalReleasesTheRunAndTheNextExportKeepsIt() = runTest {
         val f = fixture()
         advanceUntilIdle()
         val p = Presenter(closesNow = false)
@@ -232,10 +239,27 @@ class FilesControllerTest {
         advanceUntilIdle()
         assertEquals(2, p.shared.single().first.size)
         assertFalse(f.space.runs.single().deleted)
+        assertTrue(f.space.runs.single().released)
         f.controller.shareAll(p)
         advanceUntilIdle()
-        assertTrue(f.space.runs[0].deleted)
+        // A new export is no proof the first recipient finished reading (#161).
+        assertFalse(f.space.runs[0].deleted)
         assertEquals(2, f.space.runs.size)
+    }
+
+    @Test
+    fun aRunStagedAsTheExportIsCancelledIsRemoved() = runTest {
+        val f = fixture()
+        advanceUntilIdle()
+        // The screen goes away while a loose copy stages. The copy has no checkpoint, so it finishes
+        // and only the return from staging sees the cancel. Nothing would end that run's lease.
+        f.space.onNewRun = { f.job.cancel() }
+        val p = Presenter()
+        f.controller.shareFile(f.controller.archived(nameA)!!, p)
+        advanceUntilIdle()
+        assertTrue(p.shared.isEmpty())
+        assertEquals(1, f.space.runs.single().files.size)
+        assertTrue(f.space.runs.single().deleted)
     }
 
     @Test
@@ -392,6 +416,25 @@ class FilesControllerTest {
         advanceUntilIdle()
         assertEquals(listOf("hold", "list", "staged 1, shared 0"), steps)
         assertEquals(ShareKind.ARCHIVE, p.shared.single().second)
+    }
+
+    @Test
+    fun aDailyZipStagedBeforeTheHoldFailsIsRemoved() = runTest {
+        val f = fixture(
+            daily = { listOf(ExportEntry("derived/v1/s/2026-10-01.parquet", bytesA.size.toLong()) { ByteArrayReader(bytesA) }) },
+            // Staging returned, then the hold ends with an error, so nothing will show the zip.
+            holdDaily = { block ->
+                block()
+                error("hold lost")
+            },
+        )
+        advanceUntilIdle()
+        val p = Presenter()
+        f.controller.shareDaily(p)
+        advanceUntilIdle()
+        assertTrue(p.shared.isEmpty())
+        assertEquals(1, f.space.runs.single().files.size)
+        assertTrue(f.space.runs.single().deleted)
     }
 
     @Test
