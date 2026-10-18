@@ -71,6 +71,8 @@ final class BluetoothCompanion {
     /// sheet, and the user reads six digits off the sensor, so this is far longer than the connect.
     private let discoveryTimeout: TimeInterval = 90
     private var freshnessTimer: Timer?
+    /// Paced `live` and `status` reads while the MTU cannot notify a full snapshot (#159).
+    private var snapshotTimer: Timer?
     private var foreground = true
     private let engine: SensorSync
     /// This connection's shared link, made once INFO named the sensor. RESPONSE notifications go to it.
@@ -340,8 +342,10 @@ final class BluetoothCompanion {
         ioLink = nil
         connectionTimer?.invalidate()
         freshnessTimer?.invalidate()
+        snapshotTimer?.invalidate()
         connectionTimer = nil
         freshnessTimer = nil
+        snapshotTimer = nil
         tokenTimer?.invalidate()
         tokenTimer = nil
         requestingToken = false
@@ -667,6 +671,7 @@ extension BluetoothCompanion {
         case .ready:
             connectionTimer?.invalidate()
             connectionTimer = nil
+            startSnapshotReads()
             settle()
         case .live(let json):
             guard active else { return }
@@ -774,6 +779,25 @@ extension BluetoothCompanion {
         openLink(identity: observed)
         state.wifiAccessNoticed(available: canSync, busy: false, notice: .saveWifiAccess)
         state.bluetoothSyncAvailable(available: canSync)
+    }
+
+    /// The firmware omits a snapshot notification larger than MTU - 3, so below a full snapshot MTU
+    /// this side reads both values every interval. A tick skips while a run, command, lease or
+    /// queued GATT operation holds the link, and the timer ends with the connection.
+    private func startSnapshotReads() {
+        snapshotTimer?.invalidate()
+        snapshotTimer = nil
+        guard BleSnapshotReads.needed(mtu: Int(mtu)) else { return }
+        let number = connection
+        snapshotTimer = Timer.scheduledTimer(withTimeInterval: BleSnapshotReads.interval, repeats: true) {
+            [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.connection == number, self.current != nil, self.active, !self.linkBusy,
+                    self.gattIdle
+                else { return }
+                self.physical.readSnapshots(number)
+            }
+        }
     }
 
     private func tokenReplied(kind: String, payload: Data, port: Int) {

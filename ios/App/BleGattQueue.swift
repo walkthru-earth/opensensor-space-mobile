@@ -43,6 +43,14 @@ struct BleGattQueue<Target: AnyObject> {
         self.operations = operations
     }
 
+    /// Queues one paced read of each snapshot (#159), only while nothing is queued or in flight, so a
+    /// read never delays a request or a transfer chunk. False when the queue was busy.
+    mutating func readSnapshots(_ live: Target, _ status: Target) -> Bool {
+        guard isIdle else { return false }
+        operations = [.read(live), .read(status)]
+        return true
+    }
+
     mutating func append(_ operation: Operation) {
         operations.append(operation)
     }
@@ -111,4 +119,15 @@ struct BleGattQueue<Target: AnyObject> {
         failAll()
         sender = nil
     }
+}
+
+/// Paced snapshot reads (#159). The firmware caches every `live` and `status` snapshot of at most
+/// 480 bytes and omits a notification larger than MTU - 3, so below [fullMtu] the phone reads both.
+enum BleSnapshotReads {
+    /// The smallest ATT MTU whose notification carries the largest snapshot.
+    static let fullMtu = 480 + 3
+    /// The firmware publishes both snapshots every 10 s.
+    static let interval: TimeInterval = 10
+
+    static func needed(mtu: Int) -> Bool { mtu < fullMtu }
 }
