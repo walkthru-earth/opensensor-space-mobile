@@ -308,8 +308,9 @@ legacy forms so the wave 3 move onto this layout can recognise them. The "is syn
 `archived_file` record (`ArchiveRecord` behind the `ArchiveIndex` port), never a file. The archive
 ports have no file delete. A verified copy is removed only when the user removes old format files in
 Settings (`LegacyFileCleanup`, [parquet](parquet.md#removing-old-files-from-the-phone)), never by sync or the janitor (audit C, B6).
-Each removal leaves a `PrunedFiles` record, so sync does not download the file again until the user
-taps Download again.
+Each removal leaves a `PrunedFiles` record, so sync does not download the file again while the
+device lists it at the same size. A whole LIST that no longer names the file drops the record, and
+so does Download again.
 
 ## Backup
 
