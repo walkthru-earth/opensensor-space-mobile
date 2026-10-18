@@ -65,6 +65,10 @@ private class FakeStorage : StorageControls {
     val ranges = mutableListOf<OldFilesRange?>()
     val removed = mutableListOf<OldFilesPlan>()
 
+    var archive: OldFilesRange? = null
+
+    override suspend fun archiveDays(): OldFilesRange? = archive
+
     override suspend fun findOldFiles(range: OldFilesRange?): OldFilesPlan {
         ranges += range
         gate?.await()
@@ -324,5 +328,20 @@ class SettingsControllerTest {
         // A new enum value without copy fails here before it reaches a screen.
         DetailLevel.entries.forEach { levelLabel(it); levelCaption(it) }
         UnitSystem.entries.forEach { unitLabel(it) }
+    }
+
+    @Test
+    fun thePickerOffersTheArchiveDaysPlusOneOnEachSide() = runTest {
+        val scope = CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler))
+        val storage = FakeStorage().apply { archive = OldFilesRange(20_000, 20_010) }
+        val controller = SettingsController(scope, SettingsRepository(MemoryStore()), storage)
+        assertNull(controller.archiveDays.value)
+        controller.refreshStorage()
+        assertEquals(OldFilesRange(20_000, 20_010), controller.archiveDays.value)
+        assertEquals(19_999L..20_011L, pickableDays(controller.archiveDays.value))
+        assertNull(pickableDays(null))
+        assertEquals(2024, yearOf(19_723))
+        assertEquals(2023, yearOf(19_722))
+        assertEquals(1969, yearOf(-1))
     }
 }

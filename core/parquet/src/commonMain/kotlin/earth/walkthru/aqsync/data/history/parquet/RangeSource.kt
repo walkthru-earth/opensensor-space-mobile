@@ -7,19 +7,19 @@ package earth.walkthru.aqsync.data.history.parquet
 class ByteView(val array: ByteArray, val offset: Int = 0, val length: Int = array.size - offset) {
     init {
         if (offset < 0 || length < 0 || offset.toLong() + length > array.size) {
-            throw IndexOutOfBoundsException("view [$offset, ${offset.toLong() + length}) outside ${array.size} bytes")
+            throw ParquetBoundsException("view [$offset, ${offset.toLong() + length}) outside ${array.size} bytes")
         }
     }
 
     operator fun get(i: Int): Byte {
-        if (i < 0 || i >= length) throw IndexOutOfBoundsException("index $i outside a view of $length bytes")
+        if (i < 0 || i >= length) throw ParquetBoundsException("index $i outside a view of $length bytes")
         return array[offset + i]
     }
 
     /** `[from, from + length)` of this view, sharing the array. */
     fun slice(from: Int, length: Int): ByteView {
         if (from < 0 || length < 0 || from.toLong() + length > this.length) {
-            throw IndexOutOfBoundsException("slice [$from, ${from.toLong() + length}) outside a view of ${this.length} bytes")
+            throw ParquetBoundsException("slice [$from, ${from.toLong() + length}) outside a view of ${this.length} bytes")
         }
         return ByteView(array, offset + from, length)
     }
@@ -123,9 +123,9 @@ class MemoryRangeSource(
 /** Length of a non-empty [range] as an Int; a read longer than 2 GiB is refused. */
 internal fun rangeLength(range: LongRange): Int {
     if (range.isEmpty()) return 0
-    if (range.first < 0) throw IndexOutOfBoundsException("range $range starts before the file")
+    if (range.first < 0) throw ParquetBoundsException("range $range starts before the file")
     // With a non-negative start the difference cannot overflow, even for a range ending at Long.MAX_VALUE.
-    if (range.last - range.first >= Int.MAX_VALUE) throw IndexOutOfBoundsException("range $range is longer than 2 GiB")
+    if (range.last - range.first >= Int.MAX_VALUE) throw ParquetBoundsException("range $range is longer than 2 GiB")
     return (range.last - range.first + 1).toInt()
 }
 

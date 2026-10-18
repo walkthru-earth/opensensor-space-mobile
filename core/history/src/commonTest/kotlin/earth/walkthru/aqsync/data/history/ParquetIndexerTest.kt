@@ -1,6 +1,8 @@
 package earth.walkthru.aqsync.data.history
 
+import earth.walkthru.aqsync.data.history.parquet.ColumnStatistics
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
+import earth.walkthru.aqsync.data.history.parquet.ParquetFileMetadata
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -76,5 +78,30 @@ class ParquetIndexerTest {
         val decoded = ParquetIndexer.rangeByDecoding(file.readColumn(leaf))
         assertEquals(decoded, stats)
         assertEquals(360L, stats.count)
+    }
+
+    /** The footer of [file] with the statistics of [name] in every row group replaced by [stats]. */
+    private fun withStats(file: ParquetFile, name: String, stats: (ColumnStatistics) -> ColumnStatistics): ParquetFileMetadata {
+        val index = file.leaf(name).index
+        val md = file.metadata
+        return md.copy(rowGroups = md.rowGroups.map { rg -> rg.copy(columns = rg.columns.mapIndexed { i, c -> if (i == index) c.copy(statistics = stats(c.statistics!!)) else c }) })
+    }
+
+    private fun ColumnStatistics.with(nullCount: Long? = this.nullCount, min: ByteArray? = minValue, max: ByteArray? = maxValue) =
+        ColumnStatistics(nullCount, distinctCount, min, max, isMinValueExact, isMaxValueExact, nanCount, legacyMin, legacyMax)
+
+    @Test
+    fun `a negative null count in the statistics falls back to decoding`() {
+        val file = ParquetFile.wrap(bytes("v3/v3-hourly-lz4.parquet"))
+        val leaf = file.leaf("time_ms")
+        assertNotNull(ParquetIndexer.rangeFromStatistics(file.metadata, leaf))
+        assertNull(ParquetIndexer.rangeFromStatistics(withStats(file, "time_ms") { it.with(nullCount = -5) }, leaf))
+    }
+
+    @Test
+    fun `a min above the max in the statistics falls back to decoding`() {
+        val file = ParquetFile.wrap(bytes("v3/v3-hourly-lz4.parquet"))
+        val leaf = file.leaf("time_ms")
+        assertNull(ParquetIndexer.rangeFromStatistics(withStats(file, "time_ms") { it.with(min = it.maxValue, max = it.minValue) }, leaf))
     }
 }

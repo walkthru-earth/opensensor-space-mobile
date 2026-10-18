@@ -6,6 +6,12 @@ import earth.walkthru.aqsync.data.history.parquet.ThriftCompactReader.Type
 class ParquetFormatException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
 /**
+ * A bounds check of this reader refused an offset or length. It stays an [IndexOutOfBoundsException] for
+ * callers, and its own type tells a refused read apart from an index error no check caught.
+ */
+class ParquetBoundsException(message: String) : IndexOutOfBoundsException(message)
+
+/**
  * Parses the `FileMetaData` footer of a Parquet file: `… <footer bytes> <i32 LE footer length> "PAR1"`.
  * Unknown fields are skipped, so a newer parquet-format never breaks the phone; unknown *values*
  * (a physical type or codec we do not decode) are kept as `UNKNOWN` and refused only when a column
@@ -91,13 +97,13 @@ object ParquetFooterParser {
         var columnOrders: List<Int> = emptyList()
         r.readStruct { f ->
             when (f.id) {
-                1 -> version = r.readI32()
-                2 -> schema = readList(r) { readSchemaElement(r) }
-                3 -> numRows = r.readI64()
-                4 -> rowGroups = readList(r) { readRowGroup(r) }
-                5 -> readList(r) { readKeyValue(r) }.forEach { (k, v) -> kv[k] = v }
-                6 -> createdBy = r.readString()
-                7 -> columnOrders = readList(r) { readColumnOrder(r) }
+                1 -> version = r.readI32(f)
+                2 -> schema = readList(r, f, Type.STRUCT) { readSchemaElement(r) }
+                3 -> numRows = r.readI64(f)
+                4 -> rowGroups = readList(r, f, Type.STRUCT) { readRowGroup(r) }
+                5 -> readList(r, f, Type.STRUCT) { readKeyValue(r) }.forEach { (k, v) -> kv[k] = v }
+                6 -> createdBy = r.readString(f)
+                7 -> columnOrders = readList(r, f, Type.STRUCT) { readColumnOrder(r) }
                 else -> r.skip(f.type)
             }
         }
@@ -107,15 +113,23 @@ object ParquetFooterParser {
         if (root.numChildren != leafCount) throw ParquetFormatException("nested schema (root has ${root.numChildren} children, $leafCount elements): only flat schemas are supported")
         schema.drop(1).forEach { e -> if (!e.isLeaf) throw ParquetFormatException("group column '${e.name}': only flat schemas are supported") }
         if (numRows < 0) throw ParquetFormatException("footer declares $numRows rows")
+        var groupRows = 0L
         rowGroups.forEachIndexed { g, rg ->
             if (rg.numRows < 0) throw ParquetFormatException("row group $g declares ${rg.numRows} rows")
             if (rg.columns.size != leafCount) throw ParquetFormatException("row group $g has ${rg.columns.size} column chunks for $leafCount leaves")
+            groupRows = checkedAdd(groupRows, rg.numRows, "row counts")
         }
+        // A reader sizes its output from num_rows and fills it from the row groups, so the two must agree.
+        if (groupRows != numRows) throw ParquetFormatException("row groups hold $groupRows rows, footer declares $numRows")
         return ParquetFileMetadata(version, schema, numRows, rowGroups, kv, createdBy, columnOrders, footerLength)
     }
 
-    private inline fun <T> readList(r: ThriftCompactReader, element: () -> T): List<T> {
-        val header = r.readListHeader()
+    /**
+     * The list in field [field], checked to hold [elementType] values. Its size is already capped at
+     * the bytes left in the footer, so a corrupt count cannot pre-allocate more than the footer holds.
+     */
+    private inline fun <T> readList(r: ThriftCompactReader, field: ThriftCompactReader.FieldHeader, elementType: Int, element: () -> T): List<T> {
+        val header = r.readListHeader(field, elementType)
         return List(header.size) { element() }
     }
 
@@ -124,8 +138,8 @@ object ParquetFooterParser {
         var value = ""
         r.readStruct { f ->
             when (f.id) {
-                1 -> key = r.readString()
-                2 -> value = r.readString()
+                1 -> key = r.readString(f)
+                2 -> value = r.readString(f)
                 else -> r.skip(f.type)
             }
         }
@@ -143,17 +157,19 @@ object ParquetFooterParser {
         var logicalType: ParquetLogicalType? = null
         r.readStruct { f ->
             when (f.id) {
-                1 -> type = ParquetType.of(r.readI32())
-                2 -> typeLength = r.readI32()
-                3 -> repetition = ParquetRepetition.of(r.readI32())
-                4 -> name = r.readString()
-                5 -> numChildren = r.readI32()
-                6 -> convertedType = r.readI32()
-                9 -> fieldId = r.readI32()
-                10 -> logicalType = readLogicalType(r)
+                1 -> type = ParquetType.of(r.readI32(f))
+                2 -> typeLength = r.readI32(f)
+                3 -> repetition = ParquetRepetition.of(r.readI32(f))
+                4 -> name = r.readString(f)
+                5 -> numChildren = r.readI32(f)
+                6 -> convertedType = r.readI32(f)
+                9 -> fieldId = r.readI32(f)
+                10 -> { r.expect(f, Type.STRUCT); logicalType = readLogicalType(r) }
                 else -> r.skip(f.type)
             }
         }
+        if (numChildren < 0) throw ParquetFormatException("schema element '$name' declares $numChildren children")
+        typeLength?.let { if (it < 0) throw ParquetFormatException("schema element '$name' declares type_length $it") }
         return SchemaElement(name, type, typeLength, repetition, numChildren, convertedType, fieldId, logicalType)
     }
 
@@ -177,7 +193,7 @@ object ParquetFooterParser {
         var crs: String? = null
         r.readStruct { f ->
             when (f.id) {
-                1 -> crs = r.readString()
+                1 -> crs = r.readString(f)
                 else -> r.skip(f.type)
             }
         }
@@ -189,8 +205,8 @@ object ParquetFooterParser {
         var algorithm: EdgeInterpolation? = null
         r.readStruct { f ->
             when (f.id) {
-                1 -> crs = r.readString()
-                2 -> algorithm = EdgeInterpolation.of(r.readI32())
+                1 -> crs = r.readString(f)
+                2 -> algorithm = EdgeInterpolation.of(r.readI32(f))
                 else -> r.skip(f.type)
             }
         }
@@ -202,8 +218,8 @@ object ParquetFooterParser {
         var types: List<Int> = emptyList()
         r.readStruct { f ->
             when (f.id) {
-                1 -> bbox = readBoundingBox(r)
-                2 -> types = readList(r) { r.readI32() }
+                1 -> { r.expect(f, Type.STRUCT); bbox = readBoundingBox(r) }
+                2 -> types = readList(r, f, Type.I32) { r.readI32() }
                 else -> r.skip(f.type)
             }
         }
@@ -231,7 +247,7 @@ object ParquetFooterParser {
                 1 -> adjusted = r.booleanFromHeader(f)
                 2 -> {
                     // TimeUnit union: 1 MILLIS, 2 MICROS, 3 NANOS, each an empty struct.
-                    r.readStruct { u ->
+                    r.readStruct(f) { u ->
                         unit = when (u.id) {
                             1 -> ParquetLogicalType.TimeUnit.MILLIS
                             2 -> ParquetLogicalType.TimeUnit.MICROS
@@ -257,13 +273,13 @@ object ParquetFooterParser {
         var ordinal: Int? = null
         r.readStruct { f ->
             when (f.id) {
-                1 -> columns = readList(r) { readColumnChunk(r) }
-                2 -> totalByteSize = r.readI64()
-                3 -> numRows = r.readI64()
-                4 -> sorting = readList(r) { readSortingColumn(r) }
-                5 -> fileOffset = r.readI64()
-                6 -> totalCompressed = r.readI64()
-                7 -> ordinal = r.readI16()
+                1 -> columns = readList(r, f, Type.STRUCT) { readColumnChunk(r) }
+                2 -> totalByteSize = r.readI64(f)
+                3 -> numRows = r.readI64(f)
+                4 -> sorting = readList(r, f, Type.STRUCT) { readSortingColumn(r) }
+                5 -> fileOffset = r.readI64(f)
+                6 -> totalCompressed = r.readI64(f)
+                7 -> ordinal = r.readI16(f)
                 else -> r.skip(f.type)
             }
         }
@@ -276,7 +292,7 @@ object ParquetFooterParser {
         var nullsFirst = false
         r.readStruct { f ->
             when (f.id) {
-                1 -> idx = r.readI32()
+                1 -> idx = r.readI32(f)
                 2 -> desc = r.booleanFromHeader(f)
                 3 -> nullsFirst = r.booleanFromHeader(f)
                 else -> r.skip(f.type)
@@ -294,13 +310,13 @@ object ParquetFooterParser {
         var columnIndexLength: Int? = null
         r.readStruct { f ->
             when (f.id) {
-                1 -> r.readString() // file_path: never set by our writers (single-file)
-                2 -> fileOffset = r.readI64()
-                3 -> meta = readColumnMetaData(r)
-                4 -> offsetIndexOffset = r.readI64()
-                5 -> offsetIndexLength = r.readI32()
-                6 -> columnIndexOffset = r.readI64()
-                7 -> columnIndexLength = r.readI32()
+                1 -> r.readString(f) // file_path: never set by our writers (single-file)
+                2 -> fileOffset = r.readI64(f)
+                3 -> { r.expect(f, Type.STRUCT); meta = readColumnMetaData(r) }
+                4 -> offsetIndexOffset = r.readI64(f)
+                5 -> offsetIndexLength = r.readI32(f)
+                6 -> columnIndexOffset = r.readI64(f)
+                7 -> columnIndexLength = r.readI32(f)
                 else -> r.skip(f.type)
             }
         }
@@ -313,9 +329,9 @@ object ParquetFooterParser {
         )
     }
 
-    /** A page index pointer, or null when either half is missing or out of range. */
+    /** A page index pointer, or null when either half is missing or out of range, the end included. */
     private fun pageIndexRange(offset: Long?, length: Int?): LongRange? =
-        if (offset == null || length == null || offset < 0 || length <= 0) null else offset until offset + length
+        if (offset == null || length == null || offset < 0 || length <= 0 || offset > Long.MAX_VALUE - length) null else offset until offset + length
 
     /** `ColumnMetaData` before it becomes a [ColumnChunkMeta], so the chunk is built once with its page index pointers. */
     private class ColumnMetaDataFields(
@@ -348,21 +364,27 @@ object ParquetFooterParser {
         var geo: GeospatialStatistics? = null
         r.readStruct { f ->
             when (f.id) {
-                1 -> type = ParquetType.of(r.readI32())
-                2 -> encodings = readList(r) { ParquetEncoding.of(r.readI32()) }
-                3 -> path = readList(r) { r.readString() }
-                4 -> codec = ParquetCodec.of(r.readI32())
-                5 -> numValues = r.readI64()
-                6 -> uncompressed = r.readI64()
-                7 -> compressed = r.readI64()
-                9 -> dataPageOffset = r.readI64()
-                10 -> indexPageOffset = r.readI64()
-                11 -> dictionaryPageOffset = r.readI64()
-                12 -> statistics = readStatistics(r)
-                17 -> geo = readGeospatialStatistics(r)
+                1 -> type = ParquetType.of(r.readI32(f))
+                2 -> encodings = readList(r, f, Type.I32) { ParquetEncoding.of(r.readI32()) }
+                3 -> path = readList(r, f, Type.BINARY) { r.readString() }
+                4 -> codec = ParquetCodec.of(r.readI32(f))
+                5 -> numValues = r.readI64(f)
+                6 -> uncompressed = r.readI64(f)
+                7 -> compressed = r.readI64(f)
+                9 -> dataPageOffset = r.readI64(f)
+                10 -> indexPageOffset = r.readI64(f)
+                11 -> dictionaryPageOffset = r.readI64(f)
+                12 -> { r.expect(f, Type.STRUCT); statistics = readStatistics(r) }
+                17 -> { r.expect(f, Type.STRUCT); geo = readGeospatialStatistics(r) }
                 else -> r.skip(f.type)
             }
         }
+        // Sizes and offsets are byte counts and positions in the file. A negative one is corrupt, and
+        // later arithmetic on it would point a read before the file or wrap around.
+        if (numValues < 0 || uncompressed < 0 || compressed < 0 || dataPageOffset < 0) {
+            throw ParquetFormatException("column ${path.joinToString(".")} declares a negative size or offset")
+        }
+        if ((indexPageOffset ?: 0) < 0 || (dictionaryPageOffset ?: 0) < 0) throw ParquetFormatException("column ${path.joinToString(".")} declares a negative page offset")
         return ColumnMetaDataFields(type, encodings, path, codec, numValues, uncompressed, compressed, dataPageOffset, indexPageOffset, dictionaryPageOffset, statistics, geo)
     }
 
@@ -378,15 +400,15 @@ object ParquetFooterParser {
         var nanCount: Long? = null
         r.readStruct { f ->
             when (f.id) {
-                1 -> legacyMax = r.readBinary()
-                2 -> legacyMin = r.readBinary()
-                3 -> nullCount = r.readI64()
-                4 -> distinctCount = r.readI64()
-                5 -> maxValue = r.readBinary()
-                6 -> minValue = r.readBinary()
+                1 -> legacyMax = r.readBinary(f)
+                2 -> legacyMin = r.readBinary(f)
+                3 -> nullCount = r.readI64(f)
+                4 -> distinctCount = r.readI64(f)
+                5 -> maxValue = r.readBinary(f)
+                6 -> minValue = r.readBinary(f)
                 7 -> maxExact = r.booleanFromHeader(f)
                 8 -> minExact = r.booleanFromHeader(f)
-                9 -> nanCount = r.readI64()
+                9 -> nanCount = r.readI64(f)
                 else -> r.skip(f.type)
             }
         }

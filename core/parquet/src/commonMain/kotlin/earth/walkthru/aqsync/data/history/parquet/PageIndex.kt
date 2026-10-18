@@ -44,16 +44,17 @@ class OffsetIndex(
                 r.readStruct { f ->
                     when (f.id) {
                         1 -> {
-                            val list = r.readListHeader()
+                            // The size is capped at the bytes left in the index, so a corrupt count cannot over-allocate.
+                            val list = r.readListHeader(f, ThriftCompactReader.Type.STRUCT)
                             offsets = LongArray(list.size)
                             sizes = IntArray(list.size)
                             firstRows = LongArray(list.size)
                             for (i in 0 until list.size) {
                                 r.readStruct { p ->
                                     when (p.id) {
-                                        1 -> offsets[i] = r.readI64()
-                                        2 -> sizes[i] = r.readI32()
-                                        3 -> firstRows[i] = r.readI64()
+                                        1 -> offsets[i] = r.readI64(p)
+                                        2 -> sizes[i] = r.readI32(p)
+                                        3 -> firstRows[i] = r.readI64(p)
                                         else -> r.skip(p.type)
                                     }
                                 }
@@ -111,14 +112,17 @@ class ColumnIndex(
                 r.readStruct { f ->
                     when (f.id) {
                         1 -> {
+                            // Writers tag a bool list with either boolean wire type.
+                            r.expect(f, ThriftCompactReader.Type.LIST)
                             val list = r.readListHeader()
+                            require(list.size == 0 || list.elementType == ThriftCompactReader.Type.BOOLEAN_TRUE || list.elementType == ThriftCompactReader.Type.BOOLEAN_FALSE) { "null_pages is not a bool list" }
                             nullPages = BooleanArray(list.size) { r.readListBoolean() }
                         }
-                        2 -> mins = List(r.readListHeader().size) { r.readBinary() }
-                        3 -> maxs = List(r.readListHeader().size) { r.readBinary() }
-                        4 -> order = r.readI32()
+                        2 -> mins = List(r.readListHeader(f, ThriftCompactReader.Type.BINARY).size) { r.readBinary() }
+                        3 -> maxs = List(r.readListHeader(f, ThriftCompactReader.Type.BINARY).size) { r.readBinary() }
+                        4 -> order = r.readI32(f)
                         5 -> {
-                            val list = r.readListHeader()
+                            val list = r.readListHeader(f, ThriftCompactReader.Type.I64)
                             nullCounts = LongArray(list.size) { r.readI64() }
                         }
                         else -> r.skip(f.type)
@@ -130,6 +134,7 @@ class ColumnIndex(
             if (mins.size != nullPages.size || maxs.size != nullPages.size || (nullCounts != null && nullCounts!!.size != nullPages.size)) {
                 throw ParquetFormatException("column index lists disagree (${nullPages.size} pages, ${mins.size} mins, ${maxs.size} maxes)")
             }
+            nullCounts?.forEachIndexed { i, n -> if (n < 0) throw ParquetFormatException("column index page $i declares $n nulls") }
             return ColumnIndex(nullPages, mins, maxs, order, nullCounts)
         }
     }
@@ -158,8 +163,7 @@ fun ParquetFileMetadata.chunkLocation(rowGroup: Int, leaf: LeafColumn, fileSize:
     val dataEnd = fileSize - 8 - footerLength
     val start = chunk.firstPageOffset
     if (start < 0 || start >= dataEnd) throw ParquetFormatException("'${leaf.name}': page offset $start outside the file")
-    val declared = chunk.totalCompressedSize
-    val end = if (declared > 0 && start + declared <= dataEnd) start + declared else dataEnd
+    val end = chunkEnd(start, chunk.totalCompressedSize, dataEnd)
     if (end - start > Int.MAX_VALUE) throw ParquetFormatException("'${leaf.name}': column chunk larger than 2 GiB")
     fun inData(r: LongRange?) = r?.takeIf { it.first >= 0 && it.last < dataEnd }
     return ChunkLocation(rowGroup, leaf.index, start until end, inData(chunk.offsetIndex), inData(chunk.columnIndex))

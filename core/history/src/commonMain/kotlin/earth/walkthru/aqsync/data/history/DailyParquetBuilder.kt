@@ -86,11 +86,28 @@ object DailyParquetBuilder {
         nowEpochS: Long,
     ): DailyParquetResult? = pass(station, epochDay, sources, sink, anchors, nowEpochS, aggregator = null, strict = true).daily
 
+    /**
+     * The estimated instant of each of [rows] rows from [mono] and [anchor]. A row without a monotonic
+     * time, or one the anchor cannot place, is invalid, so no value of the Long range doubles as "none".
+     */
+    internal fun estimates(rows: Int, mono: LongColumn, anchor: TimeEstimate.Anchor): LongColumn {
+        val values = LongArray(rows)
+        val valid = BooleanArray(rows)
+        for (i in 0 until rows) {
+            if (!mono.has(i)) continue
+            val ns = anchor.estimateNsOrNull(mono.values[i]) ?: continue
+            values[i] = ns
+            valid[i] = true
+        }
+        return LongColumn(values, valid)
+    }
+
     /** One open source after its pass. [decoded] holds every column of a contributing source, by leaf name. */
     private class Src(
         val row: ArchiveRecord,
         val keepCount: Int,
-        val estimated: LongArray?,
+        /** The estimated instant of each row, valid only where the anchor gave one. Null without an anchor. */
+        val estimated: LongColumn?,
         val decoded: Map<String, ColumnValues>,
         val keyValueMetadata: Map<String, String>,
         val schemaVersion: String?,
@@ -154,11 +171,11 @@ object DailyParquetBuilder {
                     val seq = col(ParquetIndexer.SEQ)?.let(LongColumn::of)
                     val anchor = if (src.hasEstimatedUtc) anchors[src.bootId]?.takeIf { it.boot == md.bootId } else null
                     val mono = if (anchor != null) col(ParquetIndexer.MONO)?.let(LongColumn::of) else null
-                    val estimated = if (anchor != null && mono != null) LongArray(utc.size) { i -> if (mono.has(i)) anchor.estimateNsOrNull(mono.values[i]) ?: Long.MIN_VALUE else Long.MIN_VALUE } else null
+                    val estimated = if (anchor != null && mono != null) estimates(utc.size, mono, anchor) else null
                     val tierColumns = aggregator?.columns(::col)
                     for (i in 0 until utc.size) {
                         val real = utc.has(i)
-                        val ns = if (real) utc.values[i] else estimated?.get(i)?.takeIf { it != Long.MIN_VALUE } ?: continue
+                        val ns = if (real) utc.values[i] else estimated?.takeIf { it.has(i) }?.values?.get(i) ?: continue
                         if (ns < dayStartNs || ns >= dayEndNs) continue
                         val bySeq = seq != null && seq.has(i)
                         if (!seen.firstSight(bootHi.at(i), bootLo.at(i), bySeq, if (bySeq) seq!!.values[i] else ns)) continue
@@ -373,7 +390,10 @@ object DailyParquetBuilder {
                 ColumnValues.Int32(src.copyOf(), null)
             } else if (c.name == ESTIMATED_UTC) {
                 val v = LongArray(n); val valid = BooleanArray(n)
-                for (k in 0 until n) opened[src[k]].estimated?.get(row[k])?.takeIf { it != Long.MIN_VALUE }?.let { v[k] = UtcColumns.nsToUs(it); valid[k] = true }
+                for (k in 0 until n) {
+                    val e = opened[src[k]].estimated ?: continue
+                    if (e.has(row[k])) { v[k] = UtcColumns.nsToUs(e.values[row[k]]); valid[k] = true }
+                }
                 ColumnValues.Int64(v, valid.takeIf { it.any { b -> !b } })
             } else {
                 val perSource = Array(opened.size) { opened[it].decoded[c.name] }

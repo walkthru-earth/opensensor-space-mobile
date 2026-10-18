@@ -38,7 +38,7 @@ object RangePlanner {
         }
         for (i in order) {
             val r = ranges[i]
-            if (r.first < 0) throw IndexOutOfBoundsException("range $r starts before the file")
+            if (r.first < 0) throw ParquetBoundsException("range $r starts before the file")
             rangeLength(r)
             val rEnd = r.last + 1
             if (members.isNotEmpty() && r.first <= end + policy.coalesceGapBytes && maxOf(end, rEnd) - start <= policy.maxRequestBytes) {
@@ -49,7 +49,7 @@ object RangePlanner {
                 end = rEnd
             }
             members += i
-            if (end - start > Int.MAX_VALUE) throw IndexOutOfBoundsException("request [$start, $end) is longer than 2 GiB")
+            if (end - start > Int.MAX_VALUE) throw ParquetBoundsException("request [$start, $end) is longer than 2 GiB")
         }
         close()
         return Plan(requests, slices.toList())

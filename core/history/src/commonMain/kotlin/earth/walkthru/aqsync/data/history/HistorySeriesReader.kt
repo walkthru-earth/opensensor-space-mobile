@@ -137,14 +137,16 @@ class HistorySeriesReader(
 
     private suspend fun fromRows(station: String, metric: MetricSpec, range: HistoryRange, fromS: Long, toS: Long): HistorySeries {
         val rows = Rows()
-        if (toS > fromS) {
-            val fromNs = fromS * NS
-            val toNs = toS * NS
+        val indexed = if (toS > fromS) index.indexedForStation(station) else emptyList()
+        val window = readWindow(fromS, toS, indexed)
+        if (window != null) {
+            val fromNs = window.first * NS
+            val toNs = window.second * NS
             val firstDay = StationDays.dayOf(fromNs)
             val lastDay = StationDays.dayOf(toNs - 1)
             // Whole UTC days, so each day's source set is the one its derived file was built from.
             val files = index.timeline(station, firstDay * StationDays.DAY_NS, (lastDay + 1) * StationDays.DAY_NS)
-            val anchors = if (files.any { it.hasEstimatedUtc }) TimeEstimate.anchors(index.indexedForStation(station).map { it.info() }, clockAnchors.anchors(station)) else emptyMap()
+            val anchors = if (files.any { it.hasEstimatedUtc }) TimeEstimate.anchors(indexed.map { it.info() }, clockAnchors.anchors(station)) else emptyMap()
             val seen = RowKeys()
             val byDay = StationDays.sourcesByDay(files) { it }
             for (day in firstDay..lastDay) {
@@ -401,5 +403,37 @@ class HistorySeriesReader(
         /** Derived day footers kept, a month of days. Each is a few tens of KB with its page index. */
         const val DERIVED_FOOTERS = 32
         private const val NS = 1_000_000_000L
+        private const val DAY_S = 86_400L
+
+        /**
+         * Seconds whose nanoseconds, and the nanoseconds of the day after them, still fit a Long.
+         * About the years 1678 to 2262.
+         */
+        internal const val MAX_WINDOW_S = Long.MAX_VALUE / NS - 2 * DAY_S
+
+        /**
+         * `[fromS, toS)` clamped to the time span of [indexed] plus one day on each side, and to
+         * [MAX_WINDOW_S], as the seconds `first until second`. Null when nothing is left to read. A window
+         * reaching far past the archive (a date picker, a corrupt timestamp) never multiplies into a
+         * wrapped nanosecond, and costs no lookups for days that cannot hold rows.
+         */
+        internal fun readWindow(fromS: Long, toS: Long, indexed: List<ArchiveRecord>): Pair<Long, Long>? {
+            if (toS <= fromS) return null
+            var firstNs = Long.MAX_VALUE
+            var lastNs = Long.MIN_VALUE
+            for (r in indexed) {
+                if (!r.hasHistoryTime) continue
+                val first = r.timelineFirstNs ?: continue
+                val last = r.timelineLastNs ?: continue
+                if (first < firstNs) firstNs = first
+                if (last > lastNs) lastNs = last
+            }
+            if (firstNs > lastNs) return null
+            val spanFrom = (firstNs.floorDiv(NS) - DAY_S).coerceAtLeast(-MAX_WINDOW_S)
+            val spanTo = (lastNs.floorDiv(NS) + 1 + DAY_S).coerceAtMost(MAX_WINDOW_S)
+            val from = maxOf(fromS, spanFrom)
+            val to = minOf(toS, spanTo)
+            return if (to > from) from to to else null
+        }
     }
 }

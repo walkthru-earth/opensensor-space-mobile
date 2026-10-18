@@ -112,6 +112,35 @@ of miniblocks past the last value are not checked, as the spec allows. BYTE_STRE
 and 8 byte values. A malformed header, a width over 64 or a truncated miniblock is a
 `ParquetFormatException`.
 
+### Corrupt files
+
+A corrupt or hostile file raises `ParquetFormatException` and nothing else. The footer, page index
+and page header parsers check every field before it is used.
+
+- Each known Thrift field id must carry its `parquet.thrift` wire type (`ThriftCompactReader.expect`,
+  `readI32(header)` and the other typed reads). A list must hold the element type of its field, an
+  empty list may carry any.
+- A list or MAP size is never negative and never larger than the bytes left in the footer or page
+  index, so a size field cannot make the reader allocate or loop past the buffer.
+- Row counts, value counts, page sizes, offsets, `num_children` and `type_length` are never negative.
+  A `ColumnIndex` null count is never negative, and its `null_pages` is a bool list. The V2 data page
+  counts `num_nulls`, `definition_levels_byte_length` and `repetition_levels_byte_length` are never
+  negative.
+- A bounds check that refuses a read throws `ParquetBoundsException`, an `IndexOutOfBoundsException`
+  the readers wrap in `ParquetFormatException`. Any other index, arithmetic or allocation error is a
+  missing guard.
+- The row counts of the row groups must add up to `FileMetaData.num_rows`, summed with `checkedAdd`.
+- Byte arithmetic goes through `checkedAdd` and `checkedToInt` (`Bytes.kt`). A column chunk whose
+  `total_compressed_size` would run past the column data, or wrap, ends at the data end instead
+  (`chunkEnd`). A page index pointer whose end would wrap is ignored.
+
+`FooterHardeningTest` builds one footer, index or page per guard that is valid except for one field.
+`ParquetMutationFuzzTest` flips bytes, bits and runs of every fixture family with a fixed seed, about
+10k cases on the JVM in a few seconds, and reads each mutant through `ParquetFile` and a
+`ParquetReader` scan. It fails on any throwable other than `ParquetFormatException`, and on a
+`ParquetFormatException` that wraps a raw index, arithmetic or allocation error. The fuzz is a
+backstop for crashes nobody thought of. The unit tests prove each guard.
+
 ## Codecs (`ParquetCodecs` SPI)
 
 | Codec | Where | Notes |
@@ -142,8 +171,9 @@ CoreS3 v6.12 (schema `cores3-telemetry-v5`, dictionary `cores3-telemetry-v4`) an
 `event_time_utc_ns` and `clock_anchor_utc_ns` as `TIMESTAMP(NANOS, UTC)`, and the first CoreS3 files
 left them unannotated. The name only finds the column. The scale comes from the logical type unit,
 an unannotated INT64 under an old `*_ns` name reads as nanoseconds, and any other unannotated or non
-INT64 column under a UTC name is refused. A value past 2262 reads as null instead of wrapping. The
-reader exposes `LeafColumn.timestampUtcUnit` and `LeafColumn.fieldId`.
+INT64 column under a UTC name is refused. One rule covers every unit (`UtcColumns.fitsNs`). A value
+whose nanoseconds would not fit a Long, before 1677 or past 2262, reads as null instead of wrapping,
+in a MICROS column as much as in a NANOS one. The reader exposes `LeafColumn.timestampUtcUnit` and `LeafColumn.fieldId`.
 
 Every leaf of a current device file has `field_id` = its 1-based position in the board's
 `telemetry_fields.inc`, and dictionaries are append only, so an id never changes meaning. Older
@@ -244,7 +274,8 @@ unit-test resources. Never copy the files into another module.
 
 The oracle tests (`ParquetFileTest`, `GeoParquetFileTest`, `ParquetWriterTest`, `ByteReaderTest`,
 `GzipTest`, `PageIndexTest`, `EncodingFixtureTest`, `ValueDecodersTest`) and the range tests (`RangePlannerTest`, `LocalRangeSourceTest`,
-`TruncatedFooterFuzzTest`, truncated and corrupted files through both readers) live in `commonTest` and run on the JVM (`verify`) and on the iOS simulator (`verifyIos`).
+`TruncatedFooterFuzzTest`, truncated and corrupted files through both readers, `FooterHardeningTest`,
+`ParquetMutationFuzzTest`) live in `commonTest` and run on the JVM (`verify`) and on the iOS simulator (`verifyIos`).
 The JVM loads fixtures from the classpath. The simulator test binary reads them straight from the
 checkout through `PARQUET_FIXTURES`, which the build passes as `SIMCTL_CHILD_PARQUET_FIXTURES`. iOS
 skips the ZSTD fixtures. `JvmParquetFileTest` (mapping, threads, `OutputStream`) and
@@ -264,7 +295,7 @@ Regenerate fixtures when the firmware writer changes; commit the result. Writer 
 | `ColumnDecoder` (used by `ParquetFile` and `ParquetReader`) | `ParquetIndexer`, `Aggregator`, `HistoryRepository` day rows, Metrics screen, `RealArchiveTest` |
 | `ParquetWriter` | daily derived files → re-run PyArrow/DuckDB oracle; `ParquetWriterTest` |
 | `ParquetCodecs` SPI | `AppParquetCodecs` registration order at app start; fixtures per codec |
-| `ParquetReader`, `RangeSource`, `RangePlanner`, `PageIndex`, `longStatistics` | `ParquetFeedReader` (Discover), `:core:net`; `PageIndexTest`, `RangePlannerTest`, `TruncatedFooterFuzzTest`, `AllocationTest` |
+| `ParquetReader`, `RangeSource`, `RangePlanner`, `PageIndex`, `longStatistics` | `ParquetFeedReader` (Discover), `:core:net`; `PageIndexTest`, `RangePlannerTest`, `TruncatedFooterFuzzTest`, `ParquetMutationFuzzTest`, `AllocationTest` |
 | `ByteReader` | `ParquetFile` callers; `ByteReaderTest` |
-| `ThriftCompact*` | every footer read/write — the fixtures are the regression net |
+| `ThriftCompact*` | every footer read/write — the fixtures are the regression net, `FooterHardeningTest` |
 | `Geometry` / `GeoParquetMetadata` | `GeoParquetFileTest`; a future import UI / map (D4/D5) |

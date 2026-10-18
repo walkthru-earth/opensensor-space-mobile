@@ -191,4 +191,17 @@ class DailyParquetBuilderTest {
             )
         )
     }
+
+    @Test
+    fun anEstimateOfLongMinValueIsKeptAndAMissingOneIsInvalid() {
+        // No value of the Long range means "no estimate": validity is its own array.
+        val anchor = TimeEstimate.Anchor("boot", Long.MIN_VALUE, 0, "receipt")
+        val mono = LongColumn(longArrayOf(0, 5, -1), booleanArrayOf(true, false, true))
+        val estimated = DailyParquetBuilder.estimates(3, mono, anchor)
+        assertTrue(estimated.has(0))
+        assertEquals(Long.MIN_VALUE, estimated.values[0])
+        // No monotonic time, and a negative one the anchor refuses.
+        assertTrue(!estimated.has(1))
+        assertTrue(!estimated.has(2))
+    }
 }

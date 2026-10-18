@@ -148,17 +148,16 @@ internal class ColumnChunks(
         val (_, chunk) = chunk(leaf, rowGroup)
         val start = chunk.firstPageOffset
         if (start < 0 || start >= dataEnd) throw ParquetFormatException("'${leaf.name}': page offset $start outside the file ($source)")
-        val declared = chunk.totalCompressedSize
-        val end = if (declared > 0 && start + declared <= dataEnd) start + declared else dataEnd
+        val end = chunkEnd(start, chunk.totalCompressedSize, dataEnd)
         return checked(leaf, start, end)
     }
 
     /** The same chunk, read up to the footer: for writers whose `total_compressed_size` undercounts. */
-    fun widen(range: ChunkRange): ChunkRange = ChunkRange(range.start, (dataEnd - range.start).toInt())
+    fun widen(range: ChunkRange): ChunkRange = ChunkRange(range.start, checkedToInt(dataEnd - range.start, "column chunk length"))
 
     private fun checked(leaf: LeafColumn, start: Long, end: Long): ChunkRange {
         if (end - start > Int.MAX_VALUE) throw ParquetFormatException("'${leaf.name}': column chunk larger than 2 GiB ($source)")
-        return ChunkRange(start, (end - start).toInt())
+        return ChunkRange(start, checkedToInt(end - start, "'${leaf.name}': column chunk length"))
     }
 
     /**
