@@ -77,52 +77,52 @@ object UtcColumns {
     fun readNs(file: ParquetFile, leaf: LeafColumn): ColumnValues.Int64 = toNs(file.readColumn(leaf), nanosPerUnit(leaf))
 
     /**
-     * [column] multiplied by [scale]. A value whose nanoseconds would not fit a Long (past 2262) is
-     * null, so a bad timestamp never wraps into an apparently valid UTC partition.
+     * The one clamp rule for every unit. A stored [value] is a usable instant only when it is a whole
+     * number of nanoseconds that fits a Long, that is between about 1677 and 2262. Every reader
+     * ([toNs], [toMicros], [scaleToNs]) applies it, so MICROS, MILLIS and NANOS columns agree on
+     * which rows have a time.
+     */
+    fun fitsNs(value: Long, scale: Long): Boolean = scale == 1L || value in -(Long.MAX_VALUE / scale)..(Long.MAX_VALUE / scale)
+
+    /**
+     * [column] multiplied by [scale]. A value that fails [fitsNs] is null, so a bad timestamp never
+     * wraps into an apparently valid UTC partition.
      */
     fun toNs(column: ColumnValues, scale: Long): ColumnValues.Int64 {
         val source = column as? ColumnValues.Int64 ?: throw ParquetFormatException("UTC column is ${column::class.simpleName}, not INT64")
         if (scale == 1L) return source
-        val limit = Long.MAX_VALUE / scale
-        val out = LongArray(source.size)
-        var valid: BooleanArray? = source.valid?.copyOf()
-        for (i in 0 until source.size) {
-            if (source.isNull(i)) continue
-            val v = source.values[i]
-            if (v > limit || v < -limit) {
-                if (valid == null) valid = BooleanArray(source.size) { true }
-                valid[i] = false
-            } else {
-                out[i] = v * scale
-            }
-        }
-        return ColumnValues.Int64(out, valid)
+        return mapFitting(source, scale) { it * scale }
     }
 
-    /** [column] of a [leaf] UTC instant as microseconds, the unit a derived file stores. */
+    /**
+     * [column] of a [leaf] UTC instant as microseconds, the unit a derived file stores. The same
+     * [fitsNs] rule applies to a MICROS column too, so a row the timeline drops is dropped here as well.
+     */
     fun toMicros(column: ColumnValues, leaf: LeafColumn): ColumnValues.Int64 {
         val source = column as? ColumnValues.Int64 ?: throw ParquetFormatException("'${leaf.name}' is ${column::class.simpleName}, not INT64")
         val scale = nanosPerUnit(leaf)
-        if (scale == NS_PER_US) return source
+        return mapFitting(source, scale) { if (scale == NS_PER_US) it else nsToUs(it * scale) }
+    }
+
+    /** [source] through [map], with every value that fails [fitsNs] for [scale] turned null. */
+    private inline fun mapFitting(source: ColumnValues.Int64, scale: Long, map: (Long) -> Long): ColumnValues.Int64 {
         val out = LongArray(source.size)
         var valid: BooleanArray? = source.valid?.copyOf()
-        val limit = Long.MAX_VALUE / scale
         for (i in 0 until source.size) {
             if (source.isNull(i)) continue
             val v = source.values[i]
-            if (v > limit || v < -limit) {
+            if (fitsNs(v, scale)) {
+                out[i] = map(v)
+            } else {
                 if (valid == null) valid = BooleanArray(source.size) { true }
                 valid[i] = false
-            } else {
-                out[i] = nsToUs(v * scale)
             }
         }
         return ColumnValues.Int64(out, valid)
     }
 
-    /** One [value] in a unit of [scale] nanoseconds, as nanoseconds. Null past 2262, never wrapped. */
-    fun scaleToNs(value: Long, scale: Long): Long? =
-        if (scale == 1L) value else value.takeIf { it in -(Long.MAX_VALUE / scale)..(Long.MAX_VALUE / scale) }?.times(scale)
+    /** One [value] in a unit of [scale] nanoseconds, as nanoseconds. Null when it fails [fitsNs], never wrapped. */
+    fun scaleToNs(value: Long, scale: Long): Long? = if (fitsNs(value, scale)) value * scale else null
 
     /** Whole units of [scale] nanoseconds at or before [ns]. */
     fun nsToUnit(ns: Long, scale: Long): Long = ns.floorDiv(scale)

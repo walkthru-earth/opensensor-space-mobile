@@ -503,35 +503,35 @@ internal class ChunkDecoder(
         try {
             r.readStruct { f ->
                 when (f.id) {
-                    1 -> type = r.readI32()
-                    2 -> uncompressed = r.readI32()
-                    3 -> compressed = r.readI32()
-                    5 -> r.readStruct { d ->
+                    1 -> type = r.readI32(f)
+                    2 -> uncompressed = r.readI32(f)
+                    3 -> compressed = r.readI32(f)
+                    5 -> r.readStruct(f) { d ->
                         // DataPageHeader
                         when (d.id) {
-                            1 -> numValues = r.readI32()
-                            2 -> encoding = ParquetEncoding.of(r.readI32())
-                            3 -> defEnc = ParquetEncoding.of(r.readI32())
+                            1 -> numValues = r.readI32(d)
+                            2 -> encoding = ParquetEncoding.of(r.readI32(d))
+                            3 -> defEnc = ParquetEncoding.of(r.readI32(d))
                             else -> r.skip(d.type)
                         }
                     }
-                    7 -> r.readStruct { d ->
+                    7 -> r.readStruct(f) { d ->
                         // DictionaryPageHeader
                         when (d.id) {
-                            1 -> numValues = r.readI32()
-                            2 -> encoding = ParquetEncoding.of(r.readI32())
+                            1 -> numValues = r.readI32(d)
+                            2 -> encoding = ParquetEncoding.of(r.readI32(d))
                             else -> r.skip(d.type)
                         }
                     }
-                    8 -> r.readStruct { d ->
+                    8 -> r.readStruct(f) { d ->
                         // DataPageHeaderV2
                         when (d.id) {
-                            1 -> numValues = r.readI32()
-                            2 -> numNulls = r.readI32()
-                            3 -> r.readI32() // num_rows: equals num_values on a flat column
-                            4 -> encoding = ParquetEncoding.of(r.readI32())
-                            5 -> defLen = r.readI32()
-                            6 -> repLen = r.readI32()
+                            1 -> numValues = r.readI32(d)
+                            2 -> numNulls = r.readI32(d)
+                            3 -> r.readI32(d) // num_rows: equals num_values on a flat column
+                            4 -> encoding = ParquetEncoding.of(r.readI32(d))
+                            5 -> defLen = r.readI32(d)
+                            6 -> repLen = r.readI32(d)
                             7 -> isCompressed = r.booleanFromHeader(d)
                             else -> r.skip(d.type)
                         }
@@ -546,7 +546,7 @@ internal class ChunkDecoder(
         } catch (e: RuntimeException) {
             throw ParquetFormatException("'${leaf.name}': malformed page header at $offset: ${e.message} ($source)", e)
         }
-        if (compressed < 0 || uncompressed < 0 || numValues < 0) throw ParquetFormatException("'${leaf.name}': negative page size at $offset ($source)")
+        if (compressed < 0 || uncompressed < 0 || numValues < 0 || numNulls < 0 || defLen < 0 || repLen < 0) throw ParquetFormatException("'${leaf.name}': negative page size at $offset ($source)")
         return PageHeader(type, uncompressed, compressed, numValues, encoding, defEnc, r.position, numNulls, defLen, repLen, isCompressed)
     }
 

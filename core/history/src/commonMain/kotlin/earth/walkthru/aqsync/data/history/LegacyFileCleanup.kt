@@ -27,11 +27,11 @@ data class UtcDayRange(val fromEpochDay: Long, val toEpochDay: Long) {
         require(fromEpochDay <= toEpochDay) { "range ends before it starts" }
     }
 
-    /** Start of the first day, inclusive, in nanoseconds. */
-    val fromNs: Long get() = fromEpochDay * StationDays.DAY_NS
+    /** Start of the first day, inclusive, in nanoseconds. Saturates for days past the Long range. */
+    val fromNs: Long get() = dayStartNs(fromEpochDay)
 
-    /** Start of the day after the last one, exclusive, in nanoseconds. */
-    val untilNs: Long get() = (toEpochDay + 1) * StationDays.DAY_NS
+    /** Start of the day after the last one, exclusive, in nanoseconds. Saturates like [fromNs]. */
+    val untilNs: Long get() = if (toEpochDay == Long.MAX_VALUE) Long.MAX_VALUE else dayStartNs(toEpochDay + 1)
 
     /**
      * True when [record] has a real or estimated span overlapping the range. A file the timeline cannot
@@ -41,6 +41,17 @@ data class UtcDayRange(val fromEpochDay: Long, val toEpochDay: Long) {
         val first = record.timelineFirstNs ?: return false
         val last = record.timelineLastNs ?: return false
         return last >= fromNs && first < untilNs
+    }
+
+    private companion object {
+        /** The last epoch day whose start still fits a Long of nanoseconds, in 2262. */
+        const val MAX_DAY = Long.MAX_VALUE / StationDays.DAY_NS
+
+        fun dayStartNs(day: Long): Long = when {
+            day > MAX_DAY -> Long.MAX_VALUE
+            day < -MAX_DAY -> Long.MIN_VALUE
+            else -> day * StationDays.DAY_NS
+        }
     }
 }
 
@@ -127,6 +138,22 @@ class LegacyFileCleanup(
         }
         log("old file cleanup: found ${keys.size} files in ${stations.size} stations, skipped $skipped")
         return Plan(keys, bytes, stations.size, skipped)
+    }
+
+    /**
+     * The UTC days the phone archive spans, from the first to the last day any file has rows on. Null
+     * when no file can be placed in time. Settings limits its date picker to these days.
+     */
+    suspend fun archiveDays(): UtcDayRange? {
+        var first = Long.MAX_VALUE
+        var last = Long.MIN_VALUE
+        for (record in index.observeAll().first()) {
+            val f = record.timelineFirstNs ?: continue
+            val l = record.timelineLastNs ?: continue
+            if (f < first) first = f
+            if (l > last) last = l
+        }
+        return if (first <= last) UtcDayRange(StationDays.dayOf(first), StationDays.dayOf(last)) else null
     }
 
     /** Removes the files of [plan] that are still old. */

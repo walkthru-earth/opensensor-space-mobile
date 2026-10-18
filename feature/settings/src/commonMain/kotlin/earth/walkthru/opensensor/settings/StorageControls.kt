@@ -59,6 +59,9 @@ interface StorageControls {
 
     suspend fun clearMapCache()
 
+    /** The UTC days the phone archive spans, or null when it holds no dated file. Changes nothing. */
+    suspend fun archiveDays(): OldFilesRange?
+
     /** The old format files in [range], or in the whole phone archive when null. Changes nothing. */
     suspend fun findOldFiles(range: OldFilesRange?): OldFilesPlan
 
@@ -78,8 +81,23 @@ internal fun megabytes(bytes: Long): String {
     return "${tenths / 10}.${tenths % 10}"
 }
 
+/**
+ * The days the date picker offers, the days of [archive] plus one on each side. Null offers every day.
+ * The picker never returns a day the archive cannot hold, nor one whose milliseconds overflow.
+ */
+internal fun pickableDays(archive: OldFilesRange?): LongRange? = archive?.let { (it.fromEpochDay - 1)..(it.toEpochDay + 1) }
+
+/** The proleptic Gregorian year of a UTC epoch day. */
+internal fun yearOf(epochDay: Long): Int = civil(epochDay).first.toInt()
+
 /** A UTC epoch day as `yyyy-mm-dd`, the proleptic Gregorian date of the date picker. */
 internal fun isoDate(epochDay: Long): String {
+    val (year, month, day) = civil(epochDay)
+    return "$year-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}"
+}
+
+/** Year, month and day of a UTC epoch day. */
+private fun civil(epochDay: Long): Triple<Long, Long, Long> {
     // Days to civil date (Howard Hinnant), valid for every Long day the picker can return.
     val z = epochDay + 719_468
     val era = z.floorDiv(146_097L)
@@ -90,5 +108,5 @@ internal fun isoDate(epochDay: Long): String {
     val day = doy - (153 * mp + 2) / 5 + 1
     val month = if (mp < 10) mp + 3 else mp - 9
     val year = yoe + era * 400 + if (month <= 2) 1 else 0
-    return "$year-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}"
+    return Triple(year, month, day)
 }

@@ -117,3 +117,27 @@ internal class ByteOutput(initial: Int = 64) {
 
 internal fun le32(v: Int): ByteArray = ByteOutput(4).apply { writeIntLe(v) }.toByteArray()
 internal fun le64(v: Long): ByteArray = ByteOutput(8).apply { writeLongLe(v) }.toByteArray()
+
+/**
+ * `a + b` for sizes and offsets read from a file. A sum past [Long.MAX_VALUE] means the file is corrupt,
+ * so it throws [ParquetFormatException] instead of wrapping to a negative position.
+ */
+internal fun checkedAdd(a: Long, b: Long, what: String): Long {
+    val sum = a + b
+    // Overflow flips the sign away from both operands.
+    if ((a xor sum) and (b xor sum) < 0) throw ParquetFormatException("$what overflow ($a + $b)")
+    return sum
+}
+
+/** [v] as an Int for an array size or a read length, or [ParquetFormatException] when it does not fit. */
+internal fun checkedToInt(v: Long, what: String): Int {
+    if (v !in 0..Int.MAX_VALUE) throw ParquetFormatException("$what $v does not fit a read")
+    return v.toInt()
+}
+
+/**
+ * End of the column chunk that starts at [start]: `start + declared` when that stays inside the column
+ * data, else [dataEnd]. Compared by subtraction, so a huge declared size cannot wrap past the check.
+ */
+internal fun chunkEnd(start: Long, declared: Long, dataEnd: Long): Long =
+    if (declared > 0 && declared <= dataEnd - start) checkedAdd(start, declared, "column chunk end") else dataEnd

@@ -70,6 +70,22 @@ class UtcColumnsTest {
     }
 
     @Test
+    fun everyUnitDropsTheSameOutOfRangeValues() {
+        // One rule for every unit. A MICROS value whose nanoseconds would not fit a Long is null when it
+        // becomes a derived file's micros too, not passed through, so the timeline and the derived file agree.
+        val far = Long.MAX_VALUE / 10
+        val us = single(UtcColumns.EVENT_US, ParquetType.INT64, TimeUnit.MICROS, ColumnValues.Int64(longArrayOf(1_789_638_155_000_000L, far), null))
+        val leaf = us.leaf(UtcColumns.EVENT_US)
+        val micros = UtcColumns.toMicros(us.readColumn(leaf), leaf)
+        assertEquals(1_789_638_155_000_000L, micros.asLong(0))
+        assertNull(micros.asLong(1))
+        assertNull(UtcColumns.readNs(us, leaf).asLong(1))
+        assertNull(UtcColumns.scaleToNs(far, 1_000L))
+        assertEquals(false, UtcColumns.fitsNs(far, 1_000L))
+        assertEquals(true, UtcColumns.fitsNs(far, 1L))
+    }
+
+    @Test
     fun aMicrosValuePast2262IsNullInsteadOfWrapping() {
         val values = ColumnValues.Int64(longArrayOf(1_789_638_155_000_000L, Long.MAX_VALUE / 10, 0L), booleanArrayOf(true, true, false))
         val ns = UtcColumns.toNs(values, 1_000L)

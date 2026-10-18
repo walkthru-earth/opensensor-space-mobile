@@ -62,7 +62,8 @@ flowchart LR
 Derived from the **file**, never its name: rows, row groups, `schema_version`, `boot_id`,
 `purpose`, UTC row count + span, monotonic span, sequence span, `pms_status == 4` count,
 `indexedAt`/`indexError`. v6 footers answer spans from statistics without decoding
-(`fromStatistics`); v1/v2 files decode three columns. `purpose = codec-comparison-duplicate-rows`
+(`fromStatistics`); v1/v2 files decode three columns. Statistics with a negative null count or a
+minimum above the maximum are no answer, the column is decoded instead. `purpose = codec-comparison-duplicate-rows`
 (benchmark copies) is indexed but excluded from every history query (`withUtcBetween` filters on
 `purpose`). A refused file keeps its row with `indexError`. `ArchiveRecord.isIndexed` (indexed and no
 error) is the one test of whether a row's index columns can be read, and `withUtcBetween` applies the
@@ -154,6 +155,11 @@ size and modification time). A rebuilt day is a new file with a new identity. Ra
 through the blocking `ParquetFile` and parse their footer on each open (index, today's raw rows, file
 summaries, whose results Android already caches by name and CRC-32).
 
+Read window. `HistorySeriesReader.readWindow` clamps every requested window to the station's archive
+span plus one day on each side, and to the seconds whose nanoseconds still fit a Long. A window far
+past the archive costs no lookups and never multiplies into a wrapped nanosecond. The Settings date
+picker of the old format cleanup offers the same span plus one day (`StorageControls.archiveDays`).
+
 ### When a day is rebuilt
 
 `derived_day.sourceSignature` = SHA-256 over `derive-v<DERIVE_VERSION>` + the day's sorted
@@ -181,7 +187,8 @@ reboot, never overwriting the event time column. The 50 ppm drift assumption is 
 accuracy bound and excludes phone clock error and transport latency. Verified on
 boot `e452563e…` (2026-09-08): reproduces the firmware's own stamp 43 min after the anchor
 **exactly**. Stored as `archived_file.estFirstUtcNs/estLastUtcNs/estAnchorFile` (index only, no
-decode). Tiers carry `estimatedRows`; charts draw estimated stretches **dashed** and say so. Boots
+decode). A row's estimate is kept in a column with its own validity array, so no Long value stands
+for "no estimate". Tiers carry `estimatedRows`; charts draw estimated stretches **dashed** and say so. Boots
 that never retained a time anchor stay off the timeline. Durable receipts survive app restarts;
 a new receipt or footer anchor rebuilds affected UTC days, including files whose estimated rows
 cross midnight. See [UTC reconciliation](time-reconciliation.md).

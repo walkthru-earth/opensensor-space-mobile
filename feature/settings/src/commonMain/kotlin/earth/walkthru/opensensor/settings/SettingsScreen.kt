@@ -19,11 +19,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DateRangePicker
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -274,6 +276,7 @@ private fun OldFilesRow(
 ) {
     val state by controller.oldFiles.collectAsState()
     val range by controller.oldFilesRange.collectAsState()
+    val archiveDays by controller.archiveDays.collectAsState()
     var confirm by rememberSaveable { mutableStateOf(false) }
     var pickDates by rememberSaveable { mutableStateOf(false) }
     val label = stringResource(Res.string.storage_old_files)
@@ -317,7 +320,7 @@ private fun OldFilesRow(
         )
     }
     if (pickDates) {
-        OldFilesDates(range, onDismiss = { pickDates = false }, onPick = {
+        OldFilesDates(range, pickableDays(archiveDays), onDismiss = { pickDates = false }, onPick = {
             pickDates = false
             controller.setOldFilesRange(it)
         })
@@ -400,13 +403,33 @@ internal fun removedLines(result: OldFilesResult): List<RemovedLine> = buildList
 @Composable
 private fun fileCount(n: Int): String = pluralStringResource(Res.plurals.storage_old_files_count, n, n)
 
-/** A UTC date range picker. Apply with no dates chosen means every date. */
+/** A UTC date range picker over [days], or every date when null. Apply with no dates chosen means every date. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun OldFilesDates(range: OldFilesRange?, onDismiss: () -> Unit, onPick: (OldFilesRange?) -> Unit) {
-    val state = rememberDateRangePickerState(
-        initialSelectedStartDateMillis = range?.let { it.fromEpochDay * DAY_MS },
-        initialSelectedEndDateMillis = range?.let { it.toEpochDay * DAY_MS },
-    )
+private fun OldFilesDates(range: OldFilesRange?, days: LongRange?, onDismiss: () -> Unit, onPick: (OldFilesRange?) -> Unit) {
+    val shown = range?.takeIf { days == null || (it.fromEpochDay in days && it.toEpochDay in days) }
+    val selectable = days?.let {
+        val years = yearOf(it.first)..yearOf(it.last)
+        object : SelectableDates {
+            override fun isSelectableDate(utcTimeMillis: Long) = utcTimeMillis.floorDiv(DAY_MS) in it
+
+            override fun isSelectableYear(year: Int) = year in years
+        }
+    }
+    val state = if (days != null && selectable != null) {
+        rememberDateRangePickerState(
+            initialSelectedStartDateMillis = shown?.let { it.fromEpochDay * DAY_MS },
+            initialSelectedEndDateMillis = shown?.let { it.toEpochDay * DAY_MS },
+            initialDisplayedMonthMillis = (shown?.fromEpochDay ?: days.last) * DAY_MS,
+            yearRange = yearOf(days.first)..yearOf(days.last),
+            selectableDates = selectable,
+        )
+    } else {
+        rememberDateRangePickerState(
+            initialSelectedStartDateMillis = shown?.let { it.fromEpochDay * DAY_MS },
+            initialSelectedEndDateMillis = shown?.let { it.toEpochDay * DAY_MS },
+        )
+    }
     DatePickerDialog(
         onDismissRequest = onDismiss,
         confirmButton = {

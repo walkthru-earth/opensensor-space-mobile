@@ -3,6 +3,7 @@ package earth.walkthru.aqsync.data.history
 import earth.walkthru.aqsync.data.history.parquet.ColumnValues
 import earth.walkthru.aqsync.data.history.parquet.LeafColumn
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
+import earth.walkthru.aqsync.data.history.parquet.ParquetFileMetadata
 import earth.walkthru.aqsync.data.history.parquet.ParquetType
 
 /**
@@ -110,9 +111,12 @@ object ParquetIndexer {
      * From footer statistics only, or null when any row group lacks `null_count` or — for a group
      * with defined values — `min_value`/`max_value`. Never guesses: a partial answer is no answer.
      */
-    fun rangeFromStatistics(file: ParquetFile, leaf: LeafColumn): Range? {
+    fun rangeFromStatistics(file: ParquetFile, leaf: LeafColumn): Range? = rangeFromStatistics(file.metadata, leaf)
+
+    /** The same, from the footer alone. A negative null count or a min above its max is no answer either. */
+    fun rangeFromStatistics(md: ParquetFileMetadata, leaf: LeafColumn): Range? {
         if (leaf.type != ParquetType.INT32 && leaf.type != ParquetType.INT64) return null
-        val groups = file.metadata.rowGroups
+        val groups = md.rowGroups
         if (groups.isEmpty()) return Range(0, null, null)
         var count = 0L
         var min: Long? = null
@@ -120,12 +124,16 @@ object ParquetIndexer {
         for (rg in groups) {
             val s = rg.columns[leaf.index].statistics ?: return null
             val nulls = s.nullCount ?: return null
+            // A negative null count would make `defined` larger than the row group. Decode instead.
+            if (nulls < 0) return null
             val defined = rg.numRows - nulls
             if (defined < 0) return null
             count += defined
             if (defined == 0L) continue
             val lo = s.minLong(leaf.type) ?: return null
             val hi = s.maxLong(leaf.type) ?: return null
+            // Statistics that contradict themselves are not trusted for a time span.
+            if (lo > hi) return null
             min = if (min == null) lo else minOf(min, lo)
             max = if (max == null) hi else maxOf(max, hi)
         }

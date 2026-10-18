@@ -77,6 +77,11 @@ class SettingsController(
         }
     }
 
+    private val _archiveDays = MutableStateFlow<OldFilesRange?>(null)
+
+    /** The UTC days the phone archive spans, measured with [storageUsage]. Null offers every date. */
+    val archiveDays: StateFlow<OldFilesRange?> = _archiveDays.asStateFlow()
+
     private val _oldFilesRange = MutableStateFlow<OldFilesRange?>(null)
 
     /** The UTC days the old format cleanup looks at. Null means every date. */
@@ -149,6 +154,13 @@ class SettingsController(
             throw e
         } catch (e: Exception) {
             log("settings: removed files count failed: ${e::class.simpleName}")
+        }
+        try {
+            _archiveDays.value = controls.archiveDays()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log("settings: archive days failed: ${e::class.simpleName}")
         }
     }
 
