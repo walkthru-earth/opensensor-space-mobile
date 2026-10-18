@@ -100,6 +100,27 @@ class HistoryOrchestratorTest {
     }
 
     @Test
+    fun aDeriveEntryPointWaitsForABackfillInFlight() = runTest {
+        val record = waiting("a")
+        val history = orchestrator()
+        var sawIndexed: Boolean? = null
+        val derive = history.derivePassOf<String> { sawIndexed = index.get(record.key)!!.isIndexed }
+        index.updating = CompletableDeferred()
+        index.releaseUpdate = CompletableDeferred()
+
+        val backfill = launch { history.backfill() }
+        index.updating!!.await()
+        val deriving = launch { derive("emptied station") }
+        runCurrent()
+        assertEquals(null, sawIndexed, "the entry point waits for the backfill in flight")
+
+        index.releaseUpdate!!.complete(Unit)
+        backfill.join()
+        deriving.join()
+        assertEquals(true, sawIndexed)
+    }
+
+    @Test
     fun aBackfillAskedDuringADeriveWaitsForIt() = runTest {
         waiting("a")
         val history = orchestrator()

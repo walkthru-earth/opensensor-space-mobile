@@ -265,7 +265,7 @@ internal object IosArchive {
     private val anchorFollowUp by lazy {
         CoalescedWork(scope, "clock anchor estimate") {
             repair.estimateTimes()
-            rebuildDerived()
+            rebuildDerived(emptyList())
         }
     }
 
@@ -276,21 +276,24 @@ internal object IosArchive {
     }
 
     /**
-     * Rebuilds the derived days of every station with records, and of each of [emptied]. A station in
-     * [emptied] that has no records left is rebuilt from no sources, which removes its stale day files.
-     * It is one [HistoryOrchestrator.derivePass], so it never runs beside a backfill. The History
-     * reader's own refresh of one station takes [derivedMutex] only, so History stays visible during
-     * a backfill and keeps the days a waiting record holds.
+     * Rebuilds the derived days of every station with records, and of each of the emptied stations it
+     * is given. An emptied station with no records left is rebuilt from no sources, which removes its
+     * stale day files. It is the one derive entry point, built by [HistoryOrchestrator.derivePassOf],
+     * so every call is one pass and never runs beside a backfill. The History reader's own refresh of
+     * one station takes [derivedMutex] only, so History stays visible during a backfill and keeps the
+     * days a waiting record holds.
      */
-    private suspend fun rebuildDerived(emptied: Collection<String> = emptyList()) = history.derivePass {
-        derivedMutex.withLock {
-            val byStation = index.observeAll().first().groupBy { it.station }
-            for (station in byStation.keys + emptied) {
-                val files = byStation[station].orEmpty()
-                val anchors = TimeEstimate.anchors(files.filter { it.isIndexed }.map { it.info() }, clockAnchors.anchors(station))
-                derived.rebuild(station, files, store, anchors, Clock.System.now().epochSeconds)
+    private val rebuildDerived: suspend (Collection<String>) -> Unit by lazy {
+        history.derivePassOf { emptied: Collection<String> ->
+            derivedMutex.withLock {
+                val byStation = index.observeAll().first().groupBy { it.station }
+                for (station in byStation.keys + emptied) {
+                    val files = byStation[station].orEmpty()
+                    val anchors = TimeEstimate.anchors(files.filter { it.isIndexed }.map { it.info() }, clockAnchors.anchors(station))
+                    derived.rebuild(station, files, store, anchors, Clock.System.now().epochSeconds)
+                }
+                withContext(Dispatchers.IO) { derivedQuota.enforce() }
             }
-            withContext(Dispatchers.IO) { derivedQuota.enforce() }
         }
     }
 
@@ -306,12 +309,12 @@ internal object IosArchive {
         // The tiers give memory back on a memory warning, the next History pass rebuilds them (#61).
         scope.trimOnMemoryPressure(tiers)
         // The startup sweep of #60, the backfill and the derive, in the shared order.
-        scope.launch { history.run { rebuildDerived() } }
+        scope.launch { history.run { rebuildDerived(emptyList()) } }
         // Every archive change, a sync's new file or a removal, derives again after any backfill in flight.
         scope.launch {
             index.observeAll().conflate().collect {
                 try {
-                    rebuildDerived()
+                    rebuildDerived(emptyList())
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {

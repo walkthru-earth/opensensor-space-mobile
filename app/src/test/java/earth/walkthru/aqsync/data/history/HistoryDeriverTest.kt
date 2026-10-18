@@ -25,16 +25,20 @@ import earth.walkthru.aqsync.storage.QuotaEnforcer
 import earth.walkthru.aqsync.storage.StorageClass
 import earth.walkthru.aqsync.storage.StorageRole
 import earth.walkthru.aqsync.storage.StorageRoots
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -97,6 +101,45 @@ class HistoryDeriverTest {
             assertEquals(originalSources, files.rows)
             assertTrue(originalBytes.contentEquals(raw.readBytes()))
             assertEquals(0, deriver.deriveStale().daysRebuilt)
+        } finally {
+            tmp.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `every derive entry point waits for a History pass in flight`() = runBlocking {
+        val tmp = java.nio.file.Files.createTempDirectory("aq-derive-pass").toFile()
+        try {
+            val archive = FileArchive(tmp)
+            val files = InMemoryFiles()
+            val days = InMemoryDays()
+            val indexer = HistoryIndexer(archive, files, DeviceCoordinator())
+            val passes = indexer.passes(files)
+            val deriver = HistoryDeriver(archive, files, InMemoryBuckets(), days, DerivedStore(tmp), indexer, derivedQuota(tmp), passes)
+            val name = "station=$station/day=2026-09-17/raw.parquet"
+            val raw = archive.fileFor(station, name).apply {
+                parentFile!!.mkdirs()
+                writeBytes(bytes("device/v3-board-2rg-105rows.parquet"))
+            }
+            files.rows += indexer.indexed(ArchivedFile(station = station, name = name, bytes = raw.length(), crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), raw)
+            val entries = listOf<Pair<String, suspend () -> Unit>>(
+                "deriveStale" to { deriver.deriveStale() },
+                "deriveAfterSync" to { deriver.deriveAfterSync(0) },
+                "ensureDailyFiles" to { deriver.ensureDailyFiles() },
+            )
+            for ((entry, derive) in entries) {
+                val inPass = CompletableDeferred<Unit>()
+                val endPass = CompletableDeferred<Unit>()
+                // A backfill or another derive holds the pass.
+                val other = launch(Dispatchers.Default) { passes.derivePass { inPass.complete(Unit); endPass.await() } }
+                inPass.await()
+                val waiting = launch(Dispatchers.Default) { derive() }
+                assertNull("$entry waits for the pass in flight", withTimeoutOrNull(2_000) { waiting.join() })
+                endPass.complete(Unit)
+                other.join()
+                waiting.join()
+            }
+            assertEquals(1, days.rows.size)
         } finally {
             tmp.deleteRecursively()
         }

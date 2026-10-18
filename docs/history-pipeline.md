@@ -49,7 +49,8 @@ flowchart LR
   never overlap. A derive asked during a back-fill waits and then sees the indexed records. After each
   back-fill `run` derives once, and again whenever a record waits for its index.
 - **Every derive is a pass.** Android's `HistoryDeriver.deriveStale` and `ensureDailyFiles` and iOS's
-  `IosArchive.rebuildDerived` each run inside one `derivePass`, which is not reentrant. The iOS
+  `IosArchive.rebuildDerived` each run inside one `derivePass`, which is not reentrant. iOS builds
+  `rebuildDerived` with `derivePassOf`, so its derive body has no entry point outside a pass. The iOS
   History reader's own refresh of one station takes only the derived lock, so History stays visible
   during a back-fill.
 - **Held days.** A day a waiting record holds stays in History, see below.

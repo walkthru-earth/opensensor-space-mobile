@@ -36,6 +36,12 @@ class HistoryOrchestrator(
     /** Runs [block] as the one History pass of this archive, after any backfill or derive in flight. */
     suspend fun <T> derivePass(block: suspend () -> T): T = passes.withLock { block() }
 
+    /**
+     * [derive] behind [derivePass], as a platform's one derive entry point. Hand the platform derive
+     * body only to this, so no caller can run it outside a pass.
+     */
+    fun <A> derivePassOf(derive: suspend (A) -> Unit): suspend (A) -> Unit = { arg -> derivePass { derive(arg) } }
+
     /** Indexes every record waiting for its index, as one pass. */
     suspend fun backfill() = passes.withLock { repair.backfillUntilSettled() }
 
