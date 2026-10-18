@@ -5,7 +5,6 @@ import earth.walkthru.aqsync.storage.StorageException
 import earth.walkthru.aqsync.storage.isOutOfSpace
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Instant
 
 /** One file an export copies, under [path] in the zip or as the [name] of a loose copy. */
@@ -19,8 +18,20 @@ class ExportEntry(
 }
 
 /**
+ * An archived file that is no longer there. A reader throws it only after it checked that the path is
+ * gone, so a zip can leave that file out and still fail on any other error (#168).
+ */
+class ArchiveFileMissingException(message: String) : IllegalStateException(message)
+
+/**
+ * True when [error] says the file an export tried to open no longer exists. Never true for another
+ * failure, such as a denied permission, an IO error or too many open files.
+ */
+internal expect fun isMissingFile(error: Throwable): Boolean
+
+/**
  * A file staged for the share sheet or the save picker, inside one [ExportRun]. [skipped] counts the
- * listed files a zip left out because they could no longer be opened ([ArchiveExport.writeZip]).
+ * listed files a zip left out because they were gone by then ([ArchiveExport.writeZip]).
  */
 class StagedFile(val path: String, val name: String, val mime: String, val run: ExportRun, val skipped: Int = 0)
 
@@ -123,29 +134,30 @@ object ArchiveExport {
      * [checkpoint] runs before each entry and each 64 KiB slice, so a caller can stop a long write
      * (a coroutine passes `ensureActive`). A full disk fails with [StorageException].
      *
-     * An entry that can no longer be opened, such as a final the old format cleanup removed after the
-     * listing, is left out and the zip still builds (#168). Returns how many were left out. When none
-     * of [entries] opens, the first failure is thrown instead. A read that fails once a copy started
-     * still fails the zip.
+     * An entry whose file is gone, such as a final the old format cleanup removed after the listing,
+     * is left out and the zip still builds (#168). Returns how many were left out. When no Parquet file
+     * is left to write, the first of those failures is thrown instead, so a zip never holds manifests
+     * alone. Any other failure to open or read an entry still fails the zip.
      */
     fun writeZip(sink: ExportSink, entries: List<ExportEntry>, checkpoint: () -> Unit = {}): Int = mappingNoSpace {
         val zip = StoredZipWriter(sink, checkpoint = checkpoint)
         var skipped = 0
-        var firstFailure: Exception? = null
+        var finals = 0
+        var firstMissing: Exception? = null
         for (e in entries) {
             checkpoint()
             val reader = try {
                 e.open()
-            } catch (c: CancellationException) {
-                throw c
             } catch (x: Exception) {
+                if (!isMissingFile(x)) throw x
                 skipped++
-                firstFailure = firstFailure ?: x
+                firstMissing = firstMissing ?: x
                 continue
             }
             reader.use { zip.add(e.path, it, e.modifiedEpochMs) }
+            if (e.path.endsWith(".parquet")) finals++
         }
-        firstFailure?.let { if (skipped == entries.size) throw it }
+        firstMissing?.let { if (finals == 0) throw it }
         zip.finish()
         skipped
     }
@@ -166,12 +178,11 @@ object ArchiveExport {
      */
     fun plannedZipBytes(entries: List<ExportEntry>): Long = entries.sumOf { e ->
         val name = e.path.encodeToByteArray().size.toLong()
-        // An entry that cannot be opened is left out of the zip, so it adds nothing here either.
+        // An entry whose file is gone is left out of the zip, so it adds nothing here either.
         val size = try {
             e.open().use { it.size }
-        } catch (c: CancellationException) {
-            throw c
-        } catch (_: Exception) {
+        } catch (x: Exception) {
+            if (!isMissingFile(x)) throw x
             return@sumOf 0L
         }
         size + 2 * name + ZIP_ENTRY_OVERHEAD

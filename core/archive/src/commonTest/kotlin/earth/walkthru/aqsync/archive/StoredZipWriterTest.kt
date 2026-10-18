@@ -415,9 +415,40 @@ class ArchiveExportTest {
 
         // With every listed final gone there is nothing to share, so the export fails and leaves no run.
         store.files.remove("${ArchiveLayout.ARCHIVE}/B/b.parquet")
-        assertFailsWith<NoSuchElementException> { ArchiveExport.writeZip(MemorySink(), entries) }
-        assertFailsWith<NoSuchElementException> { ArchiveExport.stageZip(space, entries, "gone.zip") }
+        assertFailsWith<ArchiveFileMissingException> { ArchiveExport.writeZip(MemorySink(), entries) }
+        assertFailsWith<ArchiveFileMissingException> { ArchiveExport.stageZip(space, entries, "gone.zip") }
         assertTrue(space.runs.last().deleted)
+    }
+
+    @Test
+    fun anOpenFailureThatIsNotAGoneFileStillFailsTheExport() {
+        // A denied permission, an IO error or too many open files is not a file the cleanup removed.
+        val denied = ExportEntry("B/y.parquet", 0) { error("open failed: EACCES (Permission denied)") }
+        val entries = listOf(entry("A/x.parquet"), denied)
+        assertFailsWith<IllegalStateException> { ArchiveExport.writeZip(MemorySink(), entries) }
+        assertFailsWith<IllegalStateException> { ArchiveExport.plannedZipBytes(entries) }
+        val space = MemoryExportSpace()
+        assertFailsWith<IllegalStateException> { ArchiveExport.stageZip(space, entries, "z.zip") }
+        assertTrue(space.runs.single().deleted)
+    }
+
+    @Test
+    fun aDailyZipWithEveryParquetFileGoneFailsEvenWithItsManifests() {
+        fun gone(path: String) = ExportEntry(path, 0) { throw ArchiveFileMissingException(path) }
+        val manifest = entry("derived/v1/A/day=2026-10-01.manifest.json")
+        val onlyManifests = listOf(manifest, gone("derived/v1/A/day=2026-10-01.parquet"))
+        assertFailsWith<ArchiveFileMissingException> { ArchiveExport.writeZip(MemorySink(), onlyManifests) }
+        val space = MemoryExportSpace()
+        assertFailsWith<ArchiveFileMissingException> { ArchiveExport.stageZip(space, onlyManifests, "daily.zip") }
+        assertTrue(space.runs.single().deleted)
+
+        // One day file still there is enough, and the gone one is counted.
+        val sink = MemorySink()
+        assertEquals(1, ArchiveExport.writeZip(sink, onlyManifests + entry("derived/v1/A/day=2026-10-02.parquet")))
+        assertEquals(
+            listOf("derived/v1/A/day=2026-10-01.manifest.json", "derived/v1/A/day=2026-10-02.parquet"),
+            ParsedZip(sink.bytes()).entries.map { it.name },
+        )
     }
 
     @Test

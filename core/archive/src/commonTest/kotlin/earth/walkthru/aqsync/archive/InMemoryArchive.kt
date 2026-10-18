@@ -51,7 +51,7 @@ class InMemoryArchiveStore : ArchiveStore {
 
     override fun reader(key: ArchiveKey, partial: Boolean): ByteReader {
         val path = if (partial) ArchiveLayout.partialPath(key) else ArchiveLayout.finalPath(key)
-        return ByteArrayReader(files[path] ?: throw NoSuchElementException(path))
+        return ByteArrayReader(files[path] ?: throw ArchiveFileMissingException(path))
     }
 
     override suspend fun commit(key: ArchiveKey) {
