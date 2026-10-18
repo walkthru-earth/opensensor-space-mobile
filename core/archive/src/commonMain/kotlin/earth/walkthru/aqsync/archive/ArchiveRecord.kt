@@ -75,10 +75,14 @@ data class ArchiveRecord(
      * An indexed telemetry file on the timeline in `[fromNs, toNs)`, by real UTC or by its estimate. The same
      * predicate as Android's `ArchivedFileDao.withUtcBetween` query, written once for every store.
      */
-    fun onTimeline(fromNs: Long, toNs: Long): Boolean =
-        isIndexed && isTelemetry &&
-            (timelineLastNs ?: Long.MIN_VALUE) >= fromNs &&
-            (timelineFirstNs ?: Long.MAX_VALUE) < toNs
+    fun onTimeline(fromNs: Long, toNs: Long): Boolean {
+        if (!isIndexed || !isTelemetry) return false
+        // A missing end or start is no time at all, as SQL NULL fails both comparisons. No sentinel
+        // stands in for it, so no real value at either edge of Long is read as missing.
+        val last = timelineLastNs ?: return false
+        val first = timelineFirstNs ?: return false
+        return last >= fromNs && first < toNs
+    }
 
     /**
      * Indexed without error but with no UTC rows, which is all an index written before

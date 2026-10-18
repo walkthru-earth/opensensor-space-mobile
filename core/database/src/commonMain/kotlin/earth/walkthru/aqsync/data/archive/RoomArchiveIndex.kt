@@ -16,8 +16,8 @@ class RoomArchiveIndex(private val dao: ArchivedFileDao) : ArchiveIndex {
 
     override fun observeNeverIndexed(): Flow<Boolean> = dao.observeAnyNeverIndexed().distinctUntilChanged()
 
-    override fun observeLatestTimed(): Flow<Map<String, Long>> =
-        dao.observeLatestTimed().map { rows -> rows.associate { it.station to (it.lastNs ?: Long.MIN_VALUE) } }.distinctUntilChanged()
+    override fun observeLatestTimed(): Flow<Map<String, Long?>> =
+        dao.observeLatestTimed().map { rows -> rows.associate { it.station to it.lastNs } }.distinctUntilChanged()
 
     override suspend fun get(key: ArchiveKey): ArchiveRecord? = dao.get(key.station, key.name)?.toRecord()
 

@@ -219,7 +219,7 @@ class ConcurrentArchiveTest {
         override suspend fun unindexed(limit: Int) = snapshot().filter { !it.isIndexed }.take(limit)
         override fun observeUnindexedCount(): Flow<Int> = flowOf(snapshot().count { !it.isIndexed })
         override suspend fun withUtcBetween(station: String, fromNs: Long, toNs: Long) = snapshot().filter {
-            it.station == station && it.isIndexed && it.hasUtc && (it.lastUtcNs ?: Long.MIN_VALUE) >= fromNs && (it.firstUtcNs ?: Long.MAX_VALUE) < toNs
+            it.station == station && it.isIndexed && it.hasUtc && (it.lastUtcNs ?: return@filter false) >= fromNs && (it.firstUtcNs ?: return@filter false) < toNs
         }
         override suspend fun indexedForStation(station: String) = snapshot().filter { it.station == station && it.isIndexed }
         override suspend fun stations() = snapshot().map { it.station }.distinct()

@@ -187,13 +187,14 @@ interface ArchivedFileDao {
 
     /**
      * Indexed telemetry files of one station on the timeline between [fromNs, toNs): real UTC rows,
-     * or an estimated span (§4.6) when the file has none. Ordered by (real or estimated) first time.
+     * or an estimated span (§4.6) when the file has none. A file with no start or no end stays out,
+     * as in `ArchiveRecord.onTimeline`. Ordered by (real or estimated) first time.
      */
     @Query(
         "SELECT * FROM archived_file WHERE station = :station AND indexedAtEpochMs IS NOT NULL AND indexError IS NULL " +
             "AND (purpose IS NULL OR purpose = 'telemetry') " +
-            "AND COALESCE(CASE WHEN utcRows > 0 THEN lastUtcNs ELSE estLastUtcNs END, -9223372036854775808) >= :fromNs " +
-            "AND COALESCE(CASE WHEN utcRows > 0 THEN firstUtcNs ELSE estFirstUtcNs END, 9223372036854775807) < :toNs " +
+            "AND (CASE WHEN utcRows > 0 THEN lastUtcNs ELSE estLastUtcNs END) >= :fromNs " +
+            "AND (CASE WHEN utcRows > 0 THEN firstUtcNs ELSE estFirstUtcNs END) < :toNs " +
             "ORDER BY CASE WHEN utcRows > 0 THEN firstUtcNs ELSE estFirstUtcNs END"
     )
     suspend fun withUtcBetween(station: String, fromNs: Long, toNs: Long): List<ArchivedFile>

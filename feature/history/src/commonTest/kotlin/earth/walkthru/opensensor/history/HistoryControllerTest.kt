@@ -54,7 +54,7 @@ class HistoryControllerTest {
         /** How often a collector asked for every record. History asks for narrow flows only. */
         var allObserved = 0
         override fun observeAll(): Flow<List<ArchiveRecord>> = rows.also { allObserved++ }
-        override fun observeLatestTimed(): Flow<Map<String, Long>> = rows.map(ArchiveIndex::latestTimedEnds)
+        override fun observeLatestTimed(): Flow<Map<String, Long?>> = rows.map(ArchiveIndex::latestTimedEnds)
         override fun observeStation(station: String): Flow<List<ArchiveRecord>> = rows.map { list -> list.filter { it.station == station } }
         override suspend fun get(key: ArchiveKey): ArchiveRecord? = rows.value.firstOrNull { it.key == key }
         override suspend fun put(record: ArchiveRecord) {
