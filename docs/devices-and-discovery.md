@@ -135,8 +135,11 @@ an info button.
 - **Metric chips.** One row. The chips are built from the properties the visible cells actually
   report, ranked by how many visible cells report them, so the row adapts to any sensor family.
   At most three property chips show, then a "More" chip opens the sheet at full height with every
-  property grouped by category from the metric registry (Air, Weather, Water, Soil, Noise,
-  Energy). Choosing one from "More" moves it into the row. The last choice is remembered.
+  property grouped by the category the feed dictionary gives it (Air, Weather, Water, Soil, Noise,
+  Energy). Choosing one from "More" moves it into the row. The last choice is remembered. Every
+  property and category id the app knows is named in the app's language (`DiscoverLabels.kt`),
+  on chips, legends, the sheet and what screen readers say. Only an unknown id shows the
+  feed's own English label.
 - **Time slider.** A 44dp pill on the left edge of the map, not in the chip row. At rest it
   shows only the chosen window. A touch grows it into one snap stop per window the feed on
   screen offers, 1h at the top, then 24h and 7d (Real has no 1h stop, and a 1h choice moves to
