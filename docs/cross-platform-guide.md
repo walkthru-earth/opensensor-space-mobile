@@ -275,13 +275,17 @@ The rules for a new screen or component.
    `LineBreak.Heading` for the rest. A short label (bottom bar tab, section tab, button, segment,
    chip, eyebrow, legend word, caption, screen or station title) uses `FitText` in `FitText.kt`. It
    keeps the user's size while the label fits on one line, then shrinks on one line no lower than its
-   own size at font scale 1.0 (`fontSize.value.dp` through the real density), then to
-   `FitTextLimits.FloorFraction` (85 percent) of that. Below the floor it wraps between words, up to
+   own size at font scale 1.0, then to `FitTextLimits.FloorFraction` (85 percent) of that. The 1.0
+   size is `Typography.oneScaleSize(style)`, the style's own sp for every style except the display
+   numerals, which resolve to their `DisplaySizes` token (84, 48, 32) because `brandTypography` has
+   already clamped them for the current scale. Below the floor it wraps between words, up to
    `LabelMaxLines` (2), because a 48 dp target is a minimum height and the control grows for a second
-   line. Only a single word too wide at the floor shrinks on, to `LastResortFraction` (70 percent). A
-   still cut label ends in an ellipsis and its semantics keep the full text. Body text and info sheet
+   line. A word wider than its line even at the floor keeps shrinking until it fits whole, down to
+   `MinFraction` (50 percent). Only past that does the label draw on one line at 50 percent with an
+   ellipsis. Its semantics keep the full text, so screen readers read all of it. A hyphen between two
+   letters or digits (AQ-7500, Wi-Fi) joins one word, so no line ends on it. Body text and info sheet
    paragraphs use `BodyText`, which keeps the user's full size and shrinks only when one word is wider
-   than the line. `SectionTabs` measures its labels at the floor and switches to
+   than the line, down to the same 50 percent. `SectionTabs` measures its labels at the floor and switches to
    `PrimaryScrollableTabRow` when they do not all fit their equal slots, so a tab never wraps or
    splits. `TypographyLimits` in `Typography.kt` sets the line caps of the remaining labels
    (`EyebrowMaxLines = 2`, `StatLabelMaxLines = 3`, `StatValueMaxLines = 2`, `TickingMaxLines = 2`).
@@ -340,7 +344,9 @@ action, switch rows, tab roles and live iOS reduce-motion notifications. `FitTex
 `:ui:designsystem` `commonTest` pins the size search and the mid-word check, and `FitTextLayoutTest`
 in `iosTest` renders bottom bar labels, section tabs, titles and body text at font scale 1.0, 2.0 and
 3.1, 280 and 360 dp, in English and in Arabic right to left. Bottom bar labels stay on one line at no
-less than their 1.0 size and body text breaks only between words. `BandColumnChartSemanticsTest` in
+less than their 1.0 size and body text breaks only between words. It also sweeps a label from 24 to
+360 dp and checks that no line ends inside a word, and that a display numeral wraps at its token floor
+at font scale 2.0 and 3.1. `BandColumnChartSemanticsTest` in
 `:feature:history` `iosTest` walks the bar chart node by node, and `SettingsRowSemanticsTest` in
 `:feature:settings` `iosTest` checks the merged Storage rows, their 48 dp height and the button
 names (`verifyIos`). Host tests cannot render

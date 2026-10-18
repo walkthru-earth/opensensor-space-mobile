@@ -20,7 +20,6 @@ import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -39,7 +38,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlin.time.Clock
@@ -95,13 +93,12 @@ fun StatLine(label: String, value: String, modifier: Modifier = Modifier, valueC
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.Top,
         ) {
-            Text(
+            FitText(
                 label,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f).padding(end = 12.dp),
                 maxLines = TypographyLimits.StatLabelMaxLines,
-                overflow = TextOverflow.Ellipsis,
             )
             FitText(
                 value,
@@ -172,8 +169,9 @@ fun SectionTabs(
         val measurer = rememberTextMeasurer()
         val density = LocalDensity.current
         val style = MaterialTheme.typography.titleSmall
+        val oneScale = MaterialTheme.typography.oneScaleSize(style)
         val slotPx = with(density) { (maxWidth / labels.size.coerceAtLeast(1) - TabTextPadding * 2).toPx() }
-        val fixed = remember(labels, style, slotPx, density) { measurer.allFitAtFloor(labels, style, slotPx, density) }
+        val fixed = remember(labels, style, oneScale, slotPx, density) { measurer.allFitAtFloor(labels, style, oneScale, slotPx, density) }
         if (fixed) {
             PrimaryTabRow(selectedTabIndex = selectedIndex, containerColor = containerColor, tabs = tabs)
         } else {
@@ -232,6 +230,8 @@ fun TickingText(
     val now = rememberNowMillis()
     val anchor = remember { now }
     val spoken = text(quantiseSpokenMillis(now, anchor))
+    // FitText reruns its size search on every tick because the text changes. That is a few layouts
+    // a second on one short leaf, and the size only moves when the digits change width.
     FitText(
         text(now),
         modifier = modifier.semantics { contentDescription = spoken },

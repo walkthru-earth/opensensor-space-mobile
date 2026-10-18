@@ -65,6 +65,27 @@ fun clampedDisplaySizeSp(baseSp: Float, density: Density): TextUnit = with(densi
     targetDp.toSp()
 }
 
+/** The display numeral sizes at font scale 1.0, in sp (equal to dp there). */
+object DisplaySizes {
+    const val LARGE: Int = 84
+    const val MEDIUM: Int = 48
+    const val SMALL: Int = 32
+}
+
+/**
+ * The size of [style] at font scale 1.0. [brandTypography] has already clamped its display styles
+ * for the current scale (`displaySmall` is 21.6 sp at scale 2.0), so a display style resolves to its
+ * [DisplaySizes] token. Every other style scales linearly, so its own sp is its 1.0 size.
+ */
+fun Typography.oneScaleSize(style: TextStyle): TextUnit {
+    val display = listOf(displayLarge to DisplaySizes.LARGE, displayMedium to DisplaySizes.MEDIUM, displaySmall to DisplaySizes.SMALL)
+    val match = display.firstOrNull { (token, _) ->
+        token.fontFeatureSettings == TABULAR && token.fontSize == style.fontSize &&
+            token.fontFeatureSettings == style.fontFeatureSettings && token.lineHeightStyle == style.lineHeightStyle
+    }
+    return match?.second?.sp ?: style.fontSize
+}
+
 /** Quicksand's variable `wght` axis (300 to 700). */
 internal val QuicksandWeights = listOf(300, 400, 500, 600, 700)
 
@@ -165,9 +186,9 @@ fun brandTypography(text: FontFamily, numbers: FontFamily, density: Density = De
     fun TextStyle.words(heading: Boolean) =
         copy(lineBreak = if (heading) LineBreak.Heading else LineBreak.Paragraph, hyphens = Hyphens.None)
     val styles = Typography(
-        displayLarge = number(FontWeight.ExtraBold, 84, 88, -2.0),
-        displayMedium = number(FontWeight.Bold, 48, 54, -1.0),
-        displaySmall = number(FontWeight.SemiBold, 32, 38, -0.5),
+        displayLarge = number(FontWeight.ExtraBold, DisplaySizes.LARGE, 88, -2.0),
+        displayMedium = number(FontWeight.Bold, DisplaySizes.MEDIUM, 54, -1.0),
+        displaySmall = number(FontWeight.SemiBold, DisplaySizes.SMALL, 38, -0.5),
         headlineLarge = base.headlineLarge.brand(FontWeight.Bold).copy(letterSpacing = (-0.5).sp),
         headlineMedium = base.headlineMedium.brand(FontWeight.Bold).copy(letterSpacing = (-0.4).sp),
         headlineSmall = base.headlineSmall.brand(FontWeight.Bold),

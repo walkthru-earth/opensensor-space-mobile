@@ -6,6 +6,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -20,6 +23,7 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.createFontFamilyResolver
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
@@ -217,5 +221,87 @@ class FitTextLayoutTest {
             }
         }
         onNode(hasText(text), useUnmergedTree = true).assert(hasText(text))
+    }
+
+    @Test
+    fun aDisplayNumeralWrapsAtItsTokenFloorNotAtItsClampedSize() {
+        // brandTypography clamps displaySmall to 21.6 sp at scale 2.0 and 13.9 sp at 3.1. Its 1.0 size
+        // is still 32 dp, so a line too narrow for both numbers at 27.2 dp wraps there instead of
+        // shrinking toward 85 percent of the clamped size.
+        val text = "1234 5678"
+        val floorPx = 32f * 2f * 0.85f
+        for (scale in listOf(2f, 3.1f)) {
+            runComposeUiTest {
+                setContent {
+                    Scene(Setup(scale, 360.dp, arabic = false)) {
+                        val style = MaterialTheme.typography.displaySmall
+                        val measurer = rememberTextMeasurer()
+                        val oneLineAtFloor = with(LocalDensity.current) {
+                            measurer.measure(text, style.wordSafe(heading = true).copy(fontSize = floorPx.toSp()), softWrap = false).size.width.toDp()
+                        }
+                        Box(Modifier.width(oneLineAtFloor * 0.9f)) { FitText(text, style = style) }
+                    }
+                }
+                val layout = layoutOf(text)
+                assertEquals(2, layout.lineCount, "wraps between the numbers at scale $scale")
+                assertFalse(breaksInsideWord(layout), "scale $scale")
+                assertTrue(layout.fontPx() >= floorPx - 0.5f, "${layout.fontPx()} px >= floor $floorPx px at scale $scale")
+            }
+        }
+    }
+
+    @Test
+    fun noLineEverEndsInsideAWordAtAnyWidth() {
+        val texts = listOf("Synchronisation", "Archive synchronisation", "AQ-7500 station", "المزامنة والمسؤوليات")
+        val widths = (24..360 step 8).map { it.dp }
+        for (scale in listOf(1f, 2f)) {
+            for (text in texts) {
+                runComposeUiTest {
+                    var width by mutableStateOf(widths.first())
+                    setContent {
+                        Scene(Setup(scale, 360.dp, arabic = text.first() !in 'A'..'z')) {
+                            Box(Modifier.width(width)) { FitText(text, style = TextStyle(fontSize = 14.sp)) }
+                        }
+                    }
+                    // Wider then narrower, so a label cut at one width is fitted again at the next.
+                    for (w in widths + widths.reversed()) {
+                        width = w
+                        waitForIdle()
+                        val layout = layoutOf(text)
+                        val ends = (0 until layout.lineCount).map { layout.getLineEnd(it) }
+                        assertFalse(breaksInsideWord(layout), "$text line ends $ends at $w scale $scale")
+                        assertTrue(layout.lineCount <= FitTextLimits.LabelMaxLines, "$text lines at $w scale $scale")
+                        onNode(hasText(text), useUnmergedTree = true).assert(hasText(text))
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun aWordThatFitsAtHalfSizeStaysWholeOnOneLine() = runComposeUiTest {
+        // "Synchronisation" at 14 sp needs well under 60 dp at half size, so it stays whole and uncut.
+        setContent {
+            CompositionLocalProvider(LocalDensity provides Density(2f, 1f)) {
+                MaterialTheme { Box(Modifier.width(60.dp)) { FitText("Synchronisation", style = TextStyle(fontSize = 14.sp)) } }
+            }
+        }
+        val layout = layoutOf("Synchronisation")
+        assertEquals(1, layout.lineCount)
+        assertFalse(layout.hasVisualOverflow, "whole, no ellipsis")
+        assertTrue(layout.fontPx() >= 14f * 2f * 0.5f - 0.5f, "${layout.fontPx()} px")
+    }
+
+    @Test
+    fun aWordTooWideAtHalfSizeDrawsOneLineWithAnEllipsis() = runComposeUiTest {
+        setContent {
+            CompositionLocalProvider(LocalDensity provides Density(2f, 1f)) {
+                MaterialTheme { Box(Modifier.width(24.dp)) { FitText("Synchronisation", style = TextStyle(fontSize = 14.sp)) } }
+            }
+        }
+        val layout = layoutOf("Synchronisation")
+        assertEquals(1, layout.lineCount, "one line, never split across two")
+        assertTrue(layout.hasVisualOverflow, "cut, so it ends in an ellipsis")
+        onNode(hasText("Synchronisation"), useUnmergedTree = true).assert(hasText("Synchronisation"))
     }
 }

@@ -566,12 +566,11 @@ private fun FileRow(entry: ManifestEntry, localTime: String?, showName: Boolean,
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(
+                    FitText(
                         if (showName) entry.name.substringAfterLast('/') else localTime.orEmpty(),
                         style = if (showName) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.titleSmall,
                         fontFamily = if (showName) FontFamily.Monospace else null,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
                     )
                     // The name's HHMM is the UTC window start. The phone's local time goes first so the two never get confused.
                     Text(

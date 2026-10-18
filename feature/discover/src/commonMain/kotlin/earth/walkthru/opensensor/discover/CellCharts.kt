@@ -58,6 +58,7 @@ import earth.walkthru.aqsync.publicfeed.CellScale
 import earth.walkthru.aqsync.publicfeed.FeedProperty
 import earth.walkthru.aqsync.publicfeed.FeedWindow
 import earth.walkthru.aqsync.publicfeed.SequentialRamp
+import earth.walkthru.opensensor.designsystem.FitText
 import earth.walkthru.opensensor.designsystem.listSeparator
 import earth.walkthru.opensensor.designsystem.spokenList
 import kotlin.math.abs
@@ -280,12 +281,12 @@ internal fun SpreadChart(
         // the off-scale note under the end arrow stay left to right too. Their text still shapes as Arabic.
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
             Row(Modifier.fillMaxWidth()) {
-                Text(low, style = MaterialTheme.typography.labelSmall, color = muted)
+                FitText(low, style = MaterialTheme.typography.labelSmall, color = muted, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
                 Spacer(Modifier.weight(1f))
-                Text(high, style = MaterialTheme.typography.labelSmall, color = muted)
+                FitText(high, style = MaterialTheme.typography.labelSmall, color = muted, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
             }
             if (offScale != null) {
-                Text(offScale, style = MaterialTheme.typography.labelSmall, color = muted, textAlign = TextAlign.Right, modifier = Modifier.fillMaxWidth())
+                FitText(offScale, style = MaterialTheme.typography.labelSmall, color = muted, textAlign = TextAlign.Right, modifier = Modifier.fillMaxWidth())
             }
         }
     }
@@ -321,9 +322,9 @@ internal fun RangeRow(range: MetricRange, strings: DiscoverStrings, onClick: () 
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(0.9f)) {
-            Text(p.shownLabel(), style = MaterialTheme.typography.bodyLarge, maxLines = 1)
-            Text(unit, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-            if (stepName != null) Text(stepName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+            FitText(p.shownLabel(), style = MaterialTheme.typography.bodyLarge, maxLines = 1)
+            FitText(unit, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+            if (stepName != null) FitText(stepName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Spacer(Modifier.width(8.dp))
         Canvas(Modifier.weight(1.3f).height(24.dp)) {
@@ -396,7 +397,7 @@ internal fun WhoStepBar(health: HealthScale, strings: DiscoverStrings, modifier:
 @Composable
 internal fun PositionedLabels(labels: List<Pair<Float, String>>, style: TextStyle, color: Color, modifier: Modifier = Modifier) {
     Layout(
-        content = { labels.forEach { (_, text) -> Text(text, style = style, color = color, maxLines = 1) } },
+        content = { labels.forEach { (_, text) -> FitText(text, style = style, color = color, maxLines = 1) } },
         modifier = modifier.fillMaxWidth(),
     ) { measurables, constraints ->
         val width = constraints.maxWidth

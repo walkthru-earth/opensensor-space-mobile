@@ -435,12 +435,16 @@ class SemanticsTest {
         kotlin.test.assertTrue(trailingBounds.width >= 96f, "trailing width ${trailingBounds.width} >= 96 px (48 dp)")
         onNodeWithTag("stat-line").assert(hasText("24 µg/m³"))
 
-        val shortStatHeight = onNodeWithTag("stat-line-short").fetchSemanticsNode().boundsInRoot.height
-        val longValueStatHeight = onNodeWithTag("stat-line-long-value").fetchSemanticsNode().boundsInRoot.height
-        kotlin.test.assertTrue(
-            longValueStatHeight >= shortStatHeight * 1.5f,
-            "StatLine long value height $longValueStatHeight wraps within 55 percent width cap vs short $shortStatHeight",
-        )
+        // The long value wraps between words inside its 55 percent cap (176 dp, 352 px), and the
+        // label beside it fits whole instead of splitting "Connection".
+        val value = "Connected over home Wi-Fi network"
+        val valueLayout = textLayout(value)
+        kotlin.test.assertEquals(2, valueLayout.lineCount, "StatLine long value wraps to two lines")
+        kotlin.test.assertFalse(breaksInsideWord(valueLayout), "value line ends ${valueLayout.getLineEnd(0)}")
+        val valueWidth = onAllNodes(hasText(value), useUnmergedTree = true)[0].fetchSemanticsNode().boundsInRoot.width
+        kotlin.test.assertTrue(valueWidth <= 352f + 0.5f, "value width $valueWidth <= 55 percent cap")
+        val labelLayout = textLayout("Connection")
+        kotlin.test.assertFalse(breaksInsideWord(labelLayout), "label line ends ${labelLayout.getLineEnd(0)}")
     }
 
     @Test

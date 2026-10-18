@@ -53,6 +53,7 @@ import earth.walkthru.opensensor.designsystem.BrandCard
 import earth.walkthru.opensensor.designsystem.CardHeader
 import earth.walkthru.opensensor.designsystem.CardTone
 import earth.walkthru.opensensor.designsystem.Eyebrow
+import earth.walkthru.opensensor.designsystem.FitText
 import earth.walkthru.opensensor.designsystem.InfoContent
 import earth.walkthru.opensensor.designsystem.OutlinePillButton
 import earth.walkthru.opensensor.designsystem.PeacockExpression
@@ -307,7 +308,7 @@ internal fun MetricHeroCard(
                     // Value, unit and metric name read as one element ("12, µg/m³, PM2.5").
                     is NowReading.Reading -> Column(Modifier.weight(1f).semantics(mergeDescendants = true) {}) {
                         val value = fmtPm(reading.pm25)
-                        Text(
+                        FitText(
                             value,
                             style = if (value.length > 2 || portraitSize < 176.dp) MaterialTheme.typography.displayMedium else MaterialTheme.typography.displayLarge,
                             color = if (fresh) onCard else quiet,
