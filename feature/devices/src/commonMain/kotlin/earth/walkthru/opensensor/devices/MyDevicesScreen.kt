@@ -43,6 +43,7 @@ import androidx.lifecycle.compose.LifecycleStartEffect
 import earth.walkthru.aqsync.settings.DetailLevel
 import earth.walkthru.opensensor.designsystem.AppIcons
 import earth.walkthru.opensensor.designsystem.Eyebrow
+import earth.walkthru.opensensor.designsystem.FitText
 import earth.walkthru.opensensor.designsystem.FloatingControl
 import earth.walkthru.opensensor.designsystem.FloatingTextButton
 import earth.walkthru.opensensor.designsystem.InfoButton
@@ -139,7 +140,8 @@ fun MyDevicesScreen(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             LargeTopAppBar(
-                title = { Text(stringResource(SharedRes.string.tab_my_devices), Modifier.semantics { heading() }) },
+                // One line, shrunk to fit, so "أجهزتي" never leaves its last letter behind (#144).
+                title = { FitText(stringResource(SharedRes.string.tab_my_devices), Modifier.semantics { heading() }) },
                 scrollBehavior = scrollBehavior,
                 actions = {
                     InfoButton(

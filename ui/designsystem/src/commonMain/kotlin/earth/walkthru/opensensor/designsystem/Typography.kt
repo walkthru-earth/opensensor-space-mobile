@@ -10,6 +10,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.intl.Locale
+import androidx.compose.ui.text.style.Hyphens
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
@@ -27,13 +29,13 @@ const val TABULAR = "tnum"
 
 /**
  * Shared line and scale limits so system font scaling up to 200 percent wraps instead of clipping
- * headings, labels, and display numerals on 320 dp phones.
+ * headings, labels, and display numerals on 320 dp phones. Labels that fit to one line use
+ * [FitText] and [FitTextLimits].
  */
 object TypographyLimits {
     val EyebrowMaxLines: Int = 2
     val StatLabelMaxLines: Int = 3
     val StatValueMaxLines: Int = 2
-    val TabLabelMaxLines: Int = 2
     val TickingMaxLines: Int = 2
 
     /**
@@ -61,6 +63,27 @@ fun clampedDisplaySizeSp(baseSp: Float, density: Density): TextUnit = with(densi
         baseSp.sp.toDp().coerceIn(minDp, maxDp)
     }
     targetDp.toSp()
+}
+
+/** The display numeral sizes at font scale 1.0, in sp (equal to dp there). */
+object DisplaySizes {
+    const val LARGE: Int = 84
+    const val MEDIUM: Int = 48
+    const val SMALL: Int = 32
+}
+
+/**
+ * The size of [style] at font scale 1.0. [brandTypography] has already clamped its display styles
+ * for the current scale (`displaySmall` is 21.6 sp at scale 2.0), so a display style resolves to its
+ * [DisplaySizes] token. Every other style scales linearly, so its own sp is its 1.0 size.
+ */
+fun Typography.oneScaleSize(style: TextStyle): TextUnit {
+    val display = listOf(displayLarge to DisplaySizes.LARGE, displayMedium to DisplaySizes.MEDIUM, displaySmall to DisplaySizes.SMALL)
+    val match = display.firstOrNull { (token, _) ->
+        token.fontFeatureSettings == TABULAR && token.fontSize == style.fontSize &&
+            token.fontFeatureSettings == style.fontFeatureSettings && token.lineHeightStyle == style.lineHeightStyle
+    }
+    return match?.second?.sp ?: style.fontSize
 }
 
 /** Quicksand's variable `wght` axis (300 to 700). */
@@ -157,10 +180,15 @@ fun brandTypography(text: FontFamily, numbers: FontFamily, density: Density = De
             lineHeightStyle = TrimmedNumbers,
         )
     }
-    return Typography(
-        displayLarge = number(FontWeight.ExtraBold, 84, 88, -2.0),
-        displayMedium = number(FontWeight.Bold, 48, 54, -1.0),
-        displaySmall = number(FontWeight.SemiBold, 32, 38, -0.5),
+
+    // Every style breaks only between words and never hyphenates. Sentences use the paragraph
+    // strategy, numbers, headings, titles and labels the heading one (FitText.kt).
+    fun TextStyle.words(heading: Boolean) =
+        copy(lineBreak = if (heading) LineBreak.Heading else LineBreak.Paragraph, hyphens = Hyphens.None)
+    val styles = Typography(
+        displayLarge = number(FontWeight.ExtraBold, DisplaySizes.LARGE, 88, -2.0),
+        displayMedium = number(FontWeight.Bold, DisplaySizes.MEDIUM, 54, -1.0),
+        displaySmall = number(FontWeight.SemiBold, DisplaySizes.SMALL, 38, -0.5),
         headlineLarge = base.headlineLarge.brand(FontWeight.Bold).copy(letterSpacing = (-0.5).sp),
         headlineMedium = base.headlineMedium.brand(FontWeight.Bold).copy(letterSpacing = (-0.4).sp),
         headlineSmall = base.headlineSmall.brand(FontWeight.Bold),
@@ -173,6 +201,23 @@ fun brandTypography(text: FontFamily, numbers: FontFamily, density: Density = De
         labelLarge = base.labelLarge.brand(FontWeight.Bold),
         labelMedium = base.labelMedium.brand(FontWeight.Bold),
         labelSmall = base.labelSmall.brand(FontWeight.Bold).copy(letterSpacing = 0.8.sp),
+    )
+    return styles.copy(
+        displayLarge = styles.displayLarge.words(heading = true),
+        displayMedium = styles.displayMedium.words(heading = true),
+        displaySmall = styles.displaySmall.words(heading = true),
+        headlineLarge = styles.headlineLarge.words(heading = true),
+        headlineMedium = styles.headlineMedium.words(heading = true),
+        headlineSmall = styles.headlineSmall.words(heading = true),
+        titleLarge = styles.titleLarge.words(heading = true),
+        titleMedium = styles.titleMedium.words(heading = true),
+        titleSmall = styles.titleSmall.words(heading = true),
+        bodyLarge = styles.bodyLarge.words(heading = false),
+        bodyMedium = styles.bodyMedium.words(heading = false),
+        bodySmall = styles.bodySmall.words(heading = false),
+        labelLarge = styles.labelLarge.words(heading = true),
+        labelMedium = styles.labelMedium.words(heading = true),
+        labelSmall = styles.labelSmall.words(heading = true),
     )
 }
 

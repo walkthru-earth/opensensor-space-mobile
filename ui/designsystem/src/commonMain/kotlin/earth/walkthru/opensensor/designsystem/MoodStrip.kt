@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,7 +31,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import earth.walkthru.aqsync.airquality.MoodBlock
 import earth.walkthru.aqsync.airquality.WhoStep
@@ -197,15 +195,13 @@ internal fun MoodStripLayout(
                 Column(target, verticalArrangement = Arrangement.Center) {
                     Box(bar)
                     if (captioned) {
-                        Text(
+                        // A 48 dp block fits "128 areas" on one line, or wraps it between the words.
+                        FitText(
                             captions.getOrNull(i).orEmpty(),
                             modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                             style = MaterialTheme.typography.labelSmall,
                             color = muted,
                             textAlign = TextAlign.Center,
-                            // A 48 dp block wraps "128 areas" to two lines instead of cutting it.
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }
@@ -254,7 +250,7 @@ internal fun MoodLegendLayout(words: List<String>, title: String?, modifier: Mod
     val swatchShape = RoundedCornerShape(3.dp)
     Column(modifier.clearAndSetSemantics { contentDescription = summary }) {
         if (title != null) {
-            Text(title, style = MaterialTheme.typography.labelMedium)
+            FitText(title, style = MaterialTheme.typography.labelMedium)
             Spacer(Modifier.height(4.dp))
         }
         WhoStep.entries.chunked(2).forEach { pair ->
@@ -269,7 +265,7 @@ internal fun MoodLegendLayout(words: List<String>, title: String?, modifier: Mod
                                 .border(1.dp, swatchBorder, swatchShape),
                         )
                         Spacer(Modifier.width(6.dp))
-                        Text(words.getOrElse(step.ordinal) { "" }, style = MaterialTheme.typography.labelSmall)
+                        FitText(words.getOrElse(step.ordinal) { "" }, style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
                     }
                 }
             }

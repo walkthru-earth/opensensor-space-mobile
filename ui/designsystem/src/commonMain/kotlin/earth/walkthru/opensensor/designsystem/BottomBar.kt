@@ -18,7 +18,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Alignment
@@ -29,7 +28,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
 /** One destination in [BrandBottomBar]: the caller's [key], its label and its icon. */
@@ -88,14 +86,12 @@ private fun BottomBarItem(tab: BottomBarTab<*>, selected: Boolean, onClick: () -
         ) {
             Icon(tab.icon, contentDescription = null, tint = if (selected) FloatingControl.OnSelected else colors.onSurfaceVariant)
         }
-        Text(
+        // One line, shrunk to fit, never split inside a word ("أجهزتي" stays whole).
+        FitText(
             tab.label,
             style = MaterialTheme.typography.labelMedium,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
             color = if (selected) colors.onSurface else colors.onSurfaceVariant,
-            // Two lines at large font scales, never clipped mid-word.
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
         )
     }

@@ -15,7 +15,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
@@ -83,10 +82,10 @@ internal fun InfoSheetContent(info: InfoContent, closeLabel: String, onDismiss: 
             .padding(horizontal = 24.dp)
             .padding(bottom = 32.dp),
     ) {
-        Text(info.title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.headingSemantics())
+        BodyText(info.title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.headingSemantics(), heading = true)
         info.body.forEach { paragraph ->
             Spacer(Modifier.height(10.dp))
-            Text(paragraph, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            BodyText(paragraph, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Spacer(Modifier.height(20.dp))
         OutlinePillButton(

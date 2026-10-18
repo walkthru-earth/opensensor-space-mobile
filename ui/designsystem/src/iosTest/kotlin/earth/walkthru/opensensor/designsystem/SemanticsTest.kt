@@ -13,6 +13,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -29,6 +30,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.v2.runComposeUiTest
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
 import earth.walkthru.aqsync.airquality.MoodBlock
 import earth.walkthru.aqsync.airquality.WhoStep
@@ -44,6 +46,14 @@ class SemanticsTest {
     private val isHeading = SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading)
 
     private fun hasRole(role: Role) = SemanticsMatcher.expectValue(SemanticsProperties.Role, role)
+
+    /** The layout of the first text node showing [text]. */
+    private fun ComposeUiTest.textLayout(text: String): TextLayoutResult {
+        val out = mutableListOf<TextLayoutResult>()
+        val node = onAllNodes(hasText(text), useUnmergedTree = true)[0].fetchSemanticsNode()
+        node.config[SemanticsActions.GetTextLayoutResult].action!!.invoke(out)
+        return out.single()
+    }
 
     @Test
     fun bundledPeacockPortraitsLoadAndKeepTheirSpokenState() = runComposeUiTest {
@@ -226,9 +236,9 @@ class SemanticsTest {
         onNodeWithTag("strip").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Poor 1 area selected"))
     }
 
-    /** A narrow block's caption wraps to a second line instead of cutting "128 areas" short. */
+    /** A narrow block's caption shrinks or wraps between words, never cutting "128 areas" inside a word. */
     @Test
-    fun aLongCaptionInANarrowBlockWrapsAndTheStripGrows() = runComposeUiTest {
+    fun aLongCaptionInANarrowBlockKeepsWholeWords() = runComposeUiTest {
         setContent {
             MaterialTheme {
                 Column(Modifier.width(300.dp)) {
@@ -244,8 +254,11 @@ class SemanticsTest {
                 }
             }
         }
-        // 28 dp bar, 4 dp gap, two caption lines.
-        onNodeWithTag("narrow").assertHeightIsAtLeast(56.dp)
+        // 28 dp bar, 4 dp gap and at least one caption line.
+        onNodeWithTag("narrow").assertHeightIsAtLeast(48.dp)
+        val caption = textLayout("128 areas")
+        kotlin.test.assertTrue(caption.lineCount <= FitTextLimits.LabelMaxLines, "caption lines ${caption.lineCount}")
+        kotlin.test.assertFalse(breaksInsideWord(caption), "caption splits a word")
     }
 
     /** Inside a horizontal scroll the strip has no width to share, so each block takes a fixed width. */
@@ -328,7 +341,7 @@ class SemanticsTest {
     }
 
     @Test
-    fun eyebrowTickingCardHeaderAndSectionTabsWrapAt200PercentFontScale() = runComposeUiTest {
+    fun eyebrowTickingCardHeaderAndSectionTabsFitAt200PercentFontScale() = runComposeUiTest {
         setContent {
             androidx.compose.runtime.CompositionLocalProvider(
                 androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density = 2f, fontScale = 2f),
@@ -362,19 +375,13 @@ class SemanticsTest {
                 }
             }
         }
-        val shortEyebrowHeight = onNodeWithTag("eyebrow-short").fetchSemanticsNode().boundsInRoot.height
-        val longEyebrowHeight = onNodeWithTag("eyebrow-long").fetchSemanticsNode().boundsInRoot.height
-        kotlin.test.assertTrue(
-            longEyebrowHeight >= shortEyebrowHeight * 1.6f,
-            "Long eyebrow height $longEyebrowHeight should wrap to 2 lines vs short $shortEyebrowHeight",
-        )
-
-        val shortTickingHeight = onNodeWithTag("ticking-short").fetchSemanticsNode().boundsInRoot.height
-        val longTickingHeight = onNodeWithTag("ticking-long").fetchSemanticsNode().boundsInRoot.height
-        kotlin.test.assertTrue(
-            longTickingHeight >= shortTickingHeight * 1.6f,
-            "Long ticking text height $longTickingHeight should wrap to 2 lines vs short $shortTickingHeight",
-        )
+        // Long labels shrink to one line or wrap between words, never splitting a word or overflowing.
+        for (text in listOf("AUTOMATIC BACKGROUND SYNC OVER HOME WI-FI", "Updated 45 seconds ago over home Wi-Fi")) {
+            val layout = textLayout(text)
+            kotlin.test.assertTrue(layout.lineCount <= FitTextLimits.LabelMaxLines, "$text lines ${layout.lineCount}")
+            kotlin.test.assertFalse(layout.hasVisualOverflow, "$text overflows")
+            kotlin.test.assertFalse(breaksInsideWord(layout), "$text splits a word")
+        }
 
         val infoBounds = onNodeWithContentDescription("More about Wi-Fi sync").fetchSemanticsNode().boundsInRoot
         kotlin.test.assertTrue(infoBounds.right <= 480f, "CardHeader info button right ${infoBounds.right} <= 480")
@@ -384,7 +391,8 @@ class SemanticsTest {
         val shortTabHeight = onNodeWithText("Today").fetchSemanticsNode().boundsInRoot.height
         val longTabHeight = onNodeWithText("Historical readings").fetchSemanticsNode().boundsInRoot.height
         kotlin.test.assertTrue(longTabHeight >= 96f, "SectionTabs height $longTabHeight >= 96 px (48 dp)")
-        kotlin.test.assertTrue(longTabHeight >= shortTabHeight, "Long tab wraps without clipping")
+        kotlin.test.assertTrue(longTabHeight >= shortTabHeight, "Long tab fits without clipping")
+        kotlin.test.assertEquals(1, textLayout("Historical readings").lineCount, "a tab stays on one line")
     }
 
     @Test
@@ -427,12 +435,16 @@ class SemanticsTest {
         kotlin.test.assertTrue(trailingBounds.width >= 96f, "trailing width ${trailingBounds.width} >= 96 px (48 dp)")
         onNodeWithTag("stat-line").assert(hasText("24 µg/m³"))
 
-        val shortStatHeight = onNodeWithTag("stat-line-short").fetchSemanticsNode().boundsInRoot.height
-        val longValueStatHeight = onNodeWithTag("stat-line-long-value").fetchSemanticsNode().boundsInRoot.height
-        kotlin.test.assertTrue(
-            longValueStatHeight >= shortStatHeight * 1.5f,
-            "StatLine long value height $longValueStatHeight wraps within 55 percent width cap vs short $shortStatHeight",
-        )
+        // The long value wraps between words inside its 55 percent cap (176 dp, 352 px), and the
+        // label beside it fits whole instead of splitting "Connection".
+        val value = "Connected over home Wi-Fi network"
+        val valueLayout = textLayout(value)
+        kotlin.test.assertEquals(2, valueLayout.lineCount, "StatLine long value wraps to two lines")
+        kotlin.test.assertFalse(breaksInsideWord(valueLayout), "value line ends ${valueLayout.getLineEnd(0)}")
+        val valueWidth = onAllNodes(hasText(value), useUnmergedTree = true)[0].fetchSemanticsNode().boundsInRoot.width
+        kotlin.test.assertTrue(valueWidth <= 352f + 0.5f, "value width $valueWidth <= 55 percent cap")
+        val labelLayout = textLayout("Connection")
+        kotlin.test.assertFalse(breaksInsideWord(labelLayout), "label line ends ${labelLayout.getLineEnd(0)}")
     }
 
     @Test

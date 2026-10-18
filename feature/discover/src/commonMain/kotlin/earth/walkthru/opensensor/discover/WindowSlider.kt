@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -39,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import earth.walkthru.aqsync.publicfeed.FeedWindow
+import earth.walkthru.opensensor.designsystem.FitText
 import earth.walkthru.opensensor.designsystem.FloatingControl
 import earth.walkthru.opensensor.designsystem.FloatingSurface
 import kotlinx.coroutines.delay
@@ -147,7 +147,7 @@ internal fun WindowSlider(
                     windows.forEachIndexed { i, w ->
                         val selected = if (drag != null) i == thumb.roundToInt() else w == window
                         Box(Modifier.size(STOP), contentAlignment = Alignment.Center) {
-                            Text(
+                            FitText(
                                 strings.windowShort(w, daily),
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,

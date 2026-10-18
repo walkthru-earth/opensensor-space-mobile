@@ -16,7 +16,6 @@ import androidx.compose.material3.SegmentedButtonColors
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SelectableChipColors
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -180,7 +179,7 @@ fun FloatingTextButton(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             icon?.invoke()
-            Text(text, style = MaterialTheme.typography.labelLarge, maxLines = TypographyLimits.TabLabelMaxLines)
+            FitText(text, style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f, fill = false))
         }
     }
 }
