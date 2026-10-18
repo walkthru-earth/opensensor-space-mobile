@@ -707,7 +707,7 @@ private fun InView(
         }
     }
     Text(strings.areasInView(state.rows.size), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
-    freshness(strings, freshnessOf(state.newestUpdateEpochMs, reference, state.dailyAsOf, staleShown = false))?.let {
+    freshness(strings, state.inViewFreshness(reference))?.let {
         Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     property ?: return
@@ -849,7 +849,7 @@ private fun CellDetail(
         } else {
             Text(strings.notMeasured, style = MaterialTheme.typography.titleMedium)
         }
-        val parts = listOfNotNull(strings.sensors(row.devices), freshness(strings, freshnessOf(row.updatedEpochMs(property?.id), reference, state.dailyAsOf)))
+        val parts = listOfNotNull(strings.sensors(row.devices), freshness(strings, state.cellFreshness(row, reference)))
         Text(spokenList(parts, listSeparator()), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (property != null && headline != null) {
             percentBelow(state.rows.mapNotNull { it.mean(property.id) }, headline)?.let {

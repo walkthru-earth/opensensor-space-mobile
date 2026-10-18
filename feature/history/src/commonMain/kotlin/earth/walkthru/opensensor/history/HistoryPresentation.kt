@@ -58,12 +58,13 @@ fun latestHistoryDayEnd(files: List<ArchiveRecord>, zone: TimeZone): Long? = fil
     ?.let { ns -> startOfDay(localDateOf(ns.floorDiv(NS), zone).plus(1, DateTimeUnit.DAY), zone) }
 
 /**
- * The archived stations ordered oldest reading first, so the last one is the most recent. iOS has no
- * station epoch table yet, so its chips are the stations of the phone archive.
+ * The archived stations ordered oldest reading first, so the last one is the most recent. A station
+ * with no timed reading comes first, below any real end. iOS has no station epoch table yet, so its
+ * chips are the stations of the phone archive.
  */
 fun archiveStations(files: List<ArchiveRecord>): List<String> = files.groupBy { it.station }
-    .map { (station, rows) -> station to (rows.filter { it.isIndexed && it.isTelemetry }.mapNotNull { it.timelineLastNs }.maxOrNull() ?: Long.MIN_VALUE) }
-    .sortedWith(compareBy<Pair<String, Long>> { it.second }.thenBy { it.first })
+    .map { (station, rows) -> station to rows.filter { it.isIndexed && it.isTelemetry }.mapNotNull { it.timelineLastNs }.maxOrNull() }
+    .sortedWith(compareBy<Pair<String, Long?>, Long?>(nullsFirst()) { it.second }.thenBy { it.first })
     .map { it.first }
 
 private const val NS = 1_000_000_000L
