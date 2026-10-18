@@ -248,7 +248,10 @@ The rules for a new screen or component.
    or `Modifier.valueSemantics(label, value, unit, state)` (`clearAndSetSemantics`), and a clickable row
    merges by itself. A settings row with a switch reads its label and its state together through
    `Modifier.switchRowSemantics(checked, onCheckedChange)` (`toggleable(role = Role.Switch)`), and the
-   `Switch` takes `onCheckedChange = null` when the row and the switch do the same thing.
+   `Switch` takes `onCheckedChange = null` when the row and the switch do the same thing. A row with a
+   text button merges its label and its state (`"Sensor files, 40.0 MB"`) and leaves the button and any
+   info button as their own stops, and a short button label ("Find", "Clear") gets a description that
+   names what it acts on.
 5. **Touch targets.** Every tap target is at least 48 dp (`MinTouchTarget` and `FloatingControl.Size`,
    both 48 dp), with at least 8 dp (`MinTouchSpacing` and `FloatingControl.MinSpacing`) between
    neighbouring controls such as `BrandBottomBar` tabs. `Modifier.touchTarget()` combines
@@ -291,7 +294,9 @@ The rules for a new screen or component.
    day with a reading, in time order, naming the time, the value with its unit, the mood and the WHO
    step (Simple leaves the step out). Each is a button, and activating a bar selects it, as a touch
    does. These nodes are semantics only, laid over the canvas. Axis margins are measured from the
-   labels, so a large font never clips them. The map container says what it shows, and the list beside
+   labels with a `TextMeasurer`, so a large font never clips them, and `placeAxisLabels` keeps every
+   label inside the canvas and skips one that would touch its neighbour (its gridline stays).
+   `BandColumnChartFontScaleTest` checks this at font scale 2.0 on a 320 dp phone. The map container says what it shows, and the list beside
    it is the accessible way through the same cells.
 10. **Copy.** Descriptions follow the copy rules above, translated in `values-ar`, positional
     arguments, and no em dashes, colons or semicolons.
@@ -302,7 +307,8 @@ spoken tick quantisation and reduce-motion helpers. `SemanticsTest` in `:ui:desi
 renders the shared components on the iOS simulator and checks 48 dp touch bounds, 8 dp bottom bar
 spacing, headings, merged rows, 200 percent font scale multi-line wrapping, `InfoSheet` close action,
 switch rows, tab roles and live iOS reduce-motion notifications, and `BandColumnChartSemanticsTest` in
-`:feature:history` `iosTest` walks the bar chart node by node (`verifyIos`). Host tests cannot render
+`:feature:history` `iosTest` walks the bar chart node by node, and `SettingsRowSemanticsTest` in
+`:feature:settings` `iosTest` checks the merged Storage rows (`verifyIos`). Host tests cannot render
 Compose without Robolectric, so the Android check is the phone walk below.
 
 #### Phone walk (TalkBack and VoiceOver)

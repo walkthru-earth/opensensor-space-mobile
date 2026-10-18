@@ -1,8 +1,14 @@
 package earth.walkthru.opensensor.history
 
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.unit.IntSize
+import earth.walkthru.aqsync.data.history.ChartAxis
 import earth.walkthru.aqsync.data.history.HistoryColumn
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 /** The bar chart's screen reader nodes and its measured margins (#99). */
 class BarSemanticsTest {
@@ -33,6 +39,37 @@ class BarSemanticsTest {
     @Test
     fun aChartWithoutYLabelsKeepsOnlyTheGap() {
         assertEquals(4f, chartMargins(emptyList(), xLabelHeight = 0, capHeight = 0, gap = 4f).left)
+    }
+
+    @Test
+    fun crowdedYLabelsThinOutInsteadOfOverlapping() {
+        // 0 to 100 in steps of 10 on a 100 px plot leaves 10 px per tick, the labels are 24 px tall.
+        val geometry = ChartGeometry(Size(300f, 140f), ChartMargins(left = 30f, top = 20f, bottom = 20f), ChartAxis(0f, 100f, 10f), 0, 100)
+        val ticks = (0..10).map { it * 10f }
+        val labels = placeAxisLabels(geometry, ticks, ticks.map { IntSize(20, 24) }, emptyList(), emptyList(), null, IntSize.Zero, gap = 4f)
+        assertTrue(labels.y.size in 2 until ticks.size, "kept ${labels.y.size}")
+        assertEquals(0, labels.y.first().first, "zero keeps its label")
+        labels.y.zipWithNext().forEach { (lower, upper) -> assertTrue(upper.second.y + 24 + 4 <= lower.second.y, "$upper touches $lower") }
+        labels.y.forEach { (_, at) -> assertTrue(at.y >= 0f && at.y + 24 <= 140f, "$at leaves the canvas") }
+    }
+
+    @Test
+    fun xLabelsStayInsideThePlotAndNeverTouch() {
+        val geometry = ChartGeometry(Size(200f, 100f), ChartMargins(left = 20f, top = 10f, bottom = 30f), ChartAxis(0f, 10f, 5f), 0, 100)
+        val at = listOf(0L, 10L, 50L, 100L)
+        val labels = placeAxisLabels(geometry, emptyList(), emptyList(), at, at.map { IntSize(40, 20) }, null, IntSize.Zero, gap = 4f)
+        assertEquals(listOf(0, 2, 3), labels.x.map { it.first }, "the label at 10 would touch the one at 0")
+        assertEquals(Offset(20f, 78f), labels.x.first().second)
+        assertEquals(160f, labels.x.last().second.x, "the last label ends at the plot edge")
+    }
+
+    @Test
+    fun theGuidelineLabelGoesBelowALineAtTheTop() {
+        val geometry = ChartGeometry(Size(200f, 100f), ChartMargins(left = 20f, top = 10f, bottom = 20f), ChartAxis(0f, 15f, 5f), 0, 100)
+        val top = assertNotNull(placeAxisLabels(geometry, emptyList(), emptyList(), emptyList(), emptyList(), 15f, IntSize(60, 18), gap = 4f).guide)
+        assertEquals(Offset(140f, 12f), top)
+        val mid = assertNotNull(placeAxisLabels(geometry, emptyList(), emptyList(), emptyList(), emptyList(), 7.5f, IntSize(60, 18), gap = 4f).guide)
+        assertEquals(45f - 18f - 2f, mid.y)
     }
 
     private companion object {

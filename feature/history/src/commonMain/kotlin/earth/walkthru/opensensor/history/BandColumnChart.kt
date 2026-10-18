@@ -40,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import earth.walkthru.aqsync.airquality.WhoStep
@@ -92,7 +93,8 @@ import kotlin.math.roundToInt
  * guideline line is always in view. A peak whisker sits inside each slot, coverage is opacity,
  * estimated-time slots are hollow with a dashed outline, and the axis follows the 95th percentile:
  * outliers are clipped to a small cap that states their value. Touch or drag to inspect a slot.
- * Axis margins are measured from the labels, so large font sizes never clip them.
+ * Axis margins are measured from the labels, so large font sizes never clip them, and labels that
+ * would touch are thinned out ([placeAxisLabels]).
  *
  * Screen readers get a summary, then one node per bar with a reading, in time order, naming the
  * slot, the mean with its unit, its mood and its WHO step (step only above Simple) and estimated
@@ -128,9 +130,9 @@ fun BandColumnChart(
     val density = LocalDensity.current
     val gapPx = with(density) { LABEL_GAP.toPx() }
     val measurer = rememberTextMeasurer()
-    val labelStyle = remember(muted) { chartTextStyle(muted, 11) }
-    val capStyle = remember(onSurface) { chartTextStyle(onSurface, 10, bold = true) }
-    val guideStyle = remember(onSurface) { chartTextStyle(onSurface, 11) }
+    val labelStyle = remember(muted) { chartTextStyle(muted, AXIS_LABEL_SP) }
+    val capStyle = remember(onSurface) { chartTextStyle(onSurface, CAP_LABEL_SP, bold = true) }
+    val guideStyle = remember(onSurface) { chartTextStyle(onSurface, AXIS_LABEL_SP) }
     val whoLabel = stringResource(guidelineLabelRes(level))
 
     val axis = remember(columns, metric) { ChartAxes.of(columns, metric) }
@@ -143,6 +145,7 @@ fun BandColumnChart(
     val yLayouts = remember(yTicks, labelStyle, measurer) { yTicks.map { measurer.measure(it.second, labelStyle) } }
     val xLayouts = remember(xTicks, labelStyle, measurer) { xTicks.map { measurer.measure(it.second, labelStyle) } }
     val capHeight = remember(capStyle, measurer) { measurer.measure("0", capStyle).size.height }
+    val guideLayout = remember(whoLabel, guideStyle, measurer) { measurer.measure(whoLabel, guideStyle) }
     val margins = chartMargins(
         yLabelWidths = yLayouts.map { it.size.width },
         xLabelHeight = xLayouts.maxOfOrNull { it.size.height } ?: measurer.measure("0", labelStyle).size.height,
@@ -203,17 +206,27 @@ fun BandColumnChart(
                     }
                 },
         ) {
-            val plot = Rect(margins.left, margins.top, size.width, size.height - margins.bottom)
-            fun x(t: Long) = plot.left + (t - fromS).toFloat() / (toS - fromS) * plot.width
-            fun y(v: Float) = plot.bottom - axis.fraction(v) * plot.height
+            val geometry = ChartGeometry(size, margins, axis, fromS, toS)
+            val plot = geometry.plot
+            fun x(t: Long) = geometry.x(t)
+            fun y(v: Float) = geometry.y(v)
             val zeroY = y(0f)
+            val labels = placeAxisLabels(
+                geometry,
+                yTicks.map { it.first },
+                yLayouts.map { it.size },
+                xTicks.map { it.first },
+                xLayouts.map { it.size },
+                guideline,
+                guideLayout.size,
+                gapPx,
+            )
 
-            for ((i, tick) in yTicks.withIndex()) {
-                val at = tick.first
-                val yy = y(at)
+            for (tick in yTicks) {
+                val yy = y(tick.first)
                 drawLine(gridColor, Offset(plot.left, yy), Offset(plot.right, yy), 1f)
-                drawText(yLayouts[i], topLeft = Offset(0f, yy - yLayouts[i].size.height / 2f))
             }
+            for ((i, at) in labels.y) drawText(yLayouts[i], topLeft = at)
 
             // Off-scale columns: label only the tallest of each contiguous run, or the labels pile up.
             val labelCap = BooleanArray(columns.size)
@@ -291,20 +304,17 @@ fun BandColumnChart(
             guideline?.let { g ->
                 val yy = y(g)
                 drawLine(onSurface.copy(alpha = 0.75f), Offset(plot.left, yy), Offset(plot.right, yy), 1.5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f)))
-                val layout = measurer.measure(whoLabel, guideStyle)
-                drawText(layout, topLeft = Offset(plot.right - layout.size.width, yy - layout.size.height - gapPx / 2))
+                labels.guide?.let { drawText(guideLayout, topLeft = it) }
             }
             selected?.let { s ->
                 val cx = (x(s.startS) + x(s.endS)) / 2
                 drawLine(onSurface.copy(alpha = 0.6f), Offset(cx, plot.top), Offset(cx, plot.bottom), 1f)
             }
-            for ((i, tick) in xTicks.withIndex()) {
+            for (tick in xTicks) {
                 val xx = x(tick.first)
                 drawLine(gridColor, Offset(xx, plot.bottom), Offset(xx, plot.bottom + gapPx), 1f)
-                val layout = xLayouts[i]
-                val w = layout.size.width.toFloat()
-                drawText(layout, topLeft = Offset((xx - w / 2).coerceIn(plot.left, max(plot.left, plot.right - w)), plot.bottom + 2 * gapPx))
             }
+            for ((i, at) in labels.x) drawText(xLayouts[i], topLeft = at)
             drawLine(muted.copy(alpha = 0.6f), Offset(plot.left, plot.bottom), Offset(plot.right, plot.bottom), 1f)
             if (axis.min < 0f) drawLine(muted.copy(alpha = 0.6f), Offset(plot.left, zeroY), Offset(plot.right, zeroY), 1f)
         }
@@ -342,7 +352,75 @@ fun BandColumnChart(
 }
 
 /** Space between an axis label and the plot. */
-private val LABEL_GAP = 4.dp
+internal val LABEL_GAP = 4.dp
+
+/** Axis and guideline label size. It scales with the font size, and the margins are measured from it. */
+internal const val AXIS_LABEL_SP = 11
+
+/** The off-scale cap label size. */
+internal const val CAP_LABEL_SP = 10
+
+/** The plot inside a canvas of [canvas] px, and where a time or a value lands on it. */
+internal class ChartGeometry(canvas: Size, margins: ChartMargins, private val axis: ChartAxis, private val fromS: Long, private val toS: Long) {
+    val canvas: Rect = Rect(Offset.Zero, canvas)
+    val plot: Rect = Rect(margins.left, margins.top, canvas.width, canvas.height - margins.bottom)
+
+    fun x(t: Long): Float = plot.left + (t - fromS).toFloat() / (toS - fromS) * plot.width
+
+    fun y(v: Float): Float = plot.bottom - axis.fraction(v) * plot.height
+}
+
+/** Each axis label kept, as its index and top left, and where the guideline label goes, null when it has no line. */
+internal data class AxisLabels(val y: List<Pair<Int, Offset>>, val x: List<Pair<Int, Offset>>, val guide: Offset?)
+
+/**
+ * Where the axis labels go. Every label stays inside the canvas, and a label that would touch the one
+ * kept before it is skipped (its gridline stays), so at a large font size the axes thin out instead of
+ * piling up or clipping. The guideline label sits above its line, or below it when there is no room.
+ */
+internal fun placeAxisLabels(
+    geometry: ChartGeometry,
+    yAt: List<Float>,
+    ySizes: List<IntSize>,
+    xAt: List<Long>,
+    xSizes: List<IntSize>,
+    guideline: Float?,
+    guideSize: IntSize,
+    gap: Float,
+): AxisLabels {
+    val canvas = geometry.canvas
+    val plot = geometry.plot
+    val y = ArrayList<Pair<Int, Offset>>()
+    var lastTop = Float.POSITIVE_INFINITY
+    for ((i, v) in yAt.withIndex()) {
+        val h = ySizes[i].height.toFloat()
+        val top = (geometry.y(v) - h / 2f).coerceIn(canvas.top, max(canvas.top, canvas.bottom - h))
+        // Values rise up the axis, so each label must end above the last one kept.
+        if (top + h + gap <= lastTop) {
+            y += i to Offset(canvas.left, top)
+            lastTop = top
+        }
+    }
+    val x = ArrayList<Pair<Int, Offset>>()
+    var lastRight = Float.NEGATIVE_INFINITY
+    for ((i, t) in xAt.withIndex()) {
+        val w = xSizes[i].width.toFloat()
+        val left = (geometry.x(t) - w / 2f).coerceIn(plot.left, max(plot.left, plot.right - w))
+        if (left >= lastRight + gap) {
+            x += i to Offset(left, plot.bottom + 2 * gap)
+            lastRight = left + w
+        }
+    }
+    val guide = guideline?.let { g ->
+        val line = geometry.y(g)
+        val w = guideSize.width.toFloat()
+        val h = guideSize.height.toFloat()
+        val above = line - h - gap / 2
+        val top = if (above >= canvas.top) above else (line + gap / 2).coerceAtMost(max(canvas.top, canvas.bottom - h))
+        Offset(max(plot.left, plot.right - w), top)
+    }
+    return AxisLabels(y, x, guide)
+}
 
 /** The plot's inset from the canvas edges in px, room for the y labels, the x labels and an off-scale cap. */
 internal data class ChartMargins(val left: Float, val top: Float, val bottom: Float)
@@ -422,7 +500,7 @@ internal fun slotLabel(c: HistoryColumn, range: HistoryRange, zone: TimeZone): S
     HistoryRange.YEAR -> stringResource(Res.string.history_week_of, formatEpoch(c.startS, zone, "d MMMM"))
 }
 
-/** Chart labels: a fixed size and left-to-right digits, so axes read the same in Arabic. */
+/** Chart labels in `sp`, so they follow the font size, with left-to-right digits, so axes read the same in Arabic. */
 internal fun chartTextStyle(color: Color, sizeSp: Int, bold: Boolean = false) = TextStyle(
     color = color,
     fontSize = sizeSp.sp,

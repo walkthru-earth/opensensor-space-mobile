@@ -38,6 +38,7 @@
     <string name="settings_storage_body">Caches rebuild on their own when needed. Sensor files stay unless you remove old format ones.</string>
     <string name="storage_old_files">Old format files</string>
     <string name="storage_old_files_find">Find</string>
+    <string name="storage_old_files_find_named">Find old format files</string>
     <string name="storage_old_files_finding">Checking files</string>
     <string name="storage_old_files_none">None found</string>
     <plurals name="storage_old_files_count">
@@ -46,6 +47,7 @@
     </plurals>
     <string name="storage_old_files_summary">%1$s, %2$s MB</string>
     <string name="storage_old_files_remove">Remove</string>
+    <string name="storage_old_files_remove_named">Remove old format files</string>
     <string name="storage_old_files_confirm_title">Remove old format files?</string>
     <string name="storage_old_files_confirm_body">%1$s and %2$s MB leave this phone. The sensor is not changed.</string>
     <string name="storage_old_files_removed">Removed %1$s, %2$s MB</string>
@@ -61,6 +63,7 @@
     <string name="storage_old_files_pick_dates">Choose dates</string>
     <string name="storage_removed_files">Removed files</string>
     <string name="storage_removed_files_again">Download again</string>
+    <string name="storage_removed_files_again_named">Download removed files again</string>
     <string name="storage_removed_files_confirm_title">Download removed files again?</string>
     <string name="storage_removed_files_confirm_body">The next sync downloads %1$s again if a sensor still has them.</string>
     <string name="storage_apply">Apply</string>

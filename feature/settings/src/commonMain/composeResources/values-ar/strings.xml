@@ -38,6 +38,7 @@
     <string name="settings_storage_body">تُبنى الذاكرة المؤقتة من جديد تلقائيًا عند الحاجة. تبقى ملفات المستشعر ما لم تحذف الملفات ذات التنسيق القديم.</string>
     <string name="storage_old_files">ملفات بالتنسيق القديم</string>
     <string name="storage_old_files_find">بحث</string>
+    <string name="storage_old_files_find_named">البحث عن الملفات ذات التنسيق القديم</string>
     <string name="storage_old_files_finding">جارٍ فحص الملفات</string>
     <string name="storage_old_files_none">لا توجد ملفات</string>
     <plurals name="storage_old_files_count">
@@ -50,6 +51,7 @@
     </plurals>
     <string name="storage_old_files_summary">%1$s، %2$s ميغابايت</string>
     <string name="storage_old_files_remove">حذف</string>
+    <string name="storage_old_files_remove_named">حذف الملفات ذات التنسيق القديم</string>
     <string name="storage_old_files_confirm_title">حذف الملفات ذات التنسيق القديم؟</string>
     <string name="storage_old_files_confirm_body">تُحذف %1$s و%2$s ميغابايت من هذا الهاتف. لا يتغير المستشعر.</string>
     <string name="storage_old_files_removed">تم حذف %1$s، %2$s ميغابايت</string>
@@ -65,6 +67,7 @@
     <string name="storage_old_files_pick_dates">اختيار التواريخ</string>
     <string name="storage_removed_files">ملفات محذوفة</string>
     <string name="storage_removed_files_again">التنزيل مرة أخرى</string>
+    <string name="storage_removed_files_again_named">تنزيل الملفات المحذوفة مرة أخرى</string>
     <string name="storage_removed_files_confirm_title">تنزيل الملفات المحذوفة مرة أخرى؟</string>
     <string name="storage_removed_files_confirm_body">تنزّل المزامنة التالية %1$s مرة أخرى إذا كانت لا تزال على المستشعر.</string>
     <string name="storage_apply">تطبيق</string>
