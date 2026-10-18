@@ -87,6 +87,7 @@ import earth.walkthru.opensensor.device.resources.reboot_title
 import earth.walkthru.opensensor.device.resources.rotate_button
 import earth.walkthru.opensensor.device.resources.rotate_confirm
 import earth.walkthru.opensensor.device.resources.rotate_title
+import earth.walkthru.opensensor.permissions.RuntimeAccess
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
 
@@ -217,15 +218,22 @@ fun LazyListScope.deviceConfigItems(state: DeviceConfigUiState, lanAccess: LanAc
     }
 }
 
-/** The controller's open confirmation and its notices, for a platform screen that draws its own list. */
+/**
+ * The controller's open confirmation and its notices, for a platform screen that draws its own list.
+ * The snackbar's Bluetooth reconnect runs [reconnectOverBluetooth].
+ */
 @Composable
-fun DeviceConfigEffects(controller: DeviceConfigController, snackbar: SnackbarHostState) {
+fun DeviceConfigEffects(
+    controller: DeviceConfigController,
+    snackbar: SnackbarHostState,
+    reconnectOverBluetooth: () -> Unit = controller::reconnectOverBluetooth,
+) {
     val dialog by controller.dialog.collectAsState()
     LaunchedEffect(controller) {
         controller.notices.collect { notice ->
             if (notice == DeviceConfigNotice.SecretNeedsBluetooth) {
                 val result = snackbar.showSnackbar(deviceConfigNoticeText(notice), actionLabel = getString(Res.string.lan_reconnect_ble))
-                if (result == SnackbarResult.ActionPerformed) controller.reconnectOverBluetooth()
+                if (result == SnackbarResult.ActionPerformed) reconnectOverBluetooth()
             } else {
                 snackbar.showSnackbar(deviceConfigNoticeText(notice))
             }
@@ -315,7 +323,8 @@ suspend fun deviceConfigNoticeText(notice: DeviceConfigNotice): String = when (n
  * Android draws the same cards inside its Device screen with the device header and Auto-sync.
  * [lanAccess] reflects the platform's local network permission, [onPlatformAction] gets the two
  * actions the controller leaves to the platform. [lead] is the platform's first card, the iOS
- * Auto-sync switch. Reconnect sits in the top bar, the station header of this page.
+ * Auto-sync switch. Reconnect sits in the top bar, the station header of this page. With
+ * [bluetooth] both reconnect taps ask for Bluetooth first, see [ReconnectTaps].
  */
 @Composable
 fun DeviceConfigScreen(
@@ -328,10 +337,18 @@ fun DeviceConfigScreen(
     canScan: Boolean = false,
     snackbar: SnackbarHostState = remember { SnackbarHostState() },
     lead: (@Composable () -> Unit)? = null,
+    bluetooth: RuntimeAccess? = null,
 ) {
     val state by controller.state.collectAsState()
-    DeviceConfigEffects(controller, snackbar)
-    val onAction: (DeviceConfigAction) -> Unit = { action -> if (!controller.onAction(action)) onPlatformAction(action) }
+    val taps = ReconnectTaps(bluetooth, controller::reconnect, controller::reconnectOverBluetooth)
+    DeviceConfigEffects(controller, snackbar, taps::overBluetooth)
+    val onAction: (DeviceConfigAction) -> Unit = { action ->
+        if (action == DeviceConfigAction.ReconnectOverBluetooth) {
+            taps.overBluetooth()
+        } else if (!controller.onAction(action)) {
+            onPlatformAction(action)
+        }
+    }
     Scaffold(
         modifier = modifier,
         containerColor = MaterialTheme.colorScheme.background,
@@ -349,7 +366,7 @@ fun DeviceConfigScreen(
                 },
                 actions = {
                     if (state.snapshot.station.offersReconnect) {
-                        TextButton(onClick = controller::reconnect) { Text(stringResource(Res.string.action_reconnect)) }
+                        TextButton(onClick = taps::reconnect) { Text(stringResource(Res.string.action_reconnect)) }
                     }
                     IconButton(onClick = { onAction(DeviceConfigAction.Refresh) }, enabled = state.ready && state.isV2) {
                         Icon(AppIcons.Refresh, contentDescription = stringResource(Res.string.device_refresh))
@@ -371,5 +388,24 @@ fun DeviceConfigScreen(
             sensorIdentityItem(state, scan, canScan, onAction)
             deviceConfigItems(state, lanAccess, onAction)
         }
+    }
+}
+
+/**
+ * The page's two reconnect taps. With [bluetooth] each asks for Bluetooth first, from the tap, as
+ * Today's Reconnect does. A refused [reconnect] still runs, so it can use Wi-Fi. A refused
+ * [overBluetooth] does nothing, it needs Bluetooth. Without [bluetooth] both run as they are.
+ */
+internal class ReconnectTaps(
+    private val bluetooth: RuntimeAccess?,
+    private val onReconnect: () -> Unit,
+    private val onReconnectOverBluetooth: () -> Unit,
+) {
+    fun reconnect() {
+        if (bluetooth == null) onReconnect() else bluetooth.run(onDeclined = onReconnect, action = onReconnect)
+    }
+
+    fun overBluetooth() {
+        if (bluetooth == null) onReconnectOverBluetooth() else bluetooth.run(action = onReconnectOverBluetooth)
     }
 }

@@ -2,16 +2,20 @@ package earth.walkthru.opensensor.devices
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
@@ -21,6 +25,7 @@ import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -34,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
@@ -99,8 +105,9 @@ data class DevicesPlatform(
  * nearby and the sensors on the Wi-Fi this phone does not know yet. Stateless, the route owns the
  * controller and the permission dialogs.
  *
- * Bluetooth is asked for only from a tap (Scan, or opening a sensor). Once it is allowed and the
- * radio is on, the screen scans while it is visible and stops when it leaves.
+ * Bluetooth is asked for only from a tap on Scan or Collect from all. Opening a sensor never asks,
+ * see [openStation]. Once it is allowed and the radio is on, the screen scans while it is visible
+ * and stops when it leaves.
  */
 @Composable
 fun MyDevicesScreen(
@@ -124,16 +131,7 @@ fun MyDevicesScreen(
         onStopOrDispose { onAction(DevicesAction.StopScan) }
     }
 
-    // Without Bluetooth a sensor still opens on its archive, without a link.
-    fun open(id: String, name: String?, wifiReady: Boolean = false) {
-        if (wifiReady) {
-            onAction(DevicesAction.Open(id, name, connect = bluetooth.ready))
-            return
-        }
-        bluetooth.run(onDeclined = { onAction(DevicesAction.Open(id, name, connect = false)) }) {
-            onAction(DevicesAction.Open(id, name, connect = true))
-        }
-    }
+    fun open(id: String, name: String?) = openStation(id, name, bluetooth, onAction)
 
     Scaffold(
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -156,40 +154,52 @@ fun MyDevicesScreen(
                 },
             )
         },
-        floatingActionButton = {
-            FloatingTextButton(
-                text = stringResource(if (showStop) Res.string.scan_button_stop else Res.string.scan_button_scan),
-                onClick = {
-                    if (showStop) {
-                        explicitScan = false
-                        onAction(DevicesAction.StopScan)
-                    } else {
-                        explicitScan = true
-                        // A declined Bluetooth request still allows a local Wi-Fi browse.
-                        val start = { if (onScanTap == null) onAction(DevicesAction.StartScan) else onScanTap() }
-                        bluetooth.run(onDeclined = start, action = start)
-                    }
-                },
-                primary = !showStop,
-                icon = { Icon(if (showStop) AppIcons.Stop else AppIcons.Radar, contentDescription = null) },
-            )
+        // Scan floats at the end below the list, not over it. The list stops above it, so no row is
+        // ever under it, at rest or scrolled, at any font size (#146).
+        bottomBar = {
+            val onClick = {
+                if (showStop) {
+                    explicitScan = false
+                    onAction(DevicesAction.StopScan)
+                } else {
+                    explicitScan = true
+                    // A declined Bluetooth request still allows a local Wi-Fi browse.
+                    val start = { if (onScanTap == null) onAction(DevicesAction.StartScan) else onScanTap() }
+                    bluetooth.run(onDeclined = start, action = start)
+                }
+            }
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .windowInsetsPadding(ScaffoldDefaults.contentWindowInsets.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
+                    .padding(horizontal = 16.dp, vertical = FloatingControl.Margin),
+                contentAlignment = Alignment.CenterEnd,
+            ) {
+                FloatingTextButton(
+                    text = stringResource(if (showStop) Res.string.scan_button_stop else Res.string.scan_button_scan),
+                    onClick = onClick,
+                    modifier = Modifier.testTag(SCAN_BUTTON_TAG),
+                    primary = !showStop,
+                    icon = { Icon(if (showStop) AppIcons.Stop else AppIcons.Radar, contentDescription = null) },
+                )
+            }
         },
     ) { padding ->
         val list = state.list
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().padding(bottom = padding.calculateBottomPadding()),
             contentPadding = PaddingValues(
                 start = 16.dp,
                 end = 16.dp,
                 top = padding.calculateTopPadding() + 8.dp,
-                bottom = padding.calculateBottomPadding() + 96.dp,
+                bottom = 8.dp,
             ),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             if (list.active.isNotEmpty()) {
                 item(key = "active-header") { Eyebrow(stringResource(Res.string.scan_connections), heading = true) }
                 items(list.active, key = { "a:" + it.id }) { link ->
-                    ActiveRow(link, onClick = { open(link.id, link.name, wifiReady = link.id.startsWith("wifi:")) })
+                    ActiveRow(link, onClick = { open(link.id, link.name) })
                 }
             }
             item(key = "progress") {
@@ -240,7 +250,7 @@ fun MyDevicesScreen(
                 NearbyRow(
                     row = row,
                     level = level,
-                    onClick = { open(row.id, row.name, wifiReady = row.wifi == WifiTag.WITH_ACCESS) },
+                    onClick = { open(row.id, row.name) },
                     onForget = { onAction(DevicesAction.RequestForget(row.id, row.name)) },
                 )
             }
@@ -254,7 +264,7 @@ fun MyDevicesScreen(
                     KnownRow(
                         row = row,
                         level = level,
-                        onClick = { open(row.id, row.name, wifiReady = row.wifi == WifiTag.WITH_ACCESS) },
+                        onClick = { open(row.id, row.name) },
                         onForget = { onAction(DevicesAction.RequestForget(row.id, row.name)) },
                     )
                 }
@@ -286,6 +296,19 @@ fun MyDevicesScreen(
     }
 
     state.forget?.let { target -> ForgetDialog(target, platform.explainSystemBond, onAction) }
+}
+
+/** Test tag of the Scan button. */
+internal const val SCAN_BUTTON_TAG = "devices-scan"
+
+/**
+ * Opens a station from My devices. It never asks for Bluetooth, so a Deny is never asked again on
+ * the next tap (#147). The station opens on the phone archive and connects only over a link that is
+ * ready now, Bluetooth when it is allowed and on, else Wi-Fi when the platform has one. Reconnect in
+ * the station header is the tap that asks for Bluetooth.
+ */
+internal fun openStation(id: String, name: String?, bluetooth: RuntimeAccess, onAction: (DevicesAction) -> Unit) {
+    onAction(DevicesAction.Open(id, name, connect = bluetooth.ready))
 }
 
 @Composable

@@ -124,7 +124,7 @@ sealed interface DevicesAction {
     data object StartScan : DevicesAction
     data object StopScan : DevicesAction
 
-    /** Open the sensor. [connect] is false when Bluetooth was declined, so it opens on its archive. */
+    /** Open the sensor. [connect] is false when Bluetooth is not ready, so it opens on its archive. */
     data class Open(val id: String, val name: String?, val connect: Boolean) : DevicesAction
     data class RequestForget(val id: String, val name: String?) : DevicesAction
     data object ConfirmForget : DevicesAction

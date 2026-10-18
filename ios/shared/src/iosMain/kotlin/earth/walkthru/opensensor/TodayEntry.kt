@@ -46,11 +46,21 @@ private class TodayHolder(today: CompanionToday, devices: DevicesBridge, address
 
 /**
  * Today of one Bluetooth sensor (`:feature:today`), the screen Android shows. Smart Sync, Reconnect
- * and Disconnect run here. Every other action goes to [onNavigate].
+ * and Disconnect run here. Every other action goes to [onNavigate]. Reconnect is the tap that asks
+ * for Bluetooth, since opening the sensor from My devices never does (#147).
  */
 @Composable
-internal fun TodayEntry(address: String, today: CompanionToday, devices: DevicesBridge, settings: SettingsRepository, units: UnitSystem, onNavigate: (TodayAction) -> Unit) {
+internal fun TodayEntry(
+    address: String,
+    today: CompanionToday,
+    devices: DevicesBridge,
+    settings: SettingsRepository,
+    units: UnitSystem,
+    requestBluetooth: () -> Unit,
+    onNavigate: (TodayAction) -> Unit,
+) {
     val controller = viewModel(key = "today-$address") { TodayHolder(today, devices, address, settings) }.controller
+    val bluetooth = rememberIosBluetoothAccess(devices.state, requestBluetooth)
     TodayScreen(
         controller = controller,
         units = remember(units) { UnitFormatter(units) },
@@ -58,7 +68,8 @@ internal fun TodayEntry(address: String, today: CompanionToday, devices: Devices
             when (action) {
                 TodayAction.SmartSync -> controller.smartSync()
                 TodayAction.StopSync -> controller.stopSync()
-                TodayAction.Reconnect -> controller.reconnect()
+                // A refusal still reconnects, over the Wi-Fi link when the sensor has one.
+                TodayAction.Reconnect -> bluetooth.run(onDeclined = controller::reconnect, action = controller::reconnect)
                 // The sensor keeps recording. My devices shows it as known.
                 TodayAction.Disconnect -> {
                     controller.disconnect()

@@ -62,8 +62,6 @@ fun DeviceRoute(
     CollectEvents(viewModel.events) { ev ->
         snackbar.showScreenMessage(res, ev)
     }
-    // Confirm dialogs and the controller's own notices (validation, sensor saved).
-    DeviceConfigEffects(controller, snackbar)
     // The companion-device association is a system dialog launched from an IntentSender.
     val companionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
         viewModel.onCompanionResult(result.resultCode == Activity.RESULT_OK)
@@ -82,6 +80,9 @@ fun DeviceRoute(
     val lanReconnectAvailable by viewModel.lanReconnectAvailable.collectAsStateWithLifecycle()
     AccessDialogs(bluetooth)
     AccessDialogs(localNetwork)
+    // Confirm dialogs and the controller's own notices (validation, sensor saved). The snackbar's
+    // Bluetooth reconnect asks for Bluetooth like the card's.
+    DeviceConfigEffects(controller, snackbar) { bluetooth.run { controller.reconnectOverBluetooth() } }
 
     DeviceScreen(
         state = state,
