@@ -249,6 +249,7 @@ class HistorySeriesReader(
             val mono = if (anchor != null) long(ParquetIndexer.MONO) else null
             val gate = metric.gate?.let { g -> long(g.column) }
             val col = md.leaf(metric.column)?.let { DoubleColumn.of(pf.readColumn(it)) }
+            val rh = metric.humidityColumn?.let { name -> md.leaf(name)?.let { DoubleColumn.of(pf.readColumn(it)) } }
             for (i in 0 until utc.size) {
                 var est = false
                 val ns = if (utc.has(i)) {
@@ -265,7 +266,11 @@ class HistorySeriesReader(
                 if (ns < fromNs || ns >= toNs) continue
                 if (!seen.firstSight(bootHi.at(i), bootLo.at(i), bySeq, key)) continue
                 val ok = metric.accepts(if (gate != null && gate.has(i)) gate.values[i] else null)
-                val v = if (ok && col != null && col.has(i)) col.values[i].toFloat().takeIf { it.isFinite() } else null
+                val v = if (ok && col != null && col.has(i)) {
+                    metric.valueOf(col.values[i], if (rh != null && rh.has(i)) rh.values[i] else null)?.toFloat()?.takeIf { it.isFinite() }
+                } else {
+                    null
+                }
                 rows.add(ns.floorDiv(NS), v ?: Float.NaN, est)
             }
         }
@@ -295,7 +300,7 @@ class HistorySeriesReader(
                 // Both scales come from the TIMESTAMP unit, so a file in another unit is read right or refused.
                 val utcScale = UtcColumns.nanosPerUnit(utcLeaf)
                 val estScale = estLeaf?.let(UtcColumns::nanosPerUnit) ?: 1L
-                val wanted = listOfNotNull(utcLeaf.name, estLeaf?.name, "boot_id_hi", "boot_id_lo", ParquetIndexer.SEQ, metric.gate?.column, metric.column).filter { it in names }
+                val wanted = listOfNotNull(utcLeaf.name, estLeaf?.name, "boot_id_hi", "boot_id_lo", ParquetIndexer.SEQ, metric.gate?.column, metric.column, metric.humidityColumn).filter { it in names }
                 // Rows dated by an estimate have a null UTC, so only a file without them can prune by UTC.
                 val range = UtcColumns.nsToUnit(fromNs, utcScale) until UtcColumns.nsToUnitCeil(toNs, utcScale)
                 val batch = reader.scan(
@@ -308,6 +313,7 @@ class HistorySeriesReader(
                 val seq = batch[ParquetIndexer.SEQ]
                 val gate = metric.gate?.let { batch[it.column] }
                 val col = batch[metric.column]
+                val rh = metric.humidityColumn?.let { batch[it] }
                 val staged = DerivedRows(batch.rowCount)
                 for (i in 0 until batch.rowCount) {
                     val real = !utc.isNull(i)
@@ -321,7 +327,7 @@ class HistorySeriesReader(
                     if (ns < fromNs || ns >= toNs) continue
                     val bySeq = seq != null && !seq.isNull(i)
                     val ok = metric.accepts(gate?.asLong(i))
-                    val v = if (ok) col?.asDouble(i)?.toFloat()?.takeIf { it.isFinite() } else null
+                    val v = if (ok) col?.asDouble(i)?.let { metric.valueOf(it, rh?.asDouble(i)) }?.toFloat()?.takeIf { it.isFinite() } else null
                     val at = staged.rows.size
                     staged.hi[at] = bootHi.longOrZero(i)
                     staged.lo[at] = bootLo.longOrZero(i)

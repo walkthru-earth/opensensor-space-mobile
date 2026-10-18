@@ -1,9 +1,11 @@
 package earth.walkthru.opensensor.today
 
+import earth.walkthru.aqsync.airquality.Pm25Basis
 import earth.walkthru.aqsync.data.history.HistoryRange
 import earth.walkthru.aqsync.data.history.HistorySeries
 import earth.walkthru.aqsync.data.history.HistoryWindow
 import earth.walkthru.aqsync.data.history.MetricSpec
+import earth.walkthru.aqsync.data.history.Metrics
 import earth.walkthru.aqsync.data.history.TodaySoFar
 import earth.walkthru.aqsync.data.sync.ClockQuality
 import kotlinx.coroutines.flow.Flow
@@ -85,7 +87,19 @@ class TodayFormatTest {
 
         station.value = "st-1"
         val value = todaySoFar(station, observe, zone, flowOf(1_767_225_600L)).filterNotNull().first()
-        assertEquals(TodaySoFar(12.5f, 30, 0.5f), value)
-        assertEquals(listOf("st-1"), seen)
+        assertEquals(TodaySoFar(12.5f, 30, 0.5f, Pm25Basis.CORRECTED), value)
+        assertEquals(listOf("st-1", "st-1"), seen)
+    }
+
+    @Test
+    fun todaySoFarFallsBackToRawLabelledRawWithoutAValidHumidity() = runTest {
+        val observe = { _: String, metric: MetricSpec, window: HistoryWindow ->
+            val mean = if (metric == Metrics.PM25) 18f else null
+            flowOf(
+                HistorySeries(metric, HistoryRange.DAY, window.fromS, window.toS, emptyList(), validRows = if (mean == null) 0 else 30, expectedRows = 60, mean = mean, max = mean, binned = false),
+            ) as Flow<HistorySeries>
+        }
+        val value = todaySoFar(MutableStateFlow<String?>("st-1"), observe, TimeZone.UTC, flowOf(1_767_225_600L)).filterNotNull().first()
+        assertEquals(TodaySoFar(18f, 30, 0.5f, Pm25Basis.RAW), value)
     }
 }

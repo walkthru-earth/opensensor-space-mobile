@@ -131,6 +131,14 @@ class HistoryControllerTest {
     }
 
     @Test
+    fun opensOnCorrectedPm25WhenTheArchiveHasIt() = runTest {
+        val c = controller(metricIds = setOf("pm25_epa", "pm25", "rh"))
+        val s = c.state.first { !it.initializing && it.toS == lastDayEndS }
+        assertEquals(Metrics.PM25_CORRECTED, s.metric)
+        assertEquals(listOf(Metrics.PM25_CORRECTED, Metrics.PM25), s.availableMetrics.take(2))
+    }
+
+    @Test
     fun aCurrentStationWithoutTimedReadingsOpensOnTheOneWithTheLatestWithoutReadingTheWholeIndex() = runTest {
         val untimed = record("s2").copy(utcRows = 0, firstUtcNs = null, lastUtcNs = null)
         val index = Index(listOf(record("s1"), untimed))

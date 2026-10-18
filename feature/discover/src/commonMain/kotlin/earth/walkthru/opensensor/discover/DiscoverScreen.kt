@@ -238,7 +238,7 @@ private fun DiscoverContent(
                 val shownAt = remember { nowEpochMillis() }
                 // Screen readers name the map and the measurement it colours. Its gestures stay as
                 // they are, the sheet's list reads each area.
-                val mapLabel = spokenList(listOfNotNull(strings.mapLabel, state.property?.label), listSeparator())
+                val mapLabel = spokenList(listOfNotNull(strings.mapLabel, state.property?.shownLabel()), listSeparator())
                 DiscoverMap(
                     modifier = Modifier.semantics { contentDescription = mapLabel },
                     state = mapState,
@@ -386,7 +386,7 @@ private fun TopControls(
                 FilterChip(
                     selected = p.id == state.property?.id,
                     onClick = { onProperty(p.id) },
-                    label = { Text(p.label) },
+                    label = { Text(p.shownLabel()) },
                     colors = chipColors,
                     shape = FloatingControl.SmallShape,
                 )
@@ -487,14 +487,14 @@ private fun Legend(
                     val caption = if (window == FeedWindow.DAY) strings.whoCaptionDay else strings.whoCaptionCompared
                     // WHO edges are µg/m³ and never converted, so the edges print as published.
                     val spoken = buildString {
-                        append("${property.label} $unit. $caption. ")
+                        append("${property.shownLabel()} $unit. $caption. ")
                         WhoStep.entries.forEach { step ->
                             val upTo = health.rangeOf(step).second?.let { formatEdge(it) }
                             append(strings.whoStepSpoken(strings.stepName(step), upTo, unit)).append(". ")
                         }
                     }
                     Column(Modifier.width(212.dp).padding(vertical = 8.dp).clearAndSetSemantics { contentDescription = spoken }) {
-                        Text("${property.label}  $unit", style = MaterialTheme.typography.labelMedium)
+                        Text("${property.shownLabel()}  $unit", style = MaterialTheme.typography.labelMedium)
                         Spacer(Modifier.height(2.dp))
                         WhoStepBar(health, strings)
                         Spacer(Modifier.height(2.dp))
@@ -507,7 +507,7 @@ private fun Legend(
                     val high = scale.percentile.high
                     // Read as one item, label and unit, low, high and the note. The gradient is decorative.
                     Column(Modifier.widthIn(min = 140.dp, max = 180.dp).padding(vertical = 8.dp).semantics(mergeDescendants = true) {}) {
-                        Text("${property.label}  $unit", style = MaterialTheme.typography.labelMedium)
+                        Text("${property.shownLabel()}  $unit", style = MaterialTheme.typography.labelMedium)
                         Spacer(Modifier.height(4.dp))
                         Box(
                             Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp))
@@ -533,7 +533,7 @@ private fun Legend(
 private fun SimpleLegend(property: FeedProperty, strings: DiscoverStrings, infoButton: @Composable (InfoText, Modifier) -> Unit) {
     FloatingSurface {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 10.dp)) {
-            MoodLegend(Modifier.width(212.dp).padding(vertical = 8.dp), title = property.label)
+            MoodLegend(Modifier.width(212.dp).padding(vertical = 8.dp), title = property.shownLabel())
             infoButton(strings.moodInfo, Modifier.minimumInteractiveComponentSize().size(40.dp))
         }
     }
@@ -773,7 +773,7 @@ private fun DiscoverStateMessage(text: String, expression: PeacockExpression, mo
 private fun ChartTitle(property: FeedProperty, strings: DiscoverStrings, state: DiscoverUiState, trailing: String? = null) {
     // One heading for the chart below, read as label, unit, window and the trailing note.
     Row(Modifier.semantics(mergeDescendants = true) { heading() }, verticalAlignment = Alignment.Bottom) {
-        Text("${property.label}  ${unitLabel(property, LocalDiscoverUnits.current)}", style = MaterialTheme.typography.titleSmall)
+        Text("${property.shownLabel()}  ${unitLabel(property, LocalDiscoverUnits.current)}", style = MaterialTheme.typography.titleSmall)
         Spacer(Modifier.width(8.dp))
         Text(
             "${strings.avg}  ${windowLabel(state.window, strings, state.daily)}",
@@ -831,9 +831,10 @@ private fun CellDetail(
         }
         if (property != null && headline != null) {
             val unit = unitLabel(property, units)
+            val label = property.shownLabel()
             Row(
                 Modifier.clearAndSetSemantics {
-                    contentDescription = "${property.label} ${formatValue(headline, property, units)} $unit"
+                    contentDescription = "$label ${formatValue(headline, property, units)} $unit"
                     heading()
                 },
             ) {
@@ -841,7 +842,7 @@ private fun CellDetail(
                 Spacer(Modifier.width(6.dp))
                 Text(unit, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.alignByBaseline())
                 Spacer(Modifier.width(10.dp))
-                Text(property.label, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.alignByBaseline())
+                Text(label, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.alignByBaseline())
             }
             // The WHO step in words, beside its colour.
             if (headlineStep != null) StepLabel(headlineStep, strings, Modifier.padding(vertical = 2.dp))
@@ -903,7 +904,7 @@ private fun SimpleCellDetail(
             val value = summary.value?.let { formatValue(it, property, units) }
             val shown = value ?: notAvailableText()
             val word = if (summary.scaled) moodWord(summary.step) else null
-            val spoken = spokenList(listOfNotNull(word, property.label, if (value != null) "$value $unit" else shown), separator)
+            val spoken = spokenList(listOfNotNull(word, property.shownLabel(), if (value != null) "$value $unit" else shown), separator)
             Row(
                 Modifier.clearAndSetSemantics {
                     contentDescription = spoken
@@ -924,7 +925,7 @@ private fun SimpleCellDetail(
                             Text(unit, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.alignByBaseline())
                         }
                         Spacer(Modifier.width(10.dp))
-                        Text(property.label, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.alignByBaseline())
+                        Text(property.shownLabel(), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.alignByBaseline())
                     }
                 }
             }
@@ -973,7 +974,7 @@ private fun SimpleCellDetail(
                     Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(role = Role.Button) { onShowProperty(p.id) }.padding(vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(p.label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                    Text(p.shownLabel(), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                     Text(mean?.let { "${formatValue(it, p, units)} ${unitLabel(p, units)}" } ?: notAvailableText(), style = MaterialTheme.typography.bodyLarge)
                 }
             }
@@ -994,7 +995,7 @@ private fun AllProperties(state: DiscoverUiState, strings: DiscoverStrings, onPi
                 Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(role = Role.Button) { onPick(p.id) }.padding(vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(p.label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), color = if (count == 0) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)
+                Text(p.shownLabel(), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), color = if (count == 0) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)
                 Text(strings.areasInView(count), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }

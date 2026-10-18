@@ -1,6 +1,8 @@
 package earth.walkthru.aqsync.data.history
 
+import earth.walkthru.aqsync.airquality.EpaPm25Correction
 import earth.walkthru.aqsync.airquality.HealthScale
+import earth.walkthru.aqsync.airquality.Pm25Basis
 import earth.walkthru.aqsync.airquality.WhoGuidelines
 import earth.walkthru.aqsync.airquality.WhoStep
 import earth.walkthru.aqsync.data.protocol.LiveSample
@@ -54,17 +56,24 @@ sealed interface NowReading {
     /** The sensor is present but its reading is not usable yet (warming up, stale, error). */
     data class SensorNotReady(val status: PmsStatus, val hint: String) : NowReading
 
-    /** A valid PM2.5 reading and its mood. */
-    data class Reading(val pm25: Double, val mood: AirMood) : NowReading
+    /**
+     * A valid PM2.5 reading and its mood. [pm25] is the value shown, the EPA corrected PM2.5 when the
+     * sample carries a valid RH, else the raw one, as [basis] says. [raw] is the sensor's own
+     * atmospheric PM2.5, shown second in the Detailed level.
+     */
+    data class Reading(val pm25: Double, val mood: AirMood, val basis: Pm25Basis = Pm25Basis.RAW, val raw: Double? = pm25) : NowReading
 
     companion object {
         fun of(live: LiveSample?): NowReading {
             if (live == null) return Waiting
             val status = live.pmsStatus ?: return Waiting
             if (status != PmsStatus.VALID) return SensorNotReady(status, hint(status))
-            val pm = live.pm25 ?: return Waiting
+            val raw = live.pm25?.takeIf { it.isFinite() }
+            // The correction reads the CF=1 PM2.5 and the sensor's RH, the inputs it was fitted on.
+            val corrected = EpaPm25Correction.correct(live.c25, live.rh)
+            val pm = corrected ?: raw ?: return Waiting
             val mood = AirMood.ofOrNull(pm) ?: return Waiting
-            return Reading(pm, mood)
+            return Reading(pm, mood, if (corrected != null) Pm25Basis.CORRECTED else Pm25Basis.RAW, raw)
         }
 
         private fun hint(status: PmsStatus): String = when (status) {
@@ -77,8 +86,11 @@ sealed interface NowReading {
     }
 }
 
-/** "Today so far" from the UTC-day tier: a real average with its coverage, or nothing. */
-data class TodaySoFar(val pm25Mean: Float, val validRows: Int, val coverage: Float) {
+/**
+ * "Today so far" from the hourly tier, a real average with its coverage, or nothing. [basis] says
+ * whether the mean is of corrected rows or, when the day has no valid RH, of raw ones.
+ */
+data class TodaySoFar(val pm25Mean: Float, val validRows: Int, val coverage: Float, val basis: Pm25Basis = Pm25Basis.RAW) {
     /** Read against the WHO 24-hour scale. A part-day mean is not yet a 24-hour mean. */
     val mood: AirMood get() = AirMood.of(pm25Mean.toDouble())
 }

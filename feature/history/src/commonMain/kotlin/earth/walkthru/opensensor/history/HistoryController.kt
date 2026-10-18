@@ -36,7 +36,7 @@ data class HistoryUiState(
     val station: String? = null,
     /** Station generations to choose from, oldest first. The last one is the current station. */
     val stations: List<String> = emptyList(),
-    val metric: MetricSpec = Metrics.PM25,
+    val metric: MetricSpec = Metrics.PM25_CORRECTED,
     val availableMetrics: List<MetricSpec> = emptyList(),
     val range: HistoryRange = HistoryRange.DAY,
     val zone: TimeZone = TimeZone.UTC,
@@ -72,7 +72,7 @@ class HistoryController(
     tickMs: Long = 60_000,
 ) {
     private val selectedStation = MutableStateFlow<String?>(null)
-    private val metric = MutableStateFlow(Metrics.PM25)
+    private val metric = MutableStateFlow(Metrics.PM25_CORRECTED)
     private val range = MutableStateFlow(HistoryRange.DAY)
     private val toS = MutableStateFlow(nowRounded(HistoryRange.DAY))
     private val nowToS = MutableStateFlow(toS.value)

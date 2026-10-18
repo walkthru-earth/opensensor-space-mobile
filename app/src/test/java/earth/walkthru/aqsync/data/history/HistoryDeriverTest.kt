@@ -53,7 +53,9 @@ class HistoryDeriverTest {
     private val station = "53315f5f-cb85-4d8d-b623-d56266084189"
 
     @Test
-    fun `version four tiers and daily cache rebuild without a source change`() = runBlocking {
+    fun `tiers and daily cache of the previous derive version rebuild without a source change`() = runBlocking {
+        // Version 7 added the EPA corrected PM2.5 tier (#92). Installed days must rebuild to gain it.
+        assertEquals(7, HistoryDeriver.DERIVE_VERSION)
         val tmp = java.nio.file.Files.createTempDirectory("aq-derive-upgrade").toFile()
         try {
             val archive = FileArchive(tmp)
@@ -75,20 +77,20 @@ class HistoryDeriverTest {
             val originalSources = files.rows.toList()
             val current = days.rows.single()
             val oldDigest = MessageDigest.getInstance("SHA-256").apply {
-                update("derive-v4\n".toByteArray())
+                update("derive-v${HistoryDeriver.DERIVE_VERSION - 1}\n".toByteArray())
                 update("$name:1\n".toByteArray())
             }
             val oldSignature = HistoryDeriver.hex(oldDigest.digest())
             assertFalse(oldSignature == current.sourceSignature)
-            // Model an installed version 4 cache. Its pointer and unchanged source set are present,
-            // but the old tier values and daily payload need the new duplicate preference.
+            // Model an installed cache of the previous version. Its pointer and unchanged source set are
+            // present, but its tier values and daily payload predate this version.
             days.upsert(current.copy(sourceSignature = oldSignature))
             buckets.rows.clear()
             buckets.rows += expectedTiers.map { it.copy(rows = 777, validRows = 777, mean = 999f, min = 999f, max = 999f) }
             val daily = store.dayFile(station, current.epochDay)
             assertTrue(daily.isFile)
             assertTrue(days.rows.single().dailyFile != null)
-            daily.writeText("obsolete version 4 daily bytes")
+            daily.writeText("obsolete daily bytes")
             val manifest = store.manifestFile(station, current.epochDay)
             manifest.writeText(Json.encodeToString(Json.decodeFromString<DailyManifest>(manifest.readText()).copy(sourceSignature = oldSignature)))
 

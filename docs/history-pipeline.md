@@ -95,15 +95,27 @@ the hardware.
 
 | id | column | gate | health scale | chartable | axisFloor | settle |
 | --- | --- | --- | --- | --- | --- | --- |
-| `pm25` | `pm25_atmospheric_ug_m3` | `pms_status == 4` | `WhoGuidelines.PM25` | ✓ envelope | 37.5 | 180 s |
+| `pm25_epa` | `pm25_cf1_ug_m3`, corrected with `relative_humidity_percent` | `pms_status == 4` and a valid RH | `WhoGuidelines.PM25` | ✓ envelope | 37.5 | 180 s |
+| `pm25` | `pm25_atmospheric_ug_m3` (raw) | `pms_status == 4` | `WhoGuidelines.PM25` | ✓ envelope | 37.5 | 180 s |
 | `pm10` | `pm10_atmospheric_ug_m3` | `pms_status == 4` | `WhoGuidelines.PM10` | ✓ envelope | 75 | 180 s |
 | `pm1` | `pm1_atmospheric_ug_m3` | `pms_status == 4` | – | ✓ envelope | 60 | 180 s |
 | `n03` / `n25` | `particles_gt03_per_01l` / `…gt25…` | `pms_status == 4` | – | ✗ | 10 | 180 s |
 | `board_c` | `imu_temperature_c` (**not** ambient) | – | – | ✓ | 10 | – |
-| `ambient_c` / `rh` | `ambient_temperature_c` / `relative_humidity_percent` | – | – | ✓ | 10 / 100 | – (SHT20 unresolved; yield nothing today) |
+| `ambient_c` / `rh` | `ambient_temperature_c` / `relative_humidity_percent` | – | – | ✓ | 10 / 100 | – (all null on CoreS3, SHT20 unresolved. Waveshare writes them from the PMS5003T) |
 | `battery` / `vbus` | `battery_percent` / `vbus_mv` | – | – | ✗ | 100 / 10 | – |
 
 PMS concentrations are **INT32** µg/m³ in the files; only IMU/temperature/humidity are FLOAT.
+
+**Corrected PM2.5 (#92).** `pm25_epa` is a view of the same rows, not a stored column. A spec with
+a `humidityColumn` passes every row through `MetricSpec.valueOf(raw, rh)`, which calls
+`EpaPm25Correction.correct(cf1, rh)` from `:core:airquality`. The `Aggregator` (Android and iOS
+tiers), `FileSummary` and both `HistorySeriesReader` paths (raw rows and daily files) correct each
+row before any mean, min or max. A row without a valid RH yields no corrected value, so a station
+without humidity has no `pm25_epa` buckets and every screen falls back to `pm25`, labelled raw.
+Both PM2.5 specs carry `property = "pm25"` for the WHO scale and a `basis` (`CORRECTED` or `RAW`)
+for the label. Daily files keep the raw `pm25_cf1_ug_m3` and RH columns, so they need no change.
+The corrected tier came with `HistoryDeriver.DERIVE_VERSION` 7 on Android and `TierCodec.VERSION` 3
+on iOS, so installed days rebuild once.
 
 ### Sensor warm-up and settling (2026-09-17)
 

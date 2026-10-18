@@ -115,6 +115,8 @@ erDiagram
 ```
 
 `metric_bucket` and `derived_day` are **caches**: drop them and derive again → identical rows.
+The EPA corrected PM2.5 (`metricId = pm25_epa`, #92) is one more `metric_bucket` metric derived
+from the raw cf1 and RH columns. Archived files and `archived_file` rows never change.
 `archived_file` is the index of the archive, never its source of truth (a file the reader refuses
 keeps its row with `indexError`).
 `pruned_file` holds the files the user removed from this phone in Settings. Sync skips one while the
@@ -151,7 +153,7 @@ that cannot list the archive writes no marker and imports on the next launch.
 the full sticker, vendor/model, batch, source (`barcode` or `manual`), phone UTC assertion time,
 and logger/station identifiers. The record is written after the logger echoes `SET_CONFIG`.
 It does not backdate an installation or change archived raw rows. The optional batch estimate
-is a separate Parquet field and History metric; the primary PM₂.₅ metric remains atmospheric raw.
+is a separate Parquet field and History metric. It never replaces the shown PM₂.₅, which is EPA corrected where RH is valid and atmospheric raw otherwise, each with its label.
 
 Check the v9→v10 migration against the exported schemas with
 `python3 tools/validate_sensor_installation_migration.py`.

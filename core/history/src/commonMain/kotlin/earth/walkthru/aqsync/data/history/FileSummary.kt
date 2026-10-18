@@ -77,6 +77,7 @@ data class FileSummary(
                 }
             }
             val values = metrics.map { col(it.column) }
+            val humidity = metrics.mapNotNull { it.humidityColumn }.distinct().associateWith { col(it) }
             val gates = metrics.mapNotNull { it.gate?.column }.distinct().associateWith { col(it) }
             val per = LinkedHashMap<String, MetricAgg>()
             for ((k, spec) in metrics.withIndex()) {
@@ -87,7 +88,7 @@ data class FileSummary(
                 var max = Float.NEGATIVE_INFINITY
                 for (i in 0 until rows) {
                     if (!spec.accepts(spec.gate?.let { g -> gates[g.column]?.asLong(i) })) continue
-                    val v = colv.asDouble(i) ?: continue
+                    val v = colv.asDouble(i)?.let { raw -> spec.valueOf(raw, spec.humidityColumn?.let { h -> humidity[h]?.asDouble(i) }) } ?: continue
                     if (v.isNaN() || v.isInfinite()) continue
                     n++
                     sum += v

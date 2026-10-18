@@ -53,7 +53,8 @@ class SavedDay(val signature: String, val tiers: DayTiers)
  * buckets as fixed width fields, little endian. About 40 bytes a bucket.
  */
 object TierCodec {
-    private const val VERSION = 2
+    /** 3 = the EPA corrected PM2.5 metric, so tiers saved before it are rebuilt with it. */
+    internal const val VERSION = 3
 
     fun encode(signature: String, tiers: DayTiers): ByteArray {
         val out = Out()

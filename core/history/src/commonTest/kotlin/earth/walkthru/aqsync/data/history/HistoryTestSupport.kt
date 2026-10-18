@@ -1,6 +1,11 @@
 package earth.walkthru.aqsync.data.history
 
+import earth.walkthru.aqsync.data.history.parquet.ColumnValues
+import earth.walkthru.aqsync.data.history.parquet.ParquetCodec
+import earth.walkthru.aqsync.data.history.parquet.ParquetLogicalType
 import earth.walkthru.aqsync.data.history.parquet.ParquetSink
+import earth.walkthru.aqsync.data.history.parquet.ParquetType
+import earth.walkthru.aqsync.data.history.parquet.ParquetWriter
 import kotlin.math.abs
 
 // Shared by the history tests that read real device files, on the JVM (`jvmTest`) and on the iOS
@@ -52,3 +57,38 @@ fun assertNotNull(actual: Any?) {
 fun assertNull(actual: Any?) = kotlin.test.assertNull(actual)
 
 fun assertNull(message: String, actual: Any?) = kotlin.test.assertNull(actual, message)
+
+/** 2026-09-17T10:00Z, the hour [humidPm25Parquet] falls in. */
+const val HUMID_HOUR_S = 1_789_639_200L
+
+/**
+ * #92. Five rows 10 s apart from [HUMID_HOUR_S], with CF=1 PM2.5 10, 250, 40, 41, 60, atmospheric
+ * PM2.5 9, 170, 30, 31, 50 and RH 50, 80, null, 120, 50. The last row has a stale sensor. So the
+ * corrected PM2.5 has two rows (10 at 50 percent, 250 at 80 percent) and the raw PM2.5 has four.
+ */
+fun humidPm25Parquet(): ByteArray {
+    val out = MemorySink()
+    val w = ParquetWriter(
+        out,
+        listOf(
+            ParquetWriter.Column("event_time_utc_ns", ParquetType.INT64, timestampUtc = ParquetLogicalType.TimeUnit.NANOS),
+            ParquetWriter.Column("pms_status", ParquetType.INT32),
+            ParquetWriter.Column("pm25_atmospheric_ug_m3", ParquetType.INT32),
+            ParquetWriter.Column("pm25_cf1_ug_m3", ParquetType.INT32),
+            ParquetWriter.Column("relative_humidity_percent", ParquetType.FLOAT),
+        ),
+        ParquetCodec.UNCOMPRESSED,
+    )
+    w.begin()
+    w.rowGroup(
+        listOf(
+            ColumnValues.Int64(LongArray(5) { (HUMID_HOUR_S + it * 10L) * 1_000_000_000L }, null),
+            ColumnValues.Int32(intArrayOf(4, 4, 4, 4, 2), null),
+            ColumnValues.Int32(intArrayOf(9, 170, 30, 31, 50), null),
+            ColumnValues.Int32(intArrayOf(10, 250, 40, 41, 60), null),
+            ColumnValues.Float32(floatArrayOf(50f, 80f, 0f, 120f, 50f), booleanArrayOf(true, true, false, true, true)),
+        ),
+    )
+    w.finish()
+    return out.toByteArray()
+}

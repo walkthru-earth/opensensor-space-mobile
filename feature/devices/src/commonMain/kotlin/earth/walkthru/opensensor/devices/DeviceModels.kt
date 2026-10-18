@@ -1,6 +1,7 @@
 package earth.walkthru.opensensor.devices
 
 import androidx.compose.runtime.Immutable
+import earth.walkthru.aqsync.airquality.Pm25Basis
 
 /**
  * A Bluetooth advertisement seen in the current scan. [id] is the platform's peripheral id (the
@@ -58,6 +59,8 @@ data class ArchiveGlance(
     val lastDayStartS: Long? = null,
     val lastDayPm25Mean: Float? = null,
     val lastDayCoverage: Float? = null,
+    /** Whether that mean is the EPA corrected PM2.5 or the raw sensor value, so the line labels it. */
+    val lastDayPm25Basis: Pm25Basis = Pm25Basis.RAW,
 )
 
 /** Why the last scan stopped early. */

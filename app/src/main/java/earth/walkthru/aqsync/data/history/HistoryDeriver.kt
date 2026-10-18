@@ -286,8 +286,8 @@ class HistoryDeriver @Inject constructor(
         /** Each day's sources from one station listing, the same files and order as `withUtcBetween`. */
         fun sourcesByDay(files: List<ArchivedFile>): Map<Long, List<ArchivedFile>> = StationDays.sourcesByDay(files) { it.toRecord() }
 
-        /** Part of every day's signature. 2 = per-metric rows, 3 = shared RowKey, 4 = single pass, 5 = canonical duplicate source order, 6 = MICROS UTC and field_id in the daily file. */
-        const val DERIVE_VERSION = 6
+        /** Part of every day's signature. 2 = per-metric rows, 3 = shared RowKey, 4 = single pass, 5 = canonical duplicate source order, 6 = MICROS UTC and field_id in the daily file, 7 = EPA corrected PM2.5 tier. */
+        const val DERIVE_VERSION = 7
         const val DAY_NS = StationDays.DAY_NS
     }
 }

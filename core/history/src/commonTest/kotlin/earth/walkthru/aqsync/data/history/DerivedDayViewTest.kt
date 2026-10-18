@@ -1,5 +1,6 @@
 package earth.walkthru.aqsync.data.history
 
+import earth.walkthru.aqsync.airquality.EpaPm25Correction
 import earth.walkthru.aqsync.archive.ArchiveIndex
 import earth.walkthru.aqsync.archive.ArchiveKey
 import earth.walkthru.aqsync.archive.ArchiveRecord
@@ -310,6 +311,42 @@ class DerivedDayViewTest {
             }
         }
         assertTrue(opened > 0)
+    }
+
+    @Test
+    fun theDerivedDayCorrectsPm25RowByRowFromItsHumidityColumn() = runTest {
+        // #92. The daily file keeps raw CF=1 and RH. Reading it must correct each row, exactly as the
+        // raw files do, and a row without a valid RH must give no corrected value.
+        val station = "humid-station"
+        val humidDay = HUMID_HOUR_S / 86_400
+        val bytes = humidPm25Parquet()
+        val store = Store()
+        val index = Index()
+        val r = ArchiveRecord(station, "humid.parquet", bytes.size.toLong(), 1, "s", 1, "fake")
+        store.files[r.key] = bytes
+        index.put(r)
+        ArchiveIndexRepair(store, index, nowEpochMs = { 42L }).backfillAll()
+        val tiers = ArchiveHistoryTiers(store, index)
+        val sink = MemorySink()
+        val pass = DayPass.run(station, humidDay, index.rows.value.map { s -> DailyParquetSource(s) { ParquetFile.wrap(store.files.getValue(s.key)) } }, sink, emptyMap(), (humidDay + 2) * 86_400, tiers = false)
+        assertNotNull(pass.daily)
+        val derivedBytes = sink.toByteArray()
+        val derived = DerivedDayFiles { _, epochDay, _, _ -> if (epochDay == humidDay) MemoryRangeSource(derivedBytes, "humid") else null }
+        val window = HistoryWindow(humidDay * 86_400, (humidDay + 1) * 86_400, TimeZone.UTC)
+        val rawReader = HistorySeriesReader(store, index, tiers)
+        val derivedReader = HistorySeriesReader(store, index, tiers, derived = derived)
+        val first = EpaPm25Correction.correct(10.0, 50.0)!!.toFloat()
+        val second = EpaPm25Correction.correct(250.0, 80.0)!!.toFloat()
+        store.reads = 0
+        val corrected = derivedReader.observe(station, Metrics.PM25_CORRECTED, HistoryRange.DAY, window).first()
+        assertEquals(0, store.reads, "the corrected day comes from the daily file")
+        assertEquals(2L, corrected.validRows)
+        assertEquals(listOf(first, second), corrected.points.mapNotNull { it.mean })
+        assertEquals((first + second) / 2, corrected.mean!!, 1e-3f)
+        assertEquals(rawReader.observe(station, Metrics.PM25_CORRECTED, HistoryRange.DAY, window).first(), corrected)
+        // The raw view of the same daily file stays the stored atmospheric value.
+        val raw = derivedReader.observe(station, Metrics.PM25, HistoryRange.DAY, window).first()
+        assertEquals(listOf(9f, 170f, 30f, 31f), raw.points.mapNotNull { it.mean })
     }
 
     @Test

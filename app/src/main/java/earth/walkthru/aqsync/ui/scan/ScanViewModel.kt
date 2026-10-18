@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import earth.walkthru.aqsync.BuildConfig
+import earth.walkthru.aqsync.airquality.Pm25Basis
 import earth.walkthru.aqsync.data.DeviceConnectionManager
 import earth.walkthru.aqsync.data.DeviceOwnership
 import earth.walkthru.aqsync.data.DeviceSnapshot
@@ -22,6 +23,7 @@ import earth.walkthru.aqsync.data.history.Metrics
 import earth.walkthru.aqsync.data.history.Resolution
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
+import earth.walkthru.aqsync.data.local.database.MetricBucket
 import earth.walkthru.aqsync.data.local.database.MetricBucketDao
 import earth.walkthru.aqsync.data.settings.AppSettings
 import earth.walkthru.aqsync.data.settings.DetailLevel
@@ -54,6 +56,22 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/**
+ * The newest PM2.5 day of each station, both lists newest first. The corrected day wins when it is
+ * the newest day with readings, otherwise the raw day shows, labelled raw (#92).
+ */
+internal fun latestPm25Days(corrected: List<MetricBucket>, raw: List<MetricBucket>): Map<String, Pair<MetricBucket, Pm25Basis>> {
+    val out = HashMap<String, Pair<MetricBucket, Pm25Basis>>()
+    for (b in raw) if (b.validRows > 0 && b.station !in out) out[b.station] = b to Pm25Basis.RAW
+    val seen = HashSet<String>()
+    for (b in corrected) {
+        if (b.validRows <= 0 || !seen.add(b.station)) continue
+        val rawDay = out[b.station]?.first
+        if (rawDay == null || b.startEpochS >= rawDay.startEpochS) out[b.station] = b to Pm25Basis.CORRECTED
+    }
+    return out
+}
+
 @HiltViewModel
 class ScanViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -66,11 +84,14 @@ class ScanViewModel @Inject constructor(
 ) : ViewModel() {
 
     /** Per-station totals come from one grouped query, so the list never loads every archived row (#63). */
-    private val summaries: Flow<Map<String, ArchiveGlance>> = combine(archivedFileDao.observeStationGlances(), bucketDao.observeAllDays(Metrics.primary.id)) { glances, days ->
-        val latestDay = HashMap<String, earth.walkthru.aqsync.data.local.database.MetricBucket>()
-        for (b in days) if (!latestDay.containsKey(b.station)) latestDay[b.station] = b // newest first
+    private val summaries: Flow<Map<String, ArchiveGlance>> = combine(
+        archivedFileDao.observeStationGlances(),
+        bucketDao.observeAllDays(Metrics.PM25_CORRECTED.id),
+        bucketDao.observeAllDays(Metrics.PM25.id),
+    ) { glances, corrected, raw ->
+        val latestDay = latestPm25Days(corrected, raw)
         glances.associate { g ->
-            val day = latestDay[g.station]
+            val (day, basis) = latestDay[g.station] ?: (null to Pm25Basis.RAW)
             g.station to ArchiveGlance(
                 files = g.files,
                 lastSyncedMs = g.lastSyncedMs,
@@ -78,6 +99,7 @@ class ScanViewModel @Inject constructor(
                 lastDayStartS = day?.startEpochS,
                 lastDayPm25Mean = day?.mean,
                 lastDayCoverage = day?.let { (it.validRows.toFloat() / Resolution.DAY.expectedRows).coerceIn(0f, 1f) },
+                lastDayPm25Basis = basis,
             )
         }
     }

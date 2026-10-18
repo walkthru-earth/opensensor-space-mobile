@@ -29,6 +29,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import earth.walkthru.aqsync.airquality.Pm25Basis
 import earth.walkthru.aqsync.data.SyncProgress
 import earth.walkthru.aqsync.data.ble.ConfigSnapshot
 import earth.walkthru.aqsync.data.ble.ConnectionState
@@ -64,6 +65,8 @@ import earth.walkthru.opensensor.designsystem.WarningNote
 import earth.walkthru.opensensor.designsystem.listSeparator
 import earth.walkthru.opensensor.designsystem.nowEpochMillis
 import earth.walkthru.opensensor.designsystem.peacockExpressionFor
+import earth.walkthru.opensensor.designsystem.pm25CorrectionInfo
+import earth.walkthru.opensensor.designsystem.pm25Label
 import earth.walkthru.opensensor.designsystem.rememberNowMillis
 import earth.walkthru.opensensor.designsystem.spokenList
 import earth.walkthru.opensensor.today.resources.Res
@@ -254,7 +257,7 @@ internal fun FreshnessLabel(receivedAtEpochMs: Long?, color: Color = MaterialThe
 }
 
 /**
- * The hero of Today: the primary metric right now as a peacock, a big number, the mood in words and
+ * The hero of Today: PM2.5 right now, corrected when the live RH is valid and raw otherwise, as a peacock, a big number, the mood in words and
  * one line of advice. The sensor's own state comes before any number. Colour is never the only
  * carrier, the mood is also a word and a character expression.
  */
@@ -264,7 +267,6 @@ internal fun MetricHeroCard(
     receivedAtEpochMs: Long?,
     level: DetailLevel,
     modifier: Modifier = Modifier,
-    metric: MetricSpec = Metrics.primary,
 ) {
     val reading = NowReading.of(live)
     val fresh = rememberIsFresh(receivedAtEpochMs)
@@ -280,7 +282,7 @@ internal fun MetricHeroCard(
                 CardHeader(
                     title,
                     modifier = Modifier.weight(1f),
-                    info = InfoContent(title, stringResource(Res.string.now_snapshot_note), stringResource(nowInfoBodyRes(level))),
+                    info = InfoContent(title, stringResource(Res.string.now_snapshot_note), stringResource(nowInfoBodyRes(level)), pm25CorrectionInfo()),
                     color = quiet,
                 )
                 FreshnessLabel(receivedAtEpochMs, color = quiet)
@@ -311,7 +313,12 @@ internal fun MetricHeroCard(
                             color = if (fresh) onCard else quiet,
                             maxLines = 1,
                         )
-                        Text("${metric.label}  ${metric.unit}", style = MaterialTheme.typography.titleMedium, color = quiet)
+                        Text("${pm25Label(reading.basis)}  ${Metrics.PM25.unit}", style = MaterialTheme.typography.titleMedium, color = quiet)
+                        // Detailed shows the sensor's own value second, under the corrected one.
+                        val raw = reading.raw
+                        if (level.detailed && reading.basis == Pm25Basis.CORRECTED && raw != null) {
+                            Text("${pm25Label(Pm25Basis.RAW)}  ${fmtPm(raw)}", style = MaterialTheme.typography.bodyMedium, color = quiet)
+                        }
                     }
                     NowReading.Waiting -> Text(
                         stringResource(Res.string.now_waiting),
@@ -385,6 +392,7 @@ internal fun EnvironmentCard(profile: LiveProfile?, live: LiveSample?, receivedA
 internal fun TodaySoFarCard(today: TodaySoFar?, clockMissing: Boolean, level: DetailLevel, modifier: Modifier = Modifier) {
     BrandCard(modifier = modifier, tone = CardTone.SOFT) {
         Eyebrow(stringResource(Res.string.today_so_far), heading = true)
+        today?.let { Text(pm25Label(it.basis), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         Spacer(Modifier.height(8.dp))
         if (today == null) {
             Text(

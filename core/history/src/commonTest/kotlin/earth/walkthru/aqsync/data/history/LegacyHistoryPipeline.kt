@@ -51,6 +51,7 @@ internal class LegacyAggregator(
         val bootLo = col("boot_id_lo")
         val seq = col(ParquetIndexer.SEQ)
         val values = metrics.map { col(it.column) }
+        val humidity = metrics.mapNotNull { it.humidityColumn }.distinct().associateWith { col(it) }
         val gates = gateColumns.associateWith { col(it) }
         for (i in 0 until utc.size) {
             var estimated = false
@@ -68,7 +69,7 @@ internal class LegacyAggregator(
                 for ((k, spec) in metrics.withIndex()) {
                     val colv = values[k] ?: continue
                     if (!spec.accepts(spec.gate?.let { g -> gates[g.column]?.asLong(i) })) continue
-                    val v = colv.asDouble(i) ?: continue
+                    val v = colv.asDouble(i)?.let { raw -> spec.valueOf(raw, spec.humidityColumn?.let { h -> humidity[h]?.asDouble(i) }) } ?: continue
                     if (v.isNaN() || v.isInfinite()) continue
                     acc.n[k]++
                     if (spec.settleSeconds > 0 && (monoAll?.asLong(i) ?: Long.MAX_VALUE) < spec.settleSeconds * 1_000_000L) acc.settling[k]++

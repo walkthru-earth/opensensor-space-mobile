@@ -29,4 +29,9 @@
     <string name="mood_strip_selected">%1$s selected</string>
     <!-- The list comma, spoken lists join with it and one space. -->
     <string name="list_separator">,</string>
+    <!-- #92. The short label on every PM2.5 chart and card, saying which PM2.5 it shows. -->
+    <string name="pm25_corrected">PM2.5 corrected</string>
+    <string name="pm25_raw">PM2.5 raw</string>
+    <!-- Behind the info icon of a PM2.5 card. -->
+    <string name="pm25_correction_info">Corrected uses the US EPA humidity correction for this sensor. Raw is the sensor reading as stored. It shows when there is no humidity reading, and always in Detailed. Stored data never changes.</string>
 </resources>

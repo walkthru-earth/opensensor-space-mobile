@@ -33,6 +33,7 @@ import earth.walkthru.aqsync.data.history.localDateOf
 import earth.walkthru.aqsync.units.UnitFormatter
 import earth.walkthru.opensensor.designsystem.AirQualityPeacock
 import earth.walkthru.opensensor.designsystem.listSeparator
+import earth.walkthru.opensensor.designsystem.metricLabel
 import earth.walkthru.opensensor.designsystem.spokenList
 import earth.walkthru.opensensor.history.resources.Res
 import earth.walkthru.opensensor.history.resources.chart_average_value
@@ -82,7 +83,7 @@ internal fun DayRing(
     val average = units.value(mean, metric.unit)?.let { stringResource(Res.string.chart_average_value, fmtValue(it), units.unit(metric.unit)) }
     val description = spokenList(
         listOfNotNull(
-            stringResource(Res.string.chart_ring_title, metric.label),
+            stringResource(Res.string.chart_ring_title, metricLabel(metric)),
             average ?: stringResource(Res.string.history_no_readings_short),
             mood?.titleText(),
             if (showStep) mood?.step?.labelText() else null,
