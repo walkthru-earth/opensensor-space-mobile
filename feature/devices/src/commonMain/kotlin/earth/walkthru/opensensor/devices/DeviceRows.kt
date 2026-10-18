@@ -43,6 +43,7 @@ import earth.walkthru.opensensor.designsystem.SignalBars
 import earth.walkthru.opensensor.designsystem.StatusDot
 import earth.walkthru.opensensor.designsystem.TickingText
 import earth.walkthru.opensensor.designsystem.moodWord
+import earth.walkthru.opensensor.designsystem.pm25Label
 import earth.walkthru.opensensor.devices.resources.Res
 import earth.walkthru.opensensor.devices.resources.ago_days
 import earth.walkthru.opensensor.devices.resources.ago_hours
@@ -230,7 +231,7 @@ private fun ArchiveLine(glance: ArchiveGlance?, level: DetailLevel) {
         val base = stringResource(
             Res.string.scan_archive_day,
             moodWord(mood.step),
-            metric.label,
+            pm25Label(glance.lastDayPm25Basis),
             formatFixed(mean.toDouble(), 0),
             metric.unit,
             "$day ${stringResource(MONTHS[month - 1])}",

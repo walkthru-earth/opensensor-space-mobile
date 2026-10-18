@@ -186,6 +186,16 @@ in charts, on cards and in the peacock expression. The scale lives once in `:cor
   50, 75, 100, 150 µg/m³). A value at or below an edge belongs to the cleaner step. Properties
   without a WHO value (CO₂, temperature, humidity) have no scale and use the neutral viridis
   ramp. The app never invents a scale.
+- **PM2.5 corrected by default.** A row with a valid relative humidity (finite, 0 to 100 %)
+  shows the US EPA corrected PM2.5 for PurpleAir style PMS sensors (Barkjohn et al. 2021, the
+  US-wide piecewise equation the EPA uses on the AirNow Fire and Smoke Map), computed from
+  `pm25_cf1_ug_m3` and `relative_humidity_percent` by `EpaPm25Correction` in `:core:airquality`.
+  Each row is corrected before averaging, never the average. A negative result clamps to 0 and
+  there is no extrapolation. A row without a valid RH, every CoreS3 row and every Discover value
+  (the public feed has no humidity) shows the atmospheric value, labelled raw. Every PM2.5 card
+  and chart says "PM2.5 corrected" or "PM2.5 raw". Simple shows corrected only. Detailed shows
+  corrected first, then raw. The WHO steps judge whichever value is shown. Archive files, the
+  Room index, daily files and exports stay raw. The correction is derived on read and in the tiers.
 - **Fixed, not relative.** A step colour means the same thing in every viewport, window and
   screen. Percentile stretching is only for properties without a scale.
 - **Say the averaging.** The WHO values are 24-hour means. A 1-hour or 7-day mean is still

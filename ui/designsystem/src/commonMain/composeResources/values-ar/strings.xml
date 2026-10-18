@@ -25,4 +25,7 @@
     <string name="mood_strip_selected">تم اختيار %1$s</string>
     <!-- The list comma, spoken lists join with it and one space. -->
     <string name="list_separator">،</string>
+    <string name="pm25_corrected">PM2.5 مصحح</string>
+    <string name="pm25_raw">PM2.5 خام</string>
+    <string name="pm25_correction_info">القيمة المصححة تستخدم تصحيح الرطوبة من وكالة حماية البيئة الأمريكية لهذا المستشعر. القيمة الخام هي قيمة المستشعر نفسه، وتظهر عند غياب قراءة الرطوبة. البيانات المحفوظة لا تتغير أبدا.</string>
 </resources>

@@ -1,11 +1,13 @@
 package earth.walkthru.aqsync.data.history
 
+import earth.walkthru.aqsync.airquality.EpaPm25Correction
 import earth.walkthru.aqsync.data.history.parquet.ColumnValues
 import earth.walkthru.aqsync.data.history.parquet.ParquetCodec
 import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 import earth.walkthru.aqsync.data.history.parquet.ParquetLogicalType
 import earth.walkthru.aqsync.data.history.parquet.ParquetType
 import earth.walkthru.aqsync.data.history.parquet.ParquetWriter
+import kotlin.math.abs
 import kotlin.test.Test
 
 class AggregationTest {
@@ -43,6 +45,8 @@ class AggregationTest {
         assertEquals(1f, q[1].coverage(Metrics.PM25), 1e-6f)
         // Registry entries whose column is null on this board (SHT20) simply have no aggregate — never a zero.
         assertNull(d[0].agg(Metrics.HUMIDITY))
+        // No RH on this board, so no corrected PM2.5. The cards fall back to raw, labelled raw.
+        assertNull(d[0].agg(Metrics.PM25_CORRECTED))
         assertNull(d[0].agg(Metrics.AMBIENT_TEMP))
         assertNotNull(d[0].agg(Metrics.BATTERY))
         // The board booted 38 s before its first row: the first 180 s of uptime are "settling" — 15 rows (38 s → 180 s).
@@ -86,6 +90,37 @@ class AggregationTest {
         assertEquals(20f, pm.max)
         assertEquals(40.5f, b.agg(Metrics.BOARD_TEMP)!!.mean) // NaN skipped
         assertNull(b.agg(Metrics.BATTERY)) // column absent from this file
+    }
+
+    @Test
+    fun `corrected pm25 is the mean of corrected rows and never the corrected mean`() {
+        val agg = Aggregator(station, setOf(Resolution.HOUR))
+        agg.add(ParquetFile.wrap(humidPm25Parquet()))
+        val b = agg.buckets().single()
+        assertEquals(HUMID_HOUR_S, b.startEpochS)
+        val epa = b.agg(Metrics.PM25_CORRECTED)!!
+        // Row 3 has a null RH, row 4 an RH of 120 and row 5 a stale sensor, so two rows count.
+        assertEquals(2, epa.n)
+        val a = EpaPm25Correction.correct(10.0, 50.0)!!
+        val c = EpaPm25Correction.correct(250.0, 80.0)!!
+        assertEquals(((a + c) / 2).toFloat(), epa.mean, 1e-3f)
+        assertEquals(a.toFloat(), epa.min, 1e-3f)
+        assertEquals(c.toFloat(), epa.max, 1e-3f)
+        val ofMean = EpaPm25Correction.correct(130.0, 65.0)!!
+        assertTrue("corrected rows $epa, corrected mean $ofMean", abs(epa.mean - ofMean) > 5)
+        // Stored values never change, the raw aggregate still reads the atmospheric column.
+        val raw = b.agg(Metrics.PM25)!!
+        assertEquals(4, raw.n)
+        assertEquals(60f, raw.mean)
+    }
+
+    @Test
+    fun `file summaries correct each row too`() {
+        val summary = FileSummary.of("humid.parquet", ParquetFile.wrap(humidPm25Parquet()))
+        val a = EpaPm25Correction.correct(10.0, 50.0)!!
+        val c = EpaPm25Correction.correct(250.0, 80.0)!!
+        assertEquals(((a + c) / 2).toFloat(), summary.metrics.getValue(Metrics.PM25_CORRECTED.id).mean, 1e-3f)
+        assertEquals(60f, summary.metrics.getValue(Metrics.PM25.id).mean)
     }
 
     @Test

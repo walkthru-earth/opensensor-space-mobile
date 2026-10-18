@@ -27,6 +27,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,6 +47,8 @@ import earth.walkthru.aqsync.data.history.HistoryColumn
 import earth.walkthru.aqsync.data.history.HistoryRange
 import earth.walkthru.aqsync.data.history.HistorySeries
 import earth.walkthru.aqsync.data.history.HistoryWindow
+import earth.walkthru.aqsync.data.history.MetricSpec
+import earth.walkthru.aqsync.data.history.Metrics
 import earth.walkthru.aqsync.data.history.localDateOf
 import earth.walkthru.aqsync.settings.DetailLevel
 import earth.walkthru.aqsync.units.UnitFormatter
@@ -59,6 +62,8 @@ import earth.walkthru.opensensor.designsystem.PeacockExpression
 import earth.walkthru.opensensor.designsystem.PeacockIcon
 import earth.walkthru.opensensor.designsystem.SectionCard
 import earth.walkthru.opensensor.designsystem.StatLine
+import earth.walkthru.opensensor.designsystem.metricLabel
+import earth.walkthru.opensensor.designsystem.pm25CorrectionInfo
 import earth.walkthru.opensensor.history.resources.Res
 import earth.walkthru.opensensor.history.resources.chart_touch
 import earth.walkthru.opensensor.history.resources.history_archive
@@ -137,6 +142,11 @@ fun HistoryScreen(
 ) {
     val state by controller.state.collectAsState()
     val noValue = stringResource(Res.string.history_no_value)
+    val pickable = pickerMetrics(state.availableMetrics, level)
+    // Simple shows corrected PM2.5 only, so a raw choice made in Detailed moves to corrected.
+    LaunchedEffect(pickable, state.metric) {
+        if (pickable.isNotEmpty() && state.metric !in pickable && state.metric in state.availableMetrics) controller.setMetric(pickable.first())
+    }
     Scaffold(topBar = topBar) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
@@ -180,11 +190,11 @@ fun HistoryScreen(
             item(key = "metric") {
                 // One choice of many, so screen readers hear the chips as a group.
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    state.availableMetrics.forEach { m ->
+                    pickable.forEach { m ->
                         FilterChip(
                             selected = state.metric.id == m.id,
                             onClick = { controller.setMetric(m) },
-                            label = { Text(m.label) },
+                            label = { Text(metricLabel(m)) },
                             shape = FloatingControl.SmallShape,
                             colors = FloatingControl.chipColors(),
                         )
@@ -275,6 +285,7 @@ private fun ArchiveCard(state: HistoryUiState, level: DetailLevel) {
                     stringResource(Res.string.info_history_body3),
                     stringResource(Res.string.info_history_body4),
                     stringResource(colourInfoRes(level)),
+                    pm25CorrectionInfo(),
                 ),
             )
         },
@@ -294,6 +305,13 @@ private fun ArchiveCard(state: HistoryUiState, level: DetailLevel) {
     }
 }
 
+/**
+ * The History metric chips. Detailed offers corrected PM2.5 first and raw second. Simple offers
+ * corrected only, and raw only when no corrected value exists, so it is still labelled raw.
+ */
+internal fun pickerMetrics(available: List<MetricSpec>, level: DetailLevel): List<MetricSpec> =
+    if (!level.detailed && Metrics.PM25_CORRECTED in available) available - Metrics.PM25 else available
+
 /** The archive info line about PM colours. Simple never names WHO. */
 internal fun colourInfoRes(level: DetailLevel): StringResource = if (level.detailed) Res.string.info_history_body5 else Res.string.info_history_body5_simple
 
@@ -309,7 +327,7 @@ private fun ChartCard(state: HistoryUiState, units: UnitFormatter, nowS: Long, l
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Eyebrow(state.metric.label, heading = true)
+                Eyebrow(metricLabel(state.metric), heading = true)
                 Spacer(Modifier.width(6.dp))
                 Eyebrow(units.unit(state.metric.unit), uppercase = false)
                 Spacer(Modifier.weight(1f))

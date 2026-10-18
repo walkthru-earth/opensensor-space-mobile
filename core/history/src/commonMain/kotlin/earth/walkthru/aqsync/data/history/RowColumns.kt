@@ -27,7 +27,25 @@ internal fun LongColumn?.at(i: Int): Long = if (this != null && has(i)) values[i
 
 /** A decoded numeric column as unboxed doubles, as [ColumnValues.asDouble] reads it. Binary columns are all null. */
 internal class DoubleColumn(val values: DoubleArray, private val valid: BooleanArray?) {
+    val size: Int get() = values.size
+
     fun has(i: Int): Boolean = valid == null || valid[i]
+
+    /**
+     * This column's rows as [metric] shows them, [MetricSpec.valueOf] of each row and its [rh]. A row
+     * whose result is null (no valid RH, say) is a missing cell. With no RH column every row is missing.
+     */
+    fun correctedBy(metric: MetricSpec, rh: DoubleColumn?): DoubleColumn {
+        val out = DoubleArray(size)
+        val ok = BooleanArray(size)
+        for (i in 0 until size) {
+            if (!has(i)) continue
+            val v = metric.valueOf(values[i], if (rh != null && rh.has(i)) rh.values[i] else null) ?: continue
+            out[i] = v
+            ok[i] = true
+        }
+        return DoubleColumn(out, ok)
+    }
 
     companion object {
         fun of(column: ColumnValues): DoubleColumn = when (column) {

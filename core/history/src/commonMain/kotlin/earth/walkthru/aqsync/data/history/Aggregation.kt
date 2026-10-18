@@ -89,12 +89,23 @@ class Aggregator(
         val gates: Array<LongColumn?>,
     )
 
-    /** Reads what [metrics] need through [column], which returns null for a column the file lacks. */
+    /**
+     * Reads what [metrics] need through [column], which returns null for a column the file lacks. A
+     * humidity-corrected metric gets its values corrected here, row by row, so every mean, min and max
+     * the tiers keep is of corrected rows and never a corrected mean.
+     */
     internal fun columns(column: (String) -> ColumnValues?): Columns {
         val cache = HashMap<String, LongColumn?>()
+        val doubles = HashMap<String, DoubleColumn?>()
+        fun double(name: String) = doubles.getOrPut(name) { column(name)?.let(DoubleColumn::of) }
         return Columns(
             mono = column(ParquetIndexer.MONO)?.let(LongColumn::of),
-            values = Array(m) { k -> column(metrics[k].column)?.let(DoubleColumn::of) },
+            values = Array(m) { k ->
+                val spec = metrics[k]
+                val stored = double(spec.column)
+                val rh = spec.humidityColumn
+                if (rh == null || stored == null) stored else stored.correctedBy(spec, double(rh))
+            },
             gates = Array(m) { k -> gates[k]?.let { g -> cache.getOrPut(g.column) { column(g.column)?.let(LongColumn::of) } } },
         )
     }

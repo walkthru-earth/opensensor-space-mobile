@@ -1,6 +1,8 @@
 package earth.walkthru.aqsync.data.history
 
+import earth.walkthru.aqsync.airquality.EpaPm25Correction
 import earth.walkthru.aqsync.airquality.HealthScale
+import earth.walkthru.aqsync.airquality.Pm25Basis
 import earth.walkthru.aqsync.airquality.WhoGuidelines
 import earth.walkthru.aqsync.airquality.WhoStep
 
@@ -29,7 +31,7 @@ data class MetricSpec(
     val gate: Gate?,
     /**
      * The published health scale (WHO 2021 for PM2.5 and PM10) that colours and names a value, or
-     * null for a metric shown in a neutral colour. Its property id and unit must match this metric.
+     * null for a metric shown in a neutral colour. Its property id and unit must match [property].
      */
     val healthScale: HealthScale?,
     /** Shown in the History metric picker. */
@@ -44,11 +46,29 @@ data class MetricSpec(
      * ~2.5 µg/m³ mean-abs against minutes 5–10 (14 boots, 2026-09-17), so 180 s for the PMS. Not a gate.
      */
     val settleSeconds: Long = 0,
+    /** The quantity this metric measures, the health scale key. Two views of one quantity share it. */
+    val property: String = id,
+    /** Raw or corrected, for the PM2.5 metrics, so every chart and card can say which it shows. */
+    val basis: Pm25Basis? = null,
+    /**
+     * The RH column the EPA humidity correction reads, or null for a metric shown as stored. When set,
+     * each row's value is [EpaPm25Correction.correct] of [column] (CF=1 PM2.5) and this column, computed
+     * per row before any average, and a row without a valid RH has no value.
+     */
+    val humidityColumn: String? = null,
 ) {
     init {
-        require(healthScale == null || (healthScale.propertyId == id && healthScale.unit == unit)) {
-            "a health scale reads only its own property ($id, $unit)"
+        require(healthScale == null || (healthScale.propertyId == property && healthScale.unit == unit)) {
+            "a health scale reads only its own property ($property, $unit)"
         }
+        require(humidityColumn == null || basis == Pm25Basis.CORRECTED) { "a humidity-corrected metric is labelled corrected" }
+    }
+
+    /** The value a row shows from its stored [raw] value and its [rh], or null when it has none. */
+    fun valueOf(raw: Double, rh: Double?): Double? = when {
+        !raw.isFinite() -> null
+        humidityColumn == null -> raw
+        else -> EpaPm25Correction.correct(raw, rh)
     }
 
     val banded: Boolean get() = healthScale != null
@@ -69,7 +89,18 @@ object Metrics {
     /** Measured on this archive, see [MetricSpec.settleSeconds]. */
     const val PMS_SETTLE_S = 180L
 
-    val PM25 = MetricSpec("pm25", "pm25_atmospheric_ug_m3", "PM2.5", "µg/m³", MetricKind.PARTICLE_MASS, PMS_VALID, WhoGuidelines.PM25, envelope = true, axisFloor = 37.5f, settleSeconds = PMS_SETTLE_S)
+    /**
+     * PM2.5 with the US EPA humidity correction, from the stored CF=1 PM2.5 and the PMS5003T's RH,
+     * row by row. The default PM2.5 wherever a row has a valid RH. Nothing stored changes.
+     */
+    val PM25_CORRECTED = MetricSpec(
+        "pm25_epa", "pm25_cf1_ug_m3", "PM2.5 corrected", "µg/m³", MetricKind.PARTICLE_MASS, PMS_VALID, WhoGuidelines.PM25,
+        envelope = true, axisFloor = 37.5f, settleSeconds = PMS_SETTLE_S,
+        property = "pm25", basis = Pm25Basis.CORRECTED, humidityColumn = "relative_humidity_percent",
+    )
+
+    /** The sensor's own atmospheric PM2.5, as stored. Shown when no valid RH exists, and in Detailed next to the corrected value. */
+    val PM25 = MetricSpec("pm25", "pm25_atmospheric_ug_m3", "PM2.5 raw", "µg/m³", MetricKind.PARTICLE_MASS, PMS_VALID, WhoGuidelines.PM25, envelope = true, axisFloor = 37.5f, settleSeconds = PMS_SETTLE_S, basis = Pm25Basis.RAW)
 
     /** Optional Plantower batch equation, gated separately and never used as the primary PM2.5 reading. */
     val PM25_BATCH_ESTIMATE = MetricSpec("pm25_batch", "pm25_batch_candidate_ug_m3", "PM2.5 batch estimate (unvalidated)", "µg/m³", MetricKind.PARTICLE_MASS, Gate("pm25_batch_candidate_status", 3), null, envelope = true, axisFloor = 60f, settleSeconds = PMS_SETTLE_S)
@@ -86,11 +117,17 @@ object Metrics {
     val VBUS = MetricSpec("vbus", "vbus_mv", "USB voltage", "mV", MetricKind.POWER, null, null, chartable = false)
 
     /** Every metric the tiers keep. Order = picker order. */
-    val all: List<MetricSpec> = listOf(PM25, PM25_BATCH_ESTIMATE, PM10, PM1, PARTICLES_GT03, PARTICLES_GT25, BOARD_TEMP, AMBIENT_TEMP, HUMIDITY, BATTERY, VBUS)
+    val all: List<MetricSpec> = listOf(PM25_CORRECTED, PM25, PM25_BATCH_ESTIMATE, PM10, PM1, PARTICLES_GT03, PARTICLES_GT25, BOARD_TEMP, AMBIENT_TEMP, HUMIDITY, BATTERY, VBUS)
     val chartable: List<MetricSpec> get() = all.filter { it.chartable }
 
     fun byId(id: String): MetricSpec? = all.firstOrNull { it.id == id }
 
-    /** The one metric the friendly layer speaks about. */
+    /**
+     * The metric whose row counts are a bucket's "valid readings". Raw PM2.5, since a row counts as
+     * read whether or not it has an RH to correct it.
+     */
     val primary: MetricSpec get() = PM25
+
+    /** The PM2.5 views, corrected first, the order every PM2.5 card picks from. */
+    val pm25Views: List<MetricSpec> get() = listOf(PM25_CORRECTED, PM25)
 }

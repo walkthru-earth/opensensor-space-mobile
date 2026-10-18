@@ -39,6 +39,7 @@ import earth.walkthru.opensensor.designsystem.AppIcons
 import earth.walkthru.opensensor.designsystem.FloatingControl
 import earth.walkthru.opensensor.designsystem.InfoButton
 import earth.walkthru.opensensor.designsystem.InfoContent
+import earth.walkthru.opensensor.designsystem.metricLabel
 import earth.walkthru.opensensor.history.BandColumnChart
 import kotlinx.datetime.toKotlinTimeZone
 import java.time.Instant
@@ -71,7 +72,7 @@ fun FileChartCard(
                     }
                     if (state != null) {
                         Text(
-                            pluralStringResource(R.plurals.chart_by_file_summary, state.total, state.total, state.metric.label),
+                            pluralStringResource(R.plurals.chart_by_file_summary, state.total, state.total, metricLabel(state.metric)),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -85,7 +86,7 @@ fun FileChartCard(
                     FilterChip(
                         selected = state.metric.id == m.id,
                         onClick = { onMetric(m) },
-                        label = { Text(m.label) },
+                        label = { Text(metricLabel(m)) },
                         shape = FloatingControl.SmallShape,
                         colors = FloatingControl.chipColors(),
                     )
@@ -167,12 +168,12 @@ private fun SelectedFile(s: FileSummary, metric: MetricSpec, fmt: DateTimeFormat
     Column(Modifier.padding(top = 4.dp)) {
         Text(s.name.substringAfterLast('/'), style = MaterialTheme.typography.labelMedium, fontFamily = FontFamily.Monospace)
         Text(
-            pluralStringResource(R.plurals.file_chart_rows, a?.n ?: 0, pluralStringResource(R.plurals.fm_rows_count, s.rows.toInt(), s.rows), a?.n ?: 0, metric.label, span),
+            pluralStringResource(R.plurals.file_chart_rows, a?.n ?: 0, pluralStringResource(R.plurals.fm_rows_count, s.rows.toInt(), s.rows), a?.n ?: 0, metricLabel(metric), span),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
-            if (a != null) stringResource(R.string.file_chart_stats, fmt1(units.value(a.mean, u)), units.unit(u), fmt1(units.value(a.min, u)), fmt1(units.value(a.max, u))) else stringResource(R.string.file_chart_no_valid, metric.label),
+            if (a != null) stringResource(R.string.file_chart_stats, fmt1(units.value(a.mean, u)), units.unit(u), fmt1(units.value(a.min, u)), fmt1(units.value(a.max, u))) else stringResource(R.string.file_chart_no_valid, metricLabel(metric)),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

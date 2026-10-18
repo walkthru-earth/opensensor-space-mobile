@@ -1,5 +1,6 @@
 package earth.walkthru.aqsync.data.history
 
+import earth.walkthru.aqsync.airquality.EpaPm25Correction
 import earth.walkthru.aqsync.archive.ArchiveIndex
 import earth.walkthru.aqsync.archive.ArchiveKey
 import earth.walkthru.aqsync.archive.ArchiveRecord
@@ -238,6 +239,38 @@ class HistorySourcesTest {
 
         val empty = reader.observe(station, Metrics.PM25, HistoryRange.DAY, window(HistoryRange.DAY, dayStart)).first()
         assertTrue(empty.isEmpty)
+    }
+
+    @Test
+    fun corrected_pm25_is_read_row_by_row_and_falls_back_to_nothing_without_rh() = runTest {
+        // #92. The Day view and the tiers both correct each row, then average.
+        val store = Store()
+        val index = Index()
+        val humid = humidPm25Parquet()
+        val r = ArchiveRecord(station = station, name = "station=$station/year=2026/month=09/day=17/humid.parquet", bytes = humid.size.toLong(), crc32 = 7, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake")
+        store.files[r.key] = humid
+        index.put(r)
+        ArchiveIndexRepair(store, index, nowEpochMs = { 42L }).backfillAll()
+        val tiers = ArchiveHistoryTiers(store, index)
+        val reader = HistorySeriesReader(store, index, tiers)
+        val expected = ((EpaPm25Correction.correct(10.0, 50.0)!! + EpaPm25Correction.correct(250.0, 80.0)!!) / 2).toFloat()
+        val day = reader.observe(station, Metrics.PM25_CORRECTED, HistoryRange.DAY, window(HistoryRange.DAY, dayStart + 86_400)).first()
+        assertEquals(2L, day.validRows)
+        assertEquals(expected, day.mean!!, 1e-3f)
+        val raw = reader.observe(station, Metrics.PM25, HistoryRange.DAY, window(HistoryRange.DAY, dayStart + 86_400)).first()
+        assertEquals(4L, raw.validRows)
+        assertEquals(60f, raw.mean!!, 1e-3f)
+        val week = reader.observe(station, Metrics.PM25_CORRECTED, HistoryRange.WEEK, window(HistoryRange.WEEK, dayStart + 86_400)).first()
+        assertEquals(expected, week.mean!!, 1e-3f)
+        assertTrue(Metrics.PM25_CORRECTED.id in tiers.observeMetricsWithData(station).first())
+
+        // The board file has no RH, so it has no corrected PM2.5 at all and the cards show raw.
+        val (boardStore, boardIndex) = archive("station=$station/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet")
+        val boardTiers = ArchiveHistoryTiers(boardStore, boardIndex)
+        val none = HistorySeriesReader(boardStore, boardIndex, boardTiers)
+            .observe(station, Metrics.PM25_CORRECTED, HistoryRange.DAY, window(HistoryRange.DAY, dayStart + 86_400)).first()
+        assertEquals(0L, none.validRows)
+        assertFalse(Metrics.PM25_CORRECTED.id in boardTiers.observeMetricsWithData(station).first())
     }
 
     @Test

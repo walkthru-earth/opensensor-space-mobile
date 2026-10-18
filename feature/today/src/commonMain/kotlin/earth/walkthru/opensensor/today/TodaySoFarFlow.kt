@@ -1,5 +1,6 @@
 package earth.walkthru.opensensor.today
 
+import earth.walkthru.aqsync.airquality.Pm25Basis
 import earth.walkthru.aqsync.data.history.ArchiveDayQuery
 import earth.walkthru.aqsync.data.history.HistorySeries
 import earth.walkthru.aqsync.data.history.HistoryWindow
@@ -32,7 +33,7 @@ fun localDayStarts(zone: TimeZone, periodMs: Long = 60_000): Flow<Long> = flow {
 
 /**
  * Today so far for the connected [station], the local calendar day like the History Day view, from
- * the hourly tier of the phone archive. Null until the archive has a mean for this station and day.
+ * the hourly tier of the phone archive. The EPA corrected PM2.5 mean when the day has one, else raw. Null until the archive has a mean for this station and day.
  * A station or day change drops the old answer first, so a value never shows under the wrong device.
  * Both apps feed it their own [observeHourlyDay] (the shared `HistorySeriesReader`).
  */
@@ -48,8 +49,10 @@ fun todaySoFar(
             if (id == null) {
                 flowOf(null)
             } else {
-                observeHourlyDay(id, Metrics.primary, query.window).map { series ->
-                    series.mean?.let { TodaySoFar(it, series.validRows.toInt(), series.coverage) }
+                // Corrected PM2.5 when the day has rows with a valid RH, else raw, labelled by its basis.
+                combine(observeHourlyDay(id, Metrics.PM25_CORRECTED, query.window), observeHourlyDay(id, Metrics.PM25, query.window)) { corrected, raw ->
+                    val series = if (corrected.mean != null) corrected else raw
+                    series.mean?.let { TodaySoFar(it, series.validRows.toInt(), series.coverage, series.metric.basis ?: Pm25Basis.RAW) }
                 }
             }
         }

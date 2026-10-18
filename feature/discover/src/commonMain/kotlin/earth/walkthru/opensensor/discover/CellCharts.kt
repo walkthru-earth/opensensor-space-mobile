@@ -145,11 +145,11 @@ internal fun SpreadChart(
     val peakBin = counts.indices.maxByOrNull { counts[it] }?.takeIf { counts[it] > 0 }
     val peak = peakBin?.let { i -> strings.spreadPeak(formatValue(binFrom(i), property, units), formatValue(binTo(i), property, units), unit) }
     val spoken = buildString {
-        append(strings.spreadSummary(property.label, values.size, low, high, unit))
+        append(strings.spreadSummary(property.shownLabel(), values.size, low, high, unit))
         if (peak != null) append(". ").append(peak)
         if (here != null) {
             append(". ")
-            append(strings.rangeSummary(property.label, formatValue(here, property, units), hereMin?.let { formatValue(it, property, units) }, hereMax?.let { formatValue(it, property, units) }, unit))
+            append(strings.rangeSummary(property.shownLabel(), formatValue(here, property, units), hereMin?.let { formatValue(it, property, units) }, hereMax?.let { formatValue(it, property, units) }, unit))
             health?.stepOf(here)?.let { append(". ").append(strings.stepName(it)) }
         }
         if (offScale != null) append(". ").append(offScale)
@@ -313,7 +313,7 @@ internal fun RangeRow(range: MetricRange, strings: DiscoverStrings, onClick: () 
     val units = LocalDiscoverUnits.current
     val unit = unitLabel(p, units)
     val stepName = range.step?.let { strings.stepName(it) }
-    val summary = strings.rangeSummary(p.label, formatValue(range.mean, p, units), range.min?.let { formatValue(it, p, units) }, range.max?.let { formatValue(it, p, units) }, unit)
+    val summary = strings.rangeSummary(p.shownLabel(), formatValue(range.mean, p, units), range.min?.let { formatValue(it, p, units) }, range.max?.let { formatValue(it, p, units) }, unit)
     val spoken = if (stepName != null) "$summary. $stepName" else summary
     Row(
         Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(role = Role.Button, onClick = onClick).padding(vertical = 6.dp)
@@ -321,7 +321,7 @@ internal fun RangeRow(range: MetricRange, strings: DiscoverStrings, onClick: () 
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(0.9f)) {
-            Text(p.label, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
+            Text(p.shownLabel(), style = MaterialTheme.typography.bodyLarge, maxLines = 1)
             Text(unit, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
             if (stepName != null) Text(stepName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
         }

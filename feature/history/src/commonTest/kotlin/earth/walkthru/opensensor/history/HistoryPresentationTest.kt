@@ -2,7 +2,9 @@ package earth.walkthru.opensensor.history
 
 import earth.walkthru.aqsync.archive.ArchiveIndex
 import earth.walkthru.aqsync.archive.ArchiveRecord
+import earth.walkthru.aqsync.data.history.Metrics
 import earth.walkthru.aqsync.data.history.startOfDay
+import earth.walkthru.aqsync.settings.DetailLevel
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlin.test.Test
@@ -66,5 +68,15 @@ class HistoryPresentationTest {
         val recent = file("recent", "recent", dated = true, lastUtcNs = 2_000)
         val untimed = file("untimed", "untimed", dated = false)
         assertEquals(listOf("untimed", "old", "recent"), archiveStations(listOf(recent, untimed, old)))
+    }
+
+    @Test
+    fun simpleOffersCorrectedPm25OnlyAndDetailedOffersCorrectedThenRaw() {
+        val both = listOf(Metrics.PM25_CORRECTED, Metrics.PM25, Metrics.AMBIENT_TEMP)
+        assertEquals(listOf(Metrics.PM25_CORRECTED, Metrics.AMBIENT_TEMP), pickerMetrics(both, DetailLevel.SIMPLE))
+        assertEquals(both, pickerMetrics(both, DetailLevel.DETAILED))
+        // No humidity anywhere, so Simple keeps raw PM2.5, labelled raw.
+        val rawOnly = listOf(Metrics.PM25, Metrics.AMBIENT_TEMP)
+        assertEquals(rawOnly, pickerMetrics(rawOnly, DetailLevel.SIMPLE))
     }
 }

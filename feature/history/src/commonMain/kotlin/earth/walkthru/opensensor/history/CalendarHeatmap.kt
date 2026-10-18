@@ -37,6 +37,7 @@ import earth.walkthru.aqsync.data.history.localDateOf
 import earth.walkthru.aqsync.data.history.startOfDay
 import earth.walkthru.aqsync.units.UnitFormatter
 import earth.walkthru.opensensor.designsystem.listSeparator
+import earth.walkthru.opensensor.designsystem.metricLabel
 import earth.walkthru.opensensor.designsystem.spokenList
 import earth.walkthru.opensensor.history.resources.Res
 import earth.walkthru.opensensor.history.resources.chart_calendar_title
@@ -93,7 +94,7 @@ internal fun CalendarHeatmap(
     val daysWithReadings = readable.size
     val separator = listSeparator()
     val summary = listOfNotNull(
-        stringResource(Res.string.chart_calendar_title, metric.label),
+        stringResource(Res.string.chart_calendar_title, metricLabel(metric)),
         stringResource(Res.string.chart_days_with_readings, daysWithReadings, shownDays),
         chartHighest(days.filter { it.startS >= fromS && it.startS < toS }, metric, units, stepNamed = showStep) { c -> formatEpoch(c.startS, zone, DAY_SPOKEN) },
     ).let { spokenList(it, separator) }

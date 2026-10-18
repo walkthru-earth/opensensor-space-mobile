@@ -115,6 +115,8 @@ erDiagram
 ```
 
 `metric_bucket` and `derived_day` are **caches**: drop them and derive again → identical rows.
+The EPA corrected PM2.5 (`metricId = pm25_epa`, #92) is one more `metric_bucket` metric derived
+from the raw cf1 and RH columns. Archived files and `archived_file` rows never change.
 `archived_file` is the index of the archive, never its source of truth (a file the reader refuses
 keeps its row with `indexError`).
 `pruned_file` holds the files the user removed from this phone in Settings. Sync skips one while the

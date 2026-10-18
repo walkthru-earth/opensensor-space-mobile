@@ -63,6 +63,7 @@ import earth.walkthru.aqsync.units.displayAxisTicks
 import earth.walkthru.aqsync.units.formatFixed
 import earth.walkthru.aqsync.units.tickDecimals
 import earth.walkthru.opensensor.designsystem.listSeparator
+import earth.walkthru.opensensor.designsystem.metricLabel
 import earth.walkthru.opensensor.designsystem.spokenList
 import earth.walkthru.opensensor.history.resources.Res
 import earth.walkthru.opensensor.history.resources.chart_bars_title
@@ -161,7 +162,7 @@ fun BandColumnChart(
     } else {
         barSlot?.let { name -> { c -> name(c) } }
     }
-    val summary = chartSummary(stringResource(Res.string.chart_bars_title, metric.label), columns, metric, units, stepNamed = level.detailed, slot = if (xLabels == null) slot else null)
+    val summary = chartSummary(stringResource(Res.string.chart_bars_title, metricLabel(metric)), columns, metric, units, stepNamed = level.detailed, slot = if (xLabels == null) slot else null)
     val bars = readableBars(columns)
     val separator = listSeparator()
     val estimated = stringResource(Res.string.history_estimated_time)

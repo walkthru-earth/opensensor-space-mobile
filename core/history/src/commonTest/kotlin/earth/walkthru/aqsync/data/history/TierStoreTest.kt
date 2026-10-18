@@ -112,6 +112,28 @@ class TierStoreTest {
     }
 
     @Test
+    fun tiersSavedByAnOlderVersionAreRebuilt() = runTest {
+        // Version 3 added the EPA corrected PM2.5 metric (#92). Saved days must rebuild to gain it.
+        assertTrue(TierCodec.VERSION >= 3, "the corrected PM2.5 tier needs codec version 3")
+        val (store, index, station) = archive()
+        val tierStore = MemoryTierStore()
+        ArchiveHistoryTiers(store, index, tierStore = tierStore).observeDays(station).first()
+        assertTrue(tierStore.saved.isNotEmpty())
+        // Rewrite each saved day's leading version, little endian, to the previous one.
+        for (bytes in tierStore.saved.values) {
+            val old = TierCodec.VERSION - 1
+            for (i in 0 until 4) bytes[i] = (old ushr (8 * i)).toByte()
+            assertNull(TierCodec.decodeSaved(bytes))
+        }
+        val saves = tierStore.saves
+        val restarted = ArchiveHistoryTiers(store, index, tierStore = tierStore)
+        assertTrue(restarted.observeDays(station).first().count > 0)
+        assertTrue(restarted.decodedDays > 0, "an old saved day is rebuilt from the archive")
+        assertTrue(tierStore.saves > saves)
+        for (bytes in tierStore.saved.values) assertNotNull(TierCodec.decodeSaved(bytes))
+    }
+
+    @Test
     fun anotherSignatureOrDamagedBytesGiveNothing() {
         val bytes = TierCodec.encode("sig", sample)
         assertNull(TierCodec.decode(bytes, "other"))
