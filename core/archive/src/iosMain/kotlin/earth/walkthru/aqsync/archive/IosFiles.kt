@@ -94,11 +94,14 @@ internal object IosFiles {
         }
     }
 
-    /** Paths below [dir], relative to it, without following links. Empty when [dir] is absent. */
-    fun walk(dir: String): List<String> {
+    /** Paths below [dir], relative to it, without following links. Empty when [dir] is absent or cannot be listed. */
+    fun walk(dir: String): List<String> = walkOrNull(dir).orEmpty()
+
+    /** As [walk], but null when [dir] is a directory that cannot be listed, so a caller can tell it from an empty one. */
+    fun walkOrNull(dir: String): List<String>? {
         if (kind(dir) != Kind.DIRECTORY) return emptyList()
         @Suppress("UNCHECKED_CAST")
-        return (fm.subpathsOfDirectoryAtPath(dir, null) as? List<String>).orEmpty()
+        return fm.subpathsOfDirectoryAtPath(dir, null) as? List<String>
     }
 
     /** A small regular file's bytes, or null when absent, not a regular file or over [maxBytes]. */

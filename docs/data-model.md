@@ -118,8 +118,8 @@ erDiagram
 `archived_file` is the index of the archive, never its source of truth (a file the reader refuses
 keeps its row with `indexError`).
 `pruned_file` holds the files the user removed from this phone in Settings. Sync skips one while the
-device lists the same name and size and the phone has no copy. Settings › Storage › Download again
-empties it. Both phones use this table through `RoomPrunedFiles`, behind the `PrunedFiles` port in
+device lists the same name and size and the phone has no copy. Settings › Storage › Removed files ›
+Download again empties it. Both phones use this table through `RoomPrunedFiles`, behind the `PrunedFiles` port in
 `:core:archive`. On the first open of the iOS database, `LegacyReceiptImport` moves an older build's
 `SensorArchive-pruned/pruned.v1` marks and `.verified.json` receipts into Room once. A receipt
 becomes a record only if its file passes size, CRC-32 and `PAR1`, and a half-written, failing or
@@ -127,8 +127,9 @@ throwing receipt is skipped. The rows are checkpointed (`wal_checkpoint(FULL)`) 
 `receipts-imported` marker is written, and that launch deletes nothing. The next launch deletes every
 receipt and `pruned.v1` without touching Room, so a row or mark removed in between stays removed.
 Once none is left it writes `receipts-settled`, and from then on no launch walks the archive or
-checkpoints. A launch cut short during the deletes leaves `receipts-settled` unwritten, so the next
-one finishes them and never imports again.
+checkpoints. A launch cut short during the deletes, or one that cannot list the archive, leaves
+`receipts-settled` unwritten, so the next one finishes them and never imports again. A first launch
+that cannot list the archive writes no marker and imports on the next launch.
 
 ### Migrations
 
@@ -260,7 +261,7 @@ zip stays the byte-exact mirror and the derived zip is the small analysis-ready 
 
 | Class | Directories | Janitor |
 | --- | --- | --- |
-| Durable | `archive/`, the Room database, `clock-anchors/` (iOS `SensorArchive/`, its receipts, `SensorArchive-clock-anchors/`) | never deletes |
+| Durable | `archive/`, the Room database, `clock-anchors/` (iOS `SensorArchive/`, `SensorArchive-clock-anchors/`) | never deletes |
 | Rebuildable | `cacheDir/derived/v1/` (iOS `Library/Caches/derived/v1/`), the map tile cache `cacheDir/maplibre-cache.db`, the feed block cache `cacheDir/feed-blocks/` (iOS `Library/Caches/feed-blocks/`) | old derived temps, a `derived/` left in `filesDir` or Application Support by an older build (removed whole), then the derived quota |
 | Scratch | `archive-partial/`, `storage-tmp/`, `cache/export/` (iOS `tmp/opensensor-export/`) | temps after 1 h (derived builds stream into theirs), export runs after 1 h, partials of an unknown station after 1 h, any partial after 30 days |
 | Settings | `datastore/` | never deletes |
