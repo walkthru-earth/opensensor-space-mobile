@@ -134,6 +134,49 @@ class HistoryGoldenTest {
         assertTrue(rows > 500, "the corpus covers $rows rows")
     }
 
+    /**
+     * #98. The streaming builder decodes a source only while its hours are written. On every station-day
+     * of the corpus it writes the same bytes, and gives the same tiers and result, as the builder that
+     * held every column of the day ([PreStreamingDailyParquetBuilder]).
+     */
+    @Test
+    fun theStreamingBuilderWritesTheSameBytesAsTheOneThatHeldTheWholeDay() {
+        val (stations, anchors) = archive()
+        var days = 0
+        var groups = 0
+        for ((station, entries) in stations) {
+            for (day in StationDays.of(entries.map { it.record })[station].orEmpty().sorted()) {
+                val from = day * StationDays.DAY_NS
+                val dayEntries = entries.filter { it.record.onTimeline(from, from + StationDays.DAY_NS) }
+                val now = (day + 2) * 86_400
+                val oldSink = MemorySink()
+                val old = PreStreamingDailyParquetBuilder.pass(station, day, dayEntries.map { it.source() }, oldSink, anchors, now, Aggregator(station), strict = false)
+                val newSink = MemorySink()
+                val new = DayPass.run(station, day, dayEntries.map { it.source() }, newSink, anchors, now)
+                assertEquals(old.buckets, new.buckets, "tiers of $station day $day")
+                assertEquals(old.rowsRead, new.rowsRead)
+                assertEquals(old.failedSources, new.failedSources)
+                assertEquals(old.daily?.rows, new.daily?.rows)
+                assertEquals(old.daily?.columns, new.daily?.columns)
+                assertEquals(old.daily?.rowGroups, new.daily?.rowGroups)
+                assertEquals(old.daily?.sources, new.daily?.sources)
+                assertContentEquals(oldSink.toByteArray(), newSink.toByteArray(), "daily bytes of $station day $day")
+
+                val strictOld = MemorySink()
+                val strictNew = MemorySink()
+                assertEquals(
+                    PreStreamingDailyParquetBuilder.build(station, day, dayEntries.map { it.source() }, strictOld, anchors, now),
+                    DailyParquetBuilder.build(station, day, dayEntries.map { it.source() }, strictNew, anchors, now),
+                )
+                assertContentEquals(strictOld.toByteArray(), strictNew.toByteArray(), "strict daily bytes of $station day $day")
+                if (new.daily != null) days++
+                groups += new.daily?.rowGroups ?: 0
+            }
+        }
+        assertTrue(days >= 6, "the corpus covers $days station-days")
+        assertTrue(groups > days, "some days span several hours, $groups row groups")
+    }
+
     @Test
     fun aTiersOnlyPassGivesTheSameTiersWithoutADailyFile() {
         val (stations, anchors) = archive()
