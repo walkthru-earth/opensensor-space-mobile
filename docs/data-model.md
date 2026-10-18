@@ -189,13 +189,13 @@ No destructive fallback. Every version's JSON is exported to `app/schemas/`. Tok
 not change the SQL schema: `SecureKnownDeviceDao` encrypts new values with AES-256-GCM under a
 non-exportable Android Keystore key. Row reads return the ciphertext unchanged, so ViewModels never
 hold plaintext, and an upsert of a read row stores the same ciphertext again. Only
-`LanCredentialStore.lanToken(address)` decrypts, in the data layer, when a LAN transport is built. On first launch after upgrade,
+`LanCredentialStore.lanCredential(address)` decrypts, in the data layer, when a LAN transport is built. On first launch after upgrade,
 existing 64-character plaintext values are encrypted in place before the scheduler or event triggers
 start; a dedicated `LanTokenMigration` binding avoids casting the DAO implementation. A marker in
 `noBackupFilesDir` makes that migration idempotent without putting key state into backup. If an
 encrypted value cannot be authenticated (`AEADBadTagException`, also the result when the key was
 regenerated, for example after device-to-device transfer), its key was permanently invalidated, or it
-has malformed `enc1` framing, `lanToken` clears only that row's `lanToken` and `lanPort`, preserves
+has malformed `enc1` framing, `lanCredential` clears only that row's `lanToken` and `lanPort` with one conditional update that matches the ciphertext it read, so a token renewed meanwhile survives. It preserves
 the device and settings, and returns no credential until a later bonded BLE session refreshes it. A
 transient `KeyStoreException` or `UnrecoverableKeyException` propagates and keeps the credential.
 Unrelated crypto, programming and database failures also propagate.
@@ -203,7 +203,7 @@ Unrelated crypto, programming and database failures also propagate.
 ### Write semantics that bit us
 
 - **`@Upsert` on an entity with an auto id and a unique index updates nothing** (it runs `UPDATE … WHERE id = ?` with id 0). `archived_file` and `derived_day` use `@Insert(onConflict = REPLACE)` — the id carries no meaning. `known_device` (address is the PK) may use `@Upsert`.
-- **`openSession` rewrites every `KnownDevice` column.** The post-`info` upsert carries `previous?.autoSync` and `previous?.companionAssociationId`; future columns must be preserved too. Identity checks run before the upsert, and a station change deliberately discards the old token and port.
+- **`openSession` never writes a `KnownDevice` snapshot.** `connect()` already inserts a placeholder row with `insertIfAbsent` before the link opens. After `info`, `openSession` calls `insertIfAbsent` again with default settings, which adds a row only if it is still missing and returns -1 otherwise. An existing row gets `recordConnection`, which writes identity and timestamps only, so Auto-sync, the companion association and the LAN credential keep their latest value. Identity checks run before that write, and a station change clears the old token and port first with `setLanToken`. Clearing an unusable credential, or a token the LAN refused or rotated, uses `clearLanTokenIfStored`, one conditional update on the ciphertext that failed.
 - **`ArchiveIndex.update` is one Room transaction** (`ArchivedFileDao.update`, `@Transaction`), so index repair and a sync never lose each other's columns. `RoomArchiveIndexTest` runs 64 concurrent updates on one key.
 - `derived_day.dailyFile == null` means the daily Parquet failed → its signature is treated as stale next pass.
 
@@ -342,6 +342,6 @@ removed — Android 12+ (our minSdk) reads only `dataExtractionRules`.
 | `archived_file` index columns | `ArchivedFile.info()` → `IndexedFileInfo` (pure), `HistoryIndexer`, `withUtcBetween` (filters `purpose`) |
 | `metric_bucket` meaning | bump `HistoryDeriver.DERIVE_VERSION` (part of every day's signature) |
 | `derived_day.sourceSignature` inputs | which days rebuild after a sync — keep `name:crc32` + anchor |
-| `known_device` columns | the `openSession` upsert line; `KnownDevice.toString` redaction |
+| `known_device` columns | `insertIfAbsent` defaults and `recordConnection` in `openSession`; `KnownDevice.toString` redaction |
 | `station_epoch` / continuity policy | History's generation picker, reset provenance, credential renewal; never archive path rewriting |
 | `FileArchive.root` | `data_extraction_rules.xml` device-transfer include, Export zips, `HistoryIndexer` |

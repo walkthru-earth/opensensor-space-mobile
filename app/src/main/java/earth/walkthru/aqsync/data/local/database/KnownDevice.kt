@@ -80,6 +80,24 @@ interface KnownDeviceDao {
     @Query("UPDATE known_device SET lanToken = :tokenHex, lanPort = :port WHERE address = :address")
     suspend fun setLanToken(address: String, tokenHex: String?, port: Int?)
 
+    /**
+     * Clears the LAN credential and port only while the row still holds [expected], in one
+     * statement, so a credential renewed after [expected] was read survives. Returns the rows changed.
+     */
+    @Query("UPDATE known_device SET lanToken = NULL, lanPort = NULL WHERE address = :address AND lanToken = :expected")
+    suspend fun clearLanTokenIfStored(address: String, expected: String): Int
+
+    /**
+     * Records a verified connection on an existing row. Writes identity and timestamps only and
+     * never the user's settings or the LAN credential, so changes made meanwhile survive.
+     * A null [name] keeps the stored one.
+     */
+    @Query(
+        "UPDATE known_device SET name = COALESCE(:name, name), station = :station, deviceId = :deviceId, " +
+            "firmware = :firmware, lastSeenEpochMs = :epochMs, lastConnectedEpochMs = :epochMs WHERE address = :address",
+    )
+    suspend fun recordConnection(address: String, name: String?, station: String?, deviceId: String?, firmware: String?, epochMs: Long)
+
     @Query("SELECT * FROM known_device WHERE station = :station LIMIT 1")
     suspend fun findByStation(station: String): KnownDevice?
 
