@@ -34,6 +34,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import earth.walkthru.aqsync.units.UnitFormatter
 import earth.walkthru.opensensor.designsystem.AppIcons
+import earth.walkthru.opensensor.designsystem.FitText
 import earth.walkthru.opensensor.today.resources.Res
 import earth.walkthru.opensensor.today.resources.action_cancel
 import earth.walkthru.opensensor.today.resources.action_reconnect
@@ -166,7 +167,8 @@ fun TodayContent(
                         title = {
                             Column {
                                 // The device name titles the page (TalkBack headings list, VoiceOver rotor).
-                                Text(
+                                // Fits to one line, then wraps only between words, so "AQ-7500" never splits (#143).
+                                FitText(
                                     snapshot.name ?: stringResource(Res.string.device_unnamed),
                                     style = MaterialTheme.typography.titleLarge,
                                     modifier = Modifier.semantics { heading() },
@@ -176,7 +178,7 @@ fun TodayContent(
                                     if (level.detailed) TransportChip(snapshot.transport)
                                     if (level.developer) {
                                         snapshot.info?.station?.let {
-                                            Text(
+                                            FitText(
                                                 stringResource(Res.string.today_station_short, it.take(8)),
                                                 style = MaterialTheme.typography.labelSmall,
                                                 fontFamily = FontFamily.Monospace,

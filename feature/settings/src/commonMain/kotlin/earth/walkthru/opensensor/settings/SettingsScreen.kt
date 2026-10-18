@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import earth.walkthru.aqsync.settings.DetailLevel
 import earth.walkthru.aqsync.units.UnitSystem
+import earth.walkthru.opensensor.designsystem.FitText
 import earth.walkthru.opensensor.designsystem.FloatingControl
 import earth.walkthru.opensensor.designsystem.MinTouchTarget
 import earth.walkthru.opensensor.designsystem.cardSemantics
@@ -217,7 +218,7 @@ private fun <T> Choice(label: String, options: List<T>, selected: T, optionLabel
                 onClick = { onSelect(option) },
                 shape = FloatingControl.segmentShape(i, options.size),
                 colors = FloatingControl.segmentedColors(),
-                label = { Text(optionLabel(option), maxLines = 1) },
+                label = { FitText(optionLabel(option)) },
             )
         }
     }

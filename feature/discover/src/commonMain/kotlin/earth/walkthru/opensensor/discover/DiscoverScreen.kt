@@ -78,7 +78,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationBackHandler
@@ -96,6 +95,7 @@ import earth.walkthru.aqsync.settings.DetailLevel
 import earth.walkthru.aqsync.settings.DiscoverSource
 import earth.walkthru.aqsync.units.UnitFormatter
 import earth.walkthru.aqsync.units.UnitSystem
+import earth.walkthru.opensensor.designsystem.FitText
 import earth.walkthru.opensensor.designsystem.FloatingControl
 import earth.walkthru.opensensor.designsystem.FloatingSurface
 import earth.walkthru.opensensor.designsystem.MoodLegend
@@ -457,7 +457,7 @@ private fun SourceSegment(label: String, selected: Boolean, enabled: Boolean, di
                 .padding(horizontal = 12.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Text(label, style = MaterialTheme.typography.labelLarge, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            FitText(label, style = MaterialTheme.typography.labelLarge, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, color = color)
         }
     }
 }

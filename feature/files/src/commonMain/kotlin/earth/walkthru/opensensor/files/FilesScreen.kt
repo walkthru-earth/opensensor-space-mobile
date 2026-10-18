@@ -55,6 +55,7 @@ import earth.walkthru.aqsync.data.sync.SyncPlan
 import earth.walkthru.aqsync.settings.DetailLevel
 import earth.walkthru.opensensor.designsystem.AppIcons
 import earth.walkthru.opensensor.designsystem.Eyebrow
+import earth.walkthru.opensensor.designsystem.FitText
 import earth.walkthru.opensensor.designsystem.FloatingTextButton
 import earth.walkthru.opensensor.designsystem.MascotGuide
 import earth.walkthru.opensensor.designsystem.Peacock
@@ -364,14 +365,13 @@ fun FilesScreen(
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                             ) {
                                 CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 1.5.dp)
-                                Text(stringResource(Res.string.files_refreshing), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                                FitText(stringResource(Res.string.files_refreshing), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         } else {
-                            Text(
+                            FitText(
                                 stringResource(Res.string.files_listed, ago(listing.atEpochMs)),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
                             )
                         }
                     }
