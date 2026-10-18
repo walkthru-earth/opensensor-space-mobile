@@ -107,6 +107,7 @@ import earth.walkthru.opensensor.history.resources.history_range_day
 import earth.walkthru.opensensor.history.resources.history_range_month
 import earth.walkthru.opensensor.history.resources.history_range_week
 import earth.walkthru.opensensor.history.resources.history_range_year
+import earth.walkthru.opensensor.history.resources.history_read_failed
 import earth.walkthru.opensensor.history.resources.history_readings
 import earth.walkthru.opensensor.history.resources.history_span_utc
 import earth.walkthru.opensensor.history.resources.history_station_chip
@@ -299,6 +300,8 @@ private fun ArchiveCard(state: HistoryUiState, level: DetailLevel) {
         StatLine(stringResource(Res.string.history_files_time), stringResource(Res.string.history_of, files.withTime, files.total))
         if (files.pending > 0) StatLine(stringResource(Res.string.history_waiting_index), files.pending.toString())
         if (files.failed > 0) StatLine(stringResource(Res.string.history_index_failed), files.failed.toString())
+        val unreadable = state.series?.unreadableSources ?: 0
+        if (unreadable > 0) StatLine(stringResource(Res.string.history_read_failed), unreadable.toString())
         if (files.estimated > 0) StatLine(stringResource(Res.string.history_estimated), files.estimated.toString())
         if (files.otherStation > 0) InfoNote(pluralStringResource(Res.plurals.history_other_station, files.otherStation, files.otherStation))
         if (files.untimed > 0) InfoNote(pluralStringResource(Res.plurals.history_untimed_files, files.untimed, files.untimed))

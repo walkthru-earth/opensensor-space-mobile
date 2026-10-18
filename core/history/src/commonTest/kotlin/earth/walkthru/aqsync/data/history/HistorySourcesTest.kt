@@ -15,6 +15,7 @@ import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 import earth.walkthru.aqsync.data.history.parquet.ParquetLogicalType
 import earth.walkthru.aqsync.data.history.parquet.ParquetSink
 import earth.walkthru.aqsync.data.history.parquet.ParquetWriter
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,6 +27,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.datetime.TimeZone
 import kotlin.test.Test
+import kotlin.test.assertFailsWith
 
 /** The shared History sources over a fake archive: index repair, the row reader and the in-memory tiers. */
 class HistorySourcesTest {
@@ -43,9 +45,18 @@ class HistorySourcesTest {
 
         /** Runs once, on the first read, while repair holds a snapshot of the record. */
         var onFirstRead: (() -> Unit)? = null
+
+        /** Thrown by every later open, or by every later close, to stand in for a failing file. */
+        var openFailure: Throwable? = null
+        var closeFailure: Throwable? = null
         override fun reader(key: ArchiveKey, partial: Boolean): ByteReader {
             onFirstRead?.also { onFirstRead = null }?.invoke()
-            return ByteArrayReader(files[key] ?: throw NoSuchElementException(key.name))
+            openFailure?.let { throw it }
+            val bytes = ByteArrayReader(files[key] ?: throw NoSuchElementException(key.name))
+            val failure = closeFailure ?: return bytes
+            return object : ByteReader by bytes {
+                override fun close() = throw failure
+            }
         }
         override suspend fun commit(key: ArchiveKey) = Unit
         override suspend fun listFinal(station: String?): List<ArchiveKey> = files.keys.filter { station == null || it.station == station }
@@ -339,6 +350,92 @@ class HistorySourcesTest {
         assertEquals(ArchiveHistoryTiers.signature(listOf(a, b)), ArchiveHistoryTiers.signature(listOf(b, a)))
         val est = b.copy(indexedAtEpochMs = 1, rows = 1, utcRows = 0, estFirstUtcNs = 5, estLastUtcNs = 6, estAnchorFile = "a")
         assertTrue(ArchiveHistoryTiers.signature(listOf(a, b)) != ArchiveHistoryTiers.signature(listOf(a, est)))
+    }
+
+    /**
+     * #157. A copy of `v1-none-90rows-dated` with its first PM2.5 page header byte changed, as an SD
+     * card can damage it before OPEN computes the CRC. Its footer, timestamps and PMS status still read,
+     * so it verifies and indexes, only decoding PM2.5 throws.
+     */
+    private fun damagedPm25(): ByteArray {
+        val bytes = fixtureBytes("parquet/device/v1-none-90rows-dated.parquet").copyOf()
+        val chunk = ParquetFile.wrap(bytes).metadata.rowGroups[0].columns.first { it.name == Metrics.PM25.column }
+        val at = chunk.firstPageOffset.toInt()
+        bytes[at] = (bytes[at].toInt() xor 0xFF).toByte()
+        return bytes
+    }
+
+    private suspend fun archiveOf(vararg files: Pair<String, ByteArray>): Pair<Store, Index> {
+        val store = Store()
+        val index = Index()
+        for ((i, file) in files.withIndex()) {
+            val r = ArchiveRecord(station = station, name = file.first, bytes = file.second.size.toLong(), crc32 = i.toLong(), sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake")
+            store.files[r.key] = file.second
+            index.put(r)
+        }
+        ArchiveIndexRepair(store, index, nowEpochMs = { 42L }).backfillAll()
+        return store to index
+    }
+
+    private val sept8 = 1_788_825_600L // 2026-09-08T00:00Z
+    private val damagedName = "station=$station/year=2026/month=09/day=08/data_1900_1491409bed013e1999dc4072ac91ab0f_80-169-6.parquet"
+    private val healthyName = "station=$station/year=2026/month=09/day=08/data_1945_e452563e96c72ca057a48924550779b6_92-181-11.parquet"
+    private val healthy = fixtureBytes("parquet/device/v1-lz4-90rows-dated.parquet")
+
+    private suspend fun day(store: Store, index: Index, metric: MetricSpec, from: Long = dayStart): HistorySeries =
+        HistorySeriesReader(store, index, ArchiveHistoryTiers(store, index)).observe(station, metric, HistoryRange.DAY, window(HistoryRange.DAY, from + 86_400)).first()
+
+    @Test
+    fun aDamagedMetricPageSkipsOnlyItsFileAndTheRestStillCharts() = runTest {
+        assertFailsWith<Exception> { ParquetFile.wrap(damagedPm25()).readColumn(Metrics.PM25.column) }
+        val (alone, aloneIndex) = archiveOf(healthyName to healthy)
+        val expected = day(alone, aloneIndex, Metrics.PM25, sept8)
+        assertTrue(expected.validRows > 0)
+        assertEquals(0, expected.unreadableSources)
+
+        val (store, index) = archiveOf(damagedName to damagedPm25(), healthyName to healthy)
+        assertTrue("the damaged copy still indexes", index.rows.value.all { it.isIndexed })
+        val mixed = day(store, index, Metrics.PM25, sept8)
+        assertEquals("the healthy file charts as if alone", expected.points, mixed.points)
+        assertEquals(expected.validRows, mixed.validRows)
+        assertEquals("the damaged file is counted, not fatal", 1, mixed.unreadableSources)
+
+        // The damage is in one column only, so another metric of the same file still reads.
+        val pm10 = day(store, index, Metrics.PM10, sept8)
+        assertEquals(0, pm10.unreadableSources)
+        assertTrue(pm10.validRows > day(alone, aloneIndex, Metrics.PM10, sept8).validRows)
+    }
+
+    @Test
+    fun aFileThatFailsToCloseLeavesNoRowsBehind() = runTest {
+        val (store, index) = archive("station=$station/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet")
+        store.closeFailure = IllegalStateException("close failed")
+        val failed = day(store, index, Metrics.PM25)
+        // Every row decoded before close threw, none may chart from a source that did not read through.
+        assertEquals(0L, failed.validRows)
+        assertTrue(failed.isEmpty)
+        assertEquals(1, failed.unreadableSources)
+
+        store.closeFailure = null
+        val ok = day(store, index, Metrics.PM25)
+        assertEquals(105L, ok.validRows)
+        assertEquals(0, ok.unreadableSources)
+    }
+
+    @Test
+    fun cancellationWhileReadingARawFileStillPropagates() = runTest {
+        val (store, index) = archive("station=$station/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet")
+        val reader = HistorySeriesReader(store, index, ArchiveHistoryTiers(store, index))
+
+        // Read the rows directly, a flow would end a cancelled read quietly and hide which way it went.
+        suspend fun read() = reader.fromRows(station, Metrics.PM25, HistoryRange.DAY, dayStart, dayStart + 86_400)
+        store.closeFailure = CancellationException("closing")
+        assertFailsWith<CancellationException> { read() }
+        store.closeFailure = null
+        store.openFailure = CancellationException("opening")
+        assertFailsWith<CancellationException> { read() }
+        store.openFailure = null
+        assertEquals(105L, read().validRows)
     }
 
     @Test

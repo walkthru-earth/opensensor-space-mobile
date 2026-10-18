@@ -23,6 +23,7 @@
     <string name="history_of">%1$d of %2$d</string>
     <string name="history_waiting_index">waiting to index</string>
     <string name="history_index_failed">could not index</string>
+    <string name="history_read_failed">could not read</string>
     <string name="history_estimated">files with estimated time</string>
     <plurals name="history_other_station">
         <item quantity="one">%1$d copy belongs to another station</item>

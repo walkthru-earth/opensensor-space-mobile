@@ -132,11 +132,14 @@ class HistorySeriesReader(
             max = max,
             binned = false,
             estimatedRows = whole.sumOf { it.estimatedRows.toLong() } + listOfNotNull(leading, trailing).sumOf { it.estimatedRows },
+            unreadableSources = listOfNotNull(leading, trailing).sumOf { it.unreadableSources },
         )
     }
 
-    private suspend fun fromRows(station: String, metric: MetricSpec, range: HistoryRange, fromS: Long, toS: Long): HistorySeries {
+    /** The verified rows of `[fromS, toS)`. Internal so tests see a thrown cancellation without the flow around it. */
+    internal suspend fun fromRows(station: String, metric: MetricSpec, range: HistoryRange, fromS: Long, toS: Long): HistorySeries {
         val rows = Rows()
+        val unreadable = HashSet<String>()
         val indexed = if (toS > fromS) index.indexedForStation(station) else emptyList()
         val window = readWindow(fromS, toS, indexed)
         if (window != null) {
@@ -159,7 +162,9 @@ class HistorySeriesReader(
                 // the daily builder does. A duplicate with another timestamp must not win just because
                 // the builder's preferred row falls outside a fractional edge window.
                 for (f in sources.sortedWith(DailyParquetBuilder.SOURCE_ORDER)) {
-                    readRaw(f, anchors, metric, day * StationDays.DAY_NS, (day + 1) * StationDays.DAY_NS, dayFrom, dayTo, daySeen, seen, rows)
+                    // One damaged file costs only its own rows, the others of the window still chart (#157).
+                    val staged = readRaw(f, anchors, metric, day * StationDays.DAY_NS, (day + 1) * StationDays.DAY_NS, dayFrom, dayTo)
+                    if (staged == null) unreadable += f.name else staged.commitTo(daySeen, seen, rows)
                 }
             }
         }
@@ -233,15 +238,21 @@ class HistorySeriesReader(
             }
             flush()
         }
-        return HistorySeries(metric, range, fromS, toS, points, validRows = n, expectedRows = expectedRows(fromS, toS), mean = if (n > 0) (sum / n).toFloat() else null, max = max, binned = binned, estimatedRows = rows.estimatedValid)
+        return HistorySeries(metric, range, fromS, toS, points, validRows = n, expectedRows = expectedRows(fromS, toS), mean = if (n > 0) (sum / n).toFloat() else null, max = max, binned = binned, estimatedRows = rows.estimatedValid, unreadableSources = unreadable.size)
     }
 
-    /** The rows of one raw file inside `[fromNs, toNs)`, timed by UTC or by the boot's anchor. */
-    private fun readRaw(f: ArchiveRecord, anchors: Map<String, TimeEstimate.Anchor>, metric: MetricSpec, dayFromNs: Long, dayToNs: Long, fromNs: Long, toNs: Long, daySeen: RowKeys, seen: RowKeys, rows: Rows) {
+    /**
+     * The rows of one raw file inside the UTC day `[dayFromNs, dayToNs)`, timed by UTC or by the boot's
+     * anchor, staged and not yet deduplicated. Rows outside the chart window `[fromNs, toNs)` are
+     * staged too, so duplicates are still chosen over the whole day. Empty when the file holds no UTC
+     * column. Null when the file cannot be opened, decoded or closed. Nothing reaches the chart or the
+     * row keys until the file was read through and closed, so a damaged file leaves no partial rows.
+     */
+    private fun readRaw(f: ArchiveRecord, anchors: Map<String, TimeEstimate.Anchor>, metric: MetricSpec, dayFromNs: Long, dayToNs: Long, fromNs: Long, toNs: Long): StagedRows? = try {
         open(f)?.use { pf ->
             val md = pf.metadata
             fun long(name: String) = md.leaf(name)?.let { LongColumn.of(pf.readColumn(it)) }
-            val utc = UtcColumns.readEventNs(pf)?.let(LongColumn::of) ?: return@use
+            val utc = UtcColumns.readEventNs(pf)?.let(LongColumn::of) ?: return@use StagedRows(0)
             val bootHi = long("boot_id_hi")
             val bootLo = long("boot_id_lo")
             val seq = long(ParquetIndexer.SEQ)
@@ -250,6 +261,7 @@ class HistorySeriesReader(
             val gate = metric.gate?.let { g -> long(g.column) }
             val col = md.leaf(metric.column)?.let { DoubleColumn.of(pf.readColumn(it)) }
             val rh = metric.humidityColumn?.let { name -> md.leaf(name)?.let { DoubleColumn.of(pf.readColumn(it)) } }
+            val staged = StagedRows(utc.size)
             for (i in 0 until utc.size) {
                 var est = false
                 val ns = if (utc.has(i)) {
@@ -261,19 +273,21 @@ class HistorySeriesReader(
                 }
                 if (ns < dayFromNs || ns >= dayToNs) continue
                 val bySeq = seq != null && seq.has(i)
-                val key = if (bySeq) seq!!.values[i] else ns
-                if (!daySeen.firstSight(bootHi.at(i), bootLo.at(i), bySeq, key)) continue
-                if (ns < fromNs || ns >= toNs) continue
-                if (!seen.firstSight(bootHi.at(i), bootLo.at(i), bySeq, key)) continue
                 val ok = metric.accepts(if (gate != null && gate.has(i)) gate.values[i] else null)
                 val v = if (ok && col != null && col.has(i)) {
                     metric.valueOf(col.values[i], if (rh != null && rh.has(i)) rh.values[i] else null)?.toFloat()?.takeIf { it.isFinite() }
                 } else {
                     null
                 }
-                rows.add(ns.floorDiv(NS), v ?: Float.NaN, est)
+                staged.add(bootHi.at(i), bootLo.at(i), bySeq, if (bySeq) seq!!.values[i] else ns, ns >= fromNs && ns < toNs, ns.floorDiv(NS), v ?: Float.NaN, est)
             }
+            staged
         }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        // A verified copy can still hold a damaged page (#157). History skips that file and counts it.
+        null
     }
 
     /**
@@ -314,7 +328,7 @@ class HistorySeriesReader(
                 val gate = metric.gate?.let { batch[it.column] }
                 val col = batch[metric.column]
                 val rh = metric.humidityColumn?.let { batch[it] }
-                val staged = DerivedRows(batch.rowCount)
+                val staged = StagedRows(batch.rowCount)
                 for (i in 0 until batch.rowCount) {
                     val real = !utc.isNull(i)
                     val ns = if (real) {
@@ -328,21 +342,13 @@ class HistorySeriesReader(
                     val bySeq = seq != null && !seq.isNull(i)
                     val ok = metric.accepts(gate?.asLong(i))
                     val v = if (ok) col?.asDouble(i)?.let { metric.valueOf(it, rh?.asDouble(i)) }?.toFloat()?.takeIf { it.isFinite() } else null
-                    val at = staged.rows.size
-                    staged.hi[at] = bootHi.longOrZero(i)
-                    staged.lo[at] = bootLo.longOrZero(i)
-                    staged.bySequence[at] = bySeq
-                    staged.key[at] = if (bySeq) seq!!.long(i) else ns
-                    staged.rows.add(ns.floorDiv(NS), v ?: Float.NaN, !real)
+                    staged.add(bootHi.longOrZero(i), bootLo.longOrZero(i), bySeq, if (bySeq) seq!!.long(i) else ns, true, ns.floorDiv(NS), v ?: Float.NaN, !real)
                 }
                 staged
             } ?: return false
             // Commit only after every row was extracted and the source closed. A cache failure must
             // leave neither points nor row keys behind, otherwise the raw fallback loses those rows.
-            for (i in 0 until staged.rows.size) {
-                if (!seen.firstSight(staged.hi[i], staged.lo[i], staged.bySequence[i], staged.key[i])) continue
-                rows.add(staged.rows.times[i], staged.rows.values[i], staged.rows.estimated[i])
-            }
+            staged.commitTo(null, seen, rows)
             true
         } catch (e: CancellationException) {
             throw e
@@ -352,9 +358,11 @@ class HistorySeriesReader(
         }
     }
 
-    /** The verified copy, or null when it is gone or the reader refuses it (History then skips it). */
+    /** The verified copy, or null when it is gone or the reader refuses it (History then skips and counts it). */
     private fun open(record: ArchiveRecord): ParquetFile? = try {
         ParquetFile.open(store.reader(record.key), record.name)
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         null
     }
@@ -369,13 +377,40 @@ class HistorySeriesReader(
     /** The [RowKey] rule, a missing column or cell counts as 0. */
     private fun PrimitiveColumn?.longOrZero(i: Int): Long = if (this == null || isNull(i)) 0L else long(i)
 
-    /** A derived read staged until both extraction and closing succeeded. */
-    private class DerivedRows(capacity: Int) {
-        val rows = Rows()
-        val hi = LongArray(capacity)
-        val lo = LongArray(capacity)
-        val key = LongArray(capacity)
-        val bySequence = BooleanArray(capacity)
+    /**
+     * The rows of one source, raw or derived, staged until both extraction and closing succeeded, with
+     * their row keys. [inWindow] marks the rows inside the chart window, the others only claim their key.
+     */
+    private class StagedRows(capacity: Int) {
+        private val rows = Rows()
+        private val hi = LongArray(capacity)
+        private val lo = LongArray(capacity)
+        private val key = LongArray(capacity)
+        private val bySequence = BooleanArray(capacity)
+        private val inWindow = BooleanArray(capacity)
+
+        fun add(bootHi: Long, bootLo: Long, bySeq: Boolean, rowKey: Long, shown: Boolean, second: Long, value: Float, isEstimate: Boolean) {
+            val at = rows.size
+            hi[at] = bootHi
+            lo[at] = bootLo
+            bySequence[at] = bySeq
+            key[at] = rowKey
+            inWindow[at] = shown
+            rows.add(second, value, isEstimate)
+        }
+
+        /**
+         * Commits the staged rows in file order. [daySeen], when given, picks duplicates over the whole
+         * day before the window applies, then [seen] keeps each row once across sources.
+         */
+        fun commitTo(daySeen: RowKeys?, seen: RowKeys, out: Rows) {
+            for (i in 0 until rows.size) {
+                if (daySeen != null && !daySeen.firstSight(hi[i], lo[i], bySequence[i], key[i])) continue
+                if (!inWindow[i]) continue
+                if (!seen.firstSight(hi[i], lo[i], bySequence[i], key[i])) continue
+                out.add(rows.times[i], rows.values[i], rows.estimated[i])
+            }
+        }
     }
 
     /** Day view rows in primitive arrays: second, value (NaN for invalid or null) and estimate flag. */

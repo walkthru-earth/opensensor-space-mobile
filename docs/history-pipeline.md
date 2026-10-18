@@ -183,6 +183,13 @@ size and modification time). A rebuilt day is a new file with a new identity. Ra
 through the blocking `ParquetFile` and parse their footer on each open (index, today's raw rows, file
 summaries, whose results Android already caches by name and CRC-32).
 
+Damaged raw files. A verified copy can still hold a damaged page, since the SD card can corrupt it
+before the firmware computes its CRC. `HistorySeriesReader` reads each raw file on its own. Rows and
+row keys are staged and committed only after the file decoded and closed, as the derived path does.
+A file that fails to open, decode or close is skipped, and `HistorySeries.unreadableSources` counts
+it, so the other files of the window still chart. Cancellation still propagates. The Archive card
+shows the count as "could not read" when it is above zero.
+
 Read window. `HistorySeriesReader.readWindow` clamps every requested window to the station's archive
 span plus one day on each side, and to the seconds whose nanoseconds still fit a Long. A window far
 past the archive costs no lookups and never multiplies into a wrapped nanosecond. The Settings date
