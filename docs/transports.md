@@ -23,10 +23,10 @@ On Android, My devices **Scan** searches Bluetooth and `_aqsync._tcp` mDNS from 
 Existing access permits discovery while the screen is visible; the tap requests any missing
 Bluetooth and Local Network permissions. Each radio can still show results if the other is
 unavailable. LAN-only results without an enrolled Bluetooth identity and saved token are
-informational. Opening an enrolled sensor uses the AUTO rule below. If Bluetooth permission is declined,
+informational. Opening an enrolled sensor never asks for Bluetooth. With Bluetooth allowed and on it uses the AUTO rule below. Otherwise,
 a known sensor with a saved token, station and current mDNS discovery may open LAN only. That
 path has no BLE fallback or BLE auto-reconnect; if LAN cannot connect, its archive remains
-available offline. `TransportFactory` throws `TransportUnavailableException` (RADIO_OFF,
+available offline. Reconnect on the station page is the tap that asks for Bluetooth. `TransportFactory` throws `TransportUnavailableException` (RADIO_OFF,
 PERMISSION_MISSING or NO_ADAPTER) before any Bluetooth open. Connect and collection turn it into
 `DisconnectCause.Unavailable`, which is never retried, and say which one applies (2026-10-12).
 A LAN connect refused with EPERM, the Local Network permission refusal, is the same

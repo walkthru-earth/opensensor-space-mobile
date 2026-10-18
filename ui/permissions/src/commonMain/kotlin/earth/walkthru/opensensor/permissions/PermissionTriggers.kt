@@ -29,7 +29,7 @@ enum class UserAction {
     /** Find sensors (scan) on My devices. */
     FIND_SENSORS,
 
-    /** Opening a found sensor. A refusal still opens its local archive. */
+    /** Opening a sensor. Asks nothing, it opens on its local archive and connects only over a ready link. */
     OPEN_SENSOR,
 
     /** Reconnect, on the device and Today screens. */
@@ -75,7 +75,7 @@ object PermissionTriggers {
     val table: Map<UserAction, Trigger> = mapOf(
         UserAction.APP_LAUNCH to Trigger(),
         UserAction.FIND_SENSORS to Trigger(required = setOf(AccessKind.BLUETOOTH)),
-        UserAction.OPEN_SENSOR to Trigger(required = setOf(AccessKind.BLUETOOTH)),
+        UserAction.OPEN_SENSOR to Trigger(),
         UserAction.RECONNECT to Trigger(required = setOf(AccessKind.BLUETOOTH)),
         UserAction.SYNC to Trigger(optional = setOf(AccessKind.NOTIFICATIONS)),
         UserAction.WIFI_ACTION to Trigger(required = setOf(AccessKind.LOCAL_NETWORK)),

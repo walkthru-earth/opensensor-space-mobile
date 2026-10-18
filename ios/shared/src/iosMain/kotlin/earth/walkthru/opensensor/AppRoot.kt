@@ -237,7 +237,7 @@ internal fun AppRoot(
                 entry<TodayKey> { key ->
                     if (IosKnown.isPeripheral(key.address)) {
                         LeasePeripheral(leases, key.address)
-                        TodayEntry(key.address, today, devices, settingsRepository, units) { action ->
+                        TodayEntry(key.address, today, devices, settingsRepository, units, requestBluetooth) { action ->
                             when (action) {
                                 TodayAction.OpenHistory -> nav.openSection(HistoryKey(key.address))
                                 TodayAction.OpenFiles -> nav.openSection(FilesKey(key.address))
@@ -344,22 +344,12 @@ private fun DeviceSettingsEntry(address: String, devices: DevicesBridge, links: 
 }
 
 /**
- * My devices with its controller kept per entry. Bluetooth is asked for only from a tap, through the
- * shared on-demand flow. Swift creates the central manager in [requestBluetooth], which shows the
- * system prompt, and reports the answer through [CompanionState.bluetoothAuthorizationChanged].
+ * Bluetooth access for one iOS entry, asked only from a tap through the shared on-demand flow, with
+ * its dialogs. Swift creates the central manager in [requestBluetooth], which shows the system
+ * prompt, and reports the answer through [CompanionState.bluetoothAuthorizationChanged].
  */
 @Composable
-private fun MyDevicesEntry(
-    bridge: DevicesBridge,
-    level: DetailLevel,
-    requestBluetooth: () -> Unit,
-    onFiles: () -> Unit,
-    onHistory: () -> Unit,
-    onOpen: (id: String, connect: Boolean) -> Unit,
-) {
-    val controller = viewModel { DevicesHolder(bridge) }.controller
-    val state by controller.state.collectAsState()
-    val companion = bridge.state
+internal fun rememberIosBluetoothAccess(companion: CompanionState, requestBluetooth: () -> Unit): RuntimeAccess {
     val access = remember { RuntimeAccess(AccessKind.BLUETOOTH) }
     var asking by remember { mutableStateOf(false) }
     val openSettings = rememberOpenAppSettings()
@@ -372,7 +362,7 @@ private fun MyDevicesEntry(
             },
             openSettings = openSettings,
             radioOn = { !companion.bluetoothPoweredOff },
-            // iOS has no in-app switch for the radio. The list says it is off.
+            // iOS has no in-app switch for the radio. The screen says it is off.
             requestTurnOn = { access.onTurnOnResult() },
         ),
     )
@@ -384,6 +374,26 @@ private fun MyDevicesEntry(
         }
     }
     AccessDialogs(access, bluetoothAccessTexts())
+    return access
+}
+
+/**
+ * My devices with its controller kept per entry. Bluetooth is asked for only from the Scan and
+ * Collect from all taps. Opening a sensor never asks, Reconnect on its page does (#147).
+ */
+@Composable
+private fun MyDevicesEntry(
+    bridge: DevicesBridge,
+    level: DetailLevel,
+    requestBluetooth: () -> Unit,
+    onFiles: () -> Unit,
+    onHistory: () -> Unit,
+    onOpen: (id: String, connect: Boolean) -> Unit,
+) {
+    val controller = viewModel { DevicesHolder(bridge) }.controller
+    val state by controller.state.collectAsState()
+    val access = rememberIosBluetoothAccess(bridge.state, requestBluetooth)
+    val openSettings = rememberOpenAppSettings()
     MyDevicesScreen(
         state = state,
         level = level,

@@ -26,5 +26,9 @@ kotlin {
         commonTest.dependencies {
             implementation(libs.kotlinx.coroutines.test)
         }
+        // The Scan clearance test renders the screen headless on the iOS simulator (verifyIos).
+        iosTest.dependencies {
+            implementation(libs.compose.ui.test)
+        }
     }
 }

@@ -108,13 +108,19 @@ class PermissionFlowTest {
     }
 
     @Test
+    fun openingASensorAsksNothing() {
+        // A station opens on its archive. Only Reconnect asks for Bluetooth (#147).
+        assertTrue(PermissionTriggers.of(UserAction.OPEN_SENSOR).all.isEmpty())
+    }
+
+    @Test
     fun everyActionIsInTheTable() {
         assertEquals(UserAction.entries.toSet(), PermissionTriggers.table.keys)
     }
 
     @Test
     fun eachPermissionComesFromItsOwnTaps() {
-        assertEquals(setOf(UserAction.FIND_SENSORS, UserAction.OPEN_SENSOR, UserAction.RECONNECT), PermissionTriggers.actionsAsking(AccessKind.BLUETOOTH))
+        assertEquals(setOf(UserAction.FIND_SENSORS, UserAction.RECONNECT), PermissionTriggers.actionsAsking(AccessKind.BLUETOOTH))
         assertEquals(setOf(UserAction.WIFI_ACTION, UserAction.SAVE_WIFI_ACCESS), PermissionTriggers.actionsAsking(AccessKind.LOCAL_NETWORK))
         assertEquals(setOf(UserAction.NEAR_ME, UserAction.CONFIGURE_LOCATION), PermissionTriggers.actionsAsking(AccessKind.APPROX_LOCATION))
         assertEquals(setOf(UserAction.SYNC, UserAction.AUTO_SYNC_ON), PermissionTriggers.actionsAsking(AccessKind.NOTIFICATIONS))
