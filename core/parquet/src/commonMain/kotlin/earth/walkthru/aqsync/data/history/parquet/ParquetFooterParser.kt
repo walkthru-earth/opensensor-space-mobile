@@ -6,6 +6,12 @@ import earth.walkthru.aqsync.data.history.parquet.ThriftCompactReader.Type
 class ParquetFormatException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
 /**
+ * A bounds check of this reader refused an offset or length. It stays an [IndexOutOfBoundsException] for
+ * callers, and its own type tells a refused read apart from an index error no check caught.
+ */
+class ParquetBoundsException(message: String) : IndexOutOfBoundsException(message)
+
+/**
  * Parses the `FileMetaData` footer of a Parquet file: `… <footer bytes> <i32 LE footer length> "PAR1"`.
  * Unknown fields are skipped, so a newer parquet-format never breaks the phone; unknown *values*
  * (a physical type or codec we do not decode) are kept as `UNKNOWN` and refused only when a column

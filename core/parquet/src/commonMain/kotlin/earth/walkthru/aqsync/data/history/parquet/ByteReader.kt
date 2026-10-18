@@ -48,5 +48,5 @@ class ByteArrayReader(private val bytes: ByteArray) : ByteReader {
 
 /** Bounds check shared by the readers: throws [IndexOutOfBoundsException] for a range outside `[0, size)`. */
 fun checkRange(offset: Long, length: Int, size: Long) {
-    if (offset < 0 || length < 0 || offset + length > size) throw IndexOutOfBoundsException("range [$offset, ${offset + length}) outside $size bytes")
+    if (offset < 0 || length < 0 || offset + length > size) throw ParquetBoundsException("range [$offset, ${offset + length}) outside $size bytes")
 }

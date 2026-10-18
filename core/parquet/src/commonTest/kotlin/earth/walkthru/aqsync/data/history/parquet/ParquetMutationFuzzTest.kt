@@ -8,11 +8,15 @@ import kotlin.time.Duration.Companion.seconds
 /**
  * Mutates bytes anywhere in real Parquet fixtures, the data pages included, with a fixed seed (#97).
  * Every mutated file either reads or throws [ParquetFormatException], through [ParquetFile] and through a
- * [ParquetReader] scan. Any other throwable is a bug. A hang fails on the timeout, and a huge allocation
- * shows up as an [OutOfMemoryError], which is reported like any other throwable.
+ * [ParquetReader] scan. Any other throwable is a bug, and so is a [ParquetFormatException] whose cause is a
+ * raw crash such as an index, arithmetic or negative size error, since the readers wrap those. A refused
+ * read from a bounds check is a [ParquetBoundsException] and passes. A hang fails on the timeout, and a
+ * huge allocation shows up as an [OutOfMemoryError], which is reported like any other throwable.
  *
  * [TruncatedFooterFuzzTest] covers cuts and the footer. This one reaches page headers, dictionary pages,
- * definition levels and the DELTA and BYTE_STREAM_SPLIT decoders. It stays well under 10 seconds.
+ * definition levels and the DELTA and BYTE_STREAM_SPLIT decoders. It runs about 10k cases on the JVM.
+ * The fuzz is a backstop that finds crashes nobody thought of. It is not proof of each guard, the unit
+ * tests in [FooterHardeningTest] and its neighbours pin every guard one by one.
  */
 class ParquetMutationFuzzTest {
 
@@ -29,16 +33,32 @@ class ParquetMutationFuzzTest {
         try {
             val pf = ParquetFile.wrap(bytes, f.path, testCodecs)
             for (leaf in pf.leaves) pf.readColumn(leaf)
-        } catch (_: ParquetFormatException) {
+        } catch (e: ParquetFormatException) {
+            rawCrash(e)?.let { failures += "$case [ParquetFile] -> wrapped $it" }
         } catch (e: Throwable) {
             failures += "$case [ParquetFile] -> ${e::class.simpleName}: ${e.message}"
         }
         try {
             ParquetReader.open(MemoryRangeSource(bytes, f.path), testCodecs).use { it.scan(ScanRequest(f.names)) }
-        } catch (_: ParquetFormatException) {
+        } catch (e: ParquetFormatException) {
+            rawCrash(e)?.let { failures += "$case [ParquetReader] -> wrapped $it" }
         } catch (e: Throwable) {
             failures += "$case [ParquetReader] -> ${e::class.simpleName}: ${e.message}"
         }
+    }
+
+    /**
+     * The first cause of [e] that is a crash no guard threw, described, or null. The readers wrap any
+     * RuntimeException as a [ParquetFormatException], so without this check a missing guard whose
+     * file crashes with an index or arithmetic error would still pass.
+     */
+    private fun rawCrash(e: ParquetFormatException): String? {
+        var cause = e.cause
+        while (cause != null) {
+            if (cause::class.simpleName in RAW_CRASHES) return "${cause::class.simpleName}: ${cause.message}"
+            cause = cause.cause
+        }
+        return null
     }
 
     @Test
@@ -85,8 +105,22 @@ class ParquetMutationFuzzTest {
     }
 
     private companion object {
-        /** On the JVM. The iOS simulator runs a fifth of them, see [fuzzScale]. */
-        const val CASES_PER_FIXTURE = 1000
+        /** Throwables a guard never raises on purpose. By name, since some exist on the JVM only. */
+        val RAW_CRASHES = setOf(
+            "IndexOutOfBoundsException",
+            "ArrayIndexOutOfBoundsException",
+            "StringIndexOutOfBoundsException",
+            "BufferUnderflowException",
+            "BufferOverflowException",
+            "ArithmeticException",
+            "NegativeArraySizeException",
+            "NullPointerException",
+            "ClassCastException",
+            "OutOfMemoryError",
+        )
+
+        /** On the JVM, about 10k in all. The iOS simulator runs a fifth of them, see [fuzzScale]. */
+        const val CASES_PER_FIXTURE = 1112
 
         val FIXTURES = listOf(
             "parquet/discover/cells-24h-res7-pageindex.parquet",

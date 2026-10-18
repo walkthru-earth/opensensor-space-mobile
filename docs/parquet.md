@@ -123,15 +123,23 @@ and page header parsers check every field before it is used.
 - A list or MAP size is never negative and never larger than the bytes left in the footer or page
   index, so a size field cannot make the reader allocate or loop past the buffer.
 - Row counts, value counts, page sizes, offsets, `num_children` and `type_length` are never negative.
-  A `ColumnIndex` null count is never negative.
+  A `ColumnIndex` null count is never negative, and its `null_pages` is a bool list. The V2 data page
+  counts `num_nulls`, `definition_levels_byte_length` and `repetition_levels_byte_length` are never
+  negative.
+- A bounds check that refuses a read throws `ParquetBoundsException`, an `IndexOutOfBoundsException`
+  the readers wrap in `ParquetFormatException`. Any other index, arithmetic or allocation error is a
+  missing guard.
 - The row counts of the row groups must add up to `FileMetaData.num_rows`, summed with `checkedAdd`.
 - Byte arithmetic goes through `checkedAdd` and `checkedToInt` (`Bytes.kt`). A column chunk whose
   `total_compressed_size` would run past the column data, or wrap, ends at the data end instead
   (`chunkEnd`). A page index pointer whose end would wrap is ignored.
 
-`FooterHardeningTest` builds one footer per guard that is valid except for one field.
-`ParquetMutationFuzzTest` flips bytes, bits and runs of every fixture family with a fixed seed and
-reads each mutant through `ParquetFile` and a `ParquetReader` scan.
+`FooterHardeningTest` builds one footer, index or page per guard that is valid except for one field.
+`ParquetMutationFuzzTest` flips bytes, bits and runs of every fixture family with a fixed seed, about
+10k cases on the JVM in a few seconds, and reads each mutant through `ParquetFile` and a
+`ParquetReader` scan. It fails on any throwable other than `ParquetFormatException`, and on a
+`ParquetFormatException` that wraps a raw index, arithmetic or allocation error. The fuzz is a
+backstop for crashes nobody thought of. The unit tests prove each guard.
 
 ## Codecs (`ParquetCodecs` SPI)
 

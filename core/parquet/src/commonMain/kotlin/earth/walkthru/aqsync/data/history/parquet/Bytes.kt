@@ -10,7 +10,7 @@ internal class ByteCursor(val data: ByteArray, val start: Int = 0, val limit: In
     var pos: Int = start
 
     init {
-        if (start < 0 || limit > data.size || start > limit) throw IndexOutOfBoundsException("window [$start, $limit) outside ${data.size} bytes")
+        if (start < 0 || limit > data.size || start > limit) throw ParquetBoundsException("window [$start, $limit) outside ${data.size} bytes")
     }
 
     val remaining: Int get() = limit - pos
@@ -20,7 +20,7 @@ internal class ByteCursor(val data: ByteArray, val start: Int = 0, val limit: In
     val size: Int get() = limit - start
 
     fun get(): Byte {
-        if (pos >= limit) throw IndexOutOfBoundsException("read past the end ($limit)")
+        if (pos >= limit) throw ParquetBoundsException("read past the end ($limit)")
         return data[pos++]
     }
 
@@ -70,7 +70,7 @@ internal class ByteCursor(val data: ByteArray, val start: Int = 0, val limit: In
     }
 
     private fun check(at: Int, n: Int) {
-        if (n < 0 || at < start || at.toLong() + n > limit) throw IndexOutOfBoundsException("read of $n bytes at $at outside [$start, $limit)")
+        if (n < 0 || at < start || at.toLong() + n > limit) throw ParquetBoundsException("read of $n bytes at $at outside [$start, $limit)")
     }
 }
 
