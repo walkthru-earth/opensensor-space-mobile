@@ -282,8 +282,9 @@ fun PairingCard(state: DeviceConfigUiState, onSave: (PairingChoice) -> Unit, onR
             }
         }
         if (selected == PairMode.FIXED) {
-            // Kept out of screen captures while the PIN is typed (#160). A recording on iOS forces the mask on.
-            val captured = rememberCredentialCaptureGuard()
+            // Kept out of screen captures while the PIN is typed (#160). A recording on iOS forces the mask
+            // on, and a screenshot on iOS hides a revealed PIN again (#164).
+            val captured = rememberCredentialCaptureGuard(onScreenshot = { showPin = false })
             // Leaving Fixed PIN or the screen drops the typed PIN and hides it again.
             DisposableEffect(Unit) {
                 onDispose {
@@ -597,7 +598,8 @@ fun WifiCard(
                     if (pickedOpen) {
                         Text(stringResource(Res.string.wifi_open_network), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } else {
-                        val captured = rememberCredentialCaptureGuard()
+                        // Same capture rules as the PIN (#160, #164).
+                        val captured = rememberCredentialCaptureGuard(onScreenshot = { showPsk = false })
                         // Leaving the join form or the page drops the passphrase and hides it again.
                         DisposableEffect(Unit) {
                             onDispose {

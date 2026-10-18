@@ -135,7 +135,7 @@ val BrandShapes = Shapes(
 fun OpenSensorTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     typography: Typography = rememberBrandTypography(),
-    reduceMotion: Boolean = rememberReduceMotion(),
+    reduceMotion: Boolean = rememberSystemReduceMotion(),
     content: @Composable () -> Unit,
 ) {
     CompositionLocalProvider(LocalReduceMotion provides reduceMotion) {

@@ -15,6 +15,8 @@ androidxTestEspresso = "3.7.0"
 coroutines = "1.11.0"
 hilt = "2.60.1"
 junit = "4.13.2"
+# Android framework on the host for :ui:designsystem window and font scale tests (#170, #115).
+robolectric = "4.17"
 kotlin = "2.4.21"
 ksp = "2.3.12"
 # Must equal the runtime that the JetBrains navigation3-ui POM names (docs/adr/0001-shared-navigation.md).
@@ -83,6 +85,7 @@ hilt-android-compiler = { module = "com.google.dagger:hilt-android-compiler", ve
 hilt-android-testing = { module = "com.google.dagger:hilt-android-testing", version.ref = "hilt" }
 hilt-compiler = { module = "com.google.dagger:hilt-compiler", version.ref = "hilt" }
 junit = { module = "junit:junit", version.ref = "junit" }
+robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 turbine = { module = "app.cash.turbine:turbine", version.ref = "turbine" }
 androidx-navigation3-runtime = { module = "androidx.navigation3:navigation3-runtime", version.ref = "nav3Core" }

@@ -278,7 +278,8 @@ The rules for a new screen or component.
    own size at font scale 1.0, then to `FitTextLimits.FloorFraction` (85 percent) of that. The 1.0
    size is `Typography.oneScaleSize(style)`, the style's own sp for every style except the display
    numerals, which resolve to their `DisplaySizes` token (84, 48, 32) because `brandTypography` has
-   already clamped them for the current scale. Below the floor it wraps between words, up to
+   already clamped them for the current scale. A display style is known by its size and tabular
+   figures, so a copy with another line height, colour or weight still resolves to its token. Below the floor it wraps between words, up to
    `LabelMaxLines` (2), because a 48 dp target is a minimum height and the control grows for a second
    line. A word wider than its line even at the floor keeps shrinking until it fits whole, down to
    `MinFraction` (50 percent). Only past that does the label draw on one line at 50 percent with an
@@ -312,9 +313,9 @@ The rules for a new screen or component.
    reads the system setting on both platforms through `rememberSystemReduceMotion()` (Android
    `Settings.Global.ANIMATOR_DURATION_SCALE` and `ValueAnimator.areAnimatorsEnabled()` observed via
    `ContentObserver`, iOS `UIAccessibility.isReduceMotionEnabled` observed via
-   `UIAccessibilityReduceMotionStatusDidChangeNotification`). `OpenSensorTheme` and `AppShell` provide
-   `LocalReduceMotion` at the app root, and `Peacock` skips its entrance animation when
-   `rememberReduceMotion()` is true. `rememberNowMillis` keeps its 1 second tick so stale checks stay
+   `UIAccessibilityReduceMotionStatusDidChangeNotification`). `OpenSensorTheme` is the one place
+   that reads it and provides `LocalReduceMotion`. Components such as `Peacock` read
+   `LocalReduceMotion`, and `Peacock` skips its entrance animation when it is true. `rememberNowMillis` keeps its 1 second tick so stale checks stay
    exact, while `TickingText` quantises its spoken `contentDescription` to 10 second steps via
    `quantiseSpokenMillis()`. `liveRegion = LiveRegionMode.Polite` goes only on a line that changes
    while the person waits, such as sync progress or a notice, never on a value that ticks every second.

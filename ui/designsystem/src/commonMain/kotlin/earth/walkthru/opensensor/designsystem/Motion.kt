@@ -4,8 +4,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
 
 /**
- * Composition local indicating whether non-essential animations should be skipped for users who
- * prefer reduced motion. Provided at the app root from [rememberSystemReduceMotion].
+ * Whether non-essential animations should be skipped for users who prefer reduced motion. The one
+ * source for every component. [OpenSensorTheme] provides it from [rememberSystemReduceMotion] at the
+ * app root, so the system setting has a single observer and a test or preview can override it.
  */
 val LocalReduceMotion = compositionLocalOf { false }
 
@@ -29,11 +30,3 @@ fun shouldReduceMotion(reduceMotion: Boolean = false, motionScaleFactor: Float =
  */
 fun reduceMotionDurationMillis(defaultMs: Int, reduceMotion: Boolean): Int =
     if (reduceMotion) 0 else defaultMs.coerceAtLeast(0)
-
-/**
- * Whether the current composition should skip non-essential animations, combining
- * [LocalReduceMotion] and the live platform setting from [rememberSystemReduceMotion].
- */
-@Composable
-fun rememberReduceMotion(): Boolean =
-    shouldReduceMotion(LocalReduceMotion.current || rememberSystemReduceMotion())
