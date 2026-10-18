@@ -1,7 +1,7 @@
 // The shared phone archive (docs/data-model.md, `:core:archive`). One archive layout (Hive
 // paths, partial and legacy receipt names), the file verifier (size, CRC-32, PAR1), the plain records
 // both platforms store, and the store ports (`ArchiveStore`, `ArchiveIndex`). Platform adapters do file
-// and database I/O only. No Android, Hilt or Room here (AGENTS.md).
+// and database I/O only. No Android, Hilt or Room here. Room lives in `:core:database` (AGENTS.md).
 plugins {
     id("opensensor.kmp.library")
 }
@@ -21,7 +21,7 @@ kotlin {
             implementation(libs.kotlinx.datetime)
         }
         iosMain.dependencies {
-            // The iOS receipt index reads and writes `<name>.verified.json` as plain JSON objects.
+            // The one time iOS import reads the older `<name>.verified.json` receipts (LegacyReceiptImport).
             implementation(libs.kotlinx.serialization.json)
         }
         commonTest.dependencies {

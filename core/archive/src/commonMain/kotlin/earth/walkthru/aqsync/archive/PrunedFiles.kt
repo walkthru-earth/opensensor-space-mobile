@@ -21,7 +21,7 @@ data class PrunedFile(
 
 /**
  * The phone's record of [PrunedFile]s. It only ever describes files on this phone. Nothing here is
- * sent to a device. Android keeps it in Room, iOS in one small Durable file beside the receipts.
+ * sent to a device. Both phones keep it in the Room `pruned_file` table.
  */
 interface PrunedFiles {
     fun observeAll(): Flow<List<PrunedFile>>
@@ -45,22 +45,17 @@ interface PrunedFiles {
     }
 }
 
-/** The iOS line codec, one record per line. No platform JSON dependency, so common tests cover it. */
+/**
+ * The line format older iOS builds kept their [PrunedFile]s in, one record per line. Read once by the
+ * iOS import into Room (`LegacyReceiptImport`). No platform JSON dependency, so common tests cover it.
+ */
 internal object PrunedFilesCodec {
     const val VERSION = "pruned-v1"
     const val MAX_BYTES = 8L * 1024 * 1024
 
-    fun encode(files: Collection<PrunedFile>): ByteArray = buildString {
-        append(VERSION).append('\n')
-        for (f in files.sortedWith(compareBy(PrunedFile::station, PrunedFile::name))) {
-            append(f.station).append('\t').append(f.name).append('\t').append(f.bytes).append('\t')
-            append(f.crc32).append('\t').append(f.prunedAtEpochMs).append('\n')
-        }
-    }.encodeToByteArray()
-
     /**
-     * The records of [bytes], or null when the version is not [VERSION] or any line is malformed. A
-     * reader that cannot trust every record must not rewrite the file from a partial list.
+     * The records of [bytes], or null when the version is not [VERSION] or any line is malformed, so
+     * a partly readable file imports no marks.
      */
     fun decode(bytes: ByteArray): List<PrunedFile>? {
         val lines = bytes.decodeToString().split('\n')

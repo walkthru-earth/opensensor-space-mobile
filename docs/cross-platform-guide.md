@@ -38,7 +38,7 @@ interfaces.
 Both phones run `SyncEngine`, `ArchiveCollector` and one `CollectionController` per device from
 `:core:sync`, with the `ArchiveStore` and `ArchiveIndex` ports from `:core:archive`. Android adapts
 the ports in `app/.../data/archive/` and routes collection through `DeviceFacade`. iOS uses
-`IosArchiveStore` and `ReceiptArchiveIndex` in `:core:archive` iosMain, one `IosLink` per
+`IosArchiveStore` in `:core:archive` iosMain with the shared Room index from `:core:database`, one `IosLink` per
 connection over `LinkSession`, and `SensorCollections`, which every Swift sync entry point calls.
 Swift `LanSession` and `BlePhysicalLink` feed each `LinkSession` through `LinkDriver` and
 `FrameSink`. Keystore and Keychain stay platform code, and the credential port in the diagram is
@@ -68,7 +68,7 @@ flowchart LR
   subgraph i["iOS adapters (Swift)"]
     IB[Core Bluetooth]
     IL[NWConnection]
-    IF[FileManager + receipts]
+    IF[FileManager + Room KMP]
     IK[Keychain]
   end
   E --> FL & AS & AI

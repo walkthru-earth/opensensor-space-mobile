@@ -25,6 +25,10 @@ gradlePlugin {
             id = "opensensor.kmp.ios-framework"
             implementationClass = "IosFrameworkConventionPlugin"
         }
+        register("kmpAndroidLibrary") {
+            id = "opensensor.kmp.android-library"
+            implementationClass = "KmpAndroidLibraryConventionPlugin"
+        }
         register("composeFeature") {
             id = "opensensor.kmp.compose-feature"
             implementationClass = "ComposeFeatureConventionPlugin"

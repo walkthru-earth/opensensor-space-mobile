@@ -155,10 +155,6 @@ composeCompiler {
     reportsDestination = layout.buildDirectory.dir("compose_compiler")
 }
 
-ksp {
-    arg("room.schemaLocation", "$projectDir/schemas")
-}
-
 /**
  * Copies the Android builds of the H3 JNI library out of the `com.uber:h3` jar into a jniLibs
  * directory (`arm64-v8a`, `armeabi-v7a`), where `System.loadLibrary("h3-java")` finds them.
@@ -273,9 +269,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.hilt.lifecycle.viewmodel.compose)
-    implementation(libs.androidx.room.runtime)
-    implementation(libs.androidx.room.ktx)
-    ksp(libs.androidx.room.compiler)
+    // The shared Room database (entities, DAOs, migrations, schema), opened on the bundled driver.
+    implementation(project(":core:database"))
 
     // Compose
     implementation(libs.androidx.compose.ui)

@@ -2,8 +2,6 @@ package earth.walkthru.opensensor
 
 import earth.walkthru.aqsync.archive.ArchiveIndex
 import earth.walkthru.aqsync.archive.ArchiveStore
-import earth.walkthru.aqsync.archive.IosArchiveStore
-import earth.walkthru.aqsync.archive.ReceiptArchiveIndex
 import earth.walkthru.aqsync.collection.CollectionFailure
 import earth.walkthru.aqsync.collection.LinkPreference
 import earth.walkthru.aqsync.collection.SyncEndReason
@@ -26,10 +24,7 @@ import earth.walkthru.aqsync.data.sync.failed
 import earth.walkthru.aqsync.link.DisconnectCause
 import earth.walkthru.aqsync.link.LinkClosedException
 import earth.walkthru.aqsync.link.LinkTimeoutException
-import earth.walkthru.aqsync.storage.IosStorageBudget
 import earth.walkthru.aqsync.storage.StorageBudget
-import earth.walkthru.aqsync.storage.StorageRole
-import earth.walkthru.aqsync.storage.StorageRoots
 import earth.walkthru.opensensor.designsystem.nowEpochMillis
 import earth.walkthru.opensensor.today.TodayNotice
 import kotlinx.coroutines.CancellationException
@@ -60,7 +55,7 @@ class SyncHandle internal constructor(private val stop: () -> Unit) {
 }
 
 /**
- * The Swift-facing runner for the shared engine. It owns the archive store, the receipt index and
+ * The Swift-facing runner for the shared engine. It holds the archive store, the archive index and
  * the [ArchiveCollector], so LAN and Bluetooth save into the same archive under the same rules.
  *
  * Make one per app. Swift syncs through [collections] and sends commands through [command]. The
@@ -73,7 +68,7 @@ class SyncHandle internal constructor(private val stop: () -> Unit) {
  */
 class SensorSync internal constructor(
     store: ArchiveStore,
-    /** The receipt index, read by My devices for its archive line. */
+    /** The archive index, read by My devices for its archive line. */
     internal val index: ArchiveIndex,
     private val work: CoroutineContext,
     private val callbacks: CoroutineContext,
@@ -87,11 +82,6 @@ class SensorSync internal constructor(
      */
     coordinator: DeviceCoordinator = DeviceCoordinator(),
 ) {
-    constructor() : this(IosArchiveStore.inApplicationSupport(), Dispatchers.Default, Dispatchers.Main)
-
-    private constructor(store: IosArchiveStore, work: CoroutineContext, callbacks: CoroutineContext) :
-        this(store, ReceiptArchiveIndex(store.finalRoot), work, callbacks, budget = IosStorageBudget(StorageRoots(mapOf(StorageRole.Archive to store.finalRoot))))
-
     internal val collector = ArchiveCollector(store, index, SyncEngine(store, index, coordinator = coordinator, log = ::syncLog), budget)
     private val scope = CoroutineScope(SupervisorJob())
     private val lock = NSLock()

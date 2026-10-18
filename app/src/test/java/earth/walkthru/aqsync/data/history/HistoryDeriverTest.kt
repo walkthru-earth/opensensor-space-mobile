@@ -2,6 +2,8 @@ package earth.walkthru.aqsync.data.history
 
 import android.content.ContextWrapper
 import androidx.room.Room
+import androidx.room.execSQL
+import androidx.room.useWriterConnection
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import earth.walkthru.aqsync.data.archive.RoomArchiveIndex
 import earth.walkthru.aqsync.data.archive.toRecord
@@ -14,7 +16,6 @@ import earth.walkthru.aqsync.data.local.database.DerivedDay
 import earth.walkthru.aqsync.data.local.database.DerivedDayDao
 import earth.walkthru.aqsync.data.local.database.MetricBucket
 import earth.walkthru.aqsync.data.local.database.MetricBucketDao
-import earth.walkthru.aqsync.data.local.database.writerSql
 import earth.walkthru.aqsync.data.sync.DeviceCoordinator
 import earth.walkthru.aqsync.data.sync.FileArchive
 import earth.walkthru.aqsync.storage.AtomicFiles
@@ -459,7 +460,7 @@ class HistoryDeriverTest {
             val bucketDays = buckets.observeDayCount(station).first()
             assertEquals(2, bucketDays)
 
-            AppDatabase.MIGRATION_10_11.migrate(db.writerSql())
+            db.useWriterConnection { it.execSQL(AppDatabase.MIGRATION_10_11_SQL) }
             assertEquals(null, files.forStation(station).single().indexedAtEpochMs)
 
             // The derive collector may run before the backfill. The waiting file still holds its days.

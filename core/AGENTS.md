@@ -21,8 +21,8 @@ and `SensorCollections` for one controller per device, which every native sync e
 runs through ([#81](https://github.com/walkthru-earth/opensensor-space-mobile/issues/81)).
 `settings/` owns shared DataStore preferences, keys, units and detail level, with the
 iOS Application Support path and one-time UserDefaults migration. See `docs/README.md` in the repo
-root for the relevant concern. No Android, Hilt, Room, `Context` or
-`android.util.Log` in any `:core:*` module.
+root for the relevant concern. No Android, Hilt, `Context` or `android.util.Log` in any
+`:core:*` module. Room appears only in `:core:database`, the shared Room KMP database for both phones.
 
 - Change firmware's shared contract first for wire or measurement schema edits;
   preserve old archived bytes. Tests here should exercise real fixtures and

@@ -69,6 +69,8 @@ androidx-lifecycle-runtime-ktx = { module = "androidx.lifecycle:lifecycle-runtim
 androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "androidxRoom" }
 androidx-room-ktx = { module = "androidx.room:room-ktx", version.ref = "androidxRoom" }
 androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref = "androidxRoom" }
+# The bundled SQLite driver both phones open the shared database with (:core:database).
+androidx-sqlite-bundled = { module = "androidx.sqlite:sqlite-bundled", version = "2.6.2" }
 # Room's bundled SQLite for in-memory DAO tests on the host JVM. Same line as Room 2.8.5's androidx.sqlite.
 androidx-sqlite-bundled-jvm = { module = "androidx.sqlite:sqlite-bundled-jvm", version = "2.6.2" }
 androidx-test-core = { module = "androidx.test:core", version.ref = "androidxTest" }
@@ -127,6 +129,8 @@ android-application = { id = "com.android.application", version.ref = "androidGr
 android-kotlin-multiplatform-library = { id = "com.android.kotlin.multiplatform.library", version.ref = "androidGradlePlugin" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp"}
+# Exports the shared database schema of every target to core/database/schemas.
+androidx-room = { id = "androidx.room", version.ref = "androidxRoom" }
 hilt-gradle = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }

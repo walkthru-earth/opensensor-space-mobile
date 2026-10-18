@@ -8,6 +8,8 @@ plugins {
     alias(libs.plugins.kotlin.serialization) apply false
     alias(libs.plugins.compose.compiler) apply false
     alias(libs.plugins.compose.multiplatform) apply false
+    alias(libs.plugins.ksp) apply false
+    alias(libs.plugins.androidx.room) apply false
 }
 
 // The gates (AGENTS.md). Only the :app tasks are listed here. Every shared module joins the gates

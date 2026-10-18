@@ -1,7 +1,7 @@
 # Data model — Room, DataStore, files on disk, backup
 
 **Scope:** what the phone stores, where, and how it moves between phones. Not how it is computed (see history-pipeline) or fetched (see sync-engine).
-**Code:** `data/local/database/AppDatabase.kt`, `KnownDevice.kt`, `StationEpoch.kt`, `SensorInstallation.kt`, `ArchivedFile.kt`, `History.kt`; `data/local/di/DatabaseModule.kt` (`aq-sync.db`); `app/schemas/earth.walkthru.aqsync.data.local.database.AppDatabase/1…10.json`; `data/DeviceContinuityPolicy.kt`; `data/settings/AppSettings.kt`; `data/sync/FileArchive.kt`; `data/history/DailyDerived.kt`; `res/xml/data_extraction_rules.xml`.
+**Code:** `core/database` commonMain `data/local/database/AppDatabase.kt`, `KnownDevice.kt`, `StationEpoch.kt`, `SensorInstallation.kt`, `ArchivedFile.kt`, `History.kt`; `data/local/di/DatabaseModule.kt` (`aq-sync.db`); `core/database/schemas/earth.walkthru.aqsync.data.local.database.AppDatabase/1…12.json`; `data/DeviceContinuityPolicy.kt`; `data/settings/AppSettings.kt`; `data/sync/FileArchive.kt`; `data/history/DailyDerived.kt`; `res/xml/data_extraction_rules.xml`.
 **Related:** [sync-engine.md](sync-engine.md) (who writes `archived_file`), [history-pipeline.md](history-pipeline.md) (who writes the tiers), [transports.md](transports.md#lan-token-lifecycle) (the token).
 
 ## Finding and exporting the mobile archive
@@ -16,11 +16,16 @@ iOS raw files live in the app's private
 `Library/Application Support/SensorArchive/<station>/<relative Hive path>`, excluded from
 cloud backup. **Files** (a button next to History on My devices) shares one file, all files,
 or a zip of the archive, and saves the zip through Apple's Files picker, preserving
-station/Hive paths. Partial downloads and `.verified.json` size/CRC receipts are not exported. The original archive stays private and supports resume;
+station/Hive paths. Partial downloads are not exported. The original archive stays private and supports resume;
 export is available without connecting a sensor. See [ios.md](ios.md)
 for lifecycle and validation limits.
 
 ## Room schema v12 (`aq-sync.db`)
+
+One Room KMP schema in `:core:database` serves both phones on the bundled SQLite driver. Android
+keeps the file in its app database directory. iOS keeps it at
+`Application Support/database/aq-sync.db`, excluded from backup, and uses only `archived_file` and
+`pruned_file`. Exported schemas live in `core/database/schemas/`.
 
 ```mermaid
 erDiagram
@@ -114,9 +119,12 @@ erDiagram
 keeps its row with `indexError`).
 `pruned_file` holds the files the user removed from this phone in Settings. Sync skips one while the
 device lists the same name and size and the phone has no copy. Settings › Storage › Download again
-empties it. iOS keeps the same records in one Durable file, `SensorArchive-pruned/pruned.v1`
-(`IosPrunedFiles`), outside the station directories, so the janitor never adopts or sweeps it.
-Both sit behind the `PrunedFiles` port in `:core:archive`.
+empties it. Both phones use this table through `RoomPrunedFiles`, behind the `PrunedFiles` port in
+`:core:archive`. On the first open of the iOS database, `LegacyReceiptImport` moves an older build's
+`SensorArchive-pruned/pruned.v1` marks and `.verified.json` receipts into Room once. A receipt
+becomes a record only if its file passes size, CRC-32 and `PAR1`, and a half-written receipt is
+skipped. It writes the `receipts-imported` marker, then deletes the old files, and later opens only
+sweep leftovers.
 
 ### Migrations
 
@@ -185,7 +193,7 @@ own generation. These can differ. Do not silently reparent old files or relabel 
 the current generation. Collection routing and history interpretation must preserve that distinction
 ([canonical firmware contract](../../aq-parquet/docs/shared/ble-sync-protocol.md#phone-sync-algorithm)).
 
-No destructive fallback. Every version's JSON is exported to `app/schemas/`. Token encryption does
+No destructive fallback. Every version's JSON is exported to `core/database/schemas/`. Token encryption does
 not change the SQL schema: `SecureKnownDeviceDao` encrypts new values with AES-256-GCM under a
 non-exportable Android Keystore key. Row reads return the ciphertext unchanged, so ViewModels never
 hold plaintext, and an upsert of a read row stores the same ciphertext again. Only
@@ -204,7 +212,7 @@ Unrelated crypto, programming and database failures also propagate.
 
 - **`@Upsert` on an entity with an auto id and a unique index updates nothing** (it runs `UPDATE … WHERE id = ?` with id 0). `archived_file` and `derived_day` use `@Insert(onConflict = REPLACE)` — the id carries no meaning. `known_device` (address is the PK) may use `@Upsert`.
 - **`openSession` never writes a `KnownDevice` snapshot.** `connect()` already inserts a placeholder row with `insertIfAbsent` before the link opens. After `info`, `openSession` calls `insertIfAbsent` again with default settings, which adds a row only if it is still missing and returns -1 otherwise. An existing row gets `recordConnection`, which writes identity and timestamps only, so Auto-sync, the companion association and the LAN credential keep their latest value. Identity checks run before that write, and a station change clears the old token and port first with `setLanToken`. Clearing an unusable credential, or a token the LAN refused or rotated, uses `clearLanTokenIfStored`, one conditional update on the ciphertext that failed.
-- **`ArchiveIndex.update` is one Room transaction** (`ArchivedFileDao.update`, `@Transaction`), so index repair and a sync never lose each other's columns. `RoomArchiveIndexTest` runs 64 concurrent updates on one key.
+- **`ArchiveIndex.update` is one Room transaction** (`ArchivedFileDao.update`, `@Transaction`), so index repair and a sync never lose each other's columns. `RoomArchiveIndexTest` (`:core:database` commonTest, Android host and iOS simulator) runs 64 concurrent updates on one key.
 - `derived_day.dailyFile == null` means the daily Parquet failed → its signature is treated as stale next pass.
 
 ## DataStore (`:core:settings`, `SettingsRepository`)
@@ -263,8 +271,8 @@ directory is synced on both platforms. Clock receipts are written once with `cre
 `StorageJanitor` runs once per process as the first step of the shared `HistoryOrchestrator.run`,
 before the back-fill, from `AqSyncApplication` on Android and `IosArchive.startIndexRepair` on iOS. It also finds final files without an index record (a crash
 between commit and record), checks size, CRC-32, SHA-256 and `PAR1`, and indexes them with
-`sourceDevice = "adopted"` through `ArchiveIndex.putIfAbsent` (Room `INSERT OR IGNORE`, iOS
-`createNoReplace` receipt), so a record the engine writes meanwhile is never replaced. A final that
+`sourceDevice = "adopted"` through `ArchiveIndex.putIfAbsent` (Room `INSERT OR IGNORE` on both
+phones), so a record the engine writes meanwhile is never replaced. A final that
 fails `PAR1` stays in place, counted as unverifiable. A stale partial is re-listed before it is
 deleted, since opening a partial rewrites its meta. The 30 day sweep re-lists under the station's
 `DeviceCoordinator` writer lease, the one the sync engine holds while it writes that file, so a resume that
@@ -339,7 +347,7 @@ removed — Android 12+ (our minSdk) reads only `dataExtractionRules`.
 
 | Edit… | Affects… |
 | --- | --- |
-| any entity | a new explicit or auto migration, `app/schemas/<n+1>.json`, `exportSchema` check in CI |
+| any entity | a new explicit or auto migration, `core/database/schemas/<n+1>.json`, `exportSchema` check in CI |
 | `archived_file` index columns | `ArchivedFile.info()` → `IndexedFileInfo` (pure), `HistoryIndexer`, `withUtcBetween` (filters `purpose`) |
 | `metric_bucket` meaning | bump `HistoryDeriver.DERIVE_VERSION` (part of every day's signature) |
 | `derived_day.sourceSignature` inputs | which days rebuild after a sync — keep `name:crc32` + anchor |

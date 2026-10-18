@@ -12,7 +12,6 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 private fun tempRoot(): String = NSTemporaryDirectory().trimEnd('/') + "/archive-test-" + NSUUID().UUIDString()
@@ -21,9 +20,7 @@ class IosArchiveStoreContractTest : ArchiveStoreContract() {
     private val base = tempRoot()
 
     override fun newStore(): ArchiveStore = IosArchiveStore("$base/SensorArchive", "$base/archive-partial", Dispatchers.Unconfined)
-    override fun newIndex(): ArchiveIndex = ReceiptArchiveIndex("$base/SensorArchive", Dispatchers.Unconfined).also {
-        IosFiles.prepareRoot("$base/SensorArchive")
-    }
+    override fun newIndex(): ArchiveIndex = InMemoryArchiveIndex()
 
     @AfterTest
     fun cleanUp() {
@@ -31,7 +28,7 @@ class IosArchiveStoreContractTest : ArchiveStoreContract() {
     }
 }
 
-/** What the iPhone archive written by earlier builds needs from the shared store and index. */
+/** What the iPhone archive written by earlier builds needs from the shared store. */
 class IosArchiveLegacyTest {
     private val base = tempRoot()
     private val finals = "$base/SensorArchive"
@@ -67,36 +64,6 @@ class IosArchiveLegacyTest {
         store.commit(key)
         assertTrue(bytes.contentEquals(store.reader(key).read(0, bytes.size)))
         assertEquals(listOf(key), store.listFinal())
-    }
-
-    @Test
-    fun aLegacyReceiptReadsAsARecordWithoutAFingerprint() = runTest {
-        writeFile(final, bytes)
-        writeFile("$final.verified.json", """{"size":${bytes.size},"crc":${meta.crc32}}""".encodeToByteArray())
-        val record = assertNotNull(ReceiptArchiveIndex(finals, Dispatchers.Unconfined).get(key))
-        assertEquals(bytes.size.toLong(), record.bytes)
-        assertEquals(meta.crc32, record.crc32)
-        assertEquals("", record.sha256)
-        assertEquals(listOf(key), store.listFinal(station))
-    }
-
-    @Test
-    fun aReceiptKeepsTheOlderKeysAndSurvivesAReload() = runTest {
-        writeFile(final, bytes)
-        val index = ReceiptArchiveIndex(finals, Dispatchers.Unconfined)
-        index.put(ArchiveRecord(station, key.name, bytes.size.toLong(), meta.crc32, "ab", 7, "dev", rows = 2, purpose = "telemetry"))
-        val text = assertNotNull(IosFiles.readSmall("$final.verified.json", 4096)).decodeToString()
-        assertTrue(text.contains("\"size\":${bytes.size}") && text.contains("\"crc\":${meta.crc32}"))
-        val again = assertNotNull(ReceiptArchiveIndex(finals, Dispatchers.Unconfined).get(key))
-        assertEquals(2L, again.rows)
-        assertEquals("ab", again.sha256)
-        assertEquals("telemetry", again.purpose)
-    }
-
-    @Test
-    fun aReceiptWithoutItsFileIsNotSynced() = runTest {
-        writeFile("$final.verified.json", """{"size":${bytes.size},"crc":${meta.crc32}}""".encodeToByteArray())
-        assertEquals(null, ReceiptArchiveIndex(finals, Dispatchers.Unconfined).get(key))
     }
 
     @Test

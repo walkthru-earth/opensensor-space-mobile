@@ -17,6 +17,8 @@ kotlin {
             implementation(project(":core:settings"))
             implementation(project(":core:sync"))
             implementation(project(":core:archive"))
+            // The Room index and removed-file marks, shared with Android (IosArchiveDatabase).
+            implementation(project(":core:database"))
             implementation(project(":feature:discover"))
             implementation(project(":feature:history"))
             // Files, the inspector and export over the phone archive (docs/screens.md, Files).

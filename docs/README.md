@@ -31,7 +31,7 @@ before planning new work. Use [architecture.md](architecture.md), [sync-engine.m
 | Touch BLE / LAN pipes, pairing, the LAN token, mDNS, reconnect | [transports.md](transports.md) | `data/ble/`, `data/lan/`, `data/DeviceLinkOwner.kt`, `core/sync/link/` |
 | Touch file download, verification, lost windows, resume, archive paths | [sync-engine.md](sync-engine.md) | `core/sync/`, `data/archive/`, `data/DeviceFacade.kt`, `ios/shared/` |
 | Touch auto-sync, WorkManager, the foreground notification, WifiLock, or the triggers that start a run early (companion presence, advertising flags, Wi-Fi arrival) | [background-sync.md](background-sync.md) | `data/background/`, `data/lan/LanWifiLock.kt`, `core/protocol/.../Advertisement.kt` |
-| Touch Room tables, migrations, DataStore keys, on-disk layout, backup | [data-model.md](data-model.md) | `data/local/database/`, `app/schemas/`, `res/xml/data_extraction_rules.xml` |
+| Touch Room tables, migrations, DataStore keys, on-disk layout, backup | [data-model.md](data-model.md) | `core/database/` (`data/local/database/`, `schemas/`), `res/xml/data_extraction_rules.xml` |
 | Touch the index → tiers → derived-day → chart pipeline, metrics, moods, time estimate | [history-pipeline.md](history-pipeline.md) | `core/history/`, `data/history/`, `ui/history/` |
 | Reproduce history host benchmarks and understand their limits | [perf/history-2026-10-11.md](perf/history-2026-10-11.md) | `tools/history-benchmark/` |
 | Recover UTC after reboot, automatic clock sync, corrected day partitions | [time-reconciliation.md](time-reconciliation.md) | `core/archive/`, `core/history/`, `data/history/`, `ios/` |

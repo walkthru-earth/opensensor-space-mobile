@@ -7,12 +7,9 @@ import earth.walkthru.aqsync.data.local.database.PrunedFileDao
 import earth.walkthru.aqsync.data.local.database.PrunedFileEntity
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
-import javax.inject.Inject
-import javax.inject.Singleton
 
-/** The shared [PrunedFiles] over Room's `pruned_file` table (v12). */
-@Singleton
-class RoomPrunedFiles @Inject constructor(private val dao: PrunedFileDao) : PrunedFiles {
+/** The shared [PrunedFiles] over the `pruned_file` table, on both phones. */
+class RoomPrunedFiles(private val dao: PrunedFileDao) : PrunedFiles {
     override fun observeAll(): Flow<List<PrunedFile>> = dao.observeAll().map { rows -> rows.map { it.toPruned() } }
 
     override suspend fun forStation(station: String): List<PrunedFile> = dao.forStation(station).map { it.toPruned() }

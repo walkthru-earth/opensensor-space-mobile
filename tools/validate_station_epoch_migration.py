@@ -13,9 +13,9 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SCHEMAS = ROOT / "app/schemas/earth.walkthru.aqsync.data.local.database.AppDatabase"
+SCHEMAS = ROOT / "core/database/schemas/earth.walkthru.aqsync.data.local.database.AppDatabase"
 DATABASE_SOURCE = ROOT / (
-    "app/src/main/java/earth/walkthru/aqsync/data/local/database/AppDatabase.kt"
+    "core/database/src/commonMain/kotlin/earth/walkthru/aqsync/data/local/database/AppDatabase.kt"
 )
 
 
@@ -49,8 +49,9 @@ def migration_sql(from_version=8, to_version=9):
     # accidentally become part of an older migration's SQL fixture.
     body = source.split(declaration, 1)[1].split("val MIGRATION", 1)[0]
     body = re.sub(r"//[^\n]*", "", body)
-    constants = re.findall(r'db\.execSQL\(\s*("(?:[^"\\]|\\.)*")\s*\)', body)
-    require(len(constants) == body.count("db.execSQL("), "Migration must use literal SQL statements")
+    require(body.lstrip().startswith("Migration = sqlMigration(\n"), "Migration must be one sqlMigration")
+    body = body.split("sqlMigration(", 1)[1]
+    constants = re.findall(r'"(?:[^"\\]|\\.)*"', body)
     require(len(constants) == 3, "Review validator fixtures when migration statements change")
     statements = [json.loads(value) for value in constants]
     require(all("$" not in sql for sql in statements), "Interpolated migration SQL is unsupported")
