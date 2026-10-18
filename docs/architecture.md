@@ -247,7 +247,7 @@ Android still prevents endpoint aliases from concurrently claiming one physical 
 the same phone. This phone policy is separate from firmware's independent peer handles.
 The owner contract is [`../aq-parquet/docs/shared/ble-sync-protocol.md`](../../aq-parquet/docs/shared/ble-sync-protocol.md).
 
-The shared `WriterLeases` in `SyncEngine` serializes the entire OPEN/read/verify/commit/index/CLOSE sequence for
+The archive's one `DeviceCoordinator` (`core/sync`), through its writer lease in `SyncEngine`, serializes the entire OPEN/read/verify/commit/index/CLOSE sequence for
 one `(station, name)`, with cancellable waiters; different identities transfer independently.
 An existing destination must verify against OPENED size/CRC/PAR1 and its recorded SHA-256 before
 reuse. A conflict preserves existing bytes and provenance; commit refuses to replace a destination.
@@ -279,7 +279,8 @@ not phone cold-open latency or a qualified latency improvement.
 | `ParquetWriter` output | `DailyDerivedBuilder`, `tools/validate_parquet_samples.py` | PyArrow + DuckDB oracle run |
 | `CollectionState` / `SyncProgress` | facade UI projections, Files, service and worker | `CollectionControllerTest`, facade tests, lease accounting and notification text |
 | Manager/controller ownership, transfer budget | address-bound ViewModels, runner, worker, foreground service | `DeviceOwnershipTest`, `AutoSyncRunnerTest`, cancellation and per-device progress |
-| Archive writer leases / immutable commit | `SyncEngine`, partial resume, archive index and export | `ConcurrentArchiveTest`, `SyncEngineTest`; preserve existing files on conflicts |
+| `DeviceCoordinator` admission and writer leases / immutable commit | `SyncEngine`, partial resume, janitor, index repair, old file cleanup, archive index and export | `DeviceCoordinatorTest`, `ConcurrentArchiveTest`, `SyncEngineTest`; preserve existing files on conflicts |
+| `HistoryOrchestrator` pass order | janitor, back-fill and every derive pass on both phones | `HistoryOrchestratorTest`, `TierStoreTest`, `StationDaysTest` |
 | LAN transfer leases / shared mDNS resolver | all interactive and worker LAN transfers | `LanTransferLeasesTest`; phone checks on API 31–33 and screen-off LAN |
 | `DetailLevel` | every screen's `detailed`/`advancedMode` gate, Debug destination | migration from `advanced_mode` |
 

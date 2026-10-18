@@ -167,10 +167,11 @@ Settings shows that count, so it never reads as none found. The first unreadable
 class is logged once per run. A UTC day range is inclusive and matches a file whose real or estimated
 span overlaps it. A file the timeline cannot place is included only when no range is set.
 
-`remove` may run while a sync runs. Each file is handled under its `WriterLeases` lease, so a sync of
-the same file waits. It checks the file is still old, then takes the station's
-`ArchiveMutationGate` (`:core:sync`), the one sync, `ArchiveIndexRepair` and the startup janitor
-take for every archive write. Readers never take it. Under the gate it reads the live record again
+`remove` may run while a sync runs. Each file is handled under its writer lease of the archive's one
+`DeviceCoordinator` (`:core:sync`), so a sync of the same file waits, and a sync that waited finds
+the tombstone under the lease and skips the file. It checks the file is still old, then takes the
+coordinator's station gate, the one sync, `ArchiveIndexRepair` and the startup janitor take for
+every archive write. Readers never take it. Under the gate it reads the live record again
 and keeps the file when the record is gone or its size or CRC-32 changed. Then it writes a
 `PrunedFile` record, removes the index record and deletes the final file, only below the Durable
 archive root. A failed delete puts the index record back, drops the `PrunedFile` and counts as
