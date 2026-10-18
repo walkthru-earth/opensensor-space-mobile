@@ -109,9 +109,9 @@ class SyncEngineTest {
     @Test
     fun lostWindowsAreReReadFromThePhoneOffsetAndCounted() = runTest {
         val d = device(backgroundScope)
-        // File 0 is 24 000 bytes, so two 16 KiB windows of 507-byte chunks.
-        // READ 1 (window at 0) loses 3 CHUNKs. READ 2 (retry) is intact.
-        // READ 3 (window at 16384) loses every CHUNK. READ 4 loses 2 again. READ 5 is intact.
+        // File 0 is 24 000 bytes in 507-byte chunks. READ 1 (16384 at 0) loses 3 CHUNKs, so the window
+        // halves to 8112 and READ 2 is intact. READ 3 (8112 at 8112) loses every CHUNK and READ 4 (4056)
+        // loses 2, so the window sits at its 2028-byte floor. READ 5 and the 7 reads after it are intact.
         d.first.dropLeadingChunks = { k -> when (k) { 1 -> 3; 3 -> 99; 4 -> 2; else -> 0 } }
         val progress = ArrayList<FileProgress>()
 
@@ -120,7 +120,8 @@ class SyncEngineTest {
         val synced = assertIs<FileOutcome.Synced>(outcome)
         val file = d.first.files[0]
         assertEquals(file.bytes.size.toLong(), synced.bytes)
-        assertEquals(5, d.first.readCount)
+        assertEquals(12, d.first.readCount)
+        assertEquals(listOf(16384L, 8112L, 8112L, 4056L) + List(8) { 2028L }, d.first.readLengths)
         assertEquals(2, progress.last().windowsRecovered)
         assertTrue(progress.zipWithNext().all { (a, b) -> b.bytesDone >= a.bytesDone }, "progress never goes backwards")
         assertContentEquals(file.bytes, finalBytes(d.first.station, file.name))
@@ -144,6 +145,24 @@ class SyncEngineTest {
         assertIs<FileOutcome.Synced>(engine().pull(d, 1))
         assertEquals(d.first.files[1].name, index.records.single().name)
         assertContentEquals(d.first.files[1].bytes, finalBytes(d.first.station, d.first.files[1].name))
+    }
+
+    @Test
+    fun aWeakLinkShrinksTheWindowUntilReadsLandAndTheNextFileKeepsTheSmallWindow() = runTest {
+        val d = device(backgroundScope)
+        // A link that loses the head of every window longer than 8 frames. A fixed 16 KiB window
+        // would lose all 6 attempts and fail the file. The adaptive one halves to 8 frames and lands.
+        val fake = d.first
+        fake.dropLeadingChunks = { if (fake.readLengths.last() > 8 * 507) 1 else 0 }
+
+        assertIs<FileOutcome.Synced>(engine().pull(d, 0))
+        assertEquals(listOf(16384L, 8112L, 4056L), fake.readLengths.take(3))
+        assertContentEquals(fake.files[0].bytes, finalBytes(fake.station, fake.files[0].name))
+
+        val before = fake.readLengths.size
+        assertIs<FileOutcome.Synced>(engine().pull(d, 1))
+        assertTrue(fake.readLengths.drop(before).all { it <= 6084L }, "the link remembers it is weak: ${fake.readLengths}")
+        assertContentEquals(fake.files[1].bytes, finalBytes(fake.station, fake.files[1].name))
     }
 
     @Test

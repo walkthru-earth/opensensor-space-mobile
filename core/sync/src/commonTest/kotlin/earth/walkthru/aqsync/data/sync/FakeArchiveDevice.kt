@@ -46,6 +46,9 @@ class FakeArchiveDevice(
     /** The offset of every `READ` handled, in order, so a test can see where a resume started. */
     val readOffsets: MutableList<Long> = mutableListOf()
 
+    /** The length asked by every `READ` handled, in order, so a test can follow the adaptive window. */
+    val readLengths: MutableList<Long> = mutableListOf()
+
     /** `READ` requests handled so far. The hooks below are keyed on it (1-based). */
     var readCount: Int = 0
         private set
@@ -159,6 +162,7 @@ class FakeArchiveDevice(
                 val f = openFile
                 if (f == null || handle != openHandle) return send(Frame.Error(op, ProtocolError.BAD_HANDLE.code, ""))
                 readOffsets += offset
+                readLengths += length
                 beforeRead(readCount + 1)
                 val end = minOf(f.bytes.size.toLong(), offset + minOf(length, maxRead.toLong()))
                 val chunkMax = mtu - 10
