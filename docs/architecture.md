@@ -12,7 +12,7 @@ flowchart TB
     PR[":core:protocol<br/>common wire rules + JVM adapters"]
     PQ[":core:parquet<br/>reader + writer, ByteReader, RangeSource, page index, Thrift compact, LZ4/Snappy/GZIP, codec SPI, WKB"]
     NT[":core:net<br/>HTTP range source, OkHttp and NSURLSession"]
-    AQ[":core:airquality<br/>WHO 2021 scales and palette"]
+    AQ[":core:airquality<br/>WHO 2021 scales and palette, PM quality checks"]
     HI[":core:history<br/>sensor rules, file index, aggregation, calendar windows"]
     PF[":core:publicfeed<br/>Discover feed port, H3, viewport cover, sample, OpenAQ live feed"]
     UN[":core:units<br/>display units, axis ticks"]
@@ -193,7 +193,7 @@ for iOS-specific guidance. SwiftUI review rules apply only if native SwiftUI vie
 | `net` | HTTP range reads through OkHttp on JVM and NSURLSession on iOS |
 | `history` | Metric registry, indexing, aggregation, calendars, grouped `DayPass`, daily output and persistent tiers |
 | `publicfeed` | Discover feed, H3, viewport cover and sample data |
-| `units`, `airquality` | Display units, axis ticks and WHO 2021 scales |
+| `units`, `airquality` | Display units, axis ticks, WHO 2021 scales and the PM quality checks (`QcRules`) |
 | `storage` | Durable/Derived/Scratch roots, atomic no-replace commits, free-space budget, quota and memory pressure |
 | `archive` | Layout, verifier, records and store/index ports. Android uses file adapters, iosMain supplies `IosArchiveStore` and `LegacyReceiptImport` |
 | `database` | Room KMP schema v12 (`AppDatabase`, entities, DAOs) on the bundled SQLite driver, `RoomArchiveIndex` and `RoomPrunedFiles` for both phones. iosMain opens `Application Support/database/aq-sync.db` through `IosArchiveDatabase` |
@@ -215,6 +215,24 @@ for iOS-specific guidance. SwiftUI review rules apply only if native SwiftUI vie
   name at 399 bytes, with a phone segment cap of 241 bytes so a `.partial.meta` or an older iOS build's
   `.verified.json` beside it still fits 255 bytes. The shared
   `SyncPlanner` uses it on both platforms.
+
+### PM quality checks in `:core:airquality`
+
+`QcRules.flags(rows)` returns one `QcFlags` bitmask per `QcRow` and never changes a value
+([#91](https://github.com/walkthru-earth/opensensor-space-mobile/issues/91)). It is not wired yet.
+The indexer, the daily builder and the Detailed info icon adopt it in the next slice.
+
+| Bit | Flag | Rule |
+| --- | --- | --- |
+| 1 | `PM25_ABOVE_PM10` | PM2.5 above PM10 by more than 1 µg/m³, the rounding of two whole µg/m³ values |
+| 2 | `FLATLINE` | All particle count bins unchanged for 30 or more neighbouring rows |
+| 4 | `SPIKE` | One row steps away from both neighbours by more than 20 µg/m³ and 20 percent (twice the PMS5003 datasheet consistency), with no count bin moving the same way by half the relative mass change |
+| 8 | `HIGH_HUMIDITY` | RH above 85 percent, only on boards with RH |
+
+Rows are neighbours when the later one comes at most three median steps after the earlier one.
+A longer step, a repeated time or a time going back ends a flatline run and clears a spike. A missing
+measurement is `NaN` or null counts, and the check that needs it does nothing. The bit values become
+part of the derived tier format once stored, so a bit is never reused or renumbered.
 
 ## Rules that keep the modules honest
 
