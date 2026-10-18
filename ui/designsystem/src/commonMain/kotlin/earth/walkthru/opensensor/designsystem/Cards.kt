@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -22,11 +23,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -72,9 +73,8 @@ fun SectionCard(
 ) {
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = modifier.fillMaxWidth()) {
         Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Eyebrow(title, heading = true)
-                Spacer(Modifier.weight(1f))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Eyebrow(title, heading = true, modifier = Modifier.weight(1f))
                 trailing?.invoke()
             }
             Spacer(Modifier.height(8.dp))
@@ -95,16 +95,18 @@ fun Peacock(
     expression: PeacockExpression = PeacockExpression.WELCOME,
     animate: Boolean = true,
 ) {
-    if (!animate) {
+    val reduceMotion = rememberReduceMotion()
+    val durationMs = reduceMotionDurationMillis(420, !animate || reduceMotion)
+    if (durationMs == 0) {
         PeacockIcon(expression, modifier.size(size), contentDescription)
         return
     }
-    // A finite, gentle entrance. Compose scales animation by the system animator setting, so
-    // "Remove animations" shows the bird immediately.
-    val visible = remember { MutableTransitionState(false).apply { targetState = true } }
+    // A finite, gentle entrance. Skipped when [animate] is false or [rememberReduceMotion] is active.
+    val visible = remember { MutableTransitionState(false) }
+    LaunchedEffect(Unit) { visible.targetState = true }
     AnimatedVisibility(
         visibleState = visible,
-        enter = fadeIn(tween(420)) + scaleIn(tween(420), initialScale = 0.92f),
+        enter = fadeIn(tween(durationMs)) + scaleIn(tween(durationMs), initialScale = 0.92f),
         modifier = modifier,
     ) {
         PeacockIcon(expression, Modifier.size(size), contentDescription)
@@ -123,14 +125,26 @@ fun MascotGuide(
     expression: PeacockExpression = PeacockExpression.CONFUSED,
     action: (@Composable () -> Unit)? = null,
 ) {
+    val fontScale = LocalDensity.current.fontScale
     BrandCard(modifier = modifier, tone = CardTone.SOFT, contentPadding = PaddingValues(22.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Peacock(size = 96.dp, expression = expression)
-            Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
-                Spacer(Modifier.height(4.dp))
-                Text(body, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val stackVertically = maxWidth < 340.dp || fontScale >= 1.5f
+            if (stackVertically) {
+                Column(horizontalAlignment = Alignment.Start, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Peacock(size = 80.dp, expression = expression)
+                    Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.headingSemantics())
+                    Text(body, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Peacock(size = 96.dp, expression = expression)
+                    Spacer(Modifier.width(14.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.headingSemantics())
+                        Spacer(Modifier.height(4.dp))
+                        Text(body, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
             }
         }
         if (action != null) {

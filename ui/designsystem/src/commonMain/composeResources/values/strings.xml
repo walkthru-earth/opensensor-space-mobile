@@ -3,6 +3,8 @@
 <resources>
     <!-- InfoButton content description, the argument is the topic. -->
     <string name="info_more">More about %1$s</string>
+    <!-- Visible close button inside InfoSheet. -->
+    <string name="info_close">Close</string>
     <!-- SignalBars content description, the argument is 1 to 4. -->
     <string name="signal_bars">Signal %1$d of 4</string>
     <!-- The six air moods, one per WHO step, cleanest first, and the word for no reading. -->

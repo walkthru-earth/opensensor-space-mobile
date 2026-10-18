@@ -31,9 +31,9 @@ fun PillButton(
         shape = FloatingControl.Shape,
         colors = FloatingControl.primaryButtonColors(),
         contentPadding = PaddingValues(start = 24.dp, end = if (arrow) 18.dp else 24.dp, top = 14.dp, bottom = 14.dp),
-        modifier = modifier,
+        modifier = modifier.touchTarget(),
     ) {
-        Text(text, style = MaterialTheme.typography.labelLarge)
+        Text(text, style = MaterialTheme.typography.labelLarge, maxLines = TypographyLimits.TabLabelMaxLines)
         if (arrow) {
             Spacer(Modifier.width(10.dp))
             Icon(AppIcons.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -50,8 +50,8 @@ fun OutlinePillButton(text: String, onClick: () -> Unit, modifier: Modifier = Mo
         shape = FloatingControl.Shape,
         border = BorderStroke(1.5.dp, if (enabled) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outlineVariant),
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
-        modifier = modifier,
+        modifier = modifier.touchTarget(),
     ) {
-        Text(text, style = MaterialTheme.typography.labelLarge)
+        Text(text, style = MaterialTheme.typography.labelLarge, maxLines = TypographyLimits.TabLabelMaxLines)
     }
 }

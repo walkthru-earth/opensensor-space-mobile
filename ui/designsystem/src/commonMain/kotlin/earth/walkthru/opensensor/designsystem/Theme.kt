@@ -9,6 +9,7 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.unit.dp
@@ -134,12 +135,15 @@ val BrandShapes = Shapes(
 fun OpenSensorTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     typography: Typography = rememberBrandTypography(),
+    reduceMotion: Boolean = rememberReduceMotion(),
     content: @Composable () -> Unit,
 ) {
-    MaterialTheme(
-        colorScheme = if (darkTheme) BrandDarkScheme else BrandLightScheme,
-        shapes = BrandShapes,
-        typography = typography,
-        content = content,
-    )
+    CompositionLocalProvider(LocalReduceMotion provides reduceMotion) {
+        MaterialTheme(
+            colorScheme = if (darkTheme) BrandDarkScheme else BrandLightScheme,
+            shapes = BrandShapes,
+            typography = typography,
+            content = content,
+        )
+    }
 }

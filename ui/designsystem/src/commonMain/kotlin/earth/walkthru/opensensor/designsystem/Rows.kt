@@ -2,13 +2,17 @@ package earth.walkthru.opensensor.designsystem
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -31,6 +35,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
@@ -52,6 +57,7 @@ fun Eyebrow(
     color: Color = MaterialTheme.colorScheme.onSurfaceVariant,
     uppercase: Boolean = true,
     heading: Boolean = false,
+    maxLines: Int = TypographyLimits.EyebrowMaxLines,
 ) {
     Text(
         if (uppercase) text.uppercase() else text,
@@ -61,7 +67,7 @@ fun Eyebrow(
             if (uppercase) contentDescription = text
             if (heading) heading()
         },
-        maxLines = 1,
+        maxLines = maxLines,
         overflow = TextOverflow.Ellipsis,
     )
 }
@@ -80,20 +86,45 @@ fun StatusDot(color: Color, modifier: Modifier = Modifier, size: Int = 10) {
 /** Two-column key/value line for compact stat rows, read as one element ("Battery, 80 %"). */
 @Composable
 fun StatLine(label: String, value: String, modifier: Modifier = Modifier, valueColor: Color = MaterialTheme.colorScheme.onSurface) {
-    Row(modifier.fillMaxWidth().semantics(mergeDescendants = true) {}, horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, style = MaterialTheme.typography.bodyMedium, color = valueColor)
+    BoxWithConstraints(modifier.fillMaxWidth().cardSemantics(mergeDescendants = true)) {
+        val maxValueWidth = maxWidth * 0.55f
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top,
+        ) {
+            Text(
+                label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f).padding(end = 12.dp),
+                maxLines = TypographyLimits.StatLabelMaxLines,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                value,
+                style = MaterialTheme.typography.bodyMedium,
+                color = valueColor,
+                modifier = Modifier.widthIn(max = maxValueWidth),
+                textAlign = TextAlign.End,
+                maxLines = TypographyLimits.StatValueMaxLines,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 
 /** A labelled number with its unit, for the secondary measurements on a metric card, read as one element. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun BigValue(label: String, value: String, unit: String, modifier: Modifier = Modifier) {
-    Column(modifier.semantics(mergeDescendants = true) {}) {
+    Column(modifier.cardSemantics(mergeDescendants = true)) {
         Eyebrow(label, uppercase = false)
-        Row {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.Bottom,
+        ) {
             Text(value, style = MaterialTheme.typography.displaySmall, modifier = Modifier.alignByBaseline())
-            Spacer(Modifier.width(6.dp))
             Text(unit, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.alignByBaseline())
         }
     }
@@ -129,7 +160,8 @@ fun SectionTabs(
             Tab(
                 selected = index == selectedIndex,
                 onClick = { if (index != selectedIndex) onSelect(index) },
-                text = { Text(label, maxLines = 1) },
+                modifier = Modifier.touchTarget(),
+                text = { Text(label, maxLines = TypographyLimits.TabLabelMaxLines, overflow = TextOverflow.Ellipsis) },
             )
         }
     }
@@ -139,9 +171,20 @@ fun SectionTabs(
 fun nowEpochMillis(): Long = Clock.System.now().toEpochMilliseconds()
 
 /**
- * A clock that ticks once a second so "updated N s ago" stays honest. Read it only inside the leaf
- * that prints the age (see [TickingText]): a read at screen level recomposes the whole screen at
- * 1 Hz.
+ * Quantises [nowMs] to [stepMs] buckets anchored at [anchorMs] so a screen reader's spoken
+ * description of a live age updates every 10 seconds while the visual clock and stale checks keep
+ * their 1 second precision.
+ */
+fun quantiseSpokenMillis(nowMs: Long, anchorMs: Long, stepMs: Long = 10_000L): Long {
+    val safeStep = stepMs.coerceAtLeast(1L)
+    val elapsed = (nowMs - anchorMs).coerceAtLeast(0L)
+    return anchorMs + (elapsed / safeStep) * safeStep
+}
+
+/**
+ * A clock that ticks once a second so "updated N s ago" and stale checks stay honest. Read it only
+ * inside the leaf that prints the age (see [TickingText]): a read at screen level recomposes the
+ * whole screen at 1 Hz.
  */
 @Composable
 fun rememberNowMillis(periodMs: Long = 1000): Long {
@@ -155,15 +198,28 @@ fun rememberNowMillis(periodMs: Long = 1000): Long {
     return now
 }
 
-/** A leaf text that re-renders once a second with the current time, so its parent does not. */
+/**
+ * A leaf text that re-renders with the current time at 1 Hz visually, while quantising its
+ * accessibility [contentDescription] to 10 second steps so TalkBack and VoiceOver are not
+ * interrupted every second.
+ */
 @Composable
 fun TickingText(
     text: (nowMs: Long) -> String,
     modifier: Modifier = Modifier,
     style: TextStyle = MaterialTheme.typography.labelSmall,
     color: Color = MaterialTheme.colorScheme.onSurfaceVariant,
-    maxLines: Int = 1,
+    maxLines: Int = TypographyLimits.TickingMaxLines,
 ) {
     val now = rememberNowMillis()
-    Text(text(now), modifier = modifier, style = style, color = color, maxLines = maxLines, overflow = TextOverflow.Ellipsis)
+    val anchor = remember { now }
+    val spoken = text(quantiseSpokenMillis(now, anchor))
+    Text(
+        text(now),
+        modifier = modifier.semantics { contentDescription = spoken },
+        style = style,
+        color = color,
+        maxLines = maxLines,
+        overflow = TextOverflow.Ellipsis,
+    )
 }

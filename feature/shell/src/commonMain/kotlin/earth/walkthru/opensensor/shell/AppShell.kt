@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -26,6 +27,8 @@ import androidx.navigation3.ui.NavDisplay
 import earth.walkthru.opensensor.designsystem.AppIcons
 import earth.walkthru.opensensor.designsystem.BottomBarTab
 import earth.walkthru.opensensor.designsystem.BrandBottomBar
+import earth.walkthru.opensensor.designsystem.LocalReduceMotion
+import earth.walkthru.opensensor.designsystem.rememberReduceMotion
 import earth.walkthru.opensensor.strings.resources.Res
 import earth.walkthru.opensensor.strings.resources.nav_settings
 import earth.walkthru.opensensor.strings.resources.tab_discover
@@ -53,6 +56,7 @@ fun AppShell(
     modifier: Modifier = Modifier,
     bottomBar: @Composable (TabNavigator) -> Unit = { ShellBottomBar(it) },
 ) {
+    val reduceMotion = rememberReduceMotion()
     val discover = rememberNavBackStack(AppNavConfig, TopTab.DISCOVER.root)
     val devices = rememberNavBackStack(AppNavConfig, TopTab.MY_DEVICES.root)
     val settings = rememberNavBackStack(AppNavConfig, TopTab.SETTINGS.root)
@@ -89,19 +93,21 @@ fun AppShell(
         }
     }
 
-    Scaffold(
-        modifier = modifier,
-        containerColor = MaterialTheme.colorScheme.background,
-        // Screens own their top insets. Only the bar's height is passed down, and consumed so a
-        // screen's own Scaffold does not add the navigation bar inset a second time.
-        contentWindowInsets = WindowInsets(0),
-        bottomBar = { if (nav.showsBottomBar) bottomBar(nav) },
-    ) { padding ->
-        NavDisplay(
-            entries = nav.visibleTabs.flatMap { entriesByTab.getValue(it) },
-            modifier = Modifier.padding(padding).consumeWindowInsets(padding),
-            onBack = { nav.pop() },
-        )
+    CompositionLocalProvider(LocalReduceMotion provides reduceMotion) {
+        Scaffold(
+            modifier = modifier,
+            containerColor = MaterialTheme.colorScheme.background,
+            // Screens own their top insets. Only the bar's height is passed down, and consumed so a
+            // screen's own Scaffold does not add the navigation bar inset a second time.
+            contentWindowInsets = WindowInsets(0),
+            bottomBar = { if (nav.showsBottomBar) bottomBar(nav) },
+        ) { padding ->
+            NavDisplay(
+                entries = nav.visibleTabs.flatMap { entriesByTab.getValue(it) },
+                modifier = Modifier.padding(padding).consumeWindowInsets(padding),
+                onBack = { nav.pop() },
+            )
+        }
     }
 }
 

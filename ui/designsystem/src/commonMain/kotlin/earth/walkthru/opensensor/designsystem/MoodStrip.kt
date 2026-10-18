@@ -150,10 +150,11 @@ internal fun MoodStripLayout(
     val shown = blocks.indices.filter { blocks[it].weight > 0f }
     val summary = moodSummary(shown.map { words[it] }, shown.map { captions.getOrNull(it) }, separator)
     val captioned = shown.any { captions.getOrNull(it) != null }
-    val outline = MaterialTheme.colorScheme.onSurface
-    val hatch = MaterialTheme.colorScheme.outline
-    val track = MaterialTheme.colorScheme.surfaceContainerHighest
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val scheme = MaterialTheme.colorScheme
+    val outline = scheme.onSurface
+    val hatch = scheme.outline
+    val track = scheme.surfaceContainerHighest
+    val muted = scheme.onSurfaceVariant
     BoxWithConstraints(
         modifier.fillMaxWidth().clearAndSetSemantics {
             contentDescription = summary
@@ -178,7 +179,7 @@ internal fun MoodStripLayout(
                 var bar = Modifier.fillMaxWidth().height(28.dp).clip(shape)
                 val step = block.step
                 bar = if (step != null) {
-                    bar.background(Color(step.color))
+                    bar.background(step.color())
                 } else {
                     bar.background(track).drawBehind {
                         val gap = 6.dp.toPx()
@@ -249,6 +250,8 @@ fun MoodLegend(modifier: Modifier = Modifier, title: String? = null) {
 @Composable
 internal fun MoodLegendLayout(words: List<String>, title: String?, modifier: Modifier = Modifier, separator: String = ",") {
     val summary = legendSummary(words, title, separator)
+    val swatchBorder = swatchBorderColor(MaterialTheme.colorScheme)
+    val swatchShape = RoundedCornerShape(3.dp)
     Column(modifier.clearAndSetSemantics { contentDescription = summary }) {
         if (title != null) {
             Text(title, style = MaterialTheme.typography.labelMedium)
@@ -258,7 +261,13 @@ internal fun MoodLegendLayout(words: List<String>, title: String?, modifier: Mod
             Row(Modifier.fillMaxWidth()) {
                 pair.forEach { step ->
                     Row(Modifier.weight(1f).heightIn(min = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(10.dp).clip(RoundedCornerShape(3.dp)).background(Color(step.color)))
+                        Box(
+                            Modifier
+                                .size(10.dp)
+                                .clip(swatchShape)
+                                .background(step.color())
+                                .border(1.dp, swatchBorder, swatchShape),
+                        )
                         Spacer(Modifier.width(6.dp))
                         Text(words.getOrElse(step.ordinal) { "" }, style = MaterialTheme.typography.labelSmall)
                     }
