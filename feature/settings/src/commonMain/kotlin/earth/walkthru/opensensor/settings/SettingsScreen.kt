@@ -53,7 +53,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import earth.walkthru.aqsync.settings.DetailLevel
@@ -61,6 +60,8 @@ import earth.walkthru.aqsync.units.UnitSystem
 import earth.walkthru.opensensor.designsystem.FloatingControl
 import earth.walkthru.opensensor.designsystem.MinTouchTarget
 import earth.walkthru.opensensor.designsystem.cardSemantics
+import earth.walkthru.opensensor.designsystem.listSeparator
+import earth.walkthru.opensensor.designsystem.spokenList
 import earth.walkthru.opensensor.settings.resources.Res
 import earth.walkthru.opensensor.settings.resources.info_privacy
 import earth.walkthru.opensensor.settings.resources.info_settings_body1
@@ -117,7 +118,6 @@ import earth.walkthru.opensensor.settings.resources.storage_old_files_summary
 import earth.walkthru.opensensor.settings.resources.storage_old_files_unreadable
 import earth.walkthru.opensensor.settings.resources.storage_removed_files
 import earth.walkthru.opensensor.settings.resources.storage_removed_files_again
-import earth.walkthru.opensensor.settings.resources.storage_removed_files_again_named
 import earth.walkthru.opensensor.settings.resources.storage_removed_files_confirm_body
 import earth.walkthru.opensensor.settings.resources.storage_removed_files_confirm_title
 import earth.walkthru.opensensor.settings.resources.storage_sensor_files
@@ -296,9 +296,10 @@ private fun OldFilesRow(
     val pickDatesLabel = stringResource(Res.string.storage_old_files_pick_dates)
     val findLabel = stringResource(Res.string.storage_old_files_find_named)
     val removeLabel = stringResource(Res.string.storage_old_files_remove_named)
-    Row(Modifier.fillMaxWidth().heightIn(min = MinTouchTarget), verticalAlignment = Alignment.CenterVertically) {
-        // The name and its status lines read as one sentence. The info button keeps its own focus stop.
-        Column(Modifier.weight(1f).cardSemantics()) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        // The name and its status lines read as one sentence, a target of at least MinTouchTarget. The
+        // info button keeps its own focus stop.
+        Column(Modifier.weight(1f).heightIn(min = MinTouchTarget).cardSemantics(), verticalArrangement = Arrangement.Center) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(label, style = MaterialTheme.typography.bodyLarge)
                 infoButton(label, info, Modifier)
@@ -317,14 +318,13 @@ private fun OldFilesRow(
             }
         }
     }
-    // Read as what it does and the dates it holds, not the dates alone.
+    // Read as the dates it shows, then what it does. The visible words come first, so Voice Control
+    // and Voice Access find it by them.
+    val datesName = spokenList(listOf(dates, pickDatesLabel), listSeparator())
     TextButton(
         onClick = { pickDates = true },
         enabled = enabled && !state.busy,
-        modifier = Modifier.semantics {
-            contentDescription = pickDatesLabel
-            stateDescription = dates
-        },
+        modifier = Modifier.semantics { contentDescription = datesName },
     ) {
         Text(dates)
     }
@@ -359,14 +359,17 @@ private fun RemovedFilesRow(controller: SettingsController, enabled: Boolean) {
     val removed by controller.removedFiles.collectAsState()
     var confirm by rememberSaveable { mutableStateOf(false) }
     if (removed <= 0) return
-    Row(Modifier.fillMaxWidth().heightIn(min = MinTouchTarget), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f).cardSemantics()) {
-            Text(stringResource(Res.string.storage_removed_files), style = MaterialTheme.typography.bodyLarge)
+    val title = stringResource(Res.string.storage_removed_files)
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f).heightIn(min = MinTouchTarget).cardSemantics(), verticalArrangement = Arrangement.Center) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
             Text(fileCount(removed), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        val again = stringResource(Res.string.storage_removed_files_again_named)
+        // The visible words first, then what they act on.
+        val againLabel = stringResource(Res.string.storage_removed_files_again)
+        val again = spokenList(listOf(againLabel, title), listSeparator())
         TextButton(onClick = { confirm = true }, enabled = enabled, modifier = Modifier.semantics { contentDescription = again }) {
-            Text(stringResource(Res.string.storage_removed_files_again))
+            Text(againLabel)
         }
     }
     if (confirm) {
@@ -477,9 +480,9 @@ private const val DAY_MS = 86_400_000L
 
 @Composable
 private fun StorageRow(label: String, bytes: Long, enabled: Boolean = true, onClear: (() -> Unit)? = null) {
-    Row(Modifier.fillMaxWidth().heightIn(min = MinTouchTarget), verticalAlignment = Alignment.CenterVertically) {
-        // "Sensor files, 12.3 MB" as one focus stop. The clear button stays its own.
-        Column(Modifier.weight(1f).cardSemantics()) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        // "Sensor files, 12.3 MB" as one focus stop of at least MinTouchTarget. The clear button stays its own.
+        Column(Modifier.weight(1f).heightIn(min = MinTouchTarget).cardSemantics(), verticalArrangement = Arrangement.Center) {
             Text(label, style = MaterialTheme.typography.bodyLarge)
             Text(
                 stringResource(Res.string.storage_megabytes, megabytes(bytes)),

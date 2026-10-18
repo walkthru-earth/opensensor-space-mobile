@@ -63,7 +63,6 @@
     <string name="storage_old_files_pick_dates">Choose dates</string>
     <string name="storage_removed_files">Removed files</string>
     <string name="storage_removed_files_again">Download again</string>
-    <string name="storage_removed_files_again_named">Download removed files again</string>
     <string name="storage_removed_files_confirm_title">Download removed files again?</string>
     <string name="storage_removed_files_confirm_body">The next sync downloads %1$s again if a sensor still has them.</string>
     <string name="storage_apply">Apply</string>

@@ -67,7 +67,6 @@
     <string name="storage_old_files_pick_dates">اختيار التواريخ</string>
     <string name="storage_removed_files">ملفات محذوفة</string>
     <string name="storage_removed_files_again">التنزيل مرة أخرى</string>
-    <string name="storage_removed_files_again_named">تنزيل الملفات المحذوفة مرة أخرى</string>
     <string name="storage_removed_files_confirm_title">تنزيل الملفات المحذوفة مرة أخرى؟</string>
     <string name="storage_removed_files_confirm_body">تنزّل المزامنة التالية %1$s مرة أخرى إذا كانت لا تزال على المستشعر.</string>
     <string name="storage_apply">تطبيق</string>

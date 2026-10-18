@@ -16,6 +16,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.emptyPreferences
 import earth.walkthru.aqsync.settings.SettingsRepository
 import earth.walkthru.aqsync.units.UnitSystem
+import earth.walkthru.opensensor.designsystem.MinTouchTarget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -24,6 +25,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlin.test.AfterTest
 import kotlin.test.Test
+import kotlin.test.assertTrue
 
 /**
  * Settings rows read as one sentence with their state for TalkBack and VoiceOver (#99): a Storage row
@@ -72,14 +74,12 @@ class SettingsRowSemanticsTest {
     fun theOldFilesRowReadsAsOneSentenceWithItsStatus() = runComposeUiTest {
         setContent { MaterialTheme { SettingsScreen(controller, appVersion = "1.0", automaticUnits = UnitSystem.METRIC) } }
         onAllNodes(readsAs("Old format files")).assertCountEquals(1)
-        // The buttons name what they act on, and the dates button says it chooses dates and which it holds.
+        // The buttons name what they act on. The dates button starts with the dates it shows, so voice
+        // control finds it by its visible words.
         onNodeWithContentDescription("Find old format files").performSemanticsAction(SemanticsActions.OnClick)
         onAllNodes(readsAs("Old format files", "3 files, 15.0 MB")).assertCountEquals(1)
         onAllNodesWithContentDescription("Remove old format files").assertCountEquals(1)
-        onAllNodes(
-            hasClickAction() and SemanticsMatcher.expectValue(SemanticsProperties.ContentDescription, listOf("Choose dates")) and
-                SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "All dates"),
-        ).assertCountEquals(1)
+        onAllNodes(hasClickAction() and SemanticsMatcher.expectValue(SemanticsProperties.ContentDescription, listOf("All dates, Choose dates"))).assertCountEquals(1)
         // The info button keeps its own focus stop beside the merged text.
         onAllNodesWithContentDescription("More about Old format files").assertCountEquals(1)
     }
@@ -91,7 +91,23 @@ class SettingsRowSemanticsTest {
         onAllNodes(readsAs("History cache", "3.0 MB")).assertCountEquals(1)
         onAllNodes(readsAs("Removed files", "2 files")).assertCountEquals(1)
         onAllNodesWithContentDescription("Clear History cache").assertCountEquals(1)
-        onAllNodesWithContentDescription("Download removed files again").assertCountEquals(1)
+        onAllNodesWithContentDescription("Download again, Removed files").assertCountEquals(1)
+    }
+
+    @Test
+    fun eachMergedRowIsAtLeastATouchTargetTall() = runComposeUiTest {
+        setContent { MaterialTheme { SettingsScreen(controller, appVersion = "1.0", automaticUnits = UnitSystem.METRIC) } }
+        val rows = listOf(
+            readsAs("Sensor files", "40.0 MB"),
+            readsAs("History cache", "3.0 MB"),
+            readsAs("Removed files", "2 files"),
+            readsAs("Old format files"),
+        )
+        val minPx = with(density) { MinTouchTarget.toPx() }
+        for (row in rows) {
+            val node = onAllNodes(row).fetchSemanticsNodes().single()
+            assertTrue(node.size.height >= minPx - 0.5f, "${node.config} is ${node.size.height} px, less than $minPx px")
+        }
     }
 
     private companion object {
