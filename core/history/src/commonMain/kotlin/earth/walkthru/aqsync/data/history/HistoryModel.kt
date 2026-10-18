@@ -33,6 +33,8 @@ data class HistorySeries(
     val binned: Boolean,
     /** Rows on the estimated time axis (§4.6) among [validRows]-bearing rows. */
     val estimatedRows: Long = 0,
+    /** Verified files of the window that could not be read (a damaged page), skipped so the rest still chart. */
+    val unreadableSources: Int = 0,
 ) {
     val hasEstimated: Boolean get() = estimatedRows > 0
     val coverage: Float get() = if (expectedRows == 0L) 0f else (validRows.toFloat() / expectedRows).coerceIn(0f, 1f)
