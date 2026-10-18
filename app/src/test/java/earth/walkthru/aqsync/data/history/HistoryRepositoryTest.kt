@@ -4,7 +4,7 @@ import earth.walkthru.aqsync.data.local.database.ArchivedFile
 import earth.walkthru.aqsync.data.local.database.DerivedArchivedFileQueries
 import earth.walkthru.aqsync.data.local.database.MetricBucket
 import earth.walkthru.aqsync.data.local.database.MetricBucketDao
-import earth.walkthru.aqsync.data.sync.ArchiveMutationGate
+import earth.walkthru.aqsync.data.sync.DeviceCoordinator
 import earth.walkthru.aqsync.data.sync.FileArchive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -66,7 +66,7 @@ class HistoryRepositoryTest {
         val files = Files()
         val name = "station=$station/year=2026/month=09/day=08/data_1844.parquet"
         val file = archive.fileFor(station, name).apply { parentFile!!.mkdirs(); writeBytes(bytes("device/v1-none-1row-dated.parquet")) }
-        files.rows += HistoryIndexer(archive, files, ArchiveMutationGate()).indexed(
+        files.rows += HistoryIndexer(archive, files, DeviceCoordinator()).indexed(
             ArchivedFile(station = station, name = name, bytes = file.length(), crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"),
             file,
         )
@@ -89,7 +89,7 @@ class HistoryRepositoryTest {
         val buckets = Buckets()
         val name = "station=$station/year=2026/month=09/day=17/data_0930_a_2-106-2.parquet"
         archive.fileFor(station, name).apply { parentFile!!.mkdirs(); writeBytes(bytes("device/v3-board-2rg-105rows.parquet")) }
-        files.rows += HistoryIndexer(archive, files, ArchiveMutationGate()).indexed(ArchivedFile(station = station, name = name, bytes = 1, crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), archive.fileFor(station, name))
+        files.rows += HistoryIndexer(archive, files, DeviceCoordinator()).indexed(ArchivedFile(station = station, name = name, bytes = 1, crc32 = 1, sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"), archive.fileFor(station, name))
         val agg = Aggregator(station).also { it.add(earth.walkthru.aqsync.data.history.parquet.ParquetFile.wrap(bytes("device/v3-board-2rg-105rows.parquet"))) }
         buckets.rows += agg.buckets().flatMap { b -> b.metrics.map { (id, a) -> MetricBucket(station = station, metricId = id, resolution = b.resolution.seconds, startEpochS = b.startEpochS, rows = b.rows, validRows = a.n, estimatedRows = b.estimatedRows, mean = a.mean, min = a.min, max = a.max) } }
 
@@ -133,7 +133,7 @@ class HistoryRepositoryTest {
             "station=$station/year=2026/month=09/day=17/data_1000_a_107-211-3.parquet",
         ).withIndex()) {
             val file = archive.fileFor(station, name).apply { parentFile!!.mkdirs(); writeBytes(fixture) }
-            files.rows += HistoryIndexer(archive, files, ArchiveMutationGate()).indexed(
+            files.rows += HistoryIndexer(archive, files, DeviceCoordinator()).indexed(
                 ArchivedFile(station = station, name = name, bytes = fixture.size.toLong(), crc32 = index.toLong(), sha256 = "s", syncedAtEpochMs = 1, sourceDevice = "fake"),
                 file,
             )

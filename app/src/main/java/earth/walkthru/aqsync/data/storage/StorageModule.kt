@@ -2,6 +2,7 @@ package earth.walkthru.aqsync.data.storage
 
 import android.content.Context
 import android.os.storage.StorageManager
+import android.util.Log
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -10,15 +11,14 @@ import dagger.hilt.components.SingletonComponent
 import earth.walkthru.aqsync.archive.ArchiveIndex
 import earth.walkthru.aqsync.archive.ArchiveLayout
 import earth.walkthru.aqsync.archive.ArchiveStore
-import earth.walkthru.aqsync.archive.PrunedFiles
 import earth.walkthru.aqsync.data.archive.asRecordIndexer
 import earth.walkthru.aqsync.data.coroutines.IoDispatcher
 import earth.walkthru.aqsync.data.coroutines.WallClock
 import earth.walkthru.aqsync.data.history.HistoryIndexer
+import earth.walkthru.aqsync.data.history.HistoryOrchestrator
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
-import earth.walkthru.aqsync.data.sync.ArchiveMutationGate
+import earth.walkthru.aqsync.data.sync.DeviceCoordinator
 import earth.walkthru.aqsync.data.sync.FileArchive
-import earth.walkthru.aqsync.data.sync.WriterLeases
 import earth.walkthru.aqsync.net.BlockCache
 import earth.walkthru.aqsync.net.DiskBlockStore
 import earth.walkthru.aqsync.settings.SettingsRepository
@@ -148,9 +148,7 @@ object StorageModule {
         knownDevices: KnownDeviceDao,
         clock: WallClock,
         quota: DerivedQuota,
-        leases: WriterLeases,
-        gate: ArchiveMutationGate,
-        pruned: PrunedFiles,
+        coordinator: DeviceCoordinator,
         @IoDispatcher io: CoroutineDispatcher,
     ): StorageJanitor = StorageJanitor(
         roots = roots,
@@ -162,8 +160,28 @@ object StorageModule {
         knownStations = { knownDevices.allByLastConnected().mapNotNull { it.station } },
         clock = clock::nowEpochMs,
         quota = quota,
-        leases = leases,
-        gate = gate,
-        pruned = pruned,
+        coordinator = coordinator,
+    )
+
+    /**
+     * The shared order of the History passes (#100). The janitor sweeps once per process start, then
+     * the feed block quota applies, then the backfill, then the derive the app start hands in.
+     * It logs counts and class names only, never paths or station ids.
+     */
+    @Provides
+    @Singleton
+    fun provideHistoryOrchestrator(
+        historyIndexer: HistoryIndexer,
+        index: ArchiveIndex,
+        janitor: StorageJanitor,
+        blocks: BlockCache,
+    ): HistoryOrchestrator = HistoryOrchestrator(
+        repair = historyIndexer.repair,
+        index = index,
+        janitor = {
+            Log.i("StorageJanitor", janitor.run().describe())
+            blocks.enforce()
+        },
+        log = { Log.i("HistoryOrchestrator", it) },
     )
 }

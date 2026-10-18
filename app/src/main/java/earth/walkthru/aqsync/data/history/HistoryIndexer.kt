@@ -10,7 +10,7 @@ import earth.walkthru.aqsync.data.archive.toRecord
 import earth.walkthru.aqsync.data.history.parquet.LocalFileReader
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
 import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
-import earth.walkthru.aqsync.data.sync.ArchiveMutationGate
+import earth.walkthru.aqsync.data.sync.DeviceCoordinator
 import earth.walkthru.aqsync.data.sync.FileArchive
 import kotlinx.coroutines.Dispatchers
 import java.io.File
@@ -27,7 +27,7 @@ import javax.inject.Singleton
 class HistoryIndexer @Inject constructor(
     archive: FileArchive,
     archivedFileDao: ArchivedFileDao,
-    gate: ArchiveMutationGate,
+    coordinator: DeviceCoordinator,
 ) {
     val clockAnchors = FileClockAnchorStore(File(archive.root.parentFile, "clock-anchors"))
 
@@ -41,12 +41,13 @@ class HistoryIndexer @Inject constructor(
         repair.estimateTimes()
     }
 
-    private val repair = ArchiveIndexRepair(
+    /** The shared repair, which the [HistoryOrchestrator] runs as its backfill. */
+    val repair = ArchiveIndexRepair(
         store = FileArchiveStore(archive, Dispatchers.IO),
         index = RoomArchiveIndex(archivedFileDao),
         io = Dispatchers.IO,
         clockAnchors = clockAnchors,
-        gate = gate,
+        coordinator = coordinator,
         log = { Log.i(TAG, it) },
     )
 

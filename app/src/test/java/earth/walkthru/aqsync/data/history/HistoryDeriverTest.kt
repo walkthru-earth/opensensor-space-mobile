@@ -3,17 +3,19 @@ package earth.walkthru.aqsync.data.history
 import android.content.ContextWrapper
 import androidx.room.Room
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
+import earth.walkthru.aqsync.data.archive.RoomArchiveIndex
 import earth.walkthru.aqsync.data.archive.toRecord
 import earth.walkthru.aqsync.data.history.parquet.ParquetLogicalType
 import earth.walkthru.aqsync.data.local.database.AppDatabase
 import earth.walkthru.aqsync.data.local.database.ArchivedFile
+import earth.walkthru.aqsync.data.local.database.ArchivedFileDao
 import earth.walkthru.aqsync.data.local.database.DerivedArchivedFileQueries
 import earth.walkthru.aqsync.data.local.database.DerivedDay
 import earth.walkthru.aqsync.data.local.database.DerivedDayDao
 import earth.walkthru.aqsync.data.local.database.MetricBucket
 import earth.walkthru.aqsync.data.local.database.MetricBucketDao
 import earth.walkthru.aqsync.data.local.database.writerSql
-import earth.walkthru.aqsync.data.sync.ArchiveMutationGate
+import earth.walkthru.aqsync.data.sync.DeviceCoordinator
 import earth.walkthru.aqsync.data.sync.FileArchive
 import earth.walkthru.aqsync.storage.AtomicFiles
 import earth.walkthru.aqsync.storage.DerivedQuota
@@ -53,9 +55,9 @@ class HistoryDeriverTest {
             val files = InMemoryFiles()
             val buckets = InMemoryBuckets()
             val days = InMemoryDays()
-            val indexer = HistoryIndexer(archive, files, ArchiveMutationGate())
+            val indexer = HistoryIndexer(archive, files, DeviceCoordinator())
             val store = DerivedStore(tmp)
-            val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp))
+            val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp), indexer.passes(files))
             val name = "station=$station/day=2026-09-17/raw.parquet"
             val raw = archive.fileFor(station, name).apply {
                 parentFile!!.mkdirs()
@@ -107,9 +109,9 @@ class HistoryDeriverTest {
             val archive = FileArchive(tmp)
             val files = InMemoryFiles()
             val days = InMemoryDays()
-            val indexer = HistoryIndexer(archive, files, ArchiveMutationGate())
+            val indexer = HistoryIndexer(archive, files, DeviceCoordinator())
             val store = DerivedStore(tmp)
-            val deriver = HistoryDeriver(archive, files, InMemoryBuckets(), days, store, indexer, derivedQuota(tmp))
+            val deriver = HistoryDeriver(archive, files, InMemoryBuckets(), days, store, indexer, derivedQuota(tmp), indexer.passes(files))
             val name = "station=$station/day=2026-09-17/raw.parquet"
             val raw = archive.fileFor(station, name).apply {
                 parentFile!!.mkdirs()
@@ -168,9 +170,9 @@ class HistoryDeriverTest {
                 val files = InMemoryFiles()
                 val buckets = InMemoryBuckets()
                 val days = InMemoryDays()
-                val indexer = HistoryIndexer(archive, files, ArchiveMutationGate())
+                val indexer = HistoryIndexer(archive, files, DeviceCoordinator())
                 val store = DerivedStore(tmp, atomic)
-                val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp))
+                val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp), indexer.passes(files))
                 val name = "station=$station/day=2026-09-17/raw.parquet"
                 val raw = archive.fileFor(station, name).apply {
                     parentFile!!.mkdirs()
@@ -200,10 +202,10 @@ class HistoryDeriverTest {
         val files = InMemoryFiles()
         val buckets = InMemoryBuckets()
         val days = InMemoryDays()
-        val indexer = HistoryIndexer(archive, files, ArchiveMutationGate())
+        val indexer = HistoryIndexer(archive, files, DeviceCoordinator())
         val store = DerivedStore(tmp)
         val quota = derivedQuota(tmp)
-        val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, quota)
+        val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, quota, indexer.passes(files))
 
         fun put(name: String, resource: String, crc: Long) {
             archive.fileFor(station, name).apply { parentFile!!.mkdirs(); writeBytes(bytes(resource)) }
@@ -296,10 +298,10 @@ class HistoryDeriverTest {
             val files = InMemoryFiles()
             val buckets = InMemoryBuckets()
             val days = InMemoryDays()
-            val indexer = HistoryIndexer(archive, files, ArchiveMutationGate())
+            val indexer = HistoryIndexer(archive, files, DeviceCoordinator())
             val store = DerivedStore(tmp)
             var backfills = 0
-            val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp)) { backfills++ }
+            val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp), indexer.passes(files)) { backfills++ }
 
             fun put(name: String, resource: String, crc: Long, syncedAt: Long) {
                 archive.fileFor(station, name).apply { parentFile!!.mkdirs(); writeBytes(bytes(resource)) }
@@ -343,10 +345,10 @@ class HistoryDeriverTest {
             val files = InMemoryFiles()
             val buckets = InMemoryBuckets()
             val days = InMemoryDays()
-            val indexer = HistoryIndexer(archive, files, ArchiveMutationGate())
+            val indexer = HistoryIndexer(archive, files, DeviceCoordinator())
             val store = DerivedStore(tmp)
             val quota = derivedQuota(tmp)
-            val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, quota)
+            val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, quota, indexer.passes(files))
             val name = "station=$station/unsynced/boot=e452563e96c72ca057a48924550779b6/raw.parquet"
             val raw = archive.fileFor(station, name).apply {
                 parentFile!!.mkdirs()
@@ -364,7 +366,7 @@ class HistoryDeriverTest {
             assertEquals(0L, files.rows.single().utcRows)
             assertEquals(utcNs, files.rows.single().estLastUtcNs)
             assertEquals(0, deriver.deriveStale().daysRebuilt)
-            val restarted = HistoryIndexer(archive, files, ArchiveMutationGate())
+            val restarted = HistoryIndexer(archive, files, DeviceCoordinator())
             assertEquals(0, restarted.estimateTimes())
             assertEquals(utcNs, files.rows.single().estLastUtcNs)
             for (day in days.rows) {
@@ -397,9 +399,9 @@ class HistoryDeriverTest {
             val files = db.archivedFileDao()
             val days = db.derivedDayDao()
             val buckets = db.metricBucketDao()
-            val indexer = HistoryIndexer(archive, files, ArchiveMutationGate())
+            val indexer = HistoryIndexer(archive, files, DeviceCoordinator())
             val store = DerivedStore(tmp)
-            val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp))
+            val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp), indexer.passes(files))
             val name = "station=$station/unsynced/boot=e452563e96c72ca057a48924550779b6/raw.parquet"
             val raw = archive.fileFor(station, name).apply {
                 parentFile!!.mkdirs()
@@ -457,9 +459,9 @@ class HistoryDeriverTest {
             val files = InMemoryFiles()
             val buckets = InMemoryBuckets()
             val days = InMemoryDays()
-            val indexer = HistoryIndexer(archive, files, ArchiveMutationGate())
+            val indexer = HistoryIndexer(archive, files, DeviceCoordinator())
             val store = DerivedStore(tmp)
-            val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp))
+            val deriver = HistoryDeriver(archive, files, buckets, days, store, indexer, derivedQuota(tmp), indexer.passes(files))
             val name = "station=$station/unsynced/boot=00000000000000000000000000000000/raw.parquet"
             val raw = archive.fileFor(station, name).apply {
                 parentFile!!.mkdirs()
@@ -472,7 +474,7 @@ class HistoryDeriverTest {
 
             // Restart reads the exact durable acknowledgement, while the older archive row and
             // derived caches stay untouched until a cancellable pass explicitly reconciles them.
-            val restarted = HistoryIndexer(archive, files, ArchiveMutationGate())
+            val restarted = HistoryIndexer(archive, files, DeviceCoordinator())
             val anchor = restarted.clockAnchors.anchors(station).single()
             assertEquals(before.bootId, anchor.boot)
             assertEquals(utcNs, anchor.utcNs)
@@ -551,4 +553,7 @@ class HistoryDeriverTest {
         override fun observeCount(): Flow<Int> = flowOf(rows.size)
         override suspend fun stations() = rows.map { it.station }.distinct()
     }
+
+    /** The shared pass order over this test's index, as the app wires it. */
+    private fun HistoryIndexer.passes(files: ArchivedFileDao) = HistoryOrchestrator(repair, RoomArchiveIndex(files))
 }

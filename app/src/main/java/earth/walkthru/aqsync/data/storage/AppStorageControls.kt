@@ -3,13 +3,11 @@ package earth.walkthru.aqsync.data.storage
 import android.util.Log
 import earth.walkthru.aqsync.archive.ArchiveIndex
 import earth.walkthru.aqsync.archive.ArchiveStore
-import earth.walkthru.aqsync.archive.PrunedFiles
 import earth.walkthru.aqsync.data.coroutines.IoDispatcher
 import earth.walkthru.aqsync.data.history.HistoryDeriver
 import earth.walkthru.aqsync.data.history.LegacyFileCleanup
 import earth.walkthru.aqsync.data.history.UtcDayRange
-import earth.walkthru.aqsync.data.sync.ArchiveMutationGate
-import earth.walkthru.aqsync.data.sync.WriterLeases
+import earth.walkthru.aqsync.data.sync.DeviceCoordinator
 import earth.walkthru.aqsync.net.BlockCache
 import earth.walkthru.aqsync.storage.DerivedQuota
 import earth.walkthru.aqsync.storage.StorageBudget
@@ -30,7 +28,9 @@ import javax.inject.Inject
 /**
  * The Settings Storage card on Android (#61). It clears only the derived day files, the feed blocks and
  * the map tiles, and removes old format sensor files from the phone through [LegacyFileCleanup] when the
- * user asks. Sync skips the removed files until the user clears [pruned] with Download again.
+ * user asks. Sync skips the removed files until the user clears the coordinator's tombstones with
+ * Download again. The cleanup's rebuild runs as a [HistoryDeriver] pass, ordered by the shared
+ * [earth.walkthru.aqsync.data.history.HistoryOrchestrator].
  */
 class AppStorageControls @Inject constructor(
     private val budget: StorageBudget,
@@ -40,20 +40,17 @@ class AppStorageControls @Inject constructor(
     index: ArchiveIndex,
     roots: StorageRoots,
     tree: StorageTree,
-    leases: WriterLeases,
-    gate: ArchiveMutationGate,
-    private val pruned: PrunedFiles,
+    coordinator: DeviceCoordinator,
     deriver: HistoryDeriver,
     @IoDispatcher private val io: CoroutineDispatcher,
 ) : StorageControls {
+    private val pruned = coordinator.pruned
     private val cleanup = LegacyFileCleanup(
         store = store,
         index = index,
         roots = roots,
         tree = tree,
-        leases = leases,
-        gate = gate,
-        pruned = pruned,
+        coordinator = coordinator,
         io = io,
         afterRemoval = { days -> deriver.deriveStale(days.keys) },
         log = { Log.i(TAG, it) },

@@ -47,7 +47,7 @@ import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.protocol.LanFraming
 import earth.walkthru.aqsync.data.protocol.Opcode
 import earth.walkthru.aqsync.data.sync.ArchiveCollector
-import earth.walkthru.aqsync.data.sync.ArchiveMutationGate
+import earth.walkthru.aqsync.data.sync.DeviceCoordinator
 import earth.walkthru.aqsync.data.sync.FileArchive
 import earth.walkthru.aqsync.data.sync.FileOutcome
 import earth.walkthru.aqsync.data.sync.SyncEngine
@@ -1236,7 +1236,7 @@ class DeviceFacadeTest {
                     committedNames += key.name
                 }
             }
-            val engine = SyncEngine(store, RoomArchiveIndex(archived), HistoryIndexer(fileArchive, archived, ArchiveMutationGate()).asRecordIndexer(fileArchive), windowRetryBackoffMs = 1, clock = { test.testScheduler.currentTime }, io = dispatcher)
+            val engine = SyncEngine(store, RoomArchiveIndex(archived), HistoryIndexer(fileArchive, archived, DeviceCoordinator()).asRecordIndexer(fileArchive), windowRetryBackoffMs = 1, clock = { test.testScheduler.currentTime }, io = dispatcher)
             repo = DeviceFacade(
                 linkOwner = owner,
                 collector = ArchiveCollector(store, RoomArchiveIndex(archived), engine, FakeStorageBudget(), test.testScheduler.timeSource),

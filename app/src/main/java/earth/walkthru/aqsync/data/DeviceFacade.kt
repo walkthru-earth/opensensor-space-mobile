@@ -30,6 +30,7 @@ import earth.walkthru.aqsync.data.sync.ArchiveCollector
 import earth.walkthru.aqsync.data.sync.FileOutcome
 import earth.walkthru.aqsync.data.sync.FileProblem
 import earth.walkthru.aqsync.data.sync.SyncEndCause
+import earth.walkthru.aqsync.data.sync.failed
 import earth.walkthru.aqsync.link.retryable
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -114,8 +115,9 @@ class DeviceFacade internal constructor(
             address,
             LinkProvider { device, preference ->
                 val active = lock.withLock { requireNotNull(request).also { it.replaced = null } }
-                // A run asks for a link only after the run it replaced cleaned up.
-                linkOwner.lendLink(device, preference, active.background, forCollection = true)
+                // A run asks for a link only after the run it replaced cleaned up. The archive's shared
+                // coordinator admits one collection per station, as on iOS.
+                collector.coordinator.admit(linkOwner.lendLink(device, preference, active.background, forCollection = true))
             },
             collector,
             KeepAlive { kind, intent -> acquireLease(kind, intent) },
@@ -273,9 +275,9 @@ class DeviceFacade internal constructor(
             publish(terminal)
             val outcomes = lock.withLock { receipt.request.outcomes.values.toList() }
             val saved = lock.withLock { receipt.request.newlySynced.values.toList() }
-            val settledFailures = outcomes.count { it !is FileOutcome.Synced }
+            val settledFailures = outcomes.count { it.failed }
             return when (terminal) {
-                is CollectionState.Done -> BackgroundSyncResult(address, currentDisplayName ?: name, if (lanTarget == null) earth.walkthru.aqsync.data.ble.TransportKind.BLE else earth.walkthru.aqsync.data.ble.TransportKind.LAN, saved.size, saved.sumOf { it.bytes }, (terminal.summary.notSaved.map { it.name } + outcomes.filter { it !is FileOutcome.Synced }.map { it.name }).toSet().size)
+                is CollectionState.Done -> BackgroundSyncResult(address, currentDisplayName ?: name, if (lanTarget == null) earth.walkthru.aqsync.data.ble.TransportKind.BLE else earth.walkthru.aqsync.data.ble.TransportKind.LAN, saved.size, saved.sumOf { it.bytes }, (terminal.summary.notSaved.map { it.name } + outcomes.filter { it.failed }.map { it.name }).toSet().size)
                 is CollectionState.Failed -> {
                     val cause = (terminal.failure as? CollectionFailure.Link)?.cause
                     val absent = cause is earth.walkthru.aqsync.link.DisconnectCause.Unreachable || (cause is earth.walkthru.aqsync.link.DisconnectCause.Timeout && cause.phase == earth.walkthru.aqsync.link.TimeoutPhase.OPEN)

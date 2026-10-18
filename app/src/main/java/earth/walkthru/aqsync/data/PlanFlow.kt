@@ -126,7 +126,7 @@ private fun overlayProgress(plan: SyncPlan, sync: SyncProgress): SyncPlan {
                     is FileOutcome.Mismatch -> f.reason
                     is FileOutcome.DeviceError -> f.message
                     is FileOutcome.Failed -> f.message
-                    is FileOutcome.Synced -> null
+                    is FileOutcome.Synced, is FileOutcome.Removed -> null
                 }
                 e.copy(state = if (f is FileOutcome.Mismatch) FileSyncState.MISMATCH else e.state, detail = msg)
             }
