@@ -102,4 +102,15 @@ class FileExportSpaceTest {
         assertTrue(stray.isFile)
         assertTrue(strayDir.isDirectory)
     }
+
+    @Test
+    fun theSweepNeverFollowsARunLink() {
+        exports.mkdirs()
+        val outside = File(root, "outside").apply { mkdirs() }
+        val kept = File(outside, "keep.parquet").apply { writeText("x") }
+        outside.setLastModified(now - 2 * hour)
+        Files.createSymbolicLink(File(exports, "run-link").toPath(), outside.toPath())
+        zip(space(), a, "one.zip")
+        assertTrue(kept.isFile, "the sweep emptied a folder through a link")
+    }
 }

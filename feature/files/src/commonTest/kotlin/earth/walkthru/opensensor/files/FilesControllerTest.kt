@@ -419,6 +419,25 @@ class FilesControllerTest {
     }
 
     @Test
+    fun aDailyZipStagedBeforeTheHoldFailsIsRemoved() = runTest {
+        val f = fixture(
+            daily = { listOf(ExportEntry("derived/v1/s/2026-10-01.parquet", bytesA.size.toLong()) { ByteArrayReader(bytesA) }) },
+            // Staging returned, then the hold ends with an error, so nothing will show the zip.
+            holdDaily = { block ->
+                block()
+                error("hold lost")
+            },
+        )
+        advanceUntilIdle()
+        val p = Presenter()
+        f.controller.shareDaily(p)
+        advanceUntilIdle()
+        assertTrue(p.shared.isEmpty())
+        assertEquals(1, f.space.runs.single().files.size)
+        assertTrue(f.space.runs.single().deleted)
+    }
+
+    @Test
     fun theOwnerDecidesWhichCopyAListedNameMeans() = runTest {
         val f = fixture(owner = "t")
         advanceUntilIdle()

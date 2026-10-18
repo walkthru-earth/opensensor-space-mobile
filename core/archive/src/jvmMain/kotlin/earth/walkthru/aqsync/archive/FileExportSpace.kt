@@ -3,6 +3,8 @@ package earth.walkthru.aqsync.archive
 import earth.walkthru.aqsync.data.history.parquet.LocalFileReader
 import java.io.File
 import java.io.FileOutputStream
+import java.nio.file.Files
+import java.nio.file.LinkOption
 import java.util.UUID
 
 /**
@@ -33,7 +35,8 @@ class FileExportSpace(private val root: File, private val clock: () -> Long = Sy
     private fun sweepExpired() {
         val now = clock()
         for (child in root.listFiles().orEmpty()) {
-            if (child.isDirectory && ExportRuns.isExpired(child.name, now) { child.lastModified().takeIf { it > 0L } }) {
+            // A real directory only, never through a link, so a `run-` link cannot empty another folder.
+            if (Files.isDirectory(child.toPath(), LinkOption.NOFOLLOW_LINKS) && ExportRuns.isExpired(child.name, now) { child.lastModified().takeIf { it > 0L } }) {
                 child.deleteRecursively()
             }
         }
