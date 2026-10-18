@@ -39,6 +39,7 @@
     <string name="pairing_default_pin">رمز PIN ما زال الافتراضي %1$s. غيّره.</string>
     <string name="pairing_display">شاشة اكتُشفت عند أول تشغيل</string>
     <string name="pairing_fixed">رمز PIN ثابت. رمز واحد من 6 أرقام تختاره أنت. للمستشعرات التي بلا شاشة.</string>
+    <string name="pairing_hide_pin">إخفاء رمز PIN</string>
     <string name="pairing_label_fixed">رمز PIN ثابت</string>
     <string name="pairing_label_none">بلا رمز</string>
     <string name="pairing_label_random">رمز عشوائي</string>
@@ -53,6 +54,7 @@
     <string name="pairing_random">رمز عشوائي. رمز جديد من 6 أرقام على شاشة المستشعر في كل مرة. يثبت أنك بجانبه.</string>
     <string name="pairing_reboot_pending">أعد تشغيل المستشعر لتطبيق التغيير.</string>
     <string name="pairing_save">حفظ الإقران</string>
+    <string name="pairing_show_pin">إظهار رمز PIN</string>
     <string name="pairing_six_digits">ستة أرقام بالضبط</string>
     <string name="pairing_title">الإقران عبر Bluetooth</string>
     <string name="pairing_unknown">الوضع غير معروف</string>

@@ -39,6 +39,7 @@
     <string name="pairing_default_pin">The PIN is still the default %1$s. Change it.</string>
     <string name="pairing_display">display found at first boot</string>
     <string name="pairing_fixed">Fixed PIN. One 6 digit PIN you choose. For sensors without a screen.</string>
+    <string name="pairing_hide_pin">Hide PIN</string>
     <string name="pairing_label_fixed">Fixed PIN</string>
     <string name="pairing_label_none">No code</string>
     <string name="pairing_label_random">Random code</string>
@@ -53,6 +54,7 @@
     <string name="pairing_random">Random code. A fresh 6 digit code on the sensor screen each time. It proves you are next to it.</string>
     <string name="pairing_reboot_pending">Restart the sensor to apply the change.</string>
     <string name="pairing_save">Save pairing</string>
+    <string name="pairing_show_pin">Show PIN</string>
     <string name="pairing_six_digits">Exactly six digits</string>
     <string name="pairing_title">Bluetooth pairing</string>
     <string name="pairing_unknown">Mode unknown</string>

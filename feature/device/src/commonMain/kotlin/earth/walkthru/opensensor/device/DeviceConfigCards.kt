@@ -29,6 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -70,6 +71,7 @@ import earth.walkthru.opensensor.designsystem.SignalBars
 import earth.walkthru.opensensor.designsystem.StatLine
 import earth.walkthru.opensensor.designsystem.StatusDot
 import earth.walkthru.opensensor.designsystem.WarningNote
+import earth.walkthru.opensensor.designsystem.rememberCredentialCaptureGuard
 import earth.walkthru.opensensor.device.resources.Res
 import earth.walkthru.opensensor.device.resources.action_cancel
 import earth.walkthru.opensensor.device.resources.action_hide
@@ -104,6 +106,7 @@ import earth.walkthru.opensensor.device.resources.lan_token_missing
 import earth.walkthru.opensensor.device.resources.pairing_default_pin
 import earth.walkthru.opensensor.device.resources.pairing_display
 import earth.walkthru.opensensor.device.resources.pairing_fixed
+import earth.walkthru.opensensor.device.resources.pairing_hide_pin
 import earth.walkthru.opensensor.device.resources.pairing_label_fixed
 import earth.walkthru.opensensor.device.resources.pairing_label_none
 import earth.walkthru.opensensor.device.resources.pairing_label_random
@@ -115,6 +118,7 @@ import earth.walkthru.opensensor.device.resources.pairing_pin
 import earth.walkthru.opensensor.device.resources.pairing_random
 import earth.walkthru.opensensor.device.resources.pairing_reboot_pending
 import earth.walkthru.opensensor.device.resources.pairing_save
+import earth.walkthru.opensensor.device.resources.pairing_show_pin
 import earth.walkthru.opensensor.device.resources.pairing_six_digits
 import earth.walkthru.opensensor.device.resources.pairing_title
 import earth.walkthru.opensensor.device.resources.pairing_unknown
@@ -212,6 +216,7 @@ fun PairingCard(state: DeviceConfigUiState, onSave: (PairingChoice) -> Unit, onR
     var selected by rememberSaveable(current) { mutableStateOf(current ?: PairMode.RANDOM) }
     // A secret, so it stays out of the saved instance state, like the Wi-Fi passphrase.
     var pin by remember { mutableStateOf("") }
+    var showPin by remember { mutableStateOf(false) }
 
     BrandCard(modifier = modifier) {
         val title = stringResource(Res.string.pairing_title)
@@ -277,6 +282,16 @@ fun PairingCard(state: DeviceConfigUiState, onSave: (PairingChoice) -> Unit, onR
             }
         }
         if (selected == PairMode.FIXED) {
+            // Kept out of screen captures while the PIN is typed (#160). A recording on iOS forces the mask on.
+            val captured = rememberCredentialCaptureGuard()
+            // Leaving Fixed PIN or the screen drops the typed PIN and hides it again.
+            DisposableEffect(Unit) {
+                onDispose {
+                    pin = ""
+                    showPin = false
+                }
+            }
+            val revealed = showPin && !captured
             Spacer(Modifier.height(6.dp))
             OutlinedTextField(
                 value = pin,
@@ -284,7 +299,15 @@ fun PairingCard(state: DeviceConfigUiState, onSave: (PairingChoice) -> Unit, onR
                 label = { Text(stringResource(if (current == PairMode.FIXED) Res.string.pairing_new_pin else Res.string.pairing_pin)) },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                visualTransformation = VisualTransformation.None,
+                visualTransformation = if (revealed) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    IconButton(onClick = { showPin = !showPin }, enabled = !captured) {
+                        Icon(
+                            if (revealed) AppIcons.VisibilityOff else AppIcons.Visibility,
+                            contentDescription = stringResource(if (revealed) Res.string.pairing_hide_pin else Res.string.pairing_show_pin),
+                        )
+                    }
+                },
                 enabled = state.canEdit,
                 modifier = Modifier.fillMaxWidth(),
                 supportingText = if (pin.isNotEmpty() && pin.length != 6) ({ Text(stringResource(Res.string.pairing_six_digits)) }) else null,
@@ -574,19 +597,21 @@ fun WifiCard(
                     if (pickedOpen) {
                         Text(stringResource(Res.string.wifi_open_network), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } else {
+                        val captured = rememberCredentialCaptureGuard()
+                        val revealed = showPsk && !captured
                         Spacer(Modifier.height(6.dp))
                         OutlinedTextField(
                             value = psk,
                             onValueChange = { psk = it },
                             label = { Text(stringResource(Res.string.wifi_passphrase_label)) },
                             singleLine = true,
-                            visualTransformation = if (showPsk) VisualTransformation.None else PasswordVisualTransformation(),
+                            visualTransformation = if (revealed) VisualTransformation.None else PasswordVisualTransformation(),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                             trailingIcon = {
-                                IconButton(onClick = { showPsk = !showPsk }) {
+                                IconButton(onClick = { showPsk = !showPsk }, enabled = !captured) {
                                     Icon(
-                                        if (showPsk) AppIcons.VisibilityOff else AppIcons.Visibility,
-                                        contentDescription = stringResource(if (showPsk) Res.string.wifi_hide_passphrase else Res.string.wifi_show_passphrase),
+                                        if (revealed) AppIcons.VisibilityOff else AppIcons.Visibility,
+                                        contentDescription = stringResource(if (revealed) Res.string.wifi_hide_passphrase else Res.string.wifi_show_passphrase),
                                     )
                                 }
                             },

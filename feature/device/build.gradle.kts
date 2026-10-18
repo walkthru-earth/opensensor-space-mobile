@@ -29,5 +29,9 @@ kotlin {
         commonTest.dependencies {
             implementation(libs.kotlinx.coroutines.test)
         }
+        // The PIN field tests render headless on the iOS simulator (verifyIos), as in :feature:settings.
+        iosTest.dependencies {
+            implementation(libs.compose.ui.test)
+        }
     }
 }
