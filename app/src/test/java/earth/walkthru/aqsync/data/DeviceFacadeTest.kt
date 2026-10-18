@@ -703,6 +703,23 @@ class DeviceFacadeTest {
     }
 
     @Test
+    fun `an open LAN session the device ends with BYE 10 clears its token`() = harnessTest { h ->
+        h.knownDao.upsert(h.enrolled(token = OLD_TOKEN))
+        h.lan.devices.value = mapOf(h.device.station to h.lanTarget())
+        h.factory.lanOpens = true
+
+        val lent = async { h.repo.lendLink(ADDRESS, LinkPreference.LAN) }.also { h.until { it.isCompleted } }.await()
+        assertEquals(TransportKind.LAN, lent.kind)
+        assertEquals("the token survives while the session is open", OLD_TOKEN, h.knownDao.lanToken(ADDRESS))
+
+        // BYE 10 after HELLO. Only the close watcher of the open session sees it.
+        h.factory.openLanLinks.single().abort(DisconnectCause.Auth(AuthKind.TOKEN_ROTATED))
+        h.advance(1_000)
+        assertNull("the dead token is cleared", h.knownDao.lanToken(ADDRESS))
+        assertEquals(0, h.factory.fakeConnects)
+    }
+
+    @Test
     fun `unexpected LAN failure closes the probe and falls back to Bluetooth`() = harnessTest { h ->
         h.knownDao.upsert(h.enrolled(token = OLD_TOKEN))
         h.lan.devices.value = mapOf(h.device.station to h.lanTarget())
@@ -1337,6 +1354,10 @@ class DeviceFacadeTest {
 
         /** When set, the LAN link's open fails with this typed close, as the TCP driver reports a BYE. */
         var lanClose: LinkClosedException? = null
+
+        /** When set, LAN links open over the fake device, so a test can end an open LAN session. */
+        var lanOpens = false
+        val openLanLinks = CopyOnWriteArrayList<AndroidLink>()
         val lanTransports = CopyOnWriteArrayList<FailingLanTransport>()
         var fakeConnects = 0
         var interactiveConnects = 0
@@ -1391,6 +1412,12 @@ class DeviceFacadeTest {
             unattendedTimeout = connectTimeoutMs
         }
         override fun lan(address: String, name: String?, host: InetAddress, port: Int, token: ByteArray): AndroidLink {
+            if (lanOpens) {
+                val overLan = object : AqTransport by observedDevice {
+                    override val kind = TransportKind.LAN
+                }
+                return TransportLink(overLan, scope).also { openLanLinks += it }
+            }
             val link = FailingLanTransport(address, lanFailure).also { lanTransports += it }.let { TransportLink(it, scope) }
             val close = lanClose ?: return link
             return object : AndroidLink by link {

@@ -360,6 +360,29 @@ class SyncEngineTest {
     }
 
     @Test
+    fun theFooterIsIndexedOutsideTheStationGateOnCommitAndAdopt() = runTest {
+        // Gate holders seen by each footer read. The gate must cover only the short row write.
+        val heldWhileIndexing = ArrayList<Int>()
+        val engine = SyncEngine(
+            store,
+            index,
+            indexer = { heldWhileIndexing += coordinator.activeStations(); it.copy(rows = 90, indexedAtEpochMs = 2) },
+            windowRetryBackoffMs = 5,
+            clock = { 1_000L },
+            coordinator = coordinator,
+            io = StandardTestDispatcher(testScheduler),
+        )
+        assertIs<FileOutcome.Synced>(engine.pull(device(backgroundScope), 0))
+        // The record is gone, so the next pull adopts the verified copy and indexes its footer again.
+        index.remove(index.records.single().key)
+        val adopted = assertIs<FileOutcome.Synced>(engine.pull(device(backgroundScope, "fake-b"), 0))
+
+        assertTrue(adopted.alreadyArchived)
+        assertEquals(listOf(0, 0), heldWhileIndexing)
+        assertEquals(90L, index.records.single().rows)
+    }
+
+    @Test
     fun anUnsafeNameIsRefusedWithoutOpening() = runTest {
         val d = device(backgroundScope)
         val outcome = engine().download(d.second, d.first.station, "fake", "../escape.parquet", 12, 4096) {}

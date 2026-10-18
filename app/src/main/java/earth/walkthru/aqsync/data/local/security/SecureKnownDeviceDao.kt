@@ -35,7 +35,7 @@ class LanCredential(val stored: String, val tokenHex: String) {
 /**
  * Keeps LAN bearer tokens encrypted at rest. Row reads return the stored ciphertext in
  * [KnownDevice.lanToken], so `hasLanToken` works for the UI while plaintext never reaches a
- * ViewModel. Plaintext comes only from [LanCredentialStore.lanToken]. Writes accept plaintext
+ * ViewModel. Plaintext comes only from [LanCredentialStore.lanCredential]. Writes accept plaintext
  * (encrypted here) or ciphertext (stored as is), so a read row can be upserted back unchanged.
  */
 class SecureKnownDeviceDao(
