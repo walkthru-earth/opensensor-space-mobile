@@ -81,6 +81,8 @@ import earth.walkthru.opensensor.files.resources.fm_rows_next
 import earth.walkthru.opensensor.files.resources.fm_rows_page
 import earth.walkthru.opensensor.files.resources.fm_rows_previous
 import earth.walkthru.opensensor.files.resources.fm_rows_range
+import earth.walkthru.opensensor.files.resources.fm_rows_retry
+import earth.walkthru.opensensor.files.resources.fm_rows_unavailable
 import earth.walkthru.opensensor.files.resources.fm_schema
 import earth.walkthru.opensensor.files.resources.fm_sequence
 import earth.walkthru.opensensor.files.resources.fm_size
@@ -107,7 +109,7 @@ import org.jetbrains.compose.resources.stringResource
  * [onRowPage] asks for the page starting at a row index. Purely descriptive. Nothing here changes the archive.
  */
 @Composable
-fun FileMetricsScreen(state: FileMetricsState, level: DetailLevel, name: String, rows: RowPage?, onRowPage: (from: Long) -> Unit, onBack: () -> Unit) {
+fun FileMetricsScreen(state: FileMetricsState, level: DetailLevel, name: String, rows: RowsState, onRowPage: (from: Long) -> Unit, onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -147,7 +149,7 @@ fun FileMetricsScreen(state: FileMetricsState, level: DetailLevel, name: String,
 }
 
 @Composable
-private fun Loaded(s: FileMetricsState.Loaded, padding: PaddingValues, developer: Boolean, rows: RowPage?, onRowPage: (Long) -> Unit) {
+private fun Loaded(s: FileMetricsState.Loaded, padding: PaddingValues, developer: Boolean, rows: RowsState, onRowPage: (Long) -> Unit) {
     val idx = s.index
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(padding),
@@ -281,12 +283,29 @@ private fun Loaded(s: FileMetricsState.Loaded, padding: PaddingValues, developer
 
 /** One page of decoded rows, each row one line of its cells in column order, with paging by row index. */
 @Composable
-private fun RowsCard(page: RowPage?, onPage: (Long) -> Unit) {
-    LaunchedEffect(Unit) { if (page == null) onPage(0) }
+private fun RowsCard(state: RowsState, onPage: (Long) -> Unit) {
+    LaunchedEffect(Unit) { if (state == RowsState.Idle) onPage(0) }
     SectionCard(stringResource(Res.string.fm_rows_page), modifier = Modifier.padding(top = 8.dp)) {
-        if (page == null) {
-            CircularProgressIndicator(Modifier.size(24.dp).align(Alignment.CenterHorizontally))
-            return@SectionCard
+        val page = when (state) {
+            RowsState.Idle, RowsState.Loading -> {
+                CircularProgressIndicator(Modifier.size(24.dp).align(Alignment.CenterHorizontally))
+                return@SectionCard
+            }
+            is RowsState.Unavailable -> {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        stringResource(Res.string.fm_rows_unavailable),
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    IconButton(onClick = { onPage(state.from) }) {
+                        Icon(AppIcons.Refresh, contentDescription = stringResource(Res.string.fm_rows_retry))
+                    }
+                }
+                return@SectionCard
+            }
+            is RowsState.Shown -> state.page
         }
         Text(page.columns.joinToString(" · "), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
         Spacer(Modifier.height(4.dp))

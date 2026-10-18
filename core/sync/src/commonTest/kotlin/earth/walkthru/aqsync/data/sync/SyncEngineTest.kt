@@ -8,6 +8,7 @@ import earth.walkthru.aqsync.data.ble.WindowLostException
 import earth.walkthru.aqsync.data.protocol.FrameType
 import earth.walkthru.aqsync.data.protocol.Opcode
 import earth.walkthru.aqsync.link.LinkEvent
+import earth.walkthru.aqsync.link.LinkTimeoutException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -163,6 +164,65 @@ class SyncEngineTest {
         assertIs<FileOutcome.Synced>(engine().pull(d, 1))
         assertTrue(fake.readLengths.drop(before).all { it <= 6084L }, "the link remembers it is weak: ${fake.readLengths}")
         assertContentEquals(fake.files[1].bytes, finalBytes(fake.station, fake.files[1].name))
+    }
+
+    /** A file long enough for the window to climb from 8 frames back to max_read, 8 clean windows per step. */
+    private fun FakeArchiveDevice.addLongFile(): Int {
+        files += FakeArchiveDevice.FakeFile(
+            "station=$station/year=2026/month=09/day=15/data_1030_b41d_15180-15269-90.parquet",
+            FakeArchiveDevice.fakeParquet(4, 540_000),
+        )
+        return files.lastIndex
+    }
+
+    /** The READ lengths after one shrink to 8112 when every window after it lands, 507-byte frames. */
+    private val climbBack: List<Long> =
+        listOf(8112L, 10140L, 12168L, 14196L, 16224L).flatMap { step -> List(AdaptiveReadWindow.GROW_AFTER) { step } }
+
+    @Test
+    fun aLinkThatLostOneWindowGrowsBackToMaxReadAfterCleanWindows() = runTest {
+        val d = device(backgroundScope)
+        val fake = d.first
+        val long = fake.addLongFile()
+        fake.dropLeadingChunks = { k -> if (k == 1) 1 else 0 }
+
+        assertIs<FileOutcome.Synced>(engine().pull(d, long))
+        val lengths = fake.readLengths
+        assertEquals(16384L, lengths[0])
+        // Eight clean windows at each step add one 4-frame step, until the cap.
+        assertEquals(climbBack, lengths.subList(1, 1 + climbBack.size), lengths.toString())
+        assertTrue(lengths.drop(1 + climbBack.size).let { it.isNotEmpty() && it.all { l -> l == 16384L } }, lengths.toString())
+        assertContentEquals(fake.files[long].bytes, finalBytes(fake.station, fake.files[long].name))
+    }
+
+    @Test
+    fun aReadThatTimesOutIsAskedAgainFromTheSameOffsetWithAHalfWindow() = runTest {
+        val d = device(backgroundScope)
+        val fake = d.first
+        val long = fake.addLongFile()
+        fake.stallRead = { k -> k == 1 }
+
+        assertIs<FileOutcome.Synced>(engine().pull(d, long))
+        // The stalled READ was stopped with ABORT, and the retry asked the same offset, halved.
+        assertTrue(Opcode.ABORT in fake.requests, fake.requests.toString())
+        assertEquals(listOf(0L, 0L), fake.readOffsets.take(2))
+        assertEquals(16384L, fake.readLengths[0])
+        // The timeout never counted as clean, the window grows after 8 windows that landed.
+        assertEquals(climbBack, fake.readLengths.subList(1, 1 + climbBack.size), fake.readLengths.toString())
+        // Size, CRC-32 and PAR1 still gate the commit.
+        assertContentEquals(fake.files[long].bytes, finalBytes(fake.station, fake.files[long].name))
+    }
+
+    @Test
+    fun aReadThatKeepsTimingOutEndsTheAttemptAtTheFloorAndKeepsThePartial() = runTest {
+        val d = device(backgroundScope)
+        val fake = d.first
+        fake.stallRead = { true }
+
+        assertFailsWith<LinkTimeoutException> { engine().pull(d, 0) }
+        assertEquals(1 + WindowRetryPolicy.RETRIES, fake.readCount)
+        assertEquals(listOf(16384L, 8112L, 4056L, 2028L, 2028L, 2028L), fake.readLengths)
+        assertNull(finalBytes(fake.station, fake.files[0].name))
     }
 
     @Test

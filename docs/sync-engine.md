@@ -203,7 +203,12 @@ sends 16384). `STATUS` has no window field, so `max_read` is the only firmware c
 Under the cap, each link adapts its window (`AdaptiveReadWindow`, #98, shared by Android and iOS
 through `DeviceSession.readWindow`). A lost window halves it, rounded down to whole `CHUNK` frames
 (`min(payload_max, 512 on BLE) − 7` bytes), never below 4 frames. Eight clean windows in a row add
-one 4-frame step back, never above `max_read`. The window lives as long as the link, so the next
+one 4-frame step back, never above `max_read`. A reply that stalls past the first-frame or
+inter-frame timeout on a link that is still up halves the window the same way. The link has
+already sent `ABORT` and drained that `READ` to its terminal, so the engine asks again from its own
+offset with the smaller window, under the same retry budget, and a timeout never counts as clean.
+A send timeout, or a timeout past the budget, ends the attempt, and a reconnect starts again at
+`max_read`. The size, CRC-32 and `PAR1` checks still gate the commit. The window lives as long as the link, so the next
 file on a weak link starts small. The window changes only the `READ` length, the wire frames are
 the contract's.
 

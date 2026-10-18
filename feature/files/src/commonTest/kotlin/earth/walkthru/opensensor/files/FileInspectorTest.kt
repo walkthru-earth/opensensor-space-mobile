@@ -18,7 +18,6 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** #98. The inspector formats a page of rows at a time, never every row of the file. */
@@ -151,13 +150,30 @@ class FileInspectorTest {
         val io = UnconfinedTestDispatcher(testScheduler)
         val controller = FileMetricsController(CoroutineScope(backgroundScope.coroutineContext + io), Store(mapOf(ArchiveKey("s", name) to bytes)), io)
         controller.page(0)
-        assertNull(controller.rows.value, "nothing is loaded yet")
+        assertEquals(RowsState.Idle, controller.rows.value, "nothing is loaded yet")
         controller.load("s", name)
         assertIs<FileMetricsState.Loaded>(controller.state.value)
         controller.page(100)
-        assertEquals(100L, controller.rows.value?.from)
-        assertEquals(FileInspector.PAGE_ROWS, controller.rows.value?.rows?.size)
+        val shown = assertIs<RowsState.Shown>(controller.rows.value).page
+        assertEquals(100L, shown.from)
+        assertEquals(FileInspector.PAGE_ROWS, shown.rows.size)
         controller.load("s", "station=s/year=2026/month=09/day=17/data_1000_b_2-3-1.parquet")
-        assertNull(controller.rows.value)
+        assertEquals(RowsState.Idle, controller.rows.value)
+    }
+
+    @Test
+    fun aPageThatCannotBeReadEndsAsUnavailableNotAForeverSpinner() = runTest {
+        // The summary loaded, then the file went away before its rows were asked for.
+        val io = UnconfinedTestDispatcher(testScheduler)
+        val finals = mutableMapOf(ArchiveKey("s", name) to bytes)
+        val controller = FileMetricsController(CoroutineScope(backgroundScope.coroutineContext + io), Store(finals), io)
+        controller.load("s", name)
+        assertIs<FileMetricsState.Loaded>(controller.state.value)
+        finals.clear()
+        controller.page(40)
+        assertEquals(RowsState.Unavailable(40), controller.rows.value)
+        finals[ArchiveKey("s", name)] = bytes
+        controller.page(40)
+        assertEquals(40L, assertIs<RowsState.Shown>(controller.rows.value).page.from)
     }
 }

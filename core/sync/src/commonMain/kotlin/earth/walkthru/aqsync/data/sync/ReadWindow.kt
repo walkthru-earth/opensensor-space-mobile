@@ -74,7 +74,7 @@ class AdaptiveReadWindow(ceiling: Int, payloadMax: Int, kind: TransportKind) {
         current = minOf(max, current + min)
     }
 
-    /** A window lost frames and is read again. */
+    /** A window lost frames, or its reply stalled past the link timeout, and is read again. */
     fun onLost() {
         clean = 0
         current = maxOf(min, current / 2 / frame * frame)

@@ -6,6 +6,7 @@ import earth.walkthru.aqsync.data.history.parquet.ParquetFile
 import earth.walkthru.aqsync.data.history.parquet.ParquetSink
 import earth.walkthru.aqsync.data.history.parquet.ParquetWriter
 import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -18,16 +19,16 @@ import org.junit.Test
 class DailyParquetMemoryTest {
     private val board = fixtureBytes("parquet/device/v3-board-2rg-180rows.parquet")
 
-    /** 96 quarter-hour files of [rowsPerFile] rows each, every column of the board file, one UTC day. */
-    private fun day(epochDay: Long, rowsPerFile: Int): List<Pair<ArchiveRecord, ByteArray>> {
+    /** [files] files of [rowsPerFile] rows over [fileSeconds] each, every column of the board file, one UTC day. */
+    private fun day(epochDay: Long, rowsPerFile: Int, files: Int = 96, fileSeconds: Long = 900L): List<Pair<ArchiveRecord, ByteArray>> {
         val raw = ParquetFile.wrap(board)
         val station = raw.metadata.stationId ?: "memory-station"
         val base = raw.leaves.map { raw.readColumn(it) }
-        return (0 until 96).map { f ->
+        return (0 until files).map { f ->
             val values = raw.leaves.mapIndexed { c, leaf ->
                 val col = base[c]
                 when (leaf.name) {
-                    UtcColumns.EVENT_NS -> ColumnValues.Int64(LongArray(rowsPerFile) { i -> (epochDay * 86_400L + f * 900L) * 1_000_000_000L + i * (900L * 1_000_000_000L / rowsPerFile) }, null)
+                    UtcColumns.EVENT_NS -> ColumnValues.Int64(LongArray(rowsPerFile) { i -> (epochDay * 86_400L + f * fileSeconds) * 1_000_000_000L + i * (fileSeconds * 1_000_000_000L / rowsPerFile) }, null)
                     ParquetIndexer.SEQ -> ColumnValues.Int64(LongArray(rowsPerFile) { i -> f.toLong() * rowsPerFile + i }, null)
                     else -> tile(col, rowsPerFile)
                 }
@@ -144,15 +145,30 @@ class DailyParquetMemoryTest {
     }
 
     @Test
+    fun aSourceThatFillsManyHoursIsOpenedTwiceNotOncePerHour() {
+        // Once to time its rows, once for the hours it fills. Dropping a source after every hour
+        // instead of after its last one writes the same bytes but opens it again for each hour.
+        val epochDay = 20_000L
+        val files = day(epochDay, rowsPerFile = 360, files = 4, fileSeconds = 6 * 3_600L)
+        val opens = IntArray(files.size)
+        val sources = files.mapIndexed { s, (record, bytes) -> DailyParquetSource(record) { opens[s]++; ParquetFile.wrap(bytes, record.name) } }
+        val out = MemorySink()
+        DailyParquetBuilder.build(files.first().first.station, epochDay, sources, out, emptyMap(), 0)
+        assertEquals(24, ParquetFile.wrap(out.toByteArray()).metadata.rowGroups.size)
+        assertEquals(List(files.size) { 2 }, opens.toList())
+    }
+
+    @Test
     fun aTenSecondDayHoldsAboutOneHourOfColumnsNotTheDay() {
         val (old, new) = report("10 s cadence", 90)
-        assertTrue("before ${old.peakBytes}, after ${new.peakBytes}", new.peakBytes < old.peakBytes)
+        // Measured 5.4x to 5.5x apart over repeated runs. Holding the day again gives about 1x.
+        assertTrue("before ${old.peakBytes}, after ${new.peakBytes}", new.peakBytes * 4 < old.peakBytes)
     }
 
     @Test
     fun aOneSecondDayHoldsAboutOneHourOfColumnsNotTheDay() {
         val (old, new) = report("1 s cadence", 900)
-        // A day has 24 hours, the streaming build holds about one. Allow GC noise and the row group.
-        assertTrue("before ${old.peakBytes}, after ${new.peakBytes}", new.peakBytes * 4 < old.peakBytes)
+        // Measured 3x to 4.6x apart, the hour of 1 s columns swings with GC. Holding the day again gives about 1x.
+        assertTrue("before ${old.peakBytes}, after ${new.peakBytes}", new.peakBytes * 2 < old.peakBytes)
     }
 }

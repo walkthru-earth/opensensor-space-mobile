@@ -50,9 +50,10 @@ class DayPassResult(
 )
 
 /**
- * One decode of a station-day's sources feeds both the tier [Aggregator] and the derived daily file
- * (#63). Before it, the derive opened and decoded every source once for the tiers and again for the
- * daily file. Rows are timed (UTC or the same-boot estimate), kept when they fall in the UTC day, and
+ * One pass over a station-day's sources feeds both the tier [Aggregator] and the derived daily file
+ * (#63). Each source is opened once to time its rows and feed the tiers. With a sink it is opened
+ * once more and decoded only while its hourly row groups are written, then dropped, so the day's
+ * columns are never all held at once (#98). Rows are timed (UTC or the same-boot estimate), kept when they fall in the UTC day, and
  * de-duplicated once with [RowKeys], so the tiers and the daily file count the same rows.
  *
  * A source that fails to open or decode is left out of the tiers, like before, and stops the daily

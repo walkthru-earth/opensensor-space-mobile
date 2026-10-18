@@ -89,7 +89,7 @@ the pairing phase, and a lost bond shows as a failed link until the next connect
 
 The owner reported Wi-Fi file collection slower than BLE on both iPhone and
 Android after saving iPhone access. Both mobile engines start at the advertised
-`max_read` (normally 16 KiB) and only drop below it after a lost window; Android also enables `TCP_NODELAY`. Do not shrink
+`max_read` (normally 16 KiB) and only drop below it after a lost or timed-out window; Android also enables `TCP_NODELAY`. Do not shrink
 LAN windows, remove integrity checks or assume an iOS UI change fixes both apps.
 
 The [CoreS3 v6.6 concurrency bench](../../aq-parquet/docs/boards/m5stack-cores3/bench-verified.md#board-1-concurrent-lan-collectors-firmware-v66)

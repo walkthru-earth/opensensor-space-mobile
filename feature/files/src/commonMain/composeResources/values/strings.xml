@@ -156,4 +156,6 @@
     <string name="fm_rows_range">rows %1$d to %2$d of %3$d</string>
     <string name="fm_rows_previous">Previous rows</string>
     <string name="fm_rows_next">Next rows</string>
+    <string name="fm_rows_unavailable">Rows could not be read</string>
+    <string name="fm_rows_retry">Try again</string>
 </resources>

@@ -50,6 +50,19 @@ data class RowPage(val from: Long, val totalRows: Long, val columns: List<String
     val to: Long get() = from + rows.size
 }
 
+/** What the Rows card shows. */
+sealed interface RowsState {
+    /** No page asked for yet on this file. */
+    data object Idle : RowsState
+
+    data object Loading : RowsState
+
+    data class Shown(val page: RowPage) : RowsState
+
+    /** The page at [from] could not be read, for example the file went away after the summary loaded. */
+    data class Unavailable(val from: Long) : RowsState
+}
+
 data class RowGroupSummary(val ordinal: Int, val rows: Long, val bytes: Long, val firstUtcNs: Long?, val lastUtcNs: Long?)
 
 enum class FailReason { NOT_IN_ARCHIVE, READER_REFUSED, UNREADABLE }
@@ -260,10 +273,10 @@ class FileMetricsController(
     private val _state = MutableStateFlow<FileMetricsState>(FileMetricsState.Loading)
     val state: StateFlow<FileMetricsState> = _state.asStateFlow()
 
-    private val _rows = MutableStateFlow<RowPage?>(null)
+    private val _rows = MutableStateFlow<RowsState>(RowsState.Idle)
 
-    /** The page of rows last asked for with [page], null before the first one. */
-    val rows: StateFlow<RowPage?> = _rows.asStateFlow()
+    /** The page of rows last asked for with [page]. */
+    val rows: StateFlow<RowsState> = _rows.asStateFlow()
     private var loaded: Pair<String, String>? = null
     private var paging: Job? = null
 
@@ -272,7 +285,7 @@ class FileMetricsController(
         loaded = station to name
         _state.value = FileMetricsState.Loading
         paging?.cancel()
-        _rows.value = null
+        _rows.value = RowsState.Idle
         scope.launch {
             _state.value = withContext(io) { FileInspector.describe(store, station, name) }
         }
@@ -282,8 +295,10 @@ class FileMetricsController(
     fun page(from: Long) {
         val (station, name) = loaded ?: return
         paging?.cancel()
+        _rows.value = RowsState.Loading
         paging = scope.launch {
-            _rows.value = withContext(io) { FileInspector.page(store, station, name, from) }
+            val page = withContext(io) { FileInspector.page(store, station, name, from) }
+            _rows.value = page?.let(RowsState::Shown) ?: RowsState.Unavailable(from)
         }
     }
 }

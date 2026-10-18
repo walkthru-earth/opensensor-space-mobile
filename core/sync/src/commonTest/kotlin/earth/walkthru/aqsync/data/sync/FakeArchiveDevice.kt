@@ -56,6 +56,9 @@ class FakeArchiveDevice(
     /** Leading CHUNKs of the k-th READ window to drop, as a lossy BLE link does. READ_END still says the true offset. */
     var dropLeadingChunks: (readIndex: Int) -> Int = { 0 }
 
+    /** True for a READ (1-based) that sends no frame until an `ABORT` stops it, as a stalled link does. */
+    var stallRead: (readIndex: Int) -> Boolean = { false }
+
     /** Runs before an OPEN is answered, so a test can change the files between LIST and OPEN. */
     var beforeOpen: (name: String) -> Unit = {}
 
@@ -169,6 +172,13 @@ class FakeArchiveDevice(
                 var toDrop = dropLeadingChunks(++readCount)
                 var pos = offset
                 streaming = op
+                if (stallRead(readCount)) {
+                    while (!abortRequested) delay(100)
+                    abortRequested = false
+                    streaming = 0
+                    send(Frame.Error(op, ProtocolError.ABORTED.code, ""))
+                    return send(Frame.Aborted(op))
+                }
                 while (pos < end) {
                     if (abortRequested) {
                         abortRequested = false

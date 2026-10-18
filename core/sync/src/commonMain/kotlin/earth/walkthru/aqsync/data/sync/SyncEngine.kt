@@ -18,6 +18,8 @@ import earth.walkthru.aqsync.data.protocol.ParquetVerify
 import earth.walkthru.aqsync.data.protocol.ProtocolError
 import earth.walkthru.aqsync.data.protocol.Sha256
 import earth.walkthru.aqsync.data.protocol.toHex
+import earth.walkthru.aqsync.link.LinkTimeoutException
+import earth.walkthru.aqsync.link.TimeoutPhase
 import earth.walkthru.aqsync.storage.AlreadyCommitted
 import earth.walkthru.aqsync.storage.StorageException
 import earth.walkthru.aqsync.sync.nowEpochMs
@@ -335,6 +337,18 @@ class SyncEngine(
                             "notifications keep getting lost on this link, move closer and retry"
                     )
                 }
+                delay(WindowRetryPolicy.backoffMs(attempt, windowRetryBackoffMs))
+                continue
+            } catch (e: LinkTimeoutException) {
+                // A reply that stalled on a link that is still up (#98). The link has abandoned the
+                // READ, sent ABORT and drains what is left before it admits the next request, and the
+                // contract resumes a stopped READ from the phone's own offset. So the window halves
+                // and the same bytes are asked again, smaller. A timeout is never clean. A send
+                // timeout, or one past the retry budget, ends the attempt as before.
+                if (e.timeout.phase != TimeoutPhase.FIRST_FRAME && e.timeout.phase != TimeoutPhase.INTER_FRAME) throw e
+                window.onLost()
+                attempt++
+                if (WindowRetryPolicy.givesUp(attempt)) throw e
                 delay(WindowRetryPolicy.backoffMs(attempt, windowRetryBackoffMs))
                 continue
             }
