@@ -28,7 +28,12 @@ enum BleGattChecks {
 
     private static func snapshotReadsWaitForAnIdleQueue() {
         precondition(BleSnapshotReads.needed(mtu: 247), "a 247 byte MTU omits a full snapshot notification")
+        precondition(BleSnapshotReads.needed(mtu: 482), "a 482 byte MTU omits the largest snapshot notification")
         precondition(!BleSnapshotReads.needed(mtu: 483), "a 483 byte MTU notifies every snapshot")
+        precondition(
+            !BleSnapshotReads.failedReadEndsLink(info: false, discovering: false), "a failed paced read keeps the link")
+        precondition(BleSnapshotReads.failedReadEndsLink(info: false, discovering: true), "a failed discovery read ends it")
+        precondition(BleSnapshotReads.failedReadEndsLink(info: true, discovering: false), "a failed INFO read ends it")
         let live = Characteristic(), status = Characteristic(), control = Characteristic()
         var queue = BleGattQueue<Characteristic>()
         queue.attach(sender: 1)

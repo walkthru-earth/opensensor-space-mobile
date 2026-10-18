@@ -525,7 +525,11 @@ actor BlePhysicalLink {
             deliver(connection, .token(kind: reply.kind, payload: reply.payload, port: Int(reply.port)))
             return
         }
-        guard !failed, let data = characteristic.value else { return lose(.readFailed) }
+        guard !failed, let data = characteristic.value else {
+            let info = characteristic.uuid == CBUUID(string: uuids.info)
+            if BleSnapshotReads.failedReadEndsLink(info: info, discovering: discovering) { return lose(.readFailed) }
+            return readDone(characteristic)
+        }
         guard let json = String(data: data, encoding: .utf8) else {
             // INFO identifies the sensor, so an unreadable one ends the link. One bad LIVE or STATUS
             // value is dropped, and a discovery read of it still completes so the queue moves on.

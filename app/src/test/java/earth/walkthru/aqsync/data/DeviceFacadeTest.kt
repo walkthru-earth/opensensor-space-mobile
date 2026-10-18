@@ -367,6 +367,23 @@ class DeviceFacadeTest {
     }
 
     @Test
+    fun `a failed snapshot read keeps the link and the next tick reads again`() = harnessTest { h ->
+        h.factory.smallMtu = true
+        h.repo.connect(ADDRESS, "AQ-6b40")
+        h.until { h.repo.connectionState.value.isReady && h.repo.live.value != null }
+        val seq = checkNotNull(h.repo.live.value).sample.seq!!
+        val reads = h.factory.snapshotReads.size
+        h.factory.failSnapshotReads = 2
+        h.advance(SnapshotPoller.SNAPSHOT_READ_INTERVAL.inWholeMilliseconds)
+        assertEquals("both reads of the failing tick ran", reads + 2, h.factory.snapshotReads.size)
+        assertEquals(seq, checkNotNull(h.repo.live.value).sample.seq)
+        assertTrue(h.repo.connectionState.value.isReady)
+        h.advance(SnapshotPoller.SNAPSHOT_READ_INTERVAL.inWholeMilliseconds)
+        assertTrue("the next tick reads a newer LIVE", checkNotNull(h.repo.live.value).sample.seq!! > seq)
+        assertTrue(h.repo.connectionState.value.isReady)
+    }
+
+    @Test
     fun `snapshot reads pause for a transfer and never overlap its requests`() = harnessTest { h ->
         h.factory.smallMtu = true
         h.factory.snapshotReadMs = 2_000
@@ -1508,6 +1525,9 @@ class DeviceFacadeTest {
         var smallMtu = false
         var snapshotReadMs = 0L
 
+        /** The next this many snapshot reads fail, as a transient ATT error does. */
+        var failSnapshotReads = 0
+
         /** Whether a transfer owned the device, checked when each LIVE read starts. */
         var transferActive: () -> Boolean = { false }
         val snapshotReads = CopyOnWriteArrayList<String>()
@@ -1568,6 +1588,10 @@ class DeviceFacadeTest {
             readsInFlight++
             try {
                 delay(snapshotReadMs)
+                if (failSnapshotReads > 0) {
+                    failSnapshotReads--
+                    throw TransportException("read failed")
+                }
                 return value().encodeToByteArray()
             } finally {
                 readsInFlight--

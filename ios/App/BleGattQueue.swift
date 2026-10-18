@@ -130,4 +130,9 @@ enum BleSnapshotReads {
     static let interval: TimeInterval = 10
 
     static func needed(mtu: Int) -> Bool { mtu < fullMtu }
+
+    /// Whether a failed read ends the connection. INFO and the discovery reads do. A paced read can
+    /// fail once, for example when a snapshot shrinks between two long read requests, so it is
+    /// dropped and the next interval reads again.
+    static func failedReadEndsLink(info: Bool, discovering: Bool) -> Bool { info || discovering }
 }
