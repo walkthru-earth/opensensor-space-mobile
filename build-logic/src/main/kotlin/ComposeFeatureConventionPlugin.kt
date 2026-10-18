@@ -36,7 +36,8 @@ class ComposeFeatureConventionPlugin : Plugin<Project> {
                 compileSdk = OpenSensorConventions.COMPILE_SDK
                 minSdk = OpenSensorConventions.MIN_SDK
                 androidResources { enable = true }
-                withHostTest {}
+                // Merged Android resources, so a Robolectric host test can render Compose in a real window.
+                withHostTest { isIncludeAndroidResources = true }
                 compilerOptions { jvmTarget.set(OpenSensorConventions.jvmTarget) }
             }
             openSensorIosTargets()

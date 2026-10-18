@@ -19,20 +19,23 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
     else -> null
 }
 
-@Composable
-actual fun rememberCredentialCaptureGuard(): Boolean {
-    val window = LocalContext.current.findActivity()?.window
-    DisposableEffect(window) {
-        if (window != null && secureWindows.getOrPut(window) { CaptureGuardCount() }.acquire()) {
-            window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
-        }
-        onDispose {
-            if (window != null && secureWindows[window]?.release() == true) {
-                window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
-                secureWindows.remove(window)
+internal actual object PlatformCredentialCaptureGuard : CredentialCaptureGuard {
+    @Composable
+    override fun guard(onScreenshot: () -> Unit): Boolean {
+        val window = LocalContext.current.findActivity()?.window
+        DisposableEffect(window) {
+            if (window != null && secureWindows.getOrPut(window) { CaptureGuardCount() }.acquire()) {
+                window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            }
+            onDispose {
+                if (window != null && secureWindows[window]?.release() == true) {
+                    window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                    secureWindows.remove(window)
+                }
             }
         }
+        // FLAG_SECURE already blanks every capture, so the field never needs to force its mask, and a
+        // screenshot holds no secret to hide again.
+        return false
     }
-    // FLAG_SECURE already blanks every capture, so the field never needs to force its mask.
-    return false
 }

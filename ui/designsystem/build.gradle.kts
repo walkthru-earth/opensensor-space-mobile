@@ -19,9 +19,14 @@ kotlin {
             implementation(project(":core:history"))
         }
         // Semantics tests render the shared components headless on the iOS simulator (verifyIos).
-        // The Android host has no window to render into without Robolectric, so they stay iOS only.
         iosTest.dependencies {
             implementation(libs.compose.ui.test)
+        }
+        // Robolectric gives the Android host a real window and the real font scale tables, for the
+        // FLAG_SECURE capture guard and the display numeral clamp.
+        getByName("androidHostTest").dependencies {
+            implementation(libs.robolectric)
+            implementation(libs.androidx.activity.compose)
         }
     }
 }

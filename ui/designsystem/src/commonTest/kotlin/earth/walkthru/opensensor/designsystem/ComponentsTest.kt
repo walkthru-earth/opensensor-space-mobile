@@ -4,8 +4,12 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.VectorPath
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -84,72 +88,35 @@ class ComponentsTest {
     fun displayTypographyNeverShrinksBelowDefaultAndClampsRenderedDpAboveMaxScale() {
         val defaultDensity = Density(density = 2f, fontScale = 1.0f)
         val linear200Density = Density(density = 2f, fontScale = 2.0f)
-        // Models Android 14 non-linear font scaling at 200 percent, where 84 sp maps to ~86 dp
-        // instead of 168 dp while 14 sp body text doubles to 28 dp.
-        val android14NonLinear200Density = object : Density {
+        // A converter that renders large text smaller than its sp although the font scale is above 1.
+        // No phone ships one (the real Android 14 tables are pinned in DisplayFontScaleTest), but the
+        // clamp promises the 1.0x size whatever the converter does.
+        val shrinking = object : Density {
             override val density: Float = 2f
-            override val fontScale: Float = 2f
-            override fun androidx.compose.ui.unit.TextUnit.toDp(): androidx.compose.ui.unit.Dp {
-                val sp = value
-                val dp = when {
-                    sp >= 60f -> 84f + (sp - 84f) * 0.9f + 2f
-                    sp >= 40f -> 60f + (sp - 48f) * 1.1f
-                    sp >= 28f -> 46f + (sp - 32f) * 1.2f
-                    else -> sp * 2f
-                }
-                return dp.dp
-            }
-
-            override fun androidx.compose.ui.unit.Dp.toSp(): androidx.compose.ui.unit.TextUnit {
-                val d = value
-                val sp = when {
-                    d >= 75f -> 84f + (d - 86f) / 0.9f
-                    d >= 52f -> 48f + (d - 60f) / 1.1f
-                    d >= 38f -> 32f + (d - 46f) / 1.2f
-                    else -> d / 2f
-                }
-                return androidx.compose.ui.unit.TextUnit(sp, androidx.compose.ui.unit.TextUnitType.Sp)
-            }
+            override val fontScale: Float = 1.3f
+            override fun TextUnit.toDp(): Dp = (value * 0.8f).dp
+            override fun Dp.toSp(): TextUnit = (value / 0.8f).sp
         }
 
-        val base = brandTypography(
-            text = androidx.compose.ui.text.font.FontFamily.SansSerif,
-            numbers = androidx.compose.ui.text.font.FontFamily.Monospace,
-            density = defaultDensity,
-        )
-        val scaledLinear = brandTypography(
-            text = androidx.compose.ui.text.font.FontFamily.SansSerif,
-            numbers = androidx.compose.ui.text.font.FontFamily.Monospace,
-            density = linear200Density,
-        )
-        val scaledNonLinear = brandTypography(
-            text = androidx.compose.ui.text.font.FontFamily.SansSerif,
-            numbers = androidx.compose.ui.text.font.FontFamily.Monospace,
-            density = android14NonLinear200Density,
-        )
+        val base = brandTypography(FontFamily.SansSerif, FontFamily.Monospace, defaultDensity)
+        val scaledLinear = brandTypography(FontFamily.SansSerif, FontFamily.Monospace, linear200Density)
+        val scaledShrinking = brandTypography(FontFamily.SansSerif, FontFamily.Monospace, shrinking)
 
-        for ((baseStyle, linearStyle, nonLinearStyle) in listOf(
-            Triple(base.displayLarge, scaledLinear.displayLarge, scaledNonLinear.displayLarge),
-            Triple(base.displayMedium, scaledLinear.displayMedium, scaledNonLinear.displayMedium),
-            Triple(base.displaySmall, scaledLinear.displaySmall, scaledNonLinear.displaySmall),
+        for ((baseStyle, linearStyle, shrinkingStyle) in listOf(
+            Triple(base.displayLarge, scaledLinear.displayLarge, scaledShrinking.displayLarge),
+            Triple(base.displayMedium, scaledLinear.displayMedium, scaledShrinking.displayMedium),
+            Triple(base.displaySmall, scaledLinear.displaySmall, scaledShrinking.displaySmall),
         )) {
             val baseDp = with(defaultDensity) { baseStyle.fontSize.toDp().value }
             val maxDp = baseDp * TypographyLimits.MaxDisplayFontScale
             val linearDp = with(linear200Density) { linearStyle.fontSize.toDp().value }
-            val nonLinearDp = with(android14NonLinear200Density) { nonLinearStyle.fontSize.toDp().value }
+            val shrinkingDp = with(shrinking) { shrinkingStyle.fontSize.toDp().value }
 
-            assertTrue(linearDp >= baseDp - 0.01f, "linear $linearDp >= $baseDp")
-            assertTrue(linearDp <= maxDp + 0.05f, "linear $linearDp <= $maxDp")
-            assertTrue(nonLinearDp >= baseDp - 0.01f, "nonLinear $nonLinearDp >= $baseDp")
-            assertTrue(nonLinearDp <= maxDp + 0.05f, "nonLinear $nonLinearDp <= $maxDp")
+            // Android's Density(density, fontScale) applies the non-linear tables, iOS scales linearly.
+            assertTrue(linearDp >= baseDp - 0.01f && linearDp <= maxDp + 0.05f, "200 percent $linearDp in $baseDp..$maxDp")
+            assertEquals(baseDp, shrinkingDp, 0.05f, "a shrinking converter is held at the 1.0x size")
         }
 
-        // Under Android 14 non-linear 200 percent scaling, 84 sp renders at 86 dp (>= 84 dp).
-        assertEquals(
-            86f,
-            with(android14NonLinear200Density) { scaledNonLinear.displayLarge.fontSize.toDp().value },
-            0.05f,
-        )
         // Body styles keep their uncompensated sp value so the OS 2.0x font scale doubles them in full.
         assertEquals(base.bodyMedium.fontSize.value, scaledLinear.bodyMedium.fontSize.value, 0.001f)
     }

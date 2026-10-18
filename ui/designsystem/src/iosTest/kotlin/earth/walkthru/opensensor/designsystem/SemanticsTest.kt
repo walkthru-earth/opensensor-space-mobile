@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.Typography
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -485,25 +486,16 @@ class SemanticsTest {
             mainClock.autoAdvance = false
             var observedReduceMotion = false
             setContent {
-                val systemReduce = rememberReduceMotion()
-                observedReduceMotion = systemReduce
-                androidx.compose.runtime.CompositionLocalProvider(LocalReduceMotion provides systemReduce) {
-                    MaterialTheme {
-                        Column {
-                            if (!systemReduce) {
-                                Peacock(
-                                    contentDescription = "Animated peacock",
-                                    expression = PeacockExpression.CALM,
-                                    animate = true,
-                                )
-                            } else {
-                                Peacock(
-                                    contentDescription = "Static peacock",
-                                    expression = PeacockExpression.CALM,
-                                    animate = true,
-                                )
-                            }
-                        }
+                // The theme is the one place that reads the system setting.
+                OpenSensorTheme(typography = Typography()) {
+                    val reduce = LocalReduceMotion.current
+                    observedReduceMotion = reduce
+                    Column {
+                        Peacock(
+                            contentDescription = if (reduce) "Static peacock" else "Animated peacock",
+                            expression = PeacockExpression.CALM,
+                            animate = true,
+                        )
                     }
                 }
             }
@@ -521,11 +513,81 @@ class SemanticsTest {
                 `object` = null,
             )
             mainClock.advanceTimeByFrame()
-            kotlin.test.assertTrue(observedReduceMotion, "rememberReduceMotion updates when iOS notification fires")
+            kotlin.test.assertTrue(observedReduceMotion, "OpenSensorTheme provides the new setting when iOS posts it")
             // With reduce motion active, Peacock renders immediately at frame 0 without advancing 420 ms.
             onNodeWithContentDescription("Static peacock").assertExists()
         } finally {
             iosReduceMotionReader = originalReader
         }
+    }
+
+    @Test
+    fun peacockReadsReduceMotionFromTheThemeNotTheSystem() = runComposeUiTest {
+        val originalReader = iosReduceMotionReader
+        try {
+            iosReduceMotionReader = { false }
+            mainClock.autoAdvance = false
+            setContent {
+                OpenSensorTheme(typography = Typography(), reduceMotion = true) {
+                    Peacock(contentDescription = "Peacock", expression = PeacockExpression.CALM, animate = true)
+                }
+            }
+            // The system says animate, the theme says reduce. The theme wins, so there is no entrance.
+            onNodeWithContentDescription("Peacock").assertExists()
+        } finally {
+            iosReduceMotionReader = originalReader
+        }
+    }
+
+    @Test
+    fun tickingTextSpeaksIn10SecondStepsWhileItsTextTicksEverySecond() = runComposeUiTest {
+        mainClock.autoAdvance = false
+        var start: Long? = null
+        setContent {
+            MaterialTheme {
+                TickingText(
+                    text = { now -> "${now - (start ?: now.also { start = it })} ms" },
+                    modifier = Modifier.testTag("age"),
+                )
+            }
+        }
+        onNodeWithTag("age").assert(hasContentDescription("0 ms"))
+        // Let the wall clock move, then let the 1 second tick read it.
+        platform.posix.usleep(50_000u)
+        mainClock.advanceTimeBy(1_100)
+        val shown = onNodeWithTag("age").fetchSemanticsNode().config[SemanticsProperties.Text].single().text
+        kotlin.test.assertNotEquals("0 ms", shown, "the visible age ticked")
+        onNodeWithTag("age").assert(hasContentDescription("0 ms"))
+    }
+
+    @Test
+    fun aStatLineValueNeverTakesMoreThan55PercentOfTheRow() = runComposeUiTest {
+        val value = List(24) { "word" }.joinToString(" ")
+        setContent {
+            MaterialTheme {
+                Column(Modifier.width(300.dp)) {
+                    StatLine(label = "Status", value = value, modifier = Modifier.testTag("row"))
+                }
+            }
+        }
+        val row = onNodeWithTag("row").fetchSemanticsNode().boundsInRoot.width
+        val valueWidth = onAllNodes(hasText(value), useUnmergedTree = true)[0].fetchSemanticsNode().boundsInRoot.width
+        kotlin.test.assertTrue(valueWidth <= row * 0.55f + 0.5f, "value $valueWidth of row $row")
+        val labelWidth = onAllNodes(hasText("Status"), useUnmergedTree = true)[0].fetchSemanticsNode().boundsInRoot.width
+        kotlin.test.assertTrue(labelWidth > 0f, "the label keeps its room")
+    }
+
+    @Test
+    fun valueSemanticsReplacesTheTextInsteadOfMergingIt() = runComposeUiTest {
+        setContent {
+            MaterialTheme {
+                Row(Modifier.valueSemantics(label = "PM2.5", value = "12", unit = "µg/m³", state = "Fair")) {
+                    Text("12")
+                }
+            }
+        }
+        // A merge would fold the child "12" into the node and read it after the description.
+        onAllNodes(hasText("12")).assertCountEquals(0)
+        onNodeWithContentDescription("PM2.5, 12 µg/m³, Fair").assertExists()
     }
 }

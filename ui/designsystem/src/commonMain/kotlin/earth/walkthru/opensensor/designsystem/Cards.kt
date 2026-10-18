@@ -94,13 +94,12 @@ fun Peacock(
     expression: PeacockExpression = PeacockExpression.WELCOME,
     animate: Boolean = true,
 ) {
-    val reduceMotion = rememberReduceMotion()
-    val durationMs = reduceMotionDurationMillis(420, !animate || reduceMotion)
+    val durationMs = reduceMotionDurationMillis(420, !animate || LocalReduceMotion.current)
     if (durationMs == 0) {
         PeacockIcon(expression, modifier.size(size), contentDescription)
         return
     }
-    // A finite, gentle entrance. Skipped when [animate] is false or [rememberReduceMotion] is active.
+    // A finite, gentle entrance. Skipped when [animate] is false or [LocalReduceMotion] is on.
     val visible = remember { MutableTransitionState(false) }
     LaunchedEffect(Unit) { visible.targetState = true }
     AnimatedVisibility(

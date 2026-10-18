@@ -1,7 +1,13 @@
 package earth.walkthru.opensensor.designsystem
 
+import androidx.compose.material3.Typography
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -96,6 +102,32 @@ class FitTextTest {
             val plain = type.bodyMedium.copy(fontSize = type.displaySmall.fontSize)
             assertEquals(plain.fontSize, type.oneScaleSize(plain), "a plain style of the same sp keeps it at $scale")
         }
+    }
+
+    @Test
+    fun aCopiedDisplayStyleKeepsItsTokenSize() {
+        // A linear 2x scale, so every display style is clamped below its token on both platforms.
+        // Android's own Density(2f, 2f) applies the non-linear tables and may leave 84 sp unclamped.
+        val linear = object : Density {
+            override val density = 2f
+            override val fontScale = 2f
+            override fun TextUnit.toDp(): Dp = (value * 2f).dp
+            override fun Dp.toSp(): TextUnit = (value / 2f).sp
+        }
+        val type = brandTypography(FontFamily.Default, FontFamily.Default, linear)
+        for ((style, clamped) in listOf(type.displayLarge to 56.7f, type.displayMedium to 32.4f, type.displaySmall to 21.6f)) {
+            assertEquals(clamped, style.fontSize.value, 0.01f)
+        }
+        val trimmed = LineHeightStyle(LineHeightStyle.Alignment.Bottom, LineHeightStyle.Trim.None)
+        val copies = listOf(
+            type.displayLarge.copy(lineHeight = 120.sp, lineHeightStyle = trimmed) to 84.sp,
+            type.displayMedium.copy(lineHeightStyle = null, letterSpacing = 0.sp) to 48.sp,
+            type.displaySmall.copy(fontWeight = FontWeight.Light, lineHeight = 10.sp) to 32.sp,
+        )
+        for ((copy, token) in copies) assertEquals(token, type.oneScaleSize(copy))
+        // Material's own display styles carry no tabular figures, so they keep their sp.
+        val material = Typography()
+        assertEquals(material.displaySmall.fontSize, material.oneScaleSize(material.displaySmall))
     }
 
     @Test

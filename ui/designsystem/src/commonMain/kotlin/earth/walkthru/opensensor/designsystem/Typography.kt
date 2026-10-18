@@ -76,13 +76,14 @@ object DisplaySizes {
  * The size of [style] at font scale 1.0. [brandTypography] has already clamped its display styles
  * for the current scale (`displaySmall` is 21.6 sp at scale 2.0), so a display style resolves to its
  * [DisplaySizes] token. Every other style scales linearly, so its own sp is its 1.0 size.
+ *
+ * A display style is known by its clamped size with tabular figures, the two things a caller keeps
+ * when it copies one to change the line height, colour or weight (#154).
  */
 fun Typography.oneScaleSize(style: TextStyle): TextUnit {
+    if (style.fontFeatureSettings != TABULAR) return style.fontSize
     val display = listOf(displayLarge to DisplaySizes.LARGE, displayMedium to DisplaySizes.MEDIUM, displaySmall to DisplaySizes.SMALL)
-    val match = display.firstOrNull { (token, _) ->
-        token.fontFeatureSettings == TABULAR && token.fontSize == style.fontSize &&
-            token.fontFeatureSettings == style.fontFeatureSettings && token.lineHeightStyle == style.lineHeightStyle
-    }
+    val match = display.firstOrNull { (token, _) -> token.fontFeatureSettings == TABULAR && token.fontSize == style.fontSize }
     return match?.second?.sp ?: style.fontSize
 }
 
