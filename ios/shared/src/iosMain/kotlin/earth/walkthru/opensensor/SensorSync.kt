@@ -3,7 +3,6 @@ package earth.walkthru.opensensor
 import earth.walkthru.aqsync.archive.ArchiveIndex
 import earth.walkthru.aqsync.archive.ArchiveStore
 import earth.walkthru.aqsync.archive.IosArchiveStore
-import earth.walkthru.aqsync.archive.PrunedFiles
 import earth.walkthru.aqsync.archive.ReceiptArchiveIndex
 import earth.walkthru.aqsync.collection.CollectionFailure
 import earth.walkthru.aqsync.collection.LinkPreference
@@ -16,14 +15,14 @@ import earth.walkthru.aqsync.data.ble.DeviceSession
 import earth.walkthru.aqsync.data.ble.TransportException
 import earth.walkthru.aqsync.data.ble.TransportUnavailableException
 import earth.walkthru.aqsync.data.sync.ArchiveCollector
-import earth.walkthru.aqsync.data.sync.ArchiveMutationGate
 import earth.walkthru.aqsync.data.sync.CollectionProgress
 import earth.walkthru.aqsync.data.sync.CollectionSummary
+import earth.walkthru.aqsync.data.sync.DeviceCoordinator
 import earth.walkthru.aqsync.data.sync.FileOutcome
 import earth.walkthru.aqsync.data.sync.FileProblem
 import earth.walkthru.aqsync.data.sync.InsufficientSpaceException
 import earth.walkthru.aqsync.data.sync.SyncEngine
-import earth.walkthru.aqsync.data.sync.WriterLeases
+import earth.walkthru.aqsync.data.sync.failed
 import earth.walkthru.aqsync.link.DisconnectCause
 import earth.walkthru.aqsync.link.LinkClosedException
 import earth.walkthru.aqsync.link.LinkTimeoutException
@@ -81,22 +80,21 @@ class SensorSync internal constructor(
     private val progressInterval: Long = PROGRESS_INTERVAL_MS,
     private val recordClockAnchor: suspend (String, String, Long, Long) -> Unit = { _, _, _, _ -> },
     budget: StorageBudget,
-    /** Shared with the storage janitor, so it never sweeps a partial this runner is writing. */
-    leases: WriterLeases = WriterLeases(),
-    /** Shared with the index repair, the janitor and the old file cleanup of the same archive. */
-    gate: ArchiveMutationGate = ArchiveMutationGate(),
-    /** Files removed in Settings, which sync skips. */
-    pruned: PrunedFiles = PrunedFiles.None,
+    /**
+     * The archive's one coordinator, shared with the index repair, the storage janitor and the old
+     * file cleanup. It admits one sync per station and holds the writer leases, station gates and
+     * the tombstones of files removed in Settings.
+     */
+    coordinator: DeviceCoordinator = DeviceCoordinator(),
 ) {
     constructor() : this(IosArchiveStore.inApplicationSupport(), Dispatchers.Default, Dispatchers.Main)
 
     private constructor(store: IosArchiveStore, work: CoroutineContext, callbacks: CoroutineContext) :
         this(store, ReceiptArchiveIndex(store.finalRoot), work, callbacks, budget = IosStorageBudget(StorageRoots(mapOf(StorageRole.Archive to store.finalRoot))))
 
-    internal val collector = ArchiveCollector(store, index, SyncEngine(store, index, leases = leases, gate = gate, log = ::syncLog), budget, pruned = pruned)
+    internal val collector = ArchiveCollector(store, index, SyncEngine(store, index, coordinator = coordinator, log = ::syncLog), budget)
     private val scope = CoroutineScope(SupervisorJob())
     private val lock = NSLock()
-    private val active = HashSet<String>()
 
     /** The one [collections] instance. Guarded by [lock]. */
     private var shared: SensorCollections? = null
@@ -126,7 +124,7 @@ class SensorSync internal constructor(
         finished: (SyncResult) -> Unit,
     ): SyncHandle {
         IosSyncDiagnostics.record(device, "sync", "${link.kind.name.lowercase()} ${if (onlyName == null) "all files" else "one file"}")
-        if (!claim(station)) {
+        if (!collector.coordinator.tryAdmit(station)) {
             scope.launch(callbacks) { finished(SyncResult(SyncEnd.IN_USE, 0, 0, 0)) }
             return SyncHandle(null)
         }
@@ -194,7 +192,7 @@ class SensorSync internal constructor(
             ticks.close()
             withContext(NonCancellable) { if (result.end == SyncEnd.STOPPED) reporter.cancel() else reporter.join() }
             withContext(NonCancellable + callbacks) {
-                release(station)
+                collector.coordinator.release(station)
                 IosSyncDiagnostics.record(device, "result", "${result.end.name.lowercase()} · ${result.saved}/${result.files} saved")
                 finished(result)
             }
@@ -279,7 +277,7 @@ class SensorSync internal constructor(
      * The shared collection controllers over this runner's archive (#81). [linkFor] returns the
      * open link Swift holds for a device, on the main thread. [dial] asks Swift to open one when a
      * retry finds none, and Swift calls its `done` once with whether the link opened and identified
-     * (see [IosLinkProvider]). A station claimed here or there syncs over one link at a time.
+     * (see [IosLinkProvider]). A station admitted here or there syncs over one link at a time.
      *
      * The first call creates the controllers and every later call returns the same instance, so the
      * per-device busy guard and the run permits hold app wide. Later closures are ignored.
@@ -323,24 +321,6 @@ class SensorSync internal constructor(
         }
     }
 
-    internal fun claim(station: String): Boolean {
-        lock.lock()
-        try {
-            return active.add(station)
-        } finally {
-            lock.unlock()
-        }
-    }
-
-    internal fun release(station: String) {
-        lock.lock()
-        try {
-            active.remove(station)
-        } finally {
-            lock.unlock()
-        }
-    }
-
     internal companion object {
         const val PROGRESS_INTERVAL_MS = 250L
     }
@@ -365,7 +345,7 @@ internal fun MutableMap<String, FileOutcome>.record(outcome: FileOutcome) {
 /** A run that ended before its summary. [listed] files were listed and the outcomes are real. */
 internal fun partialResult(end: SyncEnd, listed: Int, outcomes: Map<String, FileOutcome>, reason: SyncEndReason = end.reason): SyncResult {
     val saved = outcomes.values.count { it is FileOutcome.Synced && !it.alreadyArchived }
-    val failed = outcomes.values.count { it !is FileOutcome.Synced }
+    val failed = outcomes.values.count { it.failed }
     return SyncResult(end, listed, saved, failed, endReason = reason)
 }
 

@@ -165,7 +165,7 @@ object StorageModule {
 
     /**
      * The shared order of the History passes (#100). The janitor sweeps once per process start, then
-     * the feed block quota applies, then the backfill, then the derive the app start hands in.
+     * the feed block quota applies even when the sweep failed, then the backfill, then the derive the app start hands in.
      * It logs counts and class names only, never paths or station ids.
      */
     @Provides
@@ -179,8 +179,11 @@ object StorageModule {
         repair = historyIndexer.repair,
         index = index,
         janitor = {
-            Log.i("StorageJanitor", janitor.run().describe())
-            blocks.enforce()
+            try {
+                Log.i("StorageJanitor", janitor.run().describe())
+            } finally {
+                blocks.enforce()
+            }
         },
         log = { Log.i("HistoryOrchestrator", it) },
     )

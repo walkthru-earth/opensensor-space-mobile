@@ -13,6 +13,7 @@ import earth.walkthru.aqsync.archive.PrunedFiles
 import earth.walkthru.aqsync.archive.ReceiptArchiveIndex
 import earth.walkthru.aqsync.data.history.ArchiveHistoryTiers
 import earth.walkthru.aqsync.data.history.ArchiveIndexRepair
+import earth.walkthru.aqsync.data.history.HistoryOrchestrator
 import earth.walkthru.aqsync.data.history.HistorySeriesReader
 import earth.walkthru.aqsync.data.history.IosDailyDerivedStore
 import earth.walkthru.aqsync.data.history.IosFileTierStore
@@ -20,8 +21,7 @@ import earth.walkthru.aqsync.data.history.LegacyFileCleanup
 import earth.walkthru.aqsync.data.history.TimeEstimate
 import earth.walkthru.aqsync.data.history.UtcDayRange
 import earth.walkthru.aqsync.data.history.info
-import earth.walkthru.aqsync.data.sync.ArchiveMutationGate
-import earth.walkthru.aqsync.data.sync.WriterLeases
+import earth.walkthru.aqsync.data.sync.DeviceCoordinator
 import earth.walkthru.aqsync.net.BlockCache
 import earth.walkthru.aqsync.net.DiskBlockStore
 import earth.walkthru.aqsync.storage.AtomicFiles
@@ -108,11 +108,30 @@ internal object IosArchive {
     }
     val reader: HistorySeriesReader by lazy { HistorySeriesReader(store, index, tiers, clockAnchors = clockAnchors, derived = derived) }
 
-    /** One writer per archive file, for the sync runner and the janitor's partial sweep. */
-    val leases = WriterLeases()
+    /**
+     * The archive's one coordinator, shared by sync, the janitor, the index repair and [oldFiles]. It
+     * admits one sync per station and holds the writer leases, station gates and tombstones.
+     */
+    val coordinator: DeviceCoordinator by lazy { DeviceCoordinator(pruned) }
 
-    /** One archive mutation per station, shared by sync, the janitor, the index repair and [oldFiles]. */
-    val gate = ArchiveMutationGate()
+    /**
+     * The shared order of the History passes (#100). The janitor and the feed block quota first, then
+     * the backfill, then [rebuildDerived], and again whenever a record waits for its index.
+     */
+    private val history by lazy {
+        HistoryOrchestrator(
+            repair,
+            index,
+            janitor = {
+                try {
+                    janitor.run()
+                } finally {
+                    feedBlocks.enforce()
+                }
+            },
+            log = ::println,
+        )
+    }
 
     private val derivedMutex = Mutex()
     private val base get() = store.finalRoot.substringBeforeLast('/')
@@ -213,9 +232,7 @@ internal object IosArchive {
             index = index,
             roots = roots,
             tree = IosStorageTree(),
-            leases = leases,
-            gate = gate,
-            pruned = pruned,
+            coordinator = coordinator,
             io = Dispatchers.IO,
             afterRemoval = { days -> rebuildDerived(days.keys) },
             log = ::println,
@@ -226,9 +243,9 @@ internal object IosArchive {
     private val derivedAtomic by lazy { IosAtomicFiles("$base/${AtomicFiles.TEMP_DIR}") }
     private val tierStore by lazy { IosFileTierStore(cachesDirectory(), derivedAtomic) }
     private val derived by lazy { IosDailyDerivedStore(cachesDirectory(), derivedAtomic, tierStore) }
-    private val repair by lazy { ArchiveIndexRepair(store, index, clockAnchors = clockAnchors, gate = gate) }
+    private val repair by lazy { ArchiveIndexRepair(store, index, clockAnchors = clockAnchors, coordinator = coordinator) }
     private val janitor by lazy {
-        StorageJanitor(roots, IosStorageTree(), store, index, Dispatchers.IO, log = ::println, quota = derivedQuota, leases = leases, gate = gate, pruned = pruned)
+        StorageJanitor(roots, IosStorageTree(), store, index, Dispatchers.IO, log = ::println, quota = derivedQuota, coordinator = coordinator)
     }
 
     /**
@@ -261,15 +278,20 @@ internal object IosArchive {
     /**
      * Rebuilds the derived days of every station with records, and of each of [emptied]. A station in
      * [emptied] that has no records left is rebuilt from no sources, which removes its stale day files.
+     * It is one [HistoryOrchestrator.derivePass], so it never runs beside a backfill. The History
+     * reader's own refresh of one station takes [derivedMutex] only, so History stays visible during
+     * a backfill and keeps the days a waiting record holds.
      */
-    private suspend fun rebuildDerived(emptied: Collection<String> = emptyList()) = derivedMutex.withLock {
-        val byStation = index.observeAll().first().groupBy { it.station }
-        for (station in byStation.keys + emptied) {
-            val files = byStation[station].orEmpty()
-            val anchors = TimeEstimate.anchors(files.filter { it.isIndexed }.map { it.info() }, clockAnchors.anchors(station))
-            derived.rebuild(station, files, store, anchors, Clock.System.now().epochSeconds)
+    private suspend fun rebuildDerived(emptied: Collection<String> = emptyList()) = history.derivePass {
+        derivedMutex.withLock {
+            val byStation = index.observeAll().first().groupBy { it.station }
+            for (station in byStation.keys + emptied) {
+                val files = byStation[station].orEmpty()
+                val anchors = TimeEstimate.anchors(files.filter { it.isIndexed }.map { it.info() }, clockAnchors.anchors(station))
+                derived.rebuild(station, files, store, anchors, Clock.System.now().epochSeconds)
+            }
+            withContext(Dispatchers.IO) { derivedQuota.enforce() }
         }
-        withContext(Dispatchers.IO) { derivedQuota.enforce() }
     }
 
     /**
@@ -283,26 +305,9 @@ internal object IosArchive {
         IosMemoryPressure.install()
         // The tiers give memory back on a memory warning, the next History pass rebuilds them (#61).
         scope.trimOnMemoryPressure(tiers)
-        scope.launch {
-            // The startup sweep of #60 first, so an orphan final it adopts is indexed by the repair below.
-            try {
-                janitor.run()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                println("storage janitor failed: ${e::class.simpleName}")
-            }
-            feedBlocks.enforce()
-            repair.backfillUntilSettled()
-            try {
-                repair.repairWhenWaiting()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                // The index flow failed. The next process start repairs again.
-                println("index repair stopped: ${e::class.simpleName}")
-            }
-        }
+        // The startup sweep of #60, the backfill and the derive, in the shared order.
+        scope.launch { history.run { rebuildDerived() } }
+        // Every archive change, a sync's new file or a removal, derives again after any backfill in flight.
         scope.launch {
             index.observeAll().conflate().collect {
                 try {
@@ -324,7 +329,7 @@ internal object IosArchive {
  */
 fun sharedSensorSync(): SensorSync {
     IosArchive.startIndexRepair()
-    return SensorSync(IosArchive.store, IosArchive.index, Dispatchers.Default, Dispatchers.Main, recordClockAnchor = IosArchive::recordClockAnchor, budget = IosArchive.budget, leases = IosArchive.leases, gate = IosArchive.gate, pruned = IosArchive.pruned)
+    return SensorSync(IosArchive.store, IosArchive.index, Dispatchers.Default, Dispatchers.Main, recordClockAnchor = IosArchive::recordClockAnchor, budget = IosArchive.budget, coordinator = IosArchive.coordinator)
 }
 
 /** `Library/Caches` of this app. */

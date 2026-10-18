@@ -19,8 +19,6 @@ import earth.walkthru.aqsync.data.protocol.Frame
 import earth.walkthru.aqsync.data.sync.CollectionSummary
 import earth.walkthru.aqsync.data.sync.FileOutcome
 import earth.walkthru.aqsync.data.sync.FileProblem
-import earth.walkthru.aqsync.link.DisconnectCause
-import earth.walkthru.aqsync.link.LinkClosedException
 import earth.walkthru.opensensor.strings.resources.Res
 import earth.walkthru.opensensor.strings.resources.companion_lan_paused
 import earth.walkthru.opensensor.strings.resources.companion_lan_sync_paused
@@ -250,18 +248,9 @@ class SensorCollections internal constructor(
     /** Lends a link only once its station is free of another sync on this phone. */
     private val links = LinkProvider { device, prefer ->
         val (link, inner) = provider.lend(device, prefer)
-        val station = inner.station
-        if (!sync.claim(station)) {
-            inner.release()
-            throw LinkClosedException(DisconnectCause.Busy)
-        }
-        lateinit var outer: CollectionLink
-        outer = CollectionLink(inner.session, station, inner.maxRead) {
-            locked { lent.remove(outer) }
-            // The IosLink lease ends before the station is free, so a sync it admits finds the link idle.
-            inner.release()
-            sync.release(station)
-        }
+        // The archive's shared coordinator admits one sync per station, as on Android. Its release
+        // ends the IosLink lease before the station is free, so a sync it admits finds the link idle.
+        val outer = sync.collector.coordinator.admit(inner) { released -> locked { lent.remove(released) } }
         locked { lent[outer] = link }
         outer
     }
