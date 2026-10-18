@@ -9,7 +9,6 @@ import earth.walkthru.aqsync.data.protocol.AqGatt
 import earth.walkthru.aqsync.data.protocol.DeviceInfo
 import earth.walkthru.aqsync.data.protocol.DeviceStatus
 import earth.walkthru.aqsync.data.protocol.LanProtocol
-import earth.walkthru.aqsync.data.protocol.LiveProfiles
 import earth.walkthru.aqsync.data.protocol.LiveSample
 import earth.walkthru.aqsync.data.protocol.ProtoGate
 import earth.walkthru.aqsync.data.protocol.requireProto3
@@ -103,7 +102,6 @@ class CompanionState {
     internal var syncFinishedAtEpochMs by mutableStateOf<Long?>(null)
         private set
     internal val reading: NowReading get() = NowReading.of(live)
-    internal val profile get() = LiveProfiles.resolve(info)
 
     internal var lanDevices by mutableStateOf<List<String>>(emptyList())
         private set

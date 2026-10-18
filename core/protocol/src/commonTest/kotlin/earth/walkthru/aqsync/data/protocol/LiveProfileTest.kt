@@ -109,11 +109,62 @@ class LiveProfileTest {
     }
 
     @Test
-    fun `unknown dictionary never borrows a temperature interpretation`() {
+    fun `INFO without a dictionary has no LIVE profile`() {
         assertNull(LiveProfiles.resolve(null))
         assertNull(LiveProfiles.resolve(DeviceInfo(fw = "idf-cores3-parquet-v6.12")))
         assertNull(LiveProfiles.resolve(DeviceInfo(schema = "cores3-telemetry-v5")))
-        assertNull(LiveProfiles.resolve(DeviceInfo(schema = "waveshare-sim7670g-telemetry-v6")))
-        assertNull(LiveProfiles.resolve(DeviceInfo(dict = "0".repeat(64))))
+        assertNull(LiveProfiles.resolve(DeviceInfo(schema = "waveshare-sim7670g-telemetry-v6"), LiveSample.parse("""{"pms":4,"t":22.0}""")))
+    }
+
+    private val unknown = DeviceInfo(fw = "idf-cores3-parquet-v9.9", schema = "waveshare-sim7670g-telemetry-v9", dict = "0".repeat(64))
+
+    @Test
+    fun `unknown dictionary with ambient keys still shows PM, ambient temperature and humidity`() {
+        val sample = LiveSample.parse("""{"seq":1,"pms":4,"pm25":7,"n03":900,"t":22.4,"rh":51.0,"bat":4100}""")
+        val profile = LiveProfiles.resolve(unknown, sample)!!
+        assertFalse(profile.reviewed)
+        assertEquals(TemperatureSource.AMBIENT, profile.temperature)
+        assertTrue(profile.humidity)
+        assertEquals(setOf("seq", "pms", "pm25", "n03", "t", "rh", "bat"), profile.keys)
+        assertEquals(22.4, profile.temperatureOf(sample)!!, 0.0)
+        assertEquals(7.0, sample.pm25!!, 0.0)
+    }
+
+    @Test
+    fun `unknown dictionary reads imu_t as board temperature and never t as board`() {
+        val board = LiveSample.parse("""{"pms":4,"pm25":7,"imu_t":40.0}""")
+        val profile = LiveProfiles.resolve(unknown, board)!!
+        assertEquals(TemperatureSource.BOARD, profile.temperature)
+        assertFalse(profile.humidity)
+        assertEquals(40.0, profile.temperatureOf(board)!!, 0.0)
+        assertNull(profile.temperatureOf(LiveSample.parse("""{"pms":4,"t":31.5}""")), "t is ambient, never board, without a reviewed profile")
+        val both = LiveSample.parse("""{"pms":4,"t":22.0,"imu_t":40.0}""")
+        val ambient = LiveProfiles.resolve(unknown, both)!!
+        assertEquals(TemperatureSource.AMBIENT, ambient.temperature)
+        assertEquals(22.0, ambient.temperatureOf(both)!!, 0.0)
+    }
+
+    @Test
+    fun `unknown LIVE keys are ignored`() {
+        val sample = LiveSample.parse("""{"pms":4,"pm25":7,"pm4":9,"t2":55.0,"temp":60.0,"imu_t":40.0}""")
+        val profile = LiveProfiles.resolve(unknown, sample)!!
+        assertEquals(setOf("pms", "pm25", "imu_t"), profile.keys)
+        assertEquals(TemperatureSource.BOARD, profile.temperature)
+        assertEquals(40.0, profile.temperatureOf(sample)!!, 0.0)
+    }
+
+    @Test
+    fun `the vocabulary is exactly the keys LiveSample reads`() {
+        val every = LiveProfiles.VOCABULARY.joinToString(",", "{", "}") { "\"$it\":1" }
+        assertEquals(LiveProfiles.VOCABULARY, LiveProfiles.keysOf(LiveSample.parse(every)))
+        assertEquals(emptySet(), LiveProfiles.keysOf(null))
+    }
+
+    @Test
+    fun `known dictionaries keep their reviewed profile whatever the sample sends`() {
+        val sample = LiveSample.parse("""{"pms":4,"t":22.0,"imu_t":40.0,"rh":50.0}""")
+        assertSame(LiveProfiles.CORES3, LiveProfiles.resolve(DeviceInfo(dict = LiveProfiles.CORES3_V5_DICTIONARY), sample))
+        assertSame(LiveProfiles.WAVESHARE_V5, LiveProfiles.resolve(DeviceInfo(dict = LiveProfiles.WAVESHARE_V5_DICTIONARY), sample))
+        assertTrue(LiveProfiles.CORES3.reviewed)
     }
 }

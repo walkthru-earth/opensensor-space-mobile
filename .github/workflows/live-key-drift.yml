@@ -1,0 +1,36 @@
+# Catch firmware and app LIVE drift before a release (#153). Compares the digests frozen in
+# aq-parquet main tools/fixtures/live_keys/*.json with LiveKeyFixturesTest and fails on a digest the
+# app does not know. aq-parquet is public, so the default read-only token is enough. A red run is
+# the signal. It opens no issue.
+# Actions are pinned to commit SHAs (version in the trailing comment). Dependabot updates them.
+name: live-key-drift
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    name: aq-parquet LIVE digests known to the app
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: walkthru-earth/aq-parquet
+          ref: main
+          path: aq-parquet
+          persist-credentials: false
+          sparse-checkout: tools/fixtures/live_keys
+      - name: Compare digests
+        run: >-
+          python3 -I tools/check_live_key_drift.py
+          aq-parquet/tools/fixtures/live_keys
+          core/protocol/src/commonTest/kotlin/earth/walkthru/aqsync/data/protocol/LiveKeyFixturesTest.kt

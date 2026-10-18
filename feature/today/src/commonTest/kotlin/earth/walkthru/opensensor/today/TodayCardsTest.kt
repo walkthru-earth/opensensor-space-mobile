@@ -160,4 +160,16 @@ class TodayCardsTest {
             assertEquals(syncEndLine(SyncProgress(endReason = reason), DetailLevel.SIMPLE), syncEndLine(SyncProgress(endReason = reason), DetailLevel.DEVELOPER))
         }
     }
+
+    @Test
+    fun unknownDictionaryTiesTodayTemperatureToTheLiveKey() {
+        val unknown = waveshare.copy(dict = "0".repeat(64))
+        val ambient = state(unknown, LiveSample(pms = 4, pm25 = 14.9, t = 22.5, imuT = 40.0, rh = 50.0), DetailLevel.SIMPLE)
+        assertEquals(listOf(NOW_AIR, TODAY_SO_FAR, ENVIRONMENT, SMART_SYNC, CLOCK), ambient.cards)
+        assertEquals(22.5, ambient.capabilities.liveProfile!!.temperatureOf(ambient.snapshot.live)!!, 0.0)
+        val board = state(unknown, LiveSample(pms = 4, pm25 = 14.9, imuT = 40.0), DetailLevel.SIMPLE)
+        assertEquals(listOf(NOW_AIR, TODAY_SO_FAR, SMART_SYNC, CLOCK), board.cards)
+        assertEquals(40.0, board.capabilities.liveProfile!!.temperatureOf(board.snapshot.live)!!, 0.0)
+        assertFalse(board.capabilities.liveProfile!!.reviewed)
+    }
 }

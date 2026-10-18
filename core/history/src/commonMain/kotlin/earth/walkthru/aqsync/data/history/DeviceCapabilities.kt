@@ -7,12 +7,13 @@ import earth.walkthru.aqsync.data.protocol.LiveSample
 import earth.walkthru.aqsync.data.protocol.PmsStatus
 
 /**
- * What the connected device can do, derived once from `INFO`. Screens ask these questions instead
- * of comparing schema strings, so a new firmware family changes one mapping and its test, not every
+ * What the connected device can do, derived from `INFO` and, for an unknown dictionary, the LIVE
+ * sample. Screens ask these questions instead of comparing schema strings, so a new firmware family changes one mapping and its test, not every
  * composable. Pure and shared by Android and iOS.
  *
- * - [liveProfile] is the reviewed interpretation of LIVE fields ([LiveProfiles.resolve]); null for
- *   an unknown schema or dictionary, which still syncs verified files.
+ * - [liveProfile] is the interpretation of LIVE fields ([LiveProfiles.resolve]). A known dictionary
+ *   gives its reviewed profile. An unknown one gives the unreviewed profile of the pinned LIVE keys
+ *   in the current sample ([LiveProfile.reviewed] false). Null without `INFO` or a dictionary.
  * - [configurable] is protocol v2 or later: pairing, Wi-Fi, LAN and bonds can be edited.
  * - [sensorIdentity] is the Waveshare telemetry family, whose board stores the fitted PM module's
  *   sticker (`sensor` config) and can opt in to a batch estimate.
@@ -27,7 +28,7 @@ data class DeviceCapabilities(
     val batchEstimate: Boolean,
 ) {
     /**
-     * The particle reading (mood, PM2.5) applies when the profile is reviewed and the live sample
+     * The particle reading (mood, PM2.5) applies when there is a LIVE profile and the live sample
      * reports a PM sensor at all. A sample without the `pms` key or with status ABSENT does not.
      */
     fun showsParticles(live: LiveSample?): Boolean =
@@ -42,9 +43,9 @@ data class DeviceCapabilities(
         /** Nothing known yet (no `INFO`): no live interpretation, no configuration. */
         val NONE = DeviceCapabilities(liveProfile = null, configurable = false, sensorIdentity = false, batchEstimate = false)
 
-        fun from(info: DeviceInfo?): DeviceCapabilities {
+        fun from(info: DeviceInfo?, live: LiveSample? = null): DeviceCapabilities {
             if (info == null) return NONE
-            val profile = LiveProfiles.resolve(info)
+            val profile = LiveProfiles.resolve(info, live)
             val schema = info.schema
             return DeviceCapabilities(
                 liveProfile = profile,

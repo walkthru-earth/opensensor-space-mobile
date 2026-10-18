@@ -69,7 +69,8 @@ build and `verify` only. No phone run against the new firmware yet.
 - Derived days. `derived-v3` writes UTC instants as MICROS under the current names, keeps device
   field ids and renames the estimate to `event_time_utc_estimated_us`. `DERIVE_VERSION` 6 rebuilds
   every cached day once.
-- LIVE. Profiles resolve by dictionary digest only, and a newer schema keeps its profile. CoreS3
+- LIVE. Reviewed profiles resolve by dictionary digest, and a newer schema keeps its profile. An
+  unknown digest reads only the pinned LIVE keys as an unreviewed profile (#153). CoreS3
   board temperature comes from `imu_t`, Waveshare air temperature from `t`. Particle bins show only
   the board's keys. Older dictionaries keep a profile because boards in the field run them. Older
   CoreS3 firmware reads board temperature from `t`. Waveshare v2.7 (`67688d0f…`, PR aq-parquet #24, and its first build `d0d01294…`)
