@@ -61,6 +61,7 @@ import earth.walkthru.aqsync.link.UnavailableKind
 import earth.walkthru.aqsync.link.retryable
 import earth.walkthru.aqsync.storage.FakeStorageBudget
 import earth.walkthru.aqsync.storage.StorageException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -296,7 +297,26 @@ class DeviceFacadeTest {
         h.until { h.repo.collectionState.value is CollectionState.Done && !h.repo.busy.value }
         assertEquals(listOf(0), h.clockAnchorsBeforeList)
         assertEquals(1, h.factory.requests.count { it == Opcode.SET_TIME })
+        h.until { h.derivedSince.isNotEmpty() }
         assertEquals(listOf(startedMs), h.derivedSince)
+    }
+
+    @Test
+    fun `a slow post-sync derive never holds the link from the next collection`() = harnessTest { h ->
+        val gate = CompletableDeferred<Unit>()
+        h.deriveGate = gate
+        h.repo.syncAll()
+        // The derive waits behind a backfill, yet the collection ends and releases its link.
+        h.until { h.repo.collectionState.value is CollectionState.Done && !h.repo.busy.value }
+        h.until { h.derivedSince.size == 1 }
+        val lists = h.factory.requests.count { it == Opcode.LIST }
+
+        h.repo.syncAll()
+        h.until { h.derivedSince.size == 2 && h.repo.collectionState.value is CollectionState.Done && !h.repo.busy.value }
+        assertTrue("the next collection ran its own LIST", h.factory.requests.count { it == Opcode.LIST } > lists)
+        assertFalse(gate.isCompleted)
+        gate.complete(Unit)
+        h.test.runCurrent()
     }
 
     @Test
@@ -1217,6 +1237,9 @@ class DeviceFacadeTest {
         val committedNames = mutableListOf<String>()
         val clockAnchorsBeforeList = mutableListOf<Int>()
         val derivedSince = mutableListOf<Long>()
+
+        /** When set, each post-sync derive waits for it, as a derive behind a slow backfill does. */
+        var deriveGate: CompletableDeferred<Unit>? = null
         val owner: DeviceLinkOwner
         val repo: DeviceFacade
         var refuseProcess = false
@@ -1237,6 +1260,7 @@ class DeviceFacadeTest {
                     override suspend fun deriveStale() = HistoryDeriver.Result(0, 0, 0)
                     override suspend fun deriveAfterSync(sinceEpochMs: Long): HistoryDeriver.Result {
                         derivedSince += sinceEpochMs
+                        deriveGate?.await()
                         return deriveStale()
                     }
                     override suspend fun recordClockAnchor(station: String, boot: String, utcNs: Long, monotonicUs: Long) = persistClockAnchor(station, boot, utcNs, monotonicUs)

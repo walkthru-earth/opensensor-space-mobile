@@ -16,6 +16,7 @@ import earth.walkthru.aqsync.data.coroutines.IoDispatcher
 import earth.walkthru.aqsync.data.coroutines.WallClock
 import earth.walkthru.aqsync.data.history.HistoryIndexer
 import earth.walkthru.aqsync.data.history.HistoryOrchestrator
+import earth.walkthru.aqsync.data.history.HistoryStartup
 import earth.walkthru.aqsync.data.local.database.KnownDeviceDao
 import earth.walkthru.aqsync.data.sync.DeviceCoordinator
 import earth.walkthru.aqsync.data.sync.FileArchive
@@ -161,30 +162,21 @@ object StorageModule {
         clock = clock::nowEpochMs,
         quota = quota,
         coordinator = coordinator,
+        log = { Log.i("StorageJanitor", it) },
     )
 
+    /** The shared order of the History passes (#100). It logs class names only, never paths or station ids. */
+    @Provides
+    @Singleton
+    fun provideHistoryOrchestrator(historyIndexer: HistoryIndexer, index: ArchiveIndex): HistoryOrchestrator =
+        HistoryOrchestrator(historyIndexer.repair, index, log = { Log.i("HistoryOrchestrator", it) })
+
     /**
-     * The shared order of the History passes (#100). The janitor sweeps once per process start, then
-     * the feed block quota applies even when the sweep failed, then the backfill, then the derive the app start hands in.
-     * It logs counts and class names only, never paths or station ids.
+     * The shared History start (#125). The janitor sweeps once per process start, then the feed block
+     * quota applies even when the sweep failed, then the backfill and the derive the app start hands in.
      */
     @Provides
     @Singleton
-    fun provideHistoryOrchestrator(
-        historyIndexer: HistoryIndexer,
-        index: ArchiveIndex,
-        janitor: StorageJanitor,
-        blocks: BlockCache,
-    ): HistoryOrchestrator = HistoryOrchestrator(
-        repair = historyIndexer.repair,
-        index = index,
-        janitor = {
-            try {
-                Log.i("StorageJanitor", janitor.run().describe())
-            } finally {
-                blocks.enforce()
-            }
-        },
-        log = { Log.i("HistoryOrchestrator", it) },
-    )
+    fun provideHistoryStartup(orchestrator: HistoryOrchestrator, janitor: StorageJanitor, blocks: BlockCache): HistoryStartup =
+        HistoryStartup(orchestrator, janitor, blocks, log = { Log.i("HistoryStartup", it) })
 }

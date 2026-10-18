@@ -14,6 +14,7 @@ import earth.walkthru.aqsync.data.history.ArchiveHistoryTiers
 import earth.walkthru.aqsync.data.history.ArchiveIndexRepair
 import earth.walkthru.aqsync.data.history.HistoryOrchestrator
 import earth.walkthru.aqsync.data.history.HistorySeriesReader
+import earth.walkthru.aqsync.data.history.HistoryStartup
 import earth.walkthru.aqsync.data.history.IosDailyDerivedStore
 import earth.walkthru.aqsync.data.history.IosFileTierStore
 import earth.walkthru.aqsync.data.history.LegacyFileCleanup
@@ -116,24 +117,15 @@ internal object IosArchive {
      */
     val coordinator: DeviceCoordinator by lazy { DeviceCoordinator(pruned) }
 
+    /** The shared order of the History passes (#100), the backfill then [rebuildDerived]. */
+    private val history by lazy { HistoryOrchestrator(repair, index, log = ::println) }
+
     /**
-     * The shared order of the History passes (#100). The janitor and the feed block quota first, then
-     * the backfill, then [rebuildDerived], and again whenever a record waits for its index.
+     * The shared History start (#125). The janitor and the feed block quota first, then the backfill,
+     * then [rebuildDerived], and again whenever a record waits for its index. [startIndexRepair]
+     * starts it once.
      */
-    private val history by lazy {
-        HistoryOrchestrator(
-            repair,
-            index,
-            janitor = {
-                try {
-                    janitor.run()
-                } finally {
-                    feedBlocks.enforce()
-                }
-            },
-            log = ::println,
-        )
-    }
+    val historyStartup by lazy { HistoryStartup(history, janitor, feedBlocks, log = ::println) }
 
     private val derivedMutex = Mutex()
     private val base get() = store.finalRoot.substringBeforeLast('/')
@@ -268,7 +260,8 @@ internal object IosArchive {
      */
     private val anchorFollowUp by lazy {
         CoalescedWork(scope, "clock anchor estimate") {
-            repair.estimateTimes()
+            // A pass of its own, so the estimates never change under a derive or a backfill.
+            history.estimateTimes()
             rebuildDerived(emptyList())
         }
     }
@@ -312,8 +305,8 @@ internal object IosArchive {
         IosMemoryPressure.install()
         // The tiers give memory back on a memory warning, the next History pass rebuilds them (#61).
         scope.trimOnMemoryPressure(tiers)
-        // The startup sweep of #60, the backfill and the derive, in the shared order.
-        scope.launch { history.run { rebuildDerived(emptyList()) } }
+        // The startup sweep of #60, the feed block quota, the backfill and the derive, in the shared order.
+        historyStartup.start(scope) { rebuildDerived(emptyList()) }
         // Every archive change, a sync's new file or a removal, derives again after any backfill in flight.
         scope.launch {
             index.observeAll().conflate().collect {

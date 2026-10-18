@@ -282,7 +282,7 @@ not phone cold-open latency or a qualified latency improvement.
 | `CollectionState` / `SyncProgress` | facade UI projections, Files, service and worker | `CollectionControllerTest`, facade tests, lease accounting and notification text |
 | Manager/controller ownership, transfer budget | address-bound ViewModels, runner, worker, foreground service | `DeviceOwnershipTest`, `AutoSyncRunnerTest`, cancellation and per-device progress |
 | `DeviceCoordinator` admission and writer leases / immutable commit | `SyncEngine`, partial resume, janitor, index repair, old file cleanup, archive index and export | `DeviceCoordinatorTest`, `ConcurrentArchiveTest`, `SyncEngineTest`; preserve existing files on conflicts |
-| `HistoryOrchestrator` pass order | janitor, back-fill and every derive pass on both phones | `HistoryOrchestratorTest`, `TierStoreTest`, `StationDaysTest` |
+| `HistoryStartup` and `HistoryOrchestrator` pass order | janitor, feed block quota, back-fill and its retry, time estimates and every derive pass on both phones | `HistoryOrchestratorTest`, `AppStartupTest`, `IosArchiveStartupTest`, `TierStoreTest`, `StationDaysTest` |
 | LAN transfer leases / shared mDNS resolver | all interactive and worker LAN transfers | `LanTransferLeasesTest`; phone checks on API 31–33 and screen-off LAN |
 | `DetailLevel` | every screen's `detailed`/`advancedMode` gate, Debug destination | migration from `advanced_mode` |
 

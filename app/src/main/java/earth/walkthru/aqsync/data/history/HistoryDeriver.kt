@@ -76,8 +76,12 @@ class HistoryDeriver @Inject constructor(
         indexer.persistClockAnchor(station, boot, utcNs, monotonicUs)
     }
 
+    /**
+     * Saves the anchor, then re-dates and derives [station] in one pass. The re-dating runs inside the
+     * pass ([deriveStale] estimates first), never beside a derive or a backfill that reads the estimates.
+     */
     override suspend fun recordClockAnchor(station: String, boot: String, utcNs: Long, monotonicUs: Long) {
-        indexer.recordClockAnchor(station, boot, utcNs, monotonicUs)
+        indexer.persistClockAnchor(station, boot, utcNs, monotonicUs)
         deriveStale(listOf(station))
     }
 

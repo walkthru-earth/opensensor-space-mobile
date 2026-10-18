@@ -9,7 +9,7 @@ import earth.walkthru.aqsync.data.background.AutoSyncScheduler
 import earth.walkthru.aqsync.data.background.SyncTriggers
 import earth.walkthru.aqsync.data.coroutines.suspendRunCatching
 import earth.walkthru.aqsync.data.history.HistoryDeriver
-import earth.walkthru.aqsync.data.history.HistoryOrchestrator
+import earth.walkthru.aqsync.data.history.HistoryStartup
 import earth.walkthru.aqsync.data.local.security.LanTokenMigration
 import earth.walkthru.aqsync.settings.SettingsRepository
 import earth.walkthru.aqsync.storage.MemoryPressure
@@ -19,6 +19,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.plus
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import android.content.res.Configuration as ResConfiguration
@@ -47,7 +48,7 @@ class AqSyncApplication :
     lateinit var lanTokenMigration: LanTokenMigration
 
     @Inject
-    lateinit var historyOrchestrator: HistoryOrchestrator
+    lateinit var historyStartup: HistoryStartup
 
     @Inject
     lateinit var historyDeriver: HistoryDeriver
@@ -62,6 +63,11 @@ class AqSyncApplication :
 
     override fun onCreate() {
         super.onCreate()
+        // The shared History start (#100, #125), first so nothing below delays it. The janitor sweeps
+        // temps and stale partials and adopts orphan finals (#60), the feed block quota applies, then
+        // old indexes backfill and History derives, and again whenever a record waits for its index.
+        // Screen navigation only observes Room; syncs derive after newly archived files arrive.
+        historyStartup.start(appScope + Dispatchers.IO) { historyDeriver.deriveStale() }
         // Shared Compose screens read the first default locale. Make it the language `res/` chose.
         AppLanguage.alignDefault(this)
         // The basemap tile cache stays in cacheDir under its cap, set before any map runs (#61).
@@ -78,12 +84,6 @@ class AqSyncApplication :
             suspendRunCatching { lanTokenMigration.migratePlaintextTokens() }
             autoSyncScheduler.start(appScope)
             syncTriggers.register(appScope)
-        }
-        // The shared History order (#100). Sweep temps and stale partials and adopt orphan finals
-        // (#60), backfill old indexes, then derive, and again whenever a record waits for its index.
-        // Screen navigation only observes Room; syncs derive after newly archived files arrive.
-        appScope.launch(Dispatchers.IO) {
-            historyOrchestrator.run { historyDeriver.deriveStale() }
         }
     }
 
